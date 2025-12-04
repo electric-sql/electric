@@ -33,6 +33,7 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverter do
             tx_change_count: 0,
             tx_size: 0,
             max_tx_size: nil,
+            max_batch_size: nil,
             last_log_offset: nil,
             txn_fragment: nil,
             current_xid: nil
@@ -43,6 +44,7 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverter do
           tx_change_count: non_neg_integer(),
           tx_size: non_neg_integer(),
           max_tx_size: non_neg_integer() | nil,
+          max_batch_size: non_neg_integer(),
           last_log_offset: LogOffset.t() | nil,
           txn_fragment: TransactionFragment.t() | nil,
           current_xid: Electric.Replication.Changes.xid() | nil
@@ -50,7 +52,8 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverter do
 
   def new(opts \\ []) do
     %__MODULE__{
-      max_tx_size: Keyword.get(opts, :max_tx_size)
+      max_tx_size: Keyword.get(opts, :max_tx_size),
+      max_batch_size: Keyword.fetch!(opts, :max_batch_size)
     }
   end
 
@@ -63,17 +66,17 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverter do
   - `{:buffering, state}` if no flush occurred
   - `{:error, reason}` on error
   """
-  @spec convert(LR.message(), non_neg_integer(), t()) ::
+  @spec convert(LR.message(), t()) ::
           {:ok, TransactionFragment.t() | Relation.t(), t()}
           | {:buffering, t()}
           | {:error, {:replica_not_full, String.t()}}
           | {:error, {:exceeded_max_tx_size, String.t()}}
-  def convert(%LR.Message{} = msg, _max_batch_size, state) do
+  def convert(%LR.Message{} = msg, state) do
     Logger.info("Got a message from PG via logical replication: #{inspect(msg)}")
     {:buffering, state}
   end
 
-  def convert(%LR.Begin{} = msg, _max_batch_size, %__MODULE__{} = state) do
+  def convert(%LR.Begin{} = msg, %__MODULE__{} = state) do
     {:buffering,
      %{
        state
@@ -90,10 +93,10 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverter do
      }}
   end
 
-  def convert(%LR.Origin{} = _msg, _max_batch_size, state), do: {:buffering, state}
-  def convert(%LR.Type{}, _max_batch_size, state), do: {:buffering, state}
+  def convert(%LR.Origin{} = _msg, state), do: {:buffering, state}
+  def convert(%LR.Type{}, state), do: {:buffering, state}
 
-  def convert(%{bytes: bytes} = _msg, _max_batch_size, %__MODULE__{
+  def convert(%{bytes: bytes} = _msg, %__MODULE__{
         max_tx_size: max,
         tx_size: tx_size
       })
@@ -103,7 +106,6 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverter do
 
   def convert(
         %LR.Relation{id: id, namespace: ns, name: name, columns: cols} = rel,
-        _max_batch_size,
         %__MODULE__{} = state
       ) do
     new_state = Map.update!(state, :relations, &Map.put(&1, rel.id, rel))
@@ -117,7 +119,7 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverter do
      }, new_state}
   end
 
-  def convert(%LR.Insert{} = msg, max_batch_size, %__MODULE__{} = state) do
+  def convert(%LR.Insert{} = msg, %__MODULE__{} = state) do
     relation = Map.fetch!(state.relations, msg.relation_id)
     data = data_tuple_to_map(relation.columns, msg.tuple_data)
 
@@ -131,10 +133,10 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverter do
     |> change_received(msg.bytes)
     |> add_change(change)
     |> add_affected_relation({relation.namespace, relation.name})
-    |> maybe_flush(max_batch_size)
+    |> maybe_flush()
   end
 
-  def convert(%LR.Update{old_tuple_data: nil} = msg, _max_batch_size, %__MODULE__{} = state) do
+  def convert(%LR.Update{old_tuple_data: nil} = msg, %__MODULE__{} = state) do
     relation = Map.get(state.relations, msg.relation_id)
 
     {:error,
@@ -148,7 +150,7 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverter do
       """}}
   end
 
-  def convert(%LR.Update{} = msg, max_batch_size, %__MODULE__{} = state) do
+  def convert(%LR.Update{} = msg, %__MODULE__{} = state) do
     relation = Map.get(state.relations, msg.relation_id)
     old_data = data_tuple_to_map(relation.columns, msg.old_tuple_data)
 
@@ -175,10 +177,10 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverter do
     |> change_received(msg.bytes)
     |> add_change(change)
     |> add_affected_relation({relation.namespace, relation.name})
-    |> maybe_flush(max_batch_size)
+    |> maybe_flush()
   end
 
-  def convert(%LR.Delete{} = msg, max_batch_size, %__MODULE__{} = state) do
+  def convert(%LR.Delete{} = msg, %__MODULE__{} = state) do
     relation = Map.get(state.relations, msg.relation_id)
     data = data_tuple_to_map(relation.columns, msg.old_tuple_data || msg.changed_key_tuple_data)
 
@@ -192,10 +194,10 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverter do
     |> change_received(msg.bytes)
     |> add_change(change)
     |> add_affected_relation({relation.namespace, relation.name})
-    |> maybe_flush(max_batch_size)
+    |> maybe_flush()
   end
 
-  def convert(%LR.Truncate{} = msg, max_batch_size, state) do
+  def convert(%LR.Truncate{} = msg, state) do
     state =
       Enum.reduce(
         msg.truncated_relations,
@@ -215,10 +217,10 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverter do
         end
       )
 
-    maybe_flush(state, max_batch_size)
+    maybe_flush(state)
   end
 
-  def convert(%LR.Commit{} = msg, _max_batch_size, %__MODULE__{txn_fragment: fragment} = state) do
+  def convert(%LR.Commit{} = msg, %__MODULE__{txn_fragment: fragment} = state) do
     commit = %Commit{
       commit_timestamp: msg.commit_timestamp,
       transaction_size: state.tx_size,
@@ -304,8 +306,10 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverter do
   end
 
   defp maybe_flush(
-         %__MODULE__{txn_fragment: %{change_count: change_count} = fragment} = state,
-         max_batch_size
+         %__MODULE__{
+           txn_fragment: %{change_count: change_count} = fragment,
+           max_batch_size: max_batch_size
+         } = state
        )
        when change_count >= max_batch_size do
     {:ok,
@@ -316,5 +320,5 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverter do
      }, %{state | txn_fragment: %TransactionFragment{xid: state.current_xid, lsn: fragment.lsn}}}
   end
 
-  defp maybe_flush(state, _max_batch_size), do: {:buffering, state}
+  defp maybe_flush(state), do: {:buffering, state}
 end

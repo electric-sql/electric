@@ -48,7 +48,6 @@ defmodule Electric.Postgres.ReplicationClient do
       :slot_temporary?,
       :display_settings,
       :message_converter,
-      :max_change_batch_size,
       :publication_owner?,
       :replication_idle_timeout,
       step: :disconnected,
@@ -80,7 +79,6 @@ defmodule Electric.Postgres.ReplicationClient do
             slot_temporary?: boolean(),
             display_settings: [String.t()],
             message_converter: MessageConverter.t(),
-            max_change_batch_size: non_neg_integer(),
             publication_owner?: boolean(),
             replication_idle_timeout: non_neg_integer(),
             step: Electric.Postgres.ReplicationClient.step(),
@@ -115,7 +113,7 @@ defmodule Electric.Postgres.ReplicationClient do
     # passing, but as we're not currently worried about the memory consumption of the
     # replication client and don't want to risk any performance degradation in production
     # it has been set arbitrarily high to 100. We can tune this figure later if needed.
-    @default_max_change_batch_size 100
+    @max_change_batch_size 100
 
     @spec new(Access.t()) :: t()
     def new(opts) do
@@ -129,8 +127,11 @@ defmodule Electric.Postgres.ReplicationClient do
         __MODULE__,
         opts ++
           [
-            message_converter: MessageConverter.new(max_tx_size: max_txn_size),
-            max_change_batch_size: @default_max_change_batch_size
+            message_converter:
+              MessageConverter.new(
+                max_tx_size: max_txn_size,
+                max_batch_size: @max_change_batch_size
+              )
           ]
       )
     end
@@ -386,7 +387,7 @@ defmodule Electric.Postgres.ReplicationClient do
     #     message_type <> " :: " <> inspect(Map.from_struct(msg))
     # )
 
-    case MessageConverter.convert(msg, state.max_change_batch_size, state.message_converter) do
+    case MessageConverter.convert(msg, state.message_converter) do
       {:error, reason} ->
         {:disconnect, {:irrecoverable_slot, reason}}
 

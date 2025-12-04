@@ -34,10 +34,10 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverterTest do
   @max_batch_size 100
 
   setup do
-    converter = MessageConverter.new()
+    converter = MessageConverter.new(max_batch_size: @max_batch_size)
 
     {:ok, %Relation{}, converter} =
-      MessageConverter.convert(@relation, @max_batch_size, converter)
+      MessageConverter.convert(@relation, converter)
 
     {:ok, converter: converter}
   end
@@ -60,12 +60,12 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverterTest do
          schema: "public",
          table: "posts",
          columns: [%Column{name: "id", type_oid: 23}]
-       }, _converter} = MessageConverter.convert(new_relation, @max_batch_size, converter)
+       }, _converter} = MessageConverter.convert(new_relation, converter)
     end
 
     test "logs information when receiving a generic message", %{converter: converter} do
       message = %LR.Message{prefix: "test", content: "hello world"}
-      log = capture_log(fn -> MessageConverter.convert(message, @max_batch_size, converter) end)
+      log = capture_log(fn -> MessageConverter.convert(message, converter) end)
       assert log =~ "Got a message from PG via logical replication"
     end
 
@@ -74,23 +74,21 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverterTest do
       type = %LR.Type{name: "custom_type"}
 
       assert {:buffering, _converter} =
-               MessageConverter.convert(origin, @max_batch_size, converter)
+               MessageConverter.convert(origin, converter)
 
-      assert {:buffering, _converter} = MessageConverter.convert(type, @max_batch_size, converter)
+      assert {:buffering, _converter} = MessageConverter.convert(type, converter)
     end
 
     test "returns TransactionFragment once a whole transaction is seen", %{converter: converter} do
       {:buffering, converter} =
         MessageConverter.convert(
           %LR.Begin{final_lsn: @test_lsn, commit_timestamp: DateTime.utc_now(), xid: 456},
-          @max_batch_size,
           converter
         )
 
       {:buffering, converter} =
         MessageConverter.convert(
           %LR.Insert{relation_id: 1, tuple_data: ["123"], bytes: 3},
-          @max_batch_size,
           converter
         )
 
@@ -119,7 +117,6 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverterTest do
                    end_lsn: @test_end_lsn,
                    commit_timestamp: ~U[2024-01-01 00:00:00Z]
                  },
-                 @max_batch_size,
                  converter
                )
 
@@ -130,14 +127,12 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverterTest do
       {:buffering, converter} =
         MessageConverter.convert(
           %LR.Begin{final_lsn: @test_lsn, commit_timestamp: DateTime.utc_now(), xid: 456},
-          @max_batch_size,
           converter
         )
 
       {:buffering, converter} =
         MessageConverter.convert(
           %LR.Update{relation_id: 1, old_tuple_data: ["123"], tuple_data: ["124"], bytes: 6},
-          @max_batch_size,
           converter
         )
 
@@ -167,7 +162,6 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverterTest do
                    end_lsn: @test_end_lsn,
                    commit_timestamp: ~U[2024-01-01 00:00:00Z]
                  },
-                 @max_batch_size,
                  converter
                )
 
@@ -178,14 +172,12 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverterTest do
       {:buffering, converter} =
         MessageConverter.convert(
           %LR.Begin{final_lsn: @test_lsn, commit_timestamp: DateTime.utc_now(), xid: 456},
-          @max_batch_size,
           converter
         )
 
       assert {:error, {:replica_not_full, message}} =
                MessageConverter.convert(
                  %LR.Update{relation_id: 1, old_tuple_data: nil, tuple_data: ["124"], bytes: 3},
-                 @max_batch_size,
                  converter
                )
 
@@ -200,14 +192,12 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverterTest do
       {:buffering, converter} =
         MessageConverter.convert(
           %LR.Begin{final_lsn: @test_lsn, commit_timestamp: DateTime.utc_now(), xid: 456},
-          @max_batch_size,
           converter
         )
 
       {:buffering, converter} =
         MessageConverter.convert(
           %LR.Delete{relation_id: 1, old_tuple_data: ["123"], bytes: 3},
-          @max_batch_size,
           converter
         )
 
@@ -236,7 +226,6 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverterTest do
                    end_lsn: @test_end_lsn,
                    commit_timestamp: ~U[2024-01-01 00:00:00Z]
                  },
-                 @max_batch_size,
                  converter
                )
 
@@ -249,14 +238,12 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverterTest do
       {:buffering, converter} =
         MessageConverter.convert(
           %LR.Begin{final_lsn: @test_lsn, commit_timestamp: DateTime.utc_now(), xid: 456},
-          @max_batch_size,
           converter
         )
 
       {:buffering, converter} =
         MessageConverter.convert(
           %LR.Truncate{number_of_relations: 1, options: [], truncated_relations: [1]},
-          @max_batch_size,
           converter
         )
 
@@ -280,7 +267,6 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverterTest do
                    end_lsn: @test_end_lsn,
                    commit_timestamp: ~U[2024-01-01 00:00:00Z]
                  },
-                 @max_batch_size,
                  converter
                )
 
@@ -299,19 +285,17 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverterTest do
       }
 
       {:ok, %Relation{}, converter} =
-        MessageConverter.convert(new_relation, @max_batch_size, converter)
+        MessageConverter.convert(new_relation, converter)
 
       {:buffering, converter} =
         MessageConverter.convert(
           %LR.Begin{final_lsn: @test_lsn, commit_timestamp: DateTime.utc_now(), xid: 456},
-          @max_batch_size,
           converter
         )
 
       {:buffering, converter} =
         MessageConverter.convert(
           %LR.Truncate{number_of_relations: 2, options: [], truncated_relations: [1, 2]},
-          @max_batch_size,
           converter
         )
 
@@ -339,7 +323,6 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverterTest do
                    end_lsn: @test_end_lsn,
                    commit_timestamp: ~U[2024-01-01 00:00:00Z]
                  },
-                 @max_batch_size,
                  converter
                )
 
@@ -350,28 +333,24 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverterTest do
       {:buffering, converter} =
         MessageConverter.convert(
           %LR.Begin{final_lsn: @test_lsn, commit_timestamp: DateTime.utc_now(), xid: 456},
-          @max_batch_size,
           converter
         )
 
       {:buffering, converter} =
         MessageConverter.convert(
           %LR.Insert{relation_id: 1, tuple_data: ["123"], bytes: 3},
-          @max_batch_size,
           converter
         )
 
       {:buffering, converter} =
         MessageConverter.convert(
           %LR.Update{relation_id: 1, old_tuple_data: ["123"], tuple_data: ["124"], bytes: 6},
-          @max_batch_size,
           converter
         )
 
       {:buffering, converter} =
         MessageConverter.convert(
           %LR.Delete{relation_id: 1, old_tuple_data: ["124"], bytes: 3},
-          @max_batch_size,
           converter
         )
 
@@ -405,21 +384,19 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverterTest do
                    end_lsn: @test_end_lsn,
                    commit_timestamp: ~U[2024-01-01 00:00:00Z]
                  },
-                 @max_batch_size,
                  converter
                )
     end
 
     test "returns error when transaction size exceeds max_tx_size limit" do
-      converter = MessageConverter.new(max_tx_size: 10)
+      converter = MessageConverter.new(max_tx_size: 10, max_batch_size: @max_batch_size)
 
       {:ok, %Relation{}, converter} =
-        MessageConverter.convert(@relation, @max_batch_size, converter)
+        MessageConverter.convert(@relation, converter)
 
       {:buffering, converter} =
         MessageConverter.convert(
           %LR.Begin{final_lsn: @test_lsn, commit_timestamp: DateTime.utc_now(), xid: 456},
-          @max_batch_size,
           converter
         )
 
@@ -427,7 +404,6 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverterTest do
       {:buffering, converter} =
         MessageConverter.convert(
           %LR.Insert{relation_id: 1, tuple_data: ["123"], bytes: 5},
-          @max_batch_size,
           converter
         )
 
@@ -435,7 +411,6 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverterTest do
       assert {:error, {:exceeded_max_tx_size, message}} =
                MessageConverter.convert(
                  %LR.Insert{relation_id: 1, tuple_data: ["456"], bytes: 10},
-                 @max_batch_size,
                  converter
                )
 
@@ -455,15 +430,14 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverterTest do
         ]
       }
 
-      converter = MessageConverter.new()
+      converter = MessageConverter.new(max_batch_size: @max_batch_size)
 
       {:ok, %Relation{}, converter} =
-        MessageConverter.convert(multi_col_relation, @max_batch_size, converter)
+        MessageConverter.convert(multi_col_relation, converter)
 
       {:buffering, converter} =
         MessageConverter.convert(
           %LR.Begin{final_lsn: @test_lsn, commit_timestamp: DateTime.utc_now(), xid: 456},
-          @max_batch_size,
           converter
         )
 
@@ -475,7 +449,6 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverterTest do
             tuple_data: ["1", "New Title", :unchanged_toast],
             bytes: 10
           },
-          @max_batch_size,
           converter
         )
 
@@ -506,25 +479,24 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverterTest do
                    end_lsn: @test_end_lsn,
                    commit_timestamp: ~U[2024-01-01 00:00:00Z]
                  },
-                 @max_batch_size,
                  converter
                )
     end
 
-    test "flushes batch when max_batch_size is reached mid-transaction", %{converter: converter} do
-      max_batch_size = 3
+    test "flushes batch when max_batch_size is reached mid-transaction", %{converter: _converter} do
+      converter = MessageConverter.new(max_batch_size: 3)
+      {:ok, %Relation{}, converter} = MessageConverter.convert(@relation, converter)
 
       {:buffering, converter} =
         MessageConverter.convert(
           %LR.Begin{final_lsn: @test_lsn, commit_timestamp: DateTime.utc_now(), xid: 456},
-          max_batch_size,
           converter
         )
 
       insert_msg = %LR.Insert{relation_id: 1, tuple_data: ["123"], bytes: 3}
 
-      {:buffering, converter} = MessageConverter.convert(insert_msg, max_batch_size, converter)
-      {:buffering, converter} = MessageConverter.convert(insert_msg, max_batch_size, converter)
+      {:buffering, converter} = MessageConverter.convert(insert_msg, converter)
+      {:buffering, converter} = MessageConverter.convert(insert_msg, converter)
 
       # Third change triggers flush (3 inserts = max_batch_size)
       assert {:ok,
@@ -536,12 +508,12 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverterTest do
                 commit: nil,
                 changes: [%NewRecord{}, %NewRecord{}, %NewRecord{}],
                 affected_relations: affected
-              }, converter} = MessageConverter.convert(insert_msg, max_batch_size, converter)
+              }, converter} = MessageConverter.convert(insert_msg, converter)
 
       assert MapSet.equal?(affected, MapSet.new([{"public", "users"}]))
 
       # Subsequent operations continue to buffer
-      {:buffering, converter} = MessageConverter.convert(insert_msg, max_batch_size, converter)
+      {:buffering, converter} = MessageConverter.convert(insert_msg, converter)
 
       # Until commit
       assert {:ok,
@@ -559,25 +531,24 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverterTest do
                    end_lsn: @test_end_lsn,
                    commit_timestamp: ~U[2024-01-01 00:00:00Z]
                  },
-                 max_batch_size,
                  converter
                )
     end
 
-    test "maintains correct log offsets across batches", %{converter: converter} do
-      max_batch_size = 3
+    test "maintains correct log offsets across batches", %{converter: _converter} do
+      converter = MessageConverter.new(max_batch_size: 3)
+      {:ok, %Relation{}, converter} = MessageConverter.convert(@relation, converter)
 
       {:buffering, converter} =
         MessageConverter.convert(
           %LR.Begin{final_lsn: @test_lsn, commit_timestamp: DateTime.utc_now(), xid: 456},
-          max_batch_size,
           converter
         )
 
       insert_msg = %LR.Insert{relation_id: 1, tuple_data: ["123"], bytes: 3}
 
-      {:buffering, converter} = MessageConverter.convert(insert_msg, max_batch_size, converter)
-      {:buffering, converter} = MessageConverter.convert(insert_msg, max_batch_size, converter)
+      {:buffering, converter} = MessageConverter.convert(insert_msg, converter)
+      {:buffering, converter} = MessageConverter.convert(insert_msg, converter)
 
       # First batch flushes (3 changes = max_batch_size)
       assert {:ok,
@@ -590,10 +561,10 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverterTest do
                   %NewRecord{log_offset: %LogOffset{tx_offset: 123, op_offset: 2}},
                   %NewRecord{log_offset: %LogOffset{tx_offset: 123, op_offset: 4}}
                 ]
-              }, converter} = MessageConverter.convert(insert_msg, max_batch_size, converter)
+              }, converter} = MessageConverter.convert(insert_msg, converter)
 
       # Second batch continues with correct offsets
-      {:buffering, converter} = MessageConverter.convert(insert_msg, max_batch_size, converter)
+      {:buffering, converter} = MessageConverter.convert(insert_msg, converter)
 
       assert {:ok,
               %TransactionFragment{
@@ -610,7 +581,6 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverterTest do
                    end_lsn: @test_end_lsn,
                    commit_timestamp: ~U[2024-01-01 00:00:00Z]
                  },
-                 max_batch_size,
                  converter
                )
     end
@@ -621,14 +591,12 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverterTest do
       {:buffering, converter} =
         MessageConverter.convert(
           %LR.Begin{final_lsn: @test_lsn, commit_timestamp: DateTime.utc_now(), xid: 456},
-          @max_batch_size,
           converter
         )
 
       {:buffering, converter} =
         MessageConverter.convert(
           %LR.Insert{relation_id: 1, tuple_data: ["123"], bytes: 3},
-          @max_batch_size,
           converter
         )
 
@@ -642,7 +610,7 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverterTest do
       }
 
       assert {:ok, %Relation{id: 2, schema: "public", table: "posts"}, converter} =
-               MessageConverter.convert(new_relation, @max_batch_size, converter)
+               MessageConverter.convert(new_relation, converter)
 
       # Buffered operations still flush on commit
       assert {:ok,
@@ -658,7 +626,6 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverterTest do
                    end_lsn: @test_end_lsn,
                    commit_timestamp: ~U[2024-01-01 00:00:00Z]
                  },
-                 @max_batch_size,
                  converter
                )
     end
@@ -669,7 +636,6 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverterTest do
       {:buffering, converter} =
         MessageConverter.convert(
           %LR.Begin{final_lsn: @test_lsn, commit_timestamp: DateTime.utc_now(), xid: 456},
-          @max_batch_size,
           converter
         )
 
@@ -694,7 +660,6 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverterTest do
                    end_lsn: @test_end_lsn,
                    commit_timestamp: ~U[2024-01-01 00:00:00Z]
                  },
-                 @max_batch_size,
                  converter
                )
 
