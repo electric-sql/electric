@@ -4,10 +4,6 @@ on:
   issue_comment:
     types: [created]
 
-defaults:
-  run:
-    working-directory: packages/sync-service
-
 env:
   PROJECT_ID: vaxine
   REGISTRY: europe-docker.pkg.dev/vaxine/electric
@@ -35,6 +31,8 @@ jobs:
             const result = await github.rest.pulls.get(request)
             core.info(`GOT ${JSON.stringify(result)}`)
             return result.data
+
+      - uses: docker/setup-buildx-action@v3
       - uses: actions/checkout@v4
         with:
           ref: ${{ fromJSON(steps.get-pr.outputs.result).head.sha }}
@@ -43,49 +41,57 @@ jobs:
           credentials_json: ${{ secrets.GCLOUD_REGISTRY_JSON_KEY }}
       - uses: google-github-actions/setup-gcloud@v1
       - name: Use gcloud CLI
-        run: 'gcloud info'
+        run: gcloud info
       - name: Docker auth
         run: gcloud auth configure-docker europe-docker.pkg.dev --quiet
       - name: Set outputs
         run: echo "SHORT_SHA=$(git rev-parse --short=5 HEAD)" >> $GITHUB_ENV
-      - name: Pull latest base images
-        run: |
-          docker pull ${{ env.REGISTRY }}/electric:canary-builder || true
-          docker pull ${{ env.REGISTRY }}/electric:canary-runner-base || true
-          docker pull ${{ env.REGISTRY }}/electric:pr-${{ github.event.issue.number }}-builder || true
-          docker pull ${{ env.REGISTRY }}/electric:pr-${{ github.event.issue.number }}-runner-base || true
-      - name: Build base images
-        env:
-          DOCKER_BUILDKIT: '1'
-        run: >
-          docker build \
-            --push \
-            --cache-from ${{ env.REGISTRY }}/electric:canary-builder \
-            --cache-from ${{ env.REGISTRY }}/electric:pr-${{ github.event.issue.number }}-builder \
-            --build-context electric-telemetry=../electric-telemetry \
-            --build-arg BUILDKIT_INLINE_CACHE=1 \
-            --tag ${{ env.REGISTRY }}/electric:pr-${{ github.event.issue.number }}-builder \
-            --target builder \
-            .
 
-          docker build \
-            --push \
-            --cache-from ${{ env.REGISTRY }}/electric:canary-runner-base \
-            --cache-from ${{ env.REGISTRY }}/electric:pr-${{ github.event.issue.number }}-runner-base \
-            --build-arg BUILDKIT_INLINE_CACHE=1 \
-            --tag  ${{ env.REGISTRY }}/electric:pr-${{ github.event.issue.number }}-runner-base \
-            --target runner_setup \
-            .
-      - name: Build actual image
-        env:
-          DOCKER_BUILDKIT: '1'
-        run: >
-          docker build \
-            --push \
-            --cache-from=${{ env.REGISTRY }}/electric:pr-${{ github.event.issue.number }}-builder \
-            --cache-from=${{ env.REGISTRY }}/electric:pr-${{ github.event.issue.number }}-runner-base \
-            --tag  ${{ env.REGISTRY }}/electric:pr-${{ github.event.issue.number }}-${{ env.SHORT_SHA }} \
-            .
+      - name: Build builder image
+        uses: docker/build-push-action@v6
+        with:
+          context: packages/sync-service
+          target: builder
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/electric:pr-${{ github.event.issue.number }}-builder
+          cache-from: |
+            type=registry,ref=${{ env.REGISTRY }}/electric:canary-builder
+            type=registry,ref=${{ env.REGISTRY }}/electric:pr-${{ github.event.issue.number }}-builder
+          cache-to: |
+            type=inline
+          build-contexts: |
+            electric-telemetry=${{ github.workspace }}/packages/electric-telemetry
+
+      - name: Build runner base image
+        uses: docker/build-push-action@v6
+        with:
+          context: packages/sync-service
+          target: runner_setup
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/electric:pr-${{ github.event.issue.number }}-runner-base
+          cache-from: |
+            type=registry,ref=${{ env.REGISTRY }}/electric:canary-runner-base
+            type=registry,ref=${{ env.REGISTRY }}/electric:pr-${{ github.event.issue.number }}-runner-base
+          cache-to: |
+            type=inline
+
+      - name: Build final image
+        uses: docker/build-push-action@v6
+        with:
+          context: packages/sync-service
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/electric:pr-${{ github.event.issue.number }}-${{ env.SHORT_SHA }}
+          cache-from: |
+            type=registry,ref=${{ env.REGISTRY }}/electric:pr-${{ github.event.issue.number }}-builder
+            type=registry,ref=${{ env.REGISTRY }}/electric:pr-${{ github.event.issue.number }}-runner-base
+          cache-to: |
+            type=inline
+          build-contexts: |
+            electric-telemetry=${{ github.workspace }}/packages/electric-telemetry
+
       - name: Write fanout benchmark
         run: |
           curl -X POST 'https://benchmarking.electric-sql.com/api/benchmarks/write_fanout/runs' \
