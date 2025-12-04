@@ -667,6 +667,45 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
     end
   end
 
+  describe "collector shutdown properties" do
+    setup ctx do
+      {:ok, pid} =
+        start_supervised(
+          Supervisor.child_spec(
+            {ShapeLogCollector,
+             stack_id: ctx.stack_id,
+             inspector: {Mock.Inspector, elem(@inspector, 1)},
+             persistent_kv: ctx.persistent_kv},
+            restart: :temporary
+          )
+        )
+
+      ref = Process.monitor(pid)
+
+      %{monitor_ref: ref}
+    end
+
+    test "shuts down when processor is shut down normally", %{monitor_ref: ref} = ctx do
+      ctx.stack_id |> ShapeLogCollector.Processor.name() |> GenServer.stop()
+      assert_receive {:DOWN, ^ref, :process, _pid, _reason}, 1000
+    end
+
+    test "shuts down when processor is shut down abnormally", %{monitor_ref: ref} = ctx do
+      ctx.stack_id |> ShapeLogCollector.Processor.name() |> GenServer.stop(:whatever)
+      assert_receive {:DOWN, ^ref, :process, _pid, _reason}, 1000
+    end
+
+    test "shuts down when registrator is shut down normally", %{monitor_ref: ref} = ctx do
+      ctx.stack_id |> ShapeLogCollector.Registrator.name() |> GenServer.stop()
+      assert_receive {:DOWN, ^ref, :process, _pid, _reason}, 1000
+    end
+
+    test "shuts down when registrator is shut down abnormally", %{monitor_ref: ref} = ctx do
+      ctx.stack_id |> ShapeLogCollector.Registrator.name() |> GenServer.stop(:whatever)
+      assert_receive {:DOWN, ^ref, :process, _pid, _reason}, 1000
+    end
+  end
+
   test "closes the loop even with no active shapes", ctx do
     ctx = setup_log_collector(ctx)
     xmin = 100

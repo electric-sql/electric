@@ -2,9 +2,10 @@ defmodule Electric.Replication.ShapeLogCollector.Supervisor do
   @moduledoc """
   Supervisor for the ShapeLogCollector components.
 
-  Using one_for_all to ensure no de/registration messages are lost
-  in case of a Registrator crash.
-
+  Setting `max_restarts` to 0 as the supervisor only acts as
+  a coordinator for starting and normal shutdowns, to preserve
+  the ShapeLogCollector's death side effects in its supervision
+  tree as before.
   """
   use Supervisor
 
@@ -30,6 +31,8 @@ defmodule Electric.Replication.ShapeLogCollector.Supervisor do
       {Registrator, stack_id: stack_id}
     ]
 
-    Supervisor.init(children, strategy: :one_for_all)
+    # Prevent any restarts until the whole system is capable of sustaining
+    # the SLC dying without any other shape machinery being restarted
+    Supervisor.init(children, strategy: :one_for_all, max_restarts: 0)
   end
 end
