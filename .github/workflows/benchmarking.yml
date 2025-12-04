@@ -3,6 +3,7 @@ name: Benchmark a PR
 on:
   issue_comment:
     types: [created]
+  workflow_dispatch:
 
 env:
   PROJECT_ID: vaxine
