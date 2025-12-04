@@ -73,6 +73,18 @@ defmodule Electric.Replication.ShapeLogCollector.Registrator do
     GenServer.call(name(stack_id), {:unsubscribe, shape_handle})
   end
 
+  @doc """
+  Handles the response from the Processor acknowledging a registration update.
+  """
+  @spec handle_processor_update_response(
+          Electric.stack_id(),
+          reference(),
+          %{optional(Electric.shape_handle()) => :ok | {:error, String.t()}}
+        ) :: :ok
+  def handle_processor_update_response(stack_id, ref, results) do
+    GenServer.cast(name(stack_id), {:handle_processor_update_response, ref, results})
+  end
+
   def start_link(opts) do
     GenServer.start_link(__MODULE__, opts, name: name(opts[:stack_id]))
   end
@@ -130,7 +142,10 @@ defmodule Electric.Replication.ShapeLogCollector.Registrator do
   end
 
   @impl true
-  def handle_info({ref, {:ok, results}}, %{ack_ref: ref} = state) do
+  def handle_cast(
+        {:handle_processor_update_response, ref, results},
+        %{ack_ref: ref} = state
+      ) do
     for {shape_handle, from} <- state.ack_waiters do
       GenServer.reply(from, Map.fetch!(results, shape_handle))
     end
@@ -166,13 +181,15 @@ defmodule Electric.Replication.ShapeLogCollector.Registrator do
         state.to_remove
       )
 
+    ack_waiters = state.to_schedule_waiters |> Enum.to_list() |> List.keydelete(nil, 1)
+
     {:noreply,
      %{
        state
        | to_add: Map.new(),
          to_remove: MapSet.new(),
          to_schedule_waiters: %{},
-         ack_waiters: List.keydelete(state.to_schedule_waiters, nil, 1),
+         ack_waiters: ack_waiters,
          ack_ref: ack_ref
      }}
   end

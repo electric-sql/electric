@@ -7,6 +7,7 @@ defmodule Electric.Replication.ShapeLogCollector.Processor do
   """
   use GenServer
 
+  alias Electric.Replication.ShapeLogCollector
   alias Electric.Postgres.ReplicationClient
   alias Electric.Replication.ShapeLogCollector.FlushTracker
   alias Electric.LsnTracker
@@ -77,10 +78,9 @@ defmodule Electric.Replication.ShapeLogCollector.Processor do
     pid = name(stack_id) |> GenServer.whereis()
     call_ref = make_ref()
 
-    send(
+    GenServer.cast(
       pid,
-      {:"$gen_call", {self(), call_ref},
-       {:handle_shape_registration_updates, shapes_to_add, shapes_to_remove}}
+      {:handle_shape_registration_updates, call_ref, shapes_to_add, shapes_to_remove}
     )
 
     call_ref
@@ -212,9 +212,47 @@ defmodule Electric.Replication.ShapeLogCollector.Processor do
     )
   end
 
-  def handle_call(
-        {:handle_shape_registration_updates, shapes_to_add, shapes_to_remove},
-        _from,
+  def handle_call(:mark_as_ready, _from, state) do
+    lsn = LsnTracker.get_last_processed_lsn(state.stack_id)
+    Electric.StatusMonitor.mark_shape_log_collector_ready(state.stack_id, self())
+    {:reply, :ok, Map.put(state, :last_processed_lsn, lsn)}
+  end
+
+  def handle_call({:handle_operations, _, _}, _from, state)
+      when not is_ready_to_process(state) do
+    {:reply, {:error, :not_ready}, state}
+  end
+
+  def handle_call({:handle_operations, operations, trace_context}, _from, state) do
+    OpenTelemetry.set_current_context(trace_context)
+
+    {actions, state} = build_db_actions(operations, state)
+
+    {response, state} = handle_actions(actions, state)
+
+    {:reply, response, state}
+  end
+
+  def handle_call(:active_shapes, _from, state) do
+    {:reply, Filter.active_shapes(state.filter), state}
+  end
+
+  def handle_call({:set_process_flags, flags}, _from, state) do
+    {settings, invalid} =
+      Enum.flat_map_reduce(flags, [], fn {flag, value}, invalid ->
+        try do
+          {[{flag, Process.flag(flag, value)}], invalid}
+        rescue
+          ArgumentError ->
+            {[], [flag | invalid]}
+        end
+      end)
+
+    {:reply, {:ok, [settings: settings, invalid: invalid]}, state}
+  end
+
+  def handle_cast(
+        {:handle_shape_registration_updates, call_ref, shapes_to_add, shapes_to_remove},
         state
       ) do
     OpenTelemetry.with_span(
@@ -272,48 +310,15 @@ defmodule Electric.Replication.ShapeLogCollector.Processor do
             )
           end)
 
-        {:reply, {:ok, results}, state}
+        ShapeLogCollector.Registrator.handle_processor_update_response(
+          state.stack_id,
+          call_ref,
+          results
+        )
+
+        {:noreply, state}
       end
     )
-  end
-
-  def handle_call(:mark_as_ready, _from, state) do
-    lsn = LsnTracker.get_last_processed_lsn(state.stack_id)
-    Electric.StatusMonitor.mark_shape_log_collector_ready(state.stack_id, self())
-    {:reply, :ok, Map.put(state, :last_processed_lsn, lsn)}
-  end
-
-  def handle_call({:handle_operations, _, _}, _from, state)
-      when not is_ready_to_process(state) do
-    {:reply, {:error, :not_ready}, state}
-  end
-
-  def handle_call({:handle_operations, operations, trace_context}, _from, state) do
-    OpenTelemetry.set_current_context(trace_context)
-
-    {actions, state} = build_db_actions(operations, state)
-
-    {response, state} = handle_actions(actions, state)
-
-    {:reply, response, state}
-  end
-
-  def handle_call(:active_shapes, _from, state) do
-    {:reply, Filter.active_shapes(state.filter), state}
-  end
-
-  def handle_call({:set_process_flags, flags}, _from, state) do
-    {settings, invalid} =
-      Enum.flat_map_reduce(flags, [], fn {flag, value}, invalid ->
-        try do
-          {[{flag, Process.flag(flag, value)}], invalid}
-        rescue
-          ArgumentError ->
-            {[], [flag | invalid]}
-        end
-      end)
-
-    {:reply, {:ok, [settings: settings, invalid: invalid]}, state}
   end
 
   def handle_cast({:writer_flushed, shape_id, offset}, state) do

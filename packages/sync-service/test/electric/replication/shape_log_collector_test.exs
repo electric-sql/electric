@@ -145,12 +145,12 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
   end
 
   describe "lazy consumer initialization" do
+    setup :setup_log_collector
+
     setup do
       supervisor = start_link_supervised!({DynamicSupervisor, strategy: :one_for_one})
       [supervisor: supervisor]
     end
-
-    setup :setup_log_collector
 
     setup(ctx) do
       %{stack_id: stack_id} = ctx
