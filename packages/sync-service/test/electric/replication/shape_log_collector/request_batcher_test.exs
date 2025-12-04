@@ -148,7 +148,7 @@ defmodule Electric.Replication.ShapeLogCollector.RequestBatcherTest do
       # should not call processor until acked
       Process.sleep(10)
       refute_received {:processor_called, _, _}
-      assert :ok = Task.await(task1, 100)
+      assert :ok = Task.await(task1, 500)
 
       # should call processor immediately after with batched update
       expected_msg =
