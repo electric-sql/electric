@@ -6,8 +6,8 @@ defmodule Electric.Shapes.Partitions do
   """
   alias Electric.Postgres.Inspector
   alias Electric.Replication.Changes.Relation
-  alias Electric.Replication.Changes.Transaction
   alias Electric.Replication.Changes.TruncatedRelation
+  alias Electric.Replication.Changes.TransactionFragment
 
   defstruct [:inspector, active: 0, partitions: %{}, partition_ownership: %{}]
 
@@ -143,19 +143,21 @@ defmodule Electric.Shapes.Partitions do
   end
 
   @doc """
-  Handle transactions from the replication stream, updating the partition mapping as appropriate.
+  Handle transaction fragments from the replication stream, updating the partition mapping as appropriate.
   """
 
   # no shapes on partitioned tables is probably the overwhelming majority of
   # cases, so let's shortcut to avoid churn
-  @spec handle_transaction(t(), Transaction.t() | Relation.t()) ::
-          {t(), Transaction.t() | Relation.t()}
-  def handle_transaction(%__MODULE__{active: 0} = state, %Transaction{} = transaction) do
-    {state, transaction}
+  @spec handle_txn_fragment(t(), TransactionFragment.t()) :: {t(), TransactionFragment.t()}
+  def handle_txn_fragment(%__MODULE__{active: 0} = state, %TransactionFragment{} = txn_fragment) do
+    {state, txn_fragment}
   end
 
-  def handle_transaction(%__MODULE__{} = state, %Transaction{changes: changes} = transaction) do
-    {state, %{transaction | changes: expand_changes(changes, state)}}
+  def handle_txn_fragment(
+        %__MODULE__{} = state,
+        %TransactionFragment{changes: changes} = txn_fragment
+      ) do
+    {state, %{txn_fragment | changes: expand_changes(changes, state)}}
   end
 
   defp expand_changes(changes, %__MODULE__{} = state) do

@@ -33,26 +33,56 @@ defmodule Electric.Replication.Changes do
           | Changes.DeletedRecord.t()
 
   @type change() :: data_change() | Changes.TruncatedRelation.t()
-  @type operation() :: Changes.Begin.t() | Changes.Commit.t() | change() | Changes.Relation.t()
-  @type action() :: Changes.Transaction.t() | Changes.Relation.t()
-
-  defmodule Begin do
-    @type t() :: %__MODULE__{
-            xid: Changes.xid()
-          }
-
-    defstruct [:xid]
-  end
 
   defmodule Commit do
     @type t() :: %__MODULE__{
-            lsn: Electric.Postgres.Lsn.t(),
             commit_timestamp: DateTime.t() | nil,
             transaction_size: non_neg_integer(),
+            txn_change_count: non_neg_integer()
+          }
+
+    defstruct [:commit_timestamp, transaction_size: 0, txn_change_count: 0]
+  end
+
+  defmodule TransactionFragment do
+    @moduledoc """
+    Represents a transaction or part of a transaction from the replication stream.
+
+    The `has_begin?` and `commit` fields indicate which portion of a transaction
+    the fragment represents:
+
+    - Full transaction: `has_begin?` is true and `commit` is set
+    - Start of a transaction: `has_begin?` is true but no `commit`
+    - Middle of a transaction: `has_begin?` is false and no `commit`
+    - End of a transaction: `has_begin?` is false but `commit` is set
+    """
+
+    @type t() :: %__MODULE__{
+            xid: Changes.xid() | nil,
+            lsn: Electric.Postgres.Lsn.t() | nil,
+            last_log_offset: LogOffset.t() | nil,
+            has_begin?: boolean(),
+            commit: Changes.Commit.t() | nil,
+            changes: [Changes.change()],
+            affected_relations: MapSet.t(Changes.relation_name()),
             change_count: non_neg_integer()
           }
 
-    defstruct [:lsn, :commit_timestamp, transaction_size: 0, change_count: 0]
+    defstruct xid: nil,
+              lsn: nil,
+              # The last_log_offset must be the last offset seen in the
+              # the range covered by this fragment. It may be not be
+              # the last offset in the changes field here if the changes
+              # have been filtered outside of postgres.
+              last_log_offset: nil,
+              has_begin?: false,
+              commit: nil,
+              changes: [],
+              affected_relations: MapSet.new(),
+              change_count: 0
+
+    def complete_transaction?(%__MODULE__{has_begin?: true, commit: %Changes.Commit{}}), do: true
+    def complete_transaction?(%__MODULE__{}), do: false
   end
 
   defmodule Transaction do
@@ -63,9 +93,11 @@ defmodule Electric.Replication.Changes do
             xid: Changes.xid() | nil,
             changes: [Changes.change()],
             num_changes: non_neg_integer(),
-            affected_relations: MapSet.t(Changes.relation_name()),
             commit_timestamp: DateTime.t() | nil,
             lsn: Electric.Postgres.Lsn.t(),
+            # The last_log_offset must be the last offset seen in the
+            # the transaction. It may be not be the last offset in the changes
+            # field here if the changes have been filtered outside of postgres.
             last_log_offset: LogOffset.t()
           }
 
@@ -75,41 +107,8 @@ defmodule Electric.Replication.Changes do
       :lsn,
       :last_log_offset,
       changes: [],
-      num_changes: 0,
-      affected_relations: MapSet.new()
+      num_changes: 0
     ]
-
-    @spec prepend_change(t(), Changes.change()) :: t()
-    def prepend_change(
-          %__MODULE__{changes: changes, affected_relations: rels} = txn,
-          %change_mod{relation: rel} = change
-        )
-        when change_mod in [
-               Changes.NewRecord,
-               Changes.UpdatedRecord,
-               Changes.DeletedRecord,
-               Changes.TruncatedRelation
-             ] do
-      %{
-        txn
-        | changes: [change | changes],
-          num_changes: txn.num_changes + 1,
-          affected_relations: MapSet.put(rels, rel)
-      }
-    end
-
-    def finalize(%__MODULE__{changes: [], lsn: lsn} = txn),
-      do: %{txn | last_log_offset: LogOffset.new(lsn, 0)}
-
-    def finalize(%__MODULE__{changes: [%{log_offset: last_offset} | _] = changes} = txn) do
-      %{
-        txn
-        | last_log_offset: last_offset,
-          changes: Enum.reverse(changes)
-      }
-    end
-
-    require Electric.Postgres.Xid
 
     @doc """
     Check if a transaction is visible in a snapshot.

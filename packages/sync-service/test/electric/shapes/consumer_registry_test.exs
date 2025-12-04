@@ -58,10 +58,10 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
     [registry_state: registry_state]
   end
 
-  describe "publish/3" do
+  describe "publish/2" do
     test "starts consumer when receiving a message", ctx do
       assert ConsumerRegistry.active_consumer_count(ctx.stack_id) == 0
-      :ok = ConsumerRegistry.publish(["handle-1"], {:txn, %{lsn: 1}}, ctx.registry_state)
+      :ok = ConsumerRegistry.publish(%{"handle-1" => {:txn, %{lsn: 1}}}, ctx.registry_state)
 
       assert_receive {:start_consumer, "handle-1"}
       assert_receive {:broadcast, "handle-1", {:txn, %{lsn: 1}}}
@@ -70,13 +70,13 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
 
     test "uses existing consumer when already active", ctx do
       assert ConsumerRegistry.active_consumer_count(ctx.stack_id) == 0
-      :ok = ConsumerRegistry.publish(["handle-1"], {:txn, %{lsn: 1}}, ctx.registry_state)
+      :ok = ConsumerRegistry.publish(%{"handle-1" => {:txn, %{lsn: 1}}}, ctx.registry_state)
 
       assert_receive {:start_consumer, "handle-1"}
       assert_receive {:broadcast, "handle-1", {:txn, %{lsn: 1}}}
       assert ConsumerRegistry.active_consumer_count(ctx.stack_id) == 1
 
-      :ok = ConsumerRegistry.publish(["handle-1"], {:txn, %{lsn: 2}}, ctx.registry_state)
+      :ok = ConsumerRegistry.publish(%{"handle-1" => {:txn, %{lsn: 2}}}, ctx.registry_state)
 
       assert ConsumerRegistry.active_consumer_count(ctx.stack_id) == 1
       assert_receive {:broadcast, "handle-1", {:txn, %{lsn: 2}}}
@@ -85,14 +85,17 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
 
     test "starts any missing consumers", ctx do
       assert ConsumerRegistry.active_consumer_count(ctx.stack_id) == 0
-      :ok = ConsumerRegistry.publish(["handle-1"], {:txn, %{lsn: 1}}, ctx.registry_state)
+      :ok = ConsumerRegistry.publish(%{"handle-1" => {:txn, %{lsn: 1}}}, ctx.registry_state)
 
       assert_receive {:start_consumer, "handle-1"}
       assert_receive {:broadcast, "handle-1", {:txn, %{lsn: 1}}}
       assert ConsumerRegistry.active_consumer_count(ctx.stack_id) == 1
 
       :ok =
-        ConsumerRegistry.publish(["handle-1", "handle-2"], {:txn, %{lsn: 2}}, ctx.registry_state)
+        ConsumerRegistry.publish(
+          %{"handle-1" => {:txn, %{lsn: 2}}, "handle-2" => {:txn, %{lsn: 2}}},
+          ctx.registry_state
+        )
 
       assert ConsumerRegistry.active_consumer_count(ctx.stack_id) == 2
 
@@ -149,8 +152,11 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
 
       :ok =
         ConsumerRegistry.publish(
-          ["handle-1", "handle-2", "handle-3"],
-          {:txn, %{lsn: 1}},
+          %{
+            "handle-1" => {:txn, %{lsn: 1}},
+            "handle-2" => {:txn, %{lsn: 1}},
+            "handle-3" => {:txn, %{lsn: 1}}
+          },
           ctx.registry_state
         )
 
@@ -180,7 +186,7 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
 
       assert ConsumerRegistry.active_consumer_count(ctx.stack_id) == 1
 
-      :ok = ConsumerRegistry.publish([handle], {:txn, %{lsn: 1}}, ctx.registry_state)
+      :ok = ConsumerRegistry.publish(%{handle => {:txn, %{lsn: 1}}}, ctx.registry_state)
       assert_receive {:broadcast, ^handle, {:txn, %{lsn: 1}}}
       refute_receive {:start_consumer, ^handle}, 10
     end
@@ -216,7 +222,7 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
 
       assert ConsumerRegistry.active_consumer_count(ctx.stack_id) == 1
 
-      :ok = ConsumerRegistry.publish([handle], {:txn, %{lsn: 1}}, ctx.registry_state)
+      :ok = ConsumerRegistry.publish(%{handle => {:txn, %{lsn: 1}}}, ctx.registry_state)
       assert_receive {:broadcast, ^handle, {:txn, %{lsn: 1}}}
       refute_receive {:start_consumer, ^handle}, 10
 
@@ -224,7 +230,7 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
 
       assert ConsumerRegistry.active_consumer_count(ctx.stack_id) == 0
 
-      :ok = ConsumerRegistry.publish(["handle-1"], {:txn, %{lsn: 1}}, ctx.registry_state)
+      :ok = ConsumerRegistry.publish(%{"handle-1" => {:txn, %{lsn: 1}}}, ctx.registry_state)
 
       assert_receive {:start_consumer, "handle-1"}
       assert_receive {:broadcast, "handle-1", {:txn, %{lsn: 1}}}
@@ -249,7 +255,7 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
     end
   end
 
-  describe "broadcast/2" do
+  describe "broadcast/1" do
     test "sends message to all subscribers" do
       pid = self()
 
@@ -266,11 +272,14 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
           {:reply, :ok, state}
         end)
 
-      assert [] =
-               ConsumerRegistry.broadcast([{"handle-1", sub1}, {"handle-2", sub2}], :test_message)
+      assert %{} =
+               ConsumerRegistry.broadcast([
+                 {"handle-1", :test_message_1, sub1},
+                 {"handle-2", :test_message_2, sub2}
+               ])
 
-      assert_receive {:sub1, :test_message}
-      assert_receive {:sub2, :test_message}
+      assert_receive {:sub1, :test_message_1}
+      assert_receive {:sub2, :test_message_2}
     end
 
     test "does not return until all subscibers have processed the message" do
@@ -288,7 +297,12 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
       {:ok, sub2} = TestSubscriber.start_link(on_message)
 
       Task.async(fn ->
-        assert [] = ConsumerRegistry.broadcast([{"h-1", sub1}, {"h-2", sub2}], :test_message)
+        assert %{} =
+                 ConsumerRegistry.broadcast([
+                   {"h-1", :test_message, sub1},
+                   {"h-2", :test_message, sub2}
+                 ])
+
         send(pid, :publish_finished)
       end)
 
@@ -319,7 +333,12 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
       pid = self()
 
       Task.async(fn ->
-        assert [] = ConsumerRegistry.broadcast([{"h-1", sub1}, {"h-2", sub2}], :test_message)
+        assert %{} =
+                 ConsumerRegistry.broadcast([
+                   {"h-1", :test_message, sub1},
+                   {"h-2", :test_message, sub2}
+                 ])
+
         send(pid, :publish_finished)
       end)
 
@@ -353,11 +372,14 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
       {:ok, sub2} = start_supervised({TestSubscriber, on_message_suspend}, id: :subscriber2)
       {:ok, sub3} = start_supervised({TestSubscriber, on_message}, id: :subscriber3)
 
-      assert ["h-1", "h-2"] =
-               ConsumerRegistry.broadcast(
-                 [{"h-1", sub1}, {"h-2", sub2}, {"h-3", sub3}],
-                 :test_message
-               )
+      result =
+        ConsumerRegistry.broadcast([
+          {"h-1", :test_message, sub1},
+          {"h-2", :test_message, sub2},
+          {"h-3", :test_message, sub3}
+        ])
+
+      assert Map.keys(result) |> Enum.sort() == ["h-1", "h-2"]
 
       assert_receive :message_received
       assert_receive :message_received

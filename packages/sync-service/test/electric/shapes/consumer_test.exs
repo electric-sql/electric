@@ -4,10 +4,10 @@ defmodule Electric.Shapes.ConsumerTest do
 
   alias Electric.Postgres.Lsn
   alias Electric.Replication.Changes.Relation
-  alias Electric.Replication.Changes.Begin
   alias Electric.Replication.Changes.Commit
   alias Electric.Replication.Changes
   alias Electric.Replication.LogOffset
+  alias Electric.Replication.Changes.TransactionFragment
   alias Electric.Replication.ShapeLogCollector
   alias Electric.ShapeCache
   alias Electric.ShapeCache.Storage
@@ -204,32 +204,30 @@ defmodule Electric.Shapes.ConsumerTest do
 
       Registry.register(ctx.registry, @shape_handle1, ref)
 
-      txn = [
-        %Begin{xid: xmin},
-        %Changes.NewRecord{
-          relation: {"public", "test_table"},
-          record: %{"id" => "1"},
-          log_offset: last_log_offset
-        },
-        %Commit{lsn: lsn, commit_timestamp: DateTime.utc_now()}
-      ]
+      txn =
+        transaction(xmin, lsn, [
+          %Changes.NewRecord{
+            relation: {"public", "test_table"},
+            record: %{"id" => "1"},
+            log_offset: last_log_offset
+          }
+        ])
 
-      assert :ok = ShapeLogCollector.handle_operations(txn, ctx.stack_id)
+      assert :ok = ShapeLogCollector.handle_event(txn, ctx.stack_id)
       assert_receive {^ref, :new_changes, ^last_log_offset}, @receive_timeout
       assert_receive {Support.TestStorage, :append_to_log!, @shape_handle1, _}
       refute_receive {Support.TestStorage, :append_to_log!, @shape_handle2, _}
 
-      txn2 = [
-        %Begin{xid: xid},
-        %Changes.NewRecord{
-          relation: {"public", "test_table"},
-          record: %{"id" => "1"},
-          log_offset: next_log_offset
-        },
-        %Commit{lsn: next_lsn, commit_timestamp: DateTime.utc_now()}
-      ]
+      txn2 =
+        transaction(xid, next_lsn, [
+          %Changes.NewRecord{
+            relation: {"public", "test_table"},
+            record: %{"id" => "1"},
+            log_offset: next_log_offset
+          }
+        ])
 
-      assert :ok = ShapeLogCollector.handle_operations(txn2, ctx.stack_id)
+      assert :ok = ShapeLogCollector.handle_event(txn2, ctx.stack_id)
       assert_receive {^ref, :new_changes, ^next_log_offset}, @receive_timeout
       assert_receive {Support.TestStorage, :append_to_log!, @shape_handle1, _}
       refute_receive {Support.TestStorage, :append_to_log!, @shape_handle2, _}
@@ -264,27 +262,26 @@ defmodule Electric.Shapes.ConsumerTest do
       Registry.register(ctx.registry, @shape_handle1, ref1)
       Registry.register(ctx.registry, @shape_handle2, ref2)
 
-      txn = [
-        %Begin{xid: xid},
-        %Changes.NewRecord{
-          relation: {"public", "something else"},
-          record: %{"id" => "3"},
-          log_offset: change3_offset
-        },
-        %Changes.NewRecord{
-          relation: {"public", "other_table"},
-          record: %{"id" => "2"},
-          log_offset: change2_offset
-        },
-        %Changes.NewRecord{
-          relation: {"public", "test_table"},
-          record: %{"id" => "1"},
-          log_offset: change1_offset
-        },
-        %Commit{lsn: lsn, commit_timestamp: DateTime.utc_now()}
-      ]
+      txn =
+        transaction(xid, lsn, [
+          %Changes.NewRecord{
+            relation: {"public", "something else"},
+            record: %{"id" => "3"},
+            log_offset: change3_offset
+          },
+          %Changes.NewRecord{
+            relation: {"public", "other_table"},
+            record: %{"id" => "2"},
+            log_offset: change2_offset
+          },
+          %Changes.NewRecord{
+            relation: {"public", "test_table"},
+            record: %{"id" => "1"},
+            log_offset: change1_offset
+          }
+        ])
 
-      assert :ok = ShapeLogCollector.handle_operations(txn, ctx.stack_id)
+      assert :ok = ShapeLogCollector.handle_event(txn, ctx.stack_id)
 
       assert_receive {^ref1, :new_changes, ^change1_offset}, @receive_timeout
       assert_receive {^ref2, :new_changes, ^change2_offset}, @receive_timeout
@@ -316,17 +313,16 @@ defmodule Electric.Shapes.ConsumerTest do
 
       expect_shape_status(set_latest_offset: fn _, @shape_handle2, _offset -> :ok end)
 
-      txn = [
-        %Begin{xid: xid},
-        %Changes.NewRecord{
-          relation: {"public", "test_table"},
-          record: %{"id" => "1"},
-          log_offset: last_log_offset
-        },
-        %Commit{lsn: lsn, commit_timestamp: DateTime.utc_now()}
-      ]
+      txn =
+        transaction(xid, lsn, [
+          %Changes.NewRecord{
+            relation: {"public", "test_table"},
+            record: %{"id" => "1"},
+            log_offset: last_log_offset
+          }
+        ])
 
-      assert :ok = ShapeLogCollector.handle_operations(txn, ctx.stack_id)
+      assert :ok = ShapeLogCollector.handle_event(txn, ctx.stack_id)
 
       assert_receive {Support.TestStorage, :append_to_log!, @shape_handle2, _}
       refute_receive {Support.TestStorage, :append_to_log!, @shape_handle1, _}
@@ -342,17 +338,16 @@ defmodule Electric.Shapes.ConsumerTest do
 
       expect_shape_status(remove_shape: {fn _, @shape_handle1 -> {:ok, @shape1} end, at_least: 1})
 
-      txn = [
-        %Begin{xid: xid},
-        %Changes.TruncatedRelation{
-          relation: {"public", "test_table"},
-          log_offset: last_log_offset
-        },
-        %Commit{lsn: lsn}
-      ]
+      txn =
+        transaction(xid, lsn, [
+          %Changes.TruncatedRelation{
+            relation: {"public", "test_table"},
+            log_offset: last_log_offset
+          }
+        ])
 
       assert_consumer_shutdown(ctx.stack_id, @shape_handle1, fn ->
-        assert :ok = ShapeLogCollector.handle_operations(txn, ctx.stack_id)
+        assert :ok = ShapeLogCollector.handle_event(txn, ctx.stack_id)
       end)
 
       assert_shape_cleanup(@shape_handle1)
@@ -398,17 +393,16 @@ defmodule Electric.Shapes.ConsumerTest do
 
       expect_shape_status(remove_shape: {fn _, @shape_handle1 -> {:ok, @shape1} end, at_least: 1})
 
-      txn = [
-        %Begin{xid: xid},
-        %Changes.TruncatedRelation{
-          relation: {"public", "test_table"},
-          log_offset: last_log_offset
-        },
-        %Commit{lsn: lsn}
-      ]
+      txn =
+        transaction(xid, lsn, [
+          %Changes.TruncatedRelation{
+            relation: {"public", "test_table"},
+            log_offset: last_log_offset
+          }
+        ])
 
       assert_consumer_shutdown(ctx.stack_id, @shape_handle1, fn ->
-        assert :ok = ShapeLogCollector.handle_operations(txn, ctx.stack_id)
+        assert :ok = ShapeLogCollector.handle_event(txn, ctx.stack_id)
       end)
 
       refute_receive {Support.TestStorage, :append_to_log!, @shape_handle1, _}
@@ -428,17 +422,16 @@ defmodule Electric.Shapes.ConsumerTest do
       ref = make_ref()
       Registry.register(ctx.registry, @shape_handle1, ref)
 
-      txn = [
-        %Begin{xid: xid},
-        %Changes.NewRecord{
-          relation: {"public", "test_table"},
-          record: %{"id" => "1"},
-          log_offset: last_log_offset
-        },
-        %Commit{lsn: lsn}
-      ]
+      txn =
+        transaction(xid, lsn, [
+          %Changes.NewRecord{
+            relation: {"public", "test_table"},
+            record: %{"id" => "1"},
+            log_offset: last_log_offset
+          }
+        ])
 
-      assert :ok = ShapeLogCollector.handle_operations(txn, ctx.stack_id)
+      assert :ok = ShapeLogCollector.handle_event(txn, ctx.stack_id)
       assert_receive {^ref, :new_changes, ^last_log_offset}, @receive_timeout
       assert_receive {Support.TestStorage, :append_to_log!, @shape_handle1, _}
     end
@@ -462,7 +455,7 @@ defmodule Electric.Shapes.ConsumerTest do
         end
       )
 
-      assert :ok = ShapeLogCollector.handle_operations([rel], ctx.stack_id)
+      assert :ok = ShapeLogCollector.handle_event(rel, ctx.stack_id)
 
       refute_receive {:DOWN, ^ref1, :process, _, _}
       refute_receive {:DOWN, ^ref2, :process, _, _}
@@ -491,7 +484,7 @@ defmodule Electric.Shapes.ConsumerTest do
 
       expect_shape_status(remove_shape: {fn _, @shape_handle1 -> {:ok, @shape1} end, at_least: 1})
 
-      assert :ok = ShapeLogCollector.handle_operations([rel], ctx.stack_id)
+      assert :ok = ShapeLogCollector.handle_event(rel, ctx.stack_id)
 
       assert_receive {:DOWN, ^ref1, :process, _, {:shutdown, :cleanup}}
       refute_receive {:DOWN, ^ref2, :process, _, _}
@@ -513,7 +506,7 @@ defmodule Electric.Shapes.ConsumerTest do
         columns: [%{name: "id", type_oid: {1, 1}}]
       }
 
-      assert :ok = ShapeLogCollector.handle_operations([rel_before], ctx.stack_id)
+      assert :ok = ShapeLogCollector.handle_event(rel_before, ctx.stack_id)
 
       refute_receive {:DOWN, _, :process, _, _}
 
@@ -527,7 +520,7 @@ defmodule Electric.Shapes.ConsumerTest do
 
       expect_shape_status(remove_shape: {fn _, @shape_handle1 -> {:ok, @shape1} end, at_least: 1})
 
-      assert :ok = ShapeLogCollector.handle_operations([rel_changed], ctx.stack_id)
+      assert :ok = ShapeLogCollector.handle_event(rel_changed, ctx.stack_id)
 
       assert_receive {:DOWN, ^ref1, :process, _, {:shutdown, :cleanup}}
       refute_receive {:DOWN, ^ref2, :process, _, _}
@@ -550,7 +543,7 @@ defmodule Electric.Shapes.ConsumerTest do
         columns: [%{name: "id", type_oid: {1, 1}}]
       }
 
-      assert :ok = ShapeLogCollector.handle_operations([rel_before], ctx.stack_id)
+      assert :ok = ShapeLogCollector.handle_event(rel_before, ctx.stack_id)
 
       refute_receive {:DOWN, _, :process, _, _}
 
@@ -566,7 +559,7 @@ defmodule Electric.Shapes.ConsumerTest do
 
       expect_shape_status(remove_shape: {fn _, @shape_handle1 -> {:ok, @shape1} end, at_least: 1})
 
-      assert :ok = ShapeLogCollector.handle_operations([rel_changed], ctx.stack_id)
+      assert :ok = ShapeLogCollector.handle_event(rel_changed, ctx.stack_id)
 
       assert_receive {:DOWN, ^ref1, :process, _, {:shutdown, :cleanup}}
       assert_receive {^live_ref, :shape_rotation}
@@ -584,20 +577,19 @@ defmodule Electric.Shapes.ConsumerTest do
 
       lsn = Lsn.from_string("0/10")
 
-      txn = [
-        %Begin{xid: 150},
-        %Changes.NewRecord{
-          relation: {"public", "test_table"},
-          record: %{"id" => "1"},
-          log_offset: LogOffset.new(lsn, 0)
-        },
-        %Commit{lsn: lsn}
-      ]
+      txn =
+        transaction(150, lsn, [
+          %Changes.NewRecord{
+            relation: {"public", "test_table"},
+            record: %{"id" => "1"},
+            log_offset: LogOffset.new(lsn, 0)
+          }
+        ])
 
       ref1 = Process.monitor(Consumer.whereis(ctx.stack_id, @shape_handle1))
       ref2 = Process.monitor(Consumer.whereis(ctx.stack_id, @shape_handle2))
 
-      :ok = ShapeLogCollector.handle_operations(txn, ctx.stack_id)
+      :ok = ShapeLogCollector.handle_event(txn, ctx.stack_id)
 
       assert_receive {:DOWN, ^ref1, :process, _, _}
       refute_receive {:DOWN, ^ref2, :process, _, _}
@@ -682,22 +674,21 @@ defmodule Electric.Shapes.ConsumerTest do
 
       ref = Shapes.Consumer.register_for_changes(ctx.stack_id, shape_handle)
 
-      txn = [
-        %Begin{xid: 11},
-        %Changes.NewRecord{
-          relation: {"public", "test_table"},
-          record: %{"id" => "1"},
-          log_offset: LogOffset.new(lsn, 0)
-        },
-        %Changes.NewRecord{
-          relation: {"public", "test_table"},
-          record: %{"id" => "2"},
-          log_offset: LogOffset.new(lsn, 2)
-        },
-        %Commit{lsn: lsn}
-      ]
+      txn =
+        transaction(11, lsn, [
+          %Changes.NewRecord{
+            relation: {"public", "test_table"},
+            record: %{"id" => "1"},
+            log_offset: LogOffset.new(lsn, 0)
+          },
+          %Changes.NewRecord{
+            relation: {"public", "test_table"},
+            record: %{"id" => "2"},
+            log_offset: LogOffset.new(lsn, 2)
+          }
+        ])
 
-      assert :ok = ShapeLogCollector.handle_operations(txn, ctx.stack_id)
+      assert :ok = ShapeLogCollector.handle_event(txn, ctx.stack_id)
 
       expected_offset = LogOffset.new(lsn, 2)
       assert_receive {^ref, :new_changes, ^expected_offset}
@@ -709,7 +700,7 @@ defmodule Electric.Shapes.ConsumerTest do
                |> Enum.map(&Jason.decode!/1)
 
       # If we encounter & store the same transaction, log stream should be stable
-      assert :ok = ShapeLogCollector.handle_operations(txn, ctx.stack_id)
+      assert :ok = ShapeLogCollector.handle_event(txn, ctx.stack_id)
 
       # We should not re-process the same transaction
       refute_receive {^ref, :new_changes, _}
@@ -734,38 +725,36 @@ defmodule Electric.Shapes.ConsumerTest do
 
       ref = Shapes.Consumer.register_for_changes(ctx.stack_id, shape_handle)
 
-      txn1 = [
-        %Begin{xid: 9},
-        %Changes.NewRecord{
-          relation: {"public", "test_table"},
-          record: %{"id" => "1"},
-          log_offset: LogOffset.new(lsn1, 0)
-        },
-        %Changes.NewRecord{
-          relation: {"public", "test_table"},
-          record: %{"id" => "2"},
-          log_offset: LogOffset.new(lsn1, 2)
-        },
-        %Commit{lsn: lsn1}
-      ]
+      txn1 =
+        transaction(9, lsn1, [
+          %Changes.NewRecord{
+            relation: {"public", "test_table"},
+            record: %{"id" => "1"},
+            log_offset: LogOffset.new(lsn1, 0)
+          },
+          %Changes.NewRecord{
+            relation: {"public", "test_table"},
+            record: %{"id" => "2"},
+            log_offset: LogOffset.new(lsn1, 2)
+          }
+        ])
 
-      txn2 = [
-        %Begin{xid: 10},
-        %Changes.NewRecord{
-          relation: {"public", "test_table"},
-          record: %{"id" => "1"},
-          log_offset: LogOffset.new(lsn2, 0)
-        },
-        %Changes.NewRecord{
-          relation: {"public", "test_table"},
-          record: %{"id" => "2"},
-          log_offset: LogOffset.new(lsn2, 2)
-        },
-        %Commit{lsn: lsn2}
-      ]
+      txn2 =
+        transaction(10, lsn2, [
+          %Changes.NewRecord{
+            relation: {"public", "test_table"},
+            record: %{"id" => "1"},
+            log_offset: LogOffset.new(lsn2, 0)
+          },
+          %Changes.NewRecord{
+            relation: {"public", "test_table"},
+            record: %{"id" => "2"},
+            log_offset: LogOffset.new(lsn2, 2)
+          }
+        ])
 
-      assert :ok = ShapeLogCollector.handle_operations(txn1, ctx.stack_id)
-      assert :ok = ShapeLogCollector.handle_operations(txn2, ctx.stack_id)
+      assert :ok = ShapeLogCollector.handle_event(txn1, ctx.stack_id)
+      assert :ok = ShapeLogCollector.handle_event(txn2, ctx.stack_id)
 
       :started = ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id)
 
@@ -823,22 +812,21 @@ defmodule Electric.Shapes.ConsumerTest do
 
       lsn = Lsn.from_integer(10)
 
-      txn = [
-        %Begin{xid: 10},
-        %Changes.NewRecord{
-          relation: {"public", "test_table"},
-          record: %{"id" => "1"},
-          log_offset: LogOffset.new(lsn, 2)
-        },
-        %Changes.NewRecord{
-          relation: {"public", "test_table"},
-          record: %{"id" => "21"},
-          log_offset: LogOffset.new(lsn, 0)
-        },
-        %Commit{lsn: lsn}
-      ]
+      txn =
+        transaction(10, lsn, [
+          %Changes.NewRecord{
+            relation: {"public", "test_table"},
+            record: %{"id" => "1"},
+            log_offset: LogOffset.new(lsn, 2)
+          },
+          %Changes.NewRecord{
+            relation: {"public", "test_table"},
+            record: %{"id" => "21"},
+            log_offset: LogOffset.new(lsn, 0)
+          }
+        ])
 
-      assert :ok = ShapeLogCollector.handle_operations(txn, ctx.stack_id)
+      assert :ok = ShapeLogCollector.handle_event(txn, ctx.stack_id)
 
       assert_receive {:flush_boundary_updated, 10}, 1_000
     end
@@ -854,28 +842,26 @@ defmodule Electric.Shapes.ConsumerTest do
 
       :started = ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id)
 
-      txn = [
-        %Begin{xid: 2},
-        %Changes.NewRecord{
-          relation: {"public", "test_table"},
-          record: %{"id" => "21"},
-          log_offset: LogOffset.new(lsn1, 0)
-        },
-        %Commit{lsn: lsn1}
-      ]
+      txn =
+        transaction(2, lsn1, [
+          %Changes.NewRecord{
+            relation: {"public", "test_table"},
+            record: %{"id" => "21"},
+            log_offset: LogOffset.new(lsn1, 0)
+          }
+        ])
 
-      txn2 = [
-        %Begin{xid: 11},
-        %Changes.NewRecord{
-          relation: {"public", "test_table"},
-          record: %{"id" => "21"},
-          log_offset: LogOffset.new(lsn2, 0)
-        },
-        %Commit{lsn: lsn2}
-      ]
+      txn2 =
+        transaction(11, lsn2, [
+          %Changes.NewRecord{
+            relation: {"public", "test_table"},
+            record: %{"id" => "21"},
+            log_offset: LogOffset.new(lsn2, 0)
+          }
+        ])
 
-      assert :ok = ShapeLogCollector.handle_operations(txn, ctx.stack_id)
-      assert :ok = ShapeLogCollector.handle_operations(txn2, ctx.stack_id)
+      assert :ok = ShapeLogCollector.handle_event(txn, ctx.stack_id)
+      assert :ok = ShapeLogCollector.handle_event(txn2, ctx.stack_id)
 
       assert_receive {:flush_boundary_updated, 300}, 1_000
       assert_receive {:flush_boundary_updated, 301}, 1_000
@@ -896,17 +882,16 @@ defmodule Electric.Shapes.ConsumerTest do
       assert is_pid(consumer_pid)
       ref = Process.monitor(consumer_pid)
 
-      txn = [
-        %Begin{xid: 2},
-        %Changes.NewRecord{
-          relation: {"public", "test_table"},
-          record: %{"id" => "21"},
-          log_offset: LogOffset.new(lsn1, 0)
-        },
-        %Commit{lsn: lsn1}
-      ]
+      txn =
+        transaction(2, lsn1, [
+          %Changes.NewRecord{
+            relation: {"public", "test_table"},
+            record: %{"id" => "21"},
+            log_offset: LogOffset.new(lsn1, 0)
+          }
+        ])
 
-      assert :ok = ShapeLogCollector.handle_operations(txn, ctx.stack_id)
+      assert :ok = ShapeLogCollector.handle_event(txn, ctx.stack_id)
 
       assert_receive {:flush_boundary_updated, 300}, 1_000
 
@@ -937,17 +922,16 @@ defmodule Electric.Shapes.ConsumerTest do
 
       assert [dependent_shape_handle] = shape.shape_dependencies_handles
 
-      txn = [
-        %Begin{xid: 2},
-        %Changes.NewRecord{
-          relation: {"public", "test_table"},
-          record: %{"id" => "21"},
-          log_offset: LogOffset.new(lsn1, 0)
-        },
-        %Commit{lsn: lsn1}
-      ]
+      txn =
+        transaction(2, lsn1, [
+          %Changes.NewRecord{
+            relation: {"public", "test_table"},
+            record: %{"id" => "21"},
+            log_offset: LogOffset.new(lsn1, 0)
+          }
+        ])
 
-      assert :ok = ShapeLogCollector.handle_operations(txn, ctx.stack_id)
+      assert :ok = ShapeLogCollector.handle_event(txn, ctx.stack_id)
 
       assert_receive {:flush_boundary_updated, 300}, 1_000
 
@@ -1012,5 +996,19 @@ defmodule Electric.Shapes.ConsumerTest do
 
       assert [] == :ets.tab2list(table)
     end
+  end
+
+  defp transaction(xid, lsn, changes) do
+    [%{log_offset: last_log_offset} | _] = Enum.reverse(changes)
+
+    %TransactionFragment{
+      xid: xid,
+      lsn: lsn,
+      last_log_offset: last_log_offset,
+      has_begin?: true,
+      commit: %Commit{},
+      changes: changes,
+      affected_relations: MapSet.new(changes, & &1.relation)
+    }
   end
 end

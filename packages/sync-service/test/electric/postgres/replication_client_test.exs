@@ -12,12 +12,12 @@ defmodule Electric.Postgres.ReplicationClientTest do
   alias Electric.Postgres.Lsn
   alias Electric.Postgres.ReplicationClient
 
-  alias Electric.Replication.Changes.Begin
-  alias Electric.Replication.Changes.Commit
   alias Electric.Replication.Changes.Relation
   alias Electric.Replication.Changes.DeletedRecord
   alias Electric.Replication.Changes.NewRecord
   alias Electric.Replication.Changes.UpdatedRecord
+  alias Electric.Replication.Changes.TransactionFragment
+  alias Electric.Replication.TransactionBuilder
 
   # Larger than average timeout for assertions that require
   # seeing changes back from the database, as it can be especially
@@ -53,6 +53,8 @@ defmodule Electric.Postgres.ReplicationClientTest do
   defmodule MockTransactionProcessor do
     use GenServer, restart: :temporary
 
+    alias Electric.Replication.Changes.TransactionFragment
+
     def start_link(test_pid) do
       GenServer.start_link(__MODULE__, test_pid, name: __MODULE__)
     end
@@ -62,8 +64,8 @@ defmodule Electric.Postgres.ReplicationClientTest do
       {:ok, %{test_pid: test_pid, should_crash?: false}}
     end
 
-    def process_transaction(txn) do
-      GenServer.call(__MODULE__, {:process_transaction, txn})
+    def handle_event(event) do
+      GenServer.call(__MODULE__, {:handle_event, event})
     end
 
     def toggle_crash(should_crash?) do
@@ -71,12 +73,17 @@ defmodule Electric.Postgres.ReplicationClientTest do
     end
 
     @impl true
-    def handle_call({:process_transaction, txn}, _from, state) do
+    def handle_call({:handle_event, %TransactionFragment{} = txn_fragment}, _from, state) do
       if state.should_crash? do
         raise "Interrupting transaction processing abnormally"
       end
 
-      send(state.test_pid, {:from_replication, txn})
+      send(state.test_pid, {:from_replication, txn_fragment})
+      {:reply, :ok, state}
+    end
+
+    def handle_call({:handle_event, %Relation{} = relation}, _from, state) do
+      send(state.test_pid, {:from_replication, [relation]})
       {:reply, :ok, state}
     end
 
@@ -106,7 +113,7 @@ defmodule Electric.Postgres.ReplicationClientTest do
         publication_name: ctx.slot_name,
         try_creating_publication?: true,
         slot_name: ctx.slot_name,
-        handle_operations: nil,
+        handle_event: nil,
         connection_manager: connection_manager
       ]
 
@@ -221,7 +228,7 @@ defmodule Electric.Postgres.ReplicationClientTest do
       refute_receive _
     end
 
-    @tag handle_operations: {MockTransactionProcessor, :process_transaction, []}
+    @tag handle_event: {MockTransactionProcessor, :handle_event, []}
     test "holds processing of transaction until ready", %{db_conn: conn} = ctx do
       client_pid = start_client(ctx)
 
@@ -244,7 +251,7 @@ defmodule Electric.Postgres.ReplicationClientTest do
       assert %NewRecord{record: %{"value" => "test value 2"}} = receive_tx_change()
     end
 
-    @tag handle_operations: {MockTransactionProcessor, :process_transaction, []}
+    @tag handle_event: {MockTransactionProcessor, :handle_event, []}
     test "aborts held processing of transaction on exit", %{db_conn: conn} = ctx do
       client_pid = start_client(ctx)
       insert_item(conn, "test value 1")
@@ -663,7 +670,7 @@ defmodule Electric.Postgres.ReplicationClientTest do
     state =
       ReplicationClient.State.new(
         stack_id: ctx.stack_id,
-        handle_operations: nil,
+        handle_event: nil,
         publication_name: "",
         try_creating_publication?: false,
         slot_name: "",
@@ -700,11 +707,11 @@ defmodule Electric.Postgres.ReplicationClientTest do
         publication_name: ctx.slot_name,
         try_creating_publication?: false,
         slot_name: ctx.slot_name,
-        handle_operations:
+        handle_event:
           Map.get(
             ctx,
-            :handle_operations,
-            {__MODULE__, :test_handle_operations, [self()]}
+            :handle_event,
+            {__MODULE__, :test_handle_event, [self()]}
           ),
         connection_manager: ctx.connection_manager
       ]
@@ -712,8 +719,10 @@ defmodule Electric.Postgres.ReplicationClientTest do
   end
 
   # Special handling for the items table to enable testing of various edge cases that depend on the result of transaction processing.
-  def test_handle_operations(
-        [%Begin{}, %NewRecord{relation: {"public", "items"}} = change, %Commit{}] = changes,
+  def test_handle_event(
+        %TransactionFragment{
+          changes: [%NewRecord{relation: {"public", "items"}} = change]
+        } = txn_fragment,
         test_pid
       ) do
     case Map.fetch!(change.record, "value") do
@@ -723,18 +732,23 @@ defmodule Electric.Postgres.ReplicationClientTest do
         if pid == self() do
           raise "Interrupting transaction processing abnormally"
         else
-          send(test_pid, {:from_replication, changes})
+          send(test_pid, {:from_replication, txn_fragment})
           :ok
         end
 
       _ ->
-        send(test_pid, {:from_replication, changes})
+        send(test_pid, {:from_replication, txn_fragment})
         :ok
     end
   end
 
-  def test_handle_operations(operations, test_pid) when is_list(operations) do
-    send(test_pid, {:from_replication, operations})
+  def test_handle_event(%TransactionFragment{} = txn_fragment, test_pid) do
+    send(test_pid, {:from_replication, txn_fragment})
+    :ok
+  end
+
+  def test_handle_event(%Relation{} = relation, test_pid) do
+    send(test_pid, {:from_replication, [relation]})
     :ok
   end
 
@@ -779,23 +793,25 @@ defmodule Electric.Postgres.ReplicationClientTest do
     {lsn, change}
   end
 
-  defp receive_transaction(acc \\ [])
+  defp receive_transaction(builder \\ TransactionBuilder.new())
 
-  defp receive_transaction([%Commit{lsn: lsn} | operations]) do
-    [%Begin{} | changes] =
-      operations
-      |> Enum.reject(&match?(%Relation{}, &1))
-      |> Enum.reverse()
-
-    {lsn, changes}
-  end
-
-  defp receive_transaction(acc) do
+  defp receive_transaction(builder) do
     receive do
-      {:from_replication, operations} -> receive_transaction(Enum.reverse(operations) ++ acc)
+      {:from_replication, %TransactionFragment{} = txn_fragment} ->
+        case TransactionBuilder.build(txn_fragment, builder) do
+          {[], builder} ->
+            receive_transaction(builder)
+
+          {[txn], _builder} ->
+            {txn.lsn, txn.changes}
+        end
+
+      # Discard Relation messages - they're not relevant for transaction tests
+      {:from_replication, [%Relation{} | _]} ->
+        receive_transaction(builder)
     after
       @assert_receive_db_timeout ->
-        raise "Expected transaction but got #{inspect(Enum.reverse(acc), pretty: true)}"
+        raise "Expected transaction"
     end
   end
 

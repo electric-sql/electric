@@ -70,20 +70,20 @@ defmodule Electric.Shapes.ConsumerRegistry do
     :ets.insert_new(table, [{shape_handle, pid}])
   end
 
-  @spec publish([shape_handle()], term(), t()) :: :ok
-  def publish([], _event, _registry_state) do
+  @spec publish(%{shape_handle() => term()}, t()) :: :ok
+  def publish(events_by_handle, _registry_state) when events_by_handle == %{} do
     :ok
   end
 
-  def publish(shape_handles, event, registry_state) do
+  def publish(events_by_handle, registry_state) do
     %{table: table} = registry_state
 
-    shape_handles
-    |> Enum.map(fn handle ->
-      {handle, consumer_pid(handle, table) || start_consumer!(handle, registry_state)}
+    events_by_handle
+    |> Enum.map(fn {handle, event} ->
+      {handle, event, consumer_pid(handle, table) || start_consumer!(handle, registry_state)}
     end)
-    |> broadcast(event)
-    |> publish(event, registry_state)
+    |> broadcast()
+    |> publish(registry_state)
   end
 
   @spec remove_consumer(shape_handle(), t()) :: :ok
@@ -106,25 +106,26 @@ defmodule Electric.Shapes.ConsumerRegistry do
   end
 
   @doc """
-  Calls many GenServers asynchronously with the same message and waits
+  Calls many GenServers asynchronously with per-handle messages and waits
   for their responses before returning.
 
-  Returns `:ok` once all GenServers have responded or have died.
+  Returns a map of `shape_handle => event` for handles that need to be retried
+  (because their consumers suspended).
 
   There is no timeout so if the GenServers do not respond or die, this
   function will block indefinitely.
   """
-  @spec broadcast([{shape_handle(), pid()}], term()) :: [shape_handle()]
-  def broadcast(handle_pids, message) do
+  @spec broadcast([{shape_handle(), term(), pid()}]) :: %{shape_handle() => term()}
+  def broadcast(handle_event_pids) do
     # Based on OTP GenServer.call, see:
     # https://github.com/erlang/otp/blob/090c308d7c925e154240685174addaa516ea2f69/lib/stdlib/src/gen.erl#L243
-    handle_pids
-    |> Enum.map(fn {handle, pid} ->
+    handle_event_pids
+    |> Enum.map(fn {handle, event, pid} ->
       ref = Process.monitor(pid)
-      send(pid, {:"$gen_call", {self(), ref}, message})
-      {handle, ref}
+      send(pid, {:"$gen_call", {self(), ref}, event})
+      {handle, event, ref}
     end)
-    |> Enum.flat_map(fn {handle, ref} ->
+    |> Enum.flat_map(fn {handle, event, ref} ->
       receive do
         {^ref, _reply} ->
           Process.demonitor(ref, [:flush])
@@ -134,18 +135,21 @@ defmodule Electric.Shapes.ConsumerRegistry do
           # Catch the race condition where a consumer is in the act of
           # suspending as the txn arrives by retrying those handles (which will
           # start a new consumer instance).
-          [handle]
+          [{handle, event}]
 
         {:DOWN, ^ref, _, _, _reason} ->
           []
       end
     end)
+    |> Map.new()
     |> tap(fn
-      [] ->
+      map when map == %{} ->
         :ok
 
       suspended_handles ->
-        Logger.debug(fn -> ["Re-trying suspended shape handles ", inspect(suspended_handles)] end)
+        Logger.debug(fn ->
+          ["Re-trying suspended shape handles ", inspect(Map.keys(suspended_handles))]
+        end)
     end)
   end
 
