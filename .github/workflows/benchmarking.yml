@@ -43,7 +43,7 @@ jobs:
           credentials_json: ${{ secrets.GCLOUD_REGISTRY_JSON_KEY }}
       - uses: google-github-actions/setup-gcloud@v1
       - name: Use gcloud CLI
-        run: 'gcloud info'
+        run: gcloud info
       - name: Docker auth
         run: gcloud auth configure-docker europe-docker.pkg.dev --quiet
       - name: Set outputs
@@ -84,6 +84,7 @@ jobs:
             --push \
             --cache-from=${{ env.REGISTRY }}/electric:pr-${{ github.event.issue.number }}-builder \
             --cache-from=${{ env.REGISTRY }}/electric:pr-${{ github.event.issue.number }}-runner-base \
+            --build-context electric-telemetry=../electric-telemetry \
             --tag  ${{ env.REGISTRY }}/electric:pr-${{ github.event.issue.number }}-${{ env.SHORT_SHA }} \
             .
       - name: Write fanout benchmark
