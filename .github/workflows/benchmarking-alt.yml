@@ -1,4 +1,4 @@
-name: Benchmark a PR
+name: Benchmark a PR alt
 
 on:
   issue_comment:
