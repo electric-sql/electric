@@ -756,7 +756,7 @@ defmodule Electric.Shapes.Consumer do
   end
 
   defp subscribe(state, action) do
-    case ShapeLogCollector.subscribe(state.stack_id, state.shape_handle, state.shape, action) do
+    case ShapeLogCollector.add_shape(state.stack_id, state.shape_handle, state.shape, action) do
       :ok ->
         true
 

@@ -1,7 +1,17 @@
 defmodule Electric.Replication.ShapeLogCollector do
   @moduledoc """
-  When any txn comes from postgres, we need to store it into the
-  log for this shape if and only if it has txid >= xmin of the snapshot.
+  The ShapeLogCollector is responsible for collecting and processing
+  shape log operations and managing shape registrations.
+
+  It consists of two main components: the processor and the RequestBatcher.
+
+  The processor handles the processing of shape log operations
+  and manages the shape matching index updates. When any txn comes from postgres,
+  we need to store it into the log for this shape if and only if it has
+  txid >= xmin of the snapshot.
+
+  The RequestBatcher batches the registration and deregistration of shapes
+  to avoid overwhelming the processor with frequent updates.
   """
   use GenServer
 
@@ -55,50 +65,82 @@ defmodule Electric.Replication.ShapeLogCollector do
     Electric.ProcessRegistry.name(stack_id, __MODULE__)
   end
 
-  def mark_as_ready(server_ref) do
-    GenServer.call(server(server_ref), :mark_as_ready)
+  @doc """
+  Marks the collector as ready to process operations from
+  the replication stream.
+
+  This is typically called after the initial shape registrations
+  have been processed.
+  """
+  @spec mark_as_ready(Electric.stack_id()) :: :ok
+  def mark_as_ready(stack_id) do
+    GenServer.call(name(stack_id), :mark_as_ready)
   end
 
-  # use `GenServer.call/2` here to make the event processing synchronous.
-  #
-  # This `call/3` has a timeout of `:infinity` because timeouts are
-  # handled at the storage layer, that is this function doesn't
-  # assume any aggregate max time for the shape consumers to actually commit
-  # the new txn to disk, instead the storage backend is responsible for
-  # determining how long a write should reasonably take and if that fails
-  # it should raise.
-  def handle_event(event, server) do
+  @doc """
+  Handles a replication log events.
+
+  Should be called with operations received from the replication stream.
+
+  Uuse `GenServer.call/2` here to make the event processing synchronous.
+
+  This `call/3` has a timeout of `:infinity` because timeouts are
+  handled at the storage layer, that is this function doesn't
+  assume any aggregate max time for the shape consumers to actually commit
+  the new txn to disk, instead the storage backend is responsible for
+  determining how long a write should reasonably take and if that fails
+  it should raise.
+  """
+  def handle_event(event, stack_id) do
     trace_context = OpenTelemetry.get_current_context()
-    GenServer.call(server, {:handle_event, event, trace_context}, :infinity)
+    GenServer.call(name(stack_id), {:handle_event, event, trace_context}, :infinity)
   end
 
-  # shapes that are being restored are already in the filters
-  # because they were restored from the ets at startup
-  def subscribe(_server_ref, _shape_handle, _shape, :restore) do
-    :ok
+  @doc """
+  Adds a shape to the shape matching index in the ShapeLogCollector
+  used for matching and sending replication stream operations.
+  """
+  defdelegate add_shape(stack_id, shape_handle, shape, operation), to: __MODULE__.RequestBatcher
+
+  @doc """
+  Removes a shape from the shape matching index in the ShapeLogCollector.
+  This call succeeds before the shape is actually removed from the index.
+  """
+  defdelegate remove_shape(stack_id, shape_handle), to: __MODULE__.RequestBatcher
+
+  @doc """
+  Handles batched shape registration updates from the RequestBatcher.
+  """
+  def handle_shape_registration_updates(stack_id, shapes_to_add, shapes_to_remove) do
+    pid = name(stack_id) |> GenServer.whereis()
+    call_ref = make_ref()
+
+    GenServer.cast(
+      pid,
+      {:handle_shape_registration_updates, call_ref, shapes_to_add, shapes_to_remove}
+    )
+
+    call_ref
   end
 
-  # new shapes -- created after boot -- do need to be added
-  def subscribe(server_ref, shape_handle, shape, :create) do
-    GenServer.call(server(server_ref), {:subscribe, shape_handle, shape})
+  @doc """
+  Notifies the ShapeLogCollector that a shape's data has been flushed
+  up to a certain offset, used to mark the overall flush progress.
+
+  Should be called by consumer processes after they flush data.
+  """
+  @spec notify_flushed(Electric.stack_id(), Electric.shape_handle(), LogOffset.t()) :: :ok
+  def notify_flushed(stack_id, shape_handle, offset) do
+    GenServer.cast(name(stack_id), {:writer_flushed, shape_handle, offset})
   end
 
-  def remove_shape(server_ref, shape_handle) do
-    # This has to be async otherwise the system will deadlock -
-    # - a consumer being cleanly shutdown may be waiting for a response from ShapeLogCollector
-    #   while ShapeLogCollector is waiting for an ack from a transaction event, or
-    # - a consumer that has crashed will be waiting in a terminate callback
-    #   for a reply from the unsubscribe while the ShapeLogCollector is again
-    #   waiting for a txn ack.
-    GenServer.cast(server(server_ref), {:remove_shape, shape_handle})
-  end
-
-  def notify_flushed(server_ref, shape_handle, offset) do
-    GenServer.cast(server(server_ref), {:writer_flushed, shape_handle, offset})
-  end
-
-  def active_shapes(server_ref) do
-    GenServer.call(server(server_ref), :active_shapes)
+  @doc """
+  Returns the list of currently active shapes being tracked
+  in the shape matching filters.
+  """
+  @spec active_shapes(Electric.stack_id()) :: MapSet.t(Electric.shape_handle())
+  def active_shapes(stack_id) do
+    GenServer.call(name(stack_id), :active_shapes)
   end
 
   @doc """
@@ -112,12 +154,12 @@ defmodule Electric.Replication.ShapeLogCollector do
       iex> ShapeLogCollector.set_process_flags("my-stack-id", min_heap_size: 1024 * 1024, min_bin_vheap_size: 1024 * 1024)
       {:ok, settings: [min_heap_size: 1024 * 1024, min_bin_vheap_size: 1024 * 1024], invalid: []}
   """
-  def set_process_flags(server_ref, flags) do
-    GenServer.call(server(server_ref), {:set_process_flags, flags}, :infinity)
+  def set_process_flags(stack_id, flags) do
+    GenServer.call(name(stack_id), {:set_process_flags, flags}, :infinity)
   end
 
-  def get_process_flags(server_ref) do
-    if pid = server(server_ref) |> GenServer.whereis() do
+  def get_process_flags(stack_id) do
+    if pid = name(stack_id) |> GenServer.whereis() do
       {:garbage_collection, gc_flags} = :erlang.process_info(pid, :garbage_collection)
       {:priority, priority} = :erlang.process_info(pid, :priority)
 
@@ -127,6 +169,16 @@ defmodule Electric.Replication.ShapeLogCollector do
     else
       :error
     end
+  end
+
+  @doc """
+  Utility for tests, monitors the SLC process.
+  """
+  def monitor(stack_id) do
+    stack_id
+    |> name()
+    |> GenServer.whereis()
+    |> Process.monitor()
   end
 
   def init(opts) do
@@ -216,34 +268,6 @@ defmodule Electric.Replication.ShapeLogCollector do
     )
   end
 
-  def handle_call({:subscribe, shape_handle, shape}, _from, state) do
-    OpenTelemetry.with_span(
-      "shape_log_collector.subscribe",
-      [shape_handle: shape_handle],
-      state.stack_id,
-      fn ->
-        case Partitions.add_shape(state.partitions, shape_handle, shape) do
-          {:ok, partitions} ->
-            state =
-              %{
-                state
-                | partitions: partitions,
-                  event_router: EventRouter.add_shape(state.event_router, shape_handle, shape),
-                  dependency_layers:
-                    DependencyLayers.add_dependency(state.dependency_layers, shape, shape_handle)
-              }
-              |> Map.update!(:subscriptions, &(&1 + 1))
-              |> log_subscription_status()
-
-            {:reply, :ok, state}
-
-          {:error, :connection_not_available} ->
-            {:reply, {:error, :connection_not_available}, state}
-        end
-      end
-    )
-  end
-
   def handle_call(:mark_as_ready, _from, state) do
     lsn = LsnTracker.get_last_processed_lsn(state.stack_id)
     offset = LogOffset.new(Lsn.to_integer(lsn), :infinity)
@@ -288,14 +312,75 @@ defmodule Electric.Replication.ShapeLogCollector do
      |> Map.update!(:flush_tracker, &FlushTracker.handle_flush_notification(&1, shape_id, offset))}
   end
 
-  def handle_cast({:remove_shape, shape_handle}, state) do
-    state =
-      case remove_subscription(state, shape_handle) do
-        {:ok, state} -> state
-        {:error, _} -> state
-      end
+  def handle_cast(
+        {:handle_shape_registration_updates, call_ref, shapes_to_add, shapes_to_remove},
+        state
+      ) do
+    OpenTelemetry.with_span(
+      "shape_log_collector.handle_shape_registration_updates",
+      [],
+      state.stack_id,
+      fn ->
+        {state, results} =
+          shapes_to_remove
+          |> Enum.reduce({state, %{}}, fn shape_handle, {state, results} ->
+            OpenTelemetry.with_span(
+              "shape_log_collector.unsubscribe",
+              [shape_handle: shape_handle],
+              state.stack_id,
+              fn ->
+                case remove_subscription(state, shape_handle) do
+                  {:ok, state} -> {state, Map.put(results, shape_handle, :ok)}
+                  {:error, reason} -> {state, Map.put(results, shape_handle, {:error, reason})}
+                end
+              end
+            )
+          end)
 
-    {:noreply, state}
+        {state, results} =
+          shapes_to_add
+          |> Enum.reduce({state, results}, fn {shape_handle, shape}, {state, results} ->
+            OpenTelemetry.with_span(
+              "shape_log_collector.subscribe",
+              [shape_handle: shape_handle],
+              state.stack_id,
+              fn ->
+                case Partitions.add_shape(state.partitions, shape_handle, shape) do
+                  {:ok, partitions} ->
+                    state =
+                      %{
+                        state
+                        | partitions: partitions,
+                          event_router:
+                            EventRouter.add_shape(state.event_router, shape_handle, shape),
+                          dependency_layers:
+                            DependencyLayers.add_dependency(
+                              state.dependency_layers,
+                              shape,
+                              shape_handle
+                            )
+                      }
+                      |> Map.update!(:subscriptions, &(&1 + 1))
+                      |> log_subscription_status()
+
+                    {state, Map.put(results, shape_handle, :ok)}
+
+                  {:error, :connection_not_available} ->
+                    {state, Map.put(results, shape_handle, {:error, :connection_not_available})}
+                end
+              end
+            )
+          end)
+
+        __MODULE__.RequestBatcher.handle_processor_update_response(
+          state.stack_id,
+          call_ref,
+          results
+        )
+
+        {:noreply, state}
+      end
+    )
   end
 
   defp do_handle_event(%Relation{} = rel, state) do
@@ -308,9 +393,7 @@ defmodule Electric.Replication.ShapeLogCollector do
         Logger.debug(fn -> "Relation received in ShapeLogCollector: #{inspect(rel)}" end)
 
         result = handle_relation(state, rel)
-
         OpenTelemetry.wipe_interval_timer()
-
         result
       end
     )
@@ -569,10 +652,6 @@ defmodule Electric.Replication.ShapeLogCollector do
 
   defp put_last_processed_offset(state, %TransactionFragment{last_log_offset: last_log_offset}),
     do: %{state | last_processed_offset: last_log_offset}
-
-  defp server(stack_id) when is_binary(stack_id), do: name(stack_id)
-  defp server({:via, _, _} = name), do: name
-  defp server(pid) when is_pid(pid), do: pid
 
   if Mix.env() == :test do
     def activate_mocked_functions_from_test_process do

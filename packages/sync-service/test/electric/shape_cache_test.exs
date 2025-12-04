@@ -991,7 +991,7 @@ defmodule Electric.ShapeCacheTest do
 
       ShapeLogCollector.handle_event(
         transaction(@xid, @lsn, [@change]),
-        ctx.shape_log_collector
+        ctx.stack_id
       )
 
       assert_receive {^ref, :new_changes, ^offset}
