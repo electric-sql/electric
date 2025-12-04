@@ -4,10 +4,6 @@ on:
   issue_comment:
     types: [created]
 
-defaults:
-  run:
-    working-directory: packages/sync-service
-
 env:
   PROJECT_ID: vaxine
   REGISTRY: europe-docker.pkg.dev/vaxine/electric
@@ -66,7 +62,7 @@ jobs:
             --build-arg BUILDKIT_INLINE_CACHE=1 \
             --tag ${{ env.REGISTRY }}/electric:pr-${{ github.event.issue.number }}-builder \
             --target builder \
-            .
+            ./packages/sync-service/
 
           docker build \
             --push \
@@ -75,7 +71,7 @@ jobs:
             --build-arg BUILDKIT_INLINE_CACHE=1 \
             --tag  ${{ env.REGISTRY }}/electric:pr-${{ github.event.issue.number }}-runner-base \
             --target runner_setup \
-            .
+            ./packages/sync-service/
       - name: Build actual image
         env:
           DOCKER_BUILDKIT: '1'
@@ -84,9 +80,8 @@ jobs:
             --push \
             --cache-from=${{ env.REGISTRY }}/electric:pr-${{ github.event.issue.number }}-builder \
             --cache-from=${{ env.REGISTRY }}/electric:pr-${{ github.event.issue.number }}-runner-base \
-            --build-context electric-telemetry=../electric-telemetry \
             --tag  ${{ env.REGISTRY }}/electric:pr-${{ github.event.issue.number }}-${{ env.SHORT_SHA }} \
-            .
+            ./packages/sync-service/
       - name: Write fanout benchmark
         run: |
           curl -X POST 'https://benchmarking.electric-sql.com/api/benchmarks/write_fanout/runs' \
