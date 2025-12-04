@@ -335,8 +335,8 @@ defmodule Electric.StackSupervisor do
       replication_opts:
         [
           stack_id: stack_id,
-          handle_operations:
-            {Electric.Replication.ShapeLogCollector, :handle_operations, [shape_log_collector]}
+          handle_event:
+            {Electric.Replication.ShapeLogCollector, :handle_event, [shape_log_collector]}
         ] ++ config.replication_opts,
       pool_opts: [types: PgInterop.Postgrex.Types] ++ config.pool_opts,
       timeline_opts: [

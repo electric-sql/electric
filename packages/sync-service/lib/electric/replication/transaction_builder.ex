@@ -1,23 +1,15 @@
 defmodule Electric.Replication.TransactionBuilder do
   @moduledoc """
-  Builds complete transactions from a stream of operations.
+  Builds complete transactions from a stream of TransactionFragments.
 
-  Takes Begin, Commit, data changes, and Relation messages and builds up
-  Transaction structs. Returns complete transactions when Commit is seen,
-  and passes through Relation messages immediately.
+  Takes TransactionFragments containing begin, commit, and changes,
+  and builds up Transaction structs. Returns complete transactions
+  when a fragment with a commit is seen.
   """
 
-  alias Electric.Replication.Changes
-
   alias Electric.Replication.Changes.{
-    Begin,
-    Commit,
     Transaction,
-    Relation,
-    NewRecord,
-    UpdatedRecord,
-    DeletedRecord,
-    TruncatedRelation
+    TransactionFragment
   }
 
   defstruct transaction: nil
@@ -26,34 +18,29 @@ defmodule Electric.Replication.TransactionBuilder do
           transaction: nil | Transaction.t()
         }
 
-  @type result() :: Transaction.t() | Relation.t()
-
   def new, do: %__MODULE__{}
 
   @doc """
-  Build transactions from a list of operations.
+  Build transactions from a TransactionFragment.
 
   Returns a tuple of {results, state} where results is a list of
-  complete transactions and/or relations, and state is the updated
-  builder state containing any partial transaction.
+  complete transactions, and state is the updated builder state
+  containing any partial transaction.
   """
-  @spec build([Changes.operation()], t()) :: {[Changes.action()], t()}
-  def build(operations, state) do
-    build(operations, state, [])
+  @spec build(TransactionFragment.t(), t()) :: {[Transaction.t()], t()}
+  def build(%TransactionFragment{} = fragment, state) do
+    state
+    |> maybe_start_transaction(fragment)
+    |> add_changes(fragment)
+    |> maybe_complete_transaction(fragment)
   end
 
-  defp build([], state, acc) do
-    {Enum.reverse(acc), state}
-  end
+  defp maybe_start_transaction(state, %TransactionFragment{has_begin?: false}), do: state
 
-  defp build([change | rest], state, acc) do
-    case build_from_change(change, state) do
-      {nil, state} -> build(rest, state, acc)
-      {txn_or_relation, state} -> build(rest, state, [txn_or_relation | acc])
-    end
-  end
-
-  defp build_from_change(%Begin{xid: xid}, %__MODULE__{} = state) do
+  defp maybe_start_transaction(
+         %__MODULE__{} = state,
+         %TransactionFragment{xid: xid, has_begin?: true}
+       ) do
     txn = %Transaction{
       xid: xid,
       changes: [],
@@ -62,33 +49,42 @@ defmodule Electric.Replication.TransactionBuilder do
       last_log_offset: nil
     }
 
-    {nil, %{state | transaction: txn}}
+    %{state | transaction: txn}
   end
 
-  defp build_from_change(%Relation{} = relation, state) do
-    {relation, state}
-  end
-
-  defp build_from_change(
-         %change_type{} = change,
-         %__MODULE__{transaction: txn} = state
-       )
-       when change_type in [NewRecord, UpdatedRecord, DeletedRecord, TruncatedRelation] and
-              not is_nil(txn) do
-    txn = Transaction.prepend_change(txn, change)
-    {nil, %{state | transaction: txn}}
-  end
-
-  defp build_from_change(%Commit{lsn: lsn, commit_timestamp: commit_timestamp}, %__MODULE__{
-         transaction: txn
-       })
-       when not is_nil(txn) do
-    completed_txn =
+  defp add_changes(%{transaction: txn} = state, %TransactionFragment{} = fragment) do
+    txn = %{
       txn
-      |> Map.put(:lsn, lsn)
-      |> Map.put(:commit_timestamp, commit_timestamp)
-      |> Transaction.finalize()
+      | changes: Enum.reverse(fragment.changes) ++ txn.changes,
+        num_changes: txn.num_changes + fragment.change_count
+    }
 
-    {completed_txn, %__MODULE__{transaction: nil}}
+    %{state | transaction: txn}
+  end
+
+  defp maybe_complete_transaction(state, %TransactionFragment{commit: nil}) do
+    {[], state}
+  end
+
+  defp maybe_complete_transaction(
+         %__MODULE__{transaction: txn},
+         %TransactionFragment{
+           lsn: lsn,
+           commit: commit,
+           last_log_offset: last_log_offset
+         }
+       ) do
+    completed_txn =
+      %{
+        txn
+        | lsn: lsn,
+          commit_timestamp: commit.commit_timestamp,
+          changes: Enum.reverse(txn.changes),
+          # The transaction may have had some changes filtered
+          # out, so we need to set the last_log_offset from the fragment
+          last_log_offset: last_log_offset
+      }
+
+    {[completed_txn], %__MODULE__{transaction: nil}}
   end
 end

@@ -13,11 +13,12 @@ defmodule Electric.Replication.ShapeLogCollector do
   alias Electric.Replication.PersistentReplicationState
   alias Electric.Postgres.Inspector
   alias Electric.Replication.Changes
-  alias Electric.Replication.Changes.{Relation, Transaction}
-  alias Electric.Replication.TransactionBuilder
+  alias Electric.Replication.Changes.Relation
+  alias Electric.Replication.Changes.TransactionFragment
+  alias Electric.Replication.LogOffset
   alias Electric.Shapes.Consumer.Materializer
   alias Electric.Shapes.DependencyLayers
-  alias Electric.Shapes.Filter
+  alias Electric.Shapes.EventRouter
   alias Electric.Shapes.Partitions
   alias Electric.Telemetry.OpenTelemetry
   alias Electric.Shapes.ConsumerRegistry
@@ -25,6 +26,7 @@ defmodule Electric.Replication.ShapeLogCollector do
   import Electric.Utils, only: [map_while_ok: 2, map_if_ok: 2]
 
   require Electric.Postgres.Lsn
+  require Electric.Replication.LogOffset
   require Logger
 
   @schema NimbleOptions.new!(
@@ -35,7 +37,8 @@ defmodule Electric.Replication.ShapeLogCollector do
           )
 
   defguardp is_ready_to_process(state)
-            when is_map_key(state, :last_processed_lsn) and not is_nil(state.last_processed_lsn)
+            when is_map_key(state, :last_processed_offset) and
+                   not is_nil(state.last_processed_offset)
 
   def start_link(opts) do
     with {:ok, opts} <- NimbleOptions.validate(Map.new(opts), @schema) do
@@ -64,9 +67,9 @@ defmodule Electric.Replication.ShapeLogCollector do
   # the new txn to disk, instead the storage backend is responsible for
   # determining how long a write should reasonably take and if that fails
   # it should raise.
-  def handle_operations(operations, server) when is_list(operations) do
+  def handle_event(event, server) do
     trace_context = OpenTelemetry.get_current_context()
-    GenServer.call(server, {:handle_operations, operations, trace_context}, :infinity)
+    GenServer.call(server, {:handle_event, event, trace_context}, :infinity)
   end
 
   # shapes that are being restored are already in the filters
@@ -156,11 +159,11 @@ defmodule Electric.Replication.ShapeLogCollector do
         partitions: Partitions.new(Keyword.new(opts)),
         dependency_layers: DependencyLayers.new(),
         pids_by_shape_handle: %{},
-        filter:
+        event_router:
           opts
           |> Map.put(:refs_fun, &Materializer.get_all_as_refs(&1, stack_id))
           |> Keyword.new()
-          |> Filter.new(),
+          |> EventRouter.new(),
         flush_tracker:
           FlushTracker.new(
             notify_fn: fn lsn ->
@@ -170,8 +173,7 @@ defmodule Electric.Replication.ShapeLogCollector do
               end
             end
           ),
-        registry_state: registry_state,
-        transaction_builder: TransactionBuilder.new()
+        registry_state: registry_state
       })
 
     {:ok, state, {:continue, :restore_shapes}}
@@ -183,17 +185,17 @@ defmodule Electric.Replication.ShapeLogCollector do
       [],
       state.stack_id,
       fn ->
-        {partitions, filter, layers, count} =
+        {partitions, event_router, layers, count} =
           state.stack_id
           |> Electric.ShapeCache.ShapeStatus.list_shapes()
           |> Enum.reduce(
-            {state.partitions, state.filter, state.dependency_layers, 0},
-            fn {shape_handle, shape}, {partitions, filter, layers, count} ->
+            {state.partitions, state.event_router, state.dependency_layers, 0},
+            fn {shape_handle, shape}, {partitions, event_router, layers, count} ->
               {:ok, partitions} = Partitions.add_shape(partitions, shape_handle, shape)
 
               {
                 partitions,
-                Filter.add_shape(filter, shape_handle, shape),
+                EventRouter.add_shape(event_router, shape_handle, shape),
                 DependencyLayers.add_dependency(layers, shape, shape_handle),
                 count + 1
               }
@@ -206,7 +208,7 @@ defmodule Electric.Replication.ShapeLogCollector do
          %{
            state
            | partitions: partitions,
-             filter: filter,
+             event_router: event_router,
              dependency_layers: layers,
              subscriptions: count
          }}
@@ -226,7 +228,7 @@ defmodule Electric.Replication.ShapeLogCollector do
               %{
                 state
                 | partitions: partitions,
-                  filter: Filter.add_shape(state.filter, shape_handle, shape),
+                  event_router: EventRouter.add_shape(state.event_router, shape_handle, shape),
                   dependency_layers:
                     DependencyLayers.add_dependency(state.dependency_layers, shape, shape_handle)
               }
@@ -244,27 +246,26 @@ defmodule Electric.Replication.ShapeLogCollector do
 
   def handle_call(:mark_as_ready, _from, state) do
     lsn = LsnTracker.get_last_processed_lsn(state.stack_id)
+    offset = LogOffset.new(Lsn.to_integer(lsn), :infinity)
     Electric.StatusMonitor.mark_shape_log_collector_ready(state.stack_id, self())
-    {:reply, :ok, Map.put(state, :last_processed_lsn, lsn)}
+    {:reply, :ok, Map.put(state, :last_processed_offset, offset)}
   end
 
-  def handle_call({:handle_operations, _, _}, _from, state)
+  def handle_call({:handle_event, _, _}, _from, state)
       when not is_ready_to_process(state) do
     {:reply, {:error, :not_ready}, state}
   end
 
-  def handle_call({:handle_operations, operations, trace_context}, _from, state) do
+  def handle_call({:handle_event, event, trace_context}, _from, state) do
     OpenTelemetry.set_current_context(trace_context)
 
-    {actions, state} = build_db_actions(operations, state)
-
-    {response, state} = handle_actions(actions, state)
+    {response, state} = do_handle_event(event, state)
 
     {:reply, response, state}
   end
 
   def handle_call(:active_shapes, _from, state) do
-    {:reply, Filter.active_shapes(state.filter), state}
+    {:reply, EventRouter.active_shapes(state.event_router), state}
   end
 
   def handle_call({:set_process_flags, flags}, _from, state) do
@@ -297,16 +298,7 @@ defmodule Electric.Replication.ShapeLogCollector do
     {:noreply, state}
   end
 
-  defp handle_actions([], state), do: {:ok, state}
-
-  defp handle_actions([action | rest], state) do
-    case handle_action(action, state) do
-      {:ok, state} -> handle_actions(rest, state)
-      {{:error, error}, state} -> {{:error, error}, state}
-    end
-  end
-
-  defp handle_action(%Relation{} = rel, state) do
+  defp do_handle_event(%Relation{} = rel, state) do
     OpenTelemetry.with_span(
       "pg_txn.replication_client.relation_received",
       ["rel.id": rel.id, "rel.schema": rel.schema, "rel.table": rel.table],
@@ -324,13 +316,14 @@ defmodule Electric.Replication.ShapeLogCollector do
     )
   end
 
-  defp handle_action(%Transaction{} = txn, state) do
+  defp do_handle_event(%TransactionFragment{} = txn_fragment, state) do
     OpenTelemetry.with_span(
       "pg_txn.replication_client.transaction_received",
       [
-        num_changes: txn.num_changes,
-        num_relations: MapSet.size(txn.affected_relations),
-        xid: txn.xid
+        num_changes: txn_fragment.change_count,
+        num_relations: MapSet.size(txn_fragment.affected_relations),
+        xid: txn_fragment.xid,
+        complete_transaction?: TransactionFragment.complete_transaction?(txn_fragment)
       ],
       state.stack_id,
       fn ->
@@ -338,16 +331,18 @@ defmodule Electric.Replication.ShapeLogCollector do
 
         Logger.debug(
           fn ->
-            "Received transaction #{txn.xid} (#{txn.num_changes} changes) from Postgres at #{txn.lsn}"
+            "Received transaction fragment #{txn_fragment.xid} (#{txn_fragment.change_count} changes) from Postgres at #{txn_fragment.lsn}"
           end,
-          received_transaction_xid: txn.xid,
-          received_transaction_num_changes: txn.num_changes,
-          received_transaction_lsn: txn.lsn
+          received_transaction_xid: txn_fragment.xid,
+          received_transaction_num_changes: txn_fragment.change_count,
+          received_transaction_lsn: txn_fragment.lsn
         )
 
-        Logger.debug(fn -> "Txn received in ShapeLogCollector: #{inspect(txn)}" end)
+        Logger.debug(fn ->
+          "Txn fragment received in ShapeLogCollector: #{inspect(txn_fragment)}"
+        end)
 
-        result = handle_transaction(state, txn)
+        result = handle_txn_fragment(state, txn_fragment)
 
         OpenTelemetry.stop_and_save_intervals(
           total_attribute: :"shape_log_collector.transaction.total_duration_µs"
@@ -358,40 +353,60 @@ defmodule Electric.Replication.ShapeLogCollector do
     )
   end
 
-  # If no-one is listening to the replication stream, then just return without
-  # emitting the transaction.
-  defp handle_transaction(%{subscriptions: 0} = state, txn) do
-    Logger.debug(fn -> "Dropping transaction #{txn.xid}: no active consumers" end)
-    OpenTelemetry.add_span_attributes("txn.is_dropped": true)
-    {:ok, %{state | flush_tracker: FlushTracker.handle_transaction(state.flush_tracker, txn, [])}}
-  end
-
-  # If we've already processed a transaction, then drop it without processing
-  defp handle_transaction(%{last_processed_lsn: last_processed_lsn} = state, txn)
-       when not Lsn.is_larger(txn.lsn, last_processed_lsn) do
+  # If we've already processed a txn_fragment, then drop it without processing
+  defp handle_txn_fragment(%{last_processed_offset: last_processed_offset} = state, txn_fragment)
+       when LogOffset.is_log_offset_lte(txn_fragment.last_log_offset, last_processed_offset) do
     Logger.debug(fn ->
-      "Dropping transaction #{txn.xid}: transaction LSN #{txn.lsn} smaller than last processed #{last_processed_lsn}"
+      "Dropping transaction fragment as last_log_offset #{txn_fragment.last_log_offset} not greater than last processed #{last_processed_offset}"
     end)
 
     OpenTelemetry.add_span_attributes("txn.is_dropped": true)
-    {:ok, %{state | flush_tracker: FlushTracker.handle_transaction(state.flush_tracker, txn, [])}}
+
+    {:ok,
+     %{
+       state
+       | flush_tracker: FlushTracker.handle_txn_fragment(state.flush_tracker, txn_fragment, [])
+     }}
   end
 
-  defp handle_transaction(state, txn) do
+  defp handle_txn_fragment(
+         %{last_processed_offset: last_processed_offset},
+         %TransactionFragment{
+           changes: [%{log_offset: first_log_offset} | _],
+           last_log_offset: last_log_offset
+         }
+       )
+       when LogOffset.is_log_offset_lte(first_log_offset, last_processed_offset) and
+              LogOffset.is_log_offset_lt(last_processed_offset, last_log_offset) do
+    raise """
+    Received TransactionFragment that has already been partially processed.
+
+    This scenario is not currently supported. It could occur if the
+    batch size was changed while restarting the replication client.
+
+    First log offset: #{inspect(first_log_offset)}
+    last processed offset: #{inspect(last_processed_offset)}
+    last log offset: #{inspect(last_log_offset)}
+    """
+  end
+
+  defp handle_txn_fragment(state, txn_fragment) do
     OpenTelemetry.add_span_attributes("txn.is_dropped": false)
 
     OpenTelemetry.start_interval("shape_log_collector.fill_keys_in_txn")
 
-    case fill_keys_in_txn(txn, state) do
-      {:ok, txn} ->
+    case fill_keys(txn_fragment, state) do
+      {:ok, txn_fragment} ->
         OpenTelemetry.start_interval("partitions.handle_transaction")
-        {partitions, txn} = Partitions.handle_transaction(state.partitions, txn)
+
+        {partitions, txn_fragment} =
+          Partitions.handle_txn_fragment(state.partitions, txn_fragment)
 
         state =
           state
           |> Map.put(:partitions, partitions)
-          |> put_last_processed_lsn(txn.lsn)
-          |> publish(txn)
+          |> put_last_processed_offset(txn_fragment)
+          |> publish(txn_fragment)
 
         {:ok, state}
 
@@ -401,10 +416,14 @@ defmodule Electric.Replication.ShapeLogCollector do
   end
 
   defp publish(state, event) do
-    OpenTelemetry.start_interval("shape_log_collector.affected_shapes")
+    OpenTelemetry.start_interval("shape_log_collector.event_routing")
 
-    affected_shapes = Filter.affected_shapes(state.filter, event)
+    {events_by_handle, event_router} =
+      EventRouter.event_by_shape_handle(state.event_router, event)
 
+    state = %{state | event_router: event_router}
+
+    affected_shapes = Map.keys(events_by_handle) |> MapSet.new()
     affected_shape_count = MapSet.size(affected_shapes)
 
     OpenTelemetry.add_span_attributes(
@@ -416,16 +435,22 @@ defmodule Electric.Replication.ShapeLogCollector do
 
     for layer <- DependencyLayers.get_for_handles(state.dependency_layers, affected_shapes) do
       # Each publish is synchronous, so layers will be processed in order
-      ConsumerRegistry.publish(layer, {:handle_event, event, context}, state.registry_state)
+      layer_events =
+        Map.new(layer, fn handle ->
+          {handle, {:handle_event, Map.fetch!(events_by_handle, handle), context}}
+        end)
+
+      ConsumerRegistry.publish(layer_events, state.registry_state)
     end
 
     OpenTelemetry.start_interval("shape_log_collector.set_last_processed_lsn")
 
-    LsnTracker.set_last_processed_lsn(state.stack_id, state.last_processed_lsn)
+    lsn = Lsn.from_integer(state.last_processed_offset.tx_offset)
+    LsnTracker.set_last_processed_lsn(state.stack_id, lsn)
 
     flush_tracker =
-      if is_struct(event, Transaction) do
-        FlushTracker.handle_transaction(state.flush_tracker, event, affected_shapes)
+      if is_struct(event, TransactionFragment) do
+        FlushTracker.handle_txn_fragment(state.flush_tracker, event, affected_shapes)
       else
         state.flush_tracker
       end
@@ -485,13 +510,13 @@ defmodule Electric.Replication.ShapeLogCollector do
       [shape_handle: shape_handle],
       state.stack_id,
       fn ->
-        if Filter.has_shape?(state.filter, shape_handle) do
+        if EventRouter.has_shape?(state.event_router, shape_handle) do
           Logger.debug("Deleting shape #{shape_handle}")
 
           OpenTelemetry.start_interval("unsubscribe_shape.remove_subscription")
 
-          OpenTelemetry.start_interval("unsubscribe_shape.remove_from_filter")
-          filter = Filter.remove_shape(state.filter, shape_handle)
+          OpenTelemetry.start_interval("unsubscribe_shape.remove_from_event_router")
+          event_router = EventRouter.remove_shape(state.event_router, shape_handle)
 
           OpenTelemetry.start_interval("unsubscribe_shape.remove_from_partitions")
           partitions = Partitions.remove_shape(state.partitions, shape_handle)
@@ -517,7 +542,7 @@ defmodule Electric.Replication.ShapeLogCollector do
            %{
              state
              | subscriptions: count - 1,
-               filter: filter,
+               event_router: event_router,
                partitions: partitions,
                pids_by_shape_handle: pids_by_shape_handle,
                dependency_layers: dependency_layers,
@@ -542,11 +567,8 @@ defmodule Electric.Replication.ShapeLogCollector do
     state
   end
 
-  defp put_last_processed_lsn(%{last_processed_lsn: last_processed_lsn} = state, lsn)
-       when Lsn.is_larger(lsn, last_processed_lsn),
-       do: %{state | last_processed_lsn: lsn}
-
-  defp put_last_processed_lsn(state, _lsn), do: state
+  defp put_last_processed_offset(state, %TransactionFragment{last_log_offset: last_log_offset}),
+    do: %{state | last_processed_offset: last_log_offset}
 
   defp server(stack_id) when is_binary(stack_id), do: name(stack_id)
   defp server({:via, _, _} = name), do: name
@@ -560,19 +582,22 @@ defmodule Electric.Replication.ShapeLogCollector do
     def activate_mocked_functions_from_test_process, do: :noop
   end
 
-  defp fill_keys_in_txn(txn, state) do
-    with {:ok, pk_cols_of_relations} <- pk_cols_of_relations(txn, state) do
-      txn =
-        Map.update!(txn, :changes, fn changes ->
-          Enum.map(changes, &Changes.fill_key(&1, pk_cols_of_relations[&1.relation]))
+  defp fill_keys(batch, state) do
+    with {:ok, pk_cols_of_relations} <- pk_cols_of_relations(batch, state) do
+      batch =
+        Map.update!(batch, :changes, fn changes ->
+          Enum.map(
+            changes,
+            &Changes.fill_key(&1, pk_cols_of_relations[Map.get(&1, :relation)])
+          )
         end)
 
-      {:ok, txn}
+      {:ok, batch}
     end
   end
 
-  defp pk_cols_of_relations(txn, state) do
-    txn.affected_relations
+  defp pk_cols_of_relations(batch, state) do
+    batch.affected_relations
     |> map_while_ok(fn relation ->
       with {:ok, pk_cols} <- pk_cols_of_relation(relation, state) do
         {:ok, {relation, pk_cols}}
@@ -586,11 +611,5 @@ defmodule Electric.Replication.ShapeLogCollector do
          {:ok, info} <- Inspector.load_column_info(oid, state.inspector) do
       {:ok, Inspector.get_pk_cols(info)}
     end
-  end
-
-  defp build_db_actions(operations, state) do
-    {actions, builder} = TransactionBuilder.build(operations, state.transaction_builder)
-
-    {actions, %{state | transaction_builder: builder}}
   end
 end

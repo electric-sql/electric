@@ -141,11 +141,70 @@ defmodule Electric.Replication.LogOffset do
     if compare(a, b) == :gt, do: a, else: b
   end
 
+  @doc """
+  Guard that checks if offset1 is less than offset2.
+
+  ## Examples
+
+      iex> LogOffset.is_log_offset_lt(new(10, 0), new(10, 1))
+      true
+
+      iex> LogOffset.is_log_offset_lt(new(9, 5), new(10, 1))
+      true
+
+      iex> LogOffset.is_log_offset_lt(new(10, 1), new(10, 0))
+      false
+
+      iex> LogOffset.is_log_offset_lt(new(10, 0), new(10, 0))
+      false
+
+      iex> LogOffset.is_log_offset_lt(new(10, 5), new(10, :infinity))
+      true
+
+      iex> LogOffset.is_log_offset_lt(new(10, :infinity), new(10, 5))
+      false
+
+      iex> LogOffset.is_log_offset_lt(new(10, :infinity), new(10, :infinity))
+      false
+
+      iex> LogOffset.is_log_offset_lt(new(9, :infinity), new(10, 0))
+      true
+  """
   defguard is_log_offset_lt(offset1, offset2)
            when offset1.tx_offset < offset2.tx_offset or
                   (offset1.tx_offset == offset2.tx_offset and
-                     offset1.op_offset < offset2.op_offset)
+                     offset1.op_offset != :infinity and
+                     (offset2.op_offset == :infinity or offset1.op_offset < offset2.op_offset))
 
+  @doc """
+  Guard that checks if offset1 is less than or equal to offset2.
+
+  ## Examples
+
+      iex> require LogOffset
+      iex> LogOffset.is_log_offset_lte(new(10, 0), new(10, 1))
+      true
+
+      iex> require LogOffset
+      iex> LogOffset.is_log_offset_lte(new(10, 0), new(10, 0))
+      true
+
+      iex> require LogOffset
+      iex> LogOffset.is_log_offset_lte(new(10, 1), new(10, 0))
+      false
+
+      iex> require LogOffset
+      iex> LogOffset.is_log_offset_lte(new(10, 5), new(10, :infinity))
+      true
+
+      iex> require LogOffset
+      iex> LogOffset.is_log_offset_lte(new(10, :infinity), new(10, :infinity))
+      true
+
+      iex> require LogOffset
+      iex> LogOffset.is_log_offset_lte(new(10, :infinity), new(10, 5))
+      false
+  """
   defguard is_log_offset_lte(offset1, offset2)
            when offset1 == offset2 or is_log_offset_lt(offset1, offset2)
 

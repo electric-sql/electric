@@ -1,6 +1,6 @@
 defmodule Electric.Replication.ShapeLogCollector.FlushTracker do
   alias Electric.Replication.LogOffset
-  alias Electric.Replication.Changes.Transaction
+  alias Electric.Replication.Changes.{Commit, TransactionFragment}
 
   @type shape_id() :: term()
 
@@ -95,13 +95,13 @@ defmodule Electric.Replication.ShapeLogCollector.FlushTracker do
     last_flushed == %{} and :gb_trees.is_empty(tree)
   end
 
-  @spec handle_transaction(t(), Transaction.t(), Enumerable.t(shape_id())) :: t()
-  def handle_transaction(
+  @spec handle_txn_fragment(t(), TransactionFragment.t(), Enumerable.t(shape_id())) :: t()
+  def handle_txn_fragment(
         %__MODULE__{
           min_incomplete_flush_tree: min_incomplete_flush_tree,
           last_flushed: last_flushed
         } = state,
-        %Transaction{lsn: _lsn, last_log_offset: last_log_offset},
+        %TransactionFragment{commit: %Commit{}, last_log_offset: last_log_offset},
         affected_shapes
       ) do
     # for affected shapes that are not currently tracked, assume their last flushed offset
@@ -144,6 +144,14 @@ defmodule Electric.Replication.ShapeLogCollector.FlushTracker do
     else
       state
     end
+  end
+
+  def handle_txn_fragment(
+        %__MODULE__{} = state,
+        %TransactionFragment{commit: nil},
+        _affected_shapes
+      ) do
+    state
   end
 
   @spec handle_flush_notification(t(), shape_id(), LogOffset.t()) :: t()
