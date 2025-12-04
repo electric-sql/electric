@@ -47,20 +47,20 @@ defmodule Electric.Replication.ShapeLogCollector.Registrator do
   Registers a shape with the SLC, returns after the shape has actually
   been added and is receiving operations from the log.
   """
-  @spec subscribe(
+  @spec add_shape(
           Electric.stack_id(),
           Electric.shape_handle(),
           Electric.Shapes.Shape.t(),
           :create | :restore
-        ) :: :ok
+        ) :: :ok | {:error, any()}
   # shapes that are being restored are already in the filters
   # because they were restored from the ets at startup
-  def subscribe(_stack_id, _shape_handle, _shape, :restore) do
+  def add_shape(_stack_id, _shape_handle, _shape, :restore) do
     :ok
   end
 
   # new shapes -- created after boot -- do need to be added
-  def subscribe(stack_id, shape_handle, shape, :create) do
+  def add_shape(stack_id, shape_handle, shape, :create) do
     GenServer.call(name(stack_id), {:add_shape, shape_handle, shape})
   end
 
@@ -68,8 +68,8 @@ defmodule Electric.Replication.ShapeLogCollector.Registrator do
   Schedules a shape removal from the SLC, returns before the shape is
   actually removed.
   """
-  @spec unsubscribe(Electric.stack_id(), Electric.shape_handle()) :: :ok
-  def unsubscribe(stack_id, shape_handle) do
+  @spec remove_shape(Electric.stack_id(), Electric.shape_handle()) :: :ok
+  def remove_shape(stack_id, shape_handle) do
     GenServer.call(name(stack_id), {:remove_shape, shape_handle})
   end
 

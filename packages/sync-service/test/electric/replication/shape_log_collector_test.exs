@@ -823,7 +823,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
            )
   end
 
-  describe "subscribe/4" do
+  describe "add_shape/4" do
     setup :setup_log_collector
     @shape Fixtures.Shape.new(1)
     @shape_handle "the-shape-handle"
@@ -838,13 +838,13 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
     test "returns :ok when relation info available", ctx do
       stub_inspector(load_relation_info: fn _, _ -> {:ok, @relation_info} end)
 
-      assert ShapeLogCollector.subscribe(ctx.stack_id, @shape_handle, @shape, :create) == :ok
+      assert ShapeLogCollector.add_shape(ctx.stack_id, @shape_handle, @shape, :create) == :ok
     end
 
     test "returns error when connection not available", ctx do
       stub_inspector(load_relation_info: fn _, _ -> {:error, :connection_not_available} end)
 
-      assert ShapeLogCollector.subscribe(ctx.stack_id, @shape_handle, @shape, :create) ==
+      assert ShapeLogCollector.add_shape(ctx.stack_id, @shape_handle, @shape, :create) ==
                {:error, :connection_not_available}
     end
   end

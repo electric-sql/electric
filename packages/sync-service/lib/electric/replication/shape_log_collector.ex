@@ -16,17 +16,16 @@ defmodule Electric.Replication.ShapeLogCollector do
   defdelegate start_link(opts), to: __MODULE__.Supervisor
 
   @doc """
-  Subscribes a shape for receiving shape log operations.
-  This will result in the shape being added to the shape filters
-  used for matching replication stream operations.
+  Adds a shape to the shape matching index in the ShapeLogCollector
+  used for matching and sending replication stream operations.
   """
-  defdelegate subscribe(stack_id, shape_handle, shape, operation), to: __MODULE__.Registrator
+  defdelegate add_shape(stack_id, shape_handle, shape, operation), to: __MODULE__.Registrator
 
   @doc """
-  Unsubscribes a shape from receiving shape log operations.
-  Removes the shape from the shape matching filters.
+  Removes a shape from the shape matching index in the ShapeLogCollector.
+  This call succeeds before the shape is actually removed from the index.
   """
-  defdelegate unsubscribe(stack_id, shape_handle), to: __MODULE__.Registrator
+  defdelegate remove_shape(stack_id, shape_handle), to: __MODULE__.Registrator
 
   @doc """
   Marks the collector as ready to process operations from
