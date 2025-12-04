@@ -61,7 +61,7 @@ defmodule Electric.Replication.ShapeLogCollector.Registrator do
 
   # new shapes -- created after boot -- do need to be added
   def subscribe(stack_id, shape_handle, shape, :create) do
-    GenServer.call(name(stack_id), {:subscribe, shape_handle, shape})
+    GenServer.call(name(stack_id), {:add_shape, shape_handle, shape})
   end
 
   @doc """
@@ -70,7 +70,7 @@ defmodule Electric.Replication.ShapeLogCollector.Registrator do
   """
   @spec unsubscribe(Electric.stack_id(), Electric.shape_handle()) :: :ok
   def unsubscribe(stack_id, shape_handle) do
-    GenServer.call(name(stack_id), {:unsubscribe, shape_handle})
+    GenServer.call(name(stack_id), {:remove_shape, shape_handle})
   end
 
   @doc """
@@ -108,7 +108,7 @@ defmodule Electric.Replication.ShapeLogCollector.Registrator do
   end
 
   @impl true
-  def handle_call({:subscribe, shape_handle, shape}, from, state) do
+  def handle_call({:add_shape, shape_handle, shape}, from, state) do
     {:noreply,
      %{
        state
@@ -118,7 +118,7 @@ defmodule Electric.Replication.ShapeLogCollector.Registrator do
      }, {:continue, :maybe_schedule_update}}
   end
 
-  def handle_call({:unsubscribe, shape_handle}, _from, state) do
+  def handle_call({:remove_shape, shape_handle}, _from, state) do
     if from = Map.get(state.to_schedule_waiters, shape_handle) do
       GenServer.reply(
         from,
