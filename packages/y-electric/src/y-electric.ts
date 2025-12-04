@@ -56,6 +56,8 @@ export class ElectricProvider<
   private pendingChanges: Uint8Array | null = null
   private sendingAwarenessState: boolean = false
   private pendingAwarenessUpdate: AwarenessUpdate | null = null
+  private debounceMs: number
+  private debounceTimer: ReturnType<typeof setTimeout> | null = null
 
   private documentUpdateHandler: (
     update: Uint8Array,
@@ -93,6 +95,7 @@ export class ElectricProvider<
    * @param {ResumeState} [options.resumeState] - Resume state for the provider
    * @param {boolean} [options.connect=true] - Whether to automatically connect upon initialization
    * @param {typeof fetch} [options.fetchClient] - Custom fetch implementation to use for HTTP requests
+   * @param {number} [options.debounceMs] - Debounce window in milliseconds for sending document updates. If 0 or undefined, debouncing is disabled.
    */
   constructor({
     doc,
@@ -101,6 +104,7 @@ export class ElectricProvider<
     resumeState,
     connect = true,
     fetchClient,
+    debounceMs,
   }: ElectricProviderOptions<RowWithDocumentUpdate, RowWithAwarenessUpdate>) {
     super()
 
@@ -108,6 +112,7 @@ export class ElectricProvider<
     this.documentUpdates = documentUpdatesConfig
     this.awarenessUpdates = awarenessUpdatesConfig
     this.resumeState = resumeState ?? {}
+    this.debounceMs = debounceMs ?? 0
 
     this.fetchClient = fetchClient
 
@@ -174,7 +179,35 @@ export class ElectricProvider<
     }
   }
 
+  private clearDebounceTimer() {
+    if (this.debounceTimer !== null) {
+      clearTimeout(this.debounceTimer)
+      this.debounceTimer = null
+    }
+  }
+
+  private scheduleSendOperations() {
+    if (this.debounceMs > 0) {
+      if (this.debounceTimer === null) {
+        this.debounceTimer = setTimeout(async () => {
+          this.debounceTimer = null
+          await this.sendOperations()
+          if (
+            this.pendingChanges &&
+            this.connected &&
+            !this.sendingPendingChanges
+          ) {
+            this.scheduleSendOperations()
+          }
+        }, this.debounceMs)
+      }
+    } else {
+      this.sendOperations()
+    }
+  }
+
   destroy() {
+    this.clearDebounceTimer()
     this.disconnect()
 
     this.doc.off(`update`, this.documentUpdateHandler)
@@ -187,6 +220,12 @@ export class ElectricProvider<
   }
 
   disconnect() {
+    // Flush any pending changes before disconnecting
+    this.clearDebounceTimer()
+    if (this.pendingChanges && this.connected) {
+      this.sendOperations()
+    }
+
     this.unsubscribeShapes?.()
 
     if (!this.connected) {
@@ -234,7 +273,7 @@ export class ElectricProvider<
     })
 
     const operationsShapeUnsubscribe = operationsStream.subscribe(
-      (messages) => {
+      (messages: Message<RowWithDocumentUpdate>[]) => {
         this.operationsShapeHandler(
           messages,
           operationsStream.lastOffset,
@@ -247,17 +286,15 @@ export class ElectricProvider<
     if (this.awarenessUpdates) {
       const awarenessStream = new ShapeStream<RowWithAwarenessUpdate>({
         ...this.awarenessUpdates.shape,
-        ...this.resumeState.awareness,
         signal: abortController.signal,
+        offset: `now`,
       })
 
-      awarenessShapeUnsubscribe = awarenessStream.subscribe((messages) => {
-        this.awarenessShapeHandler(
-          messages,
-          awarenessStream.lastOffset,
-          awarenessStream.shapeHandle!
-        )
-      })
+      awarenessShapeUnsubscribe = awarenessStream.subscribe(
+        (messages: Message<RowWithAwarenessUpdate>[]) => {
+          this.awarenessShapeHandler(messages)
+        }
+      )
     }
 
     this.unsubscribeShapes = () => {
@@ -301,8 +338,6 @@ export class ElectricProvider<
     }
   }
 
-  // TODO: add an optional throttler that batches updates
-  // before pushing to the server
   private async applyDocumentUpdate(update: Uint8Array, origin: unknown) {
     // don't re-send updates from electric
     if (origin === `server`) {
@@ -310,10 +345,12 @@ export class ElectricProvider<
     }
 
     this.batch(update)
-    this.sendOperations()
+    this.scheduleSendOperations()
   }
 
   private async sendOperations() {
+    this.clearDebounceTimer()
+
     if (!this.connected || this.sendingPendingChanges) {
       return
     }
@@ -397,11 +434,7 @@ export class ElectricProvider<
     }
   }
 
-  private awarenessShapeHandler(
-    messages: Message<RowWithAwarenessUpdate>[],
-    offset: Offset,
-    handle: string
-  ) {
+  private awarenessShapeHandler(messages: Message<RowWithAwarenessUpdate>[]) {
     for (const message of messages) {
       if (isChangeMessage(message)) {
         if (message.headers.operation === `delete`) {
@@ -418,15 +451,6 @@ export class ElectricProvider<
             this
           )
         }
-      } else if (
-        isControlMessage(message) &&
-        message.headers.control === `up-to-date`
-      ) {
-        this.resumeState.awareness = {
-          offset: offset,
-          handle: handle,
-        }
-        this.emit(`resumeState`, [this.resumeState])
       }
     }
   }

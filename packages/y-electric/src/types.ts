@@ -49,7 +49,6 @@ export type YProvider = {
  * A resume state provider is used to persist the sync state of a document
  * This is composed of:
  * - The document shape offset and handle
- * - The awareness shape offset and handle (optional)
  * - The state vector of the document synced to the server (optional)
  */
 export type ElectricResumeStateProvider = {
@@ -74,6 +73,7 @@ export type ElectricResumeStateProvider = {
  * @param resumeState (optional) The resume state to use for the provider. If no resume state the provider will fetch the entire shape.
  * @param connect (optional) Whether to automatically connect upon initialization.
  * @param fetchClient (optional) Custom fetch implementation to use for send requests.
+ * @param debounceMs (optional) Debounce window in milliseconds for sending document updates. If 0 or undefined, debouncing is disabled and updates are sent immediately.
  */
 export type ElectricProviderOptions<
   RowWithDocumentUpdate extends Row<decoding.Decoder>,
@@ -96,14 +96,11 @@ export type ElectricProviderOptions<
   resumeState?: ResumeState
   connect?: boolean
   fetchClient?: typeof fetch
+  debounceMs?: number
 }
 
 export type ResumeState = {
   document?: {
-    offset: Offset
-    handle: string
-  }
-  awareness?: {
     offset: Offset
     handle: string
   }

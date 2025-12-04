@@ -1,13 +1,10 @@
 name: Deploy Examples
 
-# Disabled: example deployments are currently broken
-# on:
-#   push:
-#     branches: ['main']
+on:
+  push:
+    branches: ['main']
 #   pull_request:
 #     paths: ['examples/*/**']
-on:
-  workflow_dispatch:
 
 concurrency:
   group: ${{ github.event_name == 'push' && 'prod-deploy-group' || format('examples-pr-{0}', github.event.number) }}
