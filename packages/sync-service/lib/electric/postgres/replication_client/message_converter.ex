@@ -14,6 +14,7 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverter do
 
   require Logger
   alias Electric.Replication.LogOffset
+  alias Electric.Postgres.Lsn
   alias Electric.Postgres.LogicalReplication.Messages, as: LR
 
   alias Electric.Replication.Changes.{
@@ -224,11 +225,13 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverter do
       txn_change_count: state.tx_change_count
     }
 
+    last_log_offset = state.last_log_offset || LogOffset.new(Lsn.to_integer(fragment.lsn), 0)
+
     {:ok,
      %{
        fragment
        | commit: commit,
-         last_log_offset: state.last_log_offset,
+         last_log_offset: last_log_offset,
          changes: Enum.reverse(fragment.changes)
      },
      %{

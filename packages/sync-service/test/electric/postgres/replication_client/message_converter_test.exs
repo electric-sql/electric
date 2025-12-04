@@ -662,5 +662,43 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverterTest do
                  converter
                )
     end
+
+    test "returns TransactionFragment with valid last_log_offset for empty transaction", %{
+      converter: converter
+    } do
+      {:buffering, converter} =
+        MessageConverter.convert(
+          %LR.Begin{final_lsn: @test_lsn, commit_timestamp: DateTime.utc_now(), xid: 456},
+          @max_batch_size,
+          converter
+        )
+
+      # Commit without any changes
+      assert {:ok,
+              %TransactionFragment{
+                xid: 456,
+                lsn: @test_lsn,
+                has_begin?: true,
+                commit: %Commit{
+                  commit_timestamp: ~U[2024-01-01 00:00:00Z],
+                  transaction_size: 0,
+                  txn_change_count: 0
+                },
+                changes: [],
+                last_log_offset: %LogOffset{tx_offset: 123, op_offset: 0},
+                affected_relations: affected
+              }, _converter} =
+               MessageConverter.convert(
+                 %LR.Commit{
+                   lsn: @test_lsn,
+                   end_lsn: @test_end_lsn,
+                   commit_timestamp: ~U[2024-01-01 00:00:00Z]
+                 },
+                 @max_batch_size,
+                 converter
+               )
+
+      assert MapSet.equal?(affected, MapSet.new([]))
+    end
   end
 end
