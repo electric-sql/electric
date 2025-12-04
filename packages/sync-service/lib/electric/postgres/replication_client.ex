@@ -394,23 +394,14 @@ defmodule Electric.Postgres.ReplicationClient do
       {:buffering, converter} ->
         {:noreply, %{state | message_converter: converter}}
 
-      {:ok, %Relation{} = relation, converter} ->
+      {:ok, event, converter} ->
         state = %{state | message_converter: converter}
 
-        handle_event(relation, state)
+        handle_event(event, state)
 
         state = maybe_update_flush_up_to_date(state)
 
-        {:noreply, state}
-
-      {:ok, %TransactionFragment{} = txn_fragment, converter} ->
-        state = %{state | message_converter: converter}
-
-        handle_event(txn_fragment, state)
-
-        state = maybe_update_flush_up_to_date(state)
-
-        {acks, state} = acknowledge_transaction(txn_fragment, state)
+        {acks, state} = acknowledge_transaction(event, state)
 
         {:noreply, acks, state}
     end
@@ -449,6 +440,8 @@ defmodule Electric.Postgres.ReplicationClient do
 
     {[encode_standby_status_update(state)], state}
   end
+
+  defp acknowledge_transaction(%Relation{}, state), do: {[], state}
 
   defp maybe_update_flush_up_to_date(state) do
     if MessageConverter.in_transaction?(state.message_converter) do
