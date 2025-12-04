@@ -151,8 +151,6 @@ defmodule Electric.Replication.Eval.Env do
     :error
   end
 
-  # For arrays of enum types, parse the array when allow_enums is true
-  # NOTE: These clauses MUST come before the generic {:array, subtype} clause below
   def parse_const(%__MODULE__{allow_enums: true}, value, {:array, {:enum, _}}) do
     {:ok, PgInterop.Array.parse(value)}
   rescue
@@ -380,7 +378,6 @@ defmodule Electric.Replication.Eval.Env do
     do: simple_consensus
 
   defp replace_polymorphics(:anyarray, simple_consensus, _), do: {:array, simple_consensus}
-  # For anyenum, the consensus is already {:enum, name} so we don't need to wrap it
   defp replace_polymorphics(:anyenum, {:enum, _} = simple_consensus, _), do: simple_consensus
   defp replace_polymorphics(:anyenum, simple_consensus, _), do: {:enum, simple_consensus}
   defp replace_polymorphics(:anyrange, simple_consensus, _), do: {:range, simple_consensus}

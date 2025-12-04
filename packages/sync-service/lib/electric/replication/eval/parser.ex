@@ -1433,10 +1433,6 @@ defmodule Electric.Replication.Eval.Parser do
      }}
   end
 
-  # Extracts the base type name for SQL type casting.
-  # For arrays, extracts the element type recursively.
-  # For enums, extracts the enum type name.
-  # For other types, returns the type as-is.
   defp extract_base_type_name({:array, type}), do: extract_base_type_name(type)
   defp extract_base_type_name({:enum, type}), do: type
   defp extract_base_type_name(type), do: type
