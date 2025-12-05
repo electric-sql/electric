@@ -45,6 +45,12 @@ jobs:
         run: node scripts/tag-latest.mjs
         env:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Comment on PRs about release
+        if: steps.changesets.outputs.published == 'true'
+        run: node scripts/comment-on-release.mjs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PUBLISHED_PACKAGES: ${{ steps.changesets.outputs.publishedPackages }}
   update-cloud:
     name: Update Electric version used by Cloud
     runs-on: ubuntu-latest
