@@ -1,6 +1,11 @@
 defmodule Electric.Telemetry.OpenTelemetry.Config do
   import Config
 
+  @doc """
+  Configure opentelemetry_exporter and opentelemetry apps.
+
+  This function is supposed to be called from config/runtime.exs.
+  """
   def configure(opts) do
     otlp_endpoint = Keyword.fetch!(opts, :otlp_endpoint)
     otlp_headers = Keyword.fetch!(opts, :otlp_headers)

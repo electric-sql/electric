@@ -274,6 +274,15 @@ config :electric,
       nil
     )
 
+# Disable opentelemetry_exporter by default.
+#
+# Without any explicit config, opentelemetry starts some resource detectors and initializes
+# otel_batch_processor which then tries to communicate with a remote OTLP server
+# (localhost:4318 by default) periodically.
+#
+# We don't want any of that unless OpenTelemetry export is explicitly enabled further down.
+config :opentelemetry, processors: []
+
 if Electric.telemetry_enabled?() do
   # Disable the default telemetry_poller process since we start our own in
   # `ElectricTelemetry.{ApplicationTelemetry, StackTelemetry}`.
@@ -287,8 +296,10 @@ if Electric.telemetry_enabled?() do
     config :sentry, dsn: sentry_dsn
   end
 
-  otlp_endpoint = env!("ELECTRIC_OTLP_ENDPOINT", :string, nil)
-  otel_debug? = env!("ELECTRIC_OTEL_DEBUG", :boolean, false)
+  otlp_endpoint =
+    env!("ELECTRIC_OTLP_ENDPOINT", :string, nil) |> IO.inspect(label: :otlp_endpoint)
+
+  otel_debug? = env!("ELECTRIC_OTEL_DEBUG", :boolean, false) |> IO.inspect(label: :otel_debug)
 
   if otlp_endpoint do
     # Shortcut config for Honeycomb.io:
