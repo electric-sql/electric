@@ -226,7 +226,7 @@
       -v $(realpath ../support_files/otel-collector-config.yaml):/conf/otel-collector-config.yaml \
       otel/opentelemetry-collector-contrib --config=/conf/otel-collector-config.yaml
     ??Starting HTTP server
-    ??"endpoint": "0.0.0.0:4318"
+    ?"endpoint": "(0\.0\.0\.0|\[::\]):4318"
     ??Everything is ready. Begin running and processing data.
 [endmacro]
 
