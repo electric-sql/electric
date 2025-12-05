@@ -7,11 +7,17 @@ on:
       - 'website/**'
       - '**/README.md'
       - 'integration-tests/**'
+      - 'packages/**'
+      - '!packages/electric-telemetry'
+      - '!packages/sync-service'
   pull_request:
     paths-ignore:
       - 'website/**'
       - '**/README.md'
       - 'integration-tests/**'
+      - 'packages/**'
+      - '!packages/electric-telemetry'
+      - '!packages/sync-service'
 
 permissions:
   contents: read
