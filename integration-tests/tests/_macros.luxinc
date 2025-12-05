@@ -1,6 +1,7 @@
 [global PS1=SH-PROMPT:]
 [global fail_pattern=(?i)error|fatal|no such]
 
+[global pg_docker_network=electric_integration_pg_net]
 [global pg_container_name=]
 [global pg_host_port=54331]
 [global pg_pooler_host_port=64331]
@@ -14,11 +15,11 @@
     -$fail_pattern
 
     # Create a named network for the PG container to be able to attach pooler
-    !docker network ls | grep ${pg_container_name}-network || docker network create ${pg_container_name}-network
+    !docker network ls | grep $pg_docker_network || docker network create $pg_docker_network
 
     !docker run \
       --name $pg_container_name \
-      --network ${pg_container_name}-network \
+      --network $pg_docker_network \
       -e POSTGRES_DB=electric \
       -e POSTGRES_USER=postgres \
       -e POSTGRES_PASSWORD=password \
@@ -78,7 +79,7 @@
 
     !docker run \
       --name "${pg_container_name}-pooler" \
-      --network ${pg_container_name}-network \
+      --network $pg_docker_network \
       -e PGBOUNCER_AUTH_TYPE=trust \
       -e PGBOUNCER_DATABASE=* \
       -e PGBOUNCER_POOL_MODE=transaction \

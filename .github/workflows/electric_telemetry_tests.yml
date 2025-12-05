@@ -6,10 +6,12 @@ on:
     paths-ignore:
       - 'website/**'
       - '**/README.md'
+      - 'integration-tests/**'
   pull_request:
     paths-ignore:
       - 'website/**'
       - '**/README.md'
+      - 'integration-tests/**'
 
 permissions:
   contents: read
