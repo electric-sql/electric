@@ -18,3 +18,8 @@ service:
         - otlp
       exporters:
         - debug
+    traces:
+      receivers:
+        - otlp
+      exporters:
+        - debug
