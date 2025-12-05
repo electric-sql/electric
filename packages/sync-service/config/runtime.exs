@@ -296,10 +296,8 @@ if Electric.telemetry_enabled?() do
     config :sentry, dsn: sentry_dsn
   end
 
-  otlp_endpoint =
-    env!("ELECTRIC_OTLP_ENDPOINT", :string, nil) |> IO.inspect(label: :otlp_endpoint)
-
-  otel_debug? = env!("ELECTRIC_OTEL_DEBUG", :boolean, false) |> IO.inspect(label: :otel_debug)
+  otlp_endpoint = env!("ELECTRIC_OTLP_ENDPOINT", :string, nil)
+  otel_debug? = env!("ELECTRIC_OTEL_DEBUG", :boolean, false)
 
   if otlp_endpoint do
     # Shortcut config for Honeycomb.io:
