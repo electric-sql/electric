@@ -1129,6 +1129,10 @@ defmodule Electric.Connection.Manager do
     Logger.warning("Skipping publication drop, pool connection not available")
   end
 
+  defp drop_publication(state) when state.manual_table_publishing? do
+    Logger.info("Skipping publication drop, manual_table_publishing is enabled")
+  end
+
   defp drop_publication(state) do
     pool = pool_name(state.stack_id, :admin)
     publication_name = Keyword.fetch!(state.replication_opts, :publication_name)
