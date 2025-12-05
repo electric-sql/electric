@@ -274,6 +274,15 @@ config :electric,
       nil
     )
 
+# Disable opentelemetry_exporter by default.
+#
+# Without any explicit config, opentelemetry starts some resource detectors and initializes
+# otel_batch_processor which then tries to communicate with a remote OTLP server
+# (localhost:4318 by default) periodically.
+#
+# We don't want any of that unless OpenTelemetry export is explicitly enabled further down.
+config :opentelemetry, processors: []
+
 if Electric.telemetry_enabled?() do
   # Disable the default telemetry_poller process since we start our own in
   # `ElectricTelemetry.{ApplicationTelemetry, StackTelemetry}`.

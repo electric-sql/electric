@@ -45,7 +45,7 @@ service:
         - batch
       exporters:
         - otlp/honeycomb
-        - logging
+        - debug
     traces:
       receivers:
         - otlp

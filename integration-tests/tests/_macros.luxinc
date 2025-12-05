@@ -7,6 +7,8 @@
 [global database_url=postgresql://postgres:password@localhost:$pg_host_port/electric?sslmode=disable]
 [global pooled_database_url=postgresql://postgres:password@localhost:$pg_pooler_host_port/electric?sslmode=disable]
 
+[global otel_collector_container_name=electric_integration_otel_collector]
+
 [macro setup_pg_with_shell_name shell_name container_env_vars config_opts extra_volumes]
   [shell $shell_name]
     -$fail_pattern
@@ -216,6 +218,18 @@
     [invoke wait-for "curl --silent -X GET http://localhost:3000/v1/health" "\{\"status\":\"$expected_status\"\}" 10 $PS1]
 [endmacro]
 
+[macro setup_otel_collector]
+  [shell otel_collector]
+    !docker run \
+      --name $otel_collector_container_name \
+      -p 4318:4318 \
+      -v $(realpath ../support_files/otel-collector-config.yaml):/conf/otel-collector-config.yaml \
+      otel/opentelemetry-collector-contrib --config=/conf/otel-collector-config.yaml
+    ??Starting HTTP server
+    ?"endpoint": "(0\.0\.0\.0|\[::\]):4318"
+    ??Everything is ready. Begin running and processing data.
+[endmacro]
+
 [macro teardown_container container_name]
   -$fail_pattern
   !docker rm -f -v $container_name 2>/dev/null || true
@@ -225,6 +239,7 @@
 [macro teardown]
   [invoke teardown_container "${pg_container_name}-pooler"]
   [invoke teardown_container $pg_container_name]
+  [invoke teardown_container $otel_collector_container_name]
   !../scripts/clean_up.sh
   ?$PS1
 [endmacro]

@@ -1,0 +1,25 @@
+exporters:
+  debug:
+    verbosity: detailed
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: '0.0.0.0:4318'
+service:
+  pipelines:
+    metrics:
+      receivers:
+        - otlp
+      exporters:
+        - debug
+    logs:
+      receivers:
+        - otlp
+      exporters:
+        - debug
+    traces:
+      receivers:
+        - otlp
+      exporters:
+        - debug
