@@ -1,5 +1,28 @@
 # @core/sync-service
 
+## 1.2.8
+
+### Patch Changes
+
+- 331676d: Reconcile ShapeStatus ETS backup rather than invalidate when stored shape handles and backed up handles diverge.
+- de366ee: Handle ShapeLogCollector shape registrations and deregistrations in separate process to batch them.
+- c28e8ed: Extract telemetry code from Electric into a separate package, for easier modification and sharing of the telemetry code between Electric and Cloud.
+- 0a82280: Hibernate the shape status owner process to release any memory accumulated during startup
+- 7bb6910: Fix a memory leak where for terminated shapes PureFileStorage would still maintain an entry in its ETS table.
+- fb24539: Reduce memory consumption by filtering transactions to only include the changes that affect the shape
+- 0408955: fix(subqueries): make sure tagging works on escaped column names
+- 4d8e61f: Refactor shape status to move shape lookups to an external module
+- 45e3490: Use ETS table for tracking shapes to avoid unbounded map growth
+- a302f66: feat: add support for subqueries without invalidation
+- 3272735: Remove redundant behaviour descriptions
+- 65edd9f: Reduce PublicationManager memory usage
+- 48b6bf0: Allow enums in subset where clauses
+- 128c362: Fix a bug in LockBreakerConnection that was preventing it from terminating stuck backends holding the advisory lock.
+- 96cacdc: Fix the name of the metrics that reports replication slot's confirmed flush lag and add two new metrics: retained WAL size (the diff between PG's current LSN and the slot's restart_lsn) and the current PG LSN itself which can be used to plot the write rate happening in the database at any given time.
+- e27b72b: Cleanup API config and terminate request handler processes periodically
+- b0b9445: Remove suspend_consumers feature flag and disable consumer suspend by default
+- 1d5a8a9: Avoid shape definition lookups when requests include a shape handle
+
 ## 1.2.7
 
 ### Patch Changes
