@@ -96,7 +96,10 @@ defmodule Electric.Shapes.Shape.SubqueryMoves do
     Enum.flat_map(patterns, fn [column_or_expr] ->
       case column_or_expr do
         column_name when is_binary(column_name) ->
-          Enum.map(gone_values, &%{pos: 0, value: make_value_hash(stack_id, shape_handle, &1)})
+          Enum.map(
+            gone_values,
+            &%{pos: 0, value: make_value_hash(stack_id, shape_handle, elem(&1, 1))}
+          )
 
         {:hash_together, columns} ->
           column_parts =
@@ -107,7 +110,8 @@ defmodule Electric.Shapes.Shape.SubqueryMoves do
             gone_values,
             &%{
               pos: 0,
-              value: make_value_hash(stack_id, shape_handle, column_parts.(Tuple.to_list(&1)))
+              value:
+                make_value_hash(stack_id, shape_handle, column_parts.(Tuple.to_list(elem(&1, 1))))
             }
           )
       end

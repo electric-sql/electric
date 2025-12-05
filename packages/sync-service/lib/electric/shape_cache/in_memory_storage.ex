@@ -316,7 +316,7 @@ defmodule Electric.ShapeCache.InMemoryStorage do
   @impl Electric.ShapeCache.Storage
   def write_move_in_snapshot!(stream, name, %MS{log_table: log_table}) do
     stream
-    |> Stream.map(fn {key, json} -> {{:movein, {name, key}}, json} end)
+    |> Stream.map(fn {key, tags, json} -> {{:movein, {name, key}}, {tags, json}} end)
     |> Stream.chunk_every(500)
     |> Stream.each(&:ets.insert(log_table, &1))
     |> Stream.run()
@@ -351,6 +351,51 @@ defmodule Electric.ShapeCache.InMemoryStorage do
           nil
       end
     end)
+    |> Stream.chunk_every(500)
+    |> Stream.each(&:ets.insert(log_table, &1))
+    |> Stream.run()
+
+    :ets.match_delete(log_table, {{:movein, {name, :_}}, :_})
+
+    resulting_offset = receive(do: ({^ref, offset} -> offset))
+
+    {{initial_offset, resulting_offset}, opts}
+  end
+
+  @impl Electric.ShapeCache.Storage
+  def append_move_in_snapshot_to_log_filtered!(
+        name,
+        %MS{log_table: log_table} = opts,
+        touch_tracker,
+        snapshot,
+        tags_to_skip
+      ) do
+    initial_offset = current_offset(opts)
+    ref = make_ref()
+
+    Stream.unfold(initial_offset, fn offset ->
+      case :ets.next_lookup(log_table, {:movein, {name, nil}}) do
+        {{:movein, {^name, _}}, [{{:move_in, {_, key}}, {tags, json}}]} ->
+          # Check if this row should be skipped
+          if Enum.all?(tags, &MapSet.member?(tags_to_skip, &1)) or
+               Electric.Shapes.Consumer.MoveIns.should_skip_query_row?(
+                 touch_tracker,
+                 snapshot,
+                 key
+               ) do
+            # Skip this row - don't increment offset
+            {[], offset}
+          else
+            offset = LogOffset.increment(offset)
+            {{{:offset, storage_offset(offset)}, json}, offset}
+          end
+
+        _ ->
+          send(self(), {ref, offset})
+          nil
+      end
+    end)
+    |> Stream.reject(&(&1 == []))
     |> Stream.chunk_every(500)
     |> Stream.each(&:ets.insert(log_table, &1))
     |> Stream.run()

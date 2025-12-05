@@ -2644,6 +2644,123 @@ defmodule Electric.Plug.RouterTest do
       assert %{"headers" => %{"control" => "snapshot-end"}} =
                Enum.find(response, &(Map.get(&1, "headers", %{})["control"] == "snapshot-end"))
     end
+
+    @tag with_sql: [
+           "CREATE TABLE parent (id INT PRIMARY KEY, value INT NOT NULL)",
+           "CREATE TABLE child (id INT PRIMARY KEY, parent_id INT NOT NULL REFERENCES parent(id), value INT NOT NULL)",
+           "INSERT INTO parent (id, value) VALUES (1, 1), (2, 2)",
+           "INSERT INTO child (id, parent_id, value) VALUES (1, 1, 10), (2, 2, 20)"
+         ]
+    test "multiple actions result in a correct event sequence", ctx do
+      req = make_shape_req("child", where: "parent_id in (SELECT id FROM parent WHERE value = 1)")
+
+      assert {req, 200, [data, _snapshot_end]} = shape_req(req, ctx.opts)
+
+      assert %{
+               "value" => %{"id" => "1", "parent_id" => "1", "value" => "10"},
+               "headers" => %{"operation" => "insert", "tags" => [tag]}
+             } = data
+
+      for stmt <- [
+            # Move-out
+            "UPDATE parent SET value = 2 WHERE id = 1",
+            # Move-in
+            "UPDATE parent SET value = 1 WHERE id = 2",
+            "UPDATE child SET value = 11 WHERE id = 1",
+            "UPDATE child SET value = 12 WHERE id = 2",
+            # Move-in again
+            "UPDATE parent SET value = 1 WHERE id = 1",
+            "UPDATE child SET value = 13 WHERE id = 1"
+          ],
+          do: Postgrex.query!(ctx.db_conn, stmt)
+
+      Process.sleep(100)
+      assert {req, 200, data1} = shape_req(req, ctx.opts)
+
+      assert length(data1) == 4
+
+      assert %{"headers" => %{"event" => "move-out"}} = Enum.at(data1, 0)
+
+      # We're not seeing updates, but seeing the move-ins with final, after-update values, because of the lag between PG and Electric.
+      assert %{
+               "value" => %{"parent_id" => "2", "value" => "12"},
+               "headers" => %{"is_move_in" => true, "tags" => [tag2]}
+             } = Enum.at(data1, 1)
+
+      assert %{
+               "value" => %{"id" => "1", "parent_id" => "1", "value" => "13"},
+               "headers" => %{"operation" => "insert", "is_move_in" => true, "tags" => [^tag]}
+             } = Enum.at(data1, 2)
+
+      assert %{"headers" => %{"control" => "up-to-date"}} = Enum.at(data1, 3)
+
+      task = live_shape_req(req, ctx.opts)
+
+      # Total move-out
+      Postgrex.query!(ctx.db_conn, "UPDATE parent SET value = 2")
+
+      assert {_, 200,
+              [
+                %{
+                  "headers" => %{
+                    "event" => "move-out",
+                    "patterns" => [
+                      %{"pos" => 0, "value" => ^tag},
+                      %{"pos" => 0, "value" => ^tag2}
+                    ]
+                  }
+                },
+                %{"headers" => %{"control" => "up-to-date"}}
+              ]} = Task.await(task)
+    end
+
+    @tag with_sql: [
+           "CREATE TABLE parent (id INT PRIMARY KEY, value INT NOT NULL)",
+           "CREATE TABLE child (id INT PRIMARY KEY, parent_id INT NOT NULL REFERENCES parent(id), value INT NOT NULL)",
+           "INSERT INTO parent (id, value) VALUES (1, 1), (2, 2), (3, 3)",
+           "INSERT INTO child (id, parent_id, value) VALUES (1, 1, 10), (2, 2, 20), (3, 3, 30)"
+         ]
+    test "move-in into move-out into move-in of the same parent results in a ", ctx do
+      req = make_shape_req("child", where: "parent_id in (SELECT id FROM parent WHERE value = 1)")
+
+      assert {req, 200, [data, _snapshot_end]} = shape_req(req, ctx.opts)
+
+      assert %{
+               "value" => %{"id" => "1", "parent_id" => "1", "value" => "10"},
+               "headers" => %{"operation" => "insert", "tags" => [_tag]}
+             } = data
+
+      for stmt <- [
+            # Move-in
+            "UPDATE parent SET value = 1 WHERE id = 2",
+            # Move-out
+            "UPDATE parent SET value = 2 WHERE id = 2",
+            # Move-in
+            "UPDATE parent SET value = 1 WHERE id = 2 OR id = 3",
+            # Move-out
+            "UPDATE parent SET value = 2 WHERE id = 2"
+          ],
+          do: Postgrex.query!(ctx.db_conn, stmt)
+
+      # Hard to wait exactly what we want, so this should be OK
+      Process.sleep(1000)
+
+      # We're essentially guaranteed, in this test environment, to see move-out before move-in resolves.
+      # It's safe to propagate a move-out even for stuff client hasn't seen (because of hashing in the pattern)
+      # as it's just a no-op.
+      # So we should see 2 move-outs and a move-in but only for the 3rd parent. The move-in should be filtered despite
+      # being triggered for 2 moved in parents initially
+      assert {_req, 200,
+              [
+                %{"headers" => %{"event" => "move-out", "patterns" => p1}},
+                %{"headers" => %{"event" => "move-out", "patterns" => p1}},
+                %{
+                  "headers" => %{"operation" => "insert", "is_move_in" => true},
+                  "value" => %{"id" => "3", "parent_id" => "3", "value" => "30"}
+                },
+                %{"headers" => %{"control" => "up-to-date"}}
+              ]} = shape_req(req, ctx.opts)
+    end
   end
 
   describe "/v1/shapes - subset snapshots" do

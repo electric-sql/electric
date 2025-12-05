@@ -102,7 +102,7 @@ defmodule Electric.Shapes.Shape.SubqueryMovesTest do
         tag_structure: [["parent_id"]]
       }
 
-      move_outs = [{"dep-handle-1", ["1", "2", "3"]}]
+      move_outs = [{"dep-handle-1", [{1, "1"}, {2, "2"}, {3, "3"}]}]
 
       message =
         SubqueryMoves.make_move_out_control_message(shape, "stack-id", "shape-handle", move_outs)
@@ -140,7 +140,7 @@ defmodule Electric.Shapes.Shape.SubqueryMovesTest do
       }
 
       # Composite keys are represented as lists
-      move_outs = [{"dep-handle-1", [{"1", "a"}, {"2", "b"}]}]
+      move_outs = [{"dep-handle-1", [{{1, "a"}, {"1", "a"}}, {{2, "b"}, {"2", "b"}}]}]
 
       message =
         SubqueryMoves.make_move_out_control_message(shape, "stack-id", "shape-handle", move_outs)
