@@ -37,10 +37,10 @@ jobs:
         uses: actions/cache@v4
         with:
           path: packages/sync-service/deps
-          key: "${{ runner.os }}-sync-service-deps-${{ env.MIX_ENV }}-${{ hashFiles('packages/sync-service/mix.lock') }}"
+          key: "${{ runner.os }}-sync-service-deps-${{ env.MIX_TARGET }}-${{ env.MIX_ENV }}-${{ hashFiles('packages/sync-service/mix.lock') }}"
           restore-keys: |
-            ${{ runner.os }}-sync-service-deps-${{ env.MIX_ENV }}-${{ hashFiles('packages/sync-service/mix.lock') }}
-            ${{ runner.os }}-sync-service-deps-${{ env.MIX_ENV }}-
+            ${{ runner.os }}-sync-service-deps-${{ env.MIX_TARGET }}-${{ env.MIX_ENV }}-${{ hashFiles('packages/sync-service/mix.lock') }}
+            ${{ runner.os }}-sync-service-deps-${{ env.MIX_TARGET }}-${{ env.MIX_ENV }}-
             ${{ runner.os }}-sync-service-deps-
 
       - name: Cache compiled code
@@ -49,10 +49,10 @@ jobs:
           path: |
             packages/sync-service/_build/*/lib
             !packages/sync-service/_build/*/lib/electric
-          key: "${{ runner.os }}-sync-service-build-${{ env.MIX_ENV }}-${{ hashFiles('packages/sync-service/mix.lock') }}"
+          key: "${{ runner.os }}-sync-service-build-${{ env.MIX_TARGET }}-${{ env.MIX_ENV }}-${{ hashFiles('packages/sync-service/mix.lock') }}"
           restore-keys: |
-            ${{ runner.os }}-sync-service-build-${{ env.MIX_ENV }}-${{ hashFiles('packages/sync-service/mix.lock') }}
-            ${{ runner.os }}-sync-service-build-${{ env.MIX_ENV }}-
+            ${{ runner.os }}-sync-service-build-${{ env.MIX_TARGET }}-${{ env.MIX_ENV }}-${{ hashFiles('packages/sync-service/mix.lock') }}
+            ${{ runner.os }}-sync-service-build-${{ env.MIX_TARGET }}-${{ env.MIX_ENV }}-
             ${{ runner.os }}-sync-service-build-
 
       - name: Install dependencies
@@ -71,7 +71,7 @@ jobs:
         run: ./run.sh
       - name: Upload lux logs
         uses: actions/upload-artifact@v4
-        if: ${{ failure() && steps.tests.outcome == 'failure'  }}
+        if: ${{ failure() && steps.tests.outcome == 'failure' }}
         with:
           name: lux_logs
           path: integration-tests/**/lux_logs/run_*
