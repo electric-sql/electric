@@ -412,35 +412,64 @@ Notify administrators via configured channel:
 - Webhook resumed
 - Unusual delivery latency
 
-## Alternatives Considered
+## Design Decisions
 
-### 1. Client-Side Webhooks
+### 1. Push (Server-Initiated) vs Pull (Webhook Polls Electric)
 
-Have clients (TypeScript SDK) forward changes to webhooks.
+**Chose: Push (Electric POSTs to webhook URL)**
 
-**Rejected because:**
-- Requires always-on client process
-- Doesn't solve serverless use case
-- Duplicates reliable delivery logic
+Alternative was having webhooks poll Electric's existing HTTP API on a schedule.
 
-### 2. PostgreSQL NOTIFY/LISTEN
+Push is better because:
+- Lower latency (immediate delivery vs polling interval)
+- More efficient (no wasted requests when nothing changed)
+- Simpler for webhook consumers (no polling logic needed)
+- Matches industry-standard webhook patterns
 
-Use Postgres NOTIFY for change events.
+### 2. Integration Point: ShapeLogCollector vs Consumer vs HTTP Layer
 
-**Rejected because:**
-- Still requires persistent connection
-- NOTIFY has payload size limits (8KB)
-- Lost if no listener connected
-- Electric already has reliable streaming
+**Chose: ShapeLogCollector level**
 
-### 3. External Message Queue
+Options considered:
+- **HTTP layer**: Intercept SSE responses and forward to webhooks
+- **Consumer level**: After storage writes, trigger webhook delivery
+- **ShapeLogCollector level**: Parallel path alongside consumer registry
 
-Publish to Kafka/Redis Streams/SQS.
+ShapeLogCollector is better because:
+- Single point of integration (not per-consumer)
+- Operations already batched by transaction
+- Can leverage existing EventRouter filtering
+- Decoupled from storage (webhooks don't need persistence first)
 
-**Partially viable as future enhancement:**
-- Could add as alternative delivery target
-- Webhooks more universal for MVP
-- Queue integration could use same architecture
+### 3. Subscription Configuration: API-Only vs Declarative Config File
+
+**Chose: API-first with optional config file support later**
+
+API-first because:
+- Dynamic creation/deletion without restarts
+- Easier integration with user dashboards
+- Per-tenant webhook management possible
+- Can add declarative config file as enhancement
+
+### 4. Delivery Guarantees: At-Least-Once vs At-Most-Once vs Exactly-Once
+
+**Chose: At-least-once**
+
+- **At-most-once**: Fire and forget (too unreliable for data sync)
+- **Exactly-once**: Requires distributed transactions (too complex)
+- **At-least-once**: Retry on failure, consumers must be idempotent
+
+At-least-once is the industry standard for webhooks (Stripe, GitHub, etc.) and matches Electric's existing offset-based idempotency model.
+
+### 5. Batching: Fixed Interval vs Size-Based vs Hybrid
+
+**Chose: Hybrid (max_size + max_wait_ms)**
+
+- **Fixed interval only**: High latency for low-volume shapes
+- **Size-based only**: Unbounded latency waiting for batch to fill
+- **Hybrid**: Delivers when batch is full OR time expires, whichever first
+
+This matches how Electric's RequestBatcher already works for shape registrations.
 
 ## Implementation Plan
 
