@@ -84,7 +84,7 @@ defmodule Electric.StackSupervisor.Telemetry do
     @min_signed_int8 -2 ** 63
     @retained_wal_size_query """
     SELECT
-      (#{@min_signed_int8})::int8 + (pg_current_wal_lsn() - '0/0')::int8 AS pg_wal_offset,
+      (pg_current_wal_lsn() - '0/0' + #{@min_signed_int8})::int8 AS pg_wal_offset,
       pg_wal_lsn_diff(pg_current_wal_lsn(), restart_lsn)::int8 AS retained_wal_size,
       pg_wal_lsn_diff(pg_current_wal_lsn(), confirmed_flush_lsn)::int8 AS confirmed_flush_lsn_lag
     FROM
