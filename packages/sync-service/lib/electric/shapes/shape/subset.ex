@@ -1,5 +1,6 @@
 defmodule Electric.Shapes.Shape.Subset do
   alias Electric.Postgres.Inspector
+  alias Electric.Replication.Eval.Env
   alias Electric.Replication.Eval.Parser
   alias Electric.Shapes.Shape.Validators
 
@@ -25,7 +26,7 @@ defmodule Electric.Shapes.Shape.Subset do
     with {:ok, fields} <- NimbleOptions.validate(Map.new(fields), @schema_options),
          {:ok, columns} <- load_column_info(shape, inspector),
          :ok <- validate_order_by(fields[:order_by], columns),
-         refs = columns |> Inspector.columns_to_expr() |> enums_to_text(),
+         refs = Inspector.columns_to_expr(columns),
          {:ok, where} <- validate_where_clause(fields[:where], fields[:params], refs) do
       {:ok,
        %__MODULE__{
@@ -68,11 +69,15 @@ defmodule Electric.Shapes.Shape.Subset do
   defp validate_where_clause(nil, _params, _refs), do: {:ok, nil}
 
   defp validate_where_clause(where, params, refs) do
+    # Use an env with allow_enums: true to allow enum types in WHERE clauses for subsets.
+    # Enum values are validated by Postgres at query time rather than during parsing.
+    env = %{Env.new() | allow_enums: true}
+
     with {:ok, where} <- Parser.parse_query(where),
          {:ok, subqueries} <- Parser.extract_subqueries(where),
          :ok <- assert_no_subqueries(subqueries),
          :ok <- Validators.validate_parameters(params),
-         {:ok, where} <- Parser.validate_where_ast(where, params: params, refs: refs),
+         {:ok, where} <- Parser.validate_where_ast(where, params: params, refs: refs, env: env),
          {:ok, where} <- Validators.validate_where_return_type(where) do
       {:ok, where}
     else
@@ -83,17 +88,4 @@ defmodule Electric.Shapes.Shape.Subset do
 
   defp assert_no_subqueries([]), do: :ok
   defp assert_no_subqueries(_), do: {:error, "Subqueries are not allowed in subsets"}
-
-  # Treat enum types as text for where clause validation.
-  #
-  # This is because enums are not supported in where clauses for shapes
-  # and would fail the validation, but since for subsets we only pass 
-  # the where clause directly to Postgres we can let Postgres validate
-  # the enum usage instead.
-  defp enums_to_text(refs) do
-    Map.new(refs, fn
-      {key, {:enum, _}} -> {key, :text}
-      entry -> entry
-    end)
-  end
 end

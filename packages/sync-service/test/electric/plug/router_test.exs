@@ -2770,7 +2770,9 @@ defmodule Electric.Plug.RouterTest do
                   }
                 ]
               }} =
-               shape_req(req, ctx.opts, subset: %{where: "status = 'value1'"})
+               shape_req(req, ctx.opts,
+                 subset: %{where: "status = $1", params: %{"1" => "value1"}}
+               )
     end
 
     @tag with_sql: [
@@ -2783,6 +2785,43 @@ defmodule Electric.Plug.RouterTest do
 
       assert {_, 400, %{"errors" => %{"subset" => %{"where" => message}}}} =
                shape_req(req, ctx.opts, subset: %{where: "status = 'invalid_value'"})
+
+      assert message =~ "invalid_value"
+    end
+
+    @tag with_sql: [
+           "CREATE TYPE my_enum AS ENUM ('value1', 'value2', 'value3')",
+           "CREATE TABLE enum_table (id UUID PRIMARY KEY, status my_enum NOT NULL)",
+           "INSERT INTO enum_table VALUES (gen_random_uuid(), 'value1')",
+           "INSERT INTO enum_table VALUES (gen_random_uuid(), 'value2')"
+         ]
+    test "subsets can filter by enum values using IN", ctx do
+      req = make_shape_req("enum_table", log: "changes_only")
+
+      assert {_, 200,
+              %{
+                "metadata" => _,
+                "data" => [
+                  %{
+                    "value" => %{"id" => _, "status" => "value1"}
+                  }
+                ]
+              }} =
+               shape_req(req, ctx.opts, subset: %{where: "status IN ('value1', 'value3')"})
+    end
+
+    @tag with_sql: [
+           "CREATE TYPE my_enum AS ENUM ('value1', 'value2', 'value3')",
+           "CREATE TABLE enum_table (id UUID PRIMARY KEY, status my_enum NOT NULL)",
+           "INSERT INTO enum_table VALUES (gen_random_uuid(), 'value1')"
+         ]
+    test "subsets return 400 for invalid enum values in IN clause", ctx do
+      req = make_shape_req("enum_table", log: "changes_only")
+
+      assert {_, 400, %{"errors" => %{"subset" => %{"where" => message}}}} =
+               shape_req(req, ctx.opts,
+                 subset: %{where: "status = ANY($1)", params: %{"1" => "{invalid_value}"}}
+               )
 
       assert message =~ "invalid_value"
     end

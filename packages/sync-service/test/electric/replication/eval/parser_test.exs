@@ -684,6 +684,22 @@ defmodule Electric.Replication.Eval.ParserTest do
       assert {:error, "At location 17: Could not select an operator overload"} =
                Parser.parse_and_validate_expression(~S/'{1,2,3}'::int[] || '{2,1,2}'::text[]/)
     end
+
+    test "rejects comparison of mismatched enum types" do
+      refs = %{
+        ["col1"] => {:enum, "test_enum1"},
+        ["col2"] => {:enum, "test_enum2"}
+      }
+
+      env = %{Env.new() | allow_enums: true}
+
+      assert {:error, "At location 5: Could not select an operator overload"} =
+               Parser.parse_and_validate_expression(
+                 ~S|col1 = col2|,
+                 refs: refs,
+                 env: env
+               )
+    end
   end
 
   describe "parse_and_validate_expression/3 with parameters" do
