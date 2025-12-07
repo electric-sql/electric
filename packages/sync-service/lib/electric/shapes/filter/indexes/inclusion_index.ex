@@ -19,8 +19,9 @@ defmodule Electric.Shapes.Filter.Indexes.InclusionIndex do
 
   Where `path` is the list of array values traversed to reach this node (e.g., `[]` for root, `[1]`, `[1, 2]`, etc.).
 
-  Additionally, we store index metadata at:
-  `{where_cond_id, field, :meta}` -> `{type}`
+  Additionally, the field type is cached at:
+  `{:type, where_cond_id, field}` -> type
+  This enables O(1) type lookup for parsing record values.
   """
 
   alias Electric.Replication.Eval.Env
@@ -56,9 +57,8 @@ defmodule Electric.Shapes.Filter.Indexes.InclusionIndex do
         shape_id,
         and_where
       ) do
-    # Store type metadata
-    meta_key = {where_cond_id, field, :meta}
-    :ets.insert(table, {meta_key, {type}})
+    # Cache the type for O(1) lookup
+    :ets.insert(table, {{:type, where_cond_id, field}, type})
 
     # Sort and deduplicate the array
     ordered = array_value |> Enum.sort() |> Enum.dedup()
@@ -266,35 +266,30 @@ defmodule Electric.Shapes.Filter.Indexes.InclusionIndex do
   Delete all entries for this index.
   """
   def delete_all(%Filter{incl_index_table: table} = filter, where_cond_id, field) do
-    # Find all entries for this where_cond_id and field
-    # We need to delete all nested WhereConditions first
-    pattern = {{where_cond_id, field, :"$1"}, :"$2"}
-    # Only match path entries, not :meta
-    guard = [{:is_list, :"$1"}]
-
-    entries = :ets.select(table, [{pattern, guard, [:"$2"]}])
+    # Find all node entries for this where_cond_id and field
+    pattern = {{where_cond_id, field, :_}, :"$1"}
+    entries = :ets.match(table, pattern)
 
     # Delete WhereConditions
     Enum.each(entries, fn
-      %{condition_id: nil} -> :ok
-      %{condition_id: condition_id} -> WhereCondition.delete(filter, condition_id)
+      [%{condition_id: nil}] -> :ok
+      [%{condition_id: condition_id}] -> WhereCondition.delete(filter, condition_id)
     end)
 
-    # Delete all entries with this prefix
+    # Delete all node entries and the type entry
     :ets.match_delete(table, {{where_cond_id, field, :_}, :_})
+    :ets.delete(table, {:type, where_cond_id, field})
   end
 
   @doc """
   Find shapes affected by a record change.
   """
   def affected_shapes(%Filter{incl_index_table: table} = filter, where_cond_id, field, record) do
-    meta_key = {where_cond_id, field, :meta}
-
-    case :ets.lookup(table, meta_key) do
+    case :ets.lookup(table, {:type, where_cond_id, field}) do
       [] ->
         MapSet.new()
 
-      [{_, {type}}] ->
+      [{_, type}] ->
         case value_from_record(record, field, type) do
           {:ok, nil} ->
             MapSet.new()
@@ -435,18 +430,15 @@ defmodule Electric.Shapes.Filter.Indexes.InclusionIndex do
   Get all shape IDs in this index.
   """
   def all_shape_ids(%Filter{incl_index_table: table} = filter, where_cond_id, field) do
-    # Find all entries with WhereConditions
-    pattern = {{where_cond_id, field, :"$1"}, :"$2"}
-    # Only match path entries, not :meta
-    guard = [{:is_list, :"$1"}]
-
-    entries = :ets.select(table, [{pattern, guard, [:"$2"]}])
+    # Find all node entries with WhereConditions
+    pattern = {{where_cond_id, field, :_}, :"$1"}
+    entries = :ets.match(table, pattern)
 
     Enum.reduce(entries, MapSet.new(), fn
-      %{condition_id: nil}, acc ->
+      [%{condition_id: nil}], acc ->
         acc
 
-      %{condition_id: condition_id}, acc ->
+      [%{condition_id: condition_id}], acc ->
         MapSet.union(acc, WhereCondition.all_shape_ids(filter, condition_id))
     end)
   end
