@@ -3,14 +3,14 @@ defmodule Electric.Shapes.Filter.Indexes.EqualityIndex do
   Efficiently finds shapes that are affected by a change when the shape's where clause has `field = const` in it.
 
   Data is stored in the Filter's eq_index_table ETS table with keys of the form:
-  `{where_cond_id, field, value}` -> `{type, nested_where_cond_id}`
+  `{condition_id, field, value}` -> `{type, next_condition_id}`
 
   The type is stored to know how to parse values from records.
-  The nested_where_cond_id points to a WhereCondition that can contain further optimizations
-  or shapes with additional conditions.
+  The next_condition_id points to a WhereCondition for the remaining conditions
+  of the where clause.
 
   Additionally, the field type is cached at:
-  `{:type, where_cond_id, field}` -> type
+  `{:type, condition_id, field}` -> type
   This enables O(1) type lookup for parsing record values.
   """
 
@@ -20,38 +20,28 @@ defmodule Electric.Shapes.Filter.Indexes.EqualityIndex do
 
   @env Env.new()
 
-  @doc """
-  Check if the index for a field is empty.
-  """
-  def empty?(%Filter{eq_index_table: table}, where_cond_id, field) do
-    # If the type entry exists, the index has at least one value
-    :ets.lookup(table, {:type, where_cond_id, field}) == []
+  def empty?(%Filter{eq_index_table: table}, condition_id, field) do
+    :ets.lookup(table, {:type, condition_id, field}) == []
   end
 
-  @doc """
-  Add a shape to the equality index.
-  """
   def add_shape(
         %Filter{eq_index_table: table} = filter,
-        where_cond_id,
+        condition_id,
         field,
         type,
         value,
         shape_id,
         and_where
       ) do
-    key = {where_cond_id, field, value}
+    key = {condition_id, field, value}
 
-    nested_where_cond_id =
+    next_condition_id =
       case :ets.lookup(table, key) do
         [] ->
-          # Create new nested WhereCondition
           new_id = make_ref()
           WhereCondition.init(filter, new_id)
           :ets.insert(table, {key, {type, new_id}})
-
-          # Cache the type for O(1) lookup
-          :ets.insert(table, {{:type, where_cond_id, field}, type})
+          :ets.insert(table, {{:type, condition_id, field}, type})
 
           new_id
 
@@ -59,84 +49,67 @@ defmodule Electric.Shapes.Filter.Indexes.EqualityIndex do
           existing_id
       end
 
-    # Add shape to nested WhereCondition
-    WhereCondition.add_shape(filter, nested_where_cond_id, shape_id, and_where)
+    WhereCondition.add_shape(filter, next_condition_id, shape_id, and_where)
   end
 
-  @doc """
-  Remove a shape from the equality index.
-  """
   def remove_shape(
         %Filter{eq_index_table: table} = filter,
-        where_cond_id,
+        condition_id,
         shape_id,
         field,
         value,
         and_where
       ) do
-    key = {where_cond_id, field, value}
+    key = {condition_id, field, value}
 
     case :ets.lookup(table, key) do
       [] ->
         :ok
 
-      [{_, {_type, nested_where_cond_id}}] ->
-        # Remove shape from nested WhereCondition
-        WhereCondition.remove_shape(filter, nested_where_cond_id, shape_id, and_where)
+      [{_, {_type, next_condition_id}}] ->
+        WhereCondition.remove_shape(filter, next_condition_id, shape_id, and_where)
 
-        # If nested condition is now empty, remove the entry
-        if WhereCondition.empty?(filter, nested_where_cond_id) do
-          WhereCondition.delete(filter, nested_where_cond_id)
+        if WhereCondition.empty?(filter, next_condition_id) do
+          WhereCondition.delete(filter, next_condition_id)
           :ets.delete(table, key)
 
-          # If no more values for this field, delete the type entry
-          if no_values?(table, where_cond_id, field) do
-            :ets.delete(table, {:type, where_cond_id, field})
+          if no_values?(table, condition_id, field) do
+            :ets.delete(table, {:type, condition_id, field})
           end
         end
     end
   end
 
-  @doc """
-  Delete all entries for this index.
-  """
-  def delete_all(%Filter{eq_index_table: table} = filter, where_cond_id, field) do
-    # Find all entries for this where_cond_id and field
-    pattern = {{where_cond_id, field, :_}, :"$1"}
-    entries = :ets.match(table, pattern)
-
-    # Delete each entry's nested WhereCondition
-    Enum.each(entries, fn [{_type, nested_where_cond_id}] ->
-      WhereCondition.delete(filter, nested_where_cond_id)
+  # TODO: why is this needed?
+  def delete_all(%Filter{eq_index_table: table} = filter, condition_id, field) do
+    table
+    |> :ets.match({{condition_id, field, :_}, :"$1"})
+    |> Enum.each(fn [{_type, next_condition_id}] ->
+      WhereCondition.delete(filter, next_condition_id)
     end)
 
-    # Delete all value entries and the type entry
-    :ets.match_delete(table, {{where_cond_id, field, :_}, :_})
-    :ets.delete(table, {:type, where_cond_id, field})
+    :ets.match_delete(table, {{condition_id, field, :_}, :_})
+    :ets.delete(table, {:type, condition_id, field})
   end
 
-  @doc """
-  Find shapes affected by a record change.
-  """
-  def affected_shapes(%Filter{eq_index_table: table} = filter, where_cond_id, field, record) do
-    type_key = {:type, where_cond_id, field}
+  def affected_shapes(%Filter{eq_index_table: table} = filter, condition_id, field, record) do
+    type_key = {:type, condition_id, field}
 
     case :ets.lookup(table, type_key) do
       [] ->
         MapSet.new()
 
       [{_, type}] ->
-        # Parse the value from the record
         case value_from_record(record, field, type) do
           {:ok, value} ->
-            key = {where_cond_id, field, value}
+            key = {condition_id, field, value}
 
             case :ets.lookup(table, key) do
               [] ->
                 MapSet.new()
 
-              [{_, {_type, nested_where_cond_id}}] ->
-                WhereCondition.affected_shapes(filter, nested_where_cond_id, record, fn _shape ->
+              [{_, {_type, next_condition_id}}] ->
+                WhereCondition.affected_shapes(filter, next_condition_id, record, fn _shape ->
                   %{}
                 end)
             end
@@ -153,21 +126,15 @@ defmodule Electric.Shapes.Filter.Indexes.EqualityIndex do
     Env.parse_const(@env, record[field], type)
   end
 
-  # Check if there are any value entries for this field
-  defp no_values?(table, where_cond_id, field) do
-    :ets.match(table, {{where_cond_id, field, :_}, :_}, 1) == :"$end_of_table"
+  defp no_values?(table, condition_id, field) do
+    :ets.match(table, {{condition_id, field, :_}, :_}, 1) == :"$end_of_table"
   end
 
-  @doc """
-  Get all shape IDs in this index.
-  """
-  def all_shape_ids(%Filter{eq_index_table: table} = filter, where_cond_id, field) do
-    # Find all entries for this where_cond_id and field
-    pattern = {{where_cond_id, field, :_}, {:"$1", :"$2"}}
-    entries = :ets.match(table, pattern)
-
-    Enum.reduce(entries, MapSet.new(), fn [_type, nested_where_cond_id], acc ->
-      MapSet.union(acc, WhereCondition.all_shape_ids(filter, nested_where_cond_id))
+  def all_shape_ids(%Filter{eq_index_table: table} = filter, condition_id, field) do
+    table
+    |> :ets.match({{condition_id, field, :_}, {:"$1", :"$2"}})
+    |> Enum.reduce(MapSet.new(), fn [_type, next_condition_id], acc ->
+      MapSet.union(acc, WhereCondition.all_shape_ids(filter, next_condition_id))
     end)
   end
 end
