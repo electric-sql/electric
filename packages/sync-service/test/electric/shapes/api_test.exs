@@ -185,35 +185,6 @@ defmodule Electric.Shapes.ApiTest do
              }
     end
 
-    test "returns error when offset is out of bounds", ctx do
-      expect_shape_cache(
-        resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id ->
-          {@test_shape_handle, @test_offset}
-        end
-      )
-
-      invalid_offset = LogOffset.increment(@test_offset)
-
-      assert {:error, %{status: 400} = response} =
-               Api.validate(
-                 ctx.api,
-                 %{
-                   table: "public.users",
-                   handle: "#{@test_shape_handle}",
-                   offset: "#{invalid_offset}"
-                 }
-               )
-
-      # this error returns as a list as it reaches the request stage
-      # and so needs cleaning up. when encoded the result is the same
-      assert response_body(response) == %{
-               message: "Invalid request",
-               errors: %{
-                 offset: ["out of bounds for this shape"]
-               }
-             }
-    end
-
     test "the shape handle does not match the shape definition", ctx do
       request_handle = @test_shape_handle <> "-wrong"
 
@@ -906,6 +877,114 @@ defmodule Electric.Shapes.ApiTest do
       assert_raise RuntimeError, fn ->
         response_body(response)
       end
+    end
+
+    @tag long_poll_timeout: 100
+    test "returns error after timeout when offset is out of bounds", ctx do
+      expect_shape_cache(
+        resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id ->
+          {@test_shape_handle, @test_offset}
+        end,
+        resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id ->
+          {@test_shape_handle, @test_offset}
+        end
+      )
+
+      out_of_bounds_offset = LogOffset.increment(@test_offset)
+
+      assert {:ok, request} =
+               Api.validate(
+                 ctx.api,
+                 %{
+                   table: "public.users",
+                   handle: "#{@test_shape_handle}",
+                   offset: "#{out_of_bounds_offset}",
+                   live: true
+                 }
+               )
+
+      now = System.monotonic_time(:millisecond)
+      assert response = Api.serve_shape_response(request)
+      duration = System.monotonic_time(:millisecond) - now
+      assert duration > 50 and duration < 100
+
+      # this error returns as a list as it reaches the request stage
+      # and so needs cleaning up. when encoded the result is the same
+      assert response.status == 400
+
+      assert response_body(response) == %{
+               message: "Invalid request",
+               errors: %{
+                 offset: ["out of bounds for this shape"]
+               }
+             }
+    end
+
+    test "recovers from out of bounds offset if appropriate change arrives", ctx do
+      test_pid = self()
+      next_offset = LogOffset.increment(@test_offset)
+      next_next_offset = LogOffset.increment(next_offset)
+
+      patch_shape_cache(
+        has_shape?: fn @test_shape_handle, _opts -> true end,
+        await_snapshot_start: fn @test_shape_handle, _ -> :started end,
+        resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id ->
+          {@test_shape_handle, @test_offset}
+        end
+      )
+
+      patch_storage(
+        for_shape: fn @test_shape_handle, _opts -> @test_opts end,
+        get_chunk_end_log_offset: fn ^next_offset, _ -> nil end
+      )
+
+      expect_storage(
+        get_log_stream: fn ^next_offset, ^next_next_offset, @test_opts ->
+          [Jason.encode!("test result")]
+        end
+      )
+
+      task =
+        Task.async(fn ->
+          assert {:ok, request} =
+                   Api.validate(
+                     ctx.api,
+                     %{
+                       table: "public.users",
+                       offset: "#{next_offset}",
+                       handle: @test_shape_handle,
+                       live: true
+                     }
+                   )
+
+          send(test_pid, :serving_req)
+
+          response = Api.serve_shape_response(request)
+
+          {response, response_body(response)}
+        end)
+
+      assert_receive :serving_req, @receive_timeout
+
+      # Simulate new changes arriving
+      Registry.dispatch(ctx.registry, @test_shape_handle, fn [{pid, ref}] ->
+        send(pid, {ref, :new_changes, next_next_offset})
+      end)
+
+      # The conn process should exit after sending the response
+      assert {response, response_body} = Task.await(task)
+
+      assert response.status == 200
+
+      assert response_body == [
+               "test result",
+               %{
+                 headers: %{
+                   control: "up-to-date",
+                   global_last_seen_lsn: to_string(next_offset.tx_offset)
+                 }
+               }
+             ]
     end
 
     test "returns correct global_last_seen_lsn on non-live responses during data race", ctx do
