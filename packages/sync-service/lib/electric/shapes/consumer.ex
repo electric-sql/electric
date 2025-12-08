@@ -297,7 +297,7 @@ defmodule Electric.Shapes.Consumer do
     feature_flags = Electric.StackConfig.lookup(state.stack_id, :feature_flags, [])
     tagged_subqueries_enabled? = "tagged_subqueries" in feature_flags
 
-    should_invalidate? = own_materializer_exists?(state) or not tagged_subqueries_enabled?
+    should_invalidate? = not tagged_subqueries_enabled?
 
     if should_invalidate? do
       # We currently cannot support causally correct event processing of 3+ level dependency trees
@@ -809,17 +809,6 @@ defmodule Electric.Shapes.Consumer do
           false
       end
     end)
-  end
-
-  defp own_materializer_exists?(state) do
-    name = Materializer.name(state.stack_id, state.shape_handle)
-
-    with pid when is_pid(pid) <- GenServer.whereis(name),
-         true <- Process.alive?(pid) do
-      true
-    else
-      _ -> false
-    end
   end
 
   defp clean_table(table_oid, state) do

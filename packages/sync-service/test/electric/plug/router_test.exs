@@ -2403,27 +2403,34 @@ defmodule Electric.Plug.RouterTest do
       assert {req, 200, [%{"value" => %{"id" => "1", "value" => "2"}}, _]} =
                Task.await(task)
 
-      # Grandparent move should invalidate the shape
+      # Grandparent move should eventually result in a move-in
       task = live_shape_req(req, opts)
       Postgrex.query!(db_conn, "UPDATE grandparent SET value = 10 WHERE id = 2")
 
-      assert {_, 409, _} =
+      assert {req, 200,
+              [
+                %{
+                  "value" => %{"id" => "2", "value" => "20"},
+                  "headers" => %{"operation" => "insert", "is_move_in" => true, "tags" => [tag]}
+                },
+                _
+              ]} =
                Task.await(task)
 
-      # And fresh view should now see everything
-      assert {_, 200, response} = shape_req(orig_req, opts)
+      # And move-out should be propagated
+      task = live_shape_req(req, opts)
+      Postgrex.query!(db_conn, "UPDATE grandparent SET value = 20 WHERE id = 2")
 
-      # Should contain 2 data records and the snapshot-end control message
-      assert length(response) == 3
-
-      # Filter out control messages to get just the data records
-      results = Enum.filter(response, &Map.has_key?(&1, "key"))
-      assert length(results) == 2
-
-      assert [
-               %{"value" => %{"id" => "1", "value" => "2"}},
-               %{"value" => %{"id" => "2", "value" => "20"}}
-             ] = Enum.sort_by(results, & &1["value"]["id"])
+      assert {_, 200,
+              [
+                %{
+                  "headers" => %{
+                    "event" => "move-out",
+                    "patterns" => [%{"pos" => 0, "value" => ^tag}]
+                  }
+                },
+                _
+              ]} = Task.await(task)
     end
 
     @tag with_sql: [

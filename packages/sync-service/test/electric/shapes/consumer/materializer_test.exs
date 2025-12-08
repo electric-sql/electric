@@ -4,19 +4,36 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
   import Support.ComponentSetup
   use Repatch.ExUnit
 
+  alias Electric.Shapes.Shape
   alias Electric.LogItems
   alias Electric.Replication.Changes
   alias Electric.ShapeCache.Storage
   alias Electric.Shapes.ConsumerRegistry
   alias Electric.Shapes.Consumer.Materializer
 
-  setup [:with_stack_id_from_test, :with_in_memory_storage, :with_consumer_registry]
+  @moduletag :tmp_dir
+
+  setup [
+    :with_stack_id_from_test,
+    :with_async_deleter,
+    :with_pure_file_storage,
+    :with_consumer_registry
+  ]
+
+  @shape %Shape{
+    root_table: {"public", "items"},
+    root_table_id: 1,
+    root_pk: ["id"],
+    storage: %{compaction: :disabled}
+  }
 
   setup %{storage: storage, stack_id: stack_id} = ctx do
     ConsumerRegistry.register_consumer(self(), "test", stack_id)
 
     Storage.for_shape("test", storage) |> Storage.start_link()
+    writer = Storage.for_shape("test", storage) |> Storage.init_writer!(@shape)
     Storage.for_shape("test", storage) |> Storage.mark_snapshot_as_started()
+    Storage.hibernate(writer)
 
     snapshot_data =
       Map.get(ctx, :snapshot_data, [])
@@ -30,7 +47,7 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
     Storage.for_shape("test", storage)
     |> then(&Storage.make_new_snapshot!(snapshot_data, &1))
 
-    {:ok, shape_handle: "test"}
+    {:ok, shape_handle: "test", shape_storage: Storage.for_shape("test", storage), writer: writer}
   end
 
   test "can get ready",
@@ -538,6 +555,46 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
       # Value 10 should still be present because key "2" still has it
       assert Materializer.get_link_values(ctx) == MapSet.new([10])
       refute_received {:materializer_changes, _, _}
+    end
+
+    test "runtime move-in tags are tracked correctly if read from a storage range",
+         %{
+           shape_storage: shape_storage,
+           writer: writer
+         } = ctx do
+      ctx = with_materializer(ctx)
+
+      Storage.write_move_in_snapshot!(
+        [
+          [
+            ~s("public"."test_table"/"1"),
+            ["tag1"],
+            ~s({"key":"\\"public\\".\\"test_table\\"/\\"1\\"","value":{"id":"1","value":"10"},"headers":{"operation":"insert","tags":["tag1"]}})
+          ]
+        ],
+        "test",
+        shape_storage
+      )
+
+      {range, writer} =
+        Storage.append_move_in_snapshot_to_log!(
+          "test",
+          writer
+        )
+
+      Materializer.new_changes(ctx, range)
+
+      assert Materializer.get_link_values(ctx) == MapSet.new([10])
+
+      {range, _writer} =
+        Storage.append_control_message!(
+          Jason.encode!(%{headers: %{event: "move-out", patterns: [%{pos: 0, value: "tag1"}]}}),
+          writer
+        )
+
+      Materializer.new_changes(ctx, range)
+
+      assert Materializer.get_link_values(ctx) == MapSet.new()
     end
   end
 
