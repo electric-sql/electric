@@ -291,6 +291,21 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
 
       assert {[^shape1, ^shape2, ^shape3], _} = ShapeStatus.least_recently_used(state, _count = 3)
     end
+
+    test "returns shapes with same timestamp in arbitrary order", ctx do
+      {:ok, state, []} = new_state(ctx)
+      {:ok, shape1} = ShapeStatus.add_shape(state, shape!("1"))
+      {:ok, shape2} = ShapeStatus.add_shape(state, shape!("2"))
+      {:ok, shape3} = ShapeStatus.add_shape(state, shape!("3"))
+
+      now = System.monotonic_time()
+      ShapeStatus.update_last_read_time(state, shape1, now + 10)
+      ShapeStatus.update_last_read_time(state, shape2, now)
+      ShapeStatus.update_last_read_time(state, shape3, now)
+
+      assert {shapes, +0.0} = ShapeStatus.least_recently_used(state, _count = 2)
+      assert shapes |> Enum.sort() == [shape2, shape3] |> Enum.sort()
+    end
   end
 
   describe "high concurrency" do
