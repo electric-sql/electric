@@ -147,6 +147,10 @@ defmodule Electric.Replication.Eval.Env.KnownFunctions do
       do: datetime |> DateTime.shift_zone!(tz) |> DateTime.to_naive()
   end
 
+  ## Enum operators
+  defpostgres("anyenum = anyenum -> bool", delegate: &Kernel.==/2)
+  defpostgres("anyenum <> anyenum -> bool", delegate: &Kernel.!=/2)
+
   ## Array functions
   defpostgres("anyarray = anyarray -> bool", delegate: &Kernel.==/2)
   defpostgres("anyarray <> anyarray -> bool", delegate: &Kernel.!=/2)

@@ -73,14 +73,16 @@ defmodule Electric.Replication.Eval.Env do
             operators: __MODULE__.KnownFunctions.known_operators(),
             explicit_casts: __MODULE__.ExplicitCasts.known(),
             implicit_casts: __MODULE__.ImplicitCasts.known(),
-            known_basic_types: __MODULE__.BasicTypes.known()
+            known_basic_types: __MODULE__.BasicTypes.known(),
+            allow_enums: false
 
   @type t() :: %__MODULE__{
           funcs: funcs(),
           operators: funcs(),
           explicit_casts: cast_registry(),
           implicit_casts: implicit_cast_registry(),
-          known_basic_types: basic_type_registry()
+          known_basic_types: basic_type_registry(),
+          allow_enums: boolean()
         }
 
   @struct_keys [:funcs, :explicit_casts, :implicit_casts, :known_basic_types, :operators]
@@ -136,6 +138,27 @@ defmodule Electric.Replication.Eval.Env do
     {:ok, PgInterop.Array.parse(value)}
   rescue
     _ -> :error
+  end
+
+  # For enum types, we can't validate the value without knowing the DDL.
+  # When allow_enums is true (used by subsets), we accept any string value
+  # and let Postgres validate when the query runs.
+  def parse_const(%__MODULE__{allow_enums: true}, value, {:enum, _}) when is_binary(value) do
+    {:ok, value}
+  end
+
+  def parse_const(%__MODULE__{allow_enums: false}, _value, {:enum, _}) do
+    :error
+  end
+
+  def parse_const(%__MODULE__{allow_enums: true}, value, {:array, {:enum, _}}) do
+    {:ok, PgInterop.Array.parse(value)}
+  rescue
+    _ -> :error
+  end
+
+  def parse_const(%__MODULE__{allow_enums: false}, _value, {:array, {:enum, _}}) do
+    :error
   end
 
   def parse_const(%__MODULE__{funcs: funcs}, value, {:array, subtype}) do
@@ -355,6 +378,7 @@ defmodule Electric.Replication.Eval.Env do
     do: simple_consensus
 
   defp replace_polymorphics(:anyarray, simple_consensus, _), do: {:array, simple_consensus}
+  defp replace_polymorphics(:anyenum, {:enum, _} = simple_consensus, _), do: simple_consensus
   defp replace_polymorphics(:anyenum, simple_consensus, _), do: {:enum, simple_consensus}
   defp replace_polymorphics(:anyrange, simple_consensus, _), do: {:range, simple_consensus}
 

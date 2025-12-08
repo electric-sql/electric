@@ -462,7 +462,8 @@ defmodule Electric.Replication.Eval.Parser do
                cast_unknowns(elements, List.duplicate(type, element_len), env),
              {:ok, elements} <-
                try_cast_implicit(elements, List.duplicate(type, element_len), env) do
-          {:ok, %Array{elements: elements, type: {:array, maybe_array_type(type)}, location: loc}}
+          {:ok,
+           %Array{elements: elements, type: {:array, extract_base_type_name(type)}, location: loc}}
         end
 
       {:error, type, candidate} ->
@@ -1092,7 +1093,7 @@ defmodule Electric.Replication.Eval.Parser do
         {:ok,
          %Func{
            location: loc,
-           type: maybe_array_type(target_type),
+           type: extract_base_type_name(target_type),
            args: [arg],
            implementation: impl,
            map_over_array_in_pos: 0,
@@ -1432,8 +1433,9 @@ defmodule Electric.Replication.Eval.Parser do
      }}
   end
 
-  defp maybe_array_type({:array, type}), do: type
-  defp maybe_array_type(type), do: type
+  defp extract_base_type_name({:array, type}), do: extract_base_type_name(type)
+  defp extract_base_type_name({:enum, type}), do: type
+  defp extract_base_type_name(type), do: type
 
   defp build_index_structure(index) do
     {:index, index}
@@ -1525,7 +1527,7 @@ defmodule Electric.Replication.Eval.Parser do
        type_name: %PgQuery.TypeName{
          names: [
            %PgQuery.Node{
-             node: {:string, %PgQuery.String{sval: to_string(maybe_array_type(type))}}
+             node: {:string, %PgQuery.String{sval: to_string(extract_base_type_name(type))}}
            }
          ],
          type_oid: 0,
