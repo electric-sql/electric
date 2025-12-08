@@ -39,14 +39,12 @@ defmodule Electric.Shapes.Filter do
 
   @spec new(keyword()) :: Filter.t()
   def new(opts \\ []) do
-    unique = :erlang.unique_integer([:positive])
-
     %Filter{
-      shapes_table: :ets.new(:"filter_shapes_#{unique}", [:set, :private]),
-      tables_table: :ets.new(:"filter_tables_#{unique}", [:set, :private]),
-      where_cond_table: :ets.new(:"filter_where_#{unique}", [:set, :private]),
-      eq_index_table: :ets.new(:"filter_eq_#{unique}", [:set, :private]),
-      incl_index_table: :ets.new(:"filter_incl_#{unique}", [:set, :private]),
+      shapes_table: :ets.new(:filter_shapes, [:set, :private]),
+      tables_table: :ets.new(:filter_tables, [:set, :private]),
+      where_cond_table: :ets.new(:filter_where, [:set, :private]),
+      eq_index_table: :ets.new(:filter_eq, [:set, :private]),
+      incl_index_table: :ets.new(:filter_incl, [:set, :private]),
       refs_fun: Keyword.get(opts, :refs_fun, fn _shape -> %{} end)
     }
   end
