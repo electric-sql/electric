@@ -22,9 +22,11 @@ defmodule Electric.Shapes.Consumer.Materializer do
   alias Electric.ShapeCache.Storage
   alias Electric.Replication.LogOffset
   alias Electric.Replication.Eval
+  alias Electric.Shapes.Shape
 
   import Electric.Replication.LogOffset
   import Electric, only: [is_stack_id: 1, is_shape_handle: 1]
+  import Shape, only: :macros
 
   def name(stack_id, shape_handle) when is_stack_id(stack_id) and is_shape_handle(shape_handle) do
     Electric.ProcessRegistry.name(stack_id, __MODULE__, shape_handle)
@@ -54,7 +56,7 @@ defmodule Electric.Shapes.Consumer.Materializer do
     GenServer.call(name(opts), :get_link_values)
   end
 
-  def get_all_as_refs(shape, stack_id) do
+  def get_all_as_refs(shape, stack_id) when are_deps_filled(shape) do
     shape.shape_dependencies_handles
     |> Enum.with_index()
     |> Map.new(fn {shape_handle, index} ->
