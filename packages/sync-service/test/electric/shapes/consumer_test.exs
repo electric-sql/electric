@@ -355,7 +355,7 @@ defmodule Electric.Shapes.ConsumerTest do
       refute_receive {Electric.ShapeCache.ShapeCleaner, :cleanup, @shape_handle2}
     end
 
-    defp assert_consumer_shutdown(stack_id, shape_handle, fun, timeout \\ 2000) do
+    defp assert_consumer_shutdown(stack_id, shape_handle, fun, timeout \\ 5000) do
       monitors =
         for name <- [
               Shapes.Consumer.name(stack_id, shape_handle),

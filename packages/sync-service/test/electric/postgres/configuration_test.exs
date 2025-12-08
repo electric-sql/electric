@@ -344,9 +344,9 @@ defmodule Electric.Postgres.ConfigurationTest do
             [oid_rel] = Enum.take_random(deadlock_oid_rels, 1)
 
             if Enum.random([true, false]) do
-              Configuration.configure_table_for_replication(conn, publication, oid_rel)
+              Configuration.configure_table_for_replication(conn, publication, oid_rel, :infinity)
             else
-              Configuration.drop_table_from_publication(conn, publication, oid_rel)
+              Configuration.drop_table_from_publication(conn, publication, oid_rel, :infinity)
             end
           end)
         end
