@@ -69,14 +69,10 @@ defmodule Electric.Shapes.Filter do
   def add_shape(%Filter{} = filter, shape_id, shape) do
     if has_shape?(filter, shape_id), do: raise("duplicate shape #{shape_id}")
 
-    # Store shape metadata
     :ets.insert(filter.shapes_table, {shape_id, shape})
 
-    # Get or create WhereCondition for the table
-    table_name = shape.root_table
-    where_cond_id = get_or_create_table_condition(filter, table_name)
+    where_cond_id = get_or_create_table_condition(filter, shape.root_table)
 
-    # Add shape to the WhereCondition
     WhereCondition.add_shape(filter, where_cond_id, shape_id, shape.where)
 
     filter
@@ -85,7 +81,6 @@ defmodule Electric.Shapes.Filter do
   defp get_or_create_table_condition(filter, table_name) do
     case :ets.lookup(filter.tables_table, table_name) do
       [] ->
-        # Create new WhereCondition
         where_cond_id = make_ref()
         WhereCondition.init(filter, where_cond_id)
         :ets.insert(filter.tables_table, {table_name, where_cond_id})
@@ -106,7 +101,6 @@ defmodule Electric.Shapes.Filter do
 
     [{_, where_cond_id}] = :ets.lookup(filter.tables_table, table_name)
 
-    # Remove shape from WhereCondition, clean up table entry if condition deleted
     case WhereCondition.remove_shape(filter, where_cond_id, shape_id, shape.where) do
       :deleted -> :ets.delete(filter.tables_table, table_name)
       :ok -> :ok

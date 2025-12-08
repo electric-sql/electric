@@ -25,26 +25,18 @@ defmodule Electric.Shapes.Filter.WhereCondition do
 
   require Logger
 
-  @doc """
-  Initialize a new WhereCondition in ETS.
-  """
   def init(%Filter{where_cond_table: table}, where_cond_id) do
     :ets.insert(table, {where_cond_id, {[], %{}}})
   end
 
-  @doc """
-  Add a shape to a WhereCondition.
-  """
   def add_shape(%Filter{where_cond_table: table} = filter, where_cond_id, shape_id, where_clause) do
     case optimise_where(where_clause) do
       :not_optimised ->
-        # Add to other_shapes
         [{_, {index_keys, other_shapes}}] = :ets.lookup(table, where_cond_id)
         updated_other = Map.put(other_shapes, shape_id, where_clause)
         :ets.insert(table, {where_cond_id, {index_keys, updated_other}})
 
       optimisation ->
-        # Add to appropriate index
         add_shape_to_index(filter, where_cond_id, shape_id, optimisation)
     end
   end
@@ -55,7 +47,6 @@ defmodule Electric.Shapes.Filter.WhereCondition do
          shape_id,
          optimisation
        ) do
-    # Ensure the index_keys list includes this index
     [{_, {index_keys, other_shapes}}] = :ets.lookup(table, where_cond_id)
     key = {optimisation.field, optimisation.operation}
 
@@ -68,7 +59,6 @@ defmodule Electric.Shapes.Filter.WhereCondition do
 
     :ets.insert(table, {where_cond_id, {updated_keys, other_shapes}})
 
-    # Add shape to the index
     Index.add_shape(filter, where_cond_id, shape_id, optimisation)
   end
 
