@@ -9,7 +9,7 @@ import {
   SnapshotMetadata,
 } from './types'
 import { MessageParser, Parser, TransformFunction } from './parser'
-import { ColumnMapper, encodeWhereClause } from './column-mapper'
+import { ColumnMapper, encodeWhereClause, encodeColumns } from './column-mapper'
 import { getOffset, isUpToDateMessage, isChangeMessage } from './helpers'
 import {
   FetchError,
@@ -855,14 +855,12 @@ export class ShapeStream<T extends Row<unknown> = Row>
         )
         setQueryParam(fetchUrl, WHERE_QUERY_PARAM, encodedWhere)
       }
-      if (params.columns && typeof params.columns === `string`) {
-        const encodedColumns = this.options.columnMapper
-          ? params.columns
-              .split(`,`)
-              .map((col) => this.options.columnMapper!.encode(col))
-              .join(`,`)
-          : params.columns
-        setQueryParam(fetchUrl, COLUMNS_QUERY_PARAM, encodedColumns)
+      if (params.columns) {
+        setQueryParam(
+          fetchUrl,
+          COLUMNS_QUERY_PARAM,
+          encodeColumns(params.columns as string, this.options.columnMapper?.encode)
+        )
       }
       if (params.replica) setQueryParam(fetchUrl, REPLICA_PARAM, params.replica)
       if (params.params)

@@ -286,6 +286,23 @@ export function encodeWhereClause(
 }
 
 /**
+ * Encodes a comma-separated list of column names using the provided encoder function.
+ *
+ * @param columns - The comma-separated column names string to encode
+ * @param encode - Optional encoder function. If undefined, returns columns unchanged.
+ * @returns The encoded columns string
+ *
+ * @internal
+ */
+export function encodeColumns(
+  columns: string | undefined,
+  encode?: (columnName: string) => string
+): string {
+  if (!columns || !encode) return columns ?? ``
+  return columns.split(`,`).map(encode).join(`,`)
+}
+
+/**
  * Creates a column mapper that automatically converts between snake_case and camelCase.
  * This is the most common use case for column mapping.
  *
