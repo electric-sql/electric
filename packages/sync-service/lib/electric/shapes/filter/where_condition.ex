@@ -25,29 +25,29 @@ defmodule Electric.Shapes.Filter.WhereCondition do
 
   require Logger
 
-  def init(%Filter{where_cond_table: table}, where_cond_id) do
-    :ets.insert(table, {where_cond_id, {[], %{}}})
+  def init(%Filter{where_cond_table: table}, condition_id) do
+    :ets.insert(table, {condition_id, {[], %{}}})
   end
 
-  def add_shape(%Filter{where_cond_table: table} = filter, where_cond_id, shape_id, where_clause) do
+  def add_shape(%Filter{where_cond_table: table} = filter, condition_id, shape_id, where_clause) do
     case optimise_where(where_clause) do
       :not_optimised ->
-        [{_, {index_keys, other_shapes}}] = :ets.lookup(table, where_cond_id)
+        [{_, {index_keys, other_shapes}}] = :ets.lookup(table, condition_id)
         updated_other = Map.put(other_shapes, shape_id, where_clause)
-        :ets.insert(table, {where_cond_id, {index_keys, updated_other}})
+        :ets.insert(table, {condition_id, {index_keys, updated_other}})
 
       optimisation ->
-        add_shape_to_index(filter, where_cond_id, shape_id, optimisation)
+        add_shape_to_index(filter, condition_id, shape_id, optimisation)
     end
   end
 
   defp add_shape_to_index(
          %Filter{where_cond_table: table} = filter,
-         where_cond_id,
+         condition_id,
          shape_id,
          optimisation
        ) do
-    [{_, {index_keys, other_shapes}}] = :ets.lookup(table, where_cond_id)
+    [{_, {index_keys, other_shapes}}] = :ets.lookup(table, condition_id)
     key = {optimisation.field, optimisation.operation}
 
     updated_keys =
@@ -57,9 +57,9 @@ defmodule Electric.Shapes.Filter.WhereCondition do
         [key | index_keys]
       end
 
-    :ets.insert(table, {where_cond_id, {updated_keys, other_shapes}})
+    :ets.insert(table, {condition_id, {updated_keys, other_shapes}})
 
-    Index.add_shape(filter, where_cond_id, shape_id, optimisation)
+    Index.add_shape(filter, condition_id, shape_id, optimisation)
   end
 
   @doc false
@@ -123,51 +123,46 @@ defmodule Electric.Shapes.Filter.WhereCondition do
   @spec remove_shape(Filter.t(), reference(), String.t(), Expr.t() | nil) :: :deleted | :ok
   def remove_shape(
         %Filter{where_cond_table: table} = filter,
-        where_cond_id,
+        condition_id,
         shape_id,
         where_clause
       ) do
     case optimise_where(where_clause) do
       :not_optimised ->
-        # Remove from other_shapes
-        [{_, {index_keys, other_shapes}}] = :ets.lookup(table, where_cond_id)
+        [{_, {index_keys, other_shapes}}] = :ets.lookup(table, condition_id)
         updated_other = Map.delete(other_shapes, shape_id)
 
         if index_keys == [] and updated_other == %{} do
-          :ets.delete(table, where_cond_id)
+          :ets.delete(table, condition_id)
           :deleted
         else
-          :ets.insert(table, {where_cond_id, {index_keys, updated_other}})
+          :ets.insert(table, {condition_id, {index_keys, updated_other}})
           :ok
         end
 
       optimisation ->
-        # Remove from appropriate index
-        remove_shape_from_index(filter, where_cond_id, shape_id, optimisation)
+        remove_shape_from_index(filter, condition_id, shape_id, optimisation)
     end
   end
 
   defp remove_shape_from_index(
          %Filter{where_cond_table: table} = filter,
-         where_cond_id,
+         condition_id,
          shape_id,
          optimisation
        ) do
-    # Remove shape from the index
-    Index.remove_shape(filter, where_cond_id, shape_id, optimisation)
+    Index.remove_shape(filter, condition_id, shape_id, optimisation)
 
-    # If index is now empty, remove from index_keys
-    if Index.empty?(filter, where_cond_id, optimisation.field, optimisation.operation) do
-      [{_, {index_keys, other_shapes}}] = :ets.lookup(table, where_cond_id)
+    if Index.empty?(filter, condition_id, optimisation.field, optimisation.operation) do
+      [{_, {index_keys, other_shapes}}] = :ets.lookup(table, condition_id)
       key = {optimisation.field, optimisation.operation}
       updated_keys = List.delete(index_keys, key)
 
-      # Check if condition is now empty
       if updated_keys == [] and other_shapes == %{} do
-        :ets.delete(table, where_cond_id)
+        :ets.delete(table, condition_id)
         :deleted
       else
-        :ets.insert(table, {where_cond_id, {updated_keys, other_shapes}})
+        :ets.insert(table, {condition_id, {updated_keys, other_shapes}})
         :ok
       end
     else
@@ -175,13 +170,10 @@ defmodule Electric.Shapes.Filter.WhereCondition do
     end
   end
 
-  @doc """
-  Find all shapes affected by a record change.
-  """
-  def affected_shapes(%Filter{where_cond_table: table} = filter, where_cond_id, record, refs_fun) do
+  def affected_shapes(%Filter{where_cond_table: table} = filter, condition_id, record, refs_fun) do
     MapSet.union(
-      indexed_shapes_affected(filter, where_cond_id, record),
-      other_shapes_affected(filter, table, where_cond_id, record, refs_fun)
+      indexed_shapes_affected(filter, condition_id, record),
+      other_shapes_affected(filter, table, condition_id, record, refs_fun)
     )
   rescue
     error ->
@@ -191,27 +183,27 @@ defmodule Electric.Shapes.Filter.WhereCondition do
       """)
 
       # We can't tell which shapes are affected, the safest thing to do is return all shapes
-      all_shape_ids(filter, where_cond_id)
+      all_shape_ids(filter, condition_id)
   end
 
-  defp indexed_shapes_affected(%Filter{where_cond_table: table} = filter, where_cond_id, record) do
+  defp indexed_shapes_affected(%Filter{where_cond_table: table} = filter, condition_id, record) do
     OpenTelemetry.with_child_span(
       "filter.filter_using_indexes",
       [],
       fn ->
-        [{_, {index_keys, _other_shapes}}] = :ets.lookup(table, where_cond_id)
+        [{_, {index_keys, _other_shapes}}] = :ets.lookup(table, condition_id)
 
         index_keys
         |> Enum.map(fn {field, operation} ->
-          Index.affected_shapes(filter, where_cond_id, field, operation, record)
+          Index.affected_shapes(filter, condition_id, field, operation, record)
         end)
         |> Enum.reduce(MapSet.new(), &MapSet.union(&1, &2))
       end
     )
   end
 
-  defp other_shapes_affected(filter, table, where_cond_id, record, refs_fun) do
-    [{_, {_index_keys, other_shapes}}] = :ets.lookup(table, where_cond_id)
+  defp other_shapes_affected(filter, table, condition_id, record, refs_fun) do
+    [{_, {_index_keys, other_shapes}}] = :ets.lookup(table, condition_id)
 
     OpenTelemetry.with_child_span(
       "filter.filter_other_shapes",
@@ -227,22 +219,17 @@ defmodule Electric.Shapes.Filter.WhereCondition do
     )
   end
 
-  @doc """
-  Get all shape IDs in this WhereCondition and its nested conditions.
-  """
-  def all_shape_ids(%Filter{where_cond_table: table} = filter, where_cond_id) do
-    case :ets.lookup(table, where_cond_id) do
+  def all_shape_ids(%Filter{where_cond_table: table} = filter, condition_id) do
+    case :ets.lookup(table, condition_id) do
       [] ->
         MapSet.new()
 
       [{_, {index_keys, other_shapes}}] ->
-        # Collect from indexes
         index_shapes =
           Enum.reduce(index_keys, MapSet.new(), fn {field, operation}, acc ->
-            MapSet.union(acc, Index.all_shape_ids(filter, where_cond_id, field, operation))
+            MapSet.union(acc, Index.all_shape_ids(filter, condition_id, field, operation))
           end)
 
-        # Collect from other_shapes
         other_shape_ids =
           Enum.reduce(other_shapes, MapSet.new(), fn {shape_id, _}, acc ->
             MapSet.put(acc, shape_id)
