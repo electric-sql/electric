@@ -45,7 +45,7 @@ export interface BackoffOptions {
 export const BackoffDefaults = {
   initialDelay: 100,
   maxDelay: 60_000, // Cap at 60s - reasonable for long-lived connections
-  multiplier: 1.3,
+  multiplier: 1.4,
   maxRetries: Infinity, // Retry forever - clients may go offline and come back
 }
 
