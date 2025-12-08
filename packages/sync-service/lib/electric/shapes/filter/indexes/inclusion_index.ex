@@ -256,7 +256,6 @@ defmodule Electric.Shapes.Filter.Indexes.InclusionIndex do
         :ok
 
       [{_, %{condition_id: condition_id} = node}] ->
-        # Remove shape from the WhereCondition
         case WhereCondition.remove_shape(filter, condition_id, shape_id, and_where) do
           :deleted ->
             :ets.insert(table, {node_key, %{node | condition_id: nil}})
@@ -274,9 +273,6 @@ defmodule Electric.Shapes.Filter.Indexes.InclusionIndex do
   defp node_empty?(%{keys: []}), do: true
   defp node_empty?(_), do: false
 
-  @doc """
-  Find shapes affected by a record change.
-  """
   def affected_shapes(%Filter{incl_index_table: table} = filter, where_cond_id, field, record) do
     case :ets.lookup(table, {:type, where_cond_id, field}) do
       [] ->
@@ -288,10 +284,8 @@ defmodule Electric.Shapes.Filter.Indexes.InclusionIndex do
             MapSet.new()
 
           {:ok, values} when is_list(values) ->
-            # Sort and deduplicate the array
             sorted_values = values |> Enum.sort() |> Enum.dedup()
 
-            # Traverse the tree
             shapes_affected_by_tree(
               filter,
               table,
