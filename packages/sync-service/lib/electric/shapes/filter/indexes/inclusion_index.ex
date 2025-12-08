@@ -15,12 +15,12 @@ defmodule Electric.Shapes.Filter.Indexes.InclusionIndex do
   ## ETS Storage
 
   Tree nodes are stored in the incl_index_table with keys of the form:
-  `{where_cond_id, field, path}` -> `%{keys: [...], condition_id: where_cond_id | nil}`
+  `{condition_id, field, path}` -> `%{keys: [...], condition_id: condition_id | nil}`
 
   Where `path` is the list of array values traversed to reach this node (e.g., `[]` for root, `[1]`, `[1, 2]`, etc.).
 
   Additionally, the field type is cached at:
-  `{:type, where_cond_id, field}` -> type
+  `{:type, condition_id, field}` -> type
   This enables O(1) type lookup for parsing record values.
   """
 
@@ -30,12 +30,8 @@ defmodule Electric.Shapes.Filter.Indexes.InclusionIndex do
 
   @env Env.new()
 
-  @doc """
-  Check if the index for a field is empty.
-  """
-  def empty?(%Filter{incl_index_table: table}, where_cond_id, field) do
-    # Check if root node exists and is empty
-    root_key = {where_cond_id, field, []}
+  def empty?(%Filter{incl_index_table: table}, condition_id, field) do
+    root_key = {condition_id, field, []}
 
     case :ets.lookup(table, root_key) do
       [] -> true
@@ -45,32 +41,26 @@ defmodule Electric.Shapes.Filter.Indexes.InclusionIndex do
     end
   end
 
-  @doc """
-  Add a shape to the inclusion index.
-  """
   def add_shape(
         %Filter{incl_index_table: table} = filter,
-        where_cond_id,
+        condition_id,
         field,
         type,
         array_value,
         shape_id,
         and_where
       ) do
-    # Cache the type for O(1) lookup
-    :ets.insert(table, {{:type, where_cond_id, field}, type})
+    :ets.insert(table, {{:type, condition_id, field}, type})
 
-    # Sort and deduplicate the array
     ordered = array_value |> Enum.sort() |> Enum.dedup()
 
-    # Add shape to the tree
-    add_shape_to_node(filter, table, where_cond_id, field, [], ordered, shape_id, and_where)
+    add_shape_to_node(filter, table, condition_id, field, [], ordered, shape_id, and_where)
   end
 
   defp add_shape_to_node(
          filter,
          table,
-         where_cond_id,
+         condition_id,
          field,
          path,
          [value | values],
@@ -79,18 +69,15 @@ defmodule Electric.Shapes.Filter.Indexes.InclusionIndex do
        ) do
     # There are still array values left, so don't add the shape to this node
     # Add it to a child or descendant node instead
-    node_key = {where_cond_id, field, path}
+    node_key = {condition_id, field, path}
 
-    # Get or create the node
     node = get_or_create_node(table, node_key)
 
-    # Check if child for this value exists
     child_path = path ++ [value]
-    child_key = {where_cond_id, field, child_path}
+    child_key = {condition_id, field, child_path}
 
     case :ets.lookup(table, child_key) do
       [] ->
-        # Child doesn't exist, create it
         :ets.insert(table, {child_key, %{keys: [], condition_id: nil}})
 
         # Update parent's keys list (maintain sorted order)
@@ -102,11 +89,10 @@ defmodule Electric.Shapes.Filter.Indexes.InclusionIndex do
         :ok
     end
 
-    # Recurse to child
     add_shape_to_node(
       filter,
       table,
-      where_cond_id,
+      condition_id,
       field,
       child_path,
       values,
@@ -115,13 +101,12 @@ defmodule Electric.Shapes.Filter.Indexes.InclusionIndex do
     )
   end
 
-  defp add_shape_to_node(filter, table, where_cond_id, field, path, [], shape_id, and_where) do
+  defp add_shape_to_node(filter, table, condition_id, field, path, [], shape_id, and_where) do
     # No more array values left, add the shape to this node
-    node_key = {where_cond_id, field, path}
+    node_key = {condition_id, field, path}
 
     node = get_or_create_node(table, node_key)
 
-    # Get or create the WhereCondition for this node
     condition_id =
       case node.condition_id do
         nil ->
@@ -134,7 +119,6 @@ defmodule Electric.Shapes.Filter.Indexes.InclusionIndex do
           existing_id
       end
 
-    # Add shape to the WhereCondition
     WhereCondition.add_shape(filter, condition_id, shape_id, and_where)
   end
 
@@ -164,30 +148,24 @@ defmodule Electric.Shapes.Filter.Indexes.InclusionIndex do
     [head | insert_sorted(tail, value)]
   end
 
-  @doc """
-  Remove a shape from the inclusion index.
-  """
   def remove_shape(
         %Filter{incl_index_table: table} = filter,
-        where_cond_id,
+        condition_id,
         shape_id,
         field,
         array_value,
         and_where
       ) do
-    # Sort and deduplicate the array
     ordered = array_value |> Enum.sort() |> Enum.dedup()
 
-    # Remove shape from the tree
-    remove_shape_from_node(filter, table, where_cond_id, field, [], ordered, shape_id, and_where)
+    remove_shape_from_node(filter, table, condition_id, field, [], ordered, shape_id, and_where)
 
-    # Clean up root node and type entry if tree is now empty
-    root_key = {where_cond_id, field, []}
+    root_key = {condition_id, field, []}
 
     case :ets.lookup(table, root_key) do
       [{_, root_node}] when root_node.keys == [] and root_node.condition_id == nil ->
         :ets.delete(table, root_key)
-        :ets.delete(table, {:type, where_cond_id, field})
+        :ets.delete(table, {:type, condition_id, field})
 
       _ ->
         :ok
@@ -197,7 +175,7 @@ defmodule Electric.Shapes.Filter.Indexes.InclusionIndex do
   defp remove_shape_from_node(
          filter,
          table,
-         where_cond_id,
+         condition_id,
          field,
          path,
          [value | values],
@@ -208,11 +186,10 @@ defmodule Electric.Shapes.Filter.Indexes.InclusionIndex do
     # Remove it from a child or descendant node instead
     child_path = path ++ [value]
 
-    # Recurse to child
     remove_shape_from_node(
       filter,
       table,
-      where_cond_id,
+      condition_id,
       field,
       child_path,
       values,
@@ -220,17 +197,14 @@ defmodule Electric.Shapes.Filter.Indexes.InclusionIndex do
       and_where
     )
 
-    # Check if child is now empty and clean up if so
-    child_key = {where_cond_id, field, child_path}
+    child_key = {condition_id, field, child_path}
 
     case :ets.lookup(table, child_key) do
       [{_, child_node}] ->
         if node_empty?(child_node) do
-          # Delete the child
           :ets.delete(table, child_key)
 
-          # Update parent's keys list
-          node_key = {where_cond_id, field, path}
+          node_key = {condition_id, field, path}
 
           case :ets.lookup(table, node_key) do
             [{_, node}] ->
@@ -247,9 +221,9 @@ defmodule Electric.Shapes.Filter.Indexes.InclusionIndex do
     end
   end
 
-  defp remove_shape_from_node(filter, table, where_cond_id, field, path, [], shape_id, and_where) do
+  defp remove_shape_from_node(filter, table, condition_id, field, path, [], shape_id, and_where) do
     # No more array values left, remove the shape from this node
-    node_key = {where_cond_id, field, path}
+    node_key = {condition_id, field, path}
 
     case :ets.lookup(table, node_key) do
       [{_, %{condition_id: nil}}] ->
@@ -273,8 +247,8 @@ defmodule Electric.Shapes.Filter.Indexes.InclusionIndex do
   defp node_empty?(%{keys: []}), do: true
   defp node_empty?(_), do: false
 
-  def affected_shapes(%Filter{incl_index_table: table} = filter, where_cond_id, field, record) do
-    case :ets.lookup(table, {:type, where_cond_id, field}) do
+  def affected_shapes(%Filter{incl_index_table: table} = filter, condition_id, field, record) do
+    case :ets.lookup(table, {:type, condition_id, field}) do
       [] ->
         MapSet.new()
 
@@ -289,7 +263,7 @@ defmodule Electric.Shapes.Filter.Indexes.InclusionIndex do
             shapes_affected_by_tree(
               filter,
               table,
-              where_cond_id,
+              condition_id,
               field,
               [],
               sorted_values,
@@ -305,8 +279,8 @@ defmodule Electric.Shapes.Filter.Indexes.InclusionIndex do
     end
   end
 
-  defp shapes_affected_by_tree(filter, table, where_cond_id, field, path, values, record) do
-    node_key = {where_cond_id, field, path}
+  defp shapes_affected_by_tree(filter, table, condition_id, field, path, values, record) do
+    node_key = {condition_id, field, path}
 
     case :ets.lookup(table, node_key) do
       [] ->
@@ -318,7 +292,7 @@ defmodule Electric.Shapes.Filter.Indexes.InclusionIndex do
           shapes_affected_by_children(
             filter,
             table,
-            where_cond_id,
+            condition_id,
             field,
             path,
             node.keys,
@@ -339,7 +313,7 @@ defmodule Electric.Shapes.Filter.Indexes.InclusionIndex do
   defp shapes_affected_by_children(
          filter,
          table,
-         where_cond_id,
+         condition_id,
          field,
          path,
          [value | keys],
@@ -349,8 +323,8 @@ defmodule Electric.Shapes.Filter.Indexes.InclusionIndex do
     child_path = path ++ [value]
 
     union(
-      shapes_affected_by_tree(filter, table, where_cond_id, field, child_path, values, record),
-      shapes_affected_by_children(filter, table, where_cond_id, field, path, keys, values, record)
+      shapes_affected_by_tree(filter, table, condition_id, field, child_path, values, record),
+      shapes_affected_by_children(filter, table, condition_id, field, path, keys, values, record)
     )
   end
 
@@ -358,7 +332,7 @@ defmodule Electric.Shapes.Filter.Indexes.InclusionIndex do
   defp shapes_affected_by_children(
          filter,
          table,
-         where_cond_id,
+         condition_id,
          field,
          path,
          [key | keys],
@@ -366,21 +340,21 @@ defmodule Electric.Shapes.Filter.Indexes.InclusionIndex do
          record
        )
        when key < value do
-    shapes_affected_by_children(filter, table, where_cond_id, field, path, keys, values, record)
+    shapes_affected_by_children(filter, table, condition_id, field, path, keys, values, record)
   end
 
   # value can be discarded as it's not in the list of keys
   defp shapes_affected_by_children(
          filter,
          table,
-         where_cond_id,
+         condition_id,
          field,
          path,
          keys,
          [_value | values],
          record
        ) do
-    shapes_affected_by_children(filter, table, where_cond_id, field, path, keys, values, record)
+    shapes_affected_by_children(filter, table, condition_id, field, path, keys, values, record)
   end
 
   # No more keys to process
@@ -413,20 +387,15 @@ defmodule Electric.Shapes.Filter.Indexes.InclusionIndex do
     Env.parse_const(@env, record[field], type)
   end
 
-  @doc """
-  Get all shape IDs in this index.
-  """
-  def all_shape_ids(%Filter{incl_index_table: table} = filter, where_cond_id, field) do
-    # Find all node entries with WhereConditions
-    pattern = {{where_cond_id, field, :_}, :"$1"}
-    entries = :ets.match(table, pattern)
+  def all_shape_ids(%Filter{incl_index_table: table} = filter, condition_id, field) do
+    table
+    |> :ets.match({{condition_id, field, :_}, :"$1"})
+    |> Enum.reduce(MapSet.new(), fn
+      [%{condition_id: nil}], ids ->
+        ids
 
-    Enum.reduce(entries, MapSet.new(), fn
-      [%{condition_id: nil}], acc ->
-        acc
-
-      [%{condition_id: condition_id}], acc ->
-        MapSet.union(acc, WhereCondition.all_shape_ids(filter, condition_id))
+      [%{condition_id: condition_id}], ids ->
+        MapSet.union(ids, WhereCondition.all_shape_ids(filter, condition_id))
     end)
   end
 
