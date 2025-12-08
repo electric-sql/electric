@@ -855,11 +855,12 @@ export class ShapeStream<T extends Row<unknown> = Row>
         )
         setQueryParam(fetchUrl, WHERE_QUERY_PARAM, encodedWhere)
       }
-      if (params.columns) {
+      if (params.columns && typeof params.columns === `string`) {
         const encodedColumns = this.options.columnMapper
-          ? params.columns.map((col) =>
-              this.options.columnMapper!.encode(String(col))
-            )
+          ? params.columns
+              .split(`,`)
+              .map((col) => this.options.columnMapper!.encode(col))
+              .join(`,`)
           : params.columns
         setQueryParam(fetchUrl, COLUMNS_QUERY_PARAM, encodedColumns)
       }
