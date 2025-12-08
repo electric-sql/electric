@@ -115,13 +115,10 @@ defmodule Electric.Shapes.Filter do
 
     [{_, where_cond_id}] = :ets.lookup(filter.tables_table, table_name)
 
-    # Remove shape from WhereCondition
-    WhereCondition.remove_shape(filter, where_cond_id, shape_id, shape.where)
-
-    # Clean up empty table condition
-    if WhereCondition.empty?(filter, where_cond_id) do
-      WhereCondition.delete(filter, where_cond_id)
-      :ets.delete(filter.tables_table, table_name)
+    # Remove shape from WhereCondition, clean up table entry if condition deleted
+    case WhereCondition.remove_shape(filter, where_cond_id, shape_id, shape.where) do
+      :deleted -> :ets.delete(filter.tables_table, table_name)
+      :ok -> :ok
     end
 
     :ets.delete(filter.shapes_table, shape_id)

@@ -75,17 +75,6 @@ defmodule Electric.Shapes.Filter.Index do
   end
 
   @doc """
-  Delete all entries for an index.
-  """
-  def delete_all(%Filter{} = filter, where_cond_id, field, "=") do
-    EqualityIndex.delete_all(filter, where_cond_id, field)
-  end
-
-  def delete_all(%Filter{} = filter, where_cond_id, field, "@>") do
-    InclusionIndex.delete_all(filter, where_cond_id, field)
-  end
-
-  @doc """
   Find shapes affected by a record change.
   """
   def affected_shapes(%Filter{} = filter, where_cond_id, field, "=", record) do

@@ -33,44 +33,6 @@ defmodule Electric.Shapes.Filter.WhereCondition do
   end
 
   @doc """
-  Check if a WhereCondition is empty (no indexes and no other_shapes).
-  """
-  def empty?(%Filter{where_cond_table: table} = filter, where_cond_id) do
-    case :ets.lookup(table, where_cond_id) do
-      [] ->
-        true
-
-      [{_, {index_keys, other_shapes}}] ->
-        index_keys == [] and other_shapes == %{} and
-          no_indexes?(filter, where_cond_id, index_keys)
-    end
-  end
-
-  defp no_indexes?(filter, where_cond_id, index_keys) do
-    Enum.all?(index_keys, fn {field, operation} ->
-      Index.empty?(filter, where_cond_id, field, operation)
-    end)
-  end
-
-  @doc """
-  Delete a WhereCondition and its associated indexes from ETS.
-  """
-  def delete(%Filter{where_cond_table: table} = filter, where_cond_id) do
-    case :ets.lookup(table, where_cond_id) do
-      [{_, {index_keys, _other_shapes}}] ->
-        # Delete all associated indexes
-        Enum.each(index_keys, fn {field, operation} ->
-          Index.delete_all(filter, where_cond_id, field, operation)
-        end)
-
-        :ets.delete(table, where_cond_id)
-
-      [] ->
-        :ok
-    end
-  end
-
-  @doc """
   Add a shape to a WhereCondition.
   """
   def add_shape(%Filter{where_cond_table: table} = filter, where_cond_id, shape_id, where_clause) do
@@ -164,7 +126,11 @@ defmodule Electric.Shapes.Filter.WhereCondition do
 
   @doc """
   Remove a shape from a WhereCondition.
+
+  Returns `:deleted` if the condition is now empty and was deleted,
+  or `:ok` if the condition still has shapes.
   """
+  @spec remove_shape(Filter.t(), reference(), String.t(), Expr.t() | nil) :: :deleted | :ok
   def remove_shape(
         %Filter{where_cond_table: table} = filter,
         where_cond_id,
@@ -176,7 +142,14 @@ defmodule Electric.Shapes.Filter.WhereCondition do
         # Remove from other_shapes
         [{_, {index_keys, other_shapes}}] = :ets.lookup(table, where_cond_id)
         updated_other = Map.delete(other_shapes, shape_id)
-        :ets.insert(table, {where_cond_id, {index_keys, updated_other}})
+
+        if index_keys == [] and updated_other == %{} do
+          :ets.delete(table, where_cond_id)
+          :deleted
+        else
+          :ets.insert(table, {where_cond_id, {index_keys, updated_other}})
+          :ok
+        end
 
       optimisation ->
         # Remove from appropriate index
@@ -198,10 +171,17 @@ defmodule Electric.Shapes.Filter.WhereCondition do
       [{_, {index_keys, other_shapes}}] = :ets.lookup(table, where_cond_id)
       key = {optimisation.field, optimisation.operation}
       updated_keys = List.delete(index_keys, key)
-      :ets.insert(table, {where_cond_id, {updated_keys, other_shapes}})
 
-      # Clean up the empty index
-      Index.delete_all(filter, where_cond_id, optimisation.field, optimisation.operation)
+      # Check if condition is now empty
+      if updated_keys == [] and other_shapes == %{} do
+        :ets.delete(table, where_cond_id)
+        :deleted
+      else
+        :ets.insert(table, {where_cond_id, {updated_keys, other_shapes}})
+        :ok
+      end
+    else
+      :ok
     end
   end
 

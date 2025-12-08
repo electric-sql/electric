@@ -180,6 +180,18 @@ defmodule Electric.Shapes.Filter.Indexes.InclusionIndex do
 
     # Remove shape from the tree
     remove_shape_from_node(filter, table, where_cond_id, field, [], ordered, shape_id, and_where)
+
+    # Clean up root node and type entry if tree is now empty
+    root_key = {where_cond_id, field, []}
+
+    case :ets.lookup(table, root_key) do
+      [{_, root_node}] when root_node.keys == [] and root_node.condition_id == nil ->
+        :ets.delete(table, root_key)
+        :ets.delete(table, {:type, where_cond_id, field})
+
+      _ ->
+        :ok
+    end
   end
 
   defp remove_shape_from_node(
@@ -245,12 +257,12 @@ defmodule Electric.Shapes.Filter.Indexes.InclusionIndex do
 
       [{_, %{condition_id: condition_id} = node}] ->
         # Remove shape from the WhereCondition
-        WhereCondition.remove_shape(filter, condition_id, shape_id, and_where)
+        case WhereCondition.remove_shape(filter, condition_id, shape_id, and_where) do
+          :deleted ->
+            :ets.insert(table, {node_key, %{node | condition_id: nil}})
 
-        # If condition is now empty, remove it
-        if WhereCondition.empty?(filter, condition_id) do
-          WhereCondition.delete(filter, condition_id)
-          :ets.insert(table, {node_key, %{node | condition_id: nil}})
+          :ok ->
+            :ok
         end
 
       [] ->
@@ -261,25 +273,6 @@ defmodule Electric.Shapes.Filter.Indexes.InclusionIndex do
   defp node_empty?(%{keys: [], condition_id: nil}), do: true
   defp node_empty?(%{keys: []}), do: true
   defp node_empty?(_), do: false
-
-  @doc """
-  Delete all entries for this index.
-  """
-  def delete_all(%Filter{incl_index_table: table} = filter, where_cond_id, field) do
-    # Find all node entries for this where_cond_id and field
-    pattern = {{where_cond_id, field, :_}, :"$1"}
-    entries = :ets.match(table, pattern)
-
-    # Delete WhereConditions
-    Enum.each(entries, fn
-      [%{condition_id: nil}] -> :ok
-      [%{condition_id: condition_id}] -> WhereCondition.delete(filter, condition_id)
-    end)
-
-    # Delete all node entries and the type entry
-    :ets.match_delete(table, {{where_cond_id, field, :_}, :_})
-    :ets.delete(table, {:type, where_cond_id, field})
-  end
 
   @doc """
   Find shapes affected by a record change.

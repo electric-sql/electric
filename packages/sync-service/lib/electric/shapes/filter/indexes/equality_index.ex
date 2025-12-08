@@ -67,29 +67,18 @@ defmodule Electric.Shapes.Filter.Indexes.EqualityIndex do
         :ok
 
       [{_, {_type, next_condition_id}}] ->
-        WhereCondition.remove_shape(filter, next_condition_id, shape_id, and_where)
+        case WhereCondition.remove_shape(filter, next_condition_id, shape_id, and_where) do
+          :deleted ->
+            :ets.delete(table, key)
 
-        if WhereCondition.empty?(filter, next_condition_id) do
-          WhereCondition.delete(filter, next_condition_id)
-          :ets.delete(table, key)
+            if no_values?(table, condition_id, field) do
+              :ets.delete(table, {:type, condition_id, field})
+            end
 
-          if no_values?(table, condition_id, field) do
-            :ets.delete(table, {:type, condition_id, field})
-          end
+          :ok ->
+            :ok
         end
     end
-  end
-
-  # TODO: why is this needed?
-  def delete_all(%Filter{eq_index_table: table} = filter, condition_id, field) do
-    table
-    |> :ets.match({{condition_id, field, :_}, :"$1"})
-    |> Enum.each(fn [{_type, next_condition_id}] ->
-      WhereCondition.delete(filter, next_condition_id)
-    end)
-
-    :ets.match_delete(table, {{condition_id, field, :_}, :_})
-    :ets.delete(table, {:type, condition_id, field})
   end
 
   def affected_shapes(%Filter{eq_index_table: table} = filter, condition_id, field, record) do
