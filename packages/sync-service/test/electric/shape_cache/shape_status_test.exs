@@ -332,7 +332,6 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
         expected_handles =
           sorted_by_timestamp |> Enum.take(expected_count) |> Enum.map(&elem(&1, 0))
 
-        # Result should match expected handles (sorted by timestamp)
         assert Enum.sort(result_handles) == Enum.sort(expected_handles)
       end
     end
