@@ -113,6 +113,9 @@ defmodule Electric.Shapes.Shape do
 
   def has_dependencies?(%__MODULE__{} = shape), do: shape.shape_dependencies != []
 
+  defguard are_deps_filled(shape)
+           when shape.shape_dependencies == [] or shape.shape_dependencies_handles != []
+
   def dependency_handles_known?(%__MODULE__{} = shape),
     do: shape.shape_dependencies_handles != []
 

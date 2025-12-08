@@ -1,21 +1,39 @@
 defmodule Electric.Shapes.Consumer.MaterializerTest do
   use ExUnit.Case, async: true
+  import ExUnit.CaptureLog
   import Support.ComponentSetup
   use Repatch.ExUnit
 
+  alias Electric.Shapes.Shape
   alias Electric.LogItems
   alias Electric.Replication.Changes
   alias Electric.ShapeCache.Storage
   alias Electric.Shapes.ConsumerRegistry
   alias Electric.Shapes.Consumer.Materializer
 
-  setup [:with_stack_id_from_test, :with_in_memory_storage, :with_consumer_registry]
+  @moduletag :tmp_dir
+
+  setup [
+    :with_stack_id_from_test,
+    :with_async_deleter,
+    :with_pure_file_storage,
+    :with_consumer_registry
+  ]
+
+  @shape %Shape{
+    root_table: {"public", "items"},
+    root_table_id: 1,
+    root_pk: ["id"],
+    storage: %{compaction: :disabled}
+  }
 
   setup %{storage: storage, stack_id: stack_id} = ctx do
     ConsumerRegistry.register_consumer(self(), "test", stack_id)
 
     Storage.for_shape("test", storage) |> Storage.start_link()
+    writer = Storage.for_shape("test", storage) |> Storage.init_writer!(@shape)
     Storage.for_shape("test", storage) |> Storage.mark_snapshot_as_started()
+    Storage.hibernate(writer)
 
     snapshot_data =
       Map.get(ctx, :snapshot_data, [])
@@ -29,7 +47,7 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
     Storage.for_shape("test", storage)
     |> then(&Storage.make_new_snapshot!(snapshot_data, &1))
 
-    {:ok, shape_handle: "test"}
+    {:ok, shape_handle: "test", shape_storage: Storage.for_shape("test", storage), writer: writer}
   end
 
   test "can get ready",
@@ -84,7 +102,7 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
 
       assert Materializer.get_link_values(ctx) == MapSet.new([1])
 
-      assert_receive {:materializer_changes, _, %{move_in: ["1"]}}
+      assert_receive {:materializer_changes, _, %{move_in: [{1, "1"}]}}
     end
 
     @tag snapshot_data: [%Changes.NewRecord{record: %{"id" => "1", "value" => "10"}}]
@@ -113,7 +131,7 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
 
       assert Materializer.get_link_values(ctx) == MapSet.new([11])
 
-      assert_receive {:materializer_changes, _, %{move_out: ["10"], move_in: ["11"]}}
+      assert_receive {:materializer_changes, _, %{move_out: [{10, "10"}], move_in: [{11, "11"}]}}
     end
 
     @tag snapshot_data: [
@@ -140,7 +158,7 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
 
       assert Materializer.get_link_values(ctx) == MapSet.new([])
 
-      assert_receive {:materializer_changes, _, %{move_out: ["10"]}}
+      assert_receive {:materializer_changes, _, %{move_out: [{10, "10"}]}}
     end
 
     @tag snapshot_data: [
@@ -191,7 +209,7 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
 
       assert Materializer.get_link_values(ctx) == MapSet.new([20])
 
-      assert_received {:materializer_changes, _, %{move_out: ["10"]}}
+      assert_received {:materializer_changes, _, %{move_out: [{10, "10"}]}}
     end
 
     @tag snapshot_data: [
@@ -216,7 +234,7 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
 
       assert Materializer.get_link_values(ctx) == MapSet.new([10, 20])
 
-      assert_received {:materializer_changes, _, %{move_in: ["20"]}}
+      assert_received {:materializer_changes, _, %{move_in: [{20, "20"}]}}
     end
 
     @tag snapshot_data: [
@@ -309,15 +327,18 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
       pid = GenServer.whereis(Materializer.name(ctx))
       Process.unlink(pid)
 
-      try do
-        Materializer.new_changes(
-          ctx,
-          [%Changes.DeletedRecord{old_record: %{"id" => "1", "value" => "10"}}] |> prep_changes()
-        )
-      catch
-        :exit, {{reason, _}, _} ->
-          assert %KeyError{key: _} = reason
-      end
+      capture_log(fn ->
+        try do
+          Materializer.new_changes(
+            ctx,
+            [%Changes.DeletedRecord{old_record: %{"id" => "1", "value" => "10"}}]
+            |> prep_changes()
+          )
+        catch
+          :exit, {{reason, _}, _} ->
+            assert %KeyError{key: _} = reason
+        end
+      end)
     end
 
     test "moves are correctly tracked across multiple calls", ctx do
@@ -331,7 +352,7 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
 
       assert Materializer.get_link_values(ctx) == MapSet.new([1, 2])
 
-      assert_receive {:materializer_changes, _, %{move_in: ["2", "1"]}}
+      assert_receive {:materializer_changes, _, %{move_in: [{2, "2"}, {1, "1"}]}}
 
       Materializer.new_changes(ctx, [
         %Changes.UpdatedRecord{
@@ -345,7 +366,7 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
 
       assert Materializer.get_link_values(ctx) == MapSet.new([1, 3])
 
-      assert_receive {:materializer_changes, _, %{move_out: ["2"], move_in: ["3"]}}
+      assert_receive {:materializer_changes, _, %{move_out: [{2, "2"}], move_in: [{3, "3"}]}}
     end
   end
 
@@ -370,7 +391,7 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
 
       assert Materializer.get_link_values(ctx) == MapSet.new([20])
       assert_receive {:materializer_changes, _, %{move_out: move_out}}
-      assert Enum.sort(move_out) == ["10", "30"]
+      assert Enum.sort(move_out) == [{10, "10"}, {30, "30"}]
     end
 
     test "runtime move_out event with multiple patterns removes all matching rows", ctx do
@@ -397,7 +418,7 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
 
       assert Materializer.get_link_values(ctx) == MapSet.new([20])
       assert_receive {:materializer_changes, _, %{move_out: move_out}}
-      assert Enum.sort(move_out) == ["10", "30"]
+      assert Enum.sort(move_out) == [{10, "10"}, {30, "30"}]
     end
 
     test "runtime move_out event for non-existent pattern causes no events", ctx do
@@ -408,7 +429,7 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
       ])
 
       assert Materializer.get_link_values(ctx) == MapSet.new([10])
-      assert_receive {:materializer_changes, _, %{move_in: ["10"]}}
+      assert_receive {:materializer_changes, _, %{move_in: [{10, "10"}]}}
 
       # Try to remove rows with non-existent tag
       Materializer.new_changes(ctx, [
@@ -429,7 +450,7 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
       ])
 
       assert Materializer.get_link_values(ctx) == MapSet.new([10])
-      assert_receive {:materializer_changes, _, %{move_in: ["10"]}}
+      assert_receive {:materializer_changes, _, %{move_in: [{10, "10"}]}}
 
       # Remove only tag1 row
       Materializer.new_changes(ctx, [
@@ -461,7 +482,7 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
 
       # Only value 20 should remain after move_out
       assert Materializer.get_link_values(ctx) == MapSet.new([20])
-      assert_receive {:materializer_changes, _, %{move_out: ["10"]}}
+      assert_receive {:materializer_changes, _, %{move_out: [{10, "10"}]}}
     end
 
     @tag snapshot_data: {
@@ -507,7 +528,7 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
 
       assert Materializer.get_link_values(ctx) == MapSet.new([30])
       assert_receive {:materializer_changes, _, %{move_out: move_out}}
-      assert Enum.sort(move_out) == ["10", "20"]
+      assert Enum.sort(move_out) == [{10, "10"}, {20, "20"}]
     end
 
     @tag snapshot_data: [
@@ -534,6 +555,46 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
       # Value 10 should still be present because key "2" still has it
       assert Materializer.get_link_values(ctx) == MapSet.new([10])
       refute_received {:materializer_changes, _, _}
+    end
+
+    test "runtime move-in tags are tracked correctly if read from a storage range",
+         %{
+           shape_storage: shape_storage,
+           writer: writer
+         } = ctx do
+      ctx = with_materializer(ctx)
+
+      Storage.write_move_in_snapshot!(
+        [
+          [
+            ~s("public"."test_table"/"1"),
+            ["tag1"],
+            ~s({"key":"\\"public\\".\\"test_table\\"/\\"1\\"","value":{"id":"1","value":"10"},"headers":{"operation":"insert","tags":["tag1"]}})
+          ]
+        ],
+        "test",
+        shape_storage
+      )
+
+      {range, writer} =
+        Storage.append_move_in_snapshot_to_log!(
+          "test",
+          writer
+        )
+
+      Materializer.new_changes(ctx, range)
+
+      assert Materializer.get_link_values(ctx) == MapSet.new([10])
+
+      {range, _writer} =
+        Storage.append_control_message!(
+          Jason.encode!(%{headers: %{event: "move-out", patterns: [%{pos: 0, value: "tag1"}]}}),
+          writer
+        )
+
+      Materializer.new_changes(ctx, range)
+
+      assert Materializer.get_link_values(ctx) == MapSet.new()
     end
   end
 

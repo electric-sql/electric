@@ -11,12 +11,13 @@ defmodule Electric.Shapes.Querying do
       json_like_select(shape, %{"is_move_in" => true}, stack_id, shape_handle)
 
     key_select = key_select(shape)
+    tag_select = make_tags(shape, stack_id, shape_handle) |> Enum.join(", ")
 
     query =
       Postgrex.prepare!(
         conn,
         table,
-        ~s|SELECT #{key_select}, #{json_like_select} FROM #{table} WHERE #{where}|
+        ~s|SELECT #{key_select}, ARRAY[#{tag_select}]::text[], #{json_like_select} FROM #{table} WHERE #{where}|
       )
 
     Postgrex.stream(conn, query, params)
@@ -143,6 +144,22 @@ defmodule Electric.Shapes.Querying do
     ~s['#{escape_relation(root_table)}' || '/' || #{join_primary_keys(pk_cols)}]
   end
 
+  # Converts a tag structure to something PG select can fill, but returns a list of separate strings for each tag
+  # - it's up to the caller to interpolate them into the query correctly
+  defp make_tags(%Shape{tag_structure: tag_structure}, stack_id, shape_handle) do
+    Enum.map(tag_structure, fn pattern ->
+      Enum.map(pattern, fn
+        column_name when is_binary(column_name) ->
+          ~s[md5('#{stack_id}#{shape_handle}' || #{pg_cast_column_to_text(column_name)})]
+
+        {:hash_together, columns} ->
+          column_parts = Enum.map(columns, &~s['#{&1}:' || #{pg_cast_column_to_text(&1)}])
+          ~s[md5('#{stack_id}#{shape_handle}' || #{Enum.join(column_parts, " || ")})]
+      end)
+      |> Enum.join("|| '/' ||")
+    end)
+  end
+
   defp json_like_select(
          %Shape{
            root_table: root_table,
@@ -152,19 +169,7 @@ defmodule Electric.Shapes.Querying do
          stack_id,
          shape_handle
        ) do
-    tags =
-      Enum.map(shape.tag_structure, fn pattern ->
-        Enum.map(pattern, fn
-          column_name when is_binary(column_name) ->
-            ~s[md5('#{stack_id}#{shape_handle}' || #{pg_cast_column_to_text(column_name)})]
-
-          {:hash_together, columns} ->
-            column_parts = Enum.map(columns, &~s['#{&1}:' || #{pg_cast_column_to_text(&1)}])
-            ~s[md5('#{stack_id}#{shape_handle}' || #{Enum.join(column_parts, " || ")})]
-        end)
-        |> Enum.join("/")
-      end)
-
+    tags = make_tags(shape, stack_id, shape_handle)
     key_part = build_key_part(shape)
     value_part = build_value_part(columns)
     headers_part = build_headers_part(root_table, additional_headers, tags)

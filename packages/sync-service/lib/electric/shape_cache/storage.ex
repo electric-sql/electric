@@ -118,6 +118,23 @@ defmodule Electric.ShapeCache.Storage do
               {inserted_range :: {LogOffset.t(), LogOffset.t()}, writer_state()} | no_return()
 
   @doc """
+  Splice a move in snapshot into the main log with filtering.
+
+  Rows are filtered using the touch_tracker: if a row's key has been touched by a transaction
+  that is NOT visible in the snapshot, skip that row (stream has fresher data).
+
+  Returns the inserted range (excluding skipped rows) and updated writer state.
+  """
+  @callback append_move_in_snapshot_to_log_filtered!(
+              name :: String.t(),
+              writer_state(),
+              touch_tracker :: %{String.t() => pos_integer()},
+              snapshot :: {pos_integer(), pos_integer(), [pos_integer()]},
+              tags_to_skip :: MapSet.t(String.t())
+            ) ::
+              {inserted_range :: {LogOffset.t(), LogOffset.t()}, writer_state()} | no_return()
+
+  @doc """
   Append a control message to the log that doesn't have an offset associated with it.
 
   Since control message doesn't have an offset associated, the offsets are inferred at append time,
@@ -296,6 +313,26 @@ defmodule Electric.ShapeCache.Storage do
   @impl __MODULE__
   def append_move_in_snapshot_to_log!(name, {mod, writer_state}) do
     {inserted_range, new_writer_state} = mod.append_move_in_snapshot_to_log!(name, writer_state)
+    {inserted_range, {mod, new_writer_state}}
+  end
+
+  @impl __MODULE__
+  def append_move_in_snapshot_to_log_filtered!(
+        name,
+        {mod, writer_state},
+        touch_tracker,
+        snapshot,
+        tags_to_skip
+      ) do
+    {inserted_range, new_writer_state} =
+      mod.append_move_in_snapshot_to_log_filtered!(
+        name,
+        writer_state,
+        touch_tracker,
+        snapshot,
+        tags_to_skip
+      )
+
     {inserted_range, {mod, new_writer_state}}
   end
 

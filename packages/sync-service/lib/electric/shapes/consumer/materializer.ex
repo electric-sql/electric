@@ -22,9 +22,11 @@ defmodule Electric.Shapes.Consumer.Materializer do
   alias Electric.ShapeCache.Storage
   alias Electric.Replication.LogOffset
   alias Electric.Replication.Eval
+  alias Electric.Shapes.Shape
 
   import Electric.Replication.LogOffset
   import Electric, only: [is_stack_id: 1, is_shape_handle: 1]
+  import Shape, only: :macros
 
   def name(stack_id, shape_handle) when is_stack_id(stack_id) and is_shape_handle(shape_handle) do
     Electric.ProcessRegistry.name(stack_id, __MODULE__, shape_handle)
@@ -42,6 +44,7 @@ defmodule Electric.Shapes.Consumer.Materializer do
 
   def whereis(stack_id, shape_handle), do: GenServer.whereis(name(stack_id, shape_handle))
 
+  @spec new_changes(map(), list(Changes.change()) | {LogOffset.t(), LogOffset.t()}) :: :ok
   def new_changes(state, changes) do
     GenServer.call(name(state), {:new_changes, changes}, :infinity)
   end
@@ -54,7 +57,7 @@ defmodule Electric.Shapes.Consumer.Materializer do
     GenServer.call(name(opts), :get_link_values)
   end
 
-  def get_all_as_refs(shape, stack_id) do
+  def get_all_as_refs(shape, stack_id) when are_deps_filled(shape) do
     shape.shape_dependencies_handles
     |> Enum.with_index()
     |> Map.new(fn {shape_handle, index} ->
@@ -118,44 +121,7 @@ defmodule Electric.Shapes.Consumer.Materializer do
 
     {state, _} =
       stream
-      |> Stream.map(&Jason.decode!/1)
-      |> Enum.filter(fn decoded ->
-        Map.has_key?(decoded, "key") || Map.has_key?(decoded["headers"], "event")
-      end)
-      |> Enum.map(fn
-        %{
-          "key" => key,
-          "value" => value,
-          "headers" => %{"operation" => operation} = headers
-        } ->
-          case operation do
-            "insert" ->
-              %Changes.NewRecord{key: key, record: value, move_tags: Map.get(headers, "tags", [])}
-
-            "update" ->
-              %Changes.UpdatedRecord{
-                key: key,
-                record: value,
-                move_tags: Map.get(headers, "tags", []),
-                removed_move_tags: Map.get(headers, "removed_tags", [])
-              }
-
-            "delete" ->
-              %Changes.DeletedRecord{
-                key: key,
-                old_record: value,
-                move_tags: Map.get(headers, "tags", [])
-              }
-          end
-
-        %{"headers" => %{"event" => "move-out", "patterns" => patterns}} ->
-          patterns =
-            Enum.map(patterns, fn %{"pos" => pos, "value" => value} ->
-              %{pos: pos, value: value}
-            end)
-
-          %{headers: %{event: "move-out", patterns: patterns}}
-      end)
+      |> decode_json_stream()
       |> apply_changes(state)
 
     {:noreply, %{state | offset: offset}}
@@ -195,14 +161,7 @@ defmodule Electric.Shapes.Consumer.Materializer do
     storage = Storage.for_shape(state.shape_handle, stack_storage)
 
     Storage.get_log_stream(range_start, range_end, storage)
-    |> Stream.map(&Jason.decode!/1)
-    |> Stream.map(fn %{"key" => key, "value" => value, "headers" => %{"operation" => operation}} ->
-      case operation do
-        "insert" -> %Changes.NewRecord{key: key, record: value}
-        "update" -> %Changes.UpdatedRecord{key: key, record: value}
-        "delete" -> %Changes.DeletedRecord{key: key, old_record: value}
-      end
-    end)
+    |> decode_json_stream()
     |> apply_changes_and_notify(state)
     |> then(fn state -> {:reply, :ok, state} end)
   end
@@ -240,6 +199,48 @@ defmodule Electric.Shapes.Consumer.Materializer do
 
   def handle_info({:DOWN, _ref, :process, pid, _reason}, state) do
     {:noreply, %{state | subscribers: MapSet.delete(state.subscribers, pid)}}
+  end
+
+  defp decode_json_stream(stream) do
+    stream
+    |> Stream.map(&Jason.decode!/1)
+    |> Enum.filter(fn decoded ->
+      Map.has_key?(decoded, "key") || Map.has_key?(decoded["headers"], "event")
+    end)
+    |> Enum.map(fn
+      %{
+        "key" => key,
+        "value" => value,
+        "headers" => %{"operation" => operation} = headers
+      } ->
+        case operation do
+          "insert" ->
+            %Changes.NewRecord{key: key, record: value, move_tags: Map.get(headers, "tags", [])}
+
+          "update" ->
+            %Changes.UpdatedRecord{
+              key: key,
+              record: value,
+              move_tags: Map.get(headers, "tags", []),
+              removed_move_tags: Map.get(headers, "removed_tags", [])
+            }
+
+          "delete" ->
+            %Changes.DeletedRecord{
+              key: key,
+              old_record: value,
+              move_tags: Map.get(headers, "tags", [])
+            }
+        end
+
+      %{"headers" => %{"event" => "move-out", "patterns" => patterns}} ->
+        patterns =
+          Enum.map(patterns, fn %{"pos" => pos, "value" => value} ->
+            %{pos: pos, value: value}
+          end)
+
+        %{headers: %{event: "move-out", patterns: patterns}}
+    end)
   end
 
   defp cast!(record, %{columns: columns, materialized_type: {:array, {:row, types}}}) do
@@ -291,7 +292,7 @@ defmodule Electric.Shapes.Consumer.Materializer do
   defp apply_changes(changes, state) do
     {{index, tag_indices}, {value_counts, events}} =
       Enum.reduce(
-        changes |> Enum.to_list(),
+        changes,
         {{state.index, state.tag_indices}, {state.value_counts, []}},
         fn
           %Changes.NewRecord{key: key, record: record, move_tags: move_tags},
@@ -363,7 +364,7 @@ defmodule Electric.Shapes.Consumer.Materializer do
         {Map.put(value_counts, value, count + 1), events}
 
       :error ->
-        {Map.put(value_counts, value, 1), [{:move_in, original_string} | events]}
+        {Map.put(value_counts, value, 1), [{:move_in, {value, original_string}} | events]}
     end
   end
 
@@ -371,7 +372,7 @@ defmodule Electric.Shapes.Consumer.Materializer do
     # If we're decrementing, it must have been added before
     case Map.fetch!(value_counts, value) do
       1 ->
-        {Map.delete(value_counts, value), [{:move_out, original_string} | events]}
+        {Map.delete(value_counts, value), [{:move_out, {value, original_string}} | events]}
 
       count ->
         {Map.put(value_counts, value, count - 1), events}

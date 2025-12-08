@@ -383,6 +383,26 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
                PureFileStorage.get_log_stream(LogOffset.new(9, 0), LogOffset.last(), opts)
                |> Enum.to_list()
     end
+
+    test "correctly skips over lines when max offset is less than the one written", %{
+      writer: writer,
+      opts: opts
+    } do
+      writer =
+        PureFileStorage.append_to_log!(
+          [
+            {LogOffset.new(10, 0), "test_key", :insert, ~s|{"test":"1"}|},
+            {LogOffset.new(12, 0), "test_key", :update, ~s|{"test":"2"}|},
+            {LogOffset.new(14, 0), "test_key", :delete, ~s|{"test":"3"}|}
+          ],
+          writer
+        )
+
+      PureFileStorage.terminate(writer)
+
+      assert PureFileStorage.get_log_stream(LogOffset.new(9, 0), LogOffset.new(11, 0), opts)
+             |> Enum.to_list() == [~s|{"test":"1"}|]
+    end
   end
 
   describe "crash recovery" do
