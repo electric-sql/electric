@@ -185,8 +185,6 @@ defmodule Electric.Plug.ServeShapePlugTest do
     test "returns 400 when offset is out of bounds after a timeout", ctx do
       out_of_bounds_offset = LogOffset.increment(@test_offset)
 
-      patch_storage(get_chunk_end_log_offset: fn ^out_of_bounds_offset, _ -> nil end)
-
       patch_shape_cache(
         resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id ->
           {@test_shape_handle, @test_offset}

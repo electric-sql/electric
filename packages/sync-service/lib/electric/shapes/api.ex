@@ -41,6 +41,9 @@ defmodule Electric.Shapes.Api do
 
   defguardp is_configured(api) when api.configured
 
+  defguardp is_out_of_bounds(request)
+            when LogOffset.is_log_offset_lt(request.last_offset, request.params.offset)
+
   defstruct [
     :inspector,
     :shape,
@@ -406,6 +409,14 @@ defmodule Electric.Shapes.Api do
     %{request | global_last_seen_lsn: offset}
   end
 
+  # If the requested offset is out of bounds, we are beyond the end of any chunk
+  defp determine_log_chunk_offset(%Request{} = request) when is_out_of_bounds(request) do
+    Request.update_response(
+      %{request | chunk_end_offset: request.last_offset},
+      &%{&1 | offset: request.last_offset}
+    )
+  end
+
   # If chunk offsets are available, use those instead of the latest available
   # offset to optimize for cache hits and response sizes
   defp determine_log_chunk_offset(%Request{} = request) do
@@ -586,14 +597,8 @@ defmodule Electric.Shapes.Api do
     }
   end
 
-  defp do_serve_shape_log(
-         %Request{
-           chunk_end_offset: chunk_end_offset,
-           new_changes_ref: ref,
-           params: %{offset: offset}
-         } = request
-       )
-       when LogOffset.is_log_offset_lt(chunk_end_offset, offset) do
+  defp do_serve_shape_log(%Request{new_changes_ref: ref} = request)
+       when is_out_of_bounds(request) do
     # treat out of bounds requests like live requests with a
     # shorter timeout before failing them, as if the client happened
     # to be slightly ahead because of a restart or handover the
