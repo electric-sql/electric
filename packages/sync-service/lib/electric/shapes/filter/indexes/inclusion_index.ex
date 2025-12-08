@@ -130,7 +130,12 @@ defmodule Electric.Shapes.Filter.Indexes.InclusionIndex do
     [head | insert_sorted(tail, value)]
   end
 
-  def remove_shape(%Filter{incl_index_table: table} = filter, condition_id, shape_id, optimisation) do
+  def remove_shape(
+        %Filter{incl_index_table: table} = filter,
+        condition_id,
+        shape_id,
+        optimisation
+      ) do
     %{field: field, value: array_value, and_where: and_where} = optimisation
     ordered = array_value |> Enum.sort() |> Enum.dedup()
 
