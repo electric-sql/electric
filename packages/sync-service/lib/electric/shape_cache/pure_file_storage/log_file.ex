@@ -268,13 +268,7 @@ defmodule Electric.ShapeCache.PureFileStorage.LogFile do
          acc
        )
        when tx_offset1 < tx_offset2 or (tx_offset1 == tx_offset2 and op_offset1 <= op_offset2),
-       do:
-         extract_jsons_from_binary(
-           rest,
-           log_offset,
-           inclusive_max_offset,
-           acc
-         )
+       do: extract_jsons_from_binary(rest, log_offset, inclusive_max_offset, acc)
 
   defp extract_jsons_from_binary(
          <<tx_offset1::64, op_offset1::64, key_size::32, _::binary-size(key_size), _::8, _flag::8,
@@ -283,14 +277,18 @@ defmodule Electric.ShapeCache.PureFileStorage.LogFile do
          %LogOffset{tx_offset: tx_offset2, op_offset: op_offset2} = inclusive_max_offset,
          acc
        )
-       when tx_offset1 > tx_offset2 or (tx_offset1 == tx_offset2 and op_offset1 >= op_offset2),
-       do:
-         extract_jsons_from_binary(
-           "",
-           log_offset,
-           inclusive_max_offset,
-           [json | acc]
-         )
+       when tx_offset1 == tx_offset2 and op_offset1 == op_offset2,
+       do: extract_jsons_from_binary("", log_offset, inclusive_max_offset, [json | acc])
+
+  defp extract_jsons_from_binary(
+         <<tx_offset1::64, op_offset1::64, key_size::32, _::binary-size(key_size), _::8, _flag::8,
+           json_size::64, _json::binary-size(json_size), _::binary>>,
+         log_offset,
+         %LogOffset{tx_offset: tx_offset2, op_offset: op_offset2} = inclusive_max_offset,
+         acc
+       )
+       when tx_offset1 > tx_offset2 or (tx_offset1 == tx_offset2 and op_offset1 > op_offset2),
+       do: extract_jsons_from_binary("", log_offset, inclusive_max_offset, acc)
 
   defp extract_jsons_from_binary(
          <<_::128, key_size::32, _::binary-size(key_size), _::8, _flag::8, json_size::64,

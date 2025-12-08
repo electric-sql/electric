@@ -1370,7 +1370,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
   # Open a file for streaming. Returns `{:halt, :data_removed}` if the shape data has been
   # removed (i.e. the shape itself has been removed). Streaming functions should return
   # an empty stream rather than raise if this returns `{:halt, :data_removed}`.
-  @spec safely_open_file!(%__MODULE__{}, Path.t(), file_opener()) ::
+  @spec safely_open_file!(%__MODULE__{}, Path.t(), [File.mode()], file_opener()) ::
           {:ok, File.file_descriptor()} | {:halt, :data_removed} | no_return()
   def safely_open_file!(%__MODULE__{} = opts, path, modes, open_fun \\ &File.open/2) do
     case open_fun.(path, modes) do
