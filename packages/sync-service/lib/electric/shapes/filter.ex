@@ -25,12 +25,6 @@ defmodule Electric.Shapes.Filter do
 
   require Logger
 
-  # ETS tables:
-  # - shapes_table: shape_id -> Shape struct
-  # - tables_table: table_name -> where_condition_id (reference to root WhereCondition for that table)
-  # - where_cond_table: where_condition_id -> {index_keys, other_shapes}
-  # - eq_index_table: {where_cond_id, field, value} -> {type, nested_where_cond_id}
-  # - incl_index_table: {where_cond_id, field, path} -> node_data
   defstruct [
     :shapes_table,
     :tables_table,
@@ -45,7 +39,6 @@ defmodule Electric.Shapes.Filter do
 
   @spec new(keyword()) :: Filter.t()
   def new(opts \\ []) do
-    # Use a unique reference for table names to allow multiple filters in tests
     unique = :erlang.unique_integer([:positive])
 
     %Filter{
