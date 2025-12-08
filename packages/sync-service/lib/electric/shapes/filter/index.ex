@@ -11,88 +11,26 @@ defmodule Electric.Shapes.Filter.Index do
   alias Electric.Shapes.Filter.Indexes.EqualityIndex
   alias Electric.Shapes.Filter.Indexes.InclusionIndex
 
-  @doc """
-  Check if an index is empty.
-  """
-  def empty?(filter, where_cond_id, field, "=") do
-    EqualityIndex.empty?(filter, where_cond_id, field)
+  defp module_for("="), do: EqualityIndex
+  defp module_for("@>"), do: InclusionIndex
+
+  def empty?(filter, where_cond_id, field, operation) do
+    module_for(operation).empty?(filter, where_cond_id, field)
   end
 
-  def empty?(filter, where_cond_id, field, "@>") do
-    InclusionIndex.empty?(filter, where_cond_id, field)
+  def add_shape(%Filter{} = filter, where_cond_id, shape_id, %{operation: op} = optimisation) do
+    module_for(op).add_shape(filter, where_cond_id, shape_id, optimisation)
   end
 
-  @doc """
-  Add a shape to an index.
-  """
-  def add_shape(%Filter{} = filter, where_cond_id, shape_id, %{operation: "="} = optimisation) do
-    EqualityIndex.add_shape(
-      filter,
-      where_cond_id,
-      optimisation.field,
-      optimisation.type,
-      optimisation.value,
-      shape_id,
-      optimisation.and_where
-    )
+  def remove_shape(%Filter{} = filter, where_cond_id, shape_id, %{operation: op} = optimisation) do
+    module_for(op).remove_shape(filter, where_cond_id, shape_id, optimisation)
   end
 
-  def add_shape(%Filter{} = filter, where_cond_id, shape_id, %{operation: "@>"} = optimisation) do
-    InclusionIndex.add_shape(
-      filter,
-      where_cond_id,
-      optimisation.field,
-      optimisation.type,
-      optimisation.value,
-      shape_id,
-      optimisation.and_where
-    )
+  def affected_shapes(%Filter{} = filter, where_cond_id, field, operation, record) do
+    module_for(operation).affected_shapes(filter, where_cond_id, field, record)
   end
 
-  @doc """
-  Remove a shape from an index.
-  """
-  def remove_shape(%Filter{} = filter, where_cond_id, shape_id, %{operation: "="} = optimisation) do
-    EqualityIndex.remove_shape(
-      filter,
-      where_cond_id,
-      shape_id,
-      optimisation.field,
-      optimisation.value,
-      optimisation.and_where
-    )
-  end
-
-  def remove_shape(%Filter{} = filter, where_cond_id, shape_id, %{operation: "@>"} = optimisation) do
-    InclusionIndex.remove_shape(
-      filter,
-      where_cond_id,
-      shape_id,
-      optimisation.field,
-      optimisation.value,
-      optimisation.and_where
-    )
-  end
-
-  @doc """
-  Find shapes affected by a record change.
-  """
-  def affected_shapes(%Filter{} = filter, where_cond_id, field, "=", record) do
-    EqualityIndex.affected_shapes(filter, where_cond_id, field, record)
-  end
-
-  def affected_shapes(%Filter{} = filter, where_cond_id, field, "@>", record) do
-    InclusionIndex.affected_shapes(filter, where_cond_id, field, record)
-  end
-
-  @doc """
-  Get all shape IDs in an index.
-  """
-  def all_shape_ids(%Filter{} = filter, where_cond_id, field, "=") do
-    EqualityIndex.all_shape_ids(filter, where_cond_id, field)
-  end
-
-  def all_shape_ids(%Filter{} = filter, where_cond_id, field, "@>") do
-    InclusionIndex.all_shape_ids(filter, where_cond_id, field)
+  def all_shape_ids(%Filter{} = filter, where_cond_id, field, operation) do
+    module_for(operation).all_shape_ids(filter, where_cond_id, field)
   end
 end

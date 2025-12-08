@@ -24,15 +24,8 @@ defmodule Electric.Shapes.Filter.Indexes.EqualityIndex do
     :ets.lookup(table, {:type, condition_id, field}) == []
   end
 
-  def add_shape(
-        %Filter{eq_index_table: table} = filter,
-        condition_id,
-        field,
-        type,
-        value,
-        shape_id,
-        and_where
-      ) do
+  def add_shape(%Filter{eq_index_table: table} = filter, condition_id, shape_id, optimisation) do
+    %{field: field, type: type, value: value, and_where: and_where} = optimisation
     key = {condition_id, field, value}
 
     next_condition_id =
@@ -52,14 +45,8 @@ defmodule Electric.Shapes.Filter.Indexes.EqualityIndex do
     WhereCondition.add_shape(filter, next_condition_id, shape_id, and_where)
   end
 
-  def remove_shape(
-        %Filter{eq_index_table: table} = filter,
-        condition_id,
-        shape_id,
-        field,
-        value,
-        and_where
-      ) do
+  def remove_shape(%Filter{eq_index_table: table} = filter, condition_id, shape_id, optimisation) do
+    %{field: field, value: value, and_where: and_where} = optimisation
     key = {condition_id, field, value}
 
     case :ets.lookup(table, key) do

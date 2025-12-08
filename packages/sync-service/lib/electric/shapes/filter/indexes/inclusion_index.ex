@@ -41,15 +41,8 @@ defmodule Electric.Shapes.Filter.Indexes.InclusionIndex do
     end
   end
 
-  def add_shape(
-        %Filter{incl_index_table: table} = filter,
-        condition_id,
-        field,
-        type,
-        array_value,
-        shape_id,
-        and_where
-      ) do
+  def add_shape(%Filter{incl_index_table: table} = filter, condition_id, shape_id, optimisation) do
+    %{field: field, type: type, value: array_value, and_where: and_where} = optimisation
     :ets.insert(table, {{:type, condition_id, field}, type})
 
     ordered = array_value |> Enum.sort() |> Enum.dedup()
@@ -148,14 +141,8 @@ defmodule Electric.Shapes.Filter.Indexes.InclusionIndex do
     [head | insert_sorted(tail, value)]
   end
 
-  def remove_shape(
-        %Filter{incl_index_table: table} = filter,
-        condition_id,
-        shape_id,
-        field,
-        array_value,
-        and_where
-      ) do
+  def remove_shape(%Filter{incl_index_table: table} = filter, condition_id, shape_id, optimisation) do
+    %{field: field, value: array_value, and_where: and_where} = optimisation
     ordered = array_value |> Enum.sort() |> Enum.dedup()
 
     remove_shape_from_node(filter, table, condition_id, field, [], ordered, shape_id, and_where)
