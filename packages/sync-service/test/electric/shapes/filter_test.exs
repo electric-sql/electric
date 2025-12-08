@@ -306,14 +306,23 @@ defmodule Electric.Shapes.FilterTest do
       %{
         where: "an_array @> '{1}'",
         records: [
-          {%{"an_array" => "{1,2}"}, true}
+          {%{"an_array" => "{1}"}, true},
+          {%{"an_array" => "{1,2}"}, true},
+          {%{"an_array" => "{3,2,1}"}, true},
+          {%{"an_array" => "{2}"}, false},
+          {%{"an_array" => "{2,3,4}"}, false},
+          {%{"an_array" => nil}, false}
         ]
       },
       %{
         where: "an_array @> '{1,3}'",
         records: [
+          {%{"an_array" => "{1,3}"}, true},
+          {%{"an_array" => "{3,1}"}, true},
+          {%{"an_array" => "{1,2,3}"}, true},
           {%{"an_array" => "{1,2}"}, false},
-          {%{"an_array" => "{1,3}"}, true}
+          {%{"an_array" => "{2,3,4}"}, false},
+          {%{"an_array" => nil}, false}
         ]
       },
       %{
@@ -327,7 +336,55 @@ defmodule Electric.Shapes.FilterTest do
       %{
         where: "an_array @> NULL",
         records: [
+          {%{"an_array" => "{1}"}, false},
+          {%{"an_array" => "{1,2,3}"}, false},
           {%{"an_array" => nil}, false}
+        ]
+      },
+      %{
+        where: "id = 7 AND number > 3 AND number < 10",
+        records: [
+          {%{"id" => "7", "number" => "5"}, true},
+          {%{"id" => "7", "number" => "9"}, true},
+          {%{"id" => "7", "number" => "3"}, false},
+          {%{"id" => "7", "number" => "10"}, false},
+          {%{"id" => "8", "number" => "5"}, false},
+          {%{"id" => nil, "number" => "5"}, false}
+        ]
+      },
+      %{
+        where: "id > 5 AND id < 10 AND number = 7",
+        records: [
+          {%{"id" => "7", "number" => "7"}, true},
+          {%{"id" => "9", "number" => "7"}, true},
+          {%{"id" => "5", "number" => "7"}, false},
+          {%{"id" => "10", "number" => "7"}, false},
+          {%{"id" => "7", "number" => "8"}, false}
+        ]
+      },
+      %{
+        where: "an_array @> '{1}' AND id = 7",
+        records: [
+          {%{"id" => "7", "an_array" => "{1}"}, true},
+          {%{"id" => "7", "an_array" => "{1,2}"}, true},
+          {%{"id" => "7", "an_array" => "{3,2,1}"}, true},
+          {%{"id" => "7", "an_array" => "{2}"}, false},
+          {%{"id" => "7", "an_array" => "{2,3,4}"}, false},
+          {%{"id" => "8", "an_array" => "{1}"}, false},
+          {%{"id" => "8", "an_array" => "{1,2,3}"}, false},
+          {%{"id" => "7", "an_array" => nil}, false},
+          {%{"id" => nil, "an_array" => "{1}"}, false}
+        ]
+      },
+      %{
+        where: "id = 7 AND an_array @> '{1}'",
+        records: [
+          {%{"id" => "7", "an_array" => "{1}"}, true},
+          {%{"id" => "7", "an_array" => "{1,2}"}, true},
+          {%{"id" => "7", "an_array" => "{3,2,1}"}, true},
+          {%{"id" => "7", "an_array" => "{2}"}, false},
+          {%{"id" => "8", "an_array" => "{1}"}, false},
+          {%{"id" => "7", "an_array" => nil}, false}
         ]
       }
     ]
