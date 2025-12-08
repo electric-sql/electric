@@ -252,40 +252,100 @@ defmodule Electric.Shapes.FilterTest do
       assert Filter.affected_shapes(filter, change) == expected_affected_shapes
     end
 
-    for test <- [
-          %{where: "id = 7", record: %{"id" => "7"}, affected: true},
-          %{where: "id = 7", record: %{"id" => "8"}, affected: false},
-          %{where: "id = 7", record: %{"id" => nil}, affected: false},
-          %{where: "7 = id", record: %{"id" => "7"}, affected: true},
-          %{where: "7 = id", record: %{"id" => "8"}, affected: false},
-          %{where: "7 = id", record: %{"id" => nil}, affected: false},
-          %{where: "id = 7 AND id > 1", record: %{"id" => "7"}, affected: true},
-          %{where: "id = 7 AND id > 1", record: %{"id" => "8"}, affected: false},
-          %{where: "id = 7 AND id > 8", record: %{"id" => "7"}, affected: false},
-          %{where: "id > 1 AND id = 7", record: %{"id" => "7"}, affected: true},
-          %{where: "id > 1 AND id = 7", record: %{"id" => "8"}, affected: false},
-          %{where: "id > 8 AND id = 7", record: %{"id" => "7"}, affected: false},
-          %{where: "an_array = '{1}'", record: %{"an_array" => "{1}"}, affected: true},
-          %{where: "an_array = '{1}'", record: %{"an_array" => "{2}"}, affected: false},
-          %{where: "an_array = '{1}'", record: %{"an_array" => "{1,2}"}, affected: false},
-          %{where: "an_array @> '{1}'", record: %{"an_array" => "{1,2}"}, affected: true},
-          %{where: "an_array @> '{1,3}'", record: %{"an_array" => "{1,2}"}, affected: false},
-          %{where: "an_array @> '{1,3}'", record: %{"an_array" => "{1,3}"}, affected: true},
-          %{where: "an_array @> '{}'", record: %{"an_array" => "{1,3}"}, affected: true},
-          %{where: "an_array @> '{}'", record: %{"an_array" => "{}"}, affected: true},
-          %{where: "an_array @> '{}'", record: %{"an_array" => nil}, affected: false},
-          %{where: "an_array @> NULL", record: %{"an_array" => nil}, affected: false}
-        ] do
-      test "where: #{test.where}, record: #{inspect(test.record)}" do
-        %{where: where, record: record, affected: affected} = unquote(Macro.escape(test))
+    @where_clause_tests [
+      %{
+        where: "id = 7",
+        records: [
+          {%{"id" => "7"}, true},
+          {%{"id" => "8"}, false},
+          {%{"id" => nil}, false}
+        ]
+      },
+      %{
+        where: "7 = id",
+        records: [
+          {%{"id" => "7"}, true},
+          {%{"id" => "8"}, false},
+          {%{"id" => nil}, false}
+        ]
+      },
+      %{
+        where: "id = 7 AND id > 1",
+        records: [
+          {%{"id" => "7"}, true},
+          {%{"id" => "8"}, false}
+        ]
+      },
+      %{
+        where: "id = 7 AND id > 8",
+        records: [
+          {%{"id" => "7"}, false}
+        ]
+      },
+      %{
+        where: "id > 1 AND id = 7",
+        records: [
+          {%{"id" => "7"}, true},
+          {%{"id" => "8"}, false}
+        ]
+      },
+      %{
+        where: "id > 8 AND id = 7",
+        records: [
+          {%{"id" => "7"}, false}
+        ]
+      },
+      %{
+        where: "an_array = '{1}'",
+        records: [
+          {%{"an_array" => "{1}"}, true},
+          {%{"an_array" => "{2}"}, false},
+          {%{"an_array" => "{1,2}"}, false}
+        ]
+      },
+      %{
+        where: "an_array @> '{1}'",
+        records: [
+          {%{"an_array" => "{1,2}"}, true}
+        ]
+      },
+      %{
+        where: "an_array @> '{1,3}'",
+        records: [
+          {%{"an_array" => "{1,2}"}, false},
+          {%{"an_array" => "{1,3}"}, true}
+        ]
+      },
+      %{
+        where: "an_array @> '{}'",
+        records: [
+          {%{"an_array" => "{1,3}"}, true},
+          {%{"an_array" => "{}"}, true},
+          {%{"an_array" => nil}, false}
+        ]
+      },
+      %{
+        where: "an_array @> NULL",
+        records: [
+          {%{"an_array" => nil}, false}
+        ]
+      }
+    ]
 
-        shape = Shape.new!("the_table", where: where, inspector: @inspector)
+    for %{where: where, records: records} <- @where_clause_tests do
+      for {record, affected} <- records do
+        test "where: #{where}, record: #{inspect(record)}" do
+          where = unquote(where)
+          record = unquote(Macro.escape(record))
+          affected = unquote(affected)
 
-        transaction = change("the_table", record)
+          shape = Shape.new!("the_table", where: where, inspector: @inspector)
+          transaction = change("the_table", record)
 
-        assert Filter.new()
-               |> Filter.add_shape("the-shape", shape)
-               |> Filter.affected_shapes(transaction) == MapSet.new(["the-shape"]) == affected
+          assert Filter.new()
+                 |> Filter.add_shape("the-shape", shape)
+                 |> Filter.affected_shapes(transaction) == MapSet.new(["the-shape"]) == affected
+        end
       end
     end
   end
