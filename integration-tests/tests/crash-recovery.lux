@@ -45,8 +45,29 @@
   ?electric-offset: ([\w\d_]+)
   [local offset=$1]
 
+## Crash electric
+[shell electric]
+  !System.halt()
+  ??$PS1
 
-# Add more data before crash
+## Start the sync service again.
+[invoke setup_electric]
+[shell electric]
+  ??[info] Starting replication from postgres
+
+# Client should be able to continue same with old offset or 0_inf offset
+[shell client]
+  [invoke shape_get items $handle $offset]
+  ??HTTP/1.1 200 OK
+  ??electric-handle: $handle
+  ??[{"headers":{"control":"up-to-date","global_last_seen_lsn":
+
+  [invoke shape_get items $handle "0_inf"]
+  ??HTTP/1.1 200 OK
+  ??electric-handle: $handle
+  ??[{"headers":{"control":"up-to-date","global_last_seen_lsn":
+
+# Add more data before another crash
 [shell psql]
   """!
   INSERT INTO items (id, val)
@@ -61,12 +82,9 @@
   ?electric-offset: ([\w\d_]+)
   [local offset=$1]
   ??"val":"#pre-crash test val"
-  
 
-## Terminate electric
+## Crash electric again
 [shell electric]
-  # ensure logs are flushed
-  [sleep 1]
   !System.halt()
   ??$PS1
 
