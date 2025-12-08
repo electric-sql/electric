@@ -142,6 +142,13 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
     assert ShapeStatus.latest_offset(state, shape_handle) ==
              {:ok, LogOffset.last_before_real_offsets()}
 
+    # virtual latest offsets are always normalized to the last before the
+    # real offsets to avoid client backtracking
+    assert ShapeStatus.set_latest_offset(state, shape_handle, LogOffset.new(0, 100))
+
+    assert ShapeStatus.latest_offset(state, shape_handle) ==
+             {:ok, LogOffset.last_before_real_offsets()}
+
     offset = LogOffset.new(100, 3)
     assert ShapeStatus.set_latest_offset(state, shape_handle, offset)
 

@@ -37,10 +37,6 @@ defmodule Electric.Shapes.Consumer do
     ConsumerRegistry.name(stack_id, shape_handle)
   end
 
-  def initial_state(consumer) do
-    GenServer.call(consumer, :initial_state, 30_000)
-  end
-
   def register_for_changes(stack_id, shape_handle) do
     ref = make_ref()
     Registry.register(Electric.StackSupervisor.registry_name(stack_id), shape_handle, ref)
@@ -189,12 +185,6 @@ defmodule Electric.Shapes.Consumer do
   end
 
   @impl GenServer
-  def handle_call(:initial_state, _from, %{latest_offset: offset} = state) do
-    Logger.debug("Returning latest offset for #{state.shape_handle}: #{inspect(offset)}")
-
-    {:reply, {:ok, offset}, state, state.hibernate_after}
-  end
-
   def handle_call({:monitor, pid}, _from, %{monitors: monitors} = state) do
     ref = make_ref()
     {:reply, ref, %{state | monitors: [{pid, ref} | monitors]}, state.hibernate_after}
