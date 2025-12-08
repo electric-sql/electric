@@ -173,15 +173,12 @@ defmodule Electric.ShapeCleanerTest do
 
       @tag restore_shapes: [{"my-shape", @shape}]
       test "removes shape handle from shape log collector if no consumer runnning", ctx do
-        alias Electric.Replication.ShapeLogCollector
-
-        assert ["my-shape"] = ShapeLogCollector.active_shapes(ctx.stack_id)
+        assert ["my-shape"] = Electric.Replication.ShapeLogCollector.active_shapes(ctx.stack_id)
 
         :ok = ShapeCleaner.remove_shape(ctx.stack_id, "my-shape")
 
         assert_shape_cleanup("my-shape")
-
-        assert [] = ShapeLogCollector.active_shapes(ctx.stack_id)
+        assert_shape_log_collector_active_shapes(ctx, [])
       end
 
       test "remove_shape swallows error if no shape to clean up", ctx do
@@ -276,5 +273,18 @@ defmodule Electric.ShapeCleanerTest do
       assert :started = ShapeCache.await_snapshot_start(shape_handle2, ctx.stack_id)
       assert shape_handle != shape_handle2
     end
+  end
+
+  defp assert_shape_log_collector_active_shapes(ctx, shape_handles_active, timeout \\ 500) do
+    assert shape_handles_active ==
+             Electric.Replication.ShapeLogCollector.active_shapes(ctx.stack_id)
+  rescue
+    e in ExUnit.AssertionError ->
+      if timeout <= 0 do
+        reraise e, __STACKTRACE__
+      else
+        Process.sleep(50)
+        assert_shape_log_collector_active_shapes(ctx, shape_handles_active, timeout - 50)
+      end
   end
 end
