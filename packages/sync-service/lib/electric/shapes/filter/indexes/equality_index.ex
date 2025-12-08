@@ -82,32 +82,30 @@ defmodule Electric.Shapes.Filter.Indexes.EqualityIndex do
   end
 
   def affected_shapes(%Filter{eq_index_table: table} = filter, condition_id, field, record) do
-    type_key = {:type, condition_id, field}
+    case :ets.lookup(table, {:type, condition_id, field}) do
+      [] -> MapSet.new()
+      [{_, type}] -> affected_shapes_for_type(filter, table, condition_id, field, record, type)
+    end
+  end
 
-    case :ets.lookup(table, type_key) do
+  defp affected_shapes_for_type(filter, table, condition_id, field, record, type) do
+    case value_from_record(record, field, type) do
+      {:ok, value} ->
+        affected_shapes_for_value(filter, table, condition_id, field, value, record)
+
+      :error ->
+        raise RuntimeError,
+          message: "Could not parse value for field #{inspect(field)} of type #{inspect(type)}"
+    end
+  end
+
+  defp affected_shapes_for_value(filter, table, condition_id, field, value, record) do
+    case :ets.lookup(table, {condition_id, field, value}) do
       [] ->
         MapSet.new()
 
-      [{_, type}] ->
-        case value_from_record(record, field, type) do
-          {:ok, value} ->
-            key = {condition_id, field, value}
-
-            case :ets.lookup(table, key) do
-              [] ->
-                MapSet.new()
-
-              [{_, {_type, next_condition_id}}] ->
-                WhereCondition.affected_shapes(filter, next_condition_id, record, fn _shape ->
-                  %{}
-                end)
-            end
-
-          :error ->
-            raise RuntimeError,
-              message:
-                "Could not parse value for field #{inspect(field)} of type #{inspect(type)}"
-        end
+      [{_, {_type, next_condition_id}}] ->
+        WhereCondition.affected_shapes(filter, next_condition_id, record, fn _shape -> %{} end)
     end
   end
 
