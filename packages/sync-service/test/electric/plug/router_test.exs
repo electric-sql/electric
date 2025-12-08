@@ -2766,7 +2766,7 @@ defmodule Electric.Plug.RouterTest do
            "CREATE TABLE parent (id INT PRIMARY KEY, value INT NOT NULL)",
            "CREATE TABLE child (id INT PRIMARY KEY, parent_id INT NOT NULL REFERENCES parent(id), value INT NOT NULL)"
          ]
-    test "runtime move-ins/outs are handled correctly", ctx do
+    test "move-outs while processing move-ins are handled correctly", ctx do
       req = make_shape_req("child", where: "parent_id in (SELECT id FROM parent WHERE value = 1)")
 
       assert {req, 200, [%{"headers" => %{"control" => "snapshot-end"}}]} =

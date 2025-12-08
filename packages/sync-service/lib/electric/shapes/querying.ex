@@ -145,7 +145,7 @@ defmodule Electric.Shapes.Querying do
   end
 
   # Converts a tag structure to something PG select can fill, but returns a list of separate strings for each tag
-  # - it's up to the caller to interpolate them into thje query correctly
+  # - it's up to the caller to interpolate them into the query correctly
   defp make_tags(%Shape{tag_structure: tag_structure}, stack_id, shape_handle) do
     Enum.map(tag_structure, fn pattern ->
       Enum.map(pattern, fn
