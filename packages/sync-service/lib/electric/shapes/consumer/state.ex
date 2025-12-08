@@ -148,21 +148,11 @@ defmodule Electric.Shapes.Consumer.State do
   def initialize(%__MODULE__{} = state, storage, writer) do
     {:ok, latest_offset, pg_snapshot} = Storage.get_current_position(storage)
 
-    # When writing the snapshot initially, we don't know ahead of time the real last offset for the
-    # shape, so we use `0_inf` essentially as a pointer to the end of all possible snapshot chunks,
-    # however many there may be. That means the clients will be using that as the latest offset.
-    # In order to avoid confusing the clients, we make sure that we preserve that functionality
-    # across a restart by setting the latest offset to `0_inf` if there were no real offsets yet.
-    normalized_latest_offset =
-      if LogOffset.is_virtual_offset(latest_offset),
-        do: LogOffset.last_before_real_offsets(),
-        else: latest_offset
-
     initial_snapshot_state = InitialSnapshot.new(pg_snapshot)
 
     %__MODULE__{
       state
-      | latest_offset: normalized_latest_offset,
+      | latest_offset: latest_offset,
         storage: storage,
         writer: writer,
         initial_snapshot_state: initial_snapshot_state,

@@ -385,16 +385,11 @@ defmodule Electric.ShapeCache.ShapeStatus do
       shape_handle,
       @shape_meta_latest_offset_pos
     )
+    |> normalize_latest_offset()
   end
 
   def latest_offset(stack_ref, shape_handle) do
-    turn_raise_into_error(fn ->
-      :ets.lookup_element(
-        shape_meta_table(stack_ref),
-        shape_handle,
-        @shape_meta_latest_offset_pos
-      )
-    end)
+    turn_raise_into_error(fn -> latest_offset!(stack_ref, shape_handle) end)
   end
 
   @spec snapshot_started?(stack_ref(), shape_handle()) :: boolean()
@@ -650,6 +645,20 @@ defmodule Electric.ShapeCache.ShapeStatus do
       nil -> nil
       dir -> Path.join(dir, @backup_dir)
     end
+  end
+
+  # When writing the snapshot initially, we don't know ahead of time the real last offset for the
+  # shape, so we use `0_inf` essentially as a pointer to the end of all possible snapshot chunks,
+  # however many there may be. That means the clients will be using that as the latest offset.
+  # In order to avoid confusing the clients, we make sure that we preserve that functionality
+  # across a restart by setting the latest offset to `0_inf` if there were no real offsets yet.
+  defp normalize_latest_offset(offset) do
+    import Electric.Replication.LogOffset,
+      only: [is_virtual_offset: 1, last_before_real_offsets: 0]
+
+    if is_virtual_offset(offset),
+      do: last_before_real_offsets(),
+      else: offset
   end
 
   defp turn_raise_into_error(fun) do
