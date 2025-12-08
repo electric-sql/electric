@@ -63,39 +63,39 @@ defmodule Electric.Shapes.Filter.WhereCondition do
   end
 
   @doc false
-  def optimise_where(%Expr{eval: eval}), do: optimise_where(eval)
+  defp optimise_where(%Expr{eval: eval}), do: optimise_where(eval)
 
-  def optimise_where(%Func{
-        name: ~s("="),
-        args: [%Ref{path: [field], type: type}, %Const{value: value}]
-      }) do
+  defp optimise_where(%Func{
+         name: ~s("="),
+         args: [%Ref{path: [field], type: type}, %Const{value: value}]
+       }) do
     %{operation: "=", field: field, type: type, value: value, and_where: nil}
   end
 
-  def optimise_where(%Func{
-        name: ~s("="),
-        args: [%Const{value: value}, %Ref{path: [field], type: type}]
-      }) do
+  defp optimise_where(%Func{
+         name: ~s("="),
+         args: [%Const{value: value}, %Ref{path: [field], type: type}]
+       }) do
     %{operation: "=", field: field, type: type, value: value, and_where: nil}
   end
 
-  def optimise_where(%Func{
-        name: ~s("@>"),
-        args: [%Ref{path: [field], type: type}, %Const{value: value}]
-      })
-      when is_list(value) do
+  defp optimise_where(%Func{
+         name: ~s("@>"),
+         args: [%Ref{path: [field], type: type}, %Const{value: value}]
+       })
+       when is_list(value) do
     %{operation: "@>", field: field, type: type, value: value, and_where: nil}
   end
 
-  def optimise_where(%Func{
-        name: ~s("<@"),
-        args: [%Const{value: value}, %Ref{path: [field], type: type}]
-      })
-      when is_list(value) do
+  defp optimise_where(%Func{
+         name: ~s("<@"),
+         args: [%Const{value: value}, %Ref{path: [field], type: type}]
+       })
+       when is_list(value) do
     %{operation: "@>", field: field, type: type, value: value, and_where: nil}
   end
 
-  def optimise_where(%Func{name: "and", args: [arg1, arg2]}) do
+  defp optimise_where(%Func{name: "and", args: [arg1, arg2]}) do
     case {optimise_where(arg1), optimise_where(arg2)} do
       {%{operation: "=", and_where: nil} = params, _} ->
         %{params | and_where: where_expr(arg2)}
@@ -108,7 +108,7 @@ defmodule Electric.Shapes.Filter.WhereCondition do
     end
   end
 
-  def optimise_where(_), do: :not_optimised
+  defp optimise_where(_), do: :not_optimised
 
   defp where_expr(eval) do
     %Expr{eval: eval, used_refs: Parser.find_refs(eval), returns: :bool}
