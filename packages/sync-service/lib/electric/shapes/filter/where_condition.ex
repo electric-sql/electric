@@ -33,8 +33,8 @@ defmodule Electric.Shapes.Filter.WhereCondition do
     case optimise_where(where_clause) do
       :not_optimised ->
         [{_, {index_keys, other_shapes}}] = :ets.lookup(table, condition_id)
-        updated_other = Map.put(other_shapes, shape_id, where_clause)
-        :ets.insert(table, {condition_id, {index_keys, updated_other}})
+        other_shapes = Map.put(other_shapes, shape_id, where_clause)
+        :ets.insert(table, {condition_id, {index_keys, other_shapes}})
 
       optimisation ->
         add_shape_to_index(filter, condition_id, shape_id, optimisation)
@@ -50,14 +50,14 @@ defmodule Electric.Shapes.Filter.WhereCondition do
     [{_, {index_keys, other_shapes}}] = :ets.lookup(table, condition_id)
     key = {optimisation.field, optimisation.operation}
 
-    updated_keys =
+    index_keys =
       if key in index_keys do
         index_keys
       else
         [key | index_keys]
       end
 
-    :ets.insert(table, {condition_id, {updated_keys, other_shapes}})
+    :ets.insert(table, {condition_id, {index_keys, other_shapes}})
 
     Index.add_shape(filter, condition_id, shape_id, optimisation)
   end
@@ -129,20 +129,17 @@ defmodule Electric.Shapes.Filter.WhereCondition do
       ) do
     case optimise_where(where_clause) do
       :not_optimised ->
-        [{_, {index_keys, other_shapes}}] = :ets.lookup(table, condition_id)
-        updated_other = Map.delete(other_shapes, shape_id)
-
-        if index_keys == [] and updated_other == %{} do
-          :ets.delete(table, condition_id)
-          :deleted
-        else
-          :ets.insert(table, {condition_id, {index_keys, updated_other}})
-          :ok
-        end
+        remove_shape_from_other_shapes(table, condition_id, shape_id)
 
       optimisation ->
         remove_shape_from_index(filter, condition_id, shape_id, optimisation)
     end
+  end
+
+  defp remove_shape_from_other_shapes(table, condition_id, shape_id) do
+    [{_, {index_keys, other_shapes}}] = :ets.lookup(table, condition_id)
+    other_shapes = Map.delete(other_shapes, shape_id)
+    update_or_delete_condition(table, condition_id, index_keys, other_shapes)
   end
 
   defp remove_shape_from_index(
@@ -155,19 +152,22 @@ defmodule Electric.Shapes.Filter.WhereCondition do
       :deleted ->
         [{_, {index_keys, other_shapes}}] = :ets.lookup(table, condition_id)
         key = {optimisation.field, optimisation.operation}
-        updated_keys = List.delete(index_keys, key)
-
-        if updated_keys == [] and other_shapes == %{} do
-          :ets.delete(table, condition_id)
-          :deleted
-        else
-          :ets.insert(table, {condition_id, {updated_keys, other_shapes}})
-          :ok
-        end
+        index_keys = List.delete(index_keys, key)
+        update_or_delete_condition(table, condition_id, index_keys, other_shapes)
 
       :ok ->
         :ok
     end
+  end
+
+  defp update_or_delete_condition(table, condition_id, [], %{} = _empty_map) do
+    :ets.delete(table, condition_id)
+    :deleted
+  end
+
+  defp update_or_delete_condition(table, condition_id, index_keys, other_shapes) do
+    :ets.insert(table, {condition_id, {index_keys, other_shapes}})
+    :ok
   end
 
   def affected_shapes(%Filter{where_cond_table: table} = filter, condition_id, record, refs_fun) do
