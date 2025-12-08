@@ -327,6 +327,10 @@ defmodule Electric.ShapeCache.ShapeStatus do
     )
   end
 
+  def least_recently_used(_stack_ref, 0) do
+    {[], 0}
+  end
+
   def least_recently_used(stack_ref, shape_count) do
     now = System.monotonic_time()
     table = shape_last_used_table(stack_ref)
