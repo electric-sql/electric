@@ -370,7 +370,9 @@ describe(`encodeColumns`, () => {
   })
 
   it(`should return columns unchanged when encoder is undefined`, () => {
-    expect(encodeColumns(`userId,createdAt`, undefined)).toBe(`userId,createdAt`)
+    expect(encodeColumns(`userId,createdAt`, undefined)).toBe(
+      `userId,createdAt`
+    )
   })
 
   it(`should encode comma-separated column names`, () => {

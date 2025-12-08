@@ -859,7 +859,10 @@ export class ShapeStream<T extends Row<unknown> = Row>
         setQueryParam(
           fetchUrl,
           COLUMNS_QUERY_PARAM,
-          encodeColumns(params.columns as string, this.options.columnMapper?.encode)
+          encodeColumns(
+            params.columns as string,
+            this.options.columnMapper?.encode
+          )
         )
       }
       if (params.replica) setQueryParam(fetchUrl, REPLICA_PARAM, params.replica)
