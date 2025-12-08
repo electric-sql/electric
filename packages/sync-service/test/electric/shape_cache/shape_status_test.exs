@@ -209,8 +209,12 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
   end
 
   describe "least_recently_used/2" do
-    test "returns the shape that was least recently updated", ctx do
+    setup ctx do
       {:ok, state, []} = new_state(ctx)
+      %{state: state}
+    end
+
+    test "returns the shape that was least recently updated", %{state: state} do
       {:ok, shape1} = ShapeStatus.add_shape(state, shape!())
       {:ok, shape2} = ShapeStatus.add_shape(state, shape2!())
 
@@ -221,22 +225,20 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
       assert {[^shape2], +0.0} = ShapeStatus.least_recently_used(state, _count = 1)
     end
 
-    test "returns shape first created if update_last_read_time_to_now has not been called", ctx do
-      {:ok, state, []} = new_state(ctx)
+    test "returns shape first created if update_last_read_time_to_now has not been called", %{
+      state: state
+    } do
       {:ok, shape1} = ShapeStatus.add_shape(state, shape!())
       {:ok, _shape2} = ShapeStatus.add_shape(state, shape2!())
 
       assert {[^shape1], _} = ShapeStatus.least_recently_used(state, _count = 1)
     end
 
-    test "returns empty list if no shapes have been added", ctx do
-      {:ok, state, []} = new_state(ctx)
-
+    test "returns empty list if no shapes have been added", %{state: state} do
       assert {[], _} = ShapeStatus.least_recently_used(state, _count = 1)
     end
 
-    test "returns empty list if all shapes have been deleted", ctx do
-      {:ok, state, []} = new_state(ctx)
+    test "returns empty list if all shapes have been deleted", %{state: state} do
       {:ok, shape1} = ShapeStatus.add_shape(state, shape!())
       {:ok, shape2} = ShapeStatus.add_shape(state, shape2!())
       ShapeStatus.remove_shape(state, shape1)
@@ -245,8 +247,7 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
       assert {[], +0.0} = ShapeStatus.least_recently_used(state, _count = 1)
     end
 
-    test "returns all shapes when count exceeds total shapes", ctx do
-      {:ok, state, []} = new_state(ctx)
+    test "returns all shapes when count exceeds total shapes", %{state: state} do
       {:ok, shape1} = ShapeStatus.add_shape(state, shape!())
       {:ok, shape2} = ShapeStatus.add_shape(state, shape2!())
 
@@ -256,9 +257,7 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
       assert shape2 in handles
     end
 
-    test "returns correct N shapes when N < total shapes", ctx do
-      {:ok, state, []} = new_state(ctx)
-
+    test "returns correct N shapes when N < total shapes", %{state: state} do
       # Add 5 shapes with staggered updates
       now = System.monotonic_time()
 
@@ -277,9 +276,7 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
       assert expected_handles == result_handles
     end
 
-    test "returns shapes in order from least to most recently used", ctx do
-      {:ok, state, []} = new_state(ctx)
-
+    test "returns shapes in order from least to most recently used", %{state: state} do
       now = System.monotonic_time()
       {:ok, shape1} = ShapeStatus.add_shape(state, shape!("oldest"))
       {:ok, shape2} = ShapeStatus.add_shape(state, shape!("middle"))
@@ -290,6 +287,53 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
       ShapeStatus.update_last_read_time(state, shape3, now + 10)
 
       assert {[^shape1, ^shape2, ^shape3], _} = ShapeStatus.least_recently_used(state, _count = 3)
+    end
+
+    test "returns shapes with same timestamp in arbitrary order", %{state: state} do
+      {:ok, shape1} = ShapeStatus.add_shape(state, shape!("1"))
+      {:ok, shape2} = ShapeStatus.add_shape(state, shape!("2"))
+      {:ok, shape3} = ShapeStatus.add_shape(state, shape!("3"))
+
+      now = System.monotonic_time()
+      ShapeStatus.update_last_read_time(state, shape1, now + 10)
+      ShapeStatus.update_last_read_time(state, shape2, now)
+      ShapeStatus.update_last_read_time(state, shape3, now)
+
+      assert {shapes, +0.0} = ShapeStatus.least_recently_used(state, _count = 2)
+      assert shapes |> Enum.sort() == [shape2, shape3] |> Enum.sort()
+    end
+
+    use ExUnitProperties
+
+    property "returns correct number of shapes in LRU order", %{state: state} do
+      check all num_shapes <- StreamData.integer(1..100),
+                count <- StreamData.integer(0..100),
+                timestamps <-
+                  StreamData.list_of(
+                    StreamData.integer(1..10_000),
+                    length: num_shapes
+                  ),
+                :ok <- ShapeStatus.reset(state) do
+        shape_handles =
+          for {timestamp, i} <- Enum.with_index(timestamps) do
+            {:ok, handle} = ShapeStatus.add_shape(state, shape!("property_test_#{i}"))
+            ShapeStatus.update_last_read_time(state, handle, timestamp)
+            {handle, timestamp}
+          end
+
+        {result_handles, _time} = ShapeStatus.least_recently_used(state, count)
+
+        expected_count = min(count, num_shapes)
+        assert length(result_handles) == expected_count
+
+        # Sort by timestamp (and handle for stable ordering when timestamps are equal)
+        sorted_by_timestamp = Enum.sort_by(shape_handles, fn {handle, ts} -> {ts, handle} end)
+
+        expected_handles =
+          sorted_by_timestamp |> Enum.take(expected_count) |> Enum.map(&elem(&1, 0))
+
+        assert Enum.sort(result_handles) == Enum.sort(expected_handles)
+      end
     end
   end
 

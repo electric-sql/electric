@@ -327,6 +327,10 @@ defmodule Electric.ShapeCache.ShapeStatus do
     )
   end
 
+  def least_recently_used(_stack_ref, 0) do
+    {[], 0}
+  end
+
   def least_recently_used(stack_ref, shape_count) do
     now = System.monotonic_time()
     table = shape_last_used_table(stack_ref)
@@ -336,17 +340,19 @@ defmodule Electric.ShapeCache.ShapeStatus do
     tree =
       :ets.foldl(
         fn {handle, last_read}, tree ->
+          last_read_tuple = {last_read, handle}
+
           if :gb_trees.size(tree) < shape_count do
             # Insert into the tree until we reach the desired size
-            :gb_trees.insert(last_read, handle, tree)
+            :gb_trees.insert(last_read_tuple, true, tree)
           else
             # If entry being examined was used less recently than the
             # most recently used tracked entry in the tree so far, replace it
-            {most_recent_tracked, _handle} = :gb_trees.largest(tree)
+            {most_recent_tuple, _} = :gb_trees.largest(tree)
 
-            if last_read < most_recent_tracked do
-              tree = :gb_trees.delete(most_recent_tracked, tree)
-              :gb_trees.insert(last_read, handle, tree)
+            if last_read_tuple < most_recent_tuple do
+              tree = :gb_trees.delete(most_recent_tuple, tree)
+              :gb_trees.insert(last_read_tuple, true, tree)
             else
               tree
             end
@@ -365,7 +371,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
 
   defp lru_to_list(iterator, handles, largest_last_read) do
     case :gb_trees.next(iterator) do
-      {last_read, handle, iter} ->
+      {{last_read, handle}, _, iter} ->
         lru_to_list(iter, [handle | handles], largest_last_read || last_read)
 
       :none ->
