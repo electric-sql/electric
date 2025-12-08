@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { ShapeStream } from '../src'
+import { ShapeStream, isChangeMessage, Message, Row } from '../src'
 import { snakeCamelMapper } from '../src/column-mapper'
 
 describe(`ShapeStream`, () => {
@@ -296,5 +296,73 @@ describe(`ShapeStream`, () => {
     const url = new URL(requestedUrls[0])
     // columns should remain unchanged when no columnMapper is provided
     expect(url.searchParams.get(`columns`)).toEqual(`user_id,created_at`)
+  })
+
+  it(`should decode data columns with columnMapper`, async () => {
+    const receivedMessages: Message<Row>[] = []
+
+    // Mock response with db column names (snake_case)
+    const mockResponseData = [
+      {
+        key: `"public"."test"/"1"`,
+        value: { user_id: `123`, created_at: `2025-01-01` },
+        headers: { operation: `insert` },
+      },
+    ]
+
+    const fetchWrapper = (): Promise<Response> => {
+      return Promise.resolve(
+        new Response(JSON.stringify(mockResponseData), {
+          status: 200,
+          headers: {
+            'content-type': `application/json`,
+            'electric-handle': `test-handle`,
+            'electric-offset': `0_0`,
+            'electric-schema': JSON.stringify({
+              user_id: { type: `text` },
+              created_at: { type: `text` },
+            }),
+          },
+        })
+      )
+    }
+
+    const aborter = new AbortController()
+    const stream = new ShapeStream({
+      url: shapeUrl,
+      params: {
+        table: `foo`,
+        columns: [`userId`, `createdAt`],
+      },
+      signal: aborter.signal,
+      fetchClient: fetchWrapper,
+      columnMapper: snakeCamelMapper(),
+    })
+
+    const unsub = stream.subscribe((messages) => {
+      receivedMessages.push(...messages)
+    })
+
+    // Wait for messages to be processed
+    await new Promise((resolve) => setTimeout(resolve, 100))
+
+    unsub()
+    aborter.abort()
+
+    // Find the change message
+    const changeMessage = receivedMessages.find(isChangeMessage)
+    expect(changeMessage).toBeDefined()
+
+    // Verify column names were decoded from snake_case to camelCase
+    expect(changeMessage!.value).toHaveProperty(`userId`)
+    expect(changeMessage!.value).toHaveProperty(`createdAt`)
+    expect((changeMessage!.value as Record<string, unknown>).userId).toBe(`123`)
+    expect((changeMessage!.value as Record<string, unknown>).createdAt).toBe(
+      `2025-01-01`
+    )
+
+    // Verify original db column names are not present
+    expect(changeMessage!.value).not.toHaveProperty(`user_id`)
+    expect(changeMessage!.value).not.toHaveProperty(`created_at`)
   })
 })
