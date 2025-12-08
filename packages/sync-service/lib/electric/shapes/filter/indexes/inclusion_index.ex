@@ -30,17 +30,6 @@ defmodule Electric.Shapes.Filter.Indexes.InclusionIndex do
 
   @env Env.new()
 
-  def empty?(%Filter{incl_index_table: table}, condition_id, field) do
-    root_key = {condition_id, field, []}
-
-    case :ets.lookup(table, root_key) do
-      [] -> true
-      [{_, %{keys: [], condition_id: nil}}] -> true
-      [{_, %{keys: []}}] -> true
-      _ -> false
-    end
-  end
-
   def add_shape(%Filter{incl_index_table: table} = filter, condition_id, shape_id, optimisation) do
     %{field: field, type: type, value: array_value, and_where: and_where} = optimisation
     :ets.insert(table, {{:type, condition_id, field}, type})
@@ -153,6 +142,7 @@ defmodule Electric.Shapes.Filter.Indexes.InclusionIndex do
       [{_, root_node}] when root_node.keys == [] and root_node.condition_id == nil ->
         :ets.delete(table, root_key)
         :ets.delete(table, {:type, condition_id, field})
+        :deleted
 
       _ ->
         :ok

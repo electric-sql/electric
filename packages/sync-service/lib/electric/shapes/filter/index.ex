@@ -14,10 +14,6 @@ defmodule Electric.Shapes.Filter.Index do
   defp module_for("="), do: EqualityIndex
   defp module_for("@>"), do: InclusionIndex
 
-  def empty?(filter, where_cond_id, field, operation) do
-    module_for(operation).empty?(filter, where_cond_id, field)
-  end
-
   def add_shape(%Filter{} = filter, where_cond_id, shape_id, %{operation: op} = optimisation) do
     module_for(op).add_shape(filter, where_cond_id, shape_id, optimisation)
   end

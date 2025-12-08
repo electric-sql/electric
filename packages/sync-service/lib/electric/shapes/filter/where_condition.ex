@@ -151,22 +151,22 @@ defmodule Electric.Shapes.Filter.WhereCondition do
          shape_id,
          optimisation
        ) do
-    Index.remove_shape(filter, condition_id, shape_id, optimisation)
+    case Index.remove_shape(filter, condition_id, shape_id, optimisation) do
+      :deleted ->
+        [{_, {index_keys, other_shapes}}] = :ets.lookup(table, condition_id)
+        key = {optimisation.field, optimisation.operation}
+        updated_keys = List.delete(index_keys, key)
 
-    if Index.empty?(filter, condition_id, optimisation.field, optimisation.operation) do
-      [{_, {index_keys, other_shapes}}] = :ets.lookup(table, condition_id)
-      key = {optimisation.field, optimisation.operation}
-      updated_keys = List.delete(index_keys, key)
+        if updated_keys == [] and other_shapes == %{} do
+          :ets.delete(table, condition_id)
+          :deleted
+        else
+          :ets.insert(table, {condition_id, {updated_keys, other_shapes}})
+          :ok
+        end
 
-      if updated_keys == [] and other_shapes == %{} do
-        :ets.delete(table, condition_id)
-        :deleted
-      else
-        :ets.insert(table, {condition_id, {updated_keys, other_shapes}})
+      :ok ->
         :ok
-      end
-    else
-      :ok
     end
   end
 
