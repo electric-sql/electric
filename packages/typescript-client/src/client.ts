@@ -855,8 +855,14 @@ export class ShapeStream<T extends Row<unknown> = Row>
         )
         setQueryParam(fetchUrl, WHERE_QUERY_PARAM, encodedWhere)
       }
-      if (params.columns)
-        setQueryParam(fetchUrl, COLUMNS_QUERY_PARAM, params.columns)
+      if (params.columns) {
+        const encodedColumns = this.options.columnMapper
+          ? params.columns.map((col) =>
+              this.options.columnMapper!.encode(String(col))
+            )
+          : params.columns
+        setQueryParam(fetchUrl, COLUMNS_QUERY_PARAM, encodedColumns)
+      }
       if (params.replica) setQueryParam(fetchUrl, REPLICA_PARAM, params.replica)
       if (params.params)
         setQueryParam(fetchUrl, WHERE_PARAMS_PARAM, params.params)
