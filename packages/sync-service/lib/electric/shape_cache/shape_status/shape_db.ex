@@ -175,7 +175,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb do
     :ets.new(name, [
       :named_table,
       :public,
-      :ordered_set,
+      :set,
       write_concurrency: :auto,
       read_concurrency: true
     ])

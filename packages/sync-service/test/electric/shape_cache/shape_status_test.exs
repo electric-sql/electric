@@ -2,7 +2,6 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
   use ExUnit.Case, async: true
   use Repatch.ExUnit, assert_expectations: true
 
-  alias Electric.Replication.LogOffset
   alias Electric.ShapeCache.ShapeStatus
   alias Electric.Shapes.Shape
 
@@ -87,24 +86,18 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
              ])
   end
 
-  test "get_existing_shape/2 with %Shape{}", ctx do
+  test "fetch_handle_by_shape/2", ctx do
     {:ok, state, []} = new_state(ctx)
     shape = shape!()
 
-    offset = LogOffset.new(50, 2)
-
-    refute ShapeStatus.get_existing_shape(state, shape)
+    assert :error = ShapeStatus.fetch_handle_by_shape(state, shape)
 
     assert {:ok, shape_handle} = ShapeStatus.add_shape(state, shape)
 
-    expect_storage([force: true],
-      get_current_position: fn ^shape_handle -> {:ok, offset, nil} end
-    )
-
-    assert {^shape_handle, ^offset} = ShapeStatus.get_existing_shape(state, shape)
+    assert {:ok, ^shape_handle} = ShapeStatus.fetch_handle_by_shape(state, shape)
 
     assert {:ok, ^shape} = ShapeStatus.remove_shape(state, shape_handle)
-    refute ShapeStatus.get_existing_shape(state, shape)
+    assert :error = ShapeStatus.fetch_handle_by_shape(state, shape)
   end
 
   test "fetch_shape_by_handle/2", ctx do
@@ -127,15 +120,8 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
 
     {:ok, state, [shape_handle1, shape_handle2]} = new_state(ctx, shapes: [shape1, shape2])
 
-    offset = LogOffset.new(100, 3)
-
-    expect_storage(
-      get_current_position: fn ^shape_handle1 -> {:ok, offset, nil} end,
-      get_current_position: fn ^shape_handle2 -> {:ok, offset, nil} end
-    )
-
-    assert {:ok, ^offset} = ShapeStatus.validate_shape_handle(state, shape_handle1, shape1)
-    assert {:ok, _} = ShapeStatus.validate_shape_handle(state, shape_handle2, shape2)
+    assert :ok = ShapeStatus.validate_shape_handle(state, shape_handle1, shape1)
+    assert :ok = ShapeStatus.validate_shape_handle(state, shape_handle2, shape2)
 
     # not a valid handle
     assert :error = ShapeStatus.validate_shape_handle(state, "not-the-handle", shape1)
@@ -315,8 +301,8 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
       add_task =
         Task.async(fn ->
           for _ <- 1..1000 do
-            case ShapeStatus.get_existing_shape(state, shape) do
-              nil -> ShapeStatus.add_shape(state, shape)
+            case ShapeStatus.fetch_handle_by_shape(state, shape) do
+              :error -> ShapeStatus.add_shape(state, shape)
               _ -> :ok
             end
           end
@@ -325,9 +311,9 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
       remove_tasks =
         for _ <- 1..1000 do
           Task.async(fn ->
-            case ShapeStatus.get_existing_shape(state, shape) do
-              nil -> :ok
-              {handle, _} -> ShapeStatus.remove_shape(state, handle)
+            case ShapeStatus.fetch_handle_by_shape(state, shape) do
+              :error -> :ok
+              {:ok, handle} -> ShapeStatus.remove_shape(state, handle)
             end
           end)
         end
@@ -382,13 +368,12 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
       )
 
       expect_storage([force: true],
-        get_all_stored_shape_handles: fn _ -> {:ok, MapSet.new([shape_handle])} end,
-        get_current_position: fn ^shape_handle -> {:ok, LogOffset.first(), nil} end
+        get_all_stored_shape_handles: fn _ -> {:ok, MapSet.new([shape_handle])} end
       )
 
       assert :ok = ShapeStatus.initialize_from_storage(state)
       assert [{^shape_handle, ^shape}] = ShapeStatus.list_shapes(state)
-      assert {^shape_handle, _offset} = ShapeStatus.get_existing_shape(state, shape)
+      assert {:ok, ^shape_handle} = ShapeStatus.fetch_handle_by_shape(state, shape)
       assert ShapeStatus.count_shapes(state) == 1
       # consuming backup directory should have removed it after load
       refute File.exists?(backup_dir)
@@ -415,7 +400,8 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
       assert [
                {to_invalidate_shape_handle, to_invalidate_shape},
                {to_keep_shape_handle, to_keep_shape}
-             ] == ShapeStatus.list_shapes(state)
+             ]
+             |> Enum.sort() == ShapeStatus.list_shapes(state) |> Enum.sort()
 
       assert :ok = ShapeStatus.save_checkpoint(state)
 
@@ -445,7 +431,8 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
       assert [
                {to_keep_shape_handle, to_keep_shape},
                {not_backed_up_shape_handle, not_backed_up_shape}
-             ] == ShapeStatus.list_shapes(state)
+             ]
+             |> Enum.sort() == ShapeStatus.list_shapes(state) |> Enum.sort()
 
       refute File.exists?(backup_dir)
     end

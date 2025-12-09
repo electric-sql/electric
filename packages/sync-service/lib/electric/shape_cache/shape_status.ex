@@ -470,9 +470,10 @@ defmodule Electric.ShapeCache.ShapeStatus do
       Shape.has_dependencies(shape) and not Shape.dependency_handles_known?(shape)
     end)
     |> Enum.each(fn {handle, %Shape{shape_dependencies: deps} = shape} ->
-      handles = Enum.map(deps, &fetch_handle_by_shape(stack_id, &1))
+      handle_results = Enum.map(deps, &fetch_handle_by_shape(stack_id, &1))
 
-      if not Enum.any?(handles, &match?(:error, &1)) do
+      if not Enum.any?(handle_results, &match?(:error, &1)) do
+        handles = Enum.map(handle_results, fn {:ok, h} -> h end)
         ShapeDb.update_shape(stack_id, handle, %{shape | shape_dependencies_handles: handles})
       else
         Logger.warning("Shape #{inspect(handle)} has dependencies but some are unknown")

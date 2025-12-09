@@ -150,11 +150,7 @@ defmodule Electric.Shapes.ConsumerTest do
       Electric.StackConfig.put(ctx.stack_id, :inspector, @base_inspector)
 
       patch_shape_status(
-        fetch_shape_by_handle: fn _, shape_handle -> Map.fetch(ctx.shapes, shape_handle) end,
-        get_existing_shape: fn
-          _, @shape1 -> {@shape_handle1, @shape1}
-          _, @shape2 -> {@shape_handle2, @shape2}
-        end
+        fetch_shape_by_handle: fn _, shape_handle -> Map.fetch(ctx.shapes, shape_handle) end
       )
 
       Support.TestUtils.activate_mocks_for_descendant_procs(Electric.Shapes.Consumer)
@@ -730,7 +726,7 @@ defmodule Electric.Shapes.ConsumerTest do
 
       :started = ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id)
 
-      assert {_, offset1} = ShapeCache.get_shape(@shape1, ctx.stack_id)
+      assert {_, offset1} = ShapeCache.resolve_shape_handle(shape_handle, @shape1, ctx.stack_id)
       assert offset1 == LogOffset.last_before_real_offsets()
 
       ref = ctx.consumer_supervisor |> GenServer.whereis() |> Process.monitor()
@@ -750,7 +746,7 @@ defmodule Electric.Shapes.ConsumerTest do
       Support.ComponentSetup.with_shape_cache(ctx)
 
       :started = ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id)
-      assert {_, offset2} = ShapeCache.get_shape(@shape1, ctx.stack_id)
+      assert {_, offset2} = ShapeCache.resolve_shape_handle(shape_handle, @shape1, ctx.stack_id)
 
       assert LogOffset.compare(offset2, offset1) != :lt
     end
@@ -935,7 +931,7 @@ defmodule Electric.Shapes.ConsumerTest do
 
       :started = ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id)
 
-      assert {_, offset1} = ShapeCache.get_shape(@shape1, ctx.stack_id)
+      assert {_, offset1} = ShapeCache.resolve_shape_handle(shape_handle, @shape1, ctx.stack_id)
       assert offset1 == LogOffset.last_before_real_offsets()
 
       table = Electric.ShapeCache.PureFileStorage.stack_ets(ctx.stack_id)

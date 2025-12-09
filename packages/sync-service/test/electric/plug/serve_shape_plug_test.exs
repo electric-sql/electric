@@ -676,11 +676,13 @@ defmodule Electric.Plug.ServeShapePlugTest do
     test "sends 409 with a redirect to existing shape when requested shape handle does not exist",
          ctx do
       patch_shape_cache(
-        resolve_shape_handle: fn "foo", @test_shape, _stack_id ->
-          nil
-        end,
-        get_shape: fn @test_shape, _opts -> {@test_shape_handle, @test_offset} end,
+        resolve_shape_handle: fn "foo", @test_shape, _stack_id -> nil end,
+        fetch_handle_by_shape: fn @test_shape, _opts -> {:ok, @test_shape_handle} end,
         has_shape?: fn "foo", _opts -> false end
+      )
+
+      patch_storage(
+        get_current_position: fn _ -> {:ok, LogOffset.last_before_real_offsets(), nil} end
       )
 
       conn =
