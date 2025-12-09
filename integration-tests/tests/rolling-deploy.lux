@@ -114,8 +114,9 @@
   """
   ??INSERT 0 1
 
-# Second service should reach healthy and active 
+# Second service should reach healthy and active with loaded backup
 [shell electric_2]
+  ??[info] Loaded shape status from backup
   ??[info] Starting replication from postgres
 
 [shell orchestator]
