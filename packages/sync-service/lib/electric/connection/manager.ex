@@ -731,6 +731,10 @@ defmodule Electric.Connection.Manager do
     dispatch_stack_event(:connection_lock_acquired, state)
     tref = schedule_periodic_connection_status_check(:replication_configuration)
 
+    # Initialize the ShapeStatusOwner process once the lock is acquired and
+    # storage is entirely within this service's control
+    :ok = Electric.ShapeCache.ShapeStatusOwner.initialize_from_storage(state.stack_id)
+
     state = %{
       state
       | replication_configuration_timer: tref,

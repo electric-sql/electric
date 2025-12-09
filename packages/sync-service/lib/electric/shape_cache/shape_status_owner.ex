@@ -20,6 +20,10 @@ defmodule Electric.ShapeCache.ShapeStatusOwner do
     Electric.ProcessRegistry.name(stack_id, __MODULE__)
   end
 
+  def initialize_from_storage(stack_id) do
+    GenServer.call(name(stack_id), :initialize_from_storage)
+  end
+
   def start_link(opts) do
     with {:ok, opts} <- NimbleOptions.validate(opts, @schema) do
       opts = Map.new(opts)
@@ -35,9 +39,18 @@ defmodule Electric.ShapeCache.ShapeStatusOwner do
     Logger.metadata(stack_id: stack_id)
     Electric.Telemetry.Sentry.set_tags_context(stack_id: stack_id)
 
-    :ok = ShapeStatus.initialize_from_storage(stack_id)
     :ok = Electric.LsnTracker.initialize(stack_id)
 
-    {:ok, nil, :hibernate}
+    {:ok, %{stack_id: stack_id, initialized: false}, :hibernate}
+  end
+
+  @impl true
+  def handle_call(:initialize_from_storage, _from, %{initialized: false} = state) do
+    :ok = ShapeStatus.initialize_from_storage(state.stack_id)
+    {:reply, :ok, %{state | initialized: true}, :hibernate}
+  end
+
+  def handle_call(:initialize_from_storage, _from, %{initialized: true} = state) do
+    {:reply, :ok, state, :hibernate}
   end
 end

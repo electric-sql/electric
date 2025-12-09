@@ -251,6 +251,8 @@ defmodule Support.ComponentSetup do
       restart: :temporary
     })
 
+    :ok = Electric.ShapeCache.ShapeStatusOwner.initialize_from_storage(ctx.stack_id)
+
     %{shape_status_owner: "shape_status_owner"}
   end
 
