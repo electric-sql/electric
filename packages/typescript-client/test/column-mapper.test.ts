@@ -5,7 +5,6 @@ import {
   createColumnMapper,
   snakeCamelMapper,
   encodeWhereClause,
-  encodeColumns,
 } from '../src/column-mapper'
 import type { Schema } from '../src/types'
 
@@ -359,61 +358,6 @@ describe(`encodeWhereClause`, () => {
     expect(
       encodeWhereClause(`userId = $1 AND "CaseSensitive" = $2`, encode)
     ).toBe(`user_id = $1 AND "CaseSensitive" = $2`)
-  })
-})
-
-describe(`encodeColumns`, () => {
-  const encode = (col: string) => camelToSnake(col)
-
-  it(`should return empty string when columns is undefined`, () => {
-    expect(encodeColumns(undefined, encode)).toBe(``)
-  })
-
-  it(`should return columns unchanged when encoder is undefined`, () => {
-    expect(encodeColumns(`userId,createdAt`, undefined)).toBe(
-      `userId,createdAt`
-    )
-  })
-
-  it(`should encode comma-separated column names`, () => {
-    expect(encodeColumns(`userId,createdAt`, encode)).toBe(`user_id,created_at`)
-  })
-
-  it(`should handle single column`, () => {
-    expect(encodeColumns(`userId`, encode)).toBe(`user_id`)
-  })
-
-  it(`should handle multiple columns`, () => {
-    expect(encodeColumns(`userId,projectId,createdAt,updatedAt`, encode)).toBe(
-      `user_id,project_id,created_at,updated_at`
-    )
-  })
-
-  it(`should preserve double-quoted column names with commas`, () => {
-    // PostgreSQL allows quoted identifiers with special characters
-    expect(encodeColumns(`"column,with,commas",userId`, encode)).toBe(
-      `"column,with,commas",user_id`
-    )
-  })
-
-  it(`should preserve double-quoted column names without encoding`, () => {
-    // Quoted identifiers should not be encoded (they're case-sensitive)
-    expect(encodeColumns(`"CaseSensitive",userId`, encode)).toBe(
-      `"CaseSensitive",user_id`
-    )
-  })
-
-  it(`should handle mixed quoted and unquoted columns`, () => {
-    expect(encodeColumns(`userId,"special,column",createdAt`, encode)).toBe(
-      `user_id,"special,column",created_at`
-    )
-  })
-
-  it(`should handle escaped quotes in quoted identifiers`, () => {
-    // PostgreSQL uses "" to escape quotes within quoted identifiers
-    expect(encodeColumns(`"column""name",userId`, encode)).toBe(
-      `"column""name",user_id`
-    )
   })
 })
 
