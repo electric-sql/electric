@@ -46,7 +46,7 @@ A sync engine can't cheat its way around delivery—we needed a transport layer 
 
 **The AI explosion**
 
-At the same time, conversations with users, customers, and industry peers kept surfacing the same theme: **AI token streaming needs reliable delivery and persistence**. This has become a dominant infrastructure concern ([as we've discussed before])(https://electric-sql.com/blog/2025/04/09/building-ai-apps-on-sync) as AI applications proliferate. Teams are shipping streaming UIs on best-effort connections, then reimplementing offsets, buffering, replay, and deduplication in application code. The underlying need is a durable stream primitive that makes token streaming (and other client streaming) survivable across the messy realities of browsers/smartphones and networks.
+At the same time, conversations with users, customers, and industry peers kept surfacing the same theme: **AI token streaming needs reliable delivery and persistence**. This has become a dominant infrastructure concern ([as we've discussed before](https://electric-sql.com/blog/2025/04/09/building-ai-apps-on-sync)) as AI applications proliferate. Teams are shipping streaming UIs on best-effort connections, then reimplementing offsets, buffering, replay, and deduplication in application code. The underlying need is a durable stream primitive that makes token streaming (and other client streaming) survivable across the messy realities of browsers/smartphones and networks.
 
 **Breaking the stack into layers**
 
