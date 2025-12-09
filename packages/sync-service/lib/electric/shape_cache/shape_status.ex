@@ -300,17 +300,6 @@ defmodule Electric.ShapeCache.ShapeStatus do
     :ok
   end
 
-  @spec set_latest_offset(stack_ref(), shape_handle(), LogOffset.t()) :: :ok
-  def set_latest_offset(stack_ref, shape_handle, latest_offset) do
-    :ets.update_element(
-      shape_meta_table(stack_ref),
-      shape_handle,
-      {@shape_meta_latest_offset_pos, latest_offset}
-    )
-
-    :ok
-  end
-
   @doc """
   Updates the last read time for the given shape to the current time.
   """

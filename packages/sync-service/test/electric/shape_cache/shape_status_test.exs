@@ -124,7 +124,10 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
 
     offset = LogOffset.new(100, 3)
 
-    ShapeStatus.set_latest_offset(ctx.stack_id, shape_handle1, offset)
+    expect_storage(
+      get_current_position: fn ^shape_handle1 -> {:ok, offset, nil} end,
+      get_current_position: fn ^shape_handle2 -> {:ok, offset, nil} end
+    )
 
     assert {:ok, ^offset} = ShapeStatus.validate_shape_handle(state, shape_handle1, shape1)
     assert {:ok, _} = ShapeStatus.validate_shape_handle(state, shape_handle2, shape2)
@@ -135,45 +138,29 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
     assert :error = ShapeStatus.validate_shape_handle(state, shape_handle1, shape2)
   end
 
-  test "latest_offset", ctx do
+  test "latest_offset/2", ctx do
+    invalid_handle = "invalid"
     {:ok, state, [shape_handle]} = new_state(ctx, shapes: [shape!()])
-    assert :error = ShapeStatus.latest_offset(state, "sdfsodf")
+
+    expect_storage(
+      get_current_position: fn ^invalid_handle -> {:error, :enoent} end,
+      get_current_position: fn ^shape_handle -> {:ok, LogOffset.new(0, 100), nil} end,
+      get_current_position: fn ^shape_handle ->
+        {:ok, LogOffset.last_before_real_offsets(), nil}
+      end,
+      get_current_position: fn ^shape_handle -> {:ok, LogOffset.new(100, 3), nil} end
+    )
+
+    assert :error = ShapeStatus.latest_offset(state, invalid_handle)
 
     assert ShapeStatus.latest_offset(state, shape_handle) ==
              {:ok, LogOffset.last_before_real_offsets()}
 
-    # virtual latest offsets are always normalized to the last before the
-    # real offsets to avoid client backtracking
-    assert ShapeStatus.set_latest_offset(state, shape_handle, LogOffset.new(0, 100))
-
     assert ShapeStatus.latest_offset(state, shape_handle) ==
              {:ok, LogOffset.last_before_real_offsets()}
 
-    offset = LogOffset.new(100, 3)
-    assert ShapeStatus.set_latest_offset(state, shape_handle, offset)
-
-    # set latest offset for an unknown shape silently does nothing
-    # this is because real-world race conditions mean that we may
-    # still receive updates on a shape that is in the process of
-    # being deleted
-    assert ShapeStatus.set_latest_offset(state, "not my shape", offset)
-
-    assert ShapeStatus.latest_offset(state, shape_handle) == {:ok, offset}
-  end
-
-  test "latest_offset public api", ctx do
-    {:ok, state, [shape_handle]} = new_state(ctx, shapes: [shape!()])
-    assert :error = ShapeStatus.latest_offset(state, "sdfsodf")
-
     assert ShapeStatus.latest_offset(state, shape_handle) ==
-             {:ok, LogOffset.last_before_real_offsets()}
-
-    offset = LogOffset.new(100, 3)
-
-    assert ShapeStatus.set_latest_offset(state, "not my shape", offset)
-
-    assert ShapeStatus.set_latest_offset(state, shape_handle, offset)
-    assert ShapeStatus.latest_offset(state, shape_handle) == {:ok, offset}
+             {:ok, LogOffset.new(100, 3)}
   end
 
   test "initialise_shape/3", ctx do
@@ -521,7 +508,11 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
 
   defp new_state(ctx, opts \\ []) do
     Electric.StackConfig.put(ctx.stack_id, Electric.ShapeCache.Storage, {Mock.Storage, []})
-    stub_storage([force: true], metadata_backup_dir: fn _ -> nil end)
+
+    stub_storage([force: true],
+      metadata_backup_dir: fn _ -> nil end,
+      for_shape: fn shape_handle, _opts -> shape_handle end
+    )
 
     stored_shapes = Access.get(opts, :stored_shapes, %{})
     stored_shape_handles = Map.keys(stored_shapes) |> MapSet.new()
