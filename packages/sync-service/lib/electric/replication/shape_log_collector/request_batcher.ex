@@ -146,7 +146,7 @@ defmodule Electric.Replication.ShapeLogCollector.RequestBatcher do
         {:handle_processor_update_response, ref, results},
         %{ack_ref: ref} = state
       ) do
-    for {shape_handle, from} <- state.ack_waiters do
+    for {shape_handle, from} when not is_nil(from) <- state.ack_waiters do
       GenServer.reply(from, Map.fetch!(results, shape_handle))
     end
 
@@ -181,7 +181,7 @@ defmodule Electric.Replication.ShapeLogCollector.RequestBatcher do
         state.to_remove
       )
 
-    ack_waiters = state.to_schedule_waiters |> Enum.to_list() |> List.keydelete(nil, 1)
+    ack_waiters = state.to_schedule_waiters |> Enum.reject(&is_nil(elem(&1, 1)))
 
     {:noreply,
      %{
