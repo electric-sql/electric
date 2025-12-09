@@ -94,21 +94,31 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb do
   # This api is awkward but we don't care because its going
   def store_backup(stack_id, backup_dir, version)
       when is_binary(backup_dir) and is_stack_id(stack_id) do
+    backup_dir_tmp = "#{backup_dir}_tmp"
+    Electric.AsyncDeleter.delete(stack_id, backup_dir_tmp)
+    File.mkdir_p!(backup_dir_tmp)
+
     with :ok <-
            :ets.tab2file(
              handle_to_shape_table(stack_id),
-             backup_file_path(backup_dir, "shape_lookup_data", version),
+             backup_file_path(backup_dir_tmp, "shape_lookup_data", version),
              sync: true,
              extended_info: [:object_count]
            ),
          :ok <-
            :ets.tab2file(
              shape_to_handle_table(stack_id),
-             backup_file_path(backup_dir, "handle_lookup_data", version),
+             backup_file_path(backup_dir_tmp, "handle_lookup_data", version),
              sync: true,
              extended_info: [:object_count]
-           ) do
+           ),
+         :ok <- Electric.AsyncDeleter.delete(stack_id, backup_dir),
+         :ok <- File.rename(backup_dir_tmp, backup_dir) do
       :ok
+    else
+      err ->
+        Electric.AsyncDeleter.delete(stack_id, backup_dir_tmp)
+        err
     end
   end
 
@@ -130,6 +140,8 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb do
            ) do
       :ok
     end
+  after
+    Electric.AsyncDeleter.delete(stack_id, backup_dir)
   end
 
   def delete(stack_id) when is_stack_id(stack_id) do
