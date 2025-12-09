@@ -104,6 +104,3 @@ jobs:
           fail_ci_if_error: true
           flags: elixir,unit-tests,elixir-client
           files: ./junit/test-junit-report.xml
-          # Upload all PR test results to single branch - requires overriding branch and commit
-          override_branch: ${{ github.event_name == 'pull_request' && 'codecov/pr-test-aggregation' || '' }}
-          override_commit: ${{ github.event_name == 'pull_request' && env.DUMMY_COMMIT_SHA || '' }}
