@@ -82,6 +82,8 @@ The [durable-streams repository](https://github.com/durable-streams/durable-stre
 - A CLI tool for testing and development
 - A conformance test suite for cross-implementation compatibility
 
+Durable Streams is designed as a community protocol. We'd love to see independent server and client implementations in other languages. The reference implementation includes a Node.js server and TypeScript/JavaScript client, but the ecosystem needs implementations in Python, Go, Rust, Java, Swift, Kotlin, and more—along with different storage backends (PostgreSQL, S3, Redis, etc.). If you're building one, the conformance test suite is there to help ensure compatibility, we're happy to link to implementations from the main repository, and we'd love to chat in [Discord](https://discord.electric-sql.com).
+
 ## Common Questions
 
 ### Why not just use SSE or WebSockets?
