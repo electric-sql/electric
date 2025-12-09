@@ -12,6 +12,16 @@ const postDate = computed(() => {
   return `${parts[0]}-${parts[1]}-${parts[2]}`
 })
 
+const formattedDate = computed(() => {
+  const date = new Date(postDate.value + 'T00:00:00Z') // Parse as UTC
+  return date.toLocaleDateString('en-US', {
+    month: 'numeric',
+    day: 'numeric',
+    year: 'numeric',
+    timeZone: 'UTC'
+  })
+})
+
 const optimizedImageSrcset = computed(() => {
   if (!frontmatter.value.image) return { src: '', srcset: '' }
 
@@ -123,7 +133,7 @@ h1 {
         </a>
         <ClientOnly>
           <span class="date">
-            &nbsp;on {{ new Date(postDate).toLocaleDateString() }}.
+            &nbsp;on {{ formattedDate }}.
           </span>
         </ClientOnly>
       </div>
