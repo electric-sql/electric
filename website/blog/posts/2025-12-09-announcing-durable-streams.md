@@ -1,7 +1,7 @@
 ---
 title: 'Announcing Durable Streams'
-description: 'An HTTP protocol for reliable, resumable streaming to clients (including AI token streams)'
-excerpt: 'We're open-sourcing Durable Streams, an HTTP-based protocol for ordered, replayable streaming to client applications. It's extracted from ~1.5 years of production use at Electric.'
+description: 'A persistent stream primitive and HTTP protocol for reliable, resumable, real-time data streaming into client applications'
+excerpt: 'We're open-sourcing Durable Streams, a persistent stream primitive and HTTP protocol for reliable, resumable, real-time data streaming into client applications. It's extracted from ~1.5 years of production use at Electric.'
 authors: [thruflo]
 image: /img/blog/announcing-durable-streams/hero.png
 tags: [durable-streams, sync, protocol]
@@ -17,7 +17,7 @@ AI products make this painfully visible. Token streaming is the UI for chat and 
 
 Durable Streams makes "durable, resumable client streaming" a standard, universally available building block that just works.
 
-Today, we're open-sourcing [Durable Streams](https://github.com/durable-streams/durable-streams): an HTTP-based protocol for reliable, resumable data streaming to client applications. We originally built Durable Streams as the delivery layer inside Electric, our Postgres-native sync engine, and are now standardizing it as a standalone protocol.
+Today, we're open-sourcing [Durable Streams](https://github.com/durable-streams/durable-streams): a persistent stream primitive and HTTP protocol for reliable, resumable, real-time data streaming into client applications. We originally built Durable Streams as the delivery layer inside Electric, our Postgres-native sync engine, and are now standardizing it as a standalone protocol.
 
 ## Why Now (and why we built it)
 
