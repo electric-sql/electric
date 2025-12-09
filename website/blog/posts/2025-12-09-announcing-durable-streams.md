@@ -100,7 +100,7 @@ Durable Streams is a delivery primitive. A few places it fits well:
 - **Event sourcing**: immutable logs clients can replay from any point in time.
 - **Real-time collaboration**: deliver CRDT / OT updates with replayable history and clean reconnects.
 
-The pattern is the same: consume events from backend systems (databases, Kafka, queues), apply auth + transformation, then fan out to clients over HTTP using Durable Streams.
+The pattern is the same: consume events from backend systems (databases, LLMs, Kafka, queues), apply auth + transformation, then fan out to clients over HTTP using Durable Streams.
 
 ## What's in the Repo
 
