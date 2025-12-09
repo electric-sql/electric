@@ -342,17 +342,6 @@ defmodule Electric.ShapeCache.ShapeStatus do
     end
   end
 
-  @spec latest_offset(stack_ref(), shape_handle()) :: {:ok, LogOffset.t()} | :error
-  def latest_offset(stack_ref, shape_handle) do
-    stack_ref
-    |> storage_for_shape(shape_handle)
-    |> Storage.get_current_position()
-    |> case do
-      {:ok, offset, _} -> {:ok, normalize_latest_offset(offset)}
-      {:error, _reason} -> :error
-    end
-  end
-
   @spec extract_stack_id(stack_ref()) :: stack_id()
   defp extract_stack_id(stack_ref) when is_list(stack_ref) or is_map(stack_ref),
     do: Access.fetch!(stack_ref, :stack_id)
@@ -565,6 +554,17 @@ defmodule Electric.ShapeCache.ShapeStatus do
   @spec storage_for_shape(stack_ref(), shape_handle()) :: Storage.shape_opts()
   defp storage_for_shape(stack_ref, shape_handle) do
     Storage.for_shape(shape_handle, storage_for_stack_ref(stack_ref))
+  end
+
+  @spec latest_offset(stack_ref(), shape_handle()) :: {:ok, LogOffset.t()} | :error
+  defp latest_offset(stack_ref, shape_handle) do
+    stack_ref
+    |> storage_for_shape(shape_handle)
+    |> Storage.get_current_position()
+    |> case do
+      {:ok, offset, _} -> {:ok, normalize_latest_offset(offset)}
+      {:error, _reason} -> :error
+    end
   end
 
   # When writing the snapshot initially, we don't know ahead of time the real last offset for the
