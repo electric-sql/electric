@@ -520,7 +520,7 @@ defmodule Electric.Replication.PublicationManagerTest do
 
       # after restart, the publication manager should repopulate the publication
       PublicationManager.remove_shape(ctx.stack_id, shape_handle)
-      assert_pub_tables(ctx, [])
+      assert_pub_tables(ctx, [], 2_000)
     end
 
     @tag update_debounce_timeout: 100
