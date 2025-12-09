@@ -444,7 +444,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
           {_shape_handle, {:error, _reason}}, acc ->
             acc
 
-          {shape_handle, {:ok, {shape, snapshot_started?, latest_offset}}},
+          {shape_handle, {:ok, shape}},
           {
             shape_db_tuples,
             meta_tuples,
@@ -456,13 +456,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
             {comparable, shape_hash} = Shape.comparable_hash(shape)
 
             shape_db_tuples = [{shape, comparable, shape_handle} | shape_db_tuples]
-
-            meta_tuples =
-              [
-                {shape_handle, shape_hash, snapshot_started?, latest_offset}
-                | meta_tuples
-              ]
-
+            meta_tuples = [{shape_handle, shape_hash} | meta_tuples]
             last_used_tuples = [{shape_handle, start_time} | last_used_tuples]
 
             relation_lookup_tuples =

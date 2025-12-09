@@ -41,7 +41,7 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
     {:ok, state, []} =
       new_state(ctx,
         stored_shapes: %{
-          shape_handle => {:ok, {shape, true, LogOffset.last_before_real_offsets()}},
+          shape_handle => {:ok, shape},
           "invalid" => {:error, :corrupted}
         }
       )
@@ -91,10 +91,17 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
     {:ok, state, []} = new_state(ctx)
     shape = shape!()
 
+    offset = LogOffset.new(50, 2)
+
     refute ShapeStatus.get_existing_shape(state, shape)
 
     assert {:ok, shape_handle} = ShapeStatus.add_shape(state, shape)
-    assert {^shape_handle, _} = ShapeStatus.get_existing_shape(state, shape)
+
+    expect_storage([force: true],
+      get_current_position: fn ^shape_handle -> {:ok, offset, nil} end
+    )
+
+    assert {^shape_handle, ^offset} = ShapeStatus.get_existing_shape(state, shape)
 
     assert {:ok, ^shape} = ShapeStatus.remove_shape(state, shape_handle)
     refute ShapeStatus.get_existing_shape(state, shape)
@@ -357,6 +364,11 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
   describe "shape storage and backup" do
     setup ctx do
       Electric.StackConfig.put(ctx.stack_id, Electric.ShapeCache.Storage, {Mock.Storage, []})
+
+      stub_storage([force: true],
+        for_shape: fn shape_handle, _opts -> shape_handle end
+      )
+
       %{state: %{stack_id: ctx.stack_id}}
     end
 
@@ -395,7 +407,8 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
       )
 
       expect_storage([force: true],
-        get_all_stored_shape_handles: fn _ -> {:ok, MapSet.new([shape_handle])} end
+        get_all_stored_shape_handles: fn _ -> {:ok, MapSet.new([shape_handle])} end,
+        get_current_position: fn ^shape_handle -> {:ok, LogOffset.first(), nil} end
       )
 
       assert :ok = ShapeStatus.initialize_from_storage(state)
@@ -448,10 +461,7 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
           {:ok, MapSet.new([to_keep_shape_handle, not_backed_up_shape_handle])}
         end,
         get_stored_shapes: fn _, ^expected_handles_to_load ->
-          %{
-            not_backed_up_shape_handle =>
-              {:ok, {not_backed_up_shape, false, LogOffset.last_before_real_offsets()}}
-          }
+          %{not_backed_up_shape_handle => {:ok, not_backed_up_shape}}
         end
       )
 

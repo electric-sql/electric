@@ -1192,7 +1192,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
         _writer = Storage.init_writer!(opts, @shape)
         invalid_handle = "invalid-handle"
 
-        assert %{@shape_handle => {:ok, {parsed, false, _}}, ^invalid_handle => {:error, _}} =
+        assert %{@shape_handle => {:ok, parsed}, ^invalid_handle => {:error, _}} =
                  Storage.get_stored_shapes(storage_base, [@shape_handle, invalid_handle])
 
         assert @shape == parsed
@@ -1202,7 +1202,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
         _writer = Storage.init_writer!(opts, @shape)
         :ok = Storage.mark_snapshot_as_started(opts)
 
-        assert %{@shape_handle => {:ok, {parsed, true, _}}} =
+        assert %{@shape_handle => {:ok, parsed}} =
                  Storage.get_stored_shapes(storage_base, [@shape_handle])
 
         assert @shape == parsed
