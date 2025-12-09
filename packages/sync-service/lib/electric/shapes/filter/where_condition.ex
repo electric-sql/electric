@@ -193,6 +193,7 @@ defmodule Electric.Shapes.Filter.WhereCondition do
       [],
       fn ->
         [{_, {index_keys, _other_shapes}}] = :ets.lookup(table, condition_id)
+        OpenTelemetry.set_attribute(:index_count, length(index_keys))
 
         index_keys
         |> Enum.map(fn {field, operation} ->
