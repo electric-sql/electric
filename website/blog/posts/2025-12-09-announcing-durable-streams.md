@@ -14,15 +14,17 @@ outline: [2, 3]
 post: true
 ---
 
+Today, we're open-sourcing [Durable Streams](https://github.com/durable-streams/durable-streams): a persistent stream primitive and HTTP protocol for reliable, resumable, real-time data streaming into client applications.
+
+We originally built Durable Streams as the delivery layer inside Electric, our Postgres-native sync engine, and are now standardizing it as a standalone protocol.
+
+## Why Durable Streams
+
 The internet has strong primitives for server-to-server messaging: Kafka, RabbitMQ, NATS. They give you ordering, delivery semantics, and fault tolerance between backend services.
 
 Client streaming is different. WebSocket and SSE connections are easy to start, but they're fragile in practice: tabs get suspended, networks flap, devices switch, pages refresh. When that happens, you either lose in-flight data or you build a bespoke backend storage & client resume protocol on top.
 
 AI products make this painfully visible. Token streaming is the UI for chat and copilots, and agentic apps often stream progress events, tool outputs, and partial results over long-running sessions. When the stream fails, the product fails—even if the model did the right thing.
-
-Today, we're open-sourcing [Durable Streams](https://github.com/durable-streams/durable-streams): a persistent stream primitive and HTTP protocol for reliable, resumable, real-time data streaming into client applications.
-
-We originally built Durable Streams as the delivery layer inside Electric, our Postgres-native sync engine, and are now standardizing it as a standalone protocol.
 
 ## What are Durable Streams?
 
