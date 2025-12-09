@@ -52,8 +52,6 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
              ShapeStatus.list_shape_handles_for_relations(state, [
                {shape.root_table_id, {"public", "other_table"}}
              ])
-
-    assert ShapeStatus.snapshot_started?(state, shape_handle)
   end
 
   test "can add shapes", ctx do
@@ -168,19 +166,6 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
     offset = LogOffset.new(100, 3)
     assert :ok = ShapeStatus.initialise_shape(state, shape_handle, offset)
     assert ShapeStatus.latest_offset(state, shape_handle) == {:ok, offset}
-  end
-
-  test "snapshot_started?/2", ctx do
-    {:ok, state, [shape_handle]} = new_state(ctx, shapes: [shape!()])
-
-    refute ShapeStatus.snapshot_started?(state, "sdfsodf")
-    refute ShapeStatus.snapshot_started?(state.stack_id, "sdfsodf")
-    refute ShapeStatus.snapshot_started?(state, shape_handle)
-
-    ShapeStatus.mark_snapshot_as_started(state, shape_handle)
-
-    assert ShapeStatus.snapshot_started?(state, shape_handle)
-    assert ShapeStatus.snapshot_started?(state.stack_id, shape_handle)
   end
 
   describe "list_shapes/2" do

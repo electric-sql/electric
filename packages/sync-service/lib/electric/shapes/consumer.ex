@@ -239,7 +239,7 @@ defmodule Electric.Shapes.Consumer do
 
   def handle_cast({:snapshot_started, shape_handle}, %{shape_handle: shape_handle} = state) do
     Logger.debug("Snapshot started shape_handle: #{shape_handle}")
-    {:noreply, mark_snapshot_started(state), state.hibernate_after}
+    {:noreply, State.mark_snapshot_started(state), state.hibernate_after}
   end
 
   def handle_cast(
@@ -259,9 +259,7 @@ defmodule Electric.Shapes.Consumer do
   end
 
   def handle_cast({:snapshot_exists, shape_handle}, %{shape_handle: shape_handle} = state) do
-    state = mark_snapshot_started(state)
-
-    {:noreply, state, state.hibernate_after}
+    {:noreply, State.mark_snapshot_started(state), state.hibernate_after}
   end
 
   @impl GenServer
@@ -608,11 +606,6 @@ defmodule Electric.Shapes.Consumer do
     )
 
     state
-  end
-
-  defp mark_snapshot_started(%State{stack_id: stack_id, shape_handle: shape_handle} = state) do
-    :ok = ShapeCache.ShapeStatus.mark_snapshot_as_started(stack_id, shape_handle)
-    State.mark_snapshot_started(state)
   end
 
   # termination and cleanup is now done in stages.

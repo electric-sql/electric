@@ -383,13 +383,6 @@ defmodule Electric.ShapeCache.ShapeStatus do
     end
   end
 
-  @spec snapshot_started?(stack_ref(), shape_handle()) :: boolean()
-  def snapshot_started?(stack_ref, shape_handle) do
-    stack_ref
-    |> storage_for_shape(shape_handle)
-    |> Storage.snapshot_started?()
-  end
-
   @spec extract_stack_id(stack_ref()) :: stack_id()
   defp extract_stack_id(stack_ref) when is_list(stack_ref) or is_map(stack_ref),
     do: Access.fetch!(stack_ref, :stack_id)
