@@ -3,12 +3,49 @@ import { useData } from 'vitepress'
 import { computed } from 'vue'
 
 import { data as authors } from '../../data/authors.data.ts'
+import { getNetlifyImageUrl } from '../utils/netlify-images.ts'
 
 const { page, frontmatter } = useData()
 
 const postDate = computed(() => {
   const parts = page.value.filePath.split('blog/posts/')[1].split('-')
   return `${parts[0]}-${parts[1]}-${parts[2]}`
+})
+
+const formattedDate = computed(() => {
+  // Parse as UTC to prevent timezone shifts, but format in user's locale
+  const date = new Date(postDate.value + 'T00:00:00Z')
+  return date.toLocaleDateString(undefined, {
+    month: 'numeric',
+    day: 'numeric',
+    year: 'numeric',
+    timeZone: 'UTC'
+  })
+})
+
+const optimizedImageSrcset = computed(() => {
+  if (!frontmatter.value.image) return { src: '', srcset: '' }
+
+  const img1x = getNetlifyImageUrl(frontmatter.value.image, {
+    width: 1530,
+    height: 874,
+    fit: 'cover',
+    format: 'jpg',
+    quality: 80,
+  })
+
+  const img2x = getNetlifyImageUrl(frontmatter.value.image, {
+    width: 1530 * 2,
+    height: 874 * 2,
+    fit: 'cover',
+    format: 'jpg',
+    quality: 80,
+  })
+
+  return {
+    src: img1x,
+    srcset: `${img1x} 1x, ${img2x} 2x`,
+  }
 })
 </script>
 
@@ -24,17 +61,31 @@ const postDate = computed(() => {
   }
 }
 
+h1 {
+  margin-bottom: 12px;
+}
+
 .post-author {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   color: var(--vp-c-text-2);
   font-size: 15px;
-  min-width: 360px;
-  overflow: hidden;
+  gap: 0.5rem;
 }
 .date {
   color: var(--vp-c-text-2);
   font-size: 15px;
+  white-space: nowrap;
+}
+.author-avatars {
+  display: flex;
+  margin-right: 0.2rem;
+}
+.author-names {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
 }
 .post-author img {
   width: 42px;
@@ -50,57 +101,44 @@ const postDate = computed(() => {
 <template>
   <div class="post-header">
     <p class="post-image">
-      <img :src="frontmatter.image" />
+      <img :src="optimizedImageSrcset.src" :srcset="optimizedImageSrcset.srcset" />
     </p>
     <h1>
       {{ frontmatter.title }}
     </h1>
-    <p class="post-author">
-      <a
-        v-for="(slug, index) in frontmatter.authors"
-        :href="'/about/team#' + slug"
-        class="no-visual"
-        :style="{ marginLeft: index > 0 ? '-20px' : '0' }"
-      >
-        <img :src="authors[slug].image" />
-      </a>
-      <span>By&nbsp;</span>
-      <a
-        v-for="(slug, index) in frontmatter.authors"
-        :href="'/about/team#' + slug"
-        class="no-visual"
-      >
-        <span
-          >{{ authors[slug].name
-          }}<span v-if="index === frontmatter.authors.length - 1">&nbsp;</span
-          ><span v-if="index < frontmatter.authors.length - 1"
+    <div class="post-author">
+      <div class="author-avatars">
+        <a
+          v-for="(slug, index) in frontmatter.authors"
+          :key="slug"
+          :href="'/about/team#' + slug"
+          class="no-visual"
+          :style="{ marginLeft: index > 0 ? '-20px' : '0' }"
+        >
+          <img :src="authors[slug].image" />
+        </a>
+      </div>
+      <div class="author-names">
+        <span>By&nbsp;</span>
+        <a
+          v-for="(slug, index) in frontmatter.authors"
+          :key="slug"
+          :href="'/about/team#' + slug"
+          class="no-visual"
+        >
+          <span>{{ authors[slug].name
+          }}<span v-if="index < frontmatter.authors.length - 1"
             ><span v-if="index < frontmatter.authors.length - 2">,&nbsp;</span
             ><span v-else>&nbsp;and&nbsp;</span></span
-          ></span
-        >
-      </a>
-      <ClientOnly>
-        <span
-          class="date hidden-sm"
-          :style="{
-            display:
-              frontmatter.authors.length === 1 ? 'inline-block !important' : '',
-          }"
-        >
-          on {{ new Date(postDate).toLocaleDateString() }}.
-        </span>
-      </ClientOnly>
-    </p>
-    <ClientOnly>
-      <div
-        class="date block-sm"
-        :style="{
-          display: frontmatter.authors.length === 1 ? 'none !important' : '',
-        }"
-      >
-        Published on {{ new Date(postDate).toLocaleDateString() }}
+          ></span>
+        </a>
+        <ClientOnly>
+          <span class="date">
+            &nbsp;on {{ formattedDate }}.
+          </span>
+        </ClientOnly>
       </div>
-    </ClientOnly>
+    </div>
     <hr />
   </div>
 </template>

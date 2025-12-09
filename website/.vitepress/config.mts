@@ -35,6 +35,12 @@ const blogSidebarItems = await posts.map((post) => ({
 // https://vitepress.dev/reference/site-config
 export default defineConfig({
   vite: {
+    define: {
+      // Expose Netlify environment variables to the client
+      'import.meta.env.DEPLOY_PRIME_URL': JSON.stringify(
+        process.env.DEPLOY_PRIME_URL || ''
+      ),
+    },
     plugins: [
       llmstxt({
         generateLLMsFullTxt: false,
@@ -374,7 +380,28 @@ export default defineConfig({
 
     const title = `${fm.title || siteData.title} | ${fm.titleTemplate || 'ElectricSQL'}`
     const description = fm.description || siteData.description
-    const image = `https://electric-sql.com${fm.image || '/img/meta/sync-solved.jpg'}`
+
+    // Get site origin from environment or use production URL
+    const siteOrigin =
+      process.env.DEPLOY_PRIME_URL || 'https://electric-sql.com'
+
+    // Generate optimized social media image URL using Netlify Image CDN
+    const getOptimizedImageUrl = (imagePath?: string) => {
+      if (!imagePath) {
+        return `${siteOrigin}/img/meta/sync-solved.jpg`
+      }
+
+      const fullImageUrl = `${siteOrigin}${imagePath}`
+
+      // Use Netlify Image CDN to optimize for social media (1200x630 is the standard for og:image)
+      const netlifyImageUrl = `${siteOrigin}/.netlify/images?url=${encodeURIComponent(
+        fullImageUrl
+      )}&w=1200&h=630&fit=cover&fm=jpg&q=80`
+
+      return netlifyImageUrl
+    }
+
+    const image = getOptimizedImageUrl(fm.image)
 
     head.push([
       'meta',
