@@ -63,8 +63,15 @@ defmodule Electric.ShapeCache.ShapeStatus do
     storage = storage_for_stack_ref(stack_ref)
 
     case backup_dir(storage) do
-      nil -> {:error, :no_backup_dir_configured}
-      backup_dir -> store_backup(stack_ref, backup_dir)
+      nil ->
+        {:error, :no_backup_dir_configured}
+
+      backup_dir ->
+        ShapeDb.store_backup(
+          extract_stack_id(stack_ref),
+          backup_dir,
+          @backup_version
+        )
     end
   end
 
@@ -495,76 +502,50 @@ defmodule Electric.ShapeCache.ShapeStatus do
     end)
   end
 
-  defp store_backup(stack_ref, backup_dir) when is_binary(backup_dir) do
-    backup_dir_tmp = "#{backup_dir}_tmp"
-    async_delete(stack_ref, backup_dir_tmp)
-    File.mkdir_p!(backup_dir_tmp)
-
-    with :ok <-
-           ShapeDb.store_backup(
-             extract_stack_id(stack_ref),
-             backup_dir_tmp,
-             @backup_version
-           ),
-         :ok <- async_delete(stack_ref, backup_dir),
-         :ok <- File.rename(backup_dir_tmp, backup_dir) do
-      :ok
-    else
-      e ->
-        async_delete(stack_ref, backup_dir_tmp)
-        e
-    end
-  end
-
   defp load_backup(stack_id, backup_dir, storage) do
-    result =
-      with :ok <- ShapeDb.restore(stack_id, backup_dir, @backup_version),
-           {:ok, stored_handles} <- Storage.get_all_stored_shape_handles(storage) do
-        hash_lookup_table = create_hash_lookup_table(stack_id)
-        last_used_table = create_last_used_table(stack_id)
-        relation_lookup_table = create_relation_lookup_table(stack_id)
+    with :ok <- ShapeDb.restore(stack_id, backup_dir, @backup_version),
+         {:ok, stored_handles} <- Storage.get_all_stored_shape_handles(storage) do
+      hash_lookup_table = create_hash_lookup_table(stack_id)
+      last_used_table = create_last_used_table(stack_id)
+      relation_lookup_table = create_relation_lookup_table(stack_id)
 
-        # repopulate last used table with current time and relation lookup table
-        # from the shape definition
-        in_memory_handles =
-          ShapeDb.reduce_shapes(stack_id, MapSet.new(), fn {shape_handle, shape}, acc ->
-            :ets.insert(hash_lookup_table, {shape_handle, Shape.hash(shape)})
-            :ets.insert(last_used_table, {shape_handle, System.monotonic_time()})
+      # repopulate last used table with current time and relation lookup table
+      # from the shape definition
+      in_memory_handles =
+        ShapeDb.reduce_shapes(stack_id, MapSet.new(), fn {shape_handle, shape}, acc ->
+          :ets.insert(hash_lookup_table, {shape_handle, Shape.hash(shape)})
+          :ets.insert(last_used_table, {shape_handle, System.monotonic_time()})
 
-            :ets.insert(
-              relation_lookup_table,
-              Enum.map(Shape.list_relations(shape), fn {oid, _name} ->
-                {{oid, shape_handle}, nil}
-              end)
-            )
-
-            MapSet.put(acc, shape_handle)
-          end)
-
-        # reconcile stored vs in-memory handles by loading any missing stored shapes
-        # and removing any invalid in-memory shapes
-        missing_stored_handles = MapSet.difference(stored_handles, in_memory_handles)
-        invalid_in_memory_handles = MapSet.difference(in_memory_handles, stored_handles)
-
-        if MapSet.size(missing_stored_handles) > 0,
-          do: load_shapes(stack_id, missing_stored_handles, storage)
-
-        Enum.each(invalid_in_memory_handles, fn handle -> remove_shape(stack_id, handle) end)
-
-        :ok
-      else
-        {:error, reason} ->
-          Logger.warning(
-            "Failed to restore shape status tables with #{inspect(reason)} - aborting restore"
+          :ets.insert(
+            relation_lookup_table,
+            Enum.map(Shape.list_relations(shape), fn {oid, _name} ->
+              {{oid, shape_handle}, nil}
+            end)
           )
 
-          :ok = ShapeDb.delete(stack_id)
-          {:error, reason}
-      end
+          MapSet.put(acc, shape_handle)
+        end)
 
-    async_delete(stack_id, backup_dir)
+      # reconcile stored vs in-memory handles by loading any missing stored shapes
+      # and removing any invalid in-memory shapes
+      missing_stored_handles = MapSet.difference(stored_handles, in_memory_handles)
+      invalid_in_memory_handles = MapSet.difference(in_memory_handles, stored_handles)
 
-    result
+      if MapSet.size(missing_stored_handles) > 0,
+        do: load_shapes(stack_id, missing_stored_handles, storage)
+
+      Enum.each(invalid_in_memory_handles, fn handle -> remove_shape(stack_id, handle) end)
+
+      :ok
+    else
+      {:error, reason} ->
+        Logger.warning(
+          "Failed to restore shape status tables with #{inspect(reason)} - aborting restore"
+        )
+
+        :ok = ShapeDb.delete(stack_id)
+        {:error, reason}
+    end
   end
 
   def backup_dir(storage) do
@@ -584,12 +565,6 @@ defmodule Electric.ShapeCache.ShapeStatus do
   @spec storage_for_shape(stack_ref(), shape_handle()) :: Storage.shape_opts()
   defp storage_for_shape(stack_ref, shape_handle) do
     Storage.for_shape(shape_handle, storage_for_stack_ref(stack_ref))
-  end
-
-  defp async_delete(stack_ref, path) do
-    stack_ref
-    |> extract_stack_id()
-    |> Electric.AsyncDeleter.delete(path)
   end
 
   # When writing the snapshot initially, we don't know ahead of time the real last offset for the
