@@ -181,21 +181,22 @@ defmodule Electric.Plug.ServeShapePlugTest do
              }
     end
 
-    test "returns 400 when offset is out of bounds", ctx do
-      expect_shape_cache(
+    @tag long_poll_timeout: 100
+    test "returns 400 when offset is out of bounds after a timeout", ctx do
+      out_of_bounds_offset = LogOffset.increment(@test_offset)
+
+      patch_shape_cache(
         resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id ->
           {@test_shape_handle, @test_offset}
         end
       )
-
-      invalid_offset = LogOffset.increment(@test_offset)
 
       conn =
         ctx
         |> conn(
           :get,
           %{"table" => "public.users"},
-          "?handle=#{@test_shape_handle}&offset=#{invalid_offset}"
+          "?handle=#{@test_shape_handle}&offset=#{out_of_bounds_offset}"
         )
         |> call_serve_shape_plug(ctx)
 

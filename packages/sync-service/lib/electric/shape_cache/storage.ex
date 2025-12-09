@@ -356,9 +356,15 @@ defmodule Electric.ShapeCache.Storage do
   end
 
   @impl __MODULE__
-  def get_log_stream(offset, max_offset \\ @last_log_offset, {mod, shape_opts})
+  def get_log_stream(offset, max_offset \\ @last_log_offset, storage)
+
+  def get_log_stream(offset, max_offset, {mod, shape_opts})
       when max_offset == @last_log_offset or not is_log_offset_lt(max_offset, offset) do
     mod.get_log_stream(offset, max_offset, shape_opts)
+  end
+
+  def get_log_stream(offset, max_offset, _storage) when is_log_offset_lt(max_offset, offset) do
+    []
   end
 
   @impl __MODULE__

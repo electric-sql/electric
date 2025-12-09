@@ -31,7 +31,7 @@ defmodule Electric.ShapeCache.StorageTest do
     Storage.get_total_disk_usage(storage)
   end
 
-  test "get_log_stream/4 correctly guards offset ordering" do
+  test "get_log_stream/4 correctly handles offset ordering" do
     storage = {PureFileStorage, :opts}
     shape_handle = "test"
 
@@ -47,9 +47,6 @@ defmodule Electric.ShapeCache.StorageTest do
     shape_storage = Storage.for_shape(shape_handle, storage)
 
     Storage.get_log_stream(l1, l2, shape_storage)
-
-    assert_raise FunctionClauseError, fn ->
-      Storage.get_log_stream(l2, l1, shape_storage)
-    end
+    assert [] = Storage.get_log_stream(l2, l1, shape_storage)
   end
 end

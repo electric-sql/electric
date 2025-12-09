@@ -41,6 +41,9 @@ defmodule Electric.Shapes.Api do
 
   defguardp is_configured(api) when api.configured
 
+  defguardp is_out_of_bounds(request)
+            when LogOffset.is_log_offset_lt(request.last_offset, request.params.offset)
+
   defstruct [
     :inspector,
     :shape,
@@ -309,15 +312,6 @@ defmodule Electric.Shapes.Api do
 
   defp handle_shape_info(
          {active_shape_handle, last_offset},
-         %Request{params: %{offset: offset, handle: shape_handle}} = request
-       )
-       when (is_nil(shape_handle) or shape_handle == active_shape_handle) and
-              is_log_offset_lt(last_offset, offset) do
-    {:error, Response.invalid_request(request, errors: @offset_out_of_bounds)}
-  end
-
-  defp handle_shape_info(
-         {active_shape_handle, last_offset},
          %Request{params: %{handle: shape_handle}} = request
        )
        when is_nil(shape_handle) or shape_handle == active_shape_handle do
@@ -415,6 +409,14 @@ defmodule Electric.Shapes.Api do
     %{request | global_last_seen_lsn: offset}
   end
 
+  # If the requested offset is out of bounds, we are beyond the end of any chunk
+  defp determine_log_chunk_offset(%Request{} = request) when is_out_of_bounds(request) do
+    Request.update_response(
+      %{request | chunk_end_offset: request.last_offset},
+      &%{&1 | offset: request.last_offset}
+    )
+  end
+
   # If chunk offsets are available, use those instead of the latest available
   # offset to optimize for cache hits and response sizes
   defp determine_log_chunk_offset(%Request{} = request) do
@@ -442,10 +444,14 @@ defmodule Electric.Shapes.Api do
       params: %{offset: offset}
     } = request
 
-    # The log can't be up to date if the last_offset is not the actual end.
+    latest_seen_offset = LogOffset.max(last_offset, offset)
+
+    # The log can't be up to date if the last seen offset, whether by
+    # us or the client, is not the actual end.
     # Also if client is requesting the start of the log, we don't set `up-to-date`
     # here either as we want to set a long max-age on the cache-control.
-    if LogOffset.compare(chunk_end_offset, last_offset) == :lt || offset == @before_all_offset do
+    if LogOffset.compare(chunk_end_offset, latest_seen_offset) == :lt ||
+         offset == @before_all_offset do
       Request.update_response(request, &%{&1 | up_to_date: false})
     else
       Request.update_response(request, &%{&1 | up_to_date: true})
@@ -591,6 +597,22 @@ defmodule Electric.Shapes.Api do
     }
   end
 
+  defp do_serve_shape_log(%Request{new_changes_ref: ref} = request)
+       when is_out_of_bounds(request) do
+    # treat out of bounds requests like live requests with a
+    # shorter timeout before failing them, as if the client happened
+    # to be slightly ahead because of a restart or handover the
+    # offset they have seen should show up shortly, otherwise we
+    # assume it is an actually invalid out of bounds request
+    Process.send_after(
+      self(),
+      {ref, :out_of_bounds_timeout},
+      div(request.api.long_poll_timeout, 2)
+    )
+
+    handle_live_request(request)
+  end
+
   defp do_serve_shape_log(%Request{} = request) do
     %{
       handle: shape_handle,
@@ -608,10 +630,7 @@ defmodule Electric.Shapes.Api do
          ) do
       {:ok, log} ->
         if live? && Enum.take(log, 1) == [] do
-          request
-          |> update_attrs(%{ot_is_immediate_response: false})
-          |> notify_changes_since_request_start()
-          |> handle_live_request()
+          handle_live_request(request)
         else
           up_to_date_lsn =
             if live? do
@@ -678,11 +697,17 @@ defmodule Electric.Shapes.Api do
   end
 
   defp handle_live_request(%Request{params: %{live_sse: true}} = request) do
-    stream_sse_events(request)
+    request
+    |> update_attrs(%{ot_is_immediate_response: false})
+    |> notify_changes_since_request_start()
+    |> stream_sse_events()
   end
 
   defp handle_live_request(%Request{} = request) do
-    hold_until_change(request)
+    request
+    |> update_attrs(%{ot_is_immediate_response: false})
+    |> notify_changes_since_request_start()
+    |> hold_until_change()
   end
 
   # Between loading the shape info and registering as a listener for new changes,
@@ -748,6 +773,14 @@ defmodule Electric.Shapes.Api do
       {^ref, :shape_rotation} ->
         error = Api.Error.must_refetch()
         Response.error(request, error.message, status: error.status)
+
+      {^ref, :out_of_bounds_timeout} ->
+        Logger.debug(fn ->
+          "Client #{inspect(self())} timed out waiting for " <>
+            "changes to #{shape_handle} (out-of-bounds check)"
+        end)
+
+        Response.invalid_request(api, errors: @offset_out_of_bounds)
     after
       # If we timeout, check that the stack is still up and
       # return an up-to-date message
@@ -872,6 +905,9 @@ defmodule Electric.Shapes.Api do
         end
 
       {^ref, :shape_rotation} ->
+        {[], %{state | mode: :done}}
+
+      {^ref, :out_of_bounds_timeout} ->
         {[], %{state | mode: :done}}
 
       {:sse_keepalive, ^ref} ->
