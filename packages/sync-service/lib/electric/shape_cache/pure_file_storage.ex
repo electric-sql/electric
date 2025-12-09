@@ -177,9 +177,19 @@ defmodule Electric.ShapeCache.PureFileStorage do
       stack_task_supervisor(stack_opts.stack_id),
       shape_handles,
       fn handle ->
-        case recover_stored_shape(stack_opts, handle) do
-          {:ok, shape_data} -> {handle, {:ok, shape_data}}
-          {:error, reason} -> {handle, {:error, reason}}
+        shape_opts = for_shape(handle, stack_opts)
+
+        case read_shape_definition(shape_opts) do
+          {:ok, shape} ->
+            {handle, {:ok, shape}}
+
+          _ ->
+            Logger.warning(
+              "Failed to read shape definition for shape #{handle}, removing it from disk"
+            )
+
+            cleanup!(shape_opts)
+            {handle, {:error, :failed_to_recover_shape}}
         end
       end,
       timeout: :infinity,
@@ -187,27 +197,6 @@ defmodule Electric.ShapeCache.PureFileStorage do
     )
     |> Enum.map(fn {:ok, res} -> res end)
     |> Map.new()
-  end
-
-  @spec recover_stored_shape(map(), Electric.stack_id()) ::
-          {:ok, {Shape.t(), snapshot_started :: boolean(), latest_offset :: LogOffset.t()}}
-          | {:error, :failed_to_recover_shape}
-  defp recover_stored_shape(stack_opts, shape_handle) do
-    opts = for_shape(shape_handle, stack_opts)
-
-    with {:ok, shape} <- read_shape_definition(opts),
-         snapshot_started? when is_boolean(snapshot_started?) <- snapshot_started?(opts),
-         latest_offset when not is_nil(latest_offset) <- get_latest_offset(opts) do
-      {:ok, {shape, snapshot_started?, latest_offset}}
-    else
-      _ ->
-        Logger.warning(
-          "Failed to read shape definition for shape #{shape_handle}, removing it from disk"
-        )
-
-        cleanup!(stack_opts, shape_handle)
-        {:error, :failed_to_recover_shape}
-    end
   end
 
   def metadata_backup_dir(%{base_path: base_path}) do
