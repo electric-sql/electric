@@ -607,7 +607,7 @@ defmodule Electric.Shapes.Api do
     Process.send_after(
       self(),
       {ref, :out_of_bounds_timeout},
-      floor(request.api.long_poll_timeout * 0.5)
+      div(request.api.long_poll_timeout, 2)
     )
 
     handle_live_request(request)
