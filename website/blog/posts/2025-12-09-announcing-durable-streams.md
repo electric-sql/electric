@@ -23,7 +23,7 @@ Today, we're open-sourcing [Durable Streams](https://github.com/durable-streams/
 
 The Durable Streams protocol is an open protocol that extends standard HTTP to support ordered, replayable streams with offset-based resumability. It's designed to work anywhere HTTP works: browsers, mobile, native clients, and IoT.
 
-The core idea is simple:
+The core idea: streams are a first-class primitive that get their own URL. Each stream is an addressable, append-only log that clients can read from any position.
 
 - Every position in a stream has an **opaque, monotonic offset**.
 - Clients persist the last offset they’ve processed.
