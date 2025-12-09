@@ -465,11 +465,15 @@ defmodule Electric.ShapeCache.PureFileStorage do
     :ok
   end
 
-  def get_current_position(%__MODULE__{} = opts) do
-    {:ok, get_latest_offset(opts), read_cached_metadata(opts, :pg_snapshot)}
+  def get_latest_offset(%__MODULE__{} = opts) do
+    {:ok, read_latest_offset(opts)}
   end
 
-  defp get_latest_offset(%__MODULE__{} = opts) do
+  def get_current_position(%__MODULE__{} = opts) do
+    {:ok, read_latest_offset(opts), read_cached_metadata(opts, :pg_snapshot)}
+  end
+
+  defp read_latest_offset(%__MODULE__{} = opts) do
     metadata =
       read_multiple_cached_metadata(opts, [
         :last_seen_txn_offset,
@@ -1076,7 +1080,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
       case :ets.lookup(stack_ets(opts.stack_id), handle) do
         [] ->
           # Writer's not active, only disk reads are possible
-          offset = get_latest_offset(opts)
+          {:ok, offset} = get_latest_offset(opts)
           {nil, offset, offset, get_read_source_info(opts)}
 
         [

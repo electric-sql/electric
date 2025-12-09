@@ -681,9 +681,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
         has_shape?: fn "foo", _opts -> false end
       )
 
-      patch_storage(
-        get_current_position: fn _ -> {:ok, LogOffset.last_before_real_offsets(), nil} end
-      )
+      patch_storage(get_latest_offset: fn _ -> {:ok, LogOffset.last_before_real_offsets()} end)
 
       conn =
         ctx

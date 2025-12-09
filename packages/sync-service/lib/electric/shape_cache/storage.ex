@@ -64,9 +64,16 @@ defmodule Electric.ShapeCache.Storage do
   @callback get_total_disk_usage(compiled_opts()) :: non_neg_integer()
 
   @doc """
+  Get the latest offset stored in the shape storage
+
+  If the instance is new, then it MUST return `{:ok, LogOffset.last_before_real_offsets()}`.
+  """
+  @callback get_latest_offset(shape_opts()) :: {:ok, offset()} | {:error, term()}
+
+  @doc """
   Get the current pg_snapshot and offset for the shape storage.
 
-  If the instance is new, then it MUST return `{LogOffset.first(), nil}`.
+  If the instance is new, then it MUST return `{:ok, LogOffset.last_before_real_offsets(), nil}`.
   """
   @callback get_current_position(shape_opts()) ::
               {:ok, offset(), pg_snapshot() | nil} | {:error, term()}
@@ -274,6 +281,11 @@ defmodule Electric.ShapeCache.Storage do
   @impl __MODULE__
   def get_current_position({mod, shape_opts}) do
     mod.get_current_position(shape_opts)
+  end
+
+  @impl __MODULE__
+  def get_latest_offset({mod, shape_opts}) do
+    mod.get_latest_offset(shape_opts)
   end
 
   @impl __MODULE__
