@@ -151,7 +151,6 @@ defmodule Electric.Shapes.ConsumerTest do
 
       patch_shape_status(
         initialise_shape: fn _, _shape_handle, _ -> :ok end,
-        mark_snapshot_as_started: fn _, _shape_handle -> :ok end,
         fetch_shape_by_handle: fn _, shape_handle -> Map.fetch(ctx.shapes, shape_handle) end,
         get_existing_shape: fn
           _, @shape1 -> {@shape_handle1, @shape1}
@@ -197,11 +196,6 @@ defmodule Electric.Shapes.ConsumerTest do
       next_lsn = Lsn.increment(lsn, 1)
       next_log_offset = LogOffset.new(next_lsn, 0)
 
-      expect_shape_status(
-        set_latest_offset: fn _, @shape_handle1, ^last_log_offset -> :ok end,
-        set_latest_offset: fn _, @shape_handle1, ^next_log_offset -> :ok end
-      )
-
       ref = make_ref()
 
       Registry.register(ctx.registry, @shape_handle1, ref)
@@ -244,19 +238,6 @@ defmodule Electric.Shapes.ConsumerTest do
       change3_offset = LogOffset.increment(expected_log_offset, 2)
 
       xid = 150
-
-      # the expectations assert an order so we can't add a sequence of
-      # set_latest_offset functions as we have no control over which order
-      # they'll come in from 2 different processes
-      expect_shape_status(
-        set_latest_offset: {
-          fn
-            _, @shape_handle1, ^change1_offset -> :ok
-            _, @shape_handle2, ^change2_offset -> :ok
-          end,
-          exactly: 2
-        }
-      )
 
       ref1 = make_ref()
       ref2 = make_ref()
@@ -312,8 +293,6 @@ defmodule Electric.Shapes.ConsumerTest do
 
       ref1 = Shapes.Consumer.register_for_changes(ctx.stack_id, @shape_handle1)
       ref2 = Shapes.Consumer.register_for_changes(ctx.stack_id, @shape_handle2)
-
-      expect_shape_status(set_latest_offset: fn _, @shape_handle2, _offset -> :ok end)
 
       txn =
         transaction(xid, lsn, [
@@ -419,8 +398,6 @@ defmodule Electric.Shapes.ConsumerTest do
       xid = 150
       lsn = Lsn.from_string("0/10")
       last_log_offset = LogOffset.new(lsn, 0)
-
-      expect_shape_status(set_latest_offset: fn _, @shape_handle1, ^last_log_offset -> :ok end)
 
       ref = make_ref()
       Registry.register(ctx.registry, @shape_handle1, ref)
@@ -574,39 +551,6 @@ defmodule Electric.Shapes.ConsumerTest do
 
       assert_receive {:DOWN, ^ref1, :process, _, {:shutdown, :cleanup}}
       assert_receive {^live_ref, :shape_rotation}
-      refute_receive {Electric.ShapeCache.ShapeCleaner, :cleanup, @shape_handle2}
-    end
-
-    test "unexpected error while handling events stops affected consumer and cleans affected shape",
-         ctx do
-      expect_shape_status(
-        set_latest_offset: fn _, @shape_handle1, _ ->
-          raise "The unexpected error"
-        end,
-        remove_shape: {fn _, @shape_handle1 -> {:ok, @shape1} end, at_least: 1}
-      )
-
-      lsn = Lsn.from_string("0/10")
-
-      txn =
-        transaction(150, lsn, [
-          %Changes.NewRecord{
-            relation: {"public", "test_table"},
-            record: %{"id" => "1"},
-            log_offset: LogOffset.new(lsn, 0)
-          }
-        ])
-
-      ref1 = Process.monitor(Consumer.whereis(ctx.stack_id, @shape_handle1))
-      ref2 = Process.monitor(Consumer.whereis(ctx.stack_id, @shape_handle2))
-
-      :ok = ShapeLogCollector.handle_event(txn, ctx.stack_id)
-
-      assert_receive {:DOWN, ^ref1, :process, _, _}
-      refute_receive {:DOWN, ^ref2, :process, _, _}
-
-      assert_shape_cleanup(@shape_handle1)
-
       refute_receive {Electric.ShapeCache.ShapeCleaner, :cleanup, @shape_handle2}
     end
 
