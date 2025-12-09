@@ -563,8 +563,6 @@ defmodule Electric.ShapeCache.ShapeStatus do
   defp store_backup(stack_ref, backup_dir) when is_binary(backup_dir) do
     meta_table = shape_meta_table(stack_ref)
     backup_dir_tmp = "#{backup_dir}_tmp"
-
-    File.mkdir_p!(backup_dir)
     async_delete(stack_ref, backup_dir_tmp)
     File.mkdir_p!(backup_dir_tmp)
 
@@ -584,6 +582,10 @@ defmodule Electric.ShapeCache.ShapeStatus do
          :ok <- async_delete(stack_ref, backup_dir),
          :ok <- File.rename(backup_dir_tmp, backup_dir) do
       :ok
+    else
+      e ->
+        async_delete(stack_ref, backup_dir_tmp)
+        e
     end
   end
 
