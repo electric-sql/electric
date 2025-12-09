@@ -405,6 +405,432 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
       end
     end
 
+    describe "#{module_name}.append_control_message!/2" do
+      setup do
+        {:ok, %{module: unquote(module)}}
+      end
+
+      setup :start_storage
+      setup :start_empty_snapshot
+
+      test "appends a control message to the log", %{storage: opts, writer: writer} do
+        control_message = %{headers: %{control: "must_refetch"}}
+
+        {inserted_range, _writer} = Storage.append_control_message!(control_message, writer)
+
+        # Verify the inserted range
+        assert {%LogOffset{}, %LogOffset{}} = inserted_range
+
+        # Verify we can read the control message back
+        stream = Storage.get_log_stream(LogOffset.first(), LogOffset.last(), opts)
+        assert [json] = Enum.to_list(stream)
+
+        decoded = Jason.decode!(json, keys: :atoms)
+        assert decoded == control_message
+      end
+
+      test "control message preserves structure", %{storage: opts, writer: writer} do
+        control_message = %{
+          headers: %{
+            event: "move-out",
+            patterns: [%{value: "test"}]
+          }
+        }
+
+        {_inserted_range, _writer} = Storage.append_control_message!(control_message, writer)
+
+        stream = Storage.get_log_stream(LogOffset.first(), LogOffset.last(), opts)
+        [json] = Enum.to_list(stream)
+
+        decoded = Jason.decode!(json, keys: :atoms)
+        assert decoded == control_message
+      end
+
+      test "appends multiple control messages", %{storage: opts, writer: writer} do
+        writer =
+          Storage.append_control_message!(%{headers: %{control: "must_refetch"}}, writer)
+          |> elem(1)
+
+        writer =
+          Storage.append_control_message!(%{headers: %{control: "up_to_date"}}, writer)
+          |> elem(1)
+
+        Storage.append_control_message!(%{headers: %{control: "another_message"}}, writer)
+
+        stream = Storage.get_log_stream(LogOffset.first(), LogOffset.last(), opts)
+        messages = Enum.map(stream, &Jason.decode!(&1, keys: :atoms))
+
+        assert length(messages) == 3
+        assert Enum.at(messages, 0).headers.control == "must_refetch"
+        assert Enum.at(messages, 1).headers.control == "up_to_date"
+        assert Enum.at(messages, 2).headers.control == "another_message"
+      end
+    end
+
+    describe "#{module_name}.write_move_in_snapshot!/3 and append_move_in_snapshot_to_log!/2" do
+      setup do
+        {:ok, %{module: unquote(module)}}
+      end
+
+      setup :start_storage
+      setup :start_empty_snapshot
+
+      test "writes and appends basic move-in snapshot", %{
+        storage: opts,
+        writer: writer
+      } do
+        move_in_data = [
+          ["key1", [], Jason.encode!(%{id: "1", name: "row1"})],
+          ["key2", ["tag1"], Jason.encode!(%{id: "2", name: "row2"})],
+          ["key3", ["tag2", "tag3"], Jason.encode!(%{id: "3", name: "row3"})]
+        ]
+
+        # Write the move-in snapshot
+        Storage.write_move_in_snapshot!(move_in_data, "test-move-in", opts)
+
+        # Append to log without filtering (unfiltered version)
+        {inserted_range, _writer} =
+          Storage.append_move_in_snapshot_to_log!("test-move-in", writer)
+
+        # Verify the inserted range
+        assert {%LogOffset{}, %LogOffset{}} = inserted_range
+
+        # Verify all rows were included
+        stream = Storage.get_log_stream(LogOffset.first(), LogOffset.last(), opts)
+        items = Enum.map(stream, &Jason.decode!(&1, keys: :atoms))
+
+        assert length(items) == 3
+
+        # Check that items have expected data
+        assert Enum.any?(items, &(&1.id == "1" && &1.name == "row1"))
+        assert Enum.any?(items, &(&1.id == "2" && &1.name == "row2"))
+        assert Enum.any?(items, &(&1.id == "3" && &1.name == "row3"))
+      end
+    end
+
+    describe "#{module_name}.append_move_in_snapshot_to_log_filtered!/5" do
+      setup do
+        {:ok, %{module: unquote(module)}}
+      end
+
+      setup :start_storage
+      setup :start_empty_snapshot
+
+      test "includes rows with keys in touch_tracker and visible txid", %{
+        storage: opts,
+        writer: writer
+      } do
+        move_in_data = [
+          ["key1", [], Jason.encode!(%{id: "1", name: "row1"})],
+          ["key2", [], Jason.encode!(%{id: "2", name: "row2"})],
+          ["key3", [], Jason.encode!(%{id: "3", name: "row3"})]
+        ]
+
+        Storage.write_move_in_snapshot!(move_in_data, "test-move-in", opts)
+
+        # Touch tracker: key2 was touched by txid 120
+        touch_tracker = %{"key2" => 120}
+
+        # Snapshot: {xmin: 100, xmax: 200, xip_list: [150]}
+        # txid 120 is visible in this snapshot (100 <= 120 < 200 and not in xip_list)
+        # This means the touch happened BEFORE the snapshot, so query data is fresher
+        snapshot = {100, 200, [150]}
+
+        tags_to_skip = MapSet.new()
+
+        {inserted_range, _writer} =
+          Storage.append_move_in_snapshot_to_log_filtered!(
+            "test-move-in",
+            writer,
+            touch_tracker,
+            snapshot,
+            tags_to_skip
+          )
+
+        assert {%LogOffset{}, %LogOffset{}} = inserted_range
+
+        # All rows should be included (key2's touch was before snapshot)
+        stream = Storage.get_log_stream(LogOffset.first(), LogOffset.last(), opts)
+        items = Enum.map(stream, &Jason.decode!(&1, keys: :atoms))
+
+        assert length(items) == 3
+        assert Enum.any?(items, &(&1.id == "1" && &1.name == "row1"))
+        assert Enum.any?(items, &(&1.id == "2" && &1.name == "row2"))
+        assert Enum.any?(items, &(&1.id == "3" && &1.name == "row3"))
+      end
+
+      test "filters out rows with keys in touch_tracker and non-visible txid", %{
+        storage: opts,
+        writer: writer
+      } do
+        move_in_data = [
+          ["key1", [], Jason.encode!(%{id: "1", name: "row1"})],
+          ["key2", [], Jason.encode!(%{id: "2", name: "row2"})],
+          ["key3", [], Jason.encode!(%{id: "3", name: "row3"})]
+        ]
+
+        Storage.write_move_in_snapshot!(move_in_data, "test-move-in", opts)
+
+        # Touch tracker: key2 was touched by txid 150
+        touch_tracker = %{"key2" => 150}
+
+        # Snapshot: {xmin: 100, xmax: 200, xip_list: [150]}
+        # txid 150 is NOT visible (in xip_list = in progress during snapshot)
+        # This means the touch happened AFTER the snapshot, so we have fresher data in stream
+        snapshot = {100, 200, [150]}
+
+        tags_to_skip = MapSet.new()
+
+        {inserted_range, _writer} =
+          Storage.append_move_in_snapshot_to_log_filtered!(
+            "test-move-in",
+            writer,
+            touch_tracker,
+            snapshot,
+            tags_to_skip
+          )
+
+        assert {%LogOffset{}, %LogOffset{}} = inserted_range
+
+        # Only key1 and key3 should be included (key2 filtered out due to fresher data)
+        stream = Storage.get_log_stream(LogOffset.first(), LogOffset.last(), opts)
+        items = Enum.map(stream, &Jason.decode!(&1, keys: :atoms))
+
+        assert length(items) == 2
+        assert Enum.any?(items, &(&1.id == "1"))
+        assert Enum.any?(items, &(&1.id == "3"))
+        refute Enum.any?(items, &(&1.id == "2"))
+      end
+
+      test "filters out rows where all tags are in tags_to_skip", %{
+        storage: opts,
+        writer: writer
+      } do
+        move_in_data = [
+          ["key1", [], Jason.encode!(%{id: "1", name: "row1"})],
+          ["key2", ["tag1"], Jason.encode!(%{id: "2", name: "row2"})],
+          ["key3", ["tag1", "tag2"], Jason.encode!(%{id: "3", name: "row3"})],
+          ["key4", ["tag3"], Jason.encode!(%{id: "4", name: "row4"})]
+        ]
+
+        Storage.write_move_in_snapshot!(move_in_data, "test-move-in", opts)
+
+        touch_tracker = %{}
+        snapshot = {100, 200, []}
+        # Skip rows where ALL tags are in this set
+        tags_to_skip = MapSet.new(["tag1", "tag2"])
+
+        {inserted_range, _writer} =
+          Storage.append_move_in_snapshot_to_log_filtered!(
+            "test-move-in",
+            writer,
+            touch_tracker,
+            snapshot,
+            tags_to_skip
+          )
+
+        assert {%LogOffset{}, %LogOffset{}} = inserted_range
+
+        stream = Storage.get_log_stream(LogOffset.first(), LogOffset.last(), opts)
+        items = Enum.map(stream, &Jason.decode!(&1, keys: :atoms))
+
+        # key1: no tags -> included
+        # key2: [tag1] -> all in tags_to_skip -> FILTERED OUT
+        # key3: [tag1, tag2] -> all in tags_to_skip -> FILTERED OUT
+        # key4: [tag3] -> not all in tags_to_skip -> included
+        assert length(items) == 2
+        assert Enum.any?(items, &(&1.id == "1"))
+        assert Enum.any?(items, &(&1.id == "4"))
+        refute Enum.any?(items, &(&1.id == "2"))
+        refute Enum.any?(items, &(&1.id == "3"))
+      end
+
+      test "includes rows with partial tag overlap", %{
+        storage: opts,
+        writer: writer
+      } do
+        move_in_data = [
+          ["key1", ["tag1", "tag_other"], Jason.encode!(%{id: "1", name: "row1"})],
+          ["key2", ["tag2", "tag_other"], Jason.encode!(%{id: "2", name: "row2"})]
+        ]
+
+        Storage.write_move_in_snapshot!(move_in_data, "test-move-in", opts)
+
+        touch_tracker = %{}
+        snapshot = {100, 200, []}
+        # Only skip if ALL tags are in this set
+        tags_to_skip = MapSet.new(["tag1", "tag2"])
+
+        {inserted_range, _writer} =
+          Storage.append_move_in_snapshot_to_log_filtered!(
+            "test-move-in",
+            writer,
+            touch_tracker,
+            snapshot,
+            tags_to_skip
+          )
+
+        assert {%LogOffset{}, %LogOffset{}} = inserted_range
+
+        stream = Storage.get_log_stream(LogOffset.first(), LogOffset.last(), opts)
+        items = Enum.map(stream, &Jason.decode!(&1, keys: :atoms))
+
+        # Both rows have tag_other which is NOT in tags_to_skip
+        # So they are NOT full subsets -> both included
+        assert length(items) == 2
+        assert Enum.any?(items, &(&1.id == "1"))
+        assert Enum.any?(items, &(&1.id == "2"))
+      end
+
+      test "combines touch_tracker and tag filtering", %{
+        storage: opts,
+        writer: writer
+      } do
+        move_in_data = [
+          ["key1", [], Jason.encode!(%{id: "1", name: "row1"})],
+          ["key2", ["tag1"], Jason.encode!(%{id: "2", name: "row2"})],
+          ["key3", ["tag1"], Jason.encode!(%{id: "3", name: "row3"})],
+          ["key4", ["tag2"], Jason.encode!(%{id: "4", name: "row4"})]
+        ]
+
+        Storage.write_move_in_snapshot!(move_in_data, "test-move-in", opts)
+
+        # key2 was touched by non-visible txid -> will be filtered by touch_tracker
+        touch_tracker = %{"key2" => 150}
+        snapshot = {100, 200, [150]}
+        # key3 will be filtered by tags (all tags in skip set)
+        tags_to_skip = MapSet.new(["tag1"])
+
+        {inserted_range, _writer} =
+          Storage.append_move_in_snapshot_to_log_filtered!(
+            "test-move-in",
+            writer,
+            touch_tracker,
+            snapshot,
+            tags_to_skip
+          )
+
+        assert {%LogOffset{}, %LogOffset{}} = inserted_range
+
+        stream = Storage.get_log_stream(LogOffset.first(), LogOffset.last(), opts)
+        items = Enum.map(stream, &Jason.decode!(&1, keys: :atoms))
+
+        # key1: no touch, no tags -> included
+        # key2: touched with non-visible txid (fresher data in stream) -> filtered by touch_tracker
+        # key3: all tags in skip set -> filtered by tags
+        # key4: has tag2 which is not in skip set -> included
+        assert length(items) == 2
+        assert Enum.any?(items, &(&1.id == "1"))
+        assert Enum.any?(items, &(&1.id == "4"))
+        refute Enum.any?(items, &(&1.id == "2"))
+        refute Enum.any?(items, &(&1.id == "3"))
+      end
+
+      test "handles empty touch_tracker and tags_to_skip", %{
+        storage: opts,
+        writer: writer
+      } do
+        move_in_data = [
+          ["key1", [], Jason.encode!(%{id: "1", name: "row1"})],
+          ["key2", ["tag1"], Jason.encode!(%{id: "2", name: "row2"})]
+        ]
+
+        Storage.write_move_in_snapshot!(move_in_data, "test-move-in", opts)
+
+        touch_tracker = %{}
+        snapshot = {100, 200, []}
+        tags_to_skip = MapSet.new()
+
+        {inserted_range, _writer} =
+          Storage.append_move_in_snapshot_to_log_filtered!(
+            "test-move-in",
+            writer,
+            touch_tracker,
+            snapshot,
+            tags_to_skip
+          )
+
+        assert {%LogOffset{}, %LogOffset{}} = inserted_range
+
+        # No filtering should occur
+        stream = Storage.get_log_stream(LogOffset.first(), LogOffset.last(), opts)
+        items = Enum.map(stream, &Jason.decode!(&1, keys: :atoms))
+
+        assert length(items) == 2
+        assert Enum.any?(items, &(&1.id == "1"))
+        assert Enum.any?(items, &(&1.id == "2"))
+      end
+
+      test "filters all rows when all conditions match", %{
+        storage: opts,
+        writer: writer
+      } do
+        move_in_data = [
+          ["key1", ["skip_tag"], Jason.encode!(%{id: "1", name: "row1"})],
+          ["key2", ["skip_tag"], Jason.encode!(%{id: "2", name: "row2"})]
+        ]
+
+        Storage.write_move_in_snapshot!(move_in_data, "test-move-in", opts)
+
+        touch_tracker = %{}
+        snapshot = {100, 200, []}
+        tags_to_skip = MapSet.new(["skip_tag"])
+
+        {inserted_range, _writer} =
+          Storage.append_move_in_snapshot_to_log_filtered!(
+            "test-move-in",
+            writer,
+            touch_tracker,
+            snapshot,
+            tags_to_skip
+          )
+
+        assert {%LogOffset{}, %LogOffset{}} = inserted_range
+
+        # All rows should be filtered out
+        stream = Storage.get_log_stream(LogOffset.first(), LogOffset.last(), opts)
+        items = Enum.to_list(stream)
+
+        assert items == []
+      end
+
+      test "correctly handles empty tag list on rows", %{
+        storage: opts,
+        writer: writer
+      } do
+        move_in_data = [
+          ["key1", [], Jason.encode!(%{id: "1", name: "row1"})],
+          ["key2", [], Jason.encode!(%{id: "2", name: "row2"})]
+        ]
+
+        Storage.write_move_in_snapshot!(move_in_data, "test-move-in", opts)
+
+        touch_tracker = %{}
+        snapshot = {100, 200, []}
+        # Tags to skip set is non-empty
+        tags_to_skip = MapSet.new(["tag1"])
+
+        {inserted_range, _writer} =
+          Storage.append_move_in_snapshot_to_log_filtered!(
+            "test-move-in",
+            writer,
+            touch_tracker,
+            snapshot,
+            tags_to_skip
+          )
+
+        assert {%LogOffset{}, %LogOffset{}} = inserted_range
+
+        # Empty tag lists should NOT be filtered (not a full subset of tags_to_skip)
+        stream = Storage.get_log_stream(LogOffset.first(), LogOffset.last(), opts)
+        items = Enum.map(stream, &Jason.decode!(&1, keys: :atoms))
+
+        assert length(items) == 2
+        assert Enum.any?(items, &(&1.id == "1"))
+        assert Enum.any?(items, &(&1.id == "2"))
+      end
+    end
+
     describe "#{module_name}.get_log_stream/4 for snapshots" do
       setup do
         {:ok, %{module: unquote(module)}}
