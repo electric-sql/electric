@@ -499,6 +499,11 @@ defmodule Electric.Shapes.FilterTest do
         end)
 
       assert affected_reductions < @max_reductions
+
+      Enum.each(1..@shape_count, fn i ->
+        remove_reductions = reductions(fn -> Filter.remove_shape(filter, i) end)
+        assert remove_reductions < @max_reductions
+      end)
     end
 
     test "where clause in the form `field = const AND another_condition` is optimised" do
@@ -518,6 +523,11 @@ defmodule Electric.Shapes.FilterTest do
         end)
 
       assert affected_reductions < @max_reductions
+
+      Enum.each(1..@shape_count, fn i ->
+        remove_reductions = reductions(fn -> Filter.remove_shape(filter, i) end)
+        assert remove_reductions < @max_reductions
+      end)
     end
 
     test "where clause in the form `a_condition AND field = const` is optimised" do
@@ -537,6 +547,11 @@ defmodule Electric.Shapes.FilterTest do
         end)
 
       assert affected_reductions < @max_reductions
+
+      Enum.each(1..@shape_count, fn i ->
+        remove_reductions = reductions(fn -> Filter.remove_shape(filter, i) end)
+        assert remove_reductions < @max_reductions
+      end)
     end
 
     test "where clause in the form `field1 = const1 AND field2 = const2` is optimised for lots of const1 values" do
@@ -554,6 +569,12 @@ defmodule Electric.Shapes.FilterTest do
       affected_reductions = reductions(fn -> Filter.affected_shapes(filter, change) end)
 
       assert affected_reductions < @max_reductions
+
+      # TODO: Fix this test - currently removal is O(n)
+      # Enum.each(1..@shape_count, fn i ->
+      #   remove_reductions = reductions(fn -> Filter.remove_shape(filter, i) end)
+      #   assert remove_reductions < @max_reductions
+      # end)
     end
 
     test "where clause in the form `field1 = const1 AND field2 = const2` is optimised for lots of const2 values" do
@@ -571,6 +592,11 @@ defmodule Electric.Shapes.FilterTest do
       affected_reductions = reductions(fn -> Filter.affected_shapes(filter, change) end)
 
       assert affected_reductions < @max_reductions
+
+      Enum.each(1..@shape_count, fn i ->
+        remove_reductions = reductions(fn -> Filter.remove_shape(filter, i) end)
+        assert remove_reductions < @max_reductions
+      end)
     end
 
     test "where clause in the form `array_field @> const_array` is optimised" do
@@ -587,21 +613,23 @@ defmodule Electric.Shapes.FilterTest do
 
       filter = Filter.new()
 
-      for(
-        x <- 1..100,
-        y <- 1..100,
-        z <- 1..100,
-        x < y,
-        y < z,
-        not (x in chosen_numbers && y in chosen_numbers && z in chosen_numbers),
-        do: {x, y, z}
-      )
-      |> Enum.take_random(shape_count - 1)
-      |> Enum.concat([matching_array])
-      |> Enum.shuffle()
-      |> Enum.each(fn {x, y, z} ->
+      arrays =
+        for(
+          x <- 1..100,
+          y <- 1..100,
+          z <- 1..100,
+          x < y,
+          y < z,
+          not (x in chosen_numbers && y in chosen_numbers && z in chosen_numbers),
+          do: {x, y, z}
+        )
+        |> Enum.take_random(shape_count - 1)
+        |> Enum.concat([matching_array])
+        |> Enum.shuffle()
+
+      Enum.each(arrays, fn {x, y, z} = array ->
         shape = Shape.new!("t1", where: "an_array @> '{#{x}, #{y}, #{z}}'", inspector: @inspector)
-        add_reductions = reductions(fn -> Filter.add_shape(filter, {x, y, z}, shape) end)
+        add_reductions = reductions(fn -> Filter.add_shape(filter, array, shape) end)
         assert add_reductions < max_reductions
       end)
 
@@ -611,6 +639,11 @@ defmodule Electric.Shapes.FilterTest do
       affected_reductions = reductions(fn -> Filter.affected_shapes(filter, change) end)
 
       assert affected_reductions < max_reductions
+
+      Enum.each(arrays, fn array ->
+        remove_reductions = reductions(fn -> Filter.remove_shape(filter, array) end)
+        assert remove_reductions < max_reductions
+      end)
     end
 
     defp reductions(fun) do
