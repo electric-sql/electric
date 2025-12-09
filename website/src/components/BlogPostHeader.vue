@@ -25,7 +25,7 @@ const postDate = computed(() => {
 }
 
 h1 {
-  margin-bottom: 16px;
+  margin-bottom: 12px;
 }
 
 .post-author {
