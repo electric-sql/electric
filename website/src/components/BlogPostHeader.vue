@@ -24,6 +24,10 @@ const postDate = computed(() => {
   }
 }
 
+h1 {
+  margin-bottom: 24px;
+}
+
 .post-author {
   display: flex;
   flex-wrap: wrap;
