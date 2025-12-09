@@ -31,6 +31,7 @@ jobs:
         working-directory: packages/sync-service
     strategy:
       fail-fast: false
+      max-parallel: 2
       matrix:
         postgres_version: [14, 15, 17, 18]
     env:

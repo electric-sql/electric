@@ -74,6 +74,7 @@ jobs:
     if: ${{ needs.changed-files.outputs.has_changes == 'true' }}
     strategy:
       fail-fast: false
+      max-parallel: 3
       matrix: ${{ fromJson(needs.changed-files.outputs.matrix) }}
 
     outputs:
