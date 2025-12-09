@@ -109,9 +109,6 @@ defmodule Electric.CoreSupervisor do
 
       {:error, :not_found} ->
         :ok
-
-      {:error, reason} ->
-        {:error, reason}
     end
   end
 end
