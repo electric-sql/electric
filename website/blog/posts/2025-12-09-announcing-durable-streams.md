@@ -7,7 +7,7 @@ excerpt: >
   We're open-sourcing Durable Streams, a persistent stream primitive and HTTP
   protocol for reliable, resumable, real-time data streaming into client
   applications. It's extracted from ~1.5 years of production use at Electric.
-authors: [thruflo]
+authors: [kyle, samwillis]
 image: /img/blog/announcing-durable-streams/hero.png
 tags: [durable-streams, sync, protocol]
 outline: [2, 3]
