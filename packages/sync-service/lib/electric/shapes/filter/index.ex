@@ -2,25 +2,31 @@ defmodule Electric.Shapes.Filter.Index do
   @moduledoc """
   Efficiently finds shapes that are affected by a change, specifically for a particular operation in where clause.
 
-  Each type of operation that has been optimised such as `=` or `@>` will have it's own index module that implements the `Protocol` for this module.
+  Each type of operation that has been optimised such as `=` or `@>` has its own index module
+  (EqualityIndex, InclusionIndex) that stores data in ETS tables.
+
+  This module dispatches to the appropriate index implementation based on the operation type.
   """
-  alias Electric.Shapes.Filter.Index.Protocol
-  alias Electric.Shapes.Filter.Indexes
+  alias Electric.Shapes.Filter
+  alias Electric.Shapes.Filter.Indexes.EqualityIndex
+  alias Electric.Shapes.Filter.Indexes.InclusionIndex
 
-  def new("=", type), do: Indexes.EqualityIndex.new(type)
-  def new("@>", type), do: Indexes.InclusionIndex.new(type)
+  defp module_for("="), do: EqualityIndex
+  defp module_for("@>"), do: InclusionIndex
 
-  defdelegate empty?(index), to: Protocol
-  defdelegate add_shape(index, value, shape_id, and_where), to: Protocol
-  defdelegate remove_shape(index, value, shape_id, and_where), to: Protocol
-  defdelegate affected_shapes(index, field, record, shapes), to: Protocol
-  defdelegate all_shape_ids(index), to: Protocol
-end
+  def add_shape(%Filter{} = filter, where_cond_id, shape_id, %{operation: op} = optimisation) do
+    module_for(op).add_shape(filter, where_cond_id, shape_id, optimisation)
+  end
 
-defprotocol Electric.Shapes.Filter.Index.Protocol do
-  def empty?(index)
-  def add_shape(index, value, shape_id, and_where)
-  def remove_shape(index, value, shape_id, and_where)
-  def affected_shapes(index, field, record, shapes)
-  def all_shape_ids(index)
+  def remove_shape(%Filter{} = filter, where_cond_id, shape_id, %{operation: op} = optimisation) do
+    module_for(op).remove_shape(filter, where_cond_id, shape_id, optimisation)
+  end
+
+  def affected_shapes(%Filter{} = filter, where_cond_id, field, operation, record) do
+    module_for(operation).affected_shapes(filter, where_cond_id, field, record)
+  end
+
+  def all_shape_ids(%Filter{} = filter, where_cond_id, field, operation) do
+    module_for(operation).all_shape_ids(filter, where_cond_id, field)
+  end
 end

@@ -252,40 +252,157 @@ defmodule Electric.Shapes.FilterTest do
       assert Filter.affected_shapes(filter, change) == expected_affected_shapes
     end
 
-    for test <- [
-          %{where: "id = 7", record: %{"id" => "7"}, affected: true},
-          %{where: "id = 7", record: %{"id" => "8"}, affected: false},
-          %{where: "id = 7", record: %{"id" => nil}, affected: false},
-          %{where: "7 = id", record: %{"id" => "7"}, affected: true},
-          %{where: "7 = id", record: %{"id" => "8"}, affected: false},
-          %{where: "7 = id", record: %{"id" => nil}, affected: false},
-          %{where: "id = 7 AND id > 1", record: %{"id" => "7"}, affected: true},
-          %{where: "id = 7 AND id > 1", record: %{"id" => "8"}, affected: false},
-          %{where: "id = 7 AND id > 8", record: %{"id" => "7"}, affected: false},
-          %{where: "id > 1 AND id = 7", record: %{"id" => "7"}, affected: true},
-          %{where: "id > 1 AND id = 7", record: %{"id" => "8"}, affected: false},
-          %{where: "id > 8 AND id = 7", record: %{"id" => "7"}, affected: false},
-          %{where: "an_array = '{1}'", record: %{"an_array" => "{1}"}, affected: true},
-          %{where: "an_array = '{1}'", record: %{"an_array" => "{2}"}, affected: false},
-          %{where: "an_array = '{1}'", record: %{"an_array" => "{1,2}"}, affected: false},
-          %{where: "an_array @> '{1}'", record: %{"an_array" => "{1,2}"}, affected: true},
-          %{where: "an_array @> '{1,3}'", record: %{"an_array" => "{1,2}"}, affected: false},
-          %{where: "an_array @> '{1,3}'", record: %{"an_array" => "{1,3}"}, affected: true},
-          %{where: "an_array @> '{}'", record: %{"an_array" => "{1,3}"}, affected: true},
-          %{where: "an_array @> '{}'", record: %{"an_array" => "{}"}, affected: true},
-          %{where: "an_array @> '{}'", record: %{"an_array" => nil}, affected: false},
-          %{where: "an_array @> NULL", record: %{"an_array" => nil}, affected: false}
-        ] do
-      test "where: #{test.where}, record: #{inspect(test.record)}" do
-        %{where: where, record: record, affected: affected} = unquote(Macro.escape(test))
+    @where_clause_tests [
+      %{
+        where: "id = 7",
+        records: [
+          {%{"id" => "7"}, true},
+          {%{"id" => "8"}, false},
+          {%{"id" => nil}, false}
+        ]
+      },
+      %{
+        where: "7 = id",
+        records: [
+          {%{"id" => "7"}, true},
+          {%{"id" => "8"}, false},
+          {%{"id" => nil}, false}
+        ]
+      },
+      %{
+        where: "id = 7 AND id > 1",
+        records: [
+          {%{"id" => "7"}, true},
+          {%{"id" => "8"}, false}
+        ]
+      },
+      %{
+        where: "id = 7 AND id > 8",
+        records: [
+          {%{"id" => "7"}, false}
+        ]
+      },
+      %{
+        where: "id > 1 AND id = 7",
+        records: [
+          {%{"id" => "7"}, true},
+          {%{"id" => "8"}, false}
+        ]
+      },
+      %{
+        where: "id > 8 AND id = 7",
+        records: [
+          {%{"id" => "7"}, false}
+        ]
+      },
+      %{
+        where: "an_array = '{1}'",
+        records: [
+          {%{"an_array" => "{1}"}, true},
+          {%{"an_array" => "{2}"}, false},
+          {%{"an_array" => "{1,2}"}, false}
+        ]
+      },
+      %{
+        where: "an_array @> '{1}'",
+        records: [
+          {%{"an_array" => "{1}"}, true},
+          {%{"an_array" => "{1,2}"}, true},
+          {%{"an_array" => "{3,2,1}"}, true},
+          {%{"an_array" => "{2}"}, false},
+          {%{"an_array" => "{2,3,4}"}, false},
+          {%{"an_array" => nil}, false}
+        ]
+      },
+      %{
+        where: "an_array @> '{1,3}'",
+        records: [
+          {%{"an_array" => "{1,3}"}, true},
+          {%{"an_array" => "{3,1}"}, true},
+          {%{"an_array" => "{1,2,3}"}, true},
+          {%{"an_array" => "{1,2}"}, false},
+          {%{"an_array" => "{2,3,4}"}, false},
+          {%{"an_array" => nil}, false}
+        ]
+      },
+      %{
+        where: "an_array @> '{}'",
+        records: [
+          {%{"an_array" => "{1,3}"}, true},
+          {%{"an_array" => "{}"}, true},
+          {%{"an_array" => nil}, false}
+        ]
+      },
+      %{
+        where: "an_array @> NULL",
+        records: [
+          {%{"an_array" => "{1}"}, false},
+          {%{"an_array" => "{1,2,3}"}, false},
+          {%{"an_array" => nil}, false}
+        ]
+      },
+      %{
+        where: "id = 7 AND number > 3 AND number < 10",
+        records: [
+          {%{"id" => "7", "number" => "5"}, true},
+          {%{"id" => "7", "number" => "9"}, true},
+          {%{"id" => "7", "number" => "3"}, false},
+          {%{"id" => "7", "number" => "10"}, false},
+          {%{"id" => "8", "number" => "5"}, false},
+          {%{"id" => nil, "number" => "5"}, false}
+        ]
+      },
+      %{
+        where: "id > 5 AND id < 10 AND number = 7",
+        records: [
+          {%{"id" => "7", "number" => "7"}, true},
+          {%{"id" => "9", "number" => "7"}, true},
+          {%{"id" => "5", "number" => "7"}, false},
+          {%{"id" => "10", "number" => "7"}, false},
+          {%{"id" => "7", "number" => "8"}, false}
+        ]
+      },
+      %{
+        where: "an_array @> '{1}' AND id = 7",
+        records: [
+          {%{"id" => "7", "an_array" => "{1}"}, true},
+          {%{"id" => "7", "an_array" => "{1,2}"}, true},
+          {%{"id" => "7", "an_array" => "{3,2,1}"}, true},
+          {%{"id" => "7", "an_array" => "{2}"}, false},
+          {%{"id" => "7", "an_array" => "{2,3,4}"}, false},
+          {%{"id" => "8", "an_array" => "{1}"}, false},
+          {%{"id" => "8", "an_array" => "{1,2,3}"}, false},
+          {%{"id" => "7", "an_array" => nil}, false},
+          {%{"id" => nil, "an_array" => "{1}"}, false}
+        ]
+      },
+      %{
+        where: "id = 7 AND an_array @> '{1}'",
+        records: [
+          {%{"id" => "7", "an_array" => "{1}"}, true},
+          {%{"id" => "7", "an_array" => "{1,2}"}, true},
+          {%{"id" => "7", "an_array" => "{3,2,1}"}, true},
+          {%{"id" => "7", "an_array" => "{2}"}, false},
+          {%{"id" => "8", "an_array" => "{1}"}, false},
+          {%{"id" => "7", "an_array" => nil}, false}
+        ]
+      }
+    ]
 
-        shape = Shape.new!("the_table", where: where, inspector: @inspector)
+    for %{where: where, records: records} <- @where_clause_tests do
+      for {record, affected} <- records do
+        test "where: #{where}, record: #{inspect(record)}" do
+          where = unquote(where)
+          record = unquote(Macro.escape(record))
+          affected = unquote(affected)
 
-        transaction = change("the_table", record)
+          shape = Shape.new!("the_table", where: where, inspector: @inspector)
+          transaction = change("the_table", record)
 
-        assert Filter.new()
-               |> Filter.add_shape("the-shape", shape)
-               |> Filter.affected_shapes(transaction) == MapSet.new(["the-shape"]) == affected
+          assert Filter.new()
+                 |> Filter.add_shape("the-shape", shape)
+                 |> Filter.affected_shapes(transaction) == MapSet.new(["the-shape"]) == affected
+        end
       end
     end
   end
@@ -306,17 +423,40 @@ defmodule Electric.Shapes.FilterTest do
       Shape.new!("table", where: "id = 1 AND an_array @> '{1,2}'", inspector: @inspector)
     ]
 
+    filter = Filter.new()
+
     shapes
     |> Enum.shuffle()
-    |> Enum.with_index()
-    |> Enum.reduce(Filter.new(), fn {shape, i}, filter ->
-      filter_with_shape_added = Filter.add_shape(filter, i, shape)
+    |> Enum.with_index(fn shape, i ->
+      # Capture ETS state before adding
+      state_before = snapshot_filter_ets(filter)
 
-      # Check that whenever you remove a shape the filter is the same as if the shape was never added
-      assert Filter.remove_shape(filter_with_shape_added, i) == filter
+      Filter.add_shape(filter, i, shape)
 
-      filter_with_shape_added
+      # Ensure that the ETS state has changed after adding
+      # (checks we've included all the ets tables in the snapshot)
+      assert snapshot_filter_ets(filter) != state_before
+
+      # Remove the shape
+      Filter.remove_shape(filter, i)
+
+      # Check that the ETS state after removing is the same as before adding
+      assert snapshot_filter_ets(filter) == state_before
+
+      # Add the shape back for the next iteration
+      Filter.add_shape(filter, i, shape)
     end)
+  end
+
+  # Captures the full state of all ETS tables in a filter for comparison
+  defp snapshot_filter_ets(filter) do
+    %{
+      shapes: :ets.tab2list(filter.shapes_table) |> Enum.sort(),
+      tables: :ets.tab2list(filter.tables_table) |> Enum.sort(),
+      where_cond: :ets.tab2list(filter.where_cond_table) |> Enum.sort(),
+      eq_index: :ets.tab2list(filter.eq_index_table) |> Enum.sort(),
+      incl_index: :ets.tab2list(filter.incl_index_table) |> Enum.sort()
+    }
   end
 
   describe "optimisations" do
@@ -343,100 +483,119 @@ defmodule Electric.Shapes.FilterTest do
     @max_reductions 1300
 
     test "where clause in the form `field = const` is optimised" do
-      filter =
-        1..@shape_count
-        |> Enum.reduce(Filter.new(), fn i, filter ->
-          Filter.add_shape(filter, i, Shape.new!("t1", where: "id = #{i}", inspector: @inspector))
-        end)
+      filter = Filter.new()
+
+      Enum.each(1..@shape_count, fn i ->
+        shape = Shape.new!("t1", where: "id = #{i}", inspector: @inspector)
+        add_reductions = reductions(fn -> Filter.add_shape(filter, i, shape) end)
+        assert add_reductions < @max_reductions
+      end)
 
       assert Filter.affected_shapes(filter, change("t1", %{"id" => "7"})) == MapSet.new([7])
 
-      reductions =
+      affected_reductions =
         reductions(fn ->
           Filter.affected_shapes(filter, change("t1", %{"id" => "7"}))
         end)
 
-      assert reductions < @max_reductions
+      assert affected_reductions < @max_reductions
+
+      Enum.each(1..@shape_count, fn i ->
+        remove_reductions = reductions(fn -> Filter.remove_shape(filter, i) end)
+        assert remove_reductions < @max_reductions
+      end)
     end
 
     test "where clause in the form `field = const AND another_condition` is optimised" do
-      filter =
-        1..@shape_count
-        |> Enum.reduce(Filter.new(), fn i, filter ->
-          Filter.add_shape(
-            filter,
-            i,
-            Shape.new!("t1", where: "id = #{i} AND id > 6", inspector: @inspector)
-          )
-        end)
+      filter = Filter.new()
+
+      Enum.each(1..@shape_count, fn i ->
+        shape = Shape.new!("t1", where: "id = #{i} AND id > 6", inspector: @inspector)
+        add_reductions = reductions(fn -> Filter.add_shape(filter, i, shape) end)
+        assert add_reductions < @max_reductions
+      end)
 
       assert Filter.affected_shapes(filter, change("t1", %{"id" => "7"})) == MapSet.new([7])
 
-      reductions =
+      affected_reductions =
         reductions(fn ->
           Filter.affected_shapes(filter, change("t1", %{"id" => "7"}))
         end)
 
-      assert reductions < @max_reductions
+      assert affected_reductions < @max_reductions
+
+      Enum.each(1..@shape_count, fn i ->
+        remove_reductions = reductions(fn -> Filter.remove_shape(filter, i) end)
+        assert remove_reductions < @max_reductions
+      end)
     end
 
     test "where clause in the form `a_condition AND field = const` is optimised" do
-      filter =
-        1..@shape_count
-        |> Enum.reduce(Filter.new(), fn i, filter ->
-          Filter.add_shape(
-            filter,
-            i,
-            Shape.new!("t1", where: "id > 6 AND id = #{i}", inspector: @inspector)
-          )
-        end)
+      filter = Filter.new()
+
+      Enum.each(1..@shape_count, fn i ->
+        shape = Shape.new!("t1", where: "id > 6 AND id = #{i}", inspector: @inspector)
+        add_reductions = reductions(fn -> Filter.add_shape(filter, i, shape) end)
+        assert add_reductions < @max_reductions
+      end)
 
       assert Filter.affected_shapes(filter, change("t1", %{"id" => "7"})) == MapSet.new([7])
 
-      reductions =
+      affected_reductions =
         reductions(fn ->
           Filter.affected_shapes(filter, change("t1", %{"id" => "7"}))
         end)
 
-      assert reductions < @max_reductions
+      assert affected_reductions < @max_reductions
+
+      Enum.each(1..@shape_count, fn i ->
+        remove_reductions = reductions(fn -> Filter.remove_shape(filter, i) end)
+        assert remove_reductions < @max_reductions
+      end)
     end
 
     test "where clause in the form `field1 = const1 AND field2 = const2` is optimised for lots of const1 values" do
-      filter =
-        1..@shape_count
-        |> Enum.reduce(Filter.new(), fn i, filter ->
-          Filter.add_shape(
-            filter,
-            i,
-            Shape.new!("t1", where: "id = #{i} AND number = 11", inspector: @inspector)
-          )
-        end)
+      filter = Filter.new()
+
+      Enum.each(1..@shape_count, fn i ->
+        shape = Shape.new!("t1", where: "id = #{i} AND number = 11", inspector: @inspector)
+        add_reductions = reductions(fn -> Filter.add_shape(filter, i, shape) end)
+        assert add_reductions < @max_reductions
+      end)
 
       change = change("t1", %{"id" => "5", "number" => "11"})
       assert Filter.affected_shapes(filter, change) == MapSet.new([5])
 
-      reductions = reductions(fn -> Filter.affected_shapes(filter, change) end)
+      affected_reductions = reductions(fn -> Filter.affected_shapes(filter, change) end)
 
-      assert reductions < @max_reductions
+      assert affected_reductions < @max_reductions
+
+      Enum.each(1..@shape_count, fn i ->
+        remove_reductions = reductions(fn -> Filter.remove_shape(filter, i) end)
+        assert remove_reductions < @max_reductions
+      end)
     end
 
     test "where clause in the form `field1 = const1 AND field2 = const2` is optimised for lots of const2 values" do
-      filter =
-        1..@shape_count
-        |> Enum.reduce(Filter.new(), fn i, filter ->
-          Filter.add_shape(
-            filter,
-            i,
-            Shape.new!("t1", where: "id = 7 AND number = #{i}", inspector: @inspector)
-          )
-        end)
+      filter = Filter.new()
+
+      Enum.each(1..@shape_count, fn i ->
+        shape = Shape.new!("t1", where: "id = 7 AND number = #{i}", inspector: @inspector)
+        add_reductions = reductions(fn -> Filter.add_shape(filter, i, shape) end)
+        assert add_reductions < @max_reductions
+      end)
 
       change = change("t1", %{"id" => "7", "number" => "9"})
       assert Filter.affected_shapes(filter, change) == MapSet.new([9])
 
-      reductions = reductions(fn -> Filter.affected_shapes(filter, change) end)
+      affected_reductions = reductions(fn -> Filter.affected_shapes(filter, change) end)
 
-      assert reductions < @max_reductions
+      assert affected_reductions < @max_reductions
+
+      Enum.each(1..@shape_count, fn i ->
+        remove_reductions = reductions(fn -> Filter.remove_shape(filter, i) end)
+        assert remove_reductions < @max_reductions
+      end)
     end
 
     test "where clause in the form `array_field @> const_array` is optimised" do
@@ -451,7 +610,9 @@ defmodule Electric.Shapes.FilterTest do
       chosen_numbers = [2, 3, 5, 7, 11, 13, 17, 19, 23, 29]
       matching_array = {5, 11, 29}
 
-      filter =
+      filter = Filter.new()
+
+      arrays =
         for(
           x <- 1..100,
           y <- 1..100,
@@ -464,20 +625,24 @@ defmodule Electric.Shapes.FilterTest do
         |> Enum.take_random(shape_count - 1)
         |> Enum.concat([matching_array])
         |> Enum.shuffle()
-        |> Enum.reduce(Filter.new(), fn {x, y, z}, filter ->
-          Filter.add_shape(
-            filter,
-            {x, y, z},
-            Shape.new!("t1", where: "an_array @> '{#{x}, #{y}, #{z}}'", inspector: @inspector)
-          )
-        end)
+
+      Enum.each(arrays, fn {x, y, z} = array ->
+        shape = Shape.new!("t1", where: "an_array @> '{#{x}, #{y}, #{z}}'", inspector: @inspector)
+        add_reductions = reductions(fn -> Filter.add_shape(filter, array, shape) end)
+        assert add_reductions < max_reductions
+      end)
 
       change = change("t1", %{"an_array" => "{#{chosen_numbers |> Enum.join(", ")}}"})
       assert Filter.affected_shapes(filter, change) == MapSet.new([matching_array])
 
-      reductions = reductions(fn -> Filter.affected_shapes(filter, change) end)
+      affected_reductions = reductions(fn -> Filter.affected_shapes(filter, change) end)
 
-      assert reductions < max_reductions
+      assert affected_reductions < max_reductions
+
+      Enum.each(arrays, fn array ->
+        remove_reductions = reductions(fn -> Filter.remove_shape(filter, array) end)
+        assert remove_reductions < max_reductions
+      end)
     end
 
     defp reductions(fun) do
