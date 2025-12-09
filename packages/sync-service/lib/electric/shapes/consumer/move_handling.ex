@@ -1,5 +1,6 @@
 defmodule Electric.Shapes.Consumer.MoveHandling do
   @moduledoc false
+  alias Electric.Replication.LogOffset
   alias Electric.ShapeCache.Storage
   alias Electric.Shapes.Consumer.State
   alias Electric.Shapes.PartialModes
@@ -58,7 +59,6 @@ defmodule Electric.Shapes.Consumer.MoveHandling do
       MoveIns.add_waiting(
         state.move_handling_state,
         name,
-        nil,
         {["$sublink", Integer.to_string(index)], MapSet.new(Enum.map(new_values, &elem(&1, 0)))}
       )
 
@@ -97,7 +97,7 @@ defmodule Electric.Shapes.Consumer.MoveHandling do
 
   def query_complete(%State{} = state, name, key_set, snapshot) do
     # 1. Splice stored snapshot into main log with filtering
-    {{_, upper_bound} = bounds, writer} =
+    {{lower_bound, upper_bound}, writer} =
       Storage.append_move_in_snapshot_to_log_filtered!(
         name,
         state.writer,
@@ -107,11 +107,33 @@ defmodule Electric.Shapes.Consumer.MoveHandling do
       )
 
     # 2. Move from "waiting" to "filtering"
-    move_handling_state =
+    {visibility_snapshot, move_handling_state} =
       MoveIns.change_to_filtering(state.move_handling_state, name, MapSet.new(key_set))
+
+    {{_, upper_bound}, writer} =
+      if is_nil(visibility_snapshot) do
+        {{nil, upper_bound}, writer}
+      else
+        append_snapshot_end_control(snapshot, writer)
+      end
 
     state = %{state | move_handling_state: move_handling_state, writer: writer}
 
-    {state, {bounds, upper_bound}}
+    {state, {{lower_bound, upper_bound}, upper_bound}}
+  end
+
+  @spec append_snapshot_end_control(MoveIns.pg_snapshot(), Storage.writer_state()) ::
+          {{LogOffset.t(), LogOffset.t()}, Storage.writer_state()}
+  defp append_snapshot_end_control({xmin, xmax, xip_list}, writer) do
+    control_message = %{
+      headers: %{
+        control: "snapshot-end",
+        xmin: Integer.to_string(xmin),
+        xmax: Integer.to_string(xmax),
+        xip_list: Enum.map(xip_list, &Integer.to_string/1)
+      }
+    }
+
+    Storage.append_control_message!(control_message, writer)
   end
 end

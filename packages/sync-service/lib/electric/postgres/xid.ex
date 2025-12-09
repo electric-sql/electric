@@ -266,10 +266,53 @@ defmodule Electric.Postgres.Xid do
   def compare(xid8_l, xid8_r) when is_lt(xid8_l, xid8_r), do: :lt
   def compare(_, _), do: :gt
 
+  @type pg_snapshot() :: {anyxid, anyxid, [anyxid]}
+
   @doc """
   Check if a transaction is after the end of a snapshot - if it's xid is over xmax
   """
-  @spec after_snapshot?(anyxid, {anyxid, anyxid, [anyxid]}) :: boolean()
+  @spec after_snapshot?(anyxid, pg_snapshot()) :: boolean()
   def after_snapshot?(xid, {_, xmax, _}) when not is_lt(xid, xmax), do: true
   def after_snapshot?(_, _), do: false
+
+  @doc """
+  Compare two snapshots.
+  Returns :lt if snapshot1 < snapshot2, :eq if equal, :gt if snapshot1 > snapshot2.
+
+  Comparison rules:
+  - snapshot1 < snapshot2 if xmax1 < xmax2 OR (xmax1 == xmax2 AND xmin1 < xmin2)
+  - snapshots are equal if both xmin and xmax are equal
+
+  ## Examples
+
+      iex> compare_snapshots({100, 200, []}, {150, 300, []})
+      :lt
+
+      iex> compare_snapshots({100, 300, []}, {150, 200, []})
+      :gt
+
+      iex> compare_snapshots({100, 300, []}, {150, 300, []})
+      :lt
+
+      iex> compare_snapshots({150, 300, []}, {100, 300, []})
+      :gt
+
+      iex> compare_snapshots({100, 300, [150]}, {100, 300, [200]})
+      :eq
+
+      iex> compare_snapshots({100, 300, []}, {100, 300, [150, 200, 250]})
+      :eq
+  """
+  @spec compare_snapshots(pg_snapshot(), pg_snapshot()) :: :lt | :eq | :gt
+  def compare_snapshots({_, xmax1, _}, {_, xmax2, _}) when is_lt(xmax1, xmax2), do: :lt
+
+  def compare_snapshots({_, xmax1, _}, {_, xmax2, _})
+      when not is_eq(xmax1, xmax2) and not is_lt(xmax1, xmax2), do: :gt
+
+  def compare_snapshots({xmin1, _, _}, {xmin2, _, _}) when is_lt(xmin1, xmin2), do: :lt
+
+  def compare_snapshots({xmin1, _, _}, {xmin2, _, _})
+      when not is_eq(xmin1, xmin2) and not is_lt(xmin1, xmin2), do: :gt
+
+  def compare_snapshots(_, _), do: :eq
 end

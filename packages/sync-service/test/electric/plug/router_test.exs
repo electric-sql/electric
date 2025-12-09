@@ -20,6 +20,12 @@ defmodule Electric.Plug.RouterTest do
   @first_offset to_string(LogOffset.first())
   @up_to_date %{"headers" => %{"control" => "up-to-date"}}
 
+  defmacrop up_to_date_ctl() do
+    quote do
+      %{"headers" => %{"control" => "up-to-date"}}
+    end
+  end
+
   describe "/" do
     test "returns 200" do
       assert %{status: 200, resp_body: ""} = Router.call(conn("GET", "/"), [])
@@ -2310,7 +2316,9 @@ defmodule Electric.Plug.RouterTest do
         :crypto.hash(:md5, stack_id <> req.handle <> "2")
         |> Base.encode16(case: :lower)
 
-      assert {_, 200, [data, %{"headers" => %{"control" => "up-to-date"}}]} = Task.await(task)
+      assert {_, 200, [data, %{"headers" => %{"control" => "snapshot-end"}}, up_to_date_ctl()]} =
+               Task.await(task)
+
       assert %{"id" => "2", "parent_id" => "2", "value" => "20"} = data["value"]
 
       assert %{"operation" => "insert", "is_move_in" => true, "tags" => [^tag2]} =
@@ -2365,7 +2373,12 @@ defmodule Electric.Plug.RouterTest do
       Postgrex.query!(db_conn, "INSERT INTO child (id, value, other_value) VALUES (2, 20, 4)", [])
       Postgrex.query!(db_conn, "UPDATE parent SET other_value = 10 WHERE id = 2")
 
-      assert {_, 200, [%{"value" => %{"id" => "2", "other_value" => "4"}}, _]} = Task.await(task)
+      assert {_, 200,
+              [
+                %{"value" => %{"id" => "2", "other_value" => "4"}},
+                %{"headers" => %{"control" => "snapshot-end"}},
+                up_to_date_ctl()
+              ]} = Task.await(task)
     end
 
     @tag with_sql: [
@@ -2413,7 +2426,8 @@ defmodule Electric.Plug.RouterTest do
                   "value" => %{"id" => "2", "value" => "20"},
                   "headers" => %{"operation" => "insert", "is_move_in" => true, "tags" => [tag]}
                 },
-                _
+                %{"headers" => %{"control" => "snapshot-end"}},
+                up_to_date_ctl()
               ]} =
                Task.await(task)
 
@@ -2476,9 +2490,10 @@ defmodule Electric.Plug.RouterTest do
               [
                 %{
                   "value" => %{"id" => "2", "name" => "Team B"},
-                  "headers" => %{"tags" => [^tag]}
+                  "headers" => %{"tags" => [^tag], "is_move_in" => true}
                 },
-                _
+                %{"headers" => %{"control" => "snapshot-end"}},
+                up_to_date_ctl()
               ]} =
                Task.await(task)
 
@@ -2554,7 +2569,8 @@ defmodule Electric.Plug.RouterTest do
                   "headers" => %{"tags" => [^tag]},
                   "value" => %{"id" => "2", "role" => "Member"}
                 },
-                _
+                %{"headers" => %{"control" => "snapshot-end"}},
+                up_to_date_ctl()
               ]} =
                Task.await(task)
 
@@ -2618,7 +2634,12 @@ defmodule Electric.Plug.RouterTest do
         :crypto.hash(:md5, ctx.stack_id <> req.handle <> "20")
         |> Base.encode16(case: :lower)
 
-      assert {_, 200, [%{"headers" => %{"tags" => [^tag]}, "value" => %{"id" => "3"}}, _]} =
+      assert {_, 200,
+              [
+                %{"headers" => %{"tags" => [^tag]}, "value" => %{"id" => "3"}},
+                %{"headers" => %{"control" => "snapshot-end"}},
+                up_to_date_ctl()
+              ]} =
                Task.await(task)
     end
 
@@ -2682,24 +2703,22 @@ defmodule Electric.Plug.RouterTest do
           do: Postgrex.query!(ctx.db_conn, stmt)
 
       Process.sleep(100)
-      assert {req, 200, data1} = shape_req(req, ctx.opts)
 
-      assert length(data1) == 4
-
-      assert %{"headers" => %{"event" => "move-out"}} = Enum.at(data1, 0)
-
-      # We're not seeing updates, but seeing the move-ins with final, after-update values, because of the lag between PG and Electric.
-      assert %{
-               "value" => %{"parent_id" => "2", "value" => "12"},
-               "headers" => %{"is_move_in" => true, "tags" => [tag2]}
-             } = Enum.at(data1, 1)
-
-      assert %{
-               "value" => %{"id" => "1", "parent_id" => "1", "value" => "13"},
-               "headers" => %{"operation" => "insert", "is_move_in" => true, "tags" => [^tag]}
-             } = Enum.at(data1, 2)
-
-      assert %{"headers" => %{"control" => "up-to-date"}} = Enum.at(data1, 3)
+      assert {req, 200,
+              [
+                %{"headers" => %{"event" => "move-out"}},
+                %{
+                  "headers" => %{"operation" => "insert", "is_move_in" => true, "tags" => [tag2]},
+                  "value" => %{"parent_id" => "2", "value" => "12"}
+                },
+                %{"headers" => %{"control" => "snapshot-end"}},
+                %{
+                  "headers" => %{"operation" => "insert", "is_move_in" => true, "tags" => [^tag]},
+                  "value" => %{"id" => "1", "parent_id" => "1", "value" => "13"}
+                },
+                %{"headers" => %{"control" => "snapshot-end"}},
+                up_to_date_ctl()
+              ]} = shape_req(req, ctx.opts)
 
       task = live_shape_req(req, ctx.opts)
 
@@ -2761,11 +2780,13 @@ defmodule Electric.Plug.RouterTest do
               [
                 %{"headers" => %{"event" => "move-out", "patterns" => p1}},
                 %{"headers" => %{"event" => "move-out", "patterns" => p1}},
+                %{"headers" => %{"control" => "snapshot-end"}},
                 %{
                   "headers" => %{"operation" => "insert", "is_move_in" => true},
                   "value" => %{"id" => "3", "parent_id" => "3", "value" => "30"}
                 },
-                %{"headers" => %{"control" => "up-to-date"}}
+                %{"headers" => %{"control" => "snapshot-end"}},
+                up_to_date_ctl()
               ]} = shape_req(req, ctx.opts)
     end
 
@@ -2790,7 +2811,8 @@ defmodule Electric.Plug.RouterTest do
                   "value" => %{"id" => "1", "parent_id" => "1", "value" => "10"},
                   "headers" => %{"operation" => "insert", "tags" => [tag]}
                 },
-                _
+                %{"headers" => %{"control" => "snapshot-end"}},
+                up_to_date_ctl()
               ]} =
                Task.await(task)
 
@@ -2806,7 +2828,7 @@ defmodule Electric.Plug.RouterTest do
                     "patterns" => [%{"pos" => 0, "value" => ^tag}]
                   }
                 },
-                _
+                up_to_date_ctl()
               ]} =
                Task.await(task)
     end
