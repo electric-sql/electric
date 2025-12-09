@@ -31,7 +31,7 @@ The core idea: streams are a first-class primitive that get their own URL. Each 
 - The server doesn’t need per-client session state; the stream is durable, and **progress is tracked client-side**.
 - Streams are addressed by offset-based URLs, so historical reads can be cached by CDNs. That makes it feasible to serve large numbers of clients from a single source stream without turning your origin into a bottleneck.
 
-That's the model: consistent, interoperable, and scalable durable client streaming.
+That's the model: consistent, interoperable, scalable, and durable client streaming.
 
 ## Why Now (and why we built it)
 
