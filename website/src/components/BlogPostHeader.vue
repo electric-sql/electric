@@ -65,7 +65,7 @@ const postDate = computed(() => {
     <h1>
       {{ frontmatter.title }}
     </h1>
-    <p class="post-author">
+    <div class="post-author">
       <div class="author-avatars">
         <a
           v-for="(slug, index) in frontmatter.authors"
@@ -97,7 +97,7 @@ const postDate = computed(() => {
           </span>
         </ClientOnly>
       </div>
-    </p>
+    </div>
     <hr />
   </div>
 </template>
