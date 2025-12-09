@@ -25,7 +25,7 @@ Durable Streams is an open protocol that extends standard HTTP to support ordere
 
 The core idea is simple:
 
-- Every position in a stream has an **opaque, lexicographically sortable offset**.
+- Every position in a stream has an **opaque, sortable offset**.
 - Clients persist the last offset they’ve processed.
 - On reconnect, clients resume by asking for “everything after offset X”.
 - The server doesn’t need per-client session state; the stream is durable, and **progress is tracked client-side**.
@@ -37,7 +37,7 @@ That's the model: consistent, interoperable, and scalable durable client streami
 
 Durable Streams comes directly out of building Electric, our Postgres-native sync engine.
 
-A sync engine can’t cheat its way around delivery. We needed a transport layer that guarantees *ordered, replayable, resumable* delivery. Over the last 1.5 years, we've refined and refined our implementation until now we reliably deliver millions of state changes every day on Electric Cloud.
+A sync engine can't cheat its way around delivery. We needed a transport layer that guarantees *ordered, replayable, resumable* delivery. Over the last 1.5 years, we've continuously refined our implementation until now we reliably deliver millions of state changes every day on Electric Cloud.
 
 At the same time, conversations with users, customers, and peers in the broader AI ecosystem were converging on the same pain point: **AI token streaming needs reliable delivery and persistence**.
 
@@ -61,15 +61,13 @@ Durable Streams uses standard HTTP methods:
 - **Read + resume**: read from an offset using `GET` for catch-up; or tail the stream using long-polling or an SSE mode. If a connection drops, reconnect using the last saved offset.
 - **Message boundaries**: choose between raw byte concatenation (with your own framing, e.g. NDJSON) or a JSON mode where servers return batches as arrays with preserved boundaries.
 
-Streams are addressed by offset-based URLs, so historical reads can be cached by CDNs. That makes it feasible to serve large numbers of clients from a single source stream without turning your origin into a bottleneck.
-
 ## Use Cases
 
 Durable Streams is a delivery primitive. A few places it fits well:
 
 - **AI / LLM streaming**: resume token streams across refreshes and device switches instead of restarting generations.
 - **Agentic apps**: stream tool outputs and progress events with replay and clean reconnect semantics.
-- **Database synchronization**: stream row changes with guaranteed ordering and resumability (how Electric ships updates to clients; also useful as a substrate for systems like TanStack DB).
+- **Database synchronization**: stream row changes with guaranteed ordering and resumability (how Electric ships updates to clients).
 - **Event sourcing**: immutable logs clients can replay from any point in time.
 - **Real-time collaboration**: deliver CRDT / OT updates with replayable history and clean reconnects.
 
@@ -84,5 +82,21 @@ The [durable-streams repository](https://github.com/durable-streams/durable-stre
 - A CLI tool for testing and development
 - A conformance test suite for cross-implementation compatibility
 
-If you want to dig in, start with the repo and the protocol docs. And if you’re thinking about where this fits in your stack, join us in [Discord](https://discord.electric-sql.com).
+## Common Questions
+
+### Why not just use SSE or WebSockets?
+
+Both SSE and WebSockets are ephemeral—when a connection drops, in-flight data is lost. There's no standard way to resume from a specific position after reconnection, no defined protocol for retrieving historical data before switching to live mode, and neither integrates well with HTTP caching infrastructure.
+
+Durable Streams provides standardized resumption through opaque, sortable offsets, a unified catch-up and live protocol, and offset-based requests that enable efficient CDN and browser caching.
+
+### How does this relate to Kafka, RabbitMQ, and other message queues?
+
+Durable Streams complements rather than replaces these systems. Kafka and RabbitMQ excel at server-to-server messaging in backend infrastructure. Durable Streams solves the distinct challenge of reliably streaming data to client applications—handling client diversity, network unreliability, and the economics of per-connection delivery.
+
+The recommended pattern: backend systems (Kafka, databases, queues) → application server → Durable Streams → clients.
+
+## Get Started
+
+Check out the [durable-streams repository](https://github.com/durable-streams/durable-streams) to get started, and join us in [Discord](https://discord.electric-sql.com) if you're thinking about where this fits in your stack.
 
