@@ -31,6 +31,7 @@ defmodule Electric.Shapes.Filter.Indexes.EqualityIndex do
           WhereCondition.init(filter, new_id)
           :ets.insert(table, {key, {type, new_id}})
           :ets.insert(table, {{:type, condition_id, field}, type})
+          increment_value_count(table, condition_id, field)
 
           new_id
 
@@ -54,7 +55,7 @@ defmodule Electric.Shapes.Filter.Indexes.EqualityIndex do
           :deleted ->
             :ets.delete(table, key)
 
-            if no_values?(table, condition_id, field) do
+            if decrement_value_count(table, condition_id, field) == 0 do
               :ets.delete(table, {:type, condition_id, field})
               :deleted
             else
@@ -99,8 +100,27 @@ defmodule Electric.Shapes.Filter.Indexes.EqualityIndex do
     Env.parse_const(@env, record[field], type)
   end
 
-  defp no_values?(table, condition_id, field) do
-    :ets.match(table, {{condition_id, field, :_}, :_}, 1) == :"$end_of_table"
+  defp increment_value_count(table, condition_id, field) do
+    count_key = {:count, condition_id, field}
+
+    case :ets.lookup(table, count_key) do
+      [] -> :ets.insert(table, {count_key, 1})
+      [{_, count}] -> :ets.insert(table, {count_key, count + 1})
+    end
+  end
+
+  defp decrement_value_count(table, condition_id, field) do
+    count_key = {:count, condition_id, field}
+    [{_, count}] = :ets.lookup(table, count_key)
+    new_count = count - 1
+
+    if new_count == 0 do
+      :ets.delete(table, count_key)
+    else
+      :ets.insert(table, {count_key, new_count})
+    end
+
+    new_count
   end
 
   def all_shape_ids(%Filter{eq_index_table: table} = filter, condition_id, field) do

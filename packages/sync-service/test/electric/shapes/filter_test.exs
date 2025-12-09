@@ -570,11 +570,10 @@ defmodule Electric.Shapes.FilterTest do
 
       assert affected_reductions < @max_reductions
 
-      # TODO: Fix this test - currently removal is O(n)
-      # Enum.each(1..@shape_count, fn i ->
-      #   remove_reductions = reductions(fn -> Filter.remove_shape(filter, i) end)
-      #   assert remove_reductions < @max_reductions
-      # end)
+      Enum.each(1..@shape_count, fn i ->
+        remove_reductions = reductions(fn -> Filter.remove_shape(filter, i) end)
+        assert remove_reductions < @max_reductions
+      end)
     end
 
     test "where clause in the form `field1 = const1 AND field2 = const2` is optimised for lots of const2 values" do
