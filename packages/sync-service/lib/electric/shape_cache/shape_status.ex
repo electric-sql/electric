@@ -45,9 +45,9 @@ defmodule Electric.ShapeCache.ShapeStatus do
   @shape_meta_snapshot_started_pos 3
   @shape_meta_latest_offset_pos 4
 
-  @spec initialize_from_storage(stack_ref(), Storage.storage()) ::
-          :ok | {:error, term()}
-  def initialize_from_storage(stack_ref, storage) do
+  @spec initialize_from_storage(stack_ref()) :: :ok | {:error, term()}
+  def initialize_from_storage(stack_ref) do
+    storage = storage_from_stack_ref(stack_ref)
     stack_id = extract_stack_id(stack_ref)
 
     with backup_dir when is_binary(backup_dir) <- backup_dir(storage),
@@ -70,7 +70,8 @@ defmodule Electric.ShapeCache.ShapeStatus do
 
   @spec save_checkpoint(stack_ref()) :: :ok | {:error, term()}
   def save_checkpoint(stack_ref) do
-    storage = stack_ref |> extract_stack_id() |> Storage.for_stack()
+    Logger.info("Saving shape status checkpoint for #{inspect(stack_ref)}")
+    storage = storage_from_stack_ref(stack_ref)
 
     case backup_dir(storage) do
       nil -> {:error, :no_backup_dir_configured}
@@ -651,6 +652,12 @@ defmodule Electric.ShapeCache.ShapeStatus do
       nil -> nil
       dir -> Path.join(dir, @backup_dir)
     end
+  end
+
+  defp storage_from_stack_ref(stack_ref) do
+    stack_ref
+    |> extract_stack_id()
+    |> Storage.for_stack()
   end
 
   # When writing the snapshot initially, we don't know ahead of time the real last offset for the

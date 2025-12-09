@@ -14,10 +14,7 @@ defmodule Electric.ShapeCache.ShapeStatusOwner do
 
   require Logger
 
-  @schema NimbleOptions.new!(
-            stack_id: [type: :string, required: true],
-            storage: [type: :mod_arg, required: true]
-          )
+  @schema NimbleOptions.new!(stack_id: [type: :string, required: true])
 
   def name(stack_id) do
     Electric.ProcessRegistry.name(stack_id, __MODULE__)
@@ -32,17 +29,15 @@ defmodule Electric.ShapeCache.ShapeStatusOwner do
 
   @impl true
   def init(config) do
-    Process.flag(:trap_exit, true)
-
     stack_id = config.stack_id
 
     Process.set_label({:shape_status_owner, stack_id})
     Logger.metadata(stack_id: stack_id)
     Electric.Telemetry.Sentry.set_tags_context(stack_id: stack_id)
 
-    :ok = ShapeStatus.initialize_from_storage(stack_id, config.storage)
+    :ok = ShapeStatus.initialize_from_storage(stack_id)
     :ok = Electric.LsnTracker.initialize(stack_id)
 
-    {:ok, %{stack_id: stack_id, storage: config.storage}, :hibernate}
+    {:ok, nil, :hibernate}
   end
 end

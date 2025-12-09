@@ -237,16 +237,17 @@ defmodule Support.ComponentSetup do
   end
 
   def with_shape_status(ctx) do
+    if Electric.StackConfig.lookup(ctx.stack_id, Electric.ShapeCache.Storage) do
+      Electric.StackConfig.put(
+        ctx.stack_id,
+        Electric.ShapeCache.Storage,
+        Map.get(ctx, :storage, {Mock.Storage, []})
+      )
+    end
+
     start_supervised!(%{
       id: "shape_status_owner",
-      start:
-        {Electric.ShapeCache.ShapeStatusOwner, :start_link,
-         [
-           [
-             stack_id: ctx.stack_id,
-             storage: Map.get(ctx, :storage, {Mock.Storage, []})
-           ]
-         ]},
+      start: {Electric.ShapeCache.ShapeStatusOwner, :start_link, [[stack_id: ctx.stack_id]]},
       restart: :temporary
     })
 
