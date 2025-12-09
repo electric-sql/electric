@@ -1,7 +1,7 @@
 ---
 title: 'Announcing Durable Streams'
 description: 'An HTTP protocol for reliable, resumable streaming to clients (including AI token streams)'
-excerpt: 'We’re open-sourcing Durable Streams, an HTTP-based protocol for ordered, replayable streaming to client applications. It’s extracted from ~1.5 years of production use at Electric.'
+excerpt: 'We're open-sourcing Durable Streams, an HTTP-based protocol for ordered, replayable streaming to client applications. It's extracted from ~1.5 years of production use at Electric.'
 authors: [thruflo]
 image: /img/blog/announcing-durable-streams/hero.png
 tags: [durable-streams, sync, protocol]
@@ -11,27 +11,13 @@ post: true
 
 The internet has strong primitives for server-to-server messaging: Kafka, RabbitMQ, NATS. They give you ordering, delivery semantics, and fault tolerance between backend services.
 
-Client streaming is different. WebSocket and SSE connections are easy to start, but they’re fragile in practice: tabs get suspended, networks flap, devices switch, pages refresh. When that happens, you either lose in-flight data or you build a bespoke backend storage & client resume protocol on top.
+Client streaming is different. WebSocket and SSE connections are easy to start, but they're fragile in practice: tabs get suspended, networks flap, devices switch, pages refresh. When that happens, you either lose in-flight data or you build a bespoke backend storage & client resume protocol on top.
 
 AI products make this painfully visible. Token streaming is the UI for chat and copilots, and agentic apps often stream progress events, tool outputs, and partial results over long-running sessions. When the stream fails, the product fails—even if the model did the right thing. A transient disconnect can leave users with truncated output, force a restart, or create duplicate/ambiguous state when the client tries to recover.
 
 Durable Streams makes "durable, resumable client streaming" a standard, universally available building block that just works.
 
 Today, we're open-sourcing [Durable Streams](https://github.com/durable-streams/durable-streams): an HTTP-based protocol for reliable, resumable data streaming to client applications. We originally built Durable Streams as the delivery layer inside Electric, our Postgres-native sync engine, and are now standardizing it as a standalone protocol.
-
-## What are Durable Streams?
-
-The Durable Streams protocol is an open protocol that extends standard HTTP to support ordered, replayable streams with offset-based resumability. It's designed to work anywhere HTTP works: browsers, mobile, native clients, and IoT.
-
-The core idea: streams are a first-class primitive that get their own URL. Each stream is an addressable, append-only log that clients can read from any position.
-
-- Every position in a stream has an **opaque, monotonic offset**.
-- Clients persist the last offset they’ve processed.
-- On reconnect, clients resume by asking for “everything after offset X”.
-- The server doesn’t need per-client session state; the stream is durable, and **progress is tracked client-side**.
-- Streams are addressed by offset-based URLs, so historical reads can be cached by CDNs. That makes it feasible to serve large numbers of clients from a single source stream without turning your origin into a bottleneck.
-
-That's the model: consistent, interoperable, scalable, and durable client streaming.
 
 ## Why Now (and why we built it)
 
@@ -102,6 +88,20 @@ for await (const chunk of stream.follow({
 }
 ```
 
+## What are Durable Streams?
+
+The Durable Streams protocol is an open protocol that extends standard HTTP to support ordered, replayable streams with offset-based resumability. It's designed to work anywhere HTTP works: browsers, mobile, native clients, and IoT.
+
+The core idea: streams are a first-class primitive that get their own URL. Each stream is an addressable, append-only log that clients can read from any position.
+
+- Every position in a stream has an **opaque, monotonic offset**.
+- Clients persist the last offset they've processed.
+- On reconnect, clients resume by asking for "everything after offset X".
+- The server doesn't need per-client session state; the stream is durable, and **progress is tracked client-side**.
+- Streams are addressed by offset-based URLs, so historical reads can be cached by CDNs. That makes it feasible to serve large numbers of clients from a single source stream without turning your origin into a bottleneck.
+
+That's the model: consistent, interoperable, scalable, and durable client streaming.
+
 ## Use Cases
 
 Durable Streams is a delivery primitive. A few places it fits well:
@@ -114,7 +114,7 @@ Durable Streams is a delivery primitive. A few places it fits well:
 
 The pattern is the same: consume events from backend systems (databases, Kafka, queues), apply auth + transformation, then fan out to clients over HTTP using Durable Streams.
 
-## What’s in the Repo
+## What's in the Repo
 
 The [durable-streams repository](https://github.com/durable-streams/durable-streams) includes:
 
@@ -156,4 +156,3 @@ If you're building one, the conformance test suite is there to help ensure compa
 ## Get Started
 
 Check out the [durable-streams repository](https://github.com/durable-streams/durable-streams) to get started, and join us in [Discord](https://discord.electric-sql.com) if you're thinking about where this fits in your stack.
-
