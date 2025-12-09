@@ -1,7 +1,12 @@
 ---
 title: 'Announcing Durable Streams'
-description: 'A persistent stream primitive and HTTP protocol for reliable, resumable, real-time data streaming into client applications'
-excerpt: 'We're open-sourcing Durable Streams, a persistent stream primitive and HTTP protocol for reliable, resumable, real-time data streaming into client applications. It's extracted from ~1.5 years of production use at Electric.'
+description: >
+  A persistent stream primitive and HTTP protocol for reliable, resumable,
+  real-time data streaming into client applications
+excerpt: >
+  We're open-sourcing Durable Streams, a persistent stream primitive and HTTP
+  protocol for reliable, resumable, real-time data streaming into client
+  applications. It's extracted from ~1.5 years of production use at Electric.
 authors: [thruflo]
 image: /img/blog/announcing-durable-streams/hero.png
 tags: [durable-streams, sync, protocol]
