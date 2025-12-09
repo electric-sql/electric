@@ -61,6 +61,46 @@ Durable Streams uses standard HTTP methods:
 - **Read + resume**: read from an offset using `GET` for catch-up; or tail the stream using long-polling or an SSE mode. If a connection drops, reconnect using the last saved offset.
 - **Message boundaries**: choose between raw byte concatenation (with your own framing, e.g. NDJSON) or a JSON mode where servers return batches as arrays with preserved boundaries.
 
+Here's what resumable streaming looks like in practice:
+
+```typescript
+import { DurableStream } from "@durable-streams/client"
+
+const stream = new DurableStream({
+  url: "https://your-server.com/v1/stream/my-stream",
+})
+
+// Catch-up: read all existing data
+const result = await stream.read()
+const savedOffset = result.offset // Persist this client-side
+
+// Resume from where you left off (after refresh, reconnect, device switch)
+for await (const chunk of stream.follow({
+  offset: savedOffset,
+  live: "long-poll",
+})) {
+  console.log(new TextDecoder().decode(chunk.data))
+  // Save chunk.offset to resume from here next time
+}
+```
+
+For AI token streaming, the pattern is similar—stream tokens to a Durable Stream, and clients can resume mid-generation:
+
+```typescript
+// Server: stream LLM output
+for await (const token of llm.stream(prompt)) {
+  await stream.append(token)
+}
+
+// Client: resume from last seen token (works across page refreshes)
+for await (const chunk of stream.follow({
+  offset: lastSeenOffset,
+  live: "sse",
+})) {
+  renderToken(new TextDecoder().decode(chunk.data))
+}
+```
+
 ## Use Cases
 
 Durable Streams is a delivery primitive. A few places it fits well:
@@ -102,9 +142,15 @@ The recommended pattern: backend systems (Kafka, databases, queues) → applicat
 
 ## Performance
 
-Durable Streams is built for production scale. In Electric, we sync data through Postgres and Electric in under 15ms end-to-end. We've measured throughput to hundreds of megabytes per second, and we've tested millions of clients subscribed to a single stream without degradation.
+Durable Streams is built for production scale. In Electric, we sync data through Postgres and Electric in under 15ms end-to-end. Throughput scales with your infrastructure—the protocol itself adds minimal overhead, and we've tested millions of concurrent clients subscribed to a single stream without degradation.
 
 The offset-based design enables aggressive caching at CDN edges, which means read-heavy workloads (common in sync and AI scenarios) scale horizontally without overwhelming origin servers.
+
+## Community
+
+Durable Streams is designed as a community protocol. We'd love to see independent server and client implementations in other languages. The reference implementation includes a Node.js server and TypeScript/JavaScript client, but the ecosystem needs implementations in Python, Go, Rust, Java, Swift, Kotlin, and more—along with different storage backends (PostgreSQL, S3, Redis, etc.).
+
+If you're building one, the conformance test suite is there to help ensure compatibility, we're happy to link to implementations from the main repository, and we'd love to chat in [Discord](https://discord.electric-sql.com).
 
 ## Get Started
 
