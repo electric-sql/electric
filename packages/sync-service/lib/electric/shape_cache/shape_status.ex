@@ -48,7 +48,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
 
   @spec initialize_from_storage(stack_ref()) :: :ok | {:error, term()}
   def initialize_from_storage(stack_ref) do
-    storage = storage_from_stack_ref(stack_ref)
+    storage = storage_for_stack_ref(stack_ref)
     stack_id = extract_stack_id(stack_ref)
 
     with backup_dir when is_binary(backup_dir) <- backup_dir(storage),
@@ -72,7 +72,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
   @spec save_checkpoint(stack_ref()) :: :ok | {:error, term()}
   def save_checkpoint(stack_ref) do
     Logger.info("Saving shape status checkpoint for #{inspect(stack_ref)}")
-    storage = storage_from_stack_ref(stack_ref)
+    storage = storage_for_stack_ref(stack_ref)
 
     case backup_dir(storage) do
       nil -> {:error, :no_backup_dir_configured}
@@ -270,7 +270,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
         shape_hash = Shape.hash(shape)
 
         if shape_hash == valid_hash do
-          {:ok, latest_offset!(stack_ref, shape_handle)}
+          latest_offset(stack_ref, shape_handle)
         else
           :error
         end
@@ -383,30 +383,25 @@ defmodule Electric.ShapeCache.ShapeStatus do
     end
   end
 
-  def latest_offset!(stack_ref, shape_handle) do
-    :ets.lookup_element(
-      shape_meta_table(stack_ref),
-      shape_handle,
-      @shape_meta_latest_offset_pos
-    )
-    |> normalize_latest_offset()
-  end
-
+  @spec latest_offset(stack_ref(), shape_handle()) :: {:ok, LogOffset.t()} | :error
   def latest_offset(stack_ref, shape_handle) do
-    turn_raise_into_error(fn -> latest_offset!(stack_ref, shape_handle) end)
+    stack_ref
+    |> storage_for_shape(shape_handle)
+    |> Storage.get_current_position()
+    |> case do
+      {:ok, offset, _} -> {:ok, normalize_latest_offset(offset)}
+      {:error, _reason} -> :error
+    end
   end
 
   @spec snapshot_started?(stack_ref(), shape_handle()) :: boolean()
   def snapshot_started?(stack_ref, shape_handle) do
-    :ets.lookup_element(
-      shape_meta_table(stack_ref),
-      shape_handle,
-      @shape_meta_snapshot_started_pos
-    )
-  rescue
-    ArgumentError -> false
+    stack_ref
+    |> storage_for_shape(shape_handle)
+    |> Storage.snapshot_started?()
   end
 
+  @spec extract_stack_id(stack_ref()) :: stack_id()
   defp extract_stack_id(stack_ref) when is_list(stack_ref) or is_map(stack_ref),
     do: Access.fetch!(stack_ref, :stack_id)
 
@@ -659,10 +654,16 @@ defmodule Electric.ShapeCache.ShapeStatus do
     end
   end
 
-  defp storage_from_stack_ref(stack_ref) do
+  @spec storage_for_stack_ref(stack_ref()) :: Storage.t()
+  defp storage_for_stack_ref(stack_ref) do
     stack_ref
     |> extract_stack_id()
     |> Storage.for_stack()
+  end
+
+  @spec storage_for_shape(stack_ref(), shape_handle()) :: Storage.shape_opts()
+  defp storage_for_shape(stack_ref, shape_handle) do
+    Storage.for_shape(shape_handle, storage_for_stack_ref(stack_ref))
   end
 
   defp async_delete(stack_ref, path) do
@@ -676,6 +677,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
   # however many there may be. That means the clients will be using that as the latest offset.
   # In order to avoid confusing the clients, we make sure that we preserve that functionality
   # across a restart by setting the latest offset to `0_inf` if there were no real offsets yet.
+  @spec normalize_latest_offset(LogOffset.t()) :: LogOffset.t()
   defp normalize_latest_offset(offset) do
     import Electric.Replication.LogOffset,
       only: [is_virtual_offset: 1, last_before_real_offsets: 0]
@@ -683,14 +685,5 @@ defmodule Electric.ShapeCache.ShapeStatus do
     if is_virtual_offset(offset),
       do: last_before_real_offsets(),
       else: offset
-  end
-
-  defp turn_raise_into_error(fun) do
-    try do
-      {:ok, fun.()}
-    rescue
-      ArgumentError ->
-        :error
-    end
   end
 end
