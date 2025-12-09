@@ -94,27 +94,20 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb do
   # This api is awkward but we don't care because its going
   def store_backup(stack_id, backup_dir, version)
       when is_binary(backup_dir) and is_stack_id(stack_id) do
-    shape_lookup_data_path = backup_file_path(backup_dir, "shape_lookup_data", version)
-    shape_lookup_data_path_tmp = "#{shape_lookup_data_path}.tmp"
-    handle_lookup_data_path = backup_file_path(backup_dir, "handle_lookup_data", version)
-    handle_lookup_data_path_tmp = "#{handle_lookup_data_path}.tmp"
-
     with :ok <-
            :ets.tab2file(
              handle_to_shape_table(stack_id),
-             String.to_charlist(shape_lookup_data_path_tmp),
+             backup_file_path(backup_dir, "shape_lookup_data", version),
              sync: true,
              extended_info: [:object_count]
            ),
          :ok <-
            :ets.tab2file(
              shape_to_handle_table(stack_id),
-             String.to_charlist(handle_lookup_data_path_tmp),
+             backup_file_path(backup_dir, "handle_lookup_data", version),
              sync: true,
              extended_info: [:object_count]
-           ),
-         :ok <- File.rename(shape_lookup_data_path_tmp, shape_lookup_data_path),
-         :ok <- File.rename(handle_lookup_data_path_tmp, handle_lookup_data_path) do
+           ) do
       :ok
     end
   end

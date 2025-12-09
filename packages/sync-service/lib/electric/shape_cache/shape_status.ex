@@ -561,26 +561,28 @@ defmodule Electric.ShapeCache.ShapeStatus do
   end
 
   defp store_backup(stack_ref, backup_dir) when is_binary(backup_dir) do
-    File.mkdir_p!(backup_dir)
     meta_table = shape_meta_table(stack_ref)
+    backup_dir_tmp = "#{backup_dir}_tmp"
 
-    meta_data_backup_path = backup_file_path(backup_dir, :shape_meta_data)
-    meta_data_backup_path_tmp = "#{meta_data_backup_path}.tmp"
+    File.mkdir_p!(backup_dir)
+    File.rm_rf(backup_dir_tmp)
+    File.mkdir_p!(backup_dir_tmp)
 
     with :ok <-
            :ets.tab2file(
              meta_table,
-             String.to_charlist(meta_data_backup_path_tmp),
+             backup_file_path(backup_dir_tmp, :shape_meta_data),
              sync: true,
              extended_info: [:object_count]
            ),
-         :ok <- File.rename(meta_data_backup_path_tmp, meta_data_backup_path),
          :ok <-
            ShapeDb.store_backup(
              extract_stack_id(stack_ref),
-             backup_dir,
+             backup_dir_tmp,
              @backup_version
-           ) do
+           ),
+         _ <- File.rm_rf(backup_dir),
+         :ok <- File.rename(backup_dir_tmp, backup_dir) do
       :ok
     end
   end
