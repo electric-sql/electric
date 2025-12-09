@@ -365,9 +365,9 @@ defmodule Electric.ShapeCache do
   defp fetch_latest_offset(stack_id, shape_handle) do
     shape_handle
     |> Storage.for_shape(Storage.for_stack(stack_id))
-    |> Storage.get_current_position()
+    |> Storage.get_latest_offset()
     |> case do
-      {:ok, offset, _} -> {:ok, normalize_latest_offset(offset)}
+      {:ok, offset} -> {:ok, normalize_latest_offset(offset)}
       {:error, _reason} -> :error
     end
   end
