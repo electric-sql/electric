@@ -7,7 +7,7 @@ defmodule Electric.Shapes.Filter.WhereCondition do
   being on the same branch.
 
   Each WhereCondition is identified by a unique reference and stores:
-  - `index_keys`: list of {field, operation} tuples for indexed conditions
+  - `index_keys`: MapSet of {field, operation} tuples for indexed conditions
   - `other_shapes`: map of shape_id -> where_clause for non-optimized shapes
 
   The logic for specific indexes (equality, inclusion) is handled by dedicated modules that also use ETS.
@@ -26,7 +26,7 @@ defmodule Electric.Shapes.Filter.WhereCondition do
   require Logger
 
   def init(%Filter{where_cond_table: table}, condition_id) do
-    :ets.insert(table, {condition_id, {[], %{}}})
+    :ets.insert(table, {condition_id, {MapSet.new(), %{}}})
   end
 
   def add_shape(%Filter{where_cond_table: table} = filter, condition_id, shape_id, where_clause) do
@@ -49,14 +49,7 @@ defmodule Electric.Shapes.Filter.WhereCondition do
        ) do
     [{_, {index_keys, other_shapes}}] = :ets.lookup(table, condition_id)
     key = {optimisation.field, optimisation.operation}
-
-    index_keys =
-      if key in index_keys do
-        index_keys
-      else
-        [key | index_keys]
-      end
-
+    index_keys = MapSet.put(index_keys, key)
     :ets.insert(table, {condition_id, {index_keys, other_shapes}})
 
     Index.add_shape(filter, condition_id, shape_id, optimisation)
@@ -152,7 +145,7 @@ defmodule Electric.Shapes.Filter.WhereCondition do
       :deleted ->
         [{_, {index_keys, other_shapes}}] = :ets.lookup(table, condition_id)
         key = {optimisation.field, optimisation.operation}
-        index_keys = List.delete(index_keys, key)
+        index_keys = MapSet.delete(index_keys, key)
         update_or_delete_condition(table, condition_id, index_keys, other_shapes)
 
       :ok ->
@@ -160,8 +153,8 @@ defmodule Electric.Shapes.Filter.WhereCondition do
     end
   end
 
-  defp update_or_delete_condition(table, condition_id, [], other_shapes)
-       when other_shapes == %{} do
+  defp update_or_delete_condition(table, condition_id, index_keys, other_shapes)
+       when index_keys == %MapSet{} and other_shapes == %{} do
     :ets.delete(table, condition_id)
     :deleted
   end
@@ -193,7 +186,7 @@ defmodule Electric.Shapes.Filter.WhereCondition do
       [],
       fn ->
         [{_, {index_keys, _other_shapes}}] = :ets.lookup(table, condition_id)
-        OpenTelemetry.set_attribute(:index_count, length(index_keys))
+        OpenTelemetry.add_span_attributes(index_count: MapSet.size(index_keys))
 
         index_keys
         |> Enum.map(fn {field, operation} ->
