@@ -17,7 +17,6 @@ defmodule Electric.ShapeCache.ShapeStatus do
   alias Electric.Shapes.Shape
   alias Electric.ShapeCache.Storage
   alias Electric.ShapeCache.ShapeStatus.ShapeDb
-  alias Electric.Replication.LogOffset
 
   import Electric, only: [is_stack_id: 1, is_shape_handle: 1]
   require Electric.Shapes.Shape
@@ -205,20 +204,13 @@ defmodule Electric.ShapeCache.ShapeStatus do
     :ok
   end
 
-  @spec get_existing_shape(stack_ref(), Shape.t() | shape_handle()) ::
-          {shape_handle(), LogOffset.t()} | nil
-  def get_existing_shape(stack_ref, %Shape{} = shape) do
+  @spec fetch_handle_by_shape(stack_ref(), Shape.t()) :: {:ok, shape_handle()} | :error
+  def fetch_handle_by_shape(stack_ref, %Shape{} = shape) do
     stack_id = extract_stack_id(stack_ref)
 
     case ShapeDb.handle_for_shape(stack_id, shape) do
-      nil ->
-        nil
-
-      shape_handle when is_shape_handle(shape_handle) ->
-        case latest_offset(stack_ref, shape_handle) do
-          {:ok, offset} -> {shape_handle, offset}
-          :error -> nil
-        end
+      nil -> :error
+      handle -> {:ok, handle}
     end
   end
 
@@ -250,6 +242,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
   Cheaply validate that a shape handle matches the shape definition by matching
   the shape's saved hash against the provided shape's hash.
   """
+  @spec validate_shape_handle(stack_ref(), shape_handle(), Shape.t()) :: :ok | :error
   def validate_shape_handle(stack_ref, shape_handle, %Shape{} = shape) do
     case :ets.lookup_element(
            shape_hash_lookup_table(stack_ref),
@@ -262,7 +255,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
 
       valid_hash when is_integer(valid_hash) ->
         case Shape.hash(shape) do
-          ^valid_hash -> latest_offset(stack_ref, shape_handle)
+          ^valid_hash -> :ok
           _ -> :error
         end
     end
@@ -477,11 +470,9 @@ defmodule Electric.ShapeCache.ShapeStatus do
       Shape.has_dependencies(shape) and not Shape.dependency_handles_known?(shape)
     end)
     |> Enum.each(fn {handle, %Shape{shape_dependencies: deps} = shape} ->
-      handles = Enum.map(deps, &get_existing_shape(stack_id, &1))
+      handles = Enum.map(deps, &fetch_handle_by_shape(stack_id, &1))
 
-      if not Enum.any?(handles, &is_nil/1) do
-        handles = Enum.map(handles, &elem(&1, 0))
-
+      if not Enum.any?(handles, &match?(:error, &1)) do
         ShapeDb.update_shape(stack_id, handle, %{shape | shape_dependencies_handles: handles})
       else
         Logger.warning("Shape #{inspect(handle)} has dependencies but some are unknown")
@@ -549,36 +540,5 @@ defmodule Electric.ShapeCache.ShapeStatus do
     stack_ref
     |> extract_stack_id()
     |> Storage.for_stack()
-  end
-
-  @spec storage_for_shape(stack_ref(), shape_handle()) :: Storage.shape_opts()
-  defp storage_for_shape(stack_ref, shape_handle) do
-    Storage.for_shape(shape_handle, storage_for_stack_ref(stack_ref))
-  end
-
-  @spec latest_offset(stack_ref(), shape_handle()) :: {:ok, LogOffset.t()} | :error
-  defp latest_offset(stack_ref, shape_handle) do
-    stack_ref
-    |> storage_for_shape(shape_handle)
-    |> Storage.get_current_position()
-    |> case do
-      {:ok, offset, _} -> {:ok, normalize_latest_offset(offset)}
-      {:error, _reason} -> :error
-    end
-  end
-
-  # When writing the snapshot initially, we don't know ahead of time the real last offset for the
-  # shape, so we use `0_inf` essentially as a pointer to the end of all possible snapshot chunks,
-  # however many there may be. That means the clients will be using that as the latest offset.
-  # In order to avoid confusing the clients, we make sure that we preserve that functionality
-  # across a restart by setting the latest offset to `0_inf` if there were no real offsets yet.
-  @spec normalize_latest_offset(LogOffset.t()) :: LogOffset.t()
-  defp normalize_latest_offset(offset) do
-    import Electric.Replication.LogOffset,
-      only: [is_virtual_offset: 1, last_before_real_offsets: 0]
-
-    if is_virtual_offset(offset),
-      do: last_before_real_offsets(),
-      else: offset
   end
 end
