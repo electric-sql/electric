@@ -288,6 +288,10 @@ export function encodeWhereClause(
 /**
  * Encodes a comma-separated list of column names using the provided encoder function.
  *
+ * Handles PostgreSQL quoted identifiers (double-quoted names) which may contain
+ * commas or other special characters. Quoted identifiers are preserved as-is
+ * without encoding since they are case-sensitive in PostgreSQL.
+ *
  * @param columns - The comma-separated column names string to encode
  * @param encode - Optional encoder function. If undefined, returns columns unchanged.
  * @returns The encoded columns string
@@ -299,7 +303,52 @@ export function encodeColumns(
   encode?: (columnName: string) => string
 ): string {
   if (!columns || !encode) return columns ?? ``
-  return columns.split(`,`).map(encode).join(`,`)
+
+  // Parse columns respecting quoted identifiers
+  const parsedColumns: string[] = []
+  let current = ``
+  let inQuotes = false
+  let i = 0
+
+  while (i < columns.length) {
+    const char = columns[i]
+
+    if (char === `"`) {
+      if (inQuotes && columns[i + 1] === `"`) {
+        // Escaped quote inside quoted identifier
+        current += `""`
+        i += 2
+        continue
+      }
+      // Toggle quote state
+      inQuotes = !inQuotes
+      current += char
+      i++
+    } else if (char === `,` && !inQuotes) {
+      // End of column (only split on commas outside quotes)
+      parsedColumns.push(current)
+      current = ``
+      i++
+    } else {
+      current += char
+      i++
+    }
+  }
+  // Don't forget the last column
+  if (current) {
+    parsedColumns.push(current)
+  }
+
+  // Encode each column, but preserve quoted identifiers as-is
+  return parsedColumns
+    .map((col) => {
+      if (col.startsWith(`"`) && col.endsWith(`"`)) {
+        // Quoted identifier - preserve as-is (case-sensitive)
+        return col
+      }
+      return encode(col)
+    })
+    .join(`,`)
 }
 
 /**

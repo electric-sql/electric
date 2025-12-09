@@ -388,6 +388,33 @@ describe(`encodeColumns`, () => {
       `user_id,project_id,created_at,updated_at`
     )
   })
+
+  it(`should preserve double-quoted column names with commas`, () => {
+    // PostgreSQL allows quoted identifiers with special characters
+    expect(encodeColumns(`"column,with,commas",userId`, encode)).toBe(
+      `"column,with,commas",user_id`
+    )
+  })
+
+  it(`should preserve double-quoted column names without encoding`, () => {
+    // Quoted identifiers should not be encoded (they're case-sensitive)
+    expect(encodeColumns(`"CaseSensitive",userId`, encode)).toBe(
+      `"CaseSensitive",user_id`
+    )
+  })
+
+  it(`should handle mixed quoted and unquoted columns`, () => {
+    expect(encodeColumns(`userId,"special,column",createdAt`, encode)).toBe(
+      `user_id,"special,column",created_at`
+    )
+  })
+
+  it(`should handle escaped quotes in quoted identifiers`, () => {
+    // PostgreSQL uses "" to escape quotes within quoted identifiers
+    expect(encodeColumns(`"column""name",userId`, encode)).toBe(
+      `"column""name",user_id`
+    )
+  })
 })
 
 describe(`columnMapper and transformer together`, () => {
