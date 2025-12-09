@@ -4,6 +4,7 @@ defmodule Electric.ShapeCache do
   alias Electric.Replication.LogOffset
   alias Electric.Replication.ShapeLogCollector
   alias Electric.ShapeCache.ShapeStatus
+  alias Electric.ShapeCache.Storage
   alias Electric.Shapes
   alias Electric.ShapeCache.ShapeCleaner
   alias Electric.Shapes.Shape
@@ -108,8 +109,10 @@ defmodule Electric.ShapeCache do
       when is_shape_handle(shape_handle) and is_stack_id(stack_id) do
     ShapeStatus.update_last_read_time_to_now(stack_id, shape_handle)
 
+    shape_storage = Storage.for_shape(shape_handle, Storage.for_stack(stack_id))
+
     cond do
-      ShapeStatus.snapshot_started?(stack_id, shape_handle) ->
+      Storage.snapshot_started?(shape_storage) ->
         :started
 
       not ShapeStatus.has_shape_handle?(stack_id, shape_handle) ->
