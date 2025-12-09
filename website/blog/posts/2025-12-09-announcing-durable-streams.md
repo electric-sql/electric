@@ -149,7 +149,7 @@ Durable Streams is built for production scale. In Electric, we sync data through
 
 The offset-based design enables aggressive caching at CDN edges, which means read-heavy workloads (common in sync and AI scenarios) scale horizontally without overwhelming origin servers.
 
-## Durable Streams on Electric Cloud?
+## Durable Streams on Electric Cloud
 
 We'll be launching our own cloud implementation of Durable Streams early next year.
 
