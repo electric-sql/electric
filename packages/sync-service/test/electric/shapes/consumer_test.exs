@@ -150,7 +150,6 @@ defmodule Electric.Shapes.ConsumerTest do
       Electric.StackConfig.put(ctx.stack_id, :inspector, @base_inspector)
 
       patch_shape_status(
-        initialise_shape: fn _, _shape_handle, _ -> :ok end,
         fetch_shape_by_handle: fn _, shape_handle -> Map.fetch(ctx.shapes, shape_handle) end,
         get_existing_shape: fn
           _, @shape1 -> {@shape_handle1, @shape1}

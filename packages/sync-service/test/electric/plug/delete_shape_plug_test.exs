@@ -2,11 +2,12 @@ defmodule Electric.Plug.DeleteShapePlugTest do
   use ExUnit.Case, async: true
   use Repatch.ExUnit, assert_expectations: true
 
+  alias Electric.Replication.LogOffset
   alias Electric.Plug.DeleteShapePlug
   alias Electric.Shapes.Shape
 
   import Support.ComponentSetup
-  import Support.TestUtils, only: [set_status_to_active: 1, expect_shape_cache: 1]
+  import Support.TestUtils
 
   @registry Registry.DeleteShapePlugTest
 
@@ -140,6 +141,12 @@ defmodule Electric.Plug.DeleteShapePlugTest do
 
       expect_shape_cache(clean_shape: fn ^shape_handle, ^stack_id -> :ok end)
 
+      expect_storage(
+        get_current_position: fn {_, %{shape_handle: ^shape_handle}} ->
+          {:ok, LogOffset.first(), nil}
+        end
+      )
+
       conn =
         ctx
         |> conn(:delete, "?table=public.users")
@@ -153,9 +160,6 @@ defmodule Electric.Plug.DeleteShapePlugTest do
       %{stack_id: stack_id} = ctx
 
       {:ok, shape_handle} = Electric.ShapeCache.ShapeStatus.add_shape(stack_id, @test_shape)
-
-      :ok =
-        Electric.ShapeCache.ShapeStatus.initialise_shape(stack_id, shape_handle, :something)
 
       expect_shape_cache(clean_shape: fn ^shape_handle, ^stack_id -> :ok end)
 

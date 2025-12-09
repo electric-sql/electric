@@ -135,13 +135,6 @@ defmodule Electric.Shapes.Consumer do
 
     state = State.initialize(state, storage, writer)
 
-    :ok =
-      ShapeCache.ShapeStatus.initialise_shape(
-        stack_id,
-        shape_handle,
-        state.latest_offset
-      )
-
     if all_materializers_alive?(state) && subscribe(state, action) do
       Logger.debug("Writer for #{shape_handle} initialized")
 

@@ -43,8 +43,6 @@ defmodule Electric.ShapeCache.ShapeStatus do
   @shape_last_used_time_pos 2
 
   @shape_meta_shape_hash_pos 2
-  @shape_meta_snapshot_started_pos 3
-  @shape_meta_latest_offset_pos 4
 
   @spec initialize_from_storage(stack_ref()) :: :ok | {:error, term()}
   def initialize_from_storage(stack_ref) do
@@ -275,18 +273,6 @@ defmodule Electric.ShapeCache.ShapeStatus do
           :error
         end
     end
-  end
-
-  @spec initialise_shape(stack_ref(), shape_handle(), LogOffset.t()) :: :ok
-  def initialise_shape(stack_ref, shape_handle, latest_offset) do
-    true =
-      :ets.update_element(
-        shape_meta_table(stack_ref),
-        shape_handle,
-        {@shape_meta_latest_offset_pos, latest_offset}
-      )
-
-    :ok
   end
 
   @doc """

@@ -161,13 +161,6 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
              {:ok, LogOffset.new(100, 3)}
   end
 
-  test "initialise_shape/3", ctx do
-    {:ok, state, [shape_handle]} = new_state(ctx, shapes: [shape!()])
-    offset = LogOffset.new(100, 3)
-    assert :ok = ShapeStatus.initialise_shape(state, shape_handle, offset)
-    assert ShapeStatus.latest_offset(state, shape_handle) == {:ok, offset}
-  end
-
   describe "list_shapes/2" do
     test "returns shapes with dependencies in a topological order", ctx do
       {:ok, state, []} = new_state(ctx)
