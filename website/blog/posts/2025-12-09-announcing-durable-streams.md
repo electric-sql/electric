@@ -19,9 +19,9 @@ Durable Streams makes "durable, resumable client streaming" a standard, universa
 
 Today, we're open-sourcing [Durable Streams](https://github.com/durable-streams/durable-streams): an HTTP-based protocol for reliable, resumable data streaming to client applications. We originally built Durable Streams as the delivery layer inside Electric, our Postgres-native sync engine, and are now standardizing it as a standalone protocol.
 
-## What is Durable Streams?
+## What are Durable Streams?
 
-Durable Streams is an open protocol that extends standard HTTP to support ordered, replayable streams with offset-based resumability. It's designed to work anywhere HTTP works: browsers, mobile, native clients, and IoT.
+The Durable Streams protocol is an open protocol that extends standard HTTP to support ordered, replayable streams with offset-based resumability. It's designed to work anywhere HTTP works: browsers, mobile, native clients, and IoT.
 
 The core idea is simple:
 
