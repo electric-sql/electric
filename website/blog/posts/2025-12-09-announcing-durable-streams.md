@@ -15,7 +15,7 @@ Client streaming is different. WebSocket and SSE connections are easy to start, 
 
 AI products make this painfully visible. Token streaming is the UI for chat and copilots, and agentic apps often stream progress events, tool outputs, and partial results over long-running sessions. A transient disconnect can leave users with truncated output, force a restart, or create duplicate/ambiguous state when the client tries to recover.
 
-Durable Streams is our attempt to make “durable, resumable client streaming” a standard, boring, building block.
+Durable Streams makes "durable, resumable client streaming" a standard, boring, building block.
 
 Today, we’re open-sourcing [Durable Streams](https://github.com/durable-streams/durable-streams): an HTTP-based protocol for reliable, resumable data streaming to client applications.
 
@@ -37,7 +37,7 @@ That's the model: consistent, interoperable, and scalable durable client streami
 
 Durable Streams comes directly out of building Electric, our Postgres-native sync engine.
 
-A sync engine can't cheat its way around delivery. We needed a transport layer that guarantees *ordered, replayable, resumable* delivery. Over the last 1.5 years, we've continuously refined our implementation until now we reliably deliver millions of state changes every day on Electric Cloud.
+A sync engine can't cheat its way around delivery. We needed a transport layer that guarantees *ordered, replayable, resumable* delivery. Over the past 18 months, we've continuously refined our implementation until now we reliably deliver millions of state changes every day on Electric Cloud.
 
 At the same time, conversations with users, customers, and peers in the broader AI ecosystem were converging on the same pain point: **AI token streaming needs reliable delivery and persistence**.
 
@@ -82,7 +82,9 @@ The [durable-streams repository](https://github.com/durable-streams/durable-stre
 - A CLI tool for testing and development
 - A conformance test suite for cross-implementation compatibility
 
-Durable Streams is designed as a community protocol. We'd love to see independent server and client implementations in other languages. The reference implementation includes a Node.js server and TypeScript/JavaScript client, but the ecosystem needs implementations in Python, Go, Rust, Java, Swift, Kotlin, and more—along with different storage backends (PostgreSQL, S3, Redis, etc.). If you're building one, the conformance test suite is there to help ensure compatibility, we're happy to link to implementations from the main repository, and we'd love to chat in [Discord](https://discord.electric-sql.com).
+Durable Streams is designed as a community protocol. We'd love to see independent server and client implementations in other languages. The reference implementation includes a Node.js server and TypeScript/JavaScript client, but the ecosystem needs implementations in Python, Go, Rust, Java, Swift, Kotlin, and more—along with different storage backends (PostgreSQL, S3, Redis, etc.).
+
+If you're building one, the conformance test suite is there to help ensure compatibility, we're happy to link to implementations from the main repository, and we'd love to chat in [Discord](https://discord.electric-sql.com).
 
 ## Common Questions
 
@@ -97,6 +99,12 @@ Durable Streams provides standardized resumption through opaque, sortable offset
 Durable Streams complements rather than replaces these systems. Kafka and RabbitMQ excel at server-to-server messaging in backend infrastructure. Durable Streams solves the distinct challenge of reliably streaming data to client applications—handling client diversity, network unreliability, and the economics of per-connection delivery.
 
 The recommended pattern: backend systems (Kafka, databases, queues) → application server → Durable Streams → clients.
+
+## Performance
+
+Durable Streams is built for production scale. In Electric, we sync data through Postgres and Electric in under 15ms end-to-end. We've measured throughput to hundreds of megabytes per second, and we've tested millions of clients subscribed to a single stream without degradation.
+
+The offset-based design enables aggressive caching at CDN edges, which means read-heavy workloads (common in sync and AI scenarios) scale horizontally without overwhelming origin servers.
 
 ## Get Started
 
