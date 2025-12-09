@@ -483,100 +483,94 @@ defmodule Electric.Shapes.FilterTest do
     @max_reductions 1300
 
     test "where clause in the form `field = const` is optimised" do
-      filter =
-        1..@shape_count
-        |> Enum.reduce(Filter.new(), fn i, filter ->
-          Filter.add_shape(filter, i, Shape.new!("t1", where: "id = #{i}", inspector: @inspector))
-        end)
+      filter = Filter.new()
+
+      Enum.each(1..@shape_count, fn i ->
+        shape = Shape.new!("t1", where: "id = #{i}", inspector: @inspector)
+        add_reductions = reductions(fn -> Filter.add_shape(filter, i, shape) end)
+        assert add_reductions < @max_reductions
+      end)
 
       assert Filter.affected_shapes(filter, change("t1", %{"id" => "7"})) == MapSet.new([7])
 
-      reductions =
+      affected_reductions =
         reductions(fn ->
           Filter.affected_shapes(filter, change("t1", %{"id" => "7"}))
         end)
 
-      assert reductions < @max_reductions
+      assert affected_reductions < @max_reductions
     end
 
     test "where clause in the form `field = const AND another_condition` is optimised" do
-      filter =
-        1..@shape_count
-        |> Enum.reduce(Filter.new(), fn i, filter ->
-          Filter.add_shape(
-            filter,
-            i,
-            Shape.new!("t1", where: "id = #{i} AND id > 6", inspector: @inspector)
-          )
-        end)
+      filter = Filter.new()
+
+      Enum.each(1..@shape_count, fn i ->
+        shape = Shape.new!("t1", where: "id = #{i} AND id > 6", inspector: @inspector)
+        add_reductions = reductions(fn -> Filter.add_shape(filter, i, shape) end)
+        assert add_reductions < @max_reductions
+      end)
 
       assert Filter.affected_shapes(filter, change("t1", %{"id" => "7"})) == MapSet.new([7])
 
-      reductions =
+      affected_reductions =
         reductions(fn ->
           Filter.affected_shapes(filter, change("t1", %{"id" => "7"}))
         end)
 
-      assert reductions < @max_reductions
+      assert affected_reductions < @max_reductions
     end
 
     test "where clause in the form `a_condition AND field = const` is optimised" do
-      filter =
-        1..@shape_count
-        |> Enum.reduce(Filter.new(), fn i, filter ->
-          Filter.add_shape(
-            filter,
-            i,
-            Shape.new!("t1", where: "id > 6 AND id = #{i}", inspector: @inspector)
-          )
-        end)
+      filter = Filter.new()
+
+      Enum.each(1..@shape_count, fn i ->
+        shape = Shape.new!("t1", where: "id > 6 AND id = #{i}", inspector: @inspector)
+        add_reductions = reductions(fn -> Filter.add_shape(filter, i, shape) end)
+        assert add_reductions < @max_reductions
+      end)
 
       assert Filter.affected_shapes(filter, change("t1", %{"id" => "7"})) == MapSet.new([7])
 
-      reductions =
+      affected_reductions =
         reductions(fn ->
           Filter.affected_shapes(filter, change("t1", %{"id" => "7"}))
         end)
 
-      assert reductions < @max_reductions
+      assert affected_reductions < @max_reductions
     end
 
     test "where clause in the form `field1 = const1 AND field2 = const2` is optimised for lots of const1 values" do
-      filter =
-        1..@shape_count
-        |> Enum.reduce(Filter.new(), fn i, filter ->
-          Filter.add_shape(
-            filter,
-            i,
-            Shape.new!("t1", where: "id = #{i} AND number = 11", inspector: @inspector)
-          )
-        end)
+      filter = Filter.new()
+
+      Enum.each(1..@shape_count, fn i ->
+        shape = Shape.new!("t1", where: "id = #{i} AND number = 11", inspector: @inspector)
+        add_reductions = reductions(fn -> Filter.add_shape(filter, i, shape) end)
+        assert add_reductions < @max_reductions
+      end)
 
       change = change("t1", %{"id" => "5", "number" => "11"})
       assert Filter.affected_shapes(filter, change) == MapSet.new([5])
 
-      reductions = reductions(fn -> Filter.affected_shapes(filter, change) end)
+      affected_reductions = reductions(fn -> Filter.affected_shapes(filter, change) end)
 
-      assert reductions < @max_reductions
+      assert affected_reductions < @max_reductions
     end
 
     test "where clause in the form `field1 = const1 AND field2 = const2` is optimised for lots of const2 values" do
-      filter =
-        1..@shape_count
-        |> Enum.reduce(Filter.new(), fn i, filter ->
-          Filter.add_shape(
-            filter,
-            i,
-            Shape.new!("t1", where: "id = 7 AND number = #{i}", inspector: @inspector)
-          )
-        end)
+      filter = Filter.new()
+
+      Enum.each(1..@shape_count, fn i ->
+        shape = Shape.new!("t1", where: "id = 7 AND number = #{i}", inspector: @inspector)
+        add_reductions = reductions(fn -> Filter.add_shape(filter, i, shape) end)
+        assert add_reductions < @max_reductions
+      end)
 
       change = change("t1", %{"id" => "7", "number" => "9"})
       assert Filter.affected_shapes(filter, change) == MapSet.new([9])
 
-      reductions = reductions(fn -> Filter.affected_shapes(filter, change) end)
+      affected_reductions = reductions(fn -> Filter.affected_shapes(filter, change) end)
 
-      assert reductions < @max_reductions
+      assert affected_reductions < @max_reductions
     end
 
     test "where clause in the form `array_field @> const_array` is optimised" do
@@ -591,33 +585,32 @@ defmodule Electric.Shapes.FilterTest do
       chosen_numbers = [2, 3, 5, 7, 11, 13, 17, 19, 23, 29]
       matching_array = {5, 11, 29}
 
-      filter =
-        for(
-          x <- 1..100,
-          y <- 1..100,
-          z <- 1..100,
-          x < y,
-          y < z,
-          not (x in chosen_numbers && y in chosen_numbers && z in chosen_numbers),
-          do: {x, y, z}
-        )
-        |> Enum.take_random(shape_count - 1)
-        |> Enum.concat([matching_array])
-        |> Enum.shuffle()
-        |> Enum.reduce(Filter.new(), fn {x, y, z}, filter ->
-          Filter.add_shape(
-            filter,
-            {x, y, z},
-            Shape.new!("t1", where: "an_array @> '{#{x}, #{y}, #{z}}'", inspector: @inspector)
-          )
-        end)
+      filter = Filter.new()
+
+      for(
+        x <- 1..100,
+        y <- 1..100,
+        z <- 1..100,
+        x < y,
+        y < z,
+        not (x in chosen_numbers && y in chosen_numbers && z in chosen_numbers),
+        do: {x, y, z}
+      )
+      |> Enum.take_random(shape_count - 1)
+      |> Enum.concat([matching_array])
+      |> Enum.shuffle()
+      |> Enum.each(fn {x, y, z} ->
+        shape = Shape.new!("t1", where: "an_array @> '{#{x}, #{y}, #{z}}'", inspector: @inspector)
+        add_reductions = reductions(fn -> Filter.add_shape(filter, {x, y, z}, shape) end)
+        assert add_reductions < max_reductions
+      end)
 
       change = change("t1", %{"an_array" => "{#{chosen_numbers |> Enum.join(", ")}}"})
       assert Filter.affected_shapes(filter, change) == MapSet.new([matching_array])
 
-      reductions = reductions(fn -> Filter.affected_shapes(filter, change) end)
+      affected_reductions = reductions(fn -> Filter.affected_shapes(filter, change) end)
 
-      assert reductions < max_reductions
+      assert affected_reductions < max_reductions
     end
 
     defp reductions(fun) do
