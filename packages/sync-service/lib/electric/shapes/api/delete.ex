@@ -40,7 +40,11 @@ defmodule Electric.Shapes.Api.Delete do
 
   defp get_shape_handle(%Request{} = request) do
     %{params: %{shape_definition: shape}, api: api} = request
-    Shapes.get_shape(api.stack_id, shape)
+
+    case Shapes.fetch_handle_by_shape(api.stack_id, shape) do
+      {:ok, shape_handle} -> shape_handle
+      :error -> nil
+    end
   end
 
   # delete request that just has the shape handle
@@ -67,7 +71,7 @@ defmodule Electric.Shapes.Api.Delete do
 
   # handle in params does not match handle of existing shape matching definition
   defp handle_shape_info_for_delete(
-         {active_shape_handle, _offset},
+         active_shape_handle,
          %Request{params: %{handle: handle}} = request
        )
        when not is_nil(handle) and handle != active_shape_handle do
@@ -75,12 +79,12 @@ defmodule Electric.Shapes.Api.Delete do
   end
 
   defp handle_shape_info_for_delete(
-         {shape_handle, last_offset},
+         shape_handle,
          %Request{} = request
        ) do
     {:ok,
      Map.update!(
-       %{request | handle: shape_handle, last_offset: last_offset},
+       %{request | handle: shape_handle},
        :response,
        &%{&1 | handle: shape_handle}
      )}
