@@ -6,7 +6,7 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
   alias Electric.ShapeCache.ShapeStatus
   alias Electric.Shapes.Shape
 
-  import Support.ComponentSetup, only: [with_stack_id_from_test: 1]
+  import Support.ComponentSetup
   import Support.TestUtils, only: [expect_calls: 3, patch_calls: 3]
 
   @inspector Support.StubInspector.new(
@@ -23,7 +23,7 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
                ]
              )
 
-  setup :with_stack_id_from_test
+  setup [:with_stack_id_from_test, :with_async_deleter]
 
   test "starts empty", ctx do
     {:ok, state, []} = new_state(ctx)

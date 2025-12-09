@@ -565,7 +565,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
     backup_dir_tmp = "#{backup_dir}_tmp"
 
     File.mkdir_p!(backup_dir)
-    File.rm_rf(backup_dir_tmp)
+    async_delete(stack_ref, backup_dir_tmp)
     File.mkdir_p!(backup_dir_tmp)
 
     with :ok <-
@@ -581,7 +581,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
              backup_dir_tmp,
              @backup_version
            ),
-         _ <- File.rm_rf(backup_dir),
+         :ok <- async_delete(stack_ref, backup_dir),
          :ok <- File.rename(backup_dir_tmp, backup_dir) do
       :ok
     end
@@ -639,7 +639,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
           {:error, reason}
       end
 
-    File.rm_rf(backup_dir)
+    async_delete(stack_id, backup_dir)
 
     result
   end
@@ -660,6 +660,12 @@ defmodule Electric.ShapeCache.ShapeStatus do
     stack_ref
     |> extract_stack_id()
     |> Storage.for_stack()
+  end
+
+  defp async_delete(stack_ref, path) do
+    stack_ref
+    |> extract_stack_id()
+    |> Electric.AsyncDeleter.delete(path)
   end
 
   # When writing the snapshot initially, we don't know ahead of time the real last offset for the
