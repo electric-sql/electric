@@ -12,15 +12,29 @@ const postDate = computed(() => {
   return `${parts[0]}-${parts[1]}-${parts[2]}`
 })
 
-const optimizedImage = computed(() => {
-  if (!frontmatter.value.image) return ''
-  return getNetlifyImageUrl(frontmatter.value.image, {
+const optimizedImageSrcset = computed(() => {
+  if (!frontmatter.value.image) return { src: '', srcset: '' }
+
+  const img1x = getNetlifyImageUrl(frontmatter.value.image, {
     width: 1530,
     height: 874,
     fit: 'cover',
     format: 'jpg',
     quality: 80,
   })
+
+  const img2x = getNetlifyImageUrl(frontmatter.value.image, {
+    width: 1530 * 2,
+    height: 874 * 2,
+    fit: 'cover',
+    format: 'jpg',
+    quality: 80,
+  })
+
+  return {
+    src: img1x,
+    srcset: `${img1x} 1x, ${img2x} 2x`,
+  }
 })
 </script>
 
@@ -76,7 +90,7 @@ h1 {
 <template>
   <div class="post-header">
     <p class="post-image">
-      <img :src="optimizedImage" />
+      <img :src="optimizedImageSrcset.src" :srcset="optimizedImageSrcset.srcset" />
     </p>
     <h1>
       {{ frontmatter.title }}
