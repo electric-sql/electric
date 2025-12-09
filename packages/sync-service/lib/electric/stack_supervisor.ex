@@ -376,7 +376,6 @@ defmodule Electric.StackSupervisor do
         Electric.ShapeCache.Storage.stack_child_spec(storage),
         {Electric.Postgres.Inspector.EtsInspector,
          stack_id: stack_id, pool: metadata_db_pool, persistent_kv: config.persistent_kv},
-        {Electric.ShapeCache.ShapeStatusOwner, [stack_id: stack_id]},
         {Electric.MonitoredCoreSupervisor,
          stack_id: stack_id, connection_manager_opts: connection_manager_opts}
       ]

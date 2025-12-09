@@ -21,6 +21,7 @@ defmodule Electric.MonitoredCoreSupervisor do
 
     children = [
       {Electric.StatusMonitor, stack_id: stack_id},
+      {Electric.ShapeCache.ShapeStatusOwner, [stack_id: stack_id]},
       {Electric.CoreSupervisor, opts}
     ]
 
