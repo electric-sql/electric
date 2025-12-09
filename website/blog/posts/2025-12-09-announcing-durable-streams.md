@@ -50,15 +50,19 @@ A sync engine can't cheat its way around delivery—we needed a transport layer 
 
 At the same time, conversations with users, customers, and industry peers kept surfacing the same theme: **AI token streaming needs reliable delivery and persistence**. This has become a dominant infrastructure concern ([as we've discussed before](https://electric-sql.com/blog/2025/04/09/building-ai-apps-on-sync)) as AI applications proliferate. Teams are shipping streaming UIs on best-effort connections, then reimplementing offsets, buffering, replay, and deduplication in application code. The underlying need is a durable stream primitive that makes token streaming (and other client streaming) survivable across the messy realities of browsers/smartphones and networks.
 
-**Breaking the stack into layers**
+**Building a composable ecosystem**
 
-As we work on Electric 2.0, we're making a key architectural shift: splitting our sync stack into three composable layers. This lets us publish each layer as a standalone protocol that teams can use independently or combine.
+As we work on Electric 2.0, we're making a key architectural shift: separating the foundational transport layer from the protocols built on top of it. This creates a composable ecosystem where protocols can be used independently or mixed together.
 
-1. **Streams** — Durable, resumable delivery
-2. **State** — A schema for state change events (inserts, updates, and deletes)
-3. **Specific** — Database-specific replication logic (e.g. Postgres)
+**Foundation:**
+- **Streams** — Durable, resumable delivery over HTTP
 
-Durable Streams is that first, and most fundamental layer extracted as a standalone protocol: the thing we need for Electric, and the thing we keep seeing other teams reinvent for AI streaming and beyond.
+**Ecosystem:**
+- **State Protocol** — A composable schema for state change events (insert/update/delete) that any protocol can adopt when it needs database sync semantics
+- **Database adapters** — Postgres, MySQL, SQLite replication using the State Protocol
+- **Application protocols** — Presence, CRDTs (Yjs, Automerge), real-time collaboration, and custom protocols built on the stream foundation
+
+Durable Streams is that foundational layer extracted as a standalone protocol: the thing we need for Electric, and the thing we keep seeing other teams reinvent for AI streaming and beyond.
 
 ## How It Works
 
@@ -119,17 +123,18 @@ If you're building one, the conformance test suite is there to help ensure compa
 
 ## What's Coming Next
 
-Today's launch focuses on Durable Streams—the foundational delivery layer. But this is just the first of the three layers we're publishing.
+Today's launch focuses on Durable Streams—the foundational transport layer. Next, we're publishing the protocols that compose on top of it.
 
-Electric's current protocol combines all three layers into a single system. As we build Electric 2.0, we're separating these concerns so each layer can be used independently:
+Electric's current protocol bundles everything together. As we build Electric 2.0, we're separating the foundation from the ecosystem so each piece can be used independently or composed together:
 
-- **Durable Streams** (launching today) — Reliable, resumable delivery over HTTP
-- **State protocol** (coming soon) — A standardized schema for state change events (inserts, updates, deletes) that works over any durable stream
-- **Database-specific adapters** (coming soon) — Replication protocols for Postgres, MySQL, SQLite, and other databases
+- **Durable Streams** (launching today) — The foundational transport layer
+- **State Protocol** (coming soon) — A composable protocol for state change events (insert/update/delete) that works over any durable stream
+- **Database adapters** (coming soon) — Postgres, MySQL, SQLite adapters that use the State Protocol
+- **Electric 2.0** (coming soon) — The complete database sync solution combining Streams + State Protocol + database adapters
 
-This means you can use Durable Streams for AI token streaming today, then later adopt the State protocol when you need database sync semantics. Or use the State protocol over a different transport if you prefer. The layers compose.
+This means you can use Durable Streams for AI token streaming today, then later adopt the State Protocol when you need database sync semantics. Or build your own protocol on top of Streams for presence, CRDTs, or custom real-time features. The protocols compose.
 
-Stay tuned for the State protocol announcement.
+Stay tuned for the State Protocol announcement.
 
 ## Common Questions
 
