@@ -35,6 +35,12 @@ const blogSidebarItems = await posts.map((post) => ({
 // https://vitepress.dev/reference/site-config
 export default defineConfig({
   vite: {
+    define: {
+      // Expose Netlify environment variables to the client
+      'import.meta.env.DEPLOY_PRIME_URL': JSON.stringify(
+        process.env.DEPLOY_PRIME_URL || ''
+      ),
+    },
     plugins: [
       llmstxt({
         generateLLMsFullTxt: false,

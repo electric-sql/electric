@@ -17,10 +17,12 @@ export function getNetlifyImageUrl(
   const { width, height, fit = `cover`, format = `jpg`, quality = 80 } = options
 
   // Get current origin (works in browser and SSR)
+  // In SSR: use Netlify's DEPLOY_PRIME_URL or fallback to production
+  // In browser: use current window location
   const origin =
     typeof window !== `undefined`
       ? window.location.origin
-      : `https://electric-sql.com`
+      : import.meta.env?.DEPLOY_PRIME_URL || `https://electric-sql.com`
 
   // Convert relative paths to absolute URLs using current origin
   const fullImageUrl = imagePath.startsWith(`http`)
