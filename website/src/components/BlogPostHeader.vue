@@ -26,15 +26,25 @@ const postDate = computed(() => {
 
 .post-author {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   color: var(--vp-c-text-2);
   font-size: 15px;
-  min-width: 360px;
-  overflow: hidden;
+  gap: 0.5rem;
 }
 .date {
   color: var(--vp-c-text-2);
   font-size: 15px;
+  white-space: nowrap;
+}
+.author-avatars {
+  display: flex;
+  margin-right: 0.2rem;
+}
+.author-names {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
 }
 .post-author img {
   width: 42px;
@@ -56,51 +66,38 @@ const postDate = computed(() => {
       {{ frontmatter.title }}
     </h1>
     <p class="post-author">
-      <a
-        v-for="(slug, index) in frontmatter.authors"
-        :href="'/about/team#' + slug"
-        class="no-visual"
-        :style="{ marginLeft: index > 0 ? '-20px' : '0' }"
-      >
-        <img :src="authors[slug].image" />
-      </a>
-      <span>By&nbsp;</span>
-      <a
-        v-for="(slug, index) in frontmatter.authors"
-        :href="'/about/team#' + slug"
-        class="no-visual"
-      >
-        <span
-          >{{ authors[slug].name
-          }}<span v-if="index === frontmatter.authors.length - 1">&nbsp;</span
-          ><span v-if="index < frontmatter.authors.length - 1"
+      <div class="author-avatars">
+        <a
+          v-for="(slug, index) in frontmatter.authors"
+          :key="slug"
+          :href="'/about/team#' + slug"
+          class="no-visual"
+          :style="{ marginLeft: index > 0 ? '-20px' : '0' }"
+        >
+          <img :src="authors[slug].image" />
+        </a>
+      </div>
+      <div class="author-names">
+        <span>By&nbsp;</span>
+        <a
+          v-for="(slug, index) in frontmatter.authors"
+          :key="slug"
+          :href="'/about/team#' + slug"
+          class="no-visual"
+        >
+          <span>{{ authors[slug].name
+          }}<span v-if="index < frontmatter.authors.length - 1"
             ><span v-if="index < frontmatter.authors.length - 2">,&nbsp;</span
             ><span v-else>&nbsp;and&nbsp;</span></span
-          ></span
-        >
-      </a>
-      <ClientOnly>
-        <span
-          class="date hidden-sm"
-          :style="{
-            display:
-              frontmatter.authors.length === 1 ? 'inline-block !important' : '',
-          }"
-        >
-          on {{ new Date(postDate).toLocaleDateString() }}.
-        </span>
-      </ClientOnly>
-    </p>
-    <ClientOnly>
-      <div
-        class="date block-sm"
-        :style="{
-          display: frontmatter.authors.length === 1 ? 'none !important' : '',
-        }"
-      >
-        Published on {{ new Date(postDate).toLocaleDateString() }}
+          ></span>
+        </a>
+        <ClientOnly>
+          <span class="date">
+            &nbsp;on {{ new Date(postDate).toLocaleDateString() }}.
+          </span>
+        </ClientOnly>
       </div>
-    </ClientOnly>
+    </p>
     <hr />
   </div>
 </template>

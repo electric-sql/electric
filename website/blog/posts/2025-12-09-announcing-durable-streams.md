@@ -2,7 +2,7 @@
 title: 'Announcing Durable Streams'
 description: 'An HTTP protocol for reliable, resumable streaming to clients (including AI token streams)'
 excerpt: 'We’re open-sourcing Durable Streams, an HTTP-based protocol for ordered, replayable streaming to client applications. It’s extracted from ~1.5 years of production use at Electric.'
-authors: [kyle, samwillis, thruflo, balegas]
+authors: [thruflo]
 image: /img/blog/announcing-durable-streams/hero.png
 tags: [durable-streams, sync, protocol]
 outline: [2, 3]
