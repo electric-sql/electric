@@ -101,8 +101,8 @@ defmodule Electric.ShapeCache.InMemoryStorage do
   end
 
   @impl Electric.ShapeCache.Storage
-  def get_current_position(%MS{} = opts) do
-    {:ok, current_offset(opts), pg_snapshot(opts)}
+  def get_pg_snapshot(%MS{} = opts) do
+    {:ok, pg_snapshot(opts)}
   end
 
   defp pg_snapshot(opts) do
