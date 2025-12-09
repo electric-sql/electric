@@ -13,8 +13,9 @@ const postDate = computed(() => {
 })
 
 const formattedDate = computed(() => {
-  const date = new Date(postDate.value + 'T00:00:00Z') // Parse as UTC
-  return date.toLocaleDateString('en-US', {
+  // Parse as UTC to prevent timezone shifts, but format in user's locale
+  const date = new Date(postDate.value + 'T00:00:00Z')
+  return date.toLocaleDateString(undefined, {
     month: 'numeric',
     day: 'numeric',
     year: 'numeric',
