@@ -143,31 +143,6 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
     assert :error = ShapeStatus.validate_shape_handle(state, shape_handle1, shape2)
   end
 
-  test "latest_offset/2", ctx do
-    invalid_handle = "invalid"
-    {:ok, state, [shape_handle]} = new_state(ctx, shapes: [shape!()])
-
-    expect_storage(
-      get_current_position: fn ^invalid_handle -> {:error, :enoent} end,
-      get_current_position: fn ^shape_handle -> {:ok, LogOffset.new(0, 100), nil} end,
-      get_current_position: fn ^shape_handle ->
-        {:ok, LogOffset.last_before_real_offsets(), nil}
-      end,
-      get_current_position: fn ^shape_handle -> {:ok, LogOffset.new(100, 3), nil} end
-    )
-
-    assert :error = ShapeStatus.latest_offset(state, invalid_handle)
-
-    assert ShapeStatus.latest_offset(state, shape_handle) ==
-             {:ok, LogOffset.last_before_real_offsets()}
-
-    assert ShapeStatus.latest_offset(state, shape_handle) ==
-             {:ok, LogOffset.last_before_real_offsets()}
-
-    assert ShapeStatus.latest_offset(state, shape_handle) ==
-             {:ok, LogOffset.new(100, 3)}
-  end
-
   describe "list_shapes/2" do
     test "returns shapes with dependencies in a topological order", ctx do
       {:ok, state, []} = new_state(ctx)
