@@ -3,12 +3,24 @@ import { useData } from 'vitepress'
 import { computed } from 'vue'
 
 import { data as authors } from '../../data/authors.data.ts'
+import { getNetlifyImageUrl } from '../utils/netlify-images.ts'
 
 const { page, frontmatter } = useData()
 
 const postDate = computed(() => {
   const parts = page.value.filePath.split('blog/posts/')[1].split('-')
   return `${parts[0]}-${parts[1]}-${parts[2]}`
+})
+
+const optimizedImage = computed(() => {
+  if (!frontmatter.value.image) return ''
+  return getNetlifyImageUrl(frontmatter.value.image, {
+    width: 1530,
+    height: 874,
+    fit: 'cover',
+    format: 'jpg',
+    quality: 80,
+  })
 })
 </script>
 
@@ -64,7 +76,7 @@ h1 {
 <template>
   <div class="post-header">
     <p class="post-image">
-      <img :src="frontmatter.image" />
+      <img :src="optimizedImage" />
     </p>
     <h1>
       {{ frontmatter.title }}
