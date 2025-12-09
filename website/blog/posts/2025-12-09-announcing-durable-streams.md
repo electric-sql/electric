@@ -58,8 +58,9 @@ As we work on Electric 2.0, we're making a key architectural shift: separating t
 - **Streams** — Durable, resumable delivery over HTTP
 
 **Ecosystem:**
-- **State Protocol** — A composable schema for state change events (insert/update/delete) that any protocol can adopt when it needs database sync semantics
+- **State Protocol** — A composable schema for state change events (insert/update/delete) that any protocol can adopt when it needs database-style sync semantics
 - **Database adapters** — Postgres, MySQL, SQLite replication using the State Protocol
+- **AI transport plugins** — Durable transport adapters for AI SDKs (Vercel AI SDK, TanStack AI, etc.), enabling resumable token streaming and persistent agent sessions
 - **Application protocols** — Presence, CRDTs (Yjs, Automerge), real-time collaboration, and custom protocols built on the stream foundation
 
 Durable Streams is that foundational layer extracted as a standalone protocol: the thing we need for Electric, and the thing we keep seeing other teams reinvent for AI streaming and beyond.
@@ -130,7 +131,6 @@ Electric's current protocol bundles everything together. As we build Electric 2.
 - **Durable Streams** (launching today) — The foundational transport layer
 - **State Protocol** (coming soon) — A composable protocol for state change events (insert/update/delete) that works over any durable stream
 - **Database adapters** (coming soon) — Postgres, MySQL, SQLite adapters that use the State Protocol
-- **Electric 2.0** (coming soon) — The complete database sync solution combining Streams + State Protocol + database adapters
 
 This means you can use Durable Streams for AI token streaming today, then later adopt the State Protocol when you need database sync semantics. Or build your own protocol on top of Streams for presence, CRDTs, or custom real-time features. The protocols compose.
 
