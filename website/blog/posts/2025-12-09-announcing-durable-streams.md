@@ -15,7 +15,7 @@ Client streaming is different. WebSocket and SSE connections are easy to start, 
 
 AI products make this painfully visible. Token streaming is the UI for chat and copilots, and agentic apps often stream progress events, tool outputs, and partial results over long-running sessions. When the stream fails, the product fails—even if the model did the right thing. A transient disconnect can leave users with truncated output, force a restart, or create duplicate/ambiguous state when the client tries to recover.
 
-Durable Streams makes "durable, resumable client streaming" a standard, boring, building block.
+Durable Streams makes "durable, resumable client streaming" a standard, universally available building block that just works.
 
 Today, we're open-sourcing [Durable Streams](https://github.com/durable-streams/durable-streams): an HTTP-based protocol for reliable, resumable data streaming to client applications. We originally built Durable Streams as the delivery layer inside Electric, our Postgres-native sync engine, and are now standardizing it as a standalone protocol.
 
