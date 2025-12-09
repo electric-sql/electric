@@ -248,7 +248,7 @@ defmodule Electric.Shapes.Consumer do
       # Schema changed while we were creating stuff, which means shape is functionally invalid.
       # Return a 409 to trigger a fresh start with validation against the new schema.
       %{shape: %Shape{root_table_id: root_table_id}} = state
-      clean_table(root_table_id, state)
+      purge_relation_from_inspector_cache(root_table_id, state)
     end
 
     state
@@ -420,8 +420,7 @@ defmodule Electric.Shapes.Consumer do
     State.reply_to_snapshot_waiters(state, {:error, "Shape terminated before snapshot was ready"})
   end
 
-  # Any relation that gets let through by the `ShapeLogCollector` (as coupled with `Shapes.Dispatcher`)
-  # is a signal that we need to terminate the shape.
+  # Any relation that gets let through by the `ShapeLogCollector` is a signal that we need to terminate the shape.
   defp handle_event(%Changes.Relation{}, state) do
     %{shape: %Shape{root_table_id: root_table_id, root_table: root_table}} = state
 
@@ -431,7 +430,7 @@ defmodule Electric.Shapes.Consumer do
 
     # We clean up the relation info from ETS as it has changed and we want
     # to source the fresh info from postgres for the next shape creation
-    clean_table(root_table_id, state)
+    purge_relation_from_inspector_cache(root_table_id, state)
 
     state
     |> State.reply_to_snapshot_waiters(
@@ -801,9 +800,9 @@ defmodule Electric.Shapes.Consumer do
     end)
   end
 
-  defp clean_table(table_oid, state) do
-    inspector = Electric.StackConfig.lookup!(state.stack_id, :inspector)
-    Inspector.clean(table_oid, inspector)
+  defp purge_relation_from_inspector_cache(table_oid, state) do
+    inspector = Inspector.for_stack(state.stack_id)
+    Inspector.purge_relation_info(table_oid, inspector)
   end
 
   defp handle_materializer_down(reason, state) do
