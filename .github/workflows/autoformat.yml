@@ -50,6 +50,7 @@ jobs:
   elixir_formatting:
     strategy:
       matrix:
+        max-parallel: 1
         package: [sync-service, elixir-client, electric-telemetry]
     name: Elixir formatting and linting
     runs-on: ubuntu-latest
