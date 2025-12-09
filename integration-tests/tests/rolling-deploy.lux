@@ -9,6 +9,29 @@
 ## Start a new Postgres cluster
 [invoke setup_pg]
 
+## Add some data
+[invoke start_psql]
+[shell psql]
+  """!
+  CREATE TABLE items (
+    id UUID PRIMARY KEY,
+    val TEXT
+  );
+  """
+  ??CREATE TABLE
+
+  """!
+  INSERT INTO
+    items (id, val)
+  SELECT
+    gen_random_uuid(),
+    '#' || generate_series || ' test val'
+  FROM
+    generate_series(1, 10);
+  """
+  ??INSERT 0 10
+
+
 ## Start the first sync service.
 [invoke setup_electric_shell_with_tenant "electric_1" "3000"]
 
@@ -21,6 +44,15 @@
 [shell orchestator]
   !curl -X GET http://localhost:3000/v1/health?database_id=integration_test_tenant
   ??{"status":"active"}
+
+
+# Initialize a shape and collect the offset
+[shell client]
+  [invoke shape_get_snapshot items]
+  ?electric-handle: ([\d-]+)
+  [local handle=$1]
+  ?electric-offset: ([\w\d_]+)
+  [local offset=$1]
 
 ## Start the second sync service.
 [invoke setup_electric_shell_with_tenant "electric_2" "3001"]
@@ -40,23 +72,63 @@
   !curl -X GET http://localhost:3001/v1/health?database_id=integration_test_tenant
   ??{"status":"waiting"}
 
-## Terminate first electric
-[shell electric_1]
-  !System.halt()
-  
-  # Confirm Electric process exit.
-  ??$PS1
+# Add more data before handover
+[shell psql]
+  """!
+  INSERT INTO items (id, val)
+  VALUES (gen_random_uuid(), '#handover test val');
+  """
+  ??INSERT 0 1
 
-## Lock should now be acquired and replication starting
+# Should see handover update
+[shell client]
+  [invoke shape_get_live items $handle $offset]
+  ??HTTP/1.1 200 OK
+  ?electric-offset: ([\w\d_]+)
+  [local offset=$1]
+  ??"val":"#handover test val"
+
+
+# Switch request port to second electric
+[global shape_url_port=3001]
+
+# Should continue same shape in new instance
+[shell client]
+  [invoke shape_get_live items $handle $offset]
+  
+# Terminate first electric
+[shell electric_1]
+  -
+  !System.stop()
+
+# Lock should now be acquired and replication starting
 [shell electric_2]
   -$fail_pattern
   ??[info] Lock acquired from postgres with name electric_slot_integration
+
+# Add more data after handover
+[shell psql]
+  """!
+  INSERT INTO items (id, val)
+  VALUES (gen_random_uuid(), '#post-handover test val');
+  """
+  ??INSERT 0 1
+
+# Second service should reach healthy and active with loaded backup
+[shell electric_2]
+  ??[info] Loaded shape status from backup
   ??[info] Starting replication from postgres
 
-# Second service is now healthy and active
 [shell orchestator]
   !curl -X GET http://localhost:3001/v1/health?database_id=integration_test_tenant
   ??{"status":"active"}
+
+# Should see post handover update
+[shell client]
+  ??HTTP/1.1 200 OK
+  ??electric-handle: $handle
+  ??"val":"#post-handover test val"
+
 
 [cleanup]
   [invoke teardown]

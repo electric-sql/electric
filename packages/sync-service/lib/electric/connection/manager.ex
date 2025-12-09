@@ -731,6 +731,10 @@ defmodule Electric.Connection.Manager do
     dispatch_stack_event(:connection_lock_acquired, state)
     tref = schedule_periodic_connection_status_check(:replication_configuration)
 
+    # Initialize the ShapeStatusOwner process once the lock is acquired and
+    # storage is entirely within this service's control
+    :ok = Electric.ShapeCache.ShapeStatusOwner.initialize_from_storage(state.stack_id)
+
     state = %{
       state
       | replication_configuration_timer: tref,
@@ -882,6 +886,10 @@ defmodule Electric.Connection.Manager do
     # drop publication before replication client so that we ensure anyone
     # acquiring the lock next will recreate the replication slot
     if state.drop_slot_requested, do: drop_publication(state)
+
+    # perform a backup of our shape metadata after the snapshotter processes and
+    # publication have been removed to guarantee a consistent checkpoint
+    Electric.ShapeCache.ShapeStatus.save_checkpoint(state.stack_id)
 
     if is_pid(replication_client_pid) do
       # if we are acquiring the lock, we should kill the replication client brutally

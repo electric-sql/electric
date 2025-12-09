@@ -8,19 +8,20 @@ defmodule Electric.ShapeCache.ShapeStatusOwner do
   ShapeStatus instance regardless of their own supervisor start order.
   """
 
-  use GenServer, shutdown: 60_000
+  use GenServer
 
   alias Electric.ShapeCache.ShapeStatus
 
   require Logger
 
-  @schema NimbleOptions.new!(
-            stack_id: [type: :string, required: true],
-            storage: [type: :mod_arg, required: true]
-          )
+  @schema NimbleOptions.new!(stack_id: [type: :string, required: true])
 
   def name(stack_id) do
     Electric.ProcessRegistry.name(stack_id, __MODULE__)
+  end
+
+  def initialize_from_storage(stack_id) do
+    GenServer.call(name(stack_id), :initialize_from_storage)
   end
 
   def start_link(opts) do
@@ -32,29 +33,24 @@ defmodule Electric.ShapeCache.ShapeStatusOwner do
 
   @impl true
   def init(config) do
-    Process.flag(:trap_exit, true)
-
     stack_id = config.stack_id
 
     Process.set_label({:shape_status_owner, stack_id})
     Logger.metadata(stack_id: stack_id)
     Electric.Telemetry.Sentry.set_tags_context(stack_id: stack_id)
 
-    :ok = ShapeStatus.initialize_from_storage(stack_id, config.storage)
     :ok = Electric.LsnTracker.initialize(stack_id)
 
-    {:ok, %{stack_id: stack_id, storage: config.storage}, :hibernate}
+    {:ok, %{stack_id: stack_id, initialized: false}, :hibernate}
   end
 
   @impl true
-  def handle_info({:EXIT, _, reason}, state) do
-    {:stop, reason, state}
+  def handle_call(:initialize_from_storage, _from, %{initialized: false} = state) do
+    :ok = ShapeStatus.initialize_from_storage(state.stack_id)
+    {:reply, :ok, %{state | initialized: true}, :hibernate}
   end
 
-  @impl true
-  def terminate(_reason, %{stack_id: stack_id, storage: storage}) do
-    Logger.info("Terminating shape status owner, backing up state for faster recovery.")
-    ShapeStatus.terminate(stack_id, storage)
-    :ok
+  def handle_call(:initialize_from_storage, _from, %{initialized: true} = state) do
+    {:reply, :ok, state, :hibernate}
   end
 end

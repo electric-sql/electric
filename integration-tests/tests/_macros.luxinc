@@ -2,6 +2,7 @@
 [global fail_pattern=(?i)error|fatal|no such]
 
 [global pg_docker_network=electric_integration_pg_net]
+[global shape_url_port=3000]
 [global pg_container_name=]
 [global pg_host_port=54331]
 [global pg_pooler_host_port=64331]
@@ -265,7 +266,7 @@
 
 [macro shape_get_url params]
   # strip ANSI codes from response for easier matching
-  !curl --silent -i "http://localhost:3000/v1/shape?$params" | sed -r "s/\x1B\[[0-9;]*[mK]//g"
+  !curl --silent -i "http://localhost:$shape_url_port/v1/shape?$params" | sed -r "s/\x1B\[[0-9;]*[mK]//g"
 [endmacro]
 
 [macro shape_get_snapshot table]

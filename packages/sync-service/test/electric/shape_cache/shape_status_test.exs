@@ -6,7 +6,7 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
   alias Electric.ShapeCache.ShapeStatus
   alias Electric.Shapes.Shape
 
-  import Support.ComponentSetup, only: [with_stack_id_from_test: 1]
+  import Support.ComponentSetup
   import Support.TestUtils, only: [expect_calls: 3, patch_calls: 3]
 
   @inspector Support.StubInspector.new(
@@ -23,7 +23,7 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
                ]
              )
 
-  setup :with_stack_id_from_test
+  setup [:with_stack_id_from_test, :with_async_deleter]
 
   test "starts empty", ctx do
     {:ok, state, []} = new_state(ctx)
@@ -313,14 +313,16 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
     use ExUnitProperties
 
     property "returns correct number of shapes in LRU order", %{state: state} do
-      check all num_shapes <- StreamData.integer(1..100),
-                count <- StreamData.integer(0..100),
-                timestamps <-
-                  StreamData.list_of(
-                    StreamData.integer(1..10_000),
-                    length: num_shapes
-                  ),
-                :ok <- ShapeStatus.reset(state) do
+      check all(
+              num_shapes <- StreamData.integer(1..100),
+              count <- StreamData.integer(0..100),
+              timestamps <-
+                StreamData.list_of(
+                  StreamData.integer(1..10_000),
+                  length: num_shapes
+                ),
+              :ok <- ShapeStatus.reset(state)
+            ) do
         shape_handles =
           for {timestamp, i} <- Enum.with_index(timestamps) do
             {:ok, handle} = ShapeStatus.add_shape(state, shape!("property_test_#{i}"))
@@ -388,7 +390,14 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
   end
 
   describe "shape storage and backup" do
-    test "terminate stores backup and initialise loads from backup instead of storage", ctx do
+    setup ctx do
+      Electric.StackConfig.put(ctx.stack_id, Electric.ShapeCache.Storage, {Mock.Storage, []})
+      %{state: %{stack_id: ctx.stack_id}}
+    end
+
+    test "terminate stores backup and initialise loads from backup instead of storage", %{
+      state: state
+    } do
       backup_base_dir =
         Path.join(System.tmp_dir!(), "shape_status_test_#{System.unique_integer([:positive])}")
 
@@ -400,18 +409,13 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
         get_stored_shapes: fn _, _ -> %{} end
       )
 
-      state = %{
-        storage: {Mock.Storage, []},
-        stack_id: ctx.stack_id
-      }
-
-      assert :ok = ShapeStatus.initialize_from_storage(state, state.storage)
+      assert :ok = ShapeStatus.initialize_from_storage(state)
       shape = shape!()
       assert {:ok, shape_handle} = ShapeStatus.add_shape(state, shape)
       assert [{^shape_handle, ^shape}] = ShapeStatus.list_shapes(state)
 
       # Persist backup
-      assert :ok = ShapeStatus.terminate(state, ShapeStatus.backup_dir(state.storage))
+      assert :ok = ShapeStatus.save_checkpoint(state)
 
       backup_dir = Path.join([backup_base_dir, "shape_status_backups"])
       assert File.exists?(backup_dir)
@@ -429,7 +433,7 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
         get_all_stored_shape_handles: fn _ -> {:ok, MapSet.new([shape_handle])} end
       )
 
-      assert :ok = ShapeStatus.initialize_from_storage(state, state.storage)
+      assert :ok = ShapeStatus.initialize_from_storage(state)
       assert [{^shape_handle, ^shape}] = ShapeStatus.list_shapes(state)
       assert {^shape_handle, _offset} = ShapeStatus.get_existing_shape(state, shape)
       assert ShapeStatus.count_shapes(state) == 1
@@ -437,7 +441,7 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
       refute File.exists?(backup_dir)
     end
 
-    test "backup restore reconciled if stored handles missing", ctx do
+    test "backup restore reconciled if stored handles missing", %{state: state} do
       backup_base_dir =
         Path.join(System.tmp_dir!(), "shape_status_test_#{System.unique_integer([:positive])}")
 
@@ -449,12 +453,7 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
         get_stored_shapes: fn _, _ -> %{} end
       )
 
-      state = %{
-        storage: {Mock.Storage, []},
-        stack_id: ctx.stack_id
-      }
-
-      assert :ok = ShapeStatus.initialize_from_storage(state, state.storage)
+      assert :ok = ShapeStatus.initialize_from_storage(state)
       to_keep_shape = shape!()
       to_invalidate_shape = shape!("to be invalidated")
       assert {:ok, to_keep_shape_handle} = ShapeStatus.add_shape(state, to_keep_shape)
@@ -465,7 +464,7 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
                {to_keep_shape_handle, to_keep_shape}
              ] == ShapeStatus.list_shapes(state)
 
-      assert :ok = ShapeStatus.terminate(state, ShapeStatus.backup_dir(state.storage))
+      assert :ok = ShapeStatus.save_checkpoint(state)
 
       backup_dir = Path.join([backup_base_dir, "shape_status_backups"])
       assert File.exists?(backup_dir)
@@ -491,7 +490,7 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
         end
       )
 
-      assert :ok = ShapeStatus.initialize_from_storage(state, state.storage)
+      assert :ok = ShapeStatus.initialize_from_storage(state)
       # after reconciliation, only the to_keep_shape and not_backed_up_shape remain
       assert [
                {to_keep_shape_handle, to_keep_shape},
@@ -521,6 +520,7 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
   end
 
   defp new_state(ctx, opts \\ []) do
+    Electric.StackConfig.put(ctx.stack_id, Electric.ShapeCache.Storage, {Mock.Storage, []})
     stub_storage([force: true], metadata_backup_dir: fn _ -> nil end)
 
     stored_shapes = Access.get(opts, :stored_shapes, %{})
@@ -536,7 +536,7 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
       stack_id: ctx.stack_id
     }
 
-    :ok = ShapeStatus.initialize_from_storage(state, state.storage)
+    :ok = ShapeStatus.initialize_from_storage(state)
 
     shapes = Keyword.get(opts, :shapes, [])
 

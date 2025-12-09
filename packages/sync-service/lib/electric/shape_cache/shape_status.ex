@@ -45,9 +45,9 @@ defmodule Electric.ShapeCache.ShapeStatus do
   @shape_meta_snapshot_started_pos 3
   @shape_meta_latest_offset_pos 4
 
-  @spec initialize_from_storage(stack_ref(), Storage.storage()) ::
-          :ok | {:error, term()}
-  def initialize_from_storage(stack_ref, storage) do
+  @spec initialize_from_storage(stack_ref()) :: :ok | {:error, term()}
+  def initialize_from_storage(stack_ref) do
+    storage = storage_from_stack_ref(stack_ref)
     stack_id = extract_stack_id(stack_ref)
 
     with backup_dir when is_binary(backup_dir) <- backup_dir(storage),
@@ -68,8 +68,11 @@ defmodule Electric.ShapeCache.ShapeStatus do
     end
   end
 
-  @spec terminate(stack_ref(), Storage.storage()) :: :ok | {:error, term()}
-  def terminate(stack_ref, storage) do
+  @spec save_checkpoint(stack_ref()) :: :ok | {:error, term()}
+  def save_checkpoint(stack_ref) do
+    Logger.info("Saving shape status checkpoint for #{inspect(stack_ref)}")
+    storage = storage_from_stack_ref(stack_ref)
+
     case backup_dir(storage) do
       nil -> {:error, :no_backup_dir_configured}
       backup_dir -> store_backup(stack_ref, backup_dir)
@@ -558,23 +561,31 @@ defmodule Electric.ShapeCache.ShapeStatus do
   end
 
   defp store_backup(stack_ref, backup_dir) when is_binary(backup_dir) do
-    File.mkdir_p!(backup_dir)
     meta_table = shape_meta_table(stack_ref)
+    backup_dir_tmp = "#{backup_dir}_tmp"
+    async_delete(stack_ref, backup_dir_tmp)
+    File.mkdir_p!(backup_dir_tmp)
 
     with :ok <-
            :ets.tab2file(
              meta_table,
-             backup_file_path(backup_dir, :shape_meta_data),
+             backup_file_path(backup_dir_tmp, :shape_meta_data),
              sync: true,
              extended_info: [:object_count]
            ),
          :ok <-
            ShapeDb.store_backup(
              extract_stack_id(stack_ref),
-             backup_dir,
+             backup_dir_tmp,
              @backup_version
-           ) do
+           ),
+         :ok <- async_delete(stack_ref, backup_dir),
+         :ok <- File.rename(backup_dir_tmp, backup_dir) do
       :ok
+    else
+      e ->
+        async_delete(stack_ref, backup_dir_tmp)
+        e
     end
   end
 
@@ -630,7 +641,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
           {:error, reason}
       end
 
-    File.rm_rf(backup_dir)
+    async_delete(stack_id, backup_dir)
 
     result
   end
@@ -645,6 +656,18 @@ defmodule Electric.ShapeCache.ShapeStatus do
       nil -> nil
       dir -> Path.join(dir, @backup_dir)
     end
+  end
+
+  defp storage_from_stack_ref(stack_ref) do
+    stack_ref
+    |> extract_stack_id()
+    |> Storage.for_stack()
+  end
+
+  defp async_delete(stack_ref, path) do
+    stack_ref
+    |> extract_stack_id()
+    |> Electric.AsyncDeleter.delete(path)
   end
 
   # When writing the snapshot initially, we don't know ahead of time the real last offset for the
