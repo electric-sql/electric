@@ -146,7 +146,8 @@ defmodule Electric.Shapes.Consumer.State do
   """
   @spec initialize(uninitialized_t(), Storage.shape_storage(), Storage.writer_state()) :: t()
   def initialize(%__MODULE__{} = state, storage, writer) do
-    {:ok, latest_offset, pg_snapshot} = Storage.get_current_position(storage)
+    {:ok, latest_offset} = Storage.get_latest_offset(storage)
+    {:ok, pg_snapshot} = Storage.get_pg_snapshot(storage)
 
     initial_snapshot_state = InitialSnapshot.new(pg_snapshot)
 

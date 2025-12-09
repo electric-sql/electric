@@ -78,8 +78,11 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
       # This deregisters the writer from the ETS
       PureFileStorage.terminate(writer)
 
-      assert PureFileStorage.get_current_position(opts) ==
-               {:ok, LogOffset.new(11, 0), %{xmin: 100}}
+      assert PureFileStorage.get_latest_offset(opts) ==
+               {:ok, LogOffset.new(11, 0)}
+
+      assert PureFileStorage.get_pg_snapshot(opts) ==
+               {:ok, %{xmin: 100}}
 
       assert PureFileStorage.get_log_stream(LogOffset.new(0, 0), LogOffset.last(), opts)
              |> Enum.to_list() == [~S|{"test": 1}|, ~S|{"test": 2}|]
@@ -420,8 +423,11 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
 
         PureFileStorage.terminate(writer)
 
-        assert PureFileStorage.get_current_position(opts) ==
-                 {:ok, LogOffset.new(10, 0), %{xmin: 100}}
+        assert PureFileStorage.get_latest_offset(opts) ==
+                 {:ok, LogOffset.new(10, 0)}
+
+        assert PureFileStorage.get_pg_snapshot(opts) ==
+                 {:ok, %{xmin: 100}}
       end
 
       :ok
@@ -445,8 +451,11 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
 
       writer = PureFileStorage.init_writer!(opts, @shape)
 
-      assert PureFileStorage.get_current_position(opts) ==
-               {:ok, LogOffset.new(10, 0), %{xmin: 100}}
+      assert PureFileStorage.get_latest_offset(opts) ==
+               {:ok, LogOffset.new(10, 0)}
+
+      assert PureFileStorage.get_pg_snapshot(opts) ==
+               {:ok, %{xmin: 100}}
 
       # After recovery we see the same line
       writer =
@@ -503,8 +512,11 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
 
       writer = PureFileStorage.init_writer!(opts, @shape)
 
-      assert PureFileStorage.get_current_position(opts) ==
-               {:ok, LogOffset.new(10, 0), %{xmin: 100}}
+      assert PureFileStorage.get_latest_offset(opts) ==
+               {:ok, LogOffset.new(10, 0)}
+
+      assert PureFileStorage.get_pg_snapshot(opts) ==
+               {:ok, %{xmin: 100}}
 
       # After recovery we see the same line
       writer =
@@ -553,8 +565,11 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
 
       writer = PureFileStorage.init_writer!(opts, @shape)
 
-      assert PureFileStorage.get_current_position(opts) ==
-               {:ok, LogOffset.new(0, 0), %{xmin: 100}}
+      assert PureFileStorage.get_latest_offset(opts) ==
+               {:ok, LogOffset.new(0, 0)}
+
+      assert PureFileStorage.get_pg_snapshot(opts) ==
+               {:ok, %{xmin: 100}}
 
       writer =
         PureFileStorage.append_to_log!(
