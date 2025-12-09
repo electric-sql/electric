@@ -68,8 +68,10 @@ defmodule Electric.ShapeCache.ShapeStatus do
     end
   end
 
-  @spec terminate(stack_ref(), Storage.storage()) :: :ok | {:error, term()}
-  def terminate(stack_ref, storage) do
+  @spec save_checkpoint(stack_ref()) :: :ok | {:error, term()}
+  def save_checkpoint(stack_ref) do
+    storage = stack_ref |> extract_stack_id() |> Storage.for_stack()
+
     case backup_dir(storage) do
       nil -> {:error, :no_backup_dir_configured}
       backup_dir -> store_backup(stack_ref, backup_dir)
@@ -561,13 +563,17 @@ defmodule Electric.ShapeCache.ShapeStatus do
     File.mkdir_p!(backup_dir)
     meta_table = shape_meta_table(stack_ref)
 
+    meta_data_backup_path = backup_file_path(backup_dir, :shape_meta_data)
+    meta_data_backup_path_tmp = "#{meta_data_backup_path}.tmp"
+
     with :ok <-
            :ets.tab2file(
              meta_table,
-             backup_file_path(backup_dir, :shape_meta_data),
+             String.to_charlist(meta_data_backup_path_tmp),
              sync: true,
              extended_info: [:object_count]
            ),
+         :ok <- File.rename(meta_data_backup_path_tmp, meta_data_backup_path),
          :ok <-
            ShapeDb.store_backup(
              extract_stack_id(stack_ref),

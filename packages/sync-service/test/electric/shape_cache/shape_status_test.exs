@@ -313,14 +313,16 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
     use ExUnitProperties
 
     property "returns correct number of shapes in LRU order", %{state: state} do
-      check all num_shapes <- StreamData.integer(1..100),
-                count <- StreamData.integer(0..100),
-                timestamps <-
-                  StreamData.list_of(
-                    StreamData.integer(1..10_000),
-                    length: num_shapes
-                  ),
-                :ok <- ShapeStatus.reset(state) do
+      check all(
+              num_shapes <- StreamData.integer(1..100),
+              count <- StreamData.integer(0..100),
+              timestamps <-
+                StreamData.list_of(
+                  StreamData.integer(1..10_000),
+                  length: num_shapes
+                ),
+              :ok <- ShapeStatus.reset(state)
+            ) do
         shape_handles =
           for {timestamp, i} <- Enum.with_index(timestamps) do
             {:ok, handle} = ShapeStatus.add_shape(state, shape!("property_test_#{i}"))
@@ -388,6 +390,11 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
   end
 
   describe "shape storage and backup" do
+    setup ctx do
+      Electric.StackConfig.put(ctx.stack_id, Electric.ShapeCache.Storage, {Mock.Storage, []})
+      :ok
+    end
+
     test "terminate stores backup and initialise loads from backup instead of storage", ctx do
       backup_base_dir =
         Path.join(System.tmp_dir!(), "shape_status_test_#{System.unique_integer([:positive])}")
@@ -411,7 +418,7 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
       assert [{^shape_handle, ^shape}] = ShapeStatus.list_shapes(state)
 
       # Persist backup
-      assert :ok = ShapeStatus.terminate(state, ShapeStatus.backup_dir(state.storage))
+      assert :ok = ShapeStatus.save_checkpoint(state)
 
       backup_dir = Path.join([backup_base_dir, "shape_status_backups"])
       assert File.exists?(backup_dir)
@@ -465,7 +472,7 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
                {to_keep_shape_handle, to_keep_shape}
              ] == ShapeStatus.list_shapes(state)
 
-      assert :ok = ShapeStatus.terminate(state, ShapeStatus.backup_dir(state.storage))
+      assert :ok = ShapeStatus.save_checkpoint(state)
 
       backup_dir = Path.join([backup_base_dir, "shape_status_backups"])
       assert File.exists?(backup_dir)

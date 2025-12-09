@@ -8,7 +8,7 @@ defmodule Electric.ShapeCache.ShapeStatusOwner do
   ShapeStatus instance regardless of their own supervisor start order.
   """
 
-  use GenServer, shutdown: 60_000
+  use GenServer
 
   alias Electric.ShapeCache.ShapeStatus
 
@@ -44,17 +44,5 @@ defmodule Electric.ShapeCache.ShapeStatusOwner do
     :ok = Electric.LsnTracker.initialize(stack_id)
 
     {:ok, %{stack_id: stack_id, storage: config.storage}, :hibernate}
-  end
-
-  @impl true
-  def handle_info({:EXIT, _, reason}, state) do
-    {:stop, reason, state}
-  end
-
-  @impl true
-  def terminate(_reason, %{stack_id: stack_id, storage: storage}) do
-    Logger.info("Terminating shape status owner, backing up state for faster recovery.")
-    ShapeStatus.terminate(stack_id, storage)
-    :ok
   end
 end

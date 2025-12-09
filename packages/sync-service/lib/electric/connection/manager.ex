@@ -883,6 +883,10 @@ defmodule Electric.Connection.Manager do
     # acquiring the lock next will recreate the replication slot
     if state.drop_slot_requested, do: drop_publication(state)
 
+    # perform a backup of our shape metadata after the snapshots and publication
+    # have been removed to guarantee a consistent checkpoint
+    Electric.ShapeCache.ShapeStatus.save_checkpoint(state.stack_id)
+
     if is_pid(replication_client_pid) do
       # if we are acquiring the lock, we should kill the replication client brutally
       # to avoid hanging while the connection process is busy waiting for the lock
