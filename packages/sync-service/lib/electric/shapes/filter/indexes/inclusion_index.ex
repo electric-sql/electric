@@ -226,7 +226,6 @@ defmodule Electric.Shapes.Filter.Indexes.InclusionIndex do
   end
 
   defp node_empty?(%{keys: [], condition_id: nil}), do: true
-  defp node_empty?(%{keys: []}), do: true
   defp node_empty?(_), do: false
 
   def affected_shapes(%Filter{incl_index_table: table} = filter, condition_id, field, record) do

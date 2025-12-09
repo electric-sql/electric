@@ -423,23 +423,28 @@ defmodule Electric.Shapes.FilterTest do
       Shape.new!("table", where: "id = 1 AND an_array @> '{1,2}'", inspector: @inspector)
     ]
 
+    filter = Filter.new()
+
     shapes
     |> Enum.shuffle()
-    |> Enum.with_index()
-    |> Enum.reduce(Filter.new(), fn {shape, i}, filter ->
+    |> Enum.with_index(fn shape, i ->
       # Capture ETS state before adding
       state_before = snapshot_filter_ets(filter)
 
-      filter_with_shape_added = Filter.add_shape(filter, i, shape)
+      Filter.add_shape(filter, i, shape)
+
+      # Ensure that the ETS state has changed after adding
+      # (checks we've included all the ets tables in the snapshot)
+      assert snapshot_filter_ets(filter) != state_before
 
       # Remove the shape
-      Filter.remove_shape(filter_with_shape_added, i)
+      Filter.remove_shape(filter, i)
 
       # Check that the ETS state after removing is the same as before adding
-      state_after = snapshot_filter_ets(filter)
-      assert state_after == state_before
+      assert snapshot_filter_ets(filter) == state_before
 
-      filter_with_shape_added
+      # Add the shape back for the next iteration
+      Filter.add_shape(filter, i, shape)
     end)
   end
 

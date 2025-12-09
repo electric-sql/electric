@@ -160,7 +160,8 @@ defmodule Electric.Shapes.Filter.WhereCondition do
     end
   end
 
-  defp update_or_delete_condition(table, condition_id, [], %{} = _empty_map) do
+  defp update_or_delete_condition(table, condition_id, [], other_shapes)
+       when other_shapes == %{} do
     :ets.delete(table, condition_id)
     :deleted
   end
