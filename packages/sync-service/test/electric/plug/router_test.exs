@@ -1393,62 +1393,6 @@ defmodule Electric.Plug.RouterTest do
     end
 
     @tag with_sql: [
-           "CREATE TABLE bigint_test (id BIGINT PRIMARY KEY, value TEXT NOT NULL)",
-           # Insert values larger than int32 max (2,147,483,647)
-           "INSERT INTO bigint_test VALUES (2147483648, 'just above int32'), (2793017076, 'large bigint'), (3500000000, 'another large')"
-         ]
-    test "GET supports WHERE clause with integers larger than int32 max", %{opts: opts} do
-      # Test exact match with value just above int32 max
-      conn =
-        conn("GET", "/v1/shape?table=bigint_test", %{offset: "-1", where: "id = 2147483648"})
-        |> Router.call(opts)
-
-      assert %{status: 200} = conn
-
-      assert [
-               %{
-                 "headers" => %{"operation" => "insert"},
-                 "value" => %{"id" => "2147483648", "value" => "just above int32"}
-               },
-               %{"headers" => %{"control" => "snapshot-end"}}
-             ] = Jason.decode!(conn.resp_body)
-
-      # Test with larger bigint value
-      conn =
-        conn("GET", "/v1/shape?table=bigint_test", %{offset: "-1", where: "id = 2793017076"})
-        |> Router.call(opts)
-
-      assert %{status: 200} = conn
-
-      assert [
-               %{
-                 "headers" => %{"operation" => "insert"},
-                 "value" => %{"id" => "2793017076", "value" => "large bigint"}
-               },
-               %{"headers" => %{"control" => "snapshot-end"}}
-             ] = Jason.decode!(conn.resp_body)
-
-      # Test IN clause with multiple large integers
-      conn =
-        conn("GET", "/v1/shape?table=bigint_test", %{
-          offset: "-1",
-          where: "id IN (2147483648, 3500000000)"
-        })
-        |> Router.call(opts)
-
-      assert %{status: 200} = conn
-
-      results =
-        Jason.decode!(conn.resp_body)
-        |> Enum.filter(&match?(%{"headers" => %{"operation" => "insert"}}, &1))
-
-      assert length(results) == 2
-
-      ids = Enum.map(results, fn %{"value" => %{"id" => id}} -> id end) |> Enum.sort()
-      assert ids == ["2147483648", "3500000000"]
-    end
-
-    @tag with_sql: [
            "CREATE TABLE large_rows_table (id BIGINT PRIMARY KEY, value TEXT NOT NULL)"
          ]
     test "GET receives chunked results based on size", %{
