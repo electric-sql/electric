@@ -23,35 +23,44 @@
   ??     -> service.version: Str(
 
   # Verify that LSN metrics are exported
-  ??Metric #
-  ??Descriptor:
-  ??     -> Name: electric.postgres.replication.pg_current_wal_lsn
-  ??     -> Unit: By
-  ??     -> DataType: Gauge
-  ??NumberDataPoints #
-  ??StartTimestamp:
-  ??Timestamp:
-  ??Value:
+  """?
+  Metric #[0-9]+
+  Descriptor:
+       -> Name: electric\.postgres\.replication\.pg_wal_offset
+       -> Description: 
+       -> Unit: 
+       -> DataType: Gauge
+  NumberDataPoints #0
+  StartTimestamp: [-0-9]+ [.:0-9]+ [-+0-9]+ UTC
+  Timestamp: [-0-9]+ [.:0-9]+ [-+0-9]+ UTC
+  Value: [-+.0-9]+
+  """
 
-  ??Metric #
-  ??Descriptor:
-  ??     -> Name: electric.postgres.replication.slot_confirmed_flush_lsn_lag
-  ??     -> Unit: By
-  ??     -> DataType: Gauge
-  ??NumberDataPoints #
-  ??StartTimestamp:
-  ??Timestamp:
-  ??Value:
+  """?
+  Metric #[0-9]+
+  Descriptor:
+       -> Name: electric\.postgres\.replication\.slot_confirmed_flush_lsn_lag
+       -> Description: 
+       -> Unit: By
+       -> DataType: Gauge
+  NumberDataPoints #0
+  StartTimestamp: [-0-9]+ [.:0-9]+ [-+0-9]+ UTC
+  Timestamp: [-0-9]+ [.:0-9]+ [-+0-9]+ UTC
+  Value: [-+.0-9]+
+  """
 
-  ??Metric #
-  ??Descriptor:
-  ??     -> Name: electric.postgres.replication.slot_retained_wal_size
-  ??     -> Unit: By
-  ??     -> DataType: Gauge
-  ??NumberDataPoints #
-  ??StartTimestamp:
-  ??Timestamp:
-  ??Value:
+  """?
+  Metric #[0-9]+
+  Descriptor:
+       -> Name: electric\.postgres\.replication\.slot_retained_wal_size
+       -> Description: 
+       -> Unit: By
+       -> DataType: Gauge
+  NumberDataPoints #0
+  StartTimestamp: [-0-9]+ [.:0-9]+ [-+0-9]+ UTC
+  Timestamp: [-0-9]+ [.:0-9]+ [-+0-9]+ UTC
+  Value: [-+.0-9]+
+  """
 
 ###
 
