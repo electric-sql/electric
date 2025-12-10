@@ -668,7 +668,9 @@ defmodule Electric.Replication.Eval.ParserTest do
 
       # Negative large integer
       assert {:ok, %Expr{eval: result}} =
-               Parser.parse_and_validate_expression(~S|id = -3000000000|, refs: %{["id"] => :int8})
+               Parser.parse_and_validate_expression(~S|id = -3000000000|,
+                 refs: %{["id"] => :int8}
+               )
 
       assert %Func{args: [%Ref{type: :int8}, %Const{type: :int8, value: -3_000_000_000}]} = result
     end
