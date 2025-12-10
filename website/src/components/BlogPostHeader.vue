@@ -19,7 +19,7 @@ const formattedDate = computed(() => {
     month: 'numeric',
     day: 'numeric',
     year: 'numeric',
-    timeZone: 'UTC'
+    timeZone: 'UTC',
   })
 })
 
@@ -101,7 +101,10 @@ h1 {
 <template>
   <div class="post-header">
     <p class="post-image">
-      <img :src="optimizedImageSrcset.src" :srcset="optimizedImageSrcset.srcset" />
+      <img
+        :src="optimizedImageSrcset.src"
+        :srcset="optimizedImageSrcset.srcset"
+      />
     </p>
     <h1>
       {{ frontmatter.title }}
@@ -126,16 +129,16 @@ h1 {
           :href="'/about/team#' + slug"
           class="no-visual"
         >
-          <span>{{ authors[slug].name
-          }}<span v-if="index < frontmatter.authors.length - 1"
-            ><span v-if="index < frontmatter.authors.length - 2">,&nbsp;</span
-            ><span v-else>&nbsp;and&nbsp;</span></span
-          ></span>
+          <span
+            >{{ authors[slug].name
+            }}<span v-if="index < frontmatter.authors.length - 1"
+              ><span v-if="index < frontmatter.authors.length - 2">,&nbsp;</span
+              ><span v-else>&nbsp;and&nbsp;</span></span
+            ></span
+          >
         </a>
         <ClientOnly>
-          <span class="date">
-            &nbsp;on {{ formattedDate }}.
-          </span>
+          <span class="date"> &nbsp;on {{ formattedDate }}. </span>
         </ClientOnly>
       </div>
     </div>
