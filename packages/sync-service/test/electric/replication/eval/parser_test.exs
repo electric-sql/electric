@@ -673,6 +673,14 @@ defmodule Electric.Replication.Eval.ParserTest do
                )
 
       assert %Func{args: [%Ref{type: :int8}, %Const{type: :int8, value: -3_000_000_000}]} = result
+
+      # Actual floats should still be parsed as numeric
+      assert {:ok, %Expr{eval: result}} =
+               Parser.parse_and_validate_expression(~S|value = 2147483648.5|,
+                 refs: %{["value"] => :numeric}
+               )
+
+      assert %Func{args: [%Ref{type: :numeric}, %Const{type: :numeric}]} = result
     end
 
     test "implements common array operators: @>, <@, &&, ||" do
