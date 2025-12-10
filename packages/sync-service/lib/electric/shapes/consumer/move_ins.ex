@@ -11,7 +11,9 @@ defmodule Electric.Shapes.Consumer.MoveIns do
             touch_tracker: %{},
             move_in_buffering_snapshot: nil,
             in_flight_values: %{},
-            moved_out_tags: %{}
+            moved_out_tags: %{},
+            maximum_resolved_snapshot: nil,
+            minimum_unresolved_snapshot: nil
 
   @type pg_snapshot() :: SnapshotQuery.pg_snapshot()
   @type move_in_name() :: String.t()
@@ -34,6 +36,9 @@ defmodule Electric.Shapes.Consumer.MoveIns do
                         where clause evaluation until the results are appended to the log.
   - `moved_out_tags`: A map of move-in names to sets of tags that were moved out while the move-in was happening and thus
                       should be skipped when appending move-in results to the log.
+  - `maximum_resolved_snapshot`: Stores the maximum snapshot of resolved move-ins that weren't immediately appended as
+                                 snapshot-end control messages, to be appended when the last concurrent move-in resolves.
+  - `minimum_unresolved_snapshot`: Stores the minimum snapshot of unresolved move-ins.
   """
   @type t() :: %__MODULE__{
           waiting_move_ins: %{move_in_name() => {pg_snapshot(), {term(), MapSet.t()}}},
@@ -41,7 +46,9 @@ defmodule Electric.Shapes.Consumer.MoveIns do
           touch_tracker: %{String.t() => pos_integer()},
           move_in_buffering_snapshot: nil | pg_snapshot(),
           in_flight_values: in_flight_values(),
-          moved_out_tags: %{move_in_name() => MapSet.t(String.t())}
+          moved_out_tags: %{move_in_name() => MapSet.t(String.t())},
+          maximum_resolved_snapshot: nil | pg_snapshot(),
+          minimum_unresolved_snapshot: nil | pg_snapshot()
         }
   def new() do
     %__MODULE__{}
@@ -49,16 +56,15 @@ defmodule Electric.Shapes.Consumer.MoveIns do
 
   @doc """
   Add information about a new move-in to the state for which we're waiting.
-  Snapshot can be nil initially and will be set later when the query begins.
+  Snapshot is initially nil and will be set later when the query begins.
   """
-  @spec add_waiting(t(), move_in_name(), pg_snapshot() | nil, {term(), MapSet.t()}) :: t()
+  @spec add_waiting(t(), move_in_name(), {term(), MapSet.t()}) :: t()
   def add_waiting(
         %__MODULE__{waiting_move_ins: waiting_move_ins} = state,
         name,
-        snapshot,
         moved_values
       ) do
-    new_waiting_move_ins = Map.put(waiting_move_ins, name, {snapshot, moved_values})
+    new_waiting_move_ins = Map.put(waiting_move_ins, name, {nil, moved_values})
     new_buffering_snapshot = make_move_in_buffering_snapshot(new_waiting_move_ins)
 
     %{
@@ -91,7 +97,8 @@ defmodule Electric.Shapes.Consumer.MoveIns do
     %{
       state
       | waiting_move_ins: new_move_ins,
-        move_in_buffering_snapshot: new_buffering_snapshot
+        move_in_buffering_snapshot: new_buffering_snapshot,
+        minimum_unresolved_snapshot: min_snapshot(state.minimum_unresolved_snapshot, snapshot)
     }
   end
 
@@ -130,22 +137,47 @@ defmodule Electric.Shapes.Consumer.MoveIns do
   end
 
   @doc """
-  Change a move-in from "waiting" to "filtering".
+  Change a move-in from "waiting" to "filtering", marking it as complete and return best-effort visibility boundary.
   """
-  @spec change_to_filtering(t(), move_in_name(), MapSet.t(String.t())) :: t()
+  @spec change_to_filtering(t(), move_in_name(), MapSet.t(String.t())) ::
+          {visibility_boundary :: nil | pg_snapshot(), t()}
   def change_to_filtering(%__MODULE__{} = state, name, key_set) do
     {{snapshot, _}, waiting_move_ins} = Map.pop!(state.waiting_move_ins, name)
     filtering_move_ins = [{snapshot, key_set} | state.filtering_move_ins]
     buffering_snapshot = make_move_in_buffering_snapshot(waiting_move_ins)
 
-    %{
+    {boundary, maximum_resolved_snapshot} =
+      cond do
+        waiting_move_ins == %{} -> {max_snapshot(state.maximum_resolved_snapshot, snapshot), nil}
+        is_minimum_snapshot?(state, snapshot) -> {snapshot, state.maximum_resolved_snapshot}
+        true -> {nil, max_snapshot(state.maximum_resolved_snapshot, snapshot)}
+      end
+
+    new_state = %{
       state
       | waiting_move_ins: waiting_move_ins,
         filtering_move_ins: filtering_move_ins,
         move_in_buffering_snapshot: buffering_snapshot,
         in_flight_values: make_in_flight_values(waiting_move_ins),
-        moved_out_tags: Map.delete(state.moved_out_tags, name)
+        moved_out_tags: Map.delete(state.moved_out_tags, name),
+        minimum_unresolved_snapshot: find_minimum_unresolved_snapshot(waiting_move_ins),
+        maximum_resolved_snapshot: maximum_resolved_snapshot
     }
+
+    {boundary, new_state}
+  end
+
+  defp find_minimum_unresolved_snapshot(waiting_move_ins) do
+    snapshots =
+      waiting_move_ins
+      |> Map.values()
+      |> Enum.map(fn {snapshot, _} -> snapshot end)
+      |> Enum.reject(&is_nil/1)
+
+    case snapshots do
+      [] -> nil
+      list -> Enum.min(list, &(Xid.compare_snapshots(&1, &2) != :gt))
+    end
   end
 
   @doc """
@@ -243,5 +275,67 @@ defmodule Electric.Shapes.Consumer.MoveIns do
     touch_xid = Map.fetch!(touch_tracker, key)
     # Skip if touch is NOT visible in snapshot (means we have fresher data in stream)
     not Transaction.visible_in_snapshot?(touch_xid, snapshot)
+  end
+
+  @spec max_snapshot(pg_snapshot() | nil, pg_snapshot() | nil) :: pg_snapshot()
+  defp max_snapshot(nil, value), do: value
+  defp max_snapshot(value, nil), do: value
+
+  defp max_snapshot(snapshot1, snapshot2) do
+    case Xid.compare_snapshots(snapshot1, snapshot2) do
+      :lt -> snapshot2
+      _ -> snapshot1
+    end
+  end
+
+  @spec min_snapshot(pg_snapshot(), pg_snapshot()) :: pg_snapshot()
+  defp min_snapshot(nil, value), do: value
+  defp min_snapshot(value, nil), do: value
+
+  defp min_snapshot(snapshot1, snapshot2) do
+    case Xid.compare_snapshots(snapshot1, snapshot2) do
+      :lt -> snapshot1
+      _ -> snapshot2
+    end
+  end
+
+  @doc """
+  Check if the given snapshot is the minimum among all concurrent waiting move-ins
+  (excluding the current one being resolved, and only considering those with known snapshots).
+  """
+  @spec is_minimum_snapshot?(t(), pg_snapshot()) :: boolean()
+  def is_minimum_snapshot?(
+        %__MODULE__{minimum_unresolved_snapshot: minimum_unresolved_snapshot},
+        snapshot
+      ) do
+    Xid.compare_snapshots(snapshot, minimum_unresolved_snapshot) == :eq
+  end
+
+  @doc """
+  Store or update the maximum resolved snapshot.
+  If there's already a stored snapshot, keep the maximum of the two.
+  """
+  @spec store_maximum_resolved_snapshot(t(), pg_snapshot()) :: t()
+  def store_maximum_resolved_snapshot(
+        %__MODULE__{maximum_resolved_snapshot: nil} = state,
+        snapshot
+      ) do
+    %{state | maximum_resolved_snapshot: snapshot}
+  end
+
+  def store_maximum_resolved_snapshot(
+        %__MODULE__{maximum_resolved_snapshot: stored} = state,
+        snapshot
+      ) do
+    %{state | maximum_resolved_snapshot: max_snapshot(stored, snapshot)}
+  end
+
+  @doc """
+  Get the stored maximum resolved snapshot and clear it, or return nil if none is stored.
+  Returns {snapshot | nil, updated_state}.
+  """
+  @spec get_and_clear_maximum_resolved_snapshot(t()) :: {pg_snapshot() | nil, t()}
+  def get_and_clear_maximum_resolved_snapshot(%__MODULE__{} = state) do
+    {state.maximum_resolved_snapshot, %{state | maximum_resolved_snapshot: nil}}
   end
 end

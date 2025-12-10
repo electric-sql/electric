@@ -316,7 +316,7 @@ defmodule Electric.ShapeCache.InMemoryStorage do
   @impl Electric.ShapeCache.Storage
   def write_move_in_snapshot!(stream, name, %MS{log_table: log_table}) do
     stream
-    |> Stream.map(fn {key, tags, json} -> {{:movein, {name, key}}, {tags, json}} end)
+    |> Stream.map(fn [key, tags, json] -> {{:movein, {name, key}}, {tags, json}} end)
     |> Stream.chunk_every(500)
     |> Stream.each(&:ets.insert(log_table, &1))
     |> Stream.run()
@@ -340,11 +340,11 @@ defmodule Electric.ShapeCache.InMemoryStorage do
     initial_offset = current_offset(opts)
     ref = make_ref()
 
-    Stream.unfold(initial_offset, fn offset ->
-      case :ets.next_lookup(log_table, {:movein, {name, nil}}) do
-        {{:movein, {^name, _}}, [{_, item}]} ->
+    Stream.unfold({initial_offset, {:movein, {name, nil}}}, fn {offset, last_key} ->
+      case :ets.next_lookup(log_table, last_key) do
+        {{:movein, {^name, _}} = key, [{_, {_tags, json}}]} ->
           offset = LogOffset.increment(offset)
-          {{{:offset, storage_offset(offset)}, item}, offset}
+          {{{:offset, storage_offset(offset)}, json}, {offset, key}}
 
         _ ->
           send(self(), {ref, offset})
@@ -373,21 +373,21 @@ defmodule Electric.ShapeCache.InMemoryStorage do
     initial_offset = current_offset(opts)
     ref = make_ref()
 
-    Stream.unfold(initial_offset, fn offset ->
-      case :ets.next_lookup(log_table, {:movein, {name, nil}}) do
-        {{:movein, {^name, _}}, [{{:move_in, {_, key}}, {tags, json}}]} ->
+    Stream.unfold({initial_offset, {:movein, {name, nil}}}, fn {offset, last_key} ->
+      case :ets.next_lookup(log_table, last_key) do
+        {{:movein, {^name, _}} = ets_key, [{{:movein, {^name, key}}, {tags, json}}]} ->
           # Check if this row should be skipped
-          if Enum.all?(tags, &MapSet.member?(tags_to_skip, &1)) or
+          if (tags != [] and Enum.all?(tags, &MapSet.member?(tags_to_skip, &1))) or
                Electric.Shapes.Consumer.MoveIns.should_skip_query_row?(
                  touch_tracker,
                  snapshot,
                  key
                ) do
-            # Skip this row - don't increment offset
-            {[], offset}
+            # Skip this row - don't increment offset, but advance to next key
+            {[], {offset, ets_key}}
           else
             offset = LogOffset.increment(offset)
-            {{{:offset, storage_offset(offset)}, json}, offset}
+            {{{:offset, storage_offset(offset)}, json}, {offset, ets_key}}
           end
 
         _ ->

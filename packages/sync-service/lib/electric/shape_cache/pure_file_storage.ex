@@ -962,7 +962,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
   end
 
   defp read_tags(file, tag_count) do
-    for _ <- 1..tag_count do
+    for _ <- 1..tag_count//1 do
       <<tag_size::16>> = IO.binread(file, 2)
       <<tag::binary-size(tag_size)>> = IO.binread(file, tag_size)
       tag
@@ -1026,10 +1026,9 @@ defmodule Electric.ShapeCache.PureFileStorage do
     {inserted_range, state}
   end
 
-  defp all_parents_moved_out?(_tags, []), do: false
-
-  defp all_parents_moved_out?(tags, tags_to_skip),
-    do: Enum.all?(tags, &MapSet.member?(tags_to_skip, &1))
+  defp all_parents_moved_out?(tags, tags_to_skip) do
+    tags != [] and Enum.all?(tags, &MapSet.member?(tags_to_skip, &1))
+  end
 
   def append_control_message!(control_message, writer_state(writer_acc: acc) = state)
       when is_binary(control_message) do
