@@ -25,8 +25,6 @@ jobs:
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
-          registry-url: 'https://registry.npmjs.org'
-          always-auth: true
           node-version-file: '.tool-versions'
           cache: pnpm
       - uses: erlef/setup-beam@v1
@@ -35,6 +33,7 @@ jobs:
           version-file: '.tool-versions'
       - run: pnpm install --frozen-lockfile
       - run: pnpm run -r --filter './packages/**' build
+
       - name: Create Release Pull Request or Publish
         id: changesets
         uses: changesets/action@v1

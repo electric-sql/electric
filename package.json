@@ -6,6 +6,9 @@
     "dotenv-cli": "^7.4.2"
   },
   "packageManager": "pnpm@9.15.0",
+  "engines": {
+    "npm": ">=11.5.1"
+  },
   "private": true,
   "scripts": {
     "ci:publish": "pnpm '/^ci:publish:.+/' && pnpm exec changeset tag",
