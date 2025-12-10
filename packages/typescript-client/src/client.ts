@@ -863,16 +863,16 @@ export class ShapeStream<T extends Row<unknown> = Row>
         // Get original columns array from options (before toInternalParams converted to string)
         const originalColumns = await resolveValue(this.options.params?.columns)
         if (Array.isArray(originalColumns)) {
-          // Quote each column name to handle special characters (commas, etc.)
           // Apply columnMapper encoding if present
-          const serializedColumns = originalColumns
-            .map((col) => {
-              const colStr = String(col)
-              const encoded = this.options.columnMapper
-                ? this.options.columnMapper.encode(colStr)
-                : colStr
-              return quoteIdentifier(encoded)
-            })
+          let encodedColumns = originalColumns.map(String)
+          if (this.options.columnMapper) {
+            encodedColumns = encodedColumns.map(
+              this.options.columnMapper.encode
+            )
+          }
+          // Quote each column name to handle special characters (commas, etc.)
+          const serializedColumns = encodedColumns
+            .map(quoteIdentifier)
             .join(`,`)
           setQueryParam(fetchUrl, COLUMNS_QUERY_PARAM, serializedColumns)
         } else {
