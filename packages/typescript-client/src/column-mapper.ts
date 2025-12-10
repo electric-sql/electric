@@ -4,6 +4,31 @@ type DbColumnName = string
 type AppColumnName = string
 
 /**
+ * Quote a PostgreSQL identifier for safe use in query parameters.
+ *
+ * Wraps the identifier in double quotes and escapes any internal
+ * double quotes by doubling them. This ensures identifiers with
+ * special characters (commas, spaces, etc.) are handled correctly.
+ *
+ * @param identifier - The identifier to quote
+ * @returns The quoted identifier
+ *
+ * @example
+ * ```typescript
+ * quoteIdentifier('user_id')        // '"user_id"'
+ * quoteIdentifier('foo,bar')        // '"foo,bar"'
+ * quoteIdentifier('has"quote')      // '"has""quote"'
+ * ```
+ *
+ * @internal
+ */
+export function quoteIdentifier(identifier: string): string {
+  // Escape internal double quotes by doubling them
+  const escaped = identifier.replace(/"/g, `""`)
+  return `"${escaped}"`
+}
+
+/**
  * A bidirectional column mapper that handles transforming column **names**
  * between database format (e.g., snake_case) and application format (e.g., camelCase).
  *

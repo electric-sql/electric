@@ -81,7 +81,7 @@ describe(`ShapeStream`, () => {
     )
 
     expect(requestedUrls[0].split(`?`)[1]).toEqual(
-      `columns=id&handle=potato&log=full&offset=-1&table=foo&where=a%3D1`
+      `columns=%22id%22&handle=potato&log=full&offset=-1&table=foo&where=a%3D1`
     )
   })
 
@@ -157,7 +157,7 @@ describe(`ShapeStream`, () => {
     )
 
     expect(requestedUrls[0].split(`?`)[1]).toEqual(
-      `columns=id&handle=potato&log=full&offset=-1&params%5B1%5D=test1&params%5B2%5D=test2&table=foo&where=a%3D%241+and+b%3D%242`
+      `columns=%22id%22&handle=potato&log=full&offset=-1&params%5B1%5D=test1&params%5B2%5D=test2&table=foo&where=a%3D%241+and+b%3D%242`
     )
   })
 
@@ -193,7 +193,7 @@ describe(`ShapeStream`, () => {
     )
 
     expect(requestedUrls[0].split(`?`)[1]).toEqual(
-      `columns=id&handle=potato&log=full&offset=-1&params%5B1%5D=test1&params%5B2%5D=test2&table=foo&where=a%3D%241+and+b%3D%242`
+      `columns=%22id%22&handle=potato&log=full&offset=-1&params%5B1%5D=test1&params%5B2%5D=test2&table=foo&where=a%3D%241+and+b%3D%242`
     )
   })
 
@@ -228,7 +228,8 @@ describe(`ShapeStream`, () => {
 
     const url = new URL(requestedUrls[0])
     // columns should be encoded from app format (camelCase) to db format (snake_case)
-    expect(url.searchParams.get(`columns`)).toEqual(`user_id,created_at`)
+    // and quoted for safe serialization
+    expect(url.searchParams.get(`columns`)).toEqual(`"user_id","created_at"`)
   })
 
   it(`should encode where clause with columnMapper`, async () => {
@@ -265,7 +266,7 @@ describe(`ShapeStream`, () => {
     expect(url.searchParams.get(`where`)).toEqual(`user_id = $1`)
   })
 
-  it(`should not encode columns when columnMapper is not provided`, async () => {
+  it(`should quote columns even when columnMapper is not provided`, async () => {
     const eventTarget = new EventTarget()
     const requestedUrls: Array<string> = []
     const fetchWrapper = (
@@ -294,8 +295,43 @@ describe(`ShapeStream`, () => {
     )
 
     const url = new URL(requestedUrls[0])
-    // columns should remain unchanged when no columnMapper is provided
-    expect(url.searchParams.get(`columns`)).toEqual(`user_id,created_at`)
+    // columns should be quoted for safe serialization
+    expect(url.searchParams.get(`columns`)).toEqual(`"user_id","created_at"`)
+  })
+
+  it(`should handle columns with special characters`, async () => {
+    const eventTarget = new EventTarget()
+    const requestedUrls: Array<string> = []
+    const fetchWrapper = (
+      ...args: Parameters<typeof fetch>
+    ): Promise<Response> => {
+      requestedUrls.push(args[0].toString())
+      eventTarget.dispatchEvent(new Event(`fetch`))
+      return Promise.resolve(Response.error())
+    }
+
+    const aborter = new AbortController()
+    const stream = new ShapeStream({
+      url: shapeUrl,
+      params: {
+        table: `foo`,
+        columns: [`normal`, `has,comma`, `has"quote`],
+      },
+      signal: aborter.signal,
+      fetchClient: fetchWrapper,
+    })
+
+    const unsub = stream.subscribe(() => unsub())
+
+    await new Promise((resolve) =>
+      eventTarget.addEventListener(`fetch`, resolve, { once: true })
+    )
+
+    const url = new URL(requestedUrls[0])
+    // columns with special characters should be properly quoted and escaped
+    expect(url.searchParams.get(`columns`)).toEqual(
+      `"normal","has,comma","has""quote"`
+    )
   })
 
   it(`should decode data columns with columnMapper`, async () => {
