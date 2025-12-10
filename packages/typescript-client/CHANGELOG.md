@@ -1,5 +1,12 @@
 # @electric-sql/client
 
+## 1.2.1
+
+### Patch Changes
+
+- a302f66: feat: add support for subqueries without invalidation
+- 3f3c078: Add SSE-related headers to client requests
+
 ## 1.2.0
 
 ### Minor Changes
