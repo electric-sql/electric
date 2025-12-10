@@ -2273,6 +2273,7 @@ describe.for(fetchAndSse)(
 
 it(
   `should fall back to long polling after 3 consecutive short SSE connections`,
+  { timeout: 15000 },
   async ({ issuesTableUrl, aborter }) => {
     let requestCount = 0
     let sseRequestCount = 0
@@ -2395,12 +2396,12 @@ it(
       // Restore console.warn
       console.warn = originalWarn
     }
-  },
-  { timeout: 15000 }
+  }
 )
 
 it(
   `should reset SSE fallback state after shape rotation (409)`,
+  { timeout: 20000 },
   async ({ issuesTableUrl, aborter }) => {
     let sseRequestCount = 0
     let shouldReturn409 = false
@@ -2548,12 +2549,12 @@ it(
     } finally {
       console.warn = originalWarn
     }
-  },
-  { timeout: 20000 }
+  }
 )
 
 it(
   `should not increment short connection counter for aborted SSE connections`,
+  { timeout: 10000 },
   async ({ issuesTableUrl, aborter }) => {
     let sseRequestCount = 0
     const requestUrls: string[] = []
@@ -2668,6 +2669,5 @@ it(
     } finally {
       console.warn = originalWarn
     }
-  },
-  { timeout: 10000 }
+  }
 )

@@ -8,12 +8,14 @@ import * as decoding from 'lib0/decoding'
 vi.mock(`@electric-sql/client`, async (importOriginal) => {
   // eslint-disable-next-line quotes
   const mod = await importOriginal<typeof import('@electric-sql/client')>()
-  const ShapeStream = vi.fn(() => ({
-    subscribe: vi.fn().mockReturnValue(vi.fn()),
-    unsubscribeAll: vi.fn(),
-    isUpToDate: true,
-    shapes: {},
-  }))
+  const ShapeStream = vi.fn(function (this: any) {
+    return {
+      subscribe: vi.fn().mockReturnValue(vi.fn()),
+      unsubscribeAll: vi.fn(),
+      isUpToDate: true,
+      shapes: {},
+    }
+  })
   return { ...mod, ShapeStream }
 })
 
@@ -30,7 +32,7 @@ export function createMockProvider(
     connect?: boolean
   } = {}
 ): ElectricProvider {
-  MockShapeStream.mockImplementation(() => {
+  MockShapeStream.mockImplementation(function (this: any) {
     let unsubscribed = false
     return {
       subscribe: vi.fn(

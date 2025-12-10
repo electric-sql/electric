@@ -20,14 +20,21 @@ describe(`ExpiredShapesCache`, () => {
   let cache: ExpiredShapesCache
   const shapeUrl = `https://example.com/v1/shape`
   let aborter: AbortController
-  let fetchMock: ReturnType<typeof vi.fn>
+  let fetchMock: ReturnType<
+    typeof vi.fn<
+      (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
+    >
+  >
 
   beforeEach(() => {
     localStorage.clear()
     cache = new ExpiredShapesCache()
     expiredShapesCache.clear()
     aborter = new AbortController()
-    fetchMock = vi.fn()
+    fetchMock =
+      vi.fn<
+        (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
+      >()
     vi.clearAllMocks()
   })
 
@@ -102,8 +109,8 @@ describe(`ExpiredShapesCache`, () => {
     const expiredHandle = `expired-handle-123`
     expiredShapesCache.markExpired(expectedShapeUrl, expiredHandle)
 
-    fetchMock.mockImplementation((url: string) => {
-      capturedUrl = url
+    fetchMock.mockImplementation((input: RequestInfo | URL) => {
+      capturedUrl = input.toString()
       aborter.abort()
       return Promise.resolve(
         new Response(JSON.stringify([]), {

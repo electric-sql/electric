@@ -6,14 +6,21 @@ describe(`UpToDateTracker`, () => {
   let tracker: UpToDateTracker
   const shapeUrl = `https://example.com/v1/shape`
   let aborter: AbortController
-  let fetchMock: ReturnType<typeof vi.fn>
+  let fetchMock: ReturnType<
+    typeof vi.fn<
+      (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
+    >
+  >
 
   beforeEach(() => {
     localStorage.clear()
     tracker = new UpToDateTracker()
     upToDateTracker.clear()
     aborter = new AbortController()
-    fetchMock = vi.fn()
+    fetchMock =
+      vi.fn<
+        (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
+      >()
     vi.clearAllMocks()
   })
 

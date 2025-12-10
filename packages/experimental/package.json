@@ -24,7 +24,7 @@
     "tsup": "^8.0.1",
     "typescript": "^5.5.2",
     "uuid": "^10.0.0",
-    "vitest": "^2.0.2"
+    "vitest": "^4.0.15"
   },
   "peerDependencies": {
     "@electric-sql/client": "workspace:*"

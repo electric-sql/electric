@@ -25,7 +25,7 @@
     "shx": "^0.3.4",
     "tsup": "^8.0.1",
     "typescript": "^5.5.2",
-    "vitest": "^2.0.2"
+    "vitest": "^4.0.15"
   },
   "scripts": {
     "build": "shx rm -rf dist && tsup && tsc -p tsconfig.build.json",
