@@ -14,7 +14,7 @@
     "@types/uuid": "^10.0.0",
     "@typescript-eslint/eslint-plugin": "^7.14.1",
     "@typescript-eslint/parser": "^7.14.1",
-    "@vitest/coverage-istanbul": "2.1.4",
+    "@vitest/coverage-istanbul": "4.0.15",
     "cache-control-parser": "^2.0.6",
     "concurrently": "^8.2.2",
     "eslint": "^8.57.0",
