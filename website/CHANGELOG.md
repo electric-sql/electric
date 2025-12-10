@@ -1,5 +1,11 @@
 # @electric-sql/docs
 
+## 0.0.4
+
+### Patch Changes
+
+- b0b9445: Remove suspend_consumers feature flag and disable consumer suspend by default
+
 ## 0.0.3
 
 ### Patch Changes
@@ -32,7 +38,6 @@
   ```
 
   ## Common Use Cases
-
   - Authentication tokens that need to be refreshed
   - User-specific parameters that may change
   - Dynamic filtering based on current state
@@ -77,7 +82,6 @@
   ```
 
   ## Common Use Cases
-
   - Authentication tokens that need to be refreshed
   - User-specific parameters that may change
   - Dynamic filtering based on current state

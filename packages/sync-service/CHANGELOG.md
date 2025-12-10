@@ -1,5 +1,42 @@
 # @core/sync-service
 
+## 1.2.8
+
+### Patch Changes
+
+- e90e24e: fix: ensure correct log reading near the log start, especially when a move-in/out is a first thing in the shape log
+  fix: ensure correct processing of move-in/move-out sequences affecting same values
+  fix: ensure correct move-in handling without duplicated data
+- 90a9867: Fix enum parameters for subsets
+- 331676d: Reconcile ShapeStatus ETS backup rather than invalidate when stored shape handles and backed up handles diverge.
+- de366ee: Handle ShapeLogCollector shape registrations and deregistrations in separate process to batch them.
+- 7e91dba: Guard against `nil` waiters in SLC RequestBatcher correctly.
+- ceef72c: Fix incorrect metric name: electric.postgres.replication.{pg_current_wal_lsn => pg_wal_offset}.
+- e90e24e: feat: add support for better buffering strategy over move-ins, unlocking 3+ shape layers
+- c28e8ed: Extract telemetry code from Electric into a separate package, for easier modification and sharing of the telemetry code between Electric and Cloud.
+- 0a82280: Hibernate the shape status owner process to release any memory accumulated during startup
+- ebdc25d: Migrate Filter module and indexes from Elixir maps to ETS tables to reduce GC pressure when tracking large numbers of shapes.
+- 900b9f1: Don't drop publication with manual_table_publishing
+- 7bb6910: Fix a memory leak where for terminated shapes PureFileStorage would still maintain an entry in its ETS table.
+- accd2a0: Fix out of bounds errros on requests because of inconsistent virtual snapshot offset recovery.
+- fb24539: Reduce memory consumption by filtering transactions to only include the changes that affect the shape
+- 0408955: fix(subqueries): make sure tagging works on escaped column names
+- bc16173: Fix issue with least recently used ordering with equal timestamps
+- eca90d3: Handle out of bounds requests with a timeout, allowing them to potentially be rescued by incoming data.
+- 4d8e61f: Refactor shape status to move shape lookups to an external module
+- 45e3490: Use ETS table for tracking shapes to avoid unbounded map growth
+- a302f66: feat: add support for subqueries without invalidation
+- 32ea8f0: feat: add `snapshot-end` messages at the end of every move-in to expose transaction visibility to the clients
+- 3272735: Remove redundant behaviour descriptions
+- 65edd9f: Reduce PublicationManager memory usage
+- 48b6bf0: Allow enums in subset where clauses
+- 128c362: Fix a bug in LockBreakerConnection that was preventing it from terminating stuck backends holding the advisory lock.
+- 96cacdc: Fix the name of the metrics that reports replication slot's confirmed flush lag and add two new metrics: retained WAL size (the diff between PG's current LSN and the slot's restart_lsn) and the current PG LSN itself which can be used to plot the write rate happening in the database at any given time.
+- 0849691: Ensure `ShapeStatus` backup is saved and loaded at the appropriate times to accelerate rolling deploys and controlled restarts.
+- e27b72b: Cleanup API config and terminate request handler processes periodically
+- b0b9445: Remove suspend_consumers feature flag and disable consumer suspend by default
+- 1d5a8a9: Avoid shape definition lookups when requests include a shape handle
+
 ## 1.2.7
 
 ### Patch Changes
