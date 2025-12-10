@@ -13,6 +13,7 @@ import {
   IssueRow,
   testWithIssuesTable as it,
   testWithMultitypeTable as mit,
+  testWithSpecialColumnsTable as scit,
 } from './support/test-context'
 import * as h from './support/test-helpers'
 
@@ -814,6 +815,48 @@ describe(`HTTP Sync`, () => {
           i4: 20,
         },
       ])
+    }
+  )
+
+  scit(
+    `should handle columns with special characters (commas, quotes, spaces)`,
+    async ({ dbClient, aborter, tableSql, tableUrl }) => {
+      // Insert data with special column names
+      await dbClient.query(
+        `INSERT INTO ${tableSql} (id, "normal", "has,comma", "has""quote", "has space") VALUES ($1, $2, $3, $4, $5)`,
+        [1, `normal_value`, `comma_value`, `quote_value`, `space_value`]
+      )
+
+      // Get initial data, selecting only some columns including ones with special chars
+      const shapeData = new Map()
+      const stream = new ShapeStream({
+        url: `${BASE_URL}/v1/shape`,
+        params: {
+          table: tableUrl,
+          columns: [`id`, `normal`, `has,comma`, `has"quote`],
+        },
+        signal: aborter.signal,
+      })
+
+      await h.forEachMessage(stream, aborter, async (res, msg, nth) => {
+        if (!isChangeMessage(msg)) return
+        shapeData.set(msg.key, msg.value)
+
+        if (nth === 0) {
+          // Verify we got the correct columns, including those with special chars
+          expect(msg.value).toStrictEqual({
+            id: 1,
+            normal: `normal_value`,
+            'has,comma': `comma_value`,
+            'has"quote': `quote_value`,
+          })
+          // Verify the column with space was NOT included
+          expect(msg.value).not.toHaveProperty(`has space`)
+          res()
+        }
+      })
+
+      expect([...shapeData.values()]).toHaveLength(1)
     }
   )
 
