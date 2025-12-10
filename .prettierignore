@@ -3,6 +3,7 @@ node_modules
 dist
 build
 coverage
+.changeset
 .next
 .sst
 .nitro
@@ -16,12 +17,22 @@ sst.config.ts
 # Ignore website markdown files to prevent underscore escaping issues
 website/**/*.md
 
-# Ignore CSS file with unstable Prettier formatting
-website/.vitepress/theme/custom.css
+# Ignore internal Vitepress files
+website/.vitepress
 
 # Ignore website partials (documentation code snippets)
 website/src/partials/**
 
+# Ignore static files used by website
+website/public
+website/static
+
 # Ignore Elixir projects
-packages/sync-service
+packages/electric-telemetry
 packages/elixir-client
+packages/sync-service
+
+# Elixir deps, tests and build artifacts
+_build
+deps
+integration-tests
