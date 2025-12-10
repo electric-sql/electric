@@ -25,6 +25,8 @@ jobs:
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
+          registry-url: 'https://registry.npmjs.org'
+          always-auth: true
           node-version-file: '.tool-versions'
           cache: pnpm
       - uses: erlef/setup-beam@v1
@@ -42,13 +44,10 @@ jobs:
           title: 'chore: publish new package versions'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
           HEX_API_KEY: ${{ secrets.HEX_API_KEY }}
       - name: Add latest tag to published packages
         if: steps.changesets.outputs.published == 'true'
         run: node scripts/tag-latest.mjs
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
       - name: Comment on PRs about release
         if: steps.changesets.outputs.published == 'true'
         run: node scripts/comment-on-release.mjs
