@@ -381,6 +381,15 @@ export interface ShapeStreamOptions<T = never> {
   columnMapper?: ColumnMapper
 
   /**
+   * Enable debug logging for the ShapeStream. When enabled, logs state transitions
+   * (pause/resume), connection status changes, and other lifecycle events to the console.
+   * Useful for diagnosing sync issues where collections stop updating.
+   *
+   * @default false
+   */
+  debug?: boolean
+
+  /**
    * A function for handling shapestream errors.
    *
    * **Automatic retries**: The client automatically retries 5xx server errors, network
@@ -577,6 +586,17 @@ export class ShapeStream<T extends Row<unknown> = Row>
   #sseBackoffBaseDelay = 100 // Base delay for exponential backoff (ms)
   #sseBackoffMaxDelay = 5000 // Maximum delay cap (ms)
   #unsubscribeFromVisibilityChanges?: () => void
+  #debug: boolean = false
+
+  // Debug logging helper
+  #log(event: string, data?: Record<string, unknown>) {
+    if (this.#debug) {
+      const timestamp = new Date().toISOString()
+      const handle = this.#shapeHandle ? `[${this.#shapeHandle.slice(0, 8)}]` : ``
+      const dataStr = data ? ` ${JSON.stringify(data)}` : ``
+      console.log(`[Electric]${handle} ${timestamp} ${event}${dataStr}`)
+    }
+  }
 
   // Derived state: we're in replay mode if we have a last seen cursor
   get #replayMode(): boolean {
@@ -641,7 +661,14 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
     this.#fetchClient = createFetchWithConsumedMessages(this.#sseFetchClient)
 
+    this.#debug = options.debug ?? false
     this.#subscribeToVisibilityChanges()
+
+    this.#log(`ShapeStream created`, {
+      url: options.url,
+      subscribe: this.options.subscribe,
+      liveSse: options.liveSse,
+    })
   }
 
   get shapeHandle() {
@@ -730,6 +757,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
   async #requestShape(): Promise<void> {
     if (this.#state === `pause-requested`) {
+      this.#log(`pause completed`, { from: `pause-requested`, to: `paused` })
       this.#state = `paused`
 
       return
@@ -743,6 +771,9 @@ export class ShapeStream<T extends Row<unknown> = Row>
     }
 
     const resumingFromPause = this.#state === `paused`
+    if (resumingFromPause) {
+      this.#log(`requestShape (resuming from pause)`, { offset: this.#lastOffset })
+    }
     this.#state = `active`
 
     const { url, signal } = this.options
@@ -784,7 +815,13 @@ export class ShapeStream<T extends Row<unknown> = Row>
           requestAbortController.signal.reason === PAUSE_STREAM &&
           currentState === `pause-requested`
         ) {
+          this.#log(`fetch aborted for pause`, { from: currentState, to: `paused` })
           this.#state = `paused`
+        } else {
+          this.#log(`fetch aborted`, {
+            state: currentState,
+            reason: requestAbortController.signal.reason,
+          })
         }
         return // interrupted
       }
@@ -1134,6 +1171,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
     })
 
     this.#connected = true
+    this.#log(`connected (long-poll)`, { offset: this.#lastOffset })
     await this.#onInitialResponse(response)
 
     const schema = this.#schema! // we know that it is not undefined because it is set by `this.#onInitialResponse`
@@ -1168,6 +1206,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
         fetch,
         onopen: async (response: Response) => {
           this.#connected = true
+          this.#log(`connected (SSE)`, { offset: this.#lastOffset })
           await this.#onInitialResponse(response)
         },
         onmessage: (event: EventSourceMessage) => {
@@ -1248,13 +1287,18 @@ export class ShapeStream<T extends Row<unknown> = Row>
   }
 
   #pause() {
+    const prevState = this.#state
     if (this.#started && this.#state === `active`) {
       this.#state = `pause-requested`
+      this.#log(`pause`, { from: prevState, to: this.#state, started: this.#started })
       this.#requestAbortController?.abort(PAUSE_STREAM)
+    } else {
+      this.#log(`pause (no-op)`, { state: this.#state, started: this.#started })
     }
   }
 
   #resume() {
+    const prevState = this.#state
     if (
       this.#started &&
       (this.#state === `paused` || this.#state === `pause-requested`)
@@ -1264,7 +1308,10 @@ export class ShapeStream<T extends Row<unknown> = Row>
       if (this.#state === `pause-requested`) {
         this.#state = `active`
       }
+      this.#log(`resume`, { from: prevState, to: this.#state, started: this.#started })
       this.#start()
+    } else {
+      this.#log(`resume (no-op)`, { state: this.#state, started: this.#started })
     }
   }
 
@@ -1275,14 +1322,17 @@ export class ShapeStream<T extends Row<unknown> = Row>
     const subscriptionId = Math.random()
 
     this.#subscribers.set(subscriptionId, [callback, onError])
+    this.#log(`subscribe`, { subscriberCount: this.#subscribers.size, started: this.#started })
     if (!this.#started) this.#start()
 
     return () => {
       this.#subscribers.delete(subscriptionId)
+      this.#log(`unsubscribe`, { subscriberCount: this.#subscribers.size })
     }
   }
 
   unsubscribeAll(): void {
+    this.#log(`unsubscribeAll`, { previousCount: this.#subscribers.size })
     this.#subscribers.clear()
     this.#unsubscribeFromVisibilityChanges?.()
   }
@@ -1403,6 +1453,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
       typeof document.addEventListener === `function`
     ) {
       const visibilityHandler = () => {
+        this.#log(`visibilitychange`, { hidden: document.hidden })
         if (document.hidden) {
           this.#pause()
         } else {
