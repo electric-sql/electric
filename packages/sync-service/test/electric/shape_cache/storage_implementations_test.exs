@@ -71,19 +71,12 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
       end
     end
 
-    describe "#{module_name}.get_current_position/1" do
+    describe "#{module_name}.fetch_latest_offset/1" do
       setup :start_storage
 
       test "returns the earliest possible position on startup", %{storage: opts} do
-        assert Storage.get_current_position(opts) ==
-                 {:ok, LogOffset.last_before_real_offsets(), nil}
-      end
-
-      test "returns the saved position for snapshot", %{storage: opts} do
-        Storage.set_pg_snapshot(%{xmin: 100}, opts)
-
-        assert Storage.get_current_position(opts) ==
-                 {:ok, LogOffset.last_before_real_offsets(), %{xmin: 100}}
+        assert Storage.fetch_latest_offset(opts) ==
+                 {:ok, LogOffset.last_before_real_offsets()}
       end
 
       @tag chunk_size: 100
@@ -93,7 +86,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
         Storage.mark_snapshot_as_started(opts)
         Storage.make_new_snapshot!(@data_stream |> Enum.intersperse(:chunk_boundary), opts)
 
-        assert Storage.get_current_position(opts) == {:ok, LogOffset.new(0, 1), nil}
+        assert Storage.fetch_latest_offset(opts) == {:ok, LogOffset.new(0, 1)}
       end
 
       @tag chunk_size: 100
@@ -113,7 +106,21 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
         |> changes_to_log_items()
         |> Storage.append_to_log!(writer)
 
-        assert Storage.get_current_position(opts) == {:ok, LogOffset.new(1000, 0), nil}
+        assert Storage.fetch_latest_offset(opts) == {:ok, LogOffset.new(1000, 0)}
+      end
+    end
+
+    describe "#{module_name}.fetch_pg_snapshot/1" do
+      setup :start_storage
+
+      test "returns empty snapshot on startup", %{storage: opts} do
+        assert Storage.fetch_pg_snapshot(opts) == {:ok, nil}
+      end
+
+      test "returns the saved position for snapshot", %{storage: opts} do
+        Storage.set_pg_snapshot(%{xmin: 100}, opts)
+
+        assert Storage.fetch_pg_snapshot(opts) == {:ok, %{xmin: 100}}
       end
     end
 
@@ -1192,7 +1199,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
         _writer = Storage.init_writer!(opts, @shape)
         invalid_handle = "invalid-handle"
 
-        assert %{@shape_handle => {:ok, {parsed, false, _}}, ^invalid_handle => {:error, _}} =
+        assert %{@shape_handle => {:ok, parsed}, ^invalid_handle => {:error, _}} =
                  Storage.get_stored_shapes(storage_base, [@shape_handle, invalid_handle])
 
         assert @shape == parsed
@@ -1202,7 +1209,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
         _writer = Storage.init_writer!(opts, @shape)
         :ok = Storage.mark_snapshot_as_started(opts)
 
-        assert %{@shape_handle => {:ok, {parsed, true, _}}} =
+        assert %{@shape_handle => {:ok, parsed}} =
                  Storage.get_stored_shapes(storage_base, [@shape_handle])
 
         assert @shape == parsed

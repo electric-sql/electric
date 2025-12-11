@@ -438,7 +438,7 @@ defmodule Electric.Shapes.ApiTest do
     end
 
     test "returns error when offset is 'now' with live=true", ctx do
-      # Note: validation fails before we need to call get_shape
+      # Note: validation fails before we need to call fetch_handle_by_shape
       assert {:error, %{status: 400} = response} =
                Api.validate(
                  ctx.api,
@@ -528,7 +528,7 @@ defmodule Electric.Shapes.ApiTest do
     test "does not create a shape if one doesn't exist for the definition", ctx do
       %{admin_shape: admin_shape} = ctx
 
-      expect_shape_cache(get_shape: fn ^admin_shape, _opts -> nil end)
+      expect_shape_cache(fetch_handle_by_shape: fn ^admin_shape, _opts -> :error end)
 
       assert {:error, %{status: 404} = _response} =
                Api.validate_for_delete(
@@ -545,7 +545,7 @@ defmodule Electric.Shapes.ApiTest do
 
       handle = "admin-shape-handle"
 
-      expect_shape_cache(get_shape: fn ^admin_shape, _opts -> {handle, @before_all_offset} end)
+      expect_shape_cache(fetch_handle_by_shape: fn ^admin_shape, _opts -> {:ok, handle} end)
 
       assert {:ok, %{handle: ^handle} = _response} =
                Api.validate_for_delete(
@@ -563,7 +563,7 @@ defmodule Electric.Shapes.ApiTest do
 
       handle = "admin-shape-handle"
 
-      expect_shape_cache(get_shape: fn ^admin_shape, _opts -> {handle, @before_all_offset} end)
+      expect_shape_cache(fetch_handle_by_shape: fn ^admin_shape, _opts -> {:ok, handle} end)
 
       assert {:error, %{status: 400} = _response} =
                Api.validate_for_delete(
@@ -711,7 +711,7 @@ defmodule Electric.Shapes.ApiTest do
 
     test "returns immediate up-to-date message when offset is 'now'", ctx do
       patch_shape_cache(
-        get_shape: fn @test_shape, _opts -> {@test_shape_handle, @test_offset} end,
+        fetch_handle_by_shape: fn @test_shape, _opts -> {:ok, @test_shape_handle} end,
         has_shape?: fn @test_shape_handle, _opts -> true end
       )
 

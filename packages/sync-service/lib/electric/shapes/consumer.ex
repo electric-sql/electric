@@ -133,13 +133,6 @@ defmodule Electric.Shapes.Consumer do
 
     state = State.initialize(state, storage, writer)
 
-    :ok =
-      ShapeCache.ShapeStatus.initialise_shape(
-        stack_id,
-        shape_handle,
-        state.latest_offset
-      )
-
     if all_materializers_alive?(state) && subscribe(state, action) do
       Logger.debug("Writer for #{shape_handle} initialized")
 
@@ -237,7 +230,7 @@ defmodule Electric.Shapes.Consumer do
 
   def handle_cast({:snapshot_started, shape_handle}, %{shape_handle: shape_handle} = state) do
     Logger.debug("Snapshot started shape_handle: #{shape_handle}")
-    {:noreply, mark_snapshot_started(state), state.hibernate_after}
+    {:noreply, State.mark_snapshot_started(state), state.hibernate_after}
   end
 
   def handle_cast(
@@ -257,9 +250,7 @@ defmodule Electric.Shapes.Consumer do
   end
 
   def handle_cast({:snapshot_exists, shape_handle}, %{shape_handle: shape_handle} = state) do
-    state = mark_snapshot_started(state)
-
-    {:noreply, state, state.hibernate_after}
+    {:noreply, State.mark_snapshot_started(state), state.hibernate_after}
   end
 
   @impl GenServer
@@ -592,12 +583,6 @@ defmodule Electric.Shapes.Consumer do
           latest_log_offset :: LogOffset.t()
         ) :: map()
   defp notify_new_changes(state, changes_or_bounds, latest_log_offset) do
-    ShapeCache.ShapeStatus.set_latest_offset(
-      state.stack_id,
-      state.shape_handle,
-      latest_log_offset
-    )
-
     if state.materializer_subscribed? do
       Materializer.new_changes(Map.take(state, [:stack_id, :shape_handle]), changes_or_bounds)
     end
@@ -616,11 +601,6 @@ defmodule Electric.Shapes.Consumer do
     )
 
     state
-  end
-
-  defp mark_snapshot_started(%State{stack_id: stack_id, shape_handle: shape_handle} = state) do
-    :ok = ShapeCache.ShapeStatus.mark_snapshot_as_started(stack_id, shape_handle)
-    State.mark_snapshot_started(state)
   end
 
   # termination and cleanup is now done in stages.
