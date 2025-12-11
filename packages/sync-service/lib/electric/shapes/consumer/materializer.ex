@@ -130,7 +130,7 @@ defmodule Electric.Shapes.Consumer.Materializer do
   def get_stream_up_to_date(min_offset, storage) do
     case Storage.get_chunk_end_log_offset(min_offset, storage) do
       nil ->
-        {:ok, max_offset} = Storage.get_latest_offset(storage)
+        {:ok, max_offset} = Storage.fetch_latest_offset(storage)
 
         if is_log_offset_lte(max_offset, min_offset) do
           {:ok, min_offset, []}
