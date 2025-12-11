@@ -18,11 +18,6 @@ defmodule Electric.ShapeCache.PureFileStorage.SharedRecords do
     cached_chunk_boundaries: {LogOffset.last_before_real_offsets(), []}
   ]
 
-  # Including `compaction_started?` would require bumping the version of the storage,
-  # as there are cases where we would have a file with "false" stored in it.
-  # For `snapshot_started?` we only have the metadata file if it has been set.
-  def metadata_boolean_fields, do: [:snapshot_started?]
-
   # Record that controls the writer's state including parts that shouldn't change in reduction
   defrecord :writer_state, [
     :writer_acc,
