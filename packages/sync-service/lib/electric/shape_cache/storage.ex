@@ -68,7 +68,7 @@ defmodule Electric.ShapeCache.Storage do
 
   If the instance is new, then it MUST return `{:ok, LogOffset.last_before_real_offsets()}`.
   """
-  @callback get_latest_offset(shape_opts()) :: {:ok, offset()} | {:error, term()}
+  @callback fetch_latest_offset(shape_opts()) :: {:ok, offset()} | {:error, term()}
 
   @doc """
   Get the current pg_snapshot for the shape storage.
@@ -276,8 +276,8 @@ defmodule Electric.ShapeCache.Storage do
   end
 
   @impl __MODULE__
-  def get_latest_offset({mod, shape_opts}) do
-    mod.get_latest_offset(shape_opts)
+  def fetch_latest_offset({mod, shape_opts}) do
+    mod.fetch_latest_offset(shape_opts)
   end
 
   @impl __MODULE__

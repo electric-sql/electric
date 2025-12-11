@@ -78,7 +78,7 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
       # This deregisters the writer from the ETS
       PureFileStorage.terminate(writer)
 
-      assert PureFileStorage.get_latest_offset(opts) ==
+      assert PureFileStorage.fetch_latest_offset(opts) ==
                {:ok, LogOffset.new(11, 0)}
 
       assert PureFileStorage.fetch_pg_snapshot(opts) ==
@@ -179,7 +179,7 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
 
       # Should not populate read through cache while writer is active
       assert PureFileStorage.snapshot_started?(opts) == true
-      assert PureFileStorage.get_latest_offset(opts) == {:ok, LogOffset.new(10, 0)}
+      assert PureFileStorage.fetch_latest_offset(opts) == {:ok, LogOffset.new(10, 0)}
 
       assert :ets.lookup(stack_ets, {:read_through_cache, @shape_handle}) == [],
              "Expected read-through cache to not be present"
@@ -188,7 +188,7 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
 
       # First read after writer termination populates cache
       assert PureFileStorage.snapshot_started?(opts) == true
-      assert PureFileStorage.get_latest_offset(opts) == {:ok, LogOffset.new(10, 0)}
+      assert PureFileStorage.fetch_latest_offset(opts) == {:ok, LogOffset.new(10, 0)}
 
       assert :ets.lookup(stack_ets, {:read_through_cache, @shape_handle}) != [],
              "Expected read-through cache to be populated"
@@ -218,13 +218,13 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
 
       # First read populates cache
       assert PureFileStorage.snapshot_started?(opts) == true
-      assert PureFileStorage.get_latest_offset(opts) == {:ok, LogOffset.new(10, 0)}
+      assert PureFileStorage.fetch_latest_offset(opts) == {:ok, LogOffset.new(10, 0)}
 
       # Delete shape failes to confirm cache is used
       File.rm_rf!(Path.join([base_opts.base_path, @shape_handle]))
 
       assert PureFileStorage.snapshot_started?(opts) == true
-      assert PureFileStorage.get_latest_offset(opts) == {:ok, LogOffset.new(10, 0)}
+      assert PureFileStorage.fetch_latest_offset(opts) == {:ok, LogOffset.new(10, 0)}
     end
 
     test "cache is cleaned up on shape deletion", %{opts: opts, stack_id: stack_id} do
@@ -252,7 +252,7 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
 
       assert PureFileStorage.snapshot_started?(opts) == false
 
-      assert PureFileStorage.get_latest_offset(opts) ==
+      assert PureFileStorage.fetch_latest_offset(opts) ==
                {:ok, LogOffset.last_before_real_offsets()}
     end
   end
@@ -520,7 +520,7 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
 
         PureFileStorage.terminate(writer)
 
-        assert PureFileStorage.get_latest_offset(opts) ==
+        assert PureFileStorage.fetch_latest_offset(opts) ==
                  {:ok, LogOffset.new(10, 0)}
 
         assert PureFileStorage.fetch_pg_snapshot(opts) ==
@@ -548,7 +548,7 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
 
       writer = PureFileStorage.init_writer!(opts, @shape)
 
-      assert PureFileStorage.get_latest_offset(opts) ==
+      assert PureFileStorage.fetch_latest_offset(opts) ==
                {:ok, LogOffset.new(10, 0)}
 
       assert PureFileStorage.fetch_pg_snapshot(opts) ==
@@ -609,7 +609,7 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
 
       writer = PureFileStorage.init_writer!(opts, @shape)
 
-      assert PureFileStorage.get_latest_offset(opts) ==
+      assert PureFileStorage.fetch_latest_offset(opts) ==
                {:ok, LogOffset.new(10, 0)}
 
       assert PureFileStorage.fetch_pg_snapshot(opts) ==
@@ -662,7 +662,7 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
 
       writer = PureFileStorage.init_writer!(opts, @shape)
 
-      assert PureFileStorage.get_latest_offset(opts) ==
+      assert PureFileStorage.fetch_latest_offset(opts) ==
                {:ok, LogOffset.new(0, 0)}
 
       assert PureFileStorage.fetch_pg_snapshot(opts) ==

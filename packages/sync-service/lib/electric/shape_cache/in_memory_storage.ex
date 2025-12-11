@@ -96,7 +96,7 @@ defmodule Electric.ShapeCache.InMemoryStorage do
   def init_writer!(%MS{} = opts, _shape_definition), do: opts
 
   @impl Electric.ShapeCache.Storage
-  def get_latest_offset(%MS{} = opts) do
+  def fetch_latest_offset(%MS{} = opts) do
     {:ok, current_offset(opts)}
   end
 

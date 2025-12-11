@@ -96,9 +96,9 @@ defmodule Support.TestStorage do
   end
 
   @impl Electric.ShapeCache.Storage
-  def get_latest_offset({parent, shape_handle, _, storage}) do
-    send(parent, {__MODULE__, :get_latest_offset, shape_handle})
-    Storage.get_latest_offset(storage)
+  def fetch_latest_offset({parent, shape_handle, _, storage}) do
+    send(parent, {__MODULE__, :fetch_latest_offset, shape_handle})
+    Storage.fetch_latest_offset(storage)
   end
 
   @impl Electric.ShapeCache.Storage
