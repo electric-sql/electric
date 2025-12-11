@@ -42,6 +42,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
 
   import LogOffset
   import Electric.ShapeCache.PureFileStorage.SharedRecords
+  import Record
 
   import File, only: [write!: 3]
 
@@ -211,6 +212,15 @@ defmodule Electric.ShapeCache.PureFileStorage do
     end
   end
 
+  defp delete_shape_ets_read_through_cache_entry(stack_id, shape_handle) do
+    try do
+      :ets.delete(stack_ets(stack_id), {:read_through_cache, shape_handle})
+      :ok
+    rescue
+      ArgumentError -> :ok
+    end
+  end
+
   def drop_all_ets_entries(stack_id) do
     try do
       :ets.delete_all_objects(stack_ets(stack_id))
@@ -235,6 +245,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
              shape_data_dir(stack_opts.base_path, shape_handle)
            ) do
       delete_shape_ets_entry(stack_opts.stack_id, shape_handle)
+      delete_shape_ets_read_through_cache_entry(stack_opts.stack_id, shape_handle)
     end
   end
 
@@ -505,6 +516,9 @@ defmodule Electric.ShapeCache.PureFileStorage do
       WriteLoop.cached_chunk_boundaries(initial_acc)
     )
 
+    # remove any existing read-through cache now that writer is active
+    delete_shape_ets_read_through_cache_entry(shape_opts.stack_id, shape_opts.shape_handle)
+
     if shape_definition.storage.compaction == :enabled do
       {__MODULE__, stack_opts} = Storage.for_stack(shape_opts.stack_id)
       schedule_compaction(stack_opts.compaction_config)
@@ -631,9 +645,34 @@ defmodule Electric.ShapeCache.PureFileStorage do
     :cached_chunk_boundaries
   ]
 
-  # we need this because macro expects a compile-time atom
+  # Keys that are cached but read through to avoid disk reads
+  # when writer is not active
+  @read_through_cached_keys [
+    :latest_name,
+    :compaction_boundary,
+    :last_persisted_txn_offset,
+    :snapshot_started?,
+    :last_snapshot_chunk
+  ]
+
+  # Record that caches read-through metadata to avoid disk reads
+  defrecord :storage_meta_read_through, [
+    :cache_key,
+    latest_name: :not_cached,
+    compaction_boundary: :not_cached,
+    last_persisted_txn_offset: :not_cached,
+    snapshot_started?: :not_cached,
+    last_snapshot_chunk: :not_cached
+  ]
+
+  # we need these because macro expects a compile-time atom
   for key <- @cached_keys do
     defp get_cached_by_key(meta, unquote(key)), do: storage_meta(meta, unquote(key))
+  end
+
+  for key <- @read_through_cached_keys do
+    defp get_read_through_cache_key_pos(unquote(key)),
+      do: storage_meta_read_through(unquote(key))
   end
 
   # optimization for snapshot started boolean to avoid expensive file open
@@ -658,7 +697,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
     try do
       case :ets.lookup(stack_ets(opts.stack_id), handle) do
         [] ->
-          read_metadata!(opts, key)
+          read_metadata_with_read_through_cache(opts, key)
 
         [storage_meta() = meta] ->
           get_cached_by_key(meta, key)
@@ -675,7 +714,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
       case :ets.lookup(stack_ets(opts.stack_id), handle) do
         [] ->
           # Fall back to reading from disk for each key
-          Enum.map(keys, fn key -> {key, read_metadata!(opts, key)} end)
+          Enum.map(keys, fn key -> {key, read_metadata_with_read_through_cache(opts, key)} end)
 
         [storage_meta() = meta] ->
           # Extract all requested values from the single ETS record
@@ -687,6 +726,38 @@ defmodule Electric.ShapeCache.PureFileStorage do
         Enum.map(keys, fn key -> {key, read_metadata!(opts, key)} end)
     end
   end
+
+  # Read metadata with read-through cache in ETS to minimise disk reads when
+  # writer is not active
+  defp read_metadata_with_read_through_cache(%__MODULE__{shape_handle: handle} = opts, key)
+       when key in @read_through_cached_keys do
+    case :ets.lookup_element(
+           stack_ets(opts.stack_id),
+           {:read_through_cache, handle},
+           get_read_through_cache_key_pos(key) + 1,
+           :not_cached
+         ) do
+      :not_cached ->
+        value = read_metadata!(opts, key)
+
+        :ets.update_element(
+          stack_ets(opts.stack_id),
+          {:read_through_cache, handle},
+          {get_read_through_cache_key_pos(key) + 1, value},
+          storage_meta_read_through(cache_key: {:read_through_cache, handle})
+        )
+
+        value
+
+      value ->
+        value
+    end
+  rescue
+    ArgumentError -> read_metadata!(opts, key)
+  end
+
+  defp read_metadata_with_read_through_cache(%__MODULE__{} = opts, key),
+    do: read_metadata!(opts, key)
 
   defp write_metadata!(%__MODULE__{} = opts, key, value) when key in @boolean_stored_keys do
     path = Path.join(shape_metadata_dir(opts), "#{key}.bin")
@@ -814,24 +885,18 @@ defmodule Electric.ShapeCache.PureFileStorage do
           cached_chunks :: {prev_max :: LogOffset.t() | nil, [chunk]}
         }
   defp get_read_source_info(%__MODULE__{} = opts) do
-    try do
-      case :ets.lookup(stack_ets(opts.stack_id), opts.shape_handle) do
-        [] ->
-          {latest_name(opts), compaction_boundary(opts), {nil, []}}
+    metadata =
+      read_multiple_cached_metadata(opts, [
+        :latest_name,
+        :compaction_boundary,
+        :cached_chunk_boundaries
+      ])
 
-        [
-          storage_meta(
-            compaction_boundary: boundary,
-            latest_name: latest_name,
-            cached_chunk_boundaries: cached_boundaries
-          )
-        ] ->
-          {latest_name, boundary, cached_boundaries}
-      end
-    rescue
-      ArgumentError ->
-        {latest_name(opts), compaction_boundary(opts), {nil, []}}
-    end
+    {
+      Keyword.get(metadata, :latest_name) || latest_name(opts),
+      Keyword.get(metadata, :compaction_boundary) || compaction_boundary(opts),
+      Keyword.get(metadata, :cached_chunk_boundaries) || {nil, []}
+    }
   end
 
   def open_file(writer_state(opts: opts, latest_name: latest_name), type) do
@@ -1402,6 +1467,6 @@ defmodule Electric.ShapeCache.PureFileStorage do
   end
 
   defp shape_gone?(%__MODULE__{} = opts) do
-    !File.exists?(shape_data_dir(opts))
+    !FileInfo.exists?(shape_data_dir(opts))
   end
 end
