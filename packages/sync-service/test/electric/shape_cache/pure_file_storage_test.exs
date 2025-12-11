@@ -44,103 +44,6 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
     %{base_opts: base_opts, opts: PureFileStorage.for_shape(@shape_handle, base_opts)}
   end
 
-  describe "read-through cache -" do
-    test "populates cache only when writer is not active", %{
-      opts: opts,
-      stack_id: stack_id
-    } do
-      writer = PureFileStorage.init_writer!(opts, @shape)
-      PureFileStorage.mark_snapshot_as_started(opts)
-      PureFileStorage.make_new_snapshot!([], opts)
-
-      writer =
-        PureFileStorage.append_to_log!(
-          [{LogOffset.new(10, 0), "test_key", :insert, ~S|{"test": 1}|}],
-          writer
-        )
-
-      stack_ets = PureFileStorage.stack_ets(stack_id)
-
-      # Should not populate read through cache while writer is active
-      assert PureFileStorage.snapshot_started?(opts) == true
-      assert PureFileStorage.get_latest_offset(opts) == {:ok, LogOffset.new(10, 0)}
-
-      assert :ets.lookup(stack_ets, {:read_through_cache, @shape_handle}) == [],
-             "Expected read-through cache to not be present"
-
-      PureFileStorage.terminate(writer)
-
-      # First read after writer termination populates cache
-      assert PureFileStorage.snapshot_started?(opts) == true
-      assert PureFileStorage.get_latest_offset(opts) == {:ok, LogOffset.new(10, 0)}
-
-      assert :ets.lookup(stack_ets, {:read_through_cache, @shape_handle}) != [],
-             "Expected read-through cache to be populated"
-
-      # Verify cache is removed when writer is re-activated
-      PureFileStorage.init_writer!(opts, @shape)
-
-      assert :ets.lookup(stack_ets, {:read_through_cache, @shape_handle}) == [],
-             "Expected read-through cache to not be present"
-    end
-
-    test "subsequent reads use cached values without disk access", %{
-      opts: opts,
-      base_opts: base_opts
-    } do
-      writer = PureFileStorage.init_writer!(opts, @shape)
-      PureFileStorage.mark_snapshot_as_started(opts)
-      PureFileStorage.make_new_snapshot!([], opts)
-
-      writer =
-        PureFileStorage.append_to_log!(
-          [{LogOffset.new(10, 0), "test_key", :insert, ~S|{"test": 1}|}],
-          writer
-        )
-
-      PureFileStorage.terminate(writer)
-
-      # First read populates cache
-      assert PureFileStorage.snapshot_started?(opts) == true
-      assert PureFileStorage.get_latest_offset(opts) == {:ok, LogOffset.new(10, 0)}
-
-      # Delete shape failes to confirm cache is used
-      File.rm_rf!(Path.join([base_opts.base_path, @shape_handle]))
-
-      assert PureFileStorage.snapshot_started?(opts) == true
-      assert PureFileStorage.get_latest_offset(opts) == {:ok, LogOffset.new(10, 0)}
-    end
-
-    test "cache is cleaned up on shape deletion", %{opts: opts, stack_id: stack_id} do
-      writer = PureFileStorage.init_writer!(opts, @shape)
-      PureFileStorage.set_pg_snapshot(%{xmin: 100}, opts)
-      PureFileStorage.mark_snapshot_as_started(opts)
-      PureFileStorage.make_new_snapshot!([], opts)
-      PureFileStorage.terminate(writer)
-
-      # Populate cache
-      PureFileStorage.snapshot_started?(opts)
-
-      stack_ets = PureFileStorage.stack_ets(stack_id)
-      assert :ets.lookup(stack_ets, {:read_through_cache, @shape_handle}) != []
-
-      # Verify cache entry is removed on cleanup
-      {PureFileStorage, base_opts} = Storage.for_stack(stack_id)
-      PureFileStorage.cleanup!(base_opts, @shape_handle)
-      assert :ets.lookup(stack_ets, {:read_through_cache, @shape_handle}) == []
-    end
-
-    test "reads work for missing metadata", %{opts: opts} do
-      writer = PureFileStorage.init_writer!(opts, @shape)
-      PureFileStorage.terminate(writer)
-
-      assert PureFileStorage.snapshot_started?(opts) == false
-
-      assert PureFileStorage.get_latest_offset(opts) ==
-               {:ok, LogOffset.last_before_real_offsets()}
-    end
-  end
-
   describe "reads without writer -" do
     test "snapshot only reads from disk", %{opts: opts} do
       writer = PureFileStorage.init_writer!(opts, @shape)
@@ -254,6 +157,103 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
         )
         |> Enum.to_list()
       end
+    end
+  end
+
+  describe "read-through cache -" do
+    test "populates cache only when writer is not active", %{
+      opts: opts,
+      stack_id: stack_id
+    } do
+      writer = PureFileStorage.init_writer!(opts, @shape)
+      PureFileStorage.mark_snapshot_as_started(opts)
+      PureFileStorage.make_new_snapshot!([], opts)
+
+      writer =
+        PureFileStorage.append_to_log!(
+          [{LogOffset.new(10, 0), "test_key", :insert, ~S|{"test": 1}|}],
+          writer
+        )
+
+      stack_ets = PureFileStorage.stack_ets(stack_id)
+
+      # Should not populate read through cache while writer is active
+      assert PureFileStorage.snapshot_started?(opts) == true
+      assert PureFileStorage.get_latest_offset(opts) == {:ok, LogOffset.new(10, 0)}
+
+      assert :ets.lookup(stack_ets, {:read_through_cache, @shape_handle}) == [],
+             "Expected read-through cache to not be present"
+
+      PureFileStorage.terminate(writer)
+
+      # First read after writer termination populates cache
+      assert PureFileStorage.snapshot_started?(opts) == true
+      assert PureFileStorage.get_latest_offset(opts) == {:ok, LogOffset.new(10, 0)}
+
+      assert :ets.lookup(stack_ets, {:read_through_cache, @shape_handle}) != [],
+             "Expected read-through cache to be populated"
+
+      # Verify cache is removed when writer is re-activated
+      PureFileStorage.init_writer!(opts, @shape)
+
+      assert :ets.lookup(stack_ets, {:read_through_cache, @shape_handle}) == [],
+             "Expected read-through cache to not be present"
+    end
+
+    test "subsequent reads use cached values without disk access", %{
+      opts: opts,
+      base_opts: base_opts
+    } do
+      writer = PureFileStorage.init_writer!(opts, @shape)
+      PureFileStorage.mark_snapshot_as_started(opts)
+      PureFileStorage.make_new_snapshot!([], opts)
+
+      writer =
+        PureFileStorage.append_to_log!(
+          [{LogOffset.new(10, 0), "test_key", :insert, ~S|{"test": 1}|}],
+          writer
+        )
+
+      PureFileStorage.terminate(writer)
+
+      # First read populates cache
+      assert PureFileStorage.snapshot_started?(opts) == true
+      assert PureFileStorage.get_latest_offset(opts) == {:ok, LogOffset.new(10, 0)}
+
+      # Delete shape failes to confirm cache is used
+      File.rm_rf!(Path.join([base_opts.base_path, @shape_handle]))
+
+      assert PureFileStorage.snapshot_started?(opts) == true
+      assert PureFileStorage.get_latest_offset(opts) == {:ok, LogOffset.new(10, 0)}
+    end
+
+    test "cache is cleaned up on shape deletion", %{opts: opts, stack_id: stack_id} do
+      writer = PureFileStorage.init_writer!(opts, @shape)
+      PureFileStorage.set_pg_snapshot(%{xmin: 100}, opts)
+      PureFileStorage.mark_snapshot_as_started(opts)
+      PureFileStorage.make_new_snapshot!([], opts)
+      PureFileStorage.terminate(writer)
+
+      # Populate cache
+      PureFileStorage.snapshot_started?(opts)
+
+      stack_ets = PureFileStorage.stack_ets(stack_id)
+      assert :ets.lookup(stack_ets, {:read_through_cache, @shape_handle}) != []
+
+      # Verify cache entry is removed on cleanup
+      {PureFileStorage, base_opts} = Storage.for_stack(stack_id)
+      PureFileStorage.cleanup!(base_opts, @shape_handle)
+      assert :ets.lookup(stack_ets, {:read_through_cache, @shape_handle}) == []
+    end
+
+    test "reads work for missing metadata", %{opts: opts} do
+      writer = PureFileStorage.init_writer!(opts, @shape)
+      PureFileStorage.terminate(writer)
+
+      assert PureFileStorage.snapshot_started?(opts) == false
+
+      assert PureFileStorage.get_latest_offset(opts) ==
+               {:ok, LogOffset.last_before_real_offsets()}
     end
   end
 
