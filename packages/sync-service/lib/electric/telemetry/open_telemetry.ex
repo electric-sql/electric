@@ -179,9 +179,9 @@ defmodule Electric.Telemetry.OpenTelemetry do
   e.g.
 
   ```elixir
-  OpenTelemetry.start_interval(:quick_sleep)
+  OpenTelemetry.start_interval(:quick_sleep.duration_µs)
   Process.sleep(1)
-  OpenTelemetry.start_interval(:longer_sleep)
+  OpenTelemetry.start_interval(:longer_sleep.duration_µs)
   Process.sleep(2)
   OpenTelemetry.stop_and_save_intervals(total_attribute: "total_sleep_µs")
   ```
