@@ -476,21 +476,17 @@ defmodule Electric.ShapeCache.PureFileStorage do
     metadata =
       read_multiple_cached_metadata(opts, [
         :last_seen_txn_offset,
+        :last_persisted_txn_offset,
         :last_snapshot_chunk
       ])
 
-    case Keyword.get(metadata, :last_seen_txn_offset) do
-      nil ->
-        # ETS entry doesn't exist, fall back to disk reads
-        read_metadata!(opts, :last_persisted_txn_offset) ||
-          Keyword.get(metadata, :last_snapshot_chunk) ||
-          LogOffset.last_before_real_offsets()
+    latest_offset =
+      Keyword.get(metadata, :last_seen_txn_offset) ||
+        Keyword.get(metadata, :last_persisted_txn_offset)
 
-      found ->
-        if LogOffset.is_virtual_offset(found),
-          do: Keyword.get(metadata, :last_snapshot_chunk) || LogOffset.last_before_real_offsets(),
-          else: found
-    end
+    if is_nil(latest_offset) or LogOffset.is_virtual_offset(latest_offset),
+      do: Keyword.get(metadata, :last_snapshot_chunk) || LogOffset.last_before_real_offsets(),
+      else: latest_offset
   end
 
   def start_link(_), do: :ignore
@@ -628,7 +624,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
     :compaction_started?,
     :last_snapshot_chunk,
     :last_seen_txn_offset,
-    :persisted_full_txn_offset,
+    :last_persisted_txn_offset,
     :last_persisted_offset,
     :compaction_boundary,
     :latest_name,
@@ -785,7 +781,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
       storage_meta(
         shape_handle: opts.shape_handle,
         ets_table: table,
-        persisted_full_txn_offset: stable_offset,
+        last_persisted_txn_offset: stable_offset,
         last_persisted_offset: stable_offset,
         last_seen_txn_offset: stable_offset,
         compaction_boundary: compaction_boundary,
@@ -1307,7 +1303,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
           stack_ets(opts.stack_id),
           handle,
           [
-            {storage_meta(:persisted_full_txn_offset) + 1, last_persisted_txn_offset},
+            {storage_meta(:last_persisted_txn_offset) + 1, last_persisted_txn_offset},
             {storage_meta(:last_persisted_offset) + 1, last_persisted_offset},
             {storage_meta(:last_seen_txn_offset) + 1, last_seen_txn_offset}
           ]

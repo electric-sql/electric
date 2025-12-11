@@ -6,7 +6,7 @@ defmodule Electric.ShapeCache.PureFileStorage.SharedRecords do
   defrecord :storage_meta, [
     :shape_handle,
     :ets_table,
-    :persisted_full_txn_offset,
+    :last_persisted_txn_offset,
     :last_persisted_offset,
     :last_seen_txn_offset,
     :compaction_boundary,
