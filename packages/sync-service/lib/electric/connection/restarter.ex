@@ -20,6 +20,8 @@ defmodule Electric.Connection.Restarter do
 
   alias Electric.StatusMonitor
 
+  require Logger
+
   def name(stack_ref) do
     Electric.ProcessRegistry.name(stack_ref, __MODULE__)
   end
@@ -121,7 +123,7 @@ defmodule Electric.Connection.Restarter do
   end
 
   def handle_call(:restart_connection_subsystem, _from, state) do
-    :ok = Electric.Connection.Manager.Supervisor.restart(stack_id: state.stack_id)
+    :ok = do_restart_connection_subsystem(state.stack_id)
     {:reply, :ok, state}
   end
 
@@ -141,13 +143,25 @@ defmodule Electric.Connection.Restarter do
 
     state =
       if wal_size >= state.wal_size_threshold do
-        :ok = restart_connection_subsystem(state.stack_id)
+        Logger.info(
+          "Retained WAL size #{wal_size} has exceeded the threshold #{state.wal_size_threshold}. Time to wake up the connection subsystem."
+        )
+
+        :ok = do_restart_connection_subsystem(state.stack_id)
         state
       else
+        Logger.info(
+          "Retained WAL size #{wal_size} is below the threshold #{state.wal_size_threshold}. Scheduling the next check to take place after #{state.wal_size_check_period}"
+        )
+
         schedule_wal_size_check(state)
       end
 
     {:noreply, state}
+  end
+
+  defp do_restart_connection_subsystem(stack_id) do
+    Electric.Connection.Manager.Supervisor.restart(stack_id: stack_id)
   end
 
   defp schedule_wal_size_check(
@@ -160,8 +174,34 @@ defmodule Electric.Connection.Restarter do
 
   defp schedule_wal_size_check(state), do: state
 
-  defp query_retained_wal_size(_state) do
-    # FIXME: placeholder
-    0
+  @retained_wal_size_query """
+  SELECT
+    pg_wal_lsn_diff(pg_current_wal_lsn(), restart_lsn) AS retained_wal_size
+  FROM
+    pg_replication_slots
+  WHERE
+    slot_name =
+  """
+
+  defp query_retained_wal_size(state) do
+    Logger.info("Opening a database connection to check the retained WAL size")
+
+    query = @retained_wal_size_query <> Electric.Utils.quote_string(state.slot_name)
+
+    opts = [
+      stack_id: state.stack_id,
+      label: :retained_wal_size_query,
+      connection_opts:
+        Electric.Connection.Manager.validated_connection_opts(state.stack_id, :pool)
+    ]
+
+    case Electric.Postgres.OneOffConnection.query(query, opts) do
+      {:ok, %Postgrex.Result{columns: ["retained_wal_size"], rows: [[wal_bytes_str]]}} ->
+        String.to_integer(wal_bytes_str)
+
+      error ->
+        Logger.info("Error querying retained WAL size: #{inspect(error)}")
+        0
+    end
   end
 end

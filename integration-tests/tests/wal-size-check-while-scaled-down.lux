@@ -1,0 +1,82 @@
+[doc Verify Electric can scale down database connections after a lull in stream transactions]
+
+[include _macros.luxinc]
+
+[global pg_container_name=db-connection-scaledown__pg]
+[global database_url=postgresql://electric_test:password@localhost:$pg_host_port/electric?sslmode=disable]
+
+###
+
+# Start Postgres and create an additional role that will be used by Electric in this test
+[invoke setup_pg_with_shell_name \
+  "pg" \
+  "-e INIT_DB_SQL=\"\
+    CREATE ROLE electric_test LOGIN PASSWORD 'password' REPLICATION;\
+    GRANT CREATE ON DATABASE electric TO electric_test\"" \
+  "" \
+  "-v $(realpath ../scripts/init_db.sh):/docker-entrypoint-initdb.d/initdb-init_db.sh"]
+
+# Create a table for subsequent shape requests
+[invoke start_psql]
+
+[shell psql]
+  !create table items(val text);
+  ??CREATE
+
+  !insert into items values ('1'), ('2');
+  ??INSERT
+
+  !alter table items owner to electric_test;
+  ??ALTER TABLE
+
+# Start Electric and wait for it to finish initialization.
+# Have to disable the ConnectionManagerPing process, otherwise it will error when
+# Connection.Manager itself goes down as part of the test scenario.
+[invoke setup_electric_with_env "DO_NOT_START_CONN_MAN_PING=true ELECTRIC_IDLE_WAL_SIZE_CHECK_PERIOD=1s"]
+[shell electric]
+  [timeout 10]
+  ??[debug] Replication client started streaming
+
+# Force Electric to scale down by sending the :idle_check message to the replication client.
+# Normally the client performs the check once a minute, so we're speeding it up here for
+# testing purposes.
+[shell electric]
+  # [sleep 2]
+
+  !Electric.Postgres.ReplicationClient.name("single_stack") |> GenServer.whereis() |> send(:check_if_idle)
+  ??[notice] Closing all database connections after the replication stream has been idle for
+
+  ??[debug] Terminating connection manager with reason :shutdown.
+
+# Confirm that Postgres no longer sees any open connections for the electric user
+[shell psql]
+  [sleep 2]
+
+  !select datname, usename, backend_type, query from pg_stat_activity where usename = 'electric_test';
+  ??(0 rows)
+
+
+# Sleep until it's time to verify that Electric has checked retained WAL size in Postgres after ELECTRIC_IDLE_WAL_SIZE_CHECK_PERIOD
+[shell electric]
+  [sleep 2]
+
+  ??Opening a database connection to check the retained WAL size
+  ?Retained WAL size [0-9]+ is below the threshold [0-9]+\. Scheduling the next check to take place after [0-9]+
+
+# Write to the database enough data to force the retained WAL size to go over ELECTRIC_IDLE_WAL_SIZE_THRESHOLD
+[shell psql]
+  !insert into items select * from generate_series(1,1000);
+  ??INSERT
+
+# Sleep and verify that Electric wakes up after checking the WAL size and seeing it has exceeded the threshold
+[shell electric]
+  ??Opening a database connection to check the retained WAL size
+  ?Retained WAL size [0-9]+ has exceeded the threshold [0-9]+\. Time to wake up the connection subsystem
+
+  ??[info] Acquiring lock from postgres
+  ??[info] Starting replication from postgres
+
+  ??[debug] Chunked 200 in
+
+[cleanup]
+  [invoke teardown]
