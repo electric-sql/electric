@@ -222,3 +222,38 @@ export const testWithMultitypeTable = testWithDbClient.extend<{
     }
   },
 })
+
+export const testWithSpecialColumnsTable = testWithDbClient.extend<{
+  tableSql: string
+  tableUrl: string
+}>({
+  tableSql: async ({ dbClient, task }, use) => {
+    const tableName = `"special_cols_${task.id}_${Math.random().toString(16).replace(`.`, `_`)}"`
+
+    // Create a table with column names containing special characters
+    await dbClient.query(`
+      DROP TABLE IF EXISTS ${tableName};
+      CREATE TABLE ${tableName} (
+        id INT PRIMARY KEY,
+        "normal" TEXT,
+        "has,comma" TEXT,
+        "has""quote" TEXT,
+        "has space" TEXT
+      )`)
+
+    await use(tableName)
+
+    // Cleanup
+    await dbClient.query(`DROP TABLE ${tableName}`)
+  },
+  tableUrl: async ({ tableSql, clearShape, pgSchema }, use) => {
+    const urlAppropriateTable = pgSchema + `.` + tableSql
+    await use(urlAppropriateTable)
+    try {
+      await clearShape(urlAppropriateTable)
+    } catch (_) {
+      // ignore - clearShape has its own logging
+      // we don't want to interrupt cleanup
+    }
+  },
+})

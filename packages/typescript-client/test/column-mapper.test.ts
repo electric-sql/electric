@@ -5,8 +5,33 @@ import {
   createColumnMapper,
   snakeCamelMapper,
   encodeWhereClause,
+  quoteIdentifier,
 } from '../src/column-mapper'
 import type { Schema } from '../src/types'
+
+describe(`quoteIdentifier`, () => {
+  it(`should wrap identifier in double quotes`, () => {
+    expect(quoteIdentifier(`user_id`)).toBe(`"user_id"`)
+    expect(quoteIdentifier(`simple`)).toBe(`"simple"`)
+  })
+
+  it(`should escape internal double quotes by doubling`, () => {
+    expect(quoteIdentifier(`has"quote`)).toBe(`"has""quote"`)
+    expect(quoteIdentifier(`two"quotes"here`)).toBe(`"two""quotes""here"`)
+  })
+
+  it(`should handle identifiers with commas`, () => {
+    expect(quoteIdentifier(`foo,bar`)).toBe(`"foo,bar"`)
+  })
+
+  it(`should handle identifiers with spaces`, () => {
+    expect(quoteIdentifier(`has space`)).toBe(`"has space"`)
+  })
+
+  it(`should handle empty string`, () => {
+    expect(quoteIdentifier(``)).toBe(`""`)
+  })
+})
 
 describe(`snakeToCamel`, () => {
   it(`should convert snake_case to camelCase`, () => {

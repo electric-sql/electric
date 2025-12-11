@@ -9,7 +9,11 @@ import {
   SnapshotMetadata,
 } from './types'
 import { MessageParser, Parser, TransformFunction } from './parser'
-import { ColumnMapper, encodeWhereClause } from './column-mapper'
+import {
+  ColumnMapper,
+  encodeWhereClause,
+  quoteIdentifier,
+} from './column-mapper'
 import { getOffset, isUpToDateMessage, isChangeMessage } from './helpers'
 import {
   FetchError,
@@ -855,8 +859,27 @@ export class ShapeStream<T extends Row<unknown> = Row>
         )
         setQueryParam(fetchUrl, WHERE_QUERY_PARAM, encodedWhere)
       }
-      if (params.columns)
-        setQueryParam(fetchUrl, COLUMNS_QUERY_PARAM, params.columns)
+      if (params.columns) {
+        // Get original columns array from options (before toInternalParams converted to string)
+        const originalColumns = await resolveValue(this.options.params?.columns)
+        if (Array.isArray(originalColumns)) {
+          // Apply columnMapper encoding if present
+          let encodedColumns = originalColumns.map(String)
+          if (this.options.columnMapper) {
+            encodedColumns = encodedColumns.map(
+              this.options.columnMapper.encode
+            )
+          }
+          // Quote each column name to handle special characters (commas, etc.)
+          const serializedColumns = encodedColumns
+            .map(quoteIdentifier)
+            .join(`,`)
+          setQueryParam(fetchUrl, COLUMNS_QUERY_PARAM, serializedColumns)
+        } else {
+          // Fallback: columns was already a string
+          setQueryParam(fetchUrl, COLUMNS_QUERY_PARAM, params.columns)
+        }
+      }
       if (params.replica) setQueryParam(fetchUrl, REPLICA_PARAM, params.replica)
       if (params.params)
         setQueryParam(fetchUrl, WHERE_PARAMS_PARAM, params.params)
