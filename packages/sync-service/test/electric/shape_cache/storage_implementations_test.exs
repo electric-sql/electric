@@ -110,17 +110,17 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
       end
     end
 
-    describe "#{module_name}.get_pg_snapshot/1" do
+    describe "#{module_name}.fetch_pg_snapshot/1" do
       setup :start_storage
 
       test "returns empty snapshot on startup", %{storage: opts} do
-        assert Storage.get_pg_snapshot(opts) == {:ok, nil}
+        assert Storage.fetch_pg_snapshot(opts) == {:ok, nil}
       end
 
       test "returns the saved position for snapshot", %{storage: opts} do
         Storage.set_pg_snapshot(%{xmin: 100}, opts)
 
-        assert Storage.get_pg_snapshot(opts) == {:ok, %{xmin: 100}}
+        assert Storage.fetch_pg_snapshot(opts) == {:ok, %{xmin: 100}}
       end
     end
 

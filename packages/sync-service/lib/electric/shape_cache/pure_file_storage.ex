@@ -479,7 +479,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
     {:ok, read_latest_offset(opts)}
   end
 
-  def get_pg_snapshot(%__MODULE__{} = opts) do
+  def fetch_pg_snapshot(%__MODULE__{} = opts) do
     {:ok, read_cached_metadata(opts, :pg_snapshot)}
   end
 

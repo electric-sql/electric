@@ -81,7 +81,7 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
       assert PureFileStorage.get_latest_offset(opts) ==
                {:ok, LogOffset.new(11, 0)}
 
-      assert PureFileStorage.get_pg_snapshot(opts) ==
+      assert PureFileStorage.fetch_pg_snapshot(opts) ==
                {:ok, %{xmin: 100}}
 
       assert PureFileStorage.get_log_stream(LogOffset.new(0, 0), LogOffset.last(), opts)
@@ -523,7 +523,7 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
         assert PureFileStorage.get_latest_offset(opts) ==
                  {:ok, LogOffset.new(10, 0)}
 
-        assert PureFileStorage.get_pg_snapshot(opts) ==
+        assert PureFileStorage.fetch_pg_snapshot(opts) ==
                  {:ok, %{xmin: 100}}
       end
 
@@ -551,7 +551,7 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
       assert PureFileStorage.get_latest_offset(opts) ==
                {:ok, LogOffset.new(10, 0)}
 
-      assert PureFileStorage.get_pg_snapshot(opts) ==
+      assert PureFileStorage.fetch_pg_snapshot(opts) ==
                {:ok, %{xmin: 100}}
 
       # After recovery we see the same line
@@ -612,7 +612,7 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
       assert PureFileStorage.get_latest_offset(opts) ==
                {:ok, LogOffset.new(10, 0)}
 
-      assert PureFileStorage.get_pg_snapshot(opts) ==
+      assert PureFileStorage.fetch_pg_snapshot(opts) ==
                {:ok, %{xmin: 100}}
 
       # After recovery we see the same line
@@ -665,7 +665,7 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
       assert PureFileStorage.get_latest_offset(opts) ==
                {:ok, LogOffset.new(0, 0)}
 
-      assert PureFileStorage.get_pg_snapshot(opts) ==
+      assert PureFileStorage.fetch_pg_snapshot(opts) ==
                {:ok, %{xmin: 100}}
 
       writer =

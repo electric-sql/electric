@@ -101,7 +101,7 @@ defmodule Electric.ShapeCache.InMemoryStorage do
   end
 
   @impl Electric.ShapeCache.Storage
-  def get_pg_snapshot(%MS{} = opts) do
+  def fetch_pg_snapshot(%MS{} = opts) do
     {:ok, pg_snapshot(opts)}
   end
 
