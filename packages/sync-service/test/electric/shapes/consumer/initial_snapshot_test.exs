@@ -142,7 +142,7 @@ defmodule Electric.Shapes.Consumer.InitialSnapshotTest do
       assert state.filtering? == true
 
       # Verify storage was updated
-      {:ok, stored_snapshot} = Storage.get_pg_snapshot(storage)
+      {:ok, stored_snapshot} = Storage.fetch_pg_snapshot(storage)
       assert stored_snapshot == %{xmin: 100, xmax: 200, xip_list: [150], filter_txns?: true}
     end
 
@@ -156,7 +156,7 @@ defmodule Electric.Shapes.Consumer.InitialSnapshotTest do
       assert state.filtering? == true
 
       # Verify storage was updated
-      {:ok, stored_snapshot} = Storage.get_pg_snapshot(storage)
+      {:ok, stored_snapshot} = Storage.fetch_pg_snapshot(storage)
       assert stored_snapshot == %{xmin: 100, xmax: 200, xip_list: [], filter_txns?: true}
     end
   end
@@ -220,7 +220,7 @@ defmodule Electric.Shapes.Consumer.InitialSnapshotTest do
       assert state.filtering? == false
 
       # Verify storage was updated
-      {:ok, stored_snapshot} = Storage.get_pg_snapshot(storage)
+      {:ok, stored_snapshot} = Storage.fetch_pg_snapshot(storage)
       assert stored_snapshot.filter_txns? == false
     end
 
