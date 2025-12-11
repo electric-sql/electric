@@ -572,4 +572,58 @@ defmodule Electric.Shapes.Consumer.MoveInsTest do
       assert state.maximum_resolved_snapshot == nil
     end
   end
+
+  describe "change_visible_in_unresolved_move_ins_for_values?/3" do
+    setup do
+      state = MoveIns.new()
+      %{state: state}
+    end
+
+    test "returns true when value is in unresolved move-in with nil snapshot", %{state: state} do
+      state = MoveIns.add_waiting(state, "move1", {["$sublink", "0"], MapSet.new([1])})
+
+      assert MoveIns.change_visible_in_unresolved_move_ins_for_values?(
+               state,
+               %{["$sublink", "0"] => 1},
+               100
+             )
+    end
+
+    test "returns true when value is in unresolved move-in with known snapshot and xid is visible",
+         %{state: state} do
+      state =
+        MoveIns.add_waiting(state, "move1", {["$sublink", "0"], MapSet.new([1])})
+        |> MoveIns.set_snapshot("move1", {150, 200, []})
+
+      assert MoveIns.change_visible_in_unresolved_move_ins_for_values?(
+               state,
+               %{["$sublink", "0"] => 1},
+               100
+             )
+    end
+
+    test "returns false when value is in unresolved move-in with known snapshot and xid is not visible",
+         %{state: state} do
+      state =
+        MoveIns.add_waiting(state, "move1", {["$sublink", "0"], MapSet.new([1])})
+        |> MoveIns.set_snapshot("move1", {150, 200, []})
+
+      refute MoveIns.change_visible_in_unresolved_move_ins_for_values?(
+               state,
+               %{["$sublink", "0"] => 1},
+               300
+             )
+    end
+
+    test "returns false when value is not in unresolved move-in", %{state: state} do
+      state =
+        MoveIns.add_waiting(state, "move1", {["$sublink", "0"], MapSet.new([1])})
+
+      refute MoveIns.change_visible_in_unresolved_move_ins_for_values?(
+               state,
+               %{["$sublink", "0"] => 2},
+               100
+             )
+    end
+  end
 end

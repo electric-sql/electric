@@ -20,6 +20,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
   alias Electric.Replication.LogOffset
 
   import Electric, only: [is_stack_id: 1, is_shape_handle: 1]
+  require Electric.Shapes.Shape
 
   require Logger
 
@@ -543,7 +544,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
     shape_db_tuples
     |> Enum.map(fn {shape, _comparable, handle} -> {handle, shape} end)
     |> Enum.filter(fn {_handle, shape} ->
-      Shape.has_dependencies?(shape) and not Shape.dependency_handles_known?(shape)
+      Shape.has_dependencies(shape) and not Shape.dependency_handles_known?(shape)
     end)
     |> Enum.each(fn {handle, %Shape{shape_dependencies: deps} = shape} ->
       handles = Enum.map(deps, &get_existing_shape(stack_id, &1))

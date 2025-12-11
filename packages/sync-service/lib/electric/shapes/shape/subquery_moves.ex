@@ -138,36 +138,42 @@ defmodule Electric.Shapes.Shape.SubqueryMoves do
   def move_in_tag_structure(%Shape{} = shape)
       when is_nil(shape.where)
       when shape.shape_dependencies == [],
-      do: []
+      do: {[], %{}}
 
   def move_in_tag_structure(shape) do
     # TODO: For multiple subqueries this should be a DNF form
-    {:ok, tag_structure} =
+    #       and this walking overrides the comparison expressions
+    {:ok, {tag_structure, comparison_expressions}} =
       Walker.reduce(
         shape.where.eval,
         fn
-          %Eval.Parser.Func{name: "sublink_membership_check", args: [testexpr, _]},
-          [current_tag | others],
+          %Eval.Parser.Func{name: "sublink_membership_check", args: [testexpr, sublink_ref]},
+          {[current_tag | others], comparison_expressions},
           _ ->
-            case testexpr do
-              %Eval.Parser.Ref{path: [column_name]} ->
-                {:ok, [[column_name | current_tag] | others]}
+            tags =
+              case testexpr do
+                %Eval.Parser.Ref{path: [column_name]} ->
+                  [[column_name | current_tag] | others]
 
-              %Eval.Parser.RowExpr{elements: elements} ->
-                elements =
-                  Enum.map(elements, fn %Eval.Parser.Ref{path: [column_name]} ->
-                    column_name
-                  end)
+                %Eval.Parser.RowExpr{elements: elements} ->
+                  elements =
+                    Enum.map(elements, fn %Eval.Parser.Ref{path: [column_name]} ->
+                      column_name
+                    end)
 
-                {:ok, [[{:hash_together, elements} | current_tag] | others]}
-            end
+                  [[{:hash_together, elements} | current_tag] | others]
+              end
+
+            {:ok, {tags, Map.put(comparison_expressions, sublink_ref.path, testexpr)}}
 
           _, acc, _ ->
             {:ok, acc}
         end,
-        [[]]
+        {[[]], %{}}
       )
 
-    tag_structure
+    comparison_expressions
+    |> Map.new(fn {path, expr} -> {path, Eval.Expr.wrap_parser_part(expr)} end)
+    |> then(&{tag_structure, &1})
   end
 end

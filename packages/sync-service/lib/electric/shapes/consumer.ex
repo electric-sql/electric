@@ -1,6 +1,7 @@
 defmodule Electric.Shapes.Consumer do
   use GenServer, restart: :temporary
 
+  alias Electric.Shapes.Consumer.ChangeHandling
   alias Electric.Shapes.Consumer.MoveIns
   alias Electric.Shapes.Consumer.InitialSnapshot
   alias Electric.Shapes.Consumer.MoveHandling
@@ -8,6 +9,7 @@ defmodule Electric.Shapes.Consumer do
 
   import Electric.Shapes.Consumer.State, only: :macros
   require Electric.Replication.LogOffset
+  require Electric.Shapes.Shape
 
   alias Electric.Replication.LogOffset
   alias Electric.Shapes.Consumer.Materializer
@@ -396,7 +398,7 @@ defmodule Electric.Shapes.Consumer do
   end
 
   defp consumer_can_suspend?(state) do
-    is_snapshot_started(state) and not Shape.has_dependencies?(state.shape) and
+    is_snapshot_started(state) and not Shape.has_dependencies(state.shape) and
       not state.materializer_subscribed?
   end
 
@@ -496,25 +498,27 @@ defmodule Electric.Shapes.Consumer do
       writer: writer
     } = state
 
+    state = State.remove_completed_move_ins(state, txn)
+
     Logger.debug(fn -> "Txn received in Shapes.Consumer: #{inspect(txn)}" end)
 
-    extra_refs1 =
+    extra_refs_full =
       Materializer.get_all_as_refs(shape, state.stack_id)
 
-    extra_refs =
-      Enum.reduce(state.move_handling_state.in_flight_values, extra_refs1, fn {key, value}, acc ->
+    extra_refs_before_move_ins =
+      Enum.reduce(state.move_handling_state.in_flight_values, extra_refs_full, fn {key, value},
+                                                                                  acc ->
         if is_map_key(acc, key),
           do: Map.update!(acc, key, &MapSet.difference(&1, value)),
           else: acc
       end)
 
-    Logger.debug(fn -> "Extra refs: #{inspect(extra_refs)}" end)
+    Logger.debug(fn -> "Extra refs: #{inspect(extra_refs_before_move_ins)}" end)
 
-    case filter_changes(
+    case ChangeHandling.process_changes(
            changes,
-           shape,
-           {xid, state.move_handling_state, state.stack_id, state.shape_handle},
-           extra_refs
+           state,
+           %{xid: xid, extra_refs: {extra_refs_before_move_ins, extra_refs_full}}
          ) do
       :includes_truncate ->
         # TODO: This is a very naive way to handle truncations: if ANY relevant truncates are
@@ -528,21 +532,15 @@ defmodule Electric.Shapes.Consumer do
 
         {:halt, state}
 
-      {_, 0, _} ->
+      {_, state, 0, _} ->
         Logger.debug(fn ->
           "No relevant changes found for #{inspect(shape)} in txn #{txn.xid}"
         end)
 
         {:cont, consider_flushed(state, txn)}
 
-      {changes, num_changes, last_log_offset} ->
+      {changes, state, num_changes, last_log_offset} ->
         timestamp = System.monotonic_time()
-
-        # Track touches for all filtered changes
-        state =
-          Enum.reduce(changes, state, fn change, acc ->
-            State.track_change(acc, xid, change)
-          end)
 
         {lines, total_size} = prepare_log_entries(changes, xid, shape)
         writer = ShapeCache.Storage.append_to_log!(lines, writer)
@@ -654,52 +652,6 @@ defmodule Electric.Shapes.Consumer do
 
   defp stop_and_clean(state) do
     {:stop, @stop_and_clean_reason, mark_for_removal(state)}
-  end
-
-  # Apply shape filter to keep only relevant changes, returning the list of changes.
-  # Marks the last change, and infers the last offset after possible splits.
-  defp filter_changes(
-         changes,
-         shape,
-         snapshot_filtering,
-         extra_refs,
-         change_acc \\ [],
-         total_ops_acc \\ 0
-       )
-
-  defp filter_changes([], _shape, _, _, [], 0), do: {[], 0, nil}
-
-  defp filter_changes([], _shape, _, _, [change | rest], total_ops),
-    do:
-      {Enum.reverse([%{change | last?: true} | rest]), total_ops,
-       LogItems.expected_offset_after_split(change)}
-
-  defp filter_changes([%Changes.TruncatedRelation{} | _], _, _, _, _, _),
-    do: :includes_truncate
-
-  defp filter_changes(
-         [change | rest],
-         shape,
-         {xid, filter_state, stack_id, shape_handle} = filtering,
-         extra_refs,
-         change_acc,
-         total_ops
-       ) do
-    if not MoveIns.change_already_visible?(filter_state, xid, change) do
-      case Shape.convert_change(shape, change,
-             extra_refs: extra_refs,
-             stack_id: stack_id,
-             shape_handle: shape_handle
-           ) do
-        [] ->
-          filter_changes(rest, shape, filtering, extra_refs, change_acc, total_ops)
-
-        [change] ->
-          filter_changes(rest, shape, filtering, extra_refs, [change | change_acc], total_ops + 1)
-      end
-    else
-      filter_changes(rest, shape, filtering, extra_refs, change_acc, total_ops)
-    end
   end
 
   defp prepare_log_entries(changes, xid, shape) do

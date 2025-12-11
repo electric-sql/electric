@@ -37,6 +37,7 @@ defmodule Electric.Shapes.Shape do
     shape_dependencies: [],
     shape_dependencies_handles: [],
     tag_structure: [],
+    subquery_comparison_expressions: %{},
     log_mode: :full,
     flags: %{},
     storage: %{compaction: :disabled},
@@ -111,7 +112,7 @@ defmodule Electric.Shapes.Shape do
      shape.replica, shape.log_mode}
   end
 
-  def has_dependencies?(%__MODULE__{} = shape), do: shape.shape_dependencies != []
+  defguard has_dependencies(shape) when shape.shape_dependencies != []
 
   defguard are_deps_filled(shape)
            when shape.shape_dependencies == [] or shape.shape_dependencies_handles != []
@@ -264,7 +265,13 @@ defmodule Electric.Shapes.Shape do
   end
 
   defp fill_tag_structure(shape) do
-    %{shape | tag_structure: SubqueryMoves.move_in_tag_structure(shape)}
+    {tag_structure, comparison_expressions} = SubqueryMoves.move_in_tag_structure(shape)
+
+    %{
+      shape
+      | tag_structure: tag_structure,
+        subquery_comparison_expressions: comparison_expressions
+    }
   end
 
   defp validate_where_clause(nil, _opts, _refs), do: {:ok, nil, []}
@@ -569,7 +576,15 @@ defmodule Electric.Shapes.Shape do
       when is_struct(change, Changes.DeletedRecord) do
     record = if is_struct(change, Changes.NewRecord), do: change.record, else: change.old_record
 
-    if WhereClause.includes_record?(where, record, opts[:extra_refs] || %{}) do
+    # This is a pre-image and post-image of the value sets for subqueries.
+    # In case of a new record, we use the post-image, because we'll need to see the record,
+    # but in case of a deleted record, we use the pre-image, because we've never seen an insert
+    extra_refs = opts[:extra_refs] || {%{}, %{}}
+
+    used_extra_refs =
+      if is_struct(change, Changes.NewRecord), do: elem(extra_refs, 1), else: elem(extra_refs, 0)
+
+    if WhereClause.includes_record?(where, record, used_extra_refs) do
       change
       |> fill_move_tags(shape, opts[:stack_id], opts[:shape_handle])
       |> filter_change_columns(selected_columns)
@@ -584,9 +599,9 @@ defmodule Electric.Shapes.Shape do
         %Changes.UpdatedRecord{old_record: old_record, record: record} = change,
         opts
       ) do
-    extra_refs = opts[:extra_refs] || %{}
-    old_record_in_shape = WhereClause.includes_record?(where, old_record, extra_refs)
-    new_record_in_shape = WhereClause.includes_record?(where, record, extra_refs)
+    {extra_refs_old, extra_refs_new} = opts[:extra_refs] || {%{}, %{}}
+    old_record_in_shape = WhereClause.includes_record?(where, old_record, extra_refs_old)
+    new_record_in_shape = WhereClause.includes_record?(where, record, extra_refs_new)
 
     converted_changes =
       case {old_record_in_shape, new_record_in_shape} do
@@ -608,26 +623,30 @@ defmodule Electric.Shapes.Shape do
     Changes.filter_columns(change, selected_columns)
   end
 
-  defp fill_move_tags(change, %__MODULE__{tag_structure: []}, _, _), do: change
+  def fill_move_tags(change, %__MODULE__{tag_structure: []}, _, _), do: change
 
-  defp fill_move_tags(
-         %Changes.NewRecord{record: record} = change,
-         %__MODULE__{
-           tag_structure: tag_structure
-         },
-         stack_id,
-         shape_handle
-       ) do
+  def fill_move_tags(%Changes.NewRecord{move_tags: [_ | _]} = change, _, _, _), do: change
+  def fill_move_tags(%Changes.UpdatedRecord{move_tags: [_ | _]} = change, _, _, _), do: change
+  def fill_move_tags(%Changes.DeletedRecord{move_tags: [_ | _]} = change, _, _, _), do: change
+
+  def fill_move_tags(
+        %Changes.NewRecord{record: record} = change,
+        %__MODULE__{
+          tag_structure: tag_structure
+        },
+        stack_id,
+        shape_handle
+      ) do
     move_tags = make_tags_from_pattern(tag_structure, record, stack_id, shape_handle)
     %{change | move_tags: move_tags}
   end
 
-  defp fill_move_tags(
-         %Changes.UpdatedRecord{record: record, old_record: old_record} = change,
-         %__MODULE__{tag_structure: tag_structure},
-         stack_id,
-         shape_handle
-       ) do
+  def fill_move_tags(
+        %Changes.UpdatedRecord{record: record, old_record: old_record} = change,
+        %__MODULE__{tag_structure: tag_structure},
+        stack_id,
+        shape_handle
+      ) do
     move_tags = make_tags_from_pattern(tag_structure, record, stack_id, shape_handle)
 
     old_move_tags =
@@ -637,14 +656,14 @@ defmodule Electric.Shapes.Shape do
     %{change | move_tags: move_tags, removed_move_tags: old_move_tags}
   end
 
-  defp fill_move_tags(
-         %Changes.DeletedRecord{old_record: record} = change,
-         %__MODULE__{
-           tag_structure: tag_structure
-         },
-         stack_id,
-         shape_handle
-       ) do
+  def fill_move_tags(
+        %Changes.DeletedRecord{old_record: record} = change,
+        %__MODULE__{
+          tag_structure: tag_structure
+        },
+        stack_id,
+        shape_handle
+      ) do
     %{change | move_tags: make_tags_from_pattern(tag_structure, record, stack_id, shape_handle)}
   end
 
