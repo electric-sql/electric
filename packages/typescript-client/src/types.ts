@@ -68,6 +68,14 @@ export type MoveTag = string
  */
 export type MoveOutPattern = { pos: number; value: string }
 
+export type SubsetParams = {
+  where?: string
+  params?: Record<string, string>
+  limit?: number
+  offset?: number
+  orderBy?: string
+}
+
 export type ControlMessage = {
   headers:
     | (Header & {
@@ -75,6 +83,7 @@ export type ControlMessage = {
         global_last_seen_lsn?: string
       })
     | (Header & { control: `snapshot-end` } & PostgresSnapshot)
+    | (Header & { control: `subset-end` } & SubsetParams)
 }
 
 export type EventMessage = {

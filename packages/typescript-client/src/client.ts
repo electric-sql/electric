@@ -7,6 +7,7 @@ import {
   GetExtensions,
   ChangeMessage,
   SnapshotMetadata,
+  SubsetParams,
 } from './types'
 import { MessageParser, Parser, TransformFunction } from './parser'
 import { ColumnMapper, encodeWhereClause } from './column-mapper'
@@ -127,14 +128,6 @@ type ParamValue =
 export type ExternalParamsRecord<T extends Row<unknown> = Row> = {
   [K in string]: ParamValue | undefined
 } & Partial<PostgresParams<T>> & { [K in ReservedParamKeys]?: never }
-
-export type SubsetParams = {
-  where?: string
-  params?: Record<string, string>
-  limit?: number
-  offset?: number
-  orderBy?: string
-}
 
 type ReservedParamKeys =
   | typeof LIVE_CACHE_BUSTER_QUERY_PARAM
@@ -1457,6 +1450,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
       const dataWithEndBoundary = (data as Array<Message<T>>).concat([
         { headers: { control: `snapshot-end`, ...metadata } },
+        { headers: { control: `subset-end`, ...opts } },
       ])
 
       this.#snapshotTracker.addSnapshot(
