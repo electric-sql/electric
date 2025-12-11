@@ -67,7 +67,7 @@
     "typescript": "^5.7.2",
     "vite": "^7.1.7",
     "vite-tsconfig-paths": "^5.1.4",
-    "vitest": "^3.0.5",
+    "vitest": "^4.0.15",
     "web-vitals": "^5.1.0"
   }
 }

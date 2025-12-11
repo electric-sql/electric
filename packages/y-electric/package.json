@@ -14,10 +14,10 @@
     "yjs": "^13.6.6"
   },
   "devDependencies": {
-    "@types/node": "^18.0.0",
+    "@types/node": "^22.0.0",
     "@typescript-eslint/eslint-plugin": "^7.14.1",
     "@typescript-eslint/parser": "^7.14.1",
-    "@vitest/coverage-istanbul": "2.1.4",
+    "@vitest/coverage-istanbul": "4.0.15",
     "eslint": "^8.57.0",
     "eslint-config-prettier": "^9.1.0",
     "eslint-plugin-prettier": "^5.1.3",
@@ -25,7 +25,7 @@
     "shx": "^0.3.4",
     "tsup": "^8.0.1",
     "typescript": "^5.5.2",
-    "vitest": "^2.0.2"
+    "vitest": "^4.0.15"
   },
   "scripts": {
     "build": "shx rm -rf dist && tsup && tsc -p tsconfig.build.json",

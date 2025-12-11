@@ -1,4 +1,3 @@
-import type { GlobalSetupContext } from 'vitest/node'
 import { makePgClient } from './test-helpers'
 
 const url = process.env.ELECTRIC_URL ?? `http://localhost:3000`
@@ -50,7 +49,11 @@ function waitForElectric(url: string): Promise<void> {
  * Global setup for the test suite. Validates that our server is running, and creates and tears down a
  * special schema in Postgres to ensure clean slate between runs.
  */
-export default async function ({ provide }: GlobalSetupContext) {
+export default async function ({
+  provide,
+}: {
+  provide: (key: string, value: unknown) => void
+}) {
   await waitForElectric(url)
 
   const client = makePgClient()
