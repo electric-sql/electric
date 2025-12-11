@@ -245,7 +245,7 @@ defmodule Electric.ShapeCache do
 
       {:ok, shape_handle} = ShapeStatus.add_shape(stack_id, shape)
 
-      Logger.info("Creating new shape for #{inspect(shape)} with handle #{shape_handle}")
+      Logger.debug("Creating new shape for #{inspect(shape)} with handle #{shape_handle}")
 
       {:ok, _pid} = start_shape(shape_handle, shape, state, otel_ctx, :create)
 
