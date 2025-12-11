@@ -5,8 +5,8 @@ defmodule Electric.Connection.ConnectionManagerTest do
   import Support.ComponentSetup
   import Support.DbSetup
 
-  alias Electric.Replication.ShapeLogCollector
   alias Electric.Connection
+  alias Electric.Replication.ShapeLogCollector
   alias Electric.StatusMonitor
 
   setup [
@@ -412,6 +412,103 @@ defmodule Electric.Connection.ConnectionManagerTest do
     end
   end
 
+  describe "lock breaker query" do
+    test "should break an abandoned lock if slot is inactive", ctx do
+      Postgrex.query!(
+        ctx.db_conn,
+        "SELECT pg_create_logical_replication_slot('#{ctx.slot_name}', 'pgoutput')"
+      )
+
+      test_pid = self()
+
+      # Start a task that will hold the lock until the end of the test
+      start_supervised!({
+        Task,
+        fn ->
+          DBConnection.run(ctx.db_conn, fn conn ->
+            Postgrex.query!(conn, "SELECT pg_advisory_lock(hashtext('#{ctx.slot_name}'))")
+
+            send(test_pid, :lock_acquired)
+
+            Process.sleep(:infinity)
+          end)
+        end
+      })
+
+      assert_receive :lock_acquired
+
+      # Verify there's an entry for the acquired lock in pg_locks
+      assert %Postgrex.Result{rows: [[pg_backend_pid]], num_rows: 1} = query_lock_status(ctx)
+
+      # Passing a pg_backend_pid to the run_lock_breaker_query() protects that backend pid from termination
+      conn_man_state = %{
+        stack_id: ctx.stack_id,
+        replication_opts: [slot_name: ctx.slot_name],
+        replication_pg_backend_pid: pg_backend_pid
+      }
+
+      assert {:ok, %Postgrex.Result{columns: ["pg_terminate_backend"], num_rows: 0}} =
+               Electric.Connection.Manager.run_lock_breaker_query(ctx.db_config, conn_man_state)
+
+      # Verify the lock is still held
+      assert %Postgrex.Result{rows: [[^pg_backend_pid]], num_rows: 1} = query_lock_status(ctx)
+
+      # Make sure we can stop the lock connection above, so we're passing nil for replication_pg_backend_pid
+      conn_man_state = %{
+        stack_id: ctx.stack_id,
+        replication_opts: [slot_name: ctx.slot_name],
+        replication_pg_backend_pid: nil
+      }
+
+      assert {:ok,
+              %Postgrex.Result{columns: ["pg_terminate_backend"], num_rows: 1, rows: [["t"]]}} =
+               Electric.Connection.Manager.run_lock_breaker_query(ctx.db_config, conn_man_state)
+
+      # Verify that the pg_locks entry is gone
+      assert %Postgrex.Result{rows: [], num_rows: 0} = query_lock_status(ctx)
+    end
+
+    test "doesn't break the lock if it's taken from expected lock connection", ctx do
+      Postgrex.query!(
+        ctx.db_conn,
+        "SELECT pg_create_logical_replication_slot('#{ctx.slot_name}', 'pgoutput')"
+      )
+
+      {:ok, replication_client_pid} =
+        start_supervised(
+          {Electric.Postgres.ReplicationClient,
+           stack_id: ctx.stack_id,
+           replication_opts: [
+             connection_opts: ctx.db_config,
+             stack_id: ctx.stack_id,
+             publication_name: ctx.slot_name,
+             try_creating_publication?: false,
+             slot_name: ctx.slot_name,
+             handle_event: nil,
+             connection_manager: self()
+           ]}
+        )
+
+      replication_client_monitor = Process.monitor(replication_client_pid)
+
+      assert_receive {:"$gen_cast", {:pg_info_obtained, %{pg_backend_pid: pg_backend_pid}}}
+      assert_receive {:"$gen_cast", :replication_client_lock_acquired}
+
+      conn_man_state = %{
+        stack_id: ctx.stack_id,
+        replication_opts: [slot_name: ctx.slot_name],
+        replication_pg_backend_pid: pg_backend_pid
+      }
+
+      assert {:ok, %Postgrex.Result{columns: ["pg_terminate_backend"], num_rows: 0}} =
+               Electric.Connection.Manager.run_lock_breaker_query(ctx.db_config, conn_man_state)
+
+      refute_received {:DOWN, ^replication_client_monitor, :process, _pid, _reason}
+
+      stop_supervised(Electric.Postgres.ReplicationClient)
+    end
+  end
+
   defp wait_until_active(stack_id) do
     assert_receive {:stack_status, _, :waiting_for_connection_lock}
     assert_receive {:stack_status, _, :connection_lock_acquired}
@@ -425,5 +522,13 @@ defmodule Electric.Connection.ConnectionManagerTest do
     |> Electric.Postgres.ReplicationClient.name()
     |> GenServer.whereis()
     |> Process.monitor()
+  end
+
+  defp query_lock_status(ctx) do
+    Postgrex.query!(
+      ctx.db_conn,
+      "SELECT pid FROM pg_locks WHERE (classid::bigint << 32) | objid::bigint = hashtext($1) AND locktype = 'advisory'",
+      [ctx.slot_name]
+    )
   end
 end
