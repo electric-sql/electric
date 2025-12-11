@@ -1311,7 +1311,7 @@ defmodule Electric.Connection.Manager do
     query = lock_breaker_query(database, lock_name, state.replication_pg_backend_pid)
     opts = [stack_id: state.stack_id, label: :lock_breaker_connection, connection_opts: conn_opts]
 
-    retval = Electric.Postgres.OneOffConnection.query(query, opts)
+    retval = Electric.Postgres.OneOffConnection.attempt_connection(opts, query)
 
     case retval do
       {:ok, %Postgrex.Result{columns: ["pg_terminate_backend"], num_rows: 0}} ->

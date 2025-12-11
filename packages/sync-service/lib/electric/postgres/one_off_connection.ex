@@ -5,7 +5,7 @@ defmodule Electric.Postgres.OneOffConnection do
 
   @default_timeout 5000
 
-  def query(query, kwopts) do
+  def attempt_connection(kwopts, query \\ nil) do
     {connection_opts, kwopts} = Keyword.pop(kwopts, :connection_opts)
     {timeout, kwopts} = Keyword.pop(kwopts, :timeout, @default_timeout)
 
@@ -16,13 +16,32 @@ defmodule Electric.Postgres.OneOffConnection do
 
     old_flag = Process.flag(:trap_exit, true)
 
-    {:ok, pid} =
-      Postgrex.SimpleConnection.start_link(
-        __MODULE__,
-        [query: query, parent_pid: self()] ++ kwopts,
-        connection_opts
-      )
+    result =
+      with {:ok, pid} <-
+             Postgrex.SimpleConnection.start_link(
+               __MODULE__,
+               [parent_pid: self(), query: query] ++ kwopts,
+               connection_opts
+             ) do
+        handle_connection(pid, query, timeout)
+      end
 
+    Process.flag(:trap_exit, old_flag)
+
+    result
+  end
+
+  defp handle_connection(pid, nil, _timeout) do
+    Process.exit(pid, :shutdown)
+
+    receive do
+      {:EXIT, ^pid, reason} -> Logger.debug("OneOffConnection exited: #{inspect(reason)}")
+    end
+
+    :success
+  end
+
+  defp handle_connection(pid, _query, timeout) do
     mon = Process.monitor(pid)
 
     result =
@@ -40,8 +59,6 @@ defmodule Electric.Postgres.OneOffConnection do
     receive do
       {:EXIT, ^pid, reason} -> Logger.debug("OneOffConnection exited: #{inspect(reason)}")
     end
-
-    Process.flag(:trap_exit, old_flag)
 
     result
   end
@@ -63,7 +80,11 @@ defmodule Electric.Postgres.OneOffConnection do
 
   @impl true
   def handle_connect(state) do
-    {:query, state.query, state}
+    if query = state[:query] do
+      {:query, query, state}
+    else
+      {:noreply, state}
+    end
   end
 
   @impl true
