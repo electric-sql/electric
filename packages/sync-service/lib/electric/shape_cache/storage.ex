@@ -73,7 +73,7 @@ defmodule Electric.ShapeCache.Storage do
   @doc """
   Get the current pg_snapshot for the shape storage.
   """
-  @callback fetch_pg_snapsho(shape_opts()) :: {:ok, pg_snapshot() | nil} | {:error, term()}
+  @callback fetch_pg_snapshot(shape_opts()) :: {:ok, pg_snapshot() | nil} | {:error, term()}
 
   @callback set_pg_snapshot(pg_snapshot(), shape_opts()) :: :ok
 
@@ -281,8 +281,8 @@ defmodule Electric.ShapeCache.Storage do
   end
 
   @impl __MODULE__
-  def fetch_pg_snapsho({mod, shape_opts}) do
-    mod.fetch_pg_snapsho(shape_opts)
+  def fetch_pg_snapshot({mod, shape_opts}) do
+    mod.fetch_pg_snapshot(shape_opts)
   end
 
   @impl __MODULE__
