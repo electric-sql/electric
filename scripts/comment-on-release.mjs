@@ -198,10 +198,12 @@ Thanks for contributing to Electric!`
       return
     }
 
-    execSync(
-      `gh pr comment ${prNumber} --repo ${REPO} --body "${body.replace(/"/g, '\\"')}"`,
-      { stdio: 'inherit' }
-    )
+    // Use --body-file with stdin to avoid shell interpretation of backticks
+    execSync(`gh pr comment ${prNumber} --repo ${REPO} --body-file -`, {
+      input: body,
+      encoding: 'utf8',
+      stdio: ['pipe', 'inherit', 'inherit'],
+    })
     console.log(`  Commented on PR #${prNumber}`)
   } catch (e) {
     console.error(`  Failed to comment on PR #${prNumber}:`, e.message)
@@ -270,10 +272,12 @@ Thanks for reporting!`
       return
     }
 
-    execSync(
-      `gh issue comment ${issueNumber} --repo ${REPO} --body "${body.replace(/"/g, '\\"')}"`,
-      { stdio: 'inherit' }
-    )
+    // Use --body-file with stdin to avoid shell interpretation of backticks
+    execSync(`gh issue comment ${issueNumber} --repo ${REPO} --body-file -`, {
+      input: body,
+      encoding: 'utf8',
+      stdio: ['pipe', 'inherit', 'inherit'],
+    })
     console.log(`  Commented on issue #${issueNumber}`)
   } catch (e) {
     console.error(`  Failed to comment on issue #${issueNumber}:`, e.message)
