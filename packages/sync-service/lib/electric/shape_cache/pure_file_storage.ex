@@ -62,7 +62,6 @@ defmodule Electric.ShapeCache.PureFileStorage do
 
   # Directory for storing metadata
   @metadata_storage_dir ".meta"
-  @metadata_bool_fields metadata_boolean_fields()
 
   def shared_opts(opts) do
     stack_id = Keyword.fetch!(opts, :stack_id)
@@ -605,11 +604,47 @@ defmodule Electric.ShapeCache.PureFileStorage do
     LogFile.trim(json_file(opts, suffix), log_search_start_pos, last_persisted_offset)
   end
 
+  # Explicitly specify which keys are actually stored as metadata files on disk
+  # to avoid unnecessary FS operations for non-persistent keys
+  @stored_keys [
+    :version,
+    :latest_name,
+    :last_persisted_txn_offset,
+    :snapshot_started?,
+    :pg_snapshot,
+    :last_snapshot_chunk,
+    :compaction_started?,
+    :compaction_boundary
+  ]
+
+  # Including `compaction_started?` would require bumping the version of the storage,
+  # as there are cases where we would have a file with "false" stored in it.
+  # For `snapshot_started?` we only have the metadata file if it has been set.
+  @boolean_stored_keys [:snapshot_started?]
+
+  @cached_keys [
+    :snapshot_started?,
+    :pg_snapshot,
+    :compaction_started?,
+    :last_snapshot_chunk,
+    :last_seen_txn_offset,
+    :persisted_full_txn_offset,
+    :last_persisted_offset,
+    :compaction_boundary,
+    :latest_name,
+    :cached_chunk_boundaries
+  ]
+
+  # we need this because macro expects a compile-time atom
+  for key <- @cached_keys do
+    defp get_cached_by_key(meta, unquote(key)), do: storage_meta(meta, unquote(key))
+  end
+
   # optimization for snapshot started boolean to avoid expensive file open
-  defp read_metadata!(%__MODULE__{} = opts, key) when key in @metadata_bool_fields,
+  defp read_metadata!(%__MODULE__{} = opts, key) when key in @boolean_stored_keys,
     do: FileInfo.exists?(shape_metadata_path(opts, "#{key}.bin"))
 
-  defp read_metadata!(%__MODULE__{} = opts, key) do
+  defp read_metadata!(%__MODULE__{} = opts, key) when key in @stored_keys do
     case File.open(
            shape_metadata_path(opts, "#{key}.bin"),
            [:read, :raw],
@@ -619,6 +654,8 @@ defmodule Electric.ShapeCache.PureFileStorage do
       {:error, :enoent} -> nil
     end
   end
+
+  defp read_metadata!(%__MODULE__{} = _opts, _key), do: nil
 
   # Read metadata with ETS-first, disk-fallback pattern
   defp read_cached_metadata(%__MODULE__{shape_handle: handle} = opts, key) do
@@ -655,25 +692,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
     end
   end
 
-  @cached_keys [
-    :snapshot_started?,
-    :pg_snapshot,
-    :compaction_started?,
-    :last_snapshot_chunk,
-    :last_seen_txn_offset,
-    :persisted_full_txn_offset,
-    :last_persisted_offset,
-    :compaction_boundary,
-    :latest_name,
-    :cached_chunk_boundaries
-  ]
-
-  # we need this because macro expects a compile-time atom
-  for key <- @cached_keys do
-    defp get_cached_by_key(meta, unquote(key)), do: storage_meta(meta, unquote(key))
-  end
-
-  defp write_metadata!(%__MODULE__{} = opts, key, value) when key in @metadata_bool_fields do
+  defp write_metadata!(%__MODULE__{} = opts, key, value) when key in @boolean_stored_keys do
     path = Path.join(shape_metadata_dir(opts), "#{key}.bin")
 
     if value,
@@ -681,7 +700,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
       else: Electric.AsyncDeleter.delete(opts.stack_id, path)
   end
 
-  defp write_metadata!(%__MODULE__{} = opts, key, value) do
+  defp write_metadata!(%__MODULE__{} = opts, key, value) when key in @stored_keys do
     metadata_dir = shape_metadata_dir(opts)
 
     path = Path.join(metadata_dir, to_string(key) <> ".bin")
