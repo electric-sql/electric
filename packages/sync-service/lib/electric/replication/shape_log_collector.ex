@@ -203,6 +203,8 @@ defmodule Electric.Replication.ShapeLogCollector do
     {:ok, registry_state} =
       ConsumerRegistry.new(stack_id, Map.get(opts, :consumer_registry_opts, []))
 
+    replication_client_name = ReplicationClient.name(stack_id)
+
     state =
       Map.merge(opts, %{
         subscriptions: 0,
@@ -219,7 +221,7 @@ defmodule Electric.Replication.ShapeLogCollector do
         flush_tracker:
           FlushTracker.new(
             notify_fn: fn lsn ->
-              case GenServer.whereis(ReplicationClient.name(stack_id)) do
+              case GenServer.whereis(replication_client_name) do
                 nil -> :ok
                 pid -> send(pid, {:flush_boundary_updated, lsn})
               end
