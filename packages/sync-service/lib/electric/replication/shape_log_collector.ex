@@ -413,7 +413,7 @@ defmodule Electric.Replication.ShapeLogCollector do
       ],
       state.stack_id,
       fn ->
-        OpenTelemetry.start_interval("shape_log_collector.logging")
+        OpenTelemetry.start_interval(:"shape_log_collector.logging.duration_µs")
 
         Logger.debug(
           fn ->
@@ -479,11 +479,11 @@ defmodule Electric.Replication.ShapeLogCollector do
   defp handle_txn_fragment(state, txn_fragment) do
     OpenTelemetry.add_span_attributes("txn.is_dropped": false)
 
-    OpenTelemetry.start_interval("shape_log_collector.fill_keys_in_txn")
+    OpenTelemetry.start_interval(:"shape_log_collector.fill_keys_in_txn.duration_µs")
 
     case fill_keys(txn_fragment, state) do
       {:ok, txn_fragment} ->
-        OpenTelemetry.start_interval("partitions.handle_transaction")
+        OpenTelemetry.start_interval(:"partitions.handle_transaction.duration_µs")
 
         {partitions, txn_fragment} =
           Partitions.handle_txn_fragment(state.partitions, txn_fragment)
@@ -502,7 +502,7 @@ defmodule Electric.Replication.ShapeLogCollector do
   end
 
   defp publish(state, event) do
-    OpenTelemetry.start_interval("shape_log_collector.event_routing")
+    OpenTelemetry.start_interval(:"shape_log_collector.event_routing.duration_µs")
 
     {events_by_handle, event_router} =
       EventRouter.event_by_shape_handle(state.event_router, event)
@@ -516,7 +516,7 @@ defmodule Electric.Replication.ShapeLogCollector do
       "shape_log_collector.affected_shape_count": affected_shape_count
     )
 
-    OpenTelemetry.start_interval("shape_log_collector.publish")
+    OpenTelemetry.start_interval(:"shape_log_collector.publish.duration_µs")
     context = OpenTelemetry.get_current_context()
 
     for layer <- DependencyLayers.get_for_handles(state.dependency_layers, affected_shapes) do
@@ -529,7 +529,7 @@ defmodule Electric.Replication.ShapeLogCollector do
       ConsumerRegistry.publish(layer_events, state.registry_state)
     end
 
-    OpenTelemetry.start_interval("shape_log_collector.set_last_processed_lsn")
+    OpenTelemetry.start_interval(:"shape_log_collector.set_last_processed_lsn.duration_µs")
 
     lsn = Lsn.from_integer(state.last_processed_offset.tx_offset)
     LsnTracker.set_last_processed_lsn(state.lsn_tracker_ref, lsn)
@@ -599,21 +599,26 @@ defmodule Electric.Replication.ShapeLogCollector do
         if EventRouter.has_shape?(state.event_router, shape_handle) do
           Logger.debug("Deleting shape #{shape_handle}")
 
-          OpenTelemetry.start_interval("unsubscribe_shape.remove_subscription")
+          OpenTelemetry.start_interval(:"unsubscribe_shape.remove_subscription.duration_µs")
 
-          OpenTelemetry.start_interval("unsubscribe_shape.remove_from_event_router")
+          OpenTelemetry.start_interval(:"unsubscribe_shape.remove_from_event_router.duration_µs")
           event_router = EventRouter.remove_shape(state.event_router, shape_handle)
 
-          OpenTelemetry.start_interval("unsubscribe_shape.remove_from_partitions")
+          OpenTelemetry.start_interval(:"unsubscribe_shape.remove_from_partitions.duration_µs")
           partitions = Partitions.remove_shape(state.partitions, shape_handle)
 
-          OpenTelemetry.start_interval("unsubscribe_shape.remove_pids_by_shape_handle")
+          OpenTelemetry.start_interval(
+            :"unsubscribe_shape.remove_pids_by_shape_handle.duration_µs"
+          )
+
           pids_by_shape_handle = Map.delete(state.pids_by_shape_handle, shape_handle)
 
-          OpenTelemetry.start_interval("unsubscribe_shape.remove_from_flush_tracker")
+          OpenTelemetry.start_interval(:"unsubscribe_shape.remove_from_flush_tracker.duration_µs")
           flush_tracker = FlushTracker.handle_shape_removed(state.flush_tracker, shape_handle)
 
-          OpenTelemetry.start_interval("unsubscribe_shape.remove_from_dependency_layers")
+          OpenTelemetry.start_interval(
+            :"unsubscribe_shape.remove_from_dependency_layers.duration_µs"
+          )
 
           dependency_layers =
             DependencyLayers.remove_dependency(state.dependency_layers, shape_handle)

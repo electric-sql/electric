@@ -179,9 +179,9 @@ defmodule Electric.Telemetry.OpenTelemetry do
   e.g.
 
   ```elixir
-  OpenTelemetry.start_interval("quick_sleep")
+  OpenTelemetry.start_interval(:quick_sleep)
   Process.sleep(1)
-  OpenTelemetry.start_interval("longer_sleep")
+  OpenTelemetry.start_interval(:longer_sleep)
   Process.sleep(2)
   OpenTelemetry.stop_and_save_intervals(total_attribute: "total_sleep_µs")
   ```
@@ -190,12 +190,12 @@ defmodule Electric.Telemetry.OpenTelemetry do
     longer_sleep.duration_µs: 2000
     total_sleep_µs: 3000
   """
-  @spec start_interval(binary()) :: :ok
-  def start_interval(context \\ nil, interval_name) do
+  @spec start_interval(atom()) :: :ok
+  def start_interval(interval_name) when is_atom(interval_name) do
     IntervalTimer.start_interval(get_interval_timer(), interval_name)
     |> set_interval_timer()
 
-    context
+    :ok
   end
 
   @doc """
@@ -221,7 +221,7 @@ defmodule Electric.Telemetry.OpenTelemetry do
     add_span_attributes(
       total_attribute ++
         for {interval_name, duration} <- durations do
-          {:"#{interval_name}.duration_µs", duration}
+          {interval_name, duration}
         end
     )
   end
