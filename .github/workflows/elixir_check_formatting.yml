@@ -38,11 +38,11 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: packages/${{ matrix.package }}/deps
-          key: "${{ runner.os }}-${{ matrix.package }}-deps-${{ env.MIX_ENV }}-${{ hashFiles('packages/${{ matrix.package }}/mix.lock') }}"
+          key: "${{ runner.os }}-${{ matrix.package }}-deps-${{ env.MIX_ENV }}-${{ hashFiles(format('packages/{0}/mix.lock', matrix.package)) }}"
           restore-keys: |
-            ${{ runner.os }}-${{ matrix.package }}-deps-${{ env.MIX_ENV }}-${{ hashFiles('packages/${{ matrix.package }}/mix.lock') }}
-            ${{ runner.os }}-${{ matrix.package }}-deps-${{ env.MIX_ENV }}-
-            ${{ runner.os }}-${{ matrix.package }}-deps-
+            ${{ runner.os }}-${{ matrix.package }}-deps-${{ env.MIX_ENV }}-${{ hashFiles(format('packages/{0}/mix.lock', matrix.package)) }}
+            ${{ runner.os }}-${{ matrix.package }}-deps-${{ env.MIX_ENV }}
+            ${{ runner.os }}-${{ matrix.package }}-deps
 
       - name: Restore compiled code
         uses: actions/cache/restore@v4
@@ -52,11 +52,11 @@ jobs:
             !packages/${{ matrix.package }}/_build/*/lib/electric
             !packages/${{ matrix.package }}/_build/*/lib/electric_client
             !packages/${{ matrix.package }}/_build/*/lib/electric_telemetry
-          key: "${{ runner.os }}-${{ matrix.package }}-build-${{ env.MIX_ENV }}-${{ hashFiles('packages/${{ matrix.package }}/mix.lock') }}"
+          key: "${{ runner.os }}-${{ matrix.package }}-build-${{ env.MIX_ENV }}-${{ hashFiles(format('packages/{0}/mix.lock', matrix.package)) }}"
           restore-keys: |
-            ${{ runner.os }}-${{ matrix.package }}-build-${{ env.MIX_ENV }}-${{ hashFiles('packages/${{ matrix.package }}/mix.lock') }}
-            ${{ runner.os }}-${{ matrix.package }}-build-${{ env.MIX_ENV }}-
-            ${{ runner.os }}-${{ matrix.package }}-build-
+            ${{ runner.os }}-${{ matrix.package }}-build-${{ env.MIX_ENV }}-${{ hashFiles(format('packages/{0}/mix.lock', matrix.package)) }}
+            ${{ runner.os }}-${{ matrix.package }}-build-${{ env.MIX_ENV }}
+            ${{ runner.os }}-${{ matrix.package }}-build
 
       - name: Install dependencies
         run: mix deps.get
