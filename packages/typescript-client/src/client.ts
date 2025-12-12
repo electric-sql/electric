@@ -592,7 +592,9 @@ export class ShapeStream<T extends Row<unknown> = Row>
   #log(event: string, data?: Record<string, unknown>) {
     if (this.#debug) {
       const timestamp = new Date().toISOString()
-      const handle = this.#shapeHandle ? `[${this.#shapeHandle.slice(0, 8)}]` : ``
+      const handle = this.#shapeHandle
+        ? `[${this.#shapeHandle.slice(0, 8)}]`
+        : ``
       const dataStr = data ? ` ${JSON.stringify(data)}` : ``
       console.log(`[Electric]${handle} ${timestamp} ${event}${dataStr}`)
     }
@@ -772,7 +774,9 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
     const resumingFromPause = this.#state === `paused`
     if (resumingFromPause) {
-      this.#log(`requestShape (resuming from pause)`, { offset: this.#lastOffset })
+      this.#log(`requestShape (resuming from pause)`, {
+        offset: this.#lastOffset,
+      })
     }
     this.#state = `active`
 
@@ -815,7 +819,10 @@ export class ShapeStream<T extends Row<unknown> = Row>
           requestAbortController.signal.reason === PAUSE_STREAM &&
           currentState === `pause-requested`
         ) {
-          this.#log(`fetch aborted for pause`, { from: currentState, to: `paused` })
+          this.#log(`fetch aborted for pause`, {
+            from: currentState,
+            to: `paused`,
+          })
           this.#state = `paused`
         } else {
           this.#log(`fetch aborted`, {
@@ -1022,7 +1029,9 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
       if (signal.aborted) {
         // If the signal is already aborted, abort the request immediately
-        this.#log(`user signal already aborted at start`, { reason: signal.reason })
+        this.#log(`user signal already aborted at start`, {
+          reason: signal.reason,
+        })
         this.#requestAbortController?.abort(signal.reason)
       }
 
@@ -1297,7 +1306,11 @@ export class ShapeStream<T extends Row<unknown> = Row>
     const prevState = this.#state
     if (this.#started && this.#state === `active`) {
       this.#state = `pause-requested`
-      this.#log(`pause`, { from: prevState, to: this.#state, started: this.#started })
+      this.#log(`pause`, {
+        from: prevState,
+        to: this.#state,
+        started: this.#started,
+      })
       this.#requestAbortController?.abort(PAUSE_STREAM)
     } else {
       this.#log(`pause (no-op)`, { state: this.#state, started: this.#started })
@@ -1333,10 +1346,17 @@ export class ShapeStream<T extends Row<unknown> = Row>
       if (this.#state === `pause-requested`) {
         this.#state = `active`
       }
-      this.#log(`resume`, { from: prevState, to: this.#state, started: this.#started })
+      this.#log(`resume`, {
+        from: prevState,
+        to: this.#state,
+        started: this.#started,
+      })
       this.#start()
     } else {
-      this.#log(`resume (no-op)`, { state: this.#state, started: this.#started })
+      this.#log(`resume (no-op)`, {
+        state: this.#state,
+        started: this.#started,
+      })
     }
   }
 
@@ -1347,7 +1367,10 @@ export class ShapeStream<T extends Row<unknown> = Row>
     const subscriptionId = Math.random()
 
     this.#subscribers.set(subscriptionId, [callback, onError])
-    this.#log(`subscribe`, { subscriberCount: this.#subscribers.size, started: this.#started })
+    this.#log(`subscribe`, {
+      subscriberCount: this.#subscribers.size,
+      started: this.#started,
+    })
     if (!this.#started) this.#start()
 
     return () => {
