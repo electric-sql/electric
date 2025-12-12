@@ -1,0 +1,249 @@
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { join } from 'path'
+import { setupTemplate } from '../src/template-setup.js'
+import type { ElectricCredentials } from '../src/electric-api.js'
+
+// Mock Node.js modules
+vi.mock('child_process', () => ({
+  execSync: vi.fn(),
+}))
+
+vi.mock('fs', async () => {
+  const actual = await vi.importActual('fs')
+  return {
+    ...actual,
+    writeFileSync: vi.fn(),
+    readFileSync: vi.fn(),
+    existsSync: vi.fn(),
+  }
+})
+
+vi.mock('path', async () => {
+  const actual = await vi.importActual('path')
+  return {
+    ...actual,
+    join: vi.fn().mockImplementation((...args) => args.join('/')),
+  }
+})
+
+describe('template-setup', () => {
+  let mockExecSync: any
+  let mockWriteFileSync: any
+  let mockReadFileSync: any
+  let mockExistsSync: any
+  
+  const mockCredentials: ElectricCredentials = {
+    source_id: 'test-source-id',
+    secret: 'test-secret',
+    DATABASE_URL: 'postgresql://test:test@localhost:5432/test',
+  }
+
+  beforeEach(async () => {
+    mockExecSync = (await vi.importMock('child_process')).execSync
+    mockWriteFileSync = (await vi.importMock('fs')).writeFileSync
+    mockReadFileSync = (await vi.importMock('fs')).readFileSync
+    mockExistsSync = (await vi.importMock('fs')).existsSync
+    
+    vi.clearAllMocks()
+    
+    // Mock process.cwd to return a test directory
+    vi.spyOn(process, 'cwd').mockReturnValue('/test/dir')
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  describe('setupTemplate', () => {
+    it('should successfully setup template with all steps', async () => {
+      const appName = 'test-app'
+      
+      // Mock existing files
+      mockExistsSync.mockImplementation((path: string) => {
+        if (path.includes('.gitignore')) return true
+        if (path.includes('package.json')) return true
+        return false
+      })
+
+      mockReadFileSync.mockImplementation((path: string) => {
+        if (path.includes('.gitignore')) return 'node_modules\ndist\n'
+        if (path.includes('package.json')) {
+          return JSON.stringify({
+            name: 'test-app',
+            scripts: {
+              dev: 'vite',
+              build: 'vite build',
+            },
+          })
+        }
+        return ''
+      })
+
+      await setupTemplate(appName, mockCredentials)
+
+      // Verify gitpick command was called
+      expect(mockExecSync).toHaveBeenCalledWith(
+        `npx gitpick electric-sql/electric/tree/main/examples/tanstack-db-web-starter ${appName}`,
+        { stdio: 'inherit' }
+      )
+
+      // Verify .env file was created
+      expect(mockWriteFileSync).toHaveBeenCalledWith(
+        `/test/dir/${appName}/.env`,
+        expect.stringContaining('DATABASE_URL=postgresql://test:test@localhost:5432/test')
+      )
+      expect(mockWriteFileSync).toHaveBeenCalledWith(
+        `/test/dir/${appName}/.env`,
+        expect.stringContaining('ELECTRIC_SECRET=test-secret')
+      )
+      expect(mockWriteFileSync).toHaveBeenCalledWith(
+        `/test/dir/${appName}/.env`,
+        expect.stringContaining('ELECTRIC_SOURCE_ID=test-source-id')
+      )
+
+      // Verify .gitignore was updated
+      expect(mockWriteFileSync).toHaveBeenCalledWith(
+        `/test/dir/${appName}/.gitignore`,
+        expect.stringContaining('.env')
+      )
+
+      // Verify package.json was updated with Electric scripts
+      expect(mockWriteFileSync).toHaveBeenCalledWith(
+        `/test/dir/${appName}/package.json`,
+        expect.stringContaining('psql')
+      )
+      expect(mockWriteFileSync).toHaveBeenCalledWith(
+        `/test/dir/${appName}/package.json`,
+        expect.stringContaining('claim')
+      )
+      expect(mockWriteFileSync).toHaveBeenCalledWith(
+        `/test/dir/${appName}/package.json`,
+        expect.stringContaining('deploy')
+      )
+
+      // Verify electric-commands.js was created
+      expect(mockWriteFileSync).toHaveBeenCalledWith(
+        `/test/dir/${appName}/electric-commands.js`,
+        expect.stringContaining('async function claim()')
+      )
+    })
+
+    it('should create .gitignore if it does not exist', async () => {
+      const appName = 'test-app'
+      
+      mockExistsSync.mockImplementation((path: string) => {
+        if (path.includes('.gitignore')) return false
+        if (path.includes('package.json')) return true
+        return false
+      })
+
+      mockReadFileSync.mockImplementation((path: string) => {
+        if (path.includes('package.json')) {
+          return JSON.stringify({ name: 'test-app', scripts: {} })
+        }
+        return ''
+      })
+
+      await setupTemplate(appName, mockCredentials)
+
+      // Verify .gitignore was created with .env entry
+      expect(mockWriteFileSync).toHaveBeenCalledWith(
+        `/test/dir/${appName}/.gitignore`,
+        expect.stringContaining('.env')
+      )
+    })
+
+    it('should not duplicate .env in .gitignore if already present', async () => {
+      const appName = 'test-app'
+      
+      mockExistsSync.mockImplementation((path: string) => {
+        if (path.includes('.gitignore')) return true
+        if (path.includes('package.json')) return true
+        return false
+      })
+
+      mockReadFileSync.mockImplementation((path: string) => {
+        if (path.includes('.gitignore')) return 'node_modules\n.env\ndist\n'
+        if (path.includes('package.json')) {
+          return JSON.stringify({ name: 'test-app', scripts: {} })
+        }
+        return ''
+      })
+
+      await setupTemplate(appName, mockCredentials)
+
+      // Verify .gitignore was not modified since .env was already present
+      const gitignoreWrites = mockWriteFileSync.mock.calls.filter(call => 
+        call[0].includes('.gitignore')
+      )
+      expect(gitignoreWrites).toHaveLength(0)
+    })
+
+    it('should create tsconfig.json if it does not exist', async () => {
+      const appName = 'test-app'
+      
+      mockExistsSync.mockImplementation((path: string) => {
+        if (path.includes('tsconfig.json')) return false
+        if (path.includes('package.json')) return true
+        return false
+      })
+
+      mockReadFileSync.mockImplementation((path: string) => {
+        if (path.includes('package.json')) {
+          return JSON.stringify({ name: 'test-app', scripts: {} })
+        }
+        return ''
+      })
+
+      await setupTemplate(appName, mockCredentials)
+
+      // Verify tsconfig.json was created
+      expect(mockWriteFileSync).toHaveBeenCalledWith(
+        `/test/dir/${appName}/tsconfig.json`,
+        expect.stringContaining('"target": "es2020"')
+      )
+    })
+
+    it('should handle gitpick command failure', async () => {
+      const appName = 'test-app'
+      
+      mockExecSync.mockImplementation(() => {
+        throw new Error('gitpick failed')
+      })
+
+      await expect(setupTemplate(appName, mockCredentials)).rejects.toThrow(
+        'Template setup failed: gitpick failed'
+      )
+    })
+
+    it('should handle file system errors', async () => {
+      const appName = 'test-app'
+      
+      mockWriteFileSync.mockImplementation(() => {
+        throw new Error('Permission denied')
+      })
+
+      await expect(setupTemplate(appName, mockCredentials)).rejects.toThrow(
+        'Template setup failed: Permission denied'
+      )
+    })
+
+    it('should handle invalid package.json', async () => {
+      const appName = 'test-app'
+      
+      mockExistsSync.mockImplementation((path: string) => {
+        if (path.includes('package.json')) return true
+        return false
+      })
+
+      mockReadFileSync.mockImplementation((path: string) => {
+        if (path.includes('package.json')) return 'invalid json'
+        return ''
+      })
+
+      await expect(setupTemplate(appName, mockCredentials)).rejects.toThrow(
+        'Template setup failed:'
+      )
+    })
+  })
+})

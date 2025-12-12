@@ -1,0 +1,6 @@
+- [ ] `npx @electric-sql/start my-electric-app`
+- [ ] `pnpm claim`
+- [ ] `pnpm deploy`
+- [ ] check the `AGENTS.md` (maybe upgrade to be the general one)
+- [ ] deploy https://quickstart.examples.electric-sql.com
+- [ ] fork https://stackblitz.com/fork/github/electric-sql/quickstart

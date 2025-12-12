@@ -7,7 +7,12 @@
     "node": ">=20.19.0 || >=22.12.0"
   },
   "scripts": {
-    "dev": "docker compose up -d && vite dev",
+    "dev": "pnpm dev:cloud",
+    "dev:cloud": "vite dev",
+    "dev:docker": "docker compose up -d && vite dev",
+    "backend:up": "docker compose up -d",
+    "backend:down": "docker compose down",
+    "backend:clear": "docker compose down -v",
     "start": "node .output/server/index.mjs",
     "build": "vite build",
     "migrate": "drizzle-kit migrate",
