@@ -221,7 +221,7 @@ export function createFetchWithChunkBuffer(
 ): typeof fetch {
   const { maxChunksToPrefetch } = prefetchOptions
 
-  let prefetchQueue: PrefetchQueue
+  let prefetchQueue: PrefetchQueue | undefined
 
   const prefetchClient = async (...args: Parameters<typeof fetchClient>) => {
     const url = args[0].toString()
@@ -233,7 +233,10 @@ export function createFetchWithChunkBuffer(
       return prefetchedRequest
     }
 
+    // Clear the prefetch queue after aborting to prevent returning
+    // stale/aborted requests on future calls with the same URL
     prefetchQueue?.abort()
+    prefetchQueue = undefined
 
     // perform request and fire off prefetch queue if request is eligible
     const response = await fetchClient(...args)
