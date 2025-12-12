@@ -13,7 +13,7 @@ on:
 
 jobs:
   build_image:
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
 
     # Make sure that all workflows calling this with the same tag will queue here.
     # Only the first workflow to reach this point will trigger a new image build, the other

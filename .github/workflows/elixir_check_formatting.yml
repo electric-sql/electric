@@ -16,7 +16,7 @@ jobs:
       matrix:
         package: [sync-service, elixir-client, electric-telemetry]
     name: Check Elixir formatting and compilation issues
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     defaults:
       run:
         working-directory: packages/${{ matrix.package }}

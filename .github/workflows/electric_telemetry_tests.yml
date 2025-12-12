@@ -15,7 +15,7 @@ permissions:
 jobs:
   build_and_test:
     name: Build and test electric-telemetry
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     defaults:
       run:
         working-directory: packages/electric-telemetry

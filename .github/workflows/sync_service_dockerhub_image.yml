@@ -9,7 +9,7 @@ on:
 jobs:
   derive_build_vars:
     name: Derive build variables from the source code
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     outputs:
       short_commit_sha: ${{ steps.vars.outputs.short_commit_sha }}
       electric_version: ${{ steps.vars.outputs.electric_version }}
@@ -44,10 +44,10 @@ jobs:
         include:
           - platform: linux/amd64
             platform_id: amd64
-            runner: ubuntu-latest
+            runner: blacksmith-4vcpu-ubuntu-2404
           - platform: linux/arm64/v8
             platform_id: arm64
-            runner: ubuntu-24.04-arm
+            runner: blacksmith-4vcpu-ubuntu-2404-arm
     runs-on: ${{ matrix.runner }}
     needs: [derive_build_vars]
     steps:
@@ -94,7 +94,7 @@ jobs:
 
   publish_tagged_image:
     needs: [derive_build_vars, build_and_push_image]
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     steps:
       - uses: docker/login-action@v3
         with:
