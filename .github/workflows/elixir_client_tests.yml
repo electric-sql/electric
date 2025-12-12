@@ -1,17 +1,13 @@
-name: Elixir Client CI
+name: elixir-client
 
 on:
   push:
     branches: ['main']
-    paths-ignore:
-      - 'website/**'
-      - '**/README.md'
-      - 'integration-tests/**'
+    paths:
+      - 'packages/elixir-client/**'
   pull_request:
-    paths-ignore:
-      - 'website/**'
-      - '**/README.md'
-      - 'integration-tests/**'
+    paths:
+      - 'packages/elixir-client/**'
 
 permissions:
   contents: read
@@ -26,9 +22,7 @@ jobs:
     env:
       MIX_ENV: test
       MIX_OS_DEPS_COMPILE_PARTITION_COUNT: 4
-      POSTGRES_VERSION: 140006
       ELECTRIC_PORT: 3100
-      PG_PORT: 54323
       ELECTRIC_URL: 'http://127.0.0.1:3333'
       DATABASE_URL: 'postgresql://postgres:password@127.0.0.1:54323/postgres?sslmode=disable'
     services:
@@ -51,16 +45,17 @@ jobs:
           version-type: strict
           version-file: '.tool-versions'
 
-      - name: Cache elixir-client dependencies
+      - name: Cache dependencies
         uses: actions/cache@v4
         with:
           path: packages/elixir-client/deps
-          key: ${{ runner.os }}-elixir-client-deps-${{ hashFiles('packages/elixir-client/mix.lock') }}
+          key: ${{ runner.os }}-elixir-client-deps-${{ env.MIX_ENV }}-${{ hashFiles('packages/elixir-client/mix.lock') }}
           restore-keys: |
-            ${{ runner.os }}-elixir-client-deps-${{ hashFiles('packages/elixir-client/mix.lock') }}
-            ${{ runner.os }}-elixir-client-deps-
+            ${{ runner.os }}-elixir-client-deps-${{ env.MIX_ENV }}-${{ hashFiles('packages/elixir-client/mix.lock') }}
+            ${{ runner.os }}-elixir-client-deps-${{ env.MIX_ENV }}
+            ${{ runner.os }}-elixir-client-deps
 
-      - name: Cache elixir-client compiled code
+      - name: Cache compiled code
         uses: actions/cache@v4
         with:
           path: |
@@ -69,15 +64,13 @@ jobs:
           key: "${{ runner.os }}-elixir-client-build-${{ env.MIX_ENV }}-${{ hashFiles('packages/elixir-client/mix.lock') }}"
           restore-keys: |
             ${{ runner.os }}-elixir-client-build-${{ env.MIX_ENV }}-${{ hashFiles('packages/elixir-client/mix.lock') }}
-            ${{ runner.os }}-elixir-client-build-${{ env.MIX_ENV }}-
-            ${{ runner.os }}-elixir-client-build-
+            ${{ runner.os }}-elixir-client-build-${{ env.MIX_ENV }}
+            ${{ runner.os }}-elixir-client-build
 
       - name: Install dependencies
         run: mix do deps.get + deps.compile
 
-      - name: Compile
-        # don't bail on compile warnings - let's get the results of the tests
-        # and let the formatting task check for compilation warnings
+      - name: Compile package
         run: mix compile
 
       - name: Run tests
