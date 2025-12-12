@@ -1009,7 +1009,12 @@ export class ShapeStream<T extends Row<unknown> = Row>
     // If user provided a signal, listen to it and pass on the reason for the abort
     if (signal) {
       const abortListener = () => {
-        this.#log(`user signal aborted`, { reason: signal.reason })
+        // Capture stack trace to help debug what's calling abort()
+        const stack = new Error().stack
+        this.#log(`user signal aborted`, {
+          reason: signal.reason,
+          stack: stack?.split(`\n`).slice(1, 6).join(`\n`), // First 5 frames
+        })
         this.#requestAbortController?.abort(signal.reason)
       }
 
