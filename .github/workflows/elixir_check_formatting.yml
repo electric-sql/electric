@@ -1,55 +1,21 @@
-name: Autoformat & Linting
-
-# Note: For pull requests, GitHub Actions automatically creates a merge commit
-# between your branch and the target branch (usually main), then runs checks on
-# that merged state. This ensures the code will be properly formatted after merge.
-# If this check fails, you may need to merge main into your branch first.
+name: Elixir formatting
 
 on:
-  push:
-    branches: ['main']
-    paths-ignore:
-      - '**/README.md'
-      - 'integration-tests/**'
   pull_request:
-    paths-ignore:
-      - '**/README.md'
-      - 'integration-tests/**'
+    paths:
+      - 'packages/electric-telemetry/**'
+      - 'packages/elixir-client/**'
+      - 'packages/sync-service/**'
 
 permissions:
   contents: read
 
 jobs:
-  typescript_formatting:
-    name: TypeScript formatting and linting
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version-file: '.tool-versions'
-          cache: 'pnpm'
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Check Prettier formatting
-        run: pnpm run format:check
-
-      - name: Check ESLint (all packages)
-        run: pnpm run stylecheck-all
-
-  elixir_formatting:
+  elixir_check_formatting:
     strategy:
       matrix:
         package: [sync-service, elixir-client, electric-telemetry]
-    name: Elixir formatting and linting
+    name: Check Elixir formatting and compilation issues
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -98,5 +64,5 @@ jobs:
       - name: Check Elixir formatting
         run: mix format --check-formatted
 
-      - name: Check Elixir compiles without warnings
+      - name: Check the package compiles without warnings
         run: mix compile --force --all-warnings --warnings-as-errors
