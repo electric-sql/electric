@@ -19,18 +19,13 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: 'postgres:17-alpine'
+        image: 'ghcr.io/${{ github.repository }}/postgres:17-alpine-logical'
         env:
           POSTGRES_PASSWORD: password
         ports:
           - 5432:5432
 
     steps:
-      - name: 'Set PG settings'
-        run: |
-          docker exec ${{ job.services.postgres.id }} sh -c 'echo "wal_level=logical" >> /var/lib/postgresql/data/postgresql.conf'
-          docker restart ${{ job.services.postgres.id }}
-
       - uses: docker/setup-buildx-action@v3
 
       - uses: actions/checkout@v4

@@ -39,7 +39,7 @@ jobs:
       POSTGRES_VERSION: '${{ matrix.postgres_version }}0000'
     services:
       postgres:
-        image: 'postgres:${{ matrix.postgres_version }}-alpine'
+        image: 'ghcr.io/${{ github.repository }}/postgres:${{ matrix.postgres_version }}-alpine-logical'
         env:
           POSTGRES_PASSWORD: password
         options: >-
@@ -64,13 +64,6 @@ jobs:
           - 65432:6432
     steps:
       - uses: actions/checkout@v4
-
-      # https://github.com/orgs/community/discussions/126453#discussioncomment-11414956
-      - name: Set PG settings
-        run: |
-          docker exec ${{ job.services.postgres.id }} sh -c 'psql -U postgres -c "ALTER SYSTEM SET wal_level = '"'"'logical'"'"';"'
-          docker exec ${{ job.services.postgres.id }} sh -c 'psql -U postgres -c "ALTER SYSTEM SET max_replication_slots = 100;"'
-          docker restart ${{ job.services.postgres.id }}
 
       - name: Seed the database
         run: psql -d postgresql://postgres:password@localhost:54321/postgres?sslmode=disable -f dev/init.sql

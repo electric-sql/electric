@@ -33,7 +33,7 @@ jobs:
       DATABASE_URL: 'postgresql://postgres:password@127.0.0.1:54323/postgres?sslmode=disable'
     services:
       postgres:
-        image: postgres:14-alpine
+        image: 'ghcr.io/${{ github.repository }}/postgres:17-alpine-logical'
         env:
           POSTGRES_PASSWORD: password
         options: >-
@@ -45,10 +45,6 @@ jobs:
           - 54323:5432
     steps:
       - uses: actions/checkout@v4
-      - name: 'Set PG settings'
-        run: |
-          docker exec ${{ job.services.postgres.id }} sh -c 'echo "wal_level=logical" >> /var/lib/postgresql/data/postgresql.conf'
-          docker restart ${{ job.services.postgres.id }}
 
       - uses: erlef/setup-beam@v1
         with:
