@@ -60,7 +60,8 @@ jobs:
       - run: pnpm -r --filter "$(jq '.name' -r package.json)^..." build
       - run: pnpm run typecheck
 
-  image_tag:
+  derive_sync_service_image_tag:
+    name: Derive the image tag for sync-service from the package source code
     runs-on: ubuntu-latest
     outputs:
       tag: ${{ steps.hash.outputs.tag }}
@@ -106,7 +107,7 @@ jobs:
         env:
           ELECTRIC_INSECURE: true
           ELECTRIC_USAGE_REPORTING: false
-          DATABASE_URL: 'postgresql://postgres:password@postgres'
+          DATABASE_URL: 'postgresql://postgres:password@postgres?sslmode=disable'
         ports:
           - 3000:3000
     steps:
