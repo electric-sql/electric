@@ -343,16 +343,24 @@ class PrefetchQueue {
 
   abort(): void {
     this.#prefetchQueue.forEach(([_, aborter]) => aborter.abort())
+    this.#prefetchQueue.clear()
   }
 
   consume(...args: Parameters<typeof fetch>): Promise<Response> | void {
     const url = args[0].toString()
 
-    const request = this.#prefetchQueue.get(url)?.[0]
+    const entry = this.#prefetchQueue.get(url)
     // only consume if request is in queue and is the queue "head"
     // if request is in the queue but not the head, the queue is being
     // consumed out of order and should be restarted
-    if (!request || url !== this.#queueHeadUrl) return
+    if (!entry || url !== this.#queueHeadUrl) return
+
+    const [request, aborter] = entry
+    // Don't return aborted requests - they will reject with AbortError
+    if (aborter.signal.aborted) {
+      this.#prefetchQueue.delete(url)
+      return
+    }
     this.#prefetchQueue.delete(url)
 
     // fire off new prefetch since request has been consumed

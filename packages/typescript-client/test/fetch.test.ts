@@ -546,16 +546,6 @@ describe(`createFetchWithChunkBuffer`, () => {
       }),
     })
 
-    // The prefetch will be aborted, so we need to make it hang until abort
-    let prefetchAbortController: AbortController | undefined
-    const prefetchPromise = new Promise<Response>((_, reject) => {
-      // This will be rejected when abort is called
-      prefetchAbortController = new AbortController()
-      prefetchAbortController.signal.addEventListener(`abort`, () => {
-        reject(new DOMException(`Aborted`, `AbortError`))
-      })
-    })
-
     // Fresh response for when we request nextUrl after clearing queue
     const freshResponse = new Response(`fresh chunk`, {
       status: 200,
@@ -565,29 +555,46 @@ describe(`createFetchWithChunkBuffer`, () => {
       }),
     })
 
+    // Create an outer abort controller that we'll use to abort the stream
+    // This simulates ShapeStream's #requestAbortController
+    const outerAbortController = new AbortController()
+
     mockFetch
       .mockResolvedValueOnce(initialResponse) // Initial request
-      .mockReturnValueOnce(prefetchPromise) // Prefetch (will be aborted)
+      .mockImplementationOnce((_url, init) => {
+        // Return a promise that hangs until the signal is aborted
+        const signal = init?.signal as AbortSignal | undefined
+        return new Promise<Response>((_, reject) => {
+          if (signal) {
+            signal.addEventListener(`abort`, () => {
+              reject(new DOMException(`Aborted`, `AbortError`))
+            })
+          }
+        })
+      })
       .mockResolvedValueOnce(freshResponse) // Fresh request after queue cleared
 
-    // Make initial request - this triggers prefetch of nextUrl
-    await fetchWrapper(baseUrl)
+    // Make initial request with abort signal - this triggers prefetch of nextUrl
+    // The prefetch inherits the signal through chainAborter
+    await fetchWrapper(baseUrl, { signal: outerAbortController.signal })
     await sleep() // Let prefetch start
 
     expect(mockFetch).toHaveBeenCalledTimes(2)
     expect(mockFetch).toHaveBeenNthCalledWith(2, nextUrl, expect.anything())
 
-    // Simulate page hidden: abort the prefetch
-    prefetchAbortController?.abort()
+    // Simulate page hidden: abort the stream's request controller
+    // This propagates through chainAborter to abort the prefetch's internal aborter
+    outerAbortController.abort()
     await sleep()
 
     // Simulate page visible: request the same URL that was being prefetched
     // Before fix: this would return the aborted promise and throw
-    // After fix: this makes a fresh request
+    // After fix: consume() checks aborter.signal.aborted and makes a fresh request
     const result = await fetchWrapper(nextUrl)
 
     expect(result).toBe(freshResponse)
-    expect(mockFetch).toHaveBeenCalledTimes(3)
+    // 4 calls: initial, prefetch (aborted), fresh request, new prefetch triggered by fresh response
+    expect(mockFetch).toHaveBeenCalledTimes(4)
     expect(mockFetch).toHaveBeenNthCalledWith(3, nextUrl)
   })
 })
