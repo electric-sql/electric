@@ -17,17 +17,6 @@ defmodule Electric.Client.MixProject do
       package: package(),
       source_url: "#{@github_repo}/tree/main/packages/elixir-client",
       homepage_url: "https://electric-sql.com",
-      # This will go away after we upgrade Elixir to 1.19, which expects the public `cli/0`
-      # function to be defined instead.
-      preferred_cli_env: [
-        dialyzer: :test,
-        coveralls: :test,
-        "coveralls.detail": :test,
-        "coveralls.post": :test,
-        "coveralls.html": :test,
-        "coveralls.cobertura": :test,
-        "coveralls.lcov": :test
-      ],
       test_coverage: [
         tool: ExCoveralls,
         ignore_modules: [
