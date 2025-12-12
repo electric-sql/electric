@@ -1,0 +1,72 @@
+name: Docker Image for sync-service
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        required: true
+        type: string
+    outputs:
+      image:
+        description: 'Full image ref'
+        value: ${{ jobs.build_image.outputs.image }}
+
+jobs:
+  build_image:
+    runs-on: ubuntu-latest
+
+    # Make sure that all workflows calling this with the same tag will queue here.
+    # Only the first workflow to reach this point will trigger a new image build, the other
+    # workflows will use it once it's been built and pushed.
+    concurrency:
+      group: sync-service-ci-image-${{ inputs.tag }}
+      cancel-in-progress: false
+
+    permissions:
+      contents: read
+      packages: write
+
+    outputs:
+      image: ${{ steps.out.outputs.image }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set image ref
+        id: vars
+        run: |
+          echo "IMAGE=ghcr.io/${{ github.repository }}/sync-service" >> $GITHUB_ENV
+          echo "TAG=${{ inputs.tag }}" >> $GITHUB_ENV
+
+      - name: Login to GHCR (private)
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check if image tag already exists
+        id: exists
+        run: |
+          if docker manifest inspect "${IMAGE}:${TAG}" > /dev/null 2>&1; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Build and push if missing
+        if: steps.exists.outputs.exists != 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: packages/sync-service
+          build-contexts: |
+            electric-telemetry=packages/electric-telemetry
+          push: true
+          tags: ${{ env.IMAGE }}:${{ env.TAG }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Output image ref
+        id: out
+        run: |
+          echo "image=${IMAGE}:${TAG}" >> $GITHUB_OUTPUT
