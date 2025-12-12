@@ -33,17 +33,6 @@ defmodule Electric.MixProject do
       start_permanent: Mix.env() == :prod,
       deps: deps(),
       aliases: aliases(),
-      # This will go away after we upgrade Elixir to 1.19, which expects the public `cli/0`
-      # function to be defined instead.
-      preferred_cli_env: [
-        dialyzer: :test,
-        coveralls: :test,
-        "coveralls.detail": :test,
-        "coveralls.post": :test,
-        "coveralls.html": :test,
-        "coveralls.cobertura": :test,
-        "coveralls.lcov": :test
-      ],
       releases: [
         electric: [
           applications: @telemetry_applications_in_release,
