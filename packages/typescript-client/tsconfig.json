@@ -1,7 +1,7 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "target": "es2016",
+    "target": "es2017",
     "lib": ["ESNext", "DOM", "DOM.Iterable"],
     "module": "commonjs"
   },
