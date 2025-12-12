@@ -171,7 +171,7 @@ Let us know if you have any questions. We'll be very happy to help. You can ask 
 <div class="actions cta-actions page-footer-actions left">
   <div class="action cloud-cta">
     <VPButton
-        href="/product/cloud/sign-up"
+        href="https://dashboard.electric-sql.cloud/"
         text="Sign-up for Cloud"
         theme="brand"
     />
