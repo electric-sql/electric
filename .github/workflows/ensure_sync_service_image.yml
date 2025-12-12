@@ -54,6 +54,9 @@ jobs:
             echo "exists=false" >> $GITHUB_OUTPUT
           fi
 
+      - name: Set up buildx for advanced Docker caching
+        uses: docker/setup-buildx-action@v3
+
       - name: Build and push if missing
         if: steps.exists.outputs.exists != 'true'
         uses: docker/build-push-action@v6
