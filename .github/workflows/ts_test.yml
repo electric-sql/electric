@@ -133,7 +133,7 @@ jobs:
           wait-time: 20
 
       - name: Run tests
-      - run: pnpm coverage
+        run: pnpm coverage
 
       - name: Upload coverage reports to CodeCov
         uses: codecov/codecov-action@ad3126e916f78f00edff4ed0317cf185271ccc2d
