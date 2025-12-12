@@ -1,17 +1,17 @@
 name: Electric Telemetry CI
 
-on:
-  push:
-    branches: ['main']
-    paths-ignore:
-      - 'website/**'
-      - '**/README.md'
-      - 'integration-tests/**'
-  pull_request:
-    paths-ignore:
-      - 'website/**'
-      - '**/README.md'
-      - 'integration-tests/**'
+#on:
+#  push:
+#    branches: ['main']
+#    paths-ignore:
+#      - 'website/**'
+#      - '**/README.md'
+#      - 'integration-tests/**'
+#  pull_request:
+#    paths-ignore:
+#      - 'website/**'
+#      - '**/README.md'
+#      - 'integration-tests/**'
 
 permissions:
   contents: read

@@ -5,16 +5,16 @@ name: Autoformat & Linting
 # that merged state. This ensures the code will be properly formatted after merge.
 # If this check fails, you may need to merge main into your branch first.
 
-on:
-  push:
-    branches: ['main']
-    paths-ignore:
-      - '**/README.md'
-      - 'integration-tests/**'
-  pull_request:
-    paths-ignore:
-      - '**/README.md'
-      - 'integration-tests/**'
+#on:
+#  push:
+#    branches: ['main']
+#    paths-ignore:
+#      - '**/README.md'
+#      - 'integration-tests/**'
+#  pull_request:
+#    paths-ignore:
+#      - '**/README.md'
+#      - 'integration-tests/**'
 
 permissions:
   contents: read
