@@ -25,7 +25,7 @@ permissions:
 jobs:
   build_and_test:
     name: 'Build and test sync-service, Postgres ${{ matrix.postgres_version }}'
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     defaults:
       run:
         working-directory: packages/sync-service
