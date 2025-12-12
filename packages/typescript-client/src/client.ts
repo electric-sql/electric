@@ -1009,6 +1009,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
     // If user provided a signal, listen to it and pass on the reason for the abort
     if (signal) {
       const abortListener = () => {
+        this.#log(`user signal aborted`, { reason: signal.reason })
         this.#requestAbortController?.abort(signal.reason)
       }
 
@@ -1016,6 +1017,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
       if (signal.aborted) {
         // If the signal is already aborted, abort the request immediately
+        this.#log(`user signal already aborted at start`, { reason: signal.reason })
         this.#requestAbortController?.abort(signal.reason)
       }
 
@@ -1303,6 +1305,16 @@ export class ShapeStream<T extends Row<unknown> = Row>
       this.#started &&
       (this.#state === `paused` || this.#state === `pause-requested`)
     ) {
+      // Don't resume if the user's signal is already aborted
+      // This can happen if the signal was aborted while we were paused
+      if (this.options.signal?.aborted) {
+        this.#log(`resume aborted (signal already aborted)`, {
+          state: this.#state,
+          signalReason: this.options.signal.reason,
+        })
+        return
+      }
+
       // If we're resuming from pause-requested state, we need to set state back to active
       // to prevent the pause from completing
       if (this.#state === `pause-requested`) {
