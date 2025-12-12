@@ -525,6 +525,71 @@ describe(`createFetchWithChunkBuffer`, () => {
     // no new prefetches since main request was aborted
     expect(mockFetch).toHaveBeenCalledTimes(2)
   })
+
+  it(`should not return aborted prefetch requests after queue is cleared`, async () => {
+    // This test verifies the fix for issue #3460:
+    // When a page is hidden, the stream pauses and aborts in-flight prefetches.
+    // Previously, the aborted promises stayed in the queue and would be returned
+    // on resume, causing the stream to incorrectly interpret the abort as fatal.
+    const fetchWrapper = createFetchWithChunkBuffer(mockFetch, {
+      maxChunksToPrefetch: 1,
+    })
+
+    const nextUrl = sortUrlParams(`${baseUrl}&handle=123&offset=0`)
+
+    // Initial response that triggers prefetch of nextUrl
+    const initialResponse = new Response(`initial chunk`, {
+      status: 200,
+      headers: responseHeaders({
+        [SHAPE_HANDLE_HEADER]: `123`,
+        [CHUNK_LAST_OFFSET_HEADER]: `0`,
+      }),
+    })
+
+    // The prefetch will be aborted, so we need to make it hang until abort
+    let prefetchAbortController: AbortController | undefined
+    const prefetchPromise = new Promise<Response>((_, reject) => {
+      // This will be rejected when abort is called
+      prefetchAbortController = new AbortController()
+      prefetchAbortController.signal.addEventListener(`abort`, () => {
+        reject(new DOMException(`Aborted`, `AbortError`))
+      })
+    })
+
+    // Fresh response for when we request nextUrl after clearing queue
+    const freshResponse = new Response(`fresh chunk`, {
+      status: 200,
+      headers: responseHeaders({
+        [SHAPE_HANDLE_HEADER]: `123`,
+        [CHUNK_LAST_OFFSET_HEADER]: `1`,
+      }),
+    })
+
+    mockFetch
+      .mockResolvedValueOnce(initialResponse) // Initial request
+      .mockReturnValueOnce(prefetchPromise) // Prefetch (will be aborted)
+      .mockResolvedValueOnce(freshResponse) // Fresh request after queue cleared
+
+    // Make initial request - this triggers prefetch of nextUrl
+    await fetchWrapper(baseUrl)
+    await sleep() // Let prefetch start
+
+    expect(mockFetch).toHaveBeenCalledTimes(2)
+    expect(mockFetch).toHaveBeenNthCalledWith(2, nextUrl, expect.anything())
+
+    // Simulate page hidden: abort the prefetch
+    prefetchAbortController?.abort()
+    await sleep()
+
+    // Simulate page visible: request the same URL that was being prefetched
+    // Before fix: this would return the aborted promise and throw
+    // After fix: this makes a fresh request
+    const result = await fetchWrapper(nextUrl)
+
+    expect(result).toBe(freshResponse)
+    expect(mockFetch).toHaveBeenCalledTimes(3)
+    expect(mockFetch).toHaveBeenNthCalledWith(3, nextUrl)
+  })
 })
 
 describe(`createFetchWithConsumedMessages`, () => {
