@@ -27,6 +27,7 @@ jobs:
         postgres_version: [14, 15, 17, 18]
     env:
       MIX_ENV: test
+      MIX_TARGET: application
       MIX_OS_DEPS_COMPILE_PARTITION_COUNT: 4
       POSTGRES_VERSION: '${{ matrix.postgres_version }}0000'
     services:
