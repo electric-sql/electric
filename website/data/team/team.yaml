@@ -8,9 +8,9 @@
     'profile_uri': 'https://www.linkedin.com/in/thruflo',
     'profile_display_uri': 'in/thruflo',
     'profile_icon': 'social-linkedin',
-    'location': 'Istria',
-    'country': 'Croatia',
-    'flag': 'hr',
+    'location': 'San Francisco',
+    'country': 'USA',
+    'flag': 'us',
     'published': true,
   },
   {
