@@ -1307,11 +1307,19 @@ export class ShapeStream<T extends Row<unknown> = Row>
     ) {
       // Don't resume if the user's signal is already aborted
       // This can happen if the signal was aborted while we were paused
+      // (e.g., TanStack DB collection was GC'd)
       if (this.options.signal?.aborted) {
         this.#log(`resume aborted (signal already aborted)`, {
           state: this.#state,
           signalReason: this.options.signal.reason,
         })
+        return
+      }
+
+      // Don't resume if there are no subscribers
+      // This can happen if the collection was GC'd but visibility listener remains
+      if (this.#subscribers.size === 0) {
+        this.#log(`resume aborted (no subscribers)`, { state: this.#state })
         return
       }
 
