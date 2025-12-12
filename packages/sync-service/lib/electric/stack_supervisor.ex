@@ -100,7 +100,7 @@ defmodule Electric.StackSupervisor do
                    type: :pos_integer,
                    default: LogChunker.default_chunk_size_threshold()
                  ],
-                 feature_flags: [type: {:list, :string}, default: []],
+                 feature_flags: [type: {:list, :atom}, default: []],
                  tweaks: [
                    type: :keyword_list,
                    required: false,
@@ -318,6 +318,10 @@ defmodule Electric.StackSupervisor do
 
     shape_hibernate_after = Keyword.fetch!(config.tweaks, :shape_hibernate_after)
     shape_enable_suspend? = Keyword.fetch!(config.tweaks, :shape_enable_suspend?)
+
+    tagged_subqueries_enabled? =
+      Electric.Config.feature_flag_tagged_subqueries() in config.feature_flags
+
     process_spawn_opts = Keyword.fetch!(config.tweaks, :process_spawn_opts)
 
     shape_cache_opts = [
@@ -364,8 +368,8 @@ defmodule Electric.StackSupervisor do
            inspector: inspector,
            shape_hibernate_after: shape_hibernate_after,
            shape_enable_suspend?: shape_enable_suspend?,
-           process_spawn_opts: process_spawn_opts,
-           feature_flags: Map.get(config, :feature_flags, [])
+           tagged_subqueries_enabled?: tagged_subqueries_enabled?,
+           process_spawn_opts: process_spawn_opts
          ]},
         {Electric.AsyncDeleter,
          stack_id: stack_id,

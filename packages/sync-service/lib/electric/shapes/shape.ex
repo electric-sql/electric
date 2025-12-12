@@ -169,7 +169,9 @@ defmodule Electric.Shapes.Shape do
       type: :mod_arg,
       default: {Electric.Postgres.Inspector, Electric.DbPool}
     ],
-    feature_flags: [type: {:list, :string}, default: Electric.Config.get_env(:feature_flags)],
+    # The default value is only used in tests. In normal usage we expect this option to be
+    # passed in by the caller.
+    allow_subqueries?: [type: :boolean, default: Electric.Config.get_env(:allow_subqueries?)],
     storage: [
       type: {
         :or,
@@ -272,7 +274,7 @@ defmodule Electric.Shapes.Shape do
   defp validate_where_clause(where, %{inspector: inspector} = opts, refs) do
     with {:ok, where} <- Parser.parse_query(where),
          {:ok, subqueries} <- Parser.extract_subqueries(where),
-         :ok <- check_feature_flag(subqueries, opts),
+         :ok <- check_if_subqueries_are_allowed(subqueries, opts),
          {:ok, shape_dependencies} <- build_shape_dependencies(subqueries, opts),
          {:ok, dependency_refs} <- build_dependency_refs(shape_dependencies, inspector),
          all_refs = Map.merge(refs, dependency_refs),
@@ -291,12 +293,11 @@ defmodule Electric.Shapes.Shape do
     end
   end
 
-  defp check_feature_flag(subqueries, opts) do
-    if subqueries != [] and
-         not Enum.member?(opts.feature_flags, "allow_subqueries") do
-      {:error, {:where, "Subqueries are not supported"}}
-    else
+  defp check_if_subqueries_are_allowed(subqueries, opts) do
+    if subqueries == [] or opts.allow_subqueries? do
       :ok
+    else
+      {:error, {:where, "Subqueries are not supported"}}
     end
   end
 

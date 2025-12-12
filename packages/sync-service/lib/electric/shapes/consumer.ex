@@ -284,8 +284,8 @@ defmodule Electric.Shapes.Consumer do
       "Consumer reacting to #{length(move_in)} move ins and #{length(move_out)} move outs from its #{dep_handle} dependency"
     end)
 
-    feature_flags = Electric.StackConfig.lookup(state.stack_id, :feature_flags, [])
-    tagged_subqueries_enabled? = "tagged_subqueries" in feature_flags
+    tagged_subqueries_enabled? =
+      Electric.StackConfig.lookup!(state.stack_id, :tagged_subqueries_enabled?)
 
     should_invalidate? = not tagged_subqueries_enabled?
 
@@ -392,7 +392,8 @@ defmodule Electric.Shapes.Consumer do
   end
 
   defp consumer_suspend_enabled?(%{stack_id: stack_id}) do
-    Electric.StackConfig.lookup(stack_id, :shape_enable_suspend?, true)
+    # Electric.StackConfig.lookup(stack_id, :shape_enable_suspend?, true)
+    Electric.StackConfig.lookup!(stack_id, :shape_enable_suspend?)
   end
 
   defp consumer_can_suspend?(state) do

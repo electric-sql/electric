@@ -152,10 +152,15 @@ defmodule Electric.Application do
   # Gets the API-side configuration based on the same opts + application config
   # used for `configuration/1`
   defp api_configuration(opts) do
-    opts
-    |> core_configuration()
-    |> Electric.StackSupervisor.build_shared_opts()
+    {feature_flags, core_config} =
+      opts
+      |> core_configuration()
+      |> Electric.StackSupervisor.build_shared_opts()
+      |> Keyword.pop(:feature_flags)
+
+    core_config
     |> Keyword.merge(
+      allow_subqueries?: Electric.Config.feature_flag_allow_subqueries() in feature_flags,
       long_poll_timeout: get_env(opts, :long_poll_timeout),
       max_age: get_env(opts, :cache_max_age),
       stale_age: get_env(opts, :cache_stale_age),

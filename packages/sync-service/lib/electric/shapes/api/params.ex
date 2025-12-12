@@ -322,7 +322,7 @@ defmodule Electric.Shapes.Api.Params do
            columns: columns,
            replica: replica,
            inspector: api.inspector,
-           feature_flags: api.feature_flags,
+           allow_subqueries?: api.allow_subqueries?,
            storage: %{compaction: if(compaction_enabled?, do: :enabled, else: :disabled)},
            log_mode: fetch_field!(changeset, :log)
          ) do
