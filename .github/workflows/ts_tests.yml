@@ -61,14 +61,15 @@ jobs:
       - run: pnpm run typecheck
 
   image_tag:
+    name: Derive the image tag for sync-service from the package source code
     runs-on: ubuntu-latest
     outputs:
       tag: ${{ steps.hash.outputs.tag }}
     steps:
       - uses: actions/checkout@v4
-      - id: hash
-        run: |
+      - run: |
           echo "tag=${{ hashFiles('packages/sync-service/mix.lock', 'packages/electric-telemetry/mix.lock') }}" >> $GITHUB_OUTPUT
+        id: hash
 
   ensure_sync_service_image:
     needs: image_tag
@@ -111,7 +112,7 @@ jobs:
         env:
           ELECTRIC_INSECURE: true
           ELECTRIC_USAGE_REPORTING: false
-          DATABASE_URL: 'postgresql://postgres:password@postgres'
+          DATABASE_URL: 'postgresql://postgres:password@postgres?sslmode=disable'
         ports:
           - 3000:3000
     steps:
