@@ -139,7 +139,7 @@ jobs:
           working-directory: packages/sync-service
       - name: build dependencies, if any
         run: pnpm -r --filter "$(jq '.name' -r package.json)^..." build
-      - run: pnpm coverage
+      - run: pnpm run coverage --run
 
       - name: Upload coverage reports to CodeCov
         uses: codecov/codecov-action@ad3126e916f78f00edff4ed0317cf185271ccc2d
@@ -181,4 +181,4 @@ jobs:
       - run: pnpm --if-present run prepare
       - run: pnpm --if-present run typecheck
       - run: pnpm --if-present run build
-      - run: pnpm --if-present run test
+      - run: pnpm --if-present run test --run
