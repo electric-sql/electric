@@ -60,7 +60,7 @@ jobs:
       - run: pnpm -r --filter "$(jq '.name' -r package.json)^..." build
       - run: pnpm run typecheck
 
-  derive_sync_service_image_tag:
+  image_tag:
     name: Derive the image tag for sync-service from the package source code
     runs-on: ubuntu-latest
     outputs:
@@ -69,7 +69,6 @@ jobs:
       - uses: actions/checkout@v4
       - run: |
           echo "tag=${{ hashFiles('packages/sync-service/mix.lock', 'packages/electric-telemetry/mix.lock') }}" >> $GITHUB_OUTPUT
-        id: image_tag
 
   ensure_sync_service_image:
     needs: image_tag
