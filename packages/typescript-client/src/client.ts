@@ -1139,7 +1139,12 @@ export class ShapeStream<T extends Row<unknown> = Row>
     const schema = this.#schema! // we know that it is not undefined because it is set by `this.#onInitialResponse`
     const res = await response.text()
     const messages = res || `[]`
-    const batch = this.#messageParser.parse<Array<Message<T>>>(messages, schema)
+    // Use async parsing to yield to the main thread periodically,
+    // preventing UI blocking when processing large responses
+    const batch = await this.#messageParser.parseAsync<Array<Message<T>>>(
+      messages,
+      schema
+    )
 
     await this.#onMessages(batch)
   }
@@ -1541,10 +1546,11 @@ export class ShapeStream<T extends Row<unknown> = Row>
       })
 
     const { metadata, data: rawData } = await response.json()
-    const data = this.#messageParser.parseSnapshotData<ChangeMessage<T>>(
-      rawData,
-      schema
-    )
+    // Use async parsing to yield to the main thread periodically,
+    // preventing UI blocking when processing large snapshots
+    const data = await this.#messageParser.parseSnapshotDataAsync<
+      ChangeMessage<T>
+    >(rawData, schema)
 
     return {
       metadata,
