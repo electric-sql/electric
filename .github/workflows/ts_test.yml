@@ -67,9 +67,9 @@ jobs:
       tag: ${{ steps.hash.outputs.tag }}
     steps:
       - uses: actions/checkout@v4
-      - id: hash
-        run: |
+      - run: |
           echo "tag=${{ hashFiles('packages/sync-service/mix.lock', 'packages/electric-telemetry/mix.lock') }}" >> $GITHUB_OUTPUT
+        id: image_tag
 
   ensure_sync_service_image:
     needs: image_tag
