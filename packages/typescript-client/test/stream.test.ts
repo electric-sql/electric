@@ -378,6 +378,7 @@ describe(`ShapeStream`, () => {
       signal: aborter.signal,
       fetchClient: fetchWrapper,
       columnMapper: snakeCamelMapper(),
+      subscribe: false, // Don't go into live mode after initial sync
     })
 
     const unsub = stream.subscribe((messages) => {
