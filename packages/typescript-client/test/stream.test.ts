@@ -344,6 +344,9 @@ describe(`ShapeStream`, () => {
         value: { user_id: `123`, created_at: `2025-01-01` },
         headers: { operation: `insert` },
       },
+      {
+        headers: { control: `up-to-date` },
+      },
     ]
 
     const fetchWrapper = (): Promise<Response> => {
@@ -354,6 +357,7 @@ describe(`ShapeStream`, () => {
             'content-type': `application/json`,
             'electric-handle': `test-handle`,
             'electric-offset': `0_0`,
+            'electric-up-to-date': `true`,
             'electric-schema': JSON.stringify({
               user_id: { type: `text` },
               created_at: { type: `text` },
