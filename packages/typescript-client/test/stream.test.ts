@@ -349,23 +349,30 @@ describe(`ShapeStream`, () => {
       },
     ]
 
+    let firstRequest = true
     const fetchWrapper = (): Promise<Response> => {
-      return Promise.resolve(
-        new Response(JSON.stringify(mockResponseData), {
-          status: 200,
-          headers: {
-            'content-type': `application/json`,
-            'electric-handle': `test-handle`,
-            'electric-offset': `0_0`,
-            'electric-cursor': `1`,
-            'electric-up-to-date': `true`,
-            'electric-schema': JSON.stringify({
-              user_id: { type: `text` },
-              created_at: { type: `text` },
-            }),
-          },
-        })
-      )
+      if (firstRequest) {
+        firstRequest = false
+        return Promise.resolve(
+          new Response(JSON.stringify(mockResponseData), {
+            status: 200,
+            headers: {
+              'content-type': `application/json`,
+              'electric-handle': `test-handle`,
+              'electric-offset': `0_0`,
+              'electric-cursor': `1`,
+              'electric-up-to-date': `true`,
+              'electric-schema': JSON.stringify({
+                user_id: { type: `text` },
+                created_at: { type: `text` },
+              }),
+            },
+          })
+        )
+      }
+      // Abort on second request to break the loop
+      aborter.abort()
+      return Promise.resolve(Response.error())
     }
 
     // Use the shared aborter from beforeEach/afterEach for proper cleanup
