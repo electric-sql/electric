@@ -111,7 +111,7 @@ jobs:
         ports:
           - 3000:3000
         options: >-
-          --health-cmd 'curl -fsS http://localhost:3000/v1/admin/health > /dev/null'
+          --health-cmd '"curl -fsS http://localhost:3000/v1/admin/health > /dev/null"'
           --health-interval 30s
           --health-retries 6
     steps:
