@@ -5,12 +5,12 @@ defmodule Electric.Telemetry.IntervalTimer do
   out simpler than wrapping each part of the process in a timer, and
   guarentees no gaps in the timings.
 
-  The simplest way to use the timer is to store the timer state in the 
+  The simplest way to use the timer is to store the timer state in the
   process memory, see `OpenTelemetry.start_interval`. This module should
   only be used directly if you do not want to use the process memory.
   """
 
-  @type t() :: [{binary(), non_neg_integer()}]
+  @type t() :: [{term(), non_neg_integer()}]
 
   def init, do: []
 

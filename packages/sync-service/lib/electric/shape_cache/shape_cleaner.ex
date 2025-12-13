@@ -137,18 +137,18 @@ defmodule Electric.ShapeCache.ShapeCleaner do
   end
 
   defp remove_shape_immediate(stack_id, shape_handle, reason) do
-    OpenTelemetry.start_interval("remove_shape.shape_status_remove")
+    OpenTelemetry.start_interval(:"remove_shape.shape_status_remove.duration_µs")
 
     case Electric.ShapeCache.ShapeStatus.remove_shape(stack_id, shape_handle) do
       {:ok, _shape} ->
-        OpenTelemetry.start_interval("remove_shape.shape_consumer_stop")
+        OpenTelemetry.start_interval(:"remove_shape.shape_consumer_stop.duration_µs")
 
         stack_storage = Storage.for_stack(stack_id)
 
         with :ok <- Consumer.stop(stack_id, shape_handle, reason),
-             OpenTelemetry.start_interval("remove_shape.storage_cleanup"),
+             OpenTelemetry.start_interval(:"remove_shape.storage_cleanup.duration_µs"),
              :ok <- Storage.cleanup!(stack_storage, shape_handle),
-             OpenTelemetry.start_interval("remove_shape.shape_log_collector_remove"),
+             OpenTelemetry.start_interval(:"remove_shape.shape_log_collector_remove.duration_µs"),
              :ok <-
                Electric.Replication.ShapeLogCollector.remove_shape(stack_id, shape_handle) do
           :ok
@@ -160,7 +160,7 @@ defmodule Electric.ShapeCache.ShapeCleaner do
   end
 
   defp remove_shapes_deferred(stack_id, shape_handles) when is_list(shape_handles) do
-    OpenTelemetry.start_interval("remove_shape.remove_shapes_deferred")
+    OpenTelemetry.start_interval(:"remove_shape.remove_shapes_deferred.duration_µs")
     :ok = CleanupTaskSupervisor.cleanup_async(stack_id, shape_handles)
   end
 
