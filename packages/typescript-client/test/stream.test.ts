@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { ShapeStream, isChangeMessage, Message, Row } from '../src'
 import { snakeCamelMapper } from '../src/column-mapper'
+import { resolveInMacrotask } from './support/test-helpers'
 
 describe(`ShapeStream`, () => {
   const shapeUrl = `https://example.com/v1/shape`
@@ -350,8 +351,8 @@ describe(`ShapeStream`, () => {
     ]
 
     const fetchWrapper = (): Promise<Response> => {
-      aborter.abort()
-      return Promise.resolve(
+      // Use resolveInMacrotask to prevent infinite microtask loops
+      return resolveInMacrotask(
         new Response(JSON.stringify(mockResponseData), {
           status: 200,
           headers: {
@@ -369,7 +370,6 @@ describe(`ShapeStream`, () => {
       )
     }
 
-    // Use the shared aborter from beforeEach/afterEach for proper cleanup
     const stream = new ShapeStream({
       url: shapeUrl,
       params: {
@@ -379,7 +379,6 @@ describe(`ShapeStream`, () => {
       signal: aborter.signal,
       fetchClient: fetchWrapper,
       columnMapper: snakeCamelMapper(),
-      subscribe: false,
     })
 
     const unsub = stream.subscribe((messages) => {
