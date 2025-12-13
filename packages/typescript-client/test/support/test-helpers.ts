@@ -20,6 +20,15 @@ export function makePgClient(overrides: ClientConfig = {}) {
   })
 }
 
+/**
+ * Like Promise.resolve() but resolves in a macrotask instead of a microtask.
+ * Use this in test mocks to prevent infinite microtask loops when mocking
+ * fetch responses that would normally have network latency.
+ */
+export function resolveInMacrotask<T>(value: T): Promise<T> {
+  return new Promise((resolve) => setTimeout(() => resolve(value), 0))
+}
+
 export function forEachMessage<T extends Row<unknown>>(
   stream: ShapeStreamInterface<T>,
   controller: AbortController,
