@@ -349,32 +349,26 @@ describe(`ShapeStream`, () => {
       },
     ]
 
-    let requestCount = 0
     const fetchWrapper = (): Promise<Response> => {
-      requestCount++
-      if (requestCount === 1) {
-        return Promise.resolve(
-          new Response(JSON.stringify(mockResponseData), {
-            status: 200,
-            headers: {
-              'content-type': `application/json`,
-              'electric-handle': `test-handle`,
-              'electric-offset': `0_0`,
-              'electric-cursor': `1`,
-              'electric-up-to-date': `true`,
-              'electric-schema': JSON.stringify({
-                user_id: { type: `text` },
-                created_at: { type: `text` },
-              }),
-            },
-          })
-        )
-      }
-      // Subsequent requests return an error to stop the stream
-      return Promise.resolve(Response.error())
+      return Promise.resolve(
+        new Response(JSON.stringify(mockResponseData), {
+          status: 200,
+          headers: {
+            'content-type': `application/json`,
+            'electric-handle': `test-handle`,
+            'electric-offset': `0_0`,
+            'electric-cursor': `1`,
+            'electric-up-to-date': `true`,
+            'electric-schema': JSON.stringify({
+              user_id: { type: `text` },
+              created_at: { type: `text` },
+            }),
+          },
+        })
+      )
     }
 
-    const aborter = new AbortController()
+    // Use the shared aborter from beforeEach/afterEach for proper cleanup
     const stream = new ShapeStream({
       url: shapeUrl,
       params: {
