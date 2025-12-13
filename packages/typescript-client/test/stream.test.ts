@@ -357,6 +357,7 @@ describe(`ShapeStream`, () => {
             'content-type': `application/json`,
             'electric-handle': `test-handle`,
             'electric-offset': `0_0`,
+            'electric-cursor': `1`,
             'electric-up-to-date': `true`,
             'electric-schema': JSON.stringify({
               user_id: { type: `text` },
