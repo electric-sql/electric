@@ -102,6 +102,8 @@ jobs:
         image: 'ghcr.io/${{ github.repository }}/postgres:17-alpine-logical'
         env:
           POSTGRES_PASSWORD: password
+        ports:
+          - 54321:5432
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
@@ -115,6 +117,10 @@ jobs:
           DATABASE_URL: 'postgresql://postgres:password@postgres?sslmode=disable'
         ports:
           - 3000:3000
+        options: >-
+          --health-cmd "curl -fsS http://localhost:3000/v1/health"
+          --health-interval 30s
+          --health-retries 6
     steps:
       - uses: actions/checkout@v4
 
@@ -130,14 +136,6 @@ jobs:
 
       - name: Build Node dependencies, if any
         run: pnpm -r --filter "$(jq '.name' -r package.json)^..." build
-
-      - name: Wait for the sync-service container to reach healthy status
-        uses: stringbean/docker-healthcheck-action@v3
-        with:
-          container: ${{ job.services.sync_service.id }}
-          require-status: running
-          require-healthy: true
-          wait-time: 20
 
       - name: Run tests with coverage
         run: pnpm run coverage --run
