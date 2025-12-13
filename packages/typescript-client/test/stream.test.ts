@@ -338,8 +338,6 @@ describe(`ShapeStream`, () => {
     const receivedMessages: Message<Row>[] = []
 
     // Mock response with db column names (snake_case)
-    // IMPORTANT: Must include an up-to-date control message, otherwise the
-    // stream will keep requesting more data in an infinite loop
     const mockResponseData = [
       {
         key: `"public"."test"/"1"`,
