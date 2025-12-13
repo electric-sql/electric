@@ -97,6 +97,8 @@ jobs:
         image: 'ghcr.io/${{ github.repository }}/postgres:17-alpine-logical'
         env:
           POSTGRES_PASSWORD: password
+        ports:
+          - 54321:5432
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
@@ -111,10 +113,20 @@ jobs:
         ports:
           - 3000:3000
         options: >-
-          --health-cmd '"curl -fsS http://localhost:3000/v1/admin/health > /dev/null"'
+          --health-cmd "curl -fsS http://localhost:3000/v1/health"
           --health-interval 30s
           --health-retries 6
     steps:
+      # - run: |
+      #     docker run --rm -e ELECTRIC_INSECURE=true \
+      #       -e ELECTRIC_USAGE_REPORTING=false \
+      #       -e DATABASE_URL='postgresql://postgres:password@postgres?sslmode=disable' \
+      #       --health-cmd '"curl -fsS http://localhost:3000/v1/health > /dev/null"' \
+      #       --health-interval 30s \
+      #       --health-retries 6 \
+      #       -p 3000:3000 \
+      #       ${{ needs.ensure_sync_service_image.outputs.image }}
+
       - uses: actions/checkout@v4
 
       - uses: pnpm/action-setup@v4
