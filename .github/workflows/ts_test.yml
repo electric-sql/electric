@@ -62,6 +62,11 @@ jobs:
     name: Test TS packages against sync-service
     needs: [list_ts_packages]
     runs-on: ubuntu-latest
+    # There is currently a buggy TS test that causes the job for typescript-client to get stuck
+    # for 6 hours on end.
+    # And it's a good practice in general to limit the test runtime and investigate at the
+    # point when it starts exceeding the limit.
+    timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
