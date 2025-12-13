@@ -349,23 +349,29 @@ describe(`ShapeStream`, () => {
       },
     ]
 
+    let requestCount = 0
     const fetchWrapper = (): Promise<Response> => {
-      return Promise.resolve(
-        new Response(JSON.stringify(mockResponseData), {
-          status: 200,
-          headers: {
-            'content-type': `application/json`,
-            'electric-handle': `test-handle`,
-            'electric-offset': `0_0`,
-            'electric-cursor': `1`,
-            'electric-up-to-date': `true`,
-            'electric-schema': JSON.stringify({
-              user_id: { type: `text` },
-              created_at: { type: `text` },
-            }),
-          },
-        })
-      )
+      requestCount++
+      if (requestCount === 1) {
+        return Promise.resolve(
+          new Response(JSON.stringify(mockResponseData), {
+            status: 200,
+            headers: {
+              'content-type': `application/json`,
+              'electric-handle': `test-handle`,
+              'electric-offset': `0_0`,
+              'electric-cursor': `1`,
+              'electric-up-to-date': `true`,
+              'electric-schema': JSON.stringify({
+                user_id: { type: `text` },
+                created_at: { type: `text` },
+              }),
+            },
+          })
+        )
+      }
+      // Subsequent requests return an error to stop the stream
+      return Promise.resolve(Response.error())
     }
 
     const aborter = new AbortController()
@@ -378,7 +384,6 @@ describe(`ShapeStream`, () => {
       signal: aborter.signal,
       fetchClient: fetchWrapper,
       columnMapper: snakeCamelMapper(),
-      subscribe: false, // Don't go into live mode after initial sync
     })
 
     const unsub = stream.subscribe((messages) => {
