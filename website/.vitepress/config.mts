@@ -301,6 +301,7 @@ export default defineConfig({
                 { text: 'PlanetScale', link: '/docs/integrations/planetscale' },
                 { text: 'Render', link: '/docs/integrations/render' },
                 { text: 'Supabase', link: '/docs/integrations/supabase' },
+                { text: 'Zeabur', link: '/docs/integrations/zeabur' },
               ],
             },
           ],
