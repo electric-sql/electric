@@ -1,23 +1,23 @@
 name: Electric CI
 
-on:
-  push:
-    branches: ['main']
-    paths-ignore:
-      - 'website/**'
-      - '**/README.md'
-      - 'integration-tests/**'
-      - 'packages/**'
-      - '!packages/electric-telemetry'
-      - '!packages/sync-service'
-  pull_request:
-    paths-ignore:
-      - 'website/**'
-      - '**/README.md'
-      - 'integration-tests/**'
-      - 'packages/**'
-      - '!packages/electric-telemetry'
-      - '!packages/sync-service'
+#on:
+#  push:
+#    branches: ['main']
+#    paths-ignore:
+#      - 'website/**'
+#      - '**/README.md'
+#      - 'integration-tests/**'
+#      - 'packages/**'
+#      - '!packages/electric-telemetry'
+#      - '!packages/sync-service'
+#  pull_request:
+#    paths-ignore:
+#      - 'website/**'
+#      - '**/README.md'
+#      - 'integration-tests/**'
+#      - 'packages/**'
+#      - '!packages/electric-telemetry'
+#      - '!packages/sync-service'
 
 permissions:
   contents: read
