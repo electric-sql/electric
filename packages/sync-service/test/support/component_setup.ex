@@ -111,7 +111,6 @@ defmodule Support.ComponentSetup do
                Map.get(ctx, :registry, Electric.StackSupervisor.registry_name(stack_id)),
              shape_hibernate_after: Map.get(ctx, :shape_hibernate_after, 1_000),
              shape_enable_suspend?: Map.get(ctx, :suspend, false),
-             feature_flags: Electric.Config.get_env(:feature_flags),
              process_spawn_opts: Map.get(ctx, :process_spawn_opts, %{})
            ],
            seed_config
@@ -419,6 +418,8 @@ defmodule Support.ComponentSetup do
     replication_connection_opts =
       Keyword.merge(ctx.db_config, List.wrap(ctx[:connection_opt_overrides]))
 
+    feature_flags = Electric.Config.get_env(:feature_flags)
+
     stack_supervisor =
       start_supervised!(
         {Electric.StackSupervisor,
@@ -451,7 +452,7 @@ defmodule Support.ComponentSetup do
            shape_cleaner_opts: shape_cleaner_opts(ctx)
          ],
          manual_table_publishing?: Map.get(ctx, :manual_table_publishing?, false),
-         feature_flags: Electric.Config.get_env(:feature_flags)},
+         feature_flags: feature_flags},
         restart: :temporary,
         significant: false
       )
@@ -470,7 +471,7 @@ defmodule Support.ComponentSetup do
       storage: storage,
       inspector:
         {EtsInspector, stack_id: stack_id, server: EtsInspector.name(stack_id: stack_id)},
-      feature_flags: Electric.Config.get_env(:feature_flags),
+      feature_flags: feature_flags,
       publication_name: publication_name
     }
   end
@@ -485,6 +486,7 @@ defmodule Support.ComponentSetup do
       max_age: 60,
       stale_age: 300,
       allow_shape_deletion: true,
+      allow_subqueries?: true,
       secret: ctx[:secret]
     ]
     |> Keyword.merge(
