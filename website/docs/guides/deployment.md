@@ -160,6 +160,29 @@ The file system location configured via `ELECTRIC_STORAGE_DIR` and the data Elec
 
 Electric provides an HTTP API exposed on a configurable [`ELECTRIC_PORT`](/docs/api/config#electric-port). You should make sure this is exposed to the Internet.
 
+### Health checks
+
+Electric provides a health check endpoint at `/v1/health` that can be used for liveness and readiness probes. This endpoint does not require authentication, so it works even when [`ELECTRIC_SECRET`](/docs/api/config#electric-secret) is set.
+
+The endpoint returns a JSON response with a `status` field:
+
+| HTTP Status | Response | Meaning |
+|-------------|----------|---------|
+| `200` | `{"status": "active"}` | Electric is fully operational and ready to serve requests |
+| `202` | `{"status": "waiting"}` | Electric is waiting to acquire the replication lock |
+| `202` | `{"status": "starting"}` | Electric is starting up and establishing connections |
+
+For **liveness probes**, any response (200 or 202) indicates the service is alive.
+
+For **readiness probes**, you should check for a `200` status code to ensure Electric is fully ready to handle shape requests.
+
+Example health check using curl:
+
+```shell
+curl http://localhost:3000/v1/health
+# {"status":"active"}
+```
+
 ### Caching proxy
 
 Electric is designed to run behind a caching proxy, such as [Nginx](https://nginx.org/en), [Caddy](https://caddyserver.com), [Varnish](https://varnish-cache.org) or a CDN like [Cloudflare](https://www.cloudflare.com/en-gb/application-services/products/cdn) or [Fastly](https://www.fastly.com/products/cdn). You don't _have_ to run a proxy in front of Electric but you will benefit from radically better performance if you do.
