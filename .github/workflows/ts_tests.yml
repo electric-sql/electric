@@ -101,6 +101,7 @@ jobs:
       postgres:
         image: 'ghcr.io/${{ github.repository }}/postgres:17-alpine-logical'
         env:
+          POSTGRES_DB: electric
           POSTGRES_PASSWORD: password
         ports:
           - 54321:5432
@@ -114,7 +115,7 @@ jobs:
         env:
           ELECTRIC_INSECURE: true
           ELECTRIC_USAGE_REPORTING: false
-          DATABASE_URL: 'postgresql://postgres:password@postgres?sslmode=disable'
+          DATABASE_URL: 'postgresql://postgres:password@postgres/electric?sslmode=disable'
         ports:
           - 3000:3000
         options: >-
