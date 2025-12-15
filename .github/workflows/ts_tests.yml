@@ -93,10 +93,6 @@ jobs:
     defaults:
       run:
         working-directory: ${{ matrix.package_dir }}
-    env:
-      ELECTRIC_DATABASE_ID: ci_test_tenant
-      MIX_ENV: dev
-      MIX_OS_DEPS_COMPILE_PARTITION_COUNT: 4
     services:
       postgres:
         image: 'ghcr.io/${{ github.repository }}/postgres:17-alpine-logical'
