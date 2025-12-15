@@ -135,6 +135,11 @@ jobs:
       - name: Build Node dependencies, if any
         run: pnpm -r --filter "$(jq '.name' -r package.json)^..." build
 
+      - name: Run nginx to serve as proxy for Electric in caching tests
+        working-directory: packages/sync-service/dev
+        run: |
+          docker run --rm -d -v ./nginx.conf:/etc/nginx/nginx.conf -p 3002:3002 --add-host host.docker.internal:host-gateway nginx
+
       - name: Run tests with coverage
         run: pnpm run coverage --run
 
