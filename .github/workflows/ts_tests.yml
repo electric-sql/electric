@@ -37,7 +37,7 @@ jobs:
         id: list_examples
 
   check_packages:
-    name: Check TS package at ${{ matrix.package_dir }}
+    name: Build and typecheck ${{ matrix.package_dir }}
     needs: [list_ts_packages]
     runs-on: ubuntu-latest
     strategy:
@@ -59,7 +59,7 @@ jobs:
       - run: pnpm run typecheck
 
   build_and_test_packages:
-    name: Test TS packages against sync-service
+    name: 'Test ${{ matrix.package_dir }} w/ sync-service'
     needs: [list_ts_packages]
     runs-on: ubuntu-latest
     # There is currently a buggy TS test that causes the job for typescript-client to get stuck
@@ -80,46 +80,51 @@ jobs:
       MIX_OS_DEPS_COMPILE_PARTITION_COUNT: 4
     steps:
       - uses: actions/checkout@v4
+
       - uses: erlef/setup-beam@v1
         with:
           version-type: strict
           version-file: '.tool-versions'
+
       - uses: pnpm/action-setup@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version-file: '.tool-versions'
           cache: pnpm
-      - run: pnpm install --frozen-lockfile
 
-      - name: Cache dependencies
+      - name: Install Node dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Cache sync-service dependencies
         uses: actions/cache@v4
         with:
           path: packages/sync-service/deps
-          key: "${{ runner.os }}-sync-service-deps-${{ env.MIX_TARGET }}-${{ env.MIX_ENV }}-${{ hashFiles('packages/sync-service/mix.lock') }}"
+          key: "${{ runner.os }}-sync-service-deps-${{ env.MIX_ENV }}-${{ hashFiles('packages/sync-service/mix.lock') }}"
           restore-keys: |
-            ${{ runner.os }}-sync-service-deps-${{ env.MIX_TARGET }}-${{ env.MIX_ENV }}-${{ hashFiles('packages/sync-service/mix.lock') }}
-            ${{ runner.os }}-sync-service-deps-${{ env.MIX_TARGET }}-${{ env.MIX_ENV }}-
-            ${{ runner.os }}-sync-service-deps-
+            ${{ runner.os }}-sync-service-deps-${{ env.MIX_ENV }}-${{ hashFiles('packages/sync-service/mix.lock') }}
+            ${{ runner.os }}-sync-service-deps-${{ env.MIX_ENV }}
+            ${{ runner.os }}-sync-service-deps
 
-      - name: Cache compiled code
+      - name: Cache sync-service compiled code
         uses: actions/cache@v4
         with:
           path: |
             packages/sync-service/_build/*/lib
             !packages/sync-service/_build/*/lib/electric
-          key: "${{ runner.os }}-sync-service-build-${{ env.MIX_TARGET }}-${{ env.MIX_ENV }}-${{ hashFiles('packages/sync-service/mix.lock') }}"
+          key: "${{ runner.os }}-sync-service-build-${{ env.MIX_ENV }}-${{ hashFiles('packages/sync-service/mix.lock') }}"
           restore-keys: |
-            ${{ runner.os }}-sync-service-build-${{ env.MIX_TARGET }}-${{ env.MIX_ENV }}-${{ hashFiles('packages/sync-service/mix.lock') }}
-            ${{ runner.os }}-sync-service-build-${{ env.MIX_TARGET }}-${{ env.MIX_ENV }}-
-            ${{ runner.os }}-sync-service-build-
+            ${{ runner.os }}-sync-service-build-${{ env.MIX_ENV }}-${{ hashFiles('packages/sync-service/mix.lock') }}
+            ${{ runner.os }}-sync-service-build-${{ env.MIX_ENV }}
+            ${{ runner.os }}-sync-service-build
 
-      - name: Install dependencies
-        run: mix do deps.get + deps.compile
+      - name: Install sync-service dependencies
         working-directory: packages/sync-service
+        run: mix do deps.get + deps.compile
 
       - name: Compile sync-service
-        run: mix compile
         working-directory: packages/sync-service
+        run: mix compile
 
       - uses: JarvusInnovations/background-action@v1
         name: Bootstrap System Under Test (SUT)
@@ -137,9 +142,12 @@ jobs:
           log-output: true
           log-output-if: failure
           working-directory: packages/sync-service
-      - name: build dependencies, if any
+
+      - name: Build Node dependencies, if any
         run: pnpm -r --filter "$(jq '.name' -r package.json)^..." build
-      - run: pnpm coverage
+
+      - name: Run tests with coverage
+        run: pnpm run coverage --run
 
       - name: Upload coverage reports to CodeCov
         uses: codecov/codecov-action@ad3126e916f78f00edff4ed0317cf185271ccc2d
@@ -159,7 +167,7 @@ jobs:
           files: ./junit/test-report.junit.xml
 
   check_and_build_examples:
-    name: Check and build ${{ matrix.example_folder }} example
+    name: Check and build ${{ matrix.example_folder }}
     needs: [list_examples, build_and_test_packages]
     runs-on: ubuntu-latest
     strategy:
@@ -181,4 +189,4 @@ jobs:
       - run: pnpm --if-present run prepare
       - run: pnpm --if-present run typecheck
       - run: pnpm --if-present run build
-      - run: pnpm --if-present run test
+      - run: pnpm --if-present run test --run
