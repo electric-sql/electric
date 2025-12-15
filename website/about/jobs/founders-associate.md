@@ -5,7 +5,7 @@ description: >-
 image: /img/icons/electric.svg
 outline: deep
 application_form: https://airtable.com/appNnEkluhSOHeyQ1/pagep5ZP0ndoHlbbr/form
-active: true
+active: false
 ---
 
 <div v-if="!$frontmatter.active">
