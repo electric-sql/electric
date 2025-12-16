@@ -242,4 +242,11 @@ defmodule Electric.Shapes.Consumer.State do
       | move_handling_state: MoveIns.gc_touch_tracker(move_handling_state)
     }
   end
+
+  def remove_completed_move_ins(
+        %__MODULE__{move_handling_state: move_handling_state} = state,
+        xid
+      ) do
+    %{state | move_handling_state: MoveIns.remove_completed(move_handling_state, xid)}
+  end
 end

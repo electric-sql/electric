@@ -357,6 +357,7 @@ defmodule Electric.Replication.Changes do
   """
   def convert_update(%UpdatedRecord{} = change, to: :new_record) do
     %NewRecord{
+      move_tags: change.move_tags,
       relation: change.relation,
       record: change.record,
       key: change.key,

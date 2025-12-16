@@ -40,6 +40,13 @@ defmodule Electric.Replication.Eval.Runner do
     end)
   end
 
+  def execute_for_record(expr, record, extra_refs \\ %{}) do
+    with {:ok, ref_values} <- record_to_ref_values(expr.used_refs, record),
+         {:ok, evaluated} <- execute(expr, Map.merge(ref_values, extra_refs)) do
+      {:ok, evaluated}
+    end
+  end
+
   @doc """
   Run a PG function parsed by `Electric.Replication.Eval.Parser` based on the inputs
   """

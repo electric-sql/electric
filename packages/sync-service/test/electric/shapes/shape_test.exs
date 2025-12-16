@@ -209,6 +209,134 @@ defmodule Electric.Shapes.ShapeTest do
 
       assert Shape.convert_change(shape, non_matching_update) == []
     end
+
+    test "correctly keeps updates with subqueries if the referenced set has not changed" do
+      shape = %Shape{
+        root_table: {"public", "table"},
+        root_table_id: @relation_id,
+        where:
+          Parser.parse_and_validate_expression!(
+            "id IN (SELECT id FROM other_table WHERE value = 'test')",
+            refs: %{["$sublink", "0"] => {:array, :int4}, ["id"] => :int4},
+            sublink_queries: %{0 => "SELECT id FROM other_table WHERE value = 'test'"}
+          )
+      }
+
+      update_to_new_record = %UpdatedRecord{
+        relation: {"public", "table"},
+        old_record: %{"id" => "1", "value" => "old doesn't match"},
+        record: %{"id" => "1", "value" => "new matches"}
+      }
+
+      extra_refs =
+        {%{["$sublink", "0"] => MapSet.new([1])}, %{["$sublink", "0"] => MapSet.new([1])}}
+
+      assert Shape.convert_change(shape, update_to_new_record, extra_refs: extra_refs) == [
+               update_to_new_record
+             ]
+    end
+
+    test "correctly converts updates to new records with subqueries if the referenced set has changed" do
+      shape = %Shape{
+        root_table: {"public", "table"},
+        root_table_id: @relation_id,
+        where:
+          Parser.parse_and_validate_expression!(
+            "id IN (SELECT id FROM other_table WHERE value = 'test')",
+            refs: %{["$sublink", "0"] => {:array, :int4}, ["id"] => :int4},
+            sublink_queries: %{0 => "SELECT id FROM other_table WHERE value = 'test'"}
+          )
+      }
+
+      update_to_new_record = %UpdatedRecord{
+        relation: {"public", "table"},
+        old_record: %{"id" => "1", "value" => "old doesn't match"},
+        record: %{"id" => "1", "value" => "new matches"}
+      }
+
+      extra_refs =
+        {%{["$sublink", "0"] => MapSet.new([])}, %{["$sublink", "0"] => MapSet.new([1])}}
+
+      assert Shape.convert_change(shape, update_to_new_record, extra_refs: extra_refs) == [
+               Changes.convert_update(update_to_new_record, to: :new_record)
+             ]
+    end
+
+    test "correctly converts updates to deleted records with subqueries if the referenced set has changed" do
+      shape = %Shape{
+        root_table: {"public", "table"},
+        root_table_id: @relation_id,
+        where:
+          Parser.parse_and_validate_expression!(
+            "id IN (SELECT id FROM other_table WHERE value = 'test')",
+            refs: %{["$sublink", "0"] => {:array, :int4}, ["id"] => :int4},
+            sublink_queries: %{0 => "SELECT id FROM other_table WHERE value = 'test'"}
+          )
+      }
+
+      update_to_deleted_record = %UpdatedRecord{
+        relation: {"public", "table"},
+        old_record: %{"id" => "1", "value" => "old doesn't match"},
+        record: %{"id" => "1", "value" => "new matches"}
+      }
+
+      extra_refs =
+        {%{["$sublink", "0"] => MapSet.new([1])}, %{["$sublink", "0"] => MapSet.new([])}}
+
+      assert Shape.convert_change(shape, update_to_deleted_record, extra_refs: extra_refs) == [
+               Changes.convert_update(update_to_deleted_record, to: :deleted_record)
+             ]
+    end
+
+    test "uses new referenced set when checking inserts with subqueries" do
+      shape = %Shape{
+        root_table: {"public", "table"},
+        root_table_id: @relation_id,
+        where:
+          Parser.parse_and_validate_expression!(
+            "id IN (SELECT id FROM other_table WHERE value = 'test')",
+            refs: %{["$sublink", "0"] => {:array, :int4}, ["id"] => :int4},
+            sublink_queries: %{0 => "SELECT id FROM other_table WHERE value = 'test'"}
+          )
+      }
+
+      insert = %NewRecord{
+        relation: {"public", "table"},
+        record: %{"id" => "1", "value" => "new matches"}
+      }
+
+      extra_refs =
+        {%{["$sublink", "0"] => MapSet.new([])}, %{["$sublink", "0"] => MapSet.new([1])}}
+
+      assert Shape.convert_change(shape, insert, extra_refs: extra_refs) == [
+               insert
+             ]
+    end
+
+    test "uses old referenced set when checking deletes with subqueries" do
+      shape = %Shape{
+        root_table: {"public", "table"},
+        root_table_id: @relation_id,
+        where:
+          Parser.parse_and_validate_expression!(
+            "id IN (SELECT id FROM other_table WHERE value = 'test')",
+            refs: %{["$sublink", "0"] => {:array, :int4}, ["id"] => :int4},
+            sublink_queries: %{0 => "SELECT id FROM other_table WHERE value = 'test'"}
+          )
+      }
+
+      delete = %DeletedRecord{
+        relation: {"public", "table"},
+        old_record: %{"id" => "1", "value" => "new matches"}
+      }
+
+      extra_refs =
+        {%{["$sublink", "0"] => MapSet.new([1])}, %{["$sublink", "0"] => MapSet.new([])}}
+
+      assert Shape.convert_change(shape, delete, extra_refs: extra_refs) == [
+               delete
+             ]
+    end
   end
 
   describe "new/2" do
@@ -430,7 +558,9 @@ defmodule Electric.Shapes.ShapeTest do
                    relation: {"public", "child"},
                    record: %{"id" => "1", "par_id" => "1"}
                  },
-                 extra_refs: %{["$sublink", "0"] => MapSet.new([1])}
+                 extra_refs:
+                   {%{["$sublink", "0"] => MapSet.new([1])},
+                    %{["$sublink", "0"] => MapSet.new([1])}}
                )
 
       assert [] =
@@ -440,7 +570,9 @@ defmodule Electric.Shapes.ShapeTest do
                    relation: {"public", "child"},
                    record: %{"id" => "1", "par_id" => "1"}
                  },
-                 extra_refs: %{["$sublink", "0"] => MapSet.new([2])}
+                 extra_refs:
+                   {%{["$sublink", "0"] => MapSet.new([2])},
+                    %{["$sublink", "0"] => MapSet.new([2])}}
                )
     end
 
@@ -474,7 +606,9 @@ defmodule Electric.Shapes.ShapeTest do
                    relation: {"public", "item"},
                    record: %{"id" => "1", "value" => "10"}
                  },
-                 extra_refs: %{["$sublink", "0"] => MapSet.new([10])}
+                 extra_refs:
+                   {%{["$sublink", "0"] => MapSet.new([10])},
+                    %{["$sublink", "0"] => MapSet.new([10])}}
                )
 
       assert [] =
@@ -484,7 +618,9 @@ defmodule Electric.Shapes.ShapeTest do
                    relation: {"public", "item"},
                    record: %{"id" => "1", "value" => "10"}
                  },
-                 extra_refs: %{["$sublink", "0"] => MapSet.new([20])}
+                 extra_refs:
+                   {%{["$sublink", "0"] => MapSet.new([20])},
+                    %{["$sublink", "0"] => MapSet.new([20])}}
                )
     end
 

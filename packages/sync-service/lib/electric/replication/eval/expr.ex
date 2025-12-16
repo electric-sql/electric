@@ -78,6 +78,21 @@ defmodule Electric.Replication.Eval.Expr do
   defp type_from_json_safe(["enum", type]), do: {:enum, type_from_json_safe(type)}
   defp type_from_json_safe(type) when is_binary(type), do: String.to_existing_atom(type)
 
+  @doc """
+  Wrap a parser part (Const, Ref, Func, Array, RowExpr) in an Expr struct, so that it can be evaluated on it's own.
+
+  This is used when a subtree of our AST needs to be made evaluatable on it's own inside Electric. The `query` field
+  is not needed in that context, it's used when going back to postgres, so we don't bother calculating it.
+  """
+  def wrap_parser_part(expr) do
+    %__MODULE__{
+      query: "This should not be executed on the database",
+      eval: expr,
+      used_refs: Parser.find_refs(expr),
+      returns: expr.type
+    }
+  end
+
   defimpl Electric.Shapes.Shape.Comparable do
     def comparable(%Electric.Replication.Eval.Expr{} = expr) do
       {:eval_expr, expr.query, expr.returns}

@@ -38,7 +38,8 @@ defmodule Electric.Shapes.ConsumerTest do
                       {"random", "definitely_different"}
                     ],
                     columns: [
-                      %{name: "id", type: "int8", pk_position: 0}
+                      %{name: "id", type: "int8", pk_position: 0},
+                      %{name: "value", type: "text"}
                     ]
                   )
   @shape_handle1 "#{inspect(__MODULE__)}-shape1"
@@ -146,6 +147,7 @@ defmodule Electric.Shapes.ConsumerTest do
         })
 
       Electric.StackConfig.put(ctx.stack_id, Electric.ShapeCache.Storage, storage)
+      Electric.StackConfig.put(ctx.stack_id, :inspector, @base_inspector)
 
       patch_shape_status(
         initialise_shape: fn _, _shape_handle, _ -> :ok end,
@@ -504,14 +506,18 @@ defmodule Electric.Shapes.ConsumerTest do
         id: @shape1.root_table_id,
         schema: orig_schema,
         table: orig_table,
-        columns: [%{name: "id", type_oid: {1, 1}}]
+        columns: [%{name: "id", type_oid: {1, 1}}, %{name: "value", type_oid: {2, 1}}]
       }
 
       assert :ok = ShapeLogCollector.handle_event(rel_before, ctx.stack_id)
 
       refute_receive {:DOWN, _, :process, _, _}
 
-      rel_changed = %{rel_before | columns: [%{name: "id", type_oid: {999, 1}}]}
+      rel_changed = %{
+        rel_before
+        | columns: [%{name: "id", type_oid: {999, 1}}, %{name: "value", type_oid: {2, 1}}],
+          affected_columns: ["id"]
+      }
 
       # also cleans up inspector cache and shape status cache
       expect_calls(
@@ -541,7 +547,7 @@ defmodule Electric.Shapes.ConsumerTest do
         id: @shape1.root_table_id,
         schema: orig_schema,
         table: orig_table,
-        columns: [%{name: "id", type_oid: {1, 1}}]
+        columns: [%{name: "id", type_oid: {1, 1}}, %{name: "value", type_oid: {2, 1}}]
       }
 
       assert :ok = ShapeLogCollector.handle_event(rel_before, ctx.stack_id)
@@ -551,11 +557,15 @@ defmodule Electric.Shapes.ConsumerTest do
       live_ref = make_ref()
       Registry.register(ctx.registry, @shape_handle1, live_ref)
 
-      rel_changed = %{rel_before | columns: [%{name: "id", type_oid: {999, 1}}]}
+      rel_changed = %{
+        rel_before
+        | columns: [%{name: "id", type_oid: {999, 1}}, %{name: "value", type_oid: {2, 1}}],
+          affected_columns: ["id"]
+      }
 
       expect_calls(
         Electric.Postgres.Inspector,
-        clean: fn ^cleaned_oid, _ -> true end
+        clean: fn cleaned_oid1, _ -> assert cleaned_oid1 == cleaned_oid end
       )
 
       expect_shape_status(remove_shape: {fn _, @shape_handle1 -> {:ok, @shape1} end, at_least: 1})
@@ -996,6 +1006,120 @@ defmodule Electric.Shapes.ConsumerTest do
       assert_receive {Electric.ShapeCache.ShapeCleaner, :cleanup, ^shape_handle}
 
       assert [] == :ets.tab2list(table)
+    end
+
+    test "UPDATE during pending move-in is converted to INSERT and query result skips duplicate key",
+         ctx do
+      # This test exposes an edge case where:
+      # 1. A move-in query starts (snapshot xmin = 90)
+      # 2. An UPDATE (xid = 100) arrives and is converted to INSERT
+      # 3. Move-in query completes with the same key
+      # 4. EXPECTED: Query result should skip the key (already processed at xid 100 > snapshot xmin 90)
+      # 5. ACTUAL BUG: Query result creates a duplicate INSERT
+
+      parent = self()
+
+      # Mock query_move_in_async to simulate a query without hitting the database
+      Repatch.patch(
+        Electric.Shapes.PartialModes,
+        :query_move_in_async,
+        [mode: :shared],
+        fn _task_sup, _shape_handle, _shape, _where_clause, opts ->
+          consumer_pid = opts[:consumer_pid]
+          name = opts[:move_in_name]
+          results_fn = opts[:results_fn]
+
+          send(parent, {:query_requested, name, consumer_pid, results_fn})
+
+          :ok
+        end
+      )
+
+      Support.TestUtils.activate_mocks_for_descendant_procs(Consumer)
+
+      {shape_handle, _} =
+        ShapeCache.get_or_create_shape_handle(@shape_with_subquery, ctx.stack_id)
+
+      :started = ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id)
+
+      {:ok, shape} = Electric.Shapes.fetch_shape_by_handle(ctx.stack_id, shape_handle)
+      [_dep_handle] = shape.shape_dependencies_handles
+
+      consumer_pid = Consumer.whereis(ctx.stack_id, shape_handle)
+      ref = Shapes.Consumer.register_for_changes(ctx.stack_id, shape_handle)
+
+      ShapeLogCollector.handle_event(
+        transaction(100, Lsn.from_integer(50), [
+          %Changes.NewRecord{
+            relation: {"public", "other_table"},
+            record: %{"id" => "1"},
+            log_offset: LogOffset.new(Lsn.from_integer(50), 0)
+          }
+        ]),
+        ctx.stack_id
+      )
+
+      assert_receive {:query_requested, name, ^consumer_pid, results_fn}
+
+      # Snapshot here is intentionally before the update to make sure the update is considered shadowing
+      send(consumer_pid, {:pg_snapshot_known, name, {90, 95, []}})
+
+      # Now send an UPDATE (xid = 100) before move-in query completes
+      # This should be converted to INSERT
+      lsn = Lsn.from_integer(100)
+      xid = 100
+
+      txn =
+        transaction(xid, lsn, [
+          %Changes.UpdatedRecord{
+            relation: {"public", "test_table"},
+            old_record: %{"id" => "1"},
+            key: "\"public\".\"test_table\"/\"1\"",
+            record: %{"id" => "1", "value" => "updated"},
+            log_offset: LogOffset.new(lsn, 0)
+          }
+        ])
+
+      assert :ok = ShapeLogCollector.handle_event(txn, ctx.stack_id)
+
+      # Should get new_changes notification for the UPDATE-as-INSERT
+      assert_receive {^ref, :new_changes, _offset}, @receive_timeout
+
+      # Now write data for the move-in query
+      results_fn.(
+        [
+          [
+            "\"public\".\"test_table\"/\"1\"",
+            ["tag_does_not_matter"],
+            Jason.encode!(%{"value" => %{"id" => "1", "value" => "old"}})
+          ]
+        ],
+        {90, 95, []}
+      )
+
+      send(consumer_pid, {:query_move_in_complete, name, ["test_key"], {90, 95, []}})
+
+      assert_receive {^ref, :new_changes, _offset}, @receive_timeout
+
+      # Check storage for operations
+      shape_storage = Storage.for_shape(shape_handle, ctx.storage)
+
+      assert [
+               %{
+                 "headers" => %{"operation" => "insert"},
+                 "value" => %{"id" => "1", "value" => "updated"}
+               },
+               %{
+                 "headers" => %{
+                   "control" => "snapshot-end",
+                   "xmin" => "90",
+                   "xmax" => "95",
+                   "xip_list" => []
+                 }
+               }
+             ] =
+               Storage.get_log_stream(LogOffset.last_before_real_offsets(), shape_storage)
+               |> Enum.map(&Jason.decode!/1)
     end
   end
 

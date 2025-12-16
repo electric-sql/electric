@@ -421,7 +421,7 @@ defmodule Electric.Replication.ShapeLogCollector do
           end,
           received_transaction_xid: txn_fragment.xid,
           received_transaction_num_changes: txn_fragment.change_count,
-          received_transaction_lsn: txn_fragment.lsn
+          received_transaction_lsn: to_string(txn_fragment.lsn)
         )
 
         Logger.debug(fn ->

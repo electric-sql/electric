@@ -1,6 +1,7 @@
 defmodule Electric.Shapes.Shape.SubqueryMovesTest do
   use ExUnit.Case, async: true
 
+  alias Electric.Replication.Eval
   alias Electric.Shapes.Shape
   alias Electric.Shapes.Shape.SubqueryMoves
 
@@ -166,13 +167,13 @@ defmodule Electric.Shapes.Shape.SubqueryMovesTest do
     test "returns empty list for shape without where clause" do
       shape = Shape.new!("child", inspector: @inspector)
 
-      assert SubqueryMoves.move_in_tag_structure(shape) == []
+      assert SubqueryMoves.move_in_tag_structure(shape) == {[], %{}}
     end
 
     test "returns empty list for shape without dependencies" do
       shape = Shape.new!("child", where: "parent_id > 5", inspector: @inspector)
 
-      assert SubqueryMoves.move_in_tag_structure(shape) == []
+      assert SubqueryMoves.move_in_tag_structure(shape) == {[], %{}}
     end
 
     test "extracts single column reference from sublink" do
@@ -184,7 +185,9 @@ defmodule Electric.Shapes.Shape.SubqueryMovesTest do
 
       result = SubqueryMoves.move_in_tag_structure(shape)
 
-      assert result == [["parent_id"]]
+      assert {[["parent_id"]],
+              %{["$sublink", "0"] => %Eval.Expr{eval: %Eval.Parser.Ref{path: ["parent_id"]}}}} =
+               result
     end
 
     test "extracts composite key references from row expression" do
@@ -196,7 +199,14 @@ defmodule Electric.Shapes.Shape.SubqueryMovesTest do
 
       result = SubqueryMoves.move_in_tag_structure(shape)
 
-      assert result == [[{:hash_together, ["col1", "col2"]}]]
+      assert {[[{:hash_together, ["col1", "col2"]}]],
+              %{
+                ["$sublink", "0"] => %Eval.Expr{
+                  eval: %Eval.Parser.RowExpr{
+                    elements: [%Eval.Parser.Ref{path: ["col1"]}, %Eval.Parser.Ref{path: ["col2"]}]
+                  }
+                }
+              }} = result
     end
   end
 

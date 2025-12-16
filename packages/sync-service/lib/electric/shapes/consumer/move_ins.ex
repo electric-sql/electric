@@ -41,7 +41,7 @@ defmodule Electric.Shapes.Consumer.MoveIns do
   - `minimum_unresolved_snapshot`: Stores the minimum snapshot of unresolved move-ins.
   """
   @type t() :: %__MODULE__{
-          waiting_move_ins: %{move_in_name() => {pg_snapshot(), {term(), MapSet.t()}}},
+          waiting_move_ins: %{move_in_name() => {pg_snapshot() | nil, {term(), MapSet.t()}}},
           filtering_move_ins: list({pg_snapshot(), keys :: list(String.t())}),
           touch_tracker: %{String.t() => pos_integer()},
           move_in_buffering_snapshot: nil | pg_snapshot(),
@@ -208,6 +208,23 @@ defmodule Electric.Shapes.Consumer.MoveIns do
   def change_already_visible?(%__MODULE__{filtering_move_ins: filters}, xid, %{key: key}) do
     Enum.any?(filters, fn {snapshot, key_set} ->
       Transaction.visible_in_snapshot?(xid, snapshot) and MapSet.member?(key_set, key)
+    end)
+  end
+
+  def change_visible_in_unresolved_move_ins_for_values?(
+        %__MODULE__{waiting_move_ins: waiting_move_ins},
+        referenced_values,
+        xid
+      ) do
+    Enum.any?(Map.values(waiting_move_ins), fn {snapshot, {path, moved_values}} ->
+      case Map.fetch(referenced_values, path) do
+        {:ok, value} ->
+          (is_nil(snapshot) or Transaction.visible_in_snapshot?(xid, snapshot)) and
+            MapSet.member?(moved_values, value)
+
+        :error ->
+          false
+      end
     end)
   end
 

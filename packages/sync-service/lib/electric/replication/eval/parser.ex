@@ -142,7 +142,7 @@ defmodule Electric.Replication.Eval.Parser do
   end
 
   defp check_valid_refs(%PgQuery.ColumnRef{} = ref, _, refs) do
-    with {:ok, %Ref{}} <- query_to_ast(ref, %{refs: refs}) do
+    with {:ok, {%Ref{}, _}} <- query_to_ast(ref, %{refs: refs}) do
       {:ok, :ok}
     end
   end
