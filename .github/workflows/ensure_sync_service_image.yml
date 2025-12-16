@@ -47,7 +47,7 @@ jobs:
       image_ref: ${{ steps.out.outputs.image_ref }}
       image: ${{ steps.out.outputs.image }}
       tag: ${{ steps.out.outputs.tag }}
-      digest: ${{ steps.build.outputs.digest }}
+      digest: ${{ steps.out.outputs.digest }}
 
     steps:
       - uses: actions/checkout@v4
@@ -89,9 +89,9 @@ jobs:
           )" >> $GITHUB_ENV
 
       - name: Check if image tag already exists
-        id: exists
+        id: manifest
         run: |
-          if docker manifest inspect "${IMAGE}:${TAG}" > /dev/null 2>&1; then
+          if docker manifest inspect "${IMAGE}:${TAG}"; then
             echo "exists=true" >> $GITHUB_OUTPUT
           else
             echo "exists=false" >> $GITHUB_OUTPUT
@@ -100,7 +100,7 @@ jobs:
       - uses: docker/setup-buildx-action@v3
 
       - name: Build and push if missing
-        if: steps.exists.outputs.exists != 'true'
+        if: steps.manifest.outputs.exists != 'true'
         id: build
         uses: docker/build-push-action@v6
         with:
@@ -121,3 +121,4 @@ jobs:
           echo "image_ref=${IMAGE}:${TAG}" >> $GITHUB_OUTPUT
           echo "image=${IMAGE}" >> $GITHUB_OUTPUT
           echo "tag=${TAG}" >> $GITHUB_OUTPUT
+          echo "digest=${{ steps.build.outputs.digest || steps.manifest}}"

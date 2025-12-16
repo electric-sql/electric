@@ -7,13 +7,13 @@ on:
     # TMP for testing
     # branches: ['main']
     branches: ['alco/ci-build-public-docker-images']
-    paths:
-      - 'packages/electric-telemetry/**'
-      - 'packages/sync-service/**'
+    # paths:
+    #   - 'packages/electric-telemetry/**'
+    #   - 'packages/sync-service/**'
 
 permissions:
   contents: read
-  packages: read
+  packages: write
 
 jobs:
   ensure_sync_service_image:
@@ -48,6 +48,8 @@ jobs:
       - name: Publish to electricsql/electric:canary and electricsql/electric-canary
         run: |
           set -euo pipefail
+
+          echo ${{ needs.ensure_sync_service_image.outputs.digest }}
 
           # Source is referenced by digest (immutable)
           SRC_IMAGE="${{ needs.ensure_sync_service_image.outputs.image }}"

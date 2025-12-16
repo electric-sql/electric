@@ -1,4 +1,4 @@
-# Electric
+# Electricc
 
 Electric Sync is a lightweight data synchronization service designed to sync small subsets of your Postgres data into various environments and applications, such as web and mobile apps, development environments, edge services, and local AI systems.
 
