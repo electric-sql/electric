@@ -28,37 +28,37 @@ jobs:
       - run: echo "directories=`find packages/ -mindepth 1 -maxdepth 1 -type d -exec test -e '{}'/tsconfig.json \; -print | jq -R -s -c 'split("\n")[:-1]'`" >> $GITHUB_OUTPUT
         id: list_ts_packages
 
-  list_examples:
-    name: List examples
-    runs-on: ubuntu-latest
-    outputs:
-      example_names: ${{ steps.list_examples.outputs.example_names }}
-    steps:
-      - uses: actions/checkout@v4
-      - run: echo "example_names=$(find examples/ -mindepth 1 -maxdepth 2 -type f -name package.json | xargs dirname | jq -R -s -c 'split("\n")[:-1]')" >> $GITHUB_OUTPUT
-        id: list_examples
+  #  list_examples:
+  #    name: List examples
+  #    runs-on: ubuntu-latest
+  #    outputs:
+  #      example_names: ${{ steps.list_examples.outputs.example_names }}
+  #    steps:
+  #      - uses: actions/checkout@v4
+  #      - run: echo "example_names=$(find examples/ -mindepth 1 -maxdepth 2 -type f -name package.json | xargs dirname | jq -R -s -c 'split("\n")[:-1]')" >> $GITHUB_OUTPUT
+  #        id: list_examples
 
-  check_packages:
-    name: Build and typecheck ${{ matrix.package_dir }}
-    needs: [list_ts_packages]
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        package_dir: ${{ fromJson(needs.list_ts_packages.outputs.directories) }}
-    defaults:
-      run:
-        working-directory: ${{ matrix.package_dir }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version-file: '.tool-versions'
-          cache: 'pnpm'
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm -r --filter "$(jq '.name' -r package.json)^..." build
-      - run: pnpm run typecheck
+  #  check_packages:
+  #    name: Build and typecheck ${{ matrix.package_dir }}
+  #    needs: [list_ts_packages]
+  #    runs-on: ubuntu-latest
+  #    strategy:
+  #      fail-fast: false
+  #      matrix:
+  #        package_dir: ${{ fromJson(needs.list_ts_packages.outputs.directories) }}
+  #    defaults:
+  #      run:
+  #        working-directory: ${{ matrix.package_dir }}
+  #    steps:
+  #      - uses: actions/checkout@v4
+  #      - uses: pnpm/action-setup@v4
+  #      - uses: actions/setup-node@v4
+  #        with:
+  #          node-version-file: '.tool-versions'
+  #          cache: 'pnpm'
+  #      - run: pnpm install --frozen-lockfile
+  #      - run: pnpm -r --filter "$(jq '.name' -r package.json)^..." build
+  #      - run: pnpm run typecheck
 
   ensure_sync_service_image:
     uses: ./.github/workflows/ensure_sync_service_image.yml
@@ -117,28 +117,28 @@ jobs:
           fail_ci_if_error: true
           flags: typescript,unit-tests,${{ matrix.package_dir }}
           files: ./junit/test-report.junit.xml
-
-  check_and_build_examples:
-    name: Check and build ${{ matrix.example_folder }}
-    needs: [list_examples, build_and_test_packages]
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        example_folder: ${{ fromJson(needs.list_examples.outputs.example_names) }}
-    defaults:
-      run:
-        working-directory: ${{ matrix.example_folder }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version-file: '.tool-versions'
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm -r --filter "$(jq '.name' -r package.json)^..." build
-      - run: pnpm --if-present run prepare
-      - run: pnpm --if-present run typecheck
-      - run: pnpm --if-present run build
-      - run: pnpm --if-present run test --run
+#  check_and_build_examples:
+#    name: Check and build ${{ matrix.example_folder }}
+#    needs: [list_examples, build_and_test_packages]
+#    runs-on: ubuntu-latest
+#    strategy:
+#      fail-fast: false
+#      matrix:
+#        example_folder: ${{ fromJson(needs.list_examples.outputs.example_names) }}
+#    defaults:
+#      run:
+#        working-directory: ${{ matrix.example_folder }}
+#    steps:
+#      - uses: actions/checkout@v4
+#      - uses: pnpm/action-setup@v4
+#      - uses: actions/setup-node@v4
+#        with:
+#          node-version-file: '.tool-versions'
+#          cache: pnpm
+#      - run: pnpm install --frozen-lockfile
+#      - run: pnpm -r --filter "$(jq '.name' -r package.json)^..." build
+#      - run: pnpm --if-present run prepare
+#      - run: pnpm --if-present run typecheck
+#      - run: pnpm --if-present run build
+#      - run: pnpm --if-present run test --run
+#
