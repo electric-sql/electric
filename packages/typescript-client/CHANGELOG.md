@@ -1,5 +1,28 @@
 # @electric-sql/client
 
+## 1.3.0
+
+### Minor Changes
+
+- ed98c6b: feat: denote end of injected subset snapshot with an additional message
+
+### Patch Changes
+
+- 8fd8c8f: Fix memory leak from recursive async functions by upgrading TypeScript target to ES2017.
+
+  The ES2016 target caused async/await to be transpiled using the `__async` helper which creates nested Promise chains that cannot be garbage collected when recursive async functions like `requestShape()` call themselves. With ES2017+, native async/await is used which doesn't have this issue.
+
+- 5ab082b: Fix stream stopping after tab visibility changes due to stale aborted requests in PrefetchQueue.
+
+  **Root cause:** When a page is hidden, the stream pauses and aborts in-flight prefetch requests. The aborted promises remained in the PrefetchQueue's internal Map. When the page became visible and the stream resumed, `consume()` returned the stale aborted promise, causing an AbortError to propagate to ShapeStream and stop syncing.
+
+  **The fix:**
+  - `PrefetchQueue.consume()` now checks if the request's abort signal is already aborted before returning it
+  - `PrefetchQueue.abort()` now clears the internal map after aborting controllers
+  - The fetch wrapper clears `prefetchQueue` after calling `abort()` to ensure fresh requests
+
+  Fixes #3460
+
 ## 1.2.2
 
 ### Patch Changes
