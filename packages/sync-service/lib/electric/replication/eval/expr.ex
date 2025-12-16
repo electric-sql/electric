@@ -82,11 +82,11 @@ defmodule Electric.Replication.Eval.Expr do
   Wrap a parser part (Const, Ref, Func, Array, RowExpr) in an Expr struct, so that it can be evaluated on it's own.
 
   This is used when a subtree of our AST needs to be made evaluatable on it's own inside Electric. The `query` field
-  doesn't make sense in that context, as it's used when going back to postgres, so it's set to a useless value.
+  is not needed in that context, it's used when going back to postgres, so we don't bother calculating it.
   """
   def wrap_parser_part(expr) do
     %__MODULE__{
-      query: "",
+      query: "This should not be executed on the database",
       eval: expr,
       used_refs: Parser.find_refs(expr),
       returns: expr.type
