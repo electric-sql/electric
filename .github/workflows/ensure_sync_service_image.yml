@@ -4,7 +4,7 @@ on:
   workflow_call:
     inputs:
       tag:
-        required: true
+        required: false
         type: string
     outputs:
       image:
@@ -44,6 +44,13 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Get the latest commit SHA that has touched files in either packages/electric-telemetry or packages/sync-service
+        if: ${{ !env.TAG }}
+        run: |
+          echo "TAG=$(
+            git log -1 --format='%H' -- packages/electric-telemetry/ packages/sync-service/{config, lib, rel, mix.*, package.json}
+          )" >> $GITHUB_ENV
 
       - name: Check if image tag already exists
         id: exists
