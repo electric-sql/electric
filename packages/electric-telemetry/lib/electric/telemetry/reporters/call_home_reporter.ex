@@ -103,14 +103,24 @@ defmodule ElectricTelemetry.Reporters.CallHomeReporter do
 
     %{
       electric_version: telemetry_opts.version,
-      environment: %{
-        os: %{family: os_family, name: os_name},
-        arch: to_string(arch),
-        cores: processors,
-        ram: total_mem,
-        electric_instance_id: Map.fetch!(telemetry_opts, :instance_id),
-        electric_installation_id: Map.get(telemetry_opts, :installation_id, "electric_default")
-      }
+      environment:
+        %{
+          os: %{family: os_family, name: os_name},
+          arch: to_string(arch),
+          cores: processors,
+          ram: total_mem,
+          electric_instance_id: Map.fetch!(telemetry_opts, :instance_id),
+          electric_installation_id: Map.get(telemetry_opts, :installation_id, "electric_default")
+        }
+        |> maybe_put(telemetry_opts, :stack_id)
     }
+  end
+
+  defp maybe_put(map, telemetry_opts, key) do
+    if val = telemetry_opts[key] do
+      Map.put(map, key, val)
+    else
+      map
+    end
   end
 end
