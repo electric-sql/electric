@@ -193,6 +193,13 @@ export function encodeWhereClause(
 ): string {
   if (!whereClause || !encode) return whereClause ?? ``
 
+  // Handle double-quoted identifiers: "userId" -> "user_id"
+  // These come from query builders like @tanstack/electric-db-collection
+  // and need encoding just like unquoted identifiers
+  whereClause = whereClause.replace(/"([^"]+)"/g, (_, identifier) => {
+    return `"${encode(identifier)}"`
+  })
+
   // SQL keywords that should not be transformed (common ones)
   const sqlKeywords = new Set([
     `SELECT`,
