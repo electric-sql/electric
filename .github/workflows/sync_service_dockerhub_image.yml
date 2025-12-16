@@ -1,0 +1,155 @@
+name: Publish Electric images to Docker Hub
+
+on:
+  push:
+    # TMP for testing
+    # branches: ['main']
+    branches: ['alco/ci-build-canary-images']
+  release:
+    released:
+
+jobs:
+  derive_build_vars:
+    name: Derive build variables from the source code
+    runs-on: ubuntu-latest
+    outputs:
+      short_commit_sha: ${{ steps.vars.outputs.short_commit_sha }}
+      electric_version: ${{ steps.vars.outputs.electric_version }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # It is crucial that we checkout the actual HEAD commit of the branch instead of
+          # GitHub's ephemeral merge commit that it creates for CI runs by default.
+          # We rely on the correct HEAD commit to be checked out in order to determine the
+          # correct ELECTRIC_VERSION to bake into the Docker image.
+          ref: ${{ github.event.pull_request.head.sha }}
+          # Also important to fetch the whole history since otherwise we won't get that tags
+          # that are required to determine the correct ELECTRIC_VERSION.
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Determine SHORT_COMMIT_SHA and ELECTRIC_VERSION to use in the build step
+        id: vars
+        run: |
+          echo "short_commit_sha=$(
+            git rev-parse --short HEAD
+          )" >> $GITHUB_OUTPUT
+
+          echo "electric_version=$(
+            git describe --abbrev=7 --tags --always --first-parent --match '@core/sync-service@*' | sed -En 's|^@core/sync-service@||p'
+          )" >> $GITHUB_OUTPUT
+
+  build_and_push_image:
+    strategy:
+      matrix:
+        include:
+          - platform: linux/amd64
+            platform_id: amd64
+            runner: ubuntu-latest
+          - platform: linux/arm64/v8
+            platform_id: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    needs: [derive_build_vars]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: docker.io
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push by digest
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: packages/sync-service
+          build-contexts: |
+            electric-telemetry=packages/electric-telemetry
+          build-args: |
+            ELECTRIC_VERSION=${{ needs.derive_build_vars.outputs.electric_version }}
+          platforms: ${{ matrix.platform }}
+          push: true
+          # push an untagged image and export its digest
+          # the subsequent merge job will assemble the manifest list and apply tags
+          outputs: type=image,push-by-digest=true,name-canonical=true,push=true
+          tags: |
+            electricsql/electric
+            electricsql/electric-canary
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Save the digest so the merge job can find both platform images
+      - name: Export digest
+        run: |
+          mkdir -p /tmp/digests
+          echo "${{ steps.build.outputs.digest }}" > "/tmp/digests/${{ matrix.platform_id }}.digest"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: digests-${{ matrix.platform_id }}
+          path: /tmp/digests/*
+
+  publish_tagged_image:
+    needs: [derive_build_vars, build_and_push_image]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: digests-*
+          merge-multiple: true
+          path: /tmp/digests
+
+      - name: Derive image tags from the GitHub Actions event
+        run: |
+          case ${{ github.event_name }} in
+            push)
+              # A regular push to the main branch triggers canary image publishing
+              echo "ELECTRIC_TAGS=-t electricsql/electric:canary" >> $GITHUB_ENV
+              echo "ELECTRIC_CANARY_TAGS=-t electricsql/electric-canary:latest -t electricsql/electric-canary:${{ needs.derive_build_vars.outputs.short_commit_sha }}" >> $GITHUB_ENV
+              ;;
+            release)
+              # A release triggers official release image publishing
+              echo "ELECTRIC_TAGS=-t electricsql/electric:latest -t electricsql/electric:${{ needs.derive_build_vars.outputs.electric_version }}" >> $GITHUB_ENV
+          esac
+
+      - name: Create multi-arch manifest list
+        run: |
+          set -euo pipefail
+
+          # Build a list of electricsql/electric@sha256:... source images
+          ELECTRIC_IMAGES=$(
+            for f in /tmp/digests/*.digest; do
+              echo electricsql/electric@$(cat $f)
+            done
+          )
+
+          # Create a manifest list for electricsql/electric:canary that includes both platforms
+          docker buildx imagetools create --dry-run \
+            $ELECTRIC_TAGS \
+            $ELECTRIC_IMAGES
+
+          if [ -n "$ELECTRIC_CANARY_TAGS" ]; then
+            # Build a list of electricsql/electric-canary@sha256:... source images
+            ELECTRIC_CANARY_IMAGES=$(
+              for f in /tmp/digests/*.digest; do
+                echo electricsql/electric-canary@$(cat $f)
+              done
+            )
+
+            # Create a manifest list for electricsql/electric-canary:... that includes both platforms
+            docker buildx imagetools create --dry-run \
+              $ELECTRIC_CANARY_TAGS \
+              $ELECTRIC_CANARY_IMAGES
+          fi
