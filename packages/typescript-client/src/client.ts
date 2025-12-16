@@ -1258,12 +1258,6 @@ export class ShapeStream<T extends Row<unknown> = Row>
         return
       }
 
-      // Don't resume if there are no subscribers
-      // This can happen if the collection was GC'd but visibility listener remains
-      if (this.#subscribers.size === 0) {
-        return
-      }
-
       // If we're resuming from pause-requested state, we need to set state back to active
       // to prevent the pause from completing
       if (this.#state === `pause-requested`) {
