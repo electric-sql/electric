@@ -78,6 +78,23 @@ defmodule Electric.ShapeCache.ShapeCleaner do
     end)
   end
 
+  @spec remove_shape_storage_async(stack_id(), [shape_handle()]) :: :ok
+  def remove_shape_storage_async(_stack_id, []) do
+    :ok
+  end
+
+  def remove_shape_storage_async(stack_id, shape_handles) do
+    CleanupTaskSupervisor.perform_async(stack_id, fn ->
+      activate_mocked_functions_from_test_process()
+
+      stack_storage = Storage.for_stack(stack_id)
+
+      Enum.each(shape_handles, fn shape_handle ->
+        :ok = Storage.cleanup!(stack_storage, shape_handle)
+      end)
+    end)
+  end
+
   @type reason() :: {:shutdown, :cleanup} | {:shutdown, :suspend} | term()
   @spec handle_writer_termination(stack_id(), shape_handle(), reason()) :: :removed | :ok
   def handle_writer_termination(stack_id, shape_handle, @shutdown_cleanup) do
@@ -140,7 +157,7 @@ defmodule Electric.ShapeCache.ShapeCleaner do
     OpenTelemetry.start_interval(:"remove_shape.shape_status_remove.duration_µs")
 
     case Electric.ShapeCache.ShapeStatus.remove_shape(stack_id, shape_handle) do
-      {:ok, _shape} ->
+      :ok ->
         OpenTelemetry.start_interval(:"remove_shape.shape_consumer_stop.duration_µs")
 
         stack_storage = Storage.for_stack(stack_id)

@@ -2,6 +2,7 @@ defmodule Electric.Shapes do
   alias Electric.Replication.LogOffset
   alias Electric.ShapeCache.Storage
   alias Electric.ShapeCache
+  alias Electric.ShapeCache.ShapeStatus
   alias Electric.Shapes.Shape
 
   import Electric, only: [is_stack_id: 1, is_shape_handle: 1]
@@ -98,6 +99,24 @@ defmodule Electric.Shapes do
     end
 
     :ok
+  end
+
+  @doc """
+  Wrap the writing of a snapshot to some Storage backend with the required
+  ShapeStatus update calls.
+  """
+  @spec make_new_snapshot!(
+          Electric.Shapes.Querying.json_result_stream(),
+          Storage.shape_storage(),
+          stack_id(),
+          shape_handle()
+        ) :: :ok | {:error, term()}
+  def make_new_snapshot!(stream, storage, stack_id, shape_handle) do
+    with :ok <- ShapeStatus.mark_snapshot_started(stack_id, shape_handle),
+         :ok <- Storage.make_new_snapshot!(stream, storage),
+         :ok <- ShapeStatus.mark_snapshot_complete(stack_id, shape_handle) do
+      :ok
+    end
   end
 
   defp shape_storage(stack_id, shape_handle) do

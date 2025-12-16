@@ -36,7 +36,7 @@
 
 [shell electric]
   ??[info] Starting replication from postgres
-  
+
 # Initialize a shape and collect the offset
 [shell client]
   [invoke shape_get_snapshot items]
@@ -92,6 +92,14 @@
 [invoke setup_electric]
 [shell electric]
   ??[info] Starting replication from postgres
+  ??[notice] Consumers ready
+  # We have a small race-condition here. we rely on the un-acked transaction from pg to
+  # be received by the storage in order to populate the offset information
+  # (that hasn't been flushed to disk). The sqlite-based startup is slightly
+  # slower than the pure-ets version (~50ms vs ~5ms) which means that this request
+  # arrives before the stack has received the pending operation.
+  # To mitigate this we ensure the txn has been processed.
+  ??[debug] Txn received in Shapes.Consumer
 
 # Client should be able to continue same shape
 [shell client]

@@ -20,8 +20,8 @@ defmodule Electric.ShapeCache.ShapeStatusOwner do
     Electric.ProcessRegistry.name(stack_id, __MODULE__)
   end
 
-  def initialize_from_storage(stack_id) do
-    GenServer.call(name(stack_id), :initialize_from_storage)
+  def initialize(stack_id) do
+    GenServer.call(name(stack_id), :initialize)
   end
 
   def start_link(opts) do
@@ -45,12 +45,12 @@ defmodule Electric.ShapeCache.ShapeStatusOwner do
   end
 
   @impl true
-  def handle_call(:initialize_from_storage, _from, %{initialized: false} = state) do
-    :ok = ShapeStatus.initialize_from_storage(state.stack_id)
+  def handle_call(:initialize, _from, %{initialized: false} = state) do
+    :ok = ShapeStatus.initialize(state.stack_id)
     {:reply, :ok, %{state | initialized: true}, :hibernate}
   end
 
-  def handle_call(:initialize_from_storage, _from, %{initialized: true} = state) do
+  def handle_call(:initialize, _from, %{initialized: true} = state) do
     {:reply, :ok, state, :hibernate}
   end
 end

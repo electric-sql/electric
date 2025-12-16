@@ -119,10 +119,8 @@ defmodule Electric.ShapeCache do
       when is_shape_handle(shape_handle) and is_stack_id(stack_id) do
     ShapeStatus.update_last_read_time_to_now(stack_id, shape_handle)
 
-    shape_storage = Storage.for_shape(shape_handle, Storage.for_stack(stack_id))
-
     cond do
-      Storage.snapshot_started?(shape_storage) ->
+      ShapeStatus.snapshot_started?(stack_id, shape_handle) ->
         :started
 
       not ShapeStatus.has_shape_handle?(stack_id, shape_handle) ->

@@ -264,7 +264,7 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
           end
         )
         |> Stream.concat([finishing_control_message])
-        |> Storage.make_new_snapshot!(storage)
+        |> Electric.Shapes.make_new_snapshot!(storage, stack_id, shape_handle)
       end
     )
   end

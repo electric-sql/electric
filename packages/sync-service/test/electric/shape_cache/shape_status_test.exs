@@ -6,7 +6,6 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
   alias Electric.Shapes.Shape
 
   import Support.ComponentSetup
-  import Support.TestUtils, only: [expect_calls: 3, patch_calls: 3]
 
   @inspector Support.StubInspector.new(
                tables: [{1, {"public", "items"}}, {2, {"public", "other_table"}}],
@@ -22,35 +21,13 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
                ]
              )
 
-  setup [:with_stack_id_from_test, :with_async_deleter]
+  @moduletag :tmp_dir
+
+  setup [:with_stack_id_from_test, :with_async_deleter, :with_shape_db]
 
   test "starts empty", ctx do
     {:ok, state, []} = new_state(ctx)
     assert [] = ShapeStatus.list_shapes(state)
-  end
-
-  test "can recover shapes from storage", ctx do
-    {:ok, state, []} = new_state(ctx)
-    shape = shape!()
-    assert {:ok, shape_handle} = ShapeStatus.add_shape(state, shape)
-    assert [{^shape_handle, ^shape}] = ShapeStatus.list_shapes(state)
-
-    ShapeStatus.remove(state)
-
-    {:ok, state, []} =
-      new_state(ctx,
-        stored_shapes: %{
-          shape_handle => {:ok, shape},
-          "invalid" => {:error, :corrupted}
-        }
-      )
-
-    assert [{^shape_handle, ^shape}] = ShapeStatus.list_shapes(state)
-
-    assert [^shape_handle] =
-             ShapeStatus.list_shape_handles_for_relations(state, [
-               {shape.root_table_id, {"public", "other_table"}}
-             ])
   end
 
   test "can add shapes", ctx do
@@ -72,7 +49,7 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
     assert Enum.sort_by([{shape_handle_1, shape_1}, {shape_handle_2, shape_2}], &elem(&1, 0)) ==
              ShapeStatus.list_shapes(state) |> Enum.sort_by(&elem(&1, 0))
 
-    assert {:ok, ^shape_1} = ShapeStatus.remove_shape(state, shape_handle_1)
+    assert :ok = ShapeStatus.remove_shape(state, shape_handle_1)
     assert [{^shape_handle_2, ^shape_2}] = ShapeStatus.list_shapes(state)
 
     assert [^shape_handle_2] =
@@ -96,7 +73,7 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
 
     assert {:ok, ^shape_handle} = ShapeStatus.fetch_handle_by_shape(state, shape)
 
-    assert {:ok, ^shape} = ShapeStatus.remove_shape(state, shape_handle)
+    assert :ok = ShapeStatus.remove_shape(state, shape_handle)
     assert :error = ShapeStatus.fetch_handle_by_shape(state, shape)
   end
 
@@ -245,6 +222,7 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
 
     use ExUnitProperties
 
+    @tag slow: true
     property "returns correct number of shapes in LRU order", %{state: state} do
       check all(
               num_shapes <- StreamData.integer(1..100),
@@ -322,122 +300,6 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
     end
   end
 
-  describe "shape storage and backup" do
-    setup ctx do
-      Electric.StackConfig.put(ctx.stack_id, Electric.ShapeCache.Storage, {Mock.Storage, []})
-
-      stub_storage([force: true],
-        for_shape: fn shape_handle, _opts -> shape_handle end
-      )
-
-      %{state: %{stack_id: ctx.stack_id}}
-    end
-
-    test "terminate stores backup and initialise loads from backup instead of storage", %{
-      state: state
-    } do
-      backup_base_dir =
-        Path.join(System.tmp_dir!(), "shape_status_test_#{System.unique_integer([:positive])}")
-
-      # First lifecycle: no shapes in storage, start empty, add a shape, terminate to create backup
-      stub_storage(metadata_backup_dir: fn _ -> backup_base_dir end)
-
-      expect_storage(
-        get_all_stored_shape_handles: fn _ -> {:ok, MapSet.new()} end,
-        get_stored_shapes: fn _, _ -> %{} end
-      )
-
-      assert :ok = ShapeStatus.initialize_from_storage(state)
-      shape = shape!()
-      assert {:ok, shape_handle} = ShapeStatus.add_shape(state, shape)
-      assert [{^shape_handle, ^shape}] = ShapeStatus.list_shapes(state)
-
-      # Persist backup
-      assert :ok = ShapeStatus.save_checkpoint(state)
-
-      backup_dir = Path.join([backup_base_dir, "shape_status_backups"])
-      assert File.exists?(backup_dir)
-
-      ShapeStatus.remove(state)
-
-      # Second lifecycle: should load from backup (so must NOT call get_stored_shapes)
-      stub_storage([force: true],
-        get_stored_shapes: fn _, _ ->
-          flunk("get_stored_shapes should not be called when backup exists")
-        end
-      )
-
-      expect_storage([force: true],
-        get_all_stored_shape_handles: fn _ -> {:ok, MapSet.new([shape_handle])} end
-      )
-
-      assert :ok = ShapeStatus.initialize_from_storage(state)
-      assert [{^shape_handle, ^shape}] = ShapeStatus.list_shapes(state)
-      assert {:ok, ^shape_handle} = ShapeStatus.fetch_handle_by_shape(state, shape)
-      assert ShapeStatus.count_shapes(state) == 1
-      # consuming backup directory should have removed it after load
-      refute File.exists?(backup_dir)
-    end
-
-    test "backup restore reconciled if stored handles missing", %{state: state} do
-      backup_base_dir =
-        Path.join(System.tmp_dir!(), "shape_status_test_#{System.unique_integer([:positive])}")
-
-      # First lifecycle: create backup containing one shape
-      stub_storage(metadata_backup_dir: fn _ -> backup_base_dir end)
-
-      expect_storage(
-        get_all_stored_shape_handles: fn _ -> {:ok, MapSet.new()} end,
-        get_stored_shapes: fn _, _ -> %{} end
-      )
-
-      assert :ok = ShapeStatus.initialize_from_storage(state)
-      to_keep_shape = shape!()
-      to_invalidate_shape = shape!("to be invalidated")
-      assert {:ok, to_keep_shape_handle} = ShapeStatus.add_shape(state, to_keep_shape)
-      assert {:ok, to_invalidate_shape_handle} = ShapeStatus.add_shape(state, to_invalidate_shape)
-
-      assert [
-               {to_invalidate_shape_handle, to_invalidate_shape},
-               {to_keep_shape_handle, to_keep_shape}
-             ]
-             |> Enum.sort() == ShapeStatus.list_shapes(state) |> Enum.sort()
-
-      assert :ok = ShapeStatus.save_checkpoint(state)
-
-      backup_dir = Path.join([backup_base_dir, "shape_status_backups"])
-      assert File.exists?(backup_dir)
-
-      ShapeStatus.remove(state)
-
-      not_backed_up_shape = shape!("not backed up")
-      not_backed_up_shape_handle = "not-backed-up-handle"
-
-      expected_handles_to_load = MapSet.new([not_backed_up_shape_handle])
-
-      expect_storage([force: true],
-        # After loading from backup and showing mismatch of stored vs in-memory handles,
-        # the missing stored handle should be loaded from storage and in memory removed
-        get_all_stored_shape_handles: fn _ ->
-          {:ok, MapSet.new([to_keep_shape_handle, not_backed_up_shape_handle])}
-        end,
-        get_stored_shapes: fn _, ^expected_handles_to_load ->
-          %{not_backed_up_shape_handle => {:ok, not_backed_up_shape}}
-        end
-      )
-
-      assert :ok = ShapeStatus.initialize_from_storage(state)
-      # after reconciliation, only the to_keep_shape and not_backed_up_shape remain
-      assert [
-               {to_keep_shape_handle, to_keep_shape},
-               {not_backed_up_shape_handle, not_backed_up_shape}
-             ]
-             |> Enum.sort() == ShapeStatus.list_shapes(state) |> Enum.sort()
-
-      refute File.exists?(backup_dir)
-    end
-  end
-
   defp shape!, do: shape!("test")
 
   defp shape!(val) do
@@ -459,42 +321,22 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
   defp new_state(ctx, opts \\ []) do
     Electric.StackConfig.put(ctx.stack_id, Electric.ShapeCache.Storage, {Mock.Storage, []})
 
-    stub_storage([force: true],
-      metadata_backup_dir: fn _ -> nil end,
-      for_shape: fn shape_handle, _opts -> shape_handle end
-    )
+    stored_shapes = Access.get(opts, :stored_shapes, [])
 
-    stored_shapes = Access.get(opts, :stored_shapes, %{})
-    stored_shape_handles = Map.keys(stored_shapes) |> MapSet.new()
+    :ok = ShapeStatus.initialize(ctx.stack_id)
 
-    expect_storage(
-      get_all_stored_shape_handles: fn _ -> {:ok, stored_shape_handles} end,
-      get_stored_shapes: fn _, _ -> Access.get(opts, :stored_shapes, %{}) end
-    )
-
-    state = %{
-      storage: {Mock.Storage, []},
-      stack_id: ctx.stack_id
-    }
-
-    :ok = ShapeStatus.initialize_from_storage(state)
+    for {handle, shape} <- stored_shapes do
+      {:ok, _hash} = ShapeStatus.ShapeDb.add_shape(ctx.stack_id, shape, handle)
+    end
 
     shapes = Keyword.get(opts, :shapes, [])
 
     shape_handles =
       for shape <- shapes do
-        {:ok, shape_handle} = ShapeStatus.add_shape(state, shape)
+        {:ok, shape_handle} = ShapeStatus.add_shape(ctx.stack_id, shape)
         shape_handle
       end
 
-    {:ok, state, shape_handles}
-  end
-
-  defp stub_storage(opts \\ [], stubs) do
-    patch_calls(Electric.ShapeCache.Storage, opts, stubs)
-  end
-
-  defp expect_storage(opts \\ [], expectations) do
-    expect_calls(Electric.ShapeCache.Storage, opts, expectations)
+    {:ok, ctx.stack_id, shape_handles}
   end
 end

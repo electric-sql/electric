@@ -149,9 +149,15 @@ defmodule Support.TestUtils do
       Electric.Shapes.Consumer.Snapshotter,
       :start_streaming_snapshot_from_db,
       [mode: :shared],
-      fn consumer, shape_handle, shape, ctx ->
+      fn consumer, shape_handle, shape, %{stack_id: stack_id, storage: storage} = ctx ->
         send(test_pid, {:snapshot, shape_handle})
-        fun.(consumer, shape_handle, shape, ctx)
+
+        # make it easier to do the right thing here by providing a wrapper
+        make_snapshot_fun = fn stream ->
+          Electric.Shapes.make_new_snapshot!(stream, storage, stack_id, shape_handle)
+        end
+
+        fun.(consumer, shape_handle, shape, Map.put(ctx, :snapshot_fun, make_snapshot_fun))
       end
     )
 

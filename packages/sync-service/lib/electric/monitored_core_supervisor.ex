@@ -21,6 +21,8 @@ defmodule Electric.MonitoredCoreSupervisor do
 
     children = [
       {Electric.StatusMonitor, stack_id: stack_id},
+      {Electric.ShapeCache.ShapeStatus.ShapeDb.Supervisor,
+       Keyword.take(opts, [:stack_id, :storage_dir])},
       {Electric.ShapeCache.ShapeStatusOwner, [stack_id: stack_id]},
       {Electric.CoreSupervisor, opts}
     ]

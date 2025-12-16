@@ -237,13 +237,7 @@ defmodule Support.ComponentSetup do
   end
 
   def with_shape_status(ctx) do
-    if Electric.StackConfig.lookup(ctx.stack_id, Electric.ShapeCache.Storage) do
-      Electric.StackConfig.put(
-        ctx.stack_id,
-        Electric.ShapeCache.Storage,
-        Map.get(ctx, :storage, {Mock.Storage, []})
-      )
-    end
+    %{shape_db: shape_db} = with_shape_db(ctx)
 
     start_supervised!(%{
       id: "shape_status_owner",
@@ -251,9 +245,19 @@ defmodule Support.ComponentSetup do
       restart: :temporary
     })
 
-    :ok = Electric.ShapeCache.ShapeStatusOwner.initialize_from_storage(ctx.stack_id)
+    :ok = Electric.ShapeCache.ShapeStatusOwner.initialize(ctx.stack_id)
 
-    %{shape_status_owner: "shape_status_owner"}
+    %{shape_status_owner: "shape_status_owner", shape_db: shape_db}
+  end
+
+  def with_shape_db(ctx) do
+    start_supervised!(
+      {Electric.ShapeCache.ShapeStatus.ShapeDb.Supervisor,
+       stack_id: ctx.stack_id, storage_dir: ctx.tmp_dir},
+      id: "shape_db"
+    )
+
+    %{shape_db: "shape_db"}
   end
 
   def with_dynamic_consumer_supervisor(%{consumer_supervisor: name} = ctx) do

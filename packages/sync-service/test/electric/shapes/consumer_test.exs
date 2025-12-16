@@ -79,6 +79,8 @@ defmodule Electric.Shapes.ConsumerTest do
     }
   }
 
+  @moduletag :tmp_dir
+
   setup :with_stack_id_from_test
 
   defp shape_status(shape_handle, ctx) do
@@ -312,7 +314,7 @@ defmodule Electric.Shapes.ConsumerTest do
       lsn = Lsn.from_string("0/10")
       last_log_offset = LogOffset.new(lsn, 0)
 
-      expect_shape_status(remove_shape: {fn _, @shape_handle1 -> {:ok, @shape1} end, at_least: 1})
+      expect_shape_status(remove_shape: {fn _, @shape_handle1 -> :ok end, at_least: 1})
 
       txn =
         transaction(xid, lsn, [
@@ -368,7 +370,7 @@ defmodule Electric.Shapes.ConsumerTest do
       lsn = Lsn.from_string("0/10")
       last_log_offset = LogOffset.new(lsn, 0)
 
-      expect_shape_status(remove_shape: {fn _, @shape_handle1 -> {:ok, @shape1} end, at_least: 1})
+      expect_shape_status(remove_shape: {fn _, @shape_handle1 -> :ok end, at_least: 1})
 
       txn =
         transaction(xid, lsn, [
@@ -457,7 +459,7 @@ defmodule Electric.Shapes.ConsumerTest do
         clean: fn ^cleaned_oid, _ -> true end
       )
 
-      expect_shape_status(remove_shape: {fn _, @shape_handle1 -> {:ok, @shape1} end, at_least: 1})
+      expect_shape_status(remove_shape: {fn _, @shape_handle1 -> :ok end, at_least: 1})
 
       assert :ok = ShapeLogCollector.handle_event(rel, ctx.stack_id)
 
@@ -497,7 +499,7 @@ defmodule Electric.Shapes.ConsumerTest do
         clean: fn ^cleaned_oid, _ -> true end
       )
 
-      expect_shape_status(remove_shape: {fn _, @shape_handle1 -> {:ok, @shape1} end, at_least: 1})
+      expect_shape_status(remove_shape: {fn _, @shape_handle1 -> :ok end, at_least: 1})
 
       assert :ok = ShapeLogCollector.handle_event(rel_changed, ctx.stack_id)
 
@@ -540,7 +542,7 @@ defmodule Electric.Shapes.ConsumerTest do
         clean: fn cleaned_oid1, _ -> assert cleaned_oid1 == cleaned_oid end
       )
 
-      expect_shape_status(remove_shape: {fn _, @shape_handle1 -> {:ok, @shape1} end, at_least: 1})
+      expect_shape_status(remove_shape: {fn _, @shape_handle1 -> :ok end, at_least: 1})
 
       assert :ok = ShapeLogCollector.handle_event(rel_changed, ctx.stack_id)
 
@@ -553,7 +555,7 @@ defmodule Electric.Shapes.ConsumerTest do
       ref1 = Process.monitor(Consumer.whereis(ctx.stack_id, @shape_handle1))
       ref2 = Process.monitor(Consumer.whereis(ctx.stack_id, @shape_handle2))
 
-      expect_shape_status(remove_shape: {fn _, @shape_handle1 -> {:ok, @shape1} end, at_least: 1})
+      expect_shape_status(remove_shape: {fn _, @shape_handle1 -> :ok end, at_least: 1})
 
       GenServer.cast(Consumer.whereis(ctx.stack_id, @shape_handle1), :unexpected_cast)
 
@@ -590,12 +592,12 @@ defmodule Electric.Shapes.ConsumerTest do
     setup(ctx) do
       snapshot_delay = Map.get(ctx, :snapshot_delay, nil)
 
-      patch_snapshotter(fn parent, shape_handle, _shape, %{storage: storage} ->
+      patch_snapshotter(fn parent, shape_handle, _shape, %{snapshot_fun: snapshot_fun} ->
         if is_integer(snapshot_delay), do: Process.sleep(snapshot_delay)
         pg_snapshot = ctx[:pg_snapshot] || {10, 11, [10]}
         GenServer.cast(parent, {:pg_snapshot_known, shape_handle, pg_snapshot})
         GenServer.cast(parent, {:snapshot_started, shape_handle})
-        Storage.make_new_snapshot!([], storage)
+        snapshot_fun.([])
       end)
 
       Electric.StackConfig.put(

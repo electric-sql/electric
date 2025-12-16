@@ -377,7 +377,9 @@ defmodule Electric.StackSupervisor do
         {Electric.Postgres.Inspector.EtsInspector,
          stack_id: stack_id, pool: metadata_db_pool, persistent_kv: config.persistent_kv},
         {Electric.MonitoredCoreSupervisor,
-         stack_id: stack_id, connection_manager_opts: connection_manager_opts}
+         stack_id: stack_id,
+         connection_manager_opts: connection_manager_opts,
+         storage_dir: config.storage_dir}
       ]
       |> Enum.reject(&is_nil/1)
 

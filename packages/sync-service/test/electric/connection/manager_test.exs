@@ -9,6 +9,8 @@ defmodule Electric.Connection.ConnectionManagerTest do
   alias Electric.Connection
   alias Electric.StatusMonitor
 
+  @moduletag :tmp_dir
+
   setup [
     :with_unique_db,
     :with_stack_id_from_test,
