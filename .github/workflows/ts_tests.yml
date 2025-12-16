@@ -81,10 +81,6 @@ jobs:
     name: 'Test ${{ matrix.package_dir }} w/ sync-service'
     needs: [list_ts_packages, ensure_sync_service_image]
     runs-on: ubuntu-latest
-    # There is currently a buggy TS test that causes the job for typescript-client to get stuck
-    # for 6 hours on end.
-    # And it's a good practice in general to limit the test runtime and investigate at the
-    # point when it starts exceeding the limit.
     timeout-minutes: 10
     strategy:
       fail-fast: false
@@ -93,32 +89,8 @@ jobs:
     defaults:
       run:
         working-directory: ${{ matrix.package_dir }}
-    services:
-      postgres:
-        image: 'ghcr.io/${{ github.repository }}/postgres:17-alpine-logical'
-        env:
-          POSTGRES_DB: electric
-          POSTGRES_PASSWORD: password
-        ports:
-          - 54321:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-      sync_service:
-        image: ${{ needs.ensure_sync_service_image.outputs.image }}
-        env:
-          ELECTRIC_INSECURE: true
-          ELECTRIC_USAGE_REPORTING: false
-          ELECTRIC_ENABLE_INTEGRATION_TESTING: true
-          DATABASE_URL: 'postgresql://postgres:password@postgres/electric?sslmode=disable'
-        ports:
-          - 3000:3000
-        options: >-
-          --health-cmd "curl -fsS http://localhost:3000/v1/health"
-          --health-interval 30s
-          --health-retries 6
+    environemnt:
+      ELECTRIC_IMAGE: ${{ needs.ensure_sync_service_image.outputs.image }}
     steps:
       - uses: actions/checkout@v4
 
@@ -135,10 +107,10 @@ jobs:
       - name: Build Node dependencies, if any
         run: pnpm -r --filter "$(jq '.name' -r package.json)^..." build
 
-      - name: Run nginx to serve as proxy for Electric in caching tests
+      - name: Run Postgres, Electric and nginx for the subsequent test suite
         working-directory: packages/sync-service/dev
         run: |
-          docker run --rm -d -v ./nginx.conf:/etc/nginx/nginx.conf -p 3002:3002 --add-host host.docker.internal:host-gateway nginx
+          docker compose -f docker-compose.yml -f docker-compose-electric.yml up --wait postgres electric nginx
 
       - name: Run tests with coverage
         run: pnpm run coverage --run

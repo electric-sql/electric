@@ -1,0 +1,18 @@
+services:
+  electric:
+    image: $ELECTRIC_IMAGE
+    environment:
+      ELECTRIC_INSECURE: true
+      ELECTRIC_USAGE_REPORTING: false
+      ELECTRIC_ENABLE_INTEGRATION_TESTING: true
+      DATABASE_URL: 'postgresql://postgres:password@postgres/electric?sslmode=disable'
+    ports:
+      - 3000:3000
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:3000/v1/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    depends_on:
+      postgres:
+        condition: service_healthy
