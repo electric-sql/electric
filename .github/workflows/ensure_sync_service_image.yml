@@ -88,14 +88,14 @@ jobs:
             git describe --abbrev=7 --tags --always --first-parent --match '@core/sync-service@*' | sed -En 's|^@core/sync-service@||p'
           )" >> $GITHUB_ENV
 
-      - name: Check if image tag already exists
-        id: manifest
-        run: |
-          if docker manifest inspect "${IMAGE}:${TAG}"; then
-            echo "exists=true" >> $GITHUB_OUTPUT
-          else
-            echo "exists=false" >> $GITHUB_OUTPUT
-          fi
+      #      - name: Check if image tag already exists
+      #        id: manifest
+      #        run: |
+      #          if docker manifest inspect "${IMAGE}:${TAG}"; then
+      #            echo "exists=true" >> $GITHUB_OUTPUT
+      #          else
+      #            echo "exists=false" >> $GITHUB_OUTPUT
+      #          fi
 
       - uses: docker/setup-buildx-action@v3
 
