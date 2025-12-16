@@ -264,7 +264,7 @@ defmodule Electric.Shapes.Filter.Indexes.InclusionIndex do
   defp shapes_affected_by_node(_ctx, %{condition_id: nil}), do: nil
 
   defp shapes_affected_by_node(ctx, %{condition_id: condition_id}) do
-    WhereCondition.affected_shapes(ctx.filter, condition_id, ctx.record, fn _shape -> %{} end)
+    WhereCondition.affected_shapes(ctx.filter, condition_id, ctx.record)
   end
 
   # key matches value, so check the child then continue with the rest

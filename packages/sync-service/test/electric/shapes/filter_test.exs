@@ -659,4 +659,216 @@ defmodule Electric.Shapes.FilterTest do
       record: record
     }
   end
+
+  describe "refs_fun threading through indexes" do
+    import Support.DbSetup
+    import Support.DbStructureSetup
+    import Support.ComponentSetup
+
+    setup [
+      :with_stack_id_from_test,
+      :with_shared_db,
+      :with_persistent_kv,
+      :with_inspector,
+      :with_sql_execute
+    ]
+
+    @tag with_sql: [
+           "CREATE TABLE IF NOT EXISTS parent (id INT PRIMARY KEY)",
+           "CREATE TABLE IF NOT EXISTS child (id INT PRIMARY KEY, par_id INT REFERENCES parent(id))"
+         ]
+    test "refs_fun is threaded through equality index for compound WHERE clause with subquery",
+         %{inspector: inspector} do
+      # Create a shape with an equality-indexed condition AND a subquery
+      # The where clause "par_id = 7 AND id IN (SELECT id FROM parent)" will:
+      # 1. Use equality index for par_id = 7
+      # 2. Use refs_fun for the subquery evaluation in the AND clause
+      {:ok, shape} =
+        Shape.new("child",
+          inspector: inspector,
+          where: "par_id = 7 AND id IN (SELECT id FROM parent)"
+        )
+
+      # Create refs_fun that returns sublink values based on the shape
+      # When id is in the sublink MapSet, the subquery condition passes
+      refs_fun = fn _shape ->
+        %{["$sublink", "0"] => MapSet.new([1, 2, 3])}
+      end
+
+      filter =
+        Filter.new(refs_fun: refs_fun)
+        |> Filter.add_shape("shape1", shape)
+
+      # Record with par_id = 7 AND id in sublink results -> affected
+      insert_matching = %NewRecord{
+        relation: {"public", "child"},
+        record: %{"id" => "1", "par_id" => "7"}
+      }
+
+      assert Filter.affected_shapes(filter, insert_matching) == MapSet.new(["shape1"])
+
+      # Record with par_id = 7 but id NOT in sublink results -> not affected
+      insert_not_in_subquery = %NewRecord{
+        relation: {"public", "child"},
+        record: %{"id" => "99", "par_id" => "7"}
+      }
+
+      assert Filter.affected_shapes(filter, insert_not_in_subquery) == MapSet.new([])
+
+      # Record with par_id != 7 -> not affected (equality index filters it out)
+      insert_wrong_par_id = %NewRecord{
+        relation: {"public", "child"},
+        record: %{"id" => "1", "par_id" => "8"}
+      }
+
+      assert Filter.affected_shapes(filter, insert_wrong_par_id) == MapSet.new([])
+    end
+
+    @tag with_sql: [
+           "CREATE TABLE IF NOT EXISTS incl_parent (id INT PRIMARY KEY)",
+           "CREATE TABLE IF NOT EXISTS incl_child (id INT PRIMARY KEY, par_id INT REFERENCES incl_parent(id), tags int[] NOT NULL)"
+         ]
+    test "refs_fun is threaded through inclusion index for compound WHERE clause with subquery",
+         %{inspector: inspector} do
+      # Create a shape with an inclusion-indexed condition AND a subquery
+      # The where clause "tags @> '{1,2}' AND id IN (SELECT id FROM parent)" will:
+      # 1. Use inclusion index for tags @> '{1,2}'
+      # 2. Use refs_fun for the subquery evaluation in the AND clause
+      {:ok, shape} =
+        Shape.new("incl_child",
+          inspector: inspector,
+          where: "tags @> '{1,2}' AND id IN (SELECT id FROM incl_parent)"
+        )
+
+      # Create refs_fun that returns sublink values based on the shape
+      refs_fun = fn _shape ->
+        %{["$sublink", "0"] => MapSet.new([10, 20, 30])}
+      end
+
+      filter =
+        Filter.new(refs_fun: refs_fun)
+        |> Filter.add_shape("shape1", shape)
+
+      # Record with tags containing {1,2} AND id in sublink results -> affected
+      insert_matching = %NewRecord{
+        relation: {"public", "incl_child"},
+        record: %{"id" => "10", "par_id" => "7", "tags" => "{1,2,3}"}
+      }
+
+      assert Filter.affected_shapes(filter, insert_matching) == MapSet.new(["shape1"])
+
+      # Record with tags containing {1,2} but id NOT in sublink results -> not affected
+      insert_not_in_subquery = %NewRecord{
+        relation: {"public", "incl_child"},
+        record: %{"id" => "99", "par_id" => "7", "tags" => "{1,2,3}"}
+      }
+
+      assert Filter.affected_shapes(filter, insert_not_in_subquery) == MapSet.new([])
+
+      # Record with tags not containing {1,2} -> not affected (inclusion index filters it out)
+      insert_wrong_tags = %NewRecord{
+        relation: {"public", "incl_child"},
+        record: %{"id" => "10", "par_id" => "7", "tags" => "{3,4}"}
+      }
+
+      assert Filter.affected_shapes(filter, insert_wrong_tags) == MapSet.new([])
+    end
+
+    @tag with_sql: [
+           "CREATE TABLE IF NOT EXISTS parent (id INT PRIMARY KEY)",
+           "CREATE TABLE IF NOT EXISTS child (id INT PRIMARY KEY, par_id INT REFERENCES parent(id))"
+         ]
+    test "refs_fun is called with the correct shape when multiple shapes exist", %{
+      inspector: inspector
+    } do
+      # Create two shapes that will have different sublink results
+      {:ok, shape1} =
+        Shape.new("child",
+          inspector: inspector,
+          where: "par_id = 7 AND id IN (SELECT id FROM parent)"
+        )
+
+      {:ok, shape2} =
+        Shape.new("child",
+          inspector: inspector,
+          where: "par_id = 8 AND id IN (SELECT id FROM parent)"
+        )
+
+      # refs_fun returns different values based on which shape is being evaluated
+      refs_fun = fn shape ->
+        if shape.where.query =~ "par_id = 7" do
+          %{["$sublink", "0"] => MapSet.new([1, 2])}
+        else
+          %{["$sublink", "0"] => MapSet.new([3, 4])}
+        end
+      end
+
+      filter =
+        Filter.new(refs_fun: refs_fun)
+        |> Filter.add_shape("shape1", shape1)
+        |> Filter.add_shape("shape2", shape2)
+
+      # Record matching shape1's equality AND subquery conditions
+      insert1 = %NewRecord{
+        relation: {"public", "child"},
+        record: %{"id" => "1", "par_id" => "7"}
+      }
+
+      assert Filter.affected_shapes(filter, insert1) == MapSet.new(["shape1"])
+
+      # Record matching shape2's equality AND subquery conditions
+      insert2 = %NewRecord{
+        relation: {"public", "child"},
+        record: %{"id" => "3", "par_id" => "8"}
+      }
+
+      assert Filter.affected_shapes(filter, insert2) == MapSet.new(["shape2"])
+
+      # Record matching shape1's equality but NOT its subquery (id=3 is in shape2's refs)
+      insert3 = %NewRecord{
+        relation: {"public", "child"},
+        record: %{"id" => "3", "par_id" => "7"}
+      }
+
+      assert Filter.affected_shapes(filter, insert3) == MapSet.new([])
+    end
+
+    @tag with_sql: [
+           "CREATE TABLE IF NOT EXISTS nested_parent (id INT PRIMARY KEY)",
+           "CREATE TABLE IF NOT EXISTS nested_child (id INT PRIMARY KEY, field1 INT NOT NULL, field2 INT REFERENCES nested_parent(id))"
+         ]
+    test "refs_fun is threaded through nested equality indexes", %{inspector: inspector} do
+      # Create a shape with two equality conditions and a subquery
+      # WHERE field1 = 10 AND field2 = 20 AND id IN (SELECT id FROM parent)
+      {:ok, shape} =
+        Shape.new("nested_child",
+          inspector: inspector,
+          where: "field1 = 10 AND field2 = 20 AND id IN (SELECT id FROM nested_parent)"
+        )
+
+      refs_fun = fn _shape ->
+        %{["$sublink", "0"] => MapSet.new([1, 2, 3])}
+      end
+
+      filter =
+        Filter.new(refs_fun: refs_fun)
+        |> Filter.add_shape("shape1", shape)
+
+      # Record matching all conditions
+      insert_matching = %NewRecord{
+        relation: {"public", "nested_child"},
+        record: %{"id" => "1", "field1" => "10", "field2" => "20"}
+      }
+
+      assert Filter.affected_shapes(filter, insert_matching) == MapSet.new(["shape1"])
+
+      # Record matching equality conditions but not subquery
+      insert_not_in_subquery = %NewRecord{
+        relation: {"public", "nested_child"},
+        record: %{"id" => "99", "field1" => "10", "field2" => "20"}
+      }
+
+      assert Filter.affected_shapes(filter, insert_not_in_subquery) == MapSet.new([])
+    end
+  end
 end

@@ -92,7 +92,7 @@ defmodule Electric.Shapes.Filter.Indexes.EqualityIndex do
         MapSet.new()
 
       [{_, {_type, next_condition_id}}] ->
-        WhereCondition.affected_shapes(filter, next_condition_id, record, fn _shape -> %{} end)
+        WhereCondition.affected_shapes(filter, next_condition_id, record)
     end
   end
 

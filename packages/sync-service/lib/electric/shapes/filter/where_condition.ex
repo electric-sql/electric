@@ -164,10 +164,10 @@ defmodule Electric.Shapes.Filter.WhereCondition do
     :ok
   end
 
-  def affected_shapes(%Filter{where_cond_table: table} = filter, condition_id, record, refs_fun) do
+  def affected_shapes(%Filter{where_cond_table: table} = filter, condition_id, record) do
     MapSet.union(
       indexed_shapes_affected(filter, condition_id, record),
-      other_shapes_affected(filter, table, condition_id, record, refs_fun)
+      other_shapes_affected(filter, table, condition_id, record)
     )
   rescue
     error ->
@@ -197,7 +197,8 @@ defmodule Electric.Shapes.Filter.WhereCondition do
     )
   end
 
-  defp other_shapes_affected(filter, table, condition_id, record, refs_fun) do
+  defp other_shapes_affected(%Filter{refs_fun: refs_fun} = filter, table, condition_id, record)
+       when is_function(refs_fun, 1) do
     [{_, {_index_keys, other_shapes}}] = :ets.lookup(table, condition_id)
 
     OpenTelemetry.with_child_span(

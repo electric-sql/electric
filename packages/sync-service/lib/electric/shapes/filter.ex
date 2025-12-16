@@ -177,7 +177,7 @@ defmodule Electric.Shapes.Filter do
         MapSet.new()
 
       [{_, where_cond_id}] ->
-        WhereCondition.affected_shapes(filter, where_cond_id, record, filter.refs_fun)
+        WhereCondition.affected_shapes(filter, where_cond_id, record)
     end
   end
 
