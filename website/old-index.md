@@ -1,7 +1,7 @@
 ---
 layout: home
 title: 'ElectricSQL'
-titleTemplate: 'Postgres sync engine'
+titleTemplate: 'Sync with your stack'
 description: 'Sync little subsets of your Postgres data into local apps and services.'
 hero:
   name: 'Realtime sync'

@@ -71,9 +71,9 @@ export default defineConfig({
     ],
   },
   lang: 'en',
-  title: 'ElectricSQL',
+  title: 'Electric',
   description:
-    "Electric is a Postgres sync engine. It solves the hard problems of sync so that you don't have to.",
+    "Composable sync primitives that work with your stack. Postgres sync, Durable Streams, TanStack DB, PGlite.",
   appearance: 'force-dark',
   base: '/',
   cleanUrls: true,
