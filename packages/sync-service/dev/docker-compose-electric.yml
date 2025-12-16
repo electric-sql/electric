@@ -1,10 +1,8 @@
 services:
   electric:
     image: $ELECTRIC_IMAGE
+    env_file: ../.env.dev
     environment:
-      ELECTRIC_INSECURE: true
-      ELECTRIC_USAGE_REPORTING: false
-      ELECTRIC_ENABLE_INTEGRATION_TESTING: true
       DATABASE_URL: 'postgresql://postgres:password@postgres/electric?sslmode=disable'
     ports:
       - 3000:3000
