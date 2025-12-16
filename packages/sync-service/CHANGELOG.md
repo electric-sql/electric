@@ -1,5 +1,13 @@
 # @core/sync-service
 
+## 1.2.9
+
+### Patch Changes
+
+- 5e936f6: fix: correct refs usage inside shape indices
+- 4803b5e: Minimize off-heap string allocation for high-frequency ShapeLogCollector process.
+- 7804860: fix: ensure correct change handling and transformations on active move-ins
+
 ## 1.2.8
 
 ### Patch Changes
