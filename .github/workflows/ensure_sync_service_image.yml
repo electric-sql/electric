@@ -49,7 +49,7 @@ jobs:
         if: ${{ !env.TAG }}
         run: |
           echo "TAG=$(
-            git log -1 --format='%H' -- packages/electric-telemetry/ packages/sync-service/{config, lib, rel, mix.*, package.json}
+            git log -1 --format='%H' -- packages/electric-telemetry/ packages/sync-service/
           )" >> $GITHUB_ENV
 
       - name: Check if image tag already exists
