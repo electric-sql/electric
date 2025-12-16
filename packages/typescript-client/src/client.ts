@@ -724,7 +724,6 @@ export class ShapeStream<T extends Row<unknown> = Row>
   async #requestShape(): Promise<void> {
     if (this.#state === `pause-requested`) {
       this.#state = `paused`
-
       return
     }
 
@@ -1252,6 +1251,13 @@ export class ShapeStream<T extends Row<unknown> = Row>
       this.#started &&
       (this.#state === `paused` || this.#state === `pause-requested`)
     ) {
+      // Don't resume if the user's signal is already aborted
+      // This can happen if the signal was aborted while we were paused
+      // (e.g., TanStack DB collection was GC'd)
+      if (this.options.signal?.aborted) {
+        return
+      }
+
       // If we're resuming from pause-requested state, we need to set state back to active
       // to prevent the pause from completing
       if (this.#state === `pause-requested`) {
