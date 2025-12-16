@@ -147,6 +147,7 @@ defmodule Electric.Shapes.ConsumerTest do
         })
 
       Electric.StackConfig.put(ctx.stack_id, Electric.ShapeCache.Storage, storage)
+      Electric.StackConfig.put(ctx.stack_id, :inspector, @base_inspector)
 
       patch_shape_status(
         initialise_shape: fn _, _shape_handle, _ -> :ok end,
@@ -505,14 +506,18 @@ defmodule Electric.Shapes.ConsumerTest do
         id: @shape1.root_table_id,
         schema: orig_schema,
         table: orig_table,
-        columns: [%{name: "id", type_oid: {1, 1}}]
+        columns: [%{name: "id", type_oid: {1, 1}}, %{name: "value", type_oid: {2, 1}}]
       }
 
       assert :ok = ShapeLogCollector.handle_event(rel_before, ctx.stack_id)
 
       refute_receive {:DOWN, _, :process, _, _}
 
-      rel_changed = %{rel_before | columns: [%{name: "id", type_oid: {999, 1}}]}
+      rel_changed = %{
+        rel_before
+        | columns: [%{name: "id", type_oid: {999, 1}}, %{name: "value", type_oid: {2, 1}}],
+          affected_columns: ["id"]
+      }
 
       # also cleans up inspector cache and shape status cache
       expect_calls(
@@ -542,7 +547,7 @@ defmodule Electric.Shapes.ConsumerTest do
         id: @shape1.root_table_id,
         schema: orig_schema,
         table: orig_table,
-        columns: [%{name: "id", type_oid: {1, 1}}]
+        columns: [%{name: "id", type_oid: {1, 1}}, %{name: "value", type_oid: {2, 1}}]
       }
 
       assert :ok = ShapeLogCollector.handle_event(rel_before, ctx.stack_id)
@@ -552,7 +557,11 @@ defmodule Electric.Shapes.ConsumerTest do
       live_ref = make_ref()
       Registry.register(ctx.registry, @shape_handle1, live_ref)
 
-      rel_changed = %{rel_before | columns: [%{name: "id", type_oid: {999, 1}}]}
+      rel_changed = %{
+        rel_before
+        | columns: [%{name: "id", type_oid: {999, 1}}, %{name: "value", type_oid: {2, 1}}],
+          affected_columns: ["id"]
+      }
 
       expect_calls(
         Electric.Postgres.Inspector,
