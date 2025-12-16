@@ -57,9 +57,61 @@ defmodule Electric.ShapeCache.PureFileStorage do
     :chunk_bytes_threshold,
     :shape_handle,
     :stack_id,
+    :stack_ets,
+    :stack_cache_ets,
     snapshot_file_timeout: :timer.seconds(5),
     version: @version
   ]
+
+  # Explicitly specify which keys are actually stored as metadata files on disk
+  # to avoid unnecessary FS operations for non-persistent keys
+  @stored_keys [
+    :version,
+    :latest_name,
+    :last_persisted_txn_offset,
+    :snapshot_started?,
+    :pg_snapshot,
+    :last_snapshot_chunk,
+    :compaction_started?,
+    :compaction_boundary
+  ]
+
+  # Including `compaction_started?` would require bumping the version of the storage,
+  # as there are cases where we would have a file with "false" stored in it.
+  # For `snapshot_started?` we only have the metadata file if it has been set.
+  @boolean_stored_keys [:snapshot_started?]
+
+  @cached_keys [
+    :snapshot_started?,
+    :pg_snapshot,
+    :compaction_started?,
+    :last_snapshot_chunk,
+    :last_seen_txn_offset,
+    :last_persisted_txn_offset,
+    :last_persisted_offset,
+    :compaction_boundary,
+    :latest_name,
+    :cached_chunk_boundaries
+  ]
+
+  # Keys that are cached but read through to avoid disk reads
+  # when writer is not active
+  @stack_cached_keys [
+    :latest_name,
+    :compaction_boundary,
+    :last_persisted_txn_offset,
+    :snapshot_started?,
+    :last_snapshot_chunk
+  ]
+
+  # Record that caches read-through metadata to avoid disk reads
+  defrecord :storage_meta_stack,
+    shape_handle: nil,
+    latest_name: :not_cached,
+    compaction_boundary: :not_cached,
+    last_persisted_txn_offset: :not_cached,
+    snapshot_started?: :not_cached,
+    last_snapshot_chunk: :not_cached
 
   # Directory for storing metadata
   @metadata_storage_dir ".meta"
@@ -88,23 +140,27 @@ defmodule Electric.ShapeCache.PureFileStorage do
     }
   end
 
-  def for_shape(shape_handle, stack_opts) do
-    stack_ets = stack_ets(stack_opts.stack_id)
+  def for_shape(shape_handle, %{stack_id: stack_id} = stack_opts) do
+    stack_ets = stack_ets(stack_id)
     buffer_ets = :ets.lookup_element(stack_ets, shape_handle, storage_meta(:ets_table) + 1, nil)
 
     %__MODULE__{
       buffer_ets: buffer_ets,
       chunk_bytes_threshold: stack_opts.chunk_bytes_threshold,
       shape_handle: shape_handle,
-      stack_id: stack_opts.stack_id
+      stack_id: stack_id,
+      stack_ets: stack_ets,
+      stack_cache_ets: stack_cache_ets(stack_id)
     }
   end
 
-  @metadata_dir "metadata"
   @log_dir "log"
+  @metadata_dir "metadata"
   @snapshot_dir "snapshot"
+
   @doc false
-  def stack_ets(stack_id), do: :"#{inspect(__MODULE__)}:#{stack_id}"
+  def stack_ets(stack_id), do: :"Electric.ShapeCache.PureFileStorage:#{stack_id}"
+  def stack_cache_ets(stack_id), do: :"Electric.ShapeCache.PureFileStorage:cache:#{stack_id}"
 
   defp stack_task_supervisor(stack_id),
     do: ProcessRegistry.name(stack_id, __MODULE__.TaskSupervisor)
@@ -147,6 +203,15 @@ defmodule Electric.ShapeCache.PureFileStorage do
              :set,
              :public,
              keypos: storage_meta(:shape_handle) + 1,
+             read_concurrency: true,
+             write_concurrency: :auto
+           ])
+
+           :ets.new(stack_cache_ets(opts.stack_id), [
+             :named_table,
+             :set,
+             :public,
+             keypos: storage_meta_stack(:shape_handle) + 1,
              read_concurrency: true,
              write_concurrency: :auto
            ])
@@ -212,9 +277,9 @@ defmodule Electric.ShapeCache.PureFileStorage do
     end
   end
 
-  defp delete_shape_ets_read_through_cache_entry(stack_id, shape_handle) do
+  defp delete_shape_stack_cache_entry(stack_id, shape_handle) do
     try do
-      :ets.delete(stack_ets(stack_id), {:read_through_cache, shape_handle})
+      :ets.delete(stack_cache_ets(stack_id), shape_handle)
       :ok
     rescue
       ArgumentError -> :ok
@@ -224,6 +289,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
   def drop_all_ets_entries(stack_id) do
     try do
       :ets.delete_all_objects(stack_ets(stack_id))
+      :ets.delete_all_objects(stack_cache_ets(stack_id))
       :ok
     rescue
       ArgumentError -> :ok
@@ -245,7 +311,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
              shape_data_dir(stack_opts.base_path, shape_handle)
            ) do
       delete_shape_ets_entry(stack_opts.stack_id, shape_handle)
-      delete_shape_ets_read_through_cache_entry(stack_opts.stack_id, shape_handle)
+      delete_shape_stack_cache_entry(stack_opts.stack_id, shape_handle)
     end
   end
 
@@ -452,9 +518,9 @@ defmodule Electric.ShapeCache.PureFileStorage do
   def compaction_boundary(%__MODULE__{} = opts),
     do: read_metadata!(opts, :compaction_boundary) || {LogOffset.before_all(), nil}
 
-  def set_compaction_boundary(%__MODULE__{} = opts, boundary) do
+  def set_compaction_boundary(%__MODULE__{stack_ets: stack_ets} = opts, boundary) do
     :ets.update_element(
-      stack_ets(opts.stack_id),
+      stack_ets,
       opts.shape_handle,
       {storage_meta(:compaction_boundary) + 1, boundary}
     )
@@ -464,9 +530,9 @@ defmodule Electric.ShapeCache.PureFileStorage do
 
   def latest_name(%__MODULE__{} = opts), do: read_metadata!(opts, :latest_name) || "latest.0"
 
-  def set_latest_name(%__MODULE__{} = opts, name) do
+  def set_latest_name(%__MODULE__{stack_ets: stack_ets} = opts, name) do
     :ets.update_element(
-      stack_ets(opts.stack_id),
+      stack_ets,
       opts.shape_handle,
       {storage_meta(:latest_name) + 1, name}
     )
@@ -515,9 +581,6 @@ defmodule Electric.ShapeCache.PureFileStorage do
       suffix,
       WriteLoop.cached_chunk_boundaries(initial_acc)
     )
-
-    # remove any existing read-through cache now that writer is active
-    delete_shape_ets_read_through_cache_entry(shape_opts.stack_id, shape_opts.shape_handle)
 
     if shape_definition.storage.compaction == :enabled do
       {__MODULE__, stack_opts} = Storage.for_stack(shape_opts.stack_id)
@@ -614,65 +677,19 @@ defmodule Electric.ShapeCache.PureFileStorage do
     LogFile.trim(json_file(opts, suffix), log_search_start_pos, last_persisted_offset)
   end
 
-  # Explicitly specify which keys are actually stored as metadata files on disk
-  # to avoid unnecessary FS operations for non-persistent keys
-  @stored_keys [
-    :version,
-    :latest_name,
-    :last_persisted_txn_offset,
-    :snapshot_started?,
-    :pg_snapshot,
-    :last_snapshot_chunk,
-    :compaction_started?,
-    :compaction_boundary
-  ]
-
-  # Including `compaction_started?` would require bumping the version of the storage,
-  # as there are cases where we would have a file with "false" stored in it.
-  # For `snapshot_started?` we only have the metadata file if it has been set.
-  @boolean_stored_keys [:snapshot_started?]
-
-  @cached_keys [
-    :snapshot_started?,
-    :pg_snapshot,
-    :compaction_started?,
-    :last_snapshot_chunk,
-    :last_seen_txn_offset,
-    :last_persisted_txn_offset,
-    :last_persisted_offset,
-    :compaction_boundary,
-    :latest_name,
-    :cached_chunk_boundaries
-  ]
-
-  # Keys that are cached but read through to avoid disk reads
-  # when writer is not active
-  @read_through_cached_keys [
-    :latest_name,
-    :compaction_boundary,
-    :last_persisted_txn_offset,
-    :snapshot_started?,
-    :last_snapshot_chunk
-  ]
-
-  # Record that caches read-through metadata to avoid disk reads
-  defrecord :storage_meta_read_through, [
-    :cache_key,
-    latest_name: :not_cached,
-    compaction_boundary: :not_cached,
-    last_persisted_txn_offset: :not_cached,
-    snapshot_started?: :not_cached,
-    last_snapshot_chunk: :not_cached
-  ]
-
   # we need these because macro expects a compile-time atom
   for key <- @cached_keys do
     defp get_cached_by_key(meta, unquote(key)), do: storage_meta(meta, unquote(key))
   end
 
-  for key <- @read_through_cached_keys do
-    defp get_read_through_cache_key_pos(unquote(key)),
-      do: storage_meta_read_through(unquote(key))
+  for key <- @stack_cached_keys do
+    defp get_stack_cache_key_pos(unquote(key)),
+      do: storage_meta_stack(unquote(key))
+  end
+
+  for key <- @cached_keys do
+    defp get_cached_key_pos(unquote(key)),
+      do: storage_meta(unquote(key))
   end
 
   # optimization for snapshot started boolean to avoid expensive file open
@@ -693,14 +710,15 @@ defmodule Electric.ShapeCache.PureFileStorage do
   defp read_metadata!(%__MODULE__{} = _opts, _key), do: nil
 
   # Read metadata with ETS-first, disk-fallback pattern
+  defp read_cached_metadata(%__MODULE__{} = opts, key) when key in @stack_cached_keys do
+    read_metadata_with_stack_cache(opts, key)
+  end
+
   defp read_cached_metadata(%__MODULE__{shape_handle: handle} = opts, key) do
     try do
-      case :ets.lookup(stack_ets(opts.stack_id), handle) do
-        [] ->
-          read_metadata_with_read_through_cache(opts, key)
-
-        [storage_meta() = meta] ->
-          get_cached_by_key(meta, key)
+      case :ets.lookup(opts.stack_ets, handle) do
+        [] -> read_metadata!(opts, key)
+        [storage_meta() = meta] -> get_cached_by_key(meta, key)
       end
     rescue
       ArgumentError ->
@@ -708,44 +726,23 @@ defmodule Electric.ShapeCache.PureFileStorage do
     end
   end
 
-  # Read multiple metadata values with a single ETS lookup
-  defp read_multiple_cached_metadata(%__MODULE__{shape_handle: handle} = opts, keys) do
-    try do
-      case :ets.lookup(stack_ets(opts.stack_id), handle) do
-        [] ->
-          # Fall back to reading from disk for each key
-          Enum.map(keys, fn key -> {key, read_metadata_with_read_through_cache(opts, key)} end)
-
-        [storage_meta() = meta] ->
-          # Extract all requested values from the single ETS record
-          Enum.map(keys, fn key -> {key, get_cached_by_key(meta, key)} end)
-      end
-    rescue
-      ArgumentError ->
-        # Fall back to reading from disk for each key
-        Enum.map(keys, fn key -> {key, read_metadata!(opts, key)} end)
-    end
+  defp read_multiple_cached_metadata(%__MODULE__{} = opts, keys) do
+    Enum.map(keys, &{&1, read_cached_metadata(opts, &1)})
   end
 
   # Read metadata with read-through cache in ETS to minimise disk reads when
   # writer is not active
-  defp read_metadata_with_read_through_cache(%__MODULE__{shape_handle: handle} = opts, key)
-       when key in @read_through_cached_keys do
+  defp read_metadata_with_stack_cache(%__MODULE__{shape_handle: handle} = opts, key)
+       when key in @stack_cached_keys do
     case :ets.lookup_element(
-           stack_ets(opts.stack_id),
-           {:read_through_cache, handle},
-           get_read_through_cache_key_pos(key) + 1,
+           opts.stack_cache_ets,
+           handle,
+           get_stack_cache_key_pos(key) + 1,
            :not_cached
          ) do
       :not_cached ->
         value = read_metadata!(opts, key)
-
-        :ets.update_element(
-          stack_ets(opts.stack_id),
-          {:read_through_cache, handle},
-          {get_read_through_cache_key_pos(key) + 1, value},
-          storage_meta_read_through(cache_key: {:read_through_cache, handle})
-        )
+        write_metadata_cache(opts, key, value)
 
         value
 
@@ -756,7 +753,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
     ArgumentError -> read_metadata!(opts, key)
   end
 
-  defp read_metadata_with_read_through_cache(%__MODULE__{} = opts, key),
+  defp read_metadata_with_stack_cache(%__MODULE__{} = opts, key),
     do: read_metadata!(opts, key)
 
   defp write_metadata!(%__MODULE__{} = opts, key, value) when key in @boolean_stored_keys do
@@ -779,28 +776,17 @@ defmodule Electric.ShapeCache.PureFileStorage do
     value
   end
 
+  defp write_metadata!(%__MODULE__{} = _opts, _key, value) do
+    value
+  end
+
   # Write metadata to both disk and ETS
-  defp write_cached_metadata!(%__MODULE__{shape_handle: handle} = opts, key, value) do
+  defp write_cached_metadata!(%__MODULE__{} = opts, key, value) do
     # Write to disk first
     write_metadata!(opts, key, value)
 
-    # Update ETS if entry exists
-    table = stack_ets(opts.stack_id)
-
     try do
-      case key do
-        :snapshot_started? ->
-          :ets.update_element(table, handle, {storage_meta(:snapshot_started?) + 1, value})
-
-        :compaction_started? ->
-          :ets.update_element(table, handle, {storage_meta(:compaction_started?) + 1, value})
-
-        :last_snapshot_chunk ->
-          :ets.update_element(table, handle, {storage_meta(:last_snapshot_chunk) + 1, value})
-
-        :pg_snapshot ->
-          :ets.update_element(table, handle, {storage_meta(:pg_snapshot) + 1, value})
-      end
+      write_metadata_cache(opts, key, value)
 
       :ok
     rescue
@@ -808,6 +794,26 @@ defmodule Electric.ShapeCache.PureFileStorage do
         # ETS entry doesn't exist yet, that's okay
         :ok
     end
+  end
+
+  defp write_metadata_cache(%__MODULE__{} = opts, key, value)
+       when key in @stack_cached_keys do
+    %{stack_cache_ets: stack_cache_ets, shape_handle: handle} = opts
+    index = get_stack_cache_key_pos(key) + 1
+
+    :ets.update_element(
+      stack_cache_ets,
+      handle,
+      {index, value},
+      storage_meta_stack(shape_handle: handle)
+    )
+  end
+
+  defp write_metadata_cache(%__MODULE__{} = opts, key, value) do
+    %{stack_ets: stack_ets, shape_handle: handle} = opts
+    index = get_cached_key_pos(key) + 1
+
+    :ets.update_element(stack_ets, handle, {index, value})
   end
 
   defp write_shape_definition!(%__MODULE__{} = opts, shape_definition) do
@@ -848,7 +854,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
     pg_snapshot = read_metadata!(opts, :pg_snapshot)
 
     :ets.insert(
-      stack_ets(opts.stack_id),
+      opts.stack_ets,
       storage_meta(
         shape_handle: opts.shape_handle,
         ets_table: table,
@@ -1157,7 +1163,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
 
   defp stream_main_log(min_offset, max_offset, %__MODULE__{shape_handle: handle} = opts) do
     {ets, last_persisted, last_seen, boundary_info} =
-      case :ets.lookup(stack_ets(opts.stack_id), handle) do
+      case :ets.lookup(opts.stack_ets, handle) do
         [] ->
           # Writer's not active, only disk reads are possible
           {:ok, offset} = fetch_latest_offset(opts)
@@ -1315,7 +1321,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
 
   def update_chunk_boundaries_cache(opts, boundaries) do
     :ets.update_element(
-      stack_ets(opts.stack_id),
+      opts.stack_ets,
       opts.shape_handle,
       {storage_meta(:cached_chunk_boundaries) + 1, boundaries}
     )
@@ -1352,30 +1358,26 @@ defmodule Electric.ShapeCache.PureFileStorage do
   end
 
   def update_global_persistence_information(
-        %__MODULE__{shape_handle: handle} = opts,
+        %__MODULE__{} = opts,
         last_persisted_txn_offset,
         last_persisted_offset,
         last_seen_txn_offset,
         old_last_persisted_txn_offset
       ) do
     if old_last_persisted_txn_offset != last_persisted_txn_offset do
-      write_metadata!(opts, :last_persisted_txn_offset, last_persisted_txn_offset)
+      write_cached_metadata!(opts, :last_persisted_txn_offset, last_persisted_txn_offset)
     end
 
     try do
-      true =
-        :ets.update_element(
-          stack_ets(opts.stack_id),
-          handle,
-          [
-            {storage_meta(:last_persisted_txn_offset) + 1, last_persisted_txn_offset},
-            {storage_meta(:last_persisted_offset) + 1, last_persisted_offset},
-            {storage_meta(:last_seen_txn_offset) + 1, last_seen_txn_offset}
-          ]
-        )
+      Enum.each(
+        [
+          {:last_persisted_offset, last_persisted_offset},
+          {:last_seen_txn_offset, last_seen_txn_offset}
+        ],
+        fn {key, value} -> write_metadata_cache(opts, key, value) end
+      )
     rescue
-      ArgumentError ->
-        true
+      ArgumentError -> true
     end
   end
 
