@@ -2,9 +2,7 @@ name: Publish Electric images to Docker Hub
 
 on:
   push:
-    # TMP for testing
-    # branches: ['main']
-    branches: ['alco/ci-build-canary-images']
+    branches: ['main']
   release:
     released:
 
@@ -136,9 +134,7 @@ jobs:
           )
 
           # Create a manifest list for electricsql/electric:canary that includes both platforms
-          docker buildx imagetools create --dry-run \
-            $ELECTRIC_TAGS \
-            $ELECTRIC_IMAGES
+          docker buildx imagetools create $ELECTRIC_TAGS $ELECTRIC_IMAGES
 
           if [ -n "$ELECTRIC_CANARY_TAGS" ]; then
             # Build a list of electricsql/electric-canary@sha256:... source images
@@ -149,7 +145,5 @@ jobs:
             )
 
             # Create a manifest list for electricsql/electric-canary:... that includes both platforms
-            docker buildx imagetools create --dry-run \
-              $ELECTRIC_CANARY_TAGS \
-              $ELECTRIC_CANARY_IMAGES
+            docker buildx imagetools create $ELECTRIC_CANARY_TAGS $ELECTRIC_CANARY_IMAGES
           fi
