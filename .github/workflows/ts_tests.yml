@@ -15,6 +15,7 @@ on:
 
 permissions:
   contents: read
+  packages: write
 
 jobs:
   list_ts_packages:
@@ -26,6 +27,7 @@ jobs:
       - uses: actions/checkout@v4
       - run: echo "directories=`find packages/ -mindepth 1 -maxdepth 1 -type d -exec test -e '{}'/tsconfig.json \; -print | jq -R -s -c 'split("\n")[:-1]'`" >> $GITHUB_OUTPUT
         id: list_ts_packages
+
   list_examples:
     name: List examples
     runs-on: ubuntu-latest
@@ -58,14 +60,13 @@ jobs:
       - run: pnpm -r --filter "$(jq '.name' -r package.json)^..." build
       - run: pnpm run typecheck
 
+  ensure_sync_service_image:
+    uses: ./.github/workflows/ensure_sync_service_image.yml
+
   build_and_test_packages:
     name: 'Test ${{ matrix.package_dir }} w/ sync-service'
-    needs: [list_ts_packages]
+    needs: [list_ts_packages, ensure_sync_service_image]
     runs-on: ubuntu-latest
-    # There is currently a buggy TS test that causes the job for typescript-client to get stuck
-    # for 6 hours on end.
-    # And it's a good practice in general to limit the test runtime and investigate at the
-    # point when it starts exceeding the limit.
     timeout-minutes: 10
     strategy:
       fail-fast: false
@@ -75,16 +76,9 @@ jobs:
       run:
         working-directory: ${{ matrix.package_dir }}
     env:
-      ELECTRIC_DATABASE_ID: ci_test_tenant
-      MIX_ENV: dev
-      MIX_OS_DEPS_COMPILE_PARTITION_COUNT: 4
+      ELECTRIC_IMAGE: ${{ needs.ensure_sync_service_image.outputs.image }}
     steps:
       - uses: actions/checkout@v4
-
-      - uses: erlef/setup-beam@v1
-        with:
-          version-type: strict
-          version-file: '.tool-versions'
 
       - uses: pnpm/action-setup@v4
 
@@ -96,55 +90,13 @@ jobs:
       - name: Install Node dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Cache sync-service dependencies
-        uses: actions/cache@v4
-        with:
-          path: packages/sync-service/deps
-          key: "${{ runner.os }}-sync-service-deps-${{ env.MIX_ENV }}-${{ hashFiles('packages/sync-service/mix.lock') }}"
-          restore-keys: |
-            ${{ runner.os }}-sync-service-deps-${{ env.MIX_ENV }}-${{ hashFiles('packages/sync-service/mix.lock') }}
-            ${{ runner.os }}-sync-service-deps-${{ env.MIX_ENV }}
-            ${{ runner.os }}-sync-service-deps
-
-      - name: Cache sync-service compiled code
-        uses: actions/cache@v4
-        with:
-          path: |
-            packages/sync-service/_build/*/lib
-            !packages/sync-service/_build/*/lib/electric
-          key: "${{ runner.os }}-sync-service-build-${{ env.MIX_ENV }}-${{ hashFiles('packages/sync-service/mix.lock') }}"
-          restore-keys: |
-            ${{ runner.os }}-sync-service-build-${{ env.MIX_ENV }}-${{ hashFiles('packages/sync-service/mix.lock') }}
-            ${{ runner.os }}-sync-service-build-${{ env.MIX_ENV }}
-            ${{ runner.os }}-sync-service-build
-
-      - name: Install sync-service dependencies
-        working-directory: packages/sync-service
-        run: mix do deps.get + deps.compile
-
-      - name: Compile sync-service
-        working-directory: packages/sync-service
-        run: mix compile
-
-      - uses: JarvusInnovations/background-action@v1
-        name: Bootstrap System Under Test (SUT)
-        with:
-          run: |
-            mix start_dev
-            ELECTRIC_INSECURE=true mix run --no-halt &
-
-          wait-on: |
-            http-get://localhost:3000/v1/health?database_id=${{ env.ELECTRIC_DATABASE_ID }}
-
-          tail: true
-          log-output-resume: stderr
-          wait-for: 1m
-          log-output: true
-          log-output-if: failure
-          working-directory: packages/sync-service
-
       - name: Build Node dependencies, if any
         run: pnpm -r --filter "$(jq '.name' -r package.json)^..." build
+
+      - name: Run Postgres, Electric and nginx for the subsequent test suite
+        working-directory: packages/sync-service/dev
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose-electric.yml up --wait postgres electric nginx
 
       - name: Run tests with coverage
         run: pnpm run coverage --run
