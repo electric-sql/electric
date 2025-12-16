@@ -42,7 +42,7 @@ jobs:
       #    username: ${{ secrets.DOCKERHUB_USERNAME }}
       #    password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Publish to electricsql/electric:canary and electricsql/electric-canary
+      - name: Build and publish
         uses: docker/build-push-action@v6
         with:
           context: packages/sync-service
