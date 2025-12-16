@@ -89,7 +89,7 @@ jobs:
     defaults:
       run:
         working-directory: ${{ matrix.package_dir }}
-    environemnt:
+    environment:
       ELECTRIC_IMAGE: ${{ needs.ensure_sync_service_image.outputs.image }}
     steps:
       - uses: actions/checkout@v4
