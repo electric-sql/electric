@@ -109,7 +109,9 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
   @spec fetch_current_filters!(Keyword.t()) :: relation_filters()
   def fetch_current_filters!(opts) do
     server = Access.get(opts, :server, name(opts))
-    GenServer.call(server, :fetch_current_filters)
+    # give an infinite timeout because this call can come in when the RelationTracker
+    # is still initialising
+    GenServer.call(server, :fetch_current_filters, :infinity)
   end
 
   def start_link(opts) do
@@ -156,11 +158,12 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
       fn ->
         # Build initial state in an ephemeral Task process so that to avoid
         # retaining the data from list_shapes in this process's heap.
+        start = System.monotonic_time()
+
         state =
           Task.async(fn ->
-            state.stack_id
-            |> Electric.ShapeCache.ShapeStatus.list_shapes()
-            |> Enum.reduce(
+            Electric.ShapeCache.ShapeStatus.reduce_shapes(
+              state.stack_id,
               state,
               fn {shape_handle, shape}, state ->
                 add_shape_to_publication_filters(
@@ -172,6 +175,10 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
             )
           end)
           |> Task.await(:infinity)
+
+        Logger.info(
+          "Restored publication filters in #{System.convert_time_unit(System.monotonic_time() - start, :native, :millisecond)}ms"
+        )
 
         # filters will be pulled by the configurator on startup, so no
         # need to explicitly call for an update here

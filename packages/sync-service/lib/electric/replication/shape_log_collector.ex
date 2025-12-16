@@ -74,7 +74,10 @@ defmodule Electric.Replication.ShapeLogCollector do
   """
   @spec mark_as_ready(Electric.stack_id()) :: :ok
   def mark_as_ready(stack_id) do
-    GenServer.call(name(stack_id), :mark_as_ready)
+    # use an infinite timeout because the call can come in while the filters are building
+    # the time taken to build the filters depends on the number of shapes so there is no
+    # known upper bound for this after which we can say "this is taking too long"
+    GenServer.call(name(stack_id), :mark_as_ready, :infinity)
   end
 
   @doc """
@@ -240,6 +243,8 @@ defmodule Electric.Replication.ShapeLogCollector do
       [],
       state.stack_id,
       fn ->
+        start = System.monotonic_time()
+
         {partitions, event_router, layers, count} =
           state.stack_id
           |> Electric.ShapeCache.ShapeStatus.list_shapes()
@@ -257,7 +262,9 @@ defmodule Electric.Replication.ShapeLogCollector do
             end
           )
 
-        Logger.info("Restored filters for #{count} shapes")
+        Logger.info(
+          "Restored filters for #{count} shapes in #{System.convert_time_unit(System.monotonic_time() - start, :native, :millisecond)}ms"
+        )
 
         {:noreply,
          %{

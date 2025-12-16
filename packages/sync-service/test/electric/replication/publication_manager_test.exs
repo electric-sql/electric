@@ -24,6 +24,8 @@ defmodule Electric.Replication.PublicationManagerTest do
   @where_clause_2 %Expr{query: "id = '2'", used_refs: %{["id"] => :text}}
   @where_clause_3 %Expr{query: "id = '3'", used_refs: %{["id"] => :text}}
 
+  @moduletag :tmp_dir
+
   setup [
     :with_stack_id_from_test,
     :with_in_memory_storage,

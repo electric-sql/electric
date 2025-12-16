@@ -59,6 +59,8 @@ defmodule Electric.Plug.DeleteShapePlugTest do
     DeleteShapePlug.call(conn, config)
   end
 
+  @moduletag :tmp_dir
+
   setup :with_persistent_kv
 
   describe "DeleteShapePlug" do
