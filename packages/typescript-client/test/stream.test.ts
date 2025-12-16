@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { ShapeStream, isChangeMessage, Message, Row } from '../src'
 import { snakeCamelMapper } from '../src/column-mapper'
+import { resolveInMacrotask } from './support/test-helpers'
 
 describe(`ShapeStream`, () => {
   const shapeUrl = `https://example.com/v1/shape`
@@ -344,16 +345,22 @@ describe(`ShapeStream`, () => {
         value: { user_id: `123`, created_at: `2025-01-01` },
         headers: { operation: `insert` },
       },
+      {
+        headers: { control: `up-to-date` },
+      },
     ]
 
     const fetchWrapper = (): Promise<Response> => {
-      return Promise.resolve(
+      // Use resolveInMacrotask to prevent infinite microtask loops
+      return resolveInMacrotask(
         new Response(JSON.stringify(mockResponseData), {
           status: 200,
           headers: {
             'content-type': `application/json`,
             'electric-handle': `test-handle`,
             'electric-offset': `0_0`,
+            'electric-cursor': `1`,
+            'electric-up-to-date': `true`,
             'electric-schema': JSON.stringify({
               user_id: { type: `text` },
               created_at: { type: `text` },
@@ -363,7 +370,6 @@ describe(`ShapeStream`, () => {
       )
     }
 
-    const aborter = new AbortController()
     const stream = new ShapeStream({
       url: shapeUrl,
       params: {

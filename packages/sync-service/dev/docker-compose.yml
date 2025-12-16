@@ -17,10 +17,14 @@ services:
     tmpfs:
       - /var/lib/postgresql
       - /tmp
-    entrypoint:
-      - docker-entrypoint.sh
+    command:
       - -c
       - config_file=/etc/postgresql.conf
+    healthcheck:
+      test: ["CMD", "pg_isready"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
   postgres2:
     image: postgres:18-alpine
     environment:
@@ -36,8 +40,7 @@ services:
     tmpfs:
       - /var/lib/postgresql
       - /tmp
-    entrypoint:
-      - docker-entrypoint.sh
+    command:
       - -c
       - config_file=/etc/postgresql.conf
   pgbouncer:
@@ -62,5 +65,3 @@ services:
       - ./nginx.conf:/etc/nginx/nginx.conf
     extra_hosts:
       - 'host.docker.internal:host-gateway'
-    depends_on:
-      - postgres
