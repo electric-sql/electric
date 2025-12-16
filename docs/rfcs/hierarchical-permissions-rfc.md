@@ -1,21 +1,19 @@
-# RFC: Hierarchical Permission Inheritance for Tree-Structured Data
+# RFC: Hierarchical Permission Inheritance (Electric-Side Implementation)
 
 **Status**: Draft
 **Author**: Electric Team
 **Date**: December 2025
 **Target Audience**: Engineers implementing hierarchical ACL patterns with Electric
 
+---
+
 ## Executive Summary
 
-This RFC addresses the challenge of syncing hierarchically-permissioned data (like Notion's blocks) through Electric. The core problem is that permission inheritance in tree structures traditionally requires "walking up" the parent chain - an unbounded recursive operation that doesn't fit Electric's `WHERE`-clause-based filtering model.
+This RFC describes how to solve the hierarchical permission inheritance problem **inside Electric** by maintaining a derived permission anchor index from the WAL stream. This approach requires no changes to the source database schema.
 
-We propose three implementation options, ordered by recommendation:
+**The core insight**: Recursive permission inheritance can be precomputed as a simple column (`perm_anchor_id`), turning unbounded tree walks into O(1) lookups. Electric maintains this derived index internally and uses it during shape filtering.
 
-1. **Option A (Recommended)**: Read Replica with Triggers - Postgres computes a `perm_anchor_id` column on a dedicated read replica
-2. **Option B**: Electric-side Derived Index - Electric maintains a permission anchor index from the WAL
-3. **Option C**: Invalidation-only Mode - Electric only signals when permissions change, client recomputes
-
-The key insight enabling all options: **compile the recursive inheritance into a precomputed column**, turning unbounded tree walks into simple equality checks.
+**Prototype location**: `packages/sync-service/lib/electric/shapes/tree_index/`
 
 ---
 
@@ -23,1017 +21,664 @@ The key insight enabling all options: **compile the recursive inheritance into a
 
 ### The Notion Use Case
 
-Notion's data model represents content as a tree of "blocks":
+Notion's blocks are organized in a tree:
 
 ```
 Page (root)
 ├── Block A
 │   ├── Block B
-│   └── Block C
+│   └── Block C (has explicit permissions)
 │       └── Block D
 └── Block E
 ```
 
-**Current Schema** (simplified):
-```sql
-CREATE TABLE blocks (
-    id UUID PRIMARY KEY,
-    parent_id UUID REFERENCES blocks(id),
-    page_id UUID NOT NULL,
-    permissions JSONB,  -- NULL means "inherit from parent"
-    content JSONB,
-    ...
-);
-```
+**Permission rule**: A block's permissions come from the first ancestor (including itself) with explicit permissions.
 
-**Permission inheritance rule**: A block's effective permissions come from the first ancestor (including itself) that has a non-NULL `permissions` column.
-
-**Current algorithm** (in Notion's API layer):
+**Current algorithm** (in Notion's API):
 ```python
-def get_effective_permissions(block, all_blocks_map):
+def get_effective_permissions(block, blocks_map):
     current = block
     while current:
         if current.permissions is not None:
             return current.permissions
-        current = all_blocks_map.get(current.parent_id)
-    return default_page_permissions
+        current = blocks_map.get(current.parent_id)
+    return default_permissions
 ```
 
-This requires loading the entire page's blocks into memory and walking up the tree for each block.
+This requires:
+1. Loading all blocks into memory
+2. Walking up the tree for each block
 
 ### Why This Breaks Electric's Model
 
-Electric's shapes filter data using SQL `WHERE` clauses:
-```
-GET /v1/shape?table=blocks&where=page_id='abc'
-```
-
-To express "blocks where user U has permission", you'd need something like:
+Electric shapes use SQL WHERE clauses. Expressing "blocks where user has permission" would require:
 
 ```sql
--- INVALID: Recursive permission check
-WHERE get_effective_permissions(blocks.id, $user) = 'allowed'
+-- IMPOSSIBLE: Recursive permission check in WHERE
+WHERE user_can_access(walk_up_tree_until_permission(block.id))
 ```
 
-This is an **unbounded self-join** - the depth of the tree is unknown, and Electric can't evaluate recursive functions in WHERE clauses.
-
-Electric's current subquery support (`column IN (SELECT ...)`) handles cross-table membership but not recursive tree traversal.
+This is an **unbounded self-join**. Electric's current subquery support handles cross-table membership, not recursive tree traversal.
 
 ### Requirements
 
-1. **Permission revocation must be immediate** - When access is removed, affected data must stop syncing within milliseconds
-2. **Permission grants can have slight latency** - Acceptable to query back for newly-visible data
-3. **Memory bounded by tables, not users/shapes** - Can't materialize per-user query results
-4. **No schema changes to primary database** (strongly preferred)
-5. **Generalizable pattern** - Not a one-off Notion-only feature
+1. **Permission revocation must be immediate** - Move-outs happen without query back
+2. **Permission grants can have slight latency** - Move-ins may require querying
+3. **Memory bounded by tables, not users/shapes** - Can't materialize per-user results
+4. **No schema changes to source database**
+5. **Generalizable pattern** - Useful beyond just Notion
 
 ---
 
-## The Key Insight: Permission Anchors
+## Solution: Permission Anchor Index
 
-The recursive "walk up until you find permissions" can be precomputed as a single column:
+### Key Insight
+
+Precompute `perm_anchor_id` for every block:
 
 ```
 perm_anchor_id = id of the first ancestor (including self) with non-NULL permissions
 ```
 
-**Examples using the tree above:**
+| Block | has_acl? | perm_anchor_id |
+|-------|----------|----------------|
+| Page  | YES      | Page           |
+| A     | NO       | Page           |
+| B     | NO       | Page           |
+| C     | YES      | C              |
+| D     | NO       | C              |
+| E     | NO       | Page           |
 
-| Block | has permissions? | perm_anchor_id |
-|-------|------------------|----------------|
-| Page  | YES              | Page           |
-| A     | NO               | Page           |
-| B     | NO               | Page           |
-| C     | YES              | C              |
-| D     | NO               | C              |
-| E     | NO               | Page           |
-
-**Once you have `perm_anchor_id`**, the permission check becomes:
+**With `perm_anchor_id`**, filtering becomes:
 
 ```sql
 SELECT * FROM blocks
 WHERE page_id = $page
-  AND perm_anchor_id IN (
-    SELECT anchor_id
-    FROM user_accessible_anchors
-    WHERE user_id = $user
-  )
+  AND perm_anchor_id IN (user_accessible_anchors)
 ```
 
-This is exactly what Electric's subquery support is designed for - no recursion, just a membership check.
-
-### Formal Definition
-
-```
-perm_anchor_id(block) =
-    if block.permissions IS NOT NULL:
-        return block.id
-    else if block.parent_id IS NULL:
-        return block.id  -- root, must have permissions
-    else:
-        return perm_anchor_id(parent(block))
-```
+No recursion. Simple membership check.
 
 ---
 
-## Option A: Read Replica with Triggers (Recommended)
-
-### Architecture
-
-```
-┌─────────────────────┐     Logical Replication    ┌─────────────────────┐
-│   Primary Postgres  │ ─────────────────────────► │   Electric Replica  │
-│                     │                            │                     │
-│  blocks (original)  │                            │  blocks (original)  │
-│                     │                            │  block_anchors      │ ◄── Maintained by triggers
-└─────────────────────┘                            │                     │
-                                                   └──────────┬──────────┘
-                                                              │
-                                                              ▼
-                                                   ┌─────────────────────┐
-                                                   │   Electric Sync     │
-                                                   │   Service           │
-                                                   └─────────────────────┘
-```
-
-**Key points:**
-- Primary database is unchanged
-- Read replica receives changes via logical replication
-- Triggers on replica compute and maintain `perm_anchor_id`
-- Electric connects to the replica
-
-### Schema on Replica
-
-```sql
--- Sidecar table (doesn't modify replicated blocks table)
-CREATE TABLE block_anchors (
-    block_id UUID PRIMARY KEY,
-    perm_anchor_id UUID NOT NULL,
-
-    -- Optional: for faster subtree queries
-    CONSTRAINT fk_block FOREIGN KEY (block_id) REFERENCES blocks(id) ON DELETE CASCADE
-);
-
--- Index for joining with blocks
-CREATE INDEX idx_block_anchors_anchor ON block_anchors(perm_anchor_id);
-```
-
-### Helper Function: Does Block Have ACL?
-
-```sql
--- Adapt this to match actual Notion schema
-CREATE OR REPLACE FUNCTION block_has_acl(p_block_id UUID)
-RETURNS BOOLEAN
-LANGUAGE sql
-STABLE
-AS $$
-    SELECT (b.permissions IS NOT NULL)
-    FROM blocks b
-    WHERE b.id = p_block_id;
-$$;
-```
-
-### Core Function: Recompute Subtree Anchors
-
-This is the heart of the implementation. When anything changes (insert, move, ACL toggle), we recompute anchors for the affected subtree.
-
-```sql
-CREATE OR REPLACE FUNCTION recompute_subtree_anchors(
-    p_root UUID,           -- Root of subtree to recompute
-    p_parent_anchor UUID   -- Anchor inherited from above this subtree
-)
-RETURNS void
-LANGUAGE sql
-AS $$
-    WITH RECURSIVE tree AS (
-        -- Base case: the root of the subtree
-        SELECT
-            b.id,
-            b.parent_id,
-            block_has_acl(b.id) AS has_acl,
-            CASE
-                WHEN block_has_acl(b.id) THEN b.id
-                ELSE p_parent_anchor
-            END AS anchor
-        FROM blocks b
-        WHERE b.id = p_root
-
-        UNION ALL
-
-        -- Recursive case: children
-        SELECT
-            c.id,
-            c.parent_id,
-            block_has_acl(c.id) AS has_acl,
-            CASE
-                WHEN block_has_acl(c.id) THEN c.id
-                ELSE t.anchor  -- Inherit from parent's computed anchor
-            END AS anchor
-        FROM blocks c
-        JOIN tree t ON c.parent_id = t.id
-    )
-    INSERT INTO block_anchors AS ba (block_id, perm_anchor_id)
-    SELECT id, anchor
-    FROM tree
-    ON CONFLICT (block_id)
-        DO UPDATE SET perm_anchor_id = EXCLUDED.perm_anchor_id
-        WHERE ba.perm_anchor_id IS DISTINCT FROM EXCLUDED.perm_anchor_id;
-$$;
-```
-
-**Performance note**: The recursive CTE traverses the subtree once. The `WHERE ... IS DISTINCT FROM` clause ensures we only write changed rows, reducing I/O.
-
-### Trigger Function: Handle Block Changes
-
-```sql
-CREATE OR REPLACE FUNCTION blocks_after_change()
-RETURNS TRIGGER
-LANGUAGE plpgsql
-AS $$
-DECLARE
-    v_parent_anchor UUID;
-BEGIN
-    -- Determine the anchor from above this block
-    IF NEW.parent_id IS NULL THEN
-        -- Root block (page) - it's its own anchor
-        v_parent_anchor := NEW.id;
-    ELSE
-        -- Look up parent's anchor
-        SELECT perm_anchor_id
-        INTO v_parent_anchor
-        FROM block_anchors
-        WHERE block_id = NEW.parent_id;
-
-        -- Parent might not be computed yet (replication ordering)
-        IF v_parent_anchor IS NULL THEN
-            -- Fallback: treat parent as its own anchor
-            -- This will be corrected when parent is processed
-            v_parent_anchor := NEW.parent_id;
-        END IF;
-    END IF;
-
-    -- Recompute this block and all descendants
-    PERFORM recompute_subtree_anchors(NEW.id, v_parent_anchor);
-
-    RETURN NEW;
-END;
-$$;
-```
-
-### Trigger: Fire on Replication Events
-
-```sql
--- Main trigger for inserts and relevant updates
-CREATE TRIGGER blocks_perm_anchor_trg
-AFTER INSERT OR UPDATE OF parent_id, permissions
-ON public.blocks
-FOR EACH ROW
-EXECUTE FUNCTION blocks_after_change();
-
--- CRITICAL: Enable trigger for logical replication
-ALTER TABLE public.blocks ENABLE REPLICA TRIGGER blocks_perm_anchor_trg;
-
--- Cleanup trigger for deletes
-CREATE OR REPLACE FUNCTION blocks_after_delete()
-RETURNS TRIGGER
-LANGUAGE plpgsql
-AS $$
-BEGIN
-    DELETE FROM block_anchors WHERE block_id = OLD.id;
-    -- Note: children will also be deleted (cascade) or their parent will change
-    RETURN OLD;
-END;
-$$;
-
-CREATE TRIGGER blocks_perm_anchor_delete_trg
-AFTER DELETE ON public.blocks
-FOR EACH ROW
-EXECUTE FUNCTION blocks_after_delete();
-
-ALTER TABLE public.blocks ENABLE REPLICA TRIGGER blocks_perm_anchor_delete_trg;
-```
-
-### Initial Backfill
-
-Run this once when setting up the replica:
-
-```sql
-DO $$
-DECLARE
-    r RECORD;
-BEGIN
-    -- Process each page root (parent_id IS NULL)
-    FOR r IN SELECT id FROM blocks WHERE parent_id IS NULL LOOP
-        PERFORM recompute_subtree_anchors(r.id, r.id);
-    END LOOP;
-END;
-$$;
-```
-
-### Electric Shape Configuration
-
-With `block_anchors` maintained on the replica, Electric shapes become simple:
-
-```typescript
-// User requests a page with their accessible blocks
-const stream = new ShapeStream({
-  url: `${ELECTRIC_URL}/v1/shape`,
-  params: {
-    table: 'blocks',
-    where: `
-      page_id = $1
-      AND id IN (
-        SELECT ba.block_id
-        FROM block_anchors ba
-        WHERE ba.perm_anchor_id IN (
-          SELECT anchor_id
-          FROM user_anchor_access
-          WHERE user_id = $2
-        )
-      )
-    `,
-    params: { 1: pageId, 2: userId }
-  }
-})
-```
-
-### Handling Move-In/Move-Out Scenarios
-
-The triggers handle all move scenarios automatically:
-
-| Scenario | What Triggers | Result |
-|----------|---------------|--------|
-| Block inserted | `AFTER INSERT` | New block gets anchor from parent |
-| Block moved (parent changed) | `UPDATE OF parent_id` | Subtree reanchored to new parent's anchor |
-| ACL added to block | `UPDATE OF permissions` | This block becomes anchor for descendants |
-| ACL removed from block | `UPDATE OF permissions` | This block inherits anchor from parent |
-| Block deleted | `AFTER DELETE` | Anchor row removed |
-
-### Pros & Cons
-
-**Pros:**
-- No changes to primary database
-- All recursion happens in Postgres (proven, debuggable)
-- Electric just sees a regular column - no new features needed
-- Pattern is generalizable ("trigger-maintained derived columns on replica")
-- Can be set up without Electric code changes
-
-**Cons:**
-- Requires managing a read replica
-- Trigger execution adds latency to replication
-- Large subtree moves can be expensive (but bounded by subtree size)
-
----
-
-## Option B: Electric-Side Derived Index
-
-If the read-replica approach isn't feasible, Electric can maintain the permission anchor mapping internally.
-
-### Architecture
+## Architecture
 
 ```
 ┌─────────────────────┐
-│   Primary Postgres  │
+│   Source Postgres   │
 │                     │
 │  blocks (original)  │
 └──────────┬──────────┘
            │ WAL Stream
            ▼
-┌─────────────────────────────────────────────────────┐
-│                Electric Sync Service                 │
-│  ┌───────────────────────────────────────────────┐  │
-│  │          Permission Anchor Index              │  │
-│  │  ┌─────────────────────────────────────────┐  │  │
-│  │  │  block_id -> perm_anchor_id mapping     │  │  │
-│  │  │  (persistent KV store or embedded DB)   │  │  │
-│  │  └─────────────────────────────────────────┘  │  │
-│  │                                               │  │
-│  │  Subscribes to: blocks(id, parent_id, has_acl)│  │
-│  │  Updates index on INSERT/UPDATE/DELETE       │  │
-│  └───────────────────────────────────────────────┘  │
-│                                                     │
-│  Shape filtering uses index as virtual column       │
-└─────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│                    Electric Sync Service                         │
+│                                                                  │
+│  ┌────────────────────────────────────────────────────────────┐  │
+│  │              Permission Anchor Index                        │  │
+│  │                                                             │  │
+│  │  ETS Tables:                                                │  │
+│  │    anchors_table:  block_id -> {perm_anchor_id, has_acl}   │  │
+│  │    children_table: parent_id -> [child_ids]                 │  │
+│  │                                                             │  │
+│  │  Subscribes to: blocks(id, parent_id, permissions)          │  │
+│  │  Updates on: INSERT, UPDATE of parent_id/permissions, DELETE │  │
+│  └────────────────────────────────────────────────────────────┘  │
+│                              │                                    │
+│                              ▼                                    │
+│  ┌────────────────────────────────────────────────────────────┐  │
+│  │                   Shape Filter                              │  │
+│  │                                                             │  │
+│  │  Uses perm_anchor_id during WHERE clause evaluation         │  │
+│  │  Filter: "Is record's anchor in user's accessible set?"     │  │
+│  └────────────────────────────────────────────────────────────┘  │
+│                                                                  │
+└──────────────────────────────────────────────────────────────────┘
 ```
 
-### Implementation Location in Codebase
+---
 
-Based on the codebase exploration, this would be implemented as a new module in the shapes subsystem:
+## Implementation
+
+### File Structure
 
 ```
-packages/sync-service/lib/electric/shapes/
-├── shape.ex                          # Shape struct (add perm_anchor support)
-├── consumer/
-│   ├── derived_index.ex              # NEW: Base module for derived indexes
-│   └── permission_anchor_index.ex    # NEW: Permission anchor implementation
-└── filter/
-    └── permission_anchor_filter.ex   # NEW: Filter using the index
+packages/sync-service/lib/electric/shapes/tree_index/
+├── permission_anchor_index.ex  # Main GenServer maintaining the index
+├── supervisor.ex               # Supervisor for tree index processes
+├── change_handler.ex           # Routes WAL changes to indexes
+└── anchor_filter.ex            # Filter integration for shapes
 ```
 
-### Data Structures
+### Core Module: PermissionAnchorIndex
+
+**Location**: `lib/electric/shapes/tree_index/permission_anchor_index.ex`
+
+The index is a GenServer that:
+1. Maintains ETS tables for O(1) lookups
+2. Processes changes from the WAL stream
+3. Reanchors subtrees when blocks move or ACLs change
+
+#### Data Structures
 
 ```elixir
-# packages/sync-service/lib/electric/shapes/consumer/permission_anchor_index.ex
+# anchors_table: block_id -> {perm_anchor_id, has_acl}
+:ets.new(:perm_anchor_stackid_public_blocks, [:set, :public, :named_table])
 
-defmodule Electric.Shapes.Consumer.PermissionAnchorIndex do
-  @moduledoc """
-  Maintains a mapping of block_id -> perm_anchor_id for tree-structured
-  permission inheritance.
+# children_table: parent_id -> child_id (bag for multiple children)
+:ets.new(:perm_children_stackid_public_blocks, [:bag, :public, :named_table])
+```
 
-  The index is updated incrementally from the WAL stream and can be
-  queried during shape filtering.
-  """
+Using ETS with `:public` access and `:named_table` allows:
+- Direct lookups without GenServer calls (for filtering hot path)
+- Read concurrency across shape consumers
+- Named access from any process
 
-  use GenServer
+#### Configuration
 
-  defstruct [
-    :stack_id,
-    :table_relation,        # {schema, table} being indexed
-    :parent_column,         # Column name containing parent reference
-    :has_acl_column,        # Column name or function to check ACL presence
-    :ets_table,             # ETS table for block_id -> anchor lookups
-    :children_table         # ETS table for parent_id -> [child_ids] (for reanchoring)
-  ]
+```elixir
+%{
+  stack_id: "my-stack",
+  table: {"public", "blocks"},
+  id_column: "id",
+  parent_column: "parent_id",
+  has_acl_column: "permissions"  # or {:not_null, "col"} or {:expr, fn -> ... end}
+}
+```
 
-  @type t :: %__MODULE__{
-    stack_id: String.t(),
-    table_relation: Electric.relation(),
-    parent_column: String.t(),
-    has_acl_column: String.t(),
-    ets_table: :ets.tid(),
-    children_table: :ets.tid()
-  }
+#### Core Algorithm: Compute Anchor
 
-  # ... implementation
+```elixir
+def compute_anchor(block_id, parent_id, has_acl, state) do
+  if has_acl do
+    # Block has its own ACL - it's its own anchor
+    block_id
+  else
+    # Inherit from parent
+    get_parent_anchor(parent_id, state) || block_id
+  end
+end
+
+defp get_parent_anchor(nil, _state), do: nil
+defp get_parent_anchor(parent_id, state) do
+  case :ets.lookup(state.anchors_table, parent_id) do
+    [{^parent_id, anchor_id, _has_acl}] -> anchor_id
+    [] -> nil
+  end
 end
 ```
 
-### Index Operations
+#### Core Algorithm: Reanchor Subtree
+
+When a block moves or its ACL changes, we need to update anchors for the entire subtree:
 
 ```elixir
-defmodule Electric.Shapes.Consumer.PermissionAnchorIndex do
-  # ... struct definition above
+def reanchor_subtree(root_id, new_anchor, state) do
+  case :ets.lookup(state.anchors_table, root_id) do
+    [{^root_id, old_anchor, has_acl}] ->
+      # Compute actual anchor (self if has_acl, otherwise inherited)
+      actual_anchor = if has_acl, do: root_id, else: new_anchor
 
-  @doc """
-  Process a new record from the WAL stream.
-  """
-  def handle_insert(state, %{record: record}) do
-    block_id = Map.fetch!(record, "id")
-    parent_id = Map.get(record, state.parent_column)
-    has_acl = check_has_acl(record, state.has_acl_column)
-
-    # Determine anchor
-    anchor =
-      if has_acl do
-        block_id
-      else
-        get_parent_anchor(state, parent_id) || parent_id
+      # Update if changed
+      if actual_anchor != old_anchor do
+        :ets.insert(state.anchors_table, {root_id, actual_anchor, has_acl})
       end
 
-    # Store mapping
-    :ets.insert(state.ets_table, {block_id, anchor, has_acl})
+      # Propagate to children (unless this block has own ACL - boundary)
+      unless has_acl do
+        propagate_to_children(root_id, actual_anchor, state)
+      end
 
-    # Track in children index for future reanchoring
-    if parent_id do
-      add_child(state.children_table, parent_id, block_id)
-    end
-
-    state
+    [] ->
+      :ok  # Not in index yet
   end
+end
 
-  @doc """
-  Process an update from the WAL stream.
-  Handles: parent_id changes (moves), ACL changes
-  """
-  def handle_update(state, %{old_record: old, record: new}) do
-    block_id = Map.fetch!(new, "id")
-    old_parent = Map.get(old, state.parent_column)
-    new_parent = Map.get(new, state.parent_column)
-    old_has_acl = check_has_acl(old, state.has_acl_column)
-    new_has_acl = check_has_acl(new, state.has_acl_column)
+defp propagate_to_children(parent_id, parent_anchor, state) do
+  children = get_children(parent_id, state)
 
-    cond do
-      # Parent changed (block moved)
-      old_parent != new_parent ->
-        # Remove from old parent's children
-        remove_child(state.children_table, old_parent, block_id)
-        # Add to new parent's children
-        add_child(state.children_table, new_parent, block_id)
-        # Reanchor this block and descendants
-        new_anchor = compute_anchor(state, block_id, new_parent, new_has_acl)
-        reanchor_subtree(state, block_id, new_anchor)
-
-      # ACL status changed
-      old_has_acl != new_has_acl ->
-        if new_has_acl do
-          # Block now has its own ACL - becomes its own anchor
-          reanchor_subtree(state, block_id, block_id)
+  Enum.each(children, fn child_id ->
+    case :ets.lookup(state.anchors_table, child_id) do
+      [{^child_id, _old, has_acl}] ->
+        if has_acl do
+          :ok  # ACL boundary - stop propagation
         else
-          # Block no longer has ACL - inherit from parent
-          parent_anchor = get_parent_anchor(state, new_parent) || new_parent
-          reanchor_subtree(state, block_id, parent_anchor)
+          :ets.insert(state.anchors_table, {child_id, parent_anchor, false})
+          propagate_to_children(child_id, parent_anchor, state)
         end
-
-      true ->
-        # No permission-relevant change
-        :ok
-    end
-
-    state
-  end
-
-  @doc """
-  Reanchor a subtree when its root's anchor changes.
-  Uses BFS to propagate new anchor, stopping at ACL boundaries.
-  """
-  defp reanchor_subtree(state, root_id, new_anchor) do
-    # Update root
-    case :ets.lookup(state.ets_table, root_id) do
-      [{^root_id, _old_anchor, has_acl}] ->
-        actual_anchor = if has_acl, do: root_id, else: new_anchor
-        :ets.insert(state.ets_table, {root_id, actual_anchor, has_acl})
-
-        # Only propagate if this block doesn't have its own ACL
-        unless has_acl do
-          propagate_to_children(state, root_id, actual_anchor)
-        end
-
       [] ->
-        # Block not in index yet - will be handled on insert
         :ok
     end
+  end)
+end
+```
+
+**Complexity**: O(size of affected subtree), not O(total blocks).
+
+### Change Processing
+
+The index processes three types of changes:
+
+#### 1. Insert
+
+```elixir
+defp handle_insert(record, state) do
+  block_id = get_id(record, state)
+  parent_id = get_parent_id(record, state)
+  has_acl = check_has_acl(record, state)
+
+  anchor_id = compute_anchor(block_id, parent_id, has_acl, state)
+
+  :ets.insert(state.anchors_table, {block_id, anchor_id, has_acl})
+
+  if parent_id do
+    :ets.insert(state.children_table, {parent_id, block_id})
   end
 
-  defp propagate_to_children(state, parent_id, parent_anchor) do
-    children = get_children(state.children_table, parent_id)
+  state
+end
+```
 
-    Enum.each(children, fn child_id ->
-      case :ets.lookup(state.ets_table, child_id) do
-        [{^child_id, _old_anchor, has_acl}] ->
-          if has_acl do
-            # Child has own ACL - stop propagation here
-            :ok
-          else
-            # Update child and recurse
-            :ets.insert(state.ets_table, {child_id, parent_anchor, false})
-            propagate_to_children(state, child_id, parent_anchor)
-          end
+#### 2. Update (Move or ACL Change)
 
-        [] ->
-          :ok
-      end
-    end)
-  end
+```elixir
+defp handle_update(old_record, new_record, state) do
+  block_id = get_id(new_record, state)
+  old_parent = get_parent_id(old_record, state)
+  new_parent = get_parent_id(new_record, state)
+  old_has_acl = check_has_acl(old_record, state)
+  new_has_acl = check_has_acl(new_record, state)
 
-  @doc """
-  Look up the permission anchor for a block.
-  Used during shape filtering.
-  """
-  def get_anchor(state, block_id) do
-    case :ets.lookup(state.ets_table, block_id) do
-      [{^block_id, anchor, _has_acl}] -> anchor
-      [] -> nil
-    end
-  end
+  cond do
+    # Block moved
+    old_parent != new_parent ->
+      # Update children index
+      :ets.delete_object(state.children_table, {old_parent, block_id})
+      :ets.insert(state.children_table, {new_parent, block_id})
 
-  # Helper functions
-  defp get_parent_anchor(state, nil), do: nil
-  defp get_parent_anchor(state, parent_id), do: get_anchor(state, parent_id)
+      # Reanchor subtree
+      new_anchor = compute_anchor(block_id, new_parent, new_has_acl, state)
+      reanchor_subtree(block_id, new_anchor, state)
 
-  defp check_has_acl(record, column) do
-    value = Map.get(record, column)
-    value != nil and value != ""
-  end
+    # ACL changed
+    old_has_acl != new_has_acl ->
+      new_anchor = if new_has_acl, do: block_id, else: get_parent_anchor(new_parent, state)
+      reanchor_subtree(block_id, new_anchor, state)
 
-  defp add_child(children_table, parent_id, child_id) do
-    :ets.insert(children_table, {parent_id, child_id})
-  end
-
-  defp remove_child(children_table, parent_id, child_id) do
-    :ets.delete_object(children_table, {parent_id, child_id})
-  end
-
-  defp get_children(children_table, parent_id) do
-    :ets.lookup(children_table, parent_id)
-    |> Enum.map(fn {_parent, child} -> child end)
-  end
-
-  defp compute_anchor(state, block_id, parent_id, has_acl) do
-    if has_acl do
-      block_id
-    else
-      get_parent_anchor(state, parent_id) || parent_id
-    end
+    true ->
+      state
   end
 end
 ```
 
-### Integration with Shape Consumer
-
-The permission anchor index would integrate with the existing Consumer module:
+#### 3. Delete
 
 ```elixir
-# In packages/sync-service/lib/electric/shapes/consumer.ex
+defp handle_delete(record, state) do
+  block_id = get_id(record, state)
+  parent_id = get_parent_id(record, state)
 
-defmodule Electric.Shapes.Consumer do
-  # ... existing code ...
+  :ets.delete(state.anchors_table, block_id)
 
-  # Add permission anchor index to state
-  defstruct [
-    # ... existing fields ...
-    :permission_anchor_index  # NEW
-  ]
-
-  # When processing transactions, update the index
-  defp process_change(state, change) do
-    # ... existing change processing ...
-
-    # Update permission anchor index if configured
-    state =
-      if state.permission_anchor_index do
-        PermissionAnchorIndex.handle_change(state.permission_anchor_index, change)
-        state
-      else
-        state
-      end
-
-    # ... rest of processing ...
+  if parent_id do
+    :ets.delete_object(state.children_table, {parent_id, block_id})
   end
+
+  state
 end
 ```
 
 ### Filter Integration
 
-For shape filtering to use the permission anchor:
+**Location**: `lib/electric/shapes/tree_index/anchor_filter.ex`
 
 ```elixir
-# In packages/sync-service/lib/electric/shapes/filter/permission_anchor_filter.ex
+@doc """
+Check if a record passes the permission anchor filter.
+"""
+def includes_record?(stack_id, table, record, id_column, accessible_anchors) do
+  block_id = Map.get(record, id_column)
 
-defmodule Electric.Shapes.Filter.PermissionAnchorFilter do
-  @moduledoc """
-  Filter that uses the permission anchor index to check if a record
-  should be included in a shape based on ACL membership.
-  """
+  case PermissionAnchorIndex.get_anchor(stack_id, table, block_id) do
+    nil ->
+      false  # Not in index - fail safe
 
-  alias Electric.Shapes.Consumer.PermissionAnchorIndex
+    anchor_id ->
+      MapSet.member?(accessible_anchors, anchor_id)
+  end
+end
 
-  @doc """
-  Check if a record passes the permission anchor filter.
+@doc """
+Filter a batch of records (more efficient).
+"""
+def filter_records(stack_id, table, records, id_column, accessible_anchors) do
+  block_ids = Enum.map(records, &Map.get(&1, id_column))
+  anchors_map = PermissionAnchorIndex.get_anchors_for_blocks(stack_id, table, block_ids)
 
-  The shape defines which anchors the user has access to.
-  This function checks if the record's anchor is in that set.
-  """
-  def includes_record?(index, record, accessible_anchors) do
-    block_id = Map.fetch!(record, "id")
+  Enum.filter(records, fn record ->
+    block_id = Map.get(record, id_column)
+    anchor_id = Map.get(anchors_map, block_id)
+    anchor_id != nil and MapSet.member?(accessible_anchors, anchor_id)
+  end)
+end
+```
 
-    case PermissionAnchorIndex.get_anchor(index, block_id) do
-      nil ->
-        # Block not in index - might be newly inserted
-        # Default to excluding (conservative)
-        false
+### Integration with ShapeLogCollector
 
-      anchor ->
-        MapSet.member?(accessible_anchors, anchor)
+**Location**: `lib/electric/shapes/tree_index/change_handler.ex`
+
+The ChangeHandler routes WAL changes to tree indexes **before** shapes process them:
+
+```elixir
+def process_changes(stack_id, changes, opts \\ []) do
+  changes_by_table = group_by_table(changes)
+
+  Enum.each(changes_by_table, fn {table, table_changes} ->
+    case GenServer.whereis(PermissionAnchorIndex.name(stack_id, table)) do
+      nil -> :ok  # No index for this table
+      pid ->
+        Enum.each(table_changes, fn change ->
+          GenServer.cast(pid, {:handle_change, change})
+        end)
     end
-  end
+  end)
 end
 ```
 
-### Persistence Considerations
+### Integration Point in ShapeLogCollector
 
-For production use, the ETS-based index should be backed by persistent storage:
+To integrate with the existing codebase, add to `handle_txn_fragment/2` in `shape_log_collector.ex`:
 
 ```elixir
-defmodule Electric.Shapes.Consumer.PermissionAnchorIndex.Storage do
-  @moduledoc """
-  Persistent storage for permission anchor index.
-  Options:
-  1. Embedded SQLite (recommended for large datasets)
-  2. DETS (simple but limited)
-  3. RocksDB via ExLevelDB
-  """
+defp handle_txn_fragment(state, txn_fragment) do
+  # Update tree indexes first (ensures anchors are current before shape filtering)
+  TreeIndex.ChangeHandler.process_transaction(state.stack_id, txn_fragment, async: false)
 
-  # SQLite implementation sketch
-  def init_sqlite(path) do
-    {:ok, conn} = Exqlite.Sqlite3.open(path)
-
-    Exqlite.Sqlite3.execute(conn, """
-      CREATE TABLE IF NOT EXISTS anchors (
-        block_id TEXT PRIMARY KEY,
-        perm_anchor_id TEXT NOT NULL,
-        has_acl INTEGER NOT NULL
-      )
-    """)
-
-    Exqlite.Sqlite3.execute(conn, """
-      CREATE TABLE IF NOT EXISTS children (
-        parent_id TEXT,
-        child_id TEXT,
-        PRIMARY KEY (parent_id, child_id)
-      )
-    """)
-
-    {:ok, conn}
-  end
+  # Then proceed with existing shape routing...
+  # ...existing code...
 end
 ```
-
-### Pros & Cons
-
-**Pros:**
-- No read replica needed
-- All logic contained within Electric
-- Generalizable as a "tree inheritance" module
-- Can be optimized for Electric's specific access patterns
-
-**Cons:**
-- Significant new code in Electric
-- Need to handle persistence/recovery
-- Need adjacency index (parent->children) for efficient reanchoring
-- Adds complexity to Electric's architecture
 
 ---
 
-## Option C: Invalidation-Only Mode
+## Usage Example
 
-A simpler approach where Electric handles data sync but not permission filtering.
+### 1. Configure the Index
 
-### Architecture
+In stack configuration:
 
-```
-┌─────────────────────┐
-│   Primary Postgres  │
-│                     │
-│  blocks (original)  │
-└──────────┬──────────┘
-           │
-           ▼
-┌─────────────────────────────────────────────────────┐
-│                Electric Sync Service                 │
-│                                                     │
-│  Shape: blocks WHERE page_id = $1                   │
-│  (No permission filtering - syncs all page blocks)  │
-│                                                     │
-│  Emits: "page P changed" events                     │
-└──────────────────────┬──────────────────────────────┘
-                       │
-                       ▼
-┌─────────────────────────────────────────────────────┐
-│               Client Application                     │
-│                                                     │
-│  On "page changed" event:                           │
-│  1. Query backend for user's permitted blocks       │
-│  2. Filter local shape data                         │
-│  3. Re-render UI                                    │
-└─────────────────────────────────────────────────────┘
+```elixir
+tree_indexes: [
+  %{
+    type: :permission_anchor,
+    table: {"public", "blocks"},
+    id_column: "id",
+    parent_column: "parent_id",
+    has_acl_column: "permissions"
+  }
+]
 ```
 
-### Implementation
-
-Electric shape syncs all blocks for a page:
+### 2. Create a Shape with Permission Filtering
 
 ```typescript
+// Client builds shape request with user's accessible anchors
+const userAnchors = await fetchUserAnchors(userId);
+
 const stream = new ShapeStream({
   url: `${ELECTRIC_URL}/v1/shape`,
   params: {
     table: 'blocks',
     where: `page_id = $1`,
-    params: { 1: pageId }
+    params: { 1: pageId },
+    // Custom parameter for anchor filtering
+    anchor_filter: JSON.stringify(userAnchors)
   }
-})
+});
 ```
 
-Client maintains permission state separately:
+### 3. Server-Side Filter Integration
 
-```typescript
-// Fetch user's accessible anchors from backend
-async function fetchAccessibleAnchors(userId: string, pageId: string) {
-  const response = await fetch(`/api/permissions?user=${userId}&page=${pageId}`)
-  return new Set(await response.json())
-}
+In shape processing, apply anchor filter after WHERE clause:
 
-// Filter blocks based on permission anchors
-function filterBlocksByPermission(blocks: Block[], accessibleAnchors: Set<string>) {
-  const blockMap = new Map(blocks.map(b => [b.id, b]))
-
-  function getAnchor(block: Block): string {
-    if (block.permissions != null) return block.id
-    const parent = blockMap.get(block.parent_id)
-    return parent ? getAnchor(parent) : block.id
-  }
-
-  return blocks.filter(block => accessibleAnchors.has(getAnchor(block)))
-}
-
-// Usage
-const shape = new Shape(stream)
-let accessibleAnchors = await fetchAccessibleAnchors(userId, pageId)
-
-shape.subscribe(async ({ rows }) => {
-  // Re-filter on any change
-  const visibleBlocks = filterBlocksByPermission(rows, accessibleAnchors)
-  renderPage(visibleBlocks)
-})
-
-// Listen for permission changes (separate channel)
-permissionEvents.on('changed', async () => {
-  accessibleAnchors = await fetchAccessibleAnchors(userId, pageId)
-  const visibleBlocks = filterBlocksByPermission(shape.currentValue, accessibleAnchors)
-  renderPage(visibleBlocks)
-})
+```elixir
+def convert_with_anchor_filter(shape, change, anchor_config) do
+  case Shape.convert_change(shape, change, opts) do
+    [] -> []
+    [filtered_change] ->
+      if AnchorFilter.includes_record?(
+        stack_id,
+        shape.root_table,
+        filtered_change.record,
+        anchor_config.id_column,
+        anchor_config.accessible_anchors
+      ) do
+        [filtered_change]
+      else
+        []
+      end
+  end
+end
 ```
-
-### Pros & Cons
-
-**Pros:**
-- Minimal Electric changes needed
-- Client has full control over permission logic
-- Easy to implement quickly
-
-**Cons:**
-- All page blocks synced to client (privacy concern?)
-- Client must re-run permission filtering on every change
-- Doesn't solve the core value proposition (instant permission-aware sync)
-- Permission changes require separate notification channel
 
 ---
 
-## Comparison Matrix
+## Move-In/Move-Out Semantics
 
-| Aspect | Option A: Replica Triggers | Option B: Electric Index | Option C: Invalidation |
-|--------|---------------------------|-------------------------|------------------------|
-| **Primary DB changes** | None | None | None |
-| **Electric code changes** | Minimal | Significant | Minimal |
-| **Infrastructure** | Read replica | None | None |
-| **Permission revocation latency** | ~100ms | ~50ms | ~100ms + client compute |
-| **Memory usage** | In Postgres | In Electric | In client |
-| **Generalizability** | High | High | Low |
-| **Implementation effort** | Medium | High | Low |
-| **Operational complexity** | Medium | Low | Low |
+The index maintains correct semantics for all move scenarios:
 
----
+| Scenario | Index Update | Shape Effect |
+|----------|--------------|--------------|
+| Block inserted under accessible anchor | Anchor computed from parent | Move-in to shape |
+| Block moved to accessible parent | Subtree reanchored | Move-in (query needed) |
+| Block moved to inaccessible parent | Subtree reanchored | Move-out (immediate) |
+| ACL added (new boundary) | Block becomes own anchor | Depends on new ACL |
+| ACL removed | Inherits from parent | Depends on parent anchor |
 
-## Recommended Approach
-
-**For the Notion partnership**: Start with **Option A (Read Replica with Triggers)**.
-
-**Rationale:**
-1. No changes needed to Notion's primary database
-2. No new features needed in Electric (uses existing subquery support)
-3. All recursion handled by proven Postgres triggers
-4. Pattern is reusable for other customers with hierarchical ACLs
-5. Read replica is a common pattern they likely already use
-
-**Future direction**: If demand warrants, implement **Option B** as a first-class Electric feature called "Tree Inheritance Index" that can be enabled for any table with parent-child relationships.
+**Key property**: Move-outs are immediate (anchor changes propagate instantly). Move-ins may require querying for newly-visible blocks.
 
 ---
 
-## Implementation Checklist for Option A
+## Performance Characteristics
 
-### Phase 1: Replica Setup (Week 1)
+### Time Complexity
 
-- [ ] Set up logical replication subscriber database
-- [ ] Create `block_anchors` table
-- [ ] Implement `block_has_acl()` function (adapted to actual schema)
-- [ ] Implement `recompute_subtree_anchors()` function
-- [ ] Create and enable replica triggers
+| Operation | Complexity |
+|-----------|------------|
+| Lookup anchor for one block | O(1) ETS lookup |
+| Insert new block | O(1) |
+| Move block (no children) | O(1) |
+| Move subtree of size N | O(N) to reanchor |
+| ACL change affecting N descendants | O(N) to reanchor |
 
-### Phase 2: Backfill & Verification (Week 2)
+### Space Complexity
 
-- [ ] Run initial backfill for all existing blocks
-- [ ] Verify anchor computation matches expected results
-- [ ] Test move scenarios (indent, outdent, cross-page move)
-- [ ] Test ACL toggle scenarios
-- [ ] Load test with large page trees
+- **anchors_table**: O(num_blocks) entries
+- **children_table**: O(num_blocks) entries
 
-### Phase 3: Electric Integration (Week 3)
+### Memory Estimate
 
-- [ ] Configure Electric to connect to replica
-- [ ] Create shape definition using `block_anchors`
-- [ ] Implement `user_anchor_access` table/view
-- [ ] End-to-end test permission filtering
-- [ ] Test move-in/move-out behavior
-
-### Phase 4: Performance & Polish (Week 4)
-
-- [ ] Benchmark trigger performance on large subtrees
-- [ ] Add monitoring for anchor computation latency
-- [ ] Document operational procedures
-- [ ] Create runbook for common issues
+For 1 million blocks:
+- anchors_table: ~1M entries × ~100 bytes ≈ 100 MB
+- children_table: ~1M entries × ~80 bytes ≈ 80 MB
+- **Total**: ~180 MB per indexed table
 
 ---
 
-## Appendix: Electric Subquery Implementation Reference
+## Comparison with Existing Subquery System
 
-The current Electric subquery implementation (relevant code locations):
+The Permission Anchor Index complements Electric's existing subquery support:
 
-- **Shape struct**: `packages/sync-service/lib/electric/shapes/shape.ex`
-  - `shape_dependencies` - list of nested shapes from subqueries
-  - `shape_dependencies_handles` - handles to dependency shapes
-  - `tag_structure` - for tracking which dependency caused row inclusion
+| Aspect | Current Subqueries | Permission Anchor Index |
+|--------|-------------------|------------------------|
+| **Use case** | Cross-table membership | Recursive tree inheritance |
+| **Location** | `shape/subquery_moves.ex` | `tree_index/permission_anchor_index.ex` |
+| **State storage** | In Consumer's `move_handling_state` | Dedicated ETS tables |
+| **Triggered by** | Dependency shape changes | All table changes |
+| **Filtering** | Via `extra_refs` in `convert_change` | Via `anchor_filter` parameter |
 
-- **Subquery handling**: `packages/sync-service/lib/electric/shapes/shape/subquery_moves.ex`
-  - `move_in_where_clause/3` - transforms `IN (SELECT...)` to `= ANY($1::type[])`
-  - `make_move_out_control_message/4` - generates control messages for removed values
-  - `move_in_tag_structure/1` - generates tag structure for tracking
-
-- **Move-in state**: `packages/sync-service/lib/electric/shapes/consumer/move_ins.ex`
-  - Tracks waiting/filtering move-in states
-  - Manages snapshot visibility for concurrent move-ins
-
-- **Move handling**: `packages/sync-service/lib/electric/shapes/consumer/move_handling.ex`
-  - `process_move_ins/3` - handles new values in dependency shapes
-  - `process_move_outs/3` - handles removed values
-
-**Current limitations** (from code TODOs):
-- Single subquery only (multi-subquery support planned)
-- Single column per pattern in tag structure
-- No nested subquery optimization
+The two systems can work together - a shape could use subqueries for user→group→anchor resolution while using the anchor index for block→anchor lookups.
 
 ---
 
-## Appendix: Test Scenarios
+## Limitations and Future Work
 
-### Scenario 1: Basic Permission Inheritance
+### Current Limitations
 
-```
-Setup:
-  Page (has ACL: admin)
-  ├── Block A (no ACL)
-  └── Block B (no ACL)
+1. **Single parent column**: Assumes one parent_id column per table
+2. **Synchronous reanchoring**: Large subtree moves block change processing
+3. **Memory-based**: Index is in ETS, not persisted across restarts
+4. **No partial initialization**: Must process all blocks on startup
 
-User: admin (has access to Page anchor)
+### Future Improvements
 
-Expected:
-  - User sees: Page, Block A, Block B
-  - All blocks have perm_anchor_id = Page.id
-```
+1. **Async reanchoring**: Process subtree updates in background worker
+2. **Persistent storage**: Back ETS with embedded SQLite for large indexes
+3. **Incremental initialization**: Build index lazily as blocks are queried
+4. **Multi-column inheritance**: Support multiple inheritance paths
 
-### Scenario 2: Mid-Tree ACL Boundary
+---
 
-```
-Setup:
-  Page (has ACL: admin)
-  ├── Block A (no ACL)
-  │   └── Block B (has ACL: editor)
-  │       └── Block C (no ACL)
-  └── Block D (no ACL)
+## Testing Strategy
 
-User: editor (has access to Block B anchor)
+### Unit Tests
 
-Expected:
-  - User sees: Block B, Block C
-  - Block B anchor = Block B
-  - Block C anchor = Block B
-```
+```elixir
+describe "PermissionAnchorIndex" do
+  test "insert block without ACL inherits parent anchor" do
+    insert_block("parent", nil, true)
+    assert get_anchor("parent") == "parent"
 
-### Scenario 3: Block Move Changes Visibility
+    insert_block("child", "parent", false)
+    assert get_anchor("child") == "parent"
+  end
 
-```
-Initial:
-  Page (has ACL: admin)
-  ├── Block A (has ACL: team1)
-  │   └── Block B (no ACL)
-  └── Block C (has ACL: team2)
+  test "move block reanchors subtree" do
+    # Build tree: root -> A -> B -> C
+    insert_block("root", nil, true)
+    insert_block("A", "root", false)
+    insert_block("B", "A", false)
+    insert_block("C", "B", false)
 
-User: team1 member
+    assert get_anchor("C") == "root"
 
-Move Block B under Block C:
-  Page
-  ├── Block A (has ACL: team1)
-  └── Block C (has ACL: team2)
-      └── Block B (no ACL)
+    # Add ACL boundary at B
+    update_acl("B", true)
+    assert get_anchor("C") == "B"
+  end
 
-Expected:
-  - Before move: User sees Block A, Block B
-  - After move: User sees only Block A
-  - Block B's anchor changes from Block A to Block C
+  test "delete block removes from index" do
+    insert_block("parent", nil, true)
+    insert_block("child", "parent", false)
+
+    delete_block("child")
+    assert get_anchor("child") == nil
+  end
+end
 ```
 
-### Scenario 4: ACL Removed Mid-Tree
+### Integration Tests
 
+1. **End-to-end with shapes**: Verify records correctly filtered by anchor
+2. **Concurrent updates**: Multiple moves don't corrupt index
+3. **Large subtree moves**: Performance under load
+4. **Recovery**: Index rebuilt correctly after restart
+
+---
+
+## Implementation Checklist
+
+### Phase 1: Core Implementation (Complete)
+
+- [x] `PermissionAnchorIndex` GenServer with ETS storage
+- [x] Insert/Update/Delete handling
+- [x] Subtree reanchoring algorithm
+- [x] `AnchorFilter` for shape integration
+- [x] `ChangeHandler` for routing changes
+- [x] `Supervisor` for process management
+
+### Phase 2: Integration
+
+- [ ] Add to `StackSupervisor` startup
+- [ ] Hook into `ShapeLogCollector.handle_txn_fragment/2`
+- [ ] Add configuration parsing
+- [ ] Add `anchor_filter` shape parameter
+- [ ] Integration tests
+
+### Phase 3: Production Hardening
+
+- [ ] Persistent storage option (SQLite)
+- [ ] Metrics/monitoring (anchor count, reanchor latency)
+- [ ] Error recovery and resilience
+- [ ] Load testing with realistic data
+
+### Phase 4: Generalization
+
+- [ ] Extract generic "tree inheritance" pattern
+- [ ] Support other inheritance rules
+- [ ] Documentation and examples
+
+---
+
+## Full API Reference
+
+### PermissionAnchorIndex
+
+```elixir
+# Start the index
+{:ok, pid} = PermissionAnchorIndex.start_link(config)
+
+# Query single anchor
+anchor = PermissionAnchorIndex.get_anchor(stack_id, table, block_id)
+
+# Query multiple anchors (batch)
+anchors = PermissionAnchorIndex.get_anchors_for_blocks(stack_id, table, block_ids)
+
+# Check if block has own ACL
+has_acl? = PermissionAnchorIndex.has_acl?(stack_id, table, block_id)
+
+# Get all blocks with specific anchor
+block_ids = PermissionAnchorIndex.get_blocks_with_anchor(stack_id, table, anchor_id)
+
+# Get all unique anchors in index
+anchors = PermissionAnchorIndex.all_anchors(stack_id, table)
 ```
-Initial:
-  Page (has ACL: admin)
-  └── Block A (has ACL: team1)
-      └── Block B (no ACL)
 
-Remove ACL from Block A:
-  Page (has ACL: admin)
-  └── Block A (no ACL)
-      └── Block B (no ACL)
+### AnchorFilter
 
-Expected:
-  - Block A anchor: Page (was Block A)
-  - Block B anchor: Page (was Block A)
-  - Users who had access via Block A now need Page access
+```elixir
+# Check single record
+passes? = AnchorFilter.includes_record?(stack_id, table, record, id_col, accessible)
+
+# Filter batch of records
+filtered = AnchorFilter.filter_records(stack_id, table, records, id_col, accessible)
+
+# Build reusable filter function
+filter_fn = AnchorFilter.build_filter_fn(stack_id, table, id_col, accessible)
+
+# Get blocks visible for anchor set
+blocks = AnchorFilter.blocks_for_anchors(stack_id, table, anchor_ids)
+```
+
+### ChangeHandler
+
+```elixir
+# Process list of changes
+:ok = ChangeHandler.process_changes(stack_id, changes)
+
+# Process full transaction
+:ok = ChangeHandler.process_transaction(stack_id, txn)
+
+# Check if table has index
+has_index? = ChangeHandler.has_index_for_table?(stack_id, table)
 ```
 
 ---
 
 ## References
 
-- [Electric Shapes Documentation](https://electric-sql.com/docs/guides/shapes)
-- [Electric Subquery Support](https://github.com/electric-sql/electric/discussions/2931)
-- [Notion Block Data Model](https://www.notion.so/blog/data-model-behind-notion)
-- [PostgreSQL Logical Replication Row Filtering](https://www.postgresql.org/docs/17/logical-replication-row-filter.html)
+- **Prototype code**: `packages/sync-service/lib/electric/shapes/tree_index/`
+- **Existing subquery system**: `packages/sync-service/lib/electric/shapes/shape/subquery_moves.ex`
+- **Materializer pattern**: `packages/sync-service/lib/electric/shapes/consumer/materializer.ex`
+- **Electric Shapes docs**: https://electric-sql.com/docs/guides/shapes
+- **Notion data model**: https://www.notion.so/blog/data-model-behind-notion
