@@ -52,6 +52,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          # It is crucial that we checkout the actual HEAD commit of the branch instead of
+          # GitHub's ephemeral merge commit that it creates for CI runs by default.
+          # We rely on the correct HEAD commit to be checked out in order to determine the
+          # correct ELECTRIC_VERSION to bake into the Docker image.
+          ref: ${{ github.event.pull_request.head.sha }}
+          # Also important to fetch the whole history since otherwise we won't get that tags
+          # that are required to determine the correct ELECTRIC_VERSION.
+          fetch-depth: 0
           fetch-tags: true
 
       - name: Set image ref
@@ -71,11 +79,10 @@ jobs:
         if: ${{ !env.TAG }}
         run: |
           echo "TAG=$(
-            git log -1 --format='%H' -- packages/electric-telemetry/ packages/sync-service/
+            git log -1 --format='%h' -- packages/electric-telemetry/ packages/sync-service/
           )" >> $GITHUB_ENV
 
       - name: Determine ELECTRIC_VERSION to pass as a build-arg to the builder
-        working-directory: packages/sync-service
         run: |
           echo "ELECTRIC_VERSION=$(
             git describe --abbrev=7 --tags --always --first-parent --match '@core/sync-service@*' | sed -En 's|^@core/sync-service@||p'
@@ -100,8 +107,8 @@ jobs:
           context: packages/sync-service
           build-contexts: |
             electric-telemetry=packages/electric-telemetry
-          build-args:
-            ELECTRIC_VERSION: ${{ env.ELECTRIC_VERSION }}
+          build-args: |
+            ELECTRIC_VERSION=${{ env.ELECTRIC_VERSION }}
           platforms: ${{ inputs.platforms }}
           push: true
           tags: ${{ env.IMAGE }}:${{ env.TAG }}
