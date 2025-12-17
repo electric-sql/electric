@@ -405,10 +405,12 @@ defmodule Electric.Shapes.Consumer do
       end
     end)
 
-    case ShapeCleaner.handle_writer_termination(state.stack_id, state.shape_handle, reason) do
-      :ok -> terminate_writer(state)
-      :removed -> :ok
-    end
+    # always need to terminate writer to remove the writer ets (which belongs
+    # to this process). leads to unecessary writes in the case of a deleted
+    # shape but the alternative is leaking ets tables.
+    state = terminate_writer(state)
+
+    ShapeCleaner.handle_writer_termination(state.stack_id, state.shape_handle, reason)
 
     State.reply_to_snapshot_waiters(state, {:error, "Shape terminated before snapshot was ready"})
   end
@@ -611,8 +613,7 @@ defmodule Electric.Shapes.Consumer do
   end
 
   defp mark_for_removal(state) do
-    # remove the writer state to save on a pointless Storage.terminate/1 call
-    %{state | terminating?: true, writer: nil}
+    %{state | terminating?: true}
   end
 
   defp stop_with_reason(reason, state) do
