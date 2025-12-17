@@ -52,10 +52,7 @@ defmodule ElectricTelemetry.CallHomeReporter do
 
   defp cast_time_to_ms({time, :minute}), do: time * 60 * 1000
   defp cast_time_to_ms({time, :second}), do: time * 1000
-
-  if Mix.env() == :test do
-    defp cast_time_to_ms({time, :millisecond}), do: time
-  end
+  defp cast_time_to_ms({time, :millisecond}), do: time
 
   @impl GenServer
   def init(opts) do
