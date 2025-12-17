@@ -14,13 +14,17 @@
 
 [shell otel_collector]
   # Verify that the Collector receives metrics from Electric with expected resource attributes
-  ??info	ResourceMetrics
-  ??Resource attributes:
-  ??     -> custom.attr: Str(electric.val)
-  ??     -> instance.id: Str(
-  ??     -> name: Str(metrics)
-  ??     -> service.name: Str(electric)
-  ??     -> service.version: Str(
+  """?
+  info	ResourceMetrics #0
+  Resource SchemaURL: 
+  Resource attributes:
+       -> custom.attr: Str\(electric.val\)
+       -> instance.id: Str\([-a-f0-9]+\)
+       -> name: Str\(metrics\)
+       -> service.name: Str\(electric\)
+       -> service.version: Str\([0-9.]+\)
+       -> stack_id: Str\(single_stack\)
+  """
 
   # Verify that LSN metrics are exported
   """?
