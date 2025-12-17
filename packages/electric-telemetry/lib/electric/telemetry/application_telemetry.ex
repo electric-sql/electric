@@ -170,9 +170,13 @@ defmodule ElectricTelemetry.ApplicationTelemetry do
   end
 
   def process_memory(%{intervals_and_thresholds: %{top_process_count: process_count}}) do
-    for %{type: type, memory: memory} <-
+    for %{type: type, proc_mem: proc_mem, binary_mem: binary_mem, avg_ref_count: avg_ref_count} <-
           ElectricTelemetry.Processes.top_memory_by_type(process_count) do
-      :telemetry.execute([:process, :memory], %{total: memory}, %{process_type: to_string(type)})
+      :telemetry.execute(
+        [:process, :memory],
+        %{total: proc_mem, binary: binary_mem, avg_ref_count: avg_ref_count},
+        %{process_type: to_string(type)}
+      )
     end
   end
 

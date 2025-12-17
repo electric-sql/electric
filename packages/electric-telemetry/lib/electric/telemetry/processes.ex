@@ -20,19 +20,37 @@ defmodule ElectricTelemetry.Processes do
     process_list
     |> Enum.map(&type_and_memory/1)
     |> Enum.reject(&(&1.type == :dead))
-    |> Enum.group_by(& &1.type, & &1.memory)
-    |> Enum.map(fn {type, memory} -> %{type: type, memory: Enum.sum(memory)} end)
-    |> Enum.sort_by(&(-&1.memory))
+    |> Enum.group_by(& &1.type)
+    |> Enum.map(fn {type, list_of_maps} ->
+      {proc_mem, binary_mem, ref_count_sum, num_binaries} =
+        Enum.reduce(list_of_maps, {0, 0, 0, 0}, fn map,
+                                                   {proc_mem, binary_mem, ref_count_sum,
+                                                    num_binaries} ->
+          {proc_mem + map.proc_mem, binary_mem + map.binary_mem,
+           ref_count_sum + map.ref_count_sum, num_binaries + map.num_binaries}
+        end)
+
+      %{
+        type: type,
+        proc_mem: proc_mem,
+        binary_mem: binary_mem,
+        avg_ref_count: if(num_binaries == 0, do: 0, else: ref_count_sum / num_binaries)
+      }
+    end)
+    |> Enum.sort_by(&(-&1.proc_mem))
     |> Enum.take(count)
   end
 
   defp type_and_memory(pid) do
     info = info(pid)
-    %{type: proc_type(pid, info), memory: memory_from_info(info)}
+
+    info
+    |> memory_from_info()
+    |> Map.put(:type, proc_type(pid, info))
   end
 
   defp info(pid) do
-    Process.info(pid, [:dictionary, :initial_call, :label, :memory])
+    Process.info(pid, [:dictionary, :initial_call, :label, :memory, :binary])
   end
 
   defp proc_type(pid, info) do
@@ -66,9 +84,29 @@ defmodule ElectricTelemetry.Processes do
   end
 
   defp memory_from_info(info) do
-    case info[:memory] do
-      bytes when is_integer(bytes) -> bytes
-      _ -> 0
+    memory =
+      case info[:memory] do
+        bytes when is_integer(bytes) -> bytes
+        _ -> 0
+      end
+
+    case info[:binary] do
+      list when is_list(list) ->
+        {binary_mem, {ref_sum, num_entries}} =
+          Enum.reduce(list, {0, {0, 0}}, fn {_reference, size, ref_count},
+                                            {total_size, {ref_sum, num_entries}} ->
+            {total_size + size, {ref_sum + ref_count, num_entries + 1}}
+          end)
+
+        %{
+          proc_mem: memory,
+          binary_mem: binary_mem,
+          ref_count_sum: ref_sum,
+          num_binaries: num_entries
+        }
+
+      _ ->
+        %{proc_mem: memory}
     end
   end
 end
