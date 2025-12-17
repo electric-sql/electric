@@ -86,6 +86,8 @@ defmodule ElectricTelemetry.ApplicationTelemetry do
   def metrics(telemetry_opts) do
     [
       last_value("process.memory.total", tags: [:process_type], unit: :byte),
+      last_value("process.memory.binary", tags: [:process_type], unit: :byte),
+      last_value("process.memory.avg_ref_count", tags: [:process_type]),
       last_value("system.cpu.core_count"),
       last_value("system.cpu.utilization.total"),
       last_value("system.load_percent.avg1"),

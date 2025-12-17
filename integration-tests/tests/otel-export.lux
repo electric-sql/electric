@@ -1,0 +1,154 @@
+[doc Verify that application and stack metrics are correctly exported via Otel]
+
+[include _macros.luxinc]
+
+[global pg_container_name=otel-export__pg]
+
+###
+
+[invoke setup_otel_collector]
+
+[invoke setup_pg]
+
+[invoke setup_electric_with_env "ELECTRIC_OTLP_ENDPOINT=http://localhost:4318 ELECTRIC_SYSTEM_METRICS_POLL_INTERVAL=1s ELECTRIC_OTEL_EXPORT_PERIOD=2s DO_NOT_START_CONN_MAN_PING=1 ELECTRIC_LOG_LEVEL=info OTEL_RESOURCE_ATTRIBUTES=custom.attr=electric.val"]
+
+# Span a process containing off-heap binary references and ensure its in the top 5 by memory footprint.
+# Otel Collector sorts metrics in its debug output, so the process label for our process needs
+# to be first lexicographically for easier output matching further down.
+[shell electric]
+  """!
+  _pid = spawn_link(fn ->
+    Process.set_label(:A_memory_hog)
+
+    on_heap_strings =
+      Enum.map(1..1_000_000, fn _ -> String.duplicate("on heap", :random.uniform(8)) end)
+
+    off_heap_strings =
+      Enum.map(1..100_000, fn i -> String.duplicate("1234567890", 70 * i) end)
+
+    receive do
+      pid -> send(pid, {on_heap_strings, off_heap_strings})
+    end
+  end)
+  """
+
+  ??#PID
+
+[shell otel_collector]
+  # Verify that the Collector receives expected application metrics from Electric
+  """?
+  info	ResourceMetrics #0
+  Resource SchemaURL: 
+  Resource attributes:
+       -> custom.attr: Str\(electric.val\)
+       -> instance.id: Str\([-a-f0-9]+\)
+       -> name: Str\(metrics\)
+       -> service.name: Str\(electric\)
+       -> service.version: Str\([0-9.]+\)
+  ScopeMetrics #0
+  """
+
+  # Verify the presence of process.memory.* metrics
+  """?
+  Metric #[0-9]+
+  Descriptor:
+       -> Name: process\.memory\.avg_ref_count
+       -> Description: 
+       -> Unit: 
+       -> DataType: Gauge
+  NumberDataPoints #0
+  Data point attributes:
+       -> process_type: Str\(A_memory_hog\)
+  StartTimestamp: [-0-9]+ [.:0-9]+ [-+0-9]+ UTC
+  Timestamp: [-0-9]+ [.:0-9]+ [-+0-9]+ UTC
+  Value: 1\.000000
+  """
+
+  """?
+  Metric #[0-9]+
+  Descriptor:
+       -> Name: process\.memory\.binary
+       -> Description: 
+       -> Unit: By
+       -> DataType: Gauge
+  NumberDataPoints #0
+  Data point attributes:
+       -> process_type: Str\(A_memory_hog\)
+  StartTimestamp: [-0-9]+ [.:0-9]+ [-+0-9]+ UTC
+  Timestamp: [-0-9]+ [.:0-9]+ [-+0-9]+ UTC
+  Value: [0-9]+
+  """
+
+  """?
+  Metric #[0-9]+
+  Descriptor:
+       -> Name: process\.memory\.total
+       -> Description: 
+       -> Unit: By
+       -> DataType: Gauge
+  NumberDataPoints #0
+  Data point attributes:
+       -> process_type: Str\(A_memory_hog\)
+  StartTimestamp: [-0-9]+ [.:0-9]+ [-+0-9]+ UTC
+  Timestamp: [-0-9]+ [.:0-9]+ [-+0-9]+ UTC
+  Value: [0-9]+
+  """
+
+  # Verify that the Collector receives stack metrics from Electric with expected resource attributes
+  """?
+  info	ResourceMetrics #0
+  Resource SchemaURL: 
+  Resource attributes:
+       -> custom.attr: Str\(electric.val\)
+       -> instance.id: Str\([-a-f0-9]+\)
+       -> name: Str\(metrics\)
+       -> service.name: Str\(electric\)
+       -> service.version: Str\([0-9.]+\)
+       -> stack_id: Str\(single_stack\)
+  ScopeMetrics #0
+  """
+
+  # Verify that LSN metrics are exported
+  """?
+  Metric #[0-9]+
+  Descriptor:
+       -> Name: electric\.postgres\.replication\.pg_wal_offset
+       -> Description: 
+       -> Unit: 
+       -> DataType: Gauge
+  NumberDataPoints #0
+  StartTimestamp: [-0-9]+ [.:0-9]+ [-+0-9]+ UTC
+  Timestamp: [-0-9]+ [.:0-9]+ [-+0-9]+ UTC
+  Value: [-+.0-9]+
+  """
+
+  """?
+  Metric #[0-9]+
+  Descriptor:
+       -> Name: electric\.postgres\.replication\.slot_confirmed_flush_lsn_lag
+       -> Description: 
+       -> Unit: By
+       -> DataType: Gauge
+  NumberDataPoints #0
+  StartTimestamp: [-0-9]+ [.:0-9]+ [-+0-9]+ UTC
+  Timestamp: [-0-9]+ [.:0-9]+ [-+0-9]+ UTC
+  Value: [-+.0-9]+
+  """
+
+  """?
+  Metric #[0-9]+
+  Descriptor:
+       -> Name: electric\.postgres\.replication\.slot_retained_wal_size
+       -> Description: 
+       -> Unit: By
+       -> DataType: Gauge
+  NumberDataPoints #0
+  StartTimestamp: [-0-9]+ [.:0-9]+ [-+0-9]+ UTC
+  Timestamp: [-0-9]+ [.:0-9]+ [-+0-9]+ UTC
+  Value: [-+.0-9]+
+  """
+
+###
+
+[cleanup]
+  [invoke teardown]
