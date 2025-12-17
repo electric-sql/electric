@@ -17,7 +17,6 @@ RUN apt-get update -y && \
 RUN mix local.hex --force && mix local.rebar --force
 
 ARG MIX_ENV=prod
-ARG ELECTRIC_VERSION
 ARG MIX_TARGET
 
 WORKDIR /builder/electric
@@ -35,6 +34,10 @@ COPY lib /builder/electric/lib/
 COPY package.json /builder/electric/
 COPY config/config.exs /builder/electric/config/
 
+# Set ELECTRIC_VERSION as late as possible to avoid invalidating the build cache for earlier steps
+ARG ELECTRIC_VERSION
+
+# The Electric app must be compiled after ELECTRIC_VERSION has been set
 RUN mix compile
 RUN mix sentry.package_source_code
 
