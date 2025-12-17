@@ -33,10 +33,11 @@ defmodule ElectricTelemetry.MixProject do
 
   defp dev_and_test_deps do
     [
+      {:bypass, "~> 2.1", only: [:test]},
       {:dialyxir, "~> 1.4", only: [:test], runtime: false},
+      {:ex_doc, ">= 0.0.0", only: :dev, runtime: false},
       {:excoveralls, "~> 0.18", only: [:test], runtime: false},
-      {:junit_formatter, "~> 3.4", only: [:test], runtime: false},
-      {:ex_doc, ">= 0.0.0", only: :dev, runtime: false}
+      {:junit_formatter, "~> 3.4", only: [:test], runtime: false}
     ]
   end
 
