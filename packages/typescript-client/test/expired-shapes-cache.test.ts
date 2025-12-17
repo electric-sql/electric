@@ -246,4 +246,116 @@ describe(`ExpiredShapesCache`, () => {
       `original-handle`
     )
   })
+
+  it(`should not accept expired handle from stale cached response after 409`, async () => {
+    // This test simulates the infinite loop bug:
+    // 1. Client has handle H1, server returns 409 with new handle H2
+    // 2. Client marks H1 as expired, resets to H2, makes new request
+    // 3. Proxy returns stale cached response with H1 in headers
+    // 4. Bug: Client accepts H1, causing infinite 409 loop
+    // Fix: Client should ignore expired handle from response
+
+    let requestCount = 0
+    const capturedHandles: string[] = []
+    let resolveSecondRequest: () => void
+    const secondRequestMade = new Promise<void>((resolve) => {
+      resolveSecondRequest = resolve
+    })
+
+    fetchMock.mockImplementation((input: RequestInfo | URL) => {
+      requestCount++
+      const url = new URL(input.toString())
+      const handle = url.searchParams.get(`handle`)
+      capturedHandles.push(handle || `none`)
+
+      if (requestCount === 1) {
+        // First request: return 409 with new handle
+        return Promise.resolve(
+          new Response(`[]`, {
+            status: 409,
+            headers: {
+              'electric-handle': `new-handle-H2`,
+            },
+          })
+        )
+      } else if (requestCount === 2) {
+        // Second request: simulate stale cached response returning OLD expired handle
+        // This is the bug scenario - proxy ignores cache buster and returns stale response
+        resolveSecondRequest()
+        return Promise.resolve(
+          new Response(JSON.stringify([{ headers: { control: `up-to-date` } }]), {
+            status: 200,
+            headers: {
+              'electric-handle': `original-handle-H1`, // OLD handle from cached response!
+              'electric-offset': `0_0`,
+              'electric-schema': `{}`,
+              'electric-cursor': `cursor-1`,
+            },
+          })
+        )
+      } else {
+        // Third+ request: if client incorrectly accepted H1, it would 409 again
+        // If fixed, client should keep H2 and this shouldn't happen
+        if (handle === `original-handle-H1`) {
+          // This means the bug occurred - client accepted the expired handle
+          return Promise.resolve(
+            new Response(`[]`, {
+              status: 409,
+              headers: {
+                'electric-handle': `new-handle-H3`,
+              },
+            })
+          )
+        }
+        // Normal response for H2
+        aborter.abort()
+        return Promise.resolve(
+          new Response(JSON.stringify([{ headers: { control: `up-to-date` } }]), {
+            status: 200,
+            headers: {
+              'electric-handle': `new-handle-H2`,
+              'electric-offset': `0_0`,
+              'electric-schema': `{}`,
+              'electric-cursor': `cursor-1`,
+            },
+          })
+        )
+      }
+    })
+
+    const stream = new ShapeStream({
+      url: shapeUrl,
+      params: { table: `test` },
+      handle: `original-handle-H1`,
+      signal: aborter.signal,
+      fetchClient: fetchMock,
+      subscribe: false,
+    })
+
+    // Subscribe to trigger fetching
+    stream.subscribe(() => {})
+
+    // Wait for the second request to be made (after 409 handling)
+    await secondRequestMade
+
+    // Small delay to let the response be processed
+    await new Promise((resolve) => setTimeout(resolve, 10))
+
+    // After 409, the expired handle should be stored
+    const expectedShapeUrl = `${shapeUrl}?table=test`
+    expect(expiredShapesCache.getExpiredHandle(expectedShapeUrl)).toBe(
+      `original-handle-H1`
+    )
+
+    // The client should have made exactly 2 requests:
+    // 1. Original request with H1 -> 409
+    // 2. New request with H2 -> 200 (but response has stale H1 in header)
+    // After fix: Client keeps H2, no infinite loop
+    // Before fix: Client would accept H1 from stale response and make request 3 with H1
+    expect(requestCount).toBe(2)
+    expect(capturedHandles).toEqual([`original-handle-H1`, `new-handle-H2`])
+
+    // Verify the stream's current handle is H2 (not the stale H1)
+    expect(stream.shapeHandle).toBe(`new-handle-H2`)
+  })
 })
