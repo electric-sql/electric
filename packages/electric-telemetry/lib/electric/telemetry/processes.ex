@@ -82,16 +82,23 @@ defmodule ElectricTelemetry.Processes do
   end
 
   defp mem_stats_for_procs(proc_infos) when is_list(proc_infos) do
-    {proc_mem, binary_mem, ref_count_sum, num_binaries} =
-      Enum.reduce(proc_infos, {0, 0, 0, 0}, fn map,
-                                               {proc_mem, binary_mem, ref_count_sum, num_binaries} ->
-        {proc_mem + map.proc_mem, binary_mem + map.binary_mem, ref_count_sum + map.ref_count_sum,
-         num_binaries + map.num_binaries}
+    {proc_mem, binary_mem, ref_count_sum, num_binaries, num_procs} =
+      Enum.reduce(proc_infos, {0, 0, 0, 0, 0}, fn map,
+                                                  {proc_mem, binary_mem, ref_count_sum,
+                                                   num_binaries, num_procs} ->
+        {
+          proc_mem + map.proc_mem,
+          binary_mem + map.binary_mem,
+          ref_count_sum + map.ref_count_sum,
+          num_binaries + map.num_binaries,
+          num_procs + 1
+        }
       end)
 
     %{
       proc_mem: proc_mem,
       binary_mem: binary_mem,
+      avg_bin_count: num_binaries / num_procs,
       avg_ref_count: if(num_binaries == 0, do: 0, else: ref_count_sum / num_binaries)
     }
   end
