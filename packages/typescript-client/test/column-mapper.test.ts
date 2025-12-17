@@ -363,12 +363,13 @@ describe(`encodeWhereClause`, () => {
     ).toBe(`first_name = 'John' AND last_name = 'Doe' AND user_id = $1`)
   })
 
-  it(`should not transform double-quoted identifiers`, () => {
-    // Postgres uses double quotes for case-sensitive identifiers
-    expect(encodeWhereClause(`"userId" = $1`, encode)).toBe(`"userId" = $1`)
+  it(`should transform double-quoted identifiers`, () => {
+    // Query builders like @tanstack/electric-db-collection use double quotes
+    // for identifiers, and these need encoding just like unquoted identifiers
+    expect(encodeWhereClause(`"userId" = $1`, encode)).toBe(`"user_id" = $1`)
 
     expect(encodeWhereClause(`"User"."createdAt" = $1`, encode)).toBe(
-      `"User"."createdAt" = $1`
+      `"user"."created_at" = $1`
     )
   })
 
@@ -382,7 +383,7 @@ describe(`encodeWhereClause`, () => {
   it(`should handle mixed quoted and unquoted identifiers`, () => {
     expect(
       encodeWhereClause(`userId = $1 AND "CaseSensitive" = $2`, encode)
-    ).toBe(`user_id = $1 AND "CaseSensitive" = $2`)
+    ).toBe(`user_id = $1 AND "case_sensitive" = $2`)
   })
 })
 
