@@ -22,18 +22,19 @@ defmodule ElectricTelemetry.Processes do
     |> Enum.reject(&(&1.type == :dead))
     |> Enum.group_by(& &1.type)
     |> Enum.map(fn {type, list_of_maps} ->
-      {proc_mem, binary_mem, ref_count_sum, num_binaries} =
-        Enum.reduce(list_of_maps, {0, 0, 0, 0}, fn map,
-                                                   {proc_mem, binary_mem, ref_count_sum,
-                                                    num_binaries} ->
+      {proc_mem, binary_mem, ref_count_sum, num_binaries, num_procs} =
+        Enum.reduce(list_of_maps, {0, 0, 0, 0, 0}, fn map,
+                                                      {proc_mem, binary_mem, ref_count_sum,
+                                                       num_binaries, num_procs} ->
           {proc_mem + map.proc_mem, binary_mem + map.binary_mem,
-           ref_count_sum + map.ref_count_sum, num_binaries + map.num_binaries}
+           ref_count_sum + map.ref_count_sum, num_binaries + map.num_binaries, num_procs + 1}
         end)
 
       %{
         type: type,
         proc_mem: proc_mem,
         binary_mem: binary_mem,
+        avg_bin_count: num_binaries / num_procs,
         avg_ref_count: if(num_binaries == 0, do: 0, else: ref_count_sum / num_binaries)
       }
     end)
