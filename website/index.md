@@ -1,10 +1,12 @@
 ---
 layout: home
+title: "Electric"
+titleTemplate: ":title | Sync with your stack"
 hero:
   name: 'Sync'
   text: 'solved'
   tagline: >-
-    Sync makes apps awesome.<br />Electric solves sync.
+    Composable sync primitives.<br />That work with your stack.
   actions:
     - theme: brand
       text: Sign-up to Cloud
