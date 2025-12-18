@@ -176,7 +176,7 @@ defmodule ElectricTelemetry.CallHomeReporter do
     {:noreply, state}
   end
 
-  # Catch-all clauses to handle EXIT and DOWN messages from the async task started in `report_home()`.
+  # Catch-all clauses to handle the result, EXIT and DOWN messages from the async task started in `report_home()`.
   def handle_info({task_mon, %Req.Response{}}, state) when is_reference(task_mon) do
     {:noreply, state}
   end
