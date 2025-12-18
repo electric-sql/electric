@@ -68,12 +68,40 @@ export type MoveTag = string
  */
 export type MoveOutPattern = { pos: number; value: string }
 
+/**
+ * Serialized expression types for structured subset queries.
+ * These allow Electric to properly apply columnMapper transformations
+ * before generating the final SQL.
+ */
+export type SerializedExpression =
+  | { type: 'ref'; column: string } // Column reference
+  | { type: 'val'; paramIndex: number } // Parameter placeholder ($1, $2, etc.)
+  | { type: 'func'; name: string; args: SerializedExpression[] } // Operator/function
+
+/**
+ * Serialized ORDER BY clause for structured subset queries.
+ */
+export type SerializedOrderByClause = {
+  column: string
+  direction?: 'asc' | 'desc' // omitted means 'asc'
+  nulls?: 'first' | 'last'
+}
+
 export type SubsetParams = {
+  /** Legacy string format WHERE clause */
   where?: string
+  /** Positional parameter values for WHERE clause */
   params?: Record<string, string>
+  /** Maximum number of rows to return */
   limit?: number
+  /** Number of rows to skip */
   offset?: number
+  /** Legacy string format ORDER BY clause */
   orderBy?: string
+  /** Structured WHERE expression (preferred when available) */
+  whereExpr?: SerializedExpression
+  /** Structured ORDER BY clauses (preferred when available) */
+  orderByExpr?: SerializedOrderByClause[]
 }
 
 export type ControlMessage = {

@@ -59,7 +59,10 @@ import {
   SUBSET_PARAM_LIMIT,
   SUBSET_PARAM_OFFSET,
   SUBSET_PARAM_ORDER_BY,
+  SUBSET_PARAM_WHERE_EXPR,
+  SUBSET_PARAM_ORDER_BY_EXPR,
 } from './constants'
+import { compileExpression, compileOrderBy } from './expression-compiler'
 import {
   EventSourceMessage,
   fetchEventSource,
@@ -890,13 +893,29 @@ export class ShapeStream<T extends Row<unknown> = Row>
     }
 
     if (subsetParams) {
-      if (subsetParams.where && typeof subsetParams.where === `string`) {
+      // Prefer structured expressions when available (allows proper columnMapper application)
+      // Fall back to legacy string format for backwards compatibility
+      if (subsetParams.whereExpr) {
+        // Compile structured expression with columnMapper applied
+        const compiledWhere = compileExpression(
+          subsetParams.whereExpr,
+          this.options.columnMapper?.encode
+        )
+        setQueryParam(fetchUrl, SUBSET_PARAM_WHERE, compiledWhere)
+        // Also send the structured expression for servers that support it
+        fetchUrl.searchParams.set(
+          SUBSET_PARAM_WHERE_EXPR,
+          JSON.stringify(subsetParams.whereExpr)
+        )
+      } else if (subsetParams.where && typeof subsetParams.where === `string`) {
+        // Legacy string format (no columnMapper applied to already-compiled SQL)
         const encodedWhere = encodeWhereClause(
           subsetParams.where,
           this.options.columnMapper?.encode
         )
         setQueryParam(fetchUrl, SUBSET_PARAM_WHERE, encodedWhere)
       }
+
       if (subsetParams.params)
         // Serialize params as JSON to keep the parameter name constant for proxy configs
         fetchUrl.searchParams.set(
@@ -907,7 +926,25 @@ export class ShapeStream<T extends Row<unknown> = Row>
         setQueryParam(fetchUrl, SUBSET_PARAM_LIMIT, subsetParams.limit)
       if (subsetParams.offset)
         setQueryParam(fetchUrl, SUBSET_PARAM_OFFSET, subsetParams.offset)
-      if (subsetParams.orderBy && typeof subsetParams.orderBy === `string`) {
+
+      // Prefer structured ORDER BY expressions when available
+      if (subsetParams.orderByExpr) {
+        // Compile structured ORDER BY with columnMapper applied
+        const compiledOrderBy = compileOrderBy(
+          subsetParams.orderByExpr,
+          this.options.columnMapper?.encode
+        )
+        setQueryParam(fetchUrl, SUBSET_PARAM_ORDER_BY, compiledOrderBy)
+        // Also send the structured expression for servers that support it
+        fetchUrl.searchParams.set(
+          SUBSET_PARAM_ORDER_BY_EXPR,
+          JSON.stringify(subsetParams.orderByExpr)
+        )
+      } else if (
+        subsetParams.orderBy &&
+        typeof subsetParams.orderBy === `string`
+      ) {
+        // Legacy string format
         const encodedOrderBy = encodeWhereClause(
           subsetParams.orderBy,
           this.options.columnMapper?.encode
