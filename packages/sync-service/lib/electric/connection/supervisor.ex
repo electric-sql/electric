@@ -57,17 +57,12 @@ defmodule Electric.Connection.Supervisor do
     Logger.metadata(stack_id: stack_id)
     Electric.Telemetry.Sentry.set_tags_context(stack_id: stack_id)
 
-    tweaks = Keyword.fetch!(opts, :tweaks)
-
-    restarter_opts =
-      [
-        stack_id: stack_id,
-        stack_events_registry: Keyword.fetch!(opts, :stack_events_registry)
-      ] ++ Keyword.take(tweaks, [:wal_size_check_period, :wal_size_threshold])
+    restarter_opts = Keyword.fetch!(opts, :restarter_opts)
+    connection_manager_opts = Keyword.fetch!(opts, :connection_manager_opts)
 
     children = [
       {Electric.Connection.Restarter, restarter_opts},
-      {Electric.Connection.Manager.Supervisor, opts}
+      {Electric.Connection.Manager.Supervisor, connection_manager_opts}
     ]
 
     Supervisor.init(children, strategy: :rest_for_one)

@@ -81,8 +81,11 @@ defmodule Electric.Connection.Restarter do
      %{
        stack_id: Keyword.fetch!(opts, :stack_id),
        stack_events_registry: Keyword.fetch!(opts, :stack_events_registry),
-       wal_size_check_period: Keyword.get(opts, :wal_size_check_period, 0),
-       wal_size_threshold: Keyword.get(opts, :wal_size_threshold, 1),
+       slot_name: Keyword.fetch!(opts, :slot_name),
+       # NOTE(alco): These defaults are really only used in testing when these config options
+       # aren't set. The actual real-world defaults are defined in Electric.Config.
+       wal_size_check_period: Keyword.get(opts, :wal_size_check_period, 3600 * 1000),
+       wal_size_threshold: Keyword.get(opts, :wal_size_threshold, 100 * 1024 * 1024),
        wait_until_conn_up_ref: nil,
        wal_size_check_timer: nil
      }}
