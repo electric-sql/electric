@@ -483,6 +483,40 @@ defmodule Electric.ShapeCache.ShapeStatus do
     end)
   end
 
+  defp remove_shapes_with_invalid_dependencies(_stack_id, removed_handles, _storage)
+       when map_size(removed_handles) == 0 do
+    :ok
+  end
+
+  defp remove_shapes_with_invalid_dependencies(stack_id, removed_handles, storage) do
+    shapes_to_remove =
+      ShapeDb.reduce_shapes(stack_id, [], fn {handle, shape}, acc ->
+        if Enum.any?(shape.shape_dependencies_handles, &MapSet.member?(removed_handles, &1)) do
+          [handle | acc]
+        else
+          acc
+        end
+      end)
+
+    if shapes_to_remove == [] do
+      :ok
+    else
+      Enum.each(shapes_to_remove, fn handle ->
+        Logger.warning("Removing shape #{inspect(handle)} because its dependency was invalidated")
+
+        remove_shape(stack_id, handle)
+        Storage.cleanup!(storage, handle)
+      end)
+
+      # Recursively check for more shapes that depended on the ones we just removed
+      remove_shapes_with_invalid_dependencies(
+        stack_id,
+        MapSet.new(shapes_to_remove),
+        storage
+      )
+    end
+  end
+
   defp load_backup(stack_id, backup_dir, storage) do
     with :ok <- ShapeDb.restore(stack_id, backup_dir, @backup_version),
          {:ok, stored_handles} <- Storage.get_all_stored_shape_handles(storage) do
@@ -516,6 +550,8 @@ defmodule Electric.ShapeCache.ShapeStatus do
         do: load_shapes(stack_id, missing_stored_handles, storage)
 
       Enum.each(invalid_in_memory_handles, fn handle -> remove_shape(stack_id, handle) end)
+
+      remove_shapes_with_invalid_dependencies(stack_id, invalid_in_memory_handles, storage)
 
       :ok
     else
