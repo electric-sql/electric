@@ -143,18 +143,25 @@ defmodule Electric.Connection.Restarter do
     state = %{state | wal_size_check_timer: nil}
 
     wal_size = query_retained_wal_size(state)
+    formatted_wal_size = Electric.Utils.format_bytes_to_human_readable_size(wal_size)
+
+    formatted_threshold =
+      Electric.Utils.format_bytes_to_human_readable_size(state.wal_size_threshold)
+
+    formatted_period =
+      Electric.Utils.format_milliseconds_to_human_readable_interval(state.wal_size_check_period)
 
     state =
       if wal_size >= state.wal_size_threshold do
         Logger.info(
-          "Retained WAL size #{wal_size} has exceeded the threshold #{state.wal_size_threshold}. Time to wake up the connection subsystem."
+          "Retained WAL size #{formatted_wal_size} has exceeded the threshold of #{formatted_threshold}. Time to wake up the connection subsystem."
         )
 
         :ok = do_restart_connection_subsystem(state.stack_id)
         state
       else
         Logger.info(
-          "Retained WAL size #{wal_size} is below the threshold #{state.wal_size_threshold}. Scheduling the next check to take place after #{state.wal_size_check_period}"
+          "Retained WAL size #{formatted_wal_size} is below the threshold of #{formatted_threshold}. Scheduling the next check to take place after #{formatted_period}"
         )
 
         schedule_wal_size_check(state)
