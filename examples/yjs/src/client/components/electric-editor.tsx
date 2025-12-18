@@ -61,6 +61,7 @@ const options: ElectricProviderOptions<UpdateTableSchema, UpdateTableSchema> = {
         where: `room = '${room}'`,
       },
       parser: parseToDecoder,
+      liveSse: true, // Need to run with HTTPs for local development
     },
     sendUrl: new URL(`/api/update?room=${room}`, serverUrl),
     getUpdateFromRow: (row) => row.update,
@@ -73,6 +74,7 @@ const options: ElectricProviderOptions<UpdateTableSchema, UpdateTableSchema> = {
         where: `room = '${room}'`,
       },
       parser: parseToDecoder,
+      liveSse: true,
     },
     sendUrl: new URL(
       `/api/update?room=${room}&client_id=${ydoc.clientID}`,
@@ -82,6 +84,7 @@ const options: ElectricProviderOptions<UpdateTableSchema, UpdateTableSchema> = {
     getUpdateFromRow: (row) => row.update,
   },
   resumeState: resumeStateProvider.load(),
+  debounceMs: 100,
 }
 
 function ElectricEditor({

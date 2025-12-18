@@ -1,5 +1,5 @@
 import { execSync } from 'node:child_process'
-import { createNeonDb, getNeonConnectionString } from './neon'
+import { createNeonDb, getNeonConnectionStrings } from './neon'
 
 function addDatabaseToElectric({
   dbUri,
@@ -121,20 +121,20 @@ export function createDatabaseForCloudElectric({
     throw e
   }
 
-  // Fetch default branch id using Neon HTTP API to avoid provider invoke here
-  type NeonProjectResponse = {
-    project?: { default_branch_id?: string }
-    default_branch_id?: string
+  // Fetch default branch id using Neon HTTP API by listing branches
+  // See: https://neon.tech/docs/manage/branches#list-branches
+  type NeonBranchesResponse = {
+    branches?: Array<{ id: string; default?: boolean }>
   }
-  const preflightJson = JSON.parse(
+  const branchesJson = JSON.parse(
     execSync(
-      `curl -s -H "Authorization: Bearer $NEON_API_KEY" https://console.neon.tech/api/v2/projects/${neonProjectId}`,
+      `curl -s -H "Authorization: Bearer $NEON_API_KEY" https://console.neon.tech/api/v2/projects/${neonProjectId}/branches`,
       { env: process.env }
     ).toString()
-  ) as unknown as NeonProjectResponse
-  const defaultBranchId: string | undefined =
-    preflightJson?.project?.default_branch_id ||
-    preflightJson?.default_branch_id
+  ) as unknown as NeonBranchesResponse
+  const defaultBranchId: string | undefined = branchesJson?.branches?.find(
+    (b) => b.default === true
+  )?.id
   if (!defaultBranchId) {
     throw new Error(`Could not resolve Neon default branch id`)
   }
@@ -152,20 +152,14 @@ export function createDatabaseForCloudElectric({
     console.log(`[db] createNeonDb owner`, { ownerName: name })
   )
 
-  const databaseUri = getNeonConnectionString({
+  const connectionStrings = getNeonConnectionStrings({
     projectId: neonProjectId,
     branchId: defaultBranchId,
     roleName: ownerName,
     databaseName: resultingDbName,
-    pooled: false,
   })
-  const pooledDatabaseUri = getNeonConnectionString({
-    projectId: neonProjectId,
-    branchId: defaultBranchId,
-    roleName: ownerName,
-    databaseName: resultingDbName,
-    pooled: true,
-  })
+  const databaseUri = connectionStrings.direct
+  const pooledDatabaseUri = connectionStrings.pooled
   databaseUri.apply(() => console.log(`[db] Resolved direct connection string`))
   pooledDatabaseUri.apply(() =>
     console.log(`[db] Resolved pooled connection string`)
