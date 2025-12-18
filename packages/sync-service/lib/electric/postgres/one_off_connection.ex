@@ -4,8 +4,6 @@ defmodule Electric.Postgres.OneOffConnection do
   database.
   """
 
-  require Logger
-
   @behaviour Postgrex.SimpleConnection
 
   @default_timeout 5000
@@ -91,7 +89,7 @@ defmodule Electric.Postgres.OneOffConnection do
     Process.exit(pid, :shutdown)
 
     receive do
-      {:EXIT, ^pid, reason} -> Logger.debug("OneOffConnection exited: #{inspect(reason)}")
+      {:EXIT, ^pid, _reason} -> :ok
     end
   end
 
