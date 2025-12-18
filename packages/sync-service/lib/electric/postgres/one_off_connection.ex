@@ -1,47 +1,75 @@
 defmodule Electric.Postgres.OneOffConnection do
+  @moduledoc """
+  A wrapper around Postgrex.SimpleConnection that provides synchronous API for querying the
+  database.
+  """
+
   require Logger
 
   @behaviour Postgrex.SimpleConnection
 
   @default_timeout 5000
 
-  def attempt_connection(kwopts, query \\ nil) do
+  @doc """
+  Attempt a database connection using the given connection options.
+
+  This function is useful to verify that a database connection can be established using the
+  provided connection options. Once a connection has been established, the connection process
+  shuts down synchronously before this function returns.
+  """
+  @spec attempt_connection(keyword()) :: :success | {:error, Postgrex.Error.t()}
+  def attempt_connection(kwopts) do
+    connect_and_maybe_query(kwopts, &handle_connection/1)
+  end
+
+  @doc """
+  Open a one-off database connection and execute a simple query.
+
+  Once a connection has been established, the query is executed, the connection process shuts
+  down and the query result is returned from the function.
+  """
+  @spec query(String.t(), keyword()) ::
+          {:ok, Postgrex.Result.t()} | {:error, Postgrex.Error.t() | :timeout}
+  def query(query, kwopts) do
+    timeout = Keyword.get(kwopts, :timeout, @default_timeout)
+    connect_and_maybe_query([query: query] ++ kwopts, &handle_query_result(&1, timeout))
+  end
+
+  ###
+
+  defp connect_and_maybe_query(kwopts, on_connected_callback_fn) do
     {connection_opts, kwopts} = Keyword.pop(kwopts, :connection_opts)
-    {timeout, kwopts} = Keyword.pop(kwopts, :timeout, @default_timeout)
 
     connection_opts =
       connection_opts
       |> Electric.Utils.deobfuscate_password()
       |> Keyword.merge(auto_reconnect: false, sync_connect: true)
 
-    old_flag = Process.flag(:trap_exit, true)
+    trap_exit_val = Process.flag(:trap_exit, true)
 
     result =
       with {:ok, pid} <-
              Postgrex.SimpleConnection.start_link(
                __MODULE__,
-               [parent_pid: self(), query: query] ++ kwopts,
+               [parent_pid: self()] ++ kwopts,
                connection_opts
              ) do
-        handle_connection(pid, query, timeout)
+        on_connected_callback_fn.(pid)
       end
 
-    Process.flag(:trap_exit, old_flag)
+    Process.flag(:trap_exit, trap_exit_val)
 
     result
   end
 
-  defp handle_connection(pid, nil, _timeout) do
-    Process.exit(pid, :shutdown)
-
-    receive do
-      {:EXIT, ^pid, reason} -> Logger.debug("OneOffConnection exited: #{inspect(reason)}")
-    end
-
+  # Callback executed after Postgrex.SimpleConnection has successfully connected and there's no query to run.
+  defp handle_connection(pid) do
+    exit_connection_process(pid)
     :success
   end
 
-  defp handle_connection(pid, _query, timeout) do
+  # Callback executed after Postgrex.SimpleConnection has successfully connected and sent off a query to the database.
+  defp handle_query_result(pid, timeout) do
     mon = Process.monitor(pid)
 
     result =
@@ -53,15 +81,21 @@ defmodule Electric.Postgres.OneOffConnection do
         timeout -> {:error, :timeout}
       end
 
-    Process.exit(pid, :shutdown)
     Process.demonitor(mon, [:flush])
+    exit_connection_process(pid)
+
+    result
+  end
+
+  defp exit_connection_process(pid) do
+    Process.exit(pid, :shutdown)
 
     receive do
       {:EXIT, ^pid, reason} -> Logger.debug("OneOffConnection exited: #{inspect(reason)}")
     end
-
-    result
   end
+
+  ###
 
   @impl true
   def init(kwopts) do
