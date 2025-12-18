@@ -31,12 +31,8 @@ describe(`compileExpression`, () => {
     })
 
     it(`should compile multiple parameter indices`, () => {
-      expect(
-        compileExpression({ type: `val`, paramIndex: 2 })
-      ).toBe(`$2`)
-      expect(
-        compileExpression({ type: `val`, paramIndex: 10 })
-      ).toBe(`$10`)
+      expect(compileExpression({ type: `val`, paramIndex: 2 })).toBe(`$2`)
+      expect(compileExpression({ type: `val`, paramIndex: 10 })).toBe(`$10`)
     })
   })
 
@@ -194,9 +190,7 @@ describe(`compileExpression`, () => {
           },
         ],
       }
-      expect(compileExpression(expr)).toBe(
-        `("status" = $1) OR ("status" = $2)`
-      )
+      expect(compileExpression(expr)).toBe(`("status" = $1) OR ("status" = $2)`)
     })
 
     it(`should compile not operator`, () => {
@@ -449,7 +443,9 @@ describe(`compileExpression`, () => {
         name: `unknownFunc`,
         args: [],
       }
-      expect(() => compileExpression(expr)).toThrow(`Unknown function: unknownFunc`)
+      expect(() => compileExpression(expr)).toThrow(
+        `Unknown function: unknownFunc`
+      )
     })
   })
 })
