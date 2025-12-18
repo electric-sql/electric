@@ -56,7 +56,7 @@ defmodule Electric.Config do
     idle_wal_size_check_period: 3_600_000,
     # We want to wake up and process any transactions that have accumulated in the WAL, hence
     # the low threshold.
-    idle_wal_size_threshold: 1_000,
+    idle_wal_size_threshold: 100 * 1024 * 1024,
     manual_table_publishing?: false,
     ## HTTP API
     # set enable_http_api: false to turn off the HTTP server totally
