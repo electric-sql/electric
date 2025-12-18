@@ -78,43 +78,4 @@ defmodule Electric.ShapeCache.PureFileStorage.SharedRecords do
   for key <- @value_keys do
     def storage_meta_key_pos(unquote(key)), do: storage_meta(unquote(key)) + 1
   end
-
-  # def storage_meta_compare_and_swap(table, handle, key, expected_value \\ @unset) do
-  #   pattern =
-  #     [
-  #       :storage_meta,
-  #       handle
-  #       | @value_key_matches
-  #         |> Enum.map(fn
-  #           {^key, _m} -> expected_value
-  #           {_k, m} -> m
-  #         end)
-  #     ]
-  #     |> List.to_tuple()
-  #
-  #   replace =
-  #     [
-  #       :storage_meta,
-  #       handle
-  #       | @value_key_matches
-  #         |> Enum.map(fn
-  #           {^key, _m} -> value
-  #           {_k, m} -> m
-  #         end)
-  #     ]
-  #     |> List.to_tuple()
-  #
-  #   # insert_new is atomic so by splitting this into insert_new + update_element
-  #   # we avoid the risk of overwriting any value placed by the writer
-  #   # with some default.
-  #   :ets.insert_new(
-  #     table,
-  #     storage_meta(shape_handle: handle)
-  #   )
-  #
-  #   :ets.select_replace(
-  #     table,
-  #     [{pattern, _guards = [], [{replace}]}]
-  #   )
-  # end
 end
