@@ -2,17 +2,14 @@ defmodule ElectricTelemetry.Reporters.CallHomeReporter do
   import Telemetry.Metrics
 
   def child_spec(telemetry_opts, reporter_opts) do
-    if call_home_url = get_in(telemetry_opts, [:reporters, :call_home_url]) do
+    if call_home_url = telemetry_opts.reporters.call_home_url do
       start_opts =
-        Keyword.merge(
-          [
-            static_info: static_info(telemetry_opts),
-            call_home_url: call_home_url,
-            first_report_in: {2, :minute},
-            reporting_period: {30, :minute}
-          ],
-          reporter_opts
-        )
+        [
+          static_info: static_info(telemetry_opts),
+          call_home_url: call_home_url
+        ]
+        |> Keyword.merge(telemetry_opts.call_home_reporter_opts)
+        |> Keyword.merge(reporter_opts)
 
       {ElectricTelemetry.CallHomeReporter, start_opts}
     end
@@ -103,14 +100,24 @@ defmodule ElectricTelemetry.Reporters.CallHomeReporter do
 
     %{
       electric_version: telemetry_opts.version,
-      environment: %{
-        os: %{family: os_family, name: os_name},
-        arch: to_string(arch),
-        cores: processors,
-        ram: total_mem,
-        electric_instance_id: Map.fetch!(telemetry_opts, :instance_id),
-        electric_installation_id: Map.get(telemetry_opts, :installation_id, "electric_default")
-      }
+      environment:
+        %{
+          os: %{family: os_family, name: os_name},
+          arch: to_string(arch),
+          cores: processors,
+          ram: total_mem,
+          electric_instance_id: Map.fetch!(telemetry_opts, :instance_id),
+          electric_installation_id: Map.get(telemetry_opts, :installation_id, "electric_default")
+        }
+        |> maybe_put(telemetry_opts, :stack_id)
     }
+  end
+
+  defp maybe_put(map, telemetry_opts, key) do
+    if val = telemetry_opts[key] do
+      Map.put(map, key, val)
+    else
+      map
+    end
   end
 end

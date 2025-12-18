@@ -41,8 +41,10 @@ defmodule ElectricTelemetry.CallHomeReporter do
 
   def report_home(telemetry_url, results) do
     # Isolate the request in a separate task to avoid blocking and
-    # to not receive any messages from the HTTP pool internals
-    Task.start(fn -> Req.post!(telemetry_url, json: results, retry: :transient) end)
+    # to not receive any messages from the HTTP pool internals.
+    # The task process must be linked to CallHomeReporter to avoid orphaned processes when the
+    # CallHomeReporter is shut down deliberately by its supervisor.
+    Task.async(fn -> Req.post!(telemetry_url, json: results, retry: :transient) end)
     :ok
   end
 
@@ -52,6 +54,7 @@ defmodule ElectricTelemetry.CallHomeReporter do
 
   defp cast_time_to_ms({time, :minute}), do: time * 60 * 1000
   defp cast_time_to_ms({time, :second}), do: time * 1000
+  defp cast_time_to_ms({time, :millisecond}), do: time
 
   @impl GenServer
   def init(opts) do
@@ -170,6 +173,19 @@ defmodule ElectricTelemetry.CallHomeReporter do
       end
 
     Process.send_after(self(), :report, state.reporting_period)
+    {:noreply, state}
+  end
+
+  # Catch-all clauses to handle the result, EXIT and DOWN messages from the async task started in `report_home()`.
+  def handle_info({task_mon, %Req.Response{}}, state) when is_reference(task_mon) do
+    {:noreply, state}
+  end
+
+  def handle_info({:EXIT, _, _}, state) do
+    {:noreply, state}
+  end
+
+  def handle_info({:DOWN, _, :process, _, _}, state) do
     {:noreply, state}
   end
 

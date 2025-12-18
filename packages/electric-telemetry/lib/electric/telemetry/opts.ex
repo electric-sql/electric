@@ -73,6 +73,20 @@ defmodule ElectricTelemetry.Opts do
           resource: [type: :map, default: %{}]
         ],
         default: []
+      ],
+      call_home_reporter_opts: [
+        type: :keyword_list,
+        keys: [
+          first_report_in: [
+            type: {:tuple, [:pos_integer, {:in, [:millisecond, :second, :minute]}]},
+            default: {2, :minute}
+          ],
+          reporting_period: [
+            type: {:tuple, [:pos_integer, {:in, [:millisecond, :second, :minute]}]},
+            default: {30, :minute}
+          ]
+        ],
+        default: []
       ]
     ]
   end
