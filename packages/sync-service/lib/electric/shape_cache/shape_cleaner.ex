@@ -137,9 +137,9 @@ defmodule Electric.ShapeCache.ShapeCleaner do
   end
 
   defp remove_shape_immediate(stack_id, shape_handle, reason) do
-    OpenTelemetry.start_interval(:"remove_shape.shape_status_remove.duration_µs")
+    OpenTelemetry.start_interval(:"remove_shape.shape_status_unlink.duration_µs")
 
-    case Electric.ShapeCache.ShapeStatus.remove_shape(stack_id, shape_handle) do
+    case Electric.ShapeCache.ShapeStatus.unlink_handle_from_shape(stack_id, shape_handle) do
       {:ok, _shape} ->
         OpenTelemetry.start_interval(:"remove_shape.shape_consumer_stop.duration_µs")
 
