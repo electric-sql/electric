@@ -4,6 +4,7 @@ defmodule Electric.ShapeCache do
   alias Electric.Replication.LogOffset
   alias Electric.Replication.ShapeLogCollector
   alias Electric.ShapeCache.ShapeStatus
+  alias Electric.ShapeCache.Storage
   alias Electric.Shapes
   alias Electric.ShapeCache.ShapeCleaner
   alias Electric.Shapes.Shape
@@ -46,9 +47,9 @@ defmodule Electric.ShapeCache do
     end
   end
 
-  @spec get_shape(shape_def(), stack_id()) :: handle_position() | nil
-  def get_shape(%Shape{} = shape, stack_id) when is_stack_id(stack_id) do
-    ShapeStatus.get_existing_shape(stack_id, shape)
+  @spec fetch_handle_by_shape(shape_def(), stack_id()) :: {:ok, shape_handle()} | :error
+  def fetch_handle_by_shape(%Shape{} = shape, stack_id) when is_stack_id(stack_id) do
+    ShapeStatus.fetch_handle_by_shape(stack_id, shape)
   end
 
   @spec fetch_shape_by_handle(shape_handle(), stack_id()) :: {:ok, Shape.t()} | :error
@@ -60,14 +61,16 @@ defmodule Electric.ShapeCache do
           handle_position()
   def get_or_create_shape_handle(shape, stack_id, opts \\ []) when is_stack_id(stack_id) do
     # Get or create the shape handle and fire a snapshot if necessary
-    if shape_state = get_shape(shape, stack_id) do
-      shape_state
+    with {:ok, handle} <- fetch_handle_by_shape(shape, stack_id),
+         {:ok, offset} <- fetch_latest_offset(stack_id, handle) do
+      {handle, offset}
     else
-      GenServer.call(
-        name(stack_id),
-        {:create_or_wait_shape_handle, shape, opts[:otel_ctx]},
-        @call_timeout
-      )
+      :error ->
+        GenServer.call(
+          name(stack_id),
+          {:create_or_wait_shape_handle, shape, opts[:otel_ctx]},
+          @call_timeout
+        )
     end
   end
 
@@ -76,10 +79,18 @@ defmodule Electric.ShapeCache do
     # Ensure that the given shape handle matches the shape using a cheap shape
     # hash check.
     # If not (or the handle has gone/changed) then try a more expensive
-    # `get_shape/2` call to use the shape to lookup an existing handle.
-    case ShapeStatus.validate_shape_handle(stack_id, shape_handle, shape) do
-      {:ok, offset} -> {shape_handle, offset}
-      :error -> get_shape(shape, stack_id)
+    # `fetch_handle_by_shape/2` call to use the shape to lookup an existing handle.
+
+    result =
+      if :ok == ShapeStatus.validate_shape_handle(stack_id, shape_handle, shape),
+        do: {:ok, shape_handle},
+        else: fetch_handle_by_shape(shape, stack_id)
+
+    with {:ok, resolved_handle} <- result,
+         {:ok, offset} <- fetch_latest_offset(stack_id, resolved_handle) do
+      {resolved_handle, offset}
+    else
+      _ -> nil
     end
   end
 
@@ -108,8 +119,10 @@ defmodule Electric.ShapeCache do
       when is_shape_handle(shape_handle) and is_stack_id(stack_id) do
     ShapeStatus.update_last_read_time_to_now(stack_id, shape_handle)
 
+    shape_storage = Storage.for_shape(shape_handle, Storage.for_stack(stack_id))
+
     cond do
-      ShapeStatus.snapshot_started?(stack_id, shape_handle) ->
+      Storage.snapshot_started?(shape_storage) ->
         :started
 
       not ShapeStatus.has_shape_handle?(stack_id, shape_handle) ->
@@ -233,25 +246,27 @@ defmodule Electric.ShapeCache do
   end
 
   defp maybe_create_shape(shape, otel_ctx, %{stack_id: stack_id} = state) do
-    if shape_state = ShapeStatus.get_existing_shape(stack_id, shape) do
-      shape_state
+    with {:ok, shape_handle} <- ShapeStatus.fetch_handle_by_shape(stack_id, shape),
+         {:ok, offset} <- fetch_latest_offset(stack_id, shape_handle) do
+      {shape_handle, offset}
     else
-      shape_handles =
-        shape.shape_dependencies
-        |> Enum.map(&maybe_create_shape(&1, otel_ctx, state))
-        |> Enum.map(&elem(&1, 0))
+      :error ->
+        shape_handles =
+          shape.shape_dependencies
+          |> Enum.map(&maybe_create_shape(&1, otel_ctx, state))
+          |> Enum.map(&elem(&1, 0))
 
-      shape = %{shape | shape_dependencies_handles: shape_handles}
+        shape = %{shape | shape_dependencies_handles: shape_handles}
 
-      {:ok, shape_handle} = ShapeStatus.add_shape(stack_id, shape)
+        {:ok, shape_handle} = ShapeStatus.add_shape(stack_id, shape)
 
-      Logger.info("Creating new shape for #{inspect(shape)} with handle #{shape_handle}")
+        Logger.info("Creating new shape for #{inspect(shape)} with handle #{shape_handle}")
 
-      {:ok, _pid} = start_shape(shape_handle, shape, state, otel_ctx, :create)
+        {:ok, _pid} = start_shape(shape_handle, shape, state, otel_ctx, :create)
 
-      # In this branch of `if`, we're guaranteed to have a newly started shape, so we can be sure about it's
-      # "latest offset" because it'll be in the snapshotting stage
-      {shape_handle, LogOffset.last_before_real_offsets()}
+        # In this branch of `if`, we're guaranteed to have a newly started shape, so we can be sure about it's
+        # "latest offset" because it'll be in the snapshotting stage
+        {shape_handle, LogOffset.last_before_real_offsets()}
     end
   end
 
@@ -344,6 +359,32 @@ defmodule Electric.ShapeCache do
       |> build_shape_dependencies(known)
 
     {descendents ++ [{handle, shape} | siblings], known}
+  end
+
+  @spec fetch_latest_offset(stack_id(), shape_handle()) :: {:ok, LogOffset.t()} | :error
+  defp fetch_latest_offset(stack_id, shape_handle) do
+    shape_handle
+    |> Storage.for_shape(Storage.for_stack(stack_id))
+    |> Storage.fetch_latest_offset()
+    |> case do
+      {:ok, offset} -> {:ok, normalize_latest_offset(offset)}
+      {:error, _reason} -> :error
+    end
+  end
+
+  # When writing the snapshot initially, we don't know ahead of time the real last offset for the
+  # shape, so we use `0_inf` essentially as a pointer to the end of all possible snapshot chunks,
+  # however many there may be. That means the clients will be using that as the latest offset.
+  # In order to avoid confusing the clients, we make sure that we preserve that functionality
+  # across a restart by setting the latest offset to `0_inf` if there were no real offsets yet.
+  @spec normalize_latest_offset(LogOffset.t()) :: LogOffset.t()
+  defp normalize_latest_offset(offset) do
+    import Electric.Replication.LogOffset,
+      only: [is_virtual_offset: 1, last_before_real_offsets: 0]
+
+    if is_virtual_offset(offset),
+      do: last_before_real_offsets(),
+      else: offset
   end
 
   if Mix.env() == :test do

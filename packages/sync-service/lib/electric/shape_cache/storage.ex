@@ -55,16 +55,7 @@ defmodule Electric.ShapeCache.Storage do
 
   @doc "Retrieve stored shapes for given shape handles"
   @callback get_stored_shapes(compiled_opts(), Enumerable.t(shape_handle())) ::
-              %{
-                shape_handle() =>
-                  {:ok,
-                   {
-                     shape_def :: Shape.t(),
-                     snapshot_started? :: boolean(),
-                     latest_offset :: LogOffset.t()
-                   }}
-                  | {:error, term()}
-              }
+              %{shape_handle() => {:ok, shape_def :: Shape.t()} | {:error, term()}}
 
   @doc "Get the directory where metadata backups are stored."
   @callback metadata_backup_dir(compiled_opts()) :: String.t() | nil
@@ -73,12 +64,16 @@ defmodule Electric.ShapeCache.Storage do
   @callback get_total_disk_usage(compiled_opts()) :: non_neg_integer()
 
   @doc """
-  Get the current pg_snapshot and offset for the shape storage.
+  Get the latest offset for the shape storage.
 
-  If the instance is new, then it MUST return `{LogOffset.first(), nil}`.
+  If the instance is new, then it MUST return `{:ok, LogOffset.last_before_real_offsets()}`.
   """
-  @callback get_current_position(shape_opts()) ::
-              {:ok, offset(), pg_snapshot() | nil} | {:error, term()}
+  @callback fetch_latest_offset(shape_opts()) :: {:ok, offset()} | {:error, term()}
+
+  @doc """
+  Get the current pg_snapshot for the shape storage.
+  """
+  @callback fetch_pg_snapshot(shape_opts()) :: {:ok, pg_snapshot() | nil} | {:error, term()}
 
   @callback set_pg_snapshot(pg_snapshot(), shape_opts()) :: :ok
 
@@ -281,8 +276,13 @@ defmodule Electric.ShapeCache.Storage do
   end
 
   @impl __MODULE__
-  def get_current_position({mod, shape_opts}) do
-    mod.get_current_position(shape_opts)
+  def fetch_latest_offset({mod, shape_opts}) do
+    mod.fetch_latest_offset(shape_opts)
+  end
+
+  @impl __MODULE__
+  def fetch_pg_snapshot({mod, shape_opts}) do
+    mod.fetch_pg_snapshot(shape_opts)
   end
 
   @impl __MODULE__

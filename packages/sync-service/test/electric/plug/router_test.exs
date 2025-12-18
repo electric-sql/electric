@@ -2702,7 +2702,7 @@ defmodule Electric.Plug.RouterTest do
           ],
           do: Postgrex.query!(ctx.db_conn, stmt)
 
-      Process.sleep(100)
+      Process.sleep(120)
 
       assert {req, 200,
               [

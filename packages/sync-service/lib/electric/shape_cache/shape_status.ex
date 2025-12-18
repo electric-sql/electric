@@ -17,7 +17,6 @@ defmodule Electric.ShapeCache.ShapeStatus do
   alias Electric.Shapes.Shape
   alias Electric.ShapeCache.Storage
   alias Electric.ShapeCache.ShapeStatus.ShapeDb
-  alias Electric.Replication.LogOffset
 
   import Electric, only: [is_stack_id: 1, is_shape_handle: 1]
   require Electric.Shapes.Shape
@@ -26,29 +25,17 @@ defmodule Electric.ShapeCache.ShapeStatus do
 
   @type stack_id() :: Electric.stack_id()
   @type shape_handle() :: Electric.shape_handle()
+  @type stack_ref() :: atom() | stack_id() | [stack_id: stack_id()]
 
-  if Mix.env() == :test do
-    @type stack_ref() ::
-            atom()
-            | stack_id()
-            | [stack_id: stack_id()]
-            | %{shape_meta_table: atom(), shape_last_used_table: atom()}
-  else
-    @type stack_ref() :: atom() | stack_id() | [stack_id: stack_id()]
-  end
-
-  @backup_version "v6"
+  @backup_version "v7"
   @backup_dir "shape_status_backups"
 
   @shape_last_used_time_pos 2
-
-  @shape_meta_shape_hash_pos 2
-  @shape_meta_snapshot_started_pos 3
-  @shape_meta_latest_offset_pos 4
+  @shape_hash_pos 2
 
   @spec initialize_from_storage(stack_ref()) :: :ok | {:error, term()}
   def initialize_from_storage(stack_ref) do
-    storage = storage_from_stack_ref(stack_ref)
+    storage = storage_for_stack_ref(stack_ref)
     stack_id = extract_stack_id(stack_ref)
 
     with backup_dir when is_binary(backup_dir) <- backup_dir(storage),
@@ -62,7 +49,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
 
         create_last_used_table(stack_id)
         create_relation_lookup_table(stack_id)
-        create_meta_table(stack_id)
+        create_hash_lookup_table(stack_id)
         ShapeDb.create(stack_id, @backup_version)
 
         load_all_shapes(stack_id, storage)
@@ -72,31 +59,26 @@ defmodule Electric.ShapeCache.ShapeStatus do
   @spec save_checkpoint(stack_ref()) :: :ok | {:error, term()}
   def save_checkpoint(stack_ref) do
     Logger.info("Saving shape status checkpoint for #{inspect(stack_ref)}")
-    storage = storage_from_stack_ref(stack_ref)
+    storage = storage_for_stack_ref(stack_ref)
 
     case backup_dir(storage) do
-      nil -> {:error, :no_backup_dir_configured}
-      backup_dir -> store_backup(stack_ref, backup_dir)
+      nil ->
+        {:error, :no_backup_dir_configured}
+
+      backup_dir ->
+        ShapeDb.store_backup(
+          extract_stack_id(stack_ref),
+          backup_dir,
+          @backup_version
+        )
     end
   end
 
   @spec add_shape(stack_ref(), Shape.t()) :: {:ok, shape_handle()} | {:error, term()}
   def add_shape(stack_ref, shape) do
     stack_id = extract_stack_id(stack_ref)
-
     {_, shape_handle} = Shape.generate_id(shape)
-    # For fresh snapshots we're setting "latest" offset to be a highest possible virtual offset,
-    # which is needed because while the snapshot is being made we DON'T update this ETS table.
-    # We could, but that would required making the Storage know about this module and I don't like that.
-    offset = LogOffset.last_before_real_offsets()
-
     {comparable_shape, shape_hash} = Shape.comparable_hash(shape)
-
-    true =
-      :ets.insert_new(
-        shape_meta_table(stack_id),
-        {shape_handle, shape_hash, false, offset}
-      )
 
     true =
       :ets.insert_new(
@@ -105,7 +87,16 @@ defmodule Electric.ShapeCache.ShapeStatus do
       )
 
     true =
-      :ets.insert_new(shape_last_used_table(stack_id), {shape_handle, System.monotonic_time()})
+      :ets.insert_new(
+        shape_last_used_table(stack_id),
+        {shape_handle, System.monotonic_time()}
+      )
+
+    true =
+      :ets.insert_new(
+        shape_hash_lookup_table(stack_id),
+        {shape_handle, shape_hash}
+      )
 
     # Add the lookup last as it is the one that enables clients to find the shape
     :ok = ShapeDb.add_shape(stack_id, shape, comparable_shape, shape_handle)
@@ -138,7 +129,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
 
   @spec count_shapes(stack_ref()) :: non_neg_integer()
   def count_shapes(stack_ref) do
-    :ets.info(shape_meta_table(stack_ref), :size)
+    :ets.info(shape_hash_lookup_table(stack_ref), :size)
   end
 
   @spec list_shape_handles_for_relations(stack_ref(), [Electric.oid_relation()]) :: [
@@ -155,7 +146,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
   @spec remove_shape(stack_ref(), shape_handle()) :: {:ok, Shape.t()} | {:error, term()}
   def remove_shape(stack_ref, shape_handle) do
     stack_id = extract_stack_id(stack_ref)
-    meta_table = shape_meta_table(stack_id)
+    hash_lookup_table = shape_hash_lookup_table(stack_id)
 
     try do
       # Always delete the hash lookup first, so that we guarantee that no shape spec
@@ -163,7 +154,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
       # select_delete can lead to inconsistent state
       shape = ShapeDb.remove_shape!(stack_id, shape_handle)
 
-      :ets.delete(meta_table, shape_handle)
+      :ets.delete(hash_lookup_table, shape_handle)
 
       relation_lookup_table = shape_relation_lookup_table(stack_id)
 
@@ -187,7 +178,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
   @spec reset(stack_ref()) :: :ok
   def reset(stack_ref) do
     ShapeDb.reset(extract_stack_id(stack_ref))
-    :ets.delete_all_objects(shape_meta_table(stack_ref))
+    :ets.delete_all_objects(shape_hash_lookup_table(stack_ref))
     :ets.delete_all_objects(shape_relation_lookup_table(stack_ref))
     :ets.delete_all_objects(shape_last_used_table(stack_ref))
     :ok
@@ -202,7 +193,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
 
     ShapeDb.delete(stack_id)
 
-    try(do: :ets.delete(shape_meta_table(stack_id)), rescue: (_ in ArgumentError -> :ok))
+    try(do: :ets.delete(shape_hash_lookup_table(stack_id)), rescue: (_ in ArgumentError -> :ok))
 
     try(
       do: :ets.delete(shape_relation_lookup_table(stack_id)),
@@ -213,20 +204,13 @@ defmodule Electric.ShapeCache.ShapeStatus do
     :ok
   end
 
-  @spec get_existing_shape(stack_ref(), Shape.t() | shape_handle()) ::
-          {shape_handle(), LogOffset.t()} | nil
-  def get_existing_shape(stack_ref, %Shape{} = shape) do
+  @spec fetch_handle_by_shape(stack_ref(), Shape.t()) :: {:ok, shape_handle()} | :error
+  def fetch_handle_by_shape(stack_ref, %Shape{} = shape) do
     stack_id = extract_stack_id(stack_ref)
 
     case ShapeDb.handle_for_shape(stack_id, shape) do
-      nil ->
-        nil
-
-      shape_handle when is_shape_handle(shape_handle) ->
-        case latest_offset(stack_ref, shape_handle) do
-          {:ok, offset} -> {shape_handle, offset}
-          :error -> nil
-        end
+      nil -> :error
+      handle -> {:ok, handle}
     end
   end
 
@@ -242,73 +226,41 @@ defmodule Electric.ShapeCache.ShapeStatus do
 
   def has_shape_handle?(stack_ref, shape_handle) do
     case :ets.lookup_element(
-           shape_meta_table(stack_ref),
+           shape_hash_lookup_table(stack_ref),
            shape_handle,
-           @shape_meta_shape_hash_pos,
+           @shape_hash_pos,
            nil
          ) do
       nil -> false
       hash when is_integer(hash) -> true
     end
+  rescue
+    ArgumentError -> false
   end
 
   @doc """
   Cheaply validate that a shape handle matches the shape definition by matching
   the shape's saved hash against the provided shape's hash.
   """
+  @spec validate_shape_handle(stack_ref(), shape_handle(), Shape.t()) :: :ok | :error
   def validate_shape_handle(stack_ref, shape_handle, %Shape{} = shape) do
     case :ets.lookup_element(
-           shape_meta_table(stack_ref),
+           shape_hash_lookup_table(stack_ref),
            shape_handle,
-           @shape_meta_shape_hash_pos,
+           @shape_hash_pos,
            nil
          ) do
       nil ->
         :error
 
       valid_hash when is_integer(valid_hash) ->
-        shape_hash = Shape.hash(shape)
-
-        if shape_hash == valid_hash do
-          {:ok, latest_offset!(stack_ref, shape_handle)}
-        else
-          :error
+        case Shape.hash(shape) do
+          ^valid_hash -> :ok
+          _ -> :error
         end
     end
-  end
-
-  @spec initialise_shape(stack_ref(), shape_handle(), LogOffset.t()) :: :ok
-  def initialise_shape(stack_ref, shape_handle, latest_offset) do
-    true =
-      :ets.update_element(
-        shape_meta_table(stack_ref),
-        shape_handle,
-        {@shape_meta_latest_offset_pos, latest_offset}
-      )
-
-    :ok
-  end
-
-  @spec mark_snapshot_as_started(stack_ref(), shape_handle()) :: :ok
-  def mark_snapshot_as_started(stack_ref, shape_handle) do
-    :ets.update_element(
-      shape_meta_table(stack_ref),
-      shape_handle,
-      {@shape_meta_snapshot_started_pos, true}
-    )
-
-    :ok
-  end
-
-  @spec set_latest_offset(stack_ref(), shape_handle(), LogOffset.t()) :: :ok
-  def set_latest_offset(stack_ref, shape_handle, latest_offset) do
-    :ets.update_element(
-      shape_meta_table(stack_ref),
-      shape_handle,
-      {@shape_meta_latest_offset_pos, latest_offset}
-    )
-
-    :ok
+  rescue
+    ArgumentError -> :error
   end
 
   @doc """
@@ -383,38 +335,15 @@ defmodule Electric.ShapeCache.ShapeStatus do
     end
   end
 
-  def latest_offset!(stack_ref, shape_handle) do
-    :ets.lookup_element(
-      shape_meta_table(stack_ref),
-      shape_handle,
-      @shape_meta_latest_offset_pos
-    )
-    |> normalize_latest_offset()
-  end
-
-  def latest_offset(stack_ref, shape_handle) do
-    turn_raise_into_error(fn -> latest_offset!(stack_ref, shape_handle) end)
-  end
-
-  @spec snapshot_started?(stack_ref(), shape_handle()) :: boolean()
-  def snapshot_started?(stack_ref, shape_handle) do
-    :ets.lookup_element(
-      shape_meta_table(stack_ref),
-      shape_handle,
-      @shape_meta_snapshot_started_pos
-    )
-  rescue
-    ArgumentError -> false
-  end
-
+  @spec extract_stack_id(stack_ref()) :: stack_id()
   defp extract_stack_id(stack_ref) when is_list(stack_ref) or is_map(stack_ref),
     do: Access.fetch!(stack_ref, :stack_id)
 
   defp extract_stack_id(stack_ref) when is_stack_id(stack_ref), do: stack_ref
 
-  @spec shape_meta_table(stack_ref()) :: atom()
-  defp shape_meta_table(stack_ref),
-    do: :"shape_meta_table:#{extract_stack_id(stack_ref)}"
+  @spec shape_hash_lookup_table(stack_ref()) :: atom()
+  defp shape_hash_lookup_table(stack_ref),
+    do: :"shape_hash_lookup_table:#{extract_stack_id(stack_ref)}"
 
   @spec shape_relation_lookup_table(stack_ref()) :: atom()
   defp shape_relation_lookup_table(stack_ref),
@@ -424,18 +353,18 @@ defmodule Electric.ShapeCache.ShapeStatus do
   defp shape_last_used_table(stack_ref),
     do: :"shape_last_used_table:#{extract_stack_id(stack_ref)}"
 
-  defp create_meta_table(stack_id) do
-    meta_table = shape_meta_table(stack_id)
+  defp create_hash_lookup_table(stack_id) do
+    hash_lookup_table = shape_hash_lookup_table(stack_id)
 
-    :ets.new(meta_table, [
+    :ets.new(hash_lookup_table, [
       :named_table,
       :public,
-      :ordered_set,
+      :set,
       write_concurrency: :auto,
       read_concurrency: true
     ])
 
-    meta_table
+    hash_lookup_table
   end
 
   defp create_relation_lookup_table(stack_id) do
@@ -457,7 +386,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
     :ets.new(last_used_table, [
       :named_table,
       :public,
-      :ordered_set,
+      :set,
       write_concurrency: :auto
     ])
 
@@ -484,7 +413,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
 
     shape_data = Storage.get_stored_shapes(storage, shape_handles)
 
-    {shape_db_tuples, meta_tuples, last_used_tuples, relation_lookup_tuples, num_shapes} =
+    {shape_db_tuples, hash_lookup_tuples, last_used_tuples, relation_lookup_tuples, num_shapes} =
       Enum.reduce(
         shape_data,
         {[], [], [], [], 0},
@@ -492,10 +421,10 @@ defmodule Electric.ShapeCache.ShapeStatus do
           {_shape_handle, {:error, _reason}}, acc ->
             acc
 
-          {shape_handle, {:ok, {shape, snapshot_started?, latest_offset}}},
+          {shape_handle, {:ok, shape}},
           {
             shape_db_tuples,
-            meta_tuples,
+            hash_lookup_tuples,
             last_used_tuples,
             relation_lookup_tuples,
             num_shapes
@@ -504,27 +433,21 @@ defmodule Electric.ShapeCache.ShapeStatus do
             {comparable, shape_hash} = Shape.comparable_hash(shape)
 
             shape_db_tuples = [{shape, comparable, shape_handle} | shape_db_tuples]
-
-            meta_tuples =
-              [
-                {shape_handle, shape_hash, snapshot_started?, latest_offset}
-                | meta_tuples
-              ]
-
+            hash_lookup_tuples = [{shape_handle, shape_hash} | hash_lookup_tuples]
             last_used_tuples = [{shape_handle, start_time} | last_used_tuples]
 
             relation_lookup_tuples =
               Enum.map(relations, fn {oid, _} -> {{oid, shape_handle}, nil} end) ++
                 relation_lookup_tuples
 
-            {shape_db_tuples, meta_tuples, last_used_tuples, relation_lookup_tuples,
+            {shape_db_tuples, hash_lookup_tuples, last_used_tuples, relation_lookup_tuples,
              num_shapes + 1}
         end
       )
 
     :ets.insert(shape_relation_lookup_table(stack_id), relation_lookup_tuples)
     :ets.insert(shape_last_used_table(stack_id), last_used_tuples)
-    :ets.insert(shape_meta_table(stack_id), meta_tuples)
+    :ets.insert(shape_hash_lookup_table(stack_id), hash_lookup_tuples)
 
     ShapeDb.load(stack_id, shape_db_tuples)
 
@@ -547,11 +470,10 @@ defmodule Electric.ShapeCache.ShapeStatus do
       Shape.has_dependencies(shape) and not Shape.dependency_handles_known?(shape)
     end)
     |> Enum.each(fn {handle, %Shape{shape_dependencies: deps} = shape} ->
-      handles = Enum.map(deps, &get_existing_shape(stack_id, &1))
+      handle_results = Enum.map(deps, &fetch_handle_by_shape(stack_id, &1))
 
-      if not Enum.any?(handles, &is_nil/1) do
-        handles = Enum.map(handles, &elem(&1, 0))
-
+      if not Enum.any?(handle_results, &match?(:error, &1)) do
+        handles = Enum.map(handle_results, fn {:ok, h} -> h end)
         ShapeDb.update_shape(stack_id, handle, %{shape | shape_dependencies_handles: handles})
       else
         Logger.warning("Shape #{inspect(handle)} has dependencies but some are unknown")
@@ -561,95 +483,50 @@ defmodule Electric.ShapeCache.ShapeStatus do
     end)
   end
 
-  defp store_backup(stack_ref, backup_dir) when is_binary(backup_dir) do
-    meta_table = shape_meta_table(stack_ref)
-    backup_dir_tmp = "#{backup_dir}_tmp"
-    async_delete(stack_ref, backup_dir_tmp)
-    File.mkdir_p!(backup_dir_tmp)
-
-    with :ok <-
-           :ets.tab2file(
-             meta_table,
-             backup_file_path(backup_dir_tmp, :shape_meta_data),
-             sync: true,
-             extended_info: [:object_count]
-           ),
-         :ok <-
-           ShapeDb.store_backup(
-             extract_stack_id(stack_ref),
-             backup_dir_tmp,
-             @backup_version
-           ),
-         :ok <- async_delete(stack_ref, backup_dir),
-         :ok <- File.rename(backup_dir_tmp, backup_dir) do
-      :ok
-    else
-      e ->
-        async_delete(stack_ref, backup_dir_tmp)
-        e
-    end
-  end
-
   defp load_backup(stack_id, backup_dir, storage) do
-    meta_table = shape_meta_table(stack_id)
-    meta_table_path = backup_file_path(backup_dir, :shape_meta_data)
+    with :ok <- ShapeDb.restore(stack_id, backup_dir, @backup_version),
+         {:ok, stored_handles} <- Storage.get_all_stored_shape_handles(storage) do
+      hash_lookup_table = create_hash_lookup_table(stack_id)
+      last_used_table = create_last_used_table(stack_id)
+      relation_lookup_table = create_relation_lookup_table(stack_id)
 
-    result =
-      with {:ok, recovered_meta_table} <- :ets.file2tab(meta_table_path, verify: true),
-           :ok <- ShapeDb.restore(stack_id, backup_dir, @backup_version),
-           {:ok, stored_handles} <- Storage.get_all_stored_shape_handles(storage) do
-        if recovered_meta_table != meta_table,
-          do: :ets.rename(recovered_meta_table, meta_table)
+      # repopulate last used table with current time and relation lookup table
+      # from the shape definition
+      in_memory_handles =
+        ShapeDb.reduce_shapes(stack_id, MapSet.new(), fn {shape_handle, shape}, acc ->
+          :ets.insert(hash_lookup_table, {shape_handle, Shape.hash(shape)})
+          :ets.insert(last_used_table, {shape_handle, System.monotonic_time()})
 
-        last_used_table = create_last_used_table(stack_id)
-        relation_lookup_table = create_relation_lookup_table(stack_id)
-
-        # repopulate last used table with current time and relation lookup table
-        # from the shape definition
-        in_memory_handles =
-          ShapeDb.reduce_shapes(stack_id, MapSet.new(), fn {shape_handle, shape}, acc ->
-            :ets.insert(last_used_table, {shape_handle, System.monotonic_time()})
-
-            :ets.insert(
-              relation_lookup_table,
-              Enum.map(Shape.list_relations(shape), fn {oid, _name} ->
-                {{oid, shape_handle}, nil}
-              end)
-            )
-
-            MapSet.put(acc, shape_handle)
-          end)
-
-        # reconcile stored vs in-memory handles by loading any missing stored shapes
-        # and removing any invalid in-memory shapes
-        missing_stored_handles = MapSet.difference(stored_handles, in_memory_handles)
-        invalid_in_memory_handles = MapSet.difference(in_memory_handles, stored_handles)
-
-        if MapSet.size(missing_stored_handles) > 0,
-          do: load_shapes(stack_id, missing_stored_handles, storage)
-
-        Enum.each(invalid_in_memory_handles, fn handle -> remove_shape(stack_id, handle) end)
-
-        :ok
-      else
-        {:error, reason} ->
-          Logger.warning(
-            "Failed to restore shape status tables with #{inspect(reason)} - aborting restore"
+          :ets.insert(
+            relation_lookup_table,
+            Enum.map(Shape.list_relations(shape), fn {oid, _name} ->
+              {{oid, shape_handle}, nil}
+            end)
           )
 
-          try(do: :ets.delete(meta_table), rescue: (_ in ArgumentError -> :ok))
-          :ok = ShapeDb.delete(stack_id)
-          {:error, reason}
-      end
+          MapSet.put(acc, shape_handle)
+        end)
 
-    async_delete(stack_id, backup_dir)
+      # reconcile stored vs in-memory handles by loading any missing stored shapes
+      # and removing any invalid in-memory shapes
+      missing_stored_handles = MapSet.difference(stored_handles, in_memory_handles)
+      invalid_in_memory_handles = MapSet.difference(in_memory_handles, stored_handles)
 
-    result
-  end
+      if MapSet.size(missing_stored_handles) > 0,
+        do: load_shapes(stack_id, missing_stored_handles, storage)
 
-  defp backup_file_path(backup_dir, table_type)
-       when table_type in [:shape_hash_lookup, :shape_meta_data] do
-    backup_dir |> Path.join("#{table_type}.#{@backup_version}.ets.backup") |> String.to_charlist()
+      Enum.each(invalid_in_memory_handles, fn handle -> remove_shape(stack_id, handle) end)
+
+      :ok
+    else
+      {:error, reason} ->
+        Logger.warning(
+          "Failed to restore shape status tables with #{inspect(reason)} - aborting restore"
+        )
+
+        :ok = ShapeDb.delete(stack_id)
+        {:error, reason}
+    end
   end
 
   def backup_dir(storage) do
@@ -659,38 +536,10 @@ defmodule Electric.ShapeCache.ShapeStatus do
     end
   end
 
-  defp storage_from_stack_ref(stack_ref) do
+  @spec storage_for_stack_ref(stack_ref()) :: Storage.storage()
+  defp storage_for_stack_ref(stack_ref) do
     stack_ref
     |> extract_stack_id()
     |> Storage.for_stack()
-  end
-
-  defp async_delete(stack_ref, path) do
-    stack_ref
-    |> extract_stack_id()
-    |> Electric.AsyncDeleter.delete(path)
-  end
-
-  # When writing the snapshot initially, we don't know ahead of time the real last offset for the
-  # shape, so we use `0_inf` essentially as a pointer to the end of all possible snapshot chunks,
-  # however many there may be. That means the clients will be using that as the latest offset.
-  # In order to avoid confusing the clients, we make sure that we preserve that functionality
-  # across a restart by setting the latest offset to `0_inf` if there were no real offsets yet.
-  defp normalize_latest_offset(offset) do
-    import Electric.Replication.LogOffset,
-      only: [is_virtual_offset: 1, last_before_real_offsets: 0]
-
-    if is_virtual_offset(offset),
-      do: last_before_real_offsets(),
-      else: offset
-  end
-
-  defp turn_raise_into_error(fun) do
-    try do
-      {:ok, fun.()}
-    rescue
-      ArgumentError ->
-        :error
-    end
   end
 end
