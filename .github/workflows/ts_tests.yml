@@ -18,34 +18,29 @@ permissions:
   packages: write
 
 jobs:
-  list_ts_packages:
-    name: List TS packages
-    runs-on: ubuntu-latest
+  list_ts_packages_and_examples:
+    name: List TS packages and examples
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     outputs:
-      directories: ${{ steps.list_ts_packages.outputs.directories }}
-    steps:
-      - uses: actions/checkout@v4
-      - run: echo "directories=`find packages/ -mindepth 1 -maxdepth 1 -type d -exec test -e '{}'/tsconfig.json \; -print | jq -R -s -c 'split("\n")[:-1]'`" >> $GITHUB_OUTPUT
-        id: list_ts_packages
-
-  list_examples:
-    name: List examples
-    runs-on: ubuntu-latest
-    outputs:
+      package_directories: ${{ steps.list_ts_packages.outputs.directories }}
       example_names: ${{ steps.list_examples.outputs.example_names }}
     steps:
       - uses: actions/checkout@v4
+
+      - run: echo "directories=`find packages/ -mindepth 1 -maxdepth 1 -type d -exec test -e '{}'/tsconfig.json \; -print | jq -R -s -c 'split("\n")[:-1]'`" >> $GITHUB_OUTPUT
+        id: list_ts_packages
+
       - run: echo "example_names=$(find examples/ -mindepth 1 -maxdepth 2 -type f -name package.json | xargs dirname | jq -R -s -c 'split("\n")[:-1]')" >> $GITHUB_OUTPUT
         id: list_examples
 
-  check_packages:
+  typecheck_packages:
     name: Build and typecheck ${{ matrix.package_dir }}
-    needs: [list_ts_packages]
-    runs-on: ubuntu-latest
+    needs: [list_ts_packages_and_examples]
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     strategy:
       fail-fast: false
       matrix:
-        package_dir: ${{ fromJson(needs.list_ts_packages.outputs.directories) }}
+        package_dir: ${{ fromJson(needs.list_ts_packages_and_examples.outputs.package_directories) }}
     defaults:
       run:
         working-directory: ${{ matrix.package_dir }}
@@ -65,13 +60,13 @@ jobs:
 
   build_and_test_packages:
     name: 'Test ${{ matrix.package_dir }} w/ sync-service'
-    needs: [list_ts_packages, ensure_sync_service_image]
-    runs-on: ubuntu-latest
+    needs: [list_ts_packages_and_examples, ensure_sync_service_image]
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
-        package_dir: ${{ fromJson(needs.list_ts_packages.outputs.directories) }}
+        package_dir: ${{ fromJson(needs.list_ts_packages_and_examples.outputs.package_directories) }}
     defaults:
       run:
         working-directory: ${{ matrix.package_dir }}
@@ -120,12 +115,12 @@ jobs:
 
   check_and_build_examples:
     name: Check and build ${{ matrix.example_folder }}
-    needs: [list_examples, build_and_test_packages]
-    runs-on: ubuntu-latest
+    needs: [list_ts_packages_and_examples, build_and_test_packages]
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     strategy:
       fail-fast: false
       matrix:
-        example_folder: ${{ fromJson(needs.list_examples.outputs.example_names) }}
+        example_folder: ${{ fromJson(needs.list_ts_packages_and_examples.outputs.example_names) }}
     defaults:
       run:
         working-directory: ${{ matrix.example_folder }}
