@@ -283,15 +283,18 @@ describe(`ExpiredShapesCache`, () => {
         // This is the bug scenario - proxy ignores cache buster and returns stale response
         resolveSecondRequest()
         return Promise.resolve(
-          new Response(JSON.stringify([{ headers: { control: `up-to-date` } }]), {
-            status: 200,
-            headers: {
-              'electric-handle': `original-handle-H1`, // OLD handle from cached response!
-              'electric-offset': `0_0`,
-              'electric-schema': `{}`,
-              'electric-cursor': `cursor-1`,
-            },
-          })
+          new Response(
+            JSON.stringify([{ headers: { control: `up-to-date` } }]),
+            {
+              status: 200,
+              headers: {
+                'electric-handle': `original-handle-H1`, // OLD handle from cached response!
+                'electric-offset': `0_0`,
+                'electric-schema': `{}`,
+                'electric-cursor': `cursor-1`,
+              },
+            }
+          )
         )
       } else {
         // Third+ request: if client incorrectly accepted H1, it would 409 again
@@ -310,15 +313,18 @@ describe(`ExpiredShapesCache`, () => {
         // Normal response for H2
         aborter.abort()
         return Promise.resolve(
-          new Response(JSON.stringify([{ headers: { control: `up-to-date` } }]), {
-            status: 200,
-            headers: {
-              'electric-handle': `new-handle-H2`,
-              'electric-offset': `0_0`,
-              'electric-schema': `{}`,
-              'electric-cursor': `cursor-1`,
-            },
-          })
+          new Response(
+            JSON.stringify([{ headers: { control: `up-to-date` } }]),
+            {
+              status: 200,
+              headers: {
+                'electric-handle': `new-handle-H2`,
+                'electric-offset': `0_0`,
+                'electric-schema': `{}`,
+                'electric-cursor': `cursor-1`,
+              },
+            }
+          )
         )
       }
     })

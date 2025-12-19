@@ -993,6 +993,14 @@ export class ShapeStream<T extends Row<unknown> = Row>
         : null
       if (shapeHandle !== expiredHandle) {
         this.#shapeHandle = shapeHandle
+      } else {
+        console.warn(
+          `[Electric] Received stale cached response with expired shape handle. ` +
+            `This should not happen and indicates a proxy/CDN caching misconfiguration. ` +
+            `The response contained handle "${shapeHandle}" which was previously marked as expired. ` +
+            `Check that your proxy includes all query parameters (especially 'handle' and 'offset') in its cache key. ` +
+            `Ignoring the stale handle and continuing with handle "${this.#shapeHandle}".`
+        )
       }
     }
 
