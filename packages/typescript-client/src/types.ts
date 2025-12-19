@@ -74,17 +74,17 @@ export type MoveOutPattern = { pos: number; value: string }
  * before generating the final SQL.
  */
 export type SerializedExpression =
-  | { type: 'ref'; column: string } // Column reference
-  | { type: 'val'; paramIndex: number } // Parameter placeholder ($1, $2, etc.)
-  | { type: 'func'; name: string; args: SerializedExpression[] } // Operator/function
+  | { type: `ref`; column: string } // Column reference
+  | { type: `val`; paramIndex: number } // Parameter placeholder ($1, $2, etc.)
+  | { type: `func`; name: string; args: SerializedExpression[] } // Operator/function
 
 /**
  * Serialized ORDER BY clause for structured subset queries.
  */
 export type SerializedOrderByClause = {
   column: string
-  direction?: 'asc' | 'desc' // omitted means 'asc'
-  nulls?: 'first' | 'last'
+  direction?: `asc` | `desc` // omitted means 'asc'
+  nulls?: `first` | `last`
 }
 
 export type SubsetParams = {

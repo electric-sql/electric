@@ -43,7 +43,7 @@ export function compileExpression(
  * Compiles a function expression into SQL.
  */
 function compileFunction(
-  expr: { type: 'func'; name: string; args: SerializedExpression[] },
+  expr: { type: `func`; name: string; args: SerializedExpression[] },
   columnMapper?: (col: string) => string
 ): string {
   const args = expr.args.map((arg) => compileExpression(arg, columnMapper))
