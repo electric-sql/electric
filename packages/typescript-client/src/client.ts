@@ -982,7 +982,26 @@ export class ShapeStream<T extends Row<unknown> = Row>
     const { headers, status } = response
     const shapeHandle = headers.get(SHAPE_HANDLE_HEADER)
     if (shapeHandle) {
-      this.#shapeHandle = shapeHandle
+      // Don't accept a handle we know is expired - this can happen if a
+      // proxy serves a stale cached response despite the expired_handle
+      // cache buster parameter
+      const shapeKey = this.#currentFetchUrl
+        ? canonicalShapeKey(this.#currentFetchUrl)
+        : null
+      const expiredHandle = shapeKey
+        ? expiredShapesCache.getExpiredHandle(shapeKey)
+        : null
+      if (shapeHandle !== expiredHandle) {
+        this.#shapeHandle = shapeHandle
+      } else {
+        console.warn(
+          `[Electric] Received stale cached response with expired shape handle. ` +
+            `This should not happen and indicates a proxy/CDN caching misconfiguration. ` +
+            `The response contained handle "${shapeHandle}" which was previously marked as expired. ` +
+            `Check that your proxy includes all query parameters (especially 'handle' and 'offset') in its cache key. ` +
+            `Ignoring the stale handle and continuing with handle "${this.#shapeHandle}".`
+        )
+      }
     }
 
     const lastOffset = headers.get(CHUNK_LAST_OFFSET_HEADER)

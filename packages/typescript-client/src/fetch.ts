@@ -1,6 +1,7 @@
 import {
   CHUNK_LAST_OFFSET_HEADER,
   CHUNK_UP_TO_DATE_HEADER,
+  EXPIRED_HANDLE_QUERY_PARAM,
   LIVE_QUERY_PARAM,
   OFFSET_QUERY_PARAM,
   SHAPE_HANDLE_HEADER,
@@ -435,6 +436,21 @@ function getNextChunkUrl(url: string, res: Response): string | void {
   // don't prefetch live requests, rushing them will only
   // potentially miss more recent data
   if (nextUrl.searchParams.has(LIVE_QUERY_PARAM)) return
+
+  // don't prefetch if the response handle is the expired handle from the request
+  // this can happen when a proxy serves a stale cached response despite the
+  // expired_handle cache buster parameter
+  const expiredHandle = nextUrl.searchParams.get(EXPIRED_HANDLE_QUERY_PARAM)
+  if (expiredHandle && shapeHandle === expiredHandle) {
+    console.warn(
+      `[Electric] Received stale cached response with expired shape handle. ` +
+        `This should not happen and indicates a proxy/CDN caching misconfiguration. ` +
+        `The response contained handle "${shapeHandle}" which was previously marked as expired. ` +
+        `Check that your proxy includes all query parameters (especially 'handle' and 'offset') in its cache key. ` +
+        `Skipping prefetch to prevent infinite 409 loop.`
+    )
+    return
+  }
 
   nextUrl.searchParams.set(SHAPE_HANDLE_QUERY_PARAM, shapeHandle)
   nextUrl.searchParams.set(OFFSET_QUERY_PARAM, lastOffset)
