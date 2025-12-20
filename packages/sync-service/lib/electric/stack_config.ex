@@ -9,18 +9,24 @@ defmodule Electric.StackConfig do
     :ets.lookup_element(table(stack_id), key, 2, default)
   end
 
-  def spawn_opts(stack_id, process_name) do
-    stack_id
-    |> lookup(:process_spawn_opts, %{})
-    |> Map.get(process_name, [])
-  end
-
   def lookup!(stack_id, key) do
     :ets.lookup_element(table(stack_id), key, 2)
   rescue
     ArgumentError ->
       raise RuntimeError,
         message: "stack config value #{inspect(key)} is missing for stack #{stack_id}"
+  end
+
+  def erase(stack_id, key) do
+    :ets.delete(table(stack_id), key)
+  rescue
+    ArgumentError -> :ok
+  end
+
+  def spawn_opts(stack_id, process_name) do
+    stack_id
+    |> lookup(:process_spawn_opts, %{})
+    |> Map.get(process_name, [])
   end
 
   @doc false

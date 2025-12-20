@@ -322,12 +322,10 @@ defmodule Electric.Connection.Manager do
   end
 
   defp init_validated_connection_opts(%{stack_id: stack_id} = state) do
-    stack_validated_connection_opts =
-      Electric.StackConfig.lookup(stack_id, @validated_conn_opts_config_key)
-
-    Map.update!(state, :validated_connection_opts, fn map ->
-      Map.new(map, fn {type, nil} -> {type, stack_validated_connection_opts[type]} end)
-    end)
+    # Wipe any previously stored validated connection opts on startup to avoid persisting a
+    # configuration that is no longer valid. We always start connection manager with the
+    # options specified by the user to avoid gettting into an unrecoverable failure state.
+    Electric.StackConfig.erase(stack_id, @validated_conn_opts_config_key)
   end
 
   defp update_validated_connection_opts(%{stack_id: stack_id} = state, type, validated_opts) do
