@@ -326,6 +326,7 @@ defmodule Electric.Connection.Manager do
     # configuration that is no longer valid. We always start connection manager with the
     # options specified by the user to avoid gettting into an unrecoverable failure state.
     Electric.StackConfig.erase(stack_id, @validated_conn_opts_config_key)
+    state
   end
 
   defp update_validated_connection_opts(%{stack_id: stack_id} = state, type, validated_opts) do
