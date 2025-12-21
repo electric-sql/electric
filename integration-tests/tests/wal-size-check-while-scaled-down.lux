@@ -32,7 +32,7 @@
 # Start Electric and wait for it to finish initialization.
 # Have to disable the ConnectionManagerPing process, otherwise it will error when
 # Connection.Manager itself goes down as part of the test scenario.
-[invoke setup_electric_with_env "DO_NOT_START_CONN_MAN_PING=true ELECTRIC_IDLE_WAL_SIZE_CHECK_PERIOD=1s ELECTRIC_IDLE_WAL_SIZE_THRESHOLD=10000"]
+[invoke setup_electric_with_env "DO_NOT_START_CONN_MAN_PING=true ELECTRIC_REPLICATION_IDLE_WAL_SIZE_CHECK_PERIOD=1s ELECTRIC_REPLICATION_IDLE_WAL_SIZE_THRESHOLD=10000"]
 [shell electric]
   [timeout 10]
   ??[debug] Replication client started streaming
@@ -56,14 +56,14 @@
   ??(0 rows)
 
 
-# Sleep until it's time to verify that Electric has checked retained WAL size in Postgres after ELECTRIC_IDLE_WAL_SIZE_CHECK_PERIOD
+# Sleep until it's time to verify that Electric has checked retained WAL size in Postgres after ELECTRIC_REPLICATION_IDLE_WAL_SIZE_CHECK_PERIOD
 [shell electric]
   [sleep 2]
 
   ??Opening a database connection to check the retained WAL size
   ?Retained WAL size [0-9]+B is below the threshold of ~10\.0KB\. Scheduling the next check to take place after 1sec
 
-# Write to the database enough data to force the retained WAL size to go over ELECTRIC_IDLE_WAL_SIZE_THRESHOLD
+# Write to the database enough data to force the retained WAL size to go over ELECTRIC_REPLICATION_IDLE_WAL_SIZE_THRESHOLD
 [shell psql]
   !insert into items select * from generate_series(1,1000);
   ??INSERT
