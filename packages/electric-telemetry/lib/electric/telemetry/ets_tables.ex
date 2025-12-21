@@ -23,23 +23,41 @@ defmodule ElectricTelemetry.EtsTables do
     - `count` - Number of top tables to return (default: #{@default_individual_count})
 
   ## Returns
-  A list of maps with `:name`, `:type`, and `:memory` keys, sorted by memory (descending).
+  A list of maps with `:name`, `:type`, `:memory`, `:size`, `:type_table_count`, and `:avg_size_per_type` keys,
+  sorted by memory (descending).
 
   ## Examples
 
       iex> ElectricTelemetry.EtsTables.top_tables(5)
       [
-        %{name: :filter_shapes, type: :filter_shapes, memory: 605630464},
-        %{name: :"shapedb:shape_lookup:6dd7c00b-...", type: :"shapedb:shape_lookup", memory: 605625344},
+        %{name: :filter_shapes, type: :filter_shapes, memory: 605630464, size: 200122,
+          type_table_count: 1, avg_size_per_type: 200122.0},
+        %{name: :"shapedb:shape_lookup:6dd7c00b-...", type: :"shapedb:shape_lookup", memory: 605625344,
+          size: 200122, type_table_count: 2, avg_size_per_type: 200122.0},
         ...
       ]
   """
   def top_tables(count \\ @default_individual_count)
 
   def top_tables(count) when is_integer(count) and count > 0 do
-    :ets.all()
-    |> Enum.map(&table_info/1)
-    |> Enum.reject(&(&1.memory == 0))
+    all_table_info =
+      :ets.all()
+      |> Enum.map(&table_info/1)
+      |> Enum.reject(&(&1.memory == 0))
+
+    # Calculate type statistics
+    type_stats = calculate_type_stats(all_table_info)
+
+    # Enrich each table with type statistics
+    all_table_info
+    |> Enum.map(fn table ->
+      stats = Map.get(type_stats, table.type)
+
+      Map.merge(table, %{
+        type_table_count: stats.count,
+        avg_size_per_type: stats.avg_size
+      })
+    end)
     |> Enum.sort_by(& &1.memory, :desc)
     |> Enum.take(count)
   end
@@ -57,29 +75,34 @@ defmodule ElectricTelemetry.EtsTables do
     - `count` - Number of top types to return (default: #{@default_type_count})
 
   ## Returns
-  A list of maps with `:type`, `:memory`, and `:table_count` keys, sorted by memory (descending).
+  A list of maps with `:type`, `:memory`, `:table_count`, and `:avg_size` keys, sorted by memory (descending).
 
   ## Examples
 
       iex> ElectricTelemetry.EtsTables.top_by_type(5)
       [
-        %{type: :"Elixir.Electric.Registry.ShapeChange", memory: 6815744, table_count: 29},
-        %{type: :tls_socket, memory: 60928, table_count: 24},
+        %{type: :"Elixir.Electric.Registry.ShapeChange", memory: 6815744, table_count: 29, avg_size: 785.5},
+        %{type: :tls_socket, memory: 60928, table_count: 24, avg_size: 1.0},
         ...
       ]
   """
   def top_by_type(count \\ @default_type_count)
 
   def top_by_type(count) when is_integer(count) and count > 0 do
-    :ets.all()
-    |> Enum.map(&table_info/1)
-    |> Enum.reject(&(&1.memory == 0))
-    |> Enum.group_by(& &1.type, & &1.memory)
-    |> Enum.map(fn {type, memories} ->
+    all_table_info =
+      :ets.all()
+      |> Enum.map(&table_info/1)
+      |> Enum.reject(&(&1.memory == 0))
+
+    type_stats = calculate_type_stats(all_table_info)
+
+    type_stats
+    |> Enum.map(fn {type, stats} ->
       %{
         type: type,
-        memory: Enum.sum(memories),
-        table_count: length(memories)
+        memory: stats.total_memory,
+        table_count: stats.count,
+        avg_size: stats.avg_size
       }
     end)
     |> Enum.sort_by(& &1.memory, :desc)
@@ -119,19 +142,30 @@ defmodule ElectricTelemetry.EtsTables do
       |> Enum.map(&table_info/1)
       |> Enum.reject(&(&1.memory == 0))
 
+    # Calculate type statistics once
+    type_stats = calculate_type_stats(all_table_info)
+
     top_tables =
       all_table_info
+      |> Enum.map(fn table ->
+        stats = Map.get(type_stats, table.type)
+
+        Map.merge(table, %{
+          type_table_count: stats.count,
+          avg_size_per_type: stats.avg_size
+        })
+      end)
       |> Enum.sort_by(& &1.memory, :desc)
       |> Enum.take(individual_count)
 
     top_by_type =
-      all_table_info
-      |> Enum.group_by(& &1.type, & &1.memory)
-      |> Enum.map(fn {type, memories} ->
+      type_stats
+      |> Enum.map(fn {type, stats} ->
         %{
           type: type,
-          memory: Enum.sum(memories),
-          table_count: length(memories)
+          memory: stats.total_memory,
+          table_count: stats.count,
+          avg_size: stats.avg_size
         }
       end)
       |> Enum.sort_by(& &1.memory, :desc)
@@ -149,12 +183,33 @@ defmodule ElectricTelemetry.EtsTables do
     name = table_name(table_ref)
     type = table_type(name)
     memory = table_memory(table_ref)
+    size = table_size(table_ref)
 
     %{
       name: name,
       type: type,
-      memory: memory
+      memory: memory,
+      size: size
     }
+  end
+
+  defp calculate_type_stats(all_table_info) do
+    all_table_info
+    |> Enum.group_by(& &1.type)
+    |> Enum.map(fn {type, tables} ->
+      total_memory = Enum.reduce(tables, 0, fn table, acc -> acc + table.memory end)
+      total_size = Enum.reduce(tables, 0, fn table, acc -> acc + table.size end)
+      count = length(tables)
+      avg_size = if count > 0, do: total_size / count, else: 0.0
+
+      {type,
+       %{
+         total_memory: total_memory,
+         count: count,
+         avg_size: avg_size
+       }}
+    end)
+    |> Map.new()
   end
 
   defp table_name(table_ref) do
@@ -172,6 +227,13 @@ defmodule ElectricTelemetry.EtsTables do
       words when is_integer(words) ->
         word_size = :erlang.system_info(:wordsize)
         words * word_size
+    end
+  end
+
+  defp table_size(table_ref) do
+    case :ets.info(table_ref, :size) do
+      :undefined -> 0
+      size when is_integer(size) -> size
     end
   end
 

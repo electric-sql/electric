@@ -26,8 +26,17 @@ defmodule ElectricTelemetry.EtsTablesTest do
         assert Map.has_key?(result, :name)
         assert Map.has_key?(result, :type)
         assert Map.has_key?(result, :memory)
+        assert Map.has_key?(result, :size)
+        assert Map.has_key?(result, :type_table_count)
+        assert Map.has_key?(result, :avg_size_per_type)
         assert is_integer(result.memory)
         assert result.memory > 0
+        assert is_integer(result.size)
+        assert result.size >= 0
+        assert is_integer(result.type_table_count)
+        assert result.type_table_count > 0
+        assert is_float(result.avg_size_per_type)
+        assert result.avg_size_per_type >= 0.0
       end
 
       # Check that results are sorted by memory (descending)
@@ -49,6 +58,43 @@ defmodule ElectricTelemetry.EtsTablesTest do
     test "excludes tables with zero memory" do
       results = EtsTables.top_tables(100)
       assert Enum.all?(results, fn %{memory: memory} -> memory > 0 end)
+    end
+
+    test "correctly calculates type statistics" do
+      # Create tables with same type but different sizes
+      table1 = :ets.new(:"TestType:stack_aaa", [:public])
+      table2 = :ets.new(:"TestType:stack_bbb", [:public])
+      table3 = :ets.new(:"TestType:stack_ccc", [:public])
+
+      # Insert different amounts of data to get different sizes
+      # Using more data to ensure these tables appear in top results
+      for i <- 1..1000, do: :ets.insert(table1, {i, :binary.copy(<<0>>, 100)})
+      for i <- 1..2000, do: :ets.insert(table2, {i, :binary.copy(<<0>>, 100)})
+      for i <- 1..3000, do: :ets.insert(table3, {i, :binary.copy(<<0>>, 100)})
+
+      results = EtsTables.top_tables(100)
+
+      test_tables =
+        results
+        |> Enum.filter(fn %{type: type} -> type == :TestType end)
+
+      # Should find all 3 tables if they made it to the top 100
+      if length(test_tables) > 0 do
+        # All should report type_table_count as 3
+        assert Enum.all?(test_tables, fn table -> table.type_table_count == 3 end)
+
+        # Average size should be (1000 + 2000 + 3000) / 3 = 2000.0
+        assert Enum.all?(test_tables, fn table -> table.avg_size_per_type == 2000.0 end)
+
+        # Verify individual sizes
+        sizes = Enum.map(test_tables, & &1.size) |> Enum.sort()
+        assert sizes == [1000, 2000, 3000]
+      end
+
+      # Cleanup
+      :ets.delete(table1)
+      :ets.delete(table2)
+      :ets.delete(table3)
     end
   end
 
@@ -75,6 +121,8 @@ defmodule ElectricTelemetry.EtsTablesTest do
         assert electric_test_type.table_count == 2
         assert is_integer(electric_test_type.memory)
         assert electric_test_type.memory > 0
+        assert is_float(electric_test_type.avg_size)
+        assert electric_test_type.avg_size > 0.0
       end
 
       # Another.Module should have 1 table
@@ -82,6 +130,8 @@ defmodule ElectricTelemetry.EtsTablesTest do
         assert another_module_type.table_count == 1
         assert is_integer(another_module_type.memory)
         assert another_module_type.memory > 0
+        assert is_float(another_module_type.avg_size)
+        assert another_module_type.avg_size > 0.0
       end
 
       # Check that results are sorted by memory (descending)
@@ -122,6 +172,36 @@ defmodule ElectricTelemetry.EtsTablesTest do
       assert is_list(results)
       assert length(results) <= 3
     end
+
+    test "correctly calculates average size for grouped types" do
+      # Create tables with same type but different sizes
+      table1 = :ets.new(:"GroupTest:id_111", [:public])
+      table2 = :ets.new(:"GroupTest:id_222", [:public])
+      table3 = :ets.new(:"GroupTest:id_333", [:public])
+
+      # Insert different amounts of data
+      for i <- 1..1500, do: :ets.insert(table1, {i, :binary.copy(<<0>>, 100)})
+      for i <- 1..2500, do: :ets.insert(table2, {i, :binary.copy(<<0>>, 100)})
+      for i <- 1..3500, do: :ets.insert(table3, {i, :binary.copy(<<0>>, 100)})
+
+      results = EtsTables.top_by_type(50)
+
+      group_test_type = Enum.find(results, fn %{type: type} -> type == :GroupTest end)
+
+      if group_test_type do
+        # Should have 3 tables grouped together
+        assert group_test_type.table_count == 3
+        # Average size should be (1500 + 2500 + 3500) / 3 = 2500.0
+        assert group_test_type.avg_size == 2500.0
+        # Memory should be the sum of all 3 tables
+        assert group_test_type.memory > 0
+      end
+
+      # Cleanup
+      :ets.delete(table1)
+      :ets.delete(table2)
+      :ets.delete(table3)
+    end
   end
 
   describe "top_memory_stats/2" do
@@ -142,6 +222,9 @@ defmodule ElectricTelemetry.EtsTablesTest do
         assert Map.has_key?(item, :name)
         assert Map.has_key?(item, :type)
         assert Map.has_key?(item, :memory)
+        assert Map.has_key?(item, :size)
+        assert Map.has_key?(item, :type_table_count)
+        assert Map.has_key?(item, :avg_size_per_type)
       end
 
       # Check structure of top_by_type
@@ -149,6 +232,7 @@ defmodule ElectricTelemetry.EtsTablesTest do
         assert Map.has_key?(item, :type)
         assert Map.has_key?(item, :memory)
         assert Map.has_key?(item, :table_count)
+        assert Map.has_key?(item, :avg_size)
       end
     end
   end
