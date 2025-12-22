@@ -77,6 +77,7 @@ BETTER_AUTH_SECRET=${betterAuthSecret}
       // Add/update scripts for cloud mode and Electric commands
       packageJson.scripts = {
         ...packageJson.scripts,
+        dev: `pnpm dev:cloud`,
         claim: `npx open-cli "${getElectricDashboardUrl()}/claim?uuid=${credentials.claimId}"`,
         'deploy:netlify': `NODE_ENV=production NITRO_PRESET=netlify pnpm build && NODE_ENV=production npx netlify deploy --no-build --prod --dir=dist --functions=.netlify/functions-internal && npx netlify env:import .env && npx netlify env:set NODE_ENV production`,
       }

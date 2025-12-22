@@ -7,7 +7,7 @@
     "node": ">=20.19.0 || >=22.12.0"
   },
   "scripts": {
-    "dev": "pnpm dev:cloud",
+    "dev": "pnpm dev:docker",
     "dev:cloud": "USE_ELECTRIC_URL=true vite dev",
     "dev:docker": "docker compose up -d && USE_ELECTRIC_URL=false vite dev",
     "backend:up": "docker compose up -d",
