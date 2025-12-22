@@ -123,7 +123,7 @@ const parseBigInt = (value: string) => BigInt(value)
 const parseJson = (value: string) => JSON.parse(value)
 const identityParser: ParseFunction = (v: string) => v
 
-export const defaultParser: Parser = {
+export const defaultParser = {
   int2: parseNumber,
   int4: parseNumber,
   int8: parseBigInt,
@@ -132,7 +132,7 @@ export const defaultParser: Parser = {
   float8: parseNumber,
   json: parseJson,
   jsonb: parseJson,
-}
+} satisfies Parser
 
 // Taken from: https://github.com/electric-sql/pglite/blob/main/packages/pglite/src/types.ts#L233-L279
 export function pgArrayParser<Extensions>(
