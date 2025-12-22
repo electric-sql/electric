@@ -1,5 +1,4 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import type { ElectricCredentials } from '../src/electric-api.js'
 
 // Mock the electric-api module
 vi.mock(`../src/electric-api.js`, () => ({
@@ -13,10 +12,11 @@ vi.mock(`../src/template-setup.js`, () => ({
 }))
 
 describe(`cli`, () => {
-  const mockCredentials: ElectricCredentials = {
+  const mockCredentials = {
     source_id: `test-source-id`,
     secret: `test-secret`,
     DATABASE_URL: `postgresql://test:test@localhost:5432/test`,
+    claimId: `test-claim-id`,
   }
 
   let mockProvisionElectricResources: ReturnType<typeof vi.fn>
@@ -177,13 +177,13 @@ describe(`cli`, () => {
 
       expect(consoleLogSpy).toHaveBeenCalledWith(`Commands:`)
       expect(consoleLogSpy).toHaveBeenCalledWith(
-        `  pnpm psql     # Connect to database`
+        `  pnpm psql             # Connect to database`
       )
       expect(consoleLogSpy).toHaveBeenCalledWith(
-        `  pnpm claim    # Claim cloud resources`
+        `  pnpm claim            # Claim cloud resources`
       )
       expect(consoleLogSpy).toHaveBeenCalledWith(
-        `  pnpm deploy   # Deploy to Netlify`
+        `  pnpm deploy:netlify   # Deploy to Netlify`
       )
     })
 

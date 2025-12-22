@@ -26,7 +26,6 @@ async function main() {
   console.log(`Creating app: ${appName}`)
 
   try {
-    console.log(`Provisioning resources...`)
     const credentials = await provisionElectricResources()
 
     // Step 2: Setup TanStack Start template
@@ -43,9 +42,9 @@ async function main() {
     console.log(`  pnpm dev`)
     console.log(``)
     console.log(`Commands:`)
-    console.log(`  pnpm psql     # Connect to database`)
-    console.log(`  pnpm claim    # Claim cloud resources`)
-    console.log(`  pnpm deploy   # Deploy to Netlify`)
+    console.log(`  pnpm psql             # Connect to database`)
+    console.log(`  pnpm claim            # Claim cloud resources`)
+    console.log(`  pnpm deploy:netlify   # Deploy to Netlify`)
     console.log(``)
     console.log(`Tutorial: https://electric-sql.com/docs`)
   } catch (error) {

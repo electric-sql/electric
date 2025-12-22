@@ -4,8 +4,9 @@ import { writeFileSync, readFileSync, existsSync } from 'fs'
 import { join } from 'path'
 import {
   ElectricCredentials,
-  DEFAULT_ELECTRIC_API_BASE,
+  ClaimableSourceResponse,
   getElectricUrl,
+  getElectricDashboardUrl,
 } from './electric-api'
 
 /**
@@ -19,7 +20,7 @@ function generateSecret(length: number = 32): string {
 
 export async function setupTemplate(
   appName: string,
-  credentials: ElectricCredentials
+  credentials: ElectricCredentials & ClaimableSourceResponse
 ): Promise<void> {
   const appPath = join(process.cwd(), appName)
 
@@ -67,33 +68,6 @@ BETTER_AUTH_SECRET=${betterAuthSecret}
       writeFileSync(gitignorePath, gitignoreContent)
     }
 
-    // Step 4: Copy shared tsconfig.json if it doesn't exist
-    const tsconfigPath = join(appPath, `tsconfig.json`)
-    if (!existsSync(tsconfigPath)) {
-      console.log(`Setting up TypeScript configuration...`)
-      // Use a basic tsconfig.json template instead of copying from parent
-      const tsconfigContent = JSON.stringify(
-        {
-          compilerOptions: {
-            target: `es2020`,
-            module: `commonjs`,
-            moduleResolution: `node`,
-            strict: true,
-            esModuleInterop: true,
-            allowSyntheticDefaultImports: true,
-            skipLibCheck: true,
-            types: [`node`],
-          },
-          include: [`src/**/*`],
-          exclude: [`node_modules`, `dist`],
-        },
-        null,
-        2
-      )
-      writeFileSync(tsconfigPath, tsconfigContent)
-    }
-
-    // Step 5: Extend package.json with additional scripts
     console.log(`Adding Electric commands...`)
     const packageJsonPath = join(appPath, `package.json`)
 
@@ -103,84 +77,12 @@ BETTER_AUTH_SECRET=${betterAuthSecret}
       // Add/update scripts for cloud mode and Electric commands
       packageJson.scripts = {
         ...packageJson.scripts,
-        // Dev mode scripts - cloud mode is default for `npx @electric-sql/start` apps
-        dev: `pnpm dev:cloud`,
-        'dev:cloud': `vite dev`,
-        'dev:docker': `docker compose up -d && vite dev`,
-        // Backend management for docker mode
-        'backend:up': `docker compose up -d`,
-        'backend:down': `docker compose down`,
-        'backend:clear': `docker compose down -v`,
-        // Electric-specific commands
-        psql: `node -e "require('dotenv').config();require('child_process').execSync('psql \\\"'+process.env.DATABASE_URL+'\\\"',{stdio:'inherit'})"`,
-        claim: `node -e "require(\\"./electric-commands\\").claim()"`,
-        deploy: `NITRO_PRESET=netlify pnpm build && netlify deploy --prod --dir=dist --functions=.netlify/functions-internal`,
+        claim: `npx open-cli "${getElectricDashboardUrl()}/claim?uuid=${credentials.claimId}"`,
+        'deploy:netlify': `NITRO_PRESET=netlify pnpm build && npx netlify deploy --no-build --prod --dir=dist --functions=.netlify/functions-internal && npx netlify env:import .env`,
       }
 
       writeFileSync(packageJsonPath, JSON.stringify(packageJson, null, 2))
     }
-
-    // Step 6: Create electric-commands.js helper file
-    console.log(`Setting up command helpers...`)
-    const electricCommandsContent = `// Using native fetch (Node.js 18+)
-
-const DEFAULT_ELECTRIC_API_BASE = '${DEFAULT_ELECTRIC_API_BASE}';
-
-function getElectricApiBase() {
-  return process.env.ELECTRIC_API_BASE_URL || DEFAULT_ELECTRIC_API_BASE;
-}
-
-async function claim() {
-  const { ELECTRIC_SOURCE_ID, ELECTRIC_SECRET } = process.env;
-
-  if (!ELECTRIC_SOURCE_ID || !ELECTRIC_SECRET) {
-    console.error('Missing ELECTRIC_SOURCE_ID or ELECTRIC_SECRET environment variables');
-    console.error('Make sure .env file exists and contains Electric credentials');
-    process.exit(1);
-  }
-
-  try {
-    const response = await fetch(\`\${getElectricApiBase()}/v1/claim\`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': \`Bearer \${ELECTRIC_SECRET}\`,
-        'User-Agent': '@electric-sql/start'
-      },
-      body: JSON.stringify({
-        source_id: ELECTRIC_SOURCE_ID
-      })
-    });
-
-    if (!response.ok) {
-      throw new Error(\`Electric API error: \${response.status} \${response.statusText}\`);
-    }
-
-    const result = await response.json();
-
-    console.log('Resource claim initiated');
-    console.log('');
-    console.log('Open this URL in your browser to complete the claiming process:');
-    console.log(result.claimUrl);
-    console.log('');
-    console.log('This will:');
-    console.log('- Link Electric Cloud account');
-    console.log('- Link Neon database account');
-    console.log('- Transfer temporary resources');
-
-  } catch (error) {
-    console.error('Failed to initiate resource claim:', error.message);
-    process.exit(1);
-  }
-}
-
-module.exports = { claim };
-`
-
-    writeFileSync(
-      join(appPath, `electric-commands.js`),
-      electricCommandsContent
-    )
 
     console.log(`Template setup complete`)
   } catch (error) {

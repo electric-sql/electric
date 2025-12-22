@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import {
   provisionElectricResources,
   claimResources,
-  type ElectricCredentials,
 } from '../src/electric-api.js'
 
 describe(`electric-api`, () => {
@@ -28,10 +27,11 @@ describe(`electric-api`, () => {
   describe(`provisionElectricResources`, () => {
     it(`should successfully provision resources`, async () => {
       const testClaimId = `test-claim-id`
-      const mockCredentials: ElectricCredentials = {
+      const mockCredentials = {
         source_id: `test-source-id`,
         secret: `test-secret`,
         DATABASE_URL: `postgresql://test:test@localhost:5432/test`,
+        claimId: testClaimId,
       }
 
       // Mock the two-step process: POST to create, then GET to poll
@@ -157,10 +157,11 @@ describe(`electric-api`, () => {
 
     it(`should poll until ready state`, async () => {
       const testClaimId = `test-claim-id`
-      const mockCredentials: ElectricCredentials = {
+      const mockCredentials = {
         source_id: `test-source-id`,
         secret: `test-secret`,
         DATABASE_URL: `postgresql://test:test@localhost:5432/test`,
+        claimId: testClaimId,
       }
 
       mockFetch

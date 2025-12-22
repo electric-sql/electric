@@ -1,5 +1,4 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import type { ElectricCredentials } from '../src/electric-api.js'
 
 // Mock child_process
 vi.mock(`child_process`, () => ({
@@ -21,10 +20,11 @@ vi.mock(`fs`, () => ({
 }))
 
 describe(`template-setup`, () => {
-  const mockCredentials: ElectricCredentials = {
+  const mockCredentials = {
     source_id: `test-source-id`,
     secret: `test-secret`,
     DATABASE_URL: `postgresql://test:test@localhost:5432/test`,
+    claimId: `test-claim-id`,
   }
 
   let mockExecSync: ReturnType<typeof vi.fn>
@@ -159,77 +159,11 @@ describe(`template-setup`, () => {
       const packageJson = JSON.parse(packageJsonWriteCall![1] as string)
 
       // Electric-specific commands
-      expect(packageJson.scripts).toHaveProperty(`psql`)
       expect(packageJson.scripts).toHaveProperty(`claim`)
-      expect(packageJson.scripts).toHaveProperty(`deploy`)
-      // Dev mode scripts - should override original dev script
-      expect(packageJson.scripts.dev).toBe(`pnpm dev:cloud`)
-      expect(packageJson.scripts[`dev:cloud`]).toBe(`vite dev`)
-      expect(packageJson.scripts[`dev:docker`]).toBe(
-        `docker compose up -d && vite dev`
-      )
-      // Backend management scripts
-      expect(packageJson.scripts[`backend:up`]).toBe(`docker compose up -d`)
-      expect(packageJson.scripts[`backend:down`]).toBe(`docker compose down`)
-      expect(packageJson.scripts[`backend:clear`]).toBe(
-        `docker compose down -v`
-      )
-      // Original build script should be preserved
+      expect(packageJson.scripts).toHaveProperty(`deploy:netlify`)
+      // Original scripts should be preserved
+      expect(packageJson.scripts.dev).toBe(`vinxi dev`)
       expect(packageJson.scripts.build).toBe(`vinxi build`)
-    })
-
-    it(`should generate electric-commands.js with configurable API URL`, async () => {
-      mockExistsSync.mockReturnValue(true)
-      mockReadFileSync.mockImplementation((path: string) => {
-        if (path.endsWith(`package.json`)) return `{"scripts":{}}`
-        if (path.endsWith(`.gitignore`)) return `.env\n`
-        return ``
-      })
-
-      const { setupTemplate } = await import(`../src/template-setup.js`)
-      await setupTemplate(`my-app`, mockCredentials)
-
-      const electricCommandsWriteCall = mockWriteFileSync.mock.calls.find(
-        (call: unknown[]) =>
-          (call[0] as string).endsWith(`electric-commands.js`)
-      )
-
-      expect(electricCommandsWriteCall).toBeDefined()
-      const content = electricCommandsWriteCall![1] as string
-
-      // Should have configurable API base
-      expect(content).toContain(`DEFAULT_ELECTRIC_API_BASE`)
-      expect(content).toContain(`getElectricApiBase()`)
-      expect(content).toContain(`ELECTRIC_API_BASE_URL`)
-      // Should use the function for the claim endpoint
-      expect(content).toContain(`\${getElectricApiBase()}/v1/claim`)
-      // Should NOT have hardcoded URL
-      expect(content).not.toContain(`'https://api.electric-sql.com/v1/claim'`)
-    })
-
-    it(`should create tsconfig.json if it does not exist`, async () => {
-      mockExistsSync.mockImplementation((path: string) => {
-        if (path.endsWith(`tsconfig.json`)) return false
-        if (path.endsWith(`package.json`)) return true
-        if (path.endsWith(`.gitignore`)) return true
-        return false
-      })
-      mockReadFileSync.mockImplementation((path: string) => {
-        if (path.endsWith(`package.json`)) return `{"scripts":{}}`
-        if (path.endsWith(`.gitignore`)) return `.env\n`
-        return ``
-      })
-
-      const { setupTemplate } = await import(`../src/template-setup.js`)
-      await setupTemplate(`my-app`, mockCredentials)
-
-      const tsconfigWriteCall = mockWriteFileSync.mock.calls.find(
-        (call: unknown[]) => (call[0] as string).endsWith(`tsconfig.json`)
-      )
-
-      expect(tsconfigWriteCall).toBeDefined()
-      const tsconfig = JSON.parse(tsconfigWriteCall![1] as string)
-      expect(tsconfig).toHaveProperty(`compilerOptions`)
     })
 
     it(`should not overwrite existing tsconfig.json`, async () => {

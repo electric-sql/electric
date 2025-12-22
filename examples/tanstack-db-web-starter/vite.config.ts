@@ -16,11 +16,7 @@ const config = defineConfig({
     }),
     caddyPlugin(),
     tailwindcss(),
-    tanstackStart({
-      router: {
-        srcDirectory: `src`,
-      },
-    }),
+    tanstackStart(),
     viteReact(),
   ],
   optimizeDeps: {

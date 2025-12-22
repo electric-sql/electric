@@ -1,6 +1,6 @@
 {
   "name": "@electric-sql/start",
-  "version": "1.0.0",
+  "version": "0.0.0",
   "description": "CLI package for the ElectricSQL Quickstart.",
   "type": "module",
   "main": "./dist/index.js",

@@ -1,16 +1,17 @@
-import "dotenv/config"
+import "@dotenvx/dotenvx/config"
 import { ELECTRIC_PROTOCOL_QUERY_PARAMS } from "@electric-sql/client"
 
 /**
- * Gets the Electric SQL endpoint URL based on environment configuration
- * Priority: ELECTRIC_URL env var > production default > local docker default
+ * Gets the Electric SQL endpoint URL based on environment configuration.
+ *
+ * If running in production, or `USE_ELECTRIC_URL` is set to `true`, the `ELECTRIC_URL` env var is used,
+ * if available, otherwise the default cloud endpoint is used.
+ * Otherwise, the local docker endpoint is used, assuming default port 30000.
  */
 function getElectricUrl(): string {
-  if (process.env.ELECTRIC_URL) {
-    return process.env.ELECTRIC_URL
-  }
-  return process.env.NODE_ENV === `production`
-    ? `https://api.electric-sql.cloud`
+  return process.env.NODE_ENV === `production` ||
+    process.env.USE_ELECTRIC_URL === `true`
+    ? process.env.ELECTRIC_URL || `https://api.electric-sql.cloud`
     : `http://localhost:30000`
 }
 

@@ -6,7 +6,7 @@ export interface ElectricCredentials {
   DATABASE_URL: string
 }
 
-interface ClaimableSourceResponse {
+export interface ClaimableSourceResponse {
   claimId: string
 }
 
@@ -22,8 +22,9 @@ interface ClaimableSourceStatus {
   error: string | null
 }
 
-export const DEFAULT_ELECTRIC_API_BASE = `https://api.electric-sql.cloud`
+export const DEFAULT_ELECTRIC_API_BASE = `https://dashboard.electric-sql.cloud/api`
 export const DEFAULT_ELECTRIC_URL = `https://api.electric-sql.cloud`
+export const DEFAULT_ELECTRIC_DASHBOARD_URL = `https://dashboard.electric-sql.cloud`
 
 export function getElectricApiBase(): string {
   return process.env.ELECTRIC_API_BASE_URL ?? DEFAULT_ELECTRIC_API_BASE
@@ -31,6 +32,10 @@ export function getElectricApiBase(): string {
 
 export function getElectricUrl(): string {
   return process.env.ELECTRIC_URL ?? DEFAULT_ELECTRIC_URL
+}
+
+export function getElectricDashboardUrl(): string {
+  return process.env.ELECTRIC_DASHBOARD_URL ?? DEFAULT_ELECTRIC_DASHBOARD_URL
 }
 
 const POLL_INTERVAL_MS = 1000 // Poll every 1 second
@@ -85,7 +90,10 @@ async function pollClaimableSource(
   )
 }
 
-export async function provisionElectricResources(): Promise<ElectricCredentials> {
+export async function provisionElectricResources(): Promise<
+  ElectricCredentials & ClaimableSourceResponse
+> {
+  console.log(`Provisioning resources...`)
   try {
     // Step 1: POST to create claimable source and get claimId
     const response = await fetch(
@@ -130,6 +138,7 @@ export async function provisionElectricResources(): Promise<ElectricCredentials>
       source_id: status.source.source_id,
       secret: status.source.secret,
       DATABASE_URL: status.connection_uri,
+      claimId,
     }
   } catch (error) {
     if (error instanceof Error) {
