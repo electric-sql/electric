@@ -38,6 +38,7 @@ jobs:
             remix/**
             react/**
             burn/**
+            tanstack-db-web-starter/**
 
       - name: Create example matrix
         id: create-example-matrix
@@ -85,6 +86,7 @@ jobs:
       remix: ${{ steps.deploy.outputs.remix }}
       react: ${{ steps.deploy.outputs.react }}
       burn: ${{ steps.deploy.outputs.burn }}
+      tanstack-db-web-starter: ${{ steps.deploy.outputs.tanstack-db-web-starter }}
 
     env:
       DEPLOY_ENV: ${{ github.event_name == 'push' && 'production' || format('pr-{0}', github.event.number) }}
@@ -108,6 +110,11 @@ jobs:
       ELECTRIC_ADMIN_API_AUTH_TOKEN: ${{ secrets.ELECTRIC_ADMIN_API_AUTH_TOKEN }}
       SECRET_KEY_BASE: ${{ secrets.LIVEVIEW_EXAMPLE_SECRET_KEY_BASE }}
       ANTHROPIC_KEY: ${{ secrets.ANTHROPIC_KEY }}
+      QUICKSTART_DATABASE_URI: ${{ secrets.QUICKSTART_DATABASE_URI }}
+      QUICKSTART_POOLED_DATABASE_URI: ${{ secrets.QUICKSTART_POOLED_DATABASE_URI }}
+      QUICKSTART_SOURCE_ID: ${{ vars.QUICKSTART_SOURCE_ID }}
+      QUICKSTART_SOURCE_SECRET: ${{ secrets.QUICKSTART_SOURCE_SECRET }}
+      BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET }}
 
     steps:
       - uses: actions/checkout@v4
@@ -295,7 +302,8 @@ jobs:
               "phoenix-liveview": "${{ needs.deploy.outputs.phoenix-liveview }}",
               "tanstack": "${{ needs.deploy.outputs.tanstack }}",
               "remix": "${{ needs.deploy.outputs.remix }}",
-              "react": "${{ needs.deploy.outputs.react }}"
+              "react": "${{ needs.deploy.outputs.react }}",
+              "tanstack-db-web-starter": "${{ needs.deploy.outputs.tanstack-db-web-starter }}"
             }
 
             // Create deployments array only for examples that were deployed
