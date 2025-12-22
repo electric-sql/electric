@@ -11,12 +11,106 @@ type NullableParseFunction<Extensions = never> = (
   value: NullableToken,
   additionalInfo?: Omit<ColumnInfo, `type` | `dims`>
 ) => Value<Extensions>
+
 /**
+ * Built-in PostgreSQL type names that can be used as parser keys.
+ * This provides autocomplete/IntelliSense support for common PostgreSQL types.
+ *
+ * Note: Custom types (enums, domains, composite types) can still be used as keys
+ * even though they are not listed here.
+ */
+export type BuiltInPgType =
+  // Numeric Types
+  | `int2`
+  | `int4`
+  | `int8`
+  | `float4`
+  | `float8`
+  | `numeric`
+  | `decimal`
+  | `money`
+  | `oid`
+  // Character Types
+  | `char`
+  | `bpchar`
+  | `varchar`
+  | `text`
+  | `citext`
+  | `name`
+  // Binary Type
+  | `bytea`
+  // Date/Time Types
+  | `date`
+  | `time`
+  | `timetz`
+  | `timestamp`
+  | `timestamptz`
+  | `interval`
+  // Boolean
+  | `bool`
+  // Geometric Types
+  | `point`
+  | `line`
+  | `lseg`
+  | `box`
+  | `path`
+  | `polygon`
+  | `circle`
+  // Network Types
+  | `cidr`
+  | `inet`
+  | `macaddr`
+  | `macaddr8`
+  // Bit String Types
+  | `bit`
+  | `varbit`
+  // Text Search Types
+  | `tsvector`
+  | `tsquery`
+  // UUID
+  | `uuid`
+  // XML
+  | `xml`
+  // JSON Types
+  | `json`
+  | `jsonb`
+  // Range Types
+  | `int4range`
+  | `int8range`
+  | `numrange`
+  | `tsrange`
+  | `tstzrange`
+  | `daterange`
+  // Multirange Types (PostgreSQL 14+)
+  | `int4multirange`
+  | `int8multirange`
+  | `nummultirange`
+  | `tsmultirange`
+  | `tstzmultirange`
+  | `datemultirange`
+
+/**
+ * Parser type mapping PostgreSQL type names to parse functions.
+ *
+ * Provides autocomplete for built-in PostgreSQL types while still allowing
+ * custom types like enums, domains, and composite types.
+ *
  * @typeParam Extensions - Additional types that can be parsed by this parser beyond the standard SQL types.
  *                         Defaults to no additional types.
+ *
+ * @example
+ * ```ts
+ * const parser: Parser = {
+ *   // Built-in types get autocomplete
+ *   timestamptz: (value) => new Date(value),
+ *   uuid: (value) => value,
+ *   // Custom types (enums, domains) also work
+ *   my_enum: (value) => value as MyEnum,
+ * }
+ * ```
  */
 export type Parser<Extensions = never> = {
-  [key: string]: ParseFunction<Extensions>
+  [key in BuiltInPgType | (string & {})]?: ParseFunction<Extensions>
 }
 
 export type TransformFunction<Extensions = never> = (
