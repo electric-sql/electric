@@ -1,88 +1,60 @@
 # Deploy Quickstart Demo to quickstart.examples.electric-sql.com
 
-## Executive Summary
+## Goal
 
-Deploy the `examples/tanstack-db-web-starter` as a demo at `https://quickstart.examples.electric-sql.com` so the link in the quickstart guide (`website/docs/quickstart.md`) works.
+Deploy the `examples/tanstack-db-web-starter` app to `https://quickstart.examples.electric-sql.com` so the demo link in the quickstart guide works.
 
 **Target URL**: `https://quickstart.examples.electric-sql.com`
 **Source**: `examples/tanstack-db-web-starter`
 
-### Key Decisions
-
-- **Seed data**: None - demo starts empty, visitors sign up
-- **PR previews**: Yes, using Neon branching
-- **e2e tests**: None for this example
-- **Migrations**: Fully automated during deployment
-
 ---
 
-## Background Investigation
+## Context
 
-### Current Infrastructure Pattern
+### Why This Deployment is Different
 
-The Electric examples use a consistent deployment pattern:
+The quickstart app (`tanstack-db-web-starter`) differs from other examples in the repo:
 
-- **Infrastructure**: SST v2 on AWS + Cloudflare DNS + Neon Postgres
-- **Automation**: GitHub Actions workflows for CI/CD
-- **Domain pattern**: `{example-name}.examples.electric-sql.com` for production
-- **PR previews**: `{example-name}-stage-pr-{number}.examples.electric-sql.com`
+| Aspect     | Quickstart App                                | Typical Example (e.g., `react`) |
+| ---------- | --------------------------------------------- | ------------------------------- |
+| Framework  | TanStack Start (full-stack)                   | Vite (static site)              |
+| Database   | Own schema (users, sessions, projects, todos) | Shared `items` table            |
+| Auth       | Better Auth                                   | None                            |
+| API        | tRPC                                          | Direct Electric sync            |
+| Migrations | Drizzle ORM                                   | Shared pg-migrations            |
 
-### Existing Workflows Reviewed
+Because it has server-side functionality (tRPC, auth), it needs a server runtime — but **not SSR** (server-side rendering of React components). The app already has `defaultSsr: false` set in `src/start.tsx`.
 
-| Workflow                                           | Purpose                                              |
-| -------------------------------------------------- | ---------------------------------------------------- |
-| `.github/workflows/deploy_examples.yml`            | Auto-deploys on push to main (only changed examples) |
-| `.github/workflows/deploy_all_examples.yml`        | Manual trigger to deploy all examples                |
-| `.github/workflows/teardown_examples_pr_stack.yml` | Cleans up PR stacks when PRs close                   |
-| `.github/workflows/test_examples.yml`              | Daily e2e tests against production examples          |
+### How Electric Examples Are Deployed
 
-### Quickstart App Architecture
+All examples use a consistent pattern:
 
-The `tanstack-db-web-starter` is significantly different from other examples:
+- **Infrastructure**: SST v3 on AWS + Cloudflare DNS + Neon Postgres
+- **CI/CD**: GitHub Actions workflows
+- **Domains**:
+  - Production: `{example}.examples.electric-sql.com`
+  - PR previews: `{example}-stage-pr-{N}.examples.electric-sql.com`
 
-| Aspect         | Quickstart                                 | Typical Example (e.g., react) |
-| -------------- | ------------------------------------------ | ----------------------------- |
-| Framework      | TanStack Start (SSR)                       | Vite static site              |
-| Database       | Drizzle ORM with auth tables               | Shared simple `items` table   |
-| Schema         | users, sessions, accounts, projects, todos | items                         |
-| Migrations     | Drizzle-generated (`src/db/out/*.sql`)     | `.shared/db/migrations/`      |
-| Authentication | Better Auth (sessions, accounts)           | None                          |
-| API Layer      | tRPC                                       | Direct Electric sync          |
-| SST Component  | `TanStackStart` (Lambda + CloudFront)      | `StaticSite`                  |
+### What SST Component We'll Use
 
----
-
-## Deployment Architecture Decision
-
-### Option A: SST TanStackStart Component (Recommended)
-
-SST provides native support for TanStack Start apps via the `TanStackStart` component:
+**`sst.aws.TanStackStart`** — SST's native component for TanStack Start apps:
 
 - Deploys to AWS Lambda + CloudFront
-- Handles SSR properly
-- Requires `server.preset: "aws-lambda"` configuration
+- Handles API routes (tRPC, auth) via Lambda
+- Serves static assets via CloudFront
+- Works with `defaultSsr: false` — React renders client-side, Lambda handles API routes only
 
-**Pros**: Native SST support, consistent with team tooling
-**Cons**: Requires app configuration changes for AWS Lambda preset
-
-### Option B: Docker Service on ECS (Like `tanstack` example)
-
-Deploy as a containerized service on the shared ECS cluster.
-
-**Pros**: More control, no need to modify app preset
-**Cons**: More complex, requires Dockerfile, uses cluster resources
-
-### Recommendation
-
-Use **Option A** (SST TanStackStart) as it's cleaner and officially supported by SST.
+This is simpler than a split deployment (separate StaticSite + ECS service) and matches SST's recommended approach.
 
 ---
 
-## Implementation Plan
+## Implementation
 
-### Phase 1: App Configuration Changes (In-Repo)
+### Phase 1: App Configuration (In-Repo)
 
-#### 1.1 Create `app.config.ts` for AWS Lambda preset
+#### 1.1 Create `app.config.ts`
+
+SST's TanStackStart component requires the AWS Lambda preset.
 
 **File**: `examples/tanstack-db-web-starter/app.config.ts`
 
@@ -96,33 +68,14 @@ export default defineConfig({
 })
 ```
 
-This is **required** by SST's TanStackStart component.
+#### 1.2 Create `sst.config.ts`
 
-#### 1.2 Add `@databases/pg-migrations` dependency
+This configures the SST deployment. Key aspects:
 
-**File**: `examples/tanstack-db-web-starter/package.json`
-
-Add to devDependencies:
-
-```json
-{
-  "devDependencies": {
-    "@databases/pg-migrations": "^5.0.3"
-  }
-}
-```
-
-#### 1.3 Copy migration to pg-migrations format
-
-The quickstart uses Drizzle which outputs to `src/db/out/`. To use the shared `applyMigrations` infrastructure, copy the migration SQL to a `db/migrations/` directory.
-
-**File**: `examples/tanstack-db-web-starter/db/migrations/01-init.sql`
-
-Copy content from `src/db/out/0000_slimy_frank_castle.sql` (the Drizzle-generated migration).
-
-This allows the standard `pg-migrations apply` to work during deployment.
-
-#### 1.4 Create `sst.config.ts`
+- Uses `TanStackStart` component for Lambda + CloudFront deployment
+- Creates separate Neon database for quickstart (not shared `items` table)
+- Runs Drizzle migrations during deploy
+- Registers database with Electric Cloud
 
 **File**: `examples/tanstack-db-web-starter/sst.config.ts`
 
@@ -137,8 +90,7 @@ export default $config({
   app(input) {
     return {
       name: `quickstart-example`,
-      removal:
-        input?.stage.toLocaleLowerCase() === `production` ? `retain` : `remove`,
+      removal: input?.stage === `production` ? `retain` : `remove`,
       protect: [`production`].includes(input?.stage),
       home: `aws`,
       providers: {
@@ -154,10 +106,8 @@ export default $config({
   },
   async run() {
     // Validate required environment variables
-    if (!process.env.ELECTRIC_API || !process.env.ELECTRIC_ADMIN_API) {
-      throw new Error(
-        `Env variables ELECTRIC_API and ELECTRIC_ADMIN_API must be set`
-      )
+    if (!process.env.ELECTRIC_API) {
+      throw new Error(`ELECTRIC_API environment variable is required`)
     }
     if (!process.env.BETTER_AUTH_SECRET) {
       throw new Error(`BETTER_AUTH_SECRET environment variable is required`)
@@ -167,20 +117,21 @@ export default $config({
       ? `quickstart-production`
       : `quickstart-${$app.stage}`
 
-    // Get database configuration (creates new DB for PR stages via Neon branching)
     const dbConfig = getQuickstartSource(dbName)
 
-    const quickstart = new sst.aws.TanStackStart(`quickstart-website`, {
+    const website = new sst.aws.TanStackStart(`quickstart-website`, {
       environment: {
         // Database
         DATABASE_URL: dbConfig.pooledDatabaseUri,
 
         // Electric
+        ELECTRIC_URL: process.env.ELECTRIC_API,
         ELECTRIC_SOURCE_ID: dbConfig.sourceId,
         ELECTRIC_SOURCE_SECRET: dbConfig.sourceSecret,
 
         // Better Auth
         BETTER_AUTH_SECRET: process.env.BETTER_AUTH_SECRET,
+        BETTER_AUTH_URL: `https://quickstart${isProduction() ? `` : `-stage-${$app.stage}`}.examples.electric-sql.com`,
       },
       domain: {
         name: `quickstart${isProduction() ? `` : `-stage-${$app.stage}`}.examples.electric-sql.com`,
@@ -189,21 +140,22 @@ export default $config({
     })
 
     return {
-      website: quickstart.url,
+      website: website.url,
     }
   },
 })
 
+// -----------------------------------------------------------------------------
+// Database helpers
+// -----------------------------------------------------------------------------
+
 /**
- * Get or create a database for the quickstart example.
- * - Production: Uses pre-configured shared database credentials
- * - PR stages: Creates a new Neon database via branching API
+ * Get or create a database for the quickstart.
+ * - Production: Uses pre-configured credentials from environment
+ * - PR stages: Creates a new Neon database via API
  */
 function getQuickstartSource(dbName: string) {
-  const migrationsDirectory = `./db/migrations`
-
   if (isProduction()) {
-    // Production uses pre-configured database
     if (
       !process.env.QUICKSTART_DATABASE_URI ||
       !process.env.QUICKSTART_POOLED_DATABASE_URI ||
@@ -211,14 +163,15 @@ function getQuickstartSource(dbName: string) {
       !process.env.QUICKSTART_SOURCE_SECRET
     ) {
       throw new Error(
-        `QUICKSTART_DATABASE_URI, QUICKSTART_POOLED_DATABASE_URI, QUICKSTART_SOURCE_ID, and QUICKSTART_SOURCE_SECRET must be set in production`
+        `Production requires QUICKSTART_DATABASE_URI, QUICKSTART_POOLED_DATABASE_URI, ` +
+          `QUICKSTART_SOURCE_ID, and QUICKSTART_SOURCE_SECRET`
       )
     }
 
     const databaseUri = process.env.QUICKSTART_DATABASE_URI
 
     // Apply migrations (idempotent)
-    applyMigrations(databaseUri, migrationsDirectory)
+    applyDrizzleMigrations(databaseUri)
 
     return {
       sourceId: process.env.QUICKSTART_SOURCE_ID,
@@ -228,39 +181,32 @@ function getQuickstartSource(dbName: string) {
     }
   }
 
-  // PR stages: Create new database via Neon API (branching)
-  return createQuickstartDatabase({ dbName, migrationsDirectory })
+  // PR stages: Create new database
+  return createQuickstartDatabase({ dbName })
 }
 
 /**
  * Creates a new Neon database for PR stages and registers with Electric.
- * Uses the same pattern as .shared/lib/database.ts but for quickstart schema.
  */
-function createQuickstartDatabase({
-  dbName,
-  migrationsDirectory,
-}: {
-  dbName: string
-  migrationsDirectory: string
-}) {
+function createQuickstartDatabase({ dbName }: { dbName: string }) {
   const neonProjectId = process.env.NEON_PROJECT_ID
   if (!neonProjectId) {
     throw new Error(`NEON_PROJECT_ID is not set`)
   }
 
-  // Get default branch ID
+  // Get default branch ID from Neon API
   type NeonBranchesResponse = {
     branches?: Array<{ id: string; default?: boolean }>
   }
   const branchesJson = JSON.parse(
     execSync(
-      `curl -s -H "Authorization: Bearer $NEON_API_KEY" https://console.neon.tech/api/v2/projects/${neonProjectId}/branches`,
+      `curl -s -H "Authorization: Bearer $NEON_API_KEY" ` +
+        `https://console.neon.tech/api/v2/projects/${neonProjectId}/branches`,
       { env: process.env }
     ).toString()
-  ) as unknown as NeonBranchesResponse
-  const defaultBranchId = branchesJson?.branches?.find(
-    (b) => b.default === true
-  )?.id
+  ) as NeonBranchesResponse
+
+  const defaultBranchId = branchesJson?.branches?.find((b) => b.default)?.id
   if (!defaultBranchId) {
     throw new Error(`Could not resolve Neon default branch id`)
   }
@@ -296,15 +242,19 @@ function createQuickstartDatabase({
     pooledDatabaseUri,
   }
 
-  // Apply migrations
+  // Apply migrations after database is created
   return databaseUri
-    .apply((uri) => applyMigrations(uri, migrationsDirectory))
+    .apply((uri) => applyDrizzleMigrations(uri))
     .apply(() => res)
 }
 
-function applyMigrations(dbUri: string, migrationsDir: string) {
-  console.log(`[quickstart] Applying migrations`, { directory: migrationsDir })
-  execSync(`pnpm exec pg-migrations apply --directory ${migrationsDir}`, {
+/**
+ * Apply migrations using Drizzle Kit.
+ * Migrations are in src/db/out/ (generated by drizzle-kit generate).
+ */
+function applyDrizzleMigrations(dbUri: string) {
+  console.log(`[quickstart] Applying Drizzle migrations`)
+  execSync(`pnpm drizzle-kit migrate`, {
     env: {
       ...process.env,
       DATABASE_URL: dbUri,
@@ -312,6 +262,9 @@ function applyMigrations(dbUri: string, migrationsDir: string) {
   })
 }
 
+/**
+ * Register a database with Electric Cloud.
+ */
 function addDatabaseToElectric({
   dbUri,
   pooledDbUri,
@@ -325,7 +278,7 @@ function addDatabaseToElectric({
 
   if (!adminApi || !teamId || !adminApiAuthToken) {
     throw new Error(
-      `ELECTRIC_ADMIN_API, ELECTRIC_TEAM_ID, or ELECTRIC_ADMIN_API_AUTH_TOKEN is not set`
+      `ELECTRIC_ADMIN_API, ELECTRIC_TEAM_ID, and ELECTRIC_ADMIN_API_AUTH_TOKEN must be set`
     )
   }
 
@@ -360,51 +313,100 @@ function addDatabaseToElectric({
   )
 
   return electricSourceCommand.stdout.apply((output) => {
-    const parsedOutput = JSON.parse(output) as {
-      id: string
-      source_secret: string
-    }
-    return parsedOutput
+    return JSON.parse(output) as { id: string; source_secret: string }
   })
 }
 ```
 
-### Phase 2: One-Time Production Database Setup (Manual)
+### Phase 2: GitHub Workflow Updates (In-Repo)
 
-For production only - PR stages are fully automated via Neon branching.
+#### 2.1 Update `deploy_examples.yml`
 
-#### 2.1 Create Neon Database
+**File**: `.github/workflows/deploy_examples.yml`
 
-Using Neon console or CLI:
+Add quickstart to the monitored files (~line 40):
+
+```yaml
+files: |
+  yjs/**
+  ...existing entries...
+  tanstack-db-web-starter/**
+```
+
+Add output (~line 87):
+
+```yaml
+tanstack-db-web-starter: ${{ steps.deploy.outputs.tanstack-db-web-starter }}
+```
+
+Add environment variables (~line 108):
+
+```yaml
+QUICKSTART_DATABASE_URI: ${{ secrets.QUICKSTART_DATABASE_URI }}
+QUICKSTART_POOLED_DATABASE_URI: ${{ secrets.QUICKSTART_POOLED_DATABASE_URI }}
+QUICKSTART_SOURCE_ID: ${{ vars.QUICKSTART_SOURCE_ID }}
+QUICKSTART_SOURCE_SECRET: ${{ secrets.QUICKSTART_SOURCE_SECRET }}
+BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET }}
+```
+
+Add to comment URLs (~line 294):
+
+```yaml
+"tanstack-db-web-starter": "${{ needs.deploy.outputs.tanstack-db-web-starter }}",
+```
+
+#### 2.2 Update `deploy_all_examples.yml`
+
+**File**: `.github/workflows/deploy_all_examples.yml`
+
+Add to matrix (~line 35):
+
+```yaml
+- name: tanstack-db-web-starter
+  path: examples/tanstack-db-web-starter
+```
+
+Add same environment variables as above.
+
+#### 2.3 Update `teardown_examples_pr_stack.yml`
+
+**File**: `.github/workflows/teardown_examples_pr_stack.yml`
+
+Add to matrix (~line 30):
+
+```yaml
+'tanstack-db-web-starter',
+```
+
+### Phase 3: Production Database Setup (One-Time, Manual)
+
+This only needs to be done once. PR stages create their own databases automatically.
+
+#### 3.1 Create Neon Database
 
 ```bash
-# Get default branch ID
+# Get the default branch ID
 BRANCH_ID=$(curl -s -H "Authorization: Bearer $NEON_API_KEY" \
   "https://console.neon.tech/api/v2/projects/$NEON_PROJECT_ID/branches" \
   | jq -r '.branches[] | select(.default==true) | .id')
 
-# Create database
+# Create the database
 curl -X POST "https://console.neon.tech/api/v2/projects/$NEON_PROJECT_ID/branches/$BRANCH_ID/databases" \
   -H "Authorization: Bearer $NEON_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"database": {"name": "quickstart-production", "owner_name": "neondb_owner"}}'
 ```
 
-#### 2.2 Get Connection Strings
+#### 3.2 Apply Migrations
 
-From the Neon console, get:
-
-- Direct connection string (for migrations)
-- Pooled connection string (for runtime)
-
-#### 2.3 Apply Initial Migrations
+From Neon console, get the direct connection string, then:
 
 ```bash
 cd examples/tanstack-db-web-starter
-DATABASE_URL="postgresql://..." pnpm exec pg-migrations apply --directory ./db/migrations
+DATABASE_URL="postgresql://..." pnpm drizzle-kit migrate
 ```
 
-#### 2.4 Register with Electric Cloud
+#### 3.3 Register with Electric Cloud
 
 ```bash
 curl -X PUT "$ELECTRIC_ADMIN_API/v1/sources" \
@@ -421,223 +423,73 @@ curl -X PUT "$ELECTRIC_ADMIN_API/v1/sources" \
   }'
 ```
 
-Save the returned `id` (SOURCE_ID) and `source_secret` (SOURCE_SECRET).
+Save the returned `id` and `source_secret`.
 
-#### 2.5 Generate BETTER_AUTH_SECRET
+#### 3.4 Generate Auth Secret
 
 ```bash
 openssl rand -base64 32
 ```
 
-### Phase 3: GitHub Secrets/Variables (Manual)
+#### 3.5 Add GitHub Secrets/Variables
 
-Add the following to GitHub repository settings.
+**Secrets** (Settings > Secrets and variables > Actions > Secrets):
 
-#### Secrets (Settings > Secrets and variables > Actions > Secrets)
+| Secret                           | Value                           |
+| -------------------------------- | ------------------------------- |
+| `QUICKSTART_DATABASE_URI`        | Direct Neon connection string   |
+| `QUICKSTART_POOLED_DATABASE_URI` | Pooled Neon connection string   |
+| `QUICKSTART_SOURCE_SECRET`       | Electric source secret from 3.3 |
+| `BETTER_AUTH_SECRET`             | Generated in 3.4                |
 
-| Secret Name                      | Description                                    |
-| -------------------------------- | ---------------------------------------------- |
-| `QUICKSTART_DATABASE_URI`        | Direct Neon connection string (for migrations) |
-| `QUICKSTART_POOLED_DATABASE_URI` | Pooled Neon connection string (for runtime)    |
-| `QUICKSTART_SOURCE_SECRET`       | Electric source secret                         |
-| `BETTER_AUTH_SECRET`             | Secret for Better Auth sessions (min 32 chars) |
+**Variables** (Settings > Secrets and variables > Actions > Variables):
 
-#### Variables (Settings > Secrets and variables > Actions > Variables)
-
-| Variable Name          | Description        |
-| ---------------------- | ------------------ |
-| `QUICKSTART_SOURCE_ID` | Electric source ID |
-
-### Phase 4: Update GitHub Workflows (In-Repo)
-
-#### 4.1 Update `deploy_examples.yml`
-
-Add to the file list (line ~40):
-
-```yaml
-files: |
-  yjs/**
-  ...existing entries...
-  tanstack-db-web-starter/**  # ADD THIS
-```
-
-Add to outputs section (line ~87):
-
-```yaml
-tanstack-db-web-starter: ${{ steps.deploy.outputs.tanstack-db-web-starter }}
-```
-
-Add to env section (line ~108):
-
-```yaml
-QUICKSTART_DATABASE_URI: ${{ secrets.QUICKSTART_DATABASE_URI }}
-QUICKSTART_POOLED_DATABASE_URI: ${{ secrets.QUICKSTART_POOLED_DATABASE_URI }}
-QUICKSTART_SOURCE_ID: ${{ vars.QUICKSTART_SOURCE_ID }}
-QUICKSTART_SOURCE_SECRET: ${{ secrets.QUICKSTART_SOURCE_SECRET }}
-BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET }}
-```
-
-Add to comment job's URLs object (line ~294):
-
-```yaml
-"tanstack-db-web-starter": "${{ needs.deploy.outputs.tanstack-db-web-starter }}",
-```
-
-#### 4.2 Update `deploy_all_examples.yml`
-
-Add to matrix (line ~35):
-
-```yaml
-- name: tanstack-db-web-starter
-  path: examples/tanstack-db-web-starter
-```
-
-Add to env section:
-
-```yaml
-QUICKSTART_DATABASE_URI: ${{ secrets.QUICKSTART_DATABASE_URI }}
-QUICKSTART_POOLED_DATABASE_URI: ${{ secrets.QUICKSTART_POOLED_DATABASE_URI }}
-QUICKSTART_SOURCE_ID: ${{ vars.QUICKSTART_SOURCE_ID }}
-QUICKSTART_SOURCE_SECRET: ${{ secrets.QUICKSTART_SOURCE_SECRET }}
-BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET }}
-```
-
-#### 4.3 Update `teardown_examples_pr_stack.yml`
-
-Add to matrix (line ~30):
-
-```yaml
-'tanstack-db-web-starter',
-```
+| Variable               | Value                       |
+| ---------------------- | --------------------------- |
+| `QUICKSTART_SOURCE_ID` | Electric source ID from 3.3 |
 
 ---
 
-## Implementation Checklist
+## Checklist
 
-### In-Repo Changes (Can Be Done Now)
+### In-Repo Changes
 
-- [ ] Create `examples/tanstack-db-web-starter/app.config.ts` with AWS Lambda preset
-- [ ] Add `@databases/pg-migrations` to package.json devDependencies
-- [ ] Create `examples/tanstack-db-web-starter/db/migrations/01-init.sql` (copy from Drizzle output)
+- [ ] Create `examples/tanstack-db-web-starter/app.config.ts`
 - [ ] Create `examples/tanstack-db-web-starter/sst.config.ts`
 - [ ] Update `.github/workflows/deploy_examples.yml`
 - [ ] Update `.github/workflows/deploy_all_examples.yml`
 - [ ] Update `.github/workflows/teardown_examples_pr_stack.yml`
 
-### One-Time Production Setup (Requires Infrastructure Access)
+### One-Time Production Setup
 
-- [ ] Create Neon database "quickstart-production" on default branch
-- [ ] Get Neon connection strings (direct + pooled)
-- [ ] Apply initial migrations via `pg-migrations apply`
-- [ ] Register database with Electric Cloud Admin API
-- [ ] Generate BETTER_AUTH_SECRET (`openssl rand -base64 32`)
-- [ ] Add GitHub secrets: `QUICKSTART_DATABASE_URI`, `QUICKSTART_POOLED_DATABASE_URI`, `QUICKSTART_SOURCE_SECRET`, `BETTER_AUTH_SECRET`
-- [ ] Add GitHub variable: `QUICKSTART_SOURCE_ID`
-- [ ] Trigger deployment via push to main or manual workflow_dispatch
+- [ ] Create Neon database `quickstart-production`
+- [ ] Apply migrations with `drizzle-kit migrate`
+- [ ] Register with Electric Cloud Admin API
+- [ ] Generate `BETTER_AUTH_SECRET`
+- [ ] Add GitHub secrets and variables
 
-### Post-Deployment Verification
+### Verification
 
-- [ ] Verify https://quickstart.examples.electric-sql.com loads
-- [ ] Test user signup flow
-- [ ] Test project creation
-- [ ] Test todo creation with real-time sync
-- [ ] Verify quickstart guide link works
+- [ ] https://quickstart.examples.electric-sql.com loads
+- [ ] User signup works
+- [ ] Project creation works
+- [ ] Todo creation with real-time sync works
 
 ---
 
-## Risk Assessment
+## Reference
 
-### High Risk Items
+### Existing Patterns
 
-1. **SST TanStackStart Support**: This is relatively new. The GitHub issue [sst/sst#5653](https://github.com/sst/sst/issues/5653) shows some deployment issues. Test thoroughly.
+- **SST TanStackStart docs**: https://sst.dev/docs/component/aws/tanstack-start
+- **Similar example**: `examples/tanstack/sst.config.ts` (uses split deployment, but shows database/Electric patterns)
+- **Shared infra helpers**: `examples/.shared/lib/infra.ts`
 
-2. **Different Schema**: The quickstart has auth tables and triggers. If shared database credentials are accidentally used, it will fail.
+### Key Files
 
-3. **BETTER_AUTH_SECRET**: If not set or too short, authentication will fail.
-
-4. **Migration Sync**: If schema changes in Drizzle but `db/migrations/` isn't updated, production will be out of sync.
-
-### Mitigation
-
-- Test SST TanStackStart locally with `sst dev` first
-- Use completely separate environment variables for quickstart database
-- Document the secret generation process
-- Add CI check to ensure `db/migrations/` matches Drizzle output (optional future enhancement)
-
----
-
-## Alternative Approaches
-
-### If SST TanStackStart Fails
-
-#### Fallback: Docker Service Deployment
-
-1. Create Dockerfile:
-
-```dockerfile
-FROM node:22-alpine
-WORKDIR /app
-COPY . .
-RUN pnpm install && pnpm build
-CMD ["node", ".output/server/index.mjs"]
-```
-
-2. Use `cluster.addService()` pattern like `examples/tanstack/sst.config.ts`
-
-### If Tight Timeline
-
-#### Minimal Viable: Static StackBlitz Fork
-
-The quickstart guide already has a StackBlitz link. If SST deployment is complex, ensure the StackBlitz link works while resolving deployment issues.
-
----
-
-## Automation Summary
-
-| Stage                           | Automation Level                                 |
-| ------------------------------- | ------------------------------------------------ |
-| Production database creation    | One-time manual                                  |
-| Production database migrations  | **Automated** (runs on every deploy, idempotent) |
-| PR database creation            | **Automated** (Neon branching via API)           |
-| PR database migrations          | **Automated** (pg-migrations apply)              |
-| PR Electric source registration | **Automated** (Admin API curl)                   |
-| PR cleanup                      | **Automated** (SST remove on PR close)           |
-| Production deployment           | **Automated** (GitHub Actions on push to main)   |
-
----
-
-## Timeline Estimate
-
-| Task                                                          | Effort                    |
-| ------------------------------------------------------------- | ------------------------- |
-| App config changes (app.config.ts, sst.config.ts, migrations) | Low                       |
-| GitHub workflow updates                                       | Low                       |
-| One-time production DB setup                                  | Low-Medium                |
-| GitHub secrets configuration                                  | Low                       |
-| Testing and debugging                                         | Medium-High               |
-| **Total**                                                     | **~Half day to full day** |
-
-**Note**: The "Medium-High" testing effort is because TanStackStart on SST is newer and may have edge cases.
-
----
-
-## References
-
-- [SST TanStackStart docs](https://sst.dev/docs/component/aws/tan-stack-start/)
-- [SST TanStack Start tutorial](https://sst.dev/docs/start/aws/tanstack/)
-- [TanStack Start hosting guide](https://tanstack.com/start/latest/docs/framework/react/guide/hosting)
-- [SST TanStackStart issue #5653](https://github.com/sst/sst/issues/5653)
-
----
-
-## Appendix: File Locations
-
-| File                                                | Purpose                           |
-| --------------------------------------------------- | --------------------------------- |
-| `examples/tanstack-db-web-starter/`                 | Quickstart source code            |
-| `examples/tanstack-db-web-starter/src/db/out/*.sql` | Drizzle migrations                |
-| `examples/.shared/lib/infra.ts`                     | Shared SST infrastructure helpers |
-| `.github/workflows/deploy_examples.yml`             | PR/main deployment workflow       |
-| `.github/workflows/deploy_all_examples.yml`         | Manual full deploy workflow       |
-| `.github/workflows/teardown_examples_pr_stack.yml`  | PR cleanup workflow               |
-| `website/docs/quickstart.md`                        | Documentation with link to demo   |
+| File                                                 | Purpose                 |
+| ---------------------------------------------------- | ----------------------- |
+| `examples/tanstack-db-web-starter/src/start.tsx`     | Has `defaultSsr: false` |
+| `examples/tanstack-db-web-starter/src/db/schema.ts`  | Drizzle schema          |
+| `examples/tanstack-db-web-starter/src/db/out/*.sql`  | Generated migrations    |
+| `examples/tanstack-db-web-starter/drizzle.config.ts` | Drizzle configuration   |
