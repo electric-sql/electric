@@ -186,7 +186,7 @@ import { eq } from "@tanstack/db"
 
 const schema = createStateSchema({
   users: {
-    schema: userSchema,
+    schema: userSchema, // Define your schema
     type: "user",
     primaryKey: "id"
   }
@@ -204,7 +204,7 @@ const activeUsers = useLiveQuery((q) =>
 )
 ```
 
-TanStack DB uses differential dataflow under the hood—queries recompute incrementally when data changes, which is dramatically faster than filtering in JavaScript.
+TanStack DB uses differential dataflow under the hood, so queries recompute incrementally when data changes, which is dramatically faster than filtering in JavaScript.
 
 The full State Protocol specification is available at [STATE-PROTOCOL.md](https://github.com/durable-streams/durable-streams/blob/main/packages/state/STATE-PROTOCOL.md).
 
@@ -296,7 +296,7 @@ The protocol is already attracting new implementations. [Ahimsa Labs released a 
 
 ## What's Next
 
-- **Hosted cloud version**: We're building our own cloud implementation of Durable Streams, launching in early January 2026.
+- **Hosted cloud version**: We're building our own cloud implementation of Durable Streams, launching in January 2026.
 - **More language implementations**: The protocol is designed to have many implementations. We'd love to see servers and clients in Rust, Java, Swift, and more.
 - **Database adapters**: Postgres, MySQL, and SQLite adapters using the State Protocol—streaming database changes to clients with proper sync semantics.
 - **Electric 2.0**: This is all foundational work for the next version of Electric.
@@ -316,6 +316,6 @@ go get github.com/durable-streams/durable-streams-go
 pip install durable-streams
 ```
 
-Run the [test UI](https://github.com/durable-streams/durable-streams/tree/main/packages/test-ui) to experiment locally. If you're building a server implementation, the conformance test suite will validate compatibility.
+If you're building a server implementation, the conformance test suite will validate compatibility.
 
 Join us in [Discord](https://discord.electric-sql.com) to share what you're building.
