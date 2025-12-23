@@ -148,8 +148,6 @@ Durable Streams gives you ordered, resumable byte delivery. The State Protocol a
 }
 ```
 
-The protocol also defines control messages (`snapshot-start`, `snapshot-end`, `reset`) for stream lifecycle management.
-
 ### Why Separate Protocols?
 
 Separation means you can adopt what you need:
@@ -290,11 +288,11 @@ And Nathan Flurry's making bold predictions:
 
 The protocol is already attracting new implementations. [Ahimsa Labs released a Go client](https://github.com/ahimsalabs/durable-streams-go), and Evil Martians announced they're gradually adopting Durable Streams in [AnyCable](https://anycable.io/)—starting with implementing the read part of the protocol for consuming durable streams. Their post ["AnyCable, Rails, and the pitfalls of LLM-streaming"](https://evilmartians.com/chronicles/anycable-rails-and-the-pitfalls-of-llm-streaming) explores the exact reliability challenges Durable Streams solves.
 
-Valter Balegas built a [Yjs provider for Durable Streams](https://github.com/durable-streams/durable-streams/pull/81)—bringing real-time collaborative editing with conflict-free sync semantics to the protocol. The provider includes awareness/presence support and a demo application showcasing collaborative text editing with colored cursors.
-
 <figure style="background: none">
   <Tweet tweet-id="2001719297651998841" conversation="none" theme="dark" />
 </figure>
+
+Valter Balegas built a [Yjs provider for Durable Streams](https://github.com/durable-streams/durable-streams/pull/81)—bringing real-time collaborative editing with conflict-free sync semantics to the protocol. The provider includes awareness/presence support and a demo application showcasing collaborative text editing with colored cursors.
 
 ## What's Next
 
