@@ -77,7 +77,7 @@ Available builds: macOS (Intel & ARM), Linux (AMD64 & ARM64), Windows (AMD64).
 Extract the archive and run:
 
 ```bash
-./durable-streams-server
+./durable-streams-server dev
 ```
 
 The server starts on `http://localhost:4437`.
@@ -85,15 +85,16 @@ The server starts on `http://localhost:4437`.
 **2. Create a stream:**
 
 ```bash
-curl -X PUT http://localhost:4437/v1/stream/my-first-stream
+curl -X PUT http://localhost:4437/v1/stream/my-first-stream \
+  -H 'Content-Type: text/plain'
 ```
 
 **3. Append some data:**
 
 ```bash
 curl -X POST http://localhost:4437/v1/stream/my-first-stream \
-  -H "Content-Type: text/plain" \
-  -d "Hello, Durable Streams!"
+  -H 'Content-Type: text/plain' \
+  -d 'Hello, Durable Streams!'
 ```
 
 The response includes an `X-Offset` header—that's your position in the stream.
@@ -109,15 +110,15 @@ curl http://localhost:4437/v1/stream/my-first-stream
 Open a terminal and start tailing with SSE:
 
 ```bash
-curl -N http://localhost:4437/v1/stream/my-first-stream?live=sse
+curl -N http://localhost:4437/v1/stream/my-first-stream?offset=-1&live=sse
 ```
 
 In another terminal, append more data:
 
 ```bash
 curl -X POST http://localhost:4437/v1/stream/my-first-stream \
-  -H "Content-Type: text/plain" \
-  -d "This appears in real-time!"
+  -H 'Content-Type: text/plain' \
+  -d 'This appears in real-time!'
 ```
 
 Watch it appear instantly in your first terminal. That's durable streaming—ordered, resumable, and live.
