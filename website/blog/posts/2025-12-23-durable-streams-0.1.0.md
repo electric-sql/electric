@@ -1,5 +1,5 @@
 ---
-title: 'Durable Streams 0.1.0: State Protocol, npm Packages, and Early Experiments'
+title: 'Durable Streams 0.1.0 & State Protocol'
 description: >
   The first official npm release of Durable Streams, introducing the State Protocol for database-style sync semantics and early community experiments
 excerpt: >
@@ -34,7 +34,7 @@ npm install @durable-streams/cli      # Development & testing tools
 
 **Server implementations:**
 
-- **Caddy-based server** — A production-ready binary built on Caddy for local development and light production workloads. Download from [GitHub releases](https://github.com/durable-streams/durable-streams/releases) and you're streaming in seconds.
+- **Caddy-based server** — A production-ready binary built on Caddy for local development and light production workloads. Download from [GitHub releases](https://github.com/durable-streams/durable-streams/releases).
 
 **Client libraries:**
 
@@ -80,18 +80,18 @@ Extract the archive and run:
 ./durable-streams-server
 ```
 
-The server starts on `http://localhost:8787`.
+The server starts on `http://localhost:4437`.
 
 **2. Create a stream:**
 
 ```bash
-curl -X PUT http://localhost:8787/v1/stream/my-first-stream
+curl -X PUT http://localhost:4437/v1/stream/my-first-stream
 ```
 
 **3. Append some data:**
 
 ```bash
-curl -X POST http://localhost:8787/v1/stream/my-first-stream \
+curl -X POST http://localhost:4437/v1/stream/my-first-stream \
   -H "Content-Type: text/plain" \
   -d "Hello, Durable Streams!"
 ```
@@ -101,7 +101,7 @@ The response includes an `X-Offset` header—that's your position in the stream.
 **4. Read the stream:**
 
 ```bash
-curl http://localhost:8787/v1/stream/my-first-stream
+curl http://localhost:4437/v1/stream/my-first-stream
 ```
 
 **5. Watch it live:**
@@ -109,13 +109,13 @@ curl http://localhost:8787/v1/stream/my-first-stream
 Open a terminal and start tailing with SSE:
 
 ```bash
-curl -N http://localhost:8787/v1/stream/my-first-stream?live=sse
+curl -N http://localhost:4437/v1/stream/my-first-stream?live=sse
 ```
 
 In another terminal, append more data:
 
 ```bash
-curl -X POST http://localhost:8787/v1/stream/my-first-stream \
+curl -X POST http://localhost:4437/v1/stream/my-first-stream \
   -H "Content-Type: text/plain" \
   -d "This appears in real-time!"
 ```
@@ -288,7 +288,9 @@ And Nathan Flurry's making bold predictions:
 
 ### New Implementations
 
-The protocol is already attracting new implementations. [Ahimsa Labs released a Go client](https://github.com/ahimsalabs/durable-streams-go), and Evil Martians announced they're gradually adopting Durable Streams in [AnyCable](https://anycable.io/)—starting with implementing the read part of the protocol for consuming durable streams. Their post ["AnyCable, Rails, and the pitfalls of LLM-streaming"](https://evilmartians.com/chronicles/anycable-rails-and-the-pitfalls-of-llm-streaming) explores the exact reliability challenges Durable Streams solves:
+The protocol is already attracting new implementations. [Ahimsa Labs released a Go client](https://github.com/ahimsalabs/durable-streams-go), and Evil Martians announced they're gradually adopting Durable Streams in [AnyCable](https://anycable.io/)—starting with implementing the read part of the protocol for consuming durable streams. Their post ["AnyCable, Rails, and the pitfalls of LLM-streaming"](https://evilmartians.com/chronicles/anycable-rails-and-the-pitfalls-of-llm-streaming) explores the exact reliability challenges Durable Streams solves.
+
+Valter Balegas built a [Yjs provider for Durable Streams](https://github.com/durable-streams/durable-streams/pull/81)—bringing real-time collaborative editing with conflict-free sync semantics to the protocol. The provider includes awareness/presence support and a demo application showcasing collaborative text editing with colored cursors.
 
 <figure style="background: none">
   <Tweet tweet-id="2001719297651998841" conversation="none" theme="dark" />
