@@ -5,7 +5,7 @@ description: >
 excerpt: >
   Two weeks after announcing Durable Streams, we're shipping 0.1.0 to npm—the first official packages you can install and use in production. This release introduces the State Protocol for database-style sync semantics and includes improved conformance tests.
 authors: [kyle, samwillis]
-image: /img/blog/announcing-durable-streams/hero.png
+image: /img/blog/durable-streams-0.1.0/hero.png
 tags: [durable-streams, sync, protocol]
 outline: [2, 3]
 post: true
