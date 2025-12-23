@@ -1,34 +1,8 @@
 <script setup>
-import { computed } from 'vue'
+import { Image } from '@unpic/vue'
 import { data as authors } from '../../data/authors.data.ts'
-import { getNetlifyImageUrl } from '../utils/netlify-images.ts'
 
 const { post } = defineProps(['post'])
-
-const optimizedImageSrcset = computed(() => {
-  if (!post.image) return { src: '', srcset: '' }
-
-  const img1x = getNetlifyImageUrl(post.image, {
-    width: 896,
-    height: 428,
-    fit: 'cover',
-    format: 'jpg',
-    quality: 80,
-  })
-
-  const img2x = getNetlifyImageUrl(post.image, {
-    width: 896 * 2,
-    height: 428 * 2,
-    fit: 'cover',
-    format: 'jpg',
-    quality: 80,
-  })
-
-  return {
-    src: img1x,
-    srcset: `${img1x} 1x, ${img2x} 2x`,
-  }
-})
 </script>
 
 <style scoped>
@@ -117,11 +91,13 @@ const optimizedImageSrcset = computed(() => {
   <div class="post">
     <a :href="post.path" class="no-visual">
       <div class="post-image">
-        <img
-          :src="optimizedImageSrcset.src"
-          :srcset="optimizedImageSrcset.srcset"
-          width="896"
-          height="428"
+        <Image
+          :src="post.image"
+          :width="896"
+          :height="428"
+          layout="constrained"
+          background="auto"
+          fallback="netlify"
         />
       </div>
       <div class="post-body">

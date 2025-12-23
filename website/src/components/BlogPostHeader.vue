@@ -1,9 +1,9 @@
 <script setup>
 import { useData } from 'vitepress'
 import { computed } from 'vue'
+import { Image } from '@unpic/vue'
 
 import { data as authors } from '../../data/authors.data.ts'
-import { getNetlifyImageUrl } from '../utils/netlify-images.ts'
 
 const { page, frontmatter } = useData()
 
@@ -21,31 +21,6 @@ const formattedDate = computed(() => {
     year: 'numeric',
     timeZone: 'UTC',
   })
-})
-
-const optimizedImageSrcset = computed(() => {
-  if (!frontmatter.value.image) return { src: '', srcset: '' }
-
-  const img1x = getNetlifyImageUrl(frontmatter.value.image, {
-    width: 1530,
-    height: 874,
-    fit: 'cover',
-    format: 'jpg',
-    quality: 80,
-  })
-
-  const img2x = getNetlifyImageUrl(frontmatter.value.image, {
-    width: 1530 * 2,
-    height: 874 * 2,
-    fit: 'cover',
-    format: 'jpg',
-    quality: 80,
-  })
-
-  return {
-    src: img1x,
-    srcset: `${img1x} 1x, ${img2x} 2x`,
-  }
 })
 </script>
 
@@ -101,9 +76,13 @@ h1 {
 <template>
   <div class="post-header">
     <p class="post-image">
-      <img
-        :src="optimizedImageSrcset.src"
-        :srcset="optimizedImageSrcset.srcset"
+      <Image
+        :src="frontmatter.image"
+        :width="1530"
+        :height="874"
+        layout="constrained"
+        background="auto"
+        fallback="netlify"
       />
     </p>
     <h1>
