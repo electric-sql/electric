@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { execSync } from 'child_process'
+import { realpathSync } from 'fs'
 import { provisionElectricResources } from './electric-api.js'
 import { setupTemplate } from './template-setup.js'
 import { join } from 'path'
@@ -96,13 +97,6 @@ async function main() {
     )
     process.exit(1)
   }
-}
-
-if (import.meta.url === `file://${process.argv[1]}`) {
-  main().catch((error) => {
-    console.error(`Unexpected error:`, error)
-    process.exit(1)
-  })
 }
 
 export { main }

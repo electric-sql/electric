@@ -5,7 +5,7 @@
   "type": "module",
   "main": "./dist/index.js",
   "bin": {
-    "start": "./dist/cli.js"
+    "start": "./dist/bin.js"
   },
   "exports": {
     "./package.json": "./package.json",
@@ -19,7 +19,7 @@
   "scripts": {
     "build": "shx rm -rf dist && tsup",
     "prepack": "pnpm build",
-    "dev": "pnpm run build && node dist/cli.js",
+    "dev": "pnpm run build && node dist/bin.js",
     "format": "eslint . --fix",
     "stylecheck": "eslint . --quiet",
     "test": "pnpm exec vitest",
