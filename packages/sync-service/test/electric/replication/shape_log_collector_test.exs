@@ -929,6 +929,108 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
     end
   end
 
+  describe "handle_event/2 with shapes with dependencies" do
+    @shape Shape.new!("test_table", inspector: @inspector)
+    @shape2 Shape.new!("test_table",
+              where: "id IN (SELECT id FROM test_table WHERE id > 10)",
+              inspector: @inspector
+            )
+    setup :setup_log_collector
+
+    setup ctx do
+      parent = self()
+
+      stub_inspector(
+        load_relation_oid: fn {"public", "test_table"}, _ ->
+          {:ok, {1234, {"public", "test_table"}}}
+        end,
+        load_relation_info: fn 1234, _ ->
+          {:ok, %{id: 1234, schema: "public", name: "test_table", parent: nil, children: nil}}
+        end,
+        load_column_info: fn 1234, _ ->
+          {:ok, [%{pk_position: 0, name: "id", is_generated: false}]}
+        end
+      )
+
+      consumers = [
+        {:normal,
+         start_link_supervised!(
+           {Support.TransactionConsumer,
+            id: :normal,
+            stack_id: ctx.stack_id,
+            parent: parent,
+            shape: @shape,
+            shape_handle: "normal-shape-handle"},
+           id: {:consumer, :normal}
+         )},
+        {:inner,
+         start_link_supervised!(
+           {Support.TransactionConsumer,
+            id: :inner,
+            stack_id: ctx.stack_id,
+            parent: parent,
+            shape: @shape2.shape_dependencies |> List.first(),
+            shape_handle: "inner-shape-handle"},
+           id: {:consumer, :inner}
+         )},
+        {:outer,
+         start_link_supervised!(
+           {Support.TransactionConsumer,
+            id: :outer,
+            stack_id: ctx.stack_id,
+            parent: parent,
+            shape: %{@shape2 | shape_dependencies_handles: ["inner-shape-handle"]},
+            shape_handle: "outer-shape-handle"},
+           id: {:consumer, :outer}
+         )}
+      ]
+
+      %{consumers: consumers}
+    end
+
+    test "should handle a transaction that requires a materializer", ctx do
+      start_link_supervised!(
+        {Support.StubMaterializer,
+         stack_id: ctx.stack_id,
+         shape_handle: "inner-shape-handle",
+         initial_values: MapSet.new([])}
+      )
+
+      txn =
+        transaction(100, Lsn.from_string("0/10"), [
+          %Changes.NewRecord{
+            relation: {"public", "test_table"},
+            record: %{"id" => "11"},
+            log_offset: LogOffset.new(Lsn.from_string("0/10"), 0)
+          }
+        ])
+
+      assert :ok = ShapeLogCollector.handle_event(txn, ctx.stack_id)
+
+      # Outer consumer should not receive this, because empty initial values won't satisfy the where clause
+      Support.TransactionConsumer.assert_consume(ctx.consumers |> Keyword.drop([:outer]), [txn])
+    end
+
+    test "should not crash if the materializer is not there, instead skipping the depenencies",
+         ctx do
+      txn =
+        transaction(100, Lsn.from_string("0/10"), [
+          %Changes.NewRecord{
+            relation: {"public", "test_table"},
+            record: %{"id" => "11"},
+            log_offset: LogOffset.new(Lsn.from_string("0/10"), 0)
+          }
+        ])
+
+      assert :ok = ShapeLogCollector.handle_event(txn, ctx.stack_id)
+
+      # This assertion holds because our where clause processing in SLC is best-effort:
+      # any crash, like abscence of a materializer, causes the transaction to just be sent everywhere
+      # and hope the consumers will filter it out.
+      Support.TransactionConsumer.assert_consume(ctx.consumers, [txn])
+    end
+  end
+
   defp transaction(xid, lsn, changes) do
     last_log_offset =
       case Enum.reverse(changes) do

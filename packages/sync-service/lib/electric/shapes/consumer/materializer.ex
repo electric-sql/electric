@@ -55,6 +55,9 @@ defmodule Electric.Shapes.Consumer.Materializer do
 
   def get_link_values(opts) do
     GenServer.call(name(opts), :get_link_values)
+  catch
+    :exit, _reason ->
+      raise ~s|Materializer for stack "#{opts.stack_id}" and handle "#{opts.shape_handle}" is not available|
   end
 
   def get_all_as_refs(shape, stack_id) when are_deps_filled(shape) do
