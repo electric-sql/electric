@@ -9,10 +9,7 @@ import { ELECTRIC_PROTOCOL_QUERY_PARAMS } from "@electric-sql/client"
  * Otherwise, the local docker endpoint is used, assuming default port 30000.
  */
 function getElectricUrl(): string {
-  return process.env.NODE_ENV === `production` ||
-    process.env.USE_ELECTRIC_URL === `true`
-    ? process.env.ELECTRIC_URL || `https://api.electric-sql.cloud`
-    : `http://localhost:30000`
+  return process.env.ELECTRIC_URL || `http://localhost:30000`
 }
 
 /**

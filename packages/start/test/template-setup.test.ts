@@ -161,8 +161,7 @@ describe(`template-setup`, () => {
       // Electric-specific commands
       expect(packageJson.scripts).toHaveProperty(`claim`)
       expect(packageJson.scripts).toHaveProperty(`deploy:netlify`)
-      // dev is overwritten to point to cloud mode, build is preserved
-      expect(packageJson.scripts.dev).toBe(`pnpm dev:cloud`)
+
       expect(packageJson.scripts.build).toBe(`vinxi build`)
     })
 

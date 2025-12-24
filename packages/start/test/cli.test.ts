@@ -11,6 +11,11 @@ vi.mock(`../src/template-setup.js`, () => ({
   setupTemplate: vi.fn(),
 }))
 
+// Mock child_process execSync
+vi.mock(`child_process`, () => ({
+  execSync: vi.fn(),
+}))
+
 describe(`cli`, () => {
   const mockCredentials = {
     source_id: `test-source-id`,
@@ -161,8 +166,9 @@ describe(`cli`, () => {
 
       expect(consoleLogSpy).toHaveBeenCalledWith(`Next steps:`)
       expect(consoleLogSpy).toHaveBeenCalledWith(`  cd my-app`)
-      expect(consoleLogSpy).toHaveBeenCalledWith(`  pnpm install`)
-      expect(consoleLogSpy).toHaveBeenCalledWith(`  pnpm migrate`)
+      // pnpm install and pnpm migrate are no longer shown because they run automatically
+      expect(consoleLogSpy).not.toHaveBeenCalledWith(`  pnpm install`)
+      expect(consoleLogSpy).not.toHaveBeenCalledWith(`  pnpm migrate`)
       expect(consoleLogSpy).toHaveBeenCalledWith(`  pnpm dev`)
     })
 
@@ -244,7 +250,8 @@ describe(`cli`, () => {
       await main()
 
       expect(consoleLogSpy).not.toHaveBeenCalledWith(`  cd .`)
-      expect(consoleLogSpy).toHaveBeenCalledWith(`  pnpm install`)
+      // pnpm install runs automatically, so it's not shown in next steps
+      expect(consoleLogSpy).toHaveBeenCalledWith(`  pnpm dev`)
     })
 
     it(`should handle non-Error thrown values`, async () => {
