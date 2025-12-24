@@ -5,7 +5,7 @@
     "@changesets/cli": "^2.27.10",
     "dotenv-cli": "^7.4.2"
   },
-  "packageManager": "pnpm@9.15.0",
+  "packageManager": "pnpm@10.12.1",
   "private": true,
   "scripts": {
     "ci:publish": "pnpm '/^ci:publish:.+/' && pnpm exec changeset tag",

@@ -7,11 +7,15 @@
     "node": ">=20.19.0 || >=22.12.0"
   },
   "scripts": {
-    "dev": "docker compose up -d && vite dev",
+    "dev": "vite dev",
+    "backend:up": "docker compose up -d",
+    "backend:down": "docker compose down",
+    "backend:clear": "docker compose down -v",
     "start": "node .output/server/index.mjs",
     "build": "vite build",
     "migrate": "drizzle-kit migrate",
     "migrate:generate": "drizzle-kit generate",
+    "psql": "dotenvx run -- sh -c 'psql \"$DATABASE_URL\"'",
     "serve": "vite preview",
     "test": "echo 'No tests yet'",
     "lint:check": "eslint .",
@@ -43,6 +47,7 @@
     "zod": "^4.0.14"
   },
   "devDependencies": {
+    "@dotenvx/dotenvx": "^1.51.2",
     "@eslint/compat": "^1.3.1",
     "@eslint/js": "^9.32.0",
     "@tanstack/devtools-vite": "^0.3.11",
@@ -56,12 +61,12 @@
     "@typescript-eslint/parser": "^8.46.0",
     "@vitejs/plugin-react": "^5.0.4",
     "drizzle-kit": "^0.31.4",
-    "dotenv": "^17.2.1",
     "eslint": "^9.32.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-prettier": "^5.5.3",
     "eslint-plugin-react": "^7.37.5",
     "jsdom": "^27.0.0",
+    "open-cli": "^8.0.0",
     "prettier": "^3.6.2",
     "tsx": "^4.20.3",
     "typescript": "^5.7.2",
