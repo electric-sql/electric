@@ -1,5 +1,13 @@
 # @core/sync-service
 
+## 1.2.10
+
+### Patch Changes
+
+- dd85d67: fix: wrong return value caused metric sending to fail sometimes
+- 3c88770: Remove persistence of metadata from `ShapeStatus` and instead rely on storage for reading and caching.
+- 4a28afa: fix: ensure abscense of a materializer doesn't crash a part of electric
+
 ## 1.2.9
 
 ### Patch Changes

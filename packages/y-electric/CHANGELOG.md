@@ -1,5 +1,13 @@
 # @electric-sql/y-electric
 
+## 0.1.22
+
+### Patch Changes
+
+- baadaf7: Added debouncing to y-electric and use offset=now
+- Updated dependencies [f6e7c75]
+  - @electric-sql/client@1.3.1
+
 ## 0.1.21
 
 ### Patch Changes
