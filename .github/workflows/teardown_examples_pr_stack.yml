@@ -29,7 +29,6 @@ jobs:
             'remix',
             'react',
             'burn',
-            'tanstack-db-web-starter',
           ]
 
     env:
