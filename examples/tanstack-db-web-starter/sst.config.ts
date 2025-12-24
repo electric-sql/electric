@@ -47,7 +47,7 @@ export default $config({
         // Electric
         ELECTRIC_URL: process.env.ELECTRIC_API,
         ELECTRIC_SOURCE_ID: process.env.QUICKSTART_SOURCE_ID,
-        ELECTRIC_SOURCE_SECRET: process.env.QUICKSTART_SOURCE_SECRET,
+        ELECTRIC_SECRET: process.env.QUICKSTART_SOURCE_SECRET,
 
         // Better Auth
         BETTER_AUTH_SECRET: process.env.BETTER_AUTH_SECRET,
