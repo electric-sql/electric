@@ -1,5 +1,11 @@
 # @core/electric-telemetry
 
+## 0.1.2
+
+### Patch Changes
+
+- 10bee98: Restore the inclusion of stack_id in CallHomeReporter's static_info.
+
 ## 0.1.1
 
 ### Patch Changes
