@@ -19,6 +19,9 @@ export default defineConfig((options) => {
       format: [`esm`],
       outExtension: () => ({ js: `.js` }),
       clean: true,
+      banner: {
+        js: `#!/usr/bin/env node`,
+      },
     },
   ]
 })
