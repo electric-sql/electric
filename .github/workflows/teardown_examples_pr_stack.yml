@@ -29,6 +29,7 @@ jobs:
             'remix',
             'react',
             'burn',
+            'tanstack-db-web-starter',
           ]
 
     env:
@@ -41,6 +42,9 @@ jobs:
       NEON_PROJECT_ID: ${{ secrets.NEON_PROJECT_ID }}
       ELECTRIC_API: ${{ secrets.ELECTRIC_API }}
       ELECTRIC_ADMIN_API: ${{ secrets.ELECTRIC_ADMIN_API }}
+      ELECTRIC_TEAM_ID: ${{ secrets.ELECTRIC_TEAM_ID }}
+      ELECTRIC_ADMIN_API_AUTH_TOKEN: ${{ secrets.ELECTRIC_ADMIN_API_AUTH_TOKEN }}
+      BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET }}
       # HONEYCOMB_API_KEY: ${{ secrets.HONEYCOMB_API_KEY }} TODO
 
     steps:

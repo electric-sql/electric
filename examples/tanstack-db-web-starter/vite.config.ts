@@ -7,10 +7,18 @@ import tailwindcss from "@tailwindcss/vite"
 import { nitro } from "nitro/vite"
 import { caddyPlugin } from "./src/vite-plugin-caddy"
 
+// Use aws-lambda preset for SST deployments (CI), otherwise use default for local dev
+const nitroPreset = process.env.CI ? `aws-lambda` : undefined
+
 const config = defineConfig({
   plugins: [
     devtools(),
-    nitro(),
+    nitro({
+      preset: nitroPreset,
+      awsLambda: {
+        streaming: true,
+      },
+    }),
     viteTsConfigPaths({
       projects: [`./tsconfig.json`],
     }),
