@@ -1,5 +1,5 @@
 ---
-title: Local-first sync with TanStack DB and Electric
+title: Local-first sync with Electric and TanStack DB
 description: >-
   Tanstack DB is a reactive client store for building super fast apps on sync.
   Paired with Electric, it provides an optimal end-to-end sync stack for
@@ -43,7 +43,7 @@ import ScalabilityChart from '../../src/components/ScalabilityChart.vue'
 
 <div class="hidden-xs">
 
-[Tanstack DB](https://tanstack.com/db) is a [reactive client store for building super fast apps on sync](https://tanstack.com/blog/tanstack-db-0.1-the-embedded-client-database-for-tanstack-query). Paired with [Electric](/), it provides an optimal end-to-end sync stack for [local-first app development](/use-cases/local-first-software).
+[Tanstack DB](https://tanstack.com/db) is a [reactive client store for building super fast apps on sync](https://tanstack.com/blog/tanstack-db-0.1-the-embedded-client-database-for-tanstack-query). Paired with [Electric](/), it provides an optimal end-to-end sync stack for building <span class="no-wrap-sm">[local-first apps](/use-cases/local-first-software)</span>.
 
 </div>
 <div class="block-xs">
