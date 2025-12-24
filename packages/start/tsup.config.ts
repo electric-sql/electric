@@ -5,7 +5,7 @@ export default defineConfig((options) => {
   const commonOptions: Partial<Options> = {
     entry: {
       index: `src/index.ts`,
-      cli: `src/cli.ts`,
+      bin: `src/bin.ts`,
     },
     tsconfig: `./tsconfig.build.json`,
     sourcemap: true,
