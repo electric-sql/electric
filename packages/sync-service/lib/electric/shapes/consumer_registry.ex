@@ -44,7 +44,10 @@ defmodule Electric.Shapes.ConsumerRegistry do
 
   @spec active_consumer_count(stack_id()) :: non_neg_integer()
   def active_consumer_count(stack_id) when is_binary(stack_id) do
-    :ets.info(ets_name(stack_id), :size)
+    case :ets.info(ets_name(stack_id), :size) do
+      :undefined -> 0
+      size -> size
+    end
   rescue
     ArgumentError -> 0
   end
