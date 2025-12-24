@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 
 import { execSync } from 'child_process'
-import { realpathSync } from 'fs'
 import { provisionElectricResources } from './electric-api.js'
 import { setupTemplate } from './template-setup.js'
 import { join } from 'path'
