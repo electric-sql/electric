@@ -13,7 +13,7 @@ interface CaddyPluginOptions {
 export function caddyPlugin(options: CaddyPluginOptions = {}): Plugin {
   const {
     host = `localhost`,
-    httpsPort = 4000,
+    httpsPort = 5173,
     encoding = true,
     autoStart = true,
     configPath = `Caddyfile`,
