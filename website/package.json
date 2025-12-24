@@ -24,6 +24,7 @@
     "yaml": "^2.5.0"
   },
   "dependencies": {
+    "@unpic/vue": "^1.0.0",
     "posthog-js": "^1.236.4"
   }
 }

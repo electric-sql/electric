@@ -9,6 +9,7 @@ sidebar: false
 
 <script setup>
 import { onMounted } from 'vue'
+import { Image } from '@unpic/vue'
 
 import { data as posts } from './data/posts.data.ts'
 
@@ -112,7 +113,14 @@ onMounted(async () => {
   <div class="container">
     <main>
       <div class="header">
-        <img src="/img/blog/electric-elephant.jpg" />
+        <Image
+          src="/img/blog/electric-elephant.jpg"
+          :width="720"
+          :height="720"
+          layout="constrained"
+          background="auto"
+          fallback="netlify"
+        />
         <h1>
           ElectricSQL Blog
         </h1>
