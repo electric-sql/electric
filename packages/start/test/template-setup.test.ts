@@ -161,8 +161,8 @@ describe(`template-setup`, () => {
       // Electric-specific commands
       expect(packageJson.scripts).toHaveProperty(`claim`)
       expect(packageJson.scripts).toHaveProperty(`deploy:netlify`)
-      // Original scripts should be preserved
-      expect(packageJson.scripts.dev).toBe(`vinxi dev`)
+      // dev is overwritten to point to cloud mode, build is preserved
+      expect(packageJson.scripts.dev).toBe(`pnpm dev:cloud`)
       expect(packageJson.scripts.build).toBe(`vinxi build`)
     })
 
@@ -221,6 +221,74 @@ describe(`template-setup`, () => {
         (call: unknown[]) => (call[0] as string).endsWith(`package.json`)
       )
       expect(packageJsonWriteCall).toBeUndefined()
+    })
+
+    it(`should skip gitpick when appName is "."`, async () => {
+      mockExistsSync.mockReturnValue(true)
+      mockReadFileSync.mockImplementation((path: string) => {
+        if (path.endsWith(`package.json`)) return `{"scripts":{}}`
+        if (path.endsWith(`.gitignore`)) return `.env\n`
+        return ``
+      })
+
+      const { setupTemplate } = await import(`../src/template-setup.js`)
+      await setupTemplate(`.`, mockCredentials)
+
+      // gitpick should NOT be called
+      expect(mockExecSync).not.toHaveBeenCalled()
+    })
+
+    it(`should use current directory when appName is "."`, async () => {
+      mockExistsSync.mockReturnValue(true)
+      mockReadFileSync.mockImplementation((path: string) => {
+        if (path.endsWith(`package.json`)) return `{"scripts":{}}`
+        if (path.endsWith(`.gitignore`)) return `.env\n`
+        return ``
+      })
+
+      const { setupTemplate } = await import(`../src/template-setup.js`)
+      await setupTemplate(`.`, mockCredentials)
+
+      // .env should be written to current directory (not a subdirectory)
+      const envWriteCall = mockWriteFileSync.mock.calls.find(
+        (call: unknown[]) => (call[0] as string).endsWith(`.env`)
+      )
+      expect(envWriteCall).toBeDefined()
+      // Path should be process.cwd()/.env, not process.cwd()/./.env
+      expect(envWriteCall![0]).not.toContain(`/./.env`)
+    })
+
+    it(`should still generate .env and patch package.json when appName is "."`, async () => {
+      mockExistsSync.mockReturnValue(true)
+      mockReadFileSync.mockImplementation((path: string) => {
+        if (path.endsWith(`package.json`)) {
+          return JSON.stringify({
+            name: `existing-app`,
+            scripts: { dev: `vite dev` },
+          })
+        }
+        if (path.endsWith(`.gitignore`)) return `.env\n`
+        return ``
+      })
+
+      const { setupTemplate } = await import(`../src/template-setup.js`)
+      await setupTemplate(`.`, mockCredentials)
+
+      // .env should be generated
+      const envWriteCall = mockWriteFileSync.mock.calls.find(
+        (call: unknown[]) => (call[0] as string).endsWith(`.env`)
+      )
+      expect(envWriteCall).toBeDefined()
+      expect(envWriteCall![1]).toContain(`DATABASE_URL=`)
+
+      // package.json should be patched
+      const packageJsonWriteCall = mockWriteFileSync.mock.calls.find(
+        (call: unknown[]) => (call[0] as string).endsWith(`package.json`)
+      )
+      expect(packageJsonWriteCall).toBeDefined()
+      const packageJson = JSON.parse(packageJsonWriteCall![1] as string)
+      expect(packageJson.scripts).toHaveProperty(`claim`)
+      expect(packageJson.scripts).toHaveProperty(`deploy:netlify`)
     })
   })
 })

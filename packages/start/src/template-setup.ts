@@ -22,15 +22,17 @@ export async function setupTemplate(
   appName: string,
   credentials: ElectricCredentials & ClaimableSourceResponse
 ): Promise<void> {
-  const appPath = join(process.cwd(), appName)
+  const appPath = appName === `.` ? process.cwd() : join(process.cwd(), appName)
 
   try {
-    // Step 1: Pull TanStack Start template using gitpick
-    console.log(`Pulling template...`)
-    execSync(
-      `npx gitpick electric-sql/electric/tree/main/examples/tanstack-db-web-starter ${appName}`,
-      { stdio: `inherit` }
-    )
+    // Step 1: Pull TanStack Start template using gitpick (skip for current directory)
+    if (appName !== `.`) {
+      console.log(`Pulling template...`)
+      execSync(
+        `npx gitpick electric-sql/electric/tree/main/examples/tanstack-db-web-starter ${appName}`,
+        { stdio: `inherit` }
+      )
+    }
 
     // Step 2: Generate .env file with credentials
     console.log(`Configuring environment...`)

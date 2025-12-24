@@ -217,6 +217,36 @@ describe(`cli`, () => {
       )
     })
 
+    it(`should accept "." as app name for current directory mode`, async () => {
+      process.argv = [`node`, `cli.js`, `.`]
+      mockProvisionElectricResources.mockResolvedValue(mockCredentials)
+      mockSetupTemplate.mockResolvedValue(undefined)
+
+      const { main } = await import(`../src/cli.js`)
+
+      await main()
+
+      expect(mockProvisionElectricResources).toHaveBeenCalledTimes(1)
+      expect(mockSetupTemplate).toHaveBeenCalledWith(`.`, mockCredentials)
+      expect(consoleLogSpy).toHaveBeenCalledWith(
+        `Configuring current directory...`
+      )
+      expect(consoleLogSpy).toHaveBeenCalledWith(`Setup complete`)
+    })
+
+    it(`should not display "cd" instruction when using "."`, async () => {
+      process.argv = [`node`, `cli.js`, `.`]
+      mockProvisionElectricResources.mockResolvedValue(mockCredentials)
+      mockSetupTemplate.mockResolvedValue(undefined)
+
+      const { main } = await import(`../src/cli.js`)
+
+      await main()
+
+      expect(consoleLogSpy).not.toHaveBeenCalledWith(`  cd .`)
+      expect(consoleLogSpy).toHaveBeenCalledWith(`  pnpm install`)
+    })
+
     it(`should handle non-Error thrown values`, async () => {
       process.argv = [`node`, `cli.js`, `my-app`]
       mockProvisionElectricResources.mockRejectedValue(`string error`)

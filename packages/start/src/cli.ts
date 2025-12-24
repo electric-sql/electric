@@ -8,14 +8,17 @@ async function main() {
 
   if (args.length === 0) {
     console.error(`Usage: npx @electric-sql/start <app-name>`)
+    console.error(
+      `       npx @electric-sql/start .  (configure current directory)`
+    )
 
     process.exit(1)
   }
 
   const appName = args[0]
 
-  // Validate app name
-  if (!/^[a-zA-Z0-9-_]+$/.test(appName)) {
+  // Validate app name (skip validation for "." which means current directory)
+  if (appName !== `.` && !/^[a-zA-Z0-9-_]+$/.test(appName)) {
     console.error(
       `App name must contain only letters, numbers, hyphens, and underscores`
     )
@@ -23,7 +26,11 @@ async function main() {
     process.exit(1)
   }
 
-  console.log(`Creating app: ${appName}`)
+  if (appName === `.`) {
+    console.log(`Configuring current directory...`)
+  } else {
+    console.log(`Creating app: ${appName}`)
+  }
 
   try {
     const credentials = await provisionElectricResources()
@@ -36,7 +43,9 @@ async function main() {
     console.log(`Setup complete`)
     console.log(``)
     console.log(`Next steps:`)
-    console.log(`  cd ${appName}`)
+    if (appName !== `.`) {
+      console.log(`  cd ${appName}`)
+    }
     console.log(`  pnpm install`)
     console.log(`  pnpm migrate`)
     console.log(`  pnpm dev`)
