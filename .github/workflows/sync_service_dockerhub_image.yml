@@ -4,7 +4,13 @@ on:
   push:
     branches: ['main']
   release:
-    released:
+    types: [released]
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'The @core/sync-service@... tag to run for (e.g. @core/sync-service@v1.2.10)'
+        required: true
+        type: string
 
 jobs:
   derive_build_vars:
@@ -17,11 +23,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          # It is crucial that we checkout the actual HEAD commit of the branch instead of
-          # GitHub's ephemeral merge commit that it creates for CI runs by default.
-          # We rely on the correct HEAD commit to be checked out in order to determine the
-          # correct ELECTRIC_VERSION to bake into the Docker image.
-          ref: ${{ github.event.pull_request.head.sha }}
+          # The checked out commit influences the value of the ELECTRIC_VERSION variable
+          # that is baked into the Docker image.
+          #
+          # For regular pushes to main, we check out the HEAD commit and publish canary images.
+          #
+          # For releases we check out the tag corresponding to the release, e.g.
+          # @core/sync-service@v1.2.10.
+          #
+          # For manual triggers via workflow_dispatch, we check out the tag specified manually
+          # by the actor.
+          ref: ${{
+            github.event_name == 'release' && format('refs/tags/{0}', github.event.release.tag_name) ||
+            github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', inputs.release_tag) ||
+            github.sha }}
           # Also important to fetch the whole history since otherwise we won't get that tags
           # that are required to determine the correct ELECTRIC_VERSION.
           fetch-depth: 0
