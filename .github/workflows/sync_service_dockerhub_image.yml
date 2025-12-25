@@ -4,7 +4,7 @@ on:
   push:
     branches: ['main']
   release:
-    released:
+    types: [released]
 
 jobs:
   derive_build_vars:
