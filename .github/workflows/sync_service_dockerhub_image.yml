@@ -5,6 +5,12 @@ on:
     branches: ['main']
   release:
     types: [released]
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'The @core/sync-service@... tag to run for (e.g. @core/sync-service@v1.2.10)'
+        required: true
+        type: string
 
 jobs:
   derive_build_vars:
@@ -24,8 +30,12 @@ jobs:
           #
           # For releases we check out the tag corresponding to the release, e.g.
           # @core/sync-service@v1.2.10.
+          #
+          # For manual triggers via workflow_dispatch, we check out the tag specified manually
+          # by the actor.
           ref: ${{
             github.event_name == 'release' && format('refs/tags/{0}', github.event.release.tag_name) ||
+            github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', inputs.release_tag) ||
             github.sha }}
           # Also important to fetch the whole history since otherwise we won't get that tags
           # that are required to determine the correct ELECTRIC_VERSION.
