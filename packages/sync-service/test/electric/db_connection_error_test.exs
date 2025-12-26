@@ -585,6 +585,28 @@ defmodule Electric.DbConnectionErrorTest do
              } == DbConnectionError.from_error(error)
     end
 
+    test "with branch does not exist error" do
+      error = %Postgrex.Error{
+        message: nil,
+        postgres: %{
+          code: :invalid_authorization_specification,
+          message: "branch 3ibd4pbmos9p does not exist",
+          unknown: "FATAL",
+          severity: "FATAL",
+          pg_code: "28000"
+        },
+        connection_id: nil,
+        query: nil
+      }
+
+      assert %DbConnectionError{
+               message: "branch 3ibd4pbmos9p does not exist",
+               type: :branch_does_not_exist,
+               original_error: error,
+               retry_may_fix?: false
+             } == DbConnectionError.from_error(error)
+    end
+
     test "with an unknown error" do
       error = %DBConnection.ConnectionError{
         message: "made-up error",
