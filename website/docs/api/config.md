@@ -170,10 +170,10 @@ Note that any modifications in the database (INSERTs, UPDATEs, DELETEs, etc) con
 
 <EnvVarConfig
     name="ELECTRIC_REPLICATION_IDLE_WAL_SIZE_THRESHOLD"
-    defaultValue="100MB"
+    defaultValue="100MiB"
     example="1GB">
 
-Define the maximum size of retained WAL that Electric can still consider safe when deciding whether to wake up the connection subsystem from the scaled-down state. Only when the difference between Postgres' current LSN and Electric's replication slot exceeds this threshold will Electric wake up the connection subsystem and reduce logical replication streaming.
+Define the maximum size of retained WAL that Electric can still consider safe when deciding whether to wake up the connection subsystem from the scaled-down state. Only when the difference between Postgres' current LSN and Electric's replication slot's `restart_lsn` exceeds this threshold will Electric wake up the connection subsystem and resume logical replication streaming.
 
 </EnvVarConfig>
 
