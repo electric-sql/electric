@@ -156,6 +156,51 @@ defmodule Electric.Shapes.ConsumerRegistry do
     end)
   end
 
+  @doc """
+  Dynamically (re-)enable consumer suspension on all running consumers.
+
+  This allows for dynamically re-configuring consumer suspension even if it was
+  disabled, because the configuration message will have the side-effect of
+  waking all consumers from hibernation.
+
+  The `max_timeout` value allows for spreading the suspension of existing
+  consumers over a large time period to avoid a sudden rush of consumer
+  shutdowns after `hibernate_after` ms.
+
+  To re-enable consumer suspend:
+
+      # Make sure consumer suspend is enabled
+      Electric.StackConfig.put(stack_id, :shape_enable_suspend?, true)
+
+      # set the hibernation timeout to 1 minute but phase the suspension of
+      # existing consumers over a 20 minute period
+      Electric.Shapes.ConsumerRegistry.enable_suspend(stack_id, 60_000, 60_000 * 20)
+
+  Disabling suspension is as easy as:
+
+      Electric.StackConfig.put(stack_id, :shape_enable_suspend?, false)
+
+  """
+  @spec enable_suspend(stack_id(), pos_integer(), pos_integer()) ::
+          consumer_count :: non_neg_integer()
+  def enable_suspend(stack_id, hibernate_after, max_timeout)
+      when is_integer(hibernate_after) and is_integer(max_timeout) and
+             max_timeout > hibernate_after do
+    Electric.StackConfig.put(stack_id, :shape_hibernate_after, hibernate_after)
+    Electric.StackConfig.put(stack_id, :shape_enable_suspend?, true)
+
+    :ets.foldl(
+      fn {_shape_handle, pid}, n ->
+        if Process.alive?(pid),
+          do: send(pid, {:configure_suspend, hibernate_after, max_timeout})
+
+        n + 1
+      end,
+      0,
+      ets_name(stack_id)
+    )
+  end
+
   defp consumer_pid(handle, table) do
     :ets.lookup_element(table, handle, 2, nil)
   rescue

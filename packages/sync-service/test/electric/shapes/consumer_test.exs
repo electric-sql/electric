@@ -905,6 +905,50 @@ defmodule Electric.Shapes.ConsumerTest do
       assert is_pid(Consumer.whereis(ctx.stack_id, shape_handle))
     end
 
+    @tag with_pure_file_storage_opts: [flush_period: 1]
+    @tag suspend: false
+    test "ConsumerRegistry.enable_suspend should suspend hibernated consumers", ctx do
+      {:via, Registry, {name, key}} = Electric.Postgres.ReplicationClient.name(ctx.stack_id)
+      Registry.register(name, key, nil)
+
+      {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape1, ctx.stack_id)
+      lsn1 = Lsn.from_integer(300)
+
+      :started = ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id)
+
+      consumer_pid = Consumer.whereis(ctx.stack_id, shape_handle)
+      assert is_pid(consumer_pid)
+      ref = Process.monitor(consumer_pid)
+
+      txn = [
+        %Begin{xid: 2},
+        %Changes.NewRecord{
+          relation: {"public", "test_table"},
+          record: %{"id" => "21"},
+          log_offset: LogOffset.new(lsn1, 0)
+        },
+        %Commit{lsn: lsn1}
+      ]
+
+      assert :ok = ShapeLogCollector.handle_operations(txn, ctx.producer)
+
+      assert_receive {:flush_boundary_updated, 300}, 1_000
+
+      Process.sleep(60)
+
+      refute_receive {:DOWN, ^ref, :process, ^consumer_pid, {:shutdown, :suspend}}
+
+      assert Consumer.whereis(ctx.stack_id, shape_handle)
+
+      Shapes.ConsumerRegistry.enable_suspend(ctx.stack_id, 5, 10)
+
+      Process.sleep(60)
+
+      assert_receive {:DOWN, ^ref, :process, ^consumer_pid, {:shutdown, :suspend}}
+
+      refute Consumer.whereis(ctx.stack_id, shape_handle)
+    end
+
     @tag with_pure_file_storage_opts: [compaction_period: 5, keep_complete_chunks: 133]
     test "compaction is scheduled and invoked for a shape that has compaction enabled", ctx do
       parent = self()
