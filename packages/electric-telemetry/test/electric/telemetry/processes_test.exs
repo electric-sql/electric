@@ -27,25 +27,33 @@ defmodule ElectricTelemetry.ProcessesTest do
 
       refute Process.alive?(pid1)
 
-      assert [%{memory: memory, type: :erlang}] = top_memory_by_type([pid1, pid2])
+      assert [
+               %{
+                 proc_mem: memory,
+                 binary_mem: _,
+                 avg_bin_count: _,
+                 avg_ref_count: _,
+                 type: :erlang
+               }
+             ] = top_memory_by_type([pid1, pid2])
 
       assert is_integer(memory)
     end
 
     test "defaults to top 5 of all processes" do
       assert [
-               %{memory: _, type: _},
-               %{memory: _, type: _},
-               %{memory: _, type: _},
-               %{memory: _, type: _},
-               %{memory: _, type: _}
+               %{proc_mem: _, type: _},
+               %{proc_mem: _, type: _},
+               %{proc_mem: _, type: _},
+               %{proc_mem: _, type: _},
+               %{proc_mem: _, type: _}
              ] = top_memory_by_type()
     end
 
     test "allows for setting limit" do
       assert [
-               %{memory: _, type: _},
-               %{memory: _, type: _}
+               %{proc_mem: _, type: _},
+               %{proc_mem: _, type: _}
              ] = top_memory_by_type(2)
     end
   end
