@@ -143,7 +143,9 @@ defmodule Electric.Application do
         shape_hibernate_after: get_env(opts, :shape_hibernate_after),
         shape_enable_suspend?: get_env(opts, :shape_enable_suspend?),
         conn_max_requests: get_env(opts, :conn_max_requests),
-        process_spawn_opts: get_env(opts, :process_spawn_opts)
+        process_spawn_opts: get_env(opts, :process_spawn_opts),
+        idle_wal_size_check_period: get_env(opts, :idle_wal_size_check_period),
+        idle_wal_size_threshold: get_env(opts, :idle_wal_size_threshold)
       ],
       manual_table_publishing?: get_env(opts, :manual_table_publishing?)
     )
