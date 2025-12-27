@@ -2,7 +2,7 @@
 
 [include _macros.luxinc]
 
-[global pg_container_name=db-connection-scaledown__pg]
+[global pg_container_name=wal-size-check-while-scaled-down__pg]
 [global database_url=postgresql://electric_test:password@localhost:$pg_host_port/electric?sslmode=disable]
 
 ###
@@ -41,8 +41,6 @@
 # Normally the client performs the check once a minute, so we're speeding it up here for
 # testing purposes.
 [shell electric]
-  # [sleep 2]
-
   !Electric.Postgres.ReplicationClient.name("single_stack") |> GenServer.whereis() |> send(:check_if_idle)
   ??[notice] Closing all database connections after the replication stream has been idle for
 
@@ -68,7 +66,7 @@
   !insert into items select * from generate_series(1,1000);
   ??INSERT
 
-# Sleep and verify that Electric wakes up after checking the WAL size and seeing it has exceeded the threshold
+# Verify that Electric wakes up after checking the WAL size and seeing it has exceeded the threshold
 [shell electric]
   ??Opening a database connection to check the retained WAL size
   ?Retained WAL size ~[0-9.]+KB has exceeded the threshold of ~10\.0KB\. Time to wake up the connection subsystem
