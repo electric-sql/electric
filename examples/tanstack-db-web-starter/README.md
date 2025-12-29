@@ -73,6 +73,136 @@ Open the application on [https://localhost:5173](https://localhost:5173).
 > [!Tip]
 > If you run into any issues, see the [troubleshooting](#troubleshooting) section below.
 
+# How Authentication Works
+
+This starter implements a secure authentication pattern for Electric sync. If you're new to Electric, it's worth understanding how the pieces fit together since this is a novel part of the stack.
+
+## Overview
+
+Electric is a Postgres sync engine that streams data to clients via HTTP. Unlike traditional REST APIs where each request is authenticated individually, Electric maintains persistent sync connections. This requires a different approach to authorization.
+
+The starter uses a **Shape Proxy Pattern** where:
+
+1. Users authenticate with [Better Auth](https://www.better-auth.com/) (session cookies)
+2. API routes validate the session before proxying requests to Electric
+3. Row-level filtering ensures users only see their own data
+4. tRPC mutations re-validate permissions server-side
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                      Client (Browser)                        │
+│                                                              │
+│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐  │
+│  │  TanStack DB │    │   Electric   │    │    tRPC      │  │
+│  │  Collection  │───▶│ Shape Client │    │   Client     │  │
+│  └──────────────┘    └──────────────┘    └──────────────┘  │
+│         │                   │                    │          │
+└─────────│───────────────────│────────────────────│──────────┘
+          │                   │                    │
+          │    Session Cookie │ (automatic)        │
+          │                   ▼                    ▼
+┌─────────│───────────────────────────────────────────────────┐
+│         │           Server (TanStack Start)                  │
+│         │                                                    │
+│         │    ┌────────────────────────────────────────────┐ │
+│         │    │           Shape Proxy Routes               │ │
+│         │    │     (/api/todos, /api/projects, etc)       │ │
+│         │    │                                            │ │
+│         │    │  1. Validate session                       │ │
+│         │    │  2. Add WHERE user_id = ?                  │ │
+│         │    │  3. Forward to Electric                    │ │
+│         │    └────────────────────────────────────────────┘ │
+│         │                         │                         │
+│         │    ┌────────────────────│───────────────────────┐ │
+│         │    │  tRPC Router       ▼                       │ │
+│         └───▶│  - Validates session                       │ │
+│              │  - Checks ownership before mutations       │ │
+│              │  - Returns transaction IDs for sync        │ │
+│              └────────────────────────────────────────────┘ │
+│                                   │                         │
+└───────────────────────────────────│─────────────────────────┘
+                                    │
+                   ┌────────────────┴────────────────┐
+                   ▼                                 ▼
+            ┌──────────┐                      ┌──────────┐
+            │ Electric │                      │ Postgres │
+            │  Server  │◀────────────────────▶│ Database │
+            └──────────┘                      └──────────┘
+```
+
+## Shape Proxy Routes
+
+Each table that syncs via Electric has a corresponding API route that acts as an authenticated proxy. Here's what happens in `/api/todos`:
+
+```typescript
+const serve = async ({ request }: { request: Request }) => {
+  // 1. Validate the session
+  const session = await auth.api.getSession({ headers: request.headers })
+  if (!session) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401,
+    })
+  }
+
+  // 2. Build the Electric URL with row-level filtering
+  const originUrl = prepareElectricUrl(request.url)
+  originUrl.searchParams.set("table", "todos")
+  // Only sync rows where the user has access
+  const filter = `'${session.user.id}' = ANY(user_ids)`
+  originUrl.searchParams.set("where", filter)
+
+  // 3. Proxy the request to Electric
+  return proxyElectricRequest(originUrl)
+}
+```
+
+This pattern ensures:
+
+- **Electric never receives unauthenticated requests** - the proxy validates first
+- **Users only see their own data** - the `WHERE` clause filters at the database level
+- **Session cookies work automatically** - no special client configuration needed
+
+## Mutation Authorization
+
+While Electric handles reads, mutations go through tRPC with additional authorization:
+
+```typescript
+// src/lib/trpc/todos.ts
+delete: authedProcedure
+  .input(deleteTodoSchema)
+  .mutation(async ({ ctx, input }) => {
+    // Find the todo first
+    const [todo] = await ctx.db.select().from(todosTable).where(eq(id, input.id))
+
+    // Verify the user has access
+    if (!todo.user_ids.includes(ctx.session.user.id)) {
+      throw new TRPCError({ code: "FORBIDDEN" })
+    }
+
+    // Proceed with deletion
+    // ...
+  })
+```
+
+## Adding Auth to New Tables
+
+When you add a new table (see [Adding a New Table](#adding-a-new-table)), you need to:
+
+1. **Include a user reference** in your schema (e.g., `user_id` column)
+2. **Create a shape proxy route** that validates the session and filters by user
+3. **Add ownership checks** in your tRPC mutations
+
+The "Adding a New Table" section below shows the complete pattern.
+
+## Learn More
+
+For more details on Electric's authentication model, see:
+
+- [Electric Auth Guide](https://electric-sql.com/docs/guides/auth) - comprehensive auth documentation
+- [Electric Shapes](https://electric-sql.com/docs/guides/shapes) - how partial replication works
+
 # Developing your app
 
 ## Adding a New Table
