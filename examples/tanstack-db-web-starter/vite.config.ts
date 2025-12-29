@@ -31,7 +31,7 @@ const config = defineConfig({
     exclude: [`@tanstack/start-server-core`],
   },
   ssr: {
-    noExternal: [`zod`],
+    noExternal: [`zod`, `drizzle-orm`],
   },
 })
 
