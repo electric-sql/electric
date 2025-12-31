@@ -143,9 +143,10 @@ export async function GET(request: Request) {
   }
 
   // Only query data the user has access to unless they're an admin.
+  // Use parameterized queries to prevent SQL injection
   if (!user.roles.includes(`admin`)) {
-    // For type-safe WHERE clause generation, see the section below
-    originUrl.searchParams.set(`where`, `org_id = '${user.org_id}'`)
+    originUrl.searchParams.set(`where`, `org_id = $1`)
+    originUrl.searchParams.set(`params[1]`, user.org_id)
   }
 
   const response = await fetch(originUrl)
@@ -169,7 +170,7 @@ export async function GET(request: Request) {
 
 #### Type-safe where clause generation
 
-The example above uses simple string-based WHERE clauses, which works well for straightforward cases. If you'd like type-safe WHERE clause generation with compile-time validation, you can use query builder libraries like Drizzle or Kysely. This is particularly useful for complex queries or when you want to catch column reference errors at compile-time rather than runtime.
+The example above uses parameterized WHERE clauses with `$1` placeholders and `params[1]` values, which prevents SQL injection. For more complex queries where you'd like type-safe WHERE clause generation with compile-time validation, you can use query builder libraries like Drizzle or Kysely. This is particularly useful when you want to catch column reference errors at compile-time rather than runtime.
 
 > [!Tip] General pattern
 > These examples show JavaScript/TypeScript APIs, but you can use this same pattern of type-safe where clause generation in any language with similar query builder libraries for your backend API.
