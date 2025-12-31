@@ -136,7 +136,15 @@ defmodule Electric.StackSupervisor do
                        type: :pos_integer,
                        default: Electric.Config.default(:conn_max_requests)
                      ],
-                     process_spawn_opts: [type: :map, default: %{}]
+                     process_spawn_opts: [type: :map, default: %{}],
+                     idle_wal_size_check_period: [
+                       type: :integer,
+                       default: Electric.Config.default(:idle_wal_size_check_period)
+                     ],
+                     idle_wal_size_threshold: [
+                       type: :integer,
+                       default: Electric.Config.default(:idle_wal_size_threshold)
+                     ]
                    ]
                  ],
                  manual_table_publishing?: [
@@ -347,6 +355,14 @@ defmodule Electric.StackSupervisor do
       manual_table_publishing?: config.manual_table_publishing?
     ]
 
+    restarter_opts = [
+      stack_id: stack_id,
+      stack_events_registry: config.stack_events_registry,
+      slot_name: Keyword.fetch!(config.replication_opts, :slot_name),
+      wal_size_check_period: Keyword.fetch!(config.tweaks, :idle_wal_size_check_period),
+      wal_size_threshold: Keyword.fetch!(config.tweaks, :idle_wal_size_threshold)
+    ]
+
     registry_partitions =
       Keyword.get(config.tweaks, :registry_partitions, System.schedulers_online())
 
@@ -377,7 +393,9 @@ defmodule Electric.StackSupervisor do
         {Electric.Postgres.Inspector.EtsInspector,
          stack_id: stack_id, pool: metadata_db_pool, persistent_kv: config.persistent_kv},
         {Electric.MonitoredCoreSupervisor,
-         stack_id: stack_id, connection_manager_opts: connection_manager_opts}
+         stack_id: stack_id,
+         connection_manager_opts: connection_manager_opts,
+         restarter_opts: restarter_opts}
       ]
       |> Enum.reject(&is_nil/1)
 

@@ -4,21 +4,6 @@ defmodule Electric.Connection.Manager.ConnectionResolver do
 
   require Logger
 
-  defmodule Connection do
-    @moduledoc false
-    @behaviour Postgrex.SimpleConnection
-
-    def init(stack_id) do
-      Logger.metadata(stack_id: stack_id, is_connection_process?: true)
-      Electric.Telemetry.Sentry.set_tags_context(stack_id: stack_id)
-      {:ok, []}
-    end
-
-    def notify(_channel, _payload, _state) do
-      :ok
-    end
-  end
-
   def name(stack_ref) do
     Electric.ProcessRegistry.name(stack_ref, __MODULE__)
   end
@@ -29,29 +14,20 @@ defmodule Electric.Connection.Manager.ConnectionResolver do
     end
   end
 
-  def validate(stack_id, db_connection) do
-    GenServer.call(name(stack_id), {:validate, db_connection}, :infinity)
+  def validate(stack_id, conn_opts) do
+    GenServer.call(name(stack_id), {:validate, conn_opts}, :infinity)
   end
 
   @impl GenServer
   def init(opts) do
     stack_id = Keyword.fetch!(opts, :stack_id)
 
-    # ignore exits from connection processes that fail to start due to
-    # connection errors or from us killing the connection after we're
-    # done
-    Process.flag(:trap_exit, true)
-
     Process.set_label({:connection_resolver, stack_id})
     metadata = [is_connection_process?: true, stack_id: stack_id]
     Logger.metadata(metadata)
     Electric.Telemetry.Sentry.set_tags_context(metadata)
 
-    {_m, _f, _a} =
-      connection_mod =
-      Keyword.get(opts, :connection_mod, {Postgrex.SimpleConnection, :start_link, []})
-
-    {:ok, %{connection_mod: connection_mod, stack_id: stack_id}, {:continue, :notify_ready}}
+    {:ok, %{stack_id: stack_id}, {:continue, :notify_ready}}
   end
 
   @impl GenServer
@@ -62,11 +38,11 @@ defmodule Electric.Connection.Manager.ConnectionResolver do
   end
 
   @impl GenServer
-  def handle_call({:validate, connection}, _from, state) do
+  def handle_call({:validate, conn_opts}, _from, state) do
     # convert to postgrex style for return to conn.manager
-    connection = populate_connection_opts(connection)
+    conn_opts = populate_connection_opts(conn_opts)
 
-    result = attempt_connection({:cont, connection}, state)
+    result = attempt_connection({:cont, conn_opts}, state)
 
     {:reply, result, state, :hibernate}
   end
@@ -80,22 +56,10 @@ defmodule Electric.Connection.Manager.ConnectionResolver do
   def handle_info({:EXIT, _pid, _reason}, state), do: {:noreply, state}
 
   defp attempt_connection({:cont, conn_opts}, state) do
-    %{
-      connection_mod: {connection_mod, connection_fun, connection_args}
-    } = state
+    opts = [stack_id: state.stack_id, label: :connection_resolver, connection_opts: conn_opts]
 
-    connection_opts =
-      Keyword.merge(Electric.Utils.deobfuscate_password(conn_opts),
-        auto_reconnect: false,
-        sync_connect: true
-      )
-
-    args = [Connection, state.stack_id, connection_opts | connection_args]
-
-    case apply(connection_mod, connection_fun, args) do
-      {:ok, conn} ->
-        Process.exit(conn, :kill)
-
+    case Electric.Postgres.OneOffConnection.attempt_connection(opts) do
+      :success ->
         {:ok, conn_opts}
 
       {:error, error} ->

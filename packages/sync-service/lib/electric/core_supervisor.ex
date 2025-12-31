@@ -24,10 +24,8 @@ defmodule Electric.CoreSupervisor do
     Logger.metadata(stack_id: stack_id)
     Electric.Telemetry.Sentry.set_tags_context(stack_id: stack_id)
 
-    connection_manager_opts = Keyword.fetch!(opts, :connection_manager_opts)
-
     children = [
-      {Electric.Connection.Supervisor, connection_manager_opts}
+      {Electric.Connection.Supervisor, opts}
     ]
 
     Supervisor.init(children, strategy: :one_for_one, auto_shutdown: :any_significant)
