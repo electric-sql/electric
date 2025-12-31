@@ -167,27 +167,6 @@ See the [starter template README](https://github.com/electric-sql/electric/blob/
 
 :::
 
-## Naming conventions
-
-The starter uses **snake_case** for all database column names (e.g., `created_at`, `user_id`). This is the PostgreSQL convention and keeps your schema consistent with Electric's expectations.
-
-If you prefer **camelCase** in your TypeScript code, you have two options:
-
-1. **Use snake_case throughout** (recommended for starters) &mdash; keep your TypeScript types matching the database schema
-2. **Use column mapping** &mdash; transform names automatically using [`snakeCamelMapper()`](/docs/api/clients/typescript#column-mapping)
-
-```ts
-import { ShapeStream, snakeCamelMapper } from '@electric-sql/client'
-
-const stream = new ShapeStream({
-  url: 'http://localhost:3000/v1/shape',
-  params: { table: 'todos' },
-  columnMapper: snakeCamelMapper(), // created_at → createdAt
-})
-```
-
-See the [TypeScript client docs](/docs/api/clients/typescript#column-mapping) for more details on column mapping.
-
 ## Next steps
 
 <!-- - follow the [Tutorial](/docs/tutorial) to evolve your starter into a production-quality app. -->
