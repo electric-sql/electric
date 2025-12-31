@@ -3,7 +3,7 @@ import { defineConfig } from 'vitest/config'
 export default defineConfig({
   test: {
     globalSetup: `test/support/global-setup.ts`,
-    setupFiles: [`vitest-localstorage-mock`, `./test/support/setup.ts`],
+    setupFiles: [`vitest-localstorage-mock`],
     typecheck: { enabled: true },
     fileParallelism: false,
     testTimeout: 30000, // 30s default timeout to catch hanging tests
