@@ -433,6 +433,7 @@ describe(`ShapeStream`, () => {
         params: { table: `foo` },
         signal: aborter.signal,
         fetchClient: fetchWrapper,
+        warnOnHttp: true,
       })
 
       expect(warnSpy).toHaveBeenCalledTimes(1)
@@ -454,6 +455,7 @@ describe(`ShapeStream`, () => {
         params: { table: `foo` },
         signal: aborter.signal,
         fetchClient: fetchWrapper,
+        warnOnHttp: true,
       })
 
       expect(warnSpy).not.toHaveBeenCalled()
@@ -472,6 +474,7 @@ describe(`ShapeStream`, () => {
         params: { table: `foo` },
         signal: aborter.signal,
         fetchClient: fetchWrapper,
+        warnOnHttp: true,
       })
 
       expect(warnSpy).not.toHaveBeenCalled()
