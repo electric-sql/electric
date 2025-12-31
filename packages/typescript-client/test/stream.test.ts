@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ShapeStream, isChangeMessage, Message, Row } from '../src'
 import { snakeCamelMapper } from '../src/column-mapper'
 import { resolveInMacrotask } from './support/test-helpers'
@@ -406,5 +406,75 @@ describe(`ShapeStream`, () => {
     // Verify original db column names are not present
     expect(changeMessage!.value).not.toHaveProperty(`user_id`)
     expect(changeMessage!.value).not.toHaveProperty(`created_at`)
+  })
+
+  describe(`HTTP URL warning`, () => {
+    let originalWindow: typeof globalThis.window
+    let warnSpy: ReturnType<typeof vi.spyOn>
+
+    beforeEach(() => {
+      originalWindow = globalThis.window
+      // Mock browser environment
+      globalThis.window = {} as typeof globalThis.window
+      warnSpy = vi.spyOn(console, `warn`).mockImplementation(() => {})
+    })
+
+    afterEach(() => {
+      globalThis.window = originalWindow
+      warnSpy.mockRestore()
+    })
+
+    it(`should warn when using HTTP URL in browser environment`, () => {
+      const fetchWrapper = (): Promise<Response> =>
+        Promise.resolve(Response.error())
+
+      new ShapeStream({
+        url: `http://example.com/v1/shape`,
+        params: { table: `foo` },
+        signal: aborter.signal,
+        fetchClient: fetchWrapper,
+      })
+
+      expect(warnSpy).toHaveBeenCalledTimes(1)
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining(`[Electric] Using HTTP (not HTTPS)`)
+      )
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining(`HTTP/1.1`))
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining(`https://bit.ly/electric-http2`)
+      )
+    })
+
+    it(`should not warn when using HTTPS URL`, () => {
+      const fetchWrapper = (): Promise<Response> =>
+        Promise.resolve(Response.error())
+
+      new ShapeStream({
+        url: `https://example.com/v1/shape`,
+        params: { table: `foo` },
+        signal: aborter.signal,
+        fetchClient: fetchWrapper,
+      })
+
+      expect(warnSpy).not.toHaveBeenCalled()
+    })
+
+    it(`should not warn in non-browser environment`, () => {
+      // Remove window to simulate Node.js environment
+      // @ts-expect-error - intentionally removing window
+      delete globalThis.window
+
+      const fetchWrapper = (): Promise<Response> =>
+        Promise.resolve(Response.error())
+
+      new ShapeStream({
+        url: `http://example.com/v1/shape`,
+        params: { table: `foo` },
+        signal: aborter.signal,
+        fetchClient: fetchWrapper,
+      })
+
+      expect(warnSpy).not.toHaveBeenCalled()
+    })
   })
 })
