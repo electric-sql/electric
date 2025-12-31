@@ -289,14 +289,6 @@ export interface ShapeStreamOptions<T = never> {
   log?: LogMode
 
   signal?: AbortSignal
-
-  /**
-   * Warn in browser console when using HTTP URLs (default: true).
-   * HTTP limits browsers to 6 concurrent connections which can cause
-   * slow shapes with multiple subscriptions.
-   */
-  warnOnHttp?: boolean
-
   fetchClient?: typeof fetch
   backoffOptions?: BackoffOptions
   parser?: Parser<T>
@@ -430,6 +422,13 @@ export interface ShapeStreamOptions<T = never> {
    * ```
    */
   onError?: ShapeStreamErrorHandler
+
+  /**
+   * Warn in browser console when using HTTP URLs (default: true).
+   * HTTP limits browsers to 6 concurrent connections which can cause
+   * slow shapes with multiple subscriptions.
+   */
+  warnOnHttp?: boolean
 }
 
 export interface ShapeStreamInterface<T extends Row<unknown> = Row> {
