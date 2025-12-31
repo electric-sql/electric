@@ -476,5 +476,20 @@ describe(`ShapeStream`, () => {
 
       expect(warnSpy).not.toHaveBeenCalled()
     })
+
+    it(`should not warn when warnOnHttp is false`, () => {
+      const fetchWrapper = (): Promise<Response> =>
+        Promise.resolve(Response.error())
+
+      new ShapeStream({
+        url: `http://example.com/v1/shape`,
+        params: { table: `foo` },
+        signal: aborter.signal,
+        fetchClient: fetchWrapper,
+        warnOnHttp: false,
+      })
+
+      expect(warnSpy).not.toHaveBeenCalled()
+    })
   })
 })

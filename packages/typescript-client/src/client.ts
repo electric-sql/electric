@@ -289,6 +289,14 @@ export interface ShapeStreamOptions<T = never> {
   log?: LogMode
 
   signal?: AbortSignal
+
+  /**
+   * Warn in browser console when using HTTP URLs (default: true).
+   * HTTP limits browsers to 6 concurrent connections which can cause
+   * slow shapes with multiple subscriptions.
+   */
+  warnOnHttp?: boolean
+
   fetchClient?: typeof fetch
   backoffOptions?: BackoffOptions
   parser?: Parser<T>
@@ -1629,21 +1637,23 @@ function validateOptions<T>(options: Partial<ShapeStreamOptions<T>>): void {
 
   validateParams(options.params)
 
-  // Warn about HTTP URLs in browser environments
+  // Warn about HTTP URLs in browser environments (unless disabled)
   // HTTP forces HTTP/1.1 which limits browsers to 6 concurrent connections
-  try {
-    if (typeof window !== `undefined` && typeof console !== `undefined`) {
-      const url = new URL(options.url)
-      if (url.protocol === `http:`) {
-        console.warn(
-          `[Electric] Using HTTP (not HTTPS) limits browsers to 6 concurrent connections (HTTP/1.1). ` +
-            `This can cause slow shapes and app freezes with multiple shapes. ` +
-            `Use HTTPS for HTTP/2 support. See: https://bit.ly/electric-http2`
-        )
+  if (options.warnOnHttp !== false) {
+    try {
+      if (typeof window !== `undefined` && typeof console !== `undefined`) {
+        const url = new URL(options.url)
+        if (url.protocol === `http:`) {
+          console.warn(
+            `[Electric] Using HTTP (not HTTPS) limits browsers to 6 concurrent connections (HTTP/1.1). ` +
+              `This can cause slow shapes and app freezes with multiple shapes. ` +
+              `Use HTTPS for HTTP/2 support. See: https://bit.ly/electric-http2`
+          )
+        }
       }
+    } catch {
+      // Ignore URL parsing errors - let the fetch fail with a clearer error
     }
-  } catch {
-    // Ignore URL parsing errors - let the fetch fail with a clearer error
   }
 
   return
