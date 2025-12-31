@@ -223,9 +223,9 @@ export const todosTable = pgTable("todos", {
   id: integer().primaryKey().generatedAlwaysAsIdentity(),
   text: varchar({ length: 500 }).notNull(),
   completed: boolean().notNull().default(false),
-  created_at: timestamp({ withTimezone: true }).notNull().defaultNow(),  // snake_case
-  user_id: text("user_id").notNull(),  // snake_case
-  project_id: integer("project_id").notNull(),  // snake_case
+  created_at: timestamp({ withTimezone: true }).notNull().defaultNow(), // snake_case
+  user_id: text("user_id").notNull(), // snake_case
+  project_id: integer("project_id").notNull(), // snake_case
 })
 ```
 
@@ -236,9 +236,9 @@ type Todo = {
   id: number
   text: string
   completed: boolean
-  created_at: Date    // matches database
-  user_id: string     // matches database
-  project_id: number  // matches database
+  created_at: Date // matches database
+  user_id: string // matches database
+  project_id: number // matches database
 }
 ```
 
@@ -247,11 +247,11 @@ type Todo = {
 If you prefer camelCase in your TypeScript code, Electric provides a `columnMapper` option that automatically transforms column names:
 
 ```ts
-import { ShapeStream, snakeCamelMapper } from '@electric-sql/client'
+import { ShapeStream, snakeCamelMapper } from "@electric-sql/client"
 
 const stream = new ShapeStream<Todo>({
-  url: 'http://localhost:3000/v1/shape',
-  params: { table: 'todos' },
+  url: "http://localhost:3000/v1/shape",
+  params: { table: "todos" },
   columnMapper: snakeCamelMapper(), // created_at → createdAt
 })
 ```
