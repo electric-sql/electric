@@ -1636,9 +1636,10 @@ function validateOptions<T>(options: Partial<ShapeStreamOptions<T>>): void {
 
   validateParams(options.params)
 
-  // Warn about HTTP URLs in browser environments (unless disabled)
+  // Warn about HTTP URLs in browser environments (unless disabled or in tests)
   // HTTP forces HTTP/1.1 which limits browsers to 6 concurrent connections
-  if (options.warnOnHttp !== false) {
+  const warnOnHttp = options.warnOnHttp ?? process.env.NODE_ENV !== `test`
+  if (warnOnHttp) {
     try {
       if (typeof window !== `undefined` && typeof console !== `undefined`) {
         const url = new URL(options.url)
