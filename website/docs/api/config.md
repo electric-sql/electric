@@ -307,6 +307,48 @@ The amount of time a consumer process remains active without receiving transacti
 
 </EnvVarConfig>
 
+## Feature Flags
+
+Feature flags enable experimental or advanced features that are not yet enabled by default in production. These flags allow testing new functionality before it becomes stable.
+
+### ELECTRIC_FEATURE_FLAGS
+
+<EnvVarConfig
+    name="ELECTRIC_FEATURE_FLAGS"
+    defaultValue=""
+    example="allow_subqueries,tagged_subqueries">
+
+Comma-separated list of feature flags to enable. Unknown flags are logged as errors but don't prevent startup, allowing for smooth deployments when adding or removing flags.
+
+**Available flags:**
+
+| Flag | Description |
+|------|-------------|
+| `allow_subqueries` | Enables subquery support in shape WHERE clauses |
+| `tagged_subqueries` | Enables improved multi-level dependency handling |
+
+</EnvVarConfig>
+
+### allow_subqueries
+
+Enables support for subqueries in the WHERE clause of [shape](/docs/guides/shapes) definitions. When enabled, you can use queries in the form:
+
+```sql
+WHERE id IN (SELECT user_id FROM memberships WHERE org_id = 'org_123')
+```
+
+This allows creating shapes that filter based on related data in other tables, enabling more complex data synchronization patterns.
+
+**Status:** Experimental. Disabled by default in production.
+
+### tagged_subqueries
+
+Enables causally correct processing of multi-level (3+) dependency trees when using subqueries. When a shape depends on another shape through subqueries, and that shape depends on yet another shape, this creates a dependency tree.
+
+Without this flag enabled, shapes in the middle of such dependency trees are invalidated when data moves into or out of dependent shapes. With the flag enabled, Electric uses an improved algorithm that correctly handles these move operations without invalidating the shapes.
+
+**Status:** Experimental. Disabled by default in production. Requires `allow_subqueries` to be useful.
+
 ## Caching
 
 ### ELECTRIC_CACHE_MAX_AGE
