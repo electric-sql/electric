@@ -669,7 +669,8 @@ export class ShapeStream<T extends Row<unknown> = Row>
       if (this.#onError) {
         const retryOpts = await this.#onError(err as Error)
         // Guard against null (typeof null === "object" in JavaScript)
-        if (retryOpts && typeof retryOpts === `object`) {
+        const isRetryable = !(err instanceof MissingHeadersError)
+        if (retryOpts && typeof retryOpts === `object` && isRetryable) {
           // Update params/headers but don't reset offset
           // We want to continue from where we left off, not refetch everything
           if (retryOpts.params) {
