@@ -15,6 +15,8 @@ import { data as posts } from './data/posts.data.ts'
 
 import BlogPostListing from './src/components/BlogPostListing.vue'
 
+const fallback = import.meta.env.DEV ? undefined : 'netlify'
+
 onMounted(async () => {
   if (typeof window !== 'undefined' && document.querySelector) {
     const githubLinks = document.querySelectorAll(
@@ -117,9 +119,9 @@ onMounted(async () => {
           src="/img/blog/electric-elephant.jpg"
           :width="720"
           :height="720"
+          :fallback="fallback"
           layout="constrained"
           background="auto"
-          fallback="netlify"
         />
         <h1>
           ElectricSQL Blog

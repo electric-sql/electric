@@ -2,6 +2,8 @@
 import { Image } from '@unpic/vue'
 import { data as authors } from '../../data/authors.data.ts'
 
+const fallback = import.meta.env.DEV ? undefined : 'netlify'
+
 const { post } = defineProps(['post'])
 </script>
 
@@ -95,9 +97,9 @@ const { post } = defineProps(['post'])
           :src="post.image"
           :width="896"
           :height="428"
+          :fallback="fallback"
           layout="constrained"
           background="auto"
-          fallback="netlify"
         />
       </div>
       <div class="post-body">
