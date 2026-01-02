@@ -125,7 +125,7 @@ onMounted(async () => {
         <Image
           :src="ElectricElephant"
           :width="720"
-          :height="720"
+          :height="440"
           :fallback="fallback"
           layout="constrained"
           background="auto"
