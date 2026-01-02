@@ -670,6 +670,23 @@ export class ShapeStream<T extends Row<unknown> = Row>
         const retryOpts = await this.#onError(err as Error)
         // Guard against null (typeof null === "object" in JavaScript)
         if (retryOpts && typeof retryOpts === `object`) {
+          // Don't retry on MissingHeadersError - this is a configuration issue
+          // (e.g., proxy not forwarding Electric headers) that won't fix itself
+          // without manual intervention. Retrying immediately would cause an
+          // infinite loop since the backoff wrapper only handles fetch failures,
+          // not post-response validation errors.
+          if (err instanceof MissingHeadersError) {
+            console.warn(
+              `[Electric] Not retrying after MissingHeadersError. ` +
+                `This is a configuration issue that requires manual intervention. ` +
+                `Check that your proxy/CDN is forwarding all Electric headers.`
+            )
+            this.#sendErrorToSubscribers(err)
+            this.#connected = false
+            this.#tickPromiseRejecter?.()
+            return
+          }
+
           // Update params/headers but don't reset offset
           // We want to continue from where we left off, not refetch everything
           if (retryOpts.params) {
