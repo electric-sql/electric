@@ -256,6 +256,19 @@ This environment variable increases this timeout.
 
 </EnvVarConfig>
 
+### ELECTRIC_LONG_POLL_TIMEOUT
+
+<EnvVarConfig
+    name="ELECTRIC_LONG_POLL_TIMEOUT"
+    defaultValue="20s"
+    example="30s">
+
+Maximum time the server will hold a request waiting for new changes before responding.
+
+When a client makes a live request (polling for updates), the server will wait up to this duration for new changes to appear. If no changes occur within this time, the server responds with an up-to-date message and the client can poll again.
+
+</EnvVarConfig>
+
 ### ELECTRIC_SHAPE_CHUNK_BYTES_THRESHOLD
 
 <EnvVarConfig
