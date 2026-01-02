@@ -347,6 +347,8 @@ Enables causally correct processing of multi-level (3+) dependency trees when us
 
 Without this flag enabled, shapes in the middle of such dependency trees are invalidated when data moves into or out of dependent shapes. With the flag enabled, Electric uses an improved algorithm that correctly handles these move operations without invalidating the shapes.
 
+See [discussion #2931](https://github.com/electric-sql/electric/discussions/2931) for more details about this feature.
+
 **Status:** Experimental. Disabled by default in production. Requires `allow_subqueries` to be useful.
 
 ## Caching
