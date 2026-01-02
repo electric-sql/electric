@@ -24,6 +24,9 @@ const formattedDate = computed(() => {
     timeZone: 'UTC',
   })
 })
+
+const headerImageWidth = computed(() => frontmatter.value.imageWidth ?? 1376)
+const headerImageHeight = computed(() => frontmatter.value.imageHeight ?? 860)
 </script>
 
 <style scoped>
@@ -80,8 +83,8 @@ h1 {
     <p class="post-image">
       <Image
         :src="frontmatter.image"
-        :width="1376"
-        :height="1032"
+        :width="headerImageWidth"
+        :height="headerImageHeight"
         :fallback="fallback"
         layout="constrained"
         background="auto"
