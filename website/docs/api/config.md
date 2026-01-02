@@ -309,7 +309,7 @@ The amount of time a consumer process remains active without receiving transacti
 
 ## Feature Flags
 
-Feature flags enable experimental or advanced features that are not yet enabled by default in production. These flags allow testing new functionality before it becomes stable.
+Feature flags enable experimental or advanced features that are not yet enabled by default in production.
 
 ### ELECTRIC_FEATURE_FLAGS
 
@@ -317,8 +317,6 @@ Feature flags enable experimental or advanced features that are not yet enabled 
     name="ELECTRIC_FEATURE_FLAGS"
     defaultValue=""
     example="allow_subqueries,tagged_subqueries">
-
-Comma-separated list of feature flags to enable. Unknown flags are logged as errors but don't prevent startup, allowing for smooth deployments when adding or removing flags.
 
 **Available flags:**
 
