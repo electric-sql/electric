@@ -5,6 +5,8 @@ import { Image } from '@unpic/vue'
 
 import { data as authors } from '../../data/authors.data.ts'
 
+const fallback = import.meta.env.DEV ? undefined : 'netlify'
+
 const { page, frontmatter } = useData()
 
 const postDate = computed(() => {
@@ -22,6 +24,9 @@ const formattedDate = computed(() => {
     timeZone: 'UTC',
   })
 })
+
+const headerImageWidth = computed(() => frontmatter.value.imageWidth ?? 1376)
+const headerImageHeight = computed(() => frontmatter.value.imageHeight ?? 860)
 </script>
 
 <style scoped>
@@ -78,11 +83,11 @@ h1 {
     <p class="post-image">
       <Image
         :src="frontmatter.image"
-        :width="1530"
-        :height="874"
+        :width="headerImageWidth"
+        :height="headerImageHeight"
+        :fallback="fallback"
         layout="constrained"
         background="auto"
-        fallback="netlify"
       />
     </p>
     <h1>

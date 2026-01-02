@@ -2,6 +2,8 @@
 import { Image } from '@unpic/vue'
 import { data as authors } from '../../data/authors.data.ts'
 
+const fallback = import.meta.env.DEV ? undefined : 'netlify'
+
 const { post } = defineProps(['post'])
 </script>
 
@@ -31,20 +33,20 @@ const { post } = defineProps(['post'])
 }
 .post-image img {
   width: 448px;
-  height: 214px;
+  height: 244px;
   object-fit: cover;
   min-width: 100%;
 }
 @media (min-width: 750px) and (max-width: 949px) {
   .post-image img {
     width: 336px;
-    height: 161px;
+    height: 191px;
   }
 }
 @media (max-width: 549px) {
   .post-image img {
     width: 336px;
-    height: 151px;
+    height: 171px;
   }
 }
 .post-body {
@@ -94,10 +96,10 @@ const { post } = defineProps(['post'])
         <Image
           :src="post.image"
           :width="896"
-          :height="428"
+          :height="488"
+          :fallback="fallback"
           layout="constrained"
           background="auto"
-          fallback="netlify"
         />
       </div>
       <div class="post-body">
