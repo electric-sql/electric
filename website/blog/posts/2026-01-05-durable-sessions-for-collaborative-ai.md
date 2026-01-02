@@ -253,7 +253,7 @@ What's needed for real collaboration is for the client to subscribe to a ***dura
 
 > ... diagramme ...
 
-Using the [Durable State]() protocol, layered over a [Durable Stream](), the Durable Session can multiplex multiple active generations at the same time and transfer a variety of structured and multi-modal data:
+Using the [Durable State](https://github.com/durable-streams/durable-streams/tree/main/packages/state) protocol, layered over a [Durable Stream](https://github.com/durable-streams/durable-streams), the Durable Session can multiplex multiple active generations at the same time and transfer a variety of structured and multi-modal data:
 
 - whole messages
 - token streams for active generations
