@@ -96,7 +96,7 @@ const { post } = defineProps(['post'])
         <Image
           :src="post.image"
           :width="896"
-          :height="428"
+          :height="488"
           :fallback="fallback"
           layout="constrained"
           background="auto"

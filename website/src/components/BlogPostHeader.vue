@@ -80,8 +80,8 @@ h1 {
     <p class="post-image">
       <Image
         :src="frontmatter.image"
-        :width="1530"
-        :height="874"
+        :width="1376"
+        :height="1032"
         :fallback="fallback"
         layout="constrained"
         background="auto"
