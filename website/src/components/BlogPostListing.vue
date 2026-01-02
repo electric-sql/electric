@@ -33,20 +33,20 @@ const { post } = defineProps(['post'])
 }
 .post-image img {
   width: 448px;
-  height: 214px;
+  height: 244px;
   object-fit: cover;
   min-width: 100%;
 }
 @media (min-width: 750px) and (max-width: 949px) {
   .post-image img {
     width: 336px;
-    height: 161px;
+    height: 191px;
   }
 }
 @media (max-width: 549px) {
   .post-image img {
     width: 336px;
-    height: 151px;
+    height: 171px;
   }
 }
 .post-body {
