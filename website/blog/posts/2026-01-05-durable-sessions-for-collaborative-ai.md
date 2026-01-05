@@ -6,6 +6,8 @@ excerpt: >
   As the world moves to getting things done through agents, the winners are going to be the products that combine AI with team-based collaboration. Building AI apps on a Durable Sessions architecture is the best way to do that.
 authors: [thruflo]
 image: /img/blog/durable-sessions-for-collaborative-ai/header.jpg
+imageWidth: 1536
+imageHeight: 947
 tags: [agents, collaboration, durable-streams, tanstack-db]
 outline: [2, 3]
 post: true
