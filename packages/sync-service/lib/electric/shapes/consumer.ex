@@ -280,7 +280,8 @@ defmodule Electric.Shapes.Consumer do
     feature_flags = Electric.StackConfig.lookup(state.stack_id, :feature_flags, [])
     tagged_subqueries_enabled? = "tagged_subqueries" in feature_flags
 
-    should_invalidate? = not tagged_subqueries_enabled?
+    should_invalidate? =
+      not tagged_subqueries_enabled? or (state.or_with_subquery? and move_out != [])
 
     if should_invalidate? do
       # We currently cannot support causally correct event processing of 3+ level dependency trees

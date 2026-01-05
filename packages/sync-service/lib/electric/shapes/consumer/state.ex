@@ -4,6 +4,7 @@ defmodule Electric.Shapes.Consumer.State do
   alias Electric.Shapes.Consumer.InitialSnapshot
   alias Electric.Shapes.Shape
   alias Electric.Replication.Changes.Transaction
+  alias Electric.Replication.Eval.Parser
   alias Electric.Replication.TransactionBuilder
   alias Electric.Postgres.SnapshotQuery
   alias Electric.Replication.LogOffset
@@ -26,7 +27,8 @@ defmodule Electric.Shapes.Consumer.State do
     txn_offset_mapping: [],
     materializer_subscribed?: false,
     terminating?: false,
-    buffering?: false
+    buffering?: false,
+    or_with_subquery?: false
   ]
 
   @type pg_snapshot() :: SnapshotQuery.pg_snapshot()
@@ -137,8 +139,19 @@ defmodule Electric.Shapes.Consumer.State do
           :shape_hibernate_after,
           Electric.Config.default(:shape_hibernate_after)
         ),
-      buffering?: true
+      buffering?: true,
+      or_with_subquery?: has_or_with_subquery?(shape)
     }
+  end
+
+  defp has_or_with_subquery?(%Shape{shape_dependencies: []}), do: false
+  defp has_or_with_subquery?(%Shape{where: nil}), do: false
+
+  defp has_or_with_subquery?(%Shape{where: where, shape_dependencies: deps}) when deps != [] do
+    case where.eval do
+      %Parser.Func{name: "or"} -> true
+      _ -> false
+    end
   end
 
   @doc """
