@@ -149,41 +149,35 @@ defmodule Electric.Shapes.Consumer.State do
   defp has_or_with_subquery?(%Shape{where: nil}), do: false
 
   defp has_or_with_subquery?(%Shape{where: where}) do
-    {:ok, result} =
-      Walker.reduce(
-        where.eval,
-        fn
-          %Parser.Func{name: "or"} = or_node, acc, _ctx ->
-            if subtree_has_sublink?(or_node) do
-              {:ok, true}
-            else
-              {:ok, acc}
-            end
-
-          _node, acc, _ctx ->
+    Walker.reduce!(
+      where.eval,
+      fn
+        %Parser.Func{name: "or"} = or_node, acc, _ctx ->
+          if subtree_has_sublink?(or_node) do
+            {:ok, true}
+          else
             {:ok, acc}
-        end,
-        false
-      )
+          end
 
-    result
+        _node, acc, _ctx ->
+          {:ok, acc}
+      end,
+      false
+    )
   end
 
   defp subtree_has_sublink?(tree) do
-    {:ok, result} =
-      Walker.reduce(
-        tree,
-        fn
-          %Parser.Ref{path: ["$sublink", _]}, _acc, _ctx ->
-            {:ok, true}
+    Walker.reduce!(
+      tree,
+      fn
+        %Parser.Ref{path: ["$sublink", _]}, _acc, _ctx ->
+          {:ok, true}
 
-          _node, acc, _ctx ->
-            {:ok, acc}
-        end,
-        false
-      )
-
-    result
+        _node, acc, _ctx ->
+          {:ok, acc}
+      end,
+      false
+    )
   end
 
   @doc """

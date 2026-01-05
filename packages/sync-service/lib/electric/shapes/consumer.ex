@@ -283,7 +283,7 @@ defmodule Electric.Shapes.Consumer do
     # We need to invalidate the consumer in the following cases:
     # - tagged subqueries are disabled since we cannot support causally correct event processing of 3+ level dependency trees
     #   so we just invalidating this middle shape instead
-    # - the where clause has an OR in it, so we can't tell if the move ins/outs actually affect the shape or not
+    # - the where clause has an OR combined with the subquery so we can't tell if the move ins/outs actually affect the shape or not
     should_invalidate? = not tagged_subqueries_enabled? or state.or_with_subquery?
 
     if should_invalidate? do
