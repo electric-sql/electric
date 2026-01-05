@@ -5,6 +5,7 @@ defmodule Electric.Shapes.Consumer.State do
   alias Electric.Shapes.Shape
   alias Electric.Replication.Changes.Transaction
   alias Electric.Replication.Eval.Parser
+  alias Electric.Replication.Eval.Walker
   alias Electric.Replication.TransactionBuilder
   alias Electric.Postgres.SnapshotQuery
   alias Electric.Replication.LogOffset
@@ -147,11 +148,42 @@ defmodule Electric.Shapes.Consumer.State do
   defp has_or_with_subquery?(%Shape{shape_dependencies: []}), do: false
   defp has_or_with_subquery?(%Shape{where: nil}), do: false
 
-  defp has_or_with_subquery?(%Shape{where: where, shape_dependencies: deps}) when deps != [] do
-    case where.eval do
-      %Parser.Func{name: "or"} -> true
-      _ -> false
-    end
+  defp has_or_with_subquery?(%Shape{where: where}) do
+    {:ok, result} =
+      Walker.reduce(
+        where.eval,
+        fn
+          %Parser.Func{name: "or"} = or_node, acc, _ctx ->
+            if subtree_has_sublink?(or_node) do
+              {:ok, true}
+            else
+              {:ok, acc}
+            end
+
+          _node, acc, _ctx ->
+            {:ok, acc}
+        end,
+        false
+      )
+
+    result
+  end
+
+  defp subtree_has_sublink?(tree) do
+    {:ok, result} =
+      Walker.reduce(
+        tree,
+        fn
+          %Parser.Ref{path: ["$sublink", _]}, _acc, _ctx ->
+            {:ok, true}
+
+          _node, acc, _ctx ->
+            {:ok, acc}
+        end,
+        false
+      )
+
+    result
   end
 
   @doc """

@@ -2,11 +2,43 @@ defmodule Electric.Shapes.Consumer.StateTest do
   use ExUnit.Case, async: true
 
   alias Electric.Shapes.Consumer.State
+  alias Electric.Shapes.Shape
   alias Electric.Replication.LogOffset
 
   import Support.ComponentSetup
 
   @moduletag :tmp_dir
+
+  @inspector Support.StubInspector.new(
+               tables: [
+                 {1, {"public", "items"}},
+                 {2, {"public", "parent"}},
+                 {2, {"public", "grandparent"}}
+               ],
+               columns: [
+                 %{
+                   name: "id",
+                   type: "int8",
+                   pk_position: 0,
+                   type_id: {20, 1},
+                   is_generated: false
+                 },
+                 %{
+                   name: "parent_id",
+                   type: "int8",
+                   pk_position: nil,
+                   type_id: {20, 1},
+                   is_generated: false
+                 },
+                 %{
+                   name: "flag",
+                   type: "bool",
+                   pk_position: nil,
+                   type_id: {16, 1},
+                   is_generated: false
+                 }
+               ]
+             )
 
   describe "new/3" do
     setup [:with_stack_id_from_test]
@@ -70,6 +102,66 @@ defmodule Electric.Shapes.Consumer.StateTest do
       {state, result} = State.align_offset_to_txn_boundary(state, offset)
       assert result == offset
       assert state.txn_offset_mapping == []
+    end
+  end
+
+  describe "or_with_subquery? field in new/3" do
+    setup [:with_stack_id_from_test]
+
+    for {where, expected} <- [
+          # No WHERE clause
+          {nil, false},
+
+          # WHERE clause without subquery
+          {"id = 1", false},
+          {"id = 1 AND flag = true", false},
+          {"id = 1 OR flag = true", false},
+
+          # Subquery without OR
+          {"id IN (SELECT id FROM parent)", false},
+          {"id = 1 AND parent_id IN (SELECT id FROM parent)", false},
+          {"parent_id IN (SELECT id FROM parent) AND id = 1", false},
+          {"parent_id IN (SELECT id FROM parent) AND flag = true AND id = 1", false},
+
+          # OR directly with subquery
+          {"parent_id IN (SELECT id FROM parent) OR flag = true", true},
+          {"flag = true OR parent_id IN (SELECT id FROM parent)", true},
+          {"(parent_id IN (SELECT id FROM parent)) OR (flag = true)", true},
+
+          # OR that is ANDed with subquery (OR not directly containing subquery)
+          {"(id = 1 OR flag = true) AND parent_id IN (SELECT id FROM parent)", false},
+          {"parent_id IN (SELECT id FROM parent) AND (id = 1 OR flag = true)", false},
+
+          # Nested cases - OR with subquery in one branch
+          {"id = 1 OR parent_id IN (SELECT id FROM parent)", true},
+          {"id = 1 OR (flag = true AND parent_id IN (SELECT id FROM parent))", true},
+          {"(id = 1 AND parent_id IN (SELECT id FROM parent)) OR flag = true", true},
+
+          # Subquery has OR inside
+          {"id IN (SELECT id FROM parent WHERE flag = true OR id = 2)", false},
+
+          # Subquery has OR with nested subquery
+          {"id IN (SELECT id FROM parent WHERE id = 2 OR id IN (SELECT id FROM grandparent))",
+           false},
+
+          # NOT should not change result
+          {"NOT (parent_id IN (SELECT id FROM parent) OR flag = true)", true},
+          {"parent_id NOT IN (SELECT id FROM parent) OR flag = true", true},
+          {"parent_id NOT IN (SELECT id FROM parent)", false},
+          {"NOT(parent_id IN (SELECT id FROM parent))", false}
+        ] do
+      @tag where: where, expected: expected
+      test "#{inspect(where)} -> or_with_subquery?=#{expected}", %{
+        stack_id: stack_id,
+        where: where,
+        expected: expected
+      } do
+        shape = Shape.new!("items", where: where, inspector: @inspector)
+
+        state = State.new(stack_id, "test-handle", shape)
+
+        assert state.or_with_subquery? == expected
+      end
     end
   end
 end
