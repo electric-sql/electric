@@ -2832,6 +2832,25 @@ defmodule Electric.Plug.RouterTest do
               ]} =
                Task.await(task)
     end
+
+    @tag with_sql: [
+           "CREATE TABLE projects (id INT PRIMARY KEY, workspace_id INT NOT NULL, name TEXT NOT NULL)",
+           "CREATE TABLE workspace_members (workspace_id INT, user_id INT, PRIMARY KEY (workspace_id, user_id))",
+           "CREATE TABLE project_members (project_id INT, user_id INT, PRIMARY KEY (project_id, user_id))"
+         ]
+    test "returns 400 for two subqueries at the same level", ctx do
+      where =
+        "workspace_id IN (SELECT workspace_id FROM workspace_members WHERE user_id = 100) " <>
+          "OR id IN (SELECT project_id FROM project_members WHERE user_id = 100)"
+
+      assert %{status: 400} =
+               conn("GET", "/v1/shape", %{
+                 table: "projects",
+                 offset: "-1",
+                 where: where
+               })
+               |> Router.call(ctx.opts)
+    end
   end
 
   describe "/v1/shapes - subset snapshots" do
