@@ -2480,6 +2480,38 @@ defmodule Electric.Plug.RouterTest do
     end
 
     @tag with_sql: [
+           "CREATE TABLE parent (id INT PRIMARY KEY, include_parent BOOLEAN NOT NULL DEFAULT FALSE)",
+           "CREATE TABLE child (id INT PRIMARY KEY, parent_id INT NOT NULL REFERENCES parent(id), include_child BOOLEAN NOT NULL DEFAULT FALSE)",
+           "INSERT INTO parent (id, include_parent) VALUES (1, false)",
+           "INSERT INTO child (id, parent_id, include_child) VALUES (1, 1, true)"
+         ]
+    test "subquery combined with OR should return a 409 on move-in", %{
+      opts: opts,
+      db_conn: db_conn
+    } do
+      orig_req =
+        make_shape_req("child",
+          where:
+            "parent_id in (SELECT id FROM parent WHERE include_parent = true) OR include_child = true"
+        )
+
+      assert {req, 200, response} = shape_req(orig_req, opts)
+      # Should contain the data record and the snapshot-end control message
+      assert length(response) == 2
+
+      assert %{"value" => %{"id" => "1", "include_child" => "true"}} =
+               Enum.find(response, &Map.has_key?(&1, "key"))
+
+      task = live_shape_req(req, opts)
+
+      # Setting include_parent to true may cause a move in, but it doesn't in this case because include_child is already true
+      Postgrex.query!(db_conn, "UPDATE parent SET include_parent = true WHERE id = 1", [])
+
+      # Rather than working out whether this is a move in or not we return a 409
+      assert {_req, 409, _response} = Task.await(task)
+    end
+
+    @tag with_sql: [
            "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL)",
            "CREATE TABLE teams (id INTEGER PRIMARY KEY, name TEXT NOT NULL)",
            "CREATE TABLE members (user_id INTEGER REFERENCES users(id), team_id INTEGER REFERENCES teams(id), PRIMARY KEY (user_id, team_id))",
