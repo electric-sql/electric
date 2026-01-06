@@ -647,6 +647,31 @@ defmodule Electric.Shapes.ShapeTest do
     end
 
     @tag with_sql: [
+           ~s|CREATE TABLE IF NOT EXISTS channel_members ("channelId" UUID NOT NULL, "userId" UUID NOT NULL, PRIMARY KEY ("channelId", "userId"))|,
+           ~s|CREATE TABLE IF NOT EXISTS messages (id UUID PRIMARY KEY, "channelId" UUID NOT NULL)|
+         ]
+    test "subquery properly quotes case-sensitive column names", %{inspector: inspector} do
+      assert {:ok,
+              %Shape{
+                root_table: {"public", "messages"},
+                where: %{query: query},
+                shape_dependencies: [
+                  %Shape{
+                    root_table: {"public", "channel_members"},
+                    explicitly_selected_columns: ["channelId"]
+                  }
+                ]
+              }} =
+               Shape.new("messages",
+                 inspector: inspector,
+                 where: ~s|"channelId" IN (SELECT "channelId" FROM channel_members)|
+               )
+
+      # The where clause must quote the column name in the subquery to preserve case
+      assert query == ~s|"channelId" IN (SELECT "channelId" FROM public.channel_members)|
+    end
+
+    @tag with_sql: [
            "CREATE TABLE IF NOT EXISTS project (id INT PRIMARY KEY, value INT NOT NULL)",
            "CREATE TABLE IF NOT EXISTS item (id INT PRIMARY KEY, value INT NOT NULL)"
          ]

@@ -361,10 +361,9 @@ defmodule Electric.Shapes.Shape do
 
   defp extract_sublink_queries(shapes) do
     Enum.with_index(shapes, fn %__MODULE__{} = shape, i ->
-      base =
-        "SELECT " <>
-          Enum.join(shape.explicitly_selected_columns, ", ") <>
-          " FROM " <> Utils.relation_to_sql(shape.root_table)
+      columns = Enum.map_join(shape.explicitly_selected_columns, ", ", &Utils.quote_name/1)
+
+      base = "SELECT " <> columns <> " FROM " <> Utils.relation_to_sql(shape.root_table)
 
       where = if shape.where, do: " WHERE " <> shape.where.query, else: ""
 
