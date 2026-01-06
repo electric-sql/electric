@@ -339,7 +339,7 @@ This allows creating shapes that filter based on related data in other tables, e
 
 ### tagged_subqueries
 
-Subqueries create dependency trees between shapes. Without this flag, when data moves into or out of a dependent shape, the shape is invalidated. With this flag enabled, move operations are handled correctly without invalidation.
+Subqueries create dependency trees between shapes. Without this flag, when data moves into or out of a dependent shape, the shape is invalidated (returning a 409). With this flag enabled, move operations are handled correctly without invalidation.
 
 See [discussion #2931](https://github.com/electric-sql/electric/discussions/2931) for more details about this feature.
 
