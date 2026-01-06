@@ -150,17 +150,21 @@ defmodule Electric.Replication.Eval.Parser do
   defp check_valid_refs(_, _, _), do: {:ok, :ok}
 
   def extract_subqueries(ast) do
-    Walker.reduce(
-      ast,
-      fn
-        %PgQuery.SubLink{subselect: %{node: {:select_stmt, stmt}}}, acc, _ ->
-          {:ok, [stmt | acc]}
+    with {:ok, subqueries} <-
+           Walker.reduce(
+             ast,
+             fn
+               %PgQuery.SubLink{subselect: %{node: {:select_stmt, stmt}}}, acc, _ ->
+                 {:ok, [stmt | acc]}
 
-        _, acc, _ ->
-          {:ok, acc}
-      end,
-      []
-    )
+               _, acc, _ ->
+                 {:ok, acc}
+             end,
+             []
+           ) do
+      # Reverse to match the order they're encountered during AST traversal
+      {:ok, Enum.reverse(subqueries)}
+    end
   end
 
   def extract_parts_from_select(select) when is_binary(select) do
