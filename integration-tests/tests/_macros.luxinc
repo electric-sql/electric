@@ -227,6 +227,8 @@
       -p 4318:4318 \
       -v $(realpath ../support_files/otel-collector-config.yaml):/conf/otel-collector-config.yaml \
       otel/opentelemetry-collector-contrib --config=/conf/otel-collector-config.yaml
+    # Allow time for docker to pull the image if not cached
+    [timeout 120]
     ??Starting HTTP server
     ?"endpoint": "(0\.0\.0\.0|\[::\]):4318"
     ??Everything is ready. Begin running and processing data.
