@@ -1,5 +1,13 @@
 # @core/sync-service
 
+## 1.2.11
+
+### Patch Changes
+
+- 10c11ac: Disallow multiple subqueries at the same level in where clauses
+- 393eca2: Support OR with subqueries with tagged_subqueries feature flag turned on by returning 409s on move-ins or outs
+- 12ce210: Fix bug with case-sensitive column names in subqueries
+
 ## 1.2.10
 
 ### Patch Changes
