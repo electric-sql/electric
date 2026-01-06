@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { ShapeStream, isChangeMessage, Message, Row } from '../src'
+import {
+  ShapeStream,
+  isChangeMessage,
+  Message,
+  Row,
+  _resetHttpWarningForTesting,
+} from '../src'
 import { snakeCamelMapper } from '../src/column-mapper'
 import { resolveInMacrotask } from './support/test-helpers'
 
@@ -409,22 +415,37 @@ describe(`ShapeStream`, () => {
   })
 
   describe(`HTTP URL warning`, () => {
+    let windowWasPresent: boolean
     let originalWindow: typeof globalThis.window
     let warnSpy: ReturnType<typeof vi.spyOn>
 
     beforeEach(() => {
+      // Track whether window was originally present
+      windowWasPresent = `window` in globalThis
       originalWindow = globalThis.window
-      // Mock browser environment
-      globalThis.window = {} as typeof globalThis.window
+      // Reset the warning flag before each test
+      _resetHttpWarningForTesting()
       warnSpy = vi.spyOn(console, `warn`).mockImplementation(() => {})
     })
 
     afterEach(() => {
-      globalThis.window = originalWindow
+      // Clean up globals properly - delete if it wasn't present, restore if it was
+      if (windowWasPresent) {
+        globalThis.window = originalWindow
+      } else {
+        // @ts-expect-error - intentionally removing window
+        delete globalThis.window
+      }
       warnSpy.mockRestore()
+      _resetHttpWarningForTesting()
     })
 
     it(`should warn when using HTTP URL in browser environment`, () => {
+      // Mock browser environment with location
+      globalThis.window = {
+        location: { href: `http://example.com/page` },
+      } as typeof globalThis.window
+
       const fetchWrapper = (): Promise<Response> =>
         Promise.resolve(Response.error())
 
@@ -442,11 +463,16 @@ describe(`ShapeStream`, () => {
       )
       expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining(`HTTP/1.1`))
       expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining(`https://bit.ly/electric-http2`)
+        expect.stringContaining(`https://electric-sql.com/r/electric-http2`)
       )
     })
 
     it(`should not warn when using HTTPS URL`, () => {
+      // Mock browser environment
+      globalThis.window = {
+        location: { href: `https://example.com/page` },
+      } as typeof globalThis.window
+
       const fetchWrapper = (): Promise<Response> =>
         Promise.resolve(Response.error())
 
@@ -481,6 +507,11 @@ describe(`ShapeStream`, () => {
     })
 
     it(`should not warn when warnOnHttp is false`, () => {
+      // Mock browser environment
+      globalThis.window = {
+        location: { href: `http://example.com/page` },
+      } as typeof globalThis.window
+
       const fetchWrapper = (): Promise<Response> =>
         Promise.resolve(Response.error())
 
@@ -493,6 +524,157 @@ describe(`ShapeStream`, () => {
       })
 
       expect(warnSpy).not.toHaveBeenCalled()
+    })
+
+    describe(`relative URL handling`, () => {
+      it(`should warn when relative URL is used and window.location is http`, () => {
+        // Mock browser environment with HTTP location
+        globalThis.window = {
+          location: { href: `http://example.com/page` },
+        } as typeof globalThis.window
+
+        const fetchWrapper = (): Promise<Response> =>
+          Promise.resolve(Response.error())
+
+        new ShapeStream({
+          url: `/v1/shape`,
+          params: { table: `foo` },
+          signal: aborter.signal,
+          fetchClient: fetchWrapper,
+          warnOnHttp: true,
+        })
+
+        expect(warnSpy).toHaveBeenCalledTimes(1)
+        expect(warnSpy).toHaveBeenCalledWith(
+          expect.stringContaining(`[Electric] Using HTTP (not HTTPS)`)
+        )
+      })
+
+      it(`should not warn when relative URL is used and window.location is https`, () => {
+        // Mock browser environment with HTTPS location
+        globalThis.window = {
+          location: { href: `https://example.com/page` },
+        } as typeof globalThis.window
+
+        const fetchWrapper = (): Promise<Response> =>
+          Promise.resolve(Response.error())
+
+        new ShapeStream({
+          url: `/v1/shape`,
+          params: { table: `foo` },
+          signal: aborter.signal,
+          fetchClient: fetchWrapper,
+          warnOnHttp: true,
+        })
+
+        expect(warnSpy).not.toHaveBeenCalled()
+      })
+
+      it(`should resolve relative URL with query params correctly`, () => {
+        // Mock browser environment with HTTP location
+        globalThis.window = {
+          location: { href: `http://example.com/app/` },
+        } as typeof globalThis.window
+
+        const fetchWrapper = (): Promise<Response> =>
+          Promise.resolve(Response.error())
+
+        new ShapeStream({
+          url: `/v1/shape?table=foo`,
+          params: { table: `foo` },
+          signal: aborter.signal,
+          fetchClient: fetchWrapper,
+          warnOnHttp: true,
+        })
+
+        expect(warnSpy).toHaveBeenCalledTimes(1)
+      })
+    })
+
+    describe(`warn-once behavior`, () => {
+      it(`should only warn once even when creating multiple ShapeStreams`, () => {
+        // Mock browser environment
+        globalThis.window = {
+          location: { href: `http://example.com/page` },
+        } as typeof globalThis.window
+
+        const fetchWrapper = (): Promise<Response> =>
+          Promise.resolve(Response.error())
+
+        // Create first stream - should warn
+        new ShapeStream({
+          url: `http://example.com/v1/shape`,
+          params: { table: `foo` },
+          signal: aborter.signal,
+          fetchClient: fetchWrapper,
+          warnOnHttp: true,
+        })
+
+        expect(warnSpy).toHaveBeenCalledTimes(1)
+
+        // Create second stream with same HTTP URL - should NOT warn again
+        const aborter2 = new AbortController()
+        new ShapeStream({
+          url: `http://example.com/v1/shape`,
+          params: { table: `bar` },
+          signal: aborter2.signal,
+          fetchClient: fetchWrapper,
+          warnOnHttp: true,
+        })
+        aborter2.abort()
+
+        expect(warnSpy).toHaveBeenCalledTimes(1)
+
+        // Create third stream with different HTTP URL - should still NOT warn
+        const aborter3 = new AbortController()
+        new ShapeStream({
+          url: `http://other.com/v1/shape`,
+          params: { table: `baz` },
+          signal: aborter3.signal,
+          fetchClient: fetchWrapper,
+          warnOnHttp: true,
+        })
+        aborter3.abort()
+
+        expect(warnSpy).toHaveBeenCalledTimes(1)
+      })
+
+      it(`should warn again after reset (for testing purposes)`, () => {
+        // Mock browser environment
+        globalThis.window = {
+          location: { href: `http://example.com/page` },
+        } as typeof globalThis.window
+
+        const fetchWrapper = (): Promise<Response> =>
+          Promise.resolve(Response.error())
+
+        // First stream - should warn
+        new ShapeStream({
+          url: `http://example.com/v1/shape`,
+          params: { table: `foo` },
+          signal: aborter.signal,
+          fetchClient: fetchWrapper,
+          warnOnHttp: true,
+        })
+
+        expect(warnSpy).toHaveBeenCalledTimes(1)
+
+        // Reset the flag
+        _resetHttpWarningForTesting()
+
+        // Second stream after reset - should warn again
+        const aborter2 = new AbortController()
+        new ShapeStream({
+          url: `http://example.com/v1/shape`,
+          params: { table: `bar` },
+          signal: aborter2.signal,
+          fetchClient: fetchWrapper,
+          warnOnHttp: true,
+        })
+        aborter2.abort()
+
+        expect(warnSpy).toHaveBeenCalledTimes(2)
+      })
     })
   })
 })
