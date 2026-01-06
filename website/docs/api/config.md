@@ -320,10 +320,8 @@ Feature flags enable experimental or advanced features that are not yet enabled 
 
 **Available flags:**
 
-| Flag | Description |
-|------|-------------|
-| `allow_subqueries` | Enables subquery support in shape WHERE clauses |
-| `tagged_subqueries` | Enables improved multi-level dependency handling |
+- `allow_subqueries` - Enables subquery support in shape WHERE clauses
+- `tagged_subqueries` - Enables improved multi-level dependency handling
 
 </EnvVarConfig>
 
@@ -341,9 +339,7 @@ This allows creating shapes that filter based on related data in other tables, e
 
 ### tagged_subqueries
 
-Enables causally correct processing of multi-level (3+) dependency trees when using subqueries. When a shape depends on another shape through subqueries, and that shape depends on yet another shape, this creates a dependency tree.
-
-Without this flag enabled, shapes in the middle of such dependency trees are invalidated when data moves into or out of dependent shapes. With the flag enabled, Electric uses an improved algorithm that correctly handles these move operations without invalidating the shapes.
+Subqueries create dependency trees between shapes. Without this flag, when data moves into or out of a dependent shape, the shape is invalidated. With this flag enabled, move operations are handled correctly without invalidation.
 
 See [discussion #2931](https://github.com/electric-sql/electric/discussions/2931) for more details about this feature.
 
