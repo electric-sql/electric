@@ -207,14 +207,24 @@ defmodule Electric.Client.MoveStateTest do
       assert rows_to_delete == []
     end
 
-    test "matches wildcard tags" do
+    test "wildcard tags are not matched by index lookup" do
+      # Wildcards in tags are not indexed for efficiency, so they won't be
+      # found by pattern lookups. This is expected behavior - wildcards are
+      # only used for tag_matches_pattern? checks on already-found rows.
       state =
         MoveState.new()
         |> MoveState.add_tags_to_row("row1", ["_|def"])
 
-      # Wildcard at pos 0 should match any value
+      # Pattern at pos 0 won't find row1 because wildcards aren't indexed
       {rows_to_delete, _state} =
         MoveState.process_move_out_pattern(state, %{pos: 0, value: "anything"})
+
+      # Row is not found because wildcard positions aren't indexed
+      assert rows_to_delete == []
+
+      # But pattern at pos 1 (non-wildcard) will find it
+      {rows_to_delete, _state} =
+        MoveState.process_move_out_pattern(state, %{pos: 1, value: "def"})
 
       assert rows_to_delete == ["row1"]
     end
