@@ -26,6 +26,8 @@ export const SUBSET_PARAM_LIMIT = `subset__limit`
 export const SUBSET_PARAM_OFFSET = `subset__offset`
 export const SUBSET_PARAM_ORDER_BY = `subset__order_by`
 export const SUBSET_PARAM_WHERE_PARAMS = `subset__params`
+export const SUBSET_PARAM_WHERE_EXPR = `subset__where_expr`
+export const SUBSET_PARAM_ORDER_BY_EXPR = `subset__order_by_expr`
 
 // Query parameters that should be passed through when proxying Electric requests
 export const ELECTRIC_PROTOCOL_QUERY_PARAMS: Array<string> = [
@@ -41,4 +43,6 @@ export const ELECTRIC_PROTOCOL_QUERY_PARAMS: Array<string> = [
   SUBSET_PARAM_OFFSET,
   SUBSET_PARAM_ORDER_BY,
   SUBSET_PARAM_WHERE_PARAMS,
+  SUBSET_PARAM_WHERE_EXPR,
+  SUBSET_PARAM_ORDER_BY_EXPR,
 ]

@@ -16,3 +16,4 @@ export {
   snakeToCamel,
   camelToSnake,
 } from './column-mapper'
+export { compileExpression, compileOrderBy } from './expression-compiler'
