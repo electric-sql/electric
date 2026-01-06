@@ -94,6 +94,7 @@ defmodule Electric.Client.TagIndexTest do
         |> TagIndex.add_tag("row1", "abc123")
 
       assert index.tag_length == 1
+
       assert TagIndex.find_rows_matching_pattern(index, %{pos: 0, value: "abc123"}) ==
                MapSet.new(["row1"])
     end
@@ -104,8 +105,10 @@ defmodule Electric.Client.TagIndexTest do
         |> TagIndex.add_tag("row1", "abc|def")
 
       assert index.tag_length == 2
+
       assert TagIndex.find_rows_matching_pattern(index, %{pos: 0, value: "abc"}) ==
                MapSet.new(["row1"])
+
       assert TagIndex.find_rows_matching_pattern(index, %{pos: 1, value: "def"}) ==
                MapSet.new(["row1"])
     end
@@ -118,8 +121,10 @@ defmodule Electric.Client.TagIndexTest do
 
       assert TagIndex.find_rows_matching_pattern(index, %{pos: 0, value: "abc"}) ==
                MapSet.new(["row1", "row2"])
+
       assert TagIndex.find_rows_matching_pattern(index, %{pos: 1, value: "def"}) ==
                MapSet.new(["row1"])
+
       assert TagIndex.find_rows_matching_pattern(index, %{pos: 1, value: "ghi"}) ==
                MapSet.new(["row2"])
     end
@@ -136,7 +141,8 @@ defmodule Electric.Client.TagIndexTest do
       index =
         TagIndex.new()
         |> TagIndex.add_tag("row1", "abc|def")
-        |> TagIndex.add_tag("row2", "xyz")  # Wrong length, should be ignored
+        # Wrong length, should be ignored
+        |> TagIndex.add_tag("row2", "xyz")
 
       # row2 should not be indexed
       assert TagIndex.find_rows_matching_pattern(index, %{pos: 0, value: "xyz"}) ==
@@ -151,6 +157,7 @@ defmodule Electric.Client.TagIndexTest do
       # Wildcard position should not return rows
       assert TagIndex.find_rows_matching_pattern(index, %{pos: 0, value: "_"}) ==
                MapSet.new([])
+
       # But non-wildcard position should work
       assert TagIndex.find_rows_matching_pattern(index, %{pos: 1, value: "def"}) ==
                MapSet.new(["row1"])
@@ -183,7 +190,8 @@ defmodule Electric.Client.TagIndexTest do
       index =
         TagIndex.new()
         |> TagIndex.add_tag("row1", "abc|def")
-        |> TagIndex.remove_tag("row1", "xyz|123")  # Non-existent
+        # Non-existent
+        |> TagIndex.remove_tag("row1", "xyz|123")
 
       # Original should still be there
       assert TagIndex.find_rows_matching_pattern(index, %{pos: 0, value: "abc"}) ==
@@ -202,6 +210,7 @@ defmodule Electric.Client.TagIndexTest do
   describe "find_rows_matching_pattern/2" do
     test "returns empty set for empty index" do
       index = TagIndex.new()
+
       assert TagIndex.find_rows_matching_pattern(index, %{pos: 0, value: "abc"}) ==
                MapSet.new([])
     end
@@ -224,6 +233,7 @@ defmodule Electric.Client.TagIndexTest do
 
       assert TagIndex.find_rows_matching_pattern(index, %{pos: 0, value: "abc"}) ==
                MapSet.new(["row1", "row2"])
+
       assert TagIndex.find_rows_matching_pattern(index, %{pos: 1, value: "def"}) ==
                MapSet.new(["row1", "row3"])
     end

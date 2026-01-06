@@ -93,7 +93,8 @@ defmodule Electric.Client.TagIndex do
   @spec get_value(parsed_tag(), position()) :: value()
   def get_value(parsed_tag, position) when is_list(parsed_tag) and is_integer(position) do
     Enum.at(parsed_tag, position) ||
-      raise ArgumentError, "Position #{position} out of bounds for tag with length #{length(parsed_tag)}"
+      raise ArgumentError,
+            "Position #{position} out of bounds for tag with length #{length(parsed_tag)}"
   end
 
   @doc """

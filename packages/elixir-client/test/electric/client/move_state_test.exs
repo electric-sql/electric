@@ -140,7 +140,8 @@ defmodule Electric.Client.MoveStateTest do
         MoveState.new()
         |> MoveState.add_tags_to_row("row1", ["abc123"])
 
-      {rows_to_delete, state} = MoveState.process_move_out_pattern(state, %{pos: 0, value: "abc123"})
+      {rows_to_delete, state} =
+        MoveState.process_move_out_pattern(state, %{pos: 0, value: "abc123"})
 
       assert rows_to_delete == ["row1"]
       refute MoveState.row_has_tags?(state, "row1")
@@ -151,7 +152,8 @@ defmodule Electric.Client.MoveStateTest do
         MoveState.new()
         |> MoveState.add_tags_to_row("row1", ["abc123", "def456"])
 
-      {rows_to_delete, state} = MoveState.process_move_out_pattern(state, %{pos: 0, value: "abc123"})
+      {rows_to_delete, state} =
+        MoveState.process_move_out_pattern(state, %{pos: 0, value: "abc123"})
 
       assert rows_to_delete == []
       assert MoveState.get_row_tags(state, "row1") == MapSet.new(["def456"])
@@ -178,7 +180,8 @@ defmodule Electric.Client.MoveStateTest do
         |> MoveState.add_tags_to_row("row1", ["abc|def"])
         |> MoveState.add_tags_to_row("row2", ["abc|ghi"])
 
-      {rows_to_delete, _state} = MoveState.process_move_out_pattern(state, %{pos: 1, value: "def"})
+      {rows_to_delete, _state} =
+        MoveState.process_move_out_pattern(state, %{pos: 1, value: "def"})
 
       assert rows_to_delete == ["row1"]
     end
@@ -188,7 +191,8 @@ defmodule Electric.Client.MoveStateTest do
         MoveState.new()
         |> MoveState.add_tags_to_row("row1", ["abc123"])
 
-      {rows_to_delete, state} = MoveState.process_move_out_pattern(state, %{pos: 0, value: "xyz789"})
+      {rows_to_delete, state} =
+        MoveState.process_move_out_pattern(state, %{pos: 0, value: "xyz789"})
 
       assert rows_to_delete == []
       assert MoveState.row_has_tags?(state, "row1")
@@ -197,7 +201,8 @@ defmodule Electric.Client.MoveStateTest do
     test "handles empty state" do
       state = MoveState.new()
 
-      {rows_to_delete, _state} = MoveState.process_move_out_pattern(state, %{pos: 0, value: "abc"})
+      {rows_to_delete, _state} =
+        MoveState.process_move_out_pattern(state, %{pos: 0, value: "abc"})
 
       assert rows_to_delete == []
     end
@@ -208,7 +213,8 @@ defmodule Electric.Client.MoveStateTest do
         |> MoveState.add_tags_to_row("row1", ["_|def"])
 
       # Wildcard at pos 0 should match any value
-      {rows_to_delete, _state} = MoveState.process_move_out_pattern(state, %{pos: 0, value: "anything"})
+      {rows_to_delete, _state} =
+        MoveState.process_move_out_pattern(state, %{pos: 0, value: "anything"})
 
       assert rows_to_delete == ["row1"]
     end
