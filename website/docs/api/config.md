@@ -343,7 +343,7 @@ Subqueries create dependency trees between shapes. Without this flag, when data 
 
 See [discussion #2931](https://github.com/electric-sql/electric/discussions/2931) for more details about this feature.
 
-**Status:** Experimental. Disabled by default in production. Requires `allow_subqueries` to be useful.
+**Status:** Experimental. Disabled by default in production. Requires `allow_subqueries` to be enabled.
 
 ## Caching
 
