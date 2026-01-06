@@ -5,19 +5,39 @@ defmodule Electric.Client.Message do
   alias Electric.Client.Offset
 
   defmodule Headers do
-    defstruct [:operation, :relation, :handle, :lsn, txids: [], op_position: 0]
+    @moduledoc """
+    Headers for change messages.
+
+    The `tags` and `removed_tags` fields are only present for shapes with
+    subqueries in their WHERE clause. They track why a row is included in the
+    shape and enable move-out processing.
+    """
+
+    defstruct [
+      :operation,
+      :relation,
+      :handle,
+      :lsn,
+      txids: [],
+      op_position: 0,
+      tags: [],
+      removed_tags: []
+    ]
 
     @type operation :: :insert | :update | :delete
     @type relation :: [String.t(), ...]
     @type lsn :: binary()
     @type txids :: [pos_integer(), ...] | nil
+    @type move_tag :: String.t()
     @type t :: %__MODULE__{
             operation: operation(),
             relation: relation(),
             handle: Client.shape_handle(),
             lsn: lsn(),
             txids: txids(),
-            op_position: non_neg_integer()
+            op_position: non_neg_integer(),
+            tags: [move_tag()],
+            removed_tags: [move_tag()]
           }
 
     @doc false
@@ -30,7 +50,9 @@ defmodule Electric.Client.Message do
         handle: handle,
         txids: Map.get(msg, "txids", []),
         lsn: Map.get(msg, "lsn", nil),
-        op_position: Map.get(msg, "op_position", 0)
+        op_position: Map.get(msg, "op_position", 0),
+        tags: Map.get(msg, "tags", []),
+        removed_tags: Map.get(msg, "removed_tags", [])
       }
     end
 
@@ -44,14 +66,34 @@ defmodule Electric.Client.Message do
   end
 
   defmodule ControlMessage do
-    defstruct [:control, :global_last_seen_lsn, :handle, :request_timestamp]
+    @moduledoc """
+    Control messages signal sync state changes.
 
-    @type control :: :must_refetch | :up_to_date
+    - `:up_to_date` - Client is caught up with the server
+    - `:must_refetch` - Client must restart sync from scratch
+    - `:snapshot_end` - A move-in snapshot has completed (includes visibility info)
+    """
+
+    defstruct [
+      :control,
+      :global_last_seen_lsn,
+      :handle,
+      :request_timestamp,
+      # Snapshot visibility fields (for snapshot-end)
+      :xmin,
+      :xmax,
+      :xip_list
+    ]
+
+    @type control :: :must_refetch | :up_to_date | :snapshot_end
     @type t :: %__MODULE__{
             control: control(),
-            global_last_seen_lsn: pos_integer(),
+            global_last_seen_lsn: pos_integer() | nil,
             handle: Client.shape_handle(),
-            request_timestamp: DateTime.t()
+            request_timestamp: DateTime.t(),
+            xmin: pos_integer() | nil,
+            xmax: pos_integer() | nil,
+            xip_list: [pos_integer()] | nil
           }
 
     def from_message(
@@ -61,7 +103,10 @@ defmodule Electric.Client.Message do
       %__MODULE__{
         control: control_atom(control),
         global_last_seen_lsn: global_last_seen_lsn(headers),
-        handle: handle
+        handle: handle,
+        xmin: parse_int(headers["xmin"]),
+        xmax: parse_int(headers["xmax"]),
+        xip_list: parse_int_list(headers["xip_list"])
       }
     end
 
@@ -72,7 +117,10 @@ defmodule Electric.Client.Message do
       %__MODULE__{
         control: control_atom(control),
         global_last_seen_lsn: global_last_seen_lsn(headers),
-        handle: handle
+        handle: handle,
+        xmin: parse_int(headers[:xmin]),
+        xmax: parse_int(headers[:xmax]),
+        xip_list: parse_int_list(headers[:xip_list])
       }
     end
 
@@ -82,15 +130,19 @@ defmodule Electric.Client.Message do
     defp control_atom(a) when is_atom(a), do: a
 
     defp global_last_seen_lsn(headers) do
-      parse_lsn(headers["global_last_seen_lsn"] || headers[:global_last_seen_lsn])
+      parse_int(headers["global_last_seen_lsn"] || headers[:global_last_seen_lsn])
     end
 
-    defp parse_lsn(nil), do: nil
-    defp parse_lsn(lsn) when is_binary(lsn), do: String.to_integer(lsn)
-    defp parse_lsn(lsn) when is_integer(lsn), do: lsn
+    defp parse_int(nil), do: nil
+    defp parse_int(val) when is_binary(val), do: String.to_integer(val)
+    defp parse_int(val) when is_integer(val), do: val
+
+    defp parse_int_list(nil), do: nil
+    defp parse_int_list(list) when is_list(list), do: Enum.map(list, &parse_int/1)
 
     def up_to_date, do: %__MODULE__{control: :up_to_date}
     def must_refetch, do: %__MODULE__{control: :must_refetch}
+    def snapshot_end, do: %__MODULE__{control: :snapshot_end}
   end
 
   defmodule ChangeMessage do
@@ -146,6 +198,62 @@ defmodule Electric.Client.Message do
     end
   end
 
+  defmodule EventMessage do
+    @moduledoc """
+    Event messages for special server events like move-outs.
+
+    A move-out event is sent when rows should be removed from the client because
+    their "reason" for being in the shape (based on subquery results) is no longer valid.
+
+    ## Example
+
+    When a parent row that was matching a subquery condition is deleted or updated
+    to no longer match, the server sends a move-out event:
+
+        %EventMessage{
+          event: :move_out,
+          patterns: [%{pos: 0, value: "abc123def456..."}]
+        }
+
+    The client should remove all tags matching the pattern from tracked rows,
+    and delete any rows that have no remaining tags.
+    """
+
+    defstruct [:event, :patterns, :handle, :request_timestamp]
+
+    @type move_out_pattern :: %{pos: non_neg_integer(), value: String.t()}
+    @type t :: %__MODULE__{
+            event: :move_out,
+            patterns: [move_out_pattern()],
+            handle: Client.shape_handle(),
+            request_timestamp: DateTime.t()
+          }
+
+    def from_message(%{"headers" => %{"event" => "move-out", "patterns" => patterns}}, handle) do
+      %__MODULE__{
+        event: :move_out,
+        patterns: Enum.map(patterns, &parse_pattern/1),
+        handle: handle
+      }
+    end
+
+    def from_message(%{headers: %{event: :move_out, patterns: patterns}}, handle) do
+      %__MODULE__{
+        event: :move_out,
+        patterns: Enum.map(patterns, &parse_pattern/1),
+        handle: handle
+      }
+    end
+
+    defp parse_pattern(%{"pos" => pos, "value" => value}) do
+      %{pos: pos, value: value}
+    end
+
+    defp parse_pattern(%{pos: pos, value: value}) do
+      %{pos: pos, value: value}
+    end
+  end
+
   defmodule ResumeMessage do
     @moduledoc """
     Emitted by the synchronisation stream before terminating early. If passed
@@ -179,8 +287,20 @@ defmodule Electric.Client.Message do
 
   defguard is_insert(msg) when is_struct(msg, ChangeMessage) and msg.headers.operation == :insert
 
+  defguard is_event(msg) when is_struct(msg, EventMessage)
+
+  defguard is_move_out(msg) when is_struct(msg, EventMessage) and msg.event == :move_out
+
   def parse(%{"value" => _} = msg, shape_handle, value_mapper_fun) do
     [ChangeMessage.from_message(msg, shape_handle, value_mapper_fun)]
+  end
+
+  def parse(%{"headers" => %{"event" => _}} = msg, shape_handle, _value_mapper_fun) do
+    [EventMessage.from_message(msg, shape_handle)]
+  end
+
+  def parse(%{headers: %{event: _}} = msg, shape_handle, _value_mapper_fun) do
+    [EventMessage.from_message(msg, shape_handle)]
   end
 
   def parse(%{"headers" => %{"control" => _}} = msg, shape_handle, _value_mapper_fun) do

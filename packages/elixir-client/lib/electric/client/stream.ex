@@ -3,6 +3,7 @@ defmodule Electric.Client.Stream do
 
   alias Electric.Client.Fetch
   alias Electric.Client.Message
+  alias Electric.Client.MoveState
   alias Electric.Client
 
   defstruct [
@@ -19,7 +20,11 @@ defmodule Electric.Client.Stream do
     shape_handle: nil,
     next_cursor: nil,
     state: :init,
-    opts: %{}
+    opts: %{},
+    # Move state for tracking tags (shapes with subqueries)
+    move_state: nil,
+    # Buffered move-out events during initial sync
+    buffered_move_outs: []
   ]
 
   @external_options [
@@ -99,7 +104,9 @@ defmodule Electric.Client.Stream do
           replica: Client.replica(),
           shape_handle: nil | Client.shape_handle(),
           state: :init | :stream | :done,
-          opts: opts()
+          opts: opts(),
+          move_state: MoveState.t() | nil,
+          buffered_move_outs: [Message.EventMessage.t()]
         }
 
   alias __MODULE__, as: S
@@ -213,15 +220,31 @@ defmodule Electric.Client.Stream do
   end
 
   defp handle_msg(%Message.ControlMessage{control: :up_to_date} = msg, stream) do
+    # Process any buffered move-outs before signaling up-to-date
+    stream = process_buffered_move_outs(stream)
     handle_up_to_date(%{stream | buffer: :queue.in(msg, stream.buffer), up_to_date?: true})
   end
 
   defp handle_msg(%Message.ControlMessage{control: :snapshot_end} = _msg, stream) do
+    # Snapshot-end messages are informational; we may use xmin/xmax/xip_list
+    # for advanced visibility filtering in the future
     {:cont, stream}
   end
 
   defp handle_msg(%Message.ChangeMessage{} = msg, stream) do
+    # Process tags for shapes with subqueries
+    stream = process_change_tags(msg, stream)
     {:cont, %{stream | buffer: :queue.in(msg, stream.buffer)}}
+  end
+
+  defp handle_msg(%Message.EventMessage{event: :move_out} = msg, stream) do
+    if stream.up_to_date? do
+      # Process move-out immediately
+      process_move_out(msg, stream)
+    else
+      # Buffer move-out until initial sync completes
+      {:cont, %{stream | buffered_move_outs: [msg | stream.buffered_move_outs]}}
+    end
   end
 
   defp handle_up_to_date(%{opts: %{live: true}} = stream) do
@@ -236,6 +259,77 @@ defmodule Electric.Client.Stream do
     }
 
     {:halt, %{stream | buffer: :queue.in(resume_message, stream.buffer), state: :done}}
+  end
+
+  # Process tags from a change message
+  defp process_change_tags(%Message.ChangeMessage{} = msg, stream) do
+    %{headers: headers, key: row_key} = msg
+    %{tags: tags, removed_tags: removed_tags, operation: operation} = headers
+
+    # Skip if no tags involved
+    if tags == [] and removed_tags == [] do
+      stream
+    else
+      move_state = stream.move_state || MoveState.new()
+
+      move_state =
+        case operation do
+          :delete ->
+            # Clear all tags for deleted row
+            MoveState.clear_row(move_state, row_key)
+
+          _ ->
+            # Remove old tags, add new tags
+            move_state
+            |> MoveState.remove_tags_from_row(row_key, removed_tags)
+            |> MoveState.add_tags_to_row(row_key, tags)
+        end
+
+      %{stream | move_state: move_state}
+    end
+  end
+
+  # Process a move-out event
+  defp process_move_out(%Message.EventMessage{patterns: patterns} = msg, stream) do
+    move_state = stream.move_state || MoveState.new()
+
+    {rows_to_delete, move_state} =
+      Enum.reduce(patterns, {[], move_state}, fn pattern, {deletes, state} ->
+        {new_deletes, state} = MoveState.process_move_out_pattern(state, pattern)
+        {new_deletes ++ deletes, state}
+      end)
+
+    # Generate synthetic delete messages for rows with empty tag sets
+    delete_msgs =
+      Enum.map(rows_to_delete, fn row_key ->
+        %Message.ChangeMessage{
+          key: row_key,
+          value: %{},
+          headers: Message.Headers.delete(handle: stream.shape_handle),
+          request_timestamp: msg.request_timestamp || DateTime.utc_now()
+        }
+      end)
+
+    # Add delete messages to buffer
+    buffer = Enum.reduce(delete_msgs, stream.buffer, &:queue.in/2)
+
+    {:cont, %{stream | move_state: move_state, buffer: buffer}}
+  end
+
+  # Process buffered move-outs when up-to-date is received
+  defp process_buffered_move_outs(%{buffered_move_outs: []} = stream), do: stream
+
+  defp process_buffered_move_outs(%{buffered_move_outs: buffered} = stream) do
+    # Process in original order (reverse since we prepended)
+    stream =
+      buffered
+      |> Enum.reverse()
+      |> Enum.reduce(%{stream | buffered_move_outs: []}, fn msg, stream ->
+        {:cont, stream} = process_move_out(msg, stream)
+        stream
+      end)
+
+    stream
   end
 
   defp unwrap([msg]), do: msg
@@ -301,7 +395,9 @@ defmodule Electric.Client.Stream do
         up_to_date?: false,
         buffer: :queue.new(),
         schema: nil,
-        value_mapper_fun: nil
+        value_mapper_fun: nil,
+        move_state: nil,
+        buffered_move_outs: []
     }
   end
 
