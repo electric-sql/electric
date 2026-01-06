@@ -1,5 +1,11 @@
 # @electric-sql/client
 
+## 1.4.0
+
+### Minor Changes
+
+- 78fc0ae: Add structured subset params support (whereExpr, orderByExpr) to enable proper columnMapper transformations for subset queries. When TanStack DB sends structured expression data alongside compiled SQL strings, the client can now apply column name transformations (e.g., camelCase to snake_case) before generating the final SQL.
+
 ## 1.3.1
 
 ### Patch Changes
