@@ -1,6 +1,7 @@
 import {
   ChangeMessage,
   ControlMessage,
+  EventMessage,
   Message,
   NormalizedPgSnapshot,
   Offset,
@@ -32,6 +33,29 @@ export function isChangeMessage<T extends Row<unknown> = Row>(
 }
 
 /**
+ * Type guard for checking {@link Message} is {@link EventMessage}.
+ *
+ * See [TS docs](https://www.typescriptlang.org/docs/handbook/advanced-types.html#user-defined-type-guards)
+ * for information on how to use type guards.
+ *
+ * @param message - the message to check
+ * @returns true if the message is an {@link EventMessage}
+ *
+ * @example
+ * ```ts
+ * if (isEventMessage(message)) {
+ *   const msgEvt: EventMessage = message // Ok
+ *   const msgChng: ChangeMessage = message // Err, type mismatch
+ * }
+ * ```
+ */
+export function isEventMessage<T extends Row<unknown> = Row>(
+  message: Message<T>
+): message is EventMessage {
+  return `headers` in message && `event` in message.headers
+}
+
+/**
  * Type guard for checking {@link Message} is {@link ControlMessage}.
  *
  * See [TS docs](https://www.typescriptlang.org/docs/handbook/advanced-types.html#user-defined-type-guards)
@@ -51,7 +75,7 @@ export function isChangeMessage<T extends Row<unknown> = Row>(
 export function isControlMessage<T extends Row<unknown> = Row>(
   message: Message<T>
 ): message is ControlMessage {
-  return !isChangeMessage(message)
+  return !isChangeMessage(message) && !isEventMessage(message)
 }
 
 export function isUpToDateMessage<T extends Row<unknown> = Row>(

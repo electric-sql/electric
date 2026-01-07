@@ -26,35 +26,96 @@ defmodule Electric.Shapes.Shape.SubqueryMoves do
   And the parameters will be:
 
       [["1", "2", "3"]]
+
+  **IMPORTANT for OR queries**: When the WHERE clause contains OR-combined subqueries,
+  simply replacing the subquery isn't enough - the query could still return rows from
+  other OR branches. To prevent this, we add an AND constraint that forces only rows
+  matching the moved-in values to be returned.
+
+  For example, `WHERE x IN (subq1) OR y IN (subq2)` when processing move-ins for subq1
+  becomes: `WHERE (x = ANY($1::...) OR y IN (subq2)) AND x = ANY($1::...)`
   """
   def move_in_where_clause(
         %Shape{
           where: %{query: query, used_refs: used_refs},
           shape_dependencies: shape_dependencies,
-          shape_dependencies_handles: shape_dependencies_handles
-        },
+          shape_dependencies_handles: shape_dependencies_handles,
+          subquery_comparison_expressions: comparison_expressions
+        } = shape,
         shape_handle,
         move_ins
       ) do
     index = Enum.find_index(shape_dependencies_handles, &(&1 == shape_handle))
     target_section = Enum.at(shape_dependencies, index) |> rebuild_subquery_section()
+    sublink_ref = ["$sublink", "#{index}"]
 
-    case used_refs[["$sublink", "#{index}"]] do
+    # Determine if we have multiple dependencies (OR case)
+    has_multiple_deps = length(shape_dependencies) > 1
+
+    # Get the comparison expression to build the AND-forcing constraint
+    testexpr = comparison_expressions[sublink_ref]
+
+    case used_refs[sublink_ref] do
       {:array, {:row, cols}} ->
         unnest_sections =
           cols
           |> Enum.map(&Electric.Replication.Eval.type_to_pg_cast/1)
-          |> Enum.with_index(fn col, index -> "$#{index + 1}::text[]::#{col}[]" end)
+          |> Enum.with_index(fn col, i -> "$#{i + 1}::text[]::#{col}[]" end)
           |> Enum.join(", ")
 
-        {String.replace(query, target_section, "IN (SELECT * FROM unnest(#{unnest_sections}))"),
-         Electric.Utils.unzip_any(move_ins) |> Tuple.to_list()}
+        replacement = "IN (SELECT * FROM unnest(#{unnest_sections}))"
+        params = Electric.Utils.unzip_any(move_ins) |> Tuple.to_list()
+
+        base_query = String.replace(query, target_section, replacement)
+
+        # For OR queries with multiple deps, add AND constraint
+        if has_multiple_deps do
+          forced_clause = build_forced_clause(testexpr, shape, unnest_sections)
+          {"(#{base_query}) AND #{forced_clause}", params}
+        else
+          {base_query, params}
+        end
 
       col ->
         type = Electric.Replication.Eval.type_to_pg_cast(col)
-        {String.replace(query, target_section, "= ANY ($1::text[]::#{type})"), [move_ins]}
+        replacement = "= ANY ($1::text[]::#{type})"
+        params = [move_ins]
+
+        base_query = String.replace(query, target_section, replacement)
+
+        # For OR queries with multiple deps, add AND constraint
+        if has_multiple_deps do
+          forced_clause = build_forced_clause(testexpr, shape, "$1::text[]::#{type}")
+          {"(#{base_query}) AND #{forced_clause}", params}
+        else
+          {base_query, params}
+        end
     end
   end
+
+  # Build the AND-forcing clause based on the test expression
+  defp build_forced_clause(nil, _shape, _param_section), do: "true"
+
+  defp build_forced_clause(%{eval: eval}, _shape, param_section) do
+    build_forced_clause_from_eval(eval, param_section)
+  end
+
+  defp build_forced_clause_from_eval(%Eval.Parser.Ref{path: [column]}, param_section) do
+    # Single column case: col = ANY($1::...)
+    "#{Electric.Utils.quote_name(column)} = ANY (#{param_section})"
+  end
+
+  defp build_forced_clause_from_eval(%Eval.Parser.RowExpr{elements: elements}, param_section) do
+    # Composite key case: (col1, col2) IN (SELECT * FROM unnest(...))
+    columns =
+      elements
+      |> Enum.map(fn %Eval.Parser.Ref{path: [col]} -> Electric.Utils.quote_name(col) end)
+      |> Enum.join(", ")
+
+    "(#{columns}) IN (SELECT * FROM unnest(#{param_section}))"
+  end
+
+  defp build_forced_clause_from_eval(_, _param_section), do: "true"
 
   defp rebuild_subquery_section(shape) do
     base =
@@ -69,13 +130,14 @@ defmodule Electric.Shapes.Shape.SubqueryMoves do
 
   Patterns are a list of lists, where each inner list represents a pattern (and is functionally a tuple, but
   JSON can't directly represent tuples). This pattern is filled with actual values that have been removed.
+
+  Now supports multiple dependencies - each move_out is processed only for its specific dependency.
   """
   @spec make_move_out_control_message(Shape.t(), String.t(), String.t(), [
           {dep_handle :: String.t(), gone_values :: String.t()},
           ...
         ]) :: map()
-  # Stub guard to allow only one dependency for now.
-  def make_move_out_control_message(shape, stack_id, shape_handle, [_] = move_outs) do
+  def make_move_out_control_message(shape, stack_id, shape_handle, move_outs) do
     %{
       headers: %{
         event: "move-out",
@@ -85,95 +147,130 @@ defmodule Electric.Shapes.Shape.SubqueryMoves do
     }
   end
 
-  # This is a stub implementation valid only for when there is exactly one dependency.
+  # Generate move-out patterns for a specific dependency
   defp make_move_out_pattern(
-         %{tag_structure: patterns},
+         %{tag_structure: tag_structure_map, shape_dependencies_handles: dep_handles},
          stack_id,
          shape_handle,
-         {_dep_handle, gone_values}
+         {dep_handle, gone_values}
        ) do
-    # TODO: This makes the assumption of only one column per pattern.
-    Enum.flat_map(patterns, fn [column_or_expr] ->
-      case column_or_expr do
-        column_name when is_binary(column_name) ->
-          Enum.map(
-            gone_values,
-            &%{pos: 0, value: make_value_hash(stack_id, shape_handle, elem(&1, 1))}
-          )
+    # Find the index of this dependency
+    index = Enum.find_index(dep_handles, &(&1 == dep_handle))
+    sublink_index = Integer.to_string(index)
+    sublink_ref = ["$sublink", sublink_index]
 
-        {:hash_together, columns} ->
-          column_parts =
-            &(Enum.zip_with(&1, columns, fn value, column -> column <> ":" <> value end)
-              |> Enum.join())
+    # Get the pattern for this specific dependency from the tag_structure map
+    case Map.get(tag_structure_map, sublink_ref) do
+      nil ->
+        # No pattern for this dependency - shouldn't happen but handle gracefully
+        []
 
-          Enum.map(
-            gone_values,
-            &%{
-              pos: 0,
-              value:
-                make_value_hash(stack_id, shape_handle, column_parts.(Tuple.to_list(elem(&1, 1))))
-            }
-          )
-      end
-    end)
+      pattern ->
+        # Process the pattern (which is a list with one column_or_expr element)
+        Enum.flat_map(pattern, fn column_or_expr ->
+          case column_or_expr do
+            column_name when is_binary(column_name) ->
+              Enum.map(
+                gone_values,
+                &%{pos: 0, value: make_value_hash(stack_id, shape_handle, sublink_index, elem(&1, 1))}
+              )
+
+            {:hash_together, columns} ->
+              column_parts =
+                &(Enum.zip_with(&1, columns, fn value, column -> column <> ":" <> value end)
+                  |> Enum.join(":"))
+
+              Enum.map(
+                gone_values,
+                &%{
+                  pos: 0,
+                  value:
+                    make_value_hash(stack_id, shape_handle, sublink_index, column_parts.(Tuple.to_list(elem(&1, 1))))
+                }
+              )
+          end
+        end)
+    end
   end
 
-  def make_value_hash(stack_id, shape_handle, value) do
-    :crypto.hash(:md5, "#{stack_id}#{shape_handle}#{value}")
+  @doc """
+  Create a hash for a value that includes the dependency index to ensure
+  tags from different subqueries don't collide even if they have the same value.
+  """
+  def make_value_hash(stack_id, shape_handle, sublink_index, value) do
+    :crypto.hash(:md5, "#{stack_id}#{shape_handle}sublink:#{sublink_index}:#{value}")
     |> Base.encode16(case: :lower)
+  end
+
+  # Backward compatibility wrapper - defaults to sublink_index "0"
+  def make_value_hash(stack_id, shape_handle, value) do
+    make_value_hash(stack_id, shape_handle, "0", value)
   end
 
   @doc """
   Generate a tag structure for a shape.
 
-  A tag structure is a list of lists, where each inner list represents a tag (and is functionally a tuple, but
-  JSON can't directly represent tuples). The structure is used to generate actual tags for each row, that act
-  as a refenence as to why this row is part of the shape.
+  A tag structure is now a map from sublink reference path (e.g. ["$sublink", "0"]) to the
+  pattern for that dependency. This allows:
+  - Proper per-dependency tagging for multiple OR-combined subqueries
+  - Move-outs that only affect the correct dependency
 
-  Tag structure then is essentially a list of column names in correct positions that will get filled in
-  with actual values from the row
+  The pattern for each dependency is a list containing either:
+  - A single column name (string) for simple IN checks
+  - `{:hash_together, columns}` for composite key checks like `(a, b) IN (SELECT ...)`
+
+  Example tag_structure for `WHERE x IN (subq1) OR y IN (subq2)`:
+  ```
+  %{
+    ["$sublink", "0"] => ["x"],
+    ["$sublink", "1"] => ["y"]
+  }
+  ```
   """
   @spec move_in_tag_structure(Shape.t()) ::
-          list(list(String.t() | {:hash_together, [String.t(), ...]}))
+          {%{[String.t()] => [String.t() | {:hash_together, [String.t(), ...]}]}, %{}}
   def move_in_tag_structure(%Shape{} = shape)
       when is_nil(shape.where)
       when shape.shape_dependencies == [],
-      do: {[], %{}}
+      do: {%{}, %{}}
 
   def move_in_tag_structure(shape) do
-    # TODO: For multiple subqueries this should be a DNF form
-    #       and this walking overrides the comparison expressions
-    {:ok, {tag_structure, comparison_expressions}} =
+    # Walk the AST and build a map of sublink_ref path -> pattern for each dependency
+    {:ok, {tag_structure_map, comparison_expressions}} =
       Walker.reduce(
         shape.where.eval,
         fn
           %Eval.Parser.Func{name: "sublink_membership_check", args: [testexpr, sublink_ref]},
-          {[current_tag | others], comparison_expressions},
+          {tag_structure_map, comparison_expressions},
           _ ->
-            tags =
+            pattern =
               case testexpr do
                 %Eval.Parser.Ref{path: [column_name]} ->
-                  [[column_name | current_tag] | others]
+                  [column_name]
 
                 %Eval.Parser.RowExpr{elements: elements} ->
-                  elements =
+                  columns =
                     Enum.map(elements, fn %Eval.Parser.Ref{path: [column_name]} ->
                       column_name
                     end)
 
-                  [[{:hash_together, elements} | current_tag] | others]
+                  [{:hash_together, columns}]
               end
 
-            {:ok, {tags, Map.put(comparison_expressions, sublink_ref.path, testexpr)}}
+            tag_structure_map = Map.put(tag_structure_map, sublink_ref.path, pattern)
+            comparison_expressions = Map.put(comparison_expressions, sublink_ref.path, testexpr)
+
+            {:ok, {tag_structure_map, comparison_expressions}}
 
           _, acc, _ ->
             {:ok, acc}
         end,
-        {[[]], %{}}
+        {%{}, %{}}
       )
 
-    comparison_expressions
-    |> Map.new(fn {path, expr} -> {path, Eval.Expr.wrap_parser_part(expr)} end)
-    |> then(&{tag_structure, &1})
+    comparison_expressions =
+      Map.new(comparison_expressions, fn {path, expr} -> {path, Eval.Expr.wrap_parser_part(expr)} end)
+
+    {tag_structure_map, comparison_expressions}
   end
 end

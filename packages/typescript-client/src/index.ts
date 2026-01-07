@@ -4,6 +4,7 @@ export * from './types'
 export {
   isChangeMessage,
   isControlMessage,
+  isEventMessage,
   isVisibleInSnapshot,
 } from './helpers'
 export { FetchError } from './error'

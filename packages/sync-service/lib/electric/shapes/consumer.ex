@@ -280,11 +280,11 @@ defmodule Electric.Shapes.Consumer do
     feature_flags = Electric.StackConfig.lookup(state.stack_id, :feature_flags, [])
     tagged_subqueries_enabled? = "tagged_subqueries" in feature_flags
 
-    # We need to invalidate the consumer in the following cases:
-    # - tagged subqueries are disabled since we cannot support causally correct event processing of 3+ level dependency trees
-    #   so we just invalidating this middle shape instead
-    # - the where clause has an OR combined with the subquery so we can't tell if the move ins/outs actually affect the shape or not
-    should_invalidate? = not tagged_subqueries_enabled? or state.or_with_subquery?
+    # We need to invalidate the consumer if tagged subqueries are disabled since we cannot
+    # support causally correct event processing of 3+ level dependency trees, so we just
+    # invalidate this middle shape instead.
+    # Note: OR-combined subqueries are now supported via proper per-dependency tagging.
+    should_invalidate? = not tagged_subqueries_enabled?
 
     if should_invalidate? do
       stop_and_clean(state)

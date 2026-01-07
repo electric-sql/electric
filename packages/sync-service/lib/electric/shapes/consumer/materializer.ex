@@ -93,6 +93,10 @@ defmodule Electric.Shapes.Consumer.Materializer do
       Map.merge(opts, %{
         index: %{},
         tag_indices: %{},
+        # row_tags tracks which tags are associated with each row (key -> MapSet of tags)
+        # This is needed for OR-combined subqueries where a row may be in the shape
+        # due to multiple different reasons (tags)
+        row_tags: %{},
         value_counts: %{},
         offset: LogOffset.before_all(),
         ref: nil,
@@ -293,18 +297,39 @@ defmodule Electric.Shapes.Consumer.Materializer do
   end
 
   defp apply_changes(changes, state) do
-    {{index, tag_indices}, {value_counts, events}} =
+    {{index, tag_indices, row_tags}, {value_counts, events}} =
       Enum.reduce(
         changes,
-        {{state.index, state.tag_indices}, {state.value_counts, []}},
+        {{state.index, state.tag_indices, state.row_tags}, {state.value_counts, []}},
         fn
           %Changes.NewRecord{key: key, record: record, move_tags: move_tags},
-          {{index, tag_indices}, counts_and_events} ->
+          {{index, tag_indices, row_tags}, counts_and_events} ->
             {value, original_string} = cast!(record, state)
-            if is_map_key(index, key), do: raise("Key #{key} already exists")
-            index = Map.put(index, key, value)
-            tag_indices = add_row_to_tag_indices(tag_indices, key, move_tags)
-            {{index, tag_indices}, increment_value(counts_and_events, value, original_string)}
+
+            # UPSERT semantics: if key exists, merge tags; otherwise insert new row
+            if is_map_key(index, key) do
+              # Key exists - merge tags (UPSERT)
+              old_value = Map.get(index, key)
+              index = Map.put(index, key, value)
+              {tag_indices, row_tags} = add_row_to_tag_indices_and_row_tags(tag_indices, row_tags, key, move_tags)
+
+              # Update value_counts if value changed
+              counts_and_events =
+                if old_value != value do
+                  counts_and_events
+                  |> decrement_value(old_value, value_to_string(old_value, state))
+                  |> increment_value(value, original_string)
+                else
+                  counts_and_events
+                end
+
+              {{index, tag_indices, row_tags}, counts_and_events}
+            else
+              # New key - insert
+              index = Map.put(index, key, value)
+              {tag_indices, row_tags} = add_row_to_tag_indices_and_row_tags(tag_indices, row_tags, key, move_tags)
+              {{index, tag_indices, row_tags}, increment_value(counts_and_events, value, original_string)}
+            end
 
           %Changes.UpdatedRecord{
             key: key,
@@ -312,53 +337,84 @@ defmodule Electric.Shapes.Consumer.Materializer do
             move_tags: move_tags,
             removed_move_tags: removed_move_tags
           },
-          {{index, tag_indices}, counts_and_events} ->
+          {{index, tag_indices, row_tags}, counts_and_events} ->
             # TODO: this is written as if it supports multiple selected columns, but it doesn't for now
             if Enum.any?(state.columns, &is_map_key(record, &1)) do
               {value, original_string} = cast!(record, state)
               old_value = Map.fetch!(index, key)
               index = Map.put(index, key, value)
 
-              tag_indices =
-                tag_indices
-                |> remove_row_from_tag_indices(key, removed_move_tags)
-                |> add_row_to_tag_indices(key, move_tags)
+              # Remove old tags first, then add new tags
+              {tag_indices, row_tags} = remove_row_from_tag_indices_and_row_tags(tag_indices, row_tags, key, removed_move_tags)
+              {tag_indices, row_tags} = add_row_to_tag_indices_and_row_tags(tag_indices, row_tags, key, move_tags)
 
-              {{index, tag_indices},
-               counts_and_events
-               |> decrement_value(old_value, value_to_string(old_value, state))
-               |> increment_value(value, original_string)}
+              # Check if all tags were removed - if so, delete the row
+              key_tags = Map.get(row_tags, key, MapSet.new())
+              if MapSet.size(key_tags) == 0 do
+                {_value, index} = Map.pop(index, key)
+                row_tags = Map.delete(row_tags, key)
+                {{index, tag_indices, row_tags},
+                 decrement_value(counts_and_events, old_value, value_to_string(old_value, state))}
+              else
+                {{index, tag_indices, row_tags},
+                 counts_and_events
+                 |> decrement_value(old_value, value_to_string(old_value, state))
+                 |> increment_value(value, original_string)}
+              end
             else
-              # Nothing relevant to this materializer has been updated
-              {{index, tag_indices}, counts_and_events}
+              # Nothing relevant to this materializer has been updated, but still process tags
+              {tag_indices, row_tags} = remove_row_from_tag_indices_and_row_tags(tag_indices, row_tags, key, removed_move_tags)
+              {tag_indices, row_tags} = add_row_to_tag_indices_and_row_tags(tag_indices, row_tags, key, move_tags)
+
+              # Check if all tags were removed - if so, delete the row
+              key_tags = Map.get(row_tags, key, MapSet.new())
+              if MapSet.size(key_tags) == 0 and is_map_key(index, key) do
+                {value, index} = Map.pop(index, key)
+                row_tags = Map.delete(row_tags, key)
+                {{index, tag_indices, row_tags},
+                 decrement_value(counts_and_events, value, value_to_string(value, state))}
+              else
+                {{index, tag_indices, row_tags}, counts_and_events}
+              end
             end
 
           %Changes.DeletedRecord{key: key, move_tags: move_tags},
-          {{index, tag_indices}, counts_and_events} ->
+          {{index, tag_indices, row_tags}, counts_and_events} ->
             {value, index} = Map.pop!(index, key)
 
-            tag_indices = remove_row_from_tag_indices(tag_indices, key, move_tags)
+            {tag_indices, row_tags} = remove_row_from_tag_indices_and_row_tags(tag_indices, row_tags, key, move_tags)
+            row_tags = Map.delete(row_tags, key)
 
-            {{index, tag_indices},
+            {{index, tag_indices, row_tags},
              decrement_value(counts_and_events, value, value_to_string(value, state))}
 
           %{headers: %{event: "move-out", patterns: patterns}},
-          {{index, tag_indices}, counts_and_events} ->
-            {keys, tag_indices} = pop_keys_from_tag_indices(tag_indices, patterns)
+          {{index, tag_indices, row_tags}, counts_and_events} ->
+            # Move-out must only delete rows when ALL tags are removed
+            {keys_to_maybe_delete, tag_indices, row_tags} = process_move_out_patterns(tag_indices, row_tags, patterns)
 
-            {index, counts_and_events} =
-              Enum.reduce(keys, {index, counts_and_events}, fn key, {index, counts_and_events} ->
-                {value, index} = Map.pop!(index, key)
-                {index, decrement_value(counts_and_events, value, value_to_string(value, state))}
+            # For each key, check if all tags were removed - only then delete the row
+            {index, row_tags, counts_and_events} =
+              Enum.reduce(keys_to_maybe_delete, {index, row_tags, counts_and_events}, fn key, {index, row_tags, counts_and_events} ->
+                key_tags = Map.get(row_tags, key, MapSet.new())
+                if MapSet.size(key_tags) == 0 do
+                  # All tags removed - delete the row
+                  {value, index} = Map.pop!(index, key)
+                  row_tags = Map.delete(row_tags, key)
+                  {index, row_tags, decrement_value(counts_and_events, value, value_to_string(value, state))}
+                else
+                  # Row still has other tags - keep it
+                  {index, row_tags, counts_and_events}
+                end
               end)
 
-            {{index, tag_indices}, counts_and_events}
+            {{index, tag_indices, row_tags}, counts_and_events}
         end
       )
 
     events = Enum.group_by(events, &elem(&1, 0), &elem(&1, 1))
 
-    {%{state | index: index, value_counts: value_counts, tag_indices: tag_indices}, events}
+    {%{state | index: index, value_counts: value_counts, tag_indices: tag_indices, row_tags: row_tags}, events}
   end
 
   defp increment_value({value_counts, events}, value, original_string) do
@@ -382,39 +438,84 @@ defmodule Electric.Shapes.Consumer.Materializer do
     end
   end
 
-  defp add_row_to_tag_indices(tag_indices, key, move_tags) do
-    # For now we only support one move tag per row (i.e. no `OR`s in the where clause if there's a subquery)
-    Enum.reduce(move_tags, tag_indices, fn tag, acc when is_binary(tag) ->
-      Map.update(acc, tag, MapSet.new([key]), &MapSet.put(&1, key))
+  # Add tags to both tag_indices and row_tags for a given key
+  # Now supports multiple tags per row for OR-combined subqueries
+  defp add_row_to_tag_indices_and_row_tags(tag_indices, row_tags, key, move_tags) do
+    Enum.reduce(move_tags, {tag_indices, row_tags}, fn tag, {tag_indices, row_tags} when is_binary(tag) ->
+      tag_indices = Map.update(tag_indices, tag, MapSet.new([key]), &MapSet.put(&1, key))
+      row_tags = Map.update(row_tags, key, MapSet.new([tag]), &MapSet.put(&1, tag))
+      {tag_indices, row_tags}
     end)
   end
 
-  defp remove_row_from_tag_indices(tag_indices, key, move_tags) do
-    Enum.reduce(move_tags, tag_indices, fn tag, acc when is_binary(tag) ->
-      case Map.fetch(acc, tag) do
-        {:ok, v} ->
-          new_mapset = MapSet.delete(v, key)
+  # Remove tags from both tag_indices and row_tags for a given key
+  defp remove_row_from_tag_indices_and_row_tags(tag_indices, row_tags, key, move_tags) do
+    Enum.reduce(move_tags, {tag_indices, row_tags}, fn tag, {tag_indices, row_tags} when is_binary(tag) ->
+      # Update tag_indices
+      tag_indices =
+        case Map.fetch(tag_indices, tag) do
+          {:ok, v} ->
+            new_mapset = MapSet.delete(v, key)
+            if MapSet.size(new_mapset) == 0 do
+              Map.delete(tag_indices, tag)
+            else
+              Map.put(tag_indices, tag, new_mapset)
+            end
 
-          if MapSet.size(new_mapset) == 0 do
-            Map.delete(acc, tag)
-          else
-            Map.put(acc, tag, new_mapset)
-          end
+          :error ->
+            tag_indices
+        end
 
-        :error ->
-          acc
+      # Update row_tags
+      row_tags =
+        case Map.fetch(row_tags, key) do
+          {:ok, tags} ->
+            new_tags = MapSet.delete(tags, tag)
+            if MapSet.size(new_tags) == 0 do
+              Map.delete(row_tags, key)
+            else
+              Map.put(row_tags, key, new_tags)
+            end
+
+          :error ->
+            row_tags
+        end
+
+      {tag_indices, row_tags}
+    end)
+  end
+
+  # Process move-out patterns: remove tags from tag_indices and row_tags
+  # Returns {keys_to_check, updated_tag_indices, updated_row_tags}
+  # Keys should be checked afterwards to see if they should be deleted (when all tags are removed)
+  defp process_move_out_patterns(tag_indices, row_tags, patterns) do
+    Enum.reduce(patterns, {MapSet.new(), tag_indices, row_tags}, fn %{pos: _pos, value: tag},
+                                                                    {keys_to_check, tag_indices, row_tags} ->
+      case Map.pop(tag_indices, tag) do
+        {nil, tag_indices} ->
+          {keys_to_check, tag_indices, row_tags}
+
+        {affected_keys, tag_indices} ->
+          # For each affected key, remove this tag from row_tags
+          row_tags =
+            Enum.reduce(affected_keys, row_tags, fn key, row_tags ->
+              case Map.fetch(row_tags, key) do
+                {:ok, tags} ->
+                  new_tags = MapSet.delete(tags, tag)
+                  if MapSet.size(new_tags) == 0 do
+                    Map.delete(row_tags, key)
+                  else
+                    Map.put(row_tags, key, new_tags)
+                  end
+
+                :error ->
+                  row_tags
+              end
+            end)
+
+          {MapSet.union(keys_to_check, affected_keys), tag_indices, row_tags}
       end
     end)
   end
 
-  defp pop_keys_from_tag_indices(tag_indices, patterns) do
-    # This implementation is naive while we support only one tag per row and no composite tags.
-    Enum.reduce(patterns, {MapSet.new(), tag_indices}, fn %{pos: _pos, value: value},
-                                                          {keys, acc} ->
-      case Map.pop(acc, value) do
-        {nil, acc} -> {keys, acc}
-        {v, acc} -> {MapSet.union(keys, v), acc}
-      end
-    end)
-  end
 end
