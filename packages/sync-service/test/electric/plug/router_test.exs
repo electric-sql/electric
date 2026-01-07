@@ -2948,23 +2948,264 @@ defmodule Electric.Plug.RouterTest do
                Task.await(task)
     end
 
+    # OR-combined subqueries at the outer level: x IN (subquery1) OR y IN (subquery2)
     @tag with_sql: [
-           "CREATE TABLE projects (id INT PRIMARY KEY, workspace_id INT NOT NULL, name TEXT NOT NULL)",
-           "CREATE TABLE workspace_members (workspace_id INT, user_id INT, PRIMARY KEY (workspace_id, user_id))",
-           "CREATE TABLE project_members (project_id INT, user_id INT, PRIMARY KEY (project_id, user_id))"
+           "CREATE TABLE parent1 (id INT PRIMARY KEY, value TEXT NOT NULL)",
+           "CREATE TABLE parent2 (id INT PRIMARY KEY, value TEXT NOT NULL)",
+           "CREATE TABLE child (id INT PRIMARY KEY, x INT REFERENCES parent1(id), y INT REFERENCES parent2(id), name TEXT NOT NULL)",
+           "INSERT INTO parent1 (id, value) VALUES (1, 'p1-a'), (2, 'p1-b')",
+           "INSERT INTO parent2 (id, value) VALUES (10, 'p2-a'), (20, 'p2-b')",
+           "INSERT INTO child (id, x, y, name) VALUES (100, 1, 10, 'child-1'), (200, 2, 20, 'child-2')"
          ]
-    test "returns 400 for two subqueries at the same level", ctx do
-      where =
-        "workspace_id IN (SELECT workspace_id FROM workspace_members WHERE user_id = 100) " <>
-          "OR id IN (SELECT project_id FROM project_members WHERE user_id = 100)"
+    test "OR-combined subqueries at outer level: move-in from first subquery", ctx do
+      # Shape: child rows where x matches parent1 OR y matches parent2
+      orig_req =
+        make_shape_req("child",
+          where:
+            "x IN (SELECT id FROM parent1 WHERE value = 'p1-a') OR y IN (SELECT id FROM parent2 WHERE value = 'p2-a')"
+        )
 
-      assert %{status: 400} =
-               conn("GET", "/v1/shape", %{
-                 table: "projects",
-                 offset: "-1",
-                 where: where
-               })
-               |> Router.call(ctx.opts)
+      assert {req, 200, response} = shape_req(orig_req, ctx.opts)
+      # child-1 matches both conditions (x=1, y=10), should be in initial snapshot
+      assert length(response) == 2
+      assert %{"value" => %{"id" => "100", "name" => "child-1"}} =
+               Enum.find(response, &Map.has_key?(&1, "key"))
+
+      # Now trigger a move-in via the first subquery (parent1)
+      task = live_shape_req(req, ctx.opts)
+      # Update parent1 row 2 to match the subquery, causing child-2 to move in via x
+      Postgrex.query!(ctx.db_conn, "UPDATE parent1 SET value = 'p1-a' WHERE id = 2", [])
+
+      # Should get a move-in with proper tags (200, not 409)
+      assert {req, 200, response} = Task.await(task)
+      assert Enum.any?(response, fn msg ->
+               match?(%{"value" => %{"id" => "200", "name" => "child-2"}, "headers" => %{"is_move_in" => true}}, msg)
+             end)
+
+      # And move-out should work too
+      task = live_shape_req(req, ctx.opts)
+      Postgrex.query!(ctx.db_conn, "UPDATE parent1 SET value = 'p1-b' WHERE id = 2", [])
+
+      assert {_req, 200, response} = Task.await(task)
+      assert Enum.any?(response, fn msg ->
+               match?(%{"headers" => %{"event" => "move-out"}}, msg)
+             end)
+    end
+
+    @tag with_sql: [
+           "CREATE TABLE parent1 (id INT PRIMARY KEY, value TEXT NOT NULL)",
+           "CREATE TABLE parent2 (id INT PRIMARY KEY, value TEXT NOT NULL)",
+           "CREATE TABLE child (id INT PRIMARY KEY, x INT REFERENCES parent1(id), y INT REFERENCES parent2(id), name TEXT NOT NULL)",
+           "INSERT INTO parent1 (id, value) VALUES (1, 'p1-a'), (2, 'p1-b')",
+           "INSERT INTO parent2 (id, value) VALUES (10, 'p2-a'), (20, 'p2-b')",
+           "INSERT INTO child (id, x, y, name) VALUES (100, 1, 10, 'child-1'), (200, 2, 20, 'child-2')"
+         ]
+    test "OR-combined subqueries at outer level: move-in from second subquery", ctx do
+      orig_req =
+        make_shape_req("child",
+          where:
+            "x IN (SELECT id FROM parent1 WHERE value = 'p1-a') OR y IN (SELECT id FROM parent2 WHERE value = 'p2-a')"
+        )
+
+      assert {req, 200, _response} = shape_req(orig_req, ctx.opts)
+
+      # Trigger a move-in via the second subquery (parent2)
+      task = live_shape_req(req, ctx.opts)
+      # Update parent2 row 20 to match the subquery, causing child-2 to move in via y
+      Postgrex.query!(ctx.db_conn, "UPDATE parent2 SET value = 'p2-a' WHERE id = 20", [])
+
+      # Should get a move-in with proper tags (200, not 409)
+      assert {req, 200, response} = Task.await(task)
+      assert Enum.any?(response, fn msg ->
+               match?(%{"value" => %{"id" => "200", "name" => "child-2"}, "headers" => %{"is_move_in" => true}}, msg)
+             end)
+
+      # And move-out should work
+      task = live_shape_req(req, ctx.opts)
+      Postgrex.query!(ctx.db_conn, "UPDATE parent2 SET value = 'p2-b' WHERE id = 20", [])
+
+      assert {_req, 200, response} = Task.await(task)
+      assert Enum.any?(response, fn msg ->
+               match?(%{"headers" => %{"event" => "move-out"}}, msg)
+             end)
+    end
+
+    @tag with_sql: [
+           "CREATE TABLE parent1 (id INT PRIMARY KEY, value TEXT NOT NULL)",
+           "CREATE TABLE parent2 (id INT PRIMARY KEY, value TEXT NOT NULL)",
+           "CREATE TABLE child (id INT PRIMARY KEY, x INT REFERENCES parent1(id), y INT REFERENCES parent2(id), name TEXT NOT NULL)",
+           "INSERT INTO parent1 (id, value) VALUES (1, 'p1-a')",
+           "INSERT INTO parent2 (id, value) VALUES (10, 'p2-a')",
+           # This child matches BOTH conditions
+           "INSERT INTO child (id, x, y, name) VALUES (100, 1, 10, 'child-both')"
+         ]
+    test "OR-combined subqueries: row matching both conditions survives single move-out", ctx do
+      orig_req =
+        make_shape_req("child",
+          where:
+            "x IN (SELECT id FROM parent1 WHERE value = 'p1-a') OR y IN (SELECT id FROM parent2 WHERE value = 'p2-a')"
+        )
+
+      assert {req, 200, response} = shape_req(orig_req, ctx.opts)
+      assert length(response) == 2
+      assert %{"value" => %{"id" => "100", "name" => "child-both"}} =
+               Enum.find(response, &Map.has_key?(&1, "key"))
+
+      # Remove from first subquery - row should remain because it still matches the second
+      task = live_shape_req(req, ctx.opts)
+      Postgrex.query!(ctx.db_conn, "UPDATE parent1 SET value = 'p1-b' WHERE id = 1", [])
+
+      # Should get move-out event but row should still be in shape
+      assert {req, 200, response} = Task.await(task)
+      assert Enum.any?(response, fn msg ->
+               match?(%{"headers" => %{"event" => "move-out"}}, msg)
+             end)
+
+      # Now remove from second subquery - row should be fully removed
+      task = live_shape_req(req, ctx.opts)
+      Postgrex.query!(ctx.db_conn, "UPDATE parent2 SET value = 'p2-b' WHERE id = 10", [])
+
+      assert {_req, 200, response} = Task.await(task)
+      assert Enum.any?(response, fn msg ->
+               match?(%{"headers" => %{"event" => "move-out"}}, msg)
+             end)
+    end
+
+    # OR inside a subquery: x IN (SELECT ... WHERE a IN (subquery) OR b IN (subquery))
+    @tag with_sql: [
+           "CREATE TABLE grandparent1 (id INT PRIMARY KEY, active BOOLEAN NOT NULL)",
+           "CREATE TABLE grandparent2 (id INT PRIMARY KEY, active BOOLEAN NOT NULL)",
+           "CREATE TABLE parent (id INT PRIMARY KEY, gp1_id INT REFERENCES grandparent1(id), gp2_id INT REFERENCES grandparent2(id))",
+           "CREATE TABLE child (id INT PRIMARY KEY, parent_id INT REFERENCES parent(id), name TEXT NOT NULL)",
+           "INSERT INTO grandparent1 (id, active) VALUES (1, true), (2, false)",
+           "INSERT INTO grandparent2 (id, active) VALUES (10, false), (20, false)",
+           "INSERT INTO parent (id, gp1_id, gp2_id) VALUES (100, 1, 10), (200, 2, 20)",
+           "INSERT INTO child (id, parent_id, name) VALUES (1000, 100, 'child-1'), (2000, 200, 'child-2')"
+         ]
+    test "OR inside subquery: move-in works correctly", ctx do
+      # Shape: child rows where parent matches grandparent1 OR grandparent2
+      orig_req =
+        make_shape_req("child",
+          where:
+            "parent_id IN (SELECT id FROM parent WHERE gp1_id IN (SELECT id FROM grandparent1 WHERE active = true) OR gp2_id IN (SELECT id FROM grandparent2 WHERE active = true))"
+        )
+
+      assert {req, 200, response} = shape_req(orig_req, ctx.opts)
+      # Only child-1 should be in initial snapshot (parent 100's gp1_id=1 is active)
+      assert length(response) == 2
+      assert %{"value" => %{"id" => "1000", "name" => "child-1"}} =
+               Enum.find(response, &Map.has_key?(&1, "key"))
+
+      # Trigger move-in via grandparent2 becoming active
+      task = live_shape_req(req, ctx.opts)
+      Postgrex.query!(ctx.db_conn, "UPDATE grandparent2 SET active = true WHERE id = 20", [])
+
+      # child-2's parent (200) should now match via gp2_id, causing move-in
+      assert {req, 200, response} = Task.await(task)
+      assert Enum.any?(response, fn msg ->
+               match?(%{"value" => %{"id" => "2000", "name" => "child-2"}, "headers" => %{"is_move_in" => true}}, msg)
+             end)
+
+      # And move-out should work
+      task = live_shape_req(req, ctx.opts)
+      Postgrex.query!(ctx.db_conn, "UPDATE grandparent2 SET active = false WHERE id = 20", [])
+
+      assert {_req, 200, response} = Task.await(task)
+      assert Enum.any?(response, fn msg ->
+               match?(%{"headers" => %{"event" => "move-out"}}, msg)
+             end)
+    end
+
+    # 3-level OR nesting: x IN (SELECT ... WHERE y IN (SELECT ... WHERE a IN (subquery) OR b IN (subquery)))
+    @tag with_sql: [
+           "CREATE TABLE level3_a (id INT PRIMARY KEY, active BOOLEAN NOT NULL)",
+           "CREATE TABLE level3_b (id INT PRIMARY KEY, active BOOLEAN NOT NULL)",
+           "CREATE TABLE level2 (id INT PRIMARY KEY, l3a_id INT REFERENCES level3_a(id), l3b_id INT REFERENCES level3_b(id))",
+           "CREATE TABLE level1 (id INT PRIMARY KEY, l2_id INT REFERENCES level2(id))",
+           "CREATE TABLE level0 (id INT PRIMARY KEY, l1_id INT REFERENCES level1(id), name TEXT NOT NULL)",
+           "INSERT INTO level3_a (id, active) VALUES (1, true), (2, false)",
+           "INSERT INTO level3_b (id, active) VALUES (10, false), (20, false)",
+           "INSERT INTO level2 (id, l3a_id, l3b_id) VALUES (100, 1, 10), (200, 2, 20)",
+           "INSERT INTO level1 (id, l2_id) VALUES (1000, 100), (2000, 200)",
+           "INSERT INTO level0 (id, l1_id, name) VALUES (10000, 1000, 'row-1'), (20000, 2000, 'row-2')"
+         ]
+    test "3-level nested OR: move-in and move-out work correctly", ctx do
+      # Shape: level0 rows where level1 -> level2 -> (level3_a OR level3_b)
+      orig_req =
+        make_shape_req("level0",
+          where:
+            "l1_id IN (SELECT id FROM level1 WHERE l2_id IN (SELECT id FROM level2 WHERE l3a_id IN (SELECT id FROM level3_a WHERE active = true) OR l3b_id IN (SELECT id FROM level3_b WHERE active = true)))"
+        )
+
+      assert {req, 200, response} = shape_req(orig_req, ctx.opts)
+      # Only row-1 should be in initial snapshot
+      assert length(response) == 2
+      assert %{"value" => %{"id" => "10000", "name" => "row-1"}} =
+               Enum.find(response, &Map.has_key?(&1, "key"))
+
+      # Trigger move-in via level3_b becoming active
+      task = live_shape_req(req, ctx.opts)
+      Postgrex.query!(ctx.db_conn, "UPDATE level3_b SET active = true WHERE id = 20", [])
+
+      # row-2 should move in
+      assert {req, 200, response} = Task.await(task)
+      assert Enum.any?(response, fn msg ->
+               match?(%{"value" => %{"id" => "20000", "name" => "row-2"}, "headers" => %{"is_move_in" => true}}, msg)
+             end)
+
+      # And move-out should work
+      task = live_shape_req(req, ctx.opts)
+      Postgrex.query!(ctx.db_conn, "UPDATE level3_b SET active = false WHERE id = 20", [])
+
+      assert {_req, 200, response} = Task.await(task)
+      assert Enum.any?(response, fn msg ->
+               match?(%{"headers" => %{"event" => "move-out"}}, msg)
+             end)
+    end
+
+    @tag with_sql: [
+           "CREATE TABLE level3_a (id INT PRIMARY KEY, active BOOLEAN NOT NULL)",
+           "CREATE TABLE level3_b (id INT PRIMARY KEY, active BOOLEAN NOT NULL)",
+           "CREATE TABLE level2 (id INT PRIMARY KEY, l3a_id INT REFERENCES level3_a(id), l3b_id INT REFERENCES level3_b(id))",
+           "CREATE TABLE level1 (id INT PRIMARY KEY, l2_id INT REFERENCES level2(id))",
+           "CREATE TABLE level0 (id INT PRIMARY KEY, l1_id INT REFERENCES level1(id), name TEXT NOT NULL)",
+           # level2 row 100 matches BOTH level3_a and level3_b
+           "INSERT INTO level3_a (id, active) VALUES (1, true)",
+           "INSERT INTO level3_b (id, active) VALUES (10, true)",
+           "INSERT INTO level2 (id, l3a_id, l3b_id) VALUES (100, 1, 10)",
+           "INSERT INTO level1 (id, l2_id) VALUES (1000, 100)",
+           "INSERT INTO level0 (id, l1_id, name) VALUES (10000, 1000, 'row-both')"
+         ]
+    test "3-level nested OR: row matching both branches survives single deactivation", ctx do
+      orig_req =
+        make_shape_req("level0",
+          where:
+            "l1_id IN (SELECT id FROM level1 WHERE l2_id IN (SELECT id FROM level2 WHERE l3a_id IN (SELECT id FROM level3_a WHERE active = true) OR l3b_id IN (SELECT id FROM level3_b WHERE active = true)))"
+        )
+
+      assert {req, 200, response} = shape_req(orig_req, ctx.opts)
+      assert length(response) == 2
+      assert %{"value" => %{"id" => "10000", "name" => "row-both"}} =
+               Enum.find(response, &Map.has_key?(&1, "key"))
+
+      # Deactivate level3_a - row should remain because level3_b is still active
+      task = live_shape_req(req, ctx.opts)
+      Postgrex.query!(ctx.db_conn, "UPDATE level3_a SET active = false WHERE id = 1", [])
+
+      assert {req, 200, response} = Task.await(task)
+      # Should get a move-out for the level3_a tag
+      assert Enum.any?(response, fn msg ->
+               match?(%{"headers" => %{"event" => "move-out"}}, msg)
+             end)
+
+      # Now deactivate level3_b - row should be fully removed
+      task = live_shape_req(req, ctx.opts)
+      Postgrex.query!(ctx.db_conn, "UPDATE level3_b SET active = false WHERE id = 10", [])
+
+      assert {_req, 200, response} = Task.await(task)
+      assert Enum.any?(response, fn msg ->
+               match?(%{"headers" => %{"event" => "move-out"}}, msg)
+             end)
     end
   end
 
