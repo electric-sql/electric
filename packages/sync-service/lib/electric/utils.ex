@@ -599,4 +599,80 @@ defmodule Electric.Utils do
       Map.new([{prefix, nested} | rest])
     end
   end
+
+  @doc """
+  Format the given milliseconds into a human-readable time interval string.
+
+  ## Examples
+
+      iex> format_milliseconds_to_human_readable_interval(100)
+      "100ms"
+
+      iex> format_milliseconds_to_human_readable_interval(13500)
+      "13sec 500ms"
+
+      iex> format_milliseconds_to_human_readable_interval(960001)
+      "16min 1ms"
+
+      iex> format_milliseconds_to_human_readable_interval(3630000)
+      "1hr 30sec"
+  """
+  def format_milliseconds_to_human_readable_interval(millisec) do
+    hours = div(millisec, 3600 * 1000)
+    remainder = millisec - hours * 3600 * 1000
+
+    minutes = div(remainder, 60 * 1000)
+    remainder = remainder - minutes * 60 * 1000
+
+    seconds = div(remainder, 1000)
+    remainder = remainder - seconds * 1000
+
+    hrs_unit = if hours > 1, do: "hrs", else: "hr"
+
+    [{hours, hrs_unit}, {minutes, "min"}, {seconds, "sec"}, {remainder, "ms"}]
+    |> Enum.reject(fn {num, _} -> num == 0 end)
+    |> Enum.map(fn {num, units} -> to_string(num) <> units end)
+    |> Enum.join(" ")
+  end
+
+  @doc """
+  Format the given bytes into a human-readable size string.
+
+  ## Examples
+
+      iex> format_bytes_to_human_readable_size(100)
+      "100B"
+
+      iex> format_bytes_to_human_readable_size(999)
+      "999B"
+
+      iex> format_bytes_to_human_readable_size(1400)
+      "~1.4KB"
+
+      iex> format_bytes_to_human_readable_size(123444)
+      "~123.4KB"
+
+      iex> format_bytes_to_human_readable_size(98_800_431)
+      "~98.8MB"
+
+      iex> format_bytes_to_human_readable_size(999_999_999)
+      "~1000.0MB"
+
+      iex> format_bytes_to_human_readable_size(1_234_567_890)
+      "~1.2GB"
+  """
+  def format_bytes_to_human_readable_size(bytes) do
+    cond do
+      bytes >= 1_000_000_000 -> "~#{round_decimal(bytes / 1_000_000_000)}GB"
+      bytes >= 1_000_000 -> "~#{round_decimal(bytes / 1_000_000)}MB"
+      bytes >= 1_000 -> "~#{round_decimal(bytes / 1_000)}KB"
+      true -> "#{bytes}B"
+    end
+  end
+
+  defp round_decimal(float) do
+    float
+    |> Decimal.from_float()
+    |> Decimal.round(1)
+  end
 end
