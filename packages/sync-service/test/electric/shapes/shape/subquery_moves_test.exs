@@ -303,6 +303,60 @@ defmodule Electric.Shapes.Shape.SubqueryMovesTest do
 
       refute hash0 == hash1
     end
+
+    test "move_in_where_clause adds forced AND for OR-with-subquery even with single dependency" do
+      # This tests the case: x IN (subq) OR status = 'active'
+      # Even though there's only one subquery dependency, we need the forced AND
+      # to prevent the query from returning rows that match just the `status = 'active'` branch
+      shape =
+        Shape.new!("child",
+          where: "x IN (SELECT id FROM parent1) OR value = 'active'",
+          inspector: @multi_inspector
+        )
+        |> fill_handles()
+
+      # Verify there's only one dependency
+      assert length(shape.shape_dependencies) == 1
+
+      move_ins = ["1", "2"]
+
+      {query, params} =
+        SubqueryMoves.move_in_where_clause(
+          shape,
+          Enum.at(shape.shape_dependencies_handles, 0),
+          move_ins
+        )
+
+      # The query should have the forced AND constraint to ensure only rows
+      # where x matches the moved-in values are returned
+      assert query =~ "AND"
+      assert query =~ "\"x\" = ANY"
+      assert params == [["1", "2"]]
+    end
+
+    test "move_in_where_clause does NOT add forced AND for simple subquery without OR" do
+      # For a simple case like: x IN (subq) without OR, no forced AND is needed
+      shape =
+        Shape.new!("child",
+          where: "x IN (SELECT id FROM parent1)",
+          inspector: @multi_inspector
+        )
+        |> fill_handles()
+
+      move_ins = ["1", "2"]
+
+      {query, params} =
+        SubqueryMoves.move_in_where_clause(
+          shape,
+          Enum.at(shape.shape_dependencies_handles, 0),
+          move_ins
+        )
+
+      # The query should NOT have the forced AND since there's no OR
+      refute query =~ ") AND"
+      assert query == "x = ANY ($1::text[]::int8[])"
+      assert params == [["1", "2"]]
+    end
   end
 
   defp fill_handles(shape) do

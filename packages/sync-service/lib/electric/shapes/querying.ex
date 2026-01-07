@@ -146,17 +146,19 @@ defmodule Electric.Shapes.Querying do
 
   # Converts a tag structure to something PG select can fill, but returns a list of separate strings for each tag
   # - it's up to the caller to interpolate them into the query correctly
+  # tag_structure is now a map from sublink ref (e.g. ["$sublink", "0"]) to pattern
   defp make_tags(%Shape{tag_structure: tag_structure}, stack_id, shape_handle) do
-    Enum.map(tag_structure, fn pattern ->
+    Enum.flat_map(tag_structure, fn {["$sublink", sublink_index], pattern} ->
+      # Each pattern produces one tag string
+      # The hash must include the sublink index to match SubqueryMoves.make_value_hash
       Enum.map(pattern, fn
         column_name when is_binary(column_name) ->
-          ~s[md5('#{stack_id}#{shape_handle}' || #{pg_cast_column_to_text(column_name)})]
+          ~s[md5('#{stack_id}#{shape_handle}sublink:#{sublink_index}:' || #{pg_cast_column_to_text(column_name)})]
 
         {:hash_together, columns} ->
           column_parts = Enum.map(columns, &~s['#{&1}:' || #{pg_cast_column_to_text(&1)}])
-          ~s[md5('#{stack_id}#{shape_handle}' || #{Enum.join(column_parts, " || ")})]
+          ~s[md5('#{stack_id}#{shape_handle}sublink:#{sublink_index}:' || #{Enum.join(column_parts, " || ':'|| ")})]
       end)
-      |> Enum.join("|| '/' ||")
     end)
   end
 

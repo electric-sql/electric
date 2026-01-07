@@ -345,12 +345,14 @@ defmodule Electric.Shapes.Consumer.Materializer do
               index = Map.put(index, key, value)
 
               # Remove old tags first, then add new tags
+              had_tags_before = Map.has_key?(row_tags, key)
               {tag_indices, row_tags} = remove_row_from_tag_indices_and_row_tags(tag_indices, row_tags, key, removed_move_tags)
               {tag_indices, row_tags} = add_row_to_tag_indices_and_row_tags(tag_indices, row_tags, key, move_tags)
 
-              # Check if all tags were removed - if so, delete the row
+              # Only delete row if it previously had tags and now has none.
+              # Rows without tags (legacy behavior) should remain.
               key_tags = Map.get(row_tags, key, MapSet.new())
-              if MapSet.size(key_tags) == 0 do
+              if had_tags_before and MapSet.size(key_tags) == 0 do
                 {_value, index} = Map.pop(index, key)
                 row_tags = Map.delete(row_tags, key)
                 {{index, tag_indices, row_tags},
@@ -363,12 +365,14 @@ defmodule Electric.Shapes.Consumer.Materializer do
               end
             else
               # Nothing relevant to this materializer has been updated, but still process tags
+              had_tags_before = Map.has_key?(row_tags, key)
               {tag_indices, row_tags} = remove_row_from_tag_indices_and_row_tags(tag_indices, row_tags, key, removed_move_tags)
               {tag_indices, row_tags} = add_row_to_tag_indices_and_row_tags(tag_indices, row_tags, key, move_tags)
 
-              # Check if all tags were removed - if so, delete the row
+              # Only delete row if it previously had tags and now has none.
+              # Rows without tags (legacy behavior) should remain.
               key_tags = Map.get(row_tags, key, MapSet.new())
-              if MapSet.size(key_tags) == 0 and is_map_key(index, key) do
+              if had_tags_before and MapSet.size(key_tags) == 0 and is_map_key(index, key) do
                 {value, index} = Map.pop(index, key)
                 row_tags = Map.delete(row_tags, key)
                 {{index, tag_indices, row_tags},

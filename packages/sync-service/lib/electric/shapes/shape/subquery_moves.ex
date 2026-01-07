@@ -49,8 +49,12 @@ defmodule Electric.Shapes.Shape.SubqueryMoves do
     target_section = Enum.at(shape_dependencies, index) |> rebuild_subquery_section()
     sublink_ref = ["$sublink", "#{index}"]
 
-    # Determine if we have multiple dependencies (OR case)
-    has_multiple_deps = length(shape_dependencies) > 1
+    # Determine if the WHERE clause has an OR with a subquery.
+    # We need to add a forced AND constraint whenever there's an OR that includes
+    # a sublink reference, not just when there are multiple dependencies.
+    # For example: `x IN (subq) OR status = 'active'` has only one dependency
+    # but still needs the forced AND to avoid returning unrelated rows.
+    needs_forced_and = or_with_subquery?(shape)
 
     # Get the comparison expression to build the AND-forcing constraint
     testexpr = comparison_expressions[sublink_ref]
@@ -68,8 +72,8 @@ defmodule Electric.Shapes.Shape.SubqueryMoves do
 
         base_query = String.replace(query, target_section, replacement)
 
-        # For OR queries with multiple deps, add AND constraint
-        if has_multiple_deps do
+        # For OR queries with subqueries, add AND constraint to avoid returning unrelated rows
+        if needs_forced_and do
           forced_clause = build_forced_clause(testexpr, shape, unnest_sections)
           {"(#{base_query}) AND #{forced_clause}", params}
         else
@@ -83,8 +87,8 @@ defmodule Electric.Shapes.Shape.SubqueryMoves do
 
         base_query = String.replace(query, target_section, replacement)
 
-        # For OR queries with multiple deps, add AND constraint
-        if has_multiple_deps do
+        # For OR queries with subqueries, add AND constraint to avoid returning unrelated rows
+        if needs_forced_and do
           forced_clause = build_forced_clause(testexpr, shape, "$1::text[]::#{type}")
           {"(#{base_query}) AND #{forced_clause}", params}
         else
@@ -272,5 +276,43 @@ defmodule Electric.Shapes.Shape.SubqueryMoves do
       Map.new(comparison_expressions, fn {path, expr} -> {path, Eval.Expr.wrap_parser_part(expr)} end)
 
     {tag_structure_map, comparison_expressions}
+  end
+
+  # Check if the WHERE clause has an OR node whose subtree contains a sublink reference.
+  # This is used to determine if we need to add a forced AND constraint to move-in queries.
+  # If there are no dependencies, there can't be an OR-with-subquery.
+  # Note: If there are dependencies, there must be a WHERE clause (subqueries require it).
+  defp or_with_subquery?(%Shape{shape_dependencies: deps}) when deps == [], do: false
+
+  defp or_with_subquery?(%Shape{where: where}) do
+    Walker.reduce!(
+      where.eval,
+      fn
+        %Eval.Parser.Func{name: "or"} = or_node, acc, _ctx ->
+          if subtree_has_sublink?(or_node) do
+            {:ok, true}
+          else
+            {:ok, acc}
+          end
+
+        _node, acc, _ctx ->
+          {:ok, acc}
+      end,
+      false
+    )
+  end
+
+  defp subtree_has_sublink?(tree) do
+    Walker.reduce!(
+      tree,
+      fn
+        %Eval.Parser.Ref{path: ["$sublink", _]}, _acc, _ctx ->
+          {:ok, true}
+
+        _node, acc, _ctx ->
+          {:ok, acc}
+      end,
+      false
+    )
   end
 end

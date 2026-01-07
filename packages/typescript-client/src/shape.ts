@@ -203,10 +203,11 @@ export class Shape<T extends Row<unknown> = Row> {
               this.#addTags(message.key, tags)
 
               // Check if all tags were removed - if so, delete the row
+              // Note: #removeTags deletes the key from #keyTags when it becomes empty,
+              // so we treat undefined as "no tags remain"
               const keyTagsAfterUpdate = this.#keyTags.get(message.key)
               if (
-                keyTagsAfterUpdate &&
-                keyTagsAfterUpdate.size === 0 &&
+                (!keyTagsAfterUpdate || keyTagsAfterUpdate.size === 0) &&
                 tags.length === 0
               ) {
                 this.#data.delete(message.key)
@@ -249,10 +250,14 @@ export class Shape<T extends Row<unknown> = Row> {
                 this.#addTags(message.key, tags)
 
                 // Check if all tags were removed - if so, delete the row
-                const keyTagsAfterUpdate = this.#keyTags.get(message.key)
+                // Note: #removeTags deletes the key from #keyTags when it becomes empty,
+                // so we treat undefined as "no tags remain"
+                const keyTagsAfterUpdateChangesOnly = this.#keyTags.get(
+                  message.key
+                )
                 if (
-                  keyTagsAfterUpdate &&
-                  keyTagsAfterUpdate.size === 0 &&
+                  (!keyTagsAfterUpdateChangesOnly ||
+                    keyTagsAfterUpdateChangesOnly.size === 0) &&
                   tags.length === 0
                 ) {
                   this.#data.delete(message.key)

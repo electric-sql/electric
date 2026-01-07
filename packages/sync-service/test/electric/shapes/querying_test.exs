@@ -287,16 +287,17 @@ defmodule Electric.Shapes.QueryingTest do
           inspector: {DirectInspector, conn}
         )
 
+      # Tags now include sublink index in the hash
       tag1 =
-        :crypto.hash(:md5, "dummy-stack-id" <> "dummy-shape-handle" <> "1")
+        :crypto.hash(:md5, "dummy-stack-id" <> "dummy-shape-handle" <> "sublink:0:" <> "1")
         |> Base.encode16(case: :lower)
 
       tag2 =
-        :crypto.hash(:md5, "dummy-stack-id" <> "dummy-shape-handle" <> "2")
+        :crypto.hash(:md5, "dummy-stack-id" <> "dummy-shape-handle" <> "sublink:0:" <> "2")
         |> Base.encode16(case: :lower)
 
       tag3 =
-        :crypto.hash(:md5, "dummy-stack-id" <> "dummy-shape-handle" <> "3")
+        :crypto.hash(:md5, "dummy-stack-id" <> "dummy-shape-handle" <> "sublink:0:" <> "3")
         |> Base.encode16(case: :lower)
 
       assert [
@@ -310,24 +311,25 @@ defmodule Electric.Shapes.QueryingTest do
     end
 
     test "if shape has a subquery, tags the results (with composite keys)", %{db_conn: conn} do
+      # Tags now include sublink index in the hash
       tag1 =
         :crypto.hash(
           :md5,
-          "dummy-stack-id" <> "dummy-shape-handle" <> "parent_id1:1" <> "parent_id2:1"
+          "dummy-stack-id" <> "dummy-shape-handle" <> "sublink:0:" <> "parent_id1:1" <> ":parent_id2:1"
         )
         |> Base.encode16(case: :lower)
 
       tag2 =
         :crypto.hash(
           :md5,
-          "dummy-stack-id" <> "dummy-shape-handle" <> "parent_id1:2" <> "parent_id2:2"
+          "dummy-stack-id" <> "dummy-shape-handle" <> "sublink:0:" <> "parent_id1:2" <> ":parent_id2:2"
         )
         |> Base.encode16(case: :lower)
 
       tag3 =
         :crypto.hash(
           :md5,
-          "dummy-stack-id" <> "dummy-shape-handle" <> "parent_id1:3" <> "parent_id2:3"
+          "dummy-stack-id" <> "dummy-shape-handle" <> "sublink:0:" <> "parent_id1:3" <> ":parent_id2:3"
         )
         |> Base.encode16(case: :lower)
 
@@ -370,16 +372,17 @@ defmodule Electric.Shapes.QueryingTest do
           inspector: {DirectInspector, conn}
         )
 
+      # Tags now include sublink index in the hash
       tag1 =
-        :crypto.hash(:md5, "dummy-stack-id" <> "dummy-shape-handle" <> "1")
+        :crypto.hash(:md5, "dummy-stack-id" <> "dummy-shape-handle" <> "sublink:0:" <> "1")
         |> Base.encode16(case: :lower)
 
       tag2 =
-        :crypto.hash(:md5, "dummy-stack-id" <> "dummy-shape-handle" <> "2")
+        :crypto.hash(:md5, "dummy-stack-id" <> "dummy-shape-handle" <> "sublink:0:" <> "2")
         |> Base.encode16(case: :lower)
 
       tag3 =
-        :crypto.hash(:md5, "dummy-stack-id" <> "dummy-shape-handle" <> "3")
+        :crypto.hash(:md5, "dummy-stack-id" <> "dummy-shape-handle" <> "sublink:0:" <> "3")
         |> Base.encode16(case: :lower)
 
       assert [
@@ -419,12 +422,13 @@ defmodule Electric.Shapes.QueryingTest do
                  move_in_values
                )
 
+      # Tags now include sublink index in the hash
       tag1 =
-        :crypto.hash(:md5, "dummy-stack-id" <> "dummy-shape-handle" <> "1")
+        :crypto.hash(:md5, "dummy-stack-id" <> "dummy-shape-handle" <> "sublink:0:" <> "1")
         |> Base.encode16(case: :lower)
 
       tag2 =
-        :crypto.hash(:md5, "dummy-stack-id" <> "dummy-shape-handle" <> "2")
+        :crypto.hash(:md5, "dummy-stack-id" <> "dummy-shape-handle" <> "sublink:0:" <> "2")
         |> Base.encode16(case: :lower)
 
       assert [
@@ -467,17 +471,18 @@ defmodule Electric.Shapes.QueryingTest do
                  move_in_values
                )
 
+      # Tags now include sublink index in the hash
       tag1 =
         :crypto.hash(
           :md5,
-          "dummy-stack-id" <> "dummy-shape-handle" <> "parent_id1:1" <> "parent_id2:1"
+          "dummy-stack-id" <> "dummy-shape-handle" <> "sublink:0:" <> "parent_id1:1" <> ":parent_id2:1"
         )
         |> Base.encode16(case: :lower)
 
       tag2 =
         :crypto.hash(
           :md5,
-          "dummy-stack-id" <> "dummy-shape-handle" <> "parent_id1:2" <> "parent_id2:2"
+          "dummy-stack-id" <> "dummy-shape-handle" <> "sublink:0:" <> "parent_id1:2" <> ":parent_id2:2"
         )
         |> Base.encode16(case: :lower)
 

@@ -2453,7 +2453,7 @@ defmodule Electric.Plug.RouterTest do
            "INSERT INTO parent (id, include_parent) VALUES (1, true)",
            "INSERT INTO child (id, parent_id, include_child) VALUES (1, 1, true)"
          ]
-    test "subquery combined with OR should return a 409 on move-out", %{
+    test "subquery combined with OR handles move-out without must-refetch", %{
       opts: opts,
       db_conn: db_conn
     } do
@@ -2472,11 +2472,17 @@ defmodule Electric.Plug.RouterTest do
 
       task = live_shape_req(req, opts)
 
-      # Setting include_parent to false may cause a move out, but it doesn't in this case because include_child is still true
+      # Setting include_parent to false causes a move-out for the subquery tag,
+      # but the row still matches include_child = true, so it should remain in shape.
+      # A move-out event should be emitted for the subquery tag.
       Postgrex.query!(db_conn, "UPDATE parent SET include_parent = false WHERE id = 1", [])
 
-      # Rather than working out whether this is a move out or not we return a 409
-      assert {_req, 409, _response} = Task.await(task)
+      # Should return 200 with a move-out event (not 409)
+      assert {_req, 200, response} = Task.await(task)
+      # Verify we got a move-out event
+      assert Enum.any?(response, fn msg ->
+               match?(%{"headers" => %{"event" => "move-out"}}, msg)
+             end)
     end
 
     @tag with_sql: [
@@ -2485,7 +2491,7 @@ defmodule Electric.Plug.RouterTest do
            "INSERT INTO parent (id, include_parent) VALUES (1, false)",
            "INSERT INTO child (id, parent_id, include_child) VALUES (1, 1, true)"
          ]
-    test "subquery combined with OR should return a 409 on move-in", %{
+    test "subquery combined with OR handles move-in without must-refetch", %{
       opts: opts,
       db_conn: db_conn
     } do
@@ -2504,11 +2510,15 @@ defmodule Electric.Plug.RouterTest do
 
       task = live_shape_req(req, opts)
 
-      # Setting include_parent to true may cause a move in, but it doesn't in this case because include_child is already true
+      # Setting include_parent to true causes a move-in via the subquery.
+      # The row already exists in the shape (due to include_child = true),
+      # so we expect an update that adds the subquery tag, not a new insert.
       Postgrex.query!(db_conn, "UPDATE parent SET include_parent = true WHERE id = 1", [])
 
-      # Rather than working out whether this is a move in or not we return a 409
-      assert {_req, 409, _response} = Task.await(task)
+      # Should return 200 (not 409) - the move-in is handled correctly
+      # Since the row already exists, there may be an update with new tags
+      # or the move-in snapshot may be empty (row already present)
+      assert {_req, 200, _response} = Task.await(task)
     end
 
     @tag with_sql: [
@@ -2519,7 +2529,7 @@ defmodule Electric.Plug.RouterTest do
            "INSERT INTO parent (id, grandparent_id, include_parent) VALUES (1, 1, true)",
            "INSERT INTO child (id, parent_id) VALUES (1, 1)"
          ]
-    test "nested subquery combined with OR should return a 409 on move-in", %{
+    test "nested subquery combined with OR handles move-in without must-refetch", %{
       opts: opts,
       db_conn: db_conn
     } do
@@ -2538,15 +2548,18 @@ defmodule Electric.Plug.RouterTest do
 
       task = live_shape_req(req, opts)
 
-      # Setting include_grandparent to true may cause a move in, but it doesn't in this case because include_parent is already true
+      # Setting include_grandparent to true causes a move-in in the parent shape's
+      # dependency (grandparent), which then affects the parent. Since the parent
+      # row already matches (include_parent = true), the parent is still in the
+      # materialized set, so the child row remains in shape.
       Postgrex.query!(
         db_conn,
         "UPDATE grandparent SET include_grandparent = true WHERE id = 1",
         []
       )
 
-      # Rather than working out whether this is a move in or not we return a 409
-      assert {_req, 409, _response} = Task.await(task)
+      # Should return 200 (not 409) - nested OR subqueries are handled correctly
+      assert {_req, 200, _response} = Task.await(task)
     end
 
     @tag with_sql: [
