@@ -4,14 +4,16 @@ defmodule Electric.Shapes.Querying do
   alias Electric.Shapes.Shape
   alias Electric.Telemetry.OpenTelemetry
 
-  def query_move_in(conn, stack_id, shape_handle, shape, {where, params}) do
+  def query_move_in(conn, stack_id, shape_handle, shape, {where, params}, sublink_index \\ nil) do
     table = Utils.relation_to_sql(shape.root_table)
 
+    # Pass sublink_index to filter tags in both the JSON headers and the tags array
+    # This prevents "phantom" tags for other dependencies in OR-combined subqueries
     {json_like_select, _} =
-      json_like_select(shape, %{"is_move_in" => true}, stack_id, shape_handle)
+      json_like_select(shape, %{"is_move_in" => true}, stack_id, shape_handle, sublink_index)
 
     key_select = key_select(shape)
-    tag_select = make_tags(shape, stack_id, shape_handle) |> Enum.join(", ")
+    tag_select = make_tags(shape, stack_id, shape_handle, sublink_index) |> Enum.join(", ")
 
     query =
       Postgrex.prepare!(
@@ -147,8 +149,13 @@ defmodule Electric.Shapes.Querying do
   # Converts a tag structure to something PG select can fill, but returns a list of separate strings for each tag
   # - it's up to the caller to interpolate them into the query correctly
   # tag_structure is now a map from sublink ref (e.g. ["$sublink", "0"]) to pattern
-  defp make_tags(%Shape{tag_structure: tag_structure}, stack_id, shape_handle) do
-    Enum.flat_map(tag_structure, fn {["$sublink", sublink_index], pattern} ->
+  # only_sublink_index: if provided, only generates tags for that specific dependency
+  defp make_tags(%Shape{tag_structure: tag_structure}, stack_id, shape_handle, only_sublink_index) do
+    tag_structure
+    |> Enum.filter(fn {["$sublink", idx], _} ->
+      is_nil(only_sublink_index) or idx == only_sublink_index
+    end)
+    |> Enum.flat_map(fn {["$sublink", sublink_index], pattern} ->
       # Each pattern produces one tag string
       # The hash must include the sublink index to match SubqueryMoves.make_value_hash
       Enum.map(pattern, fn
@@ -169,9 +176,10 @@ defmodule Electric.Shapes.Querying do
          } = shape,
          additional_headers,
          stack_id,
-         shape_handle
+         shape_handle,
+         only_sublink_index \\ nil
        ) do
-    tags = make_tags(shape, stack_id, shape_handle)
+    tags = make_tags(shape, stack_id, shape_handle, only_sublink_index)
     key_part = build_key_part(shape)
     value_part = build_value_part(columns)
     headers_part = build_headers_part(root_table, additional_headers, tags)

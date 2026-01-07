@@ -60,6 +60,7 @@ defmodule Electric.Shapes.PartialModes do
     consumer_pid = Access.fetch!(opts, :consumer_pid)
     pool = Manager.pool_name(opts[:stack_id], :snapshot)
     results_fn = Access.fetch!(opts, :results_fn)
+    sublink_index = opts[:sublink_index]
 
     :telemetry.execute([:electric, :subqueries, :move_in_triggered], %{count: 1}, %{
       stack_id: opts[:stack_id]
@@ -76,7 +77,7 @@ defmodule Electric.Shapes.PartialModes do
           end,
           query_fn: fn conn, pg_snapshot, _ ->
             result =
-              Querying.query_move_in(conn, opts[:stack_id], shape_handle, shape, where)
+              Querying.query_move_in(conn, opts[:stack_id], shape_handle, shape, where, sublink_index)
               |> results_fn.(pg_snapshot)
 
             {key_set, snapshot} = result

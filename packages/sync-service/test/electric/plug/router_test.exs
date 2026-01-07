@@ -2300,7 +2300,7 @@ defmodule Electric.Plug.RouterTest do
       assert {req, 200, [data, snapshot_end]} = shape_req(req, opts)
 
       tag =
-        :crypto.hash(:md5, stack_id <> req.handle <> "1")
+        :crypto.hash(:md5, stack_id <> req.handle <> "sublink:0:" <> "1")
         |> Base.encode16(case: :lower)
 
       assert %{"id" => "1", "parent_id" => "1", "value" => "10"} = data["value"]
@@ -2313,7 +2313,7 @@ defmodule Electric.Plug.RouterTest do
       Postgrex.query!(db_conn, "UPDATE parent SET value = 1 WHERE id = 2", [])
 
       tag2 =
-        :crypto.hash(:md5, stack_id <> req.handle <> "2")
+        :crypto.hash(:md5, stack_id <> req.handle <> "sublink:0:" <> "2")
         |> Base.encode16(case: :lower)
 
       assert {_, 200, [data, %{"headers" => %{"control" => "snapshot-end"}}, up_to_date_ctl()]} =
@@ -2598,7 +2598,7 @@ defmodule Electric.Plug.RouterTest do
       Postgrex.query!(ctx.db_conn, "INSERT INTO members (user_id, team_id) VALUES (1, 2)")
 
       tag =
-        :crypto.hash(:md5, ctx.stack_id <> req.handle <> "2")
+        :crypto.hash(:md5, ctx.stack_id <> req.handle <> "sublink:0:" <> "2")
         |> Base.encode16(case: :lower)
 
       assert {req, 200,
@@ -2675,7 +2675,7 @@ defmodule Electric.Plug.RouterTest do
       )
 
       tag =
-        :crypto.hash(:md5, ctx.stack_id <> req.handle <> "user_id:2" <> "team_id:2")
+        :crypto.hash(:md5, ctx.stack_id <> req.handle <> "sublink:0:" <> "user_id:2" <> ":" <> "team_id:2")
         |> Base.encode16(case: :lower)
 
       assert {req, 200,
@@ -2746,7 +2746,7 @@ defmodule Electric.Plug.RouterTest do
       Postgrex.query!(ctx.db_conn, "UPDATE parent SET other_value = 10 WHERE id = 2")
 
       tag =
-        :crypto.hash(:md5, ctx.stack_id <> req.handle <> "20")
+        :crypto.hash(:md5, ctx.stack_id <> req.handle <> "sublink:0:" <> "20")
         |> Base.encode16(case: :lower)
 
       assert {_, 200,
@@ -2776,7 +2776,7 @@ defmodule Electric.Plug.RouterTest do
       # Should contain the data record and the snapshot-end control message
       assert length(response) == 2
 
-      tag = :crypto.hash(:md5, ctx.stack_id <> req.handle <> "1") |> Base.encode16(case: :lower)
+      tag = :crypto.hash(:md5, ctx.stack_id <> req.handle <> "sublink:0:" <> "1") |> Base.encode16(case: :lower)
 
       assert %{
                "value" => %{"id" => "1", "parentId" => "1", "Value" => "10"},
@@ -3189,16 +3189,17 @@ defmodule Electric.Plug.RouterTest do
                Enum.find(response, &Map.has_key?(&1, "key"))
 
       # Deactivate level3_a - row should remain because level3_b is still active
+      # The level2 row loses the l3a tag but keeps the l3b tag, so no move-out propagates
       task = live_shape_req(req, ctx.opts)
       Postgrex.query!(ctx.db_conn, "UPDATE level3_a SET active = false WHERE id = 1", [])
 
       assert {req, 200, response} = Task.await(task)
-      # Should get a move-out for the level3_a tag
-      assert Enum.any?(response, fn msg ->
-               match?(%{"headers" => %{"event" => "move-out"}}, msg)
+      # No move-out should be generated since the row is still valid via l3b
+      assert Enum.all?(response, fn msg ->
+               not match?(%{"headers" => %{"event" => "move-out"}}, msg)
              end)
 
-      # Now deactivate level3_b - row should be fully removed
+      # Now deactivate level3_b - row should be fully removed (all tags gone)
       task = live_shape_req(req, ctx.opts)
       Postgrex.query!(ctx.db_conn, "UPDATE level3_b SET active = false WHERE id = 10", [])
 
