@@ -115,9 +115,9 @@ defmodule Electric.Postgres.Inspector do
   @doc """
   Clean up all information about a given relation using a provided inspector.
   """
-  @spec clean(relation_id(), inspector()) :: :ok
-  def clean(relation_id, {module, opts}) when is_relation_id(relation_id) do
-    module.clean(relation_id, opts)
+  @spec purge_relation_info(relation_id(), inspector()) :: :ok
+  def purge_relation_info(relation_id, {module, opts}) when is_relation_id(relation_id) do
+    module.purge_relation_info(relation_id, opts)
   end
 
   @doc """
