@@ -91,7 +91,11 @@ defmodule Electric.Client.MoveIntegrationTest do
   end
 
   defp insert_parent(ctx, id, value) do
-    Postgrex.query!(ctx.db_conn, ~s[INSERT INTO "#{ctx.parent_table}" (id, value) VALUES ($1, $2)], [id, value])
+    Postgrex.query!(
+      ctx.db_conn,
+      ~s[INSERT INTO "#{ctx.parent_table}" (id, value) VALUES ($1, $2)],
+      [id, value]
+    )
   end
 
   defp insert_child(ctx, id, parent_id, name) do
@@ -103,7 +107,10 @@ defmodule Electric.Client.MoveIntegrationTest do
   end
 
   defp update_parent(ctx, id, value) do
-    Postgrex.query!(ctx.db_conn, ~s[UPDATE "#{ctx.parent_table}" SET value = $1 WHERE id = $2], [value, id])
+    Postgrex.query!(ctx.db_conn, ~s[UPDATE "#{ctx.parent_table}" SET value = $1 WHERE id = $2], [
+      value,
+      id
+    ])
   end
 
   describe "shapes with subqueries" do
