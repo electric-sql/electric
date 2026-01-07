@@ -29,5 +29,7 @@ if config_env() == :test do
     # use a non-default replication stream id so we can run the client
     # tests at the same time as an active electric instance
     replication_stream_id: "client_tests",
-    storage_dir: Path.join(System.tmp_dir!(), "electric/client-tests#{System.monotonic_time()}")
+    storage_dir: Path.join(System.tmp_dir!(), "electric/client-tests#{System.monotonic_time()}"),
+    # Enable subqueries for move support testing
+    feature_flags: ["allow_subqueries", "tagged_subqueries"]
 end

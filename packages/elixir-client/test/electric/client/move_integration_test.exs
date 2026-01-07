@@ -11,11 +11,9 @@ defmodule Electric.Client.MoveIntegrationTest do
 
   use ExUnit.Case, async: false
 
-  import Support.ClientHelpers
-
   alias Electric.Client
   alias Electric.Client.Fetch
-  alias Electric.Client.Message.{ChangeMessage, ControlMessage, EventMessage, Headers}
+  alias Electric.Client.Message.{ChangeMessage, ControlMessage}
   alias Electric.Client.ShapeDefinition
 
   @moduletag :move_support
@@ -108,12 +106,6 @@ defmodule Electric.Client.MoveIntegrationTest do
     Postgrex.query!(ctx.db_conn, ~s[UPDATE "#{ctx.parent_table}" SET value = $1 WHERE id = $2], [value, id])
   end
 
-  defp delete_parent(ctx, id) do
-    # First delete children to satisfy FK constraint
-    Postgrex.query!(ctx.db_conn, ~s[DELETE FROM "#{ctx.child_table}" WHERE parent_id = $1], [id])
-    Postgrex.query!(ctx.db_conn, ~s[DELETE FROM "#{ctx.parent_table}" WHERE id = $1], [id])
-  end
-
   describe "shapes with subqueries" do
     setup [:with_parent_child_tables, :setup_client]
 
@@ -156,7 +148,7 @@ defmodule Electric.Client.MoveIntegrationTest do
       assert is_list(child_msg.headers.tags)
     end
 
-    test "receives move-out event when parent no longer matches", ctx do
+    test "generates synthetic delete when parent no longer matches", ctx do
       # Insert parent and child
       insert_parent(ctx, 1, 1)
       insert_child(ctx, 1, 1, "Child 1")
@@ -192,16 +184,12 @@ defmodule Electric.Client.MoveIntegrationTest do
       # Update parent to no longer match the subquery condition
       update_parent(ctx, 1, 99)
 
-      # Should receive a move-out event
-      assert_receive {:msg, %EventMessage{event: :move_out, patterns: patterns}}, 5000
-      assert is_list(patterns)
-      assert length(patterns) > 0
+      # Should receive a synthetic delete (the client processes move-out events
+      # internally and generates deletes for rows that have lost all their tags)
+      assert_receive {:msg, %ChangeMessage{headers: %{operation: :delete}} = delete_msg}, 5000
 
-      # Each pattern should have pos and value
-      Enum.each(patterns, fn pattern ->
-        assert Map.has_key?(pattern, :pos)
-        assert Map.has_key?(pattern, :value)
-      end)
+      # The delete message should have the correct key (child row)
+      assert delete_msg.key =~ ~r/child.*1/
 
       stop_supervised(task)
     end
@@ -247,57 +235,6 @@ defmodule Electric.Client.MoveIntegrationTest do
       assert msg.headers.operation == :insert
 
       stop_supervised(task)
-    end
-
-    test "move-out generates synthetic delete for row with single tag", ctx do
-      # This test verifies the client-side move state tracking
-      insert_parent(ctx, 1, 1)
-      insert_child(ctx, 1, 1, "Child 1")
-
-      where = ~s[parent_id IN (SELECT id FROM "#{ctx.parent_table}" WHERE value = 1)]
-      {:ok, shape} = ShapeDefinition.new(ctx.child_table, where: where, namespace: "public")
-
-      on_exit(fn ->
-        ExUnit.CaptureLog.capture_log(fn ->
-          Client.delete_shape(ctx.client, shape)
-        end)
-      end)
-
-      parent = self()
-      collected_msgs = :ets.new(:msgs, [:bag, :public])
-
-      {:ok, task} =
-        start_supervised(
-          {Task,
-           fn ->
-             Client.stream(ctx.client, shape)
-             |> Stream.each(fn msg ->
-               :ets.insert(collected_msgs, {:msg, msg})
-               send(parent, {:msg, msg})
-             end)
-             |> Stream.run()
-           end},
-          restart: :temporary
-        )
-
-      # Wait for initial data
-      assert_receive {:msg, %ChangeMessage{value: %{"id" => 1}, headers: %{operation: :insert}}},
-                     5000
-
-      assert_receive {:msg, %ControlMessage{control: :up_to_date}}, 5000
-
-      # Trigger move-out
-      update_parent(ctx, 1, 99)
-
-      # Wait for move-out event
-      assert_receive {:msg, %EventMessage{event: :move_out}}, 5000
-
-      # The stream should generate a synthetic delete
-      # (this happens in the Stream module when processing move-out)
-      assert_receive {:msg, %ChangeMessage{headers: %{operation: :delete}}}, 5000
-
-      stop_supervised(task)
-      :ets.delete(collected_msgs)
     end
 
     test "row with multiple tags survives partial move-out", ctx do
@@ -391,9 +328,8 @@ defmodule Electric.Client.MoveIntegrationTest do
       # Trigger move-out for parent
       update_parent(ctx, 1, 99)
 
-      # Should receive move-out event
-      assert_receive {:msg, %EventMessage{event: :move_out}}, 5000
-
+      # The Stream module processes move-out events internally and generates
+      # synthetic deletes for all rows that have lost all their tags.
       # Should receive synthetic deletes for all three children
       delete_ids =
         receive_all_deletes([], 3, 5000)
