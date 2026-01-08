@@ -26,6 +26,10 @@ defmodule Electric.Shapes.Consumer.MoveHandling do
     name = Electric.Utils.uuid4()
     consumer_pid = self()
 
+    # Find the index of this dependency (used for tagging)
+    index = Enum.find_index(state.shape.shape_dependencies_handles, &(&1 == dep_handle))
+    sublink_index = Integer.to_string(index)
+
     # Start async query - don't block on snapshot
     Electric.ProcessRegistry.name(state.stack_id, Electric.StackTaskSupervisor)
     |> PartialModes.query_move_in_async(
@@ -34,6 +38,9 @@ defmodule Electric.Shapes.Consumer.MoveHandling do
       formed_where_clause,
       stack_id: state.stack_id,
       consumer_pid: consumer_pid,
+      # Pass the sublink_index so move-in query only generates tags for this specific dependency
+      # This prevents phantom tags for other OR-combined dependencies
+      sublink_index: sublink_index,
       results_fn: fn stream, pg_snapshot ->
         task_pid = self()
 
@@ -52,14 +59,12 @@ defmodule Electric.Shapes.Consumer.MoveHandling do
       move_in_name: name
     )
 
-    index = Enum.find_index(state.shape.shape_dependencies_handles, &(&1 == dep_handle))
-
     # Add to waiting WITHOUT blocking (snapshot will be set later via message)
     move_handling_state =
       MoveIns.add_waiting(
         state.move_handling_state,
         name,
-        {["$sublink", Integer.to_string(index)], MapSet.new(Enum.map(new_values, &elem(&1, 0)))}
+        {["$sublink", sublink_index], MapSet.new(Enum.map(new_values, &elem(&1, 0)))}
       )
 
     Logger.debug("Move-in #{name} has been triggered from #{dep_handle}")

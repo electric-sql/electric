@@ -36,7 +36,7 @@ defmodule Electric.Shapes.Shape do
     :explicitly_selected_columns,
     shape_dependencies: [],
     shape_dependencies_handles: [],
-    tag_structure: [],
+    tag_structure: %{},
     subquery_comparison_expressions: %{},
     log_mode: :full,
     flags: %{},
@@ -66,7 +66,7 @@ defmodule Electric.Shapes.Shape do
           where: Electric.Replication.Eval.Expr.t() | nil,
           selected_columns: [String.t(), ...],
           explicitly_selected_columns: [String.t(), ...],
-          tag_structure: [String.t() | [String.t(), ...]],
+          tag_structure: %{optional([String.t()]) => [String.t() | {:hash_together, [String.t(), ...]}]},
           replica: replica(),
           storage: storage_config() | nil,
           shape_dependencies: [t(), ...],
@@ -308,12 +308,10 @@ defmodule Electric.Shapes.Shape do
     end
   end
 
-  defp check_single_subquery(subqueries) when length(subqueries) <= 1, do: :ok
-
-  defp check_single_subquery(_subqueries) do
-    {:error,
-     {:where, "Multiple subqueries at the same level in a where clause are not supported"}}
-  end
+  # Multiple subqueries are now supported when OR-combined at the same boolean level.
+  # For now, we allow any number of subqueries - the tag_structure handling in SubqueryMoves
+  # will correctly handle per-dependency tagging.
+  defp check_single_subquery(_subqueries), do: :ok
 
   defp make_opts_from_select(select, opts) do
     with {:ok, {columns, from, where}} <- Parser.extract_parts_from_select(select) do
@@ -568,7 +566,8 @@ defmodule Electric.Shapes.Shape do
     if is_struct(change, Changes.UpdatedRecord) and change.changed_columns == MapSet.new() do
       []
     else
-      [fill_move_tags(change, shape, opts[:stack_id], opts[:shape_handle])]
+      extra_refs = opts[:extra_refs] || {%{}, %{}}
+      [fill_move_tags(change, shape, opts[:stack_id], opts[:shape_handle], extra_refs)]
     end
   end
 
@@ -593,7 +592,7 @@ defmodule Electric.Shapes.Shape do
 
     if WhereClause.includes_record?(where, record, used_extra_refs) do
       change
-      |> fill_move_tags(shape, opts[:stack_id], opts[:shape_handle])
+      |> fill_move_tags(shape, opts[:stack_id], opts[:shape_handle], extra_refs)
       |> filter_change_columns(selected_columns)
       |> List.wrap()
     else
@@ -606,7 +605,8 @@ defmodule Electric.Shapes.Shape do
         %Changes.UpdatedRecord{old_record: old_record, record: record} = change,
         opts
       ) do
-    {extra_refs_old, extra_refs_new} = opts[:extra_refs] || {%{}, %{}}
+    extra_refs = opts[:extra_refs] || {%{}, %{}}
+    {extra_refs_old, extra_refs_new} = extra_refs
     old_record_in_shape = WhereClause.includes_record?(where, old_record, extra_refs_old)
     new_record_in_shape = WhereClause.includes_record?(where, record, extra_refs_new)
 
@@ -619,7 +619,7 @@ defmodule Electric.Shapes.Shape do
       end
 
     converted_changes
-    |> Enum.map(&fill_move_tags(&1, shape, opts[:stack_id], opts[:shape_handle]))
+    |> Enum.map(&fill_move_tags(&1, shape, opts[:stack_id], opts[:shape_handle], extra_refs))
     |> Enum.map(&filter_change_columns(&1, selected_columns))
     |> Enum.filter(&filtered_columns_changed?/1)
   end
@@ -630,34 +630,42 @@ defmodule Electric.Shapes.Shape do
     Changes.filter_columns(change, selected_columns)
   end
 
-  def fill_move_tags(change, %__MODULE__{tag_structure: []}, _, _), do: change
+  def fill_move_tags(change, %__MODULE__{tag_structure: tag_structure}, _, _, _extra_refs)
+      when tag_structure == %{},
+      do: change
 
-  def fill_move_tags(%Changes.NewRecord{move_tags: [_ | _]} = change, _, _, _), do: change
-  def fill_move_tags(%Changes.UpdatedRecord{move_tags: [_ | _]} = change, _, _, _), do: change
-  def fill_move_tags(%Changes.DeletedRecord{move_tags: [_ | _]} = change, _, _, _), do: change
+  def fill_move_tags(%Changes.NewRecord{move_tags: [_ | _]} = change, _, _, _, _), do: change
+  def fill_move_tags(%Changes.UpdatedRecord{move_tags: [_ | _]} = change, _, _, _, _), do: change
+  def fill_move_tags(%Changes.DeletedRecord{move_tags: [_ | _]} = change, _, _, _, _), do: change
 
   def fill_move_tags(
         %Changes.NewRecord{record: record} = change,
         %__MODULE__{
-          tag_structure: tag_structure
-        },
+          tag_structure: tag_structure,
+          subquery_comparison_expressions: comparison_expressions
+        } = shape,
         stack_id,
-        shape_handle
+        shape_handle,
+        {_extra_refs_old, extra_refs_new}
       ) do
-    move_tags = make_tags_from_pattern(tag_structure, record, stack_id, shape_handle)
+    move_tags = make_tags_from_pattern(tag_structure, comparison_expressions, record, extra_refs_new, stack_id, shape_handle, shape)
     %{change | move_tags: move_tags}
   end
 
   def fill_move_tags(
         %Changes.UpdatedRecord{record: record, old_record: old_record} = change,
-        %__MODULE__{tag_structure: tag_structure},
+        %__MODULE__{
+          tag_structure: tag_structure,
+          subquery_comparison_expressions: comparison_expressions
+        } = shape,
         stack_id,
-        shape_handle
+        shape_handle,
+        {extra_refs_old, extra_refs_new}
       ) do
-    move_tags = make_tags_from_pattern(tag_structure, record, stack_id, shape_handle)
+    move_tags = make_tags_from_pattern(tag_structure, comparison_expressions, record, extra_refs_new, stack_id, shape_handle, shape)
 
     old_move_tags =
-      make_tags_from_pattern(tag_structure, old_record, stack_id, shape_handle) --
+      make_tags_from_pattern(tag_structure, comparison_expressions, old_record, extra_refs_old, stack_id, shape_handle, shape) --
         move_tags
 
     %{change | move_tags: move_tags, removed_move_tags: old_move_tags}
@@ -666,27 +674,84 @@ defmodule Electric.Shapes.Shape do
   def fill_move_tags(
         %Changes.DeletedRecord{old_record: record} = change,
         %__MODULE__{
-          tag_structure: tag_structure
-        },
+          tag_structure: tag_structure,
+          subquery_comparison_expressions: comparison_expressions
+        } = shape,
         stack_id,
-        shape_handle
+        shape_handle,
+        {extra_refs_old, _extra_refs_new}
       ) do
-    %{change | move_tags: make_tags_from_pattern(tag_structure, record, stack_id, shape_handle)}
+    move_tags = make_tags_from_pattern(tag_structure, comparison_expressions, record, extra_refs_old, stack_id, shape_handle, shape)
+    %{change | move_tags: move_tags}
   end
 
-  defp make_tags_from_pattern(patterns, record, stack_id, shape_handle) do
-    Enum.map(patterns, fn pattern ->
-      Enum.map(pattern, fn
-        column_name when is_binary(column_name) ->
-          SubqueryMoves.make_value_hash(stack_id, shape_handle, Map.get(record, column_name))
+  defp make_tags_from_pattern(tag_structure_map, comparison_expressions, record, extra_refs, stack_id, shape_handle, _shape) do
+    # tag_structure_map is now %{["$sublink", "0"] => ["x"], ["$sublink", "1"] => ["y"]}
+    # We iterate over each dependency and create a tag only if the record's value is in extra_refs
+    tag_structure_map
+    |> Enum.flat_map(fn {sublink_ref, pattern} ->
+      # Extract the sublink index from the ref path (e.g. ["$sublink", "0"] -> "0")
+      sublink_index = List.last(sublink_ref)
 
-        {:hash_together, columns} ->
-          column_parts = Enum.map(columns, &(&1 <> ":" <> Map.get(record, &1)))
-          SubqueryMoves.make_value_hash(stack_id, shape_handle, Enum.join(column_parts, ":"))
-      end)
-      |> Enum.join("/")
+      # Check if this record's value is in the materialized set for this dependency
+      if is_value_in_dependency?(record, sublink_ref, comparison_expressions, extra_refs) do
+        tag =
+          Enum.map(pattern, fn
+            column_name when is_binary(column_name) ->
+              SubqueryMoves.make_value_hash(stack_id, shape_handle, sublink_index, Map.get(record, column_name))
+
+            {:hash_together, columns} ->
+              column_parts = Enum.map(columns, &(&1 <> ":" <> Map.get(record, &1)))
+              SubqueryMoves.make_value_hash(stack_id, shape_handle, sublink_index, Enum.join(column_parts, ":"))
+          end)
+          |> Enum.join("/")
+
+        [tag]
+      else
+        []
+      end
     end)
   end
+
+  # Check if the record's value for a given dependency is in the materialized set
+  defp is_value_in_dependency?(_record, _sublink_ref, _comparison_expressions, extra_refs)
+       when extra_refs == %{},
+       do: true
+
+  defp is_value_in_dependency?(record, sublink_ref, comparison_expressions, extra_refs) do
+    case Map.get(extra_refs, sublink_ref) do
+      nil ->
+        # No materialized set for this dependency - include tag (conservative)
+        true
+
+      materialized_set ->
+        # Get the comparison expression to extract the column value from the record
+        case Map.get(comparison_expressions, sublink_ref) do
+          nil ->
+            true
+
+          expr ->
+            # Evaluate the expression to get the value to check
+            case get_comparison_value(record, expr) do
+              nil -> true
+              value -> MapSet.member?(materialized_set, value)
+            end
+        end
+    end
+  end
+
+  # Extract the value from the record based on the comparison expression
+  defp get_comparison_value(record, %{eval: %Parser.Ref{path: [column]}}) do
+    Map.get(record, column)
+  end
+
+  defp get_comparison_value(record, %{eval: %Parser.RowExpr{elements: elements}}) do
+    elements
+    |> Enum.map(fn %Parser.Ref{path: [col]} -> Map.get(record, col) end)
+    |> List.to_tuple()
+  end
+
+  defp get_comparison_value(_record, _expr), do: nil
 
   defp filtered_columns_changed?(%Changes.UpdatedRecord{old_record: record, record: record}),
     do: false

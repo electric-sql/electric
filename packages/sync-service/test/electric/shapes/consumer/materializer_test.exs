@@ -557,6 +557,44 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
       refute_received {:materializer_changes, _, _}
     end
 
+    test "row with multiple tags only deleted when all tags removed (UPSERT semantics)", ctx do
+      ctx = with_materializer(ctx)
+
+      # Insert row with tagA
+      Materializer.new_changes(ctx, [
+        %Changes.NewRecord{key: "1", record: %{"value" => "10"}, move_tags: ["tagA"]}
+      ])
+
+      assert Materializer.get_link_values(ctx) == MapSet.new([10])
+      assert_receive {:materializer_changes, _, %{move_in: [{10, "10"}]}}
+
+      # UPSERT same row with tagB (simulates a second insert with different tag)
+      Materializer.new_changes(ctx, [
+        %Changes.NewRecord{key: "1", record: %{"value" => "10"}, move_tags: ["tagB"]}
+      ])
+
+      # Value should still be present
+      assert Materializer.get_link_values(ctx) == MapSet.new([10])
+      # No new move_in since value already present
+      refute_received {:materializer_changes, _, _}
+
+      # move-out tagA -> row should remain because tagB still exists
+      Materializer.new_changes(ctx, [
+        %{headers: %{event: "move-out", patterns: [%{pos: 0, value: "tagA"}]}}
+      ])
+
+      assert Materializer.get_link_values(ctx) == MapSet.new([10])
+      refute_received {:materializer_changes, _, _}
+
+      # move-out tagB -> row should now be deleted (all tags removed)
+      Materializer.new_changes(ctx, [
+        %{headers: %{event: "move-out", patterns: [%{pos: 0, value: "tagB"}]}}
+      ])
+
+      assert Materializer.get_link_values(ctx) == MapSet.new([])
+      assert_receive {:materializer_changes, _, %{move_out: [{10, "10"}]}}
+    end
+
     test "runtime move-in tags are tracked correctly if read from a storage range",
          %{
            shape_storage: shape_storage,

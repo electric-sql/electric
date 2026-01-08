@@ -1,5 +1,5 @@
-import { Message, Offset, Row } from './types'
-import { isChangeMessage, isControlMessage } from './helpers'
+import { Message, MoveTag, Offset, Row } from './types'
+import { isChangeMessage, isControlMessage, isEventMessage } from './helpers'
 import { FetchError } from './error'
 import { LogMode, ShapeStreamInterface } from './client'
 
@@ -54,6 +54,11 @@ export class Shape<T extends Row<unknown> = Row> {
   readonly #subscribers = new Map<number, ShapeChangedCallback<T>>()
   readonly #insertedKeys = new Set<string>()
   readonly #requestedSubSnapshots = new Set<string>()
+  // Tag indexes for OR-combined subqueries support
+  // keyTags: tracks which tags are associated with each row (key -> Set of tags)
+  readonly #keyTags: Map<string, Set<MoveTag>> = new Map()
+  // tagKeys: inverse index for fast move-out lookups (tag -> Set of keys)
+  readonly #tagKeys: Map<MoveTag, Set<string>> = new Map()
   #reexecuteSnapshotsPending = false
   #status: ShapeStatus = `syncing`
   #error: FetchError | false = false
@@ -172,30 +177,42 @@ export class Shape<T extends Row<unknown> = Row> {
     messages.forEach((message) => {
       if (isChangeMessage(message)) {
         shouldNotify = this.#updateShapeStatus(`syncing`)
+        const tags = message.headers.tags ?? []
+        const removedTags = message.headers.removed_tags ?? []
+
         if (this.mode === `full`) {
           switch (message.headers.operation) {
             case `insert`:
-              this.#data.set(message.key, message.value)
+              // UPSERT semantics: if key exists, merge tags; otherwise insert new row
+              if (this.#data.has(message.key)) {
+                // Key exists - merge row data and tags
+                this.#data.set(message.key, {
+                  ...this.#data.get(message.key)!,
+                  ...message.value,
+                })
+                this.#addTags(message.key, tags)
+              } else {
+                // New key - insert
+                this.#data.set(message.key, message.value)
+                this.#addTags(message.key, tags)
+              }
               break
             case `update`:
-              this.#data.set(message.key, {
-                ...this.#data.get(message.key)!,
-                ...message.value,
-              })
-              break
-            case `delete`:
-              this.#data.delete(message.key)
-              break
-          }
-        } else {
-          // changes_only: only apply updates/deletes for keys for which we observed an insert
-          switch (message.headers.operation) {
-            case `insert`:
-              this.#insertedKeys.add(message.key)
-              this.#data.set(message.key, message.value)
-              break
-            case `update`:
-              if (this.#insertedKeys.has(message.key)) {
+              // Remove old tags first, then add new tags
+              this.#removeTags(message.key, removedTags)
+              this.#addTags(message.key, tags)
+
+              // Check if all tags were removed - if so, delete the row
+              // Note: #removeTags deletes the key from #keyTags when it becomes empty,
+              // so we treat undefined as "no tags remain"
+              const keyTagsAfterUpdate = this.#keyTags.get(message.key)
+              if (
+                (!keyTagsAfterUpdate || keyTagsAfterUpdate.size === 0) &&
+                tags.length === 0
+              ) {
+                this.#data.delete(message.key)
+                this.#keyTags.delete(message.key)
+              } else {
                 this.#data.set(message.key, {
                   ...this.#data.get(message.key)!,
                   ...message.value,
@@ -203,12 +220,74 @@ export class Shape<T extends Row<unknown> = Row> {
               }
               break
             case `delete`:
+              this.#data.delete(message.key)
+              // Clean up tag indexes for this key
+              this.#removeAllTagsForKey(message.key)
+              break
+          }
+        } else {
+          // changes_only: only apply updates/deletes for keys for which we observed an insert
+          switch (message.headers.operation) {
+            case `insert`:
+              // UPSERT semantics for changes_only mode
+              if (this.#insertedKeys.has(message.key)) {
+                // Key exists - merge row data and tags
+                this.#data.set(message.key, {
+                  ...this.#data.get(message.key)!,
+                  ...message.value,
+                })
+                this.#addTags(message.key, tags)
+              } else {
+                this.#insertedKeys.add(message.key)
+                this.#data.set(message.key, message.value)
+                this.#addTags(message.key, tags)
+              }
+              break
+            case `update`:
+              if (this.#insertedKeys.has(message.key)) {
+                // Remove old tags first, then add new tags
+                this.#removeTags(message.key, removedTags)
+                this.#addTags(message.key, tags)
+
+                // Check if all tags were removed - if so, delete the row
+                // Note: #removeTags deletes the key from #keyTags when it becomes empty,
+                // so we treat undefined as "no tags remain"
+                const keyTagsAfterUpdateChangesOnly = this.#keyTags.get(
+                  message.key
+                )
+                if (
+                  (!keyTagsAfterUpdateChangesOnly ||
+                    keyTagsAfterUpdateChangesOnly.size === 0) &&
+                  tags.length === 0
+                ) {
+                  this.#data.delete(message.key)
+                  this.#insertedKeys.delete(message.key)
+                  this.#keyTags.delete(message.key)
+                } else {
+                  this.#data.set(message.key, {
+                    ...this.#data.get(message.key)!,
+                    ...message.value,
+                  })
+                }
+              }
+              break
+            case `delete`:
               if (this.#insertedKeys.has(message.key)) {
                 this.#data.delete(message.key)
                 this.#insertedKeys.delete(message.key)
+                // Clean up tag indexes for this key
+                this.#removeAllTagsForKey(message.key)
               }
               break
           }
+        }
+      }
+
+      // Handle move-out events
+      if (isEventMessage(message)) {
+        if (message.headers.event === `move-out`) {
+          shouldNotify = this.#updateShapeStatus(`syncing`)
+          this.#processMoveOut(message.headers.patterns)
         }
       }
 
@@ -224,6 +303,8 @@ export class Shape<T extends Row<unknown> = Row> {
           case `must-refetch`:
             this.#data.clear()
             this.#insertedKeys.clear()
+            this.#keyTags.clear()
+            this.#tagKeys.clear()
             this.#error = false
             shouldNotify = this.#updateShapeStatus(`syncing`)
             // Flag to re-execute sub-snapshots once the new shape is up-to-date
@@ -234,6 +315,108 @@ export class Shape<T extends Row<unknown> = Row> {
     })
 
     if (shouldNotify) this.#notify()
+  }
+
+  // Add tags to both keyTags and tagKeys indexes
+  #addTags(key: string, tags: MoveTag[]): void {
+    if (tags.length === 0) return
+
+    let keyTagSet = this.#keyTags.get(key)
+    if (!keyTagSet) {
+      keyTagSet = new Set()
+      this.#keyTags.set(key, keyTagSet)
+    }
+
+    for (const tag of tags) {
+      keyTagSet.add(tag)
+
+      let tagKeySet = this.#tagKeys.get(tag)
+      if (!tagKeySet) {
+        tagKeySet = new Set()
+        this.#tagKeys.set(tag, tagKeySet)
+      }
+      tagKeySet.add(key)
+    }
+  }
+
+  // Remove specific tags from both keyTags and tagKeys indexes
+  #removeTags(key: string, tags: MoveTag[]): void {
+    if (tags.length === 0) return
+
+    const keyTagSet = this.#keyTags.get(key)
+    if (!keyTagSet) return
+
+    for (const tag of tags) {
+      keyTagSet.delete(tag)
+
+      const tagKeySet = this.#tagKeys.get(tag)
+      if (tagKeySet) {
+        tagKeySet.delete(key)
+        if (tagKeySet.size === 0) {
+          this.#tagKeys.delete(tag)
+        }
+      }
+    }
+
+    if (keyTagSet.size === 0) {
+      this.#keyTags.delete(key)
+    }
+  }
+
+  // Remove all tags for a key (used when deleting a row)
+  #removeAllTagsForKey(key: string): void {
+    const keyTagSet = this.#keyTags.get(key)
+    if (!keyTagSet) return
+
+    for (const tag of keyTagSet) {
+      const tagKeySet = this.#tagKeys.get(tag)
+      if (tagKeySet) {
+        tagKeySet.delete(key)
+        if (tagKeySet.size === 0) {
+          this.#tagKeys.delete(tag)
+        }
+      }
+    }
+
+    this.#keyTags.delete(key)
+  }
+
+  // Process move-out patterns: remove tags and delete rows that have no remaining tags
+  #processMoveOut(patterns: Array<{ pos: number; value: string }>): void {
+    const keysToCheck = new Set<string>()
+
+    for (const pattern of patterns) {
+      const tag = pattern.value
+      const tagKeySet = this.#tagKeys.get(tag)
+
+      if (tagKeySet) {
+        // Collect all keys that have this tag
+        for (const key of tagKeySet) {
+          keysToCheck.add(key)
+          // Remove this tag from the key's tag set
+          const keyTagSet = this.#keyTags.get(key)
+          if (keyTagSet) {
+            keyTagSet.delete(tag)
+            if (keyTagSet.size === 0) {
+              this.#keyTags.delete(key)
+            }
+          }
+        }
+        // Remove the tag from tagKeys index
+        this.#tagKeys.delete(tag)
+      }
+    }
+
+    // For each key, check if all tags were removed - only then delete the row
+    for (const key of keysToCheck) {
+      const keyTagSet = this.#keyTags.get(key)
+      if (!keyTagSet || keyTagSet.size === 0) {
+        // All tags removed - delete the row
+        this.#data.delete(key)
+        this.#insertedKeys.delete(key)
+        this.#keyTags.delete(key)
+      }
+    }
   }
 
   async #reexecuteSnapshots(): Promise<void> {
