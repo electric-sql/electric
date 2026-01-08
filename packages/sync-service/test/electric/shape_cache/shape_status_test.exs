@@ -436,6 +436,73 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
 
       refute File.exists?(backup_dir)
     end
+
+    test "backup restore removes shapes whose inner shapes were invalidated", %{state: state} do
+      backup_base_dir =
+        Path.join(System.tmp_dir!(), "shape_status_test_#{System.unique_integer([:positive])}")
+
+      stub_storage(metadata_backup_dir: fn _ -> backup_base_dir end)
+
+      expect_storage(
+        get_all_stored_shape_handles: fn _ -> {:ok, MapSet.new()} end,
+        get_stored_shapes: fn _, _ -> %{} end
+      )
+
+      :ok = ShapeStatus.initialize_from_storage(state)
+
+      # Create a shape with a subquery
+      outer_shape =
+        %{shape_dependencies: [inner_shape]} =
+        Shape.new!("public.items",
+          where: "id IN (SELECT id FROM other_table)",
+          inspector: @inspector
+        )
+
+      {:ok, inner_handle} = ShapeStatus.add_shape(state, inner_shape)
+      outer_shape = %{outer_shape | shape_dependencies_handles: [inner_handle]}
+      {:ok, outer_handle} = ShapeStatus.add_shape(state, outer_shape)
+
+      # Also add an independent shape that should survive
+      independent_shape = shape!("independent")
+      assert {:ok, independent_handle} = ShapeStatus.add_shape(state, independent_shape)
+
+      # Verify all shapes are present
+      shapes = ShapeStatus.list_shapes(state)
+      assert length(shapes) == 3
+
+      # Save backup with all three shapes
+      assert :ok = ShapeStatus.save_checkpoint(state)
+
+      backup_dir = Path.join([backup_base_dir, "shape_status_backups"])
+      assert File.exists?(backup_dir)
+
+      ShapeStatus.remove(state)
+
+      # Now restore simulating that the outer shape's storage still exists 
+      # but the inner shape's storage has gone
+      stub_storage([force: true],
+        metadata_backup_dir: fn _ -> backup_base_dir end,
+        cleanup!: fn _, _ -> :ok end
+      )
+
+      expect_storage([force: true],
+        get_all_stored_shape_handles: fn _ ->
+          # Only independent and outer shapes have storage - the inner shape has gone
+          {:ok, MapSet.new([independent_handle, outer_handle])}
+        end
+      )
+
+      assert :ok = ShapeStatus.initialize_from_storage(state)
+
+      # The outer shape should be removed because its dependency was invalidated
+      # Only the independent shape should remain
+      remaining_shapes = ShapeStatus.list_shapes(state)
+
+      assert [{^independent_handle, ^independent_shape}] = remaining_shapes,
+             "Parent shape with invalid dependency should have been removed. Got: #{inspect(remaining_shapes)}"
+
+      refute File.exists?(backup_dir)
+    end
   end
 
   defp shape!, do: shape!("test")
