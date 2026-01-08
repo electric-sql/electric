@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: 'The @core/sync-service@... tag to run for (e.g. @core/sync-service@v1.2.10)'
+        description: 'The @core/sync-service@... tag to run the workflow for (e.g. @core/sync-service@1.2.10)'
         required: true
         type: string
 
@@ -23,6 +23,28 @@ jobs:
       electric_version: ${{ steps.vars.outputs.electric_version }}
 
     steps:
+      - name: Determine the ref to check out
+        run: |
+          echo ${{ github.event_name }}
+          echo ${{ github.event.release.tag_name }}
+          echo ${{ inputs.release_tag }}
+
+          case ${{ github.event_name }} in
+            push)
+              ref="${{ github.sha }}"
+              ;;
+
+            release)
+              ref="refs/tags/${{ github.event.release.tag_name }}"
+              ;;
+
+            workflow_dispatch)
+              ref="refs/tags/${{ inputs.release_tag }}"
+              ;;
+          esac
+
+          echo "$ref"
+
       - uses: actions/checkout@v4
         with:
           # The checked out commit influences the value of the ELECTRIC_VERSION variable
@@ -69,6 +91,10 @@ jobs:
     needs: [derive_build_vars]
     steps:
       - uses: actions/checkout@v4
+        ref: ${{
+          github.event_name == 'release' && format('refs/tags/{0}', github.event.release.tag_name) ||
+          github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', inputs.release_tag) ||
+          github.sha }}
 
       - uses: useblacksmith/setup-docker-builder@v1
 
@@ -135,6 +161,7 @@ jobs:
             release | workflow_dispatch)
               # A release triggers official release image publishing
               echo "ELECTRIC_TAGS=-t electricsql/electric:latest -t electricsql/electric:${{ needs.derive_build_vars.outputs.electric_version }}" >> $GITHUB_ENV
+              ;;
           esac
 
       - name: Create multi-arch manifest list
