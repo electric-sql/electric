@@ -1,0 +1,95 @@
+name: elixir-client
+
+on:
+  push:
+    branches: ['main']
+    paths:
+      - 'packages/elixir-client/**'
+  pull_request:
+    paths:
+      - 'packages/elixir-client/**'
+
+permissions:
+  contents: read
+
+jobs:
+  build_and_test:
+    name: Build and test elixir-client
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    defaults:
+      run:
+        working-directory: packages/elixir-client
+    env:
+      MIX_ENV: test
+      MIX_OS_DEPS_COMPILE_PARTITION_COUNT: 4
+      ELECTRIC_PORT: 3100
+      ELECTRIC_URL: 'http://127.0.0.1:3333'
+      DATABASE_URL: 'postgresql://postgres:password@127.0.0.1:54323/postgres?sslmode=disable'
+    services:
+      postgres:
+        image: 'ghcr.io/${{ github.repository }}/postgres:17-alpine-logical'
+        env:
+          POSTGRES_PASSWORD: password
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 54323:5432
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: erlef/setup-beam@v1
+        with:
+          version-type: strict
+          version-file: '.tool-versions'
+
+      - name: Cache dependencies
+        uses: actions/cache@v4
+        with:
+          path: packages/elixir-client/deps
+          key: ${{ runner.os }}-elixir-client-deps-${{ env.MIX_ENV }}-${{ hashFiles('packages/elixir-client/mix.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-elixir-client-deps-${{ env.MIX_ENV }}-${{ hashFiles('packages/elixir-client/mix.lock') }}
+            ${{ runner.os }}-elixir-client-deps-${{ env.MIX_ENV }}
+            ${{ runner.os }}-elixir-client-deps
+
+      - name: Cache compiled code
+        uses: actions/cache@v4
+        with:
+          path: |
+            packages/elixir-client/_build/*/lib
+            !packages/elixir-client/_build/*/lib/electric_client
+          key: "${{ runner.os }}-elixir-client-build-${{ env.MIX_ENV }}-${{ hashFiles('packages/elixir-client/mix.lock') }}"
+          restore-keys: |
+            ${{ runner.os }}-elixir-client-build-${{ env.MIX_ENV }}-${{ hashFiles('packages/elixir-client/mix.lock') }}
+            ${{ runner.os }}-elixir-client-build-${{ env.MIX_ENV }}
+            ${{ runner.os }}-elixir-client-build
+
+      - name: Install dependencies
+        run: mix do deps.get + deps.compile
+
+      - name: Compile package
+        run: mix compile
+
+      - name: Run tests
+        run: mix coveralls.json
+
+      - name: Upload coverage reports to CodeCov
+        uses: codecov/codecov-action@ad3126e916f78f00edff4ed0317cf185271ccc2d
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          flags: elixir,unit-tests,elixir-client
+          files: ./cover/excoveralls.json
+
+      - name: Upload test results to CodeCov
+        uses: codecov/test-results-action@f2dba722c67b86c6caa034178c6e4d35335f6706
+        if: ${{ !cancelled() }}
+        env:
+          DUMMY_COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}-dummy
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: true
+          flags: elixir,unit-tests,elixir-client
+          files: ./junit/test-junit-report.xml

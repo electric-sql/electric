@@ -1,0 +1,195 @@
+name: Test Examples
+
+on:
+  schedule:
+    - cron: '0 9 * * *' # Runs daily at 9 AM UTC
+  workflow_dispatch: # Allow manual triggering
+
+jobs:
+  test:
+    name: Run e2e tests on examples
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Test remix example
+        id: remix
+        continue-on-error: true
+        uses: ./.github/actions/test-example
+        with:
+          test_folder: remix
+          example_url: https://remix.examples.electric-sql.com
+
+      - name: Test nextjs example
+        id: nextjs
+        continue-on-error: true
+        uses: ./.github/actions/test-example
+        with:
+          test_folder: nextjs
+          example_url: https://nextjs.examples.electric-sql.com
+
+      - name: Test tanstack example
+        id: tanstack
+        continue-on-error: true
+        uses: ./.github/actions/test-example
+        with:
+          test_folder: tanstack
+          example_url: https://tanstack.examples.electric-sql.com
+
+      - name: Test phoenix liveview example
+        id: liveview
+        continue-on-error: true
+        uses: ./.github/actions/test-example
+        with:
+          test_folder: phoenix-liveview
+          example_url: https://phoenix-liveview.examples.electric-sql.com
+
+      - name: Test burn example
+        id: burn
+        continue-on-error: true
+        uses: ./.github/actions/test-example
+        with:
+          test_folder: burn
+          example_url: https://burn.examples.electric-sql.com
+
+      - name: Test react example
+        id: react
+        continue-on-error: true
+        uses: ./.github/actions/test-example
+        with:
+          test_folder: '.shared'
+          example_url: https://react.examples.electric-sql.com
+
+      - name: Test linearlite example
+        id: linearlite
+        continue-on-error: true
+        uses: ./.github/actions/test-example
+        with:
+          test_folder: '.shared'
+          example_url: https://linearlite.examples.electric-sql.com
+
+      - name: Test linearlite read-only example
+        id: linearlite-read-only
+        continue-on-error: true
+        uses: ./.github/actions/test-example
+        with:
+          test_folder: '.shared'
+          example_url: https://linearlite-read-only.examples.electric-sql.com
+
+      - name: Test proxy-auth example
+        id: proxy-auth
+        continue-on-error: true
+        uses: ./.github/actions/test-example
+        with:
+          test_folder: '.shared'
+          example_url: https://proxy-auth.examples.electric-sql.com/?org_id=1
+
+      - name: Test write-patterns example
+        id: write-patterns
+        continue-on-error: true
+        uses: ./.github/actions/test-example
+        with:
+          test_folder: '.shared'
+          example_url: https://write-patterns.examples.electric-sql.com
+
+      - name: Test yjs example
+        id: yjs
+        continue-on-error: true
+        uses: ./.github/actions/test-example
+        with:
+          test_folder: '.shared'
+          example_url: https://yjs.examples.electric-sql.com
+
+      - name: Test todo-app example
+        id: todo-app
+        continue-on-error: true
+        uses: ./.github/actions/test-example
+        with:
+          test_folder: '.shared'
+          example_url: https://todo-app.examples.electric-sql.com
+
+      - name: Test notes example
+        id: notes
+        continue-on-error: true
+        uses: ./.github/actions/test-example
+        with:
+          test_folder: '.shared'
+          example_url: https://notes.examples.electric-sql.com
+
+      - name: Test pixel art example
+        id: pixel-art
+        continue-on-error: true
+        uses: ./.github/actions/test-example
+        with:
+          test_folder: '.shared'
+          example_url: https://pixel-art.examples.electric-sql.com
+
+      - name: Test ai chat example
+        id: ai-chat
+        continue-on-error: true
+        uses: ./.github/actions/test-example
+        with:
+          test_folder: '.shared'
+          example_url: https://electric-ai-chat.examples.electric-sql.com
+
+      - name: Report test failures
+        if: |
+          steps.remix.outcome == 'failure' ||
+          steps.nextjs.outcome == 'failure' ||
+          steps.tanstack.outcome == 'failure' ||
+          steps.react.outcome == 'failure' ||
+          steps.liveview.outcome == 'failure' ||
+          steps.linearlite.outcome == 'failure' ||
+          steps.linearlite-read-only.outcome == 'failure' ||
+          steps.proxy-auth.outcome == 'failure' ||
+          steps.write-patterns.outcome == 'failure' ||
+          steps.yjs.outcome == 'failure' ||
+          steps.todo-app.outcome == 'failure' ||
+          steps.notes.outcome == 'failure' ||
+          steps.pixel-art.outcome == 'failure' ||
+          steps.ai-chat.outcome == 'failure'
+        run: |
+          echo "The following examples failed:"
+          if [ "${{ steps.remix.outcome }}" == "failure" ]; then
+            echo "- Remix example"
+          fi
+          if [ "${{ steps.nextjs.outcome }}" == "failure" ]; then
+            echo "- Next.js example"
+          fi
+          if [ "${{ steps.tanstack.outcome }}" == "failure" ]; then
+            echo "- TanStack example"
+          fi
+          if [ "${{ steps.react.outcome }}" == "failure" ]; then
+            echo "- React example"
+          fi
+          if [ "${{ steps.liveview.outcome }}" == "failure" ]; then
+            echo "- Phoenix LiveView example"
+          fi
+          if [ "${{ steps.linearlite.outcome }}" == "failure" ]; then
+            echo "- LinearLite example"
+          fi
+          if [ "${{ steps.linearlite-read-only.outcome }}" == "failure" ]; then
+            echo "- LinearLite Read-Only example"
+          fi
+          if [ "${{ steps.proxy-auth.outcome }}" == "failure" ]; then
+            echo "- Proxy Auth example"
+          fi
+          if [ "${{ steps.write-patterns.outcome }}" == "failure" ]; then
+            echo "- Write Patterns example"
+          fi
+          if [ "${{ steps.yjs.outcome }}" == "failure" ]; then
+            echo "- Yjs example"
+          fi
+          if [ "${{ steps.todo-app.outcome }}" == "failure" ]; then
+            echo "- Todo App example"
+          fi
+          if [ "${{ steps.notes.outcome }}" == "failure" ]; then
+            echo "- Notes example"
+          fi
+          if [ "${{ steps.pixel-art.outcome }}" == "failure" ]; then
+            echo "- Pixel Art example"
+          fi
+          if [ "${{ steps.ai-chat.outcome }}" == "failure" ]; then
+            echo "- AI Chat example"
+          fi
+          exit 1

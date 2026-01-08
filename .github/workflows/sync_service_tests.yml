@@ -1,0 +1,117 @@
+name: sync-service
+
+on:
+  push:
+    branches: ['main']
+    paths:
+      - 'packages/electric-telemetry/**'
+      - 'packages/sync-service/**'
+  pull_request:
+    paths:
+      - 'packages/electric-telemetry/**'
+      - 'packages/sync-service/**'
+
+permissions:
+  contents: read
+
+jobs:
+  build_and_test:
+    name: 'Build and test sync-service, pg${{ matrix.postgres_version }}'
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    defaults:
+      run:
+        working-directory: packages/sync-service
+    strategy:
+      fail-fast: false
+      matrix:
+        postgres_version: [14, 15, 17, 18]
+    env:
+      MIX_ENV: test
+      MIX_TARGET: application
+      MIX_OS_DEPS_COMPILE_PARTITION_COUNT: 4
+      POSTGRES_VERSION: '${{ matrix.postgres_version }}0000'
+    services:
+      postgres:
+        image: 'ghcr.io/${{ github.repository }}/postgres:${{ matrix.postgres_version }}-alpine-logical'
+        env:
+          POSTGRES_PASSWORD: password
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 54321:5432
+
+      pgbouncer:
+        image: bitnamilegacy/pgbouncer:latest
+        env:
+          PGBOUNCER_AUTH_TYPE: trust
+          PGBOUNCER_DATABASE: '*'
+          PGBOUNCER_POOL_MODE: transaction
+          POSTGRESQL_HOST: postgres
+          POSTGRESQL_DATABASE: electric
+          POSTGRESQL_USERNAME: postgres
+          POSTGRESQL_PASSWORD: password
+        ports:
+          - 65432:6432
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Seed the database
+        run: psql -d postgresql://postgres:password@localhost:54321/postgres?sslmode=disable -f dev/init.sql
+
+      - uses: erlef/setup-beam@v1
+        with:
+          version-type: strict
+          version-file: '.tool-versions'
+
+      - name: Cache dependencies
+        uses: actions/cache@v4
+        with:
+          path: packages/sync-service/deps
+          key: "${{ runner.os }}-sync-service-deps-${{ env.MIX_ENV }}-${{ hashFiles('packages/sync-service/mix.lock') }}"
+          restore-keys: |
+            ${{ runner.os }}-sync-service-deps-${{ env.MIX_ENV }}-${{ hashFiles('packages/sync-service/mix.lock') }}
+            ${{ runner.os }}-sync-service-deps-${{ env.MIX_ENV }}
+            ${{ runner.os }}-sync-service-deps
+
+      - name: Cache compiled code
+        uses: actions/cache@v4
+        with:
+          path: |
+            packages/sync-service/_build/*/lib
+            !packages/sync-service/_build/*/lib/electric
+            !packages/sync-service/_build/*/lib/electric_telemetry
+          key: "${{ runner.os }}-sync-service-build-${{ env.MIX_ENV }}-${{ hashFiles('packages/sync-service/mix.lock') }}"
+          restore-keys: |
+            ${{ runner.os }}-sync-service-build-${{ env.MIX_ENV }}-${{ hashFiles('packages/sync-service/mix.lock') }}
+            ${{ runner.os }}-sync-service-build-${{ env.MIX_ENV }}
+            ${{ runner.os }}-sync-service-build
+
+      - name: Install dependencies
+        run: mix do deps.get + deps.compile
+
+      - name: Compile package
+        run: mix compile
+
+      - name: Run tests
+        run: mix coveralls.json --include slow --cover --export-coverage test
+
+      - name: Upload coverage reports to CodeCov
+        uses: codecov/codecov-action@ad3126e916f78f00edff4ed0317cf185271ccc2d
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          flags: elixir,unit-tests,sync-service,postgres-${{ env.POSTGRES_VERSION }}
+          files: ./cover/excoveralls.json
+
+      - name: Upload test results to CodeCov
+        uses: codecov/test-results-action@f2dba722c67b86c6caa034178c6e4d35335f6706
+        if: ${{ !cancelled() }}
+        env:
+          DUMMY_COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}-dummy
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: true
+          flags: elixir,unit-tests,sync-service,postgres-${{ env.POSTGRES_VERSION }}
+          files: ./junit/regular-test-junit-report.xml,./junit/telemetry-test-junit-report.xml

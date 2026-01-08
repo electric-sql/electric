@@ -1,0 +1,345 @@
+name: Deploy Examples
+
+on:
+  push:
+    branches: ['main']
+#   pull_request:
+#     paths: ['examples/*/**']
+
+concurrency:
+  group: ${{ github.event_name == 'push' && 'prod-deploy-group' || format('examples-pr-{0}', github.event.number) }}
+
+jobs:
+  changed-files:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.create-example-matrix.outputs.matrix }}
+      has_changes: ${{ steps.create-example-matrix.outputs.has_changes }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check for changed files
+        id: changed-files
+        uses: tj-actions/changed-files@ed68ef82c095e0d48ec87eccea555d944a631a4c
+        with:
+          path: 'examples'
+          diff_relative: true
+          dir_names: true
+          dir_names_max_depth: 1
+          # Whitelist examples that need to be deployed
+          files: |
+            yjs/**
+            linearlite-read-only/**
+            write-patterns/**
+            nextjs/**
+            todo-app/**
+            proxy-auth/**
+            phoenix-liveview/**
+            tanstack/**
+            remix/**
+            react/**
+            burn/**
+            tanstack-db-web-starter/**
+
+      - name: Create example matrix
+        id: create-example-matrix
+        run: |
+          # Get changed example directories
+          CHANGED_DIRS="${{ steps.changed-files.outputs.all_changed_files }}"
+
+          # Initialize empty JSON array
+          MATRIX='{"example":[]}'
+          HAS_CHANGES="false"
+
+          # Add each changed directory to the matrix
+          if [ -n "$CHANGED_DIRS" ]; then
+            for dir in $CHANGED_DIRS; do
+              name=$(basename $dir)
+              MATRIX=$(echo $MATRIX | jq --arg name "$name" --arg path "examples/$name" '.example += [{"name": $name, "path": $path}]')
+              HAS_CHANGES="true"
+            done
+          fi
+
+          # Use jq to properly format and escape the JSON
+          echo "matrix=$(echo $MATRIX | jq -c '.')" >> $GITHUB_OUTPUT
+          echo "has_changes=$HAS_CHANGES" >> $GITHUB_OUTPUT
+
+  deploy:
+    name: Deploy ${{ matrix.example.name }}
+    environment: ${{ github.event_name == 'push' && 'Production' || 'Pull request' }}
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    needs: changed-files
+    if: ${{ needs.changed-files.outputs.has_changes == 'true' }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.changed-files.outputs.matrix) }}
+
+    outputs:
+      yjs: ${{ steps.deploy.outputs.yjs }}
+      linearlite-read-only: ${{ steps.deploy.outputs.linearlite-read-only }}
+      write-patterns: ${{ steps.deploy.outputs.write-patterns }}
+      nextjs: ${{ steps.deploy.outputs.nextjs }}
+      todo-app: ${{ steps.deploy.outputs.todo-app }}
+      proxy-auth: ${{ steps.deploy.outputs.proxy-auth }}
+      phoenix-liveview: ${{ steps.deploy.outputs.phoenix-liveview }}
+      tanstack: ${{ steps.deploy.outputs.tanstack }}
+      remix: ${{ steps.deploy.outputs.remix }}
+      react: ${{ steps.deploy.outputs.react }}
+      burn: ${{ steps.deploy.outputs.burn }}
+      tanstack-db-web-starter: ${{ steps.deploy.outputs.tanstack-db-web-starter }}
+
+    env:
+      DEPLOY_ENV: ${{ github.event_name == 'push' && 'production' || format('pr-{0}', github.event.number) }}
+      PULUMI_LOG_LEVEL: debug
+      SST_DEBUG: '1'
+      SHARED_INFRA_VPC_ID: ${{ vars.SHARED_INFRA_VPC_ID }}
+      SHARED_INFRA_CLUSTER_ARN: ${{ vars.SHARED_INFRA_CLUSTER_ARN }}
+      SHARED_EXAMPLES_DATABASE_URI: ${{ secrets.SHARED_EXAMPLES_DATABASE_URI }}
+      SHARED_EXAMPLES_POOLED_DATABASE_URI: ${{ secrets.SHARED_EXAMPLES_POOLED_DATABASE_URI }}
+      SHARED_EXAMPLES_SOURCE_ID: ${{ vars.SHARED_EXAMPLES_SOURCE_ID }}
+      SHARED_EXAMPLES_SOURCE_SECRET: ${{ secrets.SHARED_EXAMPLES_SOURCE_SECRET }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_DEFAULT_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_DEFAULT_ACCOUNT_ID }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+      NEON_PROJECT_ID: ${{ secrets.NEON_PROJECT_ID }}
+      ELECTRIC_API: ${{ secrets.ELECTRIC_API }}
+      ELECTRIC_ADMIN_API: ${{ secrets.ELECTRIC_ADMIN_API }}
+      ELECTRIC_TEAM_ID: ${{ secrets.ELECTRIC_TEAM_ID }}
+      ELECTRIC_ADMIN_API_AUTH_TOKEN: ${{ secrets.ELECTRIC_ADMIN_API_AUTH_TOKEN }}
+      SECRET_KEY_BASE: ${{ secrets.LIVEVIEW_EXAMPLE_SECRET_KEY_BASE }}
+      ANTHROPIC_KEY: ${{ secrets.ANTHROPIC_KEY }}
+      QUICKSTART_DATABASE_URI: ${{ secrets.QUICKSTART_DATABASE_URI }}
+      QUICKSTART_POOLED_DATABASE_URI: ${{ secrets.QUICKSTART_POOLED_DATABASE_URI }}
+      QUICKSTART_SOURCE_ID: ${{ vars.QUICKSTART_SOURCE_ID }}
+      QUICKSTART_SOURCE_SECRET: ${{ secrets.QUICKSTART_SOURCE_SECRET }}
+      BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET }}
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.tool-versions'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Cache SST state
+        uses: actions/cache@v4
+        with:
+          path: .sst
+          key: sst-cache-${{ matrix.example.name }}-${{ runner.os }}
+          restore-keys: |
+            sst-cache-${{ matrix.example.name }}-${{ runner.os }}
+
+      - name: Deploy
+        id: deploy
+        working-directory: ./${{ matrix.example.path }}
+        run: |
+          pnpm --filter @electric-sql/client --filter @electric-sql/experimental --filter @electric-sql/react run build
+          pnpm sst deploy --stage ${{ env.DEPLOY_ENV }}
+
+          if [ -f ".sst/outputs.json" ]; then
+            website=$(jq -r '.website' .sst/outputs.json)
+            echo "${{ matrix.example.name }}=$website" >> $GITHUB_OUTPUT
+          else
+            echo "sst outputs file not found. Exiting."
+            exit 123
+          fi
+
+  test-examples:
+    name: Test examples
+    needs: deploy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Test remix example
+        id: remix
+        continue-on-error: true
+        uses: ./.github/actions/test-example
+        with:
+          test_folder: remix
+          example_url: ${{ needs.deploy.outputs.remix || '' }}
+
+      - name: Test nextjs example
+        id: nextjs
+        continue-on-error: true
+        uses: ./.github/actions/test-example
+        with:
+          test_folder: nextjs
+          example_url: ${{ needs.deploy.outputs.nextjs || '' }}
+
+      - name: Test tanstack example
+        id: tanstack
+        continue-on-error: true
+        uses: ./.github/actions/test-example
+        with:
+          test_folder: tanstack
+          example_url: ${{ needs.deploy.outputs.tanstack || '' }}
+
+      - name: Test react example
+        id: react
+        continue-on-error: true
+        uses: ./.github/actions/test-example
+        with:
+          test_folder: '.shared'
+          example_url: ${{ needs.deploy.outputs.react || '' }}
+
+      - name: Test phoenix liveview example
+        id: liveview
+        continue-on-error: true
+        uses: ./.github/actions/test-example
+        with:
+          test_folder: phoenix-liveview
+          example_url: ${{ needs.deploy.outputs.phoenix-liveview || '' }}
+
+      - name: Test burn example
+        id: burn
+        continue-on-error: true
+        uses: ./.github/actions/test-example
+        with:
+          test_folder: burn
+          example_url: ${{ needs.deploy.outputs.burn || '' }}
+
+      - name: Test yjs example
+        id: yjs
+        continue-on-error: true
+        uses: ./.github/actions/test-example
+        with:
+          test_folder: '.shared'
+          example_url: ${{ needs.deploy.outputs.yjs || '' }}
+
+      - name: Test linearlite read-only example
+        id: linearlite-read-only
+        continue-on-error: true
+        uses: ./.github/actions/test-example
+        with:
+          test_folder: '.shared'
+          example_url: ${{ needs.deploy.outputs.linearlite-read-only || '' }}
+
+      - name: Test write patterns example
+        id: write-patterns
+        continue-on-error: true
+        uses: ./.github/actions/test-example
+        with:
+          test_folder: '.shared'
+          example_url: ${{ needs.deploy.outputs.write-patterns || '' }}
+
+      - name: Test todo-app example
+        id: todo-app
+        continue-on-error: true
+        uses: ./.github/actions/test-example
+        with:
+          test_folder: '.shared'
+          example_url: ${{ needs.deploy.outputs.todo-app || '' }}
+
+      - name: Report test failures
+        if: |
+          steps.remix.outcome == 'failure' ||
+          steps.nextjs.outcome == 'failure' ||
+          steps.tanstack.outcome == 'failure' ||
+          steps.react.outcome == 'failure' ||
+          steps.liveview.outcome == 'failure' ||
+          steps.yjs.outcome == 'failure' ||
+          steps.linearlite-read-only.outcome == 'failure' ||
+          steps.write-patterns.outcome == 'failure' ||
+          steps.todo-app.outcome == 'failure'
+        run: |
+          echo "The following examples failed:"
+          if [ "${{ steps.remix.outcome }}" == "failure" ]; then
+            echo "- Remix example"
+          fi
+          if [ "${{ steps.nextjs.outcome }}" == "failure" ]; then
+            echo "- Next.js example"
+          fi
+          if [ "${{ steps.tanstack.outcome }}" == "failure" ]; then
+            echo "- TanStack example"
+          fi
+          if [ "${{ steps.react.outcome }}" == "failure" ]; then
+            echo "- React example"
+          fi
+          if [ "${{ steps.liveview.outcome }}" == "failure" ]; then
+            echo "- Phoenix LiveView example"
+          fi
+          if [ "${{ steps.yjs.outcome }}" == "failure" ]; then
+            echo "- Yjs example"
+          fi
+          if [ "${{ steps.linearlite-read-only.outcome }}" == "failure" ]; then
+            echo "- LinearLite read-only example"
+          fi
+          if [ "${{ steps.write-patterns.outcome }}" == "failure" ]; then
+            echo "- Write patterns example"
+          fi
+          if [ "${{ steps.todo-app.outcome }}" == "failure" ]; then
+            echo "- Todo app example"
+          fi
+          exit 1
+
+  comment:
+    if: github.event_name == 'pull_request' && needs.changed-files.outputs.has_changes == 'true'
+    needs: [changed-files, deploy]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create PR comment with deployment URLs
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            // Get the matrix of examples that were deployed
+            const matrix = JSON.parse(${{ toJSON(needs.changed-files.outputs.matrix) }})
+
+            const urls = {
+              yjs: "${{ needs.deploy.outputs.yjs }}",
+              "linearlite-read-only": "${{ needs.deploy.outputs.linearlite-read-only }}",
+              "write-patterns": "${{ needs.deploy.outputs.write-patterns }}",
+              nextjs: "${{ needs.deploy.outputs.nextjs }}",
+              "todo-app": "${{ needs.deploy.outputs.todo-app }}",
+              "proxy-auth": "${{ needs.deploy.outputs.proxy-auth }}",
+              "phoenix-liveview": "${{ needs.deploy.outputs.phoenix-liveview }}",
+              "tanstack": "${{ needs.deploy.outputs.tanstack }}",
+              "remix": "${{ needs.deploy.outputs.remix }}",
+              "react": "${{ needs.deploy.outputs.react }}",
+              "tanstack-db-web-starter": "${{ needs.deploy.outputs.tanstack-db-web-starter }}"
+            }
+
+            // Create deployments array only for examples that were deployed
+            const deployments = matrix.example.map(example => ({
+              name: example.name,
+              url: urls[example.name]
+            }))
+
+            const commentBody = [
+              "## Examples",
+              ...deployments.map(d => `- ${d.name}: ${d.url || '*deploy failed*'}`),
+            ].join('\n')
+
+            const prNumber = context.issue.number
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+            })
+
+            const existingComment = comments.find(comment => comment.user.login ==='github-actions[bot]' && comment.body.startsWith("## Examples"))
+
+            if (existingComment) {
+              // Update the existing comment
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existingComment.id,
+                body: commentBody,
+              })
+            } else {
+              // Create a new comment if none exists
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                body: commentBody,
+              })
+            }
