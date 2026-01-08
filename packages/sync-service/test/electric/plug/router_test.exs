@@ -2518,6 +2518,107 @@ defmodule Electric.Plug.RouterTest do
       assert {_req, 200, _response} = Task.await(task)
     end
 
+    # Tests for C3 in fix3.md: OR with non-sublink predicate
+    # These test that rows only get tags for disjuncts they actually satisfy
+
+    @tag with_sql: [
+           "CREATE TABLE parent (id INT PRIMARY KEY, include_parent BOOLEAN NOT NULL DEFAULT FALSE)",
+           "CREATE TABLE child (id INT PRIMARY KEY, parent_id INT NOT NULL REFERENCES parent(id), status TEXT NOT NULL DEFAULT 'inactive')",
+           # Parent 1 has include_parent = true
+           "INSERT INTO parent (id, include_parent) VALUES (1, true)",
+           # Child 1 matches parent_id=1 (subquery) but has status='inactive' (doesn't match predicate)
+           "INSERT INTO child (id, parent_id, status) VALUES (1, 1, 'inactive')"
+         ]
+    test "OR with non-sublink predicate: row only gets tag from satisfied subquery disjunct", %{
+      opts: opts,
+      db_conn: db_conn
+    } do
+      # Shape: parent_id IN (subquery) OR status = 'active'
+      # Child 1 matches ONLY via the subquery (status='inactive')
+      # The row should only get a tag for disjunct 0 (subquery), NOT a phantom tag for status='active'
+      orig_req =
+        make_shape_req("child",
+          where:
+            "parent_id in (SELECT id FROM parent WHERE include_parent = true) OR status = 'active'"
+        )
+
+      assert {req, 200, response} = shape_req(orig_req, opts)
+      # Should contain the data record and the snapshot-end control message
+      assert length(response) == 2
+
+      # Get the data row
+      data_row = Enum.find(response, &Map.has_key?(&1, "key"))
+      assert %{"value" => %{"id" => "1", "status" => "inactive"}} = data_row
+
+      # The KEY verification: the row should only have ONE tag (for disjunct 0, the subquery disjunct)
+      # NOT a phantom tag for disjunct 1 (the status='active' predicate that this row doesn't satisfy)
+      tags = get_in(data_row, ["headers", "tags"])
+      assert length(tags) == 1, "Expected exactly 1 tag but got: #{inspect(tags)}"
+      [tag] = tags
+      assert String.starts_with?(tag, "d0:"), "Tag should be for disjunct 0 (subquery), got: #{tag}"
+
+      task = live_shape_req(req, opts)
+
+      # Setting include_parent to false causes a move-out for the subquery.
+      # Since the row doesn't have a phantom status tag, the move-out should remove all tags.
+      Postgrex.query!(db_conn, "UPDATE parent SET include_parent = false WHERE id = 1", [])
+
+      assert {_req, 200, response} = Task.await(task)
+
+      # Verify we got a move-out event
+      assert Enum.any?(response, fn msg ->
+               match?(%{"headers" => %{"event" => "move-out"}}, msg)
+             end)
+    end
+
+    @tag with_sql: [
+           "CREATE TABLE parent (id INT PRIMARY KEY, include_parent BOOLEAN NOT NULL DEFAULT FALSE)",
+           "CREATE TABLE child (id INT PRIMARY KEY, parent_id INT NOT NULL REFERENCES parent(id), status TEXT NOT NULL DEFAULT 'inactive')",
+           # Parent 1 has include_parent = true
+           "INSERT INTO parent (id, include_parent) VALUES (1, true)",
+           # Child 1 matches parent_id=1 (subquery) AND has status='active' (also matches predicate)
+           "INSERT INTO child (id, parent_id, status) VALUES (1, 1, 'active')"
+         ]
+    test "OR with non-sublink predicate: row matching predicate survives subquery move-out", %{
+      opts: opts,
+      db_conn: db_conn
+    } do
+      # Shape: parent_id IN (subquery) OR status = 'active'
+      # Child 1 matches BOTH via the subquery AND status='active'
+      # When include_parent becomes false, the row should remain
+      # because it still satisfies status='active'
+      orig_req =
+        make_shape_req("child",
+          where:
+            "parent_id in (SELECT id FROM parent WHERE include_parent = true) OR status = 'active'"
+        )
+
+      assert {req, 200, response} = shape_req(orig_req, opts)
+      # Should contain the data record and the snapshot-end control message
+      assert length(response) == 2
+
+      assert %{"value" => %{"id" => "1", "status" => "active"}} =
+               Enum.find(response, &Map.has_key?(&1, "key"))
+
+      task = live_shape_req(req, opts)
+
+      # Setting include_parent to false causes a move-out for the subquery tag.
+      # But since the row ALSO matches status='active', it should remain in the shape.
+      Postgrex.query!(db_conn, "UPDATE parent SET include_parent = false WHERE id = 1", [])
+
+      assert {_req, 200, response} = Task.await(task)
+
+      # Verify we got a move-out event (for the subquery tag)
+      assert Enum.any?(response, fn msg ->
+               match?(%{"headers" => %{"event" => "move-out"}}, msg)
+             end)
+
+      # Verify we did NOT get a delete operation (row remains in shape due to status='active')
+      refute Enum.any?(response, fn msg ->
+               match?(%{"headers" => %{"operation" => "delete"}}, msg)
+             end)
+    end
+
     @tag with_sql: [
            "CREATE TABLE grandparent (id INT PRIMARY KEY, include_grandparent BOOLEAN NOT NULL DEFAULT FALSE)",
            "CREATE TABLE parent (id INT PRIMARY KEY, grandparent_id INT NOT NULL REFERENCES grandparent(id), include_parent BOOLEAN NOT NULL DEFAULT FALSE)",

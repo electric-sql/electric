@@ -63,7 +63,9 @@ defmodule Electric.Shapes.Shape do
   @type disjunct() :: %{
           sublinks: [[String.t()]],
           patterns: %{[String.t()] => [String.t() | {:hash_together, [String.t(), ...]}]},
-          comparison_expressions: %{[String.t()] => Electric.Replication.Eval.Expr.t()}
+          comparison_expressions: %{[String.t()] => Electric.Replication.Eval.Expr.t()},
+          predicate_sql: String.t() | nil,
+          predicate_expr: Electric.Replication.Eval.Expr.t() | nil
         }
   @type t() :: %__MODULE__{
           root_table: Electric.relation(),
@@ -686,24 +688,40 @@ defmodule Electric.Shapes.Shape do
   end
 
   # Create tags using DNF structure - one tag per satisfied disjunct.
-  # For a disjunct to be "satisfied", ALL sublinks in it must have their values in the materialized sets.
+  # For a disjunct to be "satisfied":
+  # 1. The disjunct must have at least one sublink (pure predicate disjuncts don't get tags)
+  # 2. ALL sublinks in it must have their values in the materialized sets
+  # 3. The non-sublink predicate (if any) must be true for the record
   # The tag is a composite hash of the disjunct index and all sublink values.
   defp make_tags_from_dnf(dnf_structure, record, extra_refs, stack_id, shape_handle) do
     dnf_structure
     |> Enum.with_index()
     |> Enum.flat_map(fn {disjunct, disjunct_index} ->
-      # Check if ALL sublinks in this disjunct are satisfied
-      all_satisfied =
-        Enum.all?(disjunct.sublinks, fn sublink_ref ->
-          is_value_in_dependency?(record, sublink_ref, disjunct.comparison_expressions, extra_refs)
-        end)
-
-      if all_satisfied do
-        # Build composite tag from all sublink values in this disjunct
-        tag = make_disjunct_tag(disjunct, disjunct_index, record, stack_id, shape_handle)
-        [tag]
-      else
+      # Skip disjuncts without sublinks - they don't generate tags
+      # (e.g., pure predicate disjuncts like "status = 'active'" in an OR)
+      if disjunct.sublinks == [] do
         []
+      else
+        # Check if ALL sublinks in this disjunct are satisfied
+        all_sublinks_satisfied =
+          Enum.all?(disjunct.sublinks, fn sublink_ref ->
+            is_value_in_dependency?(record, sublink_ref, disjunct.comparison_expressions, extra_refs)
+          end)
+
+        # Check if the non-sublink predicate is satisfied (nil means no predicate = always true)
+        predicate_satisfied =
+          case disjunct[:predicate_expr] do
+            nil -> true
+            predicate_expr -> WhereClause.includes_record?(predicate_expr, record, %{})
+          end
+
+        if all_sublinks_satisfied and predicate_satisfied do
+          # Build composite tag from all sublink values in this disjunct
+          tag = make_disjunct_tag(disjunct, disjunct_index, record, stack_id, shape_handle)
+          [tag]
+        else
+          []
+        end
       end
     end)
   end

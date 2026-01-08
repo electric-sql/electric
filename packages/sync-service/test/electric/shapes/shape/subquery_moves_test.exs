@@ -517,6 +517,109 @@ defmodule Electric.Shapes.Shape.SubqueryMovesTest do
     end
   end
 
+  describe "disjunct predicate extraction" do
+    # Tests for non-sublink predicate extraction per C1 in fix3.md
+
+    test "x IN subq OR status = 'active' - disjunct 0 has nil predicate, disjunct 1 has status predicate" do
+      # x IN (subq) OR value = 'active'
+      # Disjunct 0: x IN (subq) - predicate_sql should be nil
+      # Disjunct 1: value = 'active' - predicate_sql should be "\"value\" = 'active'"
+      shape =
+        Shape.new!("child",
+          where: "x IN (SELECT id FROM parent1) OR value = 'active'",
+          inspector: @multi_inspector
+        )
+
+      dnf = SubqueryMoves.extract_dnf_structure(shape)
+
+      # Should have 2 disjuncts
+      assert length(dnf) == 2
+
+      # Find the disjunct with sublinks (the subquery disjunct)
+      subquery_disjunct = Enum.find(dnf, fn d -> d.sublinks != [] end)
+      # Find the disjunct without sublinks (the status predicate disjunct)
+      predicate_disjunct = Enum.find(dnf, fn d -> d.sublinks == [] end)
+
+      # The subquery disjunct should have nil predicate
+      assert subquery_disjunct.predicate_sql == nil
+      assert subquery_disjunct.predicate_expr == nil
+
+      # The predicate disjunct should have the status check
+      assert predicate_disjunct.predicate_sql =~ "\"value\""
+      assert predicate_disjunct.predicate_sql =~ "="
+      assert predicate_disjunct.predicate_sql =~ "'active'"
+      assert predicate_disjunct.predicate_expr != nil
+    end
+
+    test "x IN subq AND (status = 'active' OR y IN subq2) - distributed DNF with predicate" do
+      # After DNF distribution:
+      # - (x IN subq AND status = 'active')
+      # - (x IN subq AND y IN subq2)
+      # First disjunct should have predicate for status = 'active'
+      # Second disjunct should have nil predicate (only sublinks)
+      shape =
+        Shape.new!("child",
+          where: "x IN (SELECT id FROM parent1) AND (value = 'active' OR y IN (SELECT id FROM parent2))",
+          inspector: @multi_inspector
+        )
+
+      dnf = SubqueryMoves.extract_dnf_structure(shape)
+
+      # Should have 2 disjuncts after distribution
+      assert length(dnf) == 2
+
+      # Find the disjunct with only one sublink (x IN subq AND status = 'active')
+      single_sublink_disjunct = Enum.find(dnf, fn d -> length(d.sublinks) == 1 end)
+      # Find the disjunct with two sublinks (x IN subq AND y IN subq2)
+      double_sublink_disjunct = Enum.find(dnf, fn d -> length(d.sublinks) == 2 end)
+
+      # Single sublink disjunct should have the status predicate
+      assert single_sublink_disjunct.predicate_sql =~ "\"value\""
+      assert single_sublink_disjunct.predicate_sql =~ "'active'"
+      assert single_sublink_disjunct.predicate_expr != nil
+
+      # Double sublink disjunct should have nil predicate
+      assert double_sublink_disjunct.predicate_sql == nil
+      assert double_sublink_disjunct.predicate_expr == nil
+    end
+
+    test "simple subquery has nil predicate" do
+      shape =
+        Shape.new!("child",
+          where: "parent_id IN (SELECT id FROM parent)",
+          inspector: @inspector
+        )
+
+      dnf = SubqueryMoves.extract_dnf_structure(shape)
+
+      assert length(dnf) == 1
+      [disjunct] = dnf
+
+      # Should have nil predicate since it's only a sublink
+      assert disjunct.predicate_sql == nil
+      assert disjunct.predicate_expr == nil
+    end
+
+    test "subquery with additional AND predicate extracts the predicate" do
+      # parent_id IN (subq) AND value = 'test'
+      shape =
+        Shape.new!("child",
+          where: "parent_id IN (SELECT id FROM parent) AND value = 'test'",
+          inspector: @inspector
+        )
+
+      dnf = SubqueryMoves.extract_dnf_structure(shape)
+
+      assert length(dnf) == 1
+      [disjunct] = dnf
+
+      # Should have predicate for value = 'test'
+      assert disjunct.predicate_sql =~ "\"value\""
+      assert disjunct.predicate_sql =~ "'test'"
+      assert disjunct.predicate_expr != nil
+    end
+  end
+
   describe "disjunct-based tagging" do
     test "dnf_structure is populated in shape" do
       shape =
@@ -636,6 +739,186 @@ defmodule Electric.Shapes.Shape.SubqueryMovesTest do
       assert composite_pattern.sublink_index == "0"
       assert composite_pattern.values == ["42"]
       assert composite_pattern.affected_disjuncts == [0]
+    end
+  end
+
+  describe "runtime tagging respects non-sublink predicates" do
+    # Tests for C2 in fix3.md - runtime tagging must check predicates
+
+    @status_inspector Support.StubInspector.new(
+                        tables: ["parent1", "child"],
+                        columns: [
+                          %{name: "id", type: "int8", pk_position: 0, type_id: {20, 1}},
+                          %{name: "x", type: "int8", pk_position: nil, type_id: {20, 1}},
+                          %{name: "status", type: "text", pk_position: nil, type_id: {28, 1}}
+                        ]
+                      )
+
+    test "x IN subq OR status = 'active' - record satisfying only sublink gets only disjunct 0 tag" do
+      # Shape: x IN (subq) OR status = 'active'
+      # Record: x = 1, status = 'inactive'
+      # Extra refs: sublink 0 contains 1
+      # Expected: Only tag for disjunct 0 (the sublink disjunct)
+
+      shape =
+        Shape.new!("child",
+          where: "x IN (SELECT id FROM parent1) OR status = 'active'",
+          inspector: @status_inspector
+        )
+        |> fill_handles()
+
+      stack_id = "stack-1"
+      shape_handle = "shape-1"
+
+      # Record matches x = 1 (in sublink) but status = 'inactive' (doesn't match predicate)
+      record = %{"id" => "99", "x" => "1", "status" => "inactive"}
+      extra_refs = %{["$sublink", "0"] => MapSet.new(["1"])}
+
+      change = %Electric.Replication.Changes.NewRecord{
+        key: "key1",
+        record: record,
+        move_tags: []
+      }
+
+      tagged_change = Shape.fill_move_tags(change, shape, stack_id, shape_handle, {%{}, extra_refs})
+
+      # Should only have ONE tag (for disjunct 0, the sublink disjunct)
+      assert length(tagged_change.move_tags) == 1
+      [tag] = tagged_change.move_tags
+
+      # Tag should be for disjunct 0
+      assert String.starts_with?(tag, "d0:")
+    end
+
+    test "x IN subq OR status = 'active' - record satisfying only predicate gets only disjunct 1 tag" do
+      # Shape: x IN (subq) OR status = 'active'
+      # Record: x = 999 (not in sublink), status = 'active'
+      # Extra refs: sublink 0 does NOT contain 999
+      # Expected: Only tag for disjunct 1 (the predicate disjunct)
+      # Note: disjuncts without sublinks don't generate tags, so this should produce NO tags
+
+      shape =
+        Shape.new!("child",
+          where: "x IN (SELECT id FROM parent1) OR status = 'active'",
+          inspector: @status_inspector
+        )
+        |> fill_handles()
+
+      stack_id = "stack-1"
+      shape_handle = "shape-1"
+
+      # Record: x = 999 (not in sublink), status = 'active' (matches predicate)
+      record = %{"id" => "99", "x" => "999", "status" => "active"}
+      # The sublink doesn't contain 999
+      extra_refs = %{["$sublink", "0"] => MapSet.new(["1", "2", "3"])}
+
+      change = %Electric.Replication.Changes.NewRecord{
+        key: "key1",
+        record: record,
+        move_tags: []
+      }
+
+      tagged_change = Shape.fill_move_tags(change, shape, stack_id, shape_handle, {%{}, extra_refs})
+
+      # The predicate disjunct (status = 'active') has no sublinks, so it doesn't generate a tag
+      # Only sublink-containing disjuncts generate tags
+      # So this record should have no tags (disjunct 1 has no sublinks)
+      assert tagged_change.move_tags == []
+    end
+
+    test "x IN subq OR status = 'active' - record satisfying both gets only sublink tag (predicate disjunct has no sublinks)" do
+      # Shape: x IN (subq) OR status = 'active'
+      # Record: x = 1 (in sublink), status = 'active'
+      # Both disjuncts are satisfied, but only disjunct 0 has sublinks
+      # Expected: Only tag for disjunct 0
+
+      shape =
+        Shape.new!("child",
+          where: "x IN (SELECT id FROM parent1) OR status = 'active'",
+          inspector: @status_inspector
+        )
+        |> fill_handles()
+
+      stack_id = "stack-1"
+      shape_handle = "shape-1"
+
+      record = %{"id" => "99", "x" => "1", "status" => "active"}
+      extra_refs = %{["$sublink", "0"] => MapSet.new(["1"])}
+
+      change = %Electric.Replication.Changes.NewRecord{
+        key: "key1",
+        record: record,
+        move_tags: []
+      }
+
+      tagged_change = Shape.fill_move_tags(change, shape, stack_id, shape_handle, {%{}, extra_refs})
+
+      # Should only have tag for disjunct 0 (the one with sublinks)
+      assert length(tagged_change.move_tags) == 1
+      [tag] = tagged_change.move_tags
+      assert String.starts_with?(tag, "d0:")
+    end
+
+    test "x IN subq AND status = 'active' - record not satisfying predicate gets no tag" do
+      # Shape: x IN (subq) AND status = 'active'
+      # Record: x = 1 (in sublink), status = 'inactive' (doesn't match predicate)
+      # Expected: No tags because the predicate is not satisfied
+
+      shape =
+        Shape.new!("child",
+          where: "x IN (SELECT id FROM parent1) AND status = 'active'",
+          inspector: @status_inspector
+        )
+        |> fill_handles()
+
+      stack_id = "stack-1"
+      shape_handle = "shape-1"
+
+      record = %{"id" => "99", "x" => "1", "status" => "inactive"}
+      extra_refs = %{["$sublink", "0"] => MapSet.new(["1"])}
+
+      change = %Electric.Replication.Changes.NewRecord{
+        key: "key1",
+        record: record,
+        move_tags: []
+      }
+
+      tagged_change = Shape.fill_move_tags(change, shape, stack_id, shape_handle, {%{}, extra_refs})
+
+      # Record has x in sublink but status doesn't match, so no tags
+      assert tagged_change.move_tags == []
+    end
+
+    test "x IN subq AND status = 'active' - record satisfying both gets tag" do
+      # Shape: x IN (subq) AND status = 'active'
+      # Record: x = 1 (in sublink), status = 'active' (matches predicate)
+      # Expected: Tag for disjunct 0
+
+      shape =
+        Shape.new!("child",
+          where: "x IN (SELECT id FROM parent1) AND status = 'active'",
+          inspector: @status_inspector
+        )
+        |> fill_handles()
+
+      stack_id = "stack-1"
+      shape_handle = "shape-1"
+
+      record = %{"id" => "99", "x" => "1", "status" => "active"}
+      extra_refs = %{["$sublink", "0"] => MapSet.new(["1"])}
+
+      change = %Electric.Replication.Changes.NewRecord{
+        key: "key1",
+        record: record,
+        move_tags: []
+      }
+
+      tagged_change = Shape.fill_move_tags(change, shape, stack_id, shape_handle, {%{}, extra_refs})
+
+      # Record satisfies both sublink and predicate, should get tag
+      assert length(tagged_change.move_tags) == 1
+      [tag] = tagged_change.move_tags
+      assert String.starts_with?(tag, "d0:")
     end
   end
 end

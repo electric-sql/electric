@@ -415,18 +415,26 @@ defmodule Electric.Shapes.Shape.SubqueryMoves do
   - `sublinks`: list of sublink ref paths involved in this disjunct
   - `patterns`: map of sublink_ref -> pattern (column names for tag hash)
   - `comparison_expressions`: map of sublink_ref -> expression (for membership checking)
+  - `predicate_sql`: SQL string for non-sublink predicates in this disjunct (nil if none)
+  - `predicate_expr`: Eval.Expr for runtime evaluation of non-sublink predicates (nil if none)
 
   ## Examples
 
       # x IN (subq1) OR y IN (subq2) → 2 disjuncts, each with 1 sublink
       [
-        %{sublinks: [["$sublink", "0"]], patterns: %{...}, ...},
-        %{sublinks: [["$sublink", "1"]], patterns: %{...}, ...}
+        %{sublinks: [["$sublink", "0"]], patterns: %{...}, predicate_sql: nil, ...},
+        %{sublinks: [["$sublink", "1"]], patterns: %{...}, predicate_sql: nil, ...}
       ]
 
       # x IN (subq1) AND y IN (subq2) → 1 disjunct with 2 sublinks
       [
-        %{sublinks: [["$sublink", "0"], ["$sublink", "1"]], patterns: %{...}, ...}
+        %{sublinks: [["$sublink", "0"], ["$sublink", "1"]], patterns: %{...}, predicate_sql: nil, ...}
+      ]
+
+      # x IN (subq1) OR status = 'active' → 2 disjuncts
+      [
+        %{sublinks: [["$sublink", "0"]], patterns: %{...}, predicate_sql: nil, ...},
+        %{sublinks: [], patterns: %{}, predicate_sql: "\"status\" = 'active'", ...}
       ]
   """
   @spec extract_dnf_structure(Shape.t()) :: [Shape.disjunct()]
@@ -439,7 +447,7 @@ defmodule Electric.Shapes.Shape.SubqueryMoves do
     # Extract disjuncts from the top-level structure
     disjuncts = extract_disjuncts(where.eval)
 
-    # For each disjunct, extract sublink information
+    # For each disjunct, extract sublink information and non-sublink predicates
     Enum.map(disjuncts, fn disjunct_ast ->
       {patterns, comparison_expressions} = extract_sublink_info(disjunct_ast)
 
@@ -448,13 +456,182 @@ defmodule Electric.Shapes.Shape.SubqueryMoves do
           {path, Eval.Expr.wrap_parser_part(expr)}
         end)
 
+      # Extract non-sublink predicate for this disjunct
+      {predicate_sql, predicate_expr} = extract_non_sublink_predicate(disjunct_ast)
+
       %{
         sublinks: Map.keys(patterns) |> Enum.sort(),
         patterns: patterns,
-        comparison_expressions: comparison_expressions
+        comparison_expressions: comparison_expressions,
+        predicate_sql: predicate_sql,
+        predicate_expr: predicate_expr
       }
     end)
   end
+
+  # Extract the non-sublink predicate from a disjunct AST.
+  # Replaces sublink_membership_check nodes with literal TRUE and serializes to SQL.
+  # Returns {predicate_sql, predicate_expr} where both are nil if disjunct is only sublinks.
+  defp extract_non_sublink_predicate(disjunct_ast) do
+    # Replace sublink_membership_check with literal true
+    stripped_ast = replace_sublinks_with_true(disjunct_ast)
+
+    # Check if the result is just a literal true (disjunct was only sublinks)
+    case stripped_ast do
+      %Eval.Parser.Const{value: true} ->
+        {nil, nil}
+
+      ast ->
+        # Serialize to SQL for database queries
+        predicate_sql = ast_to_sql(ast)
+        # Wrap for runtime evaluation
+        predicate_expr = Eval.Expr.wrap_parser_part(ast)
+        {predicate_sql, predicate_expr}
+    end
+  end
+
+  # Replace all sublink_membership_check nodes with literal TRUE
+  defp replace_sublinks_with_true(%Eval.Parser.Func{name: "sublink_membership_check"}) do
+    %Eval.Parser.Const{value: true, type: :bool}
+  end
+
+  defp replace_sublinks_with_true(%Eval.Parser.Func{name: "and", args: args} = func) do
+    new_args =
+      args
+      |> Enum.map(&replace_sublinks_with_true/1)
+      |> Enum.reject(&match?(%Eval.Parser.Const{value: true, type: :bool}, &1))
+
+    case new_args do
+      [] -> %Eval.Parser.Const{value: true, type: :bool}
+      [single] -> single
+      multiple -> %{func | args: multiple}
+    end
+  end
+
+  defp replace_sublinks_with_true(%Eval.Parser.Func{name: "or", args: args} = func) do
+    new_args = Enum.map(args, &replace_sublinks_with_true/1)
+
+    # If any arg is true, the whole OR is true
+    if Enum.any?(new_args, &match?(%Eval.Parser.Const{value: true, type: :bool}, &1)) do
+      %Eval.Parser.Const{value: true, type: :bool}
+    else
+      %{func | args: new_args}
+    end
+  end
+
+  defp replace_sublinks_with_true(%Eval.Parser.Func{args: args} = func) do
+    %{func | args: Enum.map(args, &replace_sublinks_with_true/1)}
+  end
+
+  defp replace_sublinks_with_true(other), do: other
+
+  # Convert a limited subset of our AST to SQL.
+  # This handles the common cases needed for non-sublink predicates.
+  defp ast_to_sql(%Eval.Parser.Const{value: nil}), do: "NULL"
+  defp ast_to_sql(%Eval.Parser.Const{value: true, type: :bool}), do: "TRUE"
+  defp ast_to_sql(%Eval.Parser.Const{value: false, type: :bool}), do: "FALSE"
+
+  defp ast_to_sql(%Eval.Parser.Const{value: value, type: type})
+       when type in [:int2, :int4, :int8, :float4, :float8, :numeric] do
+    to_string(value)
+  end
+
+  defp ast_to_sql(%Eval.Parser.Const{value: value, type: :text}) do
+    escaped = String.replace(value, "'", "''")
+    "'#{escaped}'"
+  end
+
+  defp ast_to_sql(%Eval.Parser.Const{value: value}) when is_binary(value) do
+    escaped = String.replace(value, "'", "''")
+    "'#{escaped}'"
+  end
+
+  # Array constant (e.g., from ANY(ARRAY[1, 2]))
+  defp ast_to_sql(%Eval.Parser.Const{value: values, type: {:array, inner_type}})
+       when is_list(values) do
+    elements_sql =
+      Enum.map_join(values, ", ", fn v ->
+        ast_to_sql(%Eval.Parser.Const{value: v, type: inner_type})
+      end)
+
+    type_str = Atom.to_string(inner_type)
+    "ARRAY[#{elements_sql}]::#{type_str}[]"
+  end
+
+  defp ast_to_sql(%Eval.Parser.Const{value: values}) when is_list(values) do
+    # Fallback for untyped array constant
+    elements_sql = Enum.map_join(values, ", ", &sql_literal/1)
+    "ARRAY[#{elements_sql}]"
+  end
+
+  defp ast_to_sql(%Eval.Parser.Ref{path: [column]}) do
+    Electric.Utils.quote_name(column)
+  end
+
+  defp ast_to_sql(%Eval.Parser.Func{name: "and", args: args}) do
+    parts = Enum.map(args, &"(#{ast_to_sql(&1)})")
+    Enum.join(parts, " AND ")
+  end
+
+  defp ast_to_sql(%Eval.Parser.Func{name: "or", args: args}) do
+    parts = Enum.map(args, &"(#{ast_to_sql(&1)})")
+    Enum.join(parts, " OR ")
+  end
+
+  defp ast_to_sql(%Eval.Parser.Func{name: "not", args: [arg]}) do
+    "NOT (#{ast_to_sql(arg)})"
+  end
+
+  defp ast_to_sql(%Eval.Parser.Func{name: "is", args: [left, right]}) do
+    "#{ast_to_sql(left)} IS #{ast_to_sql(right)}"
+  end
+
+  defp ast_to_sql(%Eval.Parser.Func{name: "is not", args: [left, right]}) do
+    "#{ast_to_sql(left)} IS NOT #{ast_to_sql(right)}"
+  end
+
+  # Binary operators
+  defp ast_to_sql(%Eval.Parser.Func{name: op, args: [left, right]})
+       when op in ["=", "<>", "<", ">", "<=", ">=", "~~", "~~*", "!~~", "!~~*"] do
+    sql_op = operator_to_sql(op)
+    "#{ast_to_sql(left)} #{sql_op} #{ast_to_sql(right)}"
+  end
+
+  # General function call fallback
+  defp ast_to_sql(%Eval.Parser.Func{name: name, args: args}) do
+    args_sql = Enum.map_join(args, ", ", &ast_to_sql/1)
+    "#{name}(#{args_sql})"
+  end
+
+  defp ast_to_sql(%Eval.Parser.Array{elements: elements, type: {:array, inner_type}}) do
+    elements_sql = Enum.map_join(elements, ", ", &ast_to_sql/1)
+    type_str = Atom.to_string(inner_type)
+    "ARRAY[#{elements_sql}]::#{type_str}[]"
+  end
+
+  defp ast_to_sql(%Eval.Parser.Array{elements: elements}) do
+    elements_sql = Enum.map_join(elements, ", ", &ast_to_sql/1)
+    "ARRAY[#{elements_sql}]"
+  end
+
+  defp operator_to_sql("~~"), do: "LIKE"
+  defp operator_to_sql("~~*"), do: "ILIKE"
+  defp operator_to_sql("!~~"), do: "NOT LIKE"
+  defp operator_to_sql("!~~*"), do: "NOT ILIKE"
+  defp operator_to_sql(op), do: op
+
+  # Helper to convert a raw Elixir value to SQL literal (for array fallback case)
+  defp sql_literal(value) when is_integer(value), do: to_string(value)
+  defp sql_literal(value) when is_float(value), do: to_string(value)
+
+  defp sql_literal(value) when is_binary(value) do
+    escaped = String.replace(value, "'", "''")
+    "'#{escaped}'"
+  end
+
+  defp sql_literal(true), do: "TRUE"
+  defp sql_literal(false), do: "FALSE"
+  defp sql_literal(nil), do: "NULL"
 
   # Convert an AST to Disjunctive Normal Form (DNF).
   # DNF is a disjunction (OR) of conjunctions (ANDs), e.g.: (A AND B) OR (C AND D)

@@ -151,6 +151,10 @@ defmodule Electric.Shapes.Querying do
   # For shapes with DNF structure, generates DNF-based tags: "d{index}:{value_parts_base64}:{hash}"
   # Falls back to legacy format for shapes without DNF structure.
   # only_sublink_index: if provided, only generates tags for disjuncts containing that dependency
+  #
+  # IMPORTANT: When a disjunct has a non-sublink predicate (predicate_sql), we wrap the tag
+  # expression in a CASE WHEN to ensure rows only get tags for disjuncts they actually satisfy.
+  # This prevents "phantom" tags that would keep rows alive after move-outs.
   defp make_tags(%Shape{dnf_structure: dnf_structure} = _shape, stack_id, shape_handle, only_sublink_index)
        when dnf_structure != [] do
     # DNF-based tags: one tag per disjunct that matches the filter AND has sublinks
@@ -183,7 +187,17 @@ defmodule Electric.Shapes.Querying do
       # We use replace to convert + -> - and / -> _
       base64_expr = ~s[replace(replace(rtrim(encode((#{value_parts_expr})::bytea, 'base64'), '='), '+', '-'), '/', '_')]
 
-      ~s['d#{disjunct_index}:' || #{base64_expr} || ':' || #{hash_expr}]
+      tag_expr = ~s['d#{disjunct_index}:' || #{base64_expr} || ':' || #{hash_expr}]
+
+      # If this disjunct has a non-sublink predicate, wrap the tag with CASE WHEN
+      # This ensures rows only get tags for disjuncts whose predicates they satisfy
+      case disjunct.predicate_sql do
+        nil ->
+          tag_expr
+
+        predicate_sql ->
+          ~s[CASE WHEN (#{predicate_sql}) THEN #{tag_expr} ELSE NULL END]
+      end
     end)
   end
 
@@ -269,8 +283,12 @@ defmodule Electric.Shapes.Querying do
       if tags != [] do
         "{" <> json = headers
 
-        tags = Enum.join(tags, ~s[ || '","' || ])
-        ~s/{"tags":["' || #{tags} || '"],/ <> json
+        # Use array_to_json with array_remove to filter out NULL tags.
+        # This handles CASE WHEN ... ELSE NULL END expressions from predicate-conditional tags.
+        # We use array_to_json instead of string concatenation because NULL in string concat
+        # would make the entire result NULL.
+        tags_array = Enum.join(tags, ", ")
+        ~s/{"tags":' || array_to_json(array_remove(ARRAY[#{tags_array}], NULL)) || ',/ <> json
       else
         headers
       end
