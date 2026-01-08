@@ -3196,6 +3196,28 @@ defmodule Electric.Plug.RouterTest do
       assert message =~ "invalid_value"
     end
 
+    @tag with_sql: [
+           "INSERT INTO items VALUES (gen_random_uuid(), 'test value 1')"
+         ]
+    test "subsets can filter with explicit type cast on parameter", ctx do
+      req = make_shape_req("items", log: "changes_only")
+
+      # Explicit casts on parameters (e.g. $1::text) must preserve param_ref
+      # metadata so the parameter can be resolved during query rebuilding
+      assert {_, 200,
+              %{
+                "metadata" => _,
+                "data" => [
+                  %{
+                    "value" => %{"id" => _, "value" => "test value 1"}
+                  }
+                ]
+              }} =
+               shape_req(req, ctx.opts,
+                 subset: %{where: "value = $1::text", params: %{"1" => "test value 1"}}
+               )
+    end
+
     test "GET requests aren't cached", ctx do
       req = make_shape_req("items", log: "changes_only", subset: %{}, offset: "-1")
 
