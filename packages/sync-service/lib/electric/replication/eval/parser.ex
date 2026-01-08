@@ -1048,11 +1048,15 @@ defmodule Electric.Replication.Eval.Parser do
     end
   end
 
-  defp explicit_cast_const(%Const{type: type, value: value} = const, target_type, %Env{} = env) do
+  defp explicit_cast_const(
+         %Const{type: type, value: value, meta: meta} = const,
+         target_type,
+         %Env{} = env
+       ) do
     with {:ok, %Func{} = func} <- as_dynamic_cast(const, target_type, env) do
       case try_applying(%{func | args: [value]}) do
-        {:ok, const} ->
-          {:ok, const}
+        {:ok, result_const} ->
+          {:ok, %{result_const | meta: meta}}
 
         {:error, _} ->
           {:error,
@@ -1221,11 +1225,11 @@ defmodule Electric.Replication.Eval.Parser do
     {:error, {_loc, _message}} = error -> error
   end
 
-  defp infer_unknown(%UnknownConst{value: nil, location: loc}),
-    do: %Const{type: :unknown, value: nil, location: loc}
+  defp infer_unknown(%UnknownConst{value: nil, location: loc, meta: meta}),
+    do: %Const{type: :unknown, value: nil, location: loc, meta: meta}
 
-  defp infer_unknown(%UnknownConst{value: value, location: loc}),
-    do: %Const{type: :text, value: value, location: loc}
+  defp infer_unknown(%UnknownConst{value: value, location: loc, meta: meta}),
+    do: %Const{type: :text, value: value, location: loc, meta: meta}
 
   defp make_const(kind, value, loc) do
     case {kind, value} do
