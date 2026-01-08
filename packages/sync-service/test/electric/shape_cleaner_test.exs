@@ -37,8 +37,8 @@ defmodule Electric.ShapeCleanerTest do
     :with_pure_file_storage,
     :with_shape_status,
     :with_lsn_tracker,
-    :with_status_monitor,
-    :with_shape_cleaner
+    :with_shape_cleaner,
+    :with_status_monitor
   ]
 
   for {cleanup_fn, suite_title} <- [
@@ -73,8 +73,8 @@ defmodule Electric.ShapeCleanerTest do
         if map_size(existing_shape_map) > 0 do
           patch_calls(Electric.ShapeCache.ShapeStatus,
             remove_shape: fn _stack_id, handle ->
-              if shape = Map.get(existing_shape_map, handle) do
-                {:ok, shape}
+              if Map.get(existing_shape_map, handle) do
+                :ok
               else
                 {:error, "invalid shape #{handle}"}
               end
@@ -108,9 +108,9 @@ defmodule Electric.ShapeCleanerTest do
         Support.TestUtils.patch_snapshotter(fn parent,
                                                shape_handle,
                                                _shape,
-                                               %{storage: storage} ->
+                                               %{snapshot_fun: snapshot_fun} ->
           GenServer.cast(parent, {:pg_snapshot_known, shape_handle, @pg_snapshot_xmin_10})
-          Storage.make_new_snapshot!([["test"]], storage)
+          snapshot_fun.([["test"]])
           GenServer.cast(parent, {:snapshot_started, shape_handle})
         end)
 
@@ -187,9 +187,9 @@ defmodule Electric.ShapeCleanerTest do
         Support.TestUtils.patch_snapshotter(fn parent,
                                                shape_handle,
                                                _shape,
-                                               %{storage: storage} ->
+                                               %{snapshot_fun: snapshot_fun} ->
           GenServer.cast(parent, {:pg_snapshot_known, shape_handle, @pg_snapshot_xmin_10})
-          Storage.make_new_snapshot!([["test"]], storage)
+          snapshot_fun.([["test"]])
           GenServer.cast(parent, {:snapshot_started, shape_handle})
         end)
 
@@ -210,9 +210,12 @@ defmodule Electric.ShapeCleanerTest do
     ]
 
     setup ctx do
-      Support.TestUtils.patch_snapshotter(fn parent, shape_handle, _shape, %{storage: storage} ->
+      Support.TestUtils.patch_snapshotter(fn parent,
+                                             shape_handle,
+                                             _shape,
+                                             %{snapshot_fun: snapshot_fun} ->
         GenServer.cast(parent, {:pg_snapshot_known, shape_handle, @pg_snapshot_xmin_10})
-        Storage.make_new_snapshot!([["test"]], storage)
+        snapshot_fun.([["test"]])
         GenServer.cast(parent, {:snapshot_started, shape_handle})
       end)
 
@@ -272,6 +275,35 @@ defmodule Electric.ShapeCleanerTest do
       {shape_handle2, _} = ShapeCache.get_or_create_shape_handle(@shape, ctx.stack_id)
       assert :started = ShapeCache.await_snapshot_start(shape_handle2, ctx.stack_id)
       assert shape_handle != shape_handle2
+    end
+  end
+
+  describe "remove_shape_storage_async/2" do
+    test "calls Storage.cleanup! for all given handles", ctx do
+      parent = self()
+      handles = Enum.map(1..5, &"remove-handle-#{&1}")
+
+      agent = start_supervised!({Agent, fn -> MapSet.new(handles) end})
+
+      patch_calls(Storage,
+        cleanup!: fn _storage, handle ->
+          Agent.update(agent, &MapSet.delete(&1, handle))
+          send(parent, {:cleanup, handle})
+          :ok
+        end
+      )
+
+      activate_mocks_for_descendant_procs(ShapeCleaner)
+
+      ShapeCleaner.remove_shape_storage_async(ctx.stack_id, handles)
+
+      for handle <- handles do
+        assert_receive {:cleanup, ^handle}, 500
+      end
+
+      remaining_handles = Agent.get(agent, & &1)
+
+      assert MapSet.size(remaining_handles) == 0
     end
   end
 

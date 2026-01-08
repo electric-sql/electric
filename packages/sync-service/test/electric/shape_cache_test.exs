@@ -152,9 +152,12 @@ defmodule Electric.ShapeCacheTest do
     ]
 
     test "creates initial snapshot if one doesn't exist", %{storage: storage} = ctx do
-      Support.TestUtils.patch_snapshotter(fn parent, shape_handle, _shape, %{storage: storage} ->
+      Support.TestUtils.patch_snapshotter(fn parent,
+                                             shape_handle,
+                                             _shape,
+                                             %{snapshot_fun: snapshot_fun} ->
         GenServer.cast(parent, {:pg_snapshot_known, shape_handle, @pg_snapshot_xmin_10})
-        Storage.make_new_snapshot!([["test"]], storage)
+        snapshot_fun.([["test"]])
         GenServer.cast(parent, {:snapshot_started, shape_handle})
       end)
 
@@ -171,10 +174,13 @@ defmodule Electric.ShapeCacheTest do
     test "triggers table prep and snapshot creation only once", ctx do
       test_pid = self()
 
-      Support.TestUtils.patch_snapshotter(fn parent, shape_handle, _shape, %{storage: storage} ->
+      Support.TestUtils.patch_snapshotter(fn parent,
+                                             shape_handle,
+                                             _shape,
+                                             %{snapshot_fun: snapshot_fun} ->
         send(test_pid, {:called, :create_snapshot_fn})
         GenServer.cast(parent, {:pg_snapshot_known, shape_handle, @pg_snapshot_xmin_10})
-        Storage.make_new_snapshot!([["test"]], storage)
+        snapshot_fun.([["test"]])
         GenServer.cast(parent, {:snapshot_started, shape_handle})
       end)
 
@@ -214,10 +220,13 @@ defmodule Electric.ShapeCacheTest do
     test "triggers table prep and snapshot creation only once even with queued requests", ctx do
       test_pid = self()
 
-      Support.TestUtils.patch_snapshotter(fn parent, shape_handle, _shape, %{storage: storage} ->
+      Support.TestUtils.patch_snapshotter(fn parent,
+                                             shape_handle,
+                                             _shape,
+                                             %{snapshot_fun: snapshot_fun} ->
         send(test_pid, {:called, :create_snapshot_fn})
         GenServer.cast(parent, {:pg_snapshot_known, shape_handle, @pg_snapshot_xmin_10})
-        Storage.make_new_snapshot!([["test"]], storage)
+        snapshot_fun.([["test"]])
         GenServer.cast(parent, {:snapshot_started, shape_handle})
       end)
 
@@ -520,9 +529,12 @@ defmodule Electric.ShapeCacheTest do
     end
 
     test "lists the shape as active once there is a snapshot", ctx do
-      Support.TestUtils.patch_snapshotter(fn parent, shape_handle, _shape, %{storage: storage} ->
+      Support.TestUtils.patch_snapshotter(fn parent,
+                                             shape_handle,
+                                             _shape,
+                                             %{snapshot_fun: snapshot_fun} ->
         GenServer.cast(parent, {:pg_snapshot_known, shape_handle, @pg_snapshot_xmin_10})
-        Storage.make_new_snapshot!([["test"]], storage)
+        snapshot_fun.([["test"]])
         GenServer.cast(parent, {:snapshot_started, shape_handle})
       end)
 
@@ -537,12 +549,15 @@ defmodule Electric.ShapeCacheTest do
     test "lists the shape even if we don't know xmin", ctx do
       test_pid = self()
 
-      Support.TestUtils.patch_snapshotter(fn parent, shape_handle, _shape, %{storage: storage} ->
+      Support.TestUtils.patch_snapshotter(fn parent,
+                                             shape_handle,
+                                             _shape,
+                                             %{snapshot_fun: snapshot_fun} ->
         ref = make_ref()
         send(test_pid, {:waiting_point, ref, self()})
         receive(do: ({:continue, ^ref} -> :ok))
         GenServer.cast(parent, {:pg_snapshot_known, shape_handle, @pg_snapshot_xmin_10})
-        Storage.make_new_snapshot!([["test"]], storage)
+        snapshot_fun.([["test"]])
         GenServer.cast(parent, {:snapshot_started, shape_handle})
       end)
 
@@ -657,9 +672,12 @@ defmodule Electric.ShapeCacheTest do
       shape_handle = "orphaned_handle"
       storage = Storage.for_shape(shape_handle, ctx.storage)
 
-      Support.TestUtils.patch_snapshotter(fn parent, shape_handle, _shape, %{storage: storage} ->
+      Support.TestUtils.patch_snapshotter(fn parent,
+                                             shape_handle,
+                                             _shape,
+                                             %{snapshot_fun: snapshot_fun} ->
         GenServer.cast(parent, {:pg_snapshot_known, shape_handle, @pg_snapshot_xmin_10})
-        Storage.make_new_snapshot!([["test"]], storage)
+        snapshot_fun.([["test"]])
         GenServer.cast(parent, {:snapshot_started, shape_handle})
       end)
 
@@ -671,7 +689,10 @@ defmodule Electric.ShapeCacheTest do
     test "handles buffering multiple callers correctly", ctx do
       test_pid = self()
 
-      Support.TestUtils.patch_snapshotter(fn parent, shape_handle, _shape, %{storage: storage} ->
+      Support.TestUtils.patch_snapshotter(fn parent,
+                                             shape_handle,
+                                             _shape,
+                                             %{snapshot_fun: snapshot_fun} ->
         ref = make_ref()
         send(test_pid, {:waiting_point, ref, self()})
         receive(do: ({:continue, ^ref} -> :ok))
@@ -681,7 +702,7 @@ defmodule Electric.ShapeCacheTest do
         # if we don't actually have a snapshot. This is kind of part of the test, because
         # `await_snapshot_start/3` should always resolve to `:started` in concurrent situations
         GenServer.cast(parent, {:snapshot_started, shape_handle})
-        Storage.make_new_snapshot!([[1], [2]], storage)
+        snapshot_fun.([[1], [2]])
       end)
 
       {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape, ctx.stack_id)
@@ -726,11 +747,14 @@ defmodule Electric.ShapeCacheTest do
             raise "some error"
         end)
 
-      Support.TestUtils.patch_snapshotter(fn parent, shape_handle, _shape, %{storage: storage} ->
+      Support.TestUtils.patch_snapshotter(fn parent,
+                                             shape_handle,
+                                             _shape,
+                                             %{snapshot_fun: snapshot_fun} ->
         GenServer.cast(parent, {:pg_snapshot_known, shape_handle, @pg_snapshot_xmin_10})
         GenServer.cast(parent, {:snapshot_started, shape_handle})
 
-        Storage.make_new_snapshot!(stream_from_database, storage)
+        snapshot_fun.(stream_from_database)
       end)
 
       {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape, ctx.stack_id)
@@ -939,9 +963,12 @@ defmodule Electric.ShapeCacheTest do
     setup ctx do
       snapshot_data = ctx[:snapshot_data] || []
 
-      Support.TestUtils.patch_snapshotter(fn parent, shape_handle, _shape, %{storage: storage} ->
+      Support.TestUtils.patch_snapshotter(fn parent,
+                                             shape_handle,
+                                             _shape,
+                                             %{snapshot_fun: snapshot_fun} ->
         GenServer.cast(parent, {:pg_snapshot_known, shape_handle, @pg_snapshot_xmin_10})
-        Storage.make_new_snapshot!(snapshot_data, storage)
+        snapshot_fun.(snapshot_data)
         GenServer.cast(parent, {:snapshot_started, shape_handle})
       end)
 
@@ -1048,19 +1075,13 @@ defmodule Electric.ShapeCacheTest do
                )
              )
 
-      restart_shape_cache(ctx, remove_backup: true)
+      restart_shape_cache(ctx)
 
       assert [{^dep_handle, _}, {^shape_handle, _}] = ShapeCache.list_shapes(ctx.stack_id)
     end
 
     defp restart_shape_cache(ctx, opts \\ []) do
       stop_shape_cache(ctx)
-
-      {remove_backup?, opts} = Keyword.pop(opts, :remove_backup, false)
-
-      if remove_backup? do
-        File.rm_rf!(ShapeCache.ShapeStatus.backup_dir(ctx.storage))
-      end
 
       with_lsn_tracker(ctx)
 
@@ -1079,6 +1100,7 @@ defmodule Electric.ShapeCacheTest do
               ctx.consumer_supervisor,
               ctx.shape_log_collector,
               ctx.shape_status_owner,
+              ctx.shape_db,
               "shape_task_supervisor"
             ] do
         :ok = stop_supervised(name)
@@ -1099,9 +1121,12 @@ defmodule Electric.ShapeCacheTest do
     setup ctx do
       snapshot_data = ctx[:snapshot_data] || []
 
-      Support.TestUtils.patch_snapshotter(fn parent, shape_handle, _shape, %{storage: storage} ->
+      Support.TestUtils.patch_snapshotter(fn parent,
+                                             shape_handle,
+                                             _shape,
+                                             %{snapshot_fun: snapshot_fun} ->
         GenServer.cast(parent, {:pg_snapshot_known, shape_handle, @pg_snapshot_xmin_10})
-        Storage.make_new_snapshot!(snapshot_data, storage)
+        snapshot_fun.(snapshot_data)
         GenServer.cast(parent, {:snapshot_started, shape_handle})
       end)
 

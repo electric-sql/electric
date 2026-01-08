@@ -17,6 +17,8 @@ defmodule Electric.Replication.PublicationManagerManualTest do
 
   @shape_handle "pub_mgr_manual_test_shape_handle"
 
+  @moduletag :tmp_dir
+
   setup [
     :with_stack_id_from_test,
     :with_in_memory_storage,

@@ -20,6 +20,8 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
 
   import Support.ComponentSetup
 
+  @moduletag :tmp_dir
+
   setup [
     :with_stack_id_from_test,
     :with_in_memory_storage,
