@@ -95,7 +95,8 @@ jobs:
     needs: [derive_build_vars]
     steps:
       - uses: actions/checkout@v4
-        ref: ${{ needs.derive_build_vars.outputs.git_ref }}
+        with:
+          ref: ${{ needs.derive_build_vars.outputs.git_ref }}
 
       - uses: useblacksmith/setup-docker-builder@v1
 
