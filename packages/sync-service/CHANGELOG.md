@@ -1,5 +1,11 @@
 # @core/sync-service
 
+## 1.2.12
+
+### Patch Changes
+
+- b11b8ea: Support multiple subqueries on the same level, returning 409s on move-ins/outs
+
 ## 1.2.11
 
 ### Patch Changes
