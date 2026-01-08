@@ -1,5 +1,24 @@
 defmodule Electric.Shapes.Shape.SubqueryMoves do
-  @moduledoc false
+  @moduledoc """
+  Handles subquery move-in and move-out logic for shapes with subqueries.
+
+  ## DNF (Disjunctive Normal Form) Support
+
+  This module supports full DNF for WHERE clauses containing subqueries. DNF means
+  a disjunction (OR) of conjunctions (ANDs), e.g.:
+
+      (A AND B) OR (C AND D) OR E
+
+  For tagging purposes:
+  - Each disjunct becomes a separate "reason" for a row to be in the shape
+  - A row gets a tag for each disjunct it satisfies
+  - A row is deleted only when it has no remaining tags (no disjuncts satisfied)
+
+  Examples:
+  - `x IN (subq1) OR y IN (subq2)` → 2 disjuncts, each with 1 sublink
+  - `x IN (subq1) AND y IN (subq2)` → 1 disjunct with 2 sublinks
+  - `(x IN (subq1) AND z='foo') OR y IN (subq2)` → 2 disjuncts
+  """
   alias Electric.Replication.Eval
   alias Electric.Replication.Eval.Walker
   alias Electric.Shapes.Shape
@@ -132,8 +151,14 @@ defmodule Electric.Shapes.Shape.SubqueryMoves do
   @doc """
   Generate a tag-removal control message for a shape.
 
-  Patterns are a list of lists, where each inner list represents a pattern (and is functionally a tuple, but
-  JSON can't directly represent tuples). This pattern is filled with actual values that have been removed.
+  For single-sublink disjuncts (OR-only cases):
+    Patterns contain pre-computed tag hashes that can be directly matched.
+
+  For multi-sublink disjuncts (AND-combined cases):
+    Patterns contain information for the receiver to compute affected composite tags:
+    - sublink_ref: which sublink moved out
+    - values: which values moved out
+    - affected_disjuncts: which disjunct indices need tag recomputation
 
   Now supports multiple dependencies - each move_out is processed only for its specific dependency.
   """
@@ -142,18 +167,29 @@ defmodule Electric.Shapes.Shape.SubqueryMoves do
           ...
         ]) :: map()
   def make_move_out_control_message(shape, stack_id, shape_handle, move_outs) do
-    %{
-      headers: %{
-        event: "move-out",
-        patterns:
-          Enum.flat_map(move_outs, &make_move_out_pattern(shape, stack_id, shape_handle, &1))
-      }
-    }
+    {simple_patterns, composite_patterns} =
+      Enum.reduce(move_outs, {[], []}, fn move_out, {simple_acc, composite_acc} ->
+        {simple, composite} = make_move_out_patterns(shape, stack_id, shape_handle, move_out)
+        {simple ++ simple_acc, composite ++ composite_acc}
+      end)
+
+    headers =
+      %{event: "move-out", patterns: simple_patterns}
+      |> then(fn headers ->
+        if composite_patterns == [] do
+          headers
+        else
+          Map.put(headers, :composite_patterns, composite_patterns)
+        end
+      end)
+
+    %{headers: headers}
   end
 
   # Generate move-out patterns for a specific dependency
-  defp make_move_out_pattern(
-         %{tag_structure: tag_structure_map, shape_dependencies_handles: dep_handles},
+  # Returns {simple_patterns, composite_patterns}
+  defp make_move_out_patterns(
+         %{dnf_structure: dnf_structure, shape_dependencies_handles: dep_handles, tag_structure: tag_structure} = shape,
          stack_id,
          shape_handle,
          {dep_handle, gone_values}
@@ -163,37 +199,115 @@ defmodule Electric.Shapes.Shape.SubqueryMoves do
     sublink_index = Integer.to_string(index)
     sublink_ref = ["$sublink", sublink_index]
 
-    # Get the pattern for this specific dependency from the tag_structure map
-    case Map.get(tag_structure_map, sublink_ref) do
+    # Fallback to legacy behavior if dnf_structure is empty but tag_structure exists
+    # This handles shapes created directly without going through Shape.new!
+    if dnf_structure == [] and map_size(tag_structure) > 0 do
+      make_move_out_patterns_legacy(tag_structure, stack_id, shape_handle, sublink_ref, gone_values)
+    else
+      make_move_out_patterns_dnf(dnf_structure, stack_id, shape_handle, sublink_ref, sublink_index, gone_values, shape)
+    end
+  end
+
+  # Legacy pattern generation using tag_structure (for backward compatibility)
+  defp make_move_out_patterns_legacy(tag_structure, stack_id, shape_handle, sublink_ref, gone_values) do
+    case Map.get(tag_structure, sublink_ref) do
       nil ->
-        # No pattern for this dependency - shouldn't happen but handle gracefully
-        []
+        {[], []}
 
       pattern ->
-        # Process the pattern (which is a list with one column_or_expr element)
+        sublink_index = List.last(sublink_ref)
+        simple_patterns =
+          Enum.flat_map(pattern, fn column_or_expr ->
+            case column_or_expr do
+              column_name when is_binary(column_name) ->
+                Enum.map(gone_values, fn {_typed_value, string_value} ->
+                  %{pos: 0, value: make_value_hash(stack_id, shape_handle, sublink_index, string_value)}
+                end)
+
+              {:hash_together, columns} ->
+                column_parts =
+                  &(Enum.zip_with(&1, columns, fn value, column -> column <> ":" <> value end)
+                    |> Enum.join(":"))
+
+                Enum.map(gone_values, fn {_typed_value, composite_string_value} ->
+                  values = Tuple.to_list(composite_string_value)
+                  %{pos: 0, value: make_value_hash(stack_id, shape_handle, sublink_index, column_parts.(values))}
+                end)
+            end
+          end)
+
+        {simple_patterns, []}
+    end
+  end
+
+  # DNF-based pattern generation
+  defp make_move_out_patterns_dnf(dnf_structure, stack_id, shape_handle, sublink_ref, sublink_index, gone_values, shape) do
+    # Find which disjuncts contain this sublink and categorize them
+    {single_sublink_disjuncts, multi_sublink_disjuncts} =
+      dnf_structure
+      |> Enum.with_index()
+      |> Enum.filter(fn {disjunct, _idx} -> sublink_ref in disjunct.sublinks end)
+      |> Enum.split_with(fn {disjunct, _idx} -> length(disjunct.sublinks) == 1 end)
+
+    # For single-sublink disjuncts: generate simple pre-computed tags
+    # Tag format: "d{disjunct_index}:{hash}"
+    simple_patterns =
+      Enum.flat_map(single_sublink_disjuncts, fn {disjunct, disjunct_index} ->
+        pattern = Map.get(disjunct.patterns, sublink_ref, [])
+
         Enum.flat_map(pattern, fn column_or_expr ->
           case column_or_expr do
             column_name when is_binary(column_name) ->
-              Enum.map(
-                gone_values,
-                &%{pos: 0, value: make_value_hash(stack_id, shape_handle, sublink_index, elem(&1, 1))}
-              )
+              Enum.map(gone_values, fn {_typed_value, string_value} ->
+                value_parts = "#{sublink_index}:#{string_value}"
+                hash = make_disjunct_hash(stack_id, shape_handle, disjunct_index, value_parts)
+                %{pos: 0, value: "d#{disjunct_index}:#{hash}"}
+              end)
 
-            {:hash_together, columns} ->
-              column_parts =
-                &(Enum.zip_with(&1, columns, fn value, column -> column <> ":" <> value end)
-                  |> Enum.join(":"))
-
-              Enum.map(
-                gone_values,
-                &%{
-                  pos: 0,
-                  value:
-                    make_value_hash(stack_id, shape_handle, sublink_index, column_parts.(Tuple.to_list(elem(&1, 1))))
-                }
-              )
+            {:hash_together, _columns} ->
+              Enum.map(gone_values, fn {_typed_value, composite_string_value} ->
+                values = Tuple.to_list(composite_string_value)
+                column_values = Enum.join(values, ":")
+                value_parts = "#{sublink_index}:#{column_values}"
+                hash = make_disjunct_hash(stack_id, shape_handle, disjunct_index, value_parts)
+                %{pos: 0, value: "d#{disjunct_index}:#{hash}"}
+              end)
           end
         end)
+      end)
+
+    # For multi-sublink disjuncts: generate composite pattern info for receiver to compute
+    composite_patterns =
+      if multi_sublink_disjuncts == [] do
+        []
+      else
+        affected_disjunct_indices = Enum.map(multi_sublink_disjuncts, fn {_disjunct, idx} -> idx end)
+        pattern = get_sublink_pattern(shape, sublink_ref)
+
+        gone_string_values =
+          Enum.map(gone_values, fn {_typed_value, string_value} ->
+            if is_tuple(string_value), do: Tuple.to_list(string_value), else: string_value
+          end)
+
+        [
+          %{
+            sublink_index: sublink_index,
+            values: gone_string_values,
+            affected_disjuncts: affected_disjunct_indices,
+            pattern: pattern
+          }
+        ]
+      end
+
+    {simple_patterns, composite_patterns}
+  end
+
+  # Get the pattern (column names) for a sublink from the shape's tag structure
+  defp get_sublink_pattern(%{tag_structure: tag_structure}, sublink_ref) do
+    case Map.get(tag_structure, sublink_ref, []) do
+      [column] when is_binary(column) -> [column]
+      [{:hash_together, columns}] -> columns
+      _ -> []
     end
   end
 
@@ -209,6 +323,20 @@ defmodule Electric.Shapes.Shape.SubqueryMoves do
   # Backward compatibility wrapper - defaults to sublink_index "0"
   def make_value_hash(stack_id, shape_handle, value) do
     make_value_hash(stack_id, shape_handle, "0", value)
+  end
+
+  @doc """
+  Create a hash for a disjunct tag. This is used for AND-combined subqueries
+  where the tag represents the entire disjunct being satisfied.
+
+  The hash includes:
+  - stack_id and shape_handle (for uniqueness across shapes)
+  - disjunct_index (to differentiate tags from different disjuncts)
+  - value_parts (composite of all sublink values in the disjunct)
+  """
+  def make_disjunct_hash(stack_id, shape_handle, disjunct_index, value_parts) do
+    :crypto.hash(:md5, "#{stack_id}#{shape_handle}disjunct:#{disjunct_index}:#{value_parts}")
+    |> Base.encode16(case: :lower)
   end
 
   @doc """
@@ -276,6 +404,112 @@ defmodule Electric.Shapes.Shape.SubqueryMoves do
       Map.new(comparison_expressions, fn {path, expr} -> {path, Eval.Expr.wrap_parser_part(expr)} end)
 
     {tag_structure_map, comparison_expressions}
+  end
+
+  @doc """
+  Extract DNF (Disjunctive Normal Form) structure from a shape's WHERE clause.
+
+  Returns a list of disjuncts, where each disjunct is a map containing:
+  - `sublinks`: list of sublink ref paths involved in this disjunct
+  - `patterns`: map of sublink_ref -> pattern (column names for tag hash)
+  - `comparison_expressions`: map of sublink_ref -> expression (for membership checking)
+
+  ## Examples
+
+      # x IN (subq1) OR y IN (subq2) → 2 disjuncts, each with 1 sublink
+      [
+        %{sublinks: [["$sublink", "0"]], patterns: %{...}, ...},
+        %{sublinks: [["$sublink", "1"]], patterns: %{...}, ...}
+      ]
+
+      # x IN (subq1) AND y IN (subq2) → 1 disjunct with 2 sublinks
+      [
+        %{sublinks: [["$sublink", "0"], ["$sublink", "1"]], patterns: %{...}, ...}
+      ]
+  """
+  @spec extract_dnf_structure(Shape.t()) :: [Shape.disjunct()]
+  def extract_dnf_structure(%Shape{} = shape)
+      when is_nil(shape.where)
+      when shape.shape_dependencies == [],
+      do: []
+
+  def extract_dnf_structure(%Shape{where: where}) do
+    # Extract disjuncts from the top-level structure
+    disjuncts = extract_disjuncts(where.eval)
+
+    # For each disjunct, extract sublink information
+    Enum.map(disjuncts, fn disjunct_ast ->
+      {patterns, comparison_expressions} = extract_sublink_info(disjunct_ast)
+
+      comparison_expressions =
+        Map.new(comparison_expressions, fn {path, expr} ->
+          {path, Eval.Expr.wrap_parser_part(expr)}
+        end)
+
+      %{
+        sublinks: Map.keys(patterns) |> Enum.sort(),
+        patterns: patterns,
+        comparison_expressions: comparison_expressions
+      }
+    end)
+  end
+
+  # Extract top-level disjuncts from an OR tree.
+  # If the top node is OR, each arg is a disjunct.
+  # Otherwise, the entire tree is a single disjunct.
+  defp extract_disjuncts(%Eval.Parser.Func{name: "or", args: args}) do
+    # Flatten nested ORs into a list of disjuncts
+    Enum.flat_map(args, &extract_disjuncts/1)
+  end
+
+  defp extract_disjuncts(ast), do: [ast]
+
+  # Extract sublink patterns and comparison expressions from a disjunct AST
+  defp extract_sublink_info(ast) do
+    Walker.reduce!(
+      ast,
+      fn
+        %Eval.Parser.Func{name: "sublink_membership_check", args: [testexpr, sublink_ref]},
+        {patterns, comparison_expressions},
+        _ ->
+          pattern =
+            case testexpr do
+              %Eval.Parser.Ref{path: [column_name]} ->
+                [column_name]
+
+              %Eval.Parser.RowExpr{elements: elements} ->
+                columns =
+                  Enum.map(elements, fn %Eval.Parser.Ref{path: [column_name]} ->
+                    column_name
+                  end)
+
+                [{:hash_together, columns}]
+            end
+
+          patterns = Map.put(patterns, sublink_ref.path, pattern)
+          comparison_expressions = Map.put(comparison_expressions, sublink_ref.path, testexpr)
+
+          {:ok, {patterns, comparison_expressions}}
+
+        _, acc, _ ->
+          {:ok, acc}
+      end,
+      {%{}, %{}}
+    )
+  end
+
+  @doc """
+  Check if the shape has any disjunct with multiple sublinks (AND-combined subqueries).
+
+  This is important because AND-combined subqueries require different handling:
+  - Tags must be composite (include all sublink values in the disjunct)
+  - Move-outs need to consider all values in the disjunct
+  """
+  @spec has_and_combined_subqueries?(Shape.t()) :: boolean()
+  def has_and_combined_subqueries?(%Shape{} = shape) do
+    shape
+    |> extract_dnf_structure()
+    |> Enum.any?(fn disjunct -> length(disjunct.sublinks) > 1 end)
   end
 
   # Check if the WHERE clause has an OR node whose subtree contains a sublink reference.

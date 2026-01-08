@@ -364,4 +364,141 @@ defmodule Electric.Shapes.Shape.SubqueryMovesTest do
     handles = Enum.map(filled_deps, &Shape.generate_id/1)
     %{shape | shape_dependencies: filled_deps, shape_dependencies_handles: handles}
   end
+
+  describe "extract_dnf_structure/1" do
+    test "returns empty list for shape without where clause" do
+      shape = Shape.new!("child", inspector: @inspector)
+      assert SubqueryMoves.extract_dnf_structure(shape) == []
+    end
+
+    test "returns empty list for shape without dependencies" do
+      shape = Shape.new!("child", where: "parent_id > 5", inspector: @inspector)
+      assert SubqueryMoves.extract_dnf_structure(shape) == []
+    end
+
+    test "extracts single disjunct for simple subquery" do
+      shape =
+        Shape.new!("child",
+          where: "parent_id IN (SELECT id FROM parent)",
+          inspector: @inspector
+        )
+
+      dnf = SubqueryMoves.extract_dnf_structure(shape)
+
+      assert length(dnf) == 1
+      [disjunct] = dnf
+
+      assert disjunct.sublinks == [["$sublink", "0"]]
+      assert disjunct.patterns[["$sublink", "0"]] == ["parent_id"]
+      assert Map.has_key?(disjunct.comparison_expressions, ["$sublink", "0"])
+    end
+
+    test "extracts two disjuncts for OR-combined subqueries" do
+      shape =
+        Shape.new!("child",
+          where: "x IN (SELECT id FROM parent1) OR y IN (SELECT id FROM parent2)",
+          inspector: @multi_inspector
+        )
+
+      dnf = SubqueryMoves.extract_dnf_structure(shape)
+
+      assert length(dnf) == 2
+
+      # Each disjunct should have exactly one sublink
+      assert Enum.all?(dnf, fn disjunct -> length(disjunct.sublinks) == 1 end)
+
+      sublinks = Enum.flat_map(dnf, & &1.sublinks) |> Enum.sort()
+      assert sublinks == [["$sublink", "0"], ["$sublink", "1"]]
+    end
+
+    test "extracts single disjunct with multiple sublinks for AND-combined subqueries" do
+      shape =
+        Shape.new!("child",
+          where: "x IN (SELECT id FROM parent1) AND y IN (SELECT id FROM parent2)",
+          inspector: @multi_inspector
+        )
+
+      dnf = SubqueryMoves.extract_dnf_structure(shape)
+
+      # Single disjunct with two sublinks (AND-combined)
+      assert length(dnf) == 1
+      [disjunct] = dnf
+
+      assert length(disjunct.sublinks) == 2
+      assert Enum.sort(disjunct.sublinks) == [["$sublink", "0"], ["$sublink", "1"]]
+      assert disjunct.patterns[["$sublink", "0"]] == ["x"]
+      assert disjunct.patterns[["$sublink", "1"]] == ["y"]
+    end
+
+    test "handles mixed AND/OR with DNF structure" do
+      # (x IN subq1 AND flag = true) OR (y IN subq2)
+      # This is in DNF: two disjuncts, first has one sublink, second has one sublink
+      shape =
+        Shape.new!("child",
+          where: "(x IN (SELECT id FROM parent1) AND value = 'active') OR y IN (SELECT id FROM parent2)",
+          inspector: @multi_inspector
+        )
+
+      dnf = SubqueryMoves.extract_dnf_structure(shape)
+
+      # Two disjuncts, each with one sublink
+      assert length(dnf) == 2
+      assert Enum.all?(dnf, fn disjunct -> length(disjunct.sublinks) == 1 end)
+    end
+  end
+
+  describe "has_and_combined_subqueries?/1" do
+    test "returns false for single subquery" do
+      shape =
+        Shape.new!("child",
+          where: "parent_id IN (SELECT id FROM parent)",
+          inspector: @inspector
+        )
+
+      refute SubqueryMoves.has_and_combined_subqueries?(shape)
+    end
+
+    test "returns false for OR-combined subqueries" do
+      shape =
+        Shape.new!("child",
+          where: "x IN (SELECT id FROM parent1) OR y IN (SELECT id FROM parent2)",
+          inspector: @multi_inspector
+        )
+
+      refute SubqueryMoves.has_and_combined_subqueries?(shape)
+    end
+
+    test "returns true for AND-combined subqueries" do
+      shape =
+        Shape.new!("child",
+          where: "x IN (SELECT id FROM parent1) AND y IN (SELECT id FROM parent2)",
+          inspector: @multi_inspector
+        )
+
+      assert SubqueryMoves.has_and_combined_subqueries?(shape)
+    end
+  end
+
+  describe "disjunct-based tagging" do
+    test "dnf_structure is populated in shape" do
+      shape =
+        Shape.new!("child",
+          where: "x IN (SELECT id FROM parent1) OR y IN (SELECT id FROM parent2)",
+          inspector: @multi_inspector
+        )
+
+      assert length(shape.dnf_structure) == 2
+    end
+
+    test "make_disjunct_hash produces different hashes for different disjuncts" do
+      stack_id = "stack-1"
+      shape_handle = "shape-1"
+      value_parts = "0:42"
+
+      hash0 = SubqueryMoves.make_disjunct_hash(stack_id, shape_handle, 0, value_parts)
+      hash1 = SubqueryMoves.make_disjunct_hash(stack_id, shape_handle, 1, value_parts)
+
+      refute hash0 == hash1
+    end
+  end
 end

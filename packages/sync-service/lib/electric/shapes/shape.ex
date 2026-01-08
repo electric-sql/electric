@@ -38,6 +38,9 @@ defmodule Electric.Shapes.Shape do
     shape_dependencies_handles: [],
     tag_structure: %{},
     subquery_comparison_expressions: %{},
+    # DNF structure for disjunct-based tagging (full DNF support)
+    # List of disjuncts, each containing sublinks, patterns, and comparison expressions
+    dnf_structure: [],
     log_mode: :full,
     flags: %{},
     storage: %{compaction: :disabled},
@@ -57,6 +60,11 @@ defmodule Electric.Shapes.Shape do
   @type log_mode() :: :changes_only | :full
   @type flag() ::
           :selects_all_columns | :selects_generated_columns | :non_primitive_columns_in_where
+  @type disjunct() :: %{
+          sublinks: [[String.t()]],
+          patterns: %{[String.t()] => [String.t() | {:hash_together, [String.t(), ...]}]},
+          comparison_expressions: %{[String.t()] => Electric.Replication.Eval.Expr.t()}
+        }
   @type t() :: %__MODULE__{
           root_table: Electric.relation(),
           root_table_id: Electric.relation_id(),
@@ -67,6 +75,7 @@ defmodule Electric.Shapes.Shape do
           selected_columns: [String.t(), ...],
           explicitly_selected_columns: [String.t(), ...],
           tag_structure: %{optional([String.t()]) => [String.t() | {:hash_together, [String.t(), ...]}]},
+          dnf_structure: [disjunct()],
           replica: replica(),
           storage: storage_config() | nil,
           shape_dependencies: [t(), ...],
@@ -266,11 +275,13 @@ defmodule Electric.Shapes.Shape do
 
   defp fill_tag_structure(shape) do
     {tag_structure, comparison_expressions} = SubqueryMoves.move_in_tag_structure(shape)
+    dnf_structure = SubqueryMoves.extract_dnf_structure(shape)
 
     %{
       shape
       | tag_structure: tag_structure,
-        subquery_comparison_expressions: comparison_expressions
+        subquery_comparison_expressions: comparison_expressions,
+        dnf_structure: dnf_structure
     }
   end
 
@@ -630,9 +641,7 @@ defmodule Electric.Shapes.Shape do
     Changes.filter_columns(change, selected_columns)
   end
 
-  def fill_move_tags(change, %__MODULE__{tag_structure: tag_structure}, _, _, _extra_refs)
-      when tag_structure == %{},
-      do: change
+  def fill_move_tags(change, %__MODULE__{dnf_structure: []}, _, _, _extra_refs), do: change
 
   def fill_move_tags(%Changes.NewRecord{move_tags: [_ | _]} = change, _, _, _, _), do: change
   def fill_move_tags(%Changes.UpdatedRecord{move_tags: [_ | _]} = change, _, _, _, _), do: change
@@ -640,32 +649,26 @@ defmodule Electric.Shapes.Shape do
 
   def fill_move_tags(
         %Changes.NewRecord{record: record} = change,
-        %__MODULE__{
-          tag_structure: tag_structure,
-          subquery_comparison_expressions: comparison_expressions
-        } = shape,
+        %__MODULE__{dnf_structure: dnf_structure} = _shape,
         stack_id,
         shape_handle,
         {_extra_refs_old, extra_refs_new}
       ) do
-    move_tags = make_tags_from_pattern(tag_structure, comparison_expressions, record, extra_refs_new, stack_id, shape_handle, shape)
+    move_tags = make_tags_from_dnf(dnf_structure, record, extra_refs_new, stack_id, shape_handle)
     %{change | move_tags: move_tags}
   end
 
   def fill_move_tags(
         %Changes.UpdatedRecord{record: record, old_record: old_record} = change,
-        %__MODULE__{
-          tag_structure: tag_structure,
-          subquery_comparison_expressions: comparison_expressions
-        } = shape,
+        %__MODULE__{dnf_structure: dnf_structure} = _shape,
         stack_id,
         shape_handle,
         {extra_refs_old, extra_refs_new}
       ) do
-    move_tags = make_tags_from_pattern(tag_structure, comparison_expressions, record, extra_refs_new, stack_id, shape_handle, shape)
+    move_tags = make_tags_from_dnf(dnf_structure, record, extra_refs_new, stack_id, shape_handle)
 
     old_move_tags =
-      make_tags_from_pattern(tag_structure, comparison_expressions, old_record, extra_refs_old, stack_id, shape_handle, shape) --
+      make_tags_from_dnf(dnf_structure, old_record, extra_refs_old, stack_id, shape_handle) --
         move_tags
 
     %{change | move_tags: move_tags, removed_move_tags: old_move_tags}
@@ -673,44 +676,66 @@ defmodule Electric.Shapes.Shape do
 
   def fill_move_tags(
         %Changes.DeletedRecord{old_record: record} = change,
-        %__MODULE__{
-          tag_structure: tag_structure,
-          subquery_comparison_expressions: comparison_expressions
-        } = shape,
+        %__MODULE__{dnf_structure: dnf_structure} = _shape,
         stack_id,
         shape_handle,
         {extra_refs_old, _extra_refs_new}
       ) do
-    move_tags = make_tags_from_pattern(tag_structure, comparison_expressions, record, extra_refs_old, stack_id, shape_handle, shape)
+    move_tags = make_tags_from_dnf(dnf_structure, record, extra_refs_old, stack_id, shape_handle)
     %{change | move_tags: move_tags}
   end
 
-  defp make_tags_from_pattern(tag_structure_map, comparison_expressions, record, extra_refs, stack_id, shape_handle, _shape) do
-    # tag_structure_map is now %{["$sublink", "0"] => ["x"], ["$sublink", "1"] => ["y"]}
-    # We iterate over each dependency and create a tag only if the record's value is in extra_refs
-    tag_structure_map
-    |> Enum.flat_map(fn {sublink_ref, pattern} ->
-      # Extract the sublink index from the ref path (e.g. ["$sublink", "0"] -> "0")
-      sublink_index = List.last(sublink_ref)
+  # Create tags using DNF structure - one tag per satisfied disjunct.
+  # For a disjunct to be "satisfied", ALL sublinks in it must have their values in the materialized sets.
+  # The tag is a composite hash of the disjunct index and all sublink values.
+  defp make_tags_from_dnf(dnf_structure, record, extra_refs, stack_id, shape_handle) do
+    dnf_structure
+    |> Enum.with_index()
+    |> Enum.flat_map(fn {disjunct, disjunct_index} ->
+      # Check if ALL sublinks in this disjunct are satisfied
+      all_satisfied =
+        Enum.all?(disjunct.sublinks, fn sublink_ref ->
+          is_value_in_dependency?(record, sublink_ref, disjunct.comparison_expressions, extra_refs)
+        end)
 
-      # Check if this record's value is in the materialized set for this dependency
-      if is_value_in_dependency?(record, sublink_ref, comparison_expressions, extra_refs) do
-        tag =
-          Enum.map(pattern, fn
-            column_name when is_binary(column_name) ->
-              SubqueryMoves.make_value_hash(stack_id, shape_handle, sublink_index, Map.get(record, column_name))
-
-            {:hash_together, columns} ->
-              column_parts = Enum.map(columns, &(&1 <> ":" <> Map.get(record, &1)))
-              SubqueryMoves.make_value_hash(stack_id, shape_handle, sublink_index, Enum.join(column_parts, ":"))
-          end)
-          |> Enum.join("/")
-
+      if all_satisfied do
+        # Build composite tag from all sublink values in this disjunct
+        tag = make_disjunct_tag(disjunct, disjunct_index, record, stack_id, shape_handle)
         [tag]
       else
         []
       end
     end)
+  end
+
+  # Create a composite tag for a disjunct, including all sublink values.
+  # The tag format includes the disjunct index as a prefix for easy filtering:
+  # "d{disjunct_index}:{hash}"
+  defp make_disjunct_tag(disjunct, disjunct_index, record, stack_id, shape_handle) do
+    # Collect all value parts from each sublink in the disjunct
+    value_parts =
+      disjunct.sublinks
+      |> Enum.sort()
+      |> Enum.flat_map(fn sublink_ref ->
+        pattern = Map.get(disjunct.patterns, sublink_ref, [])
+        sublink_index = List.last(sublink_ref)
+
+        Enum.map(pattern, fn
+          column_name when is_binary(column_name) ->
+            "#{sublink_index}:#{Map.get(record, column_name)}"
+
+          {:hash_together, columns} ->
+            column_values = Enum.map(columns, &Map.get(record, &1)) |> Enum.join(":")
+            "#{sublink_index}:#{column_values}"
+        end)
+      end)
+      |> Enum.join("/")
+
+    # Hash includes disjunct index to differentiate tags from different disjuncts
+    hash = SubqueryMoves.make_disjunct_hash(stack_id, shape_handle, disjunct_index, value_parts)
+
+    # Prefix with disjunct index for easy filtering during move-out
+    "d#{disjunct_index}:#{hash}"
   end
 
   # Check if the record's value for a given dependency is in the materialized set

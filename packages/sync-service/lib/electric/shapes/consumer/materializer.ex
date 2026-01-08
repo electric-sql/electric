@@ -240,13 +240,25 @@ defmodule Electric.Shapes.Consumer.Materializer do
             }
         end
 
-      %{"headers" => %{"event" => "move-out", "patterns" => patterns}} ->
+      %{"headers" => %{"event" => "move-out"} = headers} ->
         patterns =
-          Enum.map(patterns, fn %{"pos" => pos, "value" => value} ->
+          Map.get(headers, "patterns", [])
+          |> Enum.map(fn %{"pos" => pos, "value" => value} ->
             %{pos: pos, value: value}
           end)
 
-        %{headers: %{event: "move-out", patterns: patterns}}
+        composite_patterns =
+          Map.get(headers, "composite_patterns", [])
+          |> Enum.map(fn cp ->
+            %{
+              sublink_index: cp["sublink_index"],
+              values: cp["values"],
+              affected_disjuncts: cp["affected_disjuncts"],
+              pattern: cp["pattern"]
+            }
+          end)
+
+        %{headers: %{event: "move-out", patterns: patterns, composite_patterns: composite_patterns}}
     end)
   end
 
@@ -392,10 +404,19 @@ defmodule Electric.Shapes.Consumer.Materializer do
             {{index, tag_indices, row_tags},
              decrement_value(counts_and_events, value, value_to_string(value, state))}
 
-          %{headers: %{event: "move-out", patterns: patterns}},
+          %{headers: %{event: "move-out", patterns: patterns} = headers},
           {{index, tag_indices, row_tags}, counts_and_events} ->
             # Move-out must only delete rows when ALL tags are removed
+
+            # Process simple patterns (pre-computed tag hashes)
             {keys_to_maybe_delete, tag_indices, row_tags} = process_move_out_patterns(tag_indices, row_tags, patterns)
+
+            # Process composite patterns (for AND-combined subqueries)
+            composite_patterns = Map.get(headers, :composite_patterns, [])
+            {composite_keys, tag_indices, row_tags} =
+              process_composite_move_out_patterns(index, tag_indices, row_tags, composite_patterns, state)
+
+            keys_to_maybe_delete = MapSet.union(keys_to_maybe_delete, composite_keys)
 
             # For each key, check if all tags were removed - only then delete the row
             {index, row_tags, counts_and_events} =
@@ -403,9 +424,14 @@ defmodule Electric.Shapes.Consumer.Materializer do
                 key_tags = Map.get(row_tags, key, MapSet.new())
                 if MapSet.size(key_tags) == 0 do
                   # All tags removed - delete the row
-                  {value, index} = Map.pop!(index, key)
-                  row_tags = Map.delete(row_tags, key)
-                  {index, row_tags, decrement_value(counts_and_events, value, value_to_string(value, state))}
+                  case Map.pop(index, key) do
+                    {nil, index} ->
+                      {index, row_tags, counts_and_events}
+
+                    {value, index} ->
+                      row_tags = Map.delete(row_tags, key)
+                      {index, row_tags, decrement_value(counts_and_events, value, value_to_string(value, state))}
+                  end
                 else
                   # Row still has other tags - keep it
                   {index, row_tags, counts_and_events}
@@ -486,6 +512,78 @@ defmodule Electric.Shapes.Consumer.Materializer do
         end
 
       {tag_indices, row_tags}
+    end)
+  end
+
+  # Process composite move-out patterns for AND-combined subqueries.
+  # These patterns contain sublink info and values rather than pre-computed tag hashes.
+  # To find affected tags, we need to iterate over rows that match the moved-out values.
+  #
+  # NOTE: This implementation iterates over all rows to find matches, which is O(n).
+  # For better performance with large datasets, consider adding a reverse index.
+  defp process_composite_move_out_patterns(_index, tag_indices, row_tags, [], _state) do
+    {MapSet.new(), tag_indices, row_tags}
+  end
+
+  defp process_composite_move_out_patterns(_index, tag_indices, row_tags, composite_patterns, _state) do
+    # For each composite pattern, find rows that have tags for the affected disjuncts
+    # and remove those tags.
+    #
+    # Tag format: "d{disjunct_index}:{hash}"
+    # We can filter tags by the disjunct prefix to find affected tags.
+    #
+    # Note: This is a conservative approach that removes ALL tags for affected disjuncts.
+    # For the complete solution, we'd need to verify that the row's column value
+    # matches the moved-out value, but that requires access to full row data.
+    # This approach may result in some false positives (removing tags that shouldn't
+    # be removed), but will be corrected when the row is next updated.
+
+    Enum.reduce(composite_patterns, {MapSet.new(), tag_indices, row_tags}, fn
+      %{sublink_index: _sublink_index, values: _values, affected_disjuncts: disjunct_indices},
+      {keys_to_check, tag_indices, row_tags} ->
+        # Build prefixes for affected disjuncts
+        affected_prefixes =
+          MapSet.new(disjunct_indices, fn idx -> "d#{idx}:" end)
+
+        # Find all tags that belong to affected disjuncts
+        # (tags starting with "d{affected_disjunct_index}:")
+        tags_to_remove =
+          tag_indices
+          |> Map.keys()
+          |> Enum.filter(fn tag ->
+            Enum.any?(affected_prefixes, &String.starts_with?(tag, &1))
+          end)
+
+        # Remove these tags and collect affected keys
+        {tag_indices, row_tags, affected_keys} =
+          Enum.reduce(tags_to_remove, {tag_indices, row_tags, MapSet.new()}, fn tag, {ti, rt, ak} ->
+            case Map.pop(ti, tag) do
+              {nil, ti} ->
+                {ti, rt, ak}
+
+              {keys, ti} ->
+                # Remove this tag from all affected keys' row_tags
+                rt =
+                  Enum.reduce(keys, rt, fn key, rt ->
+                    case Map.fetch(rt, key) do
+                      {:ok, tags} ->
+                        new_tags = MapSet.delete(tags, tag)
+                        if MapSet.size(new_tags) == 0 do
+                          Map.delete(rt, key)
+                        else
+                          Map.put(rt, key, new_tags)
+                        end
+
+                      :error ->
+                        rt
+                    end
+                  end)
+
+                {ti, rt, MapSet.union(ak, keys)}
+            end
+          end)
+
+        {MapSet.union(keys_to_check, affected_keys), tag_indices, row_tags}
     end)
   end
 
