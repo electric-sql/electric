@@ -1,6 +1,6 @@
 {
   "name": "@electric-sql/y-electric",
-  "version": "0.1.23",
+  "version": "0.1.24",
   "description": "YJS network provider for ElectricSQL",
   "author": "ElectricSQL team and contributors.",
   "bugs": {
