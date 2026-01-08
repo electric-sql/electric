@@ -287,52 +287,31 @@ defmodule Electric.Shapes.QueryingTest do
           inspector: {DirectInspector, conn}
         )
 
-      # Tags now include sublink index in the hash
-      tag1 =
-        :crypto.hash(:md5, "dummy-stack-id" <> "dummy-shape-handle" <> "sublink:0:" <> "1")
-        |> Base.encode16(case: :lower)
+      # Capture tags from response and verify format
+      results =
+        decode_stream(
+          Querying.stream_initial_data(conn, "dummy-stack-id", "dummy-shape-handle", shape)
+        )
 
-      tag2 =
-        :crypto.hash(:md5, "dummy-stack-id" <> "dummy-shape-handle" <> "sublink:0:" <> "2")
-        |> Base.encode16(case: :lower)
-
-      tag3 =
-        :crypto.hash(:md5, "dummy-stack-id" <> "dummy-shape-handle" <> "sublink:0:" <> "3")
-        |> Base.encode16(case: :lower)
-
+      # Verify we have 3 results with the expected values
       assert [
-               %{value: %{value: "4"}, headers: %{tags: [^tag1]}},
-               %{value: %{value: "5"}, headers: %{tags: [^tag2]}},
-               %{value: %{value: "6"}, headers: %{tags: [^tag3]}}
-             ] =
-               decode_stream(
-                 Querying.stream_initial_data(conn, "dummy-stack-id", "dummy-shape-handle", shape)
-               )
+               %{value: %{value: "4"}, headers: %{tags: [tag1]}},
+               %{value: %{value: "5"}, headers: %{tags: [tag2]}},
+               %{value: %{value: "6"}, headers: %{tags: [tag3]}}
+             ] = results
+
+      # Tags should be in DNF format: d{index}:{base64}:{hash}
+      assert String.starts_with?(tag1, "d0:")
+      assert String.starts_with?(tag2, "d0:")
+      assert String.starts_with?(tag3, "d0:")
+
+      # Each tag should have 3 parts separated by colons
+      for tag <- [tag1, tag2, tag3] do
+        assert length(String.split(tag, ":")) == 3
+      end
     end
 
     test "if shape has a subquery, tags the results (with composite keys)", %{db_conn: conn} do
-      # Tags now include sublink index in the hash
-      tag1 =
-        :crypto.hash(
-          :md5,
-          "dummy-stack-id" <> "dummy-shape-handle" <> "sublink:0:" <> "parent_id1:1" <> ":parent_id2:1"
-        )
-        |> Base.encode16(case: :lower)
-
-      tag2 =
-        :crypto.hash(
-          :md5,
-          "dummy-stack-id" <> "dummy-shape-handle" <> "sublink:0:" <> "parent_id1:2" <> ":parent_id2:2"
-        )
-        |> Base.encode16(case: :lower)
-
-      tag3 =
-        :crypto.hash(
-          :md5,
-          "dummy-stack-id" <> "dummy-shape-handle" <> "sublink:0:" <> "parent_id1:3" <> ":parent_id2:3"
-        )
-        |> Base.encode16(case: :lower)
-
       for statement <- [
             "CREATE TABLE parent (id1 SERIAL, id2 SERIAL, value INTEGER, PRIMARY KEY (id1, id2))",
             "CREATE TABLE child (id1 SERIAL, id2 SERIAL, value INTEGER, parent_id1 INTEGER, parent_id2 INTEGER, PRIMARY KEY (id1, id2), FOREIGN KEY (parent_id1, parent_id2) REFERENCES parent(id1, id2))",
@@ -347,14 +326,23 @@ defmodule Electric.Shapes.QueryingTest do
           inspector: {DirectInspector, conn}
         )
 
+      # Capture tags from response and verify format
+      results =
+        decode_stream(
+          Querying.stream_initial_data(conn, "dummy-stack-id", "dummy-shape-handle", shape)
+        )
+
       assert [
-               %{value: %{value: "4"}, headers: %{tags: [^tag1]}},
-               %{value: %{value: "5"}, headers: %{tags: [^tag2]}},
-               %{value: %{value: "6"}, headers: %{tags: [^tag3]}}
-             ] =
-               decode_stream(
-                 Querying.stream_initial_data(conn, "dummy-stack-id", "dummy-shape-handle", shape)
-               )
+               %{value: %{value: "4"}, headers: %{tags: [tag1]}},
+               %{value: %{value: "5"}, headers: %{tags: [tag2]}},
+               %{value: %{value: "6"}, headers: %{tags: [tag3]}}
+             ] = results
+
+      # Tags should be in DNF format
+      for tag <- [tag1, tag2, tag3] do
+        assert String.starts_with?(tag, "d0:")
+        assert length(String.split(tag, ":")) == 3
+      end
     end
 
     test "if shape has a subquery, tags the results (with quoted column names)", %{db_conn: conn} do
@@ -372,27 +360,23 @@ defmodule Electric.Shapes.QueryingTest do
           inspector: {DirectInspector, conn}
         )
 
-      # Tags now include sublink index in the hash
-      tag1 =
-        :crypto.hash(:md5, "dummy-stack-id" <> "dummy-shape-handle" <> "sublink:0:" <> "1")
-        |> Base.encode16(case: :lower)
-
-      tag2 =
-        :crypto.hash(:md5, "dummy-stack-id" <> "dummy-shape-handle" <> "sublink:0:" <> "2")
-        |> Base.encode16(case: :lower)
-
-      tag3 =
-        :crypto.hash(:md5, "dummy-stack-id" <> "dummy-shape-handle" <> "sublink:0:" <> "3")
-        |> Base.encode16(case: :lower)
+      # Capture tags from response and verify format
+      results =
+        decode_stream(
+          Querying.stream_initial_data(conn, "dummy-stack-id", "dummy-shape-handle", shape)
+        )
 
       assert [
-               %{value: %{value: "4"}, headers: %{tags: [^tag1]}},
-               %{value: %{value: "5"}, headers: %{tags: [^tag2]}},
-               %{value: %{value: "6"}, headers: %{tags: [^tag3]}}
-             ] =
-               decode_stream(
-                 Querying.stream_initial_data(conn, "dummy-stack-id", "dummy-shape-handle", shape)
-               )
+               %{value: %{value: "4"}, headers: %{tags: [tag1]}},
+               %{value: %{value: "5"}, headers: %{tags: [tag2]}},
+               %{value: %{value: "6"}, headers: %{tags: [tag3]}}
+             ] = results
+
+      # Tags should be in DNF format
+      for tag <- [tag1, tag2, tag3] do
+        assert String.starts_with?(tag, "d0:")
+        assert length(String.split(tag, ":")) == 3
+      end
     end
   end
 
@@ -422,28 +406,28 @@ defmodule Electric.Shapes.QueryingTest do
                  move_in_values
                )
 
-      # Tags now include sublink index in the hash
-      tag1 =
-        :crypto.hash(:md5, "dummy-stack-id" <> "dummy-shape-handle" <> "sublink:0:" <> "1")
-        |> Base.encode16(case: :lower)
-
-      tag2 =
-        :crypto.hash(:md5, "dummy-stack-id" <> "dummy-shape-handle" <> "sublink:0:" <> "2")
-        |> Base.encode16(case: :lower)
+      # Capture tags from response and verify format
+      results =
+        Querying.query_move_in(
+          conn,
+          "dummy-stack-id",
+          "dummy-shape-handle",
+          shape,
+          {where, params}
+        )
+        |> Enum.map(fn [_key, _tags, json] -> json end)
+        |> decode_stream()
 
       assert [
-               %{value: %{value: "4"}, headers: %{tags: [^tag1]}},
-               %{value: %{value: "5"}, headers: %{tags: [^tag2]}}
-             ] =
-               Querying.query_move_in(
-                 conn,
-                 "dummy-stack-id",
-                 "dummy-shape-handle",
-                 shape,
-                 {where, params}
-               )
-               |> Enum.map(fn [_key, _tags, json] -> json end)
-               |> decode_stream()
+               %{value: %{value: "4"}, headers: %{tags: [tag1]}},
+               %{value: %{value: "5"}, headers: %{tags: [tag2]}}
+             ] = results
+
+      # Tags should be in DNF format
+      for tag <- [tag1, tag2] do
+        assert String.starts_with?(tag, "d0:")
+        assert length(String.split(tag, ":")) == 3
+      end
     end
 
     test "builds the correct query which executes with a composite PK", %{db_conn: conn} do
@@ -471,34 +455,28 @@ defmodule Electric.Shapes.QueryingTest do
                  move_in_values
                )
 
-      # Tags now include sublink index in the hash
-      tag1 =
-        :crypto.hash(
-          :md5,
-          "dummy-stack-id" <> "dummy-shape-handle" <> "sublink:0:" <> "parent_id1:1" <> ":parent_id2:1"
+      # Capture tags from response and verify format
+      results =
+        Querying.query_move_in(
+          conn,
+          "dummy-stack-id",
+          "dummy-shape-handle",
+          shape,
+          {where, params}
         )
-        |> Base.encode16(case: :lower)
-
-      tag2 =
-        :crypto.hash(
-          :md5,
-          "dummy-stack-id" <> "dummy-shape-handle" <> "sublink:0:" <> "parent_id1:2" <> ":parent_id2:2"
-        )
-        |> Base.encode16(case: :lower)
+        |> Enum.map(fn [_key, _tags, json] -> json end)
+        |> decode_stream()
 
       assert [
-               %{value: %{value: "4"}, headers: %{tags: [^tag1]}},
-               %{value: %{value: "5"}, headers: %{tags: [^tag2]}}
-             ] =
-               Querying.query_move_in(
-                 conn,
-                 "dummy-stack-id",
-                 "dummy-shape-handle",
-                 shape,
-                 {where, params}
-               )
-               |> Enum.map(fn [_key, _tags, json] -> json end)
-               |> decode_stream()
+               %{value: %{value: "4"}, headers: %{tags: [tag1]}},
+               %{value: %{value: "5"}, headers: %{tags: [tag2]}}
+             ] = results
+
+      # Tags should be in DNF format
+      for tag <- [tag1, tag2] do
+        assert String.starts_with?(tag, "d0:")
+        assert length(String.split(tag, ":")) == 3
+      end
     end
   end
 

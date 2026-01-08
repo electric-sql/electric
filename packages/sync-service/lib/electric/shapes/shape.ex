@@ -709,8 +709,17 @@ defmodule Electric.Shapes.Shape do
   end
 
   # Create a composite tag for a disjunct, including all sublink values.
-  # The tag format includes the disjunct index as a prefix for easy filtering:
-  # "d{disjunct_index}:{hash}"
+  # The tag format includes the disjunct index and base64-encoded value parts for
+  # value-aware removal during move-out:
+  # "d{disjunct_index}:{value_parts_base64}:{hash}"
+  #
+  # The value_parts string contains sublink index and values, e.g.:
+  # - Single sublink: "0:42"
+  # - Multiple sublinks: "0:42/1:abc" (sorted by sublink ref)
+  #
+  # This format allows the Materializer to:
+  # 1. Parse the tag to get sublink values
+  # 2. Verify that a moved-out value actually matches before removing the tag
   defp make_disjunct_tag(disjunct, disjunct_index, record, stack_id, shape_handle) do
     # Collect all value parts from each sublink in the disjunct
     value_parts =
@@ -734,8 +743,11 @@ defmodule Electric.Shapes.Shape do
     # Hash includes disjunct index to differentiate tags from different disjuncts
     hash = SubqueryMoves.make_disjunct_hash(stack_id, shape_handle, disjunct_index, value_parts)
 
-    # Prefix with disjunct index for easy filtering during move-out
-    "d#{disjunct_index}:#{hash}"
+    # Include base64-encoded value_parts for value-aware move-out verification
+    value_parts_encoded = Base.url_encode64(value_parts, padding: false)
+
+    # Format: d{index}:{value_parts_base64}:{hash}
+    "d#{disjunct_index}:#{value_parts_encoded}:#{hash}"
   end
 
   # Check if the record's value for a given dependency is in the materialized set

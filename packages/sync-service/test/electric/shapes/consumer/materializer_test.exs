@@ -636,6 +636,213 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
     end
   end
 
+  describe "composite move-out (value-aware removal for AND-combined subqueries)" do
+    test "composite_patterns only removes tags with matching sublink values", ctx do
+      ctx = with_materializer(ctx)
+
+      # Tag format: d{disjunct_index}:{value_parts_base64}:{hash}
+      # value_parts for row1: "0:42/1:abc" (sublink 0 = 42, sublink 1 = abc)
+      # value_parts for row2: "0:42/1:xyz" (sublink 0 = 42, sublink 1 = xyz)
+      # value_parts for row3: "0:99/1:abc" (sublink 0 = 99, sublink 1 = abc)
+      value_parts1 = "0:42/1:abc"
+      value_parts2 = "0:42/1:xyz"
+      value_parts3 = "0:99/1:abc"
+
+      tag1 = "d0:#{Base.url_encode64(value_parts1, padding: false)}:hash1"
+      tag2 = "d0:#{Base.url_encode64(value_parts2, padding: false)}:hash2"
+      tag3 = "d0:#{Base.url_encode64(value_parts3, padding: false)}:hash3"
+
+      # Insert three rows with composite tags
+      Materializer.new_changes(ctx, [
+        %Changes.NewRecord{key: "1", record: %{"value" => "10"}, move_tags: [tag1]},
+        %Changes.NewRecord{key: "2", record: %{"value" => "20"}, move_tags: [tag2]},
+        %Changes.NewRecord{key: "3", record: %{"value" => "30"}, move_tags: [tag3]}
+      ])
+
+      assert Materializer.get_link_values(ctx) == MapSet.new([10, 20, 30])
+      assert_receive {:materializer_changes, _, %{move_in: _}}
+
+      # Move-out sublink 0 with value "42" from disjunct 0
+      # This should remove tags for rows where sublink 0 has value "42"
+      # (rows 1 and 2), but NOT row 3 (which has sublink 0 = 99)
+      Materializer.new_changes(ctx, [
+        %{
+          headers: %{
+            event: "move-out",
+            patterns: [],
+            composite_patterns: [
+              %{
+                sublink_index: "0",
+                values: ["42"],
+                affected_disjuncts: [0],
+                pattern: ["x"]
+              }
+            ]
+          }
+        }
+      ])
+
+      # Row 3 should remain (sublink 0 value "99" doesn't match moved-out value "42")
+      assert Materializer.get_link_values(ctx) == MapSet.new([30])
+      assert_receive {:materializer_changes, _, %{move_out: move_out}}
+      assert Enum.sort(move_out) == [{10, "10"}, {20, "20"}]
+    end
+
+    test "composite_patterns with list values (composite keys)", ctx do
+      ctx = with_materializer(ctx)
+
+      # For composite keys like (col1, col2), the value format is "sublink_index:val1:val2"
+      value_parts1 = "0:A:1/1:foo"
+      value_parts2 = "0:A:2/1:bar"
+      value_parts3 = "0:B:1/1:foo"
+
+      tag1 = "d0:#{Base.url_encode64(value_parts1, padding: false)}:hash1"
+      tag2 = "d0:#{Base.url_encode64(value_parts2, padding: false)}:hash2"
+      tag3 = "d0:#{Base.url_encode64(value_parts3, padding: false)}:hash3"
+
+      Materializer.new_changes(ctx, [
+        %Changes.NewRecord{key: "1", record: %{"value" => "10"}, move_tags: [tag1]},
+        %Changes.NewRecord{key: "2", record: %{"value" => "20"}, move_tags: [tag2]},
+        %Changes.NewRecord{key: "3", record: %{"value" => "30"}, move_tags: [tag3]}
+      ])
+
+      assert Materializer.get_link_values(ctx) == MapSet.new([10, 20, 30])
+      assert_receive {:materializer_changes, _, %{move_in: _}}
+
+      # Move-out sublink 0 with composite value ["A", "1"]
+      # This matches row 1's "0:A:1" but not row 2's "0:A:2" or row 3's "0:B:1"
+      Materializer.new_changes(ctx, [
+        %{
+          headers: %{
+            event: "move-out",
+            patterns: [],
+            composite_patterns: [
+              %{
+                sublink_index: "0",
+                values: [["A", "1"]],
+                affected_disjuncts: [0],
+                pattern: ["col1", "col2"]
+              }
+            ]
+          }
+        }
+      ])
+
+      # Only row 1 should be removed
+      assert Materializer.get_link_values(ctx) == MapSet.new([20, 30])
+      assert_receive {:materializer_changes, _, %{move_out: [{10, "10"}]}}
+    end
+
+    test "composite_patterns doesn't remove tags from non-affected disjuncts", ctx do
+      ctx = with_materializer(ctx)
+
+      # Tags from different disjuncts
+      value_parts_d0 = "0:42/1:abc"
+      value_parts_d1 = "0:42/1:xyz"
+
+      tag_d0 = "d0:#{Base.url_encode64(value_parts_d0, padding: false)}:hash1"
+      tag_d1 = "d1:#{Base.url_encode64(value_parts_d1, padding: false)}:hash2"
+
+      Materializer.new_changes(ctx, [
+        %Changes.NewRecord{key: "1", record: %{"value" => "10"}, move_tags: [tag_d0]},
+        %Changes.NewRecord{key: "2", record: %{"value" => "20"}, move_tags: [tag_d1]}
+      ])
+
+      assert Materializer.get_link_values(ctx) == MapSet.new([10, 20])
+      assert_receive {:materializer_changes, _, %{move_in: _}}
+
+      # Move-out sublink 0 with value "42" but only for disjunct 0
+      # Row 2 has disjunct 1, so it shouldn't be affected even though value matches
+      Materializer.new_changes(ctx, [
+        %{
+          headers: %{
+            event: "move-out",
+            patterns: [],
+            composite_patterns: [
+              %{
+                sublink_index: "0",
+                values: ["42"],
+                affected_disjuncts: [0],
+                pattern: ["x"]
+              }
+            ]
+          }
+        }
+      ])
+
+      # Only row 1 (disjunct 0) should be removed, row 2 (disjunct 1) remains
+      assert Materializer.get_link_values(ctx) == MapSet.new([20])
+      assert_receive {:materializer_changes, _, %{move_out: [{10, "10"}]}}
+    end
+
+    test "row with multiple tags only deleted when ALL matching tags removed", ctx do
+      ctx = with_materializer(ctx)
+
+      # Row with two tags from different reasons
+      value_parts_a = "0:42/1:abc"
+      value_parts_b = "0:99/1:xyz"
+
+      tag_a = "d0:#{Base.url_encode64(value_parts_a, padding: false)}:hashA"
+      tag_b = "d0:#{Base.url_encode64(value_parts_b, padding: false)}:hashB"
+
+      Materializer.new_changes(ctx, [
+        %Changes.NewRecord{key: "1", record: %{"value" => "10"}, move_tags: [tag_a]}
+      ])
+
+      # UPSERT with second tag
+      Materializer.new_changes(ctx, [
+        %Changes.NewRecord{key: "1", record: %{"value" => "10"}, move_tags: [tag_b]}
+      ])
+
+      assert Materializer.get_link_values(ctx) == MapSet.new([10])
+      assert_receive {:materializer_changes, _, %{move_in: [{10, "10"}]}}
+
+      # Move-out value "42" for sublink 0 - removes tag_a but tag_b remains
+      Materializer.new_changes(ctx, [
+        %{
+          headers: %{
+            event: "move-out",
+            patterns: [],
+            composite_patterns: [
+              %{
+                sublink_index: "0",
+                values: ["42"],
+                affected_disjuncts: [0],
+                pattern: ["x"]
+              }
+            ]
+          }
+        }
+      ])
+
+      # Row should remain because tag_b (with value 99) is still valid
+      assert Materializer.get_link_values(ctx) == MapSet.new([10])
+      refute_received {:materializer_changes, _, _}
+
+      # Move-out value "99" for sublink 0 - removes tag_b
+      Materializer.new_changes(ctx, [
+        %{
+          headers: %{
+            event: "move-out",
+            patterns: [],
+            composite_patterns: [
+              %{
+                sublink_index: "0",
+                values: ["99"],
+                affected_disjuncts: [0],
+                pattern: ["x"]
+              }
+            ]
+          }
+        }
+      ])
+
+      # Now row should be deleted (all tags removed)
+      assert Materializer.get_link_values(ctx) == MapSet.new([])
+      assert_receive {:materializer_changes, _, %{move_out: [{10, "10"}]}}
+    end
+  end
+
   defp respond_to_call(request, response) do
     receive do
       {:"$gen_call", {from, ref}, {^request, _arg}} ->

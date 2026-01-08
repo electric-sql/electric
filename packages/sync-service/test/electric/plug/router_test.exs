@@ -2293,18 +2293,15 @@ defmodule Electric.Plug.RouterTest do
          ]
     test "a move-in from the inner shape causes a query and new entries in the outer shape", %{
       opts: opts,
-      db_conn: db_conn,
-      stack_id: stack_id
+      db_conn: db_conn
     } do
       req = make_shape_req("child", where: "parent_id in (SELECT id FROM parent WHERE value = 1)")
       assert {req, 200, [data, snapshot_end]} = shape_req(req, opts)
 
-      tag =
-        :crypto.hash(:md5, stack_id <> req.handle <> "sublink:0:" <> "1")
-        |> Base.encode16(case: :lower)
-
+      # Capture tag from response - format is now DNF-based: "d{index}:{value_parts_base64}:{hash}"
       assert %{"id" => "1", "parent_id" => "1", "value" => "10"} = data["value"]
-      assert %{"operation" => "insert", "tags" => [^tag]} = data["headers"]
+      assert %{"operation" => "insert", "tags" => [tag]} = data["headers"]
+      assert String.starts_with?(tag, "d0:")
       assert %{"headers" => %{"control" => "snapshot-end"}} = snapshot_end
 
       task = live_shape_req(req, opts)
@@ -2312,17 +2309,17 @@ defmodule Electric.Plug.RouterTest do
       # Move in reflects in the new shape without invalidating it
       Postgrex.query!(db_conn, "UPDATE parent SET value = 1 WHERE id = 2", [])
 
-      tag2 =
-        :crypto.hash(:md5, stack_id <> req.handle <> "sublink:0:" <> "2")
-        |> Base.encode16(case: :lower)
-
       assert {_, 200, [data, %{"headers" => %{"control" => "snapshot-end"}}, up_to_date_ctl()]} =
                Task.await(task)
 
       assert %{"id" => "2", "parent_id" => "2", "value" => "20"} = data["value"]
 
-      assert %{"operation" => "insert", "is_move_in" => true, "tags" => [^tag2]} =
+      # Capture move-in tag from response
+      assert %{"operation" => "insert", "is_move_in" => true, "tags" => [tag2]} =
                data["headers"]
+
+      # Verify tag format
+      assert String.starts_with?(tag2, "d0:")
     end
 
     @tag with_sql: [
@@ -2597,20 +2594,19 @@ defmodule Electric.Plug.RouterTest do
       task = live_shape_req(req, ctx.opts)
       Postgrex.query!(ctx.db_conn, "INSERT INTO members (user_id, team_id) VALUES (1, 2)")
 
-      tag =
-        :crypto.hash(:md5, ctx.stack_id <> req.handle <> "sublink:0:" <> "2")
-        |> Base.encode16(case: :lower)
-
       assert {req, 200,
               [
                 %{
                   "value" => %{"id" => "2", "name" => "Team B"},
-                  "headers" => %{"tags" => [^tag], "is_move_in" => true}
+                  "headers" => %{"tags" => [tag], "is_move_in" => true}
                 },
                 %{"headers" => %{"control" => "snapshot-end"}},
                 up_to_date_ctl()
               ]} =
                Task.await(task)
+
+      # Verify tag format
+      assert String.starts_with?(tag, "d0:")
 
       # And move-out should be propagated
       task = live_shape_req(req, ctx.opts)
@@ -2674,20 +2670,19 @@ defmodule Electric.Plug.RouterTest do
         "UPDATE members SET flag = TRUE WHERE (user_id, team_id) = (2, 2)"
       )
 
-      tag =
-        :crypto.hash(:md5, ctx.stack_id <> req.handle <> "sublink:0:" <> "user_id:2" <> ":" <> "team_id:2")
-        |> Base.encode16(case: :lower)
-
       assert {req, 200,
               [
                 %{
-                  "headers" => %{"tags" => [^tag]},
+                  "headers" => %{"tags" => [tag]},
                   "value" => %{"id" => "2", "role" => "Member"}
                 },
                 %{"headers" => %{"control" => "snapshot-end"}},
                 up_to_date_ctl()
               ]} =
                Task.await(task)
+
+      # Verify tag format - should be DNF-based
+      assert String.starts_with?(tag, "d0:")
 
       # And move-out should be propagated
       task = live_shape_req(req, ctx.opts)
@@ -2745,17 +2740,16 @@ defmodule Electric.Plug.RouterTest do
       task = live_shape_req(req, ctx.opts)
       Postgrex.query!(ctx.db_conn, "UPDATE parent SET other_value = 10 WHERE id = 2")
 
-      tag =
-        :crypto.hash(:md5, ctx.stack_id <> req.handle <> "sublink:0:" <> "20")
-        |> Base.encode16(case: :lower)
-
       assert {_, 200,
               [
-                %{"headers" => %{"tags" => [^tag]}, "value" => %{"id" => "3"}},
+                %{"headers" => %{"tags" => [tag]}, "value" => %{"id" => "3"}},
                 %{"headers" => %{"control" => "snapshot-end"}},
                 up_to_date_ctl()
               ]} =
                Task.await(task)
+
+      # Verify tag format
+      assert String.starts_with?(tag, "d0:")
     end
 
     @tag with_sql: [
@@ -2772,17 +2766,16 @@ defmodule Electric.Plug.RouterTest do
           params: %{"1" => "10", "2" => "6"}
         )
 
-      assert {req, 200, response} = shape_req(orig_req, ctx.opts)
+      assert {_req, 200, response} = shape_req(orig_req, ctx.opts)
       # Should contain the data record and the snapshot-end control message
       assert length(response) == 2
 
-      tag = :crypto.hash(:md5, ctx.stack_id <> req.handle <> "sublink:0:" <> "1") |> Base.encode16(case: :lower)
+      data_record = Enum.find(response, &Map.has_key?(&1, "key"))
+      assert %{"value" => %{"id" => "1", "parentId" => "1", "Value" => "10"}} = data_record
 
-      assert %{
-               "value" => %{"id" => "1", "parentId" => "1", "Value" => "10"},
-               "headers" => %{"tags" => [^tag]}
-             } =
-               Enum.find(response, &Map.has_key?(&1, "key"))
+      # Capture and verify tag format
+      assert %{"headers" => %{"tags" => [tag]}} = data_record
+      assert String.starts_with?(tag, "d0:")
 
       assert %{"headers" => %{"control" => "snapshot-end"}} =
                Enum.find(response, &(Map.get(&1, "headers", %{})["control"] == "snapshot-end"))

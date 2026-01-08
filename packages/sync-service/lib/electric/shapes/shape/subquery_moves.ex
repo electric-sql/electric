@@ -250,7 +250,7 @@ defmodule Electric.Shapes.Shape.SubqueryMoves do
       |> Enum.split_with(fn {disjunct, _idx} -> length(disjunct.sublinks) == 1 end)
 
     # For single-sublink disjuncts: generate simple pre-computed tags
-    # Tag format: "d{disjunct_index}:{hash}"
+    # Tag format: "d{disjunct_index}:{value_parts_base64}:{hash}"
     simple_patterns =
       Enum.flat_map(single_sublink_disjuncts, fn {disjunct, disjunct_index} ->
         pattern = Map.get(disjunct.patterns, sublink_ref, [])
@@ -261,7 +261,8 @@ defmodule Electric.Shapes.Shape.SubqueryMoves do
               Enum.map(gone_values, fn {_typed_value, string_value} ->
                 value_parts = "#{sublink_index}:#{string_value}"
                 hash = make_disjunct_hash(stack_id, shape_handle, disjunct_index, value_parts)
-                %{pos: 0, value: "d#{disjunct_index}:#{hash}"}
+                value_parts_encoded = Base.url_encode64(value_parts, padding: false)
+                %{pos: 0, value: "d#{disjunct_index}:#{value_parts_encoded}:#{hash}"}
               end)
 
             {:hash_together, _columns} ->
@@ -270,7 +271,8 @@ defmodule Electric.Shapes.Shape.SubqueryMoves do
                 column_values = Enum.join(values, ":")
                 value_parts = "#{sublink_index}:#{column_values}"
                 hash = make_disjunct_hash(stack_id, shape_handle, disjunct_index, value_parts)
-                %{pos: 0, value: "d#{disjunct_index}:#{hash}"}
+                value_parts_encoded = Base.url_encode64(value_parts, padding: false)
+                %{pos: 0, value: "d#{disjunct_index}:#{value_parts_encoded}:#{hash}"}
               end)
           end
         end)
@@ -454,15 +456,58 @@ defmodule Electric.Shapes.Shape.SubqueryMoves do
     end)
   end
 
-  # Extract top-level disjuncts from an OR tree.
-  # If the top node is OR, each arg is a disjunct.
-  # Otherwise, the entire tree is a single disjunct.
-  defp extract_disjuncts(%Eval.Parser.Func{name: "or", args: args}) do
-    # Flatten nested ORs into a list of disjuncts
-    Enum.flat_map(args, &extract_disjuncts/1)
+  # Convert an AST to Disjunctive Normal Form (DNF).
+  # DNF is a disjunction (OR) of conjunctions (ANDs), e.g.: (A AND B) OR (C AND D)
+  #
+  # The algorithm:
+  # - OR nodes: recursively convert each arg, flatten results (OR of ORs = OR)
+  # - AND nodes: recursively convert each arg, then cartesian product (distribute AND over OR)
+  # - Other nodes: return as single conjunction containing just this atom
+  #
+  # Returns a list of disjuncts, where each disjunct is a list of "atoms" (AST nodes).
+  # These atoms are then reconstructed into an AST for extract_sublink_info.
+  defp extract_disjuncts(ast) do
+    # Convert to list of conjunctions (each conjunction is a list of atoms)
+    conjunctions = to_dnf(ast)
+
+    # Reconstruct AST for each conjunction
+    Enum.map(conjunctions, fn atoms ->
+      case atoms do
+        [single] -> single
+        multiple -> %Eval.Parser.Func{name: "and", args: multiple}
+      end
+    end)
   end
 
-  defp extract_disjuncts(ast), do: [ast]
+  # Convert AST to DNF: returns list of conjunctions, where each conjunction is a list of atoms
+  defp to_dnf(%Eval.Parser.Func{name: "or", args: args}) do
+    # OR: flatten the DNF results from all arguments
+    Enum.flat_map(args, &to_dnf/1)
+  end
+
+  defp to_dnf(%Eval.Parser.Func{name: "and", args: args}) do
+    # AND: convert each arg to DNF, then compute cartesian product
+    # (A OR B) AND (C OR D) => (A AND C) OR (A AND D) OR (B AND C) OR (B AND D)
+    args
+    |> Enum.map(&to_dnf/1)
+    |> cartesian_product()
+  end
+
+  defp to_dnf(ast) do
+    # Any other node is an "atom" - a single-element conjunction
+    [[ast]]
+  end
+
+  # Compute cartesian product of conjunctions
+  # [[a, b], [c]] × [[d], [e, f]] = [[a, b, d], [a, b, e, f], [c, d], [c, e, f]]
+  defp cartesian_product([]), do: [[]]
+  defp cartesian_product([first | rest]) do
+    rest_product = cartesian_product(rest)
+
+    for conj1 <- first, conj2 <- rest_product do
+      conj1 ++ conj2
+    end
+  end
 
   # Extract sublink patterns and comparison expressions from a disjunct AST
   defp extract_sublink_info(ast) do

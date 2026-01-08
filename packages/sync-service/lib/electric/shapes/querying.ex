@@ -147,9 +147,47 @@ defmodule Electric.Shapes.Querying do
   end
 
   # Converts a tag structure to something PG select can fill, but returns a list of separate strings for each tag
-  # - it's up to the caller to interpolate them into the query correctly
-  # tag_structure is now a map from sublink ref (e.g. ["$sublink", "0"]) to pattern
-  # only_sublink_index: if provided, only generates tags for that specific dependency
+  # Generate tag expressions for SQL queries.
+  # For shapes with DNF structure, generates DNF-based tags: "d{index}:{value_parts_base64}:{hash}"
+  # Falls back to legacy format for shapes without DNF structure.
+  # only_sublink_index: if provided, only generates tags for disjuncts containing that dependency
+  defp make_tags(%Shape{dnf_structure: dnf_structure} = _shape, stack_id, shape_handle, only_sublink_index)
+       when dnf_structure != [] do
+    # DNF-based tags: one tag per disjunct that matches the filter AND has sublinks
+    # Disjuncts without sublinks (e.g., plain conditions like "flag = true") don't generate tags
+    dnf_structure
+    |> Enum.with_index()
+    |> Enum.filter(fn {disjunct, _idx} ->
+      # Must have at least one sublink
+      disjunct.sublinks != [] and
+        (is_nil(only_sublink_index) or ["$sublink", only_sublink_index] in disjunct.sublinks)
+    end)
+    |> Enum.map(fn {disjunct, disjunct_index} ->
+      # Build value_parts expression: "0:val1/1:val2" (sorted by sublink ref)
+      value_parts_expr =
+        disjunct.sublinks
+        |> Enum.sort()
+        |> Enum.map(fn sublink_ref ->
+          pattern = Map.get(disjunct.patterns, sublink_ref, [])
+          sublink_index = List.last(sublink_ref)
+          make_sublink_value_expr(sublink_index, pattern)
+        end)
+        |> Enum.join(" || '/' || ")
+
+      # Tag format: d{index}:{value_parts_base64}:{hash}
+      # The hash is md5(stack_id || shape_handle || "disjunct:" || disjunct_index || ":" || value_parts)
+      hash_expr = ~s[md5('#{stack_id}#{shape_handle}disjunct:#{disjunct_index}:' || (#{value_parts_expr}))]
+
+      # encode() with 'base64url' encoding (matching Base.url_encode64)
+      # Note: PostgreSQL's encode(x, 'base64') uses standard base64, but we need URL-safe.
+      # We use replace to convert + -> - and / -> _
+      base64_expr = ~s[replace(replace(rtrim(encode((#{value_parts_expr})::bytea, 'base64'), '='), '+', '-'), '/', '_')]
+
+      ~s['d#{disjunct_index}:' || #{base64_expr} || ':' || #{hash_expr}]
+    end)
+  end
+
+  # Legacy format for shapes without DNF structure
   defp make_tags(%Shape{tag_structure: tag_structure}, stack_id, shape_handle, only_sublink_index) do
     tag_structure
     |> Enum.filter(fn {["$sublink", idx], _} ->
@@ -167,6 +205,19 @@ defmodule Electric.Shapes.Querying do
           ~s[md5('#{stack_id}#{shape_handle}sublink:#{sublink_index}:' || #{Enum.join(column_parts, " || ':'|| ")})]
       end)
     end)
+  end
+
+  # Build SQL expression for a sublink's value part: "{sublink_index}:{value}"
+  defp make_sublink_value_expr(sublink_index, pattern) do
+    Enum.map(pattern, fn
+      column_name when is_binary(column_name) ->
+        ~s['#{sublink_index}:' || #{pg_cast_column_to_text(column_name)}]
+
+      {:hash_together, columns} ->
+        column_parts = Enum.map(columns, &pg_cast_column_to_text/1)
+        ~s['#{sublink_index}:' || #{Enum.join(column_parts, " || ':' || ")}]
+    end)
+    |> Enum.join(" || ")
   end
 
   defp json_like_select(

@@ -517,44 +517,55 @@ defmodule Electric.Shapes.Consumer.Materializer do
 
   # Process composite move-out patterns for AND-combined subqueries.
   # These patterns contain sublink info and values rather than pre-computed tag hashes.
-  # To find affected tags, we need to iterate over rows that match the moved-out values.
   #
-  # NOTE: This implementation iterates over all rows to find matches, which is O(n).
-  # For better performance with large datasets, consider adding a reverse index.
+  # Tag format: "d{disjunct_index}:{value_parts_base64}:{hash}"
+  # Where value_parts is like: "0:42/1:abc" (sublink_index:value pairs joined by /)
+  #
+  # For value-aware removal, we:
+  # 1. Find tags for affected disjuncts
+  # 2. Parse the tag to decode value_parts
+  # 3. Check if the moved-out sublink's value matches
+  # 4. Only remove tags that actually match
   defp process_composite_move_out_patterns(_index, tag_indices, row_tags, [], _state) do
     {MapSet.new(), tag_indices, row_tags}
   end
 
   defp process_composite_move_out_patterns(_index, tag_indices, row_tags, composite_patterns, _state) do
-    # For each composite pattern, find rows that have tags for the affected disjuncts
-    # and remove those tags.
-    #
-    # Tag format: "d{disjunct_index}:{hash}"
-    # We can filter tags by the disjunct prefix to find affected tags.
-    #
-    # Note: This is a conservative approach that removes ALL tags for affected disjuncts.
-    # For the complete solution, we'd need to verify that the row's column value
-    # matches the moved-out value, but that requires access to full row data.
-    # This approach may result in some false positives (removing tags that shouldn't
-    # be removed), but will be corrected when the row is next updated.
-
     Enum.reduce(composite_patterns, {MapSet.new(), tag_indices, row_tags}, fn
-      %{sublink_index: _sublink_index, values: _values, affected_disjuncts: disjunct_indices},
+      %{sublink_index: sublink_index, values: gone_values, affected_disjuncts: disjunct_indices},
       {keys_to_check, tag_indices, row_tags} ->
         # Build prefixes for affected disjuncts
         affected_prefixes =
           MapSet.new(disjunct_indices, fn idx -> "d#{idx}:" end)
 
-        # Find all tags that belong to affected disjuncts
-        # (tags starting with "d{affected_disjunct_index}:")
+        # Normalize gone_values to a set of string patterns we're looking for
+        # For simple values: "sublink_index:value"
+        # For composite values: "sublink_index:val1:val2:..."
+        gone_value_patterns =
+          MapSet.new(gone_values, fn value ->
+            case value do
+              v when is_binary(v) -> "#{sublink_index}:#{v}"
+              v when is_list(v) -> "#{sublink_index}:#{Enum.join(v, ":")}"
+            end
+          end)
+
+        # Find tags that belong to affected disjuncts AND match the moved-out values
         tags_to_remove =
           tag_indices
           |> Map.keys()
           |> Enum.filter(fn tag ->
-            Enum.any?(affected_prefixes, &String.starts_with?(tag, &1))
+            # Check if tag is for an affected disjunct
+            tag_matches_disjunct = Enum.any?(affected_prefixes, &String.starts_with?(tag, &1))
+
+            if tag_matches_disjunct do
+              # Parse the tag to check if the moved-out value matches
+              tag_contains_moved_out_value?(tag, gone_value_patterns)
+            else
+              false
+            end
           end)
 
-        # Remove these tags and collect affected keys
+        # Remove matching tags and collect affected keys
         {tag_indices, row_tags, affected_keys} =
           Enum.reduce(tags_to_remove, {tag_indices, row_tags, MapSet.new()}, fn tag, {ti, rt, ak} ->
             case Map.pop(ti, tag) do
@@ -585,6 +596,34 @@ defmodule Electric.Shapes.Consumer.Materializer do
 
         {MapSet.union(keys_to_check, affected_keys), tag_indices, row_tags}
     end)
+  end
+
+  # Check if a tag contains the moved-out value for the specified sublink.
+  # Tag format: "d{index}:{value_parts_base64}:{hash}"
+  # value_parts format: "0:42/1:abc" (sublink_index:value pairs joined by /)
+  defp tag_contains_moved_out_value?(tag, gone_value_patterns) do
+    case String.split(tag, ":", parts: 3) do
+      [_disjunct_prefix, value_parts_encoded, _hash] ->
+        case Base.url_decode64(value_parts_encoded, padding: false) do
+          {:ok, value_parts} ->
+            # value_parts is like "0:42" or "0:42/1:abc"
+            # Split by "/" to get individual sublink:value pairs
+            sublink_values = String.split(value_parts, "/")
+
+            # Check if any of the moved-out patterns match
+            Enum.any?(sublink_values, fn sublink_value ->
+              MapSet.member?(gone_value_patterns, sublink_value)
+            end)
+
+          :error ->
+            # If decoding fails, fall back to removing (conservative)
+            true
+        end
+
+      _ ->
+        # Old format tag without encoded values, fall back to removing
+        true
+    end
   end
 
   # Process move-out patterns: remove tags from tag_indices and row_tags

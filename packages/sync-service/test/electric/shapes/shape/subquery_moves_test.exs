@@ -445,6 +445,44 @@ defmodule Electric.Shapes.Shape.SubqueryMovesTest do
       assert length(dnf) == 2
       assert Enum.all?(dnf, fn disjunct -> length(disjunct.sublinks) == 1 end)
     end
+
+    test "distributes AND over OR for nested forms" do
+      # x IN (subq1) AND (y IN (subq2) OR z IN (subq3))
+      # Should distribute to:
+      # - (x IN subq1 AND y IN subq2)
+      # - (x IN subq1 AND z IN subq3)
+      # This requires full DNF distribution, not just top-level OR flattening.
+
+      z_inspector = Support.StubInspector.new(
+        tables: ["parent1", "parent2", "parent3", "child"],
+        columns: [
+          %{name: "id", type: "int8", pk_position: 0, type_id: {20, 1}},
+          %{name: "value", type: "text", pk_position: nil, type_id: {28, 1}},
+          %{name: "x", type: "int8", pk_position: nil, type_id: {20, 1}},
+          %{name: "y", type: "int8", pk_position: nil, type_id: {20, 1}},
+          %{name: "z", type: "int8", pk_position: nil, type_id: {20, 1}}
+        ]
+      )
+
+      shape =
+        Shape.new!("child",
+          where: "x IN (SELECT id FROM parent1) AND (y IN (SELECT id FROM parent2) OR z IN (SELECT id FROM parent3))",
+          inspector: z_inspector
+        )
+
+      dnf = SubqueryMoves.extract_dnf_structure(shape)
+
+      # Should have 2 disjuncts after distribution
+      assert length(dnf) == 2
+
+      # Each disjunct should have 2 sublinks (x AND y, or x AND z)
+      assert Enum.all?(dnf, fn disjunct -> length(disjunct.sublinks) == 2 end)
+
+      # All disjuncts should contain $sublink 0 (x IN subq1 is AND-ed with both branches)
+      assert Enum.all?(dnf, fn disjunct ->
+        Enum.any?(disjunct.sublinks, fn sl -> sl == ["$sublink", "0"] end)
+      end)
+    end
   end
 
   describe "has_and_combined_subqueries?/1" do
@@ -499,6 +537,105 @@ defmodule Electric.Shapes.Shape.SubqueryMovesTest do
       hash1 = SubqueryMoves.make_disjunct_hash(stack_id, shape_handle, 1, value_parts)
 
       refute hash0 == hash1
+    end
+
+    test "tags include base64-encoded value_parts for value-aware move-out" do
+      # Create a shape with a single subquery to test tag format
+      shape =
+        Shape.new!("child",
+          where: "x IN (SELECT id FROM parent1)",
+          inspector: @multi_inspector
+        )
+        |> fill_handles()
+
+      stack_id = "stack-1"
+      shape_handle = "shape-1"
+
+      # Generate a tag via fill_move_tags
+      record = %{"x" => "42", "id" => "1", "value" => "test"}
+      extra_refs = %{["$sublink", "0"] => MapSet.new(["42"])}
+
+      change = %Electric.Replication.Changes.NewRecord{
+        key: "key1",
+        record: record,
+        move_tags: []
+      }
+
+      tagged_change = Shape.fill_move_tags(change, shape, stack_id, shape_handle, {%{}, extra_refs})
+
+      # The tag should be in format: d{index}:{value_parts_base64}:{hash}
+      [tag] = tagged_change.move_tags
+      assert String.starts_with?(tag, "d0:")
+
+      # Split the tag and verify the structure
+      parts = String.split(tag, ":")
+      assert length(parts) == 3
+
+      [_disjunct_prefix, value_parts_encoded, _hash] = parts
+
+      # Decode and verify value_parts
+      {:ok, value_parts} = Base.url_decode64(value_parts_encoded, padding: false)
+      assert value_parts == "0:42"
+    end
+
+    test "move-out patterns match fill_move_tags tag format" do
+      # Create a shape with DNF structure populated
+      shape =
+        Shape.new!("child",
+          where: "x IN (SELECT id FROM parent1)",
+          inspector: @multi_inspector
+        )
+        |> fill_handles()
+
+      stack_id = "stack-1"
+      shape_handle = "shape-1"
+
+      # Generate a tag via fill_move_tags for value "42"
+      record = %{"x" => "42", "id" => "1", "value" => "test"}
+      extra_refs = %{["$sublink", "0"] => MapSet.new(["42"])}
+
+      change = %Electric.Replication.Changes.NewRecord{
+        key: "key1",
+        record: record,
+        move_tags: []
+      }
+
+      tagged_change = Shape.fill_move_tags(change, shape, stack_id, shape_handle, {%{}, extra_refs})
+      [generated_tag] = tagged_change.move_tags
+
+      # Generate move-out pattern for the same value
+      move_outs = [{Enum.at(shape.shape_dependencies_handles, 0), [{42, "42"}]}]
+      message = SubqueryMoves.make_move_out_control_message(shape, stack_id, shape_handle, move_outs)
+
+      # The pattern should match the generated tag
+      [pattern] = message.headers.patterns
+      assert pattern.value == generated_tag
+    end
+
+    test "AND-combined subquery move-out emits composite_patterns" do
+      # Create a shape with AND-combined subqueries
+      shape =
+        Shape.new!("child",
+          where: "x IN (SELECT id FROM parent1) AND y IN (SELECT id FROM parent2)",
+          inspector: @multi_inspector
+        )
+        |> fill_handles()
+
+      stack_id = "stack-1"
+      shape_handle = "shape-1"
+
+      # Move-out for the first dependency
+      move_outs = [{Enum.at(shape.shape_dependencies_handles, 0), [{42, "42"}]}]
+      message = SubqueryMoves.make_move_out_control_message(shape, stack_id, shape_handle, move_outs)
+
+      # Since this is a multi-sublink disjunct, we should get composite_patterns
+      assert message.headers.patterns == []
+      assert Map.has_key?(message.headers, :composite_patterns)
+      [composite_pattern] = message.headers.composite_patterns
+
+      assert composite_pattern.sublink_index == "0"
+      assert composite_pattern.values == ["42"]
+      assert composite_pattern.affected_disjuncts == [0]
     end
   end
 end
