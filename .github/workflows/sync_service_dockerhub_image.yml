@@ -4,7 +4,7 @@ name: Publish Electric images to Docker Hub
 # conditional logic based on ${{ github.event_name }} in the derive_build_vars job.
 on:
   push:
-    branches: ['main', 'alco/ci-dockerhub-release-fixup']
+    branches: ['main']
   release:
     types: [released]
   workflow_dispatch:
