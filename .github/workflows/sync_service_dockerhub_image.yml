@@ -1,5 +1,7 @@
 name: Publish Electric images to Docker Hub
 
+# If you decide to modify the list of triggers for this action, don't forget to also update the
+# conditional logic in the derive_build_vars and publish_tagged_image jobs.
 on:
   push:
     branches: ['main']
@@ -42,7 +44,7 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
 
-      - name: Determine SHORT_COMMIT_SHA and ELECTRIC_VERSION to use in the build step
+      - name: Determine short_commit_sha and electric_version to use in the build step
         id: vars
         run: |
           echo "short_commit_sha=$(
@@ -130,7 +132,7 @@ jobs:
               echo "ELECTRIC_TAGS=-t electricsql/electric:canary" >> $GITHUB_ENV
               echo "ELECTRIC_CANARY_TAGS=-t electricsql/electric-canary:latest -t electricsql/electric-canary:${{ needs.derive_build_vars.outputs.short_commit_sha }}" >> $GITHUB_ENV
               ;;
-            release)
+            release | workflow_dispatch)
               # A release triggers official release image publishing
               echo "ELECTRIC_TAGS=-t electricsql/electric:latest -t electricsql/electric:${{ needs.derive_build_vars.outputs.electric_version }}" >> $GITHUB_ENV
           esac
