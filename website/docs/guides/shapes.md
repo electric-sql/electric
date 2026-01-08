@@ -102,7 +102,7 @@ The where clause must be a valid [PostgreSQL query expression](https://www.postg
 Where clauses support:
 
 1. columns of numerical types, `boolean`, `uuid`, `text`, `interval`, date and time types (with the exception of `timetz`), [Arrays](https://github.com/electric-sql/electric/issues/1767) (but not yet [Enums](https://github.com/electric-sql/electric/issues/1709), except when explicitly casting them to `text`)
-2. operators that work on those types: arithmetics, comparisons, logical/boolean operators like `OR`, string operators like `LIKE`, etc.
+2. operators that work on those types (see [supported operators](#supported-operators) below)
 3. positional placeholders, like `$1`, values for which must be provided alongside the where clause.
 
 You can use `AND` and `OR` to group multiple conditions, e.g.:
@@ -120,7 +120,41 @@ When constructing a where clause with user input as a filter, it's recommended t
 SQL injection-like situations. For example, if filtering a table on a user id, it's better to use `where=user = $1` with
 `params[1]=provided_id`. If not using positional placeholders and constructing where clauses yourself, take care to SQL-escape user input.
 
-See [`known_functions.ex`](https://github.com/electric-sql/electric/blob/main/packages/sync-service/lib/electric/replication/eval/env/known_functions.ex) and [`parser.ex`](https://github.com/electric-sql/electric/blob/main/packages/sync-service/lib/electric/replication/eval/parser.ex) for the source of truth on which types, operators and functions are currently supported. If you need a feature that isn't supported yet, please [raise a feature request](https://github.com/electric-sql/electric/discussions/categories/feature-requests).
+#### Supported operators
+
+The following operators are supported in where clauses:
+
+| Category | Operators | Notes |
+|----------|-----------|-------|
+| **Comparison** | `=`, `<>`, `<`, `>`, `<=`, `>=` | Work on numeric types, text, uuid, bool, date/time types, intervals, enums, and arrays |
+| **Logical** | `AND`, `OR`, `NOT` | |
+| **Arithmetic** | `+`, `-`, `*`, `/`, `^` (power), `\|/` (square root), `@` (absolute value) | For numeric types |
+| **Bitwise** | `&` (and), `\|` (or), `#` (xor), `~` (not) | For integer types only |
+| **String** | `\|\|` (concatenation), `~~` / `LIKE`, `~~*` / `ILIKE`, `!~~` / `NOT LIKE`, `!~~*` / `NOT ILIKE` | |
+| **Array** | `=`, `<>`, `\|\|` (concatenation), `@>` (contains), `<@` (contained by), `&&` (overlaps) | For array types only |
+| **Null tests** | `IS NULL`, `IS NOT NULL` | |
+| **Boolean tests** | `IS TRUE`, `IS NOT TRUE`, `IS FALSE`, `IS NOT FALSE`, `IS UNKNOWN`, `IS NOT UNKNOWN` | |
+| **Distinct** | `IS DISTINCT FROM`, `IS NOT DISTINCT FROM` | |
+| **Membership** | `IN`, `NOT IN` | Including subqueries: `value IN (SELECT ...)` |
+| **Range** | `BETWEEN`, `NOT BETWEEN`, `BETWEEN SYMMETRIC`, `NOT BETWEEN SYMMETRIC` | |
+| **Quantified** | `= ANY(array)`, `<> ALL(array)`, etc. | Use any comparison operator with `ANY` or `ALL` |
+
+Supported functions: `lower()`, `upper()`, `like()`, `ilike()`, `array_cat()`, `array_prepend()`, `array_append()`, `array_ndims()`, `timezone()`, `justify_days()`, `justify_hours()`, `justify_interval()`.
+
+#### Unsupported operators
+
+The following PostgreSQL operators are **not currently supported**:
+
+- **JSONB operators**: `@>`, `<@`, `?`, `?|`, `?&`, `@?`, `@@`, `#>`, `#>>`, `-`, `#-`, `jsonb_path_exists()`, etc.
+- **Full-text search operators**: `@@`, `@@@`, `||`, `&&`, `!!`, `<->`, `to_tsquery()`, `to_tsvector()`, etc.
+- **Geometric operators**: `@>`, `<@`, `&&`, `<<`, `>>`, `&<`, `&>`, `<<|`, `|>>`, `~=`, etc.
+- **Network address operators**: `<<`, `>>=`, `&&`, etc.
+- **Range operators**: `@>`, `<@`, `&&`, `-|-`, etc.
+
+If you need an operator that isn't supported yet, please [raise a feature request](https://github.com/electric-sql/electric/discussions/categories/feature-requests).
+
+> [!TIP] Source of truth
+> See [`known_functions.ex`](https://github.com/electric-sql/electric/blob/main/packages/sync-service/lib/electric/replication/eval/env/known_functions.ex) and [`parser.ex`](https://github.com/electric-sql/electric/blob/main/packages/sync-service/lib/electric/replication/eval/parser.ex) for the authoritative list of supported types, operators, and functions.
 
 > [!Warning] Throughput
 > Where clause evaluation impacts [data throughput](#throughput). Some where clauses are [optimized](#optimized-where-clauses).
