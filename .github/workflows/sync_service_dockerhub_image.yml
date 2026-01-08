@@ -1,7 +1,7 @@
 name: Publish Electric images to Docker Hub
 
 # If you decide to modify the list of triggers for this action, don't forget to also update the
-# conditional logic in the derive_build_vars and publish_tagged_image jobs.
+# conditional logic based on ${{ github.event_name }} in the derive_build_vars job.
 on:
   push:
     branches: ['main', 'alco/ci-dockerhub-release-fixup']
@@ -19,31 +19,34 @@ jobs:
     name: Derive build variables from the source code
     runs-on: blacksmith-2vcpu-ubuntu-2404
     outputs:
+      git_ref: ${{ steps.git_ref.outputs.git_ref }}
+      is_release: ${{ steps.git_ref.outputs.is_release }}
       short_commit_sha: ${{ steps.vars.outputs.short_commit_sha }}
       electric_version: ${{ steps.vars.outputs.electric_version }}
 
     steps:
       - name: Determine the ref to check out
+        id: git_ref
         run: |
-          echo ${{ github.event_name }}
-          echo ${{ github.event.release.tag_name }}
-          echo ${{ inputs.release_tag }}
-
           case ${{ github.event_name }} in
             push)
               ref="${{ github.sha }}"
+              is_release=false
               ;;
 
             release)
               ref="refs/tags/${{ github.event.release.tag_name }}"
+              is_release=true
               ;;
 
             workflow_dispatch)
               ref="refs/tags/${{ inputs.release_tag }}"
+              is_release=true
               ;;
           esac
 
-          echo "$ref"
+          echo "git_ref=$ref" >> $GITHUB_OUTPUT
+          echo "is_release=$is_release" >> $GITHUB_OUTPUT
 
       - uses: actions/checkout@v4
         with:
@@ -57,10 +60,7 @@ jobs:
           #
           # For manual triggers via workflow_dispatch, we check out the tag specified manually
           # by the actor.
-          ref: ${{
-            github.event_name == 'release' && format('refs/tags/{0}', github.event.release.tag_name) ||
-            github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', inputs.release_tag) ||
-            github.sha }}
+          ref: ${{ steps.git_ref.outputs.git_ref }}
           # Also important to fetch the whole history since otherwise we won't get that tags
           # that are required to determine the correct ELECTRIC_VERSION.
           fetch-depth: 0
@@ -91,10 +91,7 @@ jobs:
     needs: [derive_build_vars]
     steps:
       - uses: actions/checkout@v4
-        ref: ${{
-          github.event_name == 'release' && format('refs/tags/{0}', github.event.release.tag_name) ||
-          github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', inputs.release_tag) ||
-          github.sha }}
+        ref: ${{ needs.derive_build_vars.outputs.git_ref }}
 
       - uses: useblacksmith/setup-docker-builder@v1
 
@@ -152,17 +149,15 @@ jobs:
 
       - name: Derive image tags from the GitHub Actions event
         run: |
-          case ${{ github.event_name }} in
-            push)
-              # A regular push to the main branch triggers canary image publishing
-              echo "ELECTRIC_TAGS=-t electricsql/electric:canary" >> $GITHUB_ENV
-              echo "ELECTRIC_CANARY_TAGS=-t electricsql/electric-canary:latest -t electricsql/electric-canary:${{ needs.derive_build_vars.outputs.short_commit_sha }}" >> $GITHUB_ENV
-              ;;
-            release | workflow_dispatch)
-              # A release triggers official release image publishing
-              echo "ELECTRIC_TAGS=-t electricsql/electric:latest -t electricsql/electric:${{ needs.derive_build_vars.outputs.electric_version }}" >> $GITHUB_ENV
-              ;;
-          esac
+          if [ "${{ needs.derive_build_vars.outputs.is_release }}" = "true" ]; then
+            # A release triggers official release image publishing
+            echo "ELECTRIC_TAGS=-t electricsql/electric:latest -t electricsql/electric:${{ needs.derive_build_vars.outputs.electric_version }}" >> $GITHUB_ENV
+            echo "ELECTRIC_CANARY_TAGS=" >> $GITHUB_ENV
+          else
+            # A regular push to the main branch triggers canary image publishing
+            echo "ELECTRIC_TAGS=-t electricsql/electric:canary" >> $GITHUB_ENV
+            echo "ELECTRIC_CANARY_TAGS=-t electricsql/electric-canary:latest -t electricsql/electric-canary:${{ needs.derive_build_vars.outputs.short_commit_sha }}" >> $GITHUB_ENV
+          fi
 
       - name: Create multi-arch manifest list
         run: |
