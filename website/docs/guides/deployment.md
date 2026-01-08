@@ -183,6 +183,12 @@ curl http://localhost:3000/v1/health
 # {"status":"active"}
 ```
 
+### Observability
+
+Electric supports [OpenTelemetry](https://opentelemetry.io/) for exporting traces, with built-in support for [Honeycomb.io](https://www.honeycomb.io/). Metrics are also available in StatsD and Prometheus formats.
+
+See the [Telemetry reference](/docs/reference/telemetry#opentelemetry) for configuration details.
+
 ### Caching proxy
 
 Electric is designed to run behind a caching proxy, such as [Nginx](https://nginx.org/en), [Caddy](https://caddyserver.com), [Varnish](https://varnish-cache.org) or a CDN like [Cloudflare](https://www.cloudflare.com/en-gb/application-services/products/cdn) or [Fastly](https://www.fastly.com/products/cdn). You don't _have_ to run a proxy in front of Electric but you will benefit from radically better performance if you do.
