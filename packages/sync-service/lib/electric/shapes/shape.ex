@@ -280,7 +280,6 @@ defmodule Electric.Shapes.Shape do
     with {:ok, where} <- Parser.parse_query(where),
          {:ok, subqueries} <- Parser.extract_subqueries(where),
          :ok <- check_feature_flag(subqueries, opts),
-         :ok <- check_single_subquery(subqueries),
          {:ok, shape_dependencies} <- build_shape_dependencies(subqueries, opts),
          {:ok, dependency_refs} <- build_dependency_refs(shape_dependencies, inspector),
          all_refs = Map.merge(refs, dependency_refs),
@@ -306,13 +305,6 @@ defmodule Electric.Shapes.Shape do
     else
       :ok
     end
-  end
-
-  defp check_single_subquery(subqueries) when length(subqueries) <= 1, do: :ok
-
-  defp check_single_subquery(_subqueries) do
-    {:error,
-     {:where, "Multiple subqueries at the same level in a where clause are not supported"}}
   end
 
   defp make_opts_from_select(select, opts) do

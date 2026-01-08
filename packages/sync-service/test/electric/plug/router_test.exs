@@ -2938,20 +2938,81 @@ defmodule Electric.Plug.RouterTest do
     @tag with_sql: [
            "CREATE TABLE projects (id INT PRIMARY KEY, workspace_id INT NOT NULL, name TEXT NOT NULL)",
            "CREATE TABLE workspace_members (workspace_id INT, user_id INT, PRIMARY KEY (workspace_id, user_id))",
-           "CREATE TABLE project_members (project_id INT, user_id INT, PRIMARY KEY (project_id, user_id))"
+           "CREATE TABLE project_members (project_id INT, user_id INT, PRIMARY KEY (project_id, user_id))",
+           "INSERT INTO workspace_members (workspace_id, user_id) VALUES (1, 100)",
+           "INSERT INTO project_members (project_id, user_id) VALUES (1, 100), (3, 100)",
+           "INSERT INTO projects (id, workspace_id, name) VALUES (1, 1, 'project 1'), (2, 1, 'project 2')"
          ]
-    test "returns 400 for two subqueries at the same level", ctx do
+    test "supports two subqueries at the same level but returns 409 on move-in", %{
+      opts: opts,
+      db_conn: db_conn
+    } do
       where =
         "workspace_id IN (SELECT workspace_id FROM workspace_members WHERE user_id = 100) " <>
-          "OR id IN (SELECT project_id FROM project_members WHERE user_id = 100)"
+          "AND id IN (SELECT project_id FROM project_members WHERE user_id = 100)"
 
-      assert %{status: 400} =
+      assert %{status: 200} =
+               conn =
                conn("GET", "/v1/shape", %{
                  table: "projects",
                  offset: "-1",
                  where: where
                })
-               |> Router.call(ctx.opts)
+               |> Router.call(opts)
+
+      shape_handle = get_resp_header(conn, "electric-handle")
+
+      task =
+        Task.async(fn ->
+          conn("GET", "/v1/shape", %{
+            table: "projects",
+            offset: get_resp_header(conn, "electric-offset"),
+            handle: shape_handle,
+            where: where,
+            live: "true"
+          })
+          |> Router.call(opts)
+        end)
+
+      # Insert a project that satisfies both subqueries - user 100 is already a member of project 3
+      # (added in setup) and workspace 1
+      Postgrex.query!(
+        db_conn,
+        "INSERT INTO projects (id, workspace_id, name) VALUES (3, 1, 'project 3')",
+        []
+      )
+
+      assert %{status: 200} = conn = Task.await(task)
+
+      assert [
+               %{
+                 "headers" => %{"operation" => "insert"},
+                 "value" => %{"id" => "3", "workspace_id" => "1", "name" => "project 3"}
+               },
+               _
+             ] = Jason.decode!(conn.resp_body)
+
+      task =
+        Task.async(fn ->
+          conn("GET", "/v1/shape", %{
+            table: "projects",
+            offset: get_resp_header(conn, "electric-offset"),
+            handle: shape_handle,
+            where: where,
+            live: "true"
+          })
+          |> Router.call(opts)
+        end)
+
+      # Cause a move-in by adding user 100 to project 2's project_members
+      Postgrex.query!(
+        db_conn,
+        "INSERT INTO project_members (project_id, user_id) VALUES (2, 100)",
+        []
+      )
+
+      # Should get a 409 because multiple same-level subqueries cannot currently correctly handle move-ins
+      assert %{status: 409} = Task.await(task)
     end
   end
 
