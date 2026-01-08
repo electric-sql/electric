@@ -894,6 +894,62 @@ describe.for(fetchAndSse)(`Shape  (liveSSE=$liveSse)`, ({ liveSse }) => {
     expect(shapeStreamLive.isConnected()).false
   })
 
+  it(`should treat MissingHeadersError as fatal and not retry even if onError returns {}`, async ({
+    issuesTableUrl,
+    aborter,
+  }) => {
+    let callCount = 0
+    let onErrorCallCount = 0
+    let subscriberErrorCount = 0
+
+    const shapeStream = new ShapeStream({
+      url: `${BASE_URL}/v1/shape`,
+      params: {
+        table: issuesTableUrl,
+      },
+      signal: aborter.signal,
+      fetchClient: async (_input, _init) => {
+        callCount++
+        const headers = new Headers()
+        headers.set(`electric-offset`, `0_0`)
+        // Missing electric-handle and electric-schema headers
+        return new Response(``, { status: 200, headers })
+      },
+      onError: (_err) => {
+        onErrorCallCount++
+        // Return {} to request retry - should be ignored for MissingHeadersError
+        return {}
+      },
+      liveSse,
+    })
+
+    const unsub = shapeStream.subscribe(
+      () => unsub(),
+      () => {
+        subscriberErrorCount++
+      }
+    )
+
+    await vi.waitFor(
+      () => {
+        // Should have made exactly 1 request
+        expect(callCount).toBe(1)
+        // onError IS called for notification
+        expect(onErrorCallCount).toBe(1)
+        // Error should have been sent to subscriber
+        expect(subscriberErrorCount).toBe(1)
+        // Stream should have stopped (retry ignored)
+        expect(shapeStream.isConnected()).false
+        expect(shapeStream.error).toBeInstanceOf(MissingHeadersError)
+      },
+      { timeout: 1000 }
+    )
+
+    // Wait a bit more to make sure no additional requests are made
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    expect(callCount).toBe(1)
+  })
+
   it(`should set isConnected to false after fetch if not subscribed`, async ({
     issuesTableUrl,
     aborter,
