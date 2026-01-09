@@ -484,7 +484,7 @@ Thus allowing the data streaming in over the durable session to be joined up nat
 
 When it comes to handling user actions and adding messages to the sessions, you switch the `sendMessage` calls to use a TanStack DB [optimistic mutations](https://tanstack.com/db/latest/docs/guides/mutations).
 
-For example, the default TanStack AI [`ChatClient`]() and [`useChat` hook]() provide a sendMessage action:
+For example, the default TanStack AI [`ChatClient`](https://github.com/TanStack/ai/blob/main/packages/typescript/ai-client/src/chat-client.ts) and [`useChat` hook](https://github.com/TanStack/ai/blob/main/packages/typescript/ai-react/src/use-chat.ts) provide a sendMessage action:
 
 ```tsx
 const ChatPage = () => {
