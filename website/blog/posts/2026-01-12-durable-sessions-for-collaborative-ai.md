@@ -293,65 +293,348 @@ Which, of course, is exactly what [Durable Streams](#durable-streams) and [TanSt
 
 ### Using a standard schema
 
-You just need to provide a [Standard Schema](https://standardschema.dev) for the multiplexed message types you would like in your session ([here's an example](https://github.com/electric-sql/transport/blob/main/packages/durable-session/src/schema.ts)) and then you just have that data available in a reactive store in the client.
+You simplfy provide a [Standard Schema](https://standardschema.dev) for the multiplexed message types that you would like in your session ([here's an example](https://github.com/electric-sql/transport/blob/main/packages/durable-session/src/schema.ts)) and that gives you the data available in a reactive store in the client.
 
-#### Read-path sync
+That's it &mdash; you don't need to do anything else.
 
-1. multiplex the state protocol over a durable stream and route the message streams and session state into TanStack DB collections
+#### Example schema
 
-```typescript
-// … StreamDB code sample …
+For example, here's a cut down of the example schema linked above, that multiplexes whole messages, active token streams, user presence and agent registration data, with end-to-end type-safety, over a single Durable Stream.
+
+It starts by defining the schemas for the different data types:
+
+```ts
+import { z } from 'zod'
+import { createStateSchema } from '@durable-streams/state'
+
+// N.b.: this wrapper schema supports any message or chunk
+// payload format in `chunk`, which is then, as we'll see,
+// parsed and hydrated into typed messages by the AI SDK.
+export const chunkSchema = z.object({
+  messageId: z.string(),
+  actorId: z.string(),
+  role: z.enum(['user', 'assistant', 'system']),
+  chunk: z.string(),
+  seq: z.number(),
+  createdAt: z.string(),
+})
+
+export const presenceSchema = z.object({
+  userId: z.string(),
+  userName: z.string(),
+  deviceId: z.string(),
+  status: z.enum(['online', 'offline']),
+})
+
+export const registrationSchema = z.object({
+  agentId: z.string(),
+  agentName: z.string(),
+  triggers: z.enum(['all', 'user-messages'])
+  endpoint: z.string(),
+})
 ```
 
-... type safety, reactivity, efficient ...
-... pure TS so web, mobile, desktop for multi-tab, multi-device ...
-... real-time multi-user ...
-... durable for resumability, persistence and history -> async collaboration ...
-... unified on an open protocol ...
-... potential to join up into a wider client model with TanStack DB
+It then combines them into a unified session schema:
+
+```ts
+export const sessionSchema = createStateSchema({
+  chunks: {
+    schema: chunkSchema,
+    type: 'chunk',
+    primaryKey: 'id', // injected as `${messageId}:${seq}`
+    allowSyncWhilePersisting: true,
+  },
+  presence: {
+    schema: presenceSchema,
+    type: 'presence',
+    primaryKey: 'id', // injected as `${actorId}:${deviceId}`
+  },
+  agent: {
+    schema: agentValueSchema,
+    type: 'agent',
+    primaryKey: 'agentId'
+  },
+})
+```
+
+This is then passed to the durable state layer [`StreamDB`](https://github.com/durable-streams/durable-streams/blob/main/packages/state/src/stream-db.ts), which streams the data over a Durable Stream and routes the message streams and session state into TanStack DB collections for you. The schema provides end-to-end type-safety and the transport and reactivity is delegated to the sync machinery.
+
+#### Derived collections
+
+You can then derive reactive views on the data, in the form of derived live query collections. For example, the code to derive a collection of messages out of the raw chunks looks like this ([see full example](https://github.com/electric-sql/transport/blob/main/packages/durable-session/src/collections/messages.ts) and [`materializeMessage`](https://github.com/electric-sql/transport/blob/main/packages/durable-session/src/materialize.ts) source):
+
+```ts
+import { createLiveQueryCollection, collect, count, minStr } from '@tanstack/db'
+
+const messagesCollection = createLiveQueryCollection({
+  query: (q) => {
+    // The first query groups chunks into messages, see:
+    // https://tanstack.com/db/latest/docs/guides/live-queries#aggregate-functions
+    const collected = q
+      .from({ chunk: chunksCollection })
+      .groupBy(({ chunk }) => chunk.messageId)
+      .select(({ chunk }) => ({
+        messageId: chunk.messageId,
+        rows: collect(chunk),
+        startedAt: minStr(chunk.createdAt),
+        rowCount: count(chunk),
+      }))
+
+    // The second query materializes the grouped chunks into
+    // messages with `materializeMessage` using the built-in
+    // TanStack AI `StreamProcessor`:
+    // https://tanstack.com/ai/latest/docs/reference/classes/StreamProcessor
+    return q
+      .from({ collected })
+      .orderBy(({ collected }) => collected.startedAt, 'asc')
+      .fn.select(({ collected }) => materializeMessage(collected.rows))
+  },
+  getKey: (row) => row.id,
+})
+```
+
+This is highly efficient. There are no for loops over the client data when a new chunk arrives. Instead, the messages are constructed using a live query pipeline based on differential data flow. So only the changed data needs to be re-calculated.
+
+You can then derive *further* collections from the materialized messages, using additional live query pipelines to filter and coerce the data. For example, to get a collection of pending tool call approval messages:
+
+```ts
+const approvalsCollection = createLiveQueryCollection({
+  query: (q) =>
+    q
+      .from({ message: messagesCollection })
+      .fn.where(({ message }) =>
+        message.parts.some(
+          (p) =>
+            p.type === 'tool-call' &&
+            p.approval?.needsApproval === true &&
+            p.approval.approved === undefined
+        )
+      )
+  getKey: (row) => row.id,
+})
+```
+
+The key here again is there's no imperative code looping over client state. It's all materialized and derived in the live query pipeline. With [automatic reactivity](https://tanstack.com/db/latest/docs/overview##uselivequery-hook) thanks to TanStack DB. So you can just bind the derived collections to your components and everything works, eith end-to-end, surgical reactivity:
+
+```tsx
+import { useLiveQuery } from '@tanstack/react-db'
+
+const LatestPendingApprovals = () => {
+  const { data: approvals } = useLiveQuery(q =>
+    q
+      .from({ msg: approvalsCollection })
+      .orderBy(({ msg }) => msg.createdAt, 'desc')
+      .limit(3)
+  )
+
+  return <List items={ approvals } />
+}
+```
+
+It's also pure Typescript, so it works across any environment &mdash; web, mobile,  desktop, Node, Bun &mdash; simplifying multi-user, multi-device and multi-worker collaboration.
+
+#### Integrating into wider client data model
+
+Because the session data is synced into TanStack DB collections, it can be [joined up](https://tanstack.com/db/latest/docs/guides/live-queries##joins) into a wider client data model.
+
+For example, we can load user profile data into a collection [from your API](https://tanstack.com/db/latest/docs/collections/query-collection):
+
+```tsx
+import { QueryClient } from "@tanstack/query-core"
+import { createCollection } from "@tanstack/db"
+import { queryCollectionOptions } from "@tanstack/query-db-collection"
+
+const queryClient = new QueryClient()
+
+const profileCollection = createCollection(
+  queryCollectionOptions({
+    queryKey: ["profile"],
+    queryFn: async () => {
+      const response = await fetch("/api/user-profiles")
+
+      return response.json()
+    },
+    queryClient,
+    getKey: (item) => item.id,
+  })
+)
+```
+
+And then join the profile data to the session presence data when displaying active session users:
+
+```tsx
+const ActiveSessionUsers = () => {
+  const { data } = useLiveQuery(q =>
+    q
+      .from({ presence: presenceCollection }) // from the session
+      .innerJoin({ profile: profileCollection }, // from your API
+        ({ presence, profile }) => eq(presence.userId, profile.userId)
+      ),
+      .select(({ presence, profile }) => ({
+        id: presence.userId,
+        avatar: profile.avatarUrl,
+      }))
+  )
+
+  // ...
+}
+```
+
+Thus allowing the data streaming in over the durable session to be joined up naturally into a wider client data model.
 
 #### Write-path actions
 
-1. switch the `sendMessage` style actions to use TanStack DB optimistic mutations
+When it comes to handling user actions and adding messages to the sessions, you switch the `sendMessage` calls to use a TanStack DB [optimistic mutations](https://tanstack.com/db/latest/docs/guides/mutations).
 
-```typescript
-// … sendMessage createOptimisticAction example / usage …
+For example, the default TanStack AI [`ChatClient`]() and [`useChat` hook]() provide a sendMessage action:
+
+```tsx
+const ChatPage = () => {
+  const { messages, sendMessage } = useChat({...})
+
+  // ...
+}
 ```
 
-... properly syncs user messages to multiple users and agents ...
-... principled handling of optimistic state ...
-... still goes via your API and your control logic ...
-... nothing imposed ...
+We can swap that out for an optimistic mutation using [`createOptimisticAction`](https://tanstack.com/db/latest/docs/guides/mutations##creating-custom-actions).
+
+```ts
+import { createOptimisticAction } from '@tanstack/db'
+
+interface MessageActionInput {
+  content: string
+  messageId: string
+  role: 'user' | 'assistant' | 'system'
+}
+
+const sendMessage = createOptimisticAction<MessageActionInput>({
+  onMutate: ({ content, messageId, role }) => {
+    const createdAt = new Date()
+
+    // Insert optimistic state into messages collection directly
+    // This propagates to all derived collections, so the local UI
+    // updates instantly.
+    messagesCollection.insert({
+      id: messageId,
+      role,
+      parts: [{ type: 'text' as const, content }],
+      isComplete: true,
+      createdAt,
+    })
+  },
+  mutationFn: async ({ content, messageId, role, agent }) => {
+    const txid = crypto.randomUUID()
+
+    await this.postToProxy(`/v1/sessions/${this.sessionId}/messages`, {
+      messageId,
+      content,
+      role,
+      actorId: this.actorId,
+      actorType: this.actorType,
+      txid,
+      ...(agent && { agent }),
+    })
+
+    // Wait for this write to sync back on the durable stream
+    // before discarding optimistic state.
+    await streamDb.utils.awaitTxId(txid)
+  },
+})
+```
+
+In our demo code, we implement this in a customized [`DurableChatClient`](https://github.com/electric-sql/transport/blob/main/packages/durable-session/src/client.ts), which pairs with a [`useDurableChat` hook](https://github.com/electric-sql/transport/blob/main/packages/react-durable-session/src/use-durable-chat.ts):
+
+```tsx
+const ChatPage = () => {
+  const { messages, sendMessage } = useDurableChat({...})
+
+  // ...
+}
+```
+
+As you can see, the usage from component code is exactly the same. So this works as a drop-in replacement. With the actual, underlying, state handling and transfer wired properly via the durable session.
+
+This solves the [limitations of the transport level durability](#limitations-of-transport) we discussed above. By having principled management of local optimistic state and syncing user messages to the other subscribers to the session.
+
+As you can see from the `mutationFn` in the code sample above, it still POSTs the write to your backend (```this.postToProxy(`/v1/sessions/${this.sessionId}/messages`, ...``` goes to your API). So you're in control of authentication and any other custom business logic and you handle writes to the session in your backend code.
 
 #### Session CRUD
 
-1. implement some functions/handlers in your backend API to support creating, joining, subscribing and writing to sessions
+This is standard CRUD stuff and you can implement using whatever framework you prefer or already use. For example, in the reference example, we have a [handler for message actions](https://github.com/electric-sql/transport/blob/main/packages/durable-session-proxy/src/handlers/send-message.ts) which (simplified to just the happy path) essentially looks like this:
 
-```typescript
-// … backend code sample …
+```ts
+async function handleSendMessage(c: Context, protocol: Protocol): Promise<Response> {
+  // Validate and parse the request
+  const sessionId = c.req.param('sessionId')
+  const body = messageRequestSchema.parse(await c.req.json())
+
+  // Marshall the data
+  const { content, txid } = body
+  const actorId = body.actorId ?? c.req.header('X-Actor-Id') ?? crypto.randomUUID()
+  const actorType = body.actorType ?? 'user'
+  const messageId = body.messageId ?? crypto.randomUUID()
+
+  // Write to the stream
+  const stream = await protocol.getOrCreateSession(sessionId)
+  await protocol.writeUserMessage(stream, sessionId, messageId, actorId, content, txid)
+
+  return c.json({ messageId }, 200)
+}
 ```
 
-... decouple agent instruction from request response ...
-... support presence, typeahead, cursor positions ...
-... register to the session or just consume the stream ...
-... tie in the session registration to structured data model, e.g.: to Postgres ...
-... then use alongside Electric sync and join up in the client with TanStack DB ...
+Importantly, this handler ***doesn't*** perform context engineering and proxy the request through to an LLM provider. The session architecture de-couples agent instruction from request <> response.
 
-### Reactive architecture
+Instead, you can register agents and the [session backend](https://github.com/electric-sql/transport/blob/main/packages/durable-session-proxy/src/protocol.ts) notifies them when new messages are posted:
 
-... higher level overall application archiecture diagramme ...
+```ts
+state.modelMessages.subscribeChanges(async () => {
+  const history = await this.getMessageHistory(sessionId)
+
+  notifyRegisteredAgents(stream, sessionId, 'user-messages', history)
+})
+```
+
+The agents themselves are just backend API endpoints, which get invoked via HTTP request, just as normal. So the [default agent in the demo](https://github.com/electric-sql/transport/blob/main/demos/tanstack-ai-durable-session/src/routes/api.chat.kermit.ts) looks essentially like this:
+
+```ts
+import { chat, maxIterations, toStreamResponse } from '@tanstack/ai'
+import { openai } from '@tanstack/ai-openai'
+
+const SYSTEM_PROMPT = `You are ...`
+
+async ({ request }) => {
+  if (request.signal.aborted) {
+    return new Response(null, { status: 499 })
+  }
+
+  const { messages } = await request.json()
+  const abortController = new AbortController()
+
+  const stream = chat({
+    adapter: openai(),
+    model: 'gpt-4o',
+    systemPrompts: [SYSTEM_PROMPT],
+    agentLoopStrategy: maxIterations(10),
+    messages,
+    abortController,
+  })
+
+  return toStreamResponse(stream, { abortController })
+}
+```
+
+Exactly as it would look if it was handling a user message and streaming the response back in a request <> response paradigm. Except it's now being invoked by the backend session, which streams the response onto the durable stream. Where it can be streamed to any number of subscribers.
 
 ### Optimum AX/DX/UX
 
-... as a result, you get an app that fully supports multi-tab, multi-device, multi-user and multi-agent. For both real-time and asynchronous collaboration. With minimal changes to your component code and zero changes to your backend AI engineering.
+As a result, you get an app that fully supports multi-tab, multi-device, multi-user and multi-agent. For both real-time and asynchronous collaboration. With minimal changes to your component code and zero changes to your backend AI engineering.
 
 <div class="embed-container" style="padding-bottom: 62.283737%">
   <YoutubeEmbed video-id="81KXwxld7dw" />
 </div>
 
-You can see a full code example and working demo app here:
-
-- [TanStack AI <> Durable Streams <> TanStack DB durable session example](#)
+> [!Warning] Example &mdash; TanStack AI - Durable Session
+> See the full code example and working demo app of a [TanStack AI - Durable Sessions  reference implementation here](https://github.com/electric-sql/transport/?tab=readme-ov-file#durable-transport).
 
 ## The key pattern for collaborative AI
 
@@ -373,6 +656,6 @@ Dive into the projects and docs for more information:
 Check out the reference implementations in the [electric-sql/transport](https://github.com/electric-sql/transport) repo:
 
 - [Durable Transport](https://github.com/electric-sql/transport?tab=readme-ov-file#durable-transport)
-- ]Durable Sessions](https://github.com/electric-sql/transport?tab=readme-ov-file#durable-sessions)
+- [Durable Sessions](https://github.com/electric-sql/transport?tab=readme-ov-file#durable-sessions)
 
-[Reach out on our Discord channel](#) if you have any questions. [Get in touch](#) if we can help speed up your integration.
+[Reach out on our Discord channel](https://discord.electric-sql.com) if you have any questions, or if you need help implementing any of the technologies or patterns outlined in this post.
