@@ -26,26 +26,32 @@ import RequestResponseSmall from '/static/img/blog/durable-sessions-for-collabor
     border-radius: 14px !important;
     overflow: hidden;
   }
+  .embed-container {
+    margin: 24px 0;
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .embed-container.top {
+    margin: 32px 0 -12px 0;
+  }
 </style>
 
 As the world moves to getting things done through agents, the winners are going to be the products that integrate AI with team-based collaboration.
 
-This post introduces the [Durable Sessions pattern](#durable-sessions-pattern) for building collaborative AI apps.
+This post introduces the [Durable Sessions](#durable-sessions) pattern and shows how you can implement it using [Durable Streams](https://github.com/durable-streams/durable-streams) and [TanStack DB](https://tanstack.com/db) to add collaboration to your AI SDK.
 
-It shows how you can use Durable Sessions today, with your existing stack and AI SDK, to support exactly the kind of real-time and asynchronous collaboration that will unlock adoption across the enterprise.
+> [!Warning] 🤝 ✨ Durable Sessions demo
+> See the TanStack AI - Durable Sessions [demo video](https://youtu.be/81KXwxld7dw) and [source code](https://github.com/electric-sql/transport/tree/main?tab=readme-ov-file#durable-session).
 
-> [!Warning] 🤝 ✨ TanStack AI <> DB example
-> See the example app [screencast video](#) below and [source code here](#).
-
-<div class="embed-container">
-  <YoutubeEmbed video-id="..." />
+<div class="embed-container top" style="padding-bottom: 62.283737%">
+  <YoutubeEmbed video-id="81KXwxld7dw" />
 </div>
 
 ## Getting things done with agents
 
 When I sit down to get something done, I increasingly reach for an agent. Not because they're magic or perfect but because, on balance, they boost my productivity.
 
-For me, personally, as a technical startup founder, adapting to this new reality is a challenge. I spent the last however many years developing craft skills that are now somehow being both amplified and commoditized at the same time. I'm having to re-learn, on ever shorter timeframes, what it is I even do for a living.
+For me, personally, as a technical startup founder, adapting to this new reality is a challenge. I spent the last however many years developing craft skills that are now somehow being both amplified and commoditized at the same time.
 
 <figure>
   <Tweet tweet-id="2004646160200511615"
@@ -55,7 +61,7 @@ For me, personally, as a technical startup founder, adapting to this new reality
   />
 </figure>
 
-For people with less technical craft skills or who are less used to adaptation, the challenge to evolve how they work is even sharper. For large companies, that are basically normal people working in ossified structures, the challenge is existential. Teams, departments, whole industries &mdash; why do they even exist any more?
+For people with less technical craft skills or who are less used to adaptation, the challenge to evolve is even harder. For companies, made up of people working in management structures, the challenge is existential. Teams, departments, whole industries &mdash; why do they even exist any more?
 
 ### Right place, right time
 
@@ -65,11 +71,13 @@ You have the opportunity to disrupt and replace whole swathes of previous-genera
 
 ### Cracking the enterprise
 
-It's a massive economic shift, with massive customers feeling massive pain. If you can serve their transformation, as they scramble to up-skill and transform their workforce, there's no limit to what you can achieve.
+It's a massive economic shift, with massive customers feeling massive pain.
 
-However, if you build on a single user paradigm, it's not going to cut it. You're not going to win the procurement battle. You're not going to land and expand and you're not going to benefit from product-led growth.
+If you can serve their transformation, as they scramble to up-skill and transform their workforce, there's no limit to what you can achieve.
 
-Instead, to crack the enterprise, you need to support the same kind of team-based collaboration that the software you're replacing was built around. That means people working together on and around agentic sessions.
+However, if you build on a single user paradigm, it's not going to cut it. You're not going to win the procurement battle. You're not going to land and expand. You're not going to benefit from product-led growth.
+
+Instead, to crack the enterprise, you need to support the same kind of team-based collaboration that the software you're replacing was based on. That means people working together on agentic sessions.
 
 ### With collaborative AI
 
@@ -81,17 +89,19 @@ But how do you build and adapt AI and agentic products to support this kind of c
 
 ## Moving beyond single-user
 
-You need to move beyond the default single-user <> single-agent interaction paradigm of today's AI SDKs. To a multi-user <> multi-agent paradigm that naturally supports both real-time and asynchronous collaboration.
+You need to move beyond the default single‑user <> single‑agent interaction paradigm of today's AI SDKs. To a multi‑user <> multi‑agent paradigm that naturally supports both real-time and asynchronous collaboration.
 
 ### Evolving the interaction paradigm
 
-The default paradigm of the most popular AI SDKs, like the [Vercel AI SDK](https://ai-sdk.dev/docs/introduction), remains single-user <> single-agent. You have a chat interface with a `sendMessage` action:
+The default paradigm of most AI SDKs, like the [Vercel AI SDK](https://ai-sdk.dev/docs/introduction) and [TanStack AI](https://tanstack.com/ai), is single‑user <> single‑agent.
+
+You have a chat interface with a `sendMessage` action:
 
 ```tsx
 const { messages, sendMessage } = useChat({...})
 ```
 
-When the user types their prompt and hits enter, you call `sendMessage`, it adds the message to some local state and then blocks the UI whilst it makes an API request to a backend endpoint. Something like this:
+When the user types their prompt and hits enter, you call `sendMessage`, it adds the message to some local state and then blocks the UI whilst it makes an API request to a backend endpoint. That constructs an LLM instruction request and streams the response back to the client.
 
 ```tsx
 async function POST(req: Request) {
@@ -107,7 +117,7 @@ async function POST(req: Request) {
 }
 ```
 
-This constructs an LLM instruction request and streams the response back to the client. The client then consumes the response stream, writing out the agent response in chunks one at a time, and then unblocks the chat thread once the active generation is finished.
+The client then consumes the response stream, writes out the agent response one chunk at a time and unblocks the chat thread once the active generation is finished.
 
 <figure>
   <img :src="RequestResponse" class="hidden-sm" />
@@ -116,15 +126,17 @@ This constructs an LLM instruction request and streams the response back to the 
 
 The whole flow is designed around request <> response. The request is a single user message and the response is a single assistant message.
 
+### Support for collaboration
+
 This fails to support collaboration in so many ways. The local message state isn't shared, so doesn't sync across users/tabs/devices. The request response model (and blocking the UI) assumes there’s only one user waiting on a response from a one agent.
 
 What we need instead is an interaction paradigm that doesn't bake in this single user <> single agent assumption. That allows multiple users to work in multiple tabs and devices, collaborating with other users and agents on the same session in real-time. So users can join the session half way through and other users can go back to it later.
 
-That means the session needs to be persistent and addressable.
-
 ### Persistence and addressability
 
-Persistence and addressability of AI sessions is generally left up to application developers. There's no standardization and as a result there's no interop. If you want multiple users to join the same session or multiple agents to register with it, you have to dig into application-specific routing, storage and authentication.
+That means the session needs to be persistent and addressable.
+
+This is generally left up to application developers. If you want multiple users to join the same session or multiple agents to register with it, you have to dig into application-specific routing, storage and authentication.
 
 For example, the Vercel AI SDK [`useChat` hook](https://ai-sdk.dev/docs/reference/ai-sdk-ui/use-chat#messages) accepts an `messages` parameter.
 
@@ -133,7 +145,7 @@ For example, the Vercel AI SDK [`useChat` hook](https://ai-sdk.dev/docs/referenc
 messages?: UIMessage[]
 ```
 
-Which you can pass in when you initialise a chat session. Or (because it can be a bit tricky with SSR and async data loading) you can set client side, after the UI has initialized:
+Which you can pass in when you initialize a chat session. Or you can fetch asynchronously and set client side, after the UI has initialized:
 
 ```tsx
 export default function Chat({ sessionId }) {
@@ -151,15 +163,9 @@ export default function Chat({ sessionId }) {
 }
 ```
 
-Where that `sessionId`  comes from is up to you. How you use it to fetch the message history is up to you. And you need to be careful to construct the right message IDs to match any resumable active generations. Which is no doubt handled differently by every app that's implemented this so far.
+How you use that `sessionId` to fetch the message history is up to you. How other processes or apps find, consume and subscribe to it is up to you.
 
-What's needed is a ***standard protocol*** for persistence and addressability of streams and sessions. So external software can plug-in, audit, monitor and integrate, in the same way that today's enterprise systems monitor and audit web service APIs.
-
-### Durable state and subscribability
-
-When you move from single user <> single agent you decouple and have more of an event bus architecture. Everyone's an actor and actors have agency. They need visibility on events and you need to be able to craft the control flow. Workflows can't be breaking when a ephemeral connection drops.
-
-That's why there's a big focus in agentic on durable execution. But in reality, you don't need durable execution. You need durable state. If your state is persistent and addressable, your execution can be ephemoral. Because your clients or workers (or processes, or agents) can just connect and resume at any stage.
+Whereas what's needed is a ***standard protocol*** for persistence and addressability of streams and sessions. So initial message hydration is taken care of and external software can plug-in, audit, monitor and integrate. In the same way that today's enterprise systems monitor and audit web service APIs.
 
 ## Composable sync primitives
 
@@ -170,49 +176,45 @@ That's what we've been building at Electric. A suite of composable sync primitiv
 - [TanStack DB](#tanstack-db)
 - [PGlite](https://pglite.dev)
 
-They're used by millions of developers, built into tools like Firebase, Supabase, Prisma and TanStack and are used in production, at scale, by companies and products like [Trigger.dev](https://trigger.dev), [Turbo](https://www.turbo.ai) and [Humanlayer](https://www.humanlayer.dev).
+They're built into tools like [Firebase](https://firebase.google.com), [Prisma](https://www.prisma.io) and [TanStack](https://tanstack.com) and used by products like [Trigger.dev](https://trigger.dev), [Turbo](https://www.turbo.ai) and [Humanlayer](https://www.humanlayer.dev).
 
 ### Electric sync
 
-Our core product is the [Electric sync engine](https://electric-sql.com). This is a read-path sync engine for application development. It syncs data out of Postgres into client apps, handling partial replication, data delivery and fan out.
-
-As a developer, you can declare the data you want in the local app. Electric then handles the transfer and synchronization for you. This allows you to [build fast, reactive apps that support real-time collaboration](/blog/2025/07/29/local-first-sync-with-tanstack-db).
-
-Electric uses an HTTP sync protocol, that scales out data delivery through existing CDN infrastructure. This was originally designed by Kyle Mathews, based on his experience building Gatsby.
+Our core product is the [Electric sync engine](https://electric-sql.com). Electric syncs data out of Postgres into client apps, handling partial replication and fan out. Using an [HTTP-based sync protocol](/docs/api/http) that scales out data delivery through existing CDN infrastructure.
 
 ### Durable Streams
 
-We've now generalized the Electric sync protocol into the [Durable Streams](https://github.com/durable-streams/durable-streams) protocol. This is a lower-level binary streaming protocol that follows the same semantics and core protocol as Electric.
-
-As a lower-level binary protocol (that isn't coupled to Postgres) it can be used efficiently for a wider variety of use cases. These include token streaming, real-time presence and multi-modal binary data frames.
+We've now generalized the Electric sync protocol into the [Durable Streams](https://github.com/durable-streams/durable-streams) protocol. This is a lower-level binary streaming protocol supports a wider variety of use cases. Including token streaming, real-time presence and multi-modal binary data frames.
 
 ### TanStack DB
 
-You can sync Electric and Durable Streams into anything. However, the main client store we develop and recommend for application development is [TanStack&nbsp;DB](https://tanstack.com/db).
+[TanStack&nbsp;DB](https://tanstack.com/db) is a lightweight, reactive client store. It provides:
 
-TanStack DB is a lightweight, reactive client store. It has three key elements:
-
-1. [collections](https://tanstack.com/db/latest/docs/overview#defining-collections) that allow you to sync/load data from any source
+1. [collections](https://tanstack.com/db/latest/docs/overview#defining-collections) a unified data layer to load data into
 1. [live query engine](https://tanstack.com/db/latest/docs/guides/live-queries) based on a Typescript implementation of differential dataflow
 1. [optimistic mutations](https://tanstack.com/db/latest/docs/guides/mutations) that tie into the sync machinery
 
-Collections provide a unified data layer to load any type of data into, from any source. This allows you to build real-time, reactive apps that connect structured and unstructured data. No matter whether it comes from an API response, Electric sync or a Durable Stream.
+DB allows you to build real-time, reactive apps on any type of data, from any source. No matter whether it comes from an API response, Electric sync or a Durable Stream.
 
-## Durable Sessions pattern
+## Durable Sessions
 
-The key insight behind Durable Streams was not just that apps needed binary streams for things like token streaming. It was also to decouple the payload format from the delivery protocol. So the durable stream protocol could sync any data format.
+The Durable Session pattern composes [Durable Streams](#durable-streams) with [TanStack DB](#tsnstack-db) to provide a naturally collaborative transport layer for AI apps and agentic systems.
 
-With this approach, the Electric sync protocol (originally modeled on the change events emitted by Postgres logical replication) could be just _one of many_ structured state synchronization protocols layered on top of the core binary streams.
+### Layered sync
 
-So you get multiple layers:
+The key insight behind the [generalization of Electric into Durable Streams](/blog/2025/12/09/announcing-durable-streams) was not ***just*** that apps needed persistent, addressable, binary streams for presence and token streaming. (Although, of course, they do and it is the [missing primitive](https://github.com/durable-streams/durable-streams?tab=readme-ov-file#the-missing-primitive) for this).
+
+It was ***also*** to decouple the payload format from the delivery protocol. So the resilient, scalable, HTTP-based delivery protocol could be used to sync ***any*** data format.
+
+That way, the Electric sync protocol (originally modelled on the change events emitted by Postgres logical replication) becomes just ***one of many*** structured state synchronization protocols layered on top of the core binary streams:
 
 1. [durable streams](/blog/2025/12/09/announcing-durable-streams) &mdash; persistent, addressable, payload agnostic, binary stream
 1. [durable state](/blog/2025/12/23/durable-streams-0.1.0#introducing-the-state-protocol) &mdash; schema-aware structured state sync over durable stream
-1. specific protocols &mdash; like Electric sync and AI SDK token streaming
+1. [specific protocols](/blog/2025/12/23/durable-streams-0.1.0#using-the-state-protocol) &mdash; like Postgres sync and AI SDK token streaming
 
 ### Durable transport
 
-When it comes to building AI apps, the state transfer protocols tend to be defined by the AI SDKs. For example, the Vercel AI SDK has a [Data Stream Protocol](https://ai-sdk.dev/docs/ai-sdk-ui/stream-protocol#data-stream-protocol) that streams (mostly) JSON message parts over SSE:
+When it comes to building AI apps, the transport protocols are defined by the AI SDKs. For example, the Vercel AI SDK has a [Data Stream Protocol](https://ai-sdk.dev/docs/ai-sdk-ui/stream-protocol#data-stream-protocol) that streams (mostly) JSON message parts over SSE:
 
 ```json
 data: {"type":"start","messageId":"msg_1234"}
@@ -224,15 +226,23 @@ data: {"type":"finish"}
 data: [DONE]
 ```
 
-As you can see from the lack of message ID on the `data: {"type":"finish"}` part, it's a protocol that struggles to shake off its single user <> single agent roots. Because how do you multiplex multiple streaming messages at the same time if you don't know which message the finish applies to. And what's `[DONE]` exactly?
+> As you can see from the lack of message ID on the `data: {"type":"finish"}` part, it's a protocol that struggles to shake off its single user <> single agent roots. Because how do you multiplex multiple streaming messages at the same time if you don't know which message the finish applies to. And what's `[DONE]` exactly? The request or the session?
 
-The principle of layered sync on top of durable streams is that it's simple to stream this kind of structured protocol, with type safety, over a durable stream. The Vercel AI SDK has a [Transport](https://ai-sdk.dev/docs/ai-sdk-ui/transport) adapter that allows you to plugin a durable transport adapter that uses a durable stream for the state transfer.
+The durable state layer makes it simple to stream this kind of structured protocol, resiliently, with end-to-end type safety, over the Electric delivery protocol.
+
+#### Vercel AI SDK Transport
+
+The Vercel AI SDK has a [Transport](https://ai-sdk.dev/docs/ai-sdk-ui/transport) adapter mechanism that allows you to plugin a durable transport adapter:
 
 ```tsx
 const { messages, sendMessage } = useChat({
   transport: new DurableTransport({...})
 })
 ```
+
+See a Durable State based [Durable Transport adapter for the Vercel AI SDK here](https://github.com/electric-sql/transport/blob/main/demos/vercel-ai-sdk-durable-transport/app/page.tsx).
+
+#### TanStack AI Connection Adapter
 
 TanStack AI has a similar [Connection Adapter](https://tanstack.com/ai/latest/docs/guides/connection-adapters) pattern:
 
@@ -242,20 +252,19 @@ const { messages, sendMessage } = useChat({
 })
 ```
 
-You can see Durable Transport examples and demo apps for the two SDKs here:
+See a Durable State based [Durable Connection Adapter for TanStack AI here](https://github.com/electric-sql/transport/blob/main/demos/tanstack-ai-durable-transport/src/routes/index.tsx).
 
-- [TanStack AI Durable Connection Adapter example](https://github.com/electric-sql/transport/blob/main/demos/tanstack-ai-durable-transport/src/routes/index.tsx)
-- [Vercel AI SDK Durable Transport example](https://github.com/electric-sql/transport/blob/main/demos/vercel-ai-sdk-durable-transport/app/page.tsx)
+#### Resilience and resumability
 
-However, the existing Transport / Connection Adapter plugin interfaces are just a first step. They make the app more resilient, particularly when streaming long active generations. However, they don't make it ***collaborative***.
+These transport adapters give you resilient transport and, in some cases, resumeability of active generations. You can use them to make the request <> response interaction pattern more resilient. However, they are still limited to request <> response. Which binds them to the single user <> single-agent interaction paradigm.
 
-### Durable sessions
+For real collaboration, we need to go beyond just patching the transport to make individual requests and their streaming responses durable. We need to patch the state management layer to make <span class="no-wrap">***the entire session durable***</span>. By syncing it over a Durable Stream.
 
-What's needed for real collaboration is for the client to subscribe to a ***durable session*** that's persistent and addressable. With this pattern, the interaction paradigm isn't limited to request <> response. It can sync any number of messages and active generations to any number of actors or subscribers.
+### Sync the entire session
 
-> ... diagramme ...
+Syncing the entire session through a Durable Stream allows us to persist multiple messages and active generations over time. With a Durable Session, you can sync any number of messages to any number of users and any number of agents. Or, for that matter, any other subscribers, workers, applications or interested parties.
 
-Using the [Durable State](https://github.com/durable-streams/durable-streams/tree/main/packages/state) protocol, layered over a [Durable Stream](https://github.com/durable-streams/durable-streams), the Durable Session can multiplex multiple active generations at the same time and transfer a variety of structured and multi-modal data:
+In fact, using the Durable State layer, we can multiplex and transfer a variety of structured and multi-modal data both ***over time*** and ***at the same time***:
 
 - whole messages
 - token streams for active generations
@@ -263,13 +272,17 @@ Using the [Durable State](https://github.com/durable-streams/durable-streams/tre
 - CRDTs for typeahead indicators and cursor positions
 - binary data frames for multi-modal data
 
-When a user types and enters a message, resulting in a call to `sendMessage`, this can be treated as an optimistic write. For proper visibility and management of the local state. Because the stream is persistent and addressable, clients can always join and catch up from their current offset at any time. Whether that's in real-time as the session is active or later on for asynchronous collaboration and historical access.
+What we're describing is a sync-based interaction paradigm. That can combine structured state sync with efficient binary streaming. With principled management of optimistic state, tied into the sync machinery.
 
-### Reference implementation
+Because the stream is persistent and addressable, clients can always join and catch up from their current offset at any time. Whether that's in real-time as the session is active or later on for asynchronous collaboration and historical access.
 
-What we're describing is a sync-based interaction paradigm. With a combination of structured state sync and binary streaming. With principled management of optimistic state, tied into the sync machinery. As a developer, you should be able to provide a standard schema for the multiplexed message types and just have those messages available in a reactive store.
+> ... diagramme ...
 
-Which is exactly what TanStack DB and the Durable State layer on-top of Durable Streams were designed for. So, with these existing, composable sync primitives already available, the implementation becomes simple.
+### Using a Standard Schema
+
+So, with Durable Streams and TanStack DB, the implementation becomes simple.
+
+You just need to provide a [Standard Schema](https://standardschema.dev) for the multiplexed message types you would like in your session ([here's an example](https://github.com/electric-sql/transport/blob/main/packages/durable-session/src/schema.ts)) and then you just have that data available in a reactive store in the client.
 
 #### Read-path sync
 
@@ -321,11 +334,9 @@ Which is exactly what TanStack DB and the Durable State layer on-top of Durable 
 
 ... as a result, you get an app that fully supports multi-tab, multi-device, multi-user and multi-agent. For both real-time and asynchronous collaboration. With minimal changes to your component code and zero changes to your backend AI engineering.
 
-<figure>
-  <div class="embed-container" style="padding-bottom: 75.842697%">
-    <YoutubeEmbed video-id="..." />
-  </div>
-</figure>
+<div class="embed-container" style="padding-bottom: 62.283737%">
+  <YoutubeEmbed video-id="81KXwxld7dw" />
+</div>
 
 You can see a full code example and working demo app here:
 
