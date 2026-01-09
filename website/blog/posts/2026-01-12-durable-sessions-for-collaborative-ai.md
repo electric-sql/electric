@@ -295,8 +295,6 @@ Which, of course, is exactly what [Durable Streams](#durable-streams) and [TanSt
 
 You simplfy provide a [Standard Schema](https://standardschema.dev) for the multiplexed message types that you would like in your session ([here's an example](https://github.com/electric-sql/transport/blob/main/packages/durable-session/src/schema.ts)) and that gives you the data available in a reactive store in the client.
 
-That's it &mdash; you don't need to do anything else.
-
 #### Example schema
 
 For example, here's a cut down of the example schema linked above, that multiplexes whole messages, active token streams, user presence and agent registration data, with end-to-end type-safety, over a single Durable Stream.
