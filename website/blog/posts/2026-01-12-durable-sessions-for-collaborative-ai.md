@@ -615,15 +615,13 @@ As a result, you get an app that fully supports multi-tab, multi-device, multi-u
 </div>
 
 > [!Warning] Example &mdash; TanStack AI - Durable Session
-> See the full code example and working demo app of a [TanStack AI - Durable Sessions  reference implementation here](https://github.com/electric-sql/transport/?tab=readme-ov-file#durable-transport).
+> See the full code example and working demo app of a [TanStack AI - Durable Sessions reference implementation here](https://github.com/electric-sql/transport/?tab=readme-ov-file#durable-transport).
 
 ## The key pattern for collaborative AI
 
-As the world moves to getting things done through agents, the winners are going to be the products that combine AI with team-based collaboration.
+As the world moves to getting things done through agents, the winners are going to be the products that combine AI with team-based collaboration. Building AI apps on the Durable Session pattern is the best way to do that.
 
-Building AI apps on a Durable Sessions pattern is the best way to do that.
-
-[Durable Streams](https://github.com/durable-streams/durable-streams) and [TanStack DB](https://tanstack.com/db) make it simple and easy to integrate Durable Sessions with your existing stack, schema and AI SDK.
+[Durable Streams](https://github.com/durable-streams/durable-streams) and [TanStack DB](https://tanstack.com/db) allow you to build Durable Sessions with your existing stack, schema and AI SDK.
 
 ### Next steps
 
