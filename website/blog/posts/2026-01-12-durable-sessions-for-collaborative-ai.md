@@ -38,7 +38,9 @@ import RequestResponseSmall from '/static/img/blog/durable-sessions-for-collabor
 
 As the world moves to getting things done through agents, the winners are going to be the products that integrate AI with team-based collaboration.
 
-A Durable Session is a state management pattern that naturally makes AI and agentic apps collaborative. This post introduces the [Durable Session pattern](#durable-session-pattern) and shows how you can implement it using [Durable Streams](https://github.com/durable-streams/durable-streams) and [TanStack DB](https://tanstack.com/db).
+A Durable Session is a state management pattern that naturally makes AI and agentic apps collaborative.
+
+This post introduces the [Durable Session pattern](#durable-session-pattern) and shows how you can implement it using [Durable Streams](https://github.com/durable-streams/durable-streams) and [TanStack DB](https://tanstack.com/db).
 
 > [!Warning] 🤝 ✨ Durable Sessions demo
 > See the TanStack AI - Durable Sessions [demo video](https://youtu.be/81KXwxld7dw) and [source code](https://github.com/electric-sql/transport).
@@ -550,7 +552,7 @@ As you can see from the `mutationFn` in the code sample above, it still POSTs th
 
 This is standard CRUD stuff and you can implement it using whatever framework you prefer or already use.
 
-For example, in the reference example, we have a [handler for message actions](https://github.com/electric-sql/transport/blob/main/packages/durable-session-proxy/src/handlers/send-message.ts) which (simpified and on the happy) looks something like this:
+For example, in the reference example, we have a [handler for message actions](https://github.com/electric-sql/transport/blob/main/packages/durable-session-proxy/src/handlers/send-message.ts) which (simpified and on the happy path) looks something like this:
 
 ```ts
 async function handleSendMessage(c: Context, protocol: Protocol): Promise<Response> {
@@ -566,7 +568,9 @@ async function handleSendMessage(c: Context, protocol: Protocol): Promise<Respon
 }
 ```
 
-Importantly, you'll notice that handler ***doesn't*** proxy the request through to an LLM provider. Instead, you can register agents that do this. The [session backend](https://github.com/electric-sql/transport/blob/main/packages/durable-session-proxy/src/protocol.ts) then calls them when new messages are posted:
+Importantly, you'll notice that handler ***doesn't*** proxy the request through to an LLM provider. It just writes to the stream.
+
+To instruct the LLM, you register agents that subscribe to the stream and the [session backend](https://github.com/electric-sql/transport/blob/main/packages/durable-session-proxy/src/protocol.ts) calls them when new messages are posted:
 
 ```ts
 state.modelMessages.subscribeChanges(async () => {
@@ -576,7 +580,7 @@ state.modelMessages.subscribeChanges(async () => {
 })
 ```
 
-The agents themselves are backend API endpoints, where you can manage your control flow and perform context engineering as normal. For example this is the [default agent in the demo](https://github.com/electric-sql/transport/blob/main/demos/tanstack-ai-durable-session/src/routes/api.chat.kermit.ts):
+The agents themselves are backend API endpoints, where you can manage your control flow and perform context engineering as normal. For example this is the main code from the [default agent in the demo](https://github.com/electric-sql/transport/blob/main/demos/tanstack-ai-durable-session/src/routes/api.chat.kermit.ts):
 
 ```ts
 async ({ request }) => {
@@ -600,7 +604,7 @@ async ({ request }) => {
 }
 ```
 
-It looks exactly as it would if it was handling a user message and streaming the response back in a request <> response paradigm. Except now it's being invoked by the backend session, which streams the response onto the durable stream. Where it can be streamed to any number of subscribers.
+It's your code and it can be exactly the same as if it was handling a user message and streaming the response back in a request <> response paradigm. Except now it's being invoked by the backend session, which consumes the response and writes it iteratively onto the durable stream.
 
 ### Optimum AX/DX/UX
 
@@ -609,7 +613,7 @@ As a result, you get an app that fully supports multi-tab, multi-device, multi-u
 With minimal changes to your component code and zero changes to your real AI engineering.
 
 > [!Warning] Example &mdash; TanStack AI - Durable Sessions
-> See the [full code example and working demo app of a [TanStack AI - Durable Sessions reference implementation here](https://github.com/electric-sql/transport/?tab=readme-ov-file#durable-sessions).
+> See the full code example and working demo app of a [TanStack AI - Durable Sessions reference implementation here](https://github.com/electric-sql/transport/?tab=readme-ov-file#durable-sessions).
 
 <div class="embed-container" style="padding-bottom: 62.283737%">
   <YoutubeEmbed video-id="81KXwxld7dw" />
