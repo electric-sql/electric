@@ -3,7 +3,7 @@ title: Durable Sessions — the key pattern for collaborative AI
 description: >
   This post introduces the Durable Session pattern for building collaborative AI apps with Durable Streams and TanStack DB.
 excerpt: >
-  As the world moves to getting things done through agents, the winners are going to be the products that combine AI with team-based collaboration. Building AI apps on a Durable Sessions architecture is the best way to do that.
+  As the world moves to getting things done through agents, the winners are going to be the products that combine AI with team-based collaboration. Building AI apps on a Durable Session architecture is the best way to do that.
 authors: [thruflo]
 image: /img/blog/durable-sessions-for-collaborative-ai/header.jpg
 imageWidth: 1536
@@ -38,7 +38,7 @@ import RequestResponseSmall from '/static/img/blog/durable-sessions-for-collabor
 
 As the world moves to getting things done through agents, the winners are going to be the products that integrate AI with team-based collaboration.
 
-This post introduces the [Durable Sessions](#durable-sessions) pattern and shows how you can implement it using [Durable Streams](https://github.com/durable-streams/durable-streams) and [TanStack DB](https://tanstack.com/db) to add collaboration to your AI SDK.
+A Durable Session is a state management pattern that naturally makes AI and agentic apps collaborative. This post introduces the [Durable Session pattern](#durable-session-pattern) and shows how you can implement it using [Durable Streams](https://github.com/durable-streams/durable-streams) and [TanStack DB](https://tanstack.com/db).
 
 > [!Warning] 🤝 ✨ Durable Sessions demo
 > See the TanStack AI - Durable Sessions [demo video](https://youtu.be/81KXwxld7dw) and [source code](https://github.com/electric-sql/transport).
@@ -51,7 +51,7 @@ This post introduces the [Durable Sessions](#durable-sessions) pattern and shows
 
 When I sit down to get something done, I increasingly reach for an agent. Not because they're magic or perfect but because, on balance, they boost my productivity.
 
-For me, personally, as a technical startup founder, adapting to this new reality is a challenge. I spent the last however many years developing craft skills that are now somehow being both amplified and commoditized at the same time.
+For me, as a technical startup founder, adapting to this new reality is a challenge. I spent the last 20 years developing craft skills that are now being, somehow, both amplified and commoditized at the same time.
 
 <figure>
   <Tweet tweet-id="2004646160200511615"
@@ -61,7 +61,9 @@ For me, personally, as a technical startup founder, adapting to this new reality
   />
 </figure>
 
-For people with less technical craft skills or who are less used to adaptation, the challenge to evolve is even harder. For companies, made up of people working in management structures, the challenge is existential. Teams, departments, whole industries &mdash; [why do they even exist](https://x.com/justjake/status/2009459155913044354) any more?
+For people with less technical craft skills or who are less used to adaptation, the challenge to evolve is even harder. For companies, made up of normal people working in legacy management structures, the challenge is existential.
+
+Teams, departments, whole industries &mdash; [why do they even exist](https://x.com/justjake/status/2009459155913044354) any more?
 
 ### Right place, right time
 
@@ -78,7 +80,7 @@ If you can serve their transformation, as they scramble to up-skill and transfor
 However, if you build on a single user paradigm, it's not going to cut it. You're not going to win the procurement battle. You're not going to land and expand. You're not going to benefit from product-led growth.
 
 > <em>&ldquo;Today, AI works impressively for individuals but disappointingly for organizations. Closing that gap requires not just more context, but treating agents as social participants in the multiplayer systems they aim to disrupt.&rdquo;</em><br />
-> <small>&mdash; [Collaborative Intelligence. Aatish Nayak](https://x.com/nayakkayak/status/2009660549554913574)</small>
+> <small>&mdash; [Collaborative Intelligence](https://x.com/nayakkayak/status/2009660549554913574), Aatish Nayak - Product @ Scale AI, Harvey</small>
 
 Instead, to crack the enterprise, you need to support the same kind of team-based collaboration that the software you're replacing was based on. That means people working together on agentic sessions.
 
@@ -131,7 +133,7 @@ The whole flow is designed around request <> response. The request is a single u
 
 ### Support for collaboration
 
-This fails to support collaboration in so many ways. The local message state isn't shared, so doesn't sync across users/tabs/devices. The request response model (and blocking the UI) assumes there’s only one user waiting on a response from a one agent.
+This fails to support collaboration in so many ways. The local message state isn't shared, so it doesn't sync across users/tabs/devices. The request response model (and blocking the UI) assumes there’s only one user waiting on a response from a one agent.
 
 What we need instead is an interaction paradigm that doesn't bake in this single user <> single agent assumption. That allows multiple users to work in multiple tabs and devices, collaborating with other users and agents on the same session in real-time. So users can join the session half way through and other users can go back to it later.
 
@@ -141,14 +143,7 @@ That means the session needs to be persistent and addressable.
 
 This is generally left up to application developers. If you want multiple users to join the same session or multiple agents to register with it, you have to dig into application-specific routing, storage and authentication.
 
-For example, the Vercel AI SDK [`useChat` hook](https://ai-sdk.dev/docs/reference/ai-sdk-ui/use-chat#messages) accepts an `messages` parameter.
-
-```tsx
-// Initial chat messages to populate the conversation with.
-messages?: UIMessage[]
-```
-
-Which you can pass in when you initialize a chat session. Or you can fetch asynchronously and set client side, after the UI has initialized:
+For example, the Vercel AI SDK [`useChat` hook](https://ai-sdk.dev/docs/reference/ai-sdk-ui/use-chat#messages) returns a `setMessages` function you can use to populate the chat thread:
 
 ```tsx
 export default function Chat({ sessionId }) {
@@ -168,18 +163,15 @@ export default function Chat({ sessionId }) {
 
 How you use that `sessionId` to fetch the message history is up to you. How other processes or apps find, consume and subscribe to it is up to you.
 
-Whereas what's needed is a ***standard protocol*** for persistence and addressability of streams and sessions. So initial message hydration is taken care of and external software can plug-in, audit, monitor and integrate. In the same way that today's enterprise systems monitor and audit web service APIs.
+Whereas what's needed is a ***standard protocol*** for persistence and addressability of streams and sessions. So initial message hydration is taken care of and external software can plug-in, audit, monitor and integrate (in the same way that today's enterprise systems monitor and audit web service APIs).
 
 ## Composable sync primitives
 
-That's what we've been building at Electric. A suite of composable sync primitives that give you durable state that's persistent, addressable and subscribable:
+That's what we've been building at Electric. A suite of composable sync primitives that give you durable state that's persistent, addressable and subscribable, including:
 
 - [Electric sync](#electric-sync)
 - [Durable Streams](#durable-streams)
 - [TanStack DB](#tanstack-db)
-- [PGlite](https://pglite.dev)
-
-They're built into tools like [Firebase](https://firebase.google.com), [Prisma](https://www.prisma.io) and [TanStack](https://tanstack.com) and used by products like [Trigger.dev](https://trigger.dev), [Turbo](https://www.turbo.ai) and [Humanlayer](https://www.humanlayer.dev).
 
 ### Electric sync
 
@@ -203,17 +195,15 @@ This is a lower-level binary streaming protocol that supports more use cases, li
 
 DB allows you to build real-time, reactive apps on any type of data, from any source. Be it your API response, Electric sync or a Durable Stream.
 
-## Durable Sessions pattern
+## Durable Session pattern
 
-The Durable Session pattern composes [Durable Streams](#durable-streams) with [TanStack DB](#tsnstack-db) to provide a naturally collaborative transport layer for AI apps and agentic systems.
+A Durable Session is a state management pattern that makes AI and agentic apps collaborative. It multiplexes AI token streams with structured state into a persistent, resilient, shared session that users and agents can subscribe to and join at any time.
 
 ### Layered protocols
 
 The key insight behind the [generalization of Electric into Durable Streams](/blog/2025/12/09/announcing-durable-streams) was not ***just*** that apps needed persistent, addressable, binary streams for presence and token streaming. (Although, of course, [they do](https://github.com/durable-streams/durable-streams?tab=readme-ov-file#the-missing-primitive)).
 
-It was ***also*** to decouple the payload format from the delivery protocol. So the resilient, scalable, HTTP-based delivery protocol could sync ***any*** data format.
-
-That way, the Electric sync protocol (originally modelled on the change events emitted by Postgres logical replication) becomes just ***one of many*** structured state synchronization protocols layered on top of the core binary streams.
+It was ***also*** to decouple the payload format from the delivery protocol. So the resilient, scalable, HTTP-based delivery protocol could sync any data format. That way, the Electric sync protocol (originally modelled on the change events emitted by Postgres logical replication) becomes just one of many structured state synchronization protocols layered on top of the core binary streams.
 
 So you have this layered framework of wrapper protocols, where durable streams are wrapped by durable state, which is wrapped by specific transport protocols:
 
@@ -265,7 +255,7 @@ The durable state layer makes it simple to stream this kind of structured protoc
 
 ### Limitations of transport
 
-These transport adapters give you resilience and, in some cases, resumeability of active generations. However, they are still limited to request <> response. Which binds them to the single user <> single-agent interaction paradigm.
+These transport adapters give you resilience and, in some cases, resumability of active generations. However, they are still limited to request <> response. Which binds them to the single user <> single-agent interaction paradigm.
 
 For real collaboration, we need to go beyond just patching the transport to make individual requests and their streaming responses durable and resilient. We need to patch the state management layer to <strong><em>make the <span class="no-wrap">entire session durable</span></em></strong>.
 
@@ -283,7 +273,7 @@ In fact, using the Durable State layer, we can multiplex and transfer a variety 
 
 Because the stream is persistent and addressable, clients can always join and catch up from their current offset at any time. Whether that's in real-time as the session is active or later on for asynchronous collaboration and historical access.
 
-> ... diagramme ...
+> ... diagram ...
 
 What we're describing is a sync-based interaction paradigm. That can combine structured state sync with efficient binary streaming. With principled management of optimistic state, tied into the sync machinery.
 
@@ -293,7 +283,7 @@ Which, of course, is exactly what [Durable Streams](#durable-streams) and [TanSt
 
 ### Using a standard schema
 
-You simplfy provide a [Standard Schema](https://standardschema.dev) for the multiplexed message types that you would like in your session ([here's an example](https://github.com/electric-sql/transport/blob/main/packages/durable-session/src/schema.ts)) and that gives you the data available in a reactive store in the client.
+You simply provide a [Standard Schema](https://standardschema.dev) for the multiplexed message types that you would like in your session ([here's an example](https://github.com/electric-sql/transport/blob/main/packages/durable-session/src/schema.ts)) and that gives you the data available in a reactive store in the client.
 
 #### Example schema
 
@@ -324,10 +314,10 @@ export const presenceSchema = z.object({
   status: z.enum(['online', 'offline']),
 })
 
-export const registrationSchema = z.object({
+export const agentSchema = z.object({
   agentId: z.string(),
   agentName: z.string(),
-  triggers: z.enum(['all', 'user-messages'])
+  triggers: z.enum(['all', 'user-messages']),
   endpoint: z.string(),
 })
 ```
@@ -348,7 +338,7 @@ export const sessionSchema = createStateSchema({
     primaryKey: 'id', // injected as `${actorId}:${deviceId}`
   },
   agent: {
-    schema: agentValueSchema,
+    schema: agentSchema,
     type: 'agent',
     primaryKey: 'agentId'
   },
@@ -412,7 +402,7 @@ const approvalsCollection = createLiveQueryCollection({
 })
 ```
 
-The key here again is there's no imperative code looping over client state. It's all materialized and derived in the live query pipeline. With [automatic reactivity](https://tanstack.com/db/latest/docs/overview##uselivequery-hook) thanks to TanStack DB. So you can just bind the derived collections to your components and everything works, eith end-to-end, surgical reactivity:
+The key here again is there's no imperative code looping over client state. It's all materialized and derived in the live query pipeline. With [automatic reactivity](https://tanstack.com/db/latest/docs/overview#uselivequery-hook) thanks to TanStack DB. So you can just bind the derived collections to your components and everything works, with end-to-end, surgical reactivity:
 
 ```tsx
 import { useLiveQuery } from '@tanstack/react-db'
@@ -429,11 +419,11 @@ const LatestPendingApprovals = () => {
 }
 ```
 
-It's also pure Typescript, so it works across any environment &mdash; web, mobile,  desktop, Node, Bun &mdash; simplifying multi-user, multi-device and multi-worker collaboration.
+It's also pure TypeScript, so it works across any environment &mdash; web, mobile, desktop, Node.js, Bun &mdash; simplifying multi-user, multi-device and multi-worker collaboration.
 
 #### Integrating into wider client data model
 
-Because the session data is synced into TanStack DB collections, it can be [joined up](https://tanstack.com/db/latest/docs/guides/live-queries##joins) into a wider client data model.
+Because the session data is synced into TanStack DB collections, it can be [joined up](https://tanstack.com/db/latest/docs/guides/live-queries#joins) into a wider client data model.
 
 For example, we can load user profile data into a collection [from your API](https://tanstack.com/db/latest/docs/collections/query-collection):
 
@@ -467,7 +457,7 @@ const ActiveSessionUsers = () => {
       .from({ presence: presenceCollection }) // from the session
       .innerJoin({ profile: profileCollection }, // from your API
         ({ presence, profile }) => eq(presence.userId, profile.userId)
-      ),
+      )
       .select(({ presence, profile }) => ({
         id: presence.userId,
         avatar: profile.avatarUrl,
@@ -494,7 +484,7 @@ const ChatPage = () => {
 }
 ```
 
-We can swap that out for an optimistic mutation using [`createOptimisticAction`](https://tanstack.com/db/latest/docs/guides/mutations##creating-custom-actions).
+We can swap that out for an optimistic mutation using [`createOptimisticAction`](https://tanstack.com/db/latest/docs/guides/mutations#creating-custom-actions).
 
 ```ts
 import { createOptimisticAction } from '@tanstack/db'
@@ -554,11 +544,13 @@ As you can see, the usage from component code is exactly the same. So this works
 
 This solves the [limitations of the transport level durability](#limitations-of-transport) we discussed above. By having principled management of local optimistic state and syncing user messages to the other subscribers to the session.
 
-As you can see from the `mutationFn` in the code sample above, it still POSTs the write to your backend (```this.postToProxy(`/v1/sessions/${this.sessionId}/messages`, ...``` goes to your API). So you're in control of authentication and any other custom business logic and you handle writes to the session in your backend code.
+As you can see from the `mutationFn` in the code sample above, it still POSTs the write to your backend (``this.postToProxy(`/v1/sessions/${this.sessionId}/messages`, ...)`` goes to your API). So you're in control of authentication and any other custom business logic and you handle writes to the session in your backend code.
 
 #### Session CRUD
 
-This is standard CRUD stuff and you can implement using whatever framework you prefer or already use. For example, in the reference example, we have a [handler for message actions](https://github.com/electric-sql/transport/blob/main/packages/durable-session-proxy/src/handlers/send-message.ts) which (simplified to just the happy path) essentially looks like this:
+This is standard CRUD stuff and you can implement it using whatever framework you prefer or already use.
+
+For example, in the reference example, we have a [handler for message actions](https://github.com/electric-sql/transport/blob/main/packages/durable-session-proxy/src/handlers/send-message.ts) which (simpified and on the happy) looks something like this:
 
 ```ts
 async function handleSendMessage(c: Context, protocol: Protocol): Promise<Response> {
@@ -566,17 +558,11 @@ async function handleSendMessage(c: Context, protocol: Protocol): Promise<Respon
   const sessionId = c.req.param('sessionId')
   const body = messageRequestSchema.parse(await c.req.json())
 
-  // Marshall the data
-  const { content, txid } = body
-  const actorId = body.actorId ?? c.req.header('X-Actor-Id') ?? crypto.randomUUID()
-  const actorType = body.actorType ?? 'user'
-  const messageId = body.messageId ?? crypto.randomUUID()
-
   // Write to the stream
   const stream = await protocol.getOrCreateSession(sessionId)
-  await protocol.writeUserMessage(stream, sessionId, messageId, actorId, content, txid)
+  await protocol.writeUserMessage(stream, sessionId, body)
 
-  return c.json({ messageId }, 200)
+  return c.json({}, 200)
 }
 ```
 
@@ -592,14 +578,11 @@ state.modelMessages.subscribeChanges(async () => {
 })
 ```
 
-The agents themselves are just backend API endpoints, which get invoked via HTTP request, just as normal. So the [default agent in the demo](https://github.com/electric-sql/transport/blob/main/demos/tanstack-ai-durable-session/src/routes/api.chat.kermit.ts) looks essentially like this:
+The agents themselves are just backend API endpoints, which get invoked via HTTP request, just as normal.
+
+So the [default agent in the demo](https://github.com/electric-sql/transport/blob/main/demos/tanstack-ai-durable-session/src/routes/api.chat.kermit.ts) looks exactly as it would look if it was handling a user message and streaming the response back in a request <> response paradigm:
 
 ```ts
-import { chat, maxIterations, toStreamResponse } from '@tanstack/ai'
-import { openai } from '@tanstack/ai-openai'
-
-const SYSTEM_PROMPT = `You are ...`
-
 async ({ request }) => {
   if (request.signal.aborted) {
     return new Response(null, { status: 499 })
@@ -621,7 +604,7 @@ async ({ request }) => {
 }
 ```
 
-Exactly as it would look if it was handling a user message and streaming the response back in a request <> response paradigm. Except it's now being invoked by the backend session, which streams the response onto the durable stream. Where it can be streamed to any number of subscribers.
+Except now it's being invoked by the backend session, which streams the response onto the durable stream. Where it can be streamed to any number of subscribers.
 
 ### Optimum AX/DX/UX
 
