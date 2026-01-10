@@ -90,7 +90,140 @@ defmodule Electric.Replication.Eval.Decomposer do
   @spec decompose(query :: pgquery_protobuf()) ::
           {[[dnf_term()]], %{reference() => pgquery_protobuf()}}
   def decompose(query) do
-    r1 = make_ref()
-    {[[r1]], %{r1 => query}}
+    # Phase 1: Convert to intermediate DNF (list of disjuncts, each is a list of {ast, negated?})
+    internal_dnf = to_dnf(query, false)
+
+    # Phase 2: Expand to fixed-width format with references
+    expand(internal_dnf)
+  end
+
+  # Convert AST to internal DNF representation
+  # negated? tracks whether we're inside a NOT context (for De Morgan transformations)
+  defp to_dnf(
+         %PgQuery.Node{node: {:bool_expr, %PgQuery.BoolExpr{boolop: boolop, args: args}}},
+         negated
+       ) do
+    case {boolop, negated} do
+      {:OR_EXPR, false} ->
+        # OR: concatenate disjuncts from all branches
+        Enum.flat_map(args, &to_dnf(&1, false))
+
+      {:OR_EXPR, true} ->
+        # NOT OR => AND (De Morgan's law)
+        # NOT (a OR b) = NOT a AND NOT b
+        args_dnfs = Enum.map(args, &to_dnf(&1, true))
+        cross_product(args_dnfs)
+
+      {:AND_EXPR, false} ->
+        # AND: cross-product of disjuncts from all branches
+        args_dnfs = Enum.map(args, &to_dnf(&1, false))
+        cross_product(args_dnfs)
+
+      {:AND_EXPR, true} ->
+        # NOT AND => OR (De Morgan's law)
+        # NOT (a AND b) = NOT a OR NOT b
+        Enum.flat_map(args, &to_dnf(&1, true))
+
+      {:NOT_EXPR, _} ->
+        # NOT: flip the negation state (handles double negation automatically)
+        [arg] = args
+        to_dnf(arg, not negated)
+    end
+  end
+
+  defp to_dnf(%PgQuery.Node{} = leaf, negated) do
+    # Leaf expression: single disjunct with single term
+    [[{leaf, negated}]]
+  end
+
+  # Cross-product of multiple DNF forms
+  # Used for AND distribution: (A1 OR A2) AND (B1 OR B2) => (A1 AND B1) OR (A1 AND B2) OR (A2 AND B1) OR (A2 AND B2)
+  defp cross_product([]), do: [[]]
+
+  defp cross_product([dnf | rest]) do
+    rest_product = cross_product(rest)
+
+    for disjunct <- dnf, rest_disjunct <- rest_product do
+      disjunct ++ rest_disjunct
+    end
+  end
+
+  # Expand internal DNF to fixed-width format with references
+  defp expand(internal_dnf) do
+    # Calculate width of each disjunct and total width
+    widths = Enum.map(internal_dnf, &length/1)
+    total_width = Enum.sum(widths)
+
+    # Calculate start positions for each disjunct: [0, w1, w1+w2, ...]
+    start_positions = calc_start_positions(widths)
+
+    # Build subexpressions map with deduplication based on SQL string
+    {ast_to_ref, subexpressions} = build_subexpressions(internal_dnf)
+
+    # Expand each disjunct to full width
+    disjuncts =
+      internal_dnf
+      |> Enum.zip(start_positions)
+      |> Enum.map(fn {disjunct, start_pos} ->
+        # Create a list of nils of the total width
+        row = List.duplicate(nil, total_width)
+
+        # Fill in the terms at the appropriate positions
+        disjunct
+        |> Enum.with_index()
+        |> Enum.reduce(row, fn {{ast, negated}, term_idx}, row ->
+          pos = start_pos + term_idx
+          ref = Map.fetch!(ast_to_ref, deparse(ast))
+          term = if negated, do: {:not, ref}, else: ref
+          List.replace_at(row, pos, term)
+        end)
+      end)
+
+    {disjuncts, subexpressions}
+  end
+
+  defp calc_start_positions(widths) do
+    widths
+    |> Enum.reduce({[], 0}, fn width, {positions, acc} ->
+      {positions ++ [acc], acc + width}
+    end)
+    |> elem(0)
+  end
+
+  defp build_subexpressions(internal_dnf) do
+    internal_dnf
+    |> List.flatten()
+    |> Enum.map(fn {ast, _negated} -> ast end)
+    |> Enum.reduce({%{}, %{}}, fn ast, {ast_to_ref, subexpressions} ->
+      key = deparse(ast)
+
+      case Map.fetch(ast_to_ref, key) do
+        {:ok, _ref} -> {ast_to_ref, subexpressions}
+
+        :error ->
+          ref = make_ref()
+          {Map.put(ast_to_ref, key, ref), Map.put(subexpressions, ref, ast)}
+      end
+    end)
+  end
+
+  # Convert AST node back to SQL string for deduplication
+  defp deparse(ast) do
+    %PgQuery.ParseResult{
+      stmts: [
+        %PgQuery.RawStmt{
+          stmt: %PgQuery.Node{
+            node:
+              {:select_stmt,
+               %PgQuery.SelectStmt{
+                 target_list: [%PgQuery.Node{node: {:res_target, %PgQuery.ResTarget{val: ast}}}]
+               }}
+          }
+        }
+      ]
+    }
+    |> PgQuery.protobuf_to_query!()
+    |> String.replace_prefix("SELECT ", "")
+    |> String.trim()
   end
 end
