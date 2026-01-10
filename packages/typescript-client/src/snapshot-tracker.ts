@@ -19,7 +19,6 @@ export class SnapshotTracker {
     { xmin: bigint; xmax: bigint; xip_list: bigint[]; keys: Set<string> }
   > = new Map()
   private xmaxSnapshots: Map<bigint, Set<number>> = new Map()
-  private snapshotsByDatabaseLsn: Map<bigint, Set<number>> = new Map()
 
   /**
    * Add a new snapshot for tracking
@@ -36,14 +35,6 @@ export class SnapshotTracker {
         .get(BigInt(metadata.xmax))
         ?.add(metadata.snapshot_mark) ?? new Set([metadata.snapshot_mark])
     this.xmaxSnapshots.set(BigInt(metadata.xmax), xmaxSet)
-    const databaseLsnSet =
-      this.snapshotsByDatabaseLsn
-        .get(BigInt(metadata.database_lsn))
-        ?.add(metadata.snapshot_mark) ?? new Set([metadata.snapshot_mark])
-    this.snapshotsByDatabaseLsn.set(
-      BigInt(metadata.database_lsn),
-      databaseLsnSet
-    )
   }
 
   /**
@@ -74,15 +65,5 @@ export class SnapshotTracker {
     return [...this.activeSnapshots.values()].some(
       (x) => x.keys.has(message.key) && isVisibleInSnapshot(xid, x)
     )
-  }
-
-  lastSeenUpdate(newDatabaseLsn: bigint): void {
-    for (const [dbLsn, snapshots] of this.snapshotsByDatabaseLsn.entries()) {
-      if (dbLsn <= newDatabaseLsn) {
-        for (const snapshot of snapshots) {
-          this.removeSnapshot(snapshot)
-        }
-      }
-    }
   }
 }
