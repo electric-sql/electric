@@ -2,6 +2,9 @@ import fs from 'node:fs'
 import { defineConfig } from 'vitepress'
 import { tabsMarkdownPlugin } from 'vitepress-plugin-tabs'
 import llmstxt from 'vitepress-plugin-llms'
+import type { LanguageRegistration } from 'shiki'
+
+import caddyfileGrammar from './theme/syntax/caddyfile.json'
 
 import demosData from '../data/demos.data.ts'
 import postsData from '../data/posts.data.ts'
@@ -31,6 +34,12 @@ const blogSidebarItems = await posts.map((post) => ({
   text: post.title,
   link: post.path,
 }))
+
+const caddyfileLanguage: LanguageRegistration = {
+  ...caddyfileGrammar,
+  name: 'caddyfile',
+  aliases: ['caddy', 'Caddyfile'],
+}
 
 // https://vitepress.dev/reference/site-config
 export default defineConfig({
@@ -124,6 +133,7 @@ export default defineConfig({
       'sql',
       'tsx',
       'typescript',
+      caddyfileLanguage
     ],
     config(md) {
       md.use(tabsMarkdownPlugin)
