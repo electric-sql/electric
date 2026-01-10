@@ -51,7 +51,7 @@ export class Shape<T extends Row<unknown> = Row> {
   readonly stream: ShapeStreamInterface<T>
 
   readonly #data: ShapeData<T> = new Map()
-  readonly #subscribers = new Map<number, ShapeChangedCallback<T>>()
+  readonly #subscribers = new Map<object, ShapeChangedCallback<T>>()
   readonly #insertedKeys = new Set<string>()
   readonly #requestedSubSnapshots = new Set<string>()
   #reexecuteSnapshotsPending = false
@@ -149,7 +149,7 @@ export class Shape<T extends Row<unknown> = Row> {
   }
 
   subscribe(callback: ShapeChangedCallback<T>): () => void {
-    const subscriptionId = Math.random()
+    const subscriptionId = {}
 
     this.#subscribers.set(subscriptionId, callback)
 

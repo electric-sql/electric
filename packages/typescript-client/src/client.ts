@@ -534,7 +534,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
   readonly #messageParser: MessageParser<T>
 
   readonly #subscribers = new Map<
-    number,
+    object,
     [
       (messages: Message<T>[]) => MaybePromise<void>,
       ((error: Error) => void) | undefined,
@@ -1328,7 +1328,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
     callback: (messages: Message<T>[]) => MaybePromise<void>,
     onError: (error: Error) => void = () => {}
   ) {
-    const subscriptionId = Math.random()
+    const subscriptionId = {}
 
     this.#subscribers.set(subscriptionId, [callback, onError])
     if (!this.#started) this.#start()
