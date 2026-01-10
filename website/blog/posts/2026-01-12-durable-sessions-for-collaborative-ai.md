@@ -279,7 +279,7 @@ What we're describing is a sync-based interaction paradigm. That can combine str
 
 ## Reference implementation
 
-Which, of course, is exactly what [Durable Streams](#durable-streams) and [TanStack DB](#tanstack-db) were designed for. So, with Durable Streams and TanStack DB as composable sync primitives, the implementation becomes simple.
+Which is exactly what [Durable Streams](#durable-streams) and [TanStack DB](#tanstack-db) were designed for. So, with them as composable sync primitives, the implementation becomes simple.
 
 ### Using a standard schema
 
@@ -287,7 +287,7 @@ You simply provide a [Standard Schema](https://standardschema.dev) for the multi
 
 #### Example schema
 
-For example, here's a cut down of the example schema linked above, that multiplexes whole messages, active token streams, user presence and agent registration data, with end-to-end type-safety, over a single Durable Stream.
+Here's a cut down of the example schema linked above, that multiplexes whole messages, active token streams, user presence and agent registration data, with end-to-end type-safety, over a single Durable Stream.
 
 It starts by defining the schemas for the different data types:
 
@@ -421,7 +421,7 @@ const LatestPendingApprovals = () => {
 
 It's also pure TypeScript, so it works across any environment &mdash; web, mobile, desktop, Node.js, Bun &mdash; simplifying multi-user, multi-device and multi-worker collaboration.
 
-#### Integrating into wider client data model
+#### Integrating sessions into your wider data model
 
 Because the session data is synced into TanStack DB collections, it can be [joined up](https://tanstack.com/db/latest/docs/guides/live-queries#joins) into a wider client data model.
 
@@ -468,11 +468,11 @@ const ActiveSessionUsers = () => {
 }
 ```
 
-Thus allowing the data streaming in over the durable session to be joined up naturally into a wider client data model.
+Thus allowing the data streaming in over the durable session to be joined up naturally into your wider data model.
 
 #### Write-path actions
 
-When it comes to handling user actions and adding messages to the sessions, you switch the `sendMessage` calls to use a TanStack DB [optimistic mutations](https://tanstack.com/db/latest/docs/guides/mutations).
+When it comes to handling user actions and adding messages to the sessions, you switch the `sendMessage` calls to use TanStack DB [optimistic mutations](https://tanstack.com/db/latest/docs/guides/mutations).
 
 For example, the default TanStack AI [`ChatClient`](https://github.com/TanStack/ai/blob/main/packages/typescript/ai-client/src/chat-client.ts) and [`useChat` hook](https://github.com/TanStack/ai/blob/main/packages/typescript/ai-react/src/use-chat.ts) provide a sendMessage action:
 
@@ -544,7 +544,7 @@ As you can see, the usage from component code is exactly the same. So this works
 
 This solves the [limitations of the transport level durability](#limitations-of-transport) we discussed above. By having principled management of local optimistic state and syncing user messages to the other subscribers to the session.
 
-As you can see from the `mutationFn` in the code sample above, it still POSTs the write to your backend (``this.postToProxy(`/v1/sessions/${this.sessionId}/messages`, ...)`` goes to your API). So you're in control of authentication and any other custom business logic and you handle writes to the session in your backend code.
+As you can see from the `mutationFn` in the code sample above, it still POSTs the write to your backend. So you're in control of authentication and any other custom business logic and you handle writes to the session in your backend code.
 
 #### Session CRUD
 
@@ -566,9 +566,7 @@ async function handleSendMessage(c: Context, protocol: Protocol): Promise<Respon
 }
 ```
 
-Importantly, this handler ***doesn't*** perform context engineering and proxy the request through to an LLM provider. The session architecture de-couples agent instruction from request <> response.
-
-Instead, you can register agents and the [session backend](https://github.com/electric-sql/transport/blob/main/packages/durable-session-proxy/src/protocol.ts) notifies them when new messages are posted:
+Importantly, you'll notice that handler ***doesn't*** proxy the request through to an LLM provider. Instead, you can register agents that do this. The [session backend](https://github.com/electric-sql/transport/blob/main/packages/durable-session-proxy/src/protocol.ts) then calls them when new messages are posted:
 
 ```ts
 state.modelMessages.subscribeChanges(async () => {
@@ -578,9 +576,7 @@ state.modelMessages.subscribeChanges(async () => {
 })
 ```
 
-The agents themselves are just backend API endpoints, which get invoked via HTTP request, just as normal.
-
-So the [default agent in the demo](https://github.com/electric-sql/transport/blob/main/demos/tanstack-ai-durable-session/src/routes/api.chat.kermit.ts) looks exactly as it would look if it was handling a user message and streaming the response back in a request <> response paradigm:
+The agents themselves are backend API endpoints, where you can manage your control flow and perform context engineering as normal. For example this is the [default agent in the demo](https://github.com/electric-sql/transport/blob/main/demos/tanstack-ai-durable-session/src/routes/api.chat.kermit.ts):
 
 ```ts
 async ({ request }) => {
@@ -604,18 +600,20 @@ async ({ request }) => {
 }
 ```
 
-Except now it's being invoked by the backend session, which streams the response onto the durable stream. Where it can be streamed to any number of subscribers.
+It looks exactly as it would if it was handling a user message and streaming the response back in a request <> response paradigm. Except now it's being invoked by the backend session, which streams the response onto the durable stream. Where it can be streamed to any number of subscribers.
 
 ### Optimum AX/DX/UX
 
-As a result, you get an app that fully supports multi-tab, multi-device, multi-user and multi-agent. For both real-time and asynchronous collaboration. With minimal changes to your component code and zero changes to your backend AI engineering.
+As a result, you get an app that fully supports multi-tab, multi-device, multi-user and multi-agent. For both real-time and asynchronous collaboration.
+
+With minimal changes to your component code and zero changes to your real AI engineering.
+
+> [!Warning] Example &mdash; TanStack AI - Durable Sessions
+> See the [full code example and working demo app of a [TanStack AI - Durable Sessions reference implementation here](https://github.com/electric-sql/transport/?tab=readme-ov-file#durable-sessions).
 
 <div class="embed-container" style="padding-bottom: 62.283737%">
   <YoutubeEmbed video-id="81KXwxld7dw" />
 </div>
-
-> [!Warning] Example &mdash; TanStack AI - Durable Session
-> See the full code example and working demo app of a [TanStack AI - Durable Sessions reference implementation here](https://github.com/electric-sql/transport/?tab=readme-ov-file#durable-transport).
 
 ## The key pattern for collaborative AI
 
