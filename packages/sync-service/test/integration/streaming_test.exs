@@ -68,10 +68,16 @@ defmodule Electric.Integration.StreamingTest do
         assert_insert(consumer, %{"value" => "initial value"})
         assert_up_to_date(consumer)
 
-        Postgrex.query!(db_conn, "INSERT INTO items VALUES ('00000000-0000-0000-0000-000000000002', 'new value')", [])
+        Postgrex.query!(
+          db_conn,
+          "INSERT INTO items VALUES ('00000000-0000-0000-0000-000000000002', 'new value')",
+          []
+        )
 
-        msg = assert_insert(consumer, %{"id" => "00000000-0000-0000-0000-000000000002", "value" => "new value"})
-        assert msg.headers.operation == :insert
+        assert_insert(consumer, %{
+          "id" => "00000000-0000-0000-0000-000000000002",
+          "value" => "new value"
+        })
       end
     end
 
