@@ -920,17 +920,16 @@ defmodule Electric.Shapes.ConsumerTest do
       assert is_pid(consumer_pid)
       ref = Process.monitor(consumer_pid)
 
-      txn = [
-        %Begin{xid: 2},
-        %Changes.NewRecord{
-          relation: {"public", "test_table"},
-          record: %{"id" => "21"},
-          log_offset: LogOffset.new(lsn1, 0)
-        },
-        %Commit{lsn: lsn1}
-      ]
+      txn =
+        transaction(2, lsn1, [
+          %Changes.NewRecord{
+            relation: {"public", "test_table"},
+            record: %{"id" => "21"},
+            log_offset: LogOffset.new(lsn1, 0)
+          }
+        ])
 
-      assert :ok = ShapeLogCollector.handle_operations(txn, ctx.producer)
+      assert :ok = ShapeLogCollector.handle_event(txn, ctx.stack_id)
 
       assert_receive {:flush_boundary_updated, 300}, 1_000
 
