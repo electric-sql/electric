@@ -20,6 +20,7 @@ defmodule Electric.Integration.SubqueryMoveOutTest do
   import Support.ComponentSetup
   import Support.DbSetup
   import Support.DbStructureSetup
+  import Support.IntegrationSetup
 
   alias Electric.Client
   alias Electric.Client.ShapeDefinition
@@ -35,38 +36,11 @@ defmodule Electric.Integration.SubqueryMoveOutTest do
     setup [:with_unique_db, :with_parent_child_tables, :with_sql_execute]
     setup :with_complete_stack
 
-    setup ctx do
-      :ok = Electric.StatusMonitor.wait_until_active(ctx.stack_id, timeout: 2000)
+    setup :with_electric_client
 
-      # Start Bandit HTTP server on a random available port
-      router_opts = build_router_opts(ctx)
-
-      {:ok, server_pid} =
-        start_supervised(
-          {Bandit,
-           plug: {Electric.Plug.Router, router_opts},
-           port: 0,
-           ip: :loopback,
-           thousand_island_options: [num_acceptors: 1]}
-        )
-
-      # Get the actual port that was assigned
-      {:ok, {_ip, port}} = ThousandIsland.listener_info(server_pid)
-
-      base_url = "http://localhost:#{port}"
-
-      {:ok, client} = Client.new(base_url: base_url)
-
-      # Create the shape definition for subquery-filtered children
+    setup _ctx do
       shape = ShapeDefinition.new!("child", where: @subquery_where)
-
-      %{
-        client: client,
-        shape: shape,
-        base_url: base_url,
-        server_pid: server_pid,
-        port: port
-      }
+      %{shape: shape}
     end
 
     @tag with_sql: [
@@ -217,26 +191,11 @@ defmodule Electric.Integration.SubqueryMoveOutTest do
     setup [:with_unique_db, :with_parent_child_tables, :with_sql_execute]
     setup :with_complete_stack
 
-    setup ctx do
-      :ok = Electric.StatusMonitor.wait_until_active(ctx.stack_id, timeout: 2000)
+    setup :with_electric_client
 
-      router_opts = build_router_opts(ctx)
-
-      {:ok, server_pid} =
-        start_supervised(
-          {Bandit,
-           plug: {Electric.Plug.Router, router_opts},
-           port: 0,
-           ip: :loopback,
-           thousand_island_options: [num_acceptors: 1]}
-        )
-
-      {:ok, {_ip, port}} = ThousandIsland.listener_info(server_pid)
-      base_url = "http://localhost:#{port}"
-      {:ok, client} = Client.new(base_url: base_url)
+    setup _ctx do
       shape = ShapeDefinition.new!("child", where: @subquery_where)
-
-      %{client: client, shape: shape, base_url: base_url, server_pid: server_pid, port: port}
+      %{shape: shape}
     end
 
     @tag with_sql: [
@@ -282,26 +241,11 @@ defmodule Electric.Integration.SubqueryMoveOutTest do
     setup [:with_unique_db, :with_parent_child_tables, :with_sql_execute]
     setup :with_complete_stack
 
-    setup ctx do
-      :ok = Electric.StatusMonitor.wait_until_active(ctx.stack_id, timeout: 2000)
+    setup :with_electric_client
 
-      router_opts = build_router_opts(ctx)
-
-      {:ok, server_pid} =
-        start_supervised(
-          {Bandit,
-           plug: {Electric.Plug.Router, router_opts},
-           port: 0,
-           ip: :loopback,
-           thousand_island_options: [num_acceptors: 1]}
-        )
-
-      {:ok, {_ip, port}} = ThousandIsland.listener_info(server_pid)
-      base_url = "http://localhost:#{port}"
-      {:ok, client} = Client.new(base_url: base_url)
+    setup _ctx do
       shape = ShapeDefinition.new!("child", where: @subquery_where)
-
-      %{client: client, shape: shape, base_url: base_url, server_pid: server_pid, port: port}
+      %{shape: shape}
     end
 
     @tag with_sql: [
@@ -338,26 +282,11 @@ defmodule Electric.Integration.SubqueryMoveOutTest do
     setup [:with_unique_db, :with_parent_child_tables, :with_sql_execute]
     setup :with_complete_stack
 
-    setup ctx do
-      :ok = Electric.StatusMonitor.wait_until_active(ctx.stack_id, timeout: 2000)
+    setup :with_electric_client
 
-      router_opts = build_router_opts(ctx)
-
-      {:ok, server_pid} =
-        start_supervised(
-          {Bandit,
-           plug: {Electric.Plug.Router, router_opts},
-           port: 0,
-           ip: :loopback,
-           thousand_island_options: [num_acceptors: 1]}
-        )
-
-      {:ok, {_ip, port}} = ThousandIsland.listener_info(server_pid)
-      base_url = "http://localhost:#{port}"
-      {:ok, client} = Client.new(base_url: base_url)
+    setup _ctx do
       shape = ShapeDefinition.new!("child", where: @subquery_where)
-
-      %{client: client, shape: shape, base_url: base_url, server_pid: server_pid, port: port}
+      %{shape: shape}
     end
 
     @tag with_sql: [
