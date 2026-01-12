@@ -29,6 +29,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - uses: erlef/setup-beam@v1
+        id: setup-beam
         with:
           version-type: strict
           version-file: '.tool-versions'
@@ -37,11 +38,11 @@ jobs:
         uses: actions/cache@v4
         with:
           path: packages/sync-service/deps
-          key: "${{ runner.os }}-sync-service-deps-${{ env.MIX_TARGET }}-${{ env.MIX_ENV }}-${{ hashFiles('packages/sync-service/mix.lock') }}"
+          key: "${{ runner.os }}-sync-service-deps-${{ steps.setup-beam.outputs.elixir-version }}-${{ env.MIX_TARGET }}-${{ env.MIX_ENV }}-${{ hashFiles('packages/sync-service/mix.lock') }}"
           restore-keys: |
-            ${{ runner.os }}-sync-service-deps-${{ env.MIX_TARGET }}-${{ env.MIX_ENV }}-${{ hashFiles('packages/sync-service/mix.lock') }}
-            ${{ runner.os }}-sync-service-deps-${{ env.MIX_TARGET }}-${{ env.MIX_ENV }}-
-            ${{ runner.os }}-sync-service-deps-
+            ${{ runner.os }}-sync-service-deps-${{ steps.setup-beam.outputs.elixir-version }}-${{ env.MIX_TARGET }}-${{ env.MIX_ENV }}-${{ hashFiles('packages/sync-service/mix.lock') }}
+            ${{ runner.os }}-sync-service-deps-${{ steps.setup-beam.outputs.elixir-version }}-${{ env.MIX_TARGET }}-${{ env.MIX_ENV }}
+            ${{ runner.os }}-sync-service-deps-${{ steps.setup-beam.outputs.elixir-version }}
 
       - name: Cache compiled code
         uses: actions/cache@v4
@@ -49,11 +50,11 @@ jobs:
           path: |
             packages/sync-service/_build/*/lib
             !packages/sync-service/_build/*/lib/electric
-          key: "${{ runner.os }}-sync-service-build-${{ env.MIX_TARGET }}-${{ env.MIX_ENV }}-${{ hashFiles('packages/sync-service/mix.lock') }}"
+          key: "${{ runner.os }}-sync-service-build-${{ steps.setup-beam.outputs.elixir-version }}-${{ env.MIX_TARGET }}-${{ env.MIX_ENV }}-${{ hashFiles('packages/sync-service/mix.lock') }}"
           restore-keys: |
-            ${{ runner.os }}-sync-service-build-${{ env.MIX_TARGET }}-${{ env.MIX_ENV }}-${{ hashFiles('packages/sync-service/mix.lock') }}
-            ${{ runner.os }}-sync-service-build-${{ env.MIX_TARGET }}-${{ env.MIX_ENV }}-
-            ${{ runner.os }}-sync-service-build-
+            ${{ runner.os }}-sync-service-build-${{ steps.setup-beam.outputs.elixir-version }}-${{ env.MIX_TARGET }}-${{ env.MIX_ENV }}-${{ hashFiles('packages/sync-service/mix.lock') }}
+            ${{ runner.os }}-sync-service-build-${{ steps.setup-beam.outputs.elixir-version }}-${{ env.MIX_TARGET }}-${{ env.MIX_ENV }}
+            ${{ runner.os }}-sync-service-build-${{ steps.setup-beam.outputs.elixir-version }}
 
       - name: Install dependencies
         run: mix do deps.get + deps.compile
