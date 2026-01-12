@@ -5,19 +5,22 @@ defmodule Electric.Client.Message do
   alias Electric.Client.Offset
 
   defmodule Headers do
-    defstruct [:operation, :relation, :handle, :lsn, txids: [], op_position: 0]
+    defstruct [:operation, :relation, :handle, :lsn, txids: [], op_position: 0, tags: [], removed_tags: []]
 
     @type operation :: :insert | :update | :delete
     @type relation :: [String.t(), ...]
     @type lsn :: binary()
     @type txids :: [pos_integer(), ...] | nil
+    @type tag :: String.t()
     @type t :: %__MODULE__{
             operation: operation(),
             relation: relation(),
             handle: Client.shape_handle(),
             lsn: lsn(),
             txids: txids(),
-            op_position: non_neg_integer()
+            op_position: non_neg_integer(),
+            tags: [tag()],
+            removed_tags: [tag()]
           }
 
     @doc false
@@ -30,7 +33,9 @@ defmodule Electric.Client.Message do
         handle: handle,
         txids: Map.get(msg, "txids", []),
         lsn: Map.get(msg, "lsn", nil),
-        op_position: Map.get(msg, "op_position", 0)
+        op_position: Map.get(msg, "op_position", 0),
+        tags: Map.get(msg, "tags", []),
+        removed_tags: Map.get(msg, "removed_tags", [])
       }
     end
 
@@ -177,6 +182,47 @@ defmodule Electric.Client.Message do
           }
   end
 
+  defmodule MoveOutMessage do
+    @moduledoc """
+    Represents a move-out event from the server.
+
+    Move-out events are sent when rows should be removed from the client's view
+    because they no longer match the shape's subquery filter. The `patterns` field
+    contains tag hashes that identify which rows should be removed.
+
+    The client should use these patterns to generate synthetic delete messages
+    for any tracked rows that have matching tags.
+    """
+
+    defstruct [:patterns, :handle, :request_timestamp]
+
+    @type pattern :: %{pos: non_neg_integer(), value: String.t()}
+    @type t :: %__MODULE__{
+            patterns: [pattern()],
+            handle: Client.shape_handle(),
+            request_timestamp: DateTime.t()
+          }
+
+    def from_message(%{"headers" => %{"event" => "move-out", "patterns" => patterns}}, handle) do
+      parsed_patterns =
+        Enum.map(patterns, fn %{"pos" => pos, "value" => value} ->
+          %{pos: pos, value: value}
+        end)
+
+      %__MODULE__{
+        patterns: parsed_patterns,
+        handle: handle
+      }
+    end
+
+    def from_message(%{headers: %{event: "move-out", patterns: patterns}}, handle) do
+      %__MODULE__{
+        patterns: patterns,
+        handle: handle
+      }
+    end
+  end
+
   defguard is_insert(msg) when is_struct(msg, ChangeMessage) and msg.headers.operation == :insert
 
   def parse(%{"value" => _} = msg, shape_handle, value_mapper_fun) do
@@ -189,6 +235,14 @@ defmodule Electric.Client.Message do
 
   def parse(%{headers: %{control: _}} = msg, shape_handle, _value_mapper_fun) do
     [ControlMessage.from_message(msg, shape_handle)]
+  end
+
+  def parse(%{"headers" => %{"event" => "move-out"}} = msg, shape_handle, _value_mapper_fun) do
+    [MoveOutMessage.from_message(msg, shape_handle)]
+  end
+
+  def parse(%{headers: %{event: "move-out"}} = msg, shape_handle, _value_mapper_fun) do
+    [MoveOutMessage.from_message(msg, shape_handle)]
   end
 
   def parse("", _handle, _value_mapper_fun) do

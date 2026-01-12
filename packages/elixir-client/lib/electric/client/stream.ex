@@ -19,7 +19,9 @@ defmodule Electric.Client.Stream do
     shape_handle: nil,
     next_cursor: nil,
     state: :init,
-    opts: %{}
+    opts: %{},
+    # Tag index for move-out support: maps tag_value -> MapSet of {key, msg}
+    tag_index: %{}
   ]
 
   @external_options [
@@ -221,7 +223,21 @@ defmodule Electric.Client.Stream do
   end
 
   defp handle_msg(%Message.ChangeMessage{} = msg, stream) do
+    stream = update_tag_index(stream, msg)
     {:cont, %{stream | buffer: :queue.in(msg, stream.buffer)}}
+  end
+
+  defp handle_msg(%Message.MoveOutMessage{patterns: patterns} = _msg, stream) do
+    # Generate synthetic deletes for rows matching the move-out patterns
+    {synthetic_deletes, updated_tag_index} = generate_synthetic_deletes(stream, patterns)
+
+    # Add synthetic deletes to the buffer
+    buffer =
+      Enum.reduce(synthetic_deletes, stream.buffer, fn delete_msg, buf ->
+        :queue.in(delete_msg, buf)
+      end)
+
+    {:cont, %{stream | buffer: buffer, tag_index: updated_tag_index}}
   end
 
   defp handle_up_to_date(%{opts: %{live: true}} = stream) do
@@ -301,7 +317,8 @@ defmodule Electric.Client.Stream do
         up_to_date?: false,
         buffer: :queue.new(),
         schema: nil,
-        value_mapper_fun: nil
+        value_mapper_fun: nil,
+        tag_index: %{}
     }
   end
 
@@ -369,6 +386,91 @@ defmodule Electric.Client.Stream do
 
   defp stream_state(%{state: :init} = stream) do
     %{stream | state: :stream}
+  end
+
+  # Tag index management for move-out support
+
+  defp update_tag_index(stream, %Message.ChangeMessage{headers: headers, key: key} = msg) do
+    tag_index = stream.tag_index
+
+    # First, remove any tags that are being removed (for updates)
+    tag_index = remove_from_tag_index(tag_index, headers.removed_tags, key)
+
+    # Then add new tags
+    tag_index = add_to_tag_index(tag_index, headers.tags, key, msg)
+
+    # For deletes, also remove the row from all its tags
+    tag_index =
+      case headers.operation do
+        :delete -> remove_from_tag_index(tag_index, headers.tags, key)
+        _ -> tag_index
+      end
+
+    %{stream | tag_index: tag_index}
+  end
+
+  defp add_to_tag_index(tag_index, tags, key, msg) when is_list(tags) do
+    Enum.reduce(tags, tag_index, fn tag, acc ->
+      entries = Map.get(acc, tag, MapSet.new())
+      Map.put(acc, tag, MapSet.put(entries, {key, msg}))
+    end)
+  end
+
+  defp add_to_tag_index(tag_index, _tags, _key, _msg), do: tag_index
+
+  defp remove_from_tag_index(tag_index, tags, key) when is_list(tags) do
+    Enum.reduce(tags, tag_index, fn tag, acc ->
+      case Map.get(acc, tag) do
+        nil ->
+          acc
+
+        entries ->
+          # Remove entries with matching key
+          updated_entries =
+            Enum.reject(entries, fn {entry_key, _msg} -> entry_key == key end)
+            |> MapSet.new()
+
+          if MapSet.size(updated_entries) == 0 do
+            Map.delete(acc, tag)
+          else
+            Map.put(acc, tag, updated_entries)
+          end
+      end
+    end)
+  end
+
+  defp remove_from_tag_index(tag_index, _tags, _key), do: tag_index
+
+  defp generate_synthetic_deletes(stream, patterns) do
+    # Collect all rows that match any of the move-out patterns
+    {rows_to_delete, updated_tag_index} =
+      Enum.reduce(patterns, {MapSet.new(), stream.tag_index}, fn %{value: tag_value}, {rows, tag_idx} ->
+        case Map.pop(tag_idx, tag_value) do
+          {nil, tag_idx} ->
+            {rows, tag_idx}
+
+          {entries, tag_idx} ->
+            {MapSet.union(rows, entries), tag_idx}
+        end
+      end)
+
+    # Generate synthetic delete messages for each row
+    synthetic_deletes =
+      rows_to_delete
+      |> Enum.map(fn {key, original_msg} ->
+        %Message.ChangeMessage{
+          key: key,
+          value: original_msg.value,
+          old_value: nil,
+          headers: Message.Headers.delete(
+            relation: original_msg.headers.relation,
+            handle: original_msg.headers.handle
+          ),
+          request_timestamp: DateTime.utc_now()
+        }
+      end)
+
+    {synthetic_deletes, updated_tag_index}
   end
 
   defimpl Enumerable do
