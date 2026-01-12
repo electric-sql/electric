@@ -5,8 +5,6 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
 
   import Support.ComponentSetup
 
-  require Electric.Shapes.ConsumerRegistry
-
   defmodule TestSubscriber do
     use GenServer
 

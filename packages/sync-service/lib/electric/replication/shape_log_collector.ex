@@ -35,7 +35,6 @@ defmodule Electric.Replication.ShapeLogCollector do
 
   import Electric.Utils, only: [map_while_ok: 2, map_if_ok: 2]
 
-  require Electric.Postgres.Lsn
   require Electric.Replication.LogOffset
   require Logger
 

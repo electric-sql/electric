@@ -1,6 +1,4 @@
 defmodule Electric.StackSupervisor.Telemetry do
-  require Logger
-
   def configure(config) do
     # Set shared OpenTelemetry span attributes for the given stack. They are stored in
     # persistent_term so it doesn't matter which process this function is called from.
@@ -19,6 +17,8 @@ defmodule Electric.StackSupervisor.Telemetry do
   def child_spec(%{stack_telemetry: stack_telemetry}), do: stack_telemetry
 
   if Code.ensure_loaded?(ElectricTelemetry.StackTelemetry) do
+    require Logger
+
     def child_spec(config) when is_map(config) do
       telemetry_opts =
         config.telemetry_opts
