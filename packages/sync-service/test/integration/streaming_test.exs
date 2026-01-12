@@ -87,45 +87,19 @@ defmodule Electric.Integration.StreamingTest do
            "INSERT INTO items VALUES ('00000000-0000-0000-0000-000000000001', 'initial value')"
          ]
     test "receives live changes after initial snapshot", %{client: client, db_conn: db_conn} do
-      test_pid = self()
+      import Support.StreamConsumer
 
-      # Start streaming in a separate task
-      stream_task =
-        Task.async(fn ->
-          client
-          |> Client.stream("items", live: true)
-          |> Stream.each(fn msg ->
-            send(test_pid, {:message, msg})
-          end)
-          |> Stream.take_while(fn
-            %ChangeMessage{value: %{"value" => "new value"}} -> false
-            _ -> true
-          end)
-          |> Stream.run()
-        end)
+      stream = Client.stream(client, "items", live: true)
 
-      # Wait for initial snapshot to be received (the insert from setup)
-      assert_receive {:message, %ChangeMessage{value: %{"value" => "initial value"}}}, 5000
+      with_consumer stream do
+        assert_insert(consumer, %{"value" => "initial value"})
+        assert_up_to_date(consumer)
 
-      # Wait for up-to-date message indicating snapshot is complete
-      assert_receive {:message, %ControlMessage{control: :up_to_date}}, 5000
+        Postgrex.query!(db_conn, "INSERT INTO items VALUES ('00000000-0000-0000-0000-000000000002', 'new value')", [])
 
-      # Insert a new row after the stream is live
-      Postgrex.query!(
-        db_conn,
-        "INSERT INTO items VALUES ('00000000-0000-0000-0000-000000000002', 'new value')",
-        []
-      )
-
-      # Should receive the new insert
-      assert_receive {:message, %ChangeMessage{} = new_insert}, 5000
-
-      assert new_insert.headers.operation == :insert
-      assert new_insert.value["id"] == "00000000-0000-0000-0000-000000000002"
-      assert new_insert.value["value"] == "new value"
-
-      # Cleanup: the task should terminate due to take_while
-      Task.await(stream_task, 5000)
+        msg = assert_insert(consumer, %{"id" => "00000000-0000-0000-0000-000000000002", "value" => "new value"})
+        assert msg.headers.operation == :insert
+      end
     end
 
     test "streaming empty table returns up-to-date", %{client: client} do

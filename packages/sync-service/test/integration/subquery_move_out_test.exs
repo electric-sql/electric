@@ -24,7 +24,6 @@ defmodule Electric.Integration.SubqueryMoveOutTest do
   alias Electric.Client
   alias Electric.Client.ShapeDefinition
   alias Electric.Client.Message.ChangeMessage
-  alias Electric.Client.Message.ControlMessage
 
   @moduletag :integration
   @moduletag :tmp_dir
@@ -104,51 +103,21 @@ defmodule Electric.Integration.SubqueryMoveOutTest do
       shape: shape,
       db_conn: db_conn
     } do
-      test_pid = self()
+      import Support.StreamConsumer
 
-      # Start streaming with live: true
-      stream_task =
-        Task.async(fn ->
-          client
-          |> Client.stream(shape, live: true)
-          |> Stream.each(fn msg ->
-            send(test_pid, {:message, msg})
-          end)
-          |> Stream.take_while(fn
-            # Stop when we see a move-out related message (either control or synthetic delete)
-            %ControlMessage{control: :move_out} -> false
-            %ChangeMessage{headers: %{operation: :delete}, value: %{"id" => "child-1"}} -> false
-            _ -> true
-          end)
-          |> Stream.run()
-        end)
+      stream = Client.stream(client, shape, live: true)
 
-      # Wait for initial snapshot
-      assert_receive {:message, %ChangeMessage{value: %{"id" => "child-1"}}}, 5000
-      assert_receive {:message, %ControlMessage{control: :up_to_date}}, 5000
+      with_consumer stream do
+        # Wait for initial snapshot
+        assert_insert(consumer, %{"id" => "child-1"})
+        assert_up_to_date(consumer)
 
-      # Deactivate the parent - this should trigger a move-out
-      Postgrex.query!(db_conn, "UPDATE parent SET active = false WHERE id = 'parent-1'", [])
+        # Deactivate the parent - this should trigger a move-out
+        Postgrex.query!(db_conn, "UPDATE parent SET active = false WHERE id = 'parent-1'", [])
 
-      # Should receive either:
-      # 1. A move-out control message, OR
-      # 2. A synthetic delete for child-1
-      assert_receive {:message, msg}, 5000
-
-      case msg do
-        %ControlMessage{control: :move_out} = move_out ->
-          # The control message should include patterns
-          assert Map.has_key?(move_out, :patterns)
-
-        %ChangeMessage{headers: %{operation: :delete}} = delete_msg ->
-          # Or we might receive a synthetic delete directly
-          assert delete_msg.value["id"] == "child-1"
-
-        other ->
-          flunk("Expected move-out control or synthetic delete, got: #{inspect(other)}")
+        # Should receive a synthetic delete for child-1
+        assert_delete(consumer, %{"id" => "child-1"})
       end
-
-      Task.shutdown(stream_task, :brutal_kill)
     end
 
     @tag with_sql: [
@@ -161,45 +130,29 @@ defmodule Electric.Integration.SubqueryMoveOutTest do
       shape: shape,
       db_conn: db_conn
     } do
-      test_pid = self()
-      received_deletes = :ets.new(:received_deletes, [:set, :public])
+      import Support.StreamConsumer
 
-      stream_task =
-        Task.async(fn ->
-          client
-          |> Client.stream(shape, live: true)
-          |> Stream.each(fn msg ->
-            send(test_pid, {:message, msg})
-          end)
-          |> Stream.take_while(fn
-            %ChangeMessage{headers: %{operation: :delete}, value: %{"id" => id}} ->
-              :ets.insert(received_deletes, {id, true})
-              # Stop when we've seen deletes for both children
-              :ets.info(received_deletes, :size) < 2
+      stream = Client.stream(client, shape, live: true)
 
-            _ ->
-              true
-          end)
-          |> Stream.run()
-        end)
+      with_consumer stream do
+        # Wait for initial snapshot
+        assert_insert(consumer, %{"id" => "child-1"})
+        assert_insert(consumer, %{"id" => "child-2"})
+        assert_up_to_date(consumer)
 
-      # Wait for initial snapshot
-      assert_receive {:message, %ChangeMessage{value: %{"id" => "child-1"}}}, 5000
-      assert_receive {:message, %ChangeMessage{value: %{"id" => "child-2"}}}, 5000
-      assert_receive {:message, %ControlMessage{control: :up_to_date}}, 5000
+        # Deactivate the parent
+        Postgrex.query!(db_conn, "UPDATE parent SET active = false WHERE id = 'parent-1'", [])
 
-      # Deactivate the parent
-      Postgrex.query!(db_conn, "UPDATE parent SET active = false WHERE id = 'parent-1'", [])
+        # Wait for both synthetic deletes
+        {:ok, deletes} = await_count(consumer, 2,
+          match: fn msg ->
+            match?(%ChangeMessage{headers: %{operation: :delete}}, msg)
+          end
+        )
 
-      # Wait for both synthetic deletes
-      Process.sleep(2000)
-
-      # Verify we received deletes for both children
-      assert :ets.lookup(received_deletes, "child-1") == [{"child-1", true}]
-      assert :ets.lookup(received_deletes, "child-2") == [{"child-2", true}]
-
-      :ets.delete(received_deletes)
-      Task.shutdown(stream_task, :brutal_kill)
+        delete_ids = Enum.map(deletes, & &1.value["id"]) |> Enum.sort()
+        assert delete_ids == ["child-1", "child-2"]
+      end
     end
 
     @tag with_sql: [
@@ -207,35 +160,22 @@ defmodule Electric.Integration.SubqueryMoveOutTest do
            "INSERT INTO child (id, parent_id, value) VALUES ('child-1', 'parent-1', 'test value')"
          ]
     test "deleting parent row triggers move-out", %{client: client, shape: shape, db_conn: db_conn} do
-      test_pid = self()
+      import Support.StreamConsumer
 
-      stream_task =
-        Task.async(fn ->
-          client
-          |> Client.stream(shape, live: true)
-          |> Stream.each(fn msg ->
-            send(test_pid, {:message, msg})
-          end)
-          |> Stream.take_while(fn
-            %ChangeMessage{headers: %{operation: :delete}, value: %{"id" => "child-1"}} -> false
-            _ -> true
-          end)
-          |> Stream.run()
-        end)
+      stream = Client.stream(client, shape, live: true)
 
-      # Wait for initial snapshot
-      assert_receive {:message, %ChangeMessage{value: %{"id" => "child-1"}}}, 5000
-      assert_receive {:message, %ControlMessage{control: :up_to_date}}, 5000
+      with_consumer stream do
+        # Wait for initial snapshot
+        assert_insert(consumer, %{"id" => "child-1"})
+        assert_up_to_date(consumer)
 
-      # Delete the parent row
-      Postgrex.query!(db_conn, "DELETE FROM parent WHERE id = 'parent-1'", [])
+        # Delete the parent row
+        Postgrex.query!(db_conn, "DELETE FROM parent WHERE id = 'parent-1'", [])
 
-      # Should receive a synthetic delete for the child
-      assert_receive {:message, %ChangeMessage{} = delete_msg}, 5000
-      assert delete_msg.headers.operation == :delete
-      assert delete_msg.value["id"] == "child-1"
-
-      Task.shutdown(stream_task, :brutal_kill)
+        # Should receive a synthetic delete for the child
+        delete_msg = assert_delete(consumer, %{"id" => "child-1"})
+        assert delete_msg.value["id"] == "child-1"
+      end
     end
 
     @tag with_sql: [
@@ -248,42 +188,28 @@ defmodule Electric.Integration.SubqueryMoveOutTest do
       shape: shape,
       db_conn: db_conn
     } do
-      test_pid = self()
-      messages_received = :ets.new(:messages, [:bag, :public])
+      import Support.StreamConsumer
 
-      stream_task =
-        Task.async(fn ->
-          client
-          |> Client.stream(shape, live: true)
-          |> Stream.each(fn msg ->
-            :ets.insert(messages_received, {System.monotonic_time(), msg})
-            send(test_pid, {:message, msg})
-          end)
-          |> Stream.run()
-        end)
+      stream = Client.stream(client, shape, live: true)
 
-      # Wait for initial snapshot
-      assert_receive {:message, %ChangeMessage{value: %{"id" => "child-1"}}}, 5000
-      assert_receive {:message, %ControlMessage{control: :up_to_date}}, 5000
+      with_consumer stream do
+        # Wait for initial snapshot
+        assert_insert(consumer, %{"id" => "child-1"})
+        assert_up_to_date(consumer)
 
-      # Deactivate parent-1
-      Postgrex.query!(db_conn, "UPDATE parent SET active = false WHERE id = 'parent-1'", [])
+        # Deactivate parent-1
+        Postgrex.query!(db_conn, "UPDATE parent SET active = false WHERE id = 'parent-1'", [])
 
-      # Wait for the move-out (synthetic delete)
-      assert_receive {:message, %ChangeMessage{headers: %{operation: :delete}} = delete_msg}, 5000
-      assert delete_msg.value["id"] == "child-1"
+        # Wait for the move-out (synthetic delete)
+        assert_delete(consumer, %{"id" => "child-1"})
 
-      # Change child to reference parent-2 (which is still active)
-      Postgrex.query!(db_conn, "UPDATE child SET parent_id = 'parent-2' WHERE id = 'child-1'", [])
+        # Change child to reference parent-2 (which is still active)
+        Postgrex.query!(db_conn, "UPDATE child SET parent_id = 'parent-2' WHERE id = 'child-1'", [])
 
-      # Should receive a new insert (move-in) for the child
-      assert_receive {:message, %ChangeMessage{} = insert_msg}, 5000
-      assert insert_msg.headers.operation == :insert
-      assert insert_msg.value["id"] == "child-1"
-      assert insert_msg.value["parent_id"] == "parent-2"
-
-      :ets.delete(messages_received)
-      Task.shutdown(stream_task, :brutal_kill)
+        # Should receive a new insert (move-in) for the child
+        insert_msg = assert_insert(consumer, %{"id" => "child-1", "parent_id" => "parent-2"})
+        assert insert_msg.headers.operation == :insert
+      end
     end
   end
 
@@ -323,47 +249,32 @@ defmodule Electric.Integration.SubqueryMoveOutTest do
       shape: shape,
       db_conn: db_conn
     } do
-      test_pid = self()
+      import Support.StreamConsumer
 
-      stream_task =
-        Task.async(fn ->
-          client
-          |> Client.stream(shape, live: true)
-          |> Stream.each(fn msg ->
-            send(test_pid, {:message, msg})
-          end)
-          |> Stream.take_while(fn
-            %ChangeMessage{headers: %{operation: :update}, value: %{"parent_id" => "parent-2"}} ->
-              false
+      stream = Client.stream(client, shape, live: true)
 
-            _ ->
-              true
-          end)
-          |> Stream.run()
-        end)
+      with_consumer stream do
+        # Wait for initial snapshot
+        initial = assert_insert(consumer, %{"id" => "child-1"})
+        assert_up_to_date(consumer)
 
-      # Wait for initial snapshot
-      assert_receive {:message, %ChangeMessage{value: %{"id" => "child-1"}} = initial}, 5000
-      assert_receive {:message, %ControlMessage{control: :up_to_date}}, 5000
+        # Store initial tags
+        initial_tags = Map.get(initial.headers, :tags, [])
 
-      # Store initial tags
-      initial_tags = Map.get(initial.headers, :tags, [])
+        # Change child to reference parent-2
+        Postgrex.query!(db_conn, "UPDATE child SET parent_id = 'parent-2' WHERE id = 'child-1'", [])
 
-      # Change child to reference parent-2
-      Postgrex.query!(db_conn, "UPDATE child SET parent_id = 'parent-2' WHERE id = 'child-1'", [])
+        # Should receive an update with new tags
+        update_msg = assert_update(consumer, %{"id" => "child-1"})
+        assert update_msg.headers.operation == :update
 
-      # Should receive an update with new tags
-      assert_receive {:message, %ChangeMessage{} = update_msg}, 5000
-      assert update_msg.headers.operation == :update
+        # The headers should include both removed_tags and new tags
+        new_tags = Map.get(update_msg.headers, :tags, [])
+        removed_tags = Map.get(update_msg.headers, :removed_tags, [])
 
-      # The headers should include both removed_tags and new tags
-      new_tags = Map.get(update_msg.headers, :tags, [])
-      removed_tags = Map.get(update_msg.headers, :removed_tags, [])
-
-      # Either we have explicit removed_tags, or tags have changed
-      assert new_tags != initial_tags or length(removed_tags) > 0
-
-      Task.shutdown(stream_task, :brutal_kill)
+        # Either we have explicit removed_tags, or tags have changed
+        assert new_tags != initial_tags or length(removed_tags) > 0
+      end
     end
   end
 
@@ -402,49 +313,24 @@ defmodule Electric.Integration.SubqueryMoveOutTest do
       shape: shape,
       db_conn: db_conn
     } do
-      # This test verifies that if a move-out happens while we're still receiving
-      # the initial snapshot, the client properly buffers it and applies it after
-      # receiving up-to-date.
+      import Support.StreamConsumer
 
-      test_pid = self()
-      all_messages = :ets.new(:all_messages, [:ordered_set, :public])
+      stream = Client.stream(client, shape, live: true)
 
-      # Start streaming
-      stream_task =
-        Task.async(fn ->
-          client
-          |> Client.stream(shape, live: true)
-          |> Stream.each(fn msg ->
-            :ets.insert(all_messages, {System.monotonic_time(), msg})
-            send(test_pid, {:message, msg})
-          end)
-          |> Stream.take(10)
-          |> Stream.run()
-        end)
+      with_consumer stream, track_messages: true do
+        # Wait for initial insert
+        assert_insert(consumer, %{"id" => "child-1"})
+        assert_up_to_date(consumer)
 
-      # Wait for initial insert
-      assert_receive {:message, %ChangeMessage{value: %{"id" => "child-1"}}}, 5000
-      assert_receive {:message, %ControlMessage{control: :up_to_date}}, 5000
+        # Deactivate parent
+        Postgrex.query!(db_conn, "UPDATE parent SET active = false WHERE id = 'parent-1'", [])
 
-      # Deactivate parent
-      Postgrex.query!(db_conn, "UPDATE parent SET active = false WHERE id = 'parent-1'", [])
+        # Should eventually see a delete for child-1
+        assert_delete(consumer, %{"id" => "child-1"})
 
-      # Should eventually see a delete for child-1
-      assert_receive {:message, %ChangeMessage{headers: %{operation: :delete}}}, 5000
-
-      # Verify message ordering: insert should come before delete
-      messages =
-        :ets.tab2list(all_messages)
-        |> Enum.map(fn {_ts, msg} -> msg end)
-        |> Enum.filter(&match?(%ChangeMessage{}, &1))
-
-      insert_idx = Enum.find_index(messages, &(&1.headers.operation == :insert))
-      delete_idx = Enum.find_index(messages, &(&1.headers.operation == :delete))
-
-      assert insert_idx < delete_idx, "Insert should come before delete"
-
-      :ets.delete(all_messages)
-      Task.shutdown(stream_task, :brutal_kill)
+        # Verify message ordering: insert should come before delete
+        assert_insert_before_delete(consumer, "child-1")
+      end
     end
   end
 
