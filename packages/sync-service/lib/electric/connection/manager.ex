@@ -118,7 +118,9 @@ defmodule Electric.Connection.Manager do
   end
 
   use GenServer, shutdown: :infinity
-  alias Electric.Postgres.LockBreakerConnection
+
+  import Electric.Utils, only: [quote_string: 1]
+
   alias Electric.Connection.Manager.ConnectionBackoff
   alias Electric.Connection.Manager.ConnectionResolver
   alias Electric.DbConnectionError
@@ -145,6 +147,8 @@ defmodule Electric.Connection.Manager do
   # to be received. Any failure within this period will trigger a retry within
   # the same reconnection period rather than a new one.
   @replication_liveness_confirmation_duration 5_000
+
+  @validated_conn_opts_config_key {__MODULE__, :validated_connection_opts}
 
   def child_spec(init_arg) do
     %{
@@ -179,6 +183,12 @@ defmodule Electric.Connection.Manager do
 
   def pool_name(opts) do
     pool_name(Access.fetch!(opts, :stack_id), Access.fetch!(opts, :role))
+  end
+
+  def validated_connection_opts(stack_id, type) do
+    stack_id
+    |> Electric.StackConfig.lookup!(@validated_conn_opts_config_key)
+    |> Map.fetch!(type)
   end
 
   def drop_replication_slot_on_stop(manager) do
@@ -291,14 +301,15 @@ defmodule Electric.Connection.Manager do
         manual_table_publishing?: Keyword.get(opts, :manual_table_publishing?, false),
         max_shapes: Keyword.fetch!(opts, :max_shapes)
       }
-      |> initialize_connection_opts(opts)
+      |> init_connection_opts(opts)
+      |> init_validated_connection_opts()
 
     # Wait for the connection resolver to start before continuing with
     # connection setup.
     {:ok, state}
   end
 
-  defp initialize_connection_opts(state, opts) do
+  defp init_connection_opts(state, opts) do
     connection_opts = Keyword.fetch!(opts, :connection_opts)
 
     replication_opts =
@@ -310,14 +321,27 @@ defmodule Electric.Connection.Manager do
     %{state | connection_opts: connection_opts, replication_opts: replication_opts}
   end
 
+  defp init_validated_connection_opts(%{stack_id: stack_id} = state) do
+    # Wipe any previously stored validated connection opts on startup to avoid persisting a
+    # configuration that is no longer valid. We always start connection manager with the
+    # options specified by the user to avoid gettting into an unrecoverable failure state.
+    Electric.StackConfig.erase(stack_id, @validated_conn_opts_config_key)
+    state
+  end
+
+  defp update_validated_connection_opts(%{stack_id: stack_id} = state, type, validated_opts) do
+    validated_connection_opts = Map.put(state.validated_connection_opts, type, validated_opts)
+    Electric.StackConfig.put(stack_id, @validated_conn_opts_config_key, validated_connection_opts)
+    %{state | validated_connection_opts: validated_connection_opts}
+  end
+
   defp validate_connection(conn_opts, type, state) do
-    if opts = state.validated_connection_opts[type] do
+    if opts = Map.get(state.validated_connection_opts, type) do
       {:ok, opts, state}
     else
       try do
         with {:ok, validated_opts} <- ConnectionResolver.validate(state.stack_id, conn_opts) do
-          {:ok, validated_opts,
-           Map.update!(state, :validated_connection_opts, &Map.put(&1, type, validated_opts))}
+          {:ok, validated_opts, update_validated_connection_opts(state, type, validated_opts)}
         end
       catch
         :exit, {:killed, _} -> {:error, :killed}
@@ -543,27 +567,23 @@ defmodule Electric.Connection.Manager do
 
   def handle_continue(
         :check_lock_not_abandoned,
-        %State{replication_pg_backend_pid: pg_backend_pid} = state
-      ) do
-    if state.current_step == {:start_replication_client, :acquiring_lock} and
-         not is_nil(pg_backend_pid) do
-      with {:ok, conn_opts, state} <-
-             validate_connection(pooled_connection_opts(state), :pool, state),
-           {:ok, breaker_pid} <-
-             LockBreakerConnection.start(connection_opts: conn_opts, stack_id: state.stack_id) do
-        lock_name = Keyword.fetch!(state.replication_opts, :slot_name)
+        %State{
+          current_step: {:start_replication_client, :acquiring_lock},
+          replication_pg_backend_pid: pg_backend_pid
+        } = state
+      )
+      when not is_nil(pg_backend_pid) do
+    pooled_conn_opts = pooled_connection_opts(state)
 
-        LockBreakerConnection.stop_backends_and_close(breaker_pid, lock_name, pg_backend_pid)
-      else
-        {:error, reason} ->
-          # no-op, this is a one-shot attempt at fixing a lock
-          Logger.warning("Failed try and break stuck lock connection: #{inspect(reason)}")
-          :ok
-      end
+    with {:ok, conn_opts, state} <- validate_connection(pooled_conn_opts, :pool, state) do
+      run_lock_breaker_query(conn_opts, state)
+      {:noreply, state}
+    else
+      _ -> {:noreply, state}
     end
-
-    {:noreply, state}
   end
+
+  def handle_continue(:check_lock_not_abandoned, state), do: {:noreply, state}
 
   @impl true
   def handle_info(
@@ -1275,4 +1295,67 @@ defmodule Electric.Connection.Manager do
     do: %{state | replication_configuration_timer: nil}
 
   defp nillify_timer(state, _tref), do: state
+
+  # Electric takes out a session-level advisory lock on a separate connection to better manage the
+  # ownership of the replication slot. Unfortunately, we have seen instances (especially on Neon),
+  # where the Electric disconnects, but the lock is not auto-released.
+  #
+  # For these cases, this breaker exists - it'll connect to the database, and check that for
+  # a given lock name, if that lock is taken, there also exists an active replication slot with the
+  # same name. If not, it'll terminate the backend that is holding the lock, under the assumption
+  # that it's one of the abandoned locks.
+  def run_lock_breaker_query(conn_opts, state) do
+    database = Keyword.fetch!(conn_opts, :database)
+    lock_name = Keyword.fetch!(state.replication_opts, :slot_name)
+    query = lock_breaker_query(database, lock_name, state.replication_pg_backend_pid)
+    opts = [stack_id: state.stack_id, label: :lock_breaker_connection, connection_opts: conn_opts]
+
+    retval = Electric.Postgres.OneOffConnection.query(query, opts)
+
+    case retval do
+      {:ok, %Postgrex.Result{columns: ["pg_terminate_backend"], num_rows: 0}} ->
+        Logger.debug("No stuck backends found")
+
+      {:ok, %Postgrex.Result{columns: ["pg_terminate_backend"]}} ->
+        Logger.notice(
+          "Terminated a stuck backend to free the lock #{lock_name} because slot with same name was inactive"
+        )
+
+      {:error, reason} ->
+        # No retries here since this is a one-shot attempt at fixing a lock
+        Logger.warning("Failed try and break stuck lock connection: #{inspect(reason)}")
+    end
+
+    retval
+  end
+
+  defp lock_breaker_query(database, lock_name, lock_connection_pg_backend_pid)
+       when is_integer(lock_connection_pg_backend_pid) or is_nil(lock_connection_pg_backend_pid) do
+    # We're using a `WITH` clause to execute all this in one statement
+    # - See if there are existing but inactive replication slots with the given name
+    # - Find all backends that are holding locks with the same name
+    # - Terminate those backends
+    #
+    # It's generally impossible for this to return more than one row
+
+    """
+    WITH inactive_slots AS (
+        select slot_name
+        from pg_replication_slots
+        where active = false and database = #{quote_string(database)} and slot_name = #{quote_string(lock_name)}
+    ),
+    stuck_backends AS (
+        select pid
+        from pg_locks, inactive_slots
+        where
+          hashtext(slot_name) = (classid::bigint << 32) | objid::bigint
+          and locktype = 'advisory'
+          and objsubid = 1
+          and database = (select oid from pg_database where datname = #{quote_string(database)})
+          and granted
+          and pid != #{lock_connection_pg_backend_pid || 0}
+    )
+    SELECT pg_terminate_backend(pid) FROM stuck_backends;
+    """
+  end
 end
