@@ -461,7 +461,7 @@ defmodule Electric.Client.Stream do
         %Message.ChangeMessage{
           key: key,
           value: original_msg.value,
-          old_value: nil,
+          old_value: original_msg.value,
           headers: Message.Headers.delete(
             relation: original_msg.headers.relation,
             handle: original_msg.headers.handle
