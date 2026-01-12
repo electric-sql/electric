@@ -11,8 +11,6 @@ defmodule Electric.Shapes.Consumer.State do
   alias Electric.Replication.LogOffset
   alias Electric.ShapeCache.Storage
 
-  require LogOffset
-
   defstruct [
     :stack_id,
     :shape_handle,
