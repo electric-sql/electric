@@ -1709,6 +1709,385 @@ defmodule Electric.ClientTest do
       assert length(delete_msgs) == 1
       assert hd(delete_msgs).value["id"] == "1111"
     end
+
+    test "update without removed_tags causes duplicate synthetic deletes", ctx do
+      # Edge case: when a row is updated with the same tag but no removed_tags,
+      # the tag_index accumulates multiple entries for the same key
+      body1 =
+        Jason.encode!([
+          %{
+            "key" => "row-1",
+            "headers" => %{"operation" => "insert", "tags" => ["my-tag"]},
+            "offset" => "1_0",
+            "value" => %{"id" => "1111", "version" => "1"}
+          },
+          %{"headers" => %{"control" => "up-to-date", "global_last_seen_lsn" => 9997}}
+        ])
+
+      body2 =
+        Jason.encode!([
+          %{
+            "key" => "row-1",
+            "headers" => %{
+              "operation" => "update",
+              # Same tag, but no removed_tags - this is the problematic case
+              "tags" => ["my-tag"]
+            },
+            "offset" => "2_0",
+            "value" => %{"id" => "1111", "version" => "2"}
+          },
+          %{"headers" => %{"control" => "up-to-date", "global_last_seen_lsn" => 9998}}
+        ])
+
+      body3 =
+        Jason.encode!([
+          %{
+            "headers" => %{
+              "event" => "move-out",
+              "patterns" => [%{"pos" => 0, "value" => "my-tag"}]
+            }
+          },
+          %{"headers" => %{"control" => "up-to-date", "global_last_seen_lsn" => 9999}}
+        ])
+
+      schema = Jason.encode!(%{"id" => %{type: "text"}, "version" => %{type: "text"}})
+
+      {:ok, responses} =
+        start_supervised(
+          {Agent,
+           fn ->
+             %{
+               {"-1", nil} => [
+                 &bypass_resp(&1, body1,
+                   shape_handle: "my-shape",
+                   last_offset: "1_0",
+                   schema: schema
+                 )
+               ],
+               {"1_0", "my-shape"} => [
+                 &bypass_resp(&1, body2,
+                   shape_handle: "my-shape",
+                   last_offset: "2_0"
+                 )
+               ],
+               {"2_0", "my-shape"} => [
+                 &bypass_resp(&1, body3,
+                   shape_handle: "my-shape",
+                   last_offset: "3_0"
+                 )
+               ]
+             }
+           end}
+        )
+
+      bypass_response(ctx, responses)
+
+      # insert, up-to-date, update, up-to-date, synthetic delete(s), up-to-date
+      # BUG: Currently generates 2 synthetic deletes (one for each {key, msg} entry)
+      # EXPECTED: Should generate only 1 synthetic delete
+      msgs = stream(ctx, 6)
+
+      delete_msgs = Enum.filter(msgs, &match?(%ChangeMessage{headers: %{operation: :delete}}, &1))
+
+      # This assertion documents the expected behavior (1 delete)
+      # If this fails with 2 deletes, it confirms the bug
+      assert length(delete_msgs) == 1,
+             "Expected 1 synthetic delete but got #{length(delete_msgs)} - duplicate entries in tag_index"
+    end
+
+    test "row with multiple tags - partial move-out should not delete if other tags remain", ctx do
+      # Edge case: row has multiple tags, move-out for one tag shouldn't delete
+      # if the row still belongs to the shape via another tag
+      body1 =
+        Jason.encode!([
+          %{
+            "key" => "row-1",
+            "headers" => %{"operation" => "insert", "tags" => ["tag-a", "tag-b"]},
+            "offset" => "1_0",
+            "value" => %{"id" => "1111"}
+          },
+          %{"headers" => %{"control" => "up-to-date", "global_last_seen_lsn" => 9998}}
+        ])
+
+      body2 =
+        Jason.encode!([
+          %{
+            "headers" => %{
+              "event" => "move-out",
+              # Only moving out tag-a, row still has tag-b
+              "patterns" => [%{"pos" => 0, "value" => "tag-a"}]
+            }
+          },
+          %{"headers" => %{"control" => "up-to-date", "global_last_seen_lsn" => 9999}}
+        ])
+
+      schema = Jason.encode!(%{"id" => %{type: "text"}})
+
+      {:ok, responses} =
+        start_supervised(
+          {Agent,
+           fn ->
+             %{
+               {"-1", nil} => [
+                 &bypass_resp(&1, body1,
+                   shape_handle: "my-shape",
+                   last_offset: "1_0",
+                   schema: schema
+                 )
+               ],
+               {"1_0", "my-shape"} => [
+                 &bypass_resp(&1, body2,
+                   shape_handle: "my-shape",
+                   last_offset: "2_0"
+                 )
+               ]
+             }
+           end}
+        )
+
+      bypass_response(ctx, responses)
+
+      # insert, up-to-date, up-to-date
+      # BUG: Currently generates a synthetic delete even though row still has tag-b
+      # EXPECTED: No synthetic delete since row still belongs via tag-b
+      msgs = stream(ctx, 3)
+
+      delete_msgs = Enum.filter(msgs, &match?(%ChangeMessage{headers: %{operation: :delete}}, &1))
+
+      # This documents expected behavior - row should NOT be deleted
+      # If this fails, it confirms the bug that partial move-out incorrectly deletes
+      assert delete_msgs == [],
+             "Row with multiple tags should not be deleted when only one tag is moved out"
+    end
+
+    test "synthetic delete uses latest value after update", ctx do
+      # Edge case: synthetic delete should use the most recent value, not stale data
+      body1 =
+        Jason.encode!([
+          %{
+            "key" => "row-1",
+            "headers" => %{"operation" => "insert", "tags" => ["my-tag"]},
+            "offset" => "1_0",
+            "value" => %{"id" => "1111", "name" => "original"}
+          },
+          %{"headers" => %{"control" => "up-to-date", "global_last_seen_lsn" => 9997}}
+        ])
+
+      body2 =
+        Jason.encode!([
+          %{
+            "key" => "row-1",
+            "headers" => %{
+              "operation" => "update",
+              "tags" => ["my-tag"],
+              "removed_tags" => ["my-tag"]
+            },
+            "offset" => "2_0",
+            "value" => %{"id" => "1111", "name" => "updated"}
+          },
+          %{"headers" => %{"control" => "up-to-date", "global_last_seen_lsn" => 9998}}
+        ])
+
+      body3 =
+        Jason.encode!([
+          %{
+            "headers" => %{
+              "event" => "move-out",
+              "patterns" => [%{"pos" => 0, "value" => "my-tag"}]
+            }
+          },
+          %{"headers" => %{"control" => "up-to-date", "global_last_seen_lsn" => 9999}}
+        ])
+
+      schema = Jason.encode!(%{"id" => %{type: "text"}, "name" => %{type: "text"}})
+
+      {:ok, responses} =
+        start_supervised(
+          {Agent,
+           fn ->
+             %{
+               {"-1", nil} => [
+                 &bypass_resp(&1, body1,
+                   shape_handle: "my-shape",
+                   last_offset: "1_0",
+                   schema: schema
+                 )
+               ],
+               {"1_0", "my-shape"} => [
+                 &bypass_resp(&1, body2,
+                   shape_handle: "my-shape",
+                   last_offset: "2_0"
+                 )
+               ],
+               {"2_0", "my-shape"} => [
+                 &bypass_resp(&1, body3,
+                   shape_handle: "my-shape",
+                   last_offset: "3_0"
+                 )
+               ]
+             }
+           end}
+        )
+
+      bypass_response(ctx, responses)
+
+      msgs = stream(ctx, 6)
+
+      delete_msgs = Enum.filter(msgs, &match?(%ChangeMessage{headers: %{operation: :delete}}, &1))
+
+      assert length(delete_msgs) == 1
+      [delete] = delete_msgs
+
+      # Synthetic delete should have the latest value, not the original
+      assert delete.value["name"] == "updated",
+             "Synthetic delete should use latest value, got: #{inspect(delete.value)}"
+    end
+
+    test "multiple patterns matching same row generates single delete", ctx do
+      # Edge case: move-out with multiple patterns that both match the same row
+      body1 =
+        Jason.encode!([
+          %{
+            "key" => "row-1",
+            "headers" => %{"operation" => "insert", "tags" => ["tag-a", "tag-b"]},
+            "offset" => "1_0",
+            "value" => %{"id" => "1111"}
+          },
+          %{"headers" => %{"control" => "up-to-date", "global_last_seen_lsn" => 9998}}
+        ])
+
+      body2 =
+        Jason.encode!([
+          %{
+            "headers" => %{
+              "event" => "move-out",
+              # Both patterns match the same row
+              "patterns" => [
+                %{"pos" => 0, "value" => "tag-a"},
+                %{"pos" => 1, "value" => "tag-b"}
+              ]
+            }
+          },
+          %{"headers" => %{"control" => "up-to-date", "global_last_seen_lsn" => 9999}}
+        ])
+
+      schema = Jason.encode!(%{"id" => %{type: "text"}})
+
+      {:ok, responses} =
+        start_supervised(
+          {Agent,
+           fn ->
+             %{
+               {"-1", nil} => [
+                 &bypass_resp(&1, body1,
+                   shape_handle: "my-shape",
+                   last_offset: "1_0",
+                   schema: schema
+                 )
+               ],
+               {"1_0", "my-shape"} => [
+                 &bypass_resp(&1, body2,
+                   shape_handle: "my-shape",
+                   last_offset: "2_0"
+                 )
+               ]
+             }
+           end}
+        )
+
+      bypass_response(ctx, responses)
+
+      # insert, up-to-date, synthetic delete, up-to-date
+      msgs = stream(ctx, 4)
+
+      delete_msgs = Enum.filter(msgs, &match?(%ChangeMessage{headers: %{operation: :delete}}, &1))
+
+      # Should only generate 1 delete, not 2
+      assert length(delete_msgs) == 1,
+             "Multiple patterns matching same row should generate single delete, got #{length(delete_msgs)}"
+    end
+
+    test "resume does not restore tag_index - move-out after resume has no effect", ctx do
+      # Edge case: when resuming, tag_index is empty so move-outs won't match anything
+      body1 =
+        Jason.encode!([
+          %{
+            "key" => "row-1",
+            "headers" => %{"operation" => "insert", "tags" => ["my-tag"]},
+            "offset" => "1_0",
+            "value" => %{"id" => "1111"}
+          },
+          %{"headers" => %{"control" => "up-to-date", "global_last_seen_lsn" => 9998}}
+        ])
+
+      schema = Jason.encode!(%{"id" => %{type: "text"}})
+
+      {:ok, responses} =
+        start_supervised(
+          {Agent,
+           fn ->
+             %{
+               {"-1", nil} => [
+                 &bypass_resp(&1, body1,
+                   shape_handle: "my-shape",
+                   last_offset: "1_0",
+                   schema: schema
+                 )
+               ]
+             }
+           end}
+        )
+
+      bypass_response(ctx, responses)
+
+      # First, stream with live: false to get a ResumeMessage
+      msgs = stream(ctx, live: false) |> Enum.to_list()
+
+      resume_msg = Enum.find(msgs, &match?(%ResumeMessage{}, &1))
+      assert resume_msg != nil
+
+      # Now set up for resumed stream with a move-out
+      body2 =
+        Jason.encode!([
+          %{
+            "headers" => %{
+              "event" => "move-out",
+              "patterns" => [%{"pos" => 0, "value" => "my-tag"}]
+            }
+          },
+          %{"headers" => %{"control" => "up-to-date", "global_last_seen_lsn" => 9999}}
+        ])
+
+      {:ok, responses2} =
+        start_supervised(
+          {Agent,
+           fn ->
+             %{
+               {"1_0", "my-shape"} => [
+                 &bypass_resp(&1, body2,
+                   shape_handle: "my-shape",
+                   last_offset: "2_0"
+                 )
+               ]
+             }
+           end},
+          id: :responses2
+        )
+
+      bypass_response(ctx, responses2)
+
+      # Resume the stream - tag_index will be empty
+      resumed_msgs = stream(ctx, 1, resume: resume_msg)
+
+      # The move-out won't generate any synthetic deletes because tag_index is empty
+      delete_msgs =
+        Enum.filter(resumed_msgs, &match?(%ChangeMessage{headers: %{operation: :delete}}, &1))
+
+      # This documents the current behavior - no deletes after resume
+      # This may or may not be the desired behavior depending on the use case
+      assert delete_msgs == [],
+             "After resume, tag_index is empty so move-out generates no deletes (expected behavior?)"
+    end
   end
 
   defp bypass_response_endpoint(ctx, responses, opts) do

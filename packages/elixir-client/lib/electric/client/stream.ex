@@ -20,8 +20,11 @@ defmodule Electric.Client.Stream do
     next_cursor: nil,
     state: :init,
     opts: %{},
-    # Tag index for move-out support: maps tag_value -> MapSet of {key, msg}
-    tag_index: %{}
+    # Move-out support: tracks tags per key and keys per tag
+    # tag_to_keys: %{tag_value => MapSet<key>} - which keys have this tag
+    # key_data: %{key => %{tags: MapSet<tag>, msg: msg}} - each key's tags and latest message
+    tag_to_keys: %{},
+    key_data: %{}
   ]
 
   @external_options [
@@ -229,7 +232,8 @@ defmodule Electric.Client.Stream do
 
   defp handle_msg(%Message.MoveOutMessage{patterns: patterns} = _msg, stream) do
     # Generate synthetic deletes for rows matching the move-out patterns
-    {synthetic_deletes, updated_tag_index} = generate_synthetic_deletes(stream, patterns)
+    {synthetic_deletes, updated_tag_to_keys, updated_key_data} =
+      generate_synthetic_deletes(stream, patterns)
 
     # Add synthetic deletes to the buffer
     buffer =
@@ -237,7 +241,7 @@ defmodule Electric.Client.Stream do
         :queue.in(delete_msg, buf)
       end)
 
-    {:cont, %{stream | buffer: buffer, tag_index: updated_tag_index}}
+    {:cont, %{stream | buffer: buffer, tag_to_keys: updated_tag_to_keys, key_data: updated_key_data}}
   end
 
   defp handle_up_to_date(%{opts: %{live: true}} = stream) do
@@ -318,7 +322,8 @@ defmodule Electric.Client.Stream do
         buffer: :queue.new(),
         schema: nil,
         value_mapper_fun: nil,
-        tag_index: %{}
+        tag_to_keys: %{},
+        key_data: %{}
     }
   end
 
@@ -389,75 +394,136 @@ defmodule Electric.Client.Stream do
   end
 
   # Tag index management for move-out support
+  #
+  # We maintain two data structures:
+  # - tag_to_keys: %{tag_value => MapSet<key>} - which keys have each tag
+  # - key_data: %{key => %{tags: MapSet<tag>, msg: msg}} - each key's current tags and latest message
+  #
+  # This allows us to:
+  # 1. Avoid duplicate entries when a row is updated (we update the msg, not add a new entry)
+  # 2. Check if a row still has other tags before generating a synthetic delete
 
   defp update_tag_index(stream, %Message.ChangeMessage{headers: headers, key: key} = msg) do
-    tag_index = stream.tag_index
+    %{tag_to_keys: tag_to_keys, key_data: key_data} = stream
+    new_tags = headers.tags || []
+    removed_tags = headers.removed_tags || []
 
-    # First, remove any tags that are being removed (for updates)
-    tag_index = remove_from_tag_index(tag_index, headers.removed_tags, key)
+    # Get current data for this key
+    current_data = Map.get(key_data, key, %{tags: MapSet.new(), msg: nil})
+    current_tags = current_data.tags
 
-    # Then add new tags
-    tag_index = add_to_tag_index(tag_index, headers.tags, key, msg)
+    # Calculate the new set of tags for this key
+    updated_tags =
+      current_tags
+      |> MapSet.difference(MapSet.new(removed_tags))
+      |> MapSet.union(MapSet.new(new_tags))
 
-    # For deletes, also remove the row from all its tags
-    tag_index =
+    # For deletes, remove the key entirely
+    {_final_tags, final_key_data, final_tag_to_keys} =
       case headers.operation do
-        :delete -> remove_from_tag_index(tag_index, headers.tags, key)
-        _ -> tag_index
+        :delete ->
+          # Remove key from all its tags in tag_to_keys
+          updated_tag_to_keys =
+            Enum.reduce(MapSet.to_list(updated_tags), tag_to_keys, fn tag, acc ->
+              remove_key_from_tag(acc, tag, key)
+            end)
+
+          # Remove key from key_data
+          {MapSet.new(), Map.delete(key_data, key), updated_tag_to_keys}
+
+        _ ->
+          # Update tag_to_keys: remove from old tags, add to new tags
+          tags_to_remove = MapSet.difference(current_tags, updated_tags)
+          tags_to_add = MapSet.difference(updated_tags, current_tags)
+
+          updated_tag_to_keys =
+            tag_to_keys
+            |> remove_key_from_tags(tags_to_remove, key)
+            |> add_key_to_tags(tags_to_add, key)
+
+          # Update key_data with new tags and latest message
+          updated_key_data = Map.put(key_data, key, %{tags: updated_tags, msg: msg})
+
+          {updated_tags, updated_key_data, updated_tag_to_keys}
       end
 
-    %{stream | tag_index: tag_index}
+    %{stream | tag_to_keys: final_tag_to_keys, key_data: final_key_data}
   end
 
-  defp add_to_tag_index(tag_index, tags, key, msg) when is_list(tags) do
-    Enum.reduce(tags, tag_index, fn tag, acc ->
-      entries = Map.get(acc, tag, MapSet.new())
-      Map.put(acc, tag, MapSet.put(entries, {key, msg}))
+  defp remove_key_from_tags(tag_to_keys, tags, key) do
+    Enum.reduce(MapSet.to_list(tags), tag_to_keys, fn tag, acc ->
+      remove_key_from_tag(acc, tag, key)
     end)
   end
 
-  defp add_to_tag_index(tag_index, _tags, _key, _msg), do: tag_index
+  defp remove_key_from_tag(tag_to_keys, tag, key) do
+    case Map.get(tag_to_keys, tag) do
+      nil ->
+        tag_to_keys
 
-  defp remove_from_tag_index(tag_index, tags, key) when is_list(tags) do
-    Enum.reduce(tags, tag_index, fn tag, acc ->
-      case Map.get(acc, tag) do
-        nil ->
-          acc
+      keys ->
+        updated_keys = MapSet.delete(keys, key)
 
-        entries ->
-          # Remove entries with matching key
-          updated_entries =
-            Enum.reject(entries, fn {entry_key, _msg} -> entry_key == key end)
-            |> MapSet.new()
-
-          if MapSet.size(updated_entries) == 0 do
-            Map.delete(acc, tag)
-          else
-            Map.put(acc, tag, updated_entries)
-          end
-      end
-    end)
+        if MapSet.size(updated_keys) == 0 do
+          Map.delete(tag_to_keys, tag)
+        else
+          Map.put(tag_to_keys, tag, updated_keys)
+        end
+    end
   end
 
-  defp remove_from_tag_index(tag_index, _tags, _key), do: tag_index
+  defp add_key_to_tags(tag_to_keys, tags, key) do
+    Enum.reduce(MapSet.to_list(tags), tag_to_keys, fn tag, acc ->
+      keys = Map.get(acc, tag, MapSet.new())
+      Map.put(acc, tag, MapSet.put(keys, key))
+    end)
+  end
 
   defp generate_synthetic_deletes(stream, patterns) do
-    # Collect all rows that match any of the move-out patterns
-    {rows_to_delete, updated_tag_index} =
-      Enum.reduce(patterns, {MapSet.new(), stream.tag_index}, fn %{value: tag_value}, {rows, tag_idx} ->
-        case Map.pop(tag_idx, tag_value) do
-          {nil, tag_idx} ->
-            {rows, tag_idx}
+    %{tag_to_keys: tag_to_keys, key_data: key_data} = stream
 
-          {entries, tag_idx} ->
-            {MapSet.union(rows, entries), tag_idx}
+    # First pass: collect all keys that match any pattern and remove those tags
+    {matched_keys_with_tags, updated_tag_to_keys} =
+      Enum.reduce(patterns, {%{}, tag_to_keys}, fn %{value: tag_value}, {keys_acc, ttk_acc} ->
+        case Map.pop(ttk_acc, tag_value) do
+          {nil, ttk_acc} ->
+            {keys_acc, ttk_acc}
+
+          {keys_in_tag, ttk_acc} ->
+            # Track which tags were removed for each key
+            updated_keys_acc =
+              Enum.reduce(keys_in_tag, keys_acc, fn key, acc ->
+                removed_tags = Map.get(acc, key, MapSet.new())
+                Map.put(acc, key, MapSet.put(removed_tags, tag_value))
+              end)
+
+            {updated_keys_acc, ttk_acc}
         end
       end)
 
-    # Generate synthetic delete messages for each row
+    # Second pass: for each matched key, update its tags and check if it should be deleted
+    {keys_to_delete, updated_key_data} =
+      Enum.reduce(matched_keys_with_tags, {[], key_data}, fn {key, removed_tags}, {deletes, kd_acc} ->
+        case Map.get(kd_acc, key) do
+          nil ->
+            {deletes, kd_acc}
+
+          %{tags: current_tags, msg: msg} ->
+            remaining_tags = MapSet.difference(current_tags, removed_tags)
+
+            if MapSet.size(remaining_tags) == 0 do
+              # No remaining tags - key should be deleted
+              {[{key, msg} | deletes], Map.delete(kd_acc, key)}
+            else
+              # Still has other tags - update key_data but don't delete
+              {deletes, Map.put(kd_acc, key, %{tags: remaining_tags, msg: msg})}
+            end
+        end
+      end)
+
+    # Generate synthetic delete messages
     synthetic_deletes =
-      rows_to_delete
-      |> Enum.map(fn {key, original_msg} ->
+      Enum.map(keys_to_delete, fn {key, original_msg} ->
         %Message.ChangeMessage{
           key: key,
           value: original_msg.value,
@@ -470,7 +536,7 @@ defmodule Electric.Client.Stream do
         }
       end)
 
-    {synthetic_deletes, updated_tag_index}
+    {synthetic_deletes, updated_tag_to_keys, updated_key_data}
   end
 
   defimpl Enumerable do
