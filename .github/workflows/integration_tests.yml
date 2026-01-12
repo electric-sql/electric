@@ -29,6 +29,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - uses: erlef/setup-beam@v1
+        id: setup_beam
         with:
           version-type: strict
           version-file: '.tool-versions'
@@ -62,6 +63,15 @@ jobs:
       - name: Compile
         run: mix compile
         working-directory: packages/sync-service
+
+      - name: Cache lux
+        uses: actions/cache@v4
+        with:
+          path: integration-tests/lux
+          key: '${{ runner.os }}-lux-${{ steps.setup_beam.outputs.otp-version }}'
+          restore-keys: |
+            ${{ runner.os }}-lux-${{ steps.setup_beam.outputs.otp-version }}
+            ${{ runner.os }}-lux
 
       - name: Setup lux
         run: make
