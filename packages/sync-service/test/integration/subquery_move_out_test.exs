@@ -6,14 +6,6 @@ defmodule Electric.Integration.SubqueryMoveOutTest do
   1. Tags on change messages (indicating why a row belongs to the shape)
   2. Move-out control messages (when dependency values are removed)
   3. Synthetic delete generation from move-out patterns
-
-  These tests are opt-in by default. Run them with:
-
-      mix test --include integration
-
-  Or run only integration tests with:
-
-      mix test --only integration
   """
   use ExUnit.Case, async: false
 
@@ -26,7 +18,6 @@ defmodule Electric.Integration.SubqueryMoveOutTest do
   alias Electric.Client.ShapeDefinition
   alias Electric.Client.Message.ChangeMessage
 
-  @moduletag :integration
   @moduletag :tmp_dir
 
   # Shape definition for child table filtered by active parents
@@ -118,11 +109,12 @@ defmodule Electric.Integration.SubqueryMoveOutTest do
         Postgrex.query!(db_conn, "UPDATE parent SET active = false WHERE id = 'parent-1'", [])
 
         # Wait for both synthetic deletes
-        {:ok, deletes} = await_count(consumer, 2,
-          match: fn msg ->
-            match?(%ChangeMessage{headers: %{operation: :delete}}, msg)
-          end
-        )
+        {:ok, deletes} =
+          await_count(consumer, 2,
+            match: fn msg ->
+              match?(%ChangeMessage{headers: %{operation: :delete}}, msg)
+            end
+          )
 
         delete_ids = Enum.map(deletes, & &1.value["id"]) |> Enum.sort()
         assert delete_ids == ["child-1", "child-2"]
@@ -133,7 +125,11 @@ defmodule Electric.Integration.SubqueryMoveOutTest do
            "INSERT INTO parent (id, active) VALUES ('parent-1', true)",
            "INSERT INTO child (id, parent_id, value) VALUES ('child-1', 'parent-1', 'test value')"
          ]
-    test "deleting parent row triggers move-out", %{client: client, shape: shape, db_conn: db_conn} do
+    test "deleting parent row triggers move-out", %{
+      client: client,
+      shape: shape,
+      db_conn: db_conn
+    } do
       import Support.StreamConsumer
 
       stream = Client.stream(client, shape, live: true)
@@ -179,7 +175,11 @@ defmodule Electric.Integration.SubqueryMoveOutTest do
         assert_up_to_date(consumer)
 
         # Change child to reference parent-2 (which is still active)
-        Postgrex.query!(db_conn, "UPDATE child SET parent_id = 'parent-2' WHERE id = 'child-1'", [])
+        Postgrex.query!(
+          db_conn,
+          "UPDATE child SET parent_id = 'parent-2' WHERE id = 'child-1'",
+          []
+        )
 
         # Should receive a new insert (move-in) for the child
         insert_msg = assert_insert(consumer, %{"id" => "child-1", "parent_id" => "parent-2"})
@@ -222,7 +222,11 @@ defmodule Electric.Integration.SubqueryMoveOutTest do
         initial_tags = Map.get(initial.headers, :tags, [])
 
         # Change child to reference parent-2
-        Postgrex.query!(db_conn, "UPDATE child SET parent_id = 'parent-2' WHERE id = 'child-1'", [])
+        Postgrex.query!(
+          db_conn,
+          "UPDATE child SET parent_id = 'parent-2' WHERE id = 'child-1'",
+          []
+        )
 
         # Should receive an update with new tags
         update_msg = assert_update(consumer, %{"id" => "child-1"})

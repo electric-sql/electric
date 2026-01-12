@@ -2,14 +2,6 @@ defmodule Electric.Integration.StreamingTest do
   @moduledoc """
   Integration tests that spin up an Electric HTTP API + stack for a unique test DB,
   then use Electric.Client to stream a shape over HTTP.
-
-  These tests are opt-in by default. Run them with:
-
-      mix test --include integration
-
-  Or run only integration tests with:
-
-      mix test --only integration
   """
   use ExUnit.Case, async: false
 
@@ -22,7 +14,6 @@ defmodule Electric.Integration.StreamingTest do
   alias Electric.Client.Message.ChangeMessage
   alias Electric.Client.Message.ControlMessage
 
-  @moduletag :integration
   @moduletag :tmp_dir
 
   describe "Electric.Client streaming over HTTP" do
