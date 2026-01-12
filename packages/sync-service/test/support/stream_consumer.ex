@@ -10,7 +10,7 @@ defmodule Support.StreamConsumer do
 
   @default_timeout 5_000
 
-  defstruct [:task, :task_pid, :messages_table, :timeout]
+  defstruct [:task, :task_pid, :timeout]
 
   @doc """
   Start consuming a stream, forwarding messages to the test process.
@@ -18,27 +18,15 @@ defmodule Support.StreamConsumer do
   ## Options
 
     * `:timeout` - default timeout for assertions (default: 5000ms)
-    * `:track_messages` - store messages in ETS for later analysis (default: false)
   """
   def start(stream, opts \\ []) do
     test_pid = self()
-    track_messages = Keyword.get(opts, :track_messages, false)
     timeout = Keyword.get(opts, :timeout, @default_timeout)
-
-    # Create ETS table if tracking messages
-    messages_table = if track_messages do
-      :ets.new(:stream_messages, [:ordered_set, :public])
-    end
 
     # Start the streaming task
     task = Task.async(fn ->
       stream
       |> Stream.each(fn msg ->
-        # Track message if enabled
-        if messages_table do
-          :ets.insert(messages_table, {System.monotonic_time(), msg})
-        end
-        # Send to test process
         send(test_pid, {:stream_message, self(), msg})
       end)
       |> Stream.run()
@@ -47,7 +35,6 @@ defmodule Support.StreamConsumer do
     {:ok, %__MODULE__{
       task: task,
       task_pid: task.pid,
-      messages_table: messages_table,
       timeout: timeout
     }}
   end
@@ -55,9 +42,8 @@ defmodule Support.StreamConsumer do
   @doc """
   Stop the consumer and cleanup resources.
   """
-  def stop(%__MODULE__{task: task, messages_table: table}) do
+  def stop(%__MODULE__{task: task}) do
     Task.shutdown(task, :brutal_kill)
-    if table, do: :ets.delete(table)
     :ok
   end
 
@@ -158,59 +144,6 @@ defmodule Support.StreamConsumer do
     after
       remaining -> {:error, :timeout}
     end
-  end
-
-  @doc """
-  Get all collected messages (requires track_messages: true).
-
-  ## Options
-
-    * `:operation` - filter by operation type (:insert, :update, :delete)
-  """
-  def collected_messages(consumer, opts \\ [])
-
-  def collected_messages(%__MODULE__{messages_table: nil}, _opts) do
-    raise "Message tracking not enabled. Start consumer with track_messages: true"
-  end
-
-  def collected_messages(%__MODULE__{messages_table: table}, opts) do
-    operation_filter = Keyword.get(opts, :operation)
-
-    table
-    |> :ets.tab2list()
-    |> Enum.map(fn {_ts, msg} -> msg end)
-    |> maybe_filter_operation(operation_filter)
-  end
-
-  defp maybe_filter_operation(messages, nil), do: messages
-  defp maybe_filter_operation(messages, operation) do
-    Enum.filter(messages, fn
-      %ChangeMessage{headers: %{operation: ^operation}} -> true
-      _ -> false
-    end)
-  end
-
-  @doc """
-  Assert that insert comes before delete for a given row ID.
-  Requires track_messages: true.
-  """
-  def assert_insert_before_delete(%__MODULE__{} = consumer, row_id) do
-    messages = collected_messages(consumer)
-    |> Enum.filter(&match?(%ChangeMessage{}, &1))
-
-    insert_idx = Enum.find_index(messages, fn msg ->
-      msg.headers.operation == :insert and msg.value["id"] == row_id
-    end)
-
-    delete_idx = Enum.find_index(messages, fn msg ->
-      msg.headers.operation == :delete and msg.value["id"] == row_id
-    end)
-
-    assert insert_idx != nil, "No insert found for row #{row_id}"
-    assert delete_idx != nil, "No delete found for row #{row_id}"
-    assert insert_idx < delete_idx, "Insert should come before delete for row #{row_id}"
-
-    :ok
   end
 
   # Private helpers

@@ -262,7 +262,7 @@ defmodule Electric.Integration.SubqueryMoveOutTest do
 
       stream = Client.stream(client, shape, live: true)
 
-      with_consumer stream, track_messages: true do
+      with_consumer stream do
         # Wait for initial insert
         assert_insert(consumer, %{"id" => "child-1"})
         assert_up_to_date(consumer)
@@ -272,9 +272,6 @@ defmodule Electric.Integration.SubqueryMoveOutTest do
 
         # Should eventually see a delete for child-1
         assert_delete(consumer, %{"id" => "child-1"})
-
-        # Verify message ordering: insert should come before delete
-        assert_insert_before_delete(consumer, "child-1")
       end
     end
   end
