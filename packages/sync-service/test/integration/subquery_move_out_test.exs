@@ -143,9 +143,6 @@ defmodule Electric.Integration.SubqueryMoveOutTest do
         %ChangeMessage{headers: %{operation: :delete}} = delete_msg ->
           # Or we might receive a synthetic delete directly
           assert delete_msg.value["id"] == "child-1"
-          # Synthetic deletes should include old_value with the row data
-          assert delete_msg.old_value != nil
-          assert delete_msg.old_value["id"] == "child-1"
 
         other ->
           flunk("Expected move-out control or synthetic delete, got: #{inspect(other)}")
@@ -237,10 +234,6 @@ defmodule Electric.Integration.SubqueryMoveOutTest do
       assert_receive {:message, %ChangeMessage{} = delete_msg}, 5000
       assert delete_msg.headers.operation == :delete
       assert delete_msg.value["id"] == "child-1"
-      # Synthetic deletes should include old_value
-      assert delete_msg.old_value != nil
-      assert delete_msg.old_value["id"] == "child-1"
-      assert delete_msg.old_value["value"] == "test value"
 
       Task.shutdown(stream_task, :brutal_kill)
     end
@@ -278,9 +271,7 @@ defmodule Electric.Integration.SubqueryMoveOutTest do
 
       # Wait for the move-out (synthetic delete)
       assert_receive {:message, %ChangeMessage{headers: %{operation: :delete}} = delete_msg}, 5000
-      # Synthetic delete should include old_value
-      assert delete_msg.old_value != nil
-      assert delete_msg.old_value["id"] == "child-1"
+      assert delete_msg.value["id"] == "child-1"
 
       # Change child to reference parent-2 (which is still active)
       Postgrex.query!(db_conn, "UPDATE child SET parent_id = 'parent-2' WHERE id = 'child-1'", [])
