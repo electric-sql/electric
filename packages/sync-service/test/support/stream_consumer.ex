@@ -228,7 +228,7 @@ defmodule Support.StreamConsumer do
         if matcher.(msg) do
           msg
         else
-          do_assert_receive_message(task_pid, matcher, timeout, start_time)
+          flunk("Received unexpected message: #{inspect(msg)}")
         end
     after
       remaining ->

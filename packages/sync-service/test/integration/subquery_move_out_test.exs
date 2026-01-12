@@ -176,6 +176,7 @@ defmodule Electric.Integration.SubqueryMoveOutTest do
 
         # Wait for the move-out (synthetic delete)
         assert_delete(consumer, %{"id" => "child-1"})
+        assert_up_to_date(consumer)
 
         # Change child to reference parent-2 (which is still active)
         Postgrex.query!(db_conn, "UPDATE child SET parent_id = 'parent-2' WHERE id = 'child-1'", [])
