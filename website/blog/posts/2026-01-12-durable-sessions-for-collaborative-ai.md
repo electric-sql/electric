@@ -18,6 +18,9 @@ import Tweet from 'vue-tweet'
 
 import RequestResponse from '/static/img/blog/durable-sessions-for-collaborative-ai/request-response.jpg?url'
 import RequestResponseSmall from '/static/img/blog/durable-sessions-for-collaborative-ai/request-response.sm.jpg?url'
+
+import SyncBased from '/static/img/blog/durable-sessions-for-collaborative-ai/sync-based-architecture.jpg?url'
+import SyncBasedSmall from '/static/img/blog/durable-sessions-for-collaborative-ai/sync-based-architecture.sm.jpg?url'
 </script>
 
 <style scoped>
@@ -275,9 +278,12 @@ In fact, using the Durable State layer, we can multiplex and transfer a variety 
 
 Because the stream is persistent and addressable, clients can always join and catch up from their current offset at any time. Whether that's in real-time as the session is active or later on for asynchronous collaboration and historical access.
 
-> ... diagram ...
-
 What we're describing is a sync-based interaction paradigm. That can combine structured state sync with efficient binary streaming. With principled management of optimistic state, tied into the sync machinery.
+
+<figure>
+  <img :src="SyncBased" class="hidden-sm" />
+  <img :src="SyncBasedSmall" class="block-sm" />
+</figure>
 
 ## Reference implementation
 
