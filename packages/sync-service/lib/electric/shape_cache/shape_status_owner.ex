@@ -12,8 +12,6 @@ defmodule Electric.ShapeCache.ShapeStatusOwner do
 
   alias Electric.ShapeCache.ShapeStatus
 
-  require Logger
-
   @schema NimbleOptions.new!(stack_id: [type: :string, required: true])
 
   def name(stack_id) do
