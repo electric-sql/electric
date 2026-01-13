@@ -1,5 +1,5 @@
 caddy 2.10.0
-elixir 1.20.0-rc.0-otp-28
+elixir 1.20.0-rc.1-otp-28
 erlang 28.3
 nodejs 24.11.1
 pnpm 10.12.1
