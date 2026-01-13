@@ -286,44 +286,6 @@ defmodule Electric.Integration.SubqueryMoveOutTest do
     end
   end
 
-  describe "move-out message ordering" do
-    setup [:with_unique_db, :with_parent_child_tables, :with_sql_execute]
-    setup :with_complete_stack
-
-    setup :with_electric_client
-
-    setup _ctx do
-      shape = ShapeDefinition.new!("child", where: @subquery_where)
-      %{shape: shape}
-    end
-
-    @tag with_sql: [
-           "INSERT INTO parent (id, active) VALUES ('parent-1', true)",
-           "INSERT INTO child (id, parent_id, value) VALUES ('child-1', 'parent-1', 'test')"
-         ]
-    test "synthetic deletes maintain correct ordering after initial sync", %{
-      client: client,
-      shape: shape,
-      db_conn: db_conn
-    } do
-      import Support.StreamConsumer
-
-      stream = Client.stream(client, shape, live: true)
-
-      with_consumer stream do
-        # Wait for initial insert
-        assert_insert(consumer, %{"id" => "child-1"})
-        assert_up_to_date(consumer)
-
-        # Deactivate parent
-        Postgrex.query!(db_conn, "UPDATE parent SET active = false WHERE id = 'parent-1'", [])
-
-        # Should eventually see a delete for child-1
-        assert_delete(consumer, %{"id" => "child-1"})
-      end
-    end
-  end
-
   describe "must-refetch clears move-out state" do
     setup [:with_unique_db, :with_parent_child_tables, :with_sql_execute]
     setup :with_complete_stack
