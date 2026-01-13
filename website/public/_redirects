@@ -38,6 +38,7 @@ https://next.electric-sql.com/* https://electric-sql.com/:splat 301!
 
 # Shortpaths for nice links
 
+/r/electric-http2                            /docs/guides/troubleshooting#slow-shapes-mdash-why-are-my-shapes-slow-in-the-browser-in-local-development
 /docs                                        /docs/intro
 /intro                                       /docs/intro
 /examples                                    /demos
