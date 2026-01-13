@@ -35,6 +35,17 @@ defmodule Electric.ClientTest do
     [bypass: Bypass.open()]
   end
 
+  # Drains the stream by repeatedly calling next/1 until :halt is returned.
+  # Returns the final stream struct so we can inspect internal state.
+  defp drain_stream(stream) do
+    alias Electric.Client.Stream
+
+    case Stream.next(stream) do
+      {:halt, stream} -> stream
+      {_msgs, stream} -> drain_stream(stream)
+    end
+  end
+
   describe "new" do
     test ":base_url is used as the base of the endpoint" do
       endpoint = URI.new!("http://localhost:3000/v1/shape")
@@ -1364,6 +1375,59 @@ defmodule Electric.ClientTest do
   describe "move-out handling" do
     setup [:start_bypass, :bypass_client, :shape_definition]
 
+    test "tag index stays empty when messages have no tags", ctx do
+      # When insert messages have no "tags" header, the tag index should remain empty.
+      # This is important because we shouldn't track rows that don't participate in
+      # move-out semantics.
+      body1 =
+        Jason.encode!([
+          %{
+            "key" => "row-1",
+            "headers" => %{"operation" => "insert"},
+            "offset" => "1_0",
+            "value" => %{"id" => "1111"}
+          },
+          %{
+            "key" => "row-2",
+            "headers" => %{"operation" => "insert"},
+            "offset" => "1_1",
+            "value" => %{"id" => "2222"}
+          },
+          %{"headers" => %{"control" => "up-to-date", "global_last_seen_lsn" => 9999}}
+        ])
+
+      schema = Jason.encode!(%{"id" => %{type: "text"}})
+
+      {:ok, responses} =
+        start_supervised(
+          {Agent,
+           fn ->
+             %{
+               {"-1", nil} => [
+                 &bypass_resp(&1, body1,
+                   shape_handle: "my-shape",
+                   last_offset: "1_1",
+                   schema: schema
+                 )
+               ]
+             }
+           end}
+        )
+
+      bypass_response(ctx, responses)
+
+      # Use live: false so the stream halts after up-to-date
+      stream = Client.stream(ctx.client, ctx.shape, live: false)
+      final_stream = drain_stream(stream)
+
+      # The tag index should be empty since no messages had tags
+      assert final_stream.tag_to_keys == %{},
+             "tag_to_keys should be empty when no tags present, got: #{inspect(final_stream.tag_to_keys)}"
+
+      assert final_stream.key_data == %{},
+             "key_data should be empty when no tags present, got: #{inspect(final_stream.key_data)}"
+    end
+
     test "receives move-out and generates synthetic deletes", ctx do
       body1 =
         Jason.encode!([
@@ -2007,8 +2071,9 @@ defmodule Electric.ClientTest do
              "Multiple patterns matching same row should generate single delete, got #{length(delete_msgs)}"
     end
 
-    test "resume does not restore tag_index - move-out after resume has no effect", ctx do
-      # Edge case: when resuming, tag_index is empty so move-outs won't match anything
+    test "resume preserves move-out state - move-out after resume generates synthetic delete", ctx do
+      # When resuming a stream, the tag index state should be preserved so that
+      # move-out events after resume can still generate synthetic deletes.
       body1 =
         Jason.encode!([
           %{
@@ -2076,17 +2141,19 @@ defmodule Electric.ClientTest do
 
       bypass_response(ctx, responses2)
 
-      # Resume the stream - tag_index will be empty
-      resumed_msgs = stream(ctx, 1, resume: resume_msg)
+      # Resume the stream - with proper move-out support, the tag index should be restored
+      resumed_msgs = stream(ctx, resume: resume_msg, live: false) |> Enum.to_list()
 
-      # The move-out won't generate any synthetic deletes because tag_index is empty
+      # The move-out SHOULD generate a synthetic delete for the row
       delete_msgs =
         Enum.filter(resumed_msgs, &match?(%ChangeMessage{headers: %{operation: :delete}}, &1))
 
-      # This documents the current behavior - no deletes after resume
-      # This may or may not be the desired behavior depending on the use case
-      assert delete_msgs == [],
-             "After resume, tag_index is empty so move-out generates no deletes (expected behavior?)"
+      # After resume, move-out should still generate synthetic deletes
+      assert length(delete_msgs) == 1,
+             "After resume, move-out should generate synthetic delete, got: #{inspect(resumed_msgs)}"
+
+      [delete] = delete_msgs
+      assert delete.value["id"] == "1111"
     end
   end
 

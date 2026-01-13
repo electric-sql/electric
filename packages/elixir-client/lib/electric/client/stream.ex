@@ -252,7 +252,9 @@ defmodule Electric.Client.Stream do
     resume_message = %Message.ResumeMessage{
       schema: stream.schema,
       offset: stream.offset,
-      shape_handle: stream.shape_handle
+      shape_handle: stream.shape_handle,
+      tag_to_keys: stream.tag_to_keys,
+      key_data: stream.key_data
     }
 
     {:halt, %{stream | buffer: :queue.in(resume_message, stream.buffer), state: :done}}
@@ -377,11 +379,15 @@ defmodule Electric.Client.Stream do
 
   defp resume(%{opts: %{resume: %Message.ResumeMessage{} = resume}} = stream) do
     %{shape_handle: shape_handle, offset: offset, schema: schema} = resume
+    tag_to_keys = Map.get(resume, :tag_to_keys, %{})
+    key_data = Map.get(resume, :key_data, %{})
+
+    stream = %{stream | shape_handle: shape_handle, offset: offset, tag_to_keys: tag_to_keys, key_data: key_data}
 
     if schema do
-      generate_value_mapper(schema, %{stream | shape_handle: shape_handle, offset: offset})
+      generate_value_mapper(schema, stream)
     else
-      %{stream | shape_handle: shape_handle, offset: offset}
+      stream
     end
   end
 
@@ -409,8 +415,8 @@ defmodule Electric.Client.Stream do
     removed_tags = headers.removed_tags || []
 
     # Get current data for this key
-    current_data = Map.get(key_data, key, %{tags: MapSet.new(), msg: nil})
-    current_tags = current_data.tags
+    current_data = Map.get(key_data, key)
+    current_tags = if current_data, do: current_data.tags, else: MapSet.new()
 
     # Calculate the new set of tags for this key
     updated_tags =
@@ -432,19 +438,24 @@ defmodule Electric.Client.Stream do
           {MapSet.new(), Map.delete(key_data, key), updated_tag_to_keys}
 
         _ ->
-          # Update tag_to_keys: remove from old tags, add to new tags
-          tags_to_remove = MapSet.difference(current_tags, updated_tags)
-          tags_to_add = MapSet.difference(updated_tags, current_tags)
+          # If no tags (current or new), don't track this key
+          if MapSet.size(updated_tags) == 0 do
+            {MapSet.new(), key_data, tag_to_keys}
+          else
+            # Update tag_to_keys: remove from old tags, add to new tags
+            tags_to_remove = MapSet.difference(current_tags, updated_tags)
+            tags_to_add = MapSet.difference(updated_tags, current_tags)
 
-          updated_tag_to_keys =
-            tag_to_keys
-            |> remove_key_from_tags(tags_to_remove, key)
-            |> add_key_to_tags(tags_to_add, key)
+            updated_tag_to_keys =
+              tag_to_keys
+              |> remove_key_from_tags(tags_to_remove, key)
+              |> add_key_to_tags(tags_to_add, key)
 
-          # Update key_data with new tags and latest message
-          updated_key_data = Map.put(key_data, key, %{tags: updated_tags, msg: msg})
+            # Update key_data with new tags and latest message
+            updated_key_data = Map.put(key_data, key, %{tags: updated_tags, msg: msg})
 
-          {updated_tags, updated_key_data, updated_tag_to_keys}
+            {updated_tags, updated_key_data, updated_tag_to_keys}
+          end
       end
 
     %{stream | tag_to_keys: final_tag_to_keys, key_data: final_key_data}

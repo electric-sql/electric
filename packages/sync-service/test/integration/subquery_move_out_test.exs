@@ -329,6 +329,79 @@ defmodule Electric.Integration.SubqueryMoveOutTest do
     end
   end
 
+  describe "resume preserves move-out state" do
+    setup [:with_unique_db, :with_parent_child_tables, :with_sql_execute]
+    setup :with_complete_stack
+
+    setup :with_electric_client
+
+    setup _ctx do
+      shape = ShapeDefinition.new!("child", where: @subquery_where)
+      %{shape: shape}
+    end
+
+    alias Electric.Client.Message.ResumeMessage
+
+    @tag with_sql: [
+           "INSERT INTO parent (id, active) VALUES ('parent-1', true)",
+           "INSERT INTO child (id, parent_id, value) VALUES ('child-1', 'parent-1', 'test value')"
+         ]
+    test "move-out after resume generates synthetic delete", %{
+      client: client,
+      shape: shape,
+      db_conn: db_conn
+    } do
+      # First, stream with live: false to get a ResumeMessage
+      # This simulates a client that synced initial data and then disconnected
+      initial_messages =
+        client
+        |> Client.stream(shape, live: false)
+        |> Enum.to_list()
+
+      # Should have: insert for child-1, up-to-date, ResumeMessage
+      insert_messages =
+        Enum.filter(initial_messages, &match?(%ChangeMessage{headers: %{operation: :insert}}, &1))
+
+      assert length(insert_messages) == 1
+      [insert] = insert_messages
+      assert insert.value["id"] == "child-1"
+
+      # Capture the ResumeMessage for later
+      resume_msg = Enum.find(initial_messages, &match?(%ResumeMessage{}, &1))
+      assert resume_msg != nil, "Should receive a ResumeMessage with live: false"
+
+      # Now deactivate the parent while "disconnected"
+      # This should trigger a move-out on the server side
+      Postgrex.query!(db_conn, "UPDATE parent SET active = false WHERE id = 'parent-1'", [])
+
+      # Give the server time to process the change
+      Process.sleep(100)
+
+      # Resume the stream - with proper move-out support, the client should
+      # receive a synthetic delete for child-1 because its parent was deactivated
+      resumed_messages =
+        client
+        |> Client.stream(shape, live: false, resume: resume_msg)
+        |> Enum.to_list()
+
+      # The resumed stream SHOULD generate a synthetic delete
+      delete_messages =
+        Enum.filter(
+          resumed_messages,
+          &match?(%ChangeMessage{headers: %{operation: :delete}}, &1)
+        )
+
+      # This test currently fails because the tag index is not preserved across resume
+      # After the fix, this assertion should pass
+      assert length(delete_messages) == 1,
+             "After resume, move-out should generate synthetic delete for child-1. " <>
+               "Got messages: #{inspect(resumed_messages)}"
+
+      [delete] = delete_messages
+      assert delete.value["id"] == "child-1"
+    end
+  end
+
   # Helper to set up parent/child tables for subquery tests
   def with_parent_child_tables(%{db_conn: conn} = _context) do
     statements = [
