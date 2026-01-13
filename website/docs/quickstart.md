@@ -170,5 +170,5 @@ See the [starter template README](https://github.com/electric-sql/electric/blob/
 ## Next steps
 
 <!-- - follow the [Tutorial](/docs/tutorial) to evolve your starter into a production-quality app. -->
-- learn more about [Local-first sync with Electric and TanStack DB](/blog/2025/07/29/local-first-sync-with-tanstack-db)
+- learn more about [Local-first sync with Electric and TanStack DB](/blog/2025/07/29/local-first-sync-with-tanstack-db)
 - see the [Interactive guide to TanStack DB](https://frontendatscale.com/blog/tanstack-db).
