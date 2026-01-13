@@ -39,24 +39,14 @@ defmodule Electric.Integration.SubqueryMoveOutTest do
            "INSERT INTO child (id, parent_id, value) VALUES ('child-1', 'parent-1', 'test value')"
          ]
     test "change messages include tags for subquery-matched rows", %{client: client, shape: shape} do
-      # Stream a shape that uses a subquery to filter children by active parents
-      messages =
-        client
-        |> Client.stream(shape, live: false)
-        |> Enum.to_list()
+      import Support.StreamConsumer
 
-      # Find the insert message for the child row
-      insert_messages = Enum.filter(messages, &match?(%ChangeMessage{}, &1))
-      assert length(insert_messages) == 1
-      [insert] = insert_messages
+      stream = Client.stream(client, shape, live: false)
 
-      assert insert.headers.operation == :insert
-      assert insert.value["id"] == "child-1"
-
-      # The change message should include tags indicating why this row is in the shape
-      assert Map.has_key?(insert.headers, :tags)
-      assert is_list(insert.headers.tags)
-      assert length(insert.headers.tags) > 0
+      with_consumer stream do
+        insert = assert_insert(consumer, %{"id" => "child-1"})
+        assert %{headers: %{tags: [_]}} = insert
+      end
     end
 
     @tag with_sql: [
