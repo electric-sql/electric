@@ -231,6 +231,9 @@ defmodule Electric.Client.Stream do
   end
 
   defp handle_msg(%Message.MoveOutMessage{patterns: patterns} = _msg, stream) do
+    # Assumption: move-out events are only emitted after the initial snapshot is complete.
+    # We therefore apply them immediately and do not buffer for later inserts.
+
     # Generate synthetic deletes for rows matching the move-out patterns
     {synthetic_deletes, updated_tag_to_keys, updated_key_data} =
       generate_synthetic_deletes(stream, patterns)
@@ -241,7 +244,8 @@ defmodule Electric.Client.Stream do
         :queue.in(delete_msg, buf)
       end)
 
-    {:cont, %{stream | buffer: buffer, tag_to_keys: updated_tag_to_keys, key_data: updated_key_data}}
+    {:cont,
+     %{stream | buffer: buffer, tag_to_keys: updated_tag_to_keys, key_data: updated_key_data}}
   end
 
   defp handle_up_to_date(%{opts: %{live: true}} = stream) do
@@ -382,7 +386,13 @@ defmodule Electric.Client.Stream do
     tag_to_keys = Map.get(resume, :tag_to_keys, %{})
     key_data = Map.get(resume, :key_data, %{})
 
-    stream = %{stream | shape_handle: shape_handle, offset: offset, tag_to_keys: tag_to_keys, key_data: key_data}
+    stream = %{
+      stream
+      | shape_handle: shape_handle,
+        offset: offset,
+        tag_to_keys: tag_to_keys,
+        key_data: key_data
+    }
 
     if schema do
       generate_value_mapper(schema, stream)
@@ -500,6 +510,9 @@ defmodule Electric.Client.Stream do
   defp generate_synthetic_deletes(stream, patterns) do
     %{tag_to_keys: tag_to_keys, key_data: key_data} = stream
 
+    # Assumption: move-out patterns only include simple tag values; positional matching
+    # for composite tags is not needed with the current server behavior.
+
     # First pass: collect all keys that match any pattern and remove those tags
     {matched_keys_with_tags, updated_tag_to_keys} =
       Enum.reduce(patterns, {%{}, tag_to_keys}, fn %{value: tag_value}, {keys_acc, ttk_acc} ->
@@ -521,7 +534,8 @@ defmodule Electric.Client.Stream do
 
     # Second pass: for each matched key, update its tags and check if it should be deleted
     {keys_to_delete, updated_key_data} =
-      Enum.reduce(matched_keys_with_tags, {[], key_data}, fn {key, removed_tags}, {deletes, kd_acc} ->
+      Enum.reduce(matched_keys_with_tags, {[], key_data}, fn {key, removed_tags},
+                                                             {deletes, kd_acc} ->
         case Map.get(kd_acc, key) do
           nil ->
             {deletes, kd_acc}
@@ -546,10 +560,11 @@ defmodule Electric.Client.Stream do
           key: key,
           value: original_msg.value,
           old_value: nil,
-          headers: Message.Headers.delete(
-            relation: original_msg.headers.relation,
-            handle: original_msg.headers.handle
-          ),
+          headers:
+            Message.Headers.delete(
+              relation: original_msg.headers.relation,
+              handle: original_msg.headers.handle
+            ),
           request_timestamp: DateTime.utc_now()
         }
       end)
