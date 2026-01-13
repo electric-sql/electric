@@ -172,6 +172,38 @@ defmodule Support.StreamConsumer do
   end
 
   @doc """
+  Collect all messages received within the timeout period.
+  Returns a list of messages (possibly empty).
+
+  ## Options
+
+    * `:timeout` - how long to wait for messages (default: 100ms)
+    * `:match` - optional function to filter messages
+  """
+  def collect_messages(%__MODULE__{task_pid: task_pid} = consumer, opts \\ []) do
+    timeout = Keyword.get(opts, :timeout, 100)
+    matcher = Keyword.get(opts, :match, fn _ -> true end)
+
+    do_collect_messages(task_pid, matcher, [], timeout, System.monotonic_time(:millisecond))
+  end
+
+  defp do_collect_messages(task_pid, matcher, collected, timeout, start_time) do
+    elapsed = System.monotonic_time(:millisecond) - start_time
+    remaining = max(0, timeout - elapsed)
+
+    receive do
+      {:stream_message, ^task_pid, msg} ->
+        if matcher.(msg) do
+          do_collect_messages(task_pid, matcher, [msg | collected], timeout, start_time)
+        else
+          do_collect_messages(task_pid, matcher, collected, timeout, start_time)
+        end
+    after
+      remaining -> Enum.reverse(collected)
+    end
+  end
+
+  @doc """
   Macro for cleaner test blocks - auto start/stop.
 
   ## Example

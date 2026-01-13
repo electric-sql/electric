@@ -240,6 +240,60 @@ defmodule Electric.Integration.SubqueryMoveOutTest do
         assert new_tags != initial_tags or length(removed_tags) > 0
       end
     end
+
+    @tag with_sql: [
+           "INSERT INTO parent (id, active) VALUES ('parent-1', true)",
+           "INSERT INTO parent (id, active) VALUES ('parent-2', true)",
+           "INSERT INTO child (id, parent_id, value) VALUES ('child-1', 'parent-1', 'initial')"
+         ]
+    test "deactivating old parent after child changed parents should not generate delete", %{
+      client: client,
+      shape: shape,
+      db_conn: db_conn
+    } do
+      # This tests that the tag index is properly updated when a row's tags change.
+      # If the client doesn't clear stale tag entries, deactivating the OLD parent
+      # would incorrectly generate a synthetic delete even though the child is
+      # still in the shape (via the new parent).
+
+      import Support.StreamConsumer
+
+      stream = Client.stream(client, shape, live: true)
+
+      with_consumer stream do
+        # Wait for initial snapshot - child-1 is in shape via parent-1
+        assert_insert(consumer, %{"id" => "child-1"})
+        assert_up_to_date(consumer)
+
+        # Change child to reference parent-2 (also active)
+        # This should update the tag index: remove parent-1's tag, add parent-2's tag
+        Postgrex.query!(
+          db_conn,
+          "UPDATE child SET parent_id = 'parent-2' WHERE id = 'child-1'",
+          []
+        )
+
+        # Should receive an update (child is still in shape, just via different parent)
+        assert_update(consumer, %{"id" => "child-1"})
+        assert_up_to_date(consumer)
+
+        # Now deactivate parent-1 - this triggers a move-out for parent-1's tag
+        # Since child-1 no longer has parent-1's tag (it was removed in the update),
+        # this should NOT generate a synthetic delete
+        Postgrex.query!(db_conn, "UPDATE parent SET active = false WHERE id = 'parent-1'", [])
+
+        # Collect any messages that arrive - we should NOT see a delete for child-1
+        messages = collect_messages(consumer, timeout: 500)
+
+        delete_msgs =
+          Enum.filter(messages, &match?(%ChangeMessage{headers: %{operation: :delete}}, &1))
+
+        assert delete_msgs == [],
+               "Should not generate synthetic delete for child-1 after old parent deactivated. " <>
+                 "The tag index should have been updated when child changed parents. " <>
+                 "Got: #{inspect(delete_msgs)}"
+      end
+    end
   end
 
   describe "move-out message ordering" do
