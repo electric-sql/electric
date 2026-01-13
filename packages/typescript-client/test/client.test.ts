@@ -1,4 +1,4 @@
-import { describe, expect, inject, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, inject, test, vi } from 'vitest'
 import { v4 as uuidv4 } from 'uuid'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { testWithIssuesTable as it } from './support/test-context'
@@ -10,7 +10,7 @@ import {
   isControlMessage,
 } from '../src'
 import { Message, Row, ChangeMessage } from '../src/types'
-import { MissingHeadersError } from '../src/error'
+import { MissingHeadersError, InvalidShapeOptionsError } from '../src/error'
 import { resolveValue } from '../src'
 import { TransformFunction } from '../src/parser'
 import { SHAPE_HANDLE_HEADER } from '../src/constants'
@@ -2727,3 +2727,90 @@ it(
     }
   }
 )
+
+describe(`ShapeStream - relative URLs`, () => {
+  let aborter: AbortController
+
+  beforeEach(() => {
+    aborter = new AbortController()
+  })
+
+  afterEach(() => aborter.abort())
+
+  test(`should throw InvalidShapeOptionsError for relative URL in non-browser context`, () => {
+    // Ensure no globalThis.location is defined
+    const originalLocation = globalThis.location
+    // @ts-expect-error - deleting for test
+    delete globalThis.location
+
+    try {
+      expect(() => {
+        new ShapeStream({
+          url: `/v1/shape`,
+          params: { table: `foo` },
+          signal: aborter.signal,
+        })
+      }).toThrow(InvalidShapeOptionsError)
+    } finally {
+      if (originalLocation !== undefined) {
+        globalThis.location = originalLocation
+      }
+    }
+  })
+
+  test(`should resolve relative URL in browser context`, async () => {
+    const requestedUrls: string[] = []
+    const mockFetchClient = async (
+      input: string | URL | Request
+    ): Promise<Response> => {
+      const url = input instanceof Request ? input.url : input.toString()
+      requestedUrls.push(url)
+
+      return new Response(
+        JSON.stringify([{ headers: { control: `up-to-date` } }]),
+        {
+          status: 200,
+          headers: new Headers({
+            'electric-offset': `0_0`,
+            'electric-handle': `test-handle`,
+            'electric-schema': JSON.stringify({}),
+          }),
+        }
+      )
+    }
+
+    // Mock browser environment
+    const originalLocation = globalThis.location
+    // @ts-expect-error - mocking for test
+    globalThis.location = { origin: `https://example.com` }
+
+    try {
+      const shapeStream = new ShapeStream({
+        url: `/v1/shape`,
+        params: { table: `foo` },
+        signal: aborter.signal,
+        fetchClient: mockFetchClient,
+      })
+
+      // Wait for the first request
+      await vi.waitFor(
+        () => {
+          expect(requestedUrls.length).toBeGreaterThan(0)
+        },
+        { timeout: 1000 }
+      )
+
+      // Verify the URL was resolved correctly
+      expect(requestedUrls[0]).toContain(`https://example.com/v1/shape`)
+
+      shapeStream.unsubscribeAll()
+    } finally {
+      if (originalLocation !== undefined) {
+        globalThis.location = originalLocation
+      } else {
+        // @ts-expect-error - deleting for test cleanup
+        delete globalThis.location
+      }
+    }
+  })
+})

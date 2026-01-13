@@ -24,6 +24,7 @@ import {
   MissingShapeHandleError,
   ReservedParamError,
   MissingHeadersError,
+  InvalidShapeOptionsError,
 } from './error'
 import {
   BackoffDefaults,
@@ -226,8 +227,11 @@ type ShapeStreamErrorHandler = (
  */
 export interface ShapeStreamOptions<T = never> {
   /**
-   * The full URL to where the Shape is served. This can either be the Electric server
+   * The URL to where the Shape is served. This can either be the Electric server
    * directly or a proxy. E.g. for a local Electric instance, you might set `http://localhost:3000/v1/shape`
+   *
+   * In browser environments, relative URLs (e.g., `/v1/shape`) are supported and will be
+   * resolved against the current page's origin.
    */
   url: string
 
@@ -580,7 +584,8 @@ export class ShapeStream<T extends Row<unknown> = Row>
   }
 
   constructor(options: ShapeStreamOptions<GetExtensions<T>>) {
-    this.options = { subscribe: true, ...options }
+    const resolvedUrl = resolveShapeUrl(options.url)
+    this.options = { subscribe: true, ...options, url: resolvedUrl }
     validateOptions(this.options)
     this.#lastOffset = this.options.offset ?? `-1`
     this.#liveCacheBuster = ``
@@ -1646,6 +1651,31 @@ function validateParams(params: Record<string, unknown> | undefined): void {
   if (reservedParams.length > 0) {
     throw new ReservedParamError(reservedParams)
   }
+}
+
+/**
+ * Resolves a potentially relative URL to an absolute URL.
+ * In browser environments, relative URLs are resolved against the current page's origin.
+ * In non-browser environments, relative URLs throw an error.
+ */
+function resolveShapeUrl(url: string): string {
+  // Check if URL is already absolute
+  try {
+    new URL(url)
+    return url
+  } catch {
+    // URL is relative, need to resolve it
+  }
+
+  // Check for browser context
+  if (typeof globalThis.location?.origin === `string`) {
+    return new URL(url, globalThis.location.origin).toString()
+  }
+
+  throw new InvalidShapeOptionsError(
+    `Relative URLs are only supported in browser environments. ` +
+      `Please provide an absolute URL or ensure window.location is available.`
+  )
 }
 
 function validateOptions<T>(options: Partial<ShapeStreamOptions<T>>): void {
