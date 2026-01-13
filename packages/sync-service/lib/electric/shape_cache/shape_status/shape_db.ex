@@ -205,7 +205,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb do
   def snapshot_started?(stack_id, shape_handle) do
     checkout!(stack_id, fn %Connection{conn: conn, snapshot_state: stmt} ->
       case fetch_one(conn, stmt, [{:blob, shape_handle}]) do
-        {:ok, [s]} -> s in [1, 2]
+        {:ok, [s]} -> s > 0
         :error -> false
       end
     end)
@@ -226,7 +226,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb do
   def snapshot_complete?(stack_id, shape_handle) do
     checkout!(stack_id, fn %Connection{conn: conn, snapshot_state: stmt} ->
       case fetch_one(conn, stmt, [{:blob, shape_handle}]) do
-        {:ok, [s]} -> s == 2
+        {:ok, [s]} -> Bitwise.band(s, 2) == 2
         :error -> false
       end
     end)

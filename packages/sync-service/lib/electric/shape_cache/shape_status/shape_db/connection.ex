@@ -99,18 +99,19 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
     SELECT count FROM shape_count WHERE id = 1 LIMIT 1
     """,
     mark_snapshot_started: """
-    UPDATE shapes SET snapshot_state = 1 WHERE handle = ?1
+    UPDATE shapes SET snapshot_state = snapshot_state | 1 WHERE handle = ?1
     """,
     mark_snapshot_complete: """
-    UPDATE shapes SET snapshot_state = 2 WHERE handle = ?1 AND snapshot_state = 1
+    UPDATE shapes SET snapshot_state = 3 WHERE handle = ?1
     """,
     snapshot_state: """
     SELECT snapshot_state FROM shapes WHERE handle = ?1 LIMIT 1
     """,
-    # snapshot state:
-    # - 0: snapshot not started
-    # - 1: snapshot started
-    # - 2: snapshot completed
+    # snapshot state is a bitmask to handle the snapshot completion message arriving before the
+    # snapshot start event for small snapshots (since the snapshot start message goes through
+    # more indirection via the consumer process)
+    # snapshot_state &&& 1: snapshot started
+    # snapshot_state &&& 2: snapshot completed
     select_invalid: """
     SELECT handle FROM shapes WHERE snapshot_state IN (0, 1) ORDER BY handle
     """
@@ -206,8 +207,16 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
 
   def open(pool_state) do
     with {:ok, db_path} <- db_path(pool_state),
-         {:ok, conn} <- Sqlite3.open(db_path, Keyword.take(pool_state, [:mode])) do
+         {:ok, conn} <- Sqlite3.open(db_path, open_opts(pool_state)) do
       configure_db(conn)
+    end
+  end
+
+  defp open_opts(pool_state) do
+    if Keyword.get(pool_state, :readonly, false) do
+      [mode: [:readonly, :nomutex]]
+    else
+      []
     end
   end
 

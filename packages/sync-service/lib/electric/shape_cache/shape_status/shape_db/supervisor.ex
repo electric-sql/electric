@@ -29,7 +29,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Supervisor do
           # > threads provided that no single database connection nor any object
           # > derived from database connection, such as a prepared statement, is
           # > used in two or more threads at the same time.
-          worker: {ShapeDb.Connection, Keyword.put(args, :mode, [:readonly, :nomutex])},
+          worker: {ShapeDb.Connection, Keyword.put(args, :readonly, true)},
           pool_size: System.schedulers_online(),
           name: ShapeDb.Connection.pool_name(stack_id, :read)
         },

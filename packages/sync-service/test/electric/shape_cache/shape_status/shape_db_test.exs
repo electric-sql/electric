@@ -244,13 +244,23 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDbTest do
     handle1 = "handle-1"
     {:ok, _hash1} = ShapeDb.add_shape(ctx.stack_id, shape1, handle1)
 
-    # should error if the snapshot hasn't started
-    assert :error = ShapeDb.mark_snapshot_complete(ctx.stack_id, handle1)
-
-    :ok = ShapeDb.mark_snapshot_started(ctx.stack_id, handle1)
-    refute ShapeDb.snapshot_complete?(ctx.stack_id, handle1)
+    # should allow for marking a snapshot complete before the snapshot
+    # has been marked started
     assert :ok = ShapeDb.mark_snapshot_complete(ctx.stack_id, handle1)
+    assert ShapeDb.snapshot_started?(ctx.stack_id, handle1)
     assert ShapeDb.snapshot_complete?(ctx.stack_id, handle1)
+
+    shape2 = Shape.new!("items", inspector: @stub_inspector)
+    handle2 = "handle-2"
+    {:ok, _hash2} = ShapeDb.add_shape(ctx.stack_id, shape2, handle2)
+
+    refute ShapeDb.snapshot_started?(ctx.stack_id, handle2)
+    :ok = ShapeDb.mark_snapshot_started(ctx.stack_id, handle2)
+    assert ShapeDb.snapshot_started?(ctx.stack_id, handle2)
+
+    refute ShapeDb.snapshot_complete?(ctx.stack_id, handle2)
+    assert :ok = ShapeDb.mark_snapshot_complete(ctx.stack_id, handle2)
+    assert ShapeDb.snapshot_complete?(ctx.stack_id, handle2)
   end
 
   defp make_valid_shape(ctx, shape, handle) do
