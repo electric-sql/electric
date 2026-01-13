@@ -253,7 +253,7 @@ defmodule Support.StreamConsumer do
     * `:timeout` - how long to wait for messages (default: 100ms)
     * `:match` - optional function to filter messages
   """
-  def collect_messages(%__MODULE__{task_pid: task_pid} = consumer, opts \\ []) do
+  def collect_messages(%__MODULE__{task_pid: task_pid}, opts \\ []) do
     timeout = Keyword.get(opts, :timeout, 100)
     matcher = Keyword.get(opts, :match, fn _ -> true end)
 
