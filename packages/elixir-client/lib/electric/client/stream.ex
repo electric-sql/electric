@@ -440,7 +440,14 @@ defmodule Electric.Client.Stream do
         _ ->
           # If no tags (current or new), don't track this key
           if MapSet.size(updated_tags) == 0 do
-            {MapSet.new(), key_data, tag_to_keys}
+            # Remove key from all its previous tags in tag_to_keys
+            updated_tag_to_keys =
+              Enum.reduce(MapSet.to_list(current_tags), tag_to_keys, fn tag, acc ->
+                remove_key_from_tag(acc, tag, key)
+              end)
+
+            # Remove key from key_data
+            {MapSet.new(), Map.delete(key_data, key), updated_tag_to_keys}
           else
             # Update tag_to_keys: remove from old tags, add to new tags
             tags_to_remove = MapSet.difference(current_tags, updated_tags)

@@ -2071,6 +2071,100 @@ defmodule Electric.ClientTest do
              "Multiple patterns matching same row should generate single delete, got #{length(delete_msgs)}"
     end
 
+    test "update removing all tags should clear tag index so move-out is a no-op", ctx do
+      # This test demonstrates the stale tag-index entry bug:
+      # When a row is updated to remove ALL its tags (with removed_tags but no new tags),
+      # the tag-index entry should be cleared. A subsequent move-out for the old tag
+      # should NOT generate a synthetic delete since the row is no longer in the tag index.
+      #
+      # EXPECTED: move-out should be a no-op (0 deletes)
+      # CURRENT BUG: move-out generates 1 synthetic delete because the tag-index
+      # entry wasn't properly cleared when all tags were removed.
+
+      body1 =
+        Jason.encode!([
+          %{
+            "key" => "row-1",
+            "headers" => %{"operation" => "insert", "tags" => ["tag-A"]},
+            "offset" => "1_0",
+            "value" => %{"id" => "1111"}
+          },
+          %{"headers" => %{"control" => "up-to-date", "global_last_seen_lsn" => 9997}}
+        ])
+
+      body2 =
+        Jason.encode!([
+          %{
+            "key" => "row-1",
+            "headers" => %{
+              "operation" => "update",
+              # Remove the old tag but add NO new tags
+              "removed_tags" => ["tag-A"]
+              # Note: no "tags" field, meaning this row now has zero tags
+            },
+            "offset" => "2_0",
+            "value" => %{"id" => "1111", "name" => "updated"}
+          },
+          %{"headers" => %{"control" => "up-to-date", "global_last_seen_lsn" => 9998}}
+        ])
+
+      body3 =
+        Jason.encode!([
+          %{
+            "headers" => %{
+              "event" => "move-out",
+              "patterns" => [%{"pos" => 0, "value" => "tag-A"}]
+            }
+          },
+          %{"headers" => %{"control" => "up-to-date", "global_last_seen_lsn" => 9999}}
+        ])
+
+      schema = Jason.encode!(%{"id" => %{type: "text"}, "name" => %{type: "text"}})
+
+      {:ok, responses} =
+        start_supervised(
+          {Agent,
+           fn ->
+             %{
+               {"-1", nil} => [
+                 &bypass_resp(&1, body1,
+                   shape_handle: "my-shape",
+                   last_offset: "1_0",
+                   schema: schema
+                 )
+               ],
+               {"1_0", "my-shape"} => [
+                 &bypass_resp(&1, body2,
+                   shape_handle: "my-shape",
+                   last_offset: "2_0"
+                 )
+               ],
+               {"2_0", "my-shape"} => [
+                 &bypass_resp(&1, body3,
+                   shape_handle: "my-shape",
+                   last_offset: "3_0"
+                 )
+               ]
+             }
+           end}
+        )
+
+      bypass_response(ctx, responses)
+
+      # Collect messages: insert, up-to-date, update, up-to-date, up-to-date (no delete expected)
+      msgs = stream(ctx, 5)
+
+      delete_msgs = Enum.filter(msgs, &match?(%ChangeMessage{headers: %{operation: :delete}}, &1))
+
+      # The move-out should NOT generate a synthetic delete because:
+      # 1. The row was originally inserted with "tag-A"
+      # 2. The update removed "tag-A" (via removed_tags) and added NO new tags
+      # 3. The tag-index should have been cleared for this row
+      # 4. The move-out for "tag-A" should find no matching rows
+      assert delete_msgs == [],
+             "Move-out should be a no-op when all tags were removed from row, but got #{length(delete_msgs)} delete(s)"
+    end
+
     test "resume preserves move-out state - move-out after resume generates synthetic delete", ctx do
       # When resuming a stream, the tag index state should be preserved so that
       # move-out events after resume can still generate synthetic deletes.
