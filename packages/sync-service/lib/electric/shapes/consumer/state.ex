@@ -247,7 +247,12 @@ defmodule Electric.Shapes.Consumer.State do
 
   def mark_snapshot_started(%__MODULE__{initial_snapshot_state: initial_snapshot_state} = state) do
     initial_snapshot_state =
-      InitialSnapshot.mark_snapshot_started(initial_snapshot_state, state.storage)
+      InitialSnapshot.mark_snapshot_started(
+        initial_snapshot_state,
+        state.stack_id,
+        state.shape_handle,
+        state.storage
+      )
 
     %{state | initial_snapshot_state: initial_snapshot_state}
   end

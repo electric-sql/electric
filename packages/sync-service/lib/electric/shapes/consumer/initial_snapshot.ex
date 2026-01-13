@@ -75,10 +75,16 @@ defmodule Electric.Shapes.Consumer.InitialSnapshot do
     %{state | pg_snapshot: snapshot, filtering?: true}
   end
 
-  def mark_snapshot_started(%__MODULE__{snapshot_started?: true} = state, _), do: state
+  def mark_snapshot_started(
+        %__MODULE__{snapshot_started?: true} = state,
+        _stack_id,
+        _shape_handle,
+        _
+      ),
+      do: state
 
-  def mark_snapshot_started(%__MODULE__{} = state, storage) do
-    Storage.mark_snapshot_as_started(storage)
+  def mark_snapshot_started(%__MODULE__{} = state, stack_id, shape_handle, storage) do
+    Electric.Shapes.mark_snapshot_started(storage, stack_id, shape_handle)
     state = reply_to_waiters(state, :started)
     %{state | snapshot_started?: true}
   end

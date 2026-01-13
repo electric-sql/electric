@@ -112,10 +112,17 @@ defmodule Electric.Shapes do
           shape_handle()
         ) :: :ok | {:error, term()}
   def make_new_snapshot!(stream, storage, stack_id, shape_handle) do
-    with :ok <- ShapeStatus.mark_snapshot_started(stack_id, shape_handle),
-         :ok <- Storage.make_new_snapshot!(stream, storage),
+    with :ok <- Storage.make_new_snapshot!(stream, storage),
          :ok <- ShapeStatus.mark_snapshot_complete(stack_id, shape_handle) do
       :ok
+    end
+  end
+
+  @spec mark_snapshot_started(Storage.shape_storage(), stack_id(), shape_handle()) ::
+          :ok | {:error, term()}
+  def mark_snapshot_started(storage, stack_id, shape_handle) do
+    with :ok <- Storage.mark_snapshot_as_started(storage) do
+      ShapeStatus.mark_snapshot_started(stack_id, shape_handle)
     end
   end
 
