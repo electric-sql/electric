@@ -5,6 +5,7 @@ defmodule Support.StreamConsumer do
 
   alias Electric.Client.Message.ChangeMessage
   alias Electric.Client.Message.ControlMessage
+  alias Electric.Client.Message.ResumeMessage
 
   import ExUnit.Assertions
 
@@ -101,6 +102,14 @@ defmodule Support.StreamConsumer do
   end
 
   @doc """
+  Assert a resume message is received (skips non-matching messages).
+  """
+  def assert_resume(%__MODULE__{} = consumer, timeout \\ nil) do
+    timeout = timeout || consumer.timeout
+    assert_receive_matching(consumer, &match?(%ResumeMessage{}, &1), timeout)
+  end
+
+  @doc """
   Wait for N messages matching a condition.
 
   ## Options
@@ -169,6 +178,28 @@ defmodule Support.StreamConsumer do
           false
       end
     end)
+  end
+
+  defp assert_receive_matching(%__MODULE__{task_pid: task_pid}, matcher, timeout) do
+    do_assert_receive_matching(task_pid, matcher, timeout, System.monotonic_time(:millisecond))
+  end
+
+  defp do_assert_receive_matching(task_pid, matcher, timeout, start_time) do
+    elapsed = System.monotonic_time(:millisecond) - start_time
+    remaining = max(0, timeout - elapsed)
+
+    receive do
+      {:stream_message, ^task_pid, msg} ->
+        if matcher.(msg) do
+          msg
+        else
+          # Skip non-matching messages and keep waiting
+          do_assert_receive_matching(task_pid, matcher, timeout, start_time)
+        end
+    after
+      remaining ->
+        flunk("Expected to receive matching message within #{timeout}ms")
+    end
   end
 
   @doc """

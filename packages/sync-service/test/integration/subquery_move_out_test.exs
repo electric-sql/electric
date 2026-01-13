@@ -133,8 +133,7 @@ defmodule Electric.Integration.SubqueryMoveOutTest do
         Postgrex.query!(db_conn, "DELETE FROM parent WHERE id = 'parent-1'", [])
 
         # Should receive a synthetic delete for the child
-        delete_msg = assert_delete(consumer, %{"id" => "child-1"})
-        assert delete_msg.value["id"] == "child-1"
+        assert_delete(consumer, %{"id" => "child-1"})
       end
     end
 
@@ -172,8 +171,7 @@ defmodule Electric.Integration.SubqueryMoveOutTest do
         )
 
         # Should receive a new insert (move-in) for the child
-        insert_msg = assert_insert(consumer, %{"id" => "child-1", "parent_id" => "parent-2"})
-        assert insert_msg.headers.operation == :insert
+        assert_insert(consumer, %{"id" => "child-1", "parent_id" => "parent-2"})
       end
     end
   end
@@ -220,7 +218,6 @@ defmodule Electric.Integration.SubqueryMoveOutTest do
 
         # Should receive an update with new tags
         update_msg = assert_update(consumer, %{"id" => "child-1"})
-        assert update_msg.headers.operation == :update
 
         # The headers should include both removed_tags and new tags
         new_tags = Map.get(update_msg.headers, :tags, [])
@@ -302,27 +299,23 @@ defmodule Electric.Integration.SubqueryMoveOutTest do
            "INSERT INTO child (id, parent_id, value) VALUES ('child-1', 'parent-1', 'test')"
          ]
     test "must-refetch resets tag tracking state", %{client: client, shape: shape} do
-      # First, get initial data with tags
-      messages =
-        client
-        |> Client.stream(shape, live: false)
-        |> Enum.to_list()
+      import Support.StreamConsumer
 
-      insert_messages = Enum.filter(messages, &match?(%ChangeMessage{}, &1))
-      assert length(insert_messages) == 1
+      # First, get initial data with tags
+      stream1 = Client.stream(client, shape, live: false)
+
+      msg1 =
+        with_consumer stream1 do
+          assert_insert(consumer, %{"id" => "child-1"})
+        end
 
       # Verify we get consistent results on a fresh stream (simulating after must-refetch)
-      messages2 =
-        client
-        |> Client.stream(shape, live: false)
-        |> Enum.to_list()
+      stream2 = Client.stream(client, shape, live: false)
 
-      insert_messages2 = Enum.filter(messages2, &match?(%ChangeMessage{}, &1))
-      assert length(insert_messages2) == 1
-
-      # Tags should be present on both
-      [msg1] = insert_messages
-      [msg2] = insert_messages2
+      msg2 =
+        with_consumer stream2 do
+          assert_insert(consumer, %{"id" => "child-1"})
+        end
 
       # Both should have consistent tag handling
       tags1 = Map.get(msg1.headers, :tags)
@@ -346,8 +339,6 @@ defmodule Electric.Integration.SubqueryMoveOutTest do
       %{shape: shape}
     end
 
-    alias Electric.Client.Message.ResumeMessage
-
     @tag with_sql: [
            "INSERT INTO parent (id, active) VALUES ('parent-1', true)",
            "INSERT INTO child (id, parent_id, value) VALUES ('child-1', 'parent-1', 'test value')"
@@ -357,24 +348,18 @@ defmodule Electric.Integration.SubqueryMoveOutTest do
       shape: shape,
       db_conn: db_conn
     } do
+      import Support.StreamConsumer
+
       # First, stream with live: false to get a ResumeMessage
       # This simulates a client that synced initial data and then disconnected
-      initial_messages =
-        client
-        |> Client.stream(shape, live: false)
-        |> Enum.to_list()
+      stream1 = Client.stream(client, shape, live: false)
 
-      # Should have: insert for child-1, up-to-date, ResumeMessage
-      insert_messages =
-        Enum.filter(initial_messages, &match?(%ChangeMessage{headers: %{operation: :insert}}, &1))
-
-      assert length(insert_messages) == 1
-      [insert] = insert_messages
-      assert insert.value["id"] == "child-1"
-
-      # Capture the ResumeMessage for later
-      resume_msg = Enum.find(initial_messages, &match?(%ResumeMessage{}, &1))
-      assert resume_msg != nil, "Should receive a ResumeMessage with live: false"
+      resume_msg =
+        with_consumer stream1 do
+          assert_insert(consumer, %{"id" => "child-1"})
+          assert_up_to_date(consumer)
+          assert_resume(consumer)
+        end
 
       # Now deactivate the parent while "disconnected"
       # This should trigger a move-out on the server side
@@ -385,26 +370,11 @@ defmodule Electric.Integration.SubqueryMoveOutTest do
 
       # Resume the stream - with proper move-out support, the client should
       # receive a synthetic delete for child-1 because its parent was deactivated
-      resumed_messages =
-        client
-        |> Client.stream(shape, live: false, resume: resume_msg)
-        |> Enum.to_list()
+      stream2 = Client.stream(client, shape, live: false, resume: resume_msg)
 
-      # The resumed stream SHOULD generate a synthetic delete
-      delete_messages =
-        Enum.filter(
-          resumed_messages,
-          &match?(%ChangeMessage{headers: %{operation: :delete}}, &1)
-        )
-
-      # This test currently fails because the tag index is not preserved across resume
-      # After the fix, this assertion should pass
-      assert length(delete_messages) == 1,
-             "After resume, move-out should generate synthetic delete for child-1. " <>
-               "Got messages: #{inspect(resumed_messages)}"
-
-      [delete] = delete_messages
-      assert delete.value["id"] == "child-1"
+      with_consumer stream2 do
+        assert_delete(consumer, %{"id" => "child-1"})
+      end
     end
   end
 
