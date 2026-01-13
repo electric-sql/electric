@@ -29,7 +29,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Supervisor do
           # > threads provided that no single database connection nor any object
           # > derived from database connection, such as a prepared statement, is
           # > used in two or more threads at the same time.
-          worker: {ShapeDb.Connection, Keyword.put(args, :readonly, true)},
+          worker: {ShapeDb.Connection, Keyword.put(args, :mode, :read)},
           pool_size: System.schedulers_online(),
           name: ShapeDb.Connection.pool_name(stack_id, :read)
         },
@@ -39,7 +39,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Supervisor do
       # to avoid busy errors
       Supervisor.child_spec(
         {NimblePool,
-         worker: {ShapeDb.Connection, args},
+         worker: {ShapeDb.Connection, Keyword.put(args, :mode, :write)},
          pool_size: 1,
          name: ShapeDb.Connection.pool_name(stack_id, :write)},
         id: {:pool, :write}

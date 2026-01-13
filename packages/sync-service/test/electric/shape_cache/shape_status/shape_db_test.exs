@@ -250,7 +250,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDbTest do
     assert ShapeDb.snapshot_started?(ctx.stack_id, handle1)
     assert ShapeDb.snapshot_complete?(ctx.stack_id, handle1)
 
-    shape2 = Shape.new!("items", inspector: @stub_inspector)
+    shape2 = Shape.new!("items", inspector: @stub_inspector, where: "id = 2")
     handle2 = "handle-2"
     {:ok, _hash2} = ShapeDb.add_shape(ctx.stack_id, shape2, handle2)
 

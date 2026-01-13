@@ -2,6 +2,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
   @moduledoc false
 
   alias Exqlite.Sqlite3
+  alias Electric.ShapeCache.ShapeStatus.ShapeDb.Query
 
   require Logger
 
@@ -20,10 +21,16 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
     ) STRICT
     """,
     """
-    CREATE UNIQUE INDEX shapes_comparable_idx ON shapes (comparable, handle)
+    CREATE UNIQUE INDEX shapes_handle_idx ON shapes (handle)
     """,
     """
-    CREATE UNIQUE INDEX shapes_handle_idx ON shapes (handle, shape, hash, snapshot_state)
+    CREATE UNIQUE INDEX shapes_comparable_idx ON shapes (comparable)
+    """,
+    """
+    CREATE INDEX shapes_comparable_cover_idx ON shapes (comparable, handle)
+    """,
+    """
+    CREATE INDEX shapes_handle_cover_idx ON shapes (handle, shape, hash, snapshot_state)
     """,
     """
     CREATE INDEX shapes_snapshot_idx ON shapes (snapshot_state, handle)
@@ -58,70 +65,9 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
     "PRAGMA user_version=#{@schema_version}"
   ]
 
-  @stmt_sqls [
-    list_shapes: """
-    SELECT handle, shape FROM shapes ORDER BY handle
-    """,
-    list_handles: """
-    SELECT handle FROM shapes ORDER BY handle
-    """,
-    handle_exists: """
-    SELECT 1 FROM shapes WHERE handle = ?1
-    """,
-    handle_lookup: """
-    SELECT handle FROM shapes WHERE comparable = ?1 LIMIT 1
-    """,
-    shape_lookup: """
-    SELECT shape FROM shapes WHERE handle = ?1 LIMIT 1
-    """,
-    hash_lookup: """
-    SELECT hash FROM shapes WHERE handle = ?1 LIMIT 1
-    """,
-    relation_handle_lookup: """
-    SELECT handle FROM relations WHERE oid = ?1 LIMIT 1
-    """,
-    insert_shape: """
-    INSERT INTO shapes (handle, shape, comparable, hash) VALUES (?1, ?2, ?3, ?4)
-    """,
-    insert_relation: """
-    INSERT INTO relations (handle, oid) VALUES (?1, ?2)
-    """,
-    increment_counter: """
-    UPDATE shape_count SET count = count + ?1 WHERE id = 1
-    """,
-    delete_shape: """
-    DELETE FROM shapes WHERE handle = ?1
-    """,
-    delete_relation: """
-    DELETE FROM relations WHERE handle = ?1
-    """,
-    shape_count: """
-    SELECT count FROM shape_count WHERE id = 1 LIMIT 1
-    """,
-    mark_snapshot_started: """
-    UPDATE shapes SET snapshot_state = snapshot_state | 1 WHERE handle = ?1
-    """,
-    mark_snapshot_complete: """
-    UPDATE shapes SET snapshot_state = 3 WHERE handle = ?1
-    """,
-    snapshot_state: """
-    SELECT snapshot_state FROM shapes WHERE handle = ?1 LIMIT 1
-    """,
-    # snapshot state is a bitmask to handle the snapshot completion message arriving before the
-    # snapshot start event for small snapshots (since the snapshot start message goes through
-    # more indirection via the consumer process)
-    # snapshot_state &&& 1: snapshot started
-    # snapshot_state &&& 2: snapshot completed
-    select_invalid: """
-    SELECT handle FROM shapes WHERE snapshot_state IN (0, 1) ORDER BY handle
-    """
-  ]
-
-  @stmts Keyword.keys(@stmt_sqls)
-
   defguardp is_raw_connection(conn) when is_reference(conn)
 
-  defstruct [:conn | @stmts]
+  defstruct [:conn, :stmts]
 
   def pool_name(stack_id, role) when role in [:read, :write] do
     Electric.ProcessRegistry.name(stack_id, __MODULE__, role)
@@ -153,8 +99,8 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
   @impl NimblePool
   def init_worker(pool_state) do
     with {:ok, conn} <- open(pool_state),
-         {:ok, state} <- prepare_stmts(conn) do
-      {:ok, state, pool_state}
+         stmts <- Query.prepare!(conn, pool_state) do
+      {:ok, %__MODULE__{conn: conn, stmts: stmts}, pool_state}
     end
   end
 
@@ -185,24 +131,11 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
     {:ok, client_state, pool_state}
   end
 
-  defp prepare_stmts(conn) do
-    Enum.reduce_while(@stmt_sqls, {:ok, %__MODULE__{conn: conn}}, fn {name, sql}, {:ok, stmts} ->
-      case Sqlite3.prepare(conn, sql) do
-        {:ok, stmt} ->
-          {:cont, {:ok, Map.put(stmts, name, stmt)}}
-
-        {:error, _reason} = error ->
-          {:halt, error}
-      end
-    end)
-  end
-
   @pragmas [
     # for our current deployment mode synchronous = OFF would be enough (hand
     # data to kernel, don't fsync) but for oss deploys we should keep it at a
     # higher durability setting
     "PRAGMA synchronous=NORMAL"
-    # "PRAGMA optimize=0x10002"
   ]
 
   def open(pool_state) do
@@ -213,10 +146,12 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
   end
 
   defp open_opts(pool_state) do
-    if Keyword.get(pool_state, :readonly, false) do
-      [mode: [:readonly, :nomutex]]
-    else
-      []
+    case Keyword.get(pool_state, :mode, :readwrite) do
+      :read ->
+        [mode: [:readonly, :nomutex]]
+
+      _ ->
+        []
     end
   end
 
@@ -233,16 +168,17 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
     NimblePool.checkout!(
       pool_name(stack_id, :write),
       :checkout,
-      fn _from, conn -> {function.(conn), conn} end,
+      fn _from, conn ->
+        {
+          transaction(conn, fn -> function.(conn) end),
+          conn
+        }
+      end,
       timeout
     )
   end
 
-  def fetch_one(%__MODULE__{conn: conn}, sql_or_stmt, binds) do
-    fetch_one(conn, sql_or_stmt, binds)
-  end
-
-  def fetch_one(conn, sql, binds) when is_binary(sql) do
+  def fetch_one(conn, sql, binds) when is_raw_connection(conn) and is_binary(sql) do
     with {:ok, stmt} <- Sqlite3.prepare(conn, sql),
          {:ok, row} <- fetch_one(conn, stmt, binds),
          :ok <- Sqlite3.release(conn, stmt) do
@@ -270,10 +206,6 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
     end
   end
 
-  def fetch_all(%__MODULE__{conn: conn}, sql_or_stmt, binds) do
-    fetch_all(conn, sql_or_stmt, binds)
-  end
-
   def fetch_all(conn, sql, binds) when is_raw_connection(conn) and is_binary(sql) do
     with {:ok, stmt} <- Sqlite3.prepare(conn, sql),
          {:ok, rows} <- fetch_all(conn, stmt, binds),
@@ -282,16 +214,12 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
     end
   end
 
-  def fetch_all(conn, stmt, binds) when is_reference(stmt) do
+  def fetch_all(conn, stmt, binds) when is_raw_connection(conn) and is_reference(stmt) do
     with :ok <- Sqlite3.bind(stmt, binds),
          {:ok, rows} <- Sqlite3.fetch_all(conn, stmt),
          :ok <- Sqlite3.reset(stmt) do
       {:ok, rows}
     end
-  end
-
-  def fetch_all(%__MODULE__{conn: conn}, sql_or_stmt, binds, mapper_fun) do
-    fetch_all(conn, sql_or_stmt, binds, mapper_fun)
   end
 
   def fetch_all(conn, sql, binds, mapper_fun) when is_raw_connection(conn) and is_binary(sql) do
@@ -307,7 +235,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
     end
   end
 
-  def modify(%__MODULE__{conn: conn}, stmt, binds) when is_reference(stmt) do
+  def modify(conn, stmt, binds) when is_raw_connection(conn) and is_reference(stmt) do
     with :ok <- Sqlite3.bind(stmt, binds),
          :done <- Sqlite3.step(conn, stmt),
          {:ok, changes} <- Sqlite3.changes(conn),
@@ -328,16 +256,8 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
     end
   end
 
-  def execute(%__MODULE__{conn: conn}, sql) do
-    execute(conn, sql)
-  end
-
   def execute(conn, sql) when is_raw_connection(conn) and is_binary(sql) do
     Sqlite3.execute(conn, sql)
-  end
-
-  def execute_all(%__MODULE__{conn: conn}, sqls) do
-    execute_all(conn, sqls)
   end
 
   def execute_all(conn, sqls) when is_raw_connection(conn) and is_list(sqls) do
@@ -351,7 +271,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
     end
   end
 
-  def transaction(%__MODULE__{conn: conn}, fun) when is_function(fun, 0) do
+  defp transaction(%__MODULE__{conn: conn}, fun) when is_function(fun, 0) do
     try do
       :ok = execute(conn, "BEGIN IMMEDIATE TRANSACTION")
 
@@ -374,7 +294,8 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
     end
   end
 
-  def stream_query(%__MODULE__{conn: conn}, stmt, row_mapper_fun) do
+  def stream_query(conn, stmt, row_mapper_fun)
+      when is_raw_connection(conn) and is_reference(stmt) do
     Stream.resource(
       fn -> {:cont, conn, stmt} end,
       fn
@@ -402,35 +323,11 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
 
   def explain(stack_id) do
     checkout!(stack_id, fn %__MODULE__{} = conn ->
-      for {name, sql} <- @stmt_sqls, String.starts_with?(sql, "SELECT") do
-        binds =
-          Stream.repeatedly(fn -> "" end)
-          |> Enum.take(Sqlite3.bind_parameter_count(Map.fetch!(conn, name)))
+      Query.explain(conn, :read)
+    end)
 
-        with {:ok, rows} <- fetch_all(conn, "EXPLAIN QUERY PLAN " <> sql, binds) do
-          plan =
-            rows
-            |> Enum.map(fn [_, _, _, s] -> s end)
-            |> Enum.map(fn plan ->
-              colour =
-                cond do
-                  String.contains?(plan, "USING COVERING INDEX") -> :green
-                  String.contains?(plan, "USING INDEX") -> :cyan
-                  true -> :red
-                end
-
-              [:bright, colour, plan, :reset]
-            end)
-
-          IO.puts(
-            IO.ANSI.format([
-              [:bright, "#{name}", :reset],
-              ": [#{String.trim_trailing(sql)}] ",
-              plan |> Enum.intersperse(",")
-            ])
-          )
-        end
-      end
+    checkout_write!(stack_id, fn %__MODULE__{} = conn ->
+      Query.explain(conn, :write)
     end)
   end
 
