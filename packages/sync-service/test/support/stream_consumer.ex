@@ -101,17 +101,6 @@ defmodule Support.StreamConsumer do
   end
 
   @doc """
-  Assert a move_out control message is received.
-  """
-  def assert_move_out(%__MODULE__{} = consumer, timeout \\ nil) do
-    timeout = timeout || consumer.timeout
-    assert_receive_message(consumer, fn
-      %ControlMessage{control: :move_out} -> true
-      _ -> false
-    end, timeout)
-  end
-
-  @doc """
   Wait for N messages matching a condition.
 
   ## Options
