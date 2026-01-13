@@ -24,6 +24,7 @@ import {
   MissingShapeHandleError,
   ReservedParamError,
   MissingHeadersError,
+  StaleCacheError,
 } from './error'
 import {
   BackoffDefaults,
@@ -61,6 +62,7 @@ import {
   SUBSET_PARAM_ORDER_BY,
   SUBSET_PARAM_WHERE_EXPR,
   SUBSET_PARAM_ORDER_BY_EXPR,
+  CACHE_BUSTER_QUERY_PARAM,
 } from './constants'
 import { compileExpression, compileOrderBy } from './expression-compiler'
 import {
@@ -573,6 +575,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
   #sseBackoffBaseDelay = 100 // Base delay for exponential backoff (ms)
   #sseBackoffMaxDelay = 5000 // Maximum delay cap (ms)
   #unsubscribeFromVisibilityChanges?: () => void
+  #staleCacheBuster?: string // Random cache buster to bypass stale CDN responses
 
   // Derived state: we're in replay mode if we have a last seen cursor
   get #replayMode(): boolean {
@@ -784,6 +787,15 @@ export class ShapeStream<T extends Row<unknown> = Row>
         }
         return // interrupted
       }
+
+      if (e instanceof StaleCacheError) {
+        // Received a stale cached response from CDN with an expired handle.
+        // The #staleCacheBuster has been set in #onInitialResponse, so retry
+        // the request which will include a random cache buster to bypass the
+        // misconfigured CDN cache.
+        return this.#requestShape()
+      }
+
       if (!(e instanceof FetchError)) throw e // should never happen
 
       if (e.status == 409) {
@@ -986,6 +998,15 @@ export class ShapeStream<T extends Row<unknown> = Row>
       fetchUrl.searchParams.set(EXPIRED_HANDLE_QUERY_PARAM, expiredHandle)
     }
 
+    // Add random cache buster if we received a stale response from CDN
+    // This forces a fresh request bypassing the misconfigured CDN cache
+    if (this.#staleCacheBuster) {
+      fetchUrl.searchParams.set(
+        CACHE_BUSTER_QUERY_PARAM,
+        this.#staleCacheBuster
+      )
+    }
+
     // sort query params in-place for stable URLs and improved cache hits
     fetchUrl.searchParams.sort()
 
@@ -1031,6 +1052,22 @@ export class ShapeStream<T extends Row<unknown> = Row>
         : null
       if (shapeHandle !== expiredHandle) {
         this.#shapeHandle = shapeHandle
+      } else if (this.#shapeHandle === undefined) {
+        // We received a stale response from cache and don't have a handle yet.
+        // Instead of accepting the stale handle, throw an error to trigger a retry
+        // with a random cache buster to bypass the CDN cache.
+        console.warn(
+          `[Electric] Received stale cached response with expired shape handle. ` +
+            `This should not happen and indicates a proxy/CDN caching misconfiguration. ` +
+            `The response contained handle "${shapeHandle}" which was previously marked as expired. ` +
+            `Check that your proxy includes all query parameters (especially 'handle' and 'offset') in its cache key. ` +
+            `Retrying with a random cache buster to bypass the stale cache.`
+        )
+        // Generate a random cache buster for the retry
+        this.#staleCacheBuster = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`
+        throw new StaleCacheError(
+          `Received stale cached response with expired handle "${shapeHandle}"`
+        )
       } else {
         console.warn(
           `[Electric] Received stale cached response with expired shape handle. ` +

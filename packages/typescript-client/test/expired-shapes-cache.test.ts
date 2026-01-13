@@ -364,4 +364,90 @@ describe(`ExpiredShapesCache`, () => {
     // Verify the stream's current handle is H2 (not the stale H1)
     expect(stream.shapeHandle).toBe(`new-handle-H2`)
   })
+
+  it(`should retry with cache buster when receiving stale response with no handle yet`, async () => {
+    // This test verifies the fix for a bug where the client gets into a broken state:
+    // 1. Client starts fresh (no handle, offset=-1)
+    // 2. localStorage has a stale expired handle from a previous session
+    // 3. CDN returns cached response with that expired handle in headers
+    // 4. Bug: Client didn't accept the handle because it matched expired cache
+    // 5. Bug: Offset advanced but handle stayed undefined
+    // 6. Bug: Next request failed with "handle can't be blank when offset != -1"
+    // Fix: Client retries with a random cache buster to bypass the CDN cache
+
+    const expectedShapeUrl = `${shapeUrl}?table=test`
+    const staleHandle = `stale-handle-from-previous-session`
+    const freshHandle = `fresh-handle-from-origin`
+
+    // Pre-populate localStorage with stale expired handle data
+    // (simulating leftover from previous browser session)
+    expiredShapesCache.markExpired(expectedShapeUrl, staleHandle)
+
+    let requestCount = 0
+    const capturedUrls: string[] = []
+
+    fetchMock.mockImplementation((input: RequestInfo | URL) => {
+      requestCount++
+      capturedUrls.push(input.toString())
+
+      if (requestCount === 1) {
+        // First request: CDN returns stale cached response with the expired handle
+        // This simulates proxy/CDN ignoring the expired_handle cache buster
+        return Promise.resolve(
+          new Response(JSON.stringify([{ value: { id: 1 } }]), {
+            status: 200,
+            headers: {
+              'electric-handle': staleHandle, // Same as expired handle!
+              'electric-offset': `0_0`,
+              'electric-schema': `{"id":"int4"}`,
+              'electric-cursor': `cursor-1`,
+            },
+          })
+        )
+      } else {
+        // Second request: should include random cache buster (_cb param)
+        // and get fresh response from origin
+        return Promise.resolve(
+          new Response(
+            JSON.stringify([{ headers: { control: `up-to-date` } }]),
+            {
+              status: 200,
+              headers: {
+                'electric-handle': freshHandle, // Fresh handle from origin
+                'electric-offset': `0_0`,
+                'electric-schema': `{"id":"int4"}`,
+                'electric-cursor': `cursor-2`,
+              },
+            }
+          )
+        )
+      }
+    })
+
+    const stream = new ShapeStream({
+      url: shapeUrl,
+      params: { table: `test` },
+      // NO handle provided - client starts fresh
+      signal: aborter.signal,
+      fetchClient: fetchMock,
+      subscribe: false,
+    })
+
+    // Subscribe to trigger fetching
+    stream.subscribe(() => {})
+
+    // Wait for requests to be processed
+    await new Promise((resolve) => setTimeout(resolve, 50))
+
+    // The client should have retried and gotten a fresh handle
+    expect(stream.shapeHandle).toBe(freshHandle)
+
+    // Verify the second request includes the cache buster parameter
+    expect(requestCount).toBeGreaterThanOrEqual(2)
+    const secondUrl = new URL(capturedUrls[1])
+    expect(secondUrl.searchParams.has(`_cb`)).toBe(true)
+
+    // The key assertion: client should NOT be in a broken state
+    expect(stream.shapeHandle).not.toBe(undefined)
+  })
 })
