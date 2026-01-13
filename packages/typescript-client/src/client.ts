@@ -78,6 +78,7 @@ const RESERVED_PARAMS: Set<ReservedParamKeys> = new Set([
   SHAPE_HANDLE_QUERY_PARAM,
   LIVE_QUERY_PARAM,
   OFFSET_QUERY_PARAM,
+  CACHE_BUSTER_QUERY_PARAM,
 ])
 
 type Replica = `full` | `default`
@@ -143,6 +144,7 @@ type ReservedParamKeys =
   | typeof SHAPE_HANDLE_QUERY_PARAM
   | typeof LIVE_QUERY_PARAM
   | typeof OFFSET_QUERY_PARAM
+  | typeof CACHE_BUSTER_QUERY_PARAM
   | `subset__${string}`
 
 /**
@@ -1064,6 +1066,8 @@ export class ShapeStream<T extends Row<unknown> = Row>
         // Instead of accepting the stale handle, throw an error to trigger a retry
         // with a random cache buster to bypass the CDN cache.
         this.#staleCacheRetryCount++
+        // Cancel the response body to release the connection before retrying
+        await response.body?.cancel()
         if (this.#staleCacheRetryCount > this.#maxStaleCacheRetries) {
           throw new FetchError(
             502,
