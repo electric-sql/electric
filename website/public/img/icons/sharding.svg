@@ -1,0 +1,18 @@
+<svg width="300" height="260" viewBox="0 0 300 260" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Three stacked database shards -->
+  <!-- Shard 1 (top) -->
+  <path d="M40 30H120V90H40V30Z" fill="rgb(227,227,239)" />
+  <path d="M40 30H120L100 50H60L40 30Z" fill="#D0BCFF"/>
+
+  <!-- Shard 2 (middle) -->
+  <path d="M90 85H170V145H90V85Z" fill="rgb(227,227,239)" />
+  <path d="M90 85H170L150 105H110L90 85Z" fill="#D0BCFF"/>
+
+  <!-- Shard 3 (bottom) -->
+  <path d="M140 140H220V200H140V140Z" fill="rgb(227,227,239)" />
+  <path d="M140 140H220L200 160H160L140 140Z" fill="#D0BCFF"/>
+
+  <!-- Connecting lines -->
+  <path d="M120 60L90 85" stroke="#D0BCFF" stroke-width="3"/>
+  <path d="M170 115L140 140" stroke="#D0BCFF" stroke-width="3"/>
+</svg>
