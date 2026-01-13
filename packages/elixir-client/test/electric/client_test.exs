@@ -1859,7 +1859,8 @@ defmodule Electric.ClientTest do
              "Expected 1 synthetic delete but got #{length(delete_msgs)} - duplicate entries in tag_index"
     end
 
-    test "row with multiple tags - partial move-out should not delete if other tags remain", ctx do
+    test "row with multiple tags - partial move-out should not delete if other tags remain",
+         ctx do
       # Edge case: row has multiple tags, move-out for one tag shouldn't delete
       # if the row still belongs to the shape via another tag
       body1 =
@@ -2165,7 +2166,8 @@ defmodule Electric.ClientTest do
              "Move-out should be a no-op when all tags were removed from row, but got #{length(delete_msgs)} delete(s)"
     end
 
-    test "resume preserves move-out state - move-out after resume generates synthetic delete", ctx do
+    test "resume preserves move-out state - move-out after resume generates synthetic delete",
+         ctx do
       # When resuming a stream, the tag index state should be preserved so that
       # move-out events after resume can still generate synthetic deletes.
       body1 =

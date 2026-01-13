@@ -25,19 +25,21 @@ defmodule Support.StreamConsumer do
     timeout = Keyword.get(opts, :timeout, @default_timeout)
 
     # Start the streaming task
-    task = Task.async(fn ->
-      stream
-      |> Stream.each(fn msg ->
-        send(test_pid, {:stream_message, self(), msg})
+    task =
+      Task.async(fn ->
+        stream
+        |> Stream.each(fn msg ->
+          send(test_pid, {:stream_message, self(), msg})
+        end)
+        |> Stream.run()
       end)
-      |> Stream.run()
-    end)
 
-    {:ok, %__MODULE__{
-      task: task,
-      task_pid: task.pid,
-      timeout: timeout
-    }}
+    {:ok,
+     %__MODULE__{
+       task: task,
+       task_pid: task.pid,
+       timeout: timeout
+     }}
   end
 
   @doc """
@@ -53,28 +55,48 @@ defmodule Support.StreamConsumer do
   """
   def assert_insert(%__MODULE__{} = consumer, value_pattern, timeout \\ nil) do
     timeout = timeout || consumer.timeout
-    assert_receive_message(consumer, fn
-      %ChangeMessage{headers: %{operation: :insert}, value: value} ->
-        pattern_matches?(value, value_pattern)
-      _ ->
-        false
-    end, timeout)
+
+    assert_receive_message(
+      consumer,
+      fn
+        %ChangeMessage{headers: %{operation: :insert}, value: value} ->
+          pattern_matches?(value, value_pattern)
+
+        _ ->
+          false
+      end,
+      timeout
+    )
   end
 
   @doc """
   Assert an update message is received with matching value fields.
   Optionally match old_value (only present in :full replica mode).
   """
-  def assert_update(%__MODULE__{} = consumer, value_pattern, old_value_pattern \\ nil, timeout \\ nil) do
+  def assert_update(
+        %__MODULE__{} = consumer,
+        value_pattern,
+        old_value_pattern \\ nil,
+        timeout \\ nil
+      ) do
     timeout = timeout || consumer.timeout
-    assert_receive_message(consumer, fn
-      %ChangeMessage{headers: %{operation: :update}, value: value, old_value: old_value} ->
-        value_matches = pattern_matches?(value, value_pattern)
-        old_value_matches = old_value_pattern == nil or pattern_matches?(old_value || %{}, old_value_pattern)
-        value_matches and old_value_matches
-      _ ->
-        false
-    end, timeout)
+
+    assert_receive_message(
+      consumer,
+      fn
+        %ChangeMessage{headers: %{operation: :update}, value: value, old_value: old_value} ->
+          value_matches = pattern_matches?(value, value_pattern)
+
+          old_value_matches =
+            old_value_pattern == nil or pattern_matches?(old_value || %{}, old_value_pattern)
+
+          value_matches and old_value_matches
+
+        _ ->
+          false
+      end,
+      timeout
+    )
   end
 
   @doc """
@@ -82,12 +104,18 @@ defmodule Support.StreamConsumer do
   """
   def assert_delete(%__MODULE__{} = consumer, value_pattern, timeout \\ nil) do
     timeout = timeout || consumer.timeout
-    assert_receive_message(consumer, fn
-      %ChangeMessage{headers: %{operation: :delete}, value: value} ->
-        pattern_matches?(value, value_pattern)
-      _ ->
-        false
-    end, timeout)
+
+    assert_receive_message(
+      consumer,
+      fn
+        %ChangeMessage{headers: %{operation: :delete}, value: value} ->
+          pattern_matches?(value, value_pattern)
+
+        _ ->
+          false
+      end,
+      timeout
+    )
   end
 
   @doc """
@@ -95,10 +123,15 @@ defmodule Support.StreamConsumer do
   """
   def assert_up_to_date(%__MODULE__{} = consumer, timeout \\ nil) do
     timeout = timeout || consumer.timeout
-    assert_receive_message(consumer, fn
-      %ControlMessage{control: :up_to_date} -> true
-      _ -> false
-    end, timeout)
+
+    assert_receive_message(
+      consumer,
+      fn
+        %ControlMessage{control: :up_to_date} -> true
+        _ -> false
+      end,
+      timeout
+    )
   end
 
   @doc """
@@ -128,7 +161,14 @@ defmodule Support.StreamConsumer do
     {:ok, Enum.reverse(collected)}
   end
 
-  defp do_await_count(%{task_pid: task_pid} = consumer, count, matcher, collected, timeout, start_time) do
+  defp do_await_count(
+         %{task_pid: task_pid} = consumer,
+         count,
+         matcher,
+         collected,
+         timeout,
+         start_time
+       ) do
     elapsed = System.monotonic_time(:millisecond) - start_time
     remaining = max(0, timeout - elapsed)
 
@@ -172,8 +212,10 @@ defmodule Support.StreamConsumer do
       case Map.fetch(map, key) do
         {:ok, actual} when is_map(expected) and is_map(actual) ->
           pattern_matches?(actual, expected)
+
         {:ok, actual} ->
           actual == expected
+
         :error ->
           false
       end

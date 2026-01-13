@@ -5,7 +5,16 @@ defmodule Electric.Client.Message do
   alias Electric.Client.Offset
 
   defmodule Headers do
-    defstruct [:operation, :relation, :handle, :lsn, txids: [], op_position: 0, tags: [], removed_tags: []]
+    defstruct [
+      :operation,
+      :relation,
+      :handle,
+      :lsn,
+      txids: [],
+      op_position: 0,
+      tags: [],
+      removed_tags: []
+    ]
 
     @type operation :: :insert | :update | :delete
     @type relation :: [String.t(), ...]
