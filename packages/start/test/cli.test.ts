@@ -81,7 +81,7 @@ describe(`cli`, () => {
 
       await expect(main()).rejects.toThrow(`process.exit(1)`)
       expect(consoleErrorSpy).toHaveBeenCalledWith(
-        `Usage: npx @electric-sql/start <app-name>`
+        `Usage: npx @electric-sql/start <app-name> [--source <source-id>]`
       )
     })
 

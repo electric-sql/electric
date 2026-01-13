@@ -4,10 +4,13 @@ import { writeFileSync, readFileSync, existsSync } from 'fs'
 import { join } from 'path'
 import {
   ElectricCredentials,
-  ClaimableSourceResponse,
   getElectricUrl,
   getElectricDashboardUrl,
 } from './electric-api'
+
+interface SetupCredentials extends ElectricCredentials {
+  claimId?: string
+}
 
 /**
  * Generates a cryptographically secure random string for use as a secret
@@ -20,7 +23,7 @@ function generateSecret(length: number = 32): string {
 
 export async function setupTemplate(
   appName: string,
-  credentials: ElectricCredentials & ClaimableSourceResponse
+  credentials: SetupCredentials
 ): Promise<void> {
   const appPath = appName === `.` ? process.cwd() : join(process.cwd(), appName)
 
@@ -77,11 +80,17 @@ BETTER_AUTH_SECRET=${betterAuthSecret}
       const packageJson = JSON.parse(readFileSync(packageJsonPath, `utf8`))
 
       // Add/update scripts for cloud mode and Electric commands
-      packageJson.scripts = {
+      const scripts: Record<string, string> = {
         ...packageJson.scripts,
-        claim: `npx open-cli "${getElectricDashboardUrl()}/claim?uuid=${credentials.claimId}"`,
         'deploy:netlify': `NODE_ENV=production NITRO_PRESET=netlify pnpm build && NODE_ENV=production npx netlify deploy --no-build --prod --dir=dist --functions=.netlify/functions-internal && npx netlify env:import .env`,
       }
+
+      // Only add claim script if claimId is present (i.e., resources were provisioned)
+      if (credentials.claimId) {
+        scripts.claim = `npx open-cli "${getElectricDashboardUrl()}/claim?uuid=${credentials.claimId}"`
+      }
+
+      packageJson.scripts = scripts
 
       writeFileSync(packageJsonPath, JSON.stringify(packageJson, null, 2))
     }
