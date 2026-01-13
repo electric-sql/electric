@@ -11,6 +11,8 @@ defmodule Electric.ExpiryManagerTest do
   import Support.ComponentSetup
   import Support.TestUtils
 
+  @moduletag :tmp_dir
+
   setup [
     :with_stack_id_from_test,
     :with_status_monitor,

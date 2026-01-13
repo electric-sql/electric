@@ -10,6 +10,8 @@ defmodule Electric.Replication.ShapeLogCollector.SupervisorTest do
                columns: [%{name: "id", type: "int8", pk_position: 0}]
              )
 
+  @moduletag :tmp_dir
+
   setup [
     :with_stack_id_from_test,
     :with_in_memory_storage,

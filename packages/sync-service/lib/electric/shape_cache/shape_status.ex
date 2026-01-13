@@ -15,101 +15,74 @@ defmodule Electric.ShapeCache.ShapeStatus do
   using the full state and an external api using just the table name.
   """
   alias Electric.Shapes.Shape
-  alias Electric.ShapeCache.Storage
   alias Electric.ShapeCache.ShapeStatus.ShapeDb
+  alias Electric.Telemetry.OpenTelemetry
 
   import Electric, only: [is_stack_id: 1, is_shape_handle: 1]
-  require Electric.Shapes.Shape
 
+  require Electric.Shapes.Shape
   require Logger
 
   @type stack_id() :: Electric.stack_id()
   @type shape_handle() :: Electric.shape_handle()
-  @type stack_ref() :: atom() | stack_id() | [stack_id: stack_id()]
 
-  @backup_version "v7"
-  @backup_dir "shape_status_backups"
+  # MUST be updated when Shape.comparable/1 changes.
+  @version 7
 
   @shape_last_used_time_pos 2
-  @shape_hash_pos 2
 
-  @spec initialize_from_storage(stack_ref()) :: :ok | {:error, term()}
-  def initialize_from_storage(stack_ref) do
-    storage = storage_for_stack_ref(stack_ref)
-    stack_id = extract_stack_id(stack_ref)
+  @spec version() :: pos_integer()
+  def version, do: @version
 
-    with backup_dir when is_binary(backup_dir) <- backup_dir(storage),
-         true <- File.exists?(backup_dir),
-         :ok <- load_backup(stack_id, backup_dir, storage) do
-      Logger.info("Loaded shape status from backup at #{backup_dir}")
-      :ok
-    else
-      _ ->
-        Logger.debug("No shape status backup loaded, creating new tables")
+  @doc """
+  Runs a validation step on the existing Shape data.
 
-        create_last_used_table(stack_id)
-        create_relation_lookup_table(stack_id)
-        create_hash_lookup_table(stack_id)
-        ShapeDb.create(stack_id, @backup_version)
+  The database path is dependent on both `@version` above and
+  `ShapeDb.Connection`'s `@schema_version`.
 
-        load_all_shapes(stack_id, storage)
-    end
+  A change to either of those, or to the OTP release, will result in an empty
+  database.
+  """
+  @spec initialize(stack_id()) :: :ok | {:error, term()}
+  def initialize(stack_id) when is_stack_id(stack_id) do
+    create_last_used_table(stack_id)
+
+    {:ok, invalid_handles, valid_shape_count} = ShapeDb.validate_existing_shapes(stack_id)
+
+    Logger.info(
+      "Found #{valid_shape_count} existing valid shapes and #{length(invalid_handles)} shapes in an invalid state"
+    )
+
+    :ok = Electric.ShapeCache.ShapeCleaner.remove_shape_storage_async(stack_id, invalid_handles)
+
+    populate_last_used_table(stack_id)
   end
 
-  @spec save_checkpoint(stack_ref()) :: :ok | {:error, term()}
-  def save_checkpoint(stack_ref) do
-    Logger.info("Saving shape status checkpoint for #{inspect(stack_ref)}")
-    storage = storage_for_stack_ref(stack_ref)
+  @spec add_shape(stack_id(), Shape.t()) :: {:ok, shape_handle()} | {:error, term()}
+  def add_shape(stack_id, shape) when is_stack_id(stack_id) do
+    OpenTelemetry.with_span("shape_status.add_shape", [], stack_id, fn ->
+      {_, shape_handle} = Shape.generate_id(shape)
 
-    case backup_dir(storage) do
-      nil ->
-        {:error, :no_backup_dir_configured}
+      # Add the lookup last as it is the one that enables clients to find the shape
+      with {:ok, _shape_hash} <- ShapeDb.add_shape(stack_id, shape, shape_handle) do
+        true =
+          :ets.insert_new(
+            shape_last_used_table(stack_id),
+            {shape_handle, System.monotonic_time()}
+          )
 
-      backup_dir ->
-        ShapeDb.store_backup(
-          extract_stack_id(stack_ref),
-          backup_dir,
-          @backup_version
-        )
-    end
+        {:ok, shape_handle}
+      end
+    end)
   end
 
-  @spec add_shape(stack_ref(), Shape.t()) :: {:ok, shape_handle()} | {:error, term()}
-  def add_shape(stack_ref, shape) do
-    stack_id = extract_stack_id(stack_ref)
-    {_, shape_handle} = Shape.generate_id(shape)
-    {comparable_shape, shape_hash} = Shape.comparable_hash(shape)
-
-    true =
-      :ets.insert_new(
-        shape_relation_lookup_table(stack_id),
-        Enum.map(Shape.list_relations(shape), fn {oid, _name} -> {{oid, shape_handle}, nil} end)
-      )
-
-    true =
-      :ets.insert_new(
-        shape_last_used_table(stack_id),
-        {shape_handle, System.monotonic_time()}
-      )
-
-    true =
-      :ets.insert_new(
-        shape_hash_lookup_table(stack_id),
-        {shape_handle, shape_hash}
-      )
-
-    # Add the lookup last as it is the one that enables clients to find the shape
-    :ok = ShapeDb.add_shape(stack_id, shape, comparable_shape, shape_handle)
-
-    {:ok, shape_handle}
-  end
-
-  @spec list_shapes(stack_ref()) :: [{shape_handle(), Shape.t()}]
-  def list_shapes(stack_ref) do
-    stack_ref
-    |> extract_stack_id()
-    |> ShapeDb.list_shapes()
-    |> topological_sort()
+  @spec list_shapes(stack_id()) :: [{shape_handle(), Shape.t()}]
+  def list_shapes(stack_id) when is_stack_id(stack_id) do
+    OpenTelemetry.with_span("shape_status.list_shapes", [], stack_id, fn ->
+      stack_id
+      |> ShapeDb.list_shapes!()
+      |> topological_sort()
+    end)
   end
 
   @spec topological_sort([{shape_handle(), Shape.t()}]) :: [{shape_handle(), Shape.t()}]
@@ -127,147 +100,107 @@ defmodule Electric.ShapeCache.ShapeStatus do
     topological_sort(missing_deps, [appendable | acc], visited)
   end
 
-  @spec count_shapes(stack_ref()) :: non_neg_integer()
-  def count_shapes(stack_ref) do
-    :ets.info(shape_hash_lookup_table(stack_ref), :size)
+  def reduce_shapes(stack_id, acc, reducer_fun)
+      when is_stack_id(stack_id) and is_function(reducer_fun, 2) do
+    ShapeDb.reduce_shapes(stack_id, acc, reducer_fun)
   end
 
-  @spec list_shape_handles_for_relations(stack_ref(), [Electric.oid_relation()]) :: [
+  @spec count_shapes(stack_id()) :: non_neg_integer()
+  def count_shapes(stack_id) when is_stack_id(stack_id) do
+    ShapeDb.count_shapes!(stack_id)
+  end
+
+  @spec list_shape_handles_for_relations(stack_id(), [Electric.oid_relation()]) :: [
           shape_handle()
         ]
-  def list_shape_handles_for_relations(stack_ref, relations) do
-    patterns =
-      relations
-      |> Enum.map(fn {oid, _} -> {{{oid, :"$1"}, :_}, [], [:"$1"]} end)
-
-    :ets.select(shape_relation_lookup_table(stack_ref), patterns)
+  def list_shape_handles_for_relations(stack_id, relations) when is_stack_id(stack_id) do
+    OpenTelemetry.with_span("shape_status.list_shape_handles_for_relations", [], stack_id, fn ->
+      ShapeDb.shape_handles_for_relations!(stack_id, relations)
+    end)
   end
 
-  @spec remove_shape(stack_ref(), shape_handle()) :: {:ok, Shape.t()} | {:error, term()}
-  def remove_shape(stack_ref, shape_handle) do
-    stack_id = extract_stack_id(stack_ref)
-    hash_lookup_table = shape_hash_lookup_table(stack_id)
-
-    try do
-      # Always delete the hash lookup first, so that we guarantee that no shape spec
-      # is ever matched to a handle with incomplete information, since deleting with
-      # select_delete can lead to inconsistent state
-      shape = ShapeDb.remove_shape!(stack_id, shape_handle)
-
-      :ets.delete(hash_lookup_table, shape_handle)
-
-      relation_lookup_table = shape_relation_lookup_table(stack_id)
-
-      Enum.each(Shape.list_relations(shape), fn {oid, _} ->
-        :ets.delete(relation_lookup_table, {oid, shape_handle})
-      end)
-
-      :ets.delete(shape_last_used_table(stack_id), shape_handle)
-
-      {:ok, shape}
-    rescue
-      # Sometimes we're calling cleanup when snapshot creation has failed for
-      # some reason. In those cases we're not sure about the state of the ETS
-      # keys, so we're doing our best to just delete everything without
-      # crashing
-      ArgumentError ->
-        {:error, "No shape matching #{inspect(shape_handle)}"}
-    end
+  @spec remove_shape(stack_id(), shape_handle()) :: :ok | {:error, term()}
+  def remove_shape(stack_id, shape_handle) when is_stack_id(stack_id) do
+    OpenTelemetry.with_span("shape_status.remove_shape", [], stack_id, fn ->
+      with :ok <- ShapeDb.remove_shape(stack_id, shape_handle) do
+        :ets.delete(shape_last_used_table(stack_id), shape_handle)
+        :ok
+      end
+    end)
   end
 
-  @spec reset(stack_ref()) :: :ok
-  def reset(stack_ref) do
-    ShapeDb.reset(extract_stack_id(stack_ref))
-    :ets.delete_all_objects(shape_hash_lookup_table(stack_ref))
-    :ets.delete_all_objects(shape_relation_lookup_table(stack_ref))
-    :ets.delete_all_objects(shape_last_used_table(stack_ref))
+  @spec reset(stack_id()) :: :ok
+  def reset(stack_id) when is_stack_id(stack_id) do
+    :ok = ShapeDb.reset(stack_id)
+    :ets.delete_all_objects(shape_last_used_table(stack_id))
     :ok
   end
 
-  @doc """
-  Removes all ETS tables associated with the given stack reference.
-  Used in tests for tearing down.
-  """
-  def remove(stack_ref) do
-    stack_id = extract_stack_id(stack_ref)
-
-    ShapeDb.delete(stack_id)
-
-    try(do: :ets.delete(shape_hash_lookup_table(stack_id)), rescue: (_ in ArgumentError -> :ok))
-
-    try(
-      do: :ets.delete(shape_relation_lookup_table(stack_id)),
-      rescue: (_ in ArgumentError -> :ok)
-    )
-
-    try(do: :ets.delete(shape_last_used_table(stack_id)), rescue: (_ in ArgumentError -> :ok))
-    :ok
+  @spec fetch_handle_by_shape(stack_id(), Shape.t()) :: {:ok, shape_handle()} | :error
+  def fetch_handle_by_shape(stack_id, %Shape{} = shape) when is_stack_id(stack_id) do
+    OpenTelemetry.with_span("shape_status.fetch_handle_by_shape", [], stack_id, fn ->
+      ShapeDb.handle_for_shape(stack_id, shape)
+    end)
   end
 
-  @spec fetch_handle_by_shape(stack_ref(), Shape.t()) :: {:ok, shape_handle()} | :error
-  def fetch_handle_by_shape(stack_ref, %Shape{} = shape) do
-    stack_id = extract_stack_id(stack_ref)
-
-    case ShapeDb.handle_for_shape(stack_id, shape) do
-      nil -> :error
-      handle -> {:ok, handle}
-    end
+  @spec fetch_shape_by_handle(stack_id(), shape_handle()) :: {:ok, Shape.t()} | :error
+  def fetch_shape_by_handle(stack_id, shape_handle)
+      when is_stack_id(stack_id) and is_shape_handle(shape_handle) do
+    OpenTelemetry.with_span("shape_status.fetch_shape_by_handle", [], stack_id, fn ->
+      ShapeDb.shape_for_handle(stack_id, shape_handle)
+    end)
   end
 
-  @spec fetch_shape_by_handle(stack_ref(), shape_handle()) :: {:ok, Shape.t()} | :error
-  def fetch_shape_by_handle(stack_ref, shape_handle) when is_shape_handle(shape_handle) do
-    stack_id = extract_stack_id(stack_ref)
-
-    case ShapeDb.shape_for_handle(stack_id, shape_handle) do
-      nil -> :error
-      shape -> {:ok, shape}
-    end
-  end
-
-  def has_shape_handle?(stack_ref, shape_handle) do
-    case :ets.lookup_element(
-           shape_hash_lookup_table(stack_ref),
-           shape_handle,
-           @shape_hash_pos,
-           nil
-         ) do
-      nil -> false
-      hash when is_integer(hash) -> true
-    end
-  rescue
-    ArgumentError -> false
+  def has_shape_handle?(stack_id, shape_handle) do
+    OpenTelemetry.with_span("shape_status.has_shape_handle?", [], stack_id, fn ->
+      ShapeDb.handle_exists?(stack_id, shape_handle)
+    end)
   end
 
   @doc """
   Cheaply validate that a shape handle matches the shape definition by matching
   the shape's saved hash against the provided shape's hash.
   """
-  @spec validate_shape_handle(stack_ref(), shape_handle(), Shape.t()) :: :ok | :error
-  def validate_shape_handle(stack_ref, shape_handle, %Shape{} = shape) do
-    case :ets.lookup_element(
-           shape_hash_lookup_table(stack_ref),
-           shape_handle,
-           @shape_hash_pos,
-           nil
-         ) do
-      nil ->
-        :error
-
-      valid_hash when is_integer(valid_hash) ->
+  @spec validate_shape_handle(stack_id(), shape_handle(), Shape.t()) :: :ok | :error
+  def validate_shape_handle(stack_id, shape_handle, %Shape{} = shape)
+      when is_stack_id(stack_id) do
+    OpenTelemetry.with_span("shape_status.validate_shape_handle", [], stack_id, fn ->
+      with {:ok, valid_hash} <- ShapeDb.shape_hash(stack_id, shape_handle) do
         case Shape.hash(shape) do
           ^valid_hash -> :ok
           _ -> :error
         end
-    end
-  rescue
-    ArgumentError -> :error
+      end
+    end)
+  end
+
+  @spec mark_snapshot_started(stack_id(), shape_handle()) :: :ok | :error
+  def mark_snapshot_started(stack_id, shape_handle) when is_stack_id(stack_id) do
+    OpenTelemetry.with_span("shape_status.mark_snapshot_started", [], stack_id, fn ->
+      ShapeDb.mark_snapshot_started(stack_id, shape_handle)
+    end)
+  end
+
+  def snapshot_started?(stack_id, shape_handle) do
+    ShapeDb.snapshot_started?(stack_id, shape_handle)
+  end
+
+  @spec mark_snapshot_complete(stack_id(), shape_handle()) :: :ok | :error
+  def mark_snapshot_complete(stack_id, shape_handle) when is_stack_id(stack_id) do
+    OpenTelemetry.with_span("shape_status.mark_snapshot_complete", [], stack_id, fn ->
+      ShapeDb.mark_snapshot_complete(stack_id, shape_handle)
+    end)
+  end
+
+  def snapshot_complete?(stack_id, shape_handle) do
+    ShapeDb.snapshot_complete?(stack_id, shape_handle)
   end
 
   @doc """
   Updates the last read time for the given shape to the current time.
   """
-  def update_last_read_time_to_now(stack_ref, shape_handle) do
-    update_last_read_time(stack_ref, shape_handle, System.monotonic_time())
+  def update_last_read_time_to_now(stack_id, shape_handle) when is_stack_id(stack_id) do
+    update_last_read_time(stack_id, shape_handle, System.monotonic_time())
   end
 
   @doc """
@@ -275,21 +208,22 @@ defmodule Electric.ShapeCache.ShapeStatus do
 
   Used for tests, otherwise prefer `update_last_read_time_to_now/2`.
   """
-  def update_last_read_time(stack_ref, shape_handle, time) do
+  def update_last_read_time(stack_id, shape_handle, time) when is_stack_id(stack_id) do
     :ets.update_element(
-      shape_last_used_table(stack_ref),
+      shape_last_used_table(stack_id),
       shape_handle,
-      {@shape_last_used_time_pos, time}
+      {@shape_last_used_time_pos, time},
+      {shape_handle, time}
     )
   end
 
-  def least_recently_used(_stack_ref, 0) do
+  def least_recently_used(_stack_id, 0) do
     {[], 0}
   end
 
-  def least_recently_used(stack_ref, shape_count) do
+  def least_recently_used(stack_id, shape_count) when is_stack_id(stack_id) do
     now = System.monotonic_time()
-    table = shape_last_used_table(stack_ref)
+    table = shape_last_used_table(stack_id)
 
     # Use :ets.foldl with gb_trees to efficiently maintain top N without copying
     # entire table into memory and without sorting on every iteration
@@ -335,50 +269,9 @@ defmodule Electric.ShapeCache.ShapeStatus do
     end
   end
 
-  @spec extract_stack_id(stack_ref()) :: stack_id()
-  defp extract_stack_id(stack_ref) when is_list(stack_ref) or is_map(stack_ref),
-    do: Access.fetch!(stack_ref, :stack_id)
-
-  defp extract_stack_id(stack_ref) when is_stack_id(stack_ref), do: stack_ref
-
-  @spec shape_hash_lookup_table(stack_ref()) :: atom()
-  defp shape_hash_lookup_table(stack_ref),
-    do: :"shape_hash_lookup_table:#{extract_stack_id(stack_ref)}"
-
-  @spec shape_relation_lookup_table(stack_ref()) :: atom()
-  defp shape_relation_lookup_table(stack_ref),
-    do: :"shape_relation_lookup_table:#{extract_stack_id(stack_ref)}"
-
-  @spec shape_last_used_table(stack_ref()) :: atom()
-  defp shape_last_used_table(stack_ref),
-    do: :"shape_last_used_table:#{extract_stack_id(stack_ref)}"
-
-  defp create_hash_lookup_table(stack_id) do
-    hash_lookup_table = shape_hash_lookup_table(stack_id)
-
-    :ets.new(hash_lookup_table, [
-      :named_table,
-      :public,
-      :set,
-      write_concurrency: :auto,
-      read_concurrency: true
-    ])
-
-    hash_lookup_table
-  end
-
-  defp create_relation_lookup_table(stack_id) do
-    relation_lookup_table = shape_relation_lookup_table(stack_id)
-
-    :ets.new(relation_lookup_table, [
-      :named_table,
-      :public,
-      :ordered_set,
-      write_concurrency: :auto
-    ])
-
-    relation_lookup_table
-  end
+  @spec shape_last_used_table(stack_id()) :: atom()
+  defp shape_last_used_table(stack_id),
+    do: :"shape_last_used_table:#{stack_id}"
 
   defp create_last_used_table(stack_id) do
     last_used_table = shape_last_used_table(stack_id)
@@ -393,153 +286,18 @@ defmodule Electric.ShapeCache.ShapeStatus do
     last_used_table
   end
 
-  defp load_all_shapes(stack_id, storage) do
-    Electric.Telemetry.OpenTelemetry.with_span(
-      "shape_status.load_all_shapes",
-      [],
-      stack_id,
-      fn ->
-        with {:ok, shape_handles} <- Storage.get_all_stored_shape_handles(storage) do
-          load_shapes(stack_id, shape_handles, storage)
-        end
-      end
-    )
-  end
-
-  defp load_shapes(stack_id, shape_handles, storage) do
-    _ = Electric.Postgres.supported_types()
-
+  defp populate_last_used_table(stack_id) do
     start_time = System.monotonic_time()
 
-    shape_data = Storage.get_stored_shapes(storage, shape_handles)
-
-    {shape_db_tuples, hash_lookup_tuples, last_used_tuples, relation_lookup_tuples, num_shapes} =
-      Enum.reduce(
-        shape_data,
-        {[], [], [], [], 0},
-        fn
-          {_shape_handle, {:error, _reason}}, acc ->
-            acc
-
-          {shape_handle, {:ok, shape}},
-          {
-            shape_db_tuples,
-            hash_lookup_tuples,
-            last_used_tuples,
-            relation_lookup_tuples,
-            num_shapes
-          } ->
-            relations = Shape.list_relations(shape)
-            {comparable, shape_hash} = Shape.comparable_hash(shape)
-
-            shape_db_tuples = [{shape, comparable, shape_handle} | shape_db_tuples]
-            hash_lookup_tuples = [{shape_handle, shape_hash} | hash_lookup_tuples]
-            last_used_tuples = [{shape_handle, start_time} | last_used_tuples]
-
-            relation_lookup_tuples =
-              Enum.map(relations, fn {oid, _} -> {{oid, shape_handle}, nil} end) ++
-                relation_lookup_tuples
-
-            {shape_db_tuples, hash_lookup_tuples, last_used_tuples, relation_lookup_tuples,
-             num_shapes + 1}
-        end
-      )
-
-    :ets.insert(shape_relation_lookup_table(stack_id), relation_lookup_tuples)
-    :ets.insert(shape_last_used_table(stack_id), last_used_tuples)
-    :ets.insert(shape_hash_lookup_table(stack_id), hash_lookup_tuples)
-
-    ShapeDb.load(stack_id, shape_db_tuples)
-
-    restore_dependency_handles(stack_id, shape_db_tuples, storage)
-
-    Logger.info(fn ->
-      duration =
-        System.convert_time_unit(System.monotonic_time() - start_time, :native, :millisecond)
-
-      "Loaded #{num_shapes} shapes into #{inspect(__MODULE__)} in #{duration}ms"
-    end)
+    ShapeDb.reduce_shape_handles(
+      stack_id,
+      :ets.whereis(shape_last_used_table(stack_id)),
+      fn handle, table ->
+        true = :ets.insert(table, {handle, start_time})
+        table
+      end
+    )
 
     :ok
-  end
-
-  defp restore_dependency_handles(stack_id, shape_db_tuples, storage) do
-    shape_db_tuples
-    |> Enum.map(fn {shape, _comparable, handle} -> {handle, shape} end)
-    |> Enum.filter(fn {_handle, shape} ->
-      Shape.has_dependencies(shape) and not Shape.dependency_handles_known?(shape)
-    end)
-    |> Enum.each(fn {handle, %Shape{shape_dependencies: deps} = shape} ->
-      handle_results = Enum.map(deps, &fetch_handle_by_shape(stack_id, &1))
-
-      if not Enum.any?(handle_results, &match?(:error, &1)) do
-        handles = Enum.map(handle_results, fn {:ok, h} -> h end)
-        ShapeDb.update_shape(stack_id, handle, %{shape | shape_dependencies_handles: handles})
-      else
-        Logger.warning("Shape #{inspect(handle)} has dependencies but some are unknown")
-        remove_shape(stack_id, handle)
-        Storage.cleanup!(storage, handle)
-      end
-    end)
-  end
-
-  defp load_backup(stack_id, backup_dir, storage) do
-    with :ok <- ShapeDb.restore(stack_id, backup_dir, @backup_version),
-         {:ok, stored_handles} <- Storage.get_all_stored_shape_handles(storage) do
-      hash_lookup_table = create_hash_lookup_table(stack_id)
-      last_used_table = create_last_used_table(stack_id)
-      relation_lookup_table = create_relation_lookup_table(stack_id)
-
-      # repopulate last used table with current time and relation lookup table
-      # from the shape definition
-      in_memory_handles =
-        ShapeDb.reduce_shapes(stack_id, MapSet.new(), fn {shape_handle, shape}, acc ->
-          :ets.insert(hash_lookup_table, {shape_handle, Shape.hash(shape)})
-          :ets.insert(last_used_table, {shape_handle, System.monotonic_time()})
-
-          :ets.insert(
-            relation_lookup_table,
-            Enum.map(Shape.list_relations(shape), fn {oid, _name} ->
-              {{oid, shape_handle}, nil}
-            end)
-          )
-
-          MapSet.put(acc, shape_handle)
-        end)
-
-      # reconcile stored vs in-memory handles by loading any missing stored shapes
-      # and removing any invalid in-memory shapes
-      missing_stored_handles = MapSet.difference(stored_handles, in_memory_handles)
-      invalid_in_memory_handles = MapSet.difference(in_memory_handles, stored_handles)
-
-      if MapSet.size(missing_stored_handles) > 0,
-        do: load_shapes(stack_id, missing_stored_handles, storage)
-
-      Enum.each(invalid_in_memory_handles, fn handle -> remove_shape(stack_id, handle) end)
-
-      :ok
-    else
-      {:error, reason} ->
-        Logger.warning(
-          "Failed to restore shape status tables with #{inspect(reason)} - aborting restore"
-        )
-
-        :ok = ShapeDb.delete(stack_id)
-        {:error, reason}
-    end
-  end
-
-  def backup_dir(storage) do
-    case Storage.metadata_backup_dir(storage) do
-      nil -> nil
-      dir -> Path.join(dir, @backup_dir)
-    end
-  end
-
-  @spec storage_for_stack_ref(stack_ref()) :: Storage.storage()
-  defp storage_for_stack_ref(stack_ref) do
-    stack_ref
-    |> extract_stack_id()
-    |> Storage.for_stack()
   end
 end

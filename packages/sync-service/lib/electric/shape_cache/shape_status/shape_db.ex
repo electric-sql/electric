@@ -1,193 +1,192 @@
 defmodule Electric.ShapeCache.ShapeStatus.ShapeDb do
   @moduledoc false
 
-  # Will eventually replace the current ETS lookup tables with a sqlite-backed
-  # shape db. Currently just an encapsulation of the shape-to-handle and
-  # handle-to-shape ETS lookups.
-
   alias Electric.Shapes.Shape
+  alias Electric.ShapeCache.ShapeStatus.ShapeDb.Connection
+  alias Electric.ShapeCache.ShapeStatus.ShapeDb.Query
 
-  import Electric, only: [is_stack_id: 1]
+  import Electric, only: [is_stack_id: 1, is_shape_handle: 1]
+
+  import Connection,
+    only: [
+      checkout!: 2,
+      checkout_write!: 2,
+      checkout_write!: 3
+    ]
 
   @type shape_handle() :: Electric.shape_handle()
   @type stack_id() :: Electric.stack_id()
 
-  # this is called if the load_backup call fails
-  def create(stack_id, _version) when is_stack_id(stack_id) do
-    Enum.each(tables(stack_id), fn table ->
-      create_table(table)
+  defmodule Error do
+    defexception [:message]
+
+    @impl true
+    def exception(args) do
+      action = Keyword.get(args, :action, :read)
+      {:ok, error} = Keyword.fetch(args, :error)
+      %__MODULE__{message: "ShapeDb #{action} failed: #{inspect(error)}"}
+    end
+  end
+
+  def add_shape(stack_id, %Shape{} = shape, shape_handle)
+      when is_stack_id(stack_id) and is_shape_handle(shape_handle) do
+    {comparable_shape, shape_hash} = Shape.comparable_hash(shape)
+
+    checkout_write!(stack_id, fn %Connection{} = conn ->
+      with :ok <-
+             Query.add_shape(
+               conn,
+               shape_handle,
+               shape,
+               comparable_shape,
+               shape_hash,
+               Shape.list_relations(shape)
+             ) do
+        {:ok, shape_hash}
+      end
     end)
   end
 
-  @spec load(stack_id(), [{Shape.t(), Shape.comparable(), shape_handle()}]) :: :ok
-  def load(stack_id, shape_data) when is_stack_id(stack_id) do
-    {handle_lookup_data, shape_lookup_data} =
-      Enum.reduce(
-        shape_data,
-        {[], []},
-        fn {shape, comparable, shape_handle}, {handle_lookup_data, shape_lookup_data} ->
-          {
-            [{comparable, shape_handle} | handle_lookup_data],
-            [{shape_handle, shape} | shape_lookup_data]
-          }
-        end
-      )
-
-    :ets.insert(shape_to_handle_table(stack_id), handle_lookup_data)
-    :ets.insert(handle_to_shape_table(stack_id), shape_lookup_data)
-    :ok
-  end
-
-  def add_shape(stack_id, %Shape{} = shape, comparable_shape, shape_handle)
-      when is_stack_id(stack_id) do
-    true =
-      :ets.insert_new(
-        shape_to_handle_table(stack_id),
-        {comparable_shape, shape_handle}
-      )
-
-    true =
-      :ets.insert_new(
-        handle_to_shape_table(stack_id),
-        {shape_handle, shape}
-      )
-
-    :ok
-  end
-
-  def remove_shape!(stack_id, shape_handle) when is_stack_id(stack_id) do
-    handle_to_shape_table = handle_to_shape_table(stack_id)
-    shape = :ets.lookup_element(handle_to_shape_table, shape_handle, 2)
-
-    :ets.delete(shape_to_handle_table(stack_id), Shape.comparable(shape))
-    :ets.delete(handle_to_shape_table, shape_handle)
-
-    shape
-  end
-
-  def update_shape(stack_id, shape_handle, shape) do
-    :ets.update_element(handle_to_shape_table(stack_id), shape_handle, {2, shape})
+  def remove_shape(stack_id, shape_handle) when is_stack_id(stack_id) do
+    checkout_write!(stack_id, fn %Connection{} = conn ->
+      Query.remove_shape(conn, shape_handle)
+    end)
   end
 
   def handle_for_shape(stack_id, %Shape{} = shape) when is_stack_id(stack_id) do
-    :ets.lookup_element(shape_to_handle_table(stack_id), Shape.comparable(shape), 2, nil)
+    {comparable_shape, _shape_hash} = Shape.comparable_hash(shape)
+
+    checkout!(stack_id, fn %Connection{} = conn ->
+      Query.handle_for_shape(conn, comparable_shape)
+    end)
   end
 
   def shape_for_handle(stack_id, shape_handle) when is_stack_id(stack_id) do
-    :ets.lookup_element(handle_to_shape_table(stack_id), shape_handle, 2, nil)
+    checkout!(stack_id, fn %Connection{} = conn ->
+      Query.shape_for_handle(conn, shape_handle)
+    end)
   end
 
   def list_shapes(stack_id) when is_stack_id(stack_id) do
+    checkout!(stack_id, fn %Connection{} = conn ->
+      Query.list_shapes(conn)
+    end)
+  end
+
+  def list_shapes!(stack_id) when is_stack_id(stack_id) do
+    stack_id |> list_shapes() |> raise_on_error!(:list_shapes)
+  end
+
+  def shape_handles_for_relations(stack_id, relations) when is_stack_id(stack_id) do
+    checkout!(stack_id, fn %Connection{} = conn ->
+      Query.shape_handles_for_relations(conn, relations)
+    end)
+  end
+
+  def shape_handles_for_relations!(stack_id, relations) when is_stack_id(stack_id) do
     stack_id
-    |> handle_to_shape_table()
-    |> :ets.select([{{:"$1", :"$2"}, [], [{{:"$1", :"$2"}}]}])
+    |> shape_handles_for_relations(relations)
+    |> raise_on_error!(:shape_handles_for_relations)
   end
 
   def reduce_shapes(stack_id, acc, reducer_fun) when is_function(reducer_fun, 2) do
-    :ets.foldl(
-      reducer_fun,
-      acc,
-      handle_to_shape_table(stack_id)
-    )
-  end
-
-  # This api is awkward but we don't care because its going
-  def store_backup(stack_id, backup_dir, version)
-      when is_binary(backup_dir) and is_stack_id(stack_id) do
-    backup_dir_tmp = "#{backup_dir}_tmp"
-    Electric.AsyncDeleter.delete(stack_id, backup_dir_tmp)
-    File.mkdir_p!(backup_dir_tmp)
-
-    with :ok <-
-           :ets.tab2file(
-             handle_to_shape_table(stack_id),
-             backup_file_path(backup_dir_tmp, "shape_lookup_data", version),
-             sync: true,
-             extended_info: [:object_count]
-           ),
-         :ok <-
-           :ets.tab2file(
-             shape_to_handle_table(stack_id),
-             backup_file_path(backup_dir_tmp, "handle_lookup_data", version),
-             sync: true,
-             extended_info: [:object_count]
-           ),
-         :ok <- Electric.AsyncDeleter.delete(stack_id, backup_dir),
-         :ok <- File.rename(backup_dir_tmp, backup_dir) do
-      :ok
-    else
-      err ->
-        Electric.AsyncDeleter.delete(stack_id, backup_dir_tmp)
-        err
-    end
-  end
-
-  # this checks for the existance of the table and that the version of any existing
-  # file matches the version given
-  # if there is no db file or the versions don't match, then return an error which will
-  # cause a reset and a fresh load from the storage dirs
-  def restore(stack_id, backup_dir, version)
-      when is_binary(backup_dir) and is_stack_id(stack_id) do
-    with :ok <-
-           restore_table(
-             handle_to_shape_table(stack_id),
-             backup_file_path(backup_dir, "shape_lookup_data", version)
-           ),
-         :ok <-
-           restore_table(
-             shape_to_handle_table(stack_id),
-             backup_file_path(backup_dir, "handle_lookup_data", version)
-           ) do
-      :ok
-    end
-  after
-    Electric.AsyncDeleter.delete(stack_id, backup_dir)
-  end
-
-  def delete(stack_id) when is_stack_id(stack_id) do
-    Enum.each(tables(stack_id), fn table ->
-      try(do: :ets.delete(table), rescue: (_ in ArgumentError -> :ok))
+    checkout!(stack_id, fn %Connection{} = conn ->
+      conn
+      |> Query.list_shape_stream()
+      |> Enum.reduce(acc, reducer_fun)
     end)
   end
 
-  def remove(stack_id) when is_stack_id(stack_id) do
-    Enum.each(tables(stack_id), fn table ->
-      try(do: :ets.delete(table), rescue: (_ in ArgumentError -> :ok))
+  def reduce_shape_handles(stack_id, acc, reducer_fun) when is_function(reducer_fun, 2) do
+    checkout!(stack_id, fn %Connection{} = conn ->
+      conn
+      |> Query.list_handles_stream()
+      |> Enum.reduce(acc, reducer_fun)
     end)
+  end
+
+  def shape_hash(stack_id, shape_handle) do
+    checkout!(stack_id, fn %Connection{} = conn ->
+      Query.shape_hash(conn, shape_handle)
+    end)
+  end
+
+  def handle_exists?(stack_id, shape_handle) do
+    checkout!(stack_id, fn %Connection{} = conn ->
+      Query.handle_exists?(conn, shape_handle)
+    end)
+  end
+
+  def count_shapes(stack_id) do
+    checkout!(stack_id, fn %Connection{} = conn ->
+      Query.count_shapes(conn)
+    end)
+  end
+
+  def count_shapes!(stack_id) do
+    stack_id |> count_shapes() |> raise_on_error!(:count_shapes)
+  end
+
+  def mark_snapshot_started(stack_id, shape_handle) do
+    checkout_write!(stack_id, fn %Connection{} = conn ->
+      Query.mark_snapshot_started(conn, shape_handle)
+    end)
+  end
+
+  def snapshot_started?(stack_id, shape_handle) do
+    checkout!(stack_id, fn %Connection{} = conn ->
+      Query.snapshot_started?(conn, shape_handle)
+    end)
+  end
+
+  def mark_snapshot_complete(stack_id, shape_handle) do
+    checkout_write!(stack_id, fn %Connection{} = conn ->
+      Query.mark_snapshot_complete(conn, shape_handle)
+    end)
+  end
+
+  def snapshot_complete?(stack_id, shape_handle) do
+    checkout!(stack_id, fn %Connection{} = conn ->
+      Query.snapshot_complete?(conn, shape_handle)
+    end)
+  end
+
+  def validate_existing_shapes(stack_id) do
+    with {:ok, removed_handles} <-
+           checkout_write!(
+             stack_id,
+             fn %Connection{} = conn ->
+               with {:ok, handles} <- Query.select_invalid(conn) do
+                 Enum.each(handles, fn handle ->
+                   :ok = Query.remove_shape(conn, handle)
+                 end)
+
+                 {:ok, handles}
+               end
+             end,
+             # increase timeout because we may end up doing a lot of work here
+             60_000
+           ),
+         {:ok, count} <- count_shapes(stack_id) do
+      {:ok, removed_handles, count}
+    end
   end
 
   def reset(stack_id) when is_stack_id(stack_id) do
-    Enum.each(tables(stack_id), &:ets.delete_all_objects/1)
+    checkout_write!(stack_id, fn %Connection{} = conn ->
+      Query.reset(conn)
+    end)
   end
 
-  defp restore_table(name, path) do
-    with {:ok, recovered_table} <- :ets.file2tab(path, verify: true) do
-      if recovered_table != name, do: :ets.rename(recovered_table, name)
-      :ok
-    end
+  def explain(stack_id) do
+    Connection.explain(stack_id)
+
+    :ok
   end
 
-  defp backup_file_path(backup_dir, filename, version) do
-    Path.join(backup_dir, "#{filename}.#{version}.ets.backup") |> String.to_charlist()
-  end
+  defp raise_on_error!({:ok, result}, _action), do: result
 
-  defp create_table(name) do
-    :ets.new(name, [
-      :named_table,
-      :public,
-      :set,
-      write_concurrency: :auto,
-      read_concurrency: true
-    ])
+  defp raise_on_error!({:error, reason}, action) do
+    raise Error, error: reason, action: action
   end
-
-  defp tables(stack_id) do
-    [
-      handle_to_shape_table(stack_id),
-      shape_to_handle_table(stack_id)
-    ]
-  end
-
-  defp handle_to_shape_table(stack_id), do: :"shapedb:shape_lookup:#{stack_id}"
-  defp shape_to_handle_table(stack_id), do: :"shapedb:handle_lookup:#{stack_id}"
 end
