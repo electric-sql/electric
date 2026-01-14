@@ -1,28 +1,65 @@
 name: Publish Electric images to Docker Hub
 
 # If you decide to modify the list of triggers for this action, don't forget to also update the
-# conditional logic in the derive_build_vars and publish_tagged_image jobs.
+# conditional logic based on ${{ github.event_name }} in the derive_build_vars job.
 on:
   push:
     branches: ['main']
   release:
     types: [released]
+  # Allows the workflow to be called by the Changesets workflow
+  workflow_call:
+    inputs:
+      release_tag:
+        description: 'The @core/sync-service@... tag passed from caller'
+        required: true
+        type: string
+  # Allows the workflow to be triggered manually from the UI
   workflow_dispatch:
     inputs:
       release_tag:
-        description: 'The @core/sync-service@... tag to run for (e.g. @core/sync-service@v1.2.10)'
+        description: 'The @core/sync-service@... tag to run the workflow for (e.g. @core/sync-service@1.2.10)'
         required: true
         type: string
+
+env:
+  DOCKERHUB_REPO: electricsql/electric
+  DOCKERHUB_CANARY_REPO: electricsql/electric-canary
 
 jobs:
   derive_build_vars:
     name: Derive build variables from the source code
     runs-on: blacksmith-2vcpu-ubuntu-2404
     outputs:
+      git_ref: ${{ steps.git_ref.outputs.git_ref }}
+      is_release: ${{ steps.git_ref.outputs.is_release }}
       short_commit_sha: ${{ steps.vars.outputs.short_commit_sha }}
       electric_version: ${{ steps.vars.outputs.electric_version }}
 
     steps:
+      - name: Determine the ref to check out
+        id: git_ref
+        run: |
+          case ${{ github.event_name }} in
+            push)
+              ref="${{ github.sha }}"
+              is_release=false
+              ;;
+
+            release)
+              ref="refs/tags/${{ github.event.release.tag_name }}"
+              is_release=true
+              ;;
+
+            workflow_dispatch | workflow_call)
+              ref="refs/tags/${{ inputs.release_tag }}"
+              is_release=true
+              ;;
+          esac
+
+          echo "git_ref=$ref" >> $GITHUB_OUTPUT
+          echo "is_release=$is_release" >> $GITHUB_OUTPUT
+
       - uses: actions/checkout@v4
         with:
           # The checked out commit influences the value of the ELECTRIC_VERSION variable
@@ -35,10 +72,7 @@ jobs:
           #
           # For manual triggers via workflow_dispatch, we check out the tag specified manually
           # by the actor.
-          ref: ${{
-            github.event_name == 'release' && format('refs/tags/{0}', github.event.release.tag_name) ||
-            github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', inputs.release_tag) ||
-            github.sha }}
+          ref: ${{ steps.git_ref.outputs.git_ref }}
           # Also important to fetch the whole history since otherwise we won't get that tags
           # that are required to determine the correct ELECTRIC_VERSION.
           fetch-depth: 0
@@ -69,6 +103,8 @@ jobs:
     needs: [derive_build_vars]
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.derive_build_vars.outputs.git_ref }}
 
       - uses: useblacksmith/setup-docker-builder@v1
 
@@ -93,8 +129,8 @@ jobs:
           # the subsequent merge job will assemble the manifest list and apply tags
           outputs: type=image,push-by-digest=true,name-canonical=true,push=true
           tags: |
-            electricsql/electric
-            electricsql/electric-canary
+            ${{ env.DOCKERHUB_REPO }}
+            ${{ env.DOCKERHUB_CANARY_REPO }}
 
       # Save the digest so the merge job can find both platform images
       - name: Export digest
@@ -126,39 +162,38 @@ jobs:
 
       - name: Derive image tags from the GitHub Actions event
         run: |
-          case ${{ github.event_name }} in
-            push)
-              # A regular push to the main branch triggers canary image publishing
-              echo "ELECTRIC_TAGS=-t electricsql/electric:canary" >> $GITHUB_ENV
-              echo "ELECTRIC_CANARY_TAGS=-t electricsql/electric-canary:latest -t electricsql/electric-canary:${{ needs.derive_build_vars.outputs.short_commit_sha }}" >> $GITHUB_ENV
-              ;;
-            release | workflow_dispatch)
-              # A release triggers official release image publishing
-              echo "ELECTRIC_TAGS=-t electricsql/electric:latest -t electricsql/electric:${{ needs.derive_build_vars.outputs.electric_version }}" >> $GITHUB_ENV
-          esac
+          if [ "${{ needs.derive_build_vars.outputs.is_release }}" = "true" ]; then
+            # A release triggers official release image publishing
+            echo "ELECTRIC_TAGS=-t $DOCKERHUB_REPO:latest -t $DOCKERHUB_REPO:${{ needs.derive_build_vars.outputs.electric_version }}" >> $GITHUB_ENV
+            echo "ELECTRIC_CANARY_TAGS=" >> $GITHUB_ENV
+          else
+            # A regular push to the main branch triggers canary image publishing
+            echo "ELECTRIC_TAGS=-t $DOCKERHUB_REPO:canary" >> $GITHUB_ENV
+            echo "ELECTRIC_CANARY_TAGS=-t $DOCKERHUB_CANARY_REPO:latest -t $DOCKERHUB_CANARY_REPO:${{ needs.derive_build_vars.outputs.short_commit_sha }}" >> $GITHUB_ENV
+          fi
 
       - name: Create multi-arch manifest list
         run: |
           set -euo pipefail
 
-          # Build a list of electricsql/electric@sha256:... source images
+          # Build a list of $DOCKERHUB_REPO@sha256:... source images
           ELECTRIC_IMAGES=$(
             for f in /tmp/digests/*.digest; do
-              echo electricsql/electric@$(cat $f)
+              echo $DOCKERHUB_REPO@$(cat $f)
             done
           )
 
-          # Create a manifest list for electricsql/electric:canary that includes both platforms
+          # Create a manifest list for $DOCKERHUB_REPO:canary that includes both platforms
           docker buildx imagetools create $ELECTRIC_TAGS $ELECTRIC_IMAGES
 
           if [ -n "$ELECTRIC_CANARY_TAGS" ]; then
-            # Build a list of electricsql/electric-canary@sha256:... source images
+            # Build a list of $DOCKERHUB_CANARY_REPO@sha256:... source images
             ELECTRIC_CANARY_IMAGES=$(
               for f in /tmp/digests/*.digest; do
-                echo electricsql/electric-canary@$(cat $f)
+                echo $DOCKERHUB_CANARY_REPO@$(cat $f)
               done
             )
 
-            # Create a manifest list for electricsql/electric-canary:... that includes both platforms
+            # Create a manifest list for $DOCKERHUB_CANARY_REPO:... that includes both platforms
             docker buildx imagetools create $ELECTRIC_CANARY_TAGS $ELECTRIC_CANARY_IMAGES
           fi
