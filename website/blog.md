@@ -9,14 +9,12 @@ sidebar: false
 
 <script setup>
 import { onMounted } from 'vue'
-import { Image } from '@unpic/vue'
 
 import { data as posts } from './data/posts.data.ts'
 
 import ElectricElephant from '/static/img/blog/electric-elephant.jpg?url'
 import BlogPostListing from './src/components/BlogPostListing.vue'
-
-const fallback = import.meta.env.DEV ? undefined : 'netlify'
+import NetlifyImage from './src/components/NetlifyImage.vue'
 
 onMounted(async () => {
   if (typeof window !== 'undefined' && document.querySelector) {
@@ -122,13 +120,10 @@ onMounted(async () => {
   <div class="container">
     <main>
       <div class="header">
-        <Image
+        <NetlifyImage
           :src="ElectricElephant"
           :width="720"
           :height="440"
-          :fallback="fallback"
-          layout="constrained"
-          background="auto"
         />
         <h1>
           ElectricSQL Blog

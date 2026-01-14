@@ -1,11 +1,9 @@
 <script setup>
 import { useData } from 'vitepress'
 import { computed } from 'vue'
-import { Image } from '@unpic/vue'
+import NetlifyImage from './NetlifyImage.vue'
 
 import { data as authors } from '../../data/authors.data.ts'
-
-const fallback = import.meta.env.DEV ? undefined : 'netlify'
 
 const { page, frontmatter } = useData()
 
@@ -33,6 +31,10 @@ const headerImageHeight = computed(() => frontmatter.value.imageHeight ?? 860)
 .post-image {
   margin-top: -2px !important;
   margin-bottom: 32px;
+}
+.post-image img {
+  width: 100%;
+  height: auto;
 }
 @media (max-width: 559px) {
   .post-image {
@@ -81,13 +83,10 @@ h1 {
 <template>
   <div class="post-header">
     <p class="post-image">
-      <Image
+      <NetlifyImage
         :src="frontmatter.image"
         :width="headerImageWidth"
         :height="headerImageHeight"
-        :fallback="fallback"
-        layout="constrained"
-        background="auto"
       />
     </p>
     <h1>
