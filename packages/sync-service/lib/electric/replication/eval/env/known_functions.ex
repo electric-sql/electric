@@ -211,15 +211,7 @@ defmodule Electric.Replication.Eval.Env.KnownFunctions do
   defpostgres "jsonb ->> int4 -> text" do
     def jsonb_get_text_by_index(json, index) when is_list(json) and is_integer(index) do
       if index >= 0 do
-        case Enum.at(json, index) do
-          nil -> nil
-          value when is_binary(value) -> value
-          value when is_integer(value) -> Integer.to_string(value)
-          value when is_float(value) -> Float.to_string(value)
-          true -> "true"
-          false -> "false"
-          value -> Jason.encode!(value)
-        end
+        json |> Enum.at(index) |> jsonb_value_to_text()
       else
         nil
       end
