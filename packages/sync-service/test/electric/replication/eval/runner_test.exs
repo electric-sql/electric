@@ -308,9 +308,7 @@ defmodule Electric.Replication.Eval.RunnerTest do
       # Equal jsonb values
       assert {:ok, true} =
                ~S|x = y|
-               |> Parser.parse_and_validate_expression!(
-                 refs: %{["x"] => :jsonb, ["y"] => :jsonb}
-               )
+               |> Parser.parse_and_validate_expression!(refs: %{["x"] => :jsonb, ["y"] => :jsonb})
                |> Runner.execute(%{
                  ["x"] => %{"foo" => "bar"},
                  ["y"] => %{"foo" => "bar"}
@@ -319,9 +317,7 @@ defmodule Electric.Replication.Eval.RunnerTest do
       # Not equal jsonb values
       assert {:ok, false} =
                ~S|x = y|
-               |> Parser.parse_and_validate_expression!(
-                 refs: %{["x"] => :jsonb, ["y"] => :jsonb}
-               )
+               |> Parser.parse_and_validate_expression!(refs: %{["x"] => :jsonb, ["y"] => :jsonb})
                |> Runner.execute(%{
                  ["x"] => %{"foo" => "bar"},
                  ["y"] => %{"foo" => "baz"}
@@ -330,9 +326,7 @@ defmodule Electric.Replication.Eval.RunnerTest do
       # Use <> operator
       assert {:ok, true} =
                ~S|x <> y|
-               |> Parser.parse_and_validate_expression!(
-                 refs: %{["x"] => :jsonb, ["y"] => :jsonb}
-               )
+               |> Parser.parse_and_validate_expression!(refs: %{["x"] => :jsonb, ["y"] => :jsonb})
                |> Runner.execute(%{
                  ["x"] => %{"foo" => "bar"},
                  ["y"] => %{"foo" => "baz"}
