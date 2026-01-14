@@ -406,10 +406,10 @@ export default defineConfig({
 
     const image = `${siteOrigin}${fm.image || DEFAULT_IMAGE}`
 
-    head.push([
-      'meta',
-      { name: 'twitter:card', content: 'summary_large_image' },
-    ])
+    head.push(['meta', { name: 'twitter:card', content: 'summary_large_image' }])
+    head.push(['meta', { name: 'twitter:site', content: '@ElectricSQL' }])
+    head.push(['meta', { name: 'twitter:title', content: title }])
+    head.push(['meta', { name: 'twitter:description', content: description }])
     head.push(['meta', { name: 'twitter:image', content: image }])
     head.push(['meta', { property: 'og:title', content: title }])
     head.push(['meta', { property: 'og:description', content: description }])
