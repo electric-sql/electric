@@ -135,7 +135,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
     # for our current deployment mode synchronous = OFF would be enough (hand
     # data to kernel, don't fsync) but for oss deploys we should keep it at a
     # higher durability setting
-    "PRAGMA synchronous=NORMAL"
+    "PRAGMA synchronous=OFF"
   ]
 
   def open(pool_state) do
