@@ -16,6 +16,16 @@ vi.mock(`child_process`, () => ({
   execSync: vi.fn(),
 }))
 
+// Mock readline for prompt testing
+const mockQuestion = vi.fn()
+const mockClose = vi.fn()
+vi.mock(`readline`, () => ({
+  createInterface: vi.fn(() => ({
+    question: mockQuestion,
+    close: mockClose,
+  })),
+}))
+
 describe(`cli`, () => {
   const mockCredentials = {
     source_id: `test-source-id`,
@@ -265,6 +275,246 @@ describe(`cli`, () => {
         `Setup failed:`,
         `string error`
       )
+    })
+
+    it(`should exit with error when multiple positional arguments provided`, async () => {
+      process.argv = [`node`, `cli.js`, `my-app`, `another-app`]
+
+      const { main } = await import(`../src/cli.js`)
+
+      await expect(main()).rejects.toThrow(`process.exit(1)`)
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        `Error: Expected only one app name, but received multiple: my-app, another-app`
+      )
+    })
+
+    it(`should exit with error when --source flag has no value`, async () => {
+      process.argv = [`node`, `cli.js`, `my-app`, `--source`]
+
+      const { main } = await import(`../src/cli.js`)
+
+      await expect(main()).rejects.toThrow(`process.exit(1)`)
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        `Error: --source requires a source ID value`
+      )
+    })
+
+    it(`should exit with error when --secret flag has no value`, async () => {
+      process.argv = [
+        `node`,
+        `cli.js`,
+        `my-app`,
+        `--source`,
+        `src-123`,
+        `--secret`,
+      ]
+
+      const { main } = await import(`../src/cli.js`)
+
+      await expect(main()).rejects.toThrow(`process.exit(1)`)
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        `Error: --secret requires a value`
+      )
+    })
+
+    it(`should exit with error when --database-url flag has no value`, async () => {
+      process.argv = [
+        `node`,
+        `cli.js`,
+        `my-app`,
+        `--source`,
+        `src-123`,
+        `--secret`,
+        `my-secret`,
+        `--database-url`,
+      ]
+
+      const { main } = await import(`../src/cli.js`)
+
+      await expect(main()).rejects.toThrow(`process.exit(1)`)
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        `Error: --database-url requires a value`
+      )
+    })
+
+    it(`should use provided credentials with --source, --secret, and --database-url`, async () => {
+      process.argv = [
+        `node`,
+        `cli.js`,
+        `my-app`,
+        `--source`,
+        `src-123`,
+        `--secret`,
+        `my-secret`,
+        `--database-url`,
+        `postgresql://localhost/mydb`,
+      ]
+      mockSetupTemplate.mockResolvedValue(undefined)
+
+      const { main } = await import(`../src/cli.js`)
+
+      await main()
+
+      // Should NOT call provisionElectricResources when credentials are provided
+      expect(mockProvisionElectricResources).not.toHaveBeenCalled()
+      expect(mockSetupTemplate).toHaveBeenCalledWith(`my-app`, {
+        source_id: `src-123`,
+        secret: `my-secret`,
+        DATABASE_URL: `postgresql://localhost/mydb`,
+      })
+      expect(consoleLogSpy).toHaveBeenCalledWith(
+        `Using provided credentials...`
+      )
+    })
+
+    it(`should skip migrations when user provides credentials`, async () => {
+      const { execSync } = await import(`child_process`)
+      const mockExecSync = execSync as unknown as ReturnType<typeof vi.fn>
+
+      process.argv = [
+        `node`,
+        `cli.js`,
+        `my-app`,
+        `--source`,
+        `src-123`,
+        `--secret`,
+        `my-secret`,
+        `--database-url`,
+        `postgresql://localhost/mydb`,
+      ]
+      mockSetupTemplate.mockResolvedValue(undefined)
+
+      const { main } = await import(`../src/cli.js`)
+
+      await main()
+
+      // Should only run pnpm install, NOT pnpm migrate
+      const execCalls = mockExecSync.mock.calls.map(
+        (call: unknown[]) => call[0]
+      )
+      expect(execCalls).toContain(`pnpm install`)
+      expect(execCalls).not.toContain(`pnpm migrate`)
+    })
+
+    it(`should not show claim command when user provides credentials`, async () => {
+      process.argv = [
+        `node`,
+        `cli.js`,
+        `my-app`,
+        `--source`,
+        `src-123`,
+        `--secret`,
+        `my-secret`,
+        `--database-url`,
+        `postgresql://localhost/mydb`,
+      ]
+      mockSetupTemplate.mockResolvedValue(undefined)
+
+      const { main } = await import(`../src/cli.js`)
+
+      await main()
+
+      // Should NOT show claim command when using provided credentials
+      expect(consoleLogSpy).not.toHaveBeenCalledWith(
+        `  pnpm claim            # Claim cloud resources`
+      )
+      // Should show migrate in next steps since it was skipped
+      expect(consoleLogSpy).toHaveBeenCalledWith(`  pnpm migrate`)
+    })
+
+    it(`should prompt for secret and DATABASE_URL when only --source is provided`, async () => {
+      process.argv = [`node`, `cli.js`, `my-app`, `--source`, `src-123`]
+      mockSetupTemplate.mockResolvedValue(undefined)
+
+      // Mock readline responses for prompts
+      mockQuestion
+        .mockImplementationOnce(
+          (_question: string, callback: (answer: string) => void) => {
+            callback(`prompted-secret`)
+          }
+        )
+        .mockImplementationOnce(
+          (_question: string, callback: (answer: string) => void) => {
+            callback(`postgresql://prompted/db`)
+          }
+        )
+
+      const { main } = await import(`../src/cli.js`)
+
+      await main()
+
+      expect(mockSetupTemplate).toHaveBeenCalledWith(`my-app`, {
+        source_id: `src-123`,
+        secret: `prompted-secret`,
+        DATABASE_URL: `postgresql://prompted/db`,
+      })
+    })
+
+    it(`should exit with error when prompted secret is empty`, async () => {
+      process.argv = [`node`, `cli.js`, `my-app`, `--source`, `src-123`]
+
+      // Mock readline to return empty secret
+      mockQuestion.mockImplementationOnce(
+        (_question: string, callback: (answer: string) => void) => {
+          callback(``)
+        }
+      )
+
+      const { main } = await import(`../src/cli.js`)
+
+      await expect(main()).rejects.toThrow(`process.exit(1)`)
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        `Error: Secret cannot be empty`
+      )
+    })
+
+    it(`should exit with error when prompted DATABASE_URL is empty`, async () => {
+      process.argv = [`node`, `cli.js`, `my-app`, `--source`, `src-123`]
+
+      // Mock readline to return valid secret but empty DATABASE_URL
+      mockQuestion
+        .mockImplementationOnce(
+          (_question: string, callback: (answer: string) => void) => {
+            callback(`valid-secret`)
+          }
+        )
+        .mockImplementationOnce(
+          (_question: string, callback: (answer: string) => void) => {
+            callback(``)
+          }
+        )
+
+      const { main } = await import(`../src/cli.js`)
+
+      await expect(main()).rejects.toThrow(`process.exit(1)`)
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        `Error: DATABASE_URL cannot be empty`
+      )
+    })
+
+    it(`should trim whitespace from provided credentials`, async () => {
+      process.argv = [
+        `node`,
+        `cli.js`,
+        `my-app`,
+        `--source`,
+        `src-123`,
+        `--secret`,
+        `  my-secret  `,
+        `--database-url`,
+        `  postgresql://localhost/mydb  `,
+      ]
+      mockSetupTemplate.mockResolvedValue(undefined)
+
+      const { main } = await import(`../src/cli.js`)
+
+      await main()
+
+      expect(mockSetupTemplate).toHaveBeenCalledWith(`my-app`, {
+        source_id: `src-123`,
+        secret: `my-secret`,
+        DATABASE_URL: `postgresql://localhost/mydb`,
+      })
     })
   })
 })

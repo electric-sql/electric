@@ -14,7 +14,7 @@ interface ParsedArgs {
 }
 
 function parseArgs(args: string[]): ParsedArgs {
-  let appName: string | undefined
+  const positionalArgs: string[] = []
   let sourceId: string | undefined
   let secret: string | undefined
   let databaseUrl: string | undefined
@@ -42,11 +42,11 @@ function parseArgs(args: string[]): ParsedArgs {
       }
       i++ // Skip the value
     } else if (!args[i].startsWith(`-`)) {
-      appName = args[i]
+      positionalArgs.push(args[i])
     }
   }
 
-  if (!appName) {
+  if (positionalArgs.length === 0) {
     console.error(
       `Usage: npx @electric-sql/start <app-name> [--source <source-id>] [--secret <secret>] [--database-url <url>]`
     )
@@ -56,7 +56,17 @@ function parseArgs(args: string[]): ParsedArgs {
     process.exit(1)
   }
 
-  return { appName, sourceId, secret, databaseUrl }
+  if (positionalArgs.length > 1) {
+    console.error(
+      `Error: Expected only one app name, but received multiple: ${positionalArgs.join(`, `)}`
+    )
+    console.error(
+      `Usage: npx @electric-sql/start <app-name> [--source <source-id>] [--secret <secret>] [--database-url <url>]`
+    )
+    process.exit(1)
+  }
+
+  return { appName: positionalArgs[0], sourceId, secret, databaseUrl }
 }
 
 function prompt(question: string): Promise<string> {
