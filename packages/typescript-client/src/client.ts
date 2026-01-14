@@ -1086,6 +1086,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
             `This should not happen and indicates a proxy/CDN caching misconfiguration. ` +
             `The response contained handle "${shapeHandle}" which was previously marked as expired. ` +
             `Check that your proxy includes all query parameters (especially 'handle' and 'offset') in its cache key. ` +
+            `For more information visit the troubleshooting guide: https://electric-sql.com/docs/guides/troubleshooting ` +
             `Retrying with a random cache buster to bypass the stale cache (attempt ${this.#staleCacheRetryCount}/${this.#maxStaleCacheRetries}).`
         )
         // Generate a random cache buster for the retry

@@ -4,7 +4,10 @@ import {
   ExpiredShapesCache,
   expiredShapesCache,
 } from '../src/expired-shapes-cache'
-import { EXPIRED_HANDLE_QUERY_PARAM } from '../src/constants'
+import {
+  CACHE_BUSTER_QUERY_PARAM,
+  EXPIRED_HANDLE_QUERY_PARAM,
+} from '../src/constants'
 
 function waitForFetch(stream: ShapeStream): Promise<void> {
   let unsub = () => {}
@@ -453,7 +456,7 @@ describe(`ExpiredShapesCache`, () => {
     // Verify the second request includes the cache buster parameter
     expect(requestCount).toBeGreaterThanOrEqual(2)
     const secondUrl = new URL(capturedUrls[1])
-    expect(secondUrl.searchParams.has(`_cb`)).toBe(true)
+    expect(secondUrl.searchParams.has(CACHE_BUSTER_QUERY_PARAM)).toBe(true)
 
     // The key assertion: client should NOT be in a broken state
     expect(stream.shapeHandle).not.toBe(undefined)
@@ -514,7 +517,7 @@ describe(`ExpiredShapesCache`, () => {
     // Verify each retry after the first includes cache buster
     for (let i = 1; i < capturedUrls.length; i++) {
       const url = new URL(capturedUrls[i])
-      expect(url.searchParams.has(`_cb`)).toBe(true)
+      expect(url.searchParams.has(CACHE_BUSTER_QUERY_PARAM)).toBe(true)
     }
 
     // Should have thrown an error after max retries

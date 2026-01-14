@@ -28,7 +28,7 @@ export const SUBSET_PARAM_ORDER_BY = `subset__order_by`
 export const SUBSET_PARAM_WHERE_PARAMS = `subset__params`
 export const SUBSET_PARAM_WHERE_EXPR = `subset__where_expr`
 export const SUBSET_PARAM_ORDER_BY_EXPR = `subset__order_by_expr`
-export const CACHE_BUSTER_QUERY_PARAM = `_cb` // Random cache buster to bypass stale CDN responses
+export const CACHE_BUSTER_QUERY_PARAM = `cache-buster` // Random cache buster to bypass stale CDN responses
 
 // Query parameters that should be passed through when proxying Electric requests
 export const ELECTRIC_PROTOCOL_QUERY_PARAMS: Array<string> = [
