@@ -31,6 +31,7 @@ defmodule Electric.Shapes.Filter do
     :where_cond_table,
     :eq_index_table,
     :incl_index_table,
+    :key_exists_index_table,
     :refs_fun
   ]
 
@@ -45,6 +46,7 @@ defmodule Electric.Shapes.Filter do
       where_cond_table: :ets.new(:filter_where, [:set, :private]),
       eq_index_table: :ets.new(:filter_eq, [:set, :private]),
       incl_index_table: :ets.new(:filter_incl, [:set, :private]),
+      key_exists_index_table: :ets.new(:filter_key_exists, [:set, :private]),
       refs_fun: Keyword.get(opts, :refs_fun, fn _shape -> %{} end)
     }
   end
