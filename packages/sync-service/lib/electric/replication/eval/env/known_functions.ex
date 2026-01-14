@@ -251,25 +251,7 @@ defmodule Electric.Replication.Eval.Env.KnownFunctions do
   end
 
   defpostgres "jsonb <@ jsonb -> bool" do
-    def jsonb_contained_by?(left, right), do: do_jsonb_contained_by?(right, left)
-
-    # Reuse the contains logic with swapped arguments
-    defp do_jsonb_contained_by?(left, right) when is_map(left) and is_map(right) do
-      Enum.all?(right, fn {key, right_value} ->
-        case Map.fetch(left, key) do
-          {:ok, left_value} -> do_jsonb_contained_by?(left_value, right_value)
-          :error -> false
-        end
-      end)
-    end
-
-    defp do_jsonb_contained_by?(left, right) when is_list(left) and is_list(right) do
-      Enum.all?(right, fn right_elem ->
-        Enum.any?(left, fn left_elem -> do_jsonb_contained_by?(left_elem, right_elem) end)
-      end)
-    end
-
-    defp do_jsonb_contained_by?(left, right), do: left == right
+    def jsonb_contained_by?(left, right), do: do_jsonb_contains?(right, left)
   end
 
   # JSONB key existence operators
