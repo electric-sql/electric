@@ -220,6 +220,14 @@ defmodule Electric.Replication.Eval.Env.KnownFunctions do
   # JSONB containment operators
   # @> checks if left contains right, <@ checks if left is contained by right
   defpostgres "jsonb @> jsonb -> bool" do
+    # Top-level: Arrays may contain primitive values (special-case in Postgres)
+    # e.g., '["foo", "bar"]'::jsonb @> '"bar"'::jsonb returns true
+    # This only applies at the top level, not in recursive array element checks
+    def jsonb_contains?(left, right)
+        when is_list(left) and not is_list(right) and not is_map(right) do
+      Enum.member?(left, right)
+    end
+
     def jsonb_contains?(left, right), do: do_jsonb_contains?(left, right)
 
     # Objects: all key-value pairs in right must exist in left
@@ -239,20 +247,37 @@ defmodule Electric.Replication.Eval.Env.KnownFunctions do
       end)
     end
 
-    # Arrays may contain primitive values (special-case in Postgres)
-    # e.g., '["foo", "bar"]'::jsonb @> '"bar"'::jsonb returns true
-    defp do_jsonb_contains?(left, right)
-         when is_list(left) and not is_list(right) and not is_map(right) do
-      Enum.any?(left, fn left_elem -> do_jsonb_contains?(left_elem, right) end)
-    end
-
     # Scalars: must be equal
     defp do_jsonb_contains?(left, right), do: left == right
   end
 
   # <@ is the inverse of @>: x <@ y is equivalent to y @> x
   defpostgres "jsonb <@ jsonb -> bool" do
-    def jsonb_contained_by?(left, right), do: do_jsonb_contains?(right, left)
+    # Top-level: Arrays may contain primitive values (special-case in Postgres)
+    # For <@, we check if right (container) is an array containing left (primitive)
+    def jsonb_contained_by?(left, right)
+        when is_list(right) and not is_list(left) and not is_map(left) do
+      Enum.member?(right, left)
+    end
+
+    def jsonb_contained_by?(left, right), do: do_jsonb_contained_by?(right, left)
+
+    defp do_jsonb_contained_by?(left, right) when is_map(left) and is_map(right) do
+      Enum.all?(right, fn {key, right_value} ->
+        case Map.fetch(left, key) do
+          {:ok, left_value} -> do_jsonb_contained_by?(left_value, right_value)
+          :error -> false
+        end
+      end)
+    end
+
+    defp do_jsonb_contained_by?(left, right) when is_list(left) and is_list(right) do
+      Enum.all?(right, fn right_elem ->
+        Enum.any?(left, fn left_elem -> do_jsonb_contained_by?(left_elem, right_elem) end)
+      end)
+    end
+
+    defp do_jsonb_contained_by?(left, right), do: left == right
   end
 
   # JSONB key existence operators
