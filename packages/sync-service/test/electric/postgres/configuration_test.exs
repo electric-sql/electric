@@ -311,7 +311,7 @@ defmodule Electric.Postgres.ConfigurationTest do
 
   describe "concurrent publication updates" do
     @tag slow: true
-    @tag connection_opt_overrides: [pool_size: 50, queue_target: 10_000, queue_interval: 20_000]
+    @tag connection_opt_overrides: [pool_size: 5, queue_target: 10_000, queue_interval: 20_000]
     test "should not cause deadlocks", %{
       pool: conn,
       publication_name: publication
