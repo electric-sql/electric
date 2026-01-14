@@ -91,11 +91,7 @@ const { post } = defineProps(['post'])
   <div class="post">
     <a :href="post.path" class="no-visual">
       <div class="post-image">
-        <NetlifyImage
-          :src="post.image"
-          :width="896"
-          :height="488"
-        />
+        <NetlifyImage :src="post.image" :width="896" :height="488" />
       </div>
       <div class="post-body">
         <h3>
