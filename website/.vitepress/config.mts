@@ -392,27 +392,19 @@ export default defineConfig({
     const title = `${fm.title || siteData.title} | ${fm.titleTemplate || 'ElectricSQL'}`
     const description = fm.description || siteData.description
 
-    // Get site origin from environment or use production URL
+    const PRODUCTION_URL = 'https://electric-sql.com'
+    const LOCAL_DEV_URL = 'http://localhost:5173'
+    const DEFAULT_IMAGE = '/img/meta/sync-solved.jpg'
+
     const siteOrigin =
-      process.env.DEPLOY_PRIME_URL || 'https://electric-sql.com'
+      process.env.CONTEXT === 'production'
+        ? process.env.URL || PRODUCTION_URL
+        : process.env.DEPLOY_PRIME_URL ||
+          (process.env.NODE_ENV === 'development'
+            ? LOCAL_DEV_URL
+            : PRODUCTION_URL)
 
-    // Generate optimized social media image URL using Netlify Image CDN
-    const getOptimizedImageUrl = (imagePath?: string) => {
-      if (!imagePath) {
-        return `${siteOrigin}/img/meta/sync-solved.jpg`
-      }
-
-      const fullImageUrl = `${siteOrigin}${imagePath}`
-
-      // Use Netlify Image CDN to optimize for social media (1200x630 is the standard for og:image)
-      const netlifyImageUrl = `${siteOrigin}/.netlify/images?url=${encodeURIComponent(
-        fullImageUrl
-      )}&w=1200&h=630&fit=cover&fm=jpg&q=80`
-
-      return netlifyImageUrl
-    }
-
-    const image = getOptimizedImageUrl(fm.image)
+    const image = `${siteOrigin}${fm.image || DEFAULT_IMAGE}`
 
     head.push([
       'meta',
