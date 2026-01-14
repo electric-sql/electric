@@ -1,5 +1,17 @@
 # @electric-sql/client
 
+## 1.4.1
+
+### Patch Changes
+
+- 6d6e199: Fix infinite loop when response is missing required headers
+
+  When the server returns 200 OK but with missing required headers (like `electric-cursor`), the client would enter an infinite retry loop if `onError` returned `{}`. Now `MissingHeadersError` is treated as non-retryable since it's a configuration issue that won't self-heal.
+
+- 594afee: Fix stale cached responses with expired shape handles
+
+  When a CDN/proxy is misconfigured and serves a stale cached response with an expired shape handle, the client would get into a broken state where the handle was rejected but the offset was still advanced. This fix detects stale responses and triggers a retry with a cache buster parameter to bypass the misconfigured CDN cache.
+
 ## 1.4.0
 
 ### Minor Changes
