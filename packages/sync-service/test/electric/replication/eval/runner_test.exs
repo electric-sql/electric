@@ -611,6 +611,140 @@ defmodule Electric.Replication.Eval.RunnerTest do
                |> Runner.execute(%{["x"] => ["foo", "bar", "baz"]})
     end
 
+    # === Edge case tests based on Postgres documentation review ===
+
+    test "jsonb @> handles empty arrays and objects" do
+      # Empty structures contain themselves
+      assert {:ok, true} =
+               ~S|x @> y|
+               |> Parser.parse_and_validate_expression!(refs: %{["x"] => :jsonb, ["y"] => :jsonb})
+               |> Runner.execute(%{["x"] => %{}, ["y"] => %{}})
+
+      assert {:ok, true} =
+               ~S|x @> y|
+               |> Parser.parse_and_validate_expression!(refs: %{["x"] => :jsonb, ["y"] => :jsonb})
+               |> Runner.execute(%{["x"] => [], ["y"] => []})
+
+      # Any structure contains empty
+      assert {:ok, true} =
+               ~S|x @> y|
+               |> Parser.parse_and_validate_expression!(refs: %{["x"] => :jsonb, ["y"] => :jsonb})
+               |> Runner.execute(%{["x"] => %{"a" => 1}, ["y"] => %{}})
+
+      assert {:ok, true} =
+               ~S|x @> y|
+               |> Parser.parse_and_validate_expression!(refs: %{["x"] => :jsonb, ["y"] => :jsonb})
+               |> Runner.execute(%{["x"] => [1, 2, 3], ["y"] => []})
+
+      # Empty doesn't contain non-empty
+      assert {:ok, false} =
+               ~S|x @> y|
+               |> Parser.parse_and_validate_expression!(refs: %{["x"] => :jsonb, ["y"] => :jsonb})
+               |> Runner.execute(%{["x"] => [], ["y"] => [1]})
+
+      assert {:ok, false} =
+               ~S|x @> y|
+               |> Parser.parse_and_validate_expression!(refs: %{["x"] => :jsonb, ["y"] => :jsonb})
+               |> Runner.execute(%{["x"] => %{}, ["y"] => %{"a" => 1}})
+    end
+
+    test "jsonb @> array containment is order-independent and handles duplicates" do
+      # Order doesn't matter
+      assert {:ok, true} =
+               ~S|x @> y|
+               |> Parser.parse_and_validate_expression!(refs: %{["x"] => :jsonb, ["y"] => :jsonb})
+               |> Runner.execute(%{["x"] => [1, 2, 3], ["y"] => [3, 1]})
+
+      # Duplicates in right are effectively ignored
+      assert {:ok, true} =
+               ~S|x @> y|
+               |> Parser.parse_and_validate_expression!(refs: %{["x"] => :jsonb, ["y"] => :jsonb})
+               |> Runner.execute(%{["x"] => [1, 2, 3], ["y"] => [1, 1, 2]})
+    end
+
+    test "jsonb handles JSON null in containment and extraction" do
+      # Object with null contains matching null
+      assert {:ok, true} =
+               ~S|x @> y|
+               |> Parser.parse_and_validate_expression!(refs: %{["x"] => :jsonb, ["y"] => :jsonb})
+               |> Runner.execute(%{["x"] => %{"a" => nil, "b" => 2}, ["y"] => %{"a" => nil}})
+
+      # Array with null contains null
+      assert {:ok, true} =
+               ~S|x @> y|
+               |> Parser.parse_and_validate_expression!(refs: %{["x"] => :jsonb, ["y"] => :jsonb})
+               |> Runner.execute(%{["x"] => [1, nil, 3], ["y"] => [nil]})
+
+      # Extract JSON null
+      assert {:ok, nil} =
+               ~S|x -> 'a'|
+               |> Parser.parse_and_validate_expression!(refs: %{["x"] => :jsonb})
+               |> Runner.execute(%{["x"] => %{"a" => nil}})
+    end
+
+    test "jsonb ? operators only check top-level keys" do
+      # Nested key NOT found
+      assert {:ok, false} =
+               ~S|x ? 'bar'|
+               |> Parser.parse_and_validate_expression!(refs: %{["x"] => :jsonb})
+               |> Runner.execute(%{["x"] => %{"foo" => %{"bar" => "baz"}}})
+
+      # Top-level key found
+      assert {:ok, true} =
+               ~S|x ? 'foo'|
+               |> Parser.parse_and_validate_expression!(refs: %{["x"] => :jsonb})
+               |> Runner.execute(%{["x"] => %{"foo" => %{"bar" => "baz"}}})
+
+      # Key exists even if value is null
+      assert {:ok, true} =
+               ~S|x ? 'a'|
+               |> Parser.parse_and_validate_expression!(refs: %{["x"] => :jsonb})
+               |> Runner.execute(%{["x"] => %{"a" => nil}})
+    end
+
+    test "jsonb keys are case-sensitive" do
+      assert {:ok, false} =
+               ~S|x @> y|
+               |> Parser.parse_and_validate_expression!(refs: %{["x"] => :jsonb, ["y"] => :jsonb})
+               |> Runner.execute(%{["x"] => %{"Name" => "Alice"}, ["y"] => %{"name" => "Alice"}})
+
+      assert {:ok, false} =
+               ~S|x ? 'name'|
+               |> Parser.parse_and_validate_expression!(refs: %{["x"] => :jsonb})
+               |> Runner.execute(%{["x"] => %{"Name" => "Alice"}})
+
+      assert {:ok, true} =
+               ~S|x ? 'Name'|
+               |> Parser.parse_and_validate_expression!(refs: %{["x"] => :jsonb})
+               |> Runner.execute(%{["x"] => %{"Name" => "Alice"}})
+    end
+
+    test "jsonb arrays with mixed primitive types" do
+      mixed = [1, "foo", true, nil, 3.14]
+
+      assert {:ok, true} =
+               ~S|x @> y|
+               |> Parser.parse_and_validate_expression!(refs: %{["x"] => :jsonb, ["y"] => :jsonb})
+               |> Runner.execute(%{["x"] => mixed, ["y"] => [1]})
+
+      assert {:ok, true} =
+               ~S|x @> y|
+               |> Parser.parse_and_validate_expression!(refs: %{["x"] => :jsonb, ["y"] => :jsonb})
+               |> Runner.execute(%{["x"] => mixed, ["y"] => ["foo", true]})
+    end
+
+    test "jsonb boolean values are distinct from strings" do
+      assert {:ok, false} =
+               ~S|x @> y|
+               |> Parser.parse_and_validate_expression!(refs: %{["x"] => :jsonb, ["y"] => :jsonb})
+               |> Runner.execute(%{["x"] => %{"f" => true}, ["y"] => %{"f" => "true"}})
+
+      assert {:ok, true} =
+               ~S|x @> y|
+               |> Parser.parse_and_validate_expression!(refs: %{["x"] => :jsonb, ["y"] => :jsonb})
+               |> Runner.execute(%{["x"] => %{"f" => true}, ["y"] => %{"f" => true}})
+    end
+
     test "subquery" do
       assert {:ok, true} =
                ~S|test IN (SELECT val FROM tester)|
