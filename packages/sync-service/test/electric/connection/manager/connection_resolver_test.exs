@@ -1,5 +1,5 @@
 defmodule Electric.Connection.Manager.ConnectionResolverTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
   use Repatch.ExUnit
 
   alias Electric.Connection.Manager.ConnectionResolver
