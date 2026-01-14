@@ -272,6 +272,49 @@ defmodule Electric.Replication.Eval.Env.KnownFunctions do
     defp do_jsonb_contained_by?(left, right), do: left == right
   end
 
+  # JSONB key existence operators
+  # ? checks if key exists in object or string exists in array
+  defpostgres "jsonb ? text -> bool" do
+    def jsonb_key_exists?(json, key) when is_map(json) and is_binary(key) do
+      Map.has_key?(json, key)
+    end
+
+    # For arrays, check if the string exists as a top-level element
+    def jsonb_key_exists?(json, key) when is_list(json) and is_binary(key) do
+      Enum.member?(json, key)
+    end
+
+    def jsonb_key_exists?(_, _), do: false
+  end
+
+  # ?| checks if any of the keys exist
+  defpostgres "jsonb ?| text[] -> bool" do
+    def jsonb_any_key_exists?(json, keys) when is_map(json) and is_list(keys) do
+      Enum.any?(keys, &Map.has_key?(json, &1))
+    end
+
+    def jsonb_any_key_exists?(json, keys) when is_list(json) and is_list(keys) do
+      key_set = MapSet.new(keys)
+      Enum.any?(json, &(&1 in key_set))
+    end
+
+    def jsonb_any_key_exists?(_, _), do: false
+  end
+
+  # ?& checks if all of the keys exist
+  defpostgres "jsonb ?& text[] -> bool" do
+    def jsonb_all_keys_exist?(json, keys) when is_map(json) and is_list(keys) do
+      Enum.all?(keys, &Map.has_key?(json, &1))
+    end
+
+    def jsonb_all_keys_exist?(json, keys) when is_list(json) and is_list(keys) do
+      key_set = MapSet.new(keys)
+      Enum.all?(key_set, &Enum.member?(json, &1))
+    end
+
+    def jsonb_all_keys_exist?(_, _), do: false
+  end
+
   ## Array functions
   defpostgres("anyarray = anyarray -> bool", delegate: &Kernel.==/2)
   defpostgres("anyarray <> anyarray -> bool", delegate: &Kernel.!=/2)

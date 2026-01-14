@@ -461,6 +461,77 @@ defmodule Electric.Replication.Eval.RunnerTest do
                |> Runner.execute(%{["x"] => [1, 2, 3, 4, 5]})
     end
 
+    test "should work with jsonb ? key existence operator" do
+      # Key exists in object
+      assert {:ok, true} =
+               ~S|x ? 'name'|
+               |> Parser.parse_and_validate_expression!(refs: %{["x"] => :jsonb})
+               |> Runner.execute(%{["x"] => %{"name" => "alice", "age" => 30}})
+
+      # Key does not exist in object
+      assert {:ok, false} =
+               ~S|x ? 'email'|
+               |> Parser.parse_and_validate_expression!(refs: %{["x"] => :jsonb})
+               |> Runner.execute(%{["x"] => %{"name" => "alice", "age" => 30}})
+
+      # String exists in array
+      assert {:ok, true} =
+               ~S|x ? 'foo'|
+               |> Parser.parse_and_validate_expression!(refs: %{["x"] => :jsonb})
+               |> Runner.execute(%{["x"] => ["foo", "bar", "baz"]})
+
+      # String does not exist in array
+      assert {:ok, false} =
+               ~S|x ? 'missing'|
+               |> Parser.parse_and_validate_expression!(refs: %{["x"] => :jsonb})
+               |> Runner.execute(%{["x"] => ["foo", "bar", "baz"]})
+    end
+
+    test "should work with jsonb ?| any-key-exists operator" do
+      # At least one key exists
+      assert {:ok, true} =
+               ~S|x ?| ARRAY['name', 'missing']|
+               |> Parser.parse_and_validate_expression!(refs: %{["x"] => :jsonb})
+               |> Runner.execute(%{["x"] => %{"name" => "alice", "age" => 30}})
+
+      # No keys exist
+      assert {:ok, false} =
+               ~S|x ?| ARRAY['foo', 'bar']|
+               |> Parser.parse_and_validate_expression!(refs: %{["x"] => :jsonb})
+               |> Runner.execute(%{["x"] => %{"name" => "alice", "age" => 30}})
+
+      # Works with arrays too
+      assert {:ok, true} =
+               ~S|x ?| ARRAY['foo', 'missing']|
+               |> Parser.parse_and_validate_expression!(refs: %{["x"] => :jsonb})
+               |> Runner.execute(%{["x"] => ["foo", "bar", "baz"]})
+    end
+
+    test "should work with jsonb ?& all-keys-exist operator" do
+      # All keys exist
+      assert {:ok, true} =
+               ~S|x ?& ARRAY['name', 'age']|
+               |> Parser.parse_and_validate_expression!(refs: %{["x"] => :jsonb})
+               |> Runner.execute(%{["x"] => %{"name" => "alice", "age" => 30}})
+
+      # Not all keys exist
+      assert {:ok, false} =
+               ~S|x ?& ARRAY['name', 'email']|
+               |> Parser.parse_and_validate_expression!(refs: %{["x"] => :jsonb})
+               |> Runner.execute(%{["x"] => %{"name" => "alice", "age" => 30}})
+
+      # Works with arrays too
+      assert {:ok, true} =
+               ~S|x ?& ARRAY['foo', 'bar']|
+               |> Parser.parse_and_validate_expression!(refs: %{["x"] => :jsonb})
+               |> Runner.execute(%{["x"] => ["foo", "bar", "baz"]})
+
+      assert {:ok, false} =
+               ~S|x ?& ARRAY['foo', 'missing']|
+               |> Parser.parse_and_validate_expression!(refs: %{["x"] => :jsonb})
+               |> Runner.execute(%{["x"] => ["foo", "bar", "baz"]})
+    end
+
     test "subquery" do
       assert {:ok, true} =
                ~S|test IN (SELECT val FROM tester)|
