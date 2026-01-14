@@ -13,6 +13,7 @@ defmodule Electric.Postgres.LockBreakerConnectionTest do
     :with_slot_name
   ]
 
+  @tag connection_opt_overrides: [pool_size: 2]
   test "should break an abandoned lock if slot is inactive", ctx do
     Postgrex.query!(
       ctx.db_conn,
