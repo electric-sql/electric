@@ -404,7 +404,8 @@ export default defineConfig({
             ? LOCAL_DEV_URL
             : PRODUCTION_URL)
 
-    const image = `${siteOrigin}${fm.image || DEFAULT_IMAGE}`
+    const fullImageUrl = `${siteOrigin}${fm.image || DEFAULT_IMAGE}`
+    const image = `${siteOrigin}/.netlify/images?url=${encodeURIComponent(fullImageUrl)}&w=1200&h=630&fit=cover&fm=jpg&q=80`
 
     head.push(['meta', { name: 'twitter:card', content: 'summary_large_image' }])
     head.push(['meta', { name: 'twitter:site', content: '@ElectricSQL' }])
