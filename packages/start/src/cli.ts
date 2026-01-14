@@ -55,6 +55,49 @@ function prompt(question: string): Promise<string> {
   })
 }
 
+function promptPassword(question: string): Promise<string> {
+  return new Promise((resolve) => {
+    process.stdout.write(question)
+
+    const stdin = process.stdin
+    const wasRaw = stdin.isRaw
+    stdin.setRawMode(true)
+    stdin.resume()
+    stdin.setEncoding(`utf8`)
+
+    let password = ``
+
+    const onData = (char: string) => {
+      const code = char.charCodeAt(0)
+
+      if (char === `\r` || char === `\n` || code === 13) {
+        // Enter pressed
+        stdin.setRawMode(wasRaw ?? false)
+        stdin.removeListener(`data`, onData)
+        stdin.pause()
+        process.stdout.write(`\n`)
+        resolve(password)
+      } else if (code === 127 || code === 8) {
+        // Backspace
+        if (password.length > 0) {
+          password = password.slice(0, -1)
+          process.stdout.write(`\b \b`)
+        }
+      } else if (code === 3) {
+        // Ctrl+C
+        process.stdout.write(`\n`)
+        process.exit(1)
+      } else if (code >= 32) {
+        // Printable character
+        password += char
+        process.stdout.write(`*`)
+      }
+    }
+
+    stdin.on(`data`, onData)
+  })
+}
+
 interface NextStepsOptions {
   showInstall?: boolean
   showMigrate?: boolean
@@ -119,7 +162,9 @@ async function main() {
 
     if (sourceId) {
       // User provided source ID, prompt for secret and DATABASE_URL
-      const secret = await prompt(`Enter secret for source ${sourceId}: `)
+      const secret = await promptPassword(
+        `Enter secret for source ${sourceId}: `
+      )
       if (!secret.trim()) {
         console.error(`Error: Secret cannot be empty`)
         process.exit(1)
