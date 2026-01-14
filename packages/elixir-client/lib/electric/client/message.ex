@@ -194,7 +194,7 @@ defmodule Electric.Client.Message do
             offset: Offset.t(),
             schema: Client.schema(),
             tag_to_keys: %{String.t() => MapSet.t(String.t())},
-            key_data: %{String.t() => %{tags: MapSet.t(String.t()), msg: any()}}
+            key_data: %{String.t() => %{tags: MapSet.t(String.t()), msg: ChangeMessage.t()}}
           }
   end
 
