@@ -6,6 +6,7 @@ import type { LanguageRegistration } from 'shiki'
 
 import caddyfileGrammar from './theme/syntax/caddyfile.json'
 
+import { buildMetaImageUrl } from '../src/lib/meta-image'
 import demosData from '../data/demos.data.ts'
 import postsData from '../data/posts.data.ts'
 
@@ -404,8 +405,7 @@ export default defineConfig({
             ? LOCAL_DEV_URL
             : PRODUCTION_URL)
 
-    const fullImageUrl = `${siteOrigin}${fm.image || DEFAULT_IMAGE}`
-    const image = `${siteOrigin}/.netlify/images?url=${encodeURIComponent(fullImageUrl)}&w=1200&h=630&fit=cover&fm=jpg&q=80`
+    const image = buildMetaImageUrl(fm.image || DEFAULT_IMAGE, siteOrigin)
 
     head.push(['meta', { name: 'twitter:card', content: 'summary_large_image' }])
     head.push(['meta', { name: 'twitter:site', content: '@ElectricSQL' }])
