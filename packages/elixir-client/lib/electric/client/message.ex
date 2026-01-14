@@ -70,23 +70,27 @@ defmodule Electric.Client.Message do
 
     def from_message(
           %{"headers" => %{"control" => control} = headers},
-          handle
+          handle,
+          request_timestamp
         ) do
       %__MODULE__{
         control: control_atom(control),
         global_last_seen_lsn: global_last_seen_lsn(headers),
-        handle: handle
+        handle: handle,
+        request_timestamp: request_timestamp
       }
     end
 
     def from_message(
           %{headers: %{control: control} = headers},
-          handle
+          handle,
+          request_timestamp
         ) do
       %__MODULE__{
         control: control_atom(control),
         global_last_seen_lsn: global_last_seen_lsn(headers),
-        handle: handle
+        handle: handle,
+        request_timestamp: request_timestamp
       }
     end
 
@@ -122,7 +126,7 @@ defmodule Electric.Client.Message do
 
     require Logger
 
-    def from_message(msg, handle, value_mapping_fun) do
+    def from_message(msg, handle, value_mapping_fun, request_timestamp) do
       %{
         "headers" => headers,
         "value" => raw_value
@@ -134,7 +138,8 @@ defmodule Electric.Client.Message do
         key: msg["key"],
         headers: Headers.from_message(headers, handle),
         value: value,
-        old_value: old_value(msg, value_mapping_fun)
+        old_value: old_value(msg, value_mapping_fun),
+        request_timestamp: request_timestamp
       }
     end
 
@@ -214,7 +219,11 @@ defmodule Electric.Client.Message do
             request_timestamp: DateTime.t()
           }
 
-    def from_message(%{"headers" => %{"event" => "move-out", "patterns" => patterns}}, handle) do
+    def from_message(
+          %{"headers" => %{"event" => "move-out", "patterns" => patterns}},
+          handle,
+          request_timestamp
+        ) do
       parsed_patterns =
         Enum.map(patterns, fn %{"pos" => pos, "value" => value} ->
           %{pos: pos, value: value}
@@ -222,41 +231,62 @@ defmodule Electric.Client.Message do
 
       %__MODULE__{
         patterns: parsed_patterns,
-        handle: handle
+        handle: handle,
+        request_timestamp: request_timestamp
       }
     end
 
-    def from_message(%{headers: %{event: "move-out", patterns: patterns}}, handle) do
+    def from_message(
+          %{headers: %{event: "move-out", patterns: patterns}},
+          handle,
+          request_timestamp
+        ) do
       %__MODULE__{
         patterns: patterns,
-        handle: handle
+        handle: handle,
+        request_timestamp: request_timestamp
       }
     end
   end
 
   defguard is_insert(msg) when is_struct(msg, ChangeMessage) and msg.headers.operation == :insert
 
-  def parse(%{"value" => _} = msg, shape_handle, value_mapper_fun) do
-    [ChangeMessage.from_message(msg, shape_handle, value_mapper_fun)]
+  def parse(%{"value" => _} = msg, shape_handle, value_mapper_fun, request_timestamp) do
+    [ChangeMessage.from_message(msg, shape_handle, value_mapper_fun, request_timestamp)]
   end
 
-  def parse(%{"headers" => %{"control" => _}} = msg, shape_handle, _value_mapper_fun) do
-    [ControlMessage.from_message(msg, shape_handle)]
+  def parse(
+        %{"headers" => %{"control" => _}} = msg,
+        shape_handle,
+        _value_mapper_fun,
+        request_timestamp
+      ) do
+    [ControlMessage.from_message(msg, shape_handle, request_timestamp)]
   end
 
-  def parse(%{headers: %{control: _}} = msg, shape_handle, _value_mapper_fun) do
-    [ControlMessage.from_message(msg, shape_handle)]
+  def parse(%{headers: %{control: _}} = msg, shape_handle, _value_mapper_fun, request_timestamp) do
+    [ControlMessage.from_message(msg, shape_handle, request_timestamp)]
   end
 
-  def parse(%{"headers" => %{"event" => "move-out"}} = msg, shape_handle, _value_mapper_fun) do
-    [MoveOutMessage.from_message(msg, shape_handle)]
+  def parse(
+        %{"headers" => %{"event" => "move-out"}} = msg,
+        shape_handle,
+        _value_mapper_fun,
+        request_timestamp
+      ) do
+    [MoveOutMessage.from_message(msg, shape_handle, request_timestamp)]
   end
 
-  def parse(%{headers: %{event: "move-out"}} = msg, shape_handle, _value_mapper_fun) do
-    [MoveOutMessage.from_message(msg, shape_handle)]
+  def parse(
+        %{headers: %{event: "move-out"}} = msg,
+        shape_handle,
+        _value_mapper_fun,
+        request_timestamp
+      ) do
+    [MoveOutMessage.from_message(msg, shape_handle, request_timestamp)]
   end
 
-  def parse("", _handle, _value_mapper_fun) do
+  def parse("", _handle, _value_mapper_fun, _request_timestamp) do
     []
   end
 end

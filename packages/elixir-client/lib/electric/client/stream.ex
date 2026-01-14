@@ -187,8 +187,7 @@ defmodule Electric.Client.Stream do
 
     resp.body
     |> ensure_enum()
-    |> Enum.flat_map(&Message.parse(&1, shape_handle, value_mapper_fun))
-    |> Enum.map(&Map.put(&1, :request_timestamp, resp.request_timestamp))
+    |> Enum.flat_map(&Message.parse(&1, shape_handle, value_mapper_fun, resp.request_timestamp))
     |> Enum.reduce_while(stream, &handle_msg/2)
     |> dispatch()
   end
@@ -203,7 +202,12 @@ defmodule Electric.Client.Stream do
 
     stream
     |> reset(handle)
-    |> buffer(Enum.flat_map(resp.body, &Message.parse(&1, handle, value_mapper_fun)))
+    |> buffer(
+      Enum.flat_map(
+        resp.body,
+        &Message.parse(&1, handle, value_mapper_fun, resp.request_timestamp)
+      )
+    )
     |> dispatch()
   end
 

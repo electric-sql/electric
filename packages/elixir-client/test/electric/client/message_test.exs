@@ -4,29 +4,32 @@ defmodule Electric.Client.MessageTest do
   alias Electric.Client.Message
   alias Electric.Client.Message.{ChangeMessage, ControlMessage, MoveOutMessage}
 
+  # request_timestamp
+  @ts ~U[2024-01-15 10:30:00Z]
+
   describe "ControlMessage" do
     test "up-to-date" do
       assert [%ControlMessage{control: :up_to_date}] =
-               Message.parse(%{"headers" => %{"control" => "up-to-date"}}, "handle", & &1)
+               Message.parse(%{"headers" => %{"control" => "up-to-date"}}, "handle", & &1, @ts)
 
       assert [%ControlMessage{control: :up_to_date}] =
-               Message.parse(%{headers: %{control: "up-to-date"}}, "handle", & &1)
+               Message.parse(%{headers: %{control: "up-to-date"}}, "handle", & &1, @ts)
     end
 
     test "must-refetch" do
       assert [%ControlMessage{control: :must_refetch}] =
-               Message.parse(%{"headers" => %{"control" => "must-refetch"}}, "handle", & &1)
+               Message.parse(%{"headers" => %{"control" => "must-refetch"}}, "handle", & &1, @ts)
 
       assert [%ControlMessage{control: :must_refetch}] =
-               Message.parse(%{headers: %{control: "must-refetch"}}, "handle", & &1)
+               Message.parse(%{headers: %{control: "must-refetch"}}, "handle", & &1, @ts)
     end
 
     test "snapshot-end" do
       assert [%ControlMessage{control: :snapshot_end}] =
-               Message.parse(%{"headers" => %{"control" => "snapshot-end"}}, "handle", & &1)
+               Message.parse(%{"headers" => %{"control" => "snapshot-end"}}, "handle", & &1, @ts)
 
       assert [%ControlMessage{control: :snapshot_end}] =
-               Message.parse(%{headers: %{control: "snapshot-end"}}, "handle", & &1)
+               Message.parse(%{headers: %{control: "snapshot-end"}}, "handle", & &1, @ts)
     end
   end
 
@@ -40,7 +43,7 @@ defmodule Electric.Client.MessageTest do
       }
 
       assert [%MoveOutMessage{patterns: [%{pos: 0, value: "tag-hash-abc"}], handle: "my-handle"}] =
-               Message.parse(msg, "my-handle", & &1)
+               Message.parse(msg, "my-handle", & &1, @ts)
     end
 
     test "parses move-out with atom keys" do
@@ -52,7 +55,7 @@ defmodule Electric.Client.MessageTest do
       }
 
       assert [%MoveOutMessage{patterns: [%{pos: 0, value: "tag-hash-xyz"}], handle: "my-handle"}] =
-               Message.parse(msg, "my-handle", & &1)
+               Message.parse(msg, "my-handle", & &1, @ts)
     end
 
     test "parses move-out with multiple patterns" do
@@ -67,7 +70,7 @@ defmodule Electric.Client.MessageTest do
         }
       }
 
-      assert [%MoveOutMessage{patterns: patterns}] = Message.parse(msg, "handle", & &1)
+      assert [%MoveOutMessage{patterns: patterns}] = Message.parse(msg, "handle", & &1, @ts)
       assert length(patterns) == 3
       assert Enum.at(patterns, 0) == %{pos: 0, value: "tag-1"}
       assert Enum.at(patterns, 1) == %{pos: 1, value: "tag-2"}
@@ -82,7 +85,7 @@ defmodule Electric.Client.MessageTest do
         "value" => %{"id" => "1"}
       }
 
-      assert [%ChangeMessage{headers: headers}] = Message.parse(msg, "handle", & &1)
+      assert [%ChangeMessage{headers: headers}] = Message.parse(msg, "handle", & &1, @ts)
       assert headers.tags == ["tag-a", "tag-b"]
     end
 
@@ -92,7 +95,7 @@ defmodule Electric.Client.MessageTest do
         "value" => %{"id" => "1"}
       }
 
-      assert [%ChangeMessage{headers: headers}] = Message.parse(msg, "handle", & &1)
+      assert [%ChangeMessage{headers: headers}] = Message.parse(msg, "handle", & &1, @ts)
       assert headers.removed_tags == ["old-tag"]
     end
 
@@ -106,7 +109,7 @@ defmodule Electric.Client.MessageTest do
         "value" => %{"id" => "1"}
       }
 
-      assert [%ChangeMessage{headers: headers}] = Message.parse(msg, "handle", & &1)
+      assert [%ChangeMessage{headers: headers}] = Message.parse(msg, "handle", & &1, @ts)
       assert headers.tags == ["new-tag"]
       assert headers.removed_tags == ["old-tag"]
     end
@@ -117,7 +120,7 @@ defmodule Electric.Client.MessageTest do
         "value" => %{"id" => "1"}
       }
 
-      assert [%ChangeMessage{headers: headers}] = Message.parse(msg, "handle", & &1)
+      assert [%ChangeMessage{headers: headers}] = Message.parse(msg, "handle", & &1, @ts)
       assert headers.tags == []
       assert headers.removed_tags == []
     end
@@ -131,7 +134,7 @@ defmodule Electric.Client.MessageTest do
         "value" => %{"id" => "123", "name" => "test"}
       }
 
-      assert [%ChangeMessage{} = change] = Message.parse(msg, "my-handle", & &1)
+      assert [%ChangeMessage{} = change] = Message.parse(msg, "my-handle", & &1, @ts)
       assert change.key == "row-key"
       assert change.value == %{"id" => "123", "name" => "test"}
       assert change.headers.operation == :insert
@@ -147,7 +150,7 @@ defmodule Electric.Client.MessageTest do
         "old_value" => %{"name" => "original"}
       }
 
-      assert [%ChangeMessage{} = change] = Message.parse(msg, "handle", & &1)
+      assert [%ChangeMessage{} = change] = Message.parse(msg, "handle", & &1, @ts)
       assert change.headers.operation == :update
       assert change.value == %{"id" => "123", "name" => "updated"}
       assert change.old_value == %{"name" => "original"}
@@ -160,7 +163,7 @@ defmodule Electric.Client.MessageTest do
         "value" => %{"id" => "123"}
       }
 
-      assert [%ChangeMessage{} = change] = Message.parse(msg, "handle", & &1)
+      assert [%ChangeMessage{} = change] = Message.parse(msg, "handle", & &1, @ts)
       assert change.headers.operation == :delete
       assert change.value == %{"id" => "123"}
     end
