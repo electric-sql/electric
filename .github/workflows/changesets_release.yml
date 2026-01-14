@@ -11,6 +11,7 @@ permissions:
   id-token: write # Required for OIDC
   contents: write # Required to push tags and create releases
   pull-requests: write # Required for changesets to create PRs
+  issues: write # Required for changesets to comment on issues about the release in which they were fixed
 
 jobs:
   changesets:
