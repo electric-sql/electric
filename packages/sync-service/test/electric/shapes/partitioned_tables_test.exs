@@ -1,5 +1,5 @@
 defmodule Electric.Shapes.PartitionedTablesTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
 
   alias Electric.Shapes.Shape
   alias Electric.ShapeCache
