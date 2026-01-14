@@ -1,5 +1,41 @@
 import type { Context } from 'https://edge.netlify.com'
 
+// Social media and messaging platform bots that need HTML with meta tags for
+// link previews. These fetchers retrieve Open Graph / Twitter Card metadata
+// to generate rich preview cards when links are shared.
+//
+// Single pre-compiled regex for efficient matching. Case-insensitive.
+// Patterns include:
+//   - Twitter/X (Twitterbot)
+//   - Facebook/Meta (facebookexternalhit, Facebot, Meta-ExternalFetcher, Meta-ExternalAgent)
+//   - LinkedIn (LinkedInBot)
+//   - Slack (Slackbot, Slack-ImgProxy)
+//   - Discord (Discordbot)
+//   - Telegram (TelegramBot)
+//   - WhatsApp
+//   - Pinterest (Pinterestbot, Pinterest/)
+//   - Snapchat (Snap URL Preview Service)
+//   - Reddit (redditbot)
+//   - Bluesky
+//   - Mastodon (and Fediverse instances)
+//   - Microsoft Teams (Microsoft-Teams, MSTeams)
+//   - VKontakte (vkShare)
+//   - Line (Line/, LineBot)
+//   - Viber
+//   - WeChat (MicroMessenger)
+//   - Kakao
+//   - Embedly, Iframely (link preview services)
+const SOCIAL_BOT_REGEX =
+  /twitterbot|facebookexternalhit|facebot|meta-external|linkedinbot|slackbot|slack-imgproxy|discordbot|telegrambot|whatsapp|pinterestbot|pinterest\/|snapchat|redditbot|bluesky|mastodon|microsoft-teams|msteams|vkshare|line\/|linebot|viber|wechat|micromessenger|kakao|embedly|iframely|unfurl/i
+
+/**
+ * Check if the user-agent indicates a social media bot that needs HTML
+ * with meta tags for generating link preview cards.
+ */
+function isSocialMediaBot(userAgent: string): boolean {
+  return SOCIAL_BOT_REGEX.test(userAgent)
+}
+
 // Path prefixes that should serve markdown to agents
 const PATH_PREFIXES = [
   `/about/`,
@@ -51,7 +87,19 @@ function transformBlogPostPath(pathname: string): string | null {
 export default async (request: Request, context: Context) => {
   const url = new URL(request.url)
   const acceptHeader = request.headers.get(`accept`) || ``
+  const userAgent = request.headers.get(`user-agent`) || ``
   let targetPath = url.pathname
+
+  // Social media bots need HTML with Open Graph / Twitter Card meta tags
+  // to generate rich link preview cards. Always serve HTML to these bots.
+  if (isSocialMediaBot(userAgent)) {
+    return context.next()
+  }
+
+  // Skip hidden paths (like /.vitepress/) - these are internal files
+  if (url.pathname.startsWith(`/.`)) {
+    return context.next()
+  }
 
   // Check if this is a blog post
   const isBlogPost =
