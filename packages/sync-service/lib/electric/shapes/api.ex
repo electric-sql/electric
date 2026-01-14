@@ -737,6 +737,10 @@ defmodule Electric.Shapes.Api do
       {other_shape_handle, _} when other_shape_handle != shape_handle ->
         send(self(), {ref, :shape_rotation, other_shape_handle})
 
+      {^shape_handle, _latest_log_offset} ->
+        # Shape was reset/truncated - offset went backwards, client needs to re-sync
+        send(self(), {ref, :shape_rotation, shape_handle})
+
       nil ->
         send(self(), {ref, :shape_rotation})
     end

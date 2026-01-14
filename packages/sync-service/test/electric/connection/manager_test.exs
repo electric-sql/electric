@@ -1,5 +1,5 @@
 defmodule Electric.Connection.ConnectionManagerTest do
-  use ExUnit.Case
+  use ExUnit.Case, async: false
   use Repatch.ExUnit
 
   import Support.ComponentSetup
