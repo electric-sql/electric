@@ -9,17 +9,35 @@ import { join } from 'path'
 interface ParsedArgs {
   appName: string
   sourceId?: string
+  secret?: string
+  databaseUrl?: string
 }
 
 function parseArgs(args: string[]): ParsedArgs {
   let appName: string | undefined
   let sourceId: string | undefined
+  let secret: string | undefined
+  let databaseUrl: string | undefined
 
   for (let i = 0; i < args.length; i++) {
     if (args[i] === `--source`) {
       sourceId = args[i + 1]
       if (!sourceId || sourceId.startsWith(`-`)) {
         console.error(`Error: --source requires a source ID value`)
+        process.exit(1)
+      }
+      i++ // Skip the value
+    } else if (args[i] === `--secret`) {
+      secret = args[i + 1]
+      if (!secret || secret.startsWith(`-`)) {
+        console.error(`Error: --secret requires a value`)
+        process.exit(1)
+      }
+      i++ // Skip the value
+    } else if (args[i] === `--database-url`) {
+      databaseUrl = args[i + 1]
+      if (!databaseUrl || databaseUrl.startsWith(`-`)) {
+        console.error(`Error: --database-url requires a value`)
         process.exit(1)
       }
       i++ // Skip the value
@@ -30,7 +48,7 @@ function parseArgs(args: string[]): ParsedArgs {
 
   if (!appName) {
     console.error(
-      `Usage: npx @electric-sql/start <app-name> [--source <source-id>]`
+      `Usage: npx @electric-sql/start <app-name> [--source <source-id>] [--secret <secret>] [--database-url <url>]`
     )
     console.error(
       `       npx @electric-sql/start .  (configure current directory)`
@@ -38,7 +56,7 @@ function parseArgs(args: string[]): ParsedArgs {
     process.exit(1)
   }
 
-  return { appName, sourceId }
+  return { appName, sourceId, secret, databaseUrl }
 }
 
 function prompt(question: string): Promise<string> {
@@ -56,10 +74,16 @@ function prompt(question: string): Promise<string> {
 }
 
 function promptPassword(question: string): Promise<string> {
+  const stdin = process.stdin
+
+  // Fall back to regular readline-based prompt if not a TTY (e.g., piped input, CI)
+  if (!stdin.isTTY) {
+    return prompt(question)
+  }
+
   return new Promise((resolve) => {
     process.stdout.write(question)
 
-    const stdin = process.stdin
     const wasRaw = stdin.isRaw
     stdin.setRawMode(true)
     stdin.resume()
@@ -134,7 +158,7 @@ function printNextSteps(appName: string, options: NextStepsOptions = {}) {
 
 async function main() {
   const args = process.argv.slice(2)
-  const { appName, sourceId } = parseArgs(args)
+  const { appName, sourceId, secret, databaseUrl } = parseArgs(args)
 
   // Validate app name (skip validation for "." which means current directory)
   if (appName !== `.` && !/^[a-zA-Z0-9-_]+$/.test(appName)) {
@@ -161,25 +185,31 @@ async function main() {
     let userProvidedCredentials = false
 
     if (sourceId) {
-      // User provided source ID, prompt for secret and DATABASE_URL
-      const secret = await promptPassword(
-        `Enter secret for source ${sourceId}: `
-      )
-      if (!secret.trim()) {
+      // User provided source ID, get secret and DATABASE_URL from CLI params or prompt
+      let finalSecret = secret
+      if (!finalSecret) {
+        finalSecret = await promptPassword(
+          `Enter secret for source ${sourceId}: `
+        )
+      }
+      if (!finalSecret.trim()) {
         console.error(`Error: Secret cannot be empty`)
         process.exit(1)
       }
 
-      const databaseUrl = await prompt(`Enter DATABASE_URL: `)
-      if (!databaseUrl.trim()) {
+      let finalDatabaseUrl = databaseUrl
+      if (!finalDatabaseUrl) {
+        finalDatabaseUrl = await prompt(`Enter DATABASE_URL: `)
+      }
+      if (!finalDatabaseUrl.trim()) {
         console.error(`Error: DATABASE_URL cannot be empty`)
         process.exit(1)
       }
 
       credentials = {
         source_id: sourceId,
-        secret: secret.trim(),
-        DATABASE_URL: databaseUrl.trim(),
+        secret: finalSecret.trim(),
+        DATABASE_URL: finalDatabaseUrl.trim(),
       }
       userProvidedCredentials = true
       console.log(`Using provided credentials...`)
