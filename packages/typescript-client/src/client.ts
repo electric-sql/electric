@@ -24,6 +24,7 @@ import {
   MissingShapeHandleError,
   ReservedParamError,
   MissingHeadersError,
+  StaleCacheError,
 } from './error'
 import {
   BackoffDefaults,
@@ -61,6 +62,7 @@ import {
   SUBSET_PARAM_ORDER_BY,
   SUBSET_PARAM_WHERE_EXPR,
   SUBSET_PARAM_ORDER_BY_EXPR,
+  CACHE_BUSTER_QUERY_PARAM,
 } from './constants'
 import { compileExpression, compileOrderBy } from './expression-compiler'
 import {
@@ -76,6 +78,7 @@ const RESERVED_PARAMS: Set<ReservedParamKeys> = new Set([
   SHAPE_HANDLE_QUERY_PARAM,
   LIVE_QUERY_PARAM,
   OFFSET_QUERY_PARAM,
+  CACHE_BUSTER_QUERY_PARAM,
 ])
 
 type Replica = `full` | `default`
@@ -141,6 +144,7 @@ type ReservedParamKeys =
   | typeof SHAPE_HANDLE_QUERY_PARAM
   | typeof LIVE_QUERY_PARAM
   | typeof OFFSET_QUERY_PARAM
+  | typeof CACHE_BUSTER_QUERY_PARAM
   | `subset__${string}`
 
 /**
@@ -573,6 +577,9 @@ export class ShapeStream<T extends Row<unknown> = Row>
   #sseBackoffBaseDelay = 100 // Base delay for exponential backoff (ms)
   #sseBackoffMaxDelay = 5000 // Maximum delay cap (ms)
   #unsubscribeFromVisibilityChanges?: () => void
+  #staleCacheBuster?: string // Cache buster set when stale CDN response detected, used on retry requests to bypass cache
+  #staleCacheRetryCount = 0
+  #maxStaleCacheRetries = 3
 
   // Derived state: we're in replay mode if we have a last seen cursor
   get #replayMode(): boolean {
@@ -784,6 +791,15 @@ export class ShapeStream<T extends Row<unknown> = Row>
         }
         return // interrupted
       }
+
+      if (e instanceof StaleCacheError) {
+        // Received a stale cached response from CDN with an expired handle.
+        // The #staleCacheBuster has been set in #onInitialResponse, so retry
+        // the request which will include a random cache buster to bypass the
+        // misconfigured CDN cache.
+        return this.#requestShape()
+      }
+
       if (!(e instanceof FetchError)) throw e // should never happen
 
       if (e.status == 409) {
@@ -986,6 +1002,15 @@ export class ShapeStream<T extends Row<unknown> = Row>
       fetchUrl.searchParams.set(EXPIRED_HANDLE_QUERY_PARAM, expiredHandle)
     }
 
+    // Add random cache buster if we received a stale response from CDN
+    // This forces a fresh request bypassing the misconfigured CDN cache
+    if (this.#staleCacheBuster) {
+      fetchUrl.searchParams.set(
+        CACHE_BUSTER_QUERY_PARAM,
+        this.#staleCacheBuster
+      )
+    }
+
     // sort query params in-place for stable URLs and improved cache hits
     fetchUrl.searchParams.sort()
 
@@ -1031,6 +1056,46 @@ export class ShapeStream<T extends Row<unknown> = Row>
         : null
       if (shapeHandle !== expiredHandle) {
         this.#shapeHandle = shapeHandle
+        // Clear cache buster after successful response with valid handle
+        if (this.#staleCacheBuster) {
+          this.#staleCacheBuster = undefined
+          this.#staleCacheRetryCount = 0
+        }
+      } else if (this.#shapeHandle === undefined) {
+        // We received a stale response from cache and don't have a handle yet.
+        // Instead of accepting the stale handle, throw an error to trigger a retry
+        // with a random cache buster to bypass the CDN cache.
+        this.#staleCacheRetryCount++
+        // Cancel the response body to release the connection before retrying
+        await response.body?.cancel()
+        if (this.#staleCacheRetryCount > this.#maxStaleCacheRetries) {
+          throw new FetchError(
+            502,
+            undefined,
+            undefined,
+            {},
+            this.#currentFetchUrl?.toString() ?? ``,
+            `CDN continues serving stale cached responses after ${this.#maxStaleCacheRetries} retry attempts. ` +
+              `This indicates a severe proxy/CDN misconfiguration. ` +
+              `Check that your proxy includes all query parameters (especially 'handle' and 'offset') in its cache key. ` +
+              `For more information visit the troubleshooting guide: https://electric-sql.com/docs/guides/troubleshooting`
+          )
+        }
+        console.warn(
+          `[Electric] Received stale cached response with expired shape handle. ` +
+            `This should not happen and indicates a proxy/CDN caching misconfiguration. ` +
+            `The response contained handle "${shapeHandle}" which was previously marked as expired. ` +
+            `Check that your proxy includes all query parameters (especially 'handle' and 'offset') in its cache key. ` +
+            `For more information visit the troubleshooting guide: https://electric-sql.com/docs/guides/troubleshooting ` +
+            `Retrying with a random cache buster to bypass the stale cache (attempt ${this.#staleCacheRetryCount}/${this.#maxStaleCacheRetries}).`
+        )
+        // Generate a random cache buster for the retry
+        this.#staleCacheBuster = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`
+        throw new StaleCacheError(
+          `Received stale cached response with expired handle "${shapeHandle}". ` +
+            `This indicates a proxy/CDN caching misconfiguration. ` +
+            `Check that your proxy includes all query parameters (especially 'handle' and 'offset') in its cache key.`
+        )
       } else {
         console.warn(
           `[Electric] Received stale cached response with expired shape handle. ` +
@@ -1491,6 +1556,9 @@ export class ShapeStream<T extends Row<unknown> = Row>
     // Reset SSE fallback state to try SSE again after reset
     this.#consecutiveShortSseConnections = 0
     this.#sseFallbackToLongPolling = false
+    // Reset stale cache retry state
+    this.#staleCacheBuster = undefined
+    this.#staleCacheRetryCount = 0
   }
 
   /**

@@ -4,7 +4,10 @@ import {
   ExpiredShapesCache,
   expiredShapesCache,
 } from '../src/expired-shapes-cache'
-import { EXPIRED_HANDLE_QUERY_PARAM } from '../src/constants'
+import {
+  CACHE_BUSTER_QUERY_PARAM,
+  EXPIRED_HANDLE_QUERY_PARAM,
+} from '../src/constants'
 
 function waitForFetch(stream: ShapeStream): Promise<void> {
   let unsub = () => {}
@@ -363,5 +366,163 @@ describe(`ExpiredShapesCache`, () => {
 
     // Verify the stream's current handle is H2 (not the stale H1)
     expect(stream.shapeHandle).toBe(`new-handle-H2`)
+  })
+
+  it(`should retry with cache buster when receiving stale response with no handle yet`, async () => {
+    // This test verifies the fix for a bug where the client gets into a broken state:
+    // 1. Client starts fresh (no handle, offset=-1)
+    // 2. expiredShapesCache has a stale expired handle from a previous session
+    // 3. CDN returns cached response with that expired handle in headers
+    // 4. Bug: Client didn't accept the handle because it matched expired cache
+    // 5. Bug: Offset advanced but handle stayed undefined
+    // 6. Bug: Next request failed with "handle can't be blank when offset != -1"
+    // Fix: Client retries with a random cache buster to bypass the CDN cache
+
+    const expectedShapeUrl = `${shapeUrl}?table=test`
+    const staleHandle = `stale-handle-from-previous-session`
+    const freshHandle = `fresh-handle-from-origin`
+
+    // Pre-populate expiredShapesCache with stale expired handle data
+    // (simulating leftover from previous browser session)
+    expiredShapesCache.markExpired(expectedShapeUrl, staleHandle)
+
+    let requestCount = 0
+    const capturedUrls: string[] = []
+    let resolveSecondRequest: () => void
+    const secondRequestMade = new Promise<void>((resolve) => {
+      resolveSecondRequest = resolve
+    })
+
+    fetchMock.mockImplementation((input: RequestInfo | URL) => {
+      requestCount++
+      capturedUrls.push(input.toString())
+
+      if (requestCount === 1) {
+        // First request: CDN returns stale cached response with the expired handle
+        // This simulates proxy/CDN ignoring the expired_handle cache buster
+        return Promise.resolve(
+          new Response(JSON.stringify([{ value: { id: 1 } }]), {
+            status: 200,
+            headers: {
+              'electric-handle': staleHandle, // Same as expired handle!
+              'electric-offset': `0_0`,
+              'electric-schema': `{"id":"int4"}`,
+              'electric-cursor': `cursor-1`,
+            },
+          })
+        )
+      } else {
+        // Second request: should include random cache buster (_cb param)
+        // and get fresh response from origin
+        resolveSecondRequest()
+        return Promise.resolve(
+          new Response(
+            JSON.stringify([{ headers: { control: `up-to-date` } }]),
+            {
+              status: 200,
+              headers: {
+                'electric-handle': freshHandle, // Fresh handle from origin
+                'electric-offset': `0_0`,
+                'electric-schema': `{"id":"int4"}`,
+                'electric-cursor': `cursor-2`,
+              },
+            }
+          )
+        )
+      }
+    })
+
+    const stream = new ShapeStream({
+      url: shapeUrl,
+      params: { table: `test` },
+      // NO handle provided - client starts fresh
+      signal: aborter.signal,
+      fetchClient: fetchMock,
+      subscribe: false,
+    })
+
+    // Subscribe to trigger fetching
+    stream.subscribe(() => {})
+
+    // Wait for second request to be made
+    await secondRequestMade
+
+    // Small delay to let the response be processed
+    await new Promise((resolve) => setTimeout(resolve, 10))
+
+    // The client should have retried and gotten a fresh handle
+    expect(stream.shapeHandle).toBe(freshHandle)
+
+    // Verify the second request includes the cache buster parameter
+    expect(requestCount).toBeGreaterThanOrEqual(2)
+    const secondUrl = new URL(capturedUrls[1])
+    expect(secondUrl.searchParams.has(CACHE_BUSTER_QUERY_PARAM)).toBe(true)
+
+    // The key assertion: client should NOT be in a broken state
+    expect(stream.shapeHandle).not.toBe(undefined)
+  })
+
+  it(`should throw error after max stale cache retries exceeded`, async () => {
+    // This test verifies that the client doesn't retry forever when CDN
+    // continues serving stale responses despite cache buster
+    const expectedShapeUrl = `${shapeUrl}?table=test`
+    const staleHandle = `persistent-stale-handle`
+
+    // Pre-populate expiredShapesCache with stale expired handle data
+    expiredShapesCache.markExpired(expectedShapeUrl, staleHandle)
+
+    let requestCount = 0
+    const capturedUrls: string[] = []
+
+    fetchMock.mockImplementation((input: RequestInfo | URL) => {
+      requestCount++
+      capturedUrls.push(input.toString())
+
+      // Always return stale response - simulating severely misconfigured CDN
+      return Promise.resolve(
+        new Response(JSON.stringify([{ value: { id: 1 } }]), {
+          status: 200,
+          headers: {
+            'electric-handle': staleHandle, // Always stale!
+            'electric-offset': `0_0`,
+            'electric-schema': `{"id":"int4"}`,
+            'electric-cursor': `cursor-1`,
+          },
+        })
+      )
+    })
+
+    let caughtError: Error | null = null
+
+    const stream = new ShapeStream({
+      url: shapeUrl,
+      params: { table: `test` },
+      signal: aborter.signal,
+      fetchClient: fetchMock,
+      subscribe: false,
+      onError: (error) => {
+        caughtError = error
+      },
+    })
+
+    // Subscribe to trigger fetching
+    stream.subscribe(() => {})
+
+    // Wait for retries to exhaust (should be fast since no real network)
+    await new Promise((resolve) => setTimeout(resolve, 100))
+
+    // Should have made initial request + 3 retries = 4 total requests
+    expect(requestCount).toBe(4)
+
+    // Verify each retry after the first includes cache buster
+    for (let i = 1; i < capturedUrls.length; i++) {
+      const url = new URL(capturedUrls[i])
+      expect(url.searchParams.has(CACHE_BUSTER_QUERY_PARAM)).toBe(true)
+    }
+
+    // Should have thrown an error after max retries
+    expect(caughtError).not.toBe(null)
+    expect(caughtError!.message).toContain(`stale cached responses`)
+    expect(caughtError!.message).toContain(`3 retry attempts`)
   })
 })
