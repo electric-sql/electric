@@ -228,9 +228,20 @@ defmodule Electric.Replication.Eval.RunnerTest do
                |> Parser.parse_and_validate_expression!(refs: %{["x"] => :jsonb})
                |> Runner.execute(%{["x"] => ["first", "second"]})
 
-      # Negative index returns nil (PostgreSQL behavior)
-      assert {:ok, nil} =
+      # Negative indices count from the end (PostgreSQL behavior)
+      assert {:ok, "second"} =
                ~S|x -> -1|
+               |> Parser.parse_and_validate_expression!(refs: %{["x"] => :jsonb})
+               |> Runner.execute(%{["x"] => ["first", "second"]})
+
+      assert {:ok, "first"} =
+               ~S|x -> -2|
+               |> Parser.parse_and_validate_expression!(refs: %{["x"] => :jsonb})
+               |> Runner.execute(%{["x"] => ["first", "second"]})
+
+      # Negative out of bounds returns nil
+      assert {:ok, nil} =
+               ~S|x -> -3|
                |> Parser.parse_and_validate_expression!(refs: %{["x"] => :jsonb})
                |> Runner.execute(%{["x"] => ["first", "second"]})
     end
@@ -282,6 +293,48 @@ defmodule Electric.Replication.Eval.RunnerTest do
                ~S|x ->> 0|
                |> Parser.parse_and_validate_expression!(refs: %{["x"] => :jsonb})
                |> Runner.execute(%{["x"] => [42, 43]})
+
+      # Negative indices count from the end
+      assert {:ok, "second"} =
+               ~S|x ->> -1|
+               |> Parser.parse_and_validate_expression!(refs: %{["x"] => :jsonb})
+               |> Runner.execute(%{["x"] => ["first", "second"]})
+
+      assert {:ok, "first"} =
+               ~S|x ->> -2|
+               |> Parser.parse_and_validate_expression!(refs: %{["x"] => :jsonb})
+               |> Runner.execute(%{["x"] => ["first", "second"]})
+
+      # Out of bounds returns nil
+      assert {:ok, nil} =
+               ~S|x ->> -3|
+               |> Parser.parse_and_validate_expression!(refs: %{["x"] => :jsonb})
+               |> Runner.execute(%{["x"] => ["first", "second"]})
+    end
+
+    test "should return nil for structure mismatch extraction" do
+      # Object access on array returns nil
+      assert {:ok, nil} =
+               ~S|x -> 'a'|
+               |> Parser.parse_and_validate_expression!(refs: %{["x"] => :jsonb})
+               |> Runner.execute(%{["x"] => [1, 2, 3]})
+
+      # Array index access on object returns nil
+      assert {:ok, nil} =
+               ~S|x -> 0|
+               |> Parser.parse_and_validate_expression!(refs: %{["x"] => :jsonb})
+               |> Runner.execute(%{["x"] => %{"a" => 1}})
+
+      # Same for ->> variants
+      assert {:ok, nil} =
+               ~S|x ->> 'a'|
+               |> Parser.parse_and_validate_expression!(refs: %{["x"] => :jsonb})
+               |> Runner.execute(%{["x"] => [1, 2, 3]})
+
+      assert {:ok, nil} =
+               ~S|x ->> 0|
+               |> Parser.parse_and_validate_expression!(refs: %{["x"] => :jsonb})
+               |> Runner.execute(%{["x"] => %{"a" => 1}})
     end
 
     test "should work with chained jsonb operators" do
@@ -411,6 +464,32 @@ defmodule Electric.Replication.Eval.RunnerTest do
                ~S|x @> y|
                |> Parser.parse_and_validate_expression!(refs: %{["x"] => :jsonb, ["y"] => :jsonb})
                |> Runner.execute(%{["x"] => "hello", ["y"] => "world"})
+
+      # Array contains primitive (Postgres special-case)
+      # '["foo", "bar"]'::jsonb @> '"bar"'::jsonb returns true
+      assert {:ok, true} =
+               ~S|x @> y|
+               |> Parser.parse_and_validate_expression!(refs: %{["x"] => :jsonb, ["y"] => :jsonb})
+               |> Runner.execute(%{["x"] => ["foo", "bar"], ["y"] => "bar"})
+
+      # But scalar does not contain array (non-reciprocal)
+      assert {:ok, false} =
+               ~S|x @> y|
+               |> Parser.parse_and_validate_expression!(refs: %{["x"] => :jsonb, ["y"] => :jsonb})
+               |> Runner.execute(%{["x"] => "bar", ["y"] => ["foo", "bar"]})
+
+      # Structure must match for nested arrays
+      # [1, 2, [1, 3]] @> [1, 3] is false (structure doesn't match)
+      assert {:ok, false} =
+               ~S|x @> y|
+               |> Parser.parse_and_validate_expression!(refs: %{["x"] => :jsonb, ["y"] => :jsonb})
+               |> Runner.execute(%{["x"] => [1, 2, [1, 3]], ["y"] => [1, 3]})
+
+      # [1, 2, [1, 3]] @> [[1, 3]] is true (structure matches)
+      assert {:ok, true} =
+               ~S|x @> y|
+               |> Parser.parse_and_validate_expression!(refs: %{["x"] => :jsonb, ["y"] => :jsonb})
+               |> Runner.execute(%{["x"] => [1, 2, [1, 3]], ["y"] => [[1, 3]]})
     end
 
     test "should work with jsonb <@ contained-by operator" do

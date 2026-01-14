@@ -176,12 +176,8 @@ defmodule Electric.Replication.Eval.Env.KnownFunctions do
   defpostgres "jsonb -> int4 -> jsonb" do
     def jsonb_get_by_index(json, index) when is_list(json) and is_integer(index) do
       # PostgreSQL uses 0-based indexing for JSON arrays
-      # Negative indices are not supported (unlike Python), they return null
-      if index >= 0 do
-        Enum.at(json, index)
-      else
-        nil
-      end
+      # Negative indices count from the end (e.g., -1 is last element)
+      Enum.at(json, index)
     end
 
     def jsonb_get_by_index(_, _), do: nil
@@ -210,11 +206,8 @@ defmodule Electric.Replication.Eval.Env.KnownFunctions do
 
   defpostgres "jsonb ->> int4 -> text" do
     def jsonb_get_text_by_index(json, index) when is_list(json) and is_integer(index) do
-      if index >= 0 do
-        json |> Enum.at(index) |> jsonb_value_to_text()
-      else
-        nil
-      end
+      # Negative indices count from the end (e.g., -1 is last element)
+      json |> Enum.at(index) |> jsonb_value_to_text()
     end
 
     def jsonb_get_text_by_index(_, _), do: nil
@@ -246,10 +239,18 @@ defmodule Electric.Replication.Eval.Env.KnownFunctions do
       end)
     end
 
+    # Arrays may contain primitive values (special-case in Postgres)
+    # e.g., '["foo", "bar"]'::jsonb @> '"bar"'::jsonb returns true
+    defp do_jsonb_contains?(left, right)
+         when is_list(left) and not is_list(right) and not is_map(right) do
+      Enum.any?(left, fn left_elem -> do_jsonb_contains?(left_elem, right) end)
+    end
+
     # Scalars: must be equal
     defp do_jsonb_contains?(left, right), do: left == right
   end
 
+  # <@ is the inverse of @>: x <@ y is equivalent to y @> x
   defpostgres "jsonb <@ jsonb -> bool" do
     def jsonb_contained_by?(left, right), do: do_jsonb_contains?(right, left)
   end
