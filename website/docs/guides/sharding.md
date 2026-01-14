@@ -7,6 +7,7 @@ outline: [2, 3]
 
 <img src="/img/icons/sharding.svg" class="product-icon"
     style="width: 72px"
+    alt="Sharding icon"
 />
 
 # Sharding
@@ -177,7 +178,8 @@ function createUserStream(userId: string) {
     url: `${shardUrl}/v1/shape`,
     params: {
       table: 'user_data',
-      where: `user_id = '${userId}'`,
+      where: `user_id = $1`,
+      'params[1]': userId,
     },
   })
 }
@@ -235,20 +237,24 @@ app.get('/v1/shape', async (req, res) => {
     })
   }
 
-  // Build upstream URL with all query parameters
+  // Build upstream URL with Electric protocol parameters only
   const upstreamUrl = new URL('/v1/shape', targetUrl)
   Object.entries(req.query).forEach(([key, value]) => {
-    if (key !== 'user_id') { // Don't forward routing param
-      upstreamUrl.searchParams.set(key, value as string)
+    if (key === 'user_id') return // Don't forward routing param
+    if (Array.isArray(value)) {
+      value.forEach(v => upstreamUrl.searchParams.append(key, String(v)))
+    } else if (value != null) {
+      upstreamUrl.searchParams.set(key, String(value))
     }
   })
 
+  // Add Electric API secret as query parameter (not header)
+  if (process.env.ELECTRIC_SECRET) {
+    upstreamUrl.searchParams.set('secret', process.env.ELECTRIC_SECRET)
+  }
+
   // Forward request to correct Electric instance
-  const response = await fetch(upstreamUrl, {
-    headers: {
-      'Authorization': `Bearer ${process.env.ELECTRIC_SECRET}`,
-    },
-  })
+  const response = await fetch(upstreamUrl)
 
   // Stream response back to client
   res.status(response.status)
@@ -259,7 +265,14 @@ app.get('/v1/shape', async (req, res) => {
     }
   })
 
-  response.body?.pipe(res)
+  // Note: In Node.js 18+, fetch returns a Web ReadableStream.
+  // Use Readable.fromWeb() to pipe to Express response.
+  if (response.body) {
+    const { Readable } = await import('node:stream')
+    Readable.fromWeb(response.body as any).pipe(res)
+  } else {
+    res.end()
+  }
 })
 
 app.listen(3000)
@@ -280,6 +293,9 @@ const stream = new ShapeStream({
 })
 ```
 
+> [!Warning] This example shows routing only
+> The proxy above handles **shard routing** but does not enforce **authorization**. In production, your proxy should also validate the user's identity and set an appropriate `where` clause to restrict data access. See [Combining with auth](#combining-with-auth) below and the [Auth guide](/docs/guides/auth) for complete examples.
+
 ### Edge routing
 
 For optimal performance with a CDN, implement routing at the edge. This minimizes latency while keeping sharding logic server-side.
@@ -287,7 +303,7 @@ For optimal performance with a CDN, implement routing at the edge. This minimize
 ```typescript
 // Cloudflare Worker or similar edge function
 export default {
-  async fetch(request: Request): Promise<Response> {
+  async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url)
 
     // Extract user ID from request
@@ -300,6 +316,14 @@ export default {
 
     // Determine shard (edge KV lookup or compute)
     const shardId = await getShardForUser(userId)
+
+    // Remove routing-only params before forwarding
+    url.searchParams.delete('user_id')
+
+    // Add Electric API secret (injected at edge, never from client)
+    if (env.ELECTRIC_SECRET) {
+      url.searchParams.set('secret', env.ELECTRIC_SECRET)
+    }
 
     // Route to correct Electric instance
     const targetOrigin = `https://electric-shard-${shardId}.internal`
@@ -401,15 +425,17 @@ app.get('/v1/shape', async (req, res) => {
   const upstreamUrl = new URL('/v1/shape', targetUrl)
   upstreamUrl.searchParams.set('table', req.query.table as string)
 
-  // Enforce user can only access their own data
-  upstreamUrl.searchParams.set('where', `user_id = '${user.id}'`)
+  // Enforce user can only access their own data using parameterized where
+  upstreamUrl.searchParams.set('where', 'user_id = $1')
+  upstreamUrl.searchParams.set('params[1]', user.id)
+
+  // Add Electric API secret as query parameter
+  if (process.env.ELECTRIC_SECRET) {
+    upstreamUrl.searchParams.set('secret', process.env.ELECTRIC_SECRET)
+  }
 
   // 4. Forward to Electric
-  const response = await fetch(upstreamUrl, {
-    headers: {
-      'Authorization': `Bearer ${process.env.ELECTRIC_SECRET}`,
-    },
-  })
+  const response = await fetch(upstreamUrl)
 
   // Stream response...
 })
@@ -423,10 +449,14 @@ Monitor all Electric instances for a complete view of your sharded deployment:
 // Health check aggregator
 async function checkAllShards(): Promise<ShardHealth[]> {
   const checks = Object.entries(SHARD_URLS).map(async ([shardId, url]) => {
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 5000)
+
     try {
       const response = await fetch(`${url}/v1/health`, {
-        timeout: 5000,
+        signal: controller.signal,
       })
+      clearTimeout(timeoutId)
       const data = await response.json()
       return {
         shardId,
@@ -434,6 +464,7 @@ async function checkAllShards(): Promise<ShardHealth[]> {
         healthy: response.ok,
       }
     } catch (error) {
+      clearTimeout(timeoutId)
       return {
         shardId,
         status: 'unreachable',
@@ -473,9 +504,10 @@ If you need to move users between shards:
 
 1. Update your shard mapping (directory, config, etc.)
 2. New requests route to the new shard
-3. Clients automatically sync fresh data from the new shard
+3. Clients receive a [`must-refetch`](/docs/api/http#control-messages) control message from the old shard
+4. Clients resync from scratch with the new shard
 
-Electric is stateless from the client's perspective&mdash;changing which instance serves a user's data is transparent.
+Switching shards is transparent at the API surface (same URL structure), but clients should be prepared to handle `must-refetch` and rebuild their local materializations. This is standard Electric behavior for any shape that becomes invalid.
 
 ## Next steps
 
