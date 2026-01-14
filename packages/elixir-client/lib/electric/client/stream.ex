@@ -234,13 +234,16 @@ defmodule Electric.Client.Stream do
     {:cont, %{stream | buffer: :queue.in(msg, stream.buffer)}}
   end
 
-  defp handle_msg(%Message.MoveOutMessage{patterns: patterns} = _msg, stream) do
+  defp handle_msg(
+         %Message.MoveOutMessage{patterns: patterns, request_timestamp: request_timestamp} = _msg,
+         stream
+       ) do
     # Assumption: move-out events are only emitted after the initial snapshot is complete.
     # We therefore apply them immediately and do not buffer for later inserts.
 
     # Generate synthetic deletes for rows matching the move-out patterns
     {synthetic_deletes, updated_tag_to_keys, updated_key_data} =
-      generate_synthetic_deletes(stream, patterns)
+      generate_synthetic_deletes(stream, patterns, request_timestamp)
 
     # Add synthetic deletes to the buffer
     buffer =
@@ -512,7 +515,7 @@ defmodule Electric.Client.Stream do
     end)
   end
 
-  defp generate_synthetic_deletes(stream, patterns) do
+  defp generate_synthetic_deletes(stream, patterns, request_timestamp) do
     %{tag_to_keys: tag_to_keys, key_data: key_data} = stream
 
     # Assumption: move-out patterns only include simple tag values; positional matching
@@ -570,7 +573,7 @@ defmodule Electric.Client.Stream do
               relation: original_msg.headers.relation,
               handle: original_msg.headers.handle
             ),
-          request_timestamp: DateTime.utc_now()
+          request_timestamp: request_timestamp
         }
       end)
 
