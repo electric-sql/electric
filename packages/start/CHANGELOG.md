@@ -1,5 +1,11 @@
 # @electric-sql/start
 
+## 1.0.3
+
+### Patch Changes
+
+- bbaf243: feat: allow running CLI with `--source` flag to allow using existing sources in setup
+
 ## 1.0.2
 
 ### Patch Changes

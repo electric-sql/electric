@@ -1,5 +1,17 @@
 # @core/sync-service
 
+## 1.3.0
+
+### Minor Changes
+
+- cb9f571: Replace in-memory shape metadata storage with SQLite
+
+### Patch Changes
+
+- b11b8ea: Support multiple subqueries on the same level, returning 409s on move-ins/outs
+- 9d27e85: Fix handling of explicit casts on query parameters
+- 1397e7c: Add function to dynamically re-enable consumer suspension
+
 ## 1.2.11
 
 ### Patch Changes
