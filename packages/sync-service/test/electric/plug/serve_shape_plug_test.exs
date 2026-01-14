@@ -678,7 +678,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
       patch_shape_cache(
         resolve_shape_handle: fn "foo", @test_shape, _stack_id -> nil end,
         fetch_handle_by_shape: fn @test_shape, _opts -> {:ok, @test_shape_handle} end,
-        has_shape?: fn "foo", _opts -> false end
+        has_shape?: fn @test_shape_handle, _opts -> true end
       )
 
       patch_storage(fetch_latest_offset: fn _ -> {:ok, LogOffset.last_before_real_offsets()} end)
