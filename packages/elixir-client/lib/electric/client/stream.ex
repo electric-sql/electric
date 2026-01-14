@@ -94,7 +94,9 @@ defmodule Electric.Client.Stream do
         }
 
   @type t :: %__MODULE__{
+          id: integer(),
           client: Client.t(),
+          shape: Client.shape() | nil,
           schema: Client.schema(),
           value_mapper_fun: Client.ValueMapper.mapper_fun(),
           parser: nil | {module(), term()},
@@ -103,8 +105,11 @@ defmodule Electric.Client.Stream do
           offset: Client.offset(),
           replica: Client.replica(),
           shape_handle: nil | Client.shape_handle(),
+          next_cursor: binary() | nil,
           state: :init | :stream | :done,
-          opts: opts()
+          opts: opts(),
+          tag_to_keys: %{optional(term()) => MapSet.t()},
+          key_data: %{optional(term()) => %{tags: MapSet.t(), msg: Message.ChangeMessage.t()}}
         }
 
   alias __MODULE__, as: S
