@@ -29,7 +29,9 @@ function parseArgs(args: string[]): ParsedArgs {
   }
 
   if (!appName) {
-    console.error(`Usage: npx @electric-sql/start <app-name> [--source <source-id>]`)
+    console.error(
+      `Usage: npx @electric-sql/start <app-name> [--source <source-id>]`
+    )
     console.error(
       `       npx @electric-sql/start .  (configure current directory)`
     )
