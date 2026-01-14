@@ -51,7 +51,7 @@ jobs:
               is_release=true
               ;;
 
-            workflow_dispatch)
+            workflow_dispatch | workflow_call)
               ref="refs/tags/${{ inputs.release_tag }}"
               is_release=true
               ;;
