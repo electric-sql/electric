@@ -7,6 +7,14 @@ on:
     branches: ['main']
   release:
     types: [released]
+  # Allows the workflow to be called by the Changesets workflow
+  workflow_call:
+    inputs:
+      release_tag:
+        description: 'The @core/sync-service@... tag passed from caller'
+        required: true
+        type: string
+  # Allows the workflow to be triggered manually from the UI
   workflow_dispatch:
     inputs:
       release_tag:

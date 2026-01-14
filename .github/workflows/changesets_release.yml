@@ -18,6 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       published: ${{ steps.changesets.outputs.published }}
+      sync_service_release_tag: ${{ steps.sync_service_release_tag.outputs.tag }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -45,6 +46,13 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.OLEKSII_PAT_TOKEN_FOR_DOCKERHUB_RELEASE_WORKFLOW }}
           HEX_API_KEY: ${{ secrets.HEX_API_KEY }}
+      - name: Capture the new sync-service release as an output (if any)
+        id: sync_service_release_tag
+        if: steps.changesets.outputs.published == 'true'
+        run: |
+          # Use jq to pick the revelant package from the JSON array and format it into a <package>@<version> output
+          TAGS=$(echo '${{ steps.changesets.outputs.publishedPackages }}' | jq -r '.[] | select(.name == "@core/sync-service") | .name + "@" + .version')
+          echo "tag=$TAGS" >> $GITHUB_OUTPUT
       - name: Add latest tag to published packages
         if: steps.changesets.outputs.published == 'true'
         run: node scripts/tag-latest.mjs
@@ -54,6 +62,15 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PUBLISHED_PACKAGES: ${{ steps.changesets.outputs.publishedPackages }}
+
+  publish-to-dockerhub:
+    needs: changesets
+    if: ${{ needs.changesets.outputs.published == 'true' && needs.changesets.outputs.sync_service_release_tag  != '' }}
+    uses: ./.github/workflows/sync_service_dockerhub_image.yml
+    secrets: inherit
+    inputs:
+      release_tag: ${{ needs.changesets.outputs.sync_service_release_tag }}
+
   update-cloud:
     name: Update Electric version used by Cloud
     runs-on: ubuntu-latest
