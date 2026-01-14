@@ -49,9 +49,11 @@ jobs:
         id: sync_service_release_tag
         if: steps.changesets.outputs.published == 'true'
         run: |
-          # Use jq to pick the revelant package from the JSON array and format it into a <package>@<version> output
-          TAGS=$(echo '${{ steps.changesets.outputs.publishedPackages }}' | jq -r '.[] | select(.name == "@core/sync-service") | .name + "@" + .version')
-          echo "tag=$TAGS" >> $GITHUB_OUTPUT
+          # Assign publishedPackages to a variable first to avoid any interpretation of JSON special chars by the shell
+          PUBLISHED_PACKAGES='${{ steps.changesets.outputs.publishedPackages }}'
+          # Use jq to pick the relevant package from the JSON array and format it into a <package>@<version> output
+          TAGS=$(echo "$PUBLISHED_PACKAGES" | jq -r '.[] | select(.name == "@core/sync-service") | .name + "@" + .version')
+          echo "tag=$TAGS" >> "$GITHUB_OUTPUT"
       - name: Add latest tag to published packages
         if: steps.changesets.outputs.published == 'true'
         run: node scripts/tag-latest.mjs
