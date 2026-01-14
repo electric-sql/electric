@@ -490,19 +490,19 @@ defmodule Electric.Replication.Eval.RunnerTest do
     test "should work with jsonb ?| any-key-exists operator" do
       # At least one key exists
       assert {:ok, true} =
-               ~S|x ?| ARRAY['name', 'missing']|
+               ~S(x ?| ARRAY['name', 'missing'])
                |> Parser.parse_and_validate_expression!(refs: %{["x"] => :jsonb})
                |> Runner.execute(%{["x"] => %{"name" => "alice", "age" => 30}})
 
       # No keys exist
       assert {:ok, false} =
-               ~S|x ?| ARRAY['foo', 'bar']|
+               ~S(x ?| ARRAY['foo', 'bar'])
                |> Parser.parse_and_validate_expression!(refs: %{["x"] => :jsonb})
                |> Runner.execute(%{["x"] => %{"name" => "alice", "age" => 30}})
 
       # Works with arrays too
       assert {:ok, true} =
-               ~S|x ?| ARRAY['foo', 'missing']|
+               ~S(x ?| ARRAY['foo', 'missing'])
                |> Parser.parse_and_validate_expression!(refs: %{["x"] => :jsonb})
                |> Runner.execute(%{["x"] => ["foo", "bar", "baz"]})
     end
