@@ -44,7 +44,7 @@ jobs:
           publish: pnpm ci:publish
           title: 'chore: publish new package versions'
         env:
-          GITHUB_TOKEN: ${{ secrets.OLEKSII_PAT_TOKEN_FOR_DOCKERHUB_RELEASE_WORKFLOW }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           HEX_API_KEY: ${{ secrets.HEX_API_KEY }}
       - name: Capture the new sync-service release as an output (if any)
         id: sync_service_release_tag
