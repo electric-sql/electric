@@ -151,6 +151,87 @@ defmodule Electric.Replication.Eval.Env.KnownFunctions do
   defpostgres("anyenum = anyenum -> bool", delegate: &Kernel.==/2)
   defpostgres("anyenum <> anyenum -> bool", delegate: &Kernel.!=/2)
 
+  ## JSONB functions
+
+  # Parse text to jsonb
+  defpostgres "jsonb(text) -> jsonb" do
+    def parse_jsonb(text) when is_binary(text), do: Jason.decode!(text)
+  end
+
+  # Output jsonb as text
+  defpostgres "jsonbout(jsonb) -> text" do
+    def jsonb_out(nil), do: nil
+    def jsonb_out(value), do: Jason.encode!(value)
+  end
+
+  # Get object field or array element as jsonb
+  defpostgres "jsonb -> text -> jsonb" do
+    def jsonb_get_by_key(json, key) when is_map(json) and is_binary(key) do
+      Map.get(json, key)
+    end
+
+    def jsonb_get_by_key(_, _), do: nil
+  end
+
+  defpostgres "jsonb -> int4 -> jsonb" do
+    def jsonb_get_by_index(json, index) when is_list(json) and is_integer(index) do
+      # PostgreSQL uses 0-based indexing for JSON arrays
+      # Negative indices are not supported (unlike Python), they return null
+      if index >= 0 do
+        Enum.at(json, index)
+      else
+        nil
+      end
+    end
+
+    def jsonb_get_by_index(_, _), do: nil
+  end
+
+  # Get object field or array element as text
+  defpostgres "jsonb ->> text -> text" do
+    def jsonb_get_text_by_key(json, key) when is_map(json) and is_binary(key) do
+      case Map.get(json, key) do
+        nil -> nil
+        value -> jsonb_value_to_text(value)
+      end
+    end
+
+    def jsonb_get_text_by_key(_, _), do: nil
+
+    defp jsonb_value_to_text(value) when is_binary(value), do: value
+    defp jsonb_value_to_text(value) when is_integer(value), do: Integer.to_string(value)
+    defp jsonb_value_to_text(value) when is_float(value), do: Float.to_string(value)
+    defp jsonb_value_to_text(true), do: "true"
+    defp jsonb_value_to_text(false), do: "false"
+    defp jsonb_value_to_text(nil), do: nil
+    # For nested objects/arrays, return JSON string
+    defp jsonb_value_to_text(value), do: Jason.encode!(value)
+  end
+
+  defpostgres "jsonb ->> int4 -> text" do
+    def jsonb_get_text_by_index(json, index) when is_list(json) and is_integer(index) do
+      if index >= 0 do
+        case Enum.at(json, index) do
+          nil -> nil
+          value when is_binary(value) -> value
+          value when is_integer(value) -> Integer.to_string(value)
+          value when is_float(value) -> Float.to_string(value)
+          true -> "true"
+          false -> "false"
+          value -> Jason.encode!(value)
+        end
+      else
+        nil
+      end
+    end
+
+    def jsonb_get_text_by_index(_, _), do: nil
+  end
+
+  # JSONB equality
+  defpostgres("jsonb = jsonb -> bool", delegate: &Kernel.==/2)
+  defpostgres("jsonb <> jsonb -> bool", delegate: &Kernel.!=/2)
+
   ## Array functions
   defpostgres("anyarray = anyarray -> bool", delegate: &Kernel.==/2)
   defpostgres("anyarray <> anyarray -> bool", delegate: &Kernel.!=/2)

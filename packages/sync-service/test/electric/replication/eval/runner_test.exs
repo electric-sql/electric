@@ -184,6 +184,174 @@ defmodule Electric.Replication.Eval.RunnerTest do
                |> Runner.execute(%{["x"] => [[[3, 4]]]})
     end
 
+    test "should work with jsonb -> operator for object field access" do
+      # Access object field with -> returns jsonb
+      assert {:ok, "bar"} =
+               ~S|x -> 'foo'|
+               |> Parser.parse_and_validate_expression!(refs: %{["x"] => :jsonb})
+               |> Runner.execute(%{["x"] => %{"foo" => "bar", "num" => 42}})
+
+      # Access nested field
+      assert {:ok, %{"nested" => "value"}} =
+               ~S|x -> 'foo'|
+               |> Parser.parse_and_validate_expression!(refs: %{["x"] => :jsonb})
+               |> Runner.execute(%{["x"] => %{"foo" => %{"nested" => "value"}}})
+
+      # Access non-existent field returns nil
+      assert {:ok, nil} =
+               ~S|x -> 'missing'|
+               |> Parser.parse_and_validate_expression!(refs: %{["x"] => :jsonb})
+               |> Runner.execute(%{["x"] => %{"foo" => "bar"}})
+
+      # Access on null jsonb returns nil
+      assert {:ok, nil} =
+               ~S|x -> 'foo'|
+               |> Parser.parse_and_validate_expression!(refs: %{["x"] => :jsonb})
+               |> Runner.execute(%{["x"] => nil})
+    end
+
+    test "should work with jsonb -> operator for array index access" do
+      # Access array element by index
+      assert {:ok, "first"} =
+               ~S|x -> 0|
+               |> Parser.parse_and_validate_expression!(refs: %{["x"] => :jsonb})
+               |> Runner.execute(%{["x"] => ["first", "second", "third"]})
+
+      assert {:ok, "second"} =
+               ~S|x -> 1|
+               |> Parser.parse_and_validate_expression!(refs: %{["x"] => :jsonb})
+               |> Runner.execute(%{["x"] => ["first", "second", "third"]})
+
+      # Out of bounds returns nil
+      assert {:ok, nil} =
+               ~S|x -> 10|
+               |> Parser.parse_and_validate_expression!(refs: %{["x"] => :jsonb})
+               |> Runner.execute(%{["x"] => ["first", "second"]})
+
+      # Negative index returns nil (PostgreSQL behavior)
+      assert {:ok, nil} =
+               ~S|x -> -1|
+               |> Parser.parse_and_validate_expression!(refs: %{["x"] => :jsonb})
+               |> Runner.execute(%{["x"] => ["first", "second"]})
+    end
+
+    test "should work with jsonb ->> operator for text extraction" do
+      # Extract string field as text
+      assert {:ok, "bar"} =
+               ~S|x ->> 'foo'|
+               |> Parser.parse_and_validate_expression!(refs: %{["x"] => :jsonb})
+               |> Runner.execute(%{["x"] => %{"foo" => "bar"}})
+
+      # Extract number field as text
+      assert {:ok, "42"} =
+               ~S|x ->> 'num'|
+               |> Parser.parse_and_validate_expression!(refs: %{["x"] => :jsonb})
+               |> Runner.execute(%{["x"] => %{"num" => 42}})
+
+      # Extract boolean field as text
+      assert {:ok, "true"} =
+               ~S|x ->> 'flag'|
+               |> Parser.parse_and_validate_expression!(refs: %{["x"] => :jsonb})
+               |> Runner.execute(%{["x"] => %{"flag" => true}})
+
+      # Extract nested object as JSON string
+      assert {:ok, result} =
+               ~S|x ->> 'nested'|
+               |> Parser.parse_and_validate_expression!(refs: %{["x"] => :jsonb})
+               |> Runner.execute(%{["x"] => %{"nested" => %{"a" => 1}}})
+
+      # The nested object should be a JSON string
+      assert Jason.decode!(result) == %{"a" => 1}
+
+      # Extract non-existent field returns nil
+      assert {:ok, nil} =
+               ~S|x ->> 'missing'|
+               |> Parser.parse_and_validate_expression!(refs: %{["x"] => :jsonb})
+               |> Runner.execute(%{["x"] => %{"foo" => "bar"}})
+    end
+
+    test "should work with jsonb ->> operator for array text extraction" do
+      # Extract array element as text
+      assert {:ok, "first"} =
+               ~S|x ->> 0|
+               |> Parser.parse_and_validate_expression!(refs: %{["x"] => :jsonb})
+               |> Runner.execute(%{["x"] => ["first", "second"]})
+
+      # Extract number element as text
+      assert {:ok, "42"} =
+               ~S|x ->> 0|
+               |> Parser.parse_and_validate_expression!(refs: %{["x"] => :jsonb})
+               |> Runner.execute(%{["x"] => [42, 43]})
+    end
+
+    test "should work with chained jsonb operators" do
+      # Chain -> operators for nested access
+      assert {:ok, "deep"} =
+               ~S|(x -> 'foo') -> 'bar'|
+               |> Parser.parse_and_validate_expression!(refs: %{["x"] => :jsonb})
+               |> Runner.execute(%{["x"] => %{"foo" => %{"bar" => "deep"}}})
+
+      # Chain -> then ->> for nested text extraction
+      assert {:ok, "deep"} =
+               ~S|(x -> 'foo') ->> 'bar'|
+               |> Parser.parse_and_validate_expression!(refs: %{["x"] => :jsonb})
+               |> Runner.execute(%{["x"] => %{"foo" => %{"bar" => "deep"}}})
+
+      # Mix object and array access
+      assert {:ok, "value"} =
+               ~S|(x -> 'arr') -> 0|
+               |> Parser.parse_and_validate_expression!(refs: %{["x"] => :jsonb})
+               |> Runner.execute(%{["x"] => %{"arr" => ["value", "other"]}})
+    end
+
+    test "should work with jsonb comparison" do
+      # Equal jsonb values
+      assert {:ok, true} =
+               ~S|x = y|
+               |> Parser.parse_and_validate_expression!(
+                 refs: %{["x"] => :jsonb, ["y"] => :jsonb}
+               )
+               |> Runner.execute(%{
+                 ["x"] => %{"foo" => "bar"},
+                 ["y"] => %{"foo" => "bar"}
+               })
+
+      # Not equal jsonb values
+      assert {:ok, false} =
+               ~S|x = y|
+               |> Parser.parse_and_validate_expression!(
+                 refs: %{["x"] => :jsonb, ["y"] => :jsonb}
+               )
+               |> Runner.execute(%{
+                 ["x"] => %{"foo" => "bar"},
+                 ["y"] => %{"foo" => "baz"}
+               })
+
+      # Use <> operator
+      assert {:ok, true} =
+               ~S|x <> y|
+               |> Parser.parse_and_validate_expression!(
+                 refs: %{["x"] => :jsonb, ["y"] => :jsonb}
+               )
+               |> Runner.execute(%{
+                 ["x"] => %{"foo" => "bar"},
+                 ["y"] => %{"foo" => "baz"}
+               })
+    end
+
+    test "should filter rows using jsonb ->> with comparison" do
+      # Common pattern: filter by json field value
+      assert {:ok, true} =
+               ~S|(x ->> 'status') = 'active'|
+               |> Parser.parse_and_validate_expression!(refs: %{["x"] => :jsonb})
+               |> Runner.execute(%{["x"] => %{"status" => "active", "id" => 123}})
+
+      assert {:ok, false} =
+               ~S|(x ->> 'status') = 'active'|
+               |> Parser.parse_and_validate_expression!(refs: %{["x"] => :jsonb})
+               |> Runner.execute(%{["x"] => %{"status" => "inactive", "id" => 123}})
+    end
+
     test "subquery" do
       assert {:ok, true} =
                ~S|test IN (SELECT val FROM tester)|
