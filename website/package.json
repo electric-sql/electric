@@ -9,6 +9,7 @@
     "api:watch": "nodemon -w ./ -x \"npm run api:generate\" -e \"electric-api.yaml\"",
     "build": "npm run api:generate && vitepress build . && cp ../AGENTS.md .vitepress/dist",
     "dev": "vitepress dev .",
+    "dev:netlify": "netlify dev",
     "preview": "vitepress preview ."
   },
   "engineManager": "^pnpm@9.15.0",
