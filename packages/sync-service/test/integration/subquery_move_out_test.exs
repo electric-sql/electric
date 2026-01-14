@@ -13,6 +13,7 @@ defmodule Electric.Integration.SubqueryMoveOutTest do
   import Support.DbSetup
   import Support.DbStructureSetup
   import Support.IntegrationSetup
+  import Support.StreamConsumer
 
   alias Electric.Client
   alias Electric.Client.ShapeDefinition
@@ -39,8 +40,6 @@ defmodule Electric.Integration.SubqueryMoveOutTest do
            "INSERT INTO child (id, parent_id, value) VALUES ('child-1', 'parent-1', 'test value')"
          ]
     test "change messages include tags for subquery-matched rows", %{client: client, shape: shape} do
-      import Support.StreamConsumer
-
       stream = Client.stream(client, shape, live: false)
 
       with_consumer stream do
@@ -58,8 +57,6 @@ defmodule Electric.Integration.SubqueryMoveOutTest do
       shape: shape,
       db_conn: db_conn
     } do
-      import Support.StreamConsumer
-
       stream = Client.stream(client, shape, live: true)
 
       with_consumer stream do
@@ -85,8 +82,6 @@ defmodule Electric.Integration.SubqueryMoveOutTest do
       shape: shape,
       db_conn: db_conn
     } do
-      import Support.StreamConsumer
-
       stream = Client.stream(client, shape, live: true)
 
       with_consumer stream do
@@ -120,8 +115,6 @@ defmodule Electric.Integration.SubqueryMoveOutTest do
       shape: shape,
       db_conn: db_conn
     } do
-      import Support.StreamConsumer
-
       stream = Client.stream(client, shape, live: true)
 
       with_consumer stream do
@@ -147,8 +140,6 @@ defmodule Electric.Integration.SubqueryMoveOutTest do
       shape: shape,
       db_conn: db_conn
     } do
-      import Support.StreamConsumer
-
       stream = Client.stream(client, shape, live: true)
 
       with_consumer stream do
@@ -197,8 +188,6 @@ defmodule Electric.Integration.SubqueryMoveOutTest do
       shape: shape,
       db_conn: db_conn
     } do
-      import Support.StreamConsumer
-
       stream = Client.stream(client, shape, live: true)
 
       with_consumer stream do
@@ -242,8 +231,6 @@ defmodule Electric.Integration.SubqueryMoveOutTest do
       # If the client doesn't clear stale tag entries, deactivating the OLD parent
       # would incorrectly generate a synthetic delete even though the child is
       # still in the shape (via the new parent).
-
-      import Support.StreamConsumer
 
       stream = Client.stream(client, shape, live: true)
 
@@ -299,8 +286,6 @@ defmodule Electric.Integration.SubqueryMoveOutTest do
            "INSERT INTO child (id, parent_id, value) VALUES ('child-1', 'parent-1', 'test')"
          ]
     test "must-refetch resets tag tracking state", %{client: client, shape: shape} do
-      import Support.StreamConsumer
-
       # First, get initial data with tags
       stream1 = Client.stream(client, shape, live: false)
 
@@ -348,8 +333,6 @@ defmodule Electric.Integration.SubqueryMoveOutTest do
       shape: shape,
       db_conn: db_conn
     } do
-      import Support.StreamConsumer
-
       # First, stream with live: false to get a ResumeMessage
       # This simulates a client that synced initial data and then disconnected
       stream1 = Client.stream(client, shape, live: false)

@@ -9,10 +9,9 @@ defmodule Electric.Integration.StreamingTest do
   import Support.DbSetup
   import Support.DbStructureSetup
   import Support.IntegrationSetup
+  import Support.StreamConsumer
 
   alias Electric.Client
-  alias Electric.Client.Message.ChangeMessage
-  alias Electric.Client.Message.ControlMessage
 
   @moduletag :tmp_dir
 
@@ -26,33 +25,22 @@ defmodule Electric.Integration.StreamingTest do
            "INSERT INTO items VALUES ('00000000-0000-0000-0000-000000000001', 'initial value')"
          ]
     test "initial snapshot contains pre-existing row", %{client: client} do
-      # Stream with live: false to get only the initial snapshot
-      messages =
-        client
-        |> Client.stream("items", live: false)
-        |> Enum.to_list()
+      stream = Client.stream(client, "items", live: false)
 
-      # Should have at least one insert message and control messages
-      insert_messages = Enum.filter(messages, &match?(%ChangeMessage{}, &1))
-      control_messages = Enum.filter(messages, &match?(%ControlMessage{}, &1))
+      with_consumer stream do
+        assert_insert(consumer, %{
+          "id" => "00000000-0000-0000-0000-000000000001",
+          "value" => "initial value"
+        })
 
-      assert length(insert_messages) == 1
-      [insert] = insert_messages
-
-      assert insert.headers.operation == :insert
-      assert insert.value["id"] == "00000000-0000-0000-0000-000000000001"
-      assert insert.value["value"] == "initial value"
-
-      # Should end with up-to-date control message
-      assert Enum.any?(control_messages, &(&1.control == :up_to_date))
+        assert_up_to_date(consumer)
+      end
     end
 
     @tag with_sql: [
            "INSERT INTO items VALUES ('00000000-0000-0000-0000-000000000001', 'initial value')"
          ]
     test "receives live changes after initial snapshot", %{client: client, db_conn: db_conn} do
-      import Support.StreamConsumer
-
       stream = Client.stream(client, "items", live: true)
 
       with_consumer stream do
@@ -73,17 +61,11 @@ defmodule Electric.Integration.StreamingTest do
     end
 
     test "streaming empty table returns up-to-date", %{client: client} do
-      messages =
-        client
-        |> Client.stream("items", live: false)
-        |> Enum.to_list()
+      stream = Client.stream(client, "items", live: false)
 
-      # Should have just control messages, no data
-      insert_messages = Enum.filter(messages, &match?(%ChangeMessage{}, &1))
-      control_messages = Enum.filter(messages, &match?(%ControlMessage{}, &1))
-
-      assert Enum.empty?(insert_messages)
-      assert Enum.any?(control_messages, &(&1.control == :up_to_date))
+      with_consumer stream do
+        assert_up_to_date(consumer)
+      end
     end
   end
 end
