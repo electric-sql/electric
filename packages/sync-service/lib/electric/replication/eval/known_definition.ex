@@ -263,6 +263,11 @@ defmodule Electric.Replication.Eval.KnownDefinition do
     end
   end
 
+  # Convert type representation to string (inverse of parse_type_string)
+  # :text -> "text", {:array, :text} -> "text[]"
+  defp type_to_string({:array, base_type}), do: "#{base_type}[]"
+  defp type_to_string(type) when is_atom(type), do: to_string(type)
+
   defp parse_function(function) do
     %{"name" => name, "args" => args, "return_type" => return} =
       Regex.named_captures(func_regex(), function)
@@ -377,7 +382,7 @@ defmodule Electric.Replication.Eval.KnownDefinition do
 
   defp validate_at_most_one_category(%{defined_at: line, args: args} = map) do
     args
-    |> Enum.map(&to_string/1)
+    |> Enum.map(&type_to_string/1)
     |> Enum.filter(&Regex.match?(~r/\*[[:alnum:]_]+\*/, &1))
     |> Enum.uniq()
     |> case do
