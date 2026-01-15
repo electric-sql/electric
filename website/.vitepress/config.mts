@@ -390,7 +390,9 @@ export default defineConfig({
     const fm = pageData.frontmatter
     const head = []
 
-    const title = `${fm.title || siteData.title} | ${fm.titleTemplate || 'ElectricSQL'}`
+    const pageTitle = fm.title || siteData.title
+    const titleTemplate = fm.titleTemplate || ':title | ElectricSQL'
+    const title = titleTemplate.replace(':title', pageTitle)
     const description = fm.description || siteData.description
 
     const PRODUCTION_URL = 'https://electric-sql.com'
