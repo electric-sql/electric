@@ -40,7 +40,7 @@ jobs:
         run: |
           echo '
             FROM postgres:${{ matrix.postgres_version }}-alpine
-            CMD ["postgres", "-c", "wal_level=logical", "-c", "max_replication_slots=40"]
+            CMD ["postgres", "-c", "wal_level=logical", "-c", "max_replication_slots=40", "-c", "max_connections=200"]
           ' > Dockerfile
 
       - name: Build and push
