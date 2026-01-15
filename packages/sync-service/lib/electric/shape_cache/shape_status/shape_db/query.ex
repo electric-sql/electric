@@ -3,8 +3,8 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Query do
     list_shapes: """
     SELECT handle, shape FROM shapes ORDER BY handle
     """,
-    list_handles: """
-    SELECT handle FROM shapes ORDER BY handle
+    list_shape_meta: """
+    SELECT handle, hash, snapshot_state FROM shapes ORDER BY handle
     """,
     handle_exists: """
     SELECT 1 FROM shapes WHERE handle = ?1
@@ -246,8 +246,10 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Query do
     end)
   end
 
-  def list_handles_stream(%Conn{conn: conn, stmts: %{list_handles: stmt}}) do
-    stream_query(conn, stmt, fn [handle] -> handle end)
+  def list_shape_meta_stream(%Conn{conn: conn, stmts: %{list_shape_meta: stmt}}) do
+    stream_query(conn, stmt, fn [handle, hash, snapshot_state] ->
+      {handle, hash, snapshot_state > 0}
+    end)
   end
 
   def reset(%Conn{conn: conn}) do
