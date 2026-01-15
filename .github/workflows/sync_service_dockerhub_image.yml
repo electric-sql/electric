@@ -39,15 +39,19 @@ jobs:
     steps:
       - name: Determine the ref to check out
         id: git_ref
+        env:
+          INPUT_RELEASE_TAG: ${{ inputs.release_tag }}
+          EVENT_RELEASE_TAG: ${{ github.event.release.tag_name }}
+          COMMIT_SHA: ${{ github.sha }}
         run: |
-          if [ -n "${{ inputs.release_tag }}" ]; then
-            ref="refs/tags/${{ inputs.release_tag }}"
+          if [ -n "$INPUT_RELEASE_TAG" ]; then
+            ref="refs/tags/$INPUT_RELEASE_TAG"
             is_release=true
-          elif [ -n "${{ github.event.release.tag_name }}" ]; then
-            ref="refs/tags/${{ github.event.release.tag_name }}"
+          elif [ -n "$EVENT_RELEASE_TAG" ]; then
+            ref="refs/tags/$EVENT_RELEASE_TAG"
             is_release=true
           else
-            ref="${{ github.sha }}"
+            ref="$COMMIT_SHA"
             is_release=false
           fi
 
