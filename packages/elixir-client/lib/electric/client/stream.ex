@@ -357,10 +357,12 @@ defmodule Electric.Client.Stream do
   defp resume(%{opts: %{resume: %Message.ResumeMessage{} = resume}} = stream) do
     %{shape_handle: shape_handle, offset: offset, schema: schema} = resume
 
+    stream = %{stream | shape_handle: shape_handle, offset: offset, up_to_date?: true}
+
     if schema do
-      generate_value_mapper(schema, %{stream | shape_handle: shape_handle, offset: offset})
+      generate_value_mapper(schema, stream)
     else
-      %{stream | shape_handle: shape_handle, offset: offset}
+      stream
     end
   end
 
