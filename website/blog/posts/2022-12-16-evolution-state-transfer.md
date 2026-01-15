@@ -16,6 +16,9 @@ post: true
 import Tweet from 'vue-tweet'
 </script>
 
+> [!WARNING]
+> This post was written for a previous version of Electric that is no longer active. It is preserved for historical interest only. See the [Electric Next](/blog/2024/07/17/electric-next) post for context on the new system.
+
 Web development has been progressing through an evolution of state transfer. Local-first is the natural endgame and the vision we're working towards with Electric.
 
 State transfer is fundamental to online applications. Web apps are architected around the network, with the separation of front-end from back-end and protocols like AJAX and REST. However, newer protocols like GraphQL and frameworks like Remix are increasingly abstracting state transfer away from application code.

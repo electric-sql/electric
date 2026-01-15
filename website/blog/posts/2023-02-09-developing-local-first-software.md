@@ -12,6 +12,9 @@ outline: deep
 post: true
 ---
 
+> [!WARNING]
+> This post was written for a previous version of Electric that is no longer active. It is preserved for historical interest only. See the [Electric Next](/blog/2024/07/17/electric-next) post for context on the new system.
+
 [Local-first software](https://www.inkandswitch.com/local-first) is the future. It's the [natural evolution of state-transfer](/blog/2022/12/16/evolution-state-transfer). It enables a modern, realtime multi-user experience, with built in offline support, resilience, privacy and data ownership. You get instant reactivity and a network-free interaction path. Plus it's much cheaper to operate and scale.
 
 <!--truncate-->
