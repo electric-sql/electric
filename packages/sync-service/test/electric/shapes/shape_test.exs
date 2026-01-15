@@ -1,5 +1,5 @@
 defmodule Electric.Shapes.ShapeTest do
-  use ExUnit.Case, async: false
+  use ExUnit.Case, async: true
 
   alias Electric.Replication.Changes.{NewRecord, DeletedRecord, UpdatedRecord}
   alias Electric.Replication.Eval.Parser

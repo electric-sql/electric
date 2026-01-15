@@ -1,5 +1,5 @@
 defmodule PgInterop.Postgrex.Extensions.PgLsnTest do
-  use ExUnit.Case, async: false
+  use ExUnit.Case, async: true
 
   alias Electric.Postgres.Lsn
 

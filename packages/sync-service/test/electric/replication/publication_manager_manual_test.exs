@@ -5,7 +5,7 @@ defmodule Electric.Replication.PublicationManagerManualTest do
   # published table is dropped or renamed in the database, and that the corresponding shapes
   # are cleaned up.
 
-  use ExUnit.Case, async: false
+  use ExUnit.Case, async: true
   use Repatch.ExUnit
 
   import Support.ComponentSetup

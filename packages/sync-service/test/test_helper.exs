@@ -5,8 +5,7 @@
 # Registry.start_link(name: Electric.Application.process_registry(), keys: :unique)
 
 ExUnit.configure(formatters: [JUnitFormatter, ExUnit.CLIFormatter])
-# Limit max_cases to reduce concurrent DB connections and avoid exhausting max_connections
-ExUnit.start(assert_receive_timeout: 400, exclude: [:slow], capture_log: true, max_cases: 4)
+ExUnit.start(assert_receive_timeout: 400, exclude: [:slow], capture_log: true)
 
 # Repatch in async tests has lazy recompilation issues, so as a temporary fix
 # we force recompilation in the setup. The issue is tracked here:

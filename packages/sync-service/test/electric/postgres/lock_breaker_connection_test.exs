@@ -1,5 +1,5 @@
 defmodule Electric.Postgres.LockBreakerConnectionTest do
-  use ExUnit.Case, async: false
+  use ExUnit.Case, async: true
   import Support.DbSetup, except: [with_publication: 1]
   import Support.ComponentSetup
 

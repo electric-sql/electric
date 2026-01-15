@@ -5,7 +5,7 @@ defmodule Electric.Replication.PublicationManagerTest do
   # that's part of it is dropped or renamed in the database, and that the corresponding shapes
   # are cleaned up.
 
-  use ExUnit.Case, async: false
+  use ExUnit.Case, async: true
 
   import Support.ComponentSetup
   import Support.DbSetup

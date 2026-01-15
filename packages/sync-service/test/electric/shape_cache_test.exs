@@ -1,5 +1,5 @@
 defmodule Electric.ShapeCacheTest do
-  use ExUnit.Case, async: false
+  use ExUnit.Case, async: true
   use Repatch.ExUnit, assert_expectations: true
 
   alias Electric.Replication.Changes

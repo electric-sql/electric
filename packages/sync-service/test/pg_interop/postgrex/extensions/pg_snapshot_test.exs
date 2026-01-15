@@ -1,5 +1,5 @@
 defmodule PgInterop.Postgrex.Extensions.PgSnapshotTest do
-  use ExUnit.Case, async: false
+  use ExUnit.Case, async: true
 
   setup do: %{connection_opt_overrides: [pool_size: 4]}
   setup {Support.DbSetup, :with_unique_db}

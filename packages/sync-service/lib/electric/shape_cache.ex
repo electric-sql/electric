@@ -61,10 +61,7 @@ defmodule Electric.ShapeCache do
           handle_position()
   def get_or_create_shape_handle(shape, stack_id, opts \\ []) when is_stack_id(stack_id) do
     # Get or create the shape handle and fire a snapshot if necessary.
-    # We check has_shape? to ensure the shape hasn't been deleted between
-    # fetching the handle and fetching the offset (race with async cleanup).
     with {:ok, handle} <- fetch_handle_by_shape(shape, stack_id),
-         true <- has_shape?(handle, stack_id),
          {:ok, offset} <- fetch_latest_offset(stack_id, handle) do
       {handle, offset}
     else

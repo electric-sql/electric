@@ -1,5 +1,5 @@
 defmodule Electric.Postgres.Inspector.EtsInspectorTest do
-  use ExUnit.Case, async: false
+  use ExUnit.Case, async: true
   use Repatch.ExUnit
   import Support.ComponentSetup
   import Support.DbSetup
