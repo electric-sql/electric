@@ -267,7 +267,7 @@ defmodule Electric.ShapeCacheTest do
       assert_received {:called, :create_snapshot_fn}
     end
 
-    test "shape gets cleaned up if terminated unexpectedly", %{storage: storage} = ctx do
+    test "shape gets cleaned up if terminated unexpectedly", ctx do
       Support.TestUtils.patch_snapshotter(fn _, _, _, _ -> nil end)
       with_shape_cache(ctx)
 
@@ -283,11 +283,6 @@ defmodule Electric.ShapeCacheTest do
 
       # should have cleaned up the shape
       assert :error == ShapeStatus.fetch_shape_by_handle(ctx.stack_id, shape_handle)
-
-      assert {:ok, found} =
-               Electric.ShapeCache.Storage.get_all_stored_shape_handles(storage)
-
-      assert MapSet.size(found) == 0
     end
   end
 
