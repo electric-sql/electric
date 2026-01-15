@@ -427,10 +427,8 @@ defmodule Electric.Postgres.ReplicationClientTest do
 
       send(pid, {:flush_boundary_updated, 100})
 
-      # This is to pass the time instead of a sleep - if PG is responsive, it probably has processed the wal acknowledge too
-      Postgrex.query!(conn, "SELECT * FROM items", [])
-
-      new_confirmed_flush_lsn = get_confirmed_flush_lsn(conn, ctx.slot_name)
+      # Poll until the flush LSN advances, with a timeout
+      new_confirmed_flush_lsn = wait_for_flush_lsn_to_advance(conn, ctx.slot_name, confirmed_flush_lsn)
       assert Lsn.compare(confirmed_flush_lsn, new_confirmed_flush_lsn) == :lt
     end
 
@@ -511,6 +509,28 @@ defmodule Electric.Postgres.ReplicationClientTest do
       )
 
     confirmed_flush_lsn
+  end
+
+  # Polls pg_replication_slots until confirmed_flush_lsn advances beyond the baseline
+  defp wait_for_flush_lsn_to_advance(conn, slot_name, baseline_lsn, timeout \\ 2000) do
+    deadline = System.monotonic_time(:millisecond) + timeout
+
+    Stream.repeatedly(fn ->
+      Process.sleep(50)
+      get_confirmed_flush_lsn(conn, slot_name)
+    end)
+    |> Enum.reduce_while(baseline_lsn, fn current_lsn, _acc ->
+      cond do
+        Lsn.compare(baseline_lsn, current_lsn) == :lt ->
+          {:halt, current_lsn}
+
+        System.monotonic_time(:millisecond) > deadline ->
+          {:halt, current_lsn}
+
+        true ->
+          {:cont, current_lsn}
+      end
+    end)
   end
 
   describe "ReplicationClient against real db (toast)" do
