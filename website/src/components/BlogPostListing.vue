@@ -1,8 +1,6 @@
 <script setup>
-import { Image } from '@unpic/vue'
+import NetlifyImage from './NetlifyImage.vue'
 import { data as authors } from '../../data/authors.data.ts'
-
-const fallback = import.meta.env.DEV ? undefined : 'netlify'
 
 const { post } = defineProps(['post'])
 </script>
@@ -93,14 +91,7 @@ const { post } = defineProps(['post'])
   <div class="post">
     <a :href="post.path" class="no-visual">
       <div class="post-image">
-        <Image
-          :src="post.image"
-          :width="896"
-          :height="488"
-          :fallback="fallback"
-          layout="constrained"
-          background="auto"
-        />
+        <NetlifyImage :src="post.image" :width="896" :height="488" />
       </div>
       <div class="post-body">
         <h3>

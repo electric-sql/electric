@@ -6,6 +6,7 @@ import type { LanguageRegistration } from 'shiki'
 
 import caddyfileGrammar from './theme/syntax/caddyfile.json'
 
+import { buildMetaImageUrl } from '../src/lib/meta-image'
 import demosData from '../data/demos.data.ts'
 import postsData from '../data/posts.data.ts'
 
@@ -389,35 +390,29 @@ export default defineConfig({
     const fm = pageData.frontmatter
     const head = []
 
-    const title = `${fm.title || siteData.title} | ${fm.titleTemplate || 'ElectricSQL'}`
+    const pageTitle = fm.title || siteData.title
+    const titleTemplate = fm.titleTemplate || ':title | ElectricSQL'
+    const title = titleTemplate.replace(':title', pageTitle)
     const description = fm.description || siteData.description
 
-    // Get site origin from environment or use production URL
+    const PRODUCTION_URL = 'https://electric-sql.com'
+    const LOCAL_DEV_URL = 'http://localhost:5173'
+    const DEFAULT_IMAGE = '/img/meta/sync-solved.jpg'
+
     const siteOrigin =
-      process.env.DEPLOY_PRIME_URL || 'https://electric-sql.com'
+      process.env.CONTEXT === 'production'
+        ? process.env.URL || PRODUCTION_URL
+        : process.env.DEPLOY_PRIME_URL ||
+          (process.env.NODE_ENV === 'development'
+            ? LOCAL_DEV_URL
+            : PRODUCTION_URL)
 
-    // Generate optimized social media image URL using Netlify Image CDN
-    const getOptimizedImageUrl = (imagePath?: string) => {
-      if (!imagePath) {
-        return `${siteOrigin}/img/meta/sync-solved.jpg`
-      }
+    const image = buildMetaImageUrl(fm.image || DEFAULT_IMAGE, siteOrigin)
 
-      const fullImageUrl = `${siteOrigin}${imagePath}`
-
-      // Use Netlify Image CDN to optimize for social media (1200x630 is the standard for og:image)
-      const netlifyImageUrl = `${siteOrigin}/.netlify/images?url=${encodeURIComponent(
-        fullImageUrl
-      )}&w=1200&h=630&fit=cover&fm=jpg&q=80`
-
-      return netlifyImageUrl
-    }
-
-    const image = getOptimizedImageUrl(fm.image)
-
-    head.push([
-      'meta',
-      { name: 'twitter:card', content: 'summary_large_image' },
-    ])
+    head.push(['meta', { name: 'twitter:card', content: 'summary_large_image' }])
+    head.push(['meta', { name: 'twitter:site', content: '@ElectricSQL' }])
+    head.push(['meta', { name: 'twitter:title', content: title }])
+    head.push(['meta', { name: 'twitter:description', content: description }])
     head.push(['meta', { name: 'twitter:image', content: image }])
     head.push(['meta', { property: 'og:title', content: title }])
     head.push(['meta', { property: 'og:description', content: description }])
