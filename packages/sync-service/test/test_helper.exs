@@ -7,6 +7,12 @@
 ExUnit.configure(formatters: [JUnitFormatter, ExUnit.CLIFormatter])
 ExUnit.start(assert_receive_timeout: 400, exclude: [:slow], capture_log: true)
 
+# Start electric_client application directly, bypassing OTP's dependency resolution.
+# This avoids a circular dependency: electric_client has :electric as an optional dep,
+# which gets added to its applications list when compiled in sync-service context,
+# causing a deadlock when OTP tries to start both applications.
+{:ok, _} = Electric.Client.Application.start(:normal, [])
+
 # Repatch in async tests has lazy recompilation issues, so as a temporary fix
 # we force recompilation in the setup. The issue is tracked here:
 # https://github.com/hissssst/repatch/issues/2
