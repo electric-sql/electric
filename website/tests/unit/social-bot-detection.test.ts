@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { isSocialMediaBot } from '../../src/lib/social-bot-detection'
+import {
+  isSearchEngineBot,
+  isSocialMediaBot,
+} from '../../src/lib/social-bot-detection'
 
 describe(`isSocialMediaBot`, () => {
   describe(`social media bots - should return true (serve HTML)`, () => {
@@ -116,6 +119,160 @@ describe(`isSocialMediaBot`, () => {
 
     it(`random string`, () => {
       expect(isSocialMediaBot(`some random string`)).toBe(false)
+    })
+  })
+})
+
+describe(`isSearchEngineBot`, () => {
+  describe(`search engine bots - should return true (serve HTML)`, () => {
+    const searchBots = [
+      {
+        ua: `Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)`,
+        name: `Googlebot`,
+      },
+      {
+        ua: `Mozilla/5.0 (Linux; Android 6.0.1; Nexus 5X Build/MMB29P) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/W.X.Y.Z Mobile Safari/537.36 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)`,
+        name: `Googlebot Mobile`,
+      },
+      {
+        ua: `AdsBot-Google (+http://www.google.com/adsbot.html)`,
+        name: `AdsBot-Google`,
+      },
+      {
+        ua: `Mediapartners-Google`,
+        name: `Mediapartners-Google (AdSense)`,
+      },
+      {
+        ua: `FeedFetcher-Google; (+http://www.google.com/feedfetcher.html)`,
+        name: `FeedFetcher-Google`,
+      },
+      {
+        ua: `Mozilla/5.0 (compatible; Google-InspectionTool/1.0;)`,
+        name: `Google-InspectionTool`,
+      },
+      {
+        ua: `Mozilla/5.0 (compatible; Storebot-Google/1.0; +http://www.google.com/storebot.html)`,
+        name: `Storebot-Google`,
+      },
+      {
+        ua: `Mozilla/5.0 (compatible; bingbot/2.0; +http://www.bing.com/bingbot.htm)`,
+        name: `Bingbot`,
+      },
+      {
+        ua: `Mozilla/5.0 (compatible; adidxbot/2.0; +http://www.bing.com/bingbot.htm)`,
+        name: `adidxbot (Bing Ads)`,
+      },
+      {
+        ua: `msnbot/2.0b (+http://search.msn.com/msnbot.htm)`,
+        name: `msnbot`,
+      },
+      {
+        ua: `Mozilla/5.0 (compatible; Yahoo! Slurp; http://help.yahoo.com/help/us/ysearch/slurp)`,
+        name: `Yahoo Slurp`,
+      },
+      {
+        ua: `DuckDuckBot/1.0; (+http://duckduckgo.com/duckduckbot.html)`,
+        name: `DuckDuckBot`,
+      },
+      {
+        ua: `Mozilla/5.0 (compatible; YandexBot/3.0; +http://yandex.com/bots)`,
+        name: `YandexBot`,
+      },
+      {
+        ua: `Mozilla/5.0 (compatible; Baiduspider/2.0; +http://www.baidu.com/search/spider.html)`,
+        name: `Baiduspider`,
+      },
+      {
+        ua: `Sogou web spider/4.0(+http://www.sogou.com/docs/help/webmasters.htm#07)`,
+        name: `Sogou`,
+      },
+      {
+        ua: `Mozilla/5.0 (compatible; PetalBot;+https://webmaster.petalsearch.com/site/petalbot)`,
+        name: `PetalBot`,
+      },
+      {
+        ua: `Mozilla/5.0 (compatible; SeznamBot/3.2; +http://napoveda.seznam.cz/en/seznambot-intro/)`,
+        name: `SeznamBot`,
+      },
+      {
+        ua: `Mozilla/5.0 (compatible; Exabot/3.0; +http://www.exabot.com/go/robot)`,
+        name: `Exabot`,
+      },
+      // AI search bots (not training bots)
+      {
+        ua: `Claude-SearchBot/1.0`,
+        name: `Claude-SearchBot`,
+      },
+      {
+        ua: `OAI-SearchBot/1.0`,
+        name: `OAI-SearchBot`,
+      },
+    ]
+
+    it.each(searchBots)(`$name`, ({ ua }) => {
+      expect(isSearchEngineBot(ua)).toBe(true)
+    })
+  })
+
+  describe(`AI training bots - should return false (serve Markdown)`, () => {
+    const trainingBots = [
+      {
+        ua: `Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; ClaudeBot/1.0; +claudebot@anthropic.com)`,
+        name: `ClaudeBot (training)`,
+      },
+      {
+        ua: `Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; GPTBot/1.0; +https://openai.com/gptbot)`,
+        name: `GPTBot (training)`,
+      },
+      {
+        ua: `Mozilla/5.0 (compatible; Google-Extended; +https://developers.google.com/search/docs/crawling-indexing/google-common-crawlers)`,
+        name: `Google-Extended (AI training)`,
+      },
+      {
+        ua: `ChatGPT-User/1.0`,
+        name: `ChatGPT-User (live browsing)`,
+      },
+      {
+        ua: `anthropic-ai`,
+        name: `anthropic-ai`,
+      },
+      {
+        ua: `CCBot/2.0`,
+        name: `CCBot (Common Crawl)`,
+      },
+      {
+        ua: `cohere-ai`,
+        name: `cohere-ai`,
+      },
+    ]
+
+    it.each(trainingBots)(`$name`, ({ ua }) => {
+      expect(isSearchEngineBot(ua)).toBe(false)
+    })
+  })
+
+  describe(`browsers and CLI tools - should return false`, () => {
+    const others = [
+      {
+        ua: `Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36`,
+        name: `Chrome`,
+      },
+      { ua: `curl/7.64.1`, name: `curl` },
+      { ua: `Wget/1.21`, name: `wget` },
+    ]
+
+    it.each(others)(`$name`, ({ ua }) => {
+      expect(isSearchEngineBot(ua)).toBe(false)
+    })
+  })
+
+  describe(`edge cases`, () => {
+    it(`empty user agent`, () => {
+      expect(isSearchEngineBot(``)).toBe(false)
+    })
+
+    it(`random string`, () => {
+      expect(isSearchEngineBot(`some random string`)).toBe(false)
     })
   })
 })

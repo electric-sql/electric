@@ -1,6 +1,9 @@
 import type { Context } from 'https://edge.netlify.com'
 
-import { isSocialMediaBot } from '../../src/lib/social-bot-detection.ts'
+import {
+  isSearchEngineBot,
+  isSocialMediaBot,
+} from '../../src/lib/social-bot-detection.ts'
 
 // Path prefixes that should serve markdown to agents
 const PATH_PREFIXES = [
@@ -58,7 +61,8 @@ export default async (request: Request, context: Context) => {
 
   // Social media bots need HTML with Open Graph / Twitter Card meta tags
   // to generate rich link preview cards. Always serve HTML to these bots.
-  if (isSocialMediaBot(userAgent)) {
+  // Search engine bots need HTML for proper indexing in search results.
+  if (isSocialMediaBot(userAgent) || isSearchEngineBot(userAgent)) {
     return context.next()
   }
 

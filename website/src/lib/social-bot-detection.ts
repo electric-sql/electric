@@ -1,3 +1,53 @@
+// Search engine crawlers that need HTML for proper indexing.
+// These bots index content for search results and need full HTML
+// with proper meta tags, structured data, and rendered content.
+//
+// Single pre-compiled regex for efficient matching. Case-insensitive.
+// Patterns include:
+//   - Google (Googlebot, AdsBot-Google, Mediapartners-Google)
+//   - Bing (bingbot, adidxbot, msnbot)
+//   - Yahoo (Slurp)
+//   - DuckDuckGo (DuckDuckBot)
+//   - Yandex (YandexBot)
+//   - Baidu (Baiduspider)
+//   - Sogou
+//   - AI search bots (Claude-SearchBot, OAI-SearchBot) - not training bots
+const SEARCH_ENGINE_PATTERNS = [
+  `googlebot`,
+  `adsbot-google`,
+  `mediapartners-google`,
+  `feedfetcher-google`,
+  `google-inspectiontool`,
+  `storebot-google`,
+  `bingbot`,
+  `adidxbot`,
+  `msnbot`,
+  `slurp`, // Yahoo
+  `duckduckbot`,
+  `yandexbot`,
+  `baiduspider`,
+  `sogou`,
+  `petalbot`, // Huawei/Aspiegel
+  `seznambot`, // Czech search engine
+  `exabot`,
+  // AI search bots (these index for search/citations, not training)
+  `claude-searchbot`,
+  `oai-searchbot`,
+]
+
+export const SEARCH_ENGINE_REGEX = new RegExp(
+  SEARCH_ENGINE_PATTERNS.join(`|`),
+  `i`
+)
+
+/**
+ * Check if the user-agent indicates a search engine crawler that needs HTML
+ * for proper indexing in search results.
+ */
+export function isSearchEngineBot(userAgent: string): boolean {
+  return SEARCH_ENGINE_REGEX.test(userAgent)
+}
+
 // Social media and messaging platform bots that need HTML with meta tags for
 // link previews. These fetchers retrieve Open Graph / Twitter Card metadata
 // to generate rich preview cards when links are shared.
