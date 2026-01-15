@@ -1,5 +1,5 @@
 defmodule Electric.Replication.Eval.RunnerTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
   use ExUnitProperties
 
   import Support.DbSetup

@@ -1,5 +1,5 @@
 defmodule Electric.SchemaTest do
-  use Support.TransactionCase, async: true
+  use Support.TransactionCase, async: false
 
   alias Electric.Schema
   alias Electric.Postgres.Inspector.DirectInspector

@@ -1,5 +1,5 @@
 defmodule Electric.Shapes.QueryingTest do
-  use Support.TransactionCase, async: true
+  use Support.TransactionCase, async: false
 
   alias Electric.Shapes.Shape.SubqueryMoves
   alias Electric.Postgres.Inspector.DirectInspector

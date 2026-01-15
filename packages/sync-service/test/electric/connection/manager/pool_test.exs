@@ -1,5 +1,5 @@
 defmodule Electric.Connection.Manager.PoolTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
   use Repatch.ExUnit
 
   import Support.ComponentSetup
