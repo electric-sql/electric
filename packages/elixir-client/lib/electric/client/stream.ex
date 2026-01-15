@@ -205,7 +205,7 @@ defmodule Electric.Client.Stream do
   defp handle_response({:error, %Fetch.Response{} = resp}, stream) do
     %Fetch.Response{body: body} = resp
 
-    handle_error(%Client.Error{message: unwrap(body), resp: resp}, stream)
+    handle_error(%Client.Error{message: unwrap_error(body), resp: resp}, stream)
   end
 
   defp handle_response({:error, error}, stream) do
@@ -238,9 +238,10 @@ defmodule Electric.Client.Stream do
     {:halt, %{stream | buffer: :queue.in(resume_message, stream.buffer), state: :done}}
   end
 
-  defp unwrap([msg]), do: msg
-  defp unwrap([_ | _] = msgs), do: msgs
-  defp unwrap(msg), do: msg
+  defp unwrap_error([]), do: "Unknown error"
+  defp unwrap_error([msg]), do: msg
+  defp unwrap_error([_ | _] = msgs), do: msgs
+  defp unwrap_error(msg), do: msg
 
   defp handle_error(error, %{opts: %{errors: :stream}} = stream) do
     %{stream | buffer: :queue.in(error, stream.buffer), state: :done}
