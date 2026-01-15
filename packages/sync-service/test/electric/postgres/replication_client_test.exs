@@ -428,7 +428,9 @@ defmodule Electric.Postgres.ReplicationClientTest do
       send(pid, {:flush_boundary_updated, 100})
 
       # Poll until the flush LSN advances, with a timeout
-      new_confirmed_flush_lsn = wait_for_flush_lsn_to_advance(conn, ctx.slot_name, confirmed_flush_lsn)
+      new_confirmed_flush_lsn =
+        wait_for_flush_lsn_to_advance(conn, ctx.slot_name, confirmed_flush_lsn)
+
       assert Lsn.compare(confirmed_flush_lsn, new_confirmed_flush_lsn) == :lt
     end
 
