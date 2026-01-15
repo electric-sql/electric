@@ -1,5 +1,11 @@
 # @core/sync-service
 
+## 1.3.1
+
+### Patch Changes
+
+- 5a767e6: Add Move-Out Support for Subqueries in Elixir Client
+
 ## 1.3.0
 
 ### Minor Changes

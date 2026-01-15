@@ -1,5 +1,11 @@
 # @core/elixir-client
 
+## 0.8.1
+
+### Patch Changes
+
+- 5a767e6: Add Move-Out Support for Subqueries in Elixir Client
+
 ## 0.8.0
 
 ### Minor Changes
