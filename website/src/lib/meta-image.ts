@@ -14,7 +14,11 @@ export function buildFullImageUrl(
   imagePath: string,
   siteOrigin: string
 ): string {
-  return isAbsoluteUrl(imagePath) ? imagePath : `${siteOrigin}${imagePath}`
+  if (isAbsoluteUrl(imagePath)) {
+    return imagePath
+  }
+  const normalizedPath = imagePath.startsWith(`/`) ? imagePath : `/${imagePath}`
+  return `${siteOrigin}${normalizedPath}`
 }
 
 /**

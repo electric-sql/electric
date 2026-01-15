@@ -67,6 +67,13 @@ describe(`buildFullImageUrl`, () => {
       `${SITE_ORIGIN}/img/meta/image.jpg`
     )
   })
+
+  it(`normalizes relative path without leading slash`, () => {
+    const relativePath = `img/meta/image.jpg`
+    expect(buildFullImageUrl(relativePath, SITE_ORIGIN)).toBe(
+      `${SITE_ORIGIN}/img/meta/image.jpg`
+    )
+  })
 })
 
 describe(`buildMetaImageUrl`, () => {
