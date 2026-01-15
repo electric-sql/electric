@@ -1187,46 +1187,6 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
       end
     end
 
-    describe "#{module_name}.get_stored_shapes/1" do
-      @describetag skip_initialise: true
-      setup :start_storage
-
-      test "retrieves no shapes if no shapes persisted", %{storage_base: storage_base} do
-        assert %{} = Storage.get_stored_shapes(storage_base, [])
-      end
-
-      test "retrieves stored shapes", %{storage: opts, storage_base: storage_base} do
-        _writer = Storage.init_writer!(opts, @shape)
-        invalid_handle = "invalid-handle"
-
-        assert %{@shape_handle => {:ok, parsed}, ^invalid_handle => {:error, _}} =
-                 Storage.get_stored_shapes(storage_base, [@shape_handle, invalid_handle])
-
-        assert @shape == parsed
-      end
-
-      test "restores shape snapshot started flag", %{storage: opts, storage_base: storage_base} do
-        _writer = Storage.init_writer!(opts, @shape)
-        :ok = Storage.mark_snapshot_as_started(opts)
-
-        assert %{@shape_handle => {:ok, parsed}} =
-                 Storage.get_stored_shapes(storage_base, [@shape_handle])
-
-        assert @shape == parsed
-      end
-    end
-
-    describe "#{module_name}.metadata_backup_dir/1" do
-      @describetag skip_initialise: true
-      setup :start_storage
-
-      test "returns metadata backup directory", %{storage_base: storage_base} do
-        assert dir = Storage.metadata_backup_dir(storage_base)
-        assert is_binary(dir)
-        assert Path.type(dir) == :absolute
-      end
-    end
-
     describe "#{module_name}.cleanup!/1" do
       setup :start_storage
 
@@ -1299,7 +1259,6 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
 
         Storage.cleanup_all!(storage_base)
         assert Storage.get_total_disk_usage(storage_base) == 0
-        refute File.dir?(Storage.metadata_backup_dir(storage_base))
       end
 
       test "should handle entire base directory already missing", %{storage_base: storage_base} do

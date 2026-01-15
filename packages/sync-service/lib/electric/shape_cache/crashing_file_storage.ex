@@ -10,8 +10,6 @@ defmodule Electric.ShapeCache.CrashingFileStorage do
   defdelegate for_shape(shape_handle, opts), to: PureFileStorage
   defdelegate start_link(opts), to: PureFileStorage
   defdelegate get_all_stored_shape_handles(opts), to: PureFileStorage
-  defdelegate get_stored_shapes(opts, shape_handles), to: PureFileStorage
-  defdelegate metadata_backup_dir(opts), to: PureFileStorage
   defdelegate get_total_disk_usage(opts), to: PureFileStorage
   defdelegate fetch_latest_offset(opts), to: PureFileStorage
   defdelegate fetch_pg_snapshot(opts), to: PureFileStorage
