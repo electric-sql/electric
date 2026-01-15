@@ -19,7 +19,12 @@ defmodule Electric.Client.Stream do
     shape_handle: nil,
     next_cursor: nil,
     state: :init,
-    opts: %{}
+    opts: %{},
+    # Move-out support: tracks tags per key and keys per tag
+    # tag_to_keys: %{tag_value => MapSet<key>} - which keys have this tag
+    # key_data: %{key => %{tags: MapSet<tag>, msg: msg}} - each key's tags and latest message
+    tag_to_keys: %{},
+    key_data: %{}
   ]
 
   @external_options [
@@ -89,7 +94,9 @@ defmodule Electric.Client.Stream do
         }
 
   @type t :: %__MODULE__{
+          id: integer(),
           client: Client.t(),
+          shape: Client.shape() | nil,
           schema: Client.schema(),
           value_mapper_fun: Client.ValueMapper.mapper_fun(),
           parser: nil | {module(), term()},
@@ -98,8 +105,11 @@ defmodule Electric.Client.Stream do
           offset: Client.offset(),
           replica: Client.replica(),
           shape_handle: nil | Client.shape_handle(),
+          next_cursor: binary() | nil,
           state: :init | :stream | :done,
-          opts: opts()
+          opts: opts(),
+          tag_to_keys: %{optional(term()) => MapSet.t()},
+          key_data: %{optional(term()) => %{tags: MapSet.t(), msg: Message.ChangeMessage.t()}}
         }
 
   alias __MODULE__, as: S
@@ -182,8 +192,7 @@ defmodule Electric.Client.Stream do
 
     resp.body
     |> ensure_enum()
-    |> Enum.flat_map(&Message.parse(&1, shape_handle, value_mapper_fun))
-    |> Enum.map(&Map.put(&1, :request_timestamp, resp.request_timestamp))
+    |> Enum.flat_map(&Message.parse(&1, shape_handle, value_mapper_fun, resp.request_timestamp))
     |> Enum.reduce_while(stream, &handle_msg/2)
     |> dispatch()
   end
@@ -198,7 +207,12 @@ defmodule Electric.Client.Stream do
 
     stream
     |> reset(handle)
-    |> buffer(Enum.flat_map(resp.body, &Message.parse(&1, handle, value_mapper_fun)))
+    |> buffer(
+      Enum.flat_map(
+        resp.body,
+        &Message.parse(&1, handle, value_mapper_fun, resp.request_timestamp)
+      )
+    )
     |> dispatch()
   end
 
@@ -221,7 +235,29 @@ defmodule Electric.Client.Stream do
   end
 
   defp handle_msg(%Message.ChangeMessage{} = msg, stream) do
+    stream = update_tag_index(stream, msg)
     {:cont, %{stream | buffer: :queue.in(msg, stream.buffer)}}
+  end
+
+  defp handle_msg(
+         %Message.MoveOutMessage{patterns: patterns, request_timestamp: request_timestamp} = _msg,
+         stream
+       ) do
+    # Assumption: move-out events are only emitted after the initial snapshot is complete.
+    # We therefore apply them immediately and do not buffer for later inserts.
+
+    # Generate synthetic deletes for rows matching the move-out patterns
+    {synthetic_deletes, updated_tag_to_keys, updated_key_data} =
+      generate_synthetic_deletes(stream, patterns, request_timestamp)
+
+    # Add synthetic deletes to the buffer
+    buffer =
+      Enum.reduce(synthetic_deletes, stream.buffer, fn delete_msg, buf ->
+        :queue.in(delete_msg, buf)
+      end)
+
+    {:cont,
+     %{stream | buffer: buffer, tag_to_keys: updated_tag_to_keys, key_data: updated_key_data}}
   end
 
   defp handle_up_to_date(%{opts: %{live: true}} = stream) do
@@ -232,7 +268,9 @@ defmodule Electric.Client.Stream do
     resume_message = %Message.ResumeMessage{
       schema: stream.schema,
       offset: stream.offset,
-      shape_handle: stream.shape_handle
+      shape_handle: stream.shape_handle,
+      tag_to_keys: stream.tag_to_keys,
+      key_data: stream.key_data
     }
 
     {:halt, %{stream | buffer: :queue.in(resume_message, stream.buffer), state: :done}}
@@ -302,7 +340,9 @@ defmodule Electric.Client.Stream do
         up_to_date?: false,
         buffer: :queue.new(),
         schema: nil,
-        value_mapper_fun: nil
+        value_mapper_fun: nil,
+        tag_to_keys: %{},
+        key_data: %{}
     }
   end
 
@@ -356,8 +396,17 @@ defmodule Electric.Client.Stream do
 
   defp resume(%{opts: %{resume: %Message.ResumeMessage{} = resume}} = stream) do
     %{shape_handle: shape_handle, offset: offset, schema: schema} = resume
+    tag_to_keys = Map.get(resume, :tag_to_keys, %{})
+    key_data = Map.get(resume, :key_data, %{})
 
-    stream = %{stream | shape_handle: shape_handle, offset: offset, up_to_date?: true}
+    stream = %{
+      stream
+      | shape_handle: shape_handle,
+        offset: offset,
+        tag_to_keys: tag_to_keys,
+        key_data: key_data,
+        up_to_date?: true
+    }
 
     if schema do
       generate_value_mapper(schema, stream)
@@ -372,6 +421,169 @@ defmodule Electric.Client.Stream do
 
   defp stream_state(%{state: :init} = stream) do
     %{stream | state: :stream}
+  end
+
+  # Tag index management for move-out support
+  #
+  # We maintain two data structures:
+  # - tag_to_keys: %{tag_value => MapSet<key>} - which keys have each tag
+  # - key_data: %{key => %{tags: MapSet<tag>, msg: msg}} - each key's current tags and latest message
+  #
+  # This allows us to:
+  # 1. Avoid duplicate entries when a row is updated (we update the msg, not add a new entry)
+  # 2. Check if a row still has other tags before generating a synthetic delete
+
+  defp update_tag_index(stream, %Message.ChangeMessage{headers: headers, key: key} = msg) do
+    %{tag_to_keys: tag_to_keys, key_data: key_data} = stream
+    new_tags = headers.tags || []
+    removed_tags = headers.removed_tags || []
+
+    # Get current data for this key
+    current_data = Map.get(key_data, key)
+    current_tags = if current_data, do: current_data.tags, else: MapSet.new()
+
+    # Calculate the new set of tags for this key
+    updated_tags =
+      current_tags
+      |> MapSet.difference(MapSet.new(removed_tags))
+      |> MapSet.union(MapSet.new(new_tags))
+
+    # For deletes, remove the key entirely
+    {_final_tags, final_key_data, final_tag_to_keys} =
+      case headers.operation do
+        :delete ->
+          # Remove key from all its tags in tag_to_keys
+          updated_tag_to_keys =
+            Enum.reduce(updated_tags, tag_to_keys, fn tag, acc ->
+              remove_key_from_tag(acc, tag, key)
+            end)
+
+          # Remove key from key_data
+          {MapSet.new(), Map.delete(key_data, key), updated_tag_to_keys}
+
+        _ ->
+          # If no tags (current or new), don't track this key
+          if MapSet.size(updated_tags) == 0 do
+            # Remove key from all its previous tags in tag_to_keys
+            updated_tag_to_keys =
+              Enum.reduce(current_tags, tag_to_keys, fn tag, acc ->
+                remove_key_from_tag(acc, tag, key)
+              end)
+
+            # Remove key from key_data
+            {MapSet.new(), Map.delete(key_data, key), updated_tag_to_keys}
+          else
+            # Update tag_to_keys: remove from old tags, add to new tags
+            tags_to_remove = MapSet.difference(current_tags, updated_tags)
+            tags_to_add = MapSet.difference(updated_tags, current_tags)
+
+            updated_tag_to_keys =
+              tag_to_keys
+              |> remove_key_from_tags(tags_to_remove, key)
+              |> add_key_to_tags(tags_to_add, key)
+
+            # Update key_data with new tags and latest message
+            updated_key_data = Map.put(key_data, key, %{tags: updated_tags, msg: msg})
+
+            {updated_tags, updated_key_data, updated_tag_to_keys}
+          end
+      end
+
+    %{stream | tag_to_keys: final_tag_to_keys, key_data: final_key_data}
+  end
+
+  defp remove_key_from_tags(tag_to_keys, tags, key) do
+    Enum.reduce(tags, tag_to_keys, fn tag, acc ->
+      remove_key_from_tag(acc, tag, key)
+    end)
+  end
+
+  defp remove_key_from_tag(tag_to_keys, tag, key) do
+    case Map.get(tag_to_keys, tag) do
+      nil ->
+        tag_to_keys
+
+      keys ->
+        updated_keys = MapSet.delete(keys, key)
+
+        if MapSet.size(updated_keys) == 0 do
+          Map.delete(tag_to_keys, tag)
+        else
+          Map.put(tag_to_keys, tag, updated_keys)
+        end
+    end
+  end
+
+  defp add_key_to_tags(tag_to_keys, tags, key) do
+    Enum.reduce(tags, tag_to_keys, fn tag, acc ->
+      keys = Map.get(acc, tag, MapSet.new())
+      Map.put(acc, tag, MapSet.put(keys, key))
+    end)
+  end
+
+  defp generate_synthetic_deletes(stream, patterns, request_timestamp) do
+    %{tag_to_keys: tag_to_keys, key_data: key_data} = stream
+
+    # Assumption: move-out patterns only include simple tag values; positional matching
+    # for composite tags is not needed with the current server behavior.
+
+    # First pass: collect all keys that match any pattern and remove those tags
+    {matched_keys_with_tags, updated_tag_to_keys} =
+      Enum.reduce(patterns, {%{}, tag_to_keys}, fn %{value: tag_value}, {keys_acc, ttk_acc} ->
+        case Map.pop(ttk_acc, tag_value) do
+          {nil, ttk_acc} ->
+            {keys_acc, ttk_acc}
+
+          {keys_in_tag, ttk_acc} ->
+            # Track which tags were removed for each key
+            updated_keys_acc =
+              Enum.reduce(keys_in_tag, keys_acc, fn key, acc ->
+                removed_tags = Map.get(acc, key, MapSet.new())
+                Map.put(acc, key, MapSet.put(removed_tags, tag_value))
+              end)
+
+            {updated_keys_acc, ttk_acc}
+        end
+      end)
+
+    # Second pass: for each matched key, update its tags and check if it should be deleted
+    {keys_to_delete, updated_key_data} =
+      Enum.reduce(matched_keys_with_tags, {[], key_data}, fn {key, removed_tags},
+                                                             {deletes, kd_acc} ->
+        case Map.get(kd_acc, key) do
+          nil ->
+            {deletes, kd_acc}
+
+          %{tags: current_tags, msg: msg} ->
+            remaining_tags = MapSet.difference(current_tags, removed_tags)
+
+            if MapSet.size(remaining_tags) == 0 do
+              # No remaining tags - key should be deleted
+              {[{key, msg} | deletes], Map.delete(kd_acc, key)}
+            else
+              # Still has other tags - update key_data but don't delete
+              {deletes, Map.put(kd_acc, key, %{tags: remaining_tags, msg: msg})}
+            end
+        end
+      end)
+
+    # Generate synthetic delete messages
+    synthetic_deletes =
+      Enum.map(keys_to_delete, fn {key, original_msg} ->
+        %Message.ChangeMessage{
+          key: key,
+          value: original_msg.value,
+          old_value: nil,
+          headers:
+            Message.Headers.delete(
+              relation: original_msg.headers.relation,
+              handle: original_msg.headers.handle
+            ),
+          request_timestamp: request_timestamp
+        }
+      end)
+
+    {synthetic_deletes, updated_tag_to_keys, updated_key_data}
   end
 
   defimpl Enumerable do
