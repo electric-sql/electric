@@ -514,11 +514,19 @@ describe(`ExpiredShapesCache`, () => {
     // Should have made initial request + 3 retries = 4 total requests
     expect(requestCount).toBe(4)
 
-    // Verify each retry after the first includes cache buster
+    // Verify each retry after the first includes cache buster and that each is UNIQUE
+    const cacheBusters: string[] = []
     for (let i = 1; i < capturedUrls.length; i++) {
       const url = new URL(capturedUrls[i])
       expect(url.searchParams.has(CACHE_BUSTER_QUERY_PARAM)).toBe(true)
+      const cacheBuster = url.searchParams.get(CACHE_BUSTER_QUERY_PARAM)
+      expect(cacheBuster).not.toBeNull()
+      cacheBusters.push(cacheBuster!)
     }
+
+    // Verify all cache busters are unique (this is the key fix for issue #3723)
+    const uniqueCacheBusters = new Set(cacheBusters)
+    expect(uniqueCacheBusters.size).toBe(cacheBusters.length)
 
     // Should have thrown an error after max retries
     expect(caughtError).not.toBe(null)
