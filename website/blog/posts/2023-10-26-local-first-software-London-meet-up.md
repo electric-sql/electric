@@ -12,6 +12,9 @@ outline: deep
 post: true
 ---
 
+> [!WARNING]
+> This post was written for a previous version of Electric that is no longer active. It is preserved for historical interest only. See the [Electric Next](/blog/2024/07/17/electric-next) post for context on the new system.
+
 Last Thursday, the Electric team was excited to host the first [Local-first Software London](https://guild.host/local-first-software-london/events) meet-up. It was a really successful evening, and it was brilliant to meet so many people from the Local-first movement in person, many of whom had travelled to London for the [React Advanced](https://reactadvanced.com) conference on Friday.
 
 We had a great turn out for the meet-up, both in person, and from those joining in via the livestream. We were delighted that the speakers we'd asked to join us accepted our invitation, and we were treated to an evening of interesting and enthusiastic presentations from each. Our guest speakers are all leaders from across the broad spectrum of Local-first projects and products. We are grateful to all of them for contributing to this first meet-up, and for further taking the time to answer follow-up questions from the attendees after each talk.

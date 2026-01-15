@@ -9,6 +9,9 @@ outline: deep
 post: true
 ---
 
+> [!WARNING]
+> This post was written for a previous version of Electric that is no longer active. It is preserved for historical interest only. See the [Electric Next](/blog/2024/07/17/electric-next) post for context on the new system.
+
 One of the most common questions we get asked about developing on ElectricSQL and local-first in general is how to do secure, confirmed transactions like bookings and payments. <!--truncate-->It's a great question, because you typically need to use a server for these type of transactions. You don't want to bundle secrets into a client app and the server can make sure that a transaction is only executed once.
 
 The good news is that there's a simple pattern you can easily implement to do secure transactions with ElectricSQL and local-first applications in general. Read ahead for more context, or [jump straight to the solution](#solution--use-a-state-machine).
