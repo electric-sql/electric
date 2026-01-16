@@ -41,6 +41,7 @@ import {
   OpenSourceSection,
   PGliteStrap,
   ScalesToSection,
+  SolutionsSection,
   SolvesSyncSection,
   SyncAwesomeSection,
   UsedBySection,
@@ -96,6 +97,7 @@ function Component({ project }) {
 
 <SyncAwesomeSection />
 <AIThesisSection />
+<SolutionsSection />
 <SolvesSyncSection />
 <WorksWithSection />
 <ScalesToSection />
