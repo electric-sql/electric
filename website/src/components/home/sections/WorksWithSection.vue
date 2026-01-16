@@ -299,39 +299,32 @@ onMounted(() => {
 
 <template>
   <Section :actions="actions" :wideSectionHead="false">
-    <template #title> With your existing&nbsp;stack </template>
+    <template #title> That work with your&nbsp;stack </template>
     <template #override-tagline>
       <p>
-        Electric works with <span class="inline-sm">any </span>
+        Our products work with
         <a href="/docs/guides/deployment#_1-running-postgres">
-          <span class="hidden-sm">any </span>Postgres</a
+          <span class="inline-sm">any </span>Postgres</a
         >,
-        <a href="/docs/guides/deployment#data-model-compatibility">
-          <span class="hidden-sm">any </span>data model</a
+        <a href="/docs/integrations">
+          <span class="inline-sm">any </span>web framework</a
         >
         and
-        <a href="/docs/integrations">
-          <span class="hidden-sm">any </span>web framework</a
-        >.
-        <span class="hidden -hidden-lg">
-          that speaks
-          <a href="/docs/guides/client-development"> HTTP and JSON</a></span
+        <a href="/docs/guides/client-development">
+          <span class="inline-sm">any </span>client</a
         >
-        <span class="no-wrap-sm"> It syncs data</span>
-        <span class="hidden -hidden-lg"> out of Postgres</span>
-        into anything
-        <span class="hidden-lg"> you like, </span>
-        from a
-        <a href="/docs/integrations/react">
-          <span class="hidden -hidden-lg"> Javascript</span>
-          state variable</a
-        >
-        to a
-        <a href="/product/pglite">
-          local
-          <span class="hidden -hidden-lg"> SQL</span>
-          database</a
-        >.
+        <span class="hidden-sm">that speaks HTTP</span>.
+        <span class="no-wrap-sm"> Use</span>
+        <a href="/products/postgres-sync">Postgres Sync</a>
+        with
+        <a href="/products/tanstack-db">TanStack DB</a>
+        for local-first apps.
+        <span class="hidden-sm">Add</span>
+        <a href="/products/durable-streams">Durable Streams</a>
+        for resilient AI.
+        <span class="hidden-sm">Run</span>
+        <a href="/products/pglite">PGlite</a>
+        anywhere.
       </p>
     </template>
     <div class="your-stack">
@@ -393,9 +386,9 @@ onMounted(() => {
       </div>
     </div>
     <template #outline>
-      So you can adopt sync incrementally, one route at a time<span
+      Adopt sync incrementally, one component at a time<span
         class="hidden-lg"
-        >, into both greenfield and brownfield applications</span
+        >, into greenfield and brownfield apps alike</span
       >.
     </template>
     <template #outbody>

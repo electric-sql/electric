@@ -1,0 +1,309 @@
+[
+  {
+    "id": "1.1",
+    "category": "navigation",
+    "description": "Update main navigation structure",
+    "steps": [
+      "Change Product link to Sync pointing to /sync",
+      "Add Products link pointing to /products",
+      "Add Cloud link pointing to /cloud",
+      "Remove Use cases link",
+      "Update activeMatch patterns"
+    ],
+    "files": [".vitepress/config.mts"],
+    "passes": true
+  },
+  {
+    "id": "1.2",
+    "category": "navigation",
+    "description": "Configure products sidebar",
+    "steps": [
+      "Add /products/ sidebar config with Overview, Postgres Sync, Durable Streams, TanStack DB, PGlite",
+      "Remove /product/ sidebar config"
+    ],
+    "files": [".vitepress/config.mts"],
+    "passes": true
+  },
+  {
+    "id": "2.1",
+    "category": "homepage-components",
+    "description": "Create AIThesisSection component",
+    "steps": [
+      "Create AIThesisSection.vue with 'Build collaborative AI apps' content",
+      "Add AI + collaboration thesis paragraph",
+      "Export from sections/index.ts"
+    ],
+    "files": ["src/components/home/sections/AIThesisSection.vue", "src/components/home/sections/index.ts"],
+    "passes": true
+  },
+  {
+    "id": "2.2",
+    "category": "homepage-components",
+    "description": "Create SolutionsSection component",
+    "steps": [
+      "Create SolutionsSection.vue with 5 outcome-focused panels",
+      "Implement 3+2 column grid layout",
+      "Add links to /sync sections",
+      "Use visual treatment from SyncAwesomeSection",
+      "Export from sections/index.ts"
+    ],
+    "files": ["src/components/home/sections/SolutionsSection.vue", "src/components/home/sections/index.ts"],
+    "passes": true
+  },
+  {
+    "id": "2.3",
+    "category": "homepage-components",
+    "description": "Create ProductsSection component",
+    "steps": [
+      "Create ProductsSection.vue with 4 product cards",
+      "Add Postgres Sync, Durable Streams, TanStack DB, PGlite panels",
+      "Link each to individual product pages",
+      "Add CTA to /products",
+      "Export from sections/index.ts"
+    ],
+    "files": ["src/components/home/sections/ProductsSection.vue", "src/components/home/sections/index.ts"],
+    "passes": true
+  },
+  {
+    "id": "2.4",
+    "category": "homepage-components",
+    "description": "Create DeploymentSection component",
+    "steps": [
+      "Create DeploymentSection.vue with three-tier layout",
+      "Add Electric Cloud primary CTA",
+      "Add Open Source and Local dev secondary cards",
+      "Export from sections/index.ts"
+    ],
+    "files": ["src/components/home/sections/DeploymentSection.vue", "src/components/home/sections/index.ts"],
+    "passes": true
+  },
+  {
+    "id": "2.5",
+    "category": "homepage-components",
+    "description": "Update homepage layout",
+    "steps": [
+      "Restructure index.md section order",
+      "Add new sections: AIThesisSection, SolutionsSection, ProductsSection, DeploymentSection",
+      "Remove PGliteStrap, SyncAwesomeSection, SolvesSyncSection",
+      "Keep ScalesToSection, UsedBySection, BackedBySection, OpenSourceSection, GetStartedStrap"
+    ],
+    "files": ["index.md"],
+    "passes": true
+  },
+  {
+    "id": "2.6",
+    "category": "homepage-components",
+    "description": "Update hero section",
+    "steps": [
+      "Change headline to 'Sync with your stack'",
+      "Update tagline",
+      "Keep CTAs: Sign-up to Cloud, Quickstart"
+    ],
+    "files": ["index.md"],
+    "passes": true
+  },
+  {
+    "id": "2.7",
+    "category": "homepage-components",
+    "description": "Generalize WorksWithSection",
+    "steps": [
+      "Update title to 'That work with your stack'",
+      "Show integrations across all products",
+      "Maintain visual structure"
+    ],
+    "files": ["src/components/home/sections/WorksWithSection.vue"],
+    "passes": true
+  },
+  {
+    "id": "3.1",
+    "category": "product-pages",
+    "description": "Create products index page",
+    "steps": [
+      "Create products/index.md",
+      "Add 'Which product should I use?' guidance section",
+      "Add composition diagram",
+      "Add product cards",
+      "Add cross-link to /sync"
+    ],
+    "files": ["products/index.md"],
+    "passes": false
+  },
+  {
+    "id": "3.2",
+    "category": "product-pages",
+    "description": "Create Postgres Sync product page",
+    "steps": [
+      "Create products/postgres-sync.md based on product/electric.md",
+      "Update title and icon",
+      "Update internal links",
+      "Add filtered blog post listing by postgres-sync tag"
+    ],
+    "files": ["products/postgres-sync.md"],
+    "passes": false
+  },
+  {
+    "id": "3.3",
+    "category": "product-pages",
+    "description": "Create Durable Streams product page",
+    "steps": [
+      "Create products/durable-streams.md",
+      "Add product description",
+      "Link to external docs",
+      "Add filtered blog post listing by durable-streams tag"
+    ],
+    "files": ["products/durable-streams.md"],
+    "passes": false
+  },
+  {
+    "id": "3.4",
+    "category": "product-pages",
+    "description": "Create TanStack DB product page",
+    "steps": [
+      "Create products/tanstack-db.md",
+      "Add product description",
+      "Link to TanStack docs (external)",
+      "Add filtered blog post listing by tanstack-db tag"
+    ],
+    "files": ["products/tanstack-db.md"],
+    "passes": false
+  },
+  {
+    "id": "3.5",
+    "category": "product-pages",
+    "description": "Migrate PGlite product page",
+    "steps": [
+      "Create products/pglite.md from product/pglite.md",
+      "Update internal links",
+      "Add filtered blog post listing by pglite tag"
+    ],
+    "files": ["products/pglite.md"],
+    "passes": false
+  },
+  {
+    "id": "3.6",
+    "category": "product-pages",
+    "description": "Create BlogPostsByTag component",
+    "steps": [
+      "Create src/components/BlogPostsByTag.vue",
+      "Accept tag prop",
+      "Filter posts from posts.data.ts by tag",
+      "Render using BlogPostListing component"
+    ],
+    "files": ["src/components/BlogPostsByTag.vue"],
+    "passes": false
+  },
+  {
+    "id": "4.1",
+    "category": "cloud-section",
+    "description": "Move cloud page to /cloud",
+    "steps": [
+      "Create cloud.md from product/cloud.md",
+      "Update internal links",
+      "Minimal changes only (Phase 3 redesign later)"
+    ],
+    "files": ["cloud.md"],
+    "passes": false
+  },
+  {
+    "id": "5.1",
+    "category": "sync-page",
+    "description": "Create sync page stub",
+    "steps": [
+      "Create sync.md",
+      "Add hero with SyncAwesomeSection visual treatment",
+      "Add placeholder sections for 5 solution categories",
+      "Add cross-link to /products"
+    ],
+    "files": ["sync.md"],
+    "passes": false
+  },
+  {
+    "id": "6.1",
+    "category": "docs-updates",
+    "description": "Update docs index with external links",
+    "steps": [
+      "Add Durable Streams docs link",
+      "Add TanStack DB docs link",
+      "Add PGlite docs (pglite.dev) link"
+    ],
+    "files": ["docs/intro.md"],
+    "passes": false
+  },
+  {
+    "id": "7.1",
+    "category": "blog-tags",
+    "description": "Audit and add blog post tags",
+    "steps": [
+      "Review all blog posts",
+      "Add postgres-sync tag where appropriate",
+      "Add durable-streams tag where appropriate",
+      "Add tanstack-db tag where appropriate",
+      "Add pglite tag where appropriate"
+    ],
+    "files": ["blog/posts/*.md"],
+    "passes": false
+  },
+  {
+    "id": "8.1",
+    "category": "redirects-cleanup",
+    "description": "Configure URL redirects",
+    "steps": [
+      "Add /product/electric → /products/postgres-sync redirect",
+      "Add /product/cloud → /cloud redirect",
+      "Add /product/pglite → /products/pglite redirect",
+      "Add /use-cases/* → /sync redirect"
+    ],
+    "files": ["netlify.toml"],
+    "passes": false
+  },
+  {
+    "id": "8.2",
+    "category": "redirects-cleanup",
+    "description": "Remove old files",
+    "steps": [
+      "Delete product/electric.md",
+      "Delete product/cloud.md",
+      "Delete product/pglite.md",
+      "Delete use-cases/*.md (all 6 files)",
+      "Delete src/components/home/straps/PGliteStrap.vue"
+    ],
+    "files": ["product/electric.md", "product/cloud.md", "product/pglite.md", "use-cases/*.md", "src/components/home/straps/PGliteStrap.vue"],
+    "passes": false
+  },
+  {
+    "id": "8.3",
+    "category": "redirects-cleanup",
+    "description": "Clean up component exports",
+    "steps": [
+      "Remove PGliteStrap from straps/index.ts",
+      "Verify all new section exports in sections/index.ts"
+    ],
+    "files": ["src/components/home/straps/index.ts", "src/components/home/sections/index.ts"],
+    "passes": false
+  },
+  {
+    "id": "9.1",
+    "category": "testing",
+    "description": "Verify no broken links",
+    "steps": [
+      "Run link checker on site",
+      "Verify all internal links work",
+      "Verify redirects function correctly",
+      "Confirm no 404s from old URLs"
+    ],
+    "files": [],
+    "passes": false
+  },
+  {
+    "id": "9.2",
+    "category": "testing",
+    "description": "Verify production build",
+    "steps": [
+      "Run npm run build",
+      "Preview site with vitepress preview",
+      "Verify all new pages render correctly"
+    ],
+    "files": [],
+    "passes": false
+  }
+]
