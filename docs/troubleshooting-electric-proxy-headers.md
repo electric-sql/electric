@@ -79,7 +79,20 @@ However, the combination of network suspension + stale CDN cache can cause the U
 
 The root cause is your **CDN or hosting platform** caching Electric responses without including query parameters in the cache key.
 
-#### Vercel
+Electric requests include critical query parameters like `handle`, `offset`, and `cursor` that **must** be part of the cache key. Without them, the CDN will serve stale responses.
+
+#### CDN Comparison
+
+| CDN | Can include query params in cache key? | Solution |
+|-----|---------------------------------------|----------|
+| **Vercel** | ❌ No - [ISR explicitly ignores query strings](https://github.com/vercel/vercel/discussions/5155) | Must disable CDN caching |
+| **Cloudflare** | ✅ Yes | Cache Rules → "All query string parameters" |
+| **AWS CloudFront** | ✅ Yes | Cache Policy → `query_string_behavior = "all"` |
+| **Nginx** | ✅ Yes | `proxy_cache_key` includes `$request_uri` |
+
+#### Vercel (No query param support - must disable caching)
+
+Vercel's CDN **explicitly ignores query parameters** in cache keys. There is no way to configure it to include them. You must disable CDN caching for Electric routes.
 
 Add to your `vercel.json`:
 
@@ -87,7 +100,7 @@ Add to your `vercel.json`:
 {
   "headers": [
     {
-      "source": "/api/electric/(.*)",
+      "source": "/api/v1/sync(.*)",
       "headers": [
         {
           "key": "CDN-Cache-Control",
@@ -103,72 +116,74 @@ Add to your `vercel.json`:
 }
 ```
 
-Or use the edge config to vary by query params (preferred for performance):
+> **Note**: This disables Vercel's edge caching. Electric's own caching headers will still work for browser caching and any upstream CDN that properly respects query parameters.
+
+#### Cloudflare (Recommended - supports query params in cache key)
+
+Cloudflare has excellent cache key control. Configure it to include all query parameters:
+
+1. Go to **Caching** → **Cache Rules**
+2. Create a rule matching: `(http.request.uri.path contains "/api/electric")` or your proxy path
+3. Set **Cache eligibility** to "Eligible for cache"
+4. Under **Cache key**, set **Query string** to **"All query string parameters"**
+
+This preserves caching benefits while ensuring each unique `handle`/`offset` combination gets its own cache entry.
+
+See: [Cloudflare Cache Keys documentation](https://developers.cloudflare.com/cache/how-to/cache-keys/)
+
+#### AWS CloudFront (Supports query params in cache key)
+
+Create a cache policy that includes all query strings:
+
+1. Go to **CloudFront** → **Policies** → **Cache**
+2. Create a new cache policy
+3. Under **Query strings**, select **"All"** (or whitelist: `handle`, `offset`, `cursor`, `live`, `table`)
+4. Attach this policy to your Electric API behavior
 
 ```json
 {
-  "headers": [
-    {
-      "source": "/api/electric/(.*)",
-      "headers": [
-        {
-          "key": "Vary",
-          "value": "Accept, Authorization"
-        },
-        {
-          "key": "Cache-Control",
-          "value": "public, max-age=5, stale-while-revalidate=5"
-        }
-      ]
-    }
-  ]
+  "QueryStringsConfig": {
+    "QueryStringBehavior": "all"
+  }
 }
 ```
 
-#### Cloudflare
-
-Create a Cache Rule for your Electric proxy path:
-
-1. Go to **Caching** → **Cache Rules**
-2. Create a rule matching `(http.request.uri.path contains "/api/electric")`
-3. Set **Cache eligibility** to "Bypass cache" OR
-4. Set **Cache key** → **Query string** to "All query string parameters"
+See: [CloudFront Query String Parameters](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/QueryStringParameters.html)
 
 #### Nginx
 
+Nginx includes the full URI (with query string) in cache keys by default when using `$request_uri`:
+
 ```nginx
 location /api/electric {
-    # Include query string in cache key
+    # Default includes query string - this is correct
     proxy_cache_key "$scheme$request_method$host$request_uri";
 
-    # Or disable caching entirely for Electric
-    proxy_cache off;
-    add_header X-Cache-Status "BYPASS";
+    proxy_cache my_cache;
+    proxy_cache_valid 200 5s;
 
-    proxy_pass http://localhost:5173;
+    # SSE streaming support
     proxy_buffering off;
     proxy_http_version 1.1;
     proxy_set_header Connection '';
 }
 ```
 
-#### AWS CloudFront
+#### SvelteKit Proxy - Add Cache Headers
 
-Configure the cache behavior for your Electric API path:
-1. **Cache key and origin requests** → Create a new policy
-2. **Query strings** → Select "All"
-3. This ensures `handle`, `offset`, `cursor`, etc. are all part of the cache key
-
-#### SvelteKit Proxy - Disable Caching for Live Requests
-
-Update your proxy to signal that live requests should not be cached:
+Your proxy should set appropriate cache headers. Electric's responses already include good cache headers, but you can reinforce them:
 
 ```typescript
-// For live requests, ensure no caching
-if (url.searchParams.get('live') === 'true') {
-    responseHeaders.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+// Copy Electric's cache headers (they're already correct)
+// But for Vercel, override to disable CDN caching
+if (process.env.VERCEL) {
     responseHeaders.set('CDN-Cache-Control', 'no-store');
     responseHeaders.set('Vercel-CDN-Cache-Control', 'no-store');
+}
+
+// For live/SSE requests, always disable caching
+if (url.searchParams.get('live') === 'true') {
+    responseHeaders.set('Cache-Control', 'no-store, no-cache, must-revalidate');
 }
 ```
 
