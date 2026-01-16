@@ -88,6 +88,7 @@ Electric requests include critical query parameters like `handle`, `offset`, and
 | **Vercel** | ❌ No - [ISR explicitly ignores query strings](https://github.com/vercel/vercel/discussions/5155) | Must disable CDN caching |
 | **Cloudflare** | ✅ Yes | Cache Rules → "All query string parameters" |
 | **AWS CloudFront** | ✅ Yes | Cache Policy → `query_string_behavior = "all"` |
+| **BunnyCDN** | ✅ Yes | Vary Cache → Enable "URL Query String" |
 | **Nginx** | ✅ Yes | `proxy_cache_key` includes `$request_uri` |
 
 #### Vercel (No query param support - must disable caching)
@@ -149,6 +150,22 @@ Create a cache policy that includes all query strings:
 ```
 
 See: [CloudFront Query String Parameters](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/QueryStringParameters.html)
+
+#### BunnyCDN (Supports query params in cache key)
+
+BunnyCDN has a "Vary Cache" feature that allows including query strings in cache keys:
+
+1. Go to your **Pull Zone** → **Caching**
+2. Scroll to the **Vary Cache** section
+3. Enable **"URL Query String"**
+4. Click **"Save Vary Cache"**
+5. Click **"Purge Cache"** to clear any existing stale responses
+
+This ensures each unique combination of `handle`, `offset`, `cursor`, etc. gets its own cache entry.
+
+> **Note**: BunnyCDN's "Smart Cache" respects `Cache-Control` headers from your origin, so Electric's caching headers should work correctly. The key fix is enabling "URL Query String" in Vary Cache.
+
+See: [BunnyCDN Smart Cache documentation](https://support.bunny.net/hc/en-us/articles/360017484299-Understanding-Smart-Cache)
 
 #### Nginx
 
