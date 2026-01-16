@@ -153,7 +153,9 @@ defmodule ElectricTelemetry.Measurement do
           %{
             min: min,
             max: max,
-            mean: mean
+            mean: mean,
+            median: 0,
+            mode: nil
           }
         rescue
           ArithmeticError -> default
