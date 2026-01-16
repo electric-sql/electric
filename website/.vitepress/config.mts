@@ -173,13 +173,15 @@ export default defineConfig({
       provider: 'local',
     },
     sidebar: {
-      '/product': [
+      '/products': [
         {
-          text: 'Product',
+          text: 'Products',
           items: [
-            { text: 'Electric', link: '/product/electric' },
-            { text: 'Cloud', link: '/product/cloud' },
-            { text: 'PGlite', link: '/product/pglite' },
+            { text: 'Overview', link: '/products/' },
+            { text: 'Postgres Sync', link: '/products/postgres-sync' },
+            { text: 'Durable Streams', link: '/products/durable-streams' },
+            { text: 'TanStack DB', link: '/products/tanstack-db' },
+            { text: 'PGlite', link: '/products/pglite' },
           ],
         },
       ],
