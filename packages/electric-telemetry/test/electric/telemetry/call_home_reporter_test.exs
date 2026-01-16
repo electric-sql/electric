@@ -1,6 +1,17 @@
 defmodule ElectricTelemetry.CallHomeReporterTest do
   use ExUnit.Case, async: true
 
+  # IMPORTANT: The schema in test/support/call_home_remote_schema.json is a copy of
+  # the schema used by the remote telemetry server. If either schema changes, both
+  # must be kept in sync.
+  @schema_path Path.expand("../../support/call_home_remote_schema.json", __DIR__)
+  @external_resource @schema_path
+
+  @remote_schema @schema_path
+                 |> File.read!()
+                 |> Jason.decode!()
+                 |> ExJsonSchema.Schema.resolve()
+
   @telemetry_opts [
     instance_id: "test-instance_id",
     stack_id: "test-stack",
@@ -108,6 +119,32 @@ defmodule ElectricTelemetry.CallHomeReporterTest do
     assert_receive :bypass_done, 500
   end
 
+  test "StackTelemetry report data conforms to remote server schema", ctx do
+    add_bypass_expectation(ctx, fn report ->
+      data = report["data"]
+
+      case ExJsonSchema.Validator.validate(@remote_schema, data) do
+        :ok ->
+          :ok
+
+        {:error, errors} ->
+          flunk("""
+          CallHomeReporter payload failed remote schema validation.
+
+          Errors:
+          #{inspect(errors, pretty: true)}
+
+          Payload:
+          #{inspect(data, pretty: true)}
+          """)
+      end
+    end)
+
+    start_supervised!({ElectricTelemetry.StackTelemetry, ctx.telemetry_opts})
+
+    assert_receive :bypass_done, 500
+  end
+
   defp add_bypass_expectation(%{bypass: bypass, telemetry_opts: telemetry_opts}, test_specific_fn) do
     test_pid = self()
 
@@ -115,7 +152,7 @@ defmodule ElectricTelemetry.CallHomeReporterTest do
       assert {"content-type", "application/json"} in conn.req_headers
       assert {:ok, body, conn} = Plug.Conn.read_body(conn)
 
-      report = :json.decode(body)
+      report = Jason.decode!(body)
 
       assert_call_home_report_common_fields(report, telemetry_opts)
       test_specific_fn.(report)
