@@ -227,7 +227,12 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverter do
       txn_change_count: state.tx_change_count
     }
 
-    last_log_offset = state.last_log_offset || LogOffset.new(Lsn.to_integer(fragment.lsn), 0)
+    last_log_offset =
+      if empty_commit_fragment_after_flush?(fragment, state, msg) do
+        LogOffset.new(Lsn.to_integer(msg.end_lsn), 0)
+      else
+        state.last_log_offset || LogOffset.new(Lsn.to_integer(fragment.lsn), 0)
+      end
 
     {:ok,
      %{
@@ -269,6 +274,10 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverter do
 
   defp current_offset(state) do
     LogOffset.new(state.txn_fragment.lsn, state.tx_op_index)
+  end
+
+  defp empty_commit_fragment_after_flush?(fragment, state, msg) do
+    fragment.change_count == 0 and not is_nil(state.last_log_offset) and not is_nil(msg.end_lsn)
   end
 
   defp change_received(%__MODULE__{} = state, bytes) do
