@@ -40,6 +40,7 @@ import {
   NoSilosStrap,
   OpenSourceSection,
   PGliteStrap,
+  ProductsSection,
   ScalesToSection,
   SolutionsSection,
   SolvesSyncSection,
@@ -98,6 +99,7 @@ function Component({ project }) {
 <SyncAwesomeSection />
 <AIThesisSection />
 <SolutionsSection />
+<ProductsSection />
 <SolvesSyncSection />
 <WorksWithSection />
 <ScalesToSection />
