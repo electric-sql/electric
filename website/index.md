@@ -35,6 +35,7 @@ import { onMounted } from 'vue'
 import {
   AIThesisSection,
   BackedBySection,
+  DeploymentSection,
   GetStartedStrap,
   LatestNewsSection,
   NoSilosStrap,
@@ -100,6 +101,7 @@ function Component({ project }) {
 <AIThesisSection />
 <SolutionsSection />
 <ProductsSection />
+<DeploymentSection />
 <SolvesSyncSection />
 <WorksWithSection />
 <ScalesToSection />
