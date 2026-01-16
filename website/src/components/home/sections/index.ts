@@ -1,5 +1,6 @@
 export { default as AIThesisSection } from './AIThesisSection.vue'
 export { default as BackedBySection } from './BackedBySection.vue'
+export { default as DeploymentSection } from './DeploymentSection.vue'
 export { default as ProductsSection } from './ProductsSection.vue'
 export { default as LatestNewsSection } from './LatestNewsSection.vue'
 export { default as OpenSourceSection } from './OpenSourceSection.vue'
