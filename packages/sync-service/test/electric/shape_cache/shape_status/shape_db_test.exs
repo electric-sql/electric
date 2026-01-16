@@ -173,21 +173,29 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDbTest do
            ) == MapSet.new(handles)
   end
 
-  test "reduce_shape_handles/3", ctx do
-    {handles, _shapes} =
+  test "reduce_shape_meta/3", ctx do
+    expected =
       Enum.map(1..100, fn n ->
         shape = Shape.new!("items", inspector: @stub_inspector, where: "id = #{n}")
         handle = "handle-#{n}"
-        {:ok, _hash} = ShapeDb.add_shape(ctx.stack_id, shape, handle)
-        {handle, shape}
-      end)
-      |> Enum.unzip()
+        {:ok, hash} = ShapeDb.add_shape(ctx.stack_id, shape, handle)
 
-    assert ShapeDb.reduce_shape_handles(
+        # Mark some shapes as snapshot_started
+        if rem(n, 2) == 0 do
+          :ok = ShapeDb.mark_snapshot_started(ctx.stack_id, handle)
+          {handle, hash, true}
+        else
+          {handle, hash, false}
+        end
+      end)
+
+    assert ShapeDb.reduce_shape_meta(
              ctx.stack_id,
              MapSet.new(),
-             fn handle, acc -> MapSet.put(acc, handle) end
-           ) == MapSet.new(handles)
+             fn {handle, hash, snapshot_started}, acc ->
+               MapSet.put(acc, {handle, hash, snapshot_started})
+             end
+           ) == MapSet.new(expected)
   end
 
   test "shape_hash/2", ctx do
