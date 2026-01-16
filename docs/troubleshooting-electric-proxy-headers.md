@@ -6,6 +6,8 @@ This document investigates and provides solutions for common issues when using E
 
 - Console warnings: `Missing headers, retrying: The response for the shape request didn't include the following required headers: electric-cursor`
 - Warning: `[Electric] SSE connections are closing immediately (possibly due to proxy buffering or misconfiguration). Falling back to long polling.`
+- Warning: `[Electric] Received stale cached response with expired shape handle`
+- Red errors: `ERR_NETWORK_IO_SUSPENDED` after laptop sleep/lid close
 - UI falls back to original state after leaving the tab open for a while
 - After page refresh, data appears in the correct position
 
@@ -37,7 +39,138 @@ When a tab is hidden, the Electric client **pauses** the stream. When it becomes
 1. **Session expiration** - If your proxy checks authentication and the session expires while the tab is idle, subsequent requests might fail
 2. **Shape handle invalidation** - If Electric invalidates the shape while the tab is idle, the client gets a 409 and resets
 
+### Problem 4: Stale Cached Responses (CDN/Proxy Caching Misconfiguration)
+
+**Symptom:**
+```
+[Electric] Received stale cached response with expired shape handle. This should not happen
+and indicates a proxy/CDN caching misconfiguration. The response contained handle
+"21647081-1767924217010595" which was previously marked as expired. Check that your proxy
+includes all query parameters (especially 'handle' and 'offset') in its cache key.
+```
+
+**What's happening:**
+
+1. Client makes a request with `handle=ABC&offset=123`
+2. Your CDN/hosting platform caches the response but **doesn't include `handle` and `offset` in the cache key**
+3. Later, client makes a new request with `handle=ABC&offset=456` (different offset)
+4. CDN serves the **old cached response** (for offset 123) because it only cached based on the URL path
+5. Electric client detects this mismatch and warns about stale cache
+
+**This is a critical issue** because it can cause:
+- Data appearing to "jump back" to old state
+- Infinite retry loops
+- Lost updates
+
+### Problem 5: `ERR_NETWORK_IO_SUSPENDED` Errors
+
+These errors appear when Chrome suspends network I/O, typically when:
+- Laptop lid is closed
+- Device goes to sleep
+- Network connection is lost
+
+**This is expected browser behavior** and not a bug. The Electric client handles this gracefully by pausing and resuming the stream when the tab becomes visible again.
+
+However, the combination of network suspension + stale CDN cache can cause the UI reset issues.
+
 ## Solution
+
+### Fix for Stale Cache (Problem 4) - CRITICAL
+
+The root cause is your **CDN or hosting platform** caching Electric responses without including query parameters in the cache key.
+
+#### Vercel
+
+Add to your `vercel.json`:
+
+```json
+{
+  "headers": [
+    {
+      "source": "/api/electric/(.*)",
+      "headers": [
+        {
+          "key": "CDN-Cache-Control",
+          "value": "no-store"
+        },
+        {
+          "key": "Vercel-CDN-Cache-Control",
+          "value": "no-store"
+        }
+      ]
+    }
+  ]
+}
+```
+
+Or use the edge config to vary by query params (preferred for performance):
+
+```json
+{
+  "headers": [
+    {
+      "source": "/api/electric/(.*)",
+      "headers": [
+        {
+          "key": "Vary",
+          "value": "Accept, Authorization"
+        },
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=5, stale-while-revalidate=5"
+        }
+      ]
+    }
+  ]
+}
+```
+
+#### Cloudflare
+
+Create a Cache Rule for your Electric proxy path:
+
+1. Go to **Caching** → **Cache Rules**
+2. Create a rule matching `(http.request.uri.path contains "/api/electric")`
+3. Set **Cache eligibility** to "Bypass cache" OR
+4. Set **Cache key** → **Query string** to "All query string parameters"
+
+#### Nginx
+
+```nginx
+location /api/electric {
+    # Include query string in cache key
+    proxy_cache_key "$scheme$request_method$host$request_uri";
+
+    # Or disable caching entirely for Electric
+    proxy_cache off;
+    add_header X-Cache-Status "BYPASS";
+
+    proxy_pass http://localhost:5173;
+    proxy_buffering off;
+    proxy_http_version 1.1;
+    proxy_set_header Connection '';
+}
+```
+
+#### AWS CloudFront
+
+Configure the cache behavior for your Electric API path:
+1. **Cache key and origin requests** → Create a new policy
+2. **Query strings** → Select "All"
+3. This ensures `handle`, `offset`, `cursor`, etc. are all part of the cache key
+
+#### SvelteKit Proxy - Disable Caching for Live Requests
+
+Update your proxy to signal that live requests should not be cached:
+
+```typescript
+// For live requests, ensure no caching
+if (url.searchParams.get('live') === 'true') {
+    responseHeaders.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+    responseHeaders.set('CDN-Cache-Control', 'no-store');
+    responseHeaders.set('Vercel-CDN-Cache-Control', 'no-store');
+}
+```
 
 ### Updated Proxy Implementation (SvelteKit)
 
@@ -261,5 +394,13 @@ export const myCollection = createCollection(
 | Missing `electric-cursor` header | Browser can't read headers not in `Access-Control-Expose-Headers` from your proxy | Add `Access-Control-Expose-Headers: electric-cursor,electric-handle,...` to proxy response |
 | SSE fallback to long polling | Proxy buffering SSE responses | Add `X-Accel-Buffering: no` header, configure reverse proxy |
 | UI resets after tab idle | Session expiration OR shape invalidation during idle period | Extend session timeout, add error handling in collection |
+| Stale cached response with expired handle | CDN caching without `handle`/`offset` in cache key | Configure CDN to include all query params in cache key, or disable caching for Electric routes |
+| `ERR_NETWORK_IO_SUSPENDED` | Browser suspends network when laptop sleeps | Expected behavior - Electric handles this automatically |
 
-The **most critical fix** is ensuring your proxy explicitly sets `Access-Control-Expose-Headers` to include all the Electric headers. Even though Electric sends this header, your proxy needs to re-send it because the browser's CORS enforcement only looks at the direct response from your proxy server, not the upstream Electric server.
+## Critical Fixes (in order of importance)
+
+1. **Fix CDN/proxy caching** - If you see "stale cached response with expired shape handle", your CDN is serving old responses. This is the most likely cause of UI "jumping back" to old state. Disable caching or include all query params in cache key.
+
+2. **Add `Access-Control-Expose-Headers`** - Ensure your proxy explicitly exposes all Electric headers for the browser to read.
+
+3. **Disable response buffering for SSE** - Add `X-Accel-Buffering: no` header and configure your reverse proxy for streaming.
