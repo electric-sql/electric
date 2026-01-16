@@ -33,6 +33,7 @@ hero:
 import { onMounted } from 'vue'
 
 import {
+  AIThesisSection,
   BackedBySection,
   GetStartedStrap,
   LatestNewsSection,
@@ -94,6 +95,7 @@ function Component({ project }) {
 </div>
 
 <SyncAwesomeSection />
+<AIThesisSection />
 <SolvesSyncSection />
 <WorksWithSection />
 <ScalesToSection />
