@@ -1,0 +1,177 @@
+{
+  "$schema": "http://json-schema.org/draft-06/schema#",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "electric_version": {
+      "type": "string",
+      "maxLength": 32
+    },
+    "environment": {
+      "$ref": "#/definitions/Environment"
+    },
+    "resources": {
+      "$ref": "#/definitions/Resources"
+    },
+    "usage": {
+      "$ref": "#/definitions/Usage"
+    }
+  },
+  "required": ["electric_version", "environment"],
+  "definitions": {
+    "Environment": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "arch": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "cores": {
+          "type": "integer"
+        },
+        "electric_installation_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "electric_instance_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "os": {
+          "$ref": "#/definitions/OS"
+        },
+        "pg_version": {
+          "type": "integer"
+        },
+        "ram": {
+          "type": "integer"
+        },
+        "stack_id": {
+          "type": "string",
+          "maxLength": 255
+        }
+      },
+      "required": [
+        "arch",
+        "cores",
+        "electric_instance_id",
+        "os",
+        "ram"
+      ],
+      "title": "Environment"
+    },
+    "OS": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "family": {
+          "type": "string",
+          "maxLength": 16
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 16
+        }
+      },
+      "required": ["family", "name"],
+      "title": "OS"
+    },
+    "Resources": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "uptime": {
+          "type": "integer"
+        },
+        "used_memory": {
+          "$ref": "#/definitions/Summary"
+        },
+        "run_queue_total": {
+          "$ref": "#/definitions/Summary"
+        },
+        "run_queue_cpu": {
+          "$ref": "#/definitions/Summary"
+        },
+        "run_queue_io": {
+          "$ref": "#/definitions/Summary"
+        }
+      },
+      "required": [
+        "uptime",
+        "used_memory",
+        "run_queue_total",
+        "run_queue_cpu",
+        "run_queue_io"
+      ],
+      "title": "Resources"
+    },
+    "Summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "max": {
+          "type": "number"
+        },
+        "mean": {
+          "type": "number"
+        },
+        "median": {
+          "type": "number"
+        },
+        "min": {
+          "type": "number"
+        },
+        "mode": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": ["max", "mean", "median", "min", "mode"],
+      "title": "Summary"
+    },
+    "Usage": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "wal_size": { "$ref": "#/definitions/Summary" },
+        "total_shapes": { "type": "integer" },
+        "inbound_bytes": { "type": "integer" },
+        "inbound_transactions": { "type": "integer" },
+        "inbound_operations": { "type": "integer" },
+        "stored_bytes": { "type": "integer" },
+        "stored_transactions": { "type": "integer" },
+        "stored_operations": { "type": "integer" },
+        "total_used_storage_kb": { "type": "number" },
+        "active_shapes": { "type": "integer" },
+        "unique_clients": { "type": "integer" },
+        "sync_requests": { "type": "integer" },
+        "live_requests": { "type": "integer" },
+        "served_bytes": { "type": "integer" }
+      },
+      "required": [
+        "wal_size",
+        "total_shapes",
+        "inbound_bytes",
+        "inbound_transactions",
+        "inbound_operations",
+        "stored_bytes",
+        "stored_transactions",
+        "stored_operations",
+        "total_used_storage_kb",
+        "active_shapes",
+        "unique_clients",
+        "sync_requests",
+        "live_requests",
+        "served_bytes"
+      ],
+      "title": "Usage"
+    }
+  }
+}
