@@ -40,12 +40,9 @@ import {
   LatestNewsSection,
   NoSilosStrap,
   OpenSourceSection,
-  PGliteStrap,
   ProductsSection,
   ScalesToSection,
   SolutionsSection,
-  SolvesSyncSection,
-  SyncAwesomeSection,
   UsedBySection,
   WorksWithSection
 } from './src/components/home'
@@ -97,18 +94,15 @@ function Component({ project }) {
 
 </div>
 
-<SyncAwesomeSection />
 <AIThesisSection />
 <SolutionsSection />
 <ProductsSection />
-<DeploymentSection />
-<SolvesSyncSection />
 <WorksWithSection />
+<DeploymentSection />
 <ScalesToSection />
 <NoSilosStrap />
 <UsedBySection />
 <BackedBySection />
 <OpenSourceSection />
-<PGliteStrap />
 <LatestNewsSection />
 <GetStartedStrap />
