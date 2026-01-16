@@ -38,6 +38,7 @@ defmodule ElectricTelemetry.MixProject do
       {:ex_doc, ">= 0.0.0", only: :dev, runtime: false},
       {:ex_json_schema, "~> 0.10", only: [:test]},
       {:excoveralls, "~> 0.18", only: [:test], runtime: false},
+      {:jason, "~> 1.4"},
       {:junit_formatter, "~> 3.4", only: [:test], runtime: false}
     ]
   end
