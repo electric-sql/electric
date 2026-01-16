@@ -4,15 +4,12 @@ title: "Electric"
 titleTemplate: ":title | Sync with your stack"
 hero:
   name: 'Sync'
-  text: 'solved'
+  text: 'with your stack'
   tagline: >-
-    Composable sync primitives.<br />That work with your stack.
+    Composable sync primitives for local-first apps,<br />real-time dashboards, and resilient AI agents.
   actions:
     - theme: brand
       text: Sign-up to Cloud
-      link: https://dashboard.electric-sql.cloud/
-    - theme: brand
-      text: Sign-up
       link: https://dashboard.electric-sql.cloud/
     - theme: alt
       text: Quickstart
