@@ -160,12 +160,9 @@ export default defineConfig({
     },
     logo: '/img/brand/logo.svg',
     nav: [
-      { text: 'Product', link: '/product/electric', activeMatch: '/product/' },
-      {
-        text: 'Use cases',
-        link: '/use-cases/data-sync',
-        activeMatch: '/use-cases/',
-      },
+      { text: 'Sync', link: '/sync', activeMatch: '/sync' },
+      { text: 'Products', link: '/products', activeMatch: '/products' },
+      { text: 'Cloud', link: '/cloud', activeMatch: '/cloud' },
       { text: 'Docs', link: '/docs/intro', activeMatch: '/docs/' },
       { text: 'Demos', link: '/demos', activeMatch: '/demos' },
       { text: 'Blog', link: '/blog', activeMatch: '/blog' },
