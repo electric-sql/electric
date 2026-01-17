@@ -5,6 +5,10 @@ description: >-
 outline: deep
 ---
 
+<script setup>
+import BlogPostsByTag from '../src/components/BlogPostsByTag.vue'
+</script>
+
 <img src="/img/home/sync-targets/worker.svg" class="product-icon" />
 
 # Durable Streams
@@ -59,6 +63,10 @@ Postgres Sync ────────────┐
 Durable Streams ──────────┘     (reactive client DB)
 (streams, AI, sessions)
 ```
+
+## Related posts
+
+<BlogPostsByTag tag="durable-streams" />
 
 ## More information
 
