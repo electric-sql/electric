@@ -49,11 +49,7 @@ const products = [
       Build with modular components that combine to power any sync scenario.
     </template>
     <div class="products-grid">
-      <div
-        v-for="product in products"
-        :key="product.slug"
-        class="product-card"
-      >
+      <div v-for="product in products" :key="product.slug" class="product-card">
         <Card
           :href="product.href"
           :icon="product.icon"
