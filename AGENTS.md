@@ -1,350 +1,284 @@
-# AGENTS.md – ElectricSQL + TanStack DB
+# AGENTS.md
 
-> **Audience:** coding agents/codegen tools
-> **Goal:** ship fast, reliable, local-first apps by pairing **Electric** (Postgres sync engine over HTTP) with **TanStack DB** (embedded client DB with live queries & optimistic mutations).
-> **Status:** current as of **2025-09-18**.
+ElectricSQL is an open-source Postgres sync engine. It syncs little subsets of your Postgres data into local apps and services.
 
-## TL;DR
+- **Sync engine (Elixir):** Core sync-service that handles PostgreSQL logical replication and serves shape data over HTTP
+- **TypeScript client:** Browser/Node client library for consuming shapes
+- **React hooks:** React integration with TanStack Query
+- **Elixir client:** Elixir client for consuming shapes server-side
 
-- **Electric:** read-path sync Postgres→clients via HTTP (shapes→changelog→client) ([Electric][1])
-- **TanStack DB:** client collections+live queries+transactional optimistic mutations. Swap `queryCollectionOptions`→`electricCollectionOptions` without touching components ([TanStack][2])
-- **Electric Collection:** subscribes to Electric Shapes (single-table, optional `where`/`columns`) ([TanStack][3])
-- **Writes:** mutations→API→Postgres txid→await in Electric collection→drop optimistic state when change arrives ([TanStack][3])
-- **Live queries:** differential dataflow→sub-ms updates+cross-collection joins ([TanStack][2])
-- **Security/scale:** proxy auth, shape-scoped authorization, CDN caching. Use Electric Cloud to skip ops ([Electric][4])
+See `docs/implementation/sync-service/architecture.md` for the deeper system diagram + flows.
 
-## 🔒 Security Rules (ALWAYS)
+---
 
-1. **Never expose `SOURCE_SECRET` to browser** – inject server-side via proxy
-2. **Electric HTTP API public by default** – enforce auth at proxy
-3. **Put Electric behind server/proxy** – never call directly from production ([Electric][10])
-4. **Define shapes in server/proxy** – no client-defined tables/WHERE clauses
+## Setup commands
 
-## Golden Path
-
-### 0) Create project
-
-```sh
-npx gitpick electric-sql/electric/tree/main/examples/tanstack-db-web-starter my-tanstack-db-project
-cd my-tanstack-db-project
-cp .env.example .env
-pnpm install
-pnpm dev
-# in new terminal
-pnpm migrate
+```bash
+asdf install                    # Install correct Elixir/Node versions
+pnpm install                    # Install JS dependencies
+cd packages/sync-service
+mix deps.get                    # Install Elixir dependencies
 ```
 
-### 1) Electric proxy (server)
+Start the dev environment:
 
-```ts
-// TanStack Start server function
-import { createServerFileRoute } from '@tanstack/react-start/server'
-import { ELECTRIC_PROTOCOL_QUERY_PARAMS } from '@electric-sql/client'
-
-const ELECTRIC_URL = 'https://api.electric-sql.cloud/v1/shape'
-
-const serve = async ({ request }: { request: Request }) => {
-  const url = new URL(request.url)
-  const origin = new URL(ELECTRIC_URL)
-
-  // Pass Electric protocol params
-  url.searchParams.forEach((v, k) => {
-    if (ELECTRIC_PROTOCOL_QUERY_PARAMS.includes(k))
-      origin.searchParams.set(k, v)
-  })
-
-  // Server decides shape
-  origin.searchParams.set('table', 'todos')
-  // Tenant isolation: origin.searchParams.set('where', `user_id=$1`)
-  // origin.searchParams.set('params', JSON.stringify([user.id]))
-  origin.searchParams.set('source_id', process.env.SOURCE_ID!)
-  origin.searchParams.set('secret', process.env.SOURCE_SECRET!)
-
-  const res = await fetch(origin)
-  const headers = new Headers(res.headers)
-  headers.delete('content-encoding')
-  headers.delete('content-length')
-  return new Response(res.body, {
-    status: res.status,
-    statusText: res.statusText,
-    headers,
-  })
-}
-
-export const ServerRoute = createServerFileRoute('/api/todos').methods({
-  GET: serve,
-})
+```bash
+cd packages/sync-service
+mix start_dev                   # Starts Postgres + Electric
 ```
 
-### 2) Electric Collection (client)
+---
+
+## Dev environment tips
+
+### Check whether dev infrastructure is already running
+
+**Before** starting `mix start_dev`, check:
+
+```bash
+# Are dev containers running?
+docker ps | grep postgres
+
+# Is Electric already running?
+lsof -i :3000 || true
+```
+
+If you see Postgres running and port 3000 is bound, **don't start another instance**.
+
+### Database requirements
+
+- PostgreSQL 14+ with logical replication enabled
+- `wal_level=logical` in PostgreSQL config
+- User with REPLICATION role
+
+---
+
+## Testing instructions
+
+Tests assume Postgres is running.
+
+```bash
+# 1) In terminal A (or use existing dev DB):
+cd packages/sync-service && mix start_dev
+
+# 2) In terminal B:
+cd packages/sync-service && mix test
+```
+
+TypeScript packages:
+
+```bash
+pnpm test                       # Run all JS tests
+pnpm -C packages/typescript-client test
+pnpm -C packages/react-hooks test
+```
+
+---
+
+## Repo map (where to look)
+
+```
+packages/
+├── sync-service/           # Core Elixir sync engine (HTTP API, replication)
+│   └── lib/electric/       # Main application code
+├── typescript-client/      # @electric-sql/client (browser/Node)
+├── react-hooks/            # @electric-sql/react (React + TanStack Query)
+├── elixir-client/          # Elixir client library
+├── experimental/           # Experimental features
+├── start/                  # CLI starter tool
+├── y-electric/             # Yjs CRDT integration
+├── sqlite-sync/            # SQLite sync (experimental)
+└── electric-telemetry/     # Telemetry utilities
+
+examples/                   # 25+ example applications
+├── tanstack-db-web-starter/  # Start here for TanStack DB examples
+└── ...
+
+website/                    # Documentation site (VitePress)
+integration-tests/          # End-to-end tests (Lux framework)
+```
+
+---
+
+## "Don't make me think" commands
+
+```bash
+pnpm format                 # Prettier for JS/TS
+pnpm test                   # Run all JS tests
+pnpm typecheck              # TypeScript type checking
+```
+
+Package-scoped examples:
+
+```bash
+pnpm -C packages/typescript-client test
+pnpm -C packages/react-hooks build
+
+cd packages/sync-service
+mix deps.get
+mix test
+mix format
+```
+
+---
+
+## How the system fits together (30 seconds)
+
+```
+PostgreSQL
+    │
+    ▼ (Logical Replication / pgoutput)
+ReplicationClient
+    │
+    ▼
+ShapeLogCollector (routes transactions to shapes)
+    │
+    ▼
+Consumer (per-shape processing)
+    │
+    ▼
+Storage (file-based: ETS buffer + disk)
+    │
+    ▼
+HTTP API (Plug) → Clients (TypeScript/React/Elixir)
+```
+
+- **Shapes** are filtered subsets of a single Postgres table (with optional WHERE clause)
+- **LogOffset** orders operations globally: `{tx_offset, op_offset}`
+- Clients request shapes via HTTP, receive JSON changelog, apply to local state
+- Write path: client → your API → Postgres → Electric streams change back
+
+---
+
+## Safety rules (read this before touching infra)
+
+### Secrets
+
+- **Never expose `DATABASE_URL` to clients** – Electric connects server-side
+- **Proxy Electric in production** – add auth/tenant isolation at proxy layer
+
+### Shapes
+
+- **Shapes are immutable** – same definition always produces same handle
+- **Single table only** – no joins in shape definitions
+- **WHERE clauses** support subset of SQL (see `docs/implementation/sync-service/shapes.md`)
+
+---
+
+## Coding conventions
+
+### TypeScript
+
+- No semicolons (Prettier with `semi: false`)
+- Use TypeScript strict mode
+- Prefer small, composable modules
+
+### Elixir
+
+- Run `mix format` before committing
+- Follow OTP conventions for GenServers and supervision trees
+- Use typespecs for public functions
+- See `docs/implementation/sync-service/code_conventions.md` for detailed patterns
+
+---
+
+## PR instructions
+
+- Run `mix format` and `pnpm format` before opening a PR
+- Run `mix test` and `pnpm test` to verify changes
+- Commits: `type(scope): message` (e.g., `fix(sync-service): Fix bug`)
+
+---
+
+## Documentation maintenance
+
+**IMPORTANT**: Always keep documentation in sync with code changes.
+
+When modifying code that is covered by documentation in `docs/`:
+
+1. **Check for related docs**: Before changing behavior or APIs, search `docs/` for references
+2. **Update docs alongside code**: If your change affects documented behavior, update the relevant documentation in the same PR
+3. **Document new features**: When adding significant functionality, add or update documentation
+
+### Documentation index
+
+| Document    | Description                                                  |
+| ----------- | ------------------------------------------------------------ |
+| `AGENTS.md` | Quick reference for AI agents and new developers (this file) |
+
+#### sync-service (`packages/sync-service/`)
+
+| Document                                                                    | Description                                |
+| --------------------------------------------------------------------------- | ------------------------------------------ |
+| [codebase_map.md](docs/implementation/sync-service/codebase_map.md)         | Repository structure, module organization  |
+| [architecture.md](docs/implementation/sync-service/architecture.md)         | System design, data flow, supervision tree |
+| [database.md](docs/implementation/sync-service/database.md)                 | PostgreSQL replication, storage layer      |
+| [api.md](docs/implementation/sync-service/api.md)                           | HTTP endpoints, request/response formats   |
+| [building.md](docs/implementation/sync-service/building.md)                 | Build setup, dependencies, Docker          |
+| [testing.md](docs/implementation/sync-service/testing.md)                   | Test suites, running tests                 |
+| [code_conventions.md](docs/implementation/sync-service/code_conventions.md) | Elixir style, patterns                     |
+| [shapes.md](docs/implementation/sync-service/shapes.md)                     | Shape definition, WHERE clause evaluation  |
+| [replication.md](docs/implementation/sync-service/replication.md)           | WAL decoding, message conversion           |
+| [storage.md](docs/implementation/sync-service/storage.md)                   | File formats, buffering, compaction        |
+| [http-api.md](docs/implementation/sync-service/http-api.md)                 | Router, admission control, streaming       |
+| [connections.md](docs/implementation/sync-service/connections.md)           | Connection state machine, pools            |
+
+#### typescript-client (`packages/typescript-client/`)
+
+<!-- TODO: Run code-explorer agent to generate documentation -->
+
+- `docs/implementation/typescript-client/` - Not yet documented
+
+#### react-hooks (`packages/react-hooks/`)
+
+<!-- TODO: Run code-explorer agent to generate documentation -->
+
+- `docs/implementation/react-hooks/` - Not yet documented
+
+#### elixir-client (`packages/elixir-client/`)
+
+<!-- TODO: Run code-explorer agent to generate documentation -->
+
+- `docs/implementation/elixir-client/` - Not yet documented
+
+#### y-electric (`packages/y-electric/`)
+
+<!-- TODO: Run code-explorer agent to generate documentation -->
+
+- `docs/implementation/y-electric/` - Not yet documented
+
+---
+
+## Using Electric (for application developers)
+
+For guidance on **using** Electric in your applications (as opposed to developing Electric itself), see the [tanstack-db-web-starter example](examples/tanstack-db-web-starter/AGENTS.md) which covers:
+
+- Electric + TanStack DB integration patterns
+- Proxy setup for auth/tenant isolation
+- Shape configuration
+- Optimistic mutations with txid handshake
+- Live queries
+
+### Quick reference
 
 ```ts
-import { createCollection } from '@tanstack/react-db'
+// Electric Collection (client-side)
 import { electricCollectionOptions } from '@tanstack/electric-db-collection'
-import { todoSchema } from './schema'
 
 export const todoCollection = createCollection(
   electricCollectionOptions({
     id: 'todos',
     schema: todoSchema,
-    getKey: (row) => row.id,
     shapeOptions: { url: '/api/todos' },
-    onInsert: async ({ transaction }) => {
-      const newTodo = transaction.mutations[0].modified
-      const { txid } = await api.todos.create(newTodo)
-      return { txid }
-    },
-    // onUpdate/onDelete same pattern
   })
 )
 ```
 
-**Shape config:**
+---
 
-- Single-table only + optional `where`/`columns`
-- Include PK if using `columns`
-- Shapes immutable per subscription ([Electric][6]) use collection factory function to make dynamic
+## External references
 
-### 3) Write-path contract
-
-1. UI mutates collection (instant optimistic)
-2. Collection calls API in `onInsert`/`onUpdate`/`onDelete`
-3. API writes Postgres, returns txid
-4. Client awaits tx on Electric stream→drops optimistic state
-
-**Backend: get Postgres txid and return as an integer**
-
-```sql
-SELECT pg_current_xact_id()::xid::text as txid
-```
-
-### 4) Live queries
-
-TanStack DB SQL-like queries **sub-ms performance** differential dataflow ([TanStack][7]):
-
-```tsx
-import { useLiveQuery, eq } from '@tanstack/react-db'
-
-export function TodoList() {
-  const { data: todos } = useLiveQuery((q) =>
-    q
-      .from({ todo: todoCollection })
-      .where(({ todo }) => eq(todo.completed, false))
-      .orderBy(({ todo }) => todo.created_at, 'desc')
-      .limit(50)
-  )
-  return (
-    <ul>
-      {todos.map((todo) => (
-        <li key={todo.id}>{todo.text}</li>
-      ))}
-    </ul>
-  )
-}
-```
-
-Dependencies:
-
-```tsx
-const [direction, setDirection] = useState('desc')
-const { data } = useLiveQuery(
-  (q) =>
-    q
-      .from({ todo: todoCollection })
-      .orderBy(({ todo }) => todo.createdAt, direction)
-      .limit(50),
-  [direction]
-)
-```
-
-Cross-collection joins:
-
-```tsx
-.join({ user: userCollection }, ({ todo, user }) => eq(todo.user_id, user.id))
-.where(({ user }) => eq(u.active, true))
-.select(({ todo, user }) => ({ id: todo.id, text: todo.text, userName: user.name }))
-```
-
-Aggregations:
-
-```tsx
-.groupBy(({ todo }) => todo.listId)
-.select(({ todo }) => ({ listId: todo.listId, totalTodos: count(todo.id) }))
-```
-
-## Optimistic Mutations
-
-### Direct mutations
-
-```tsx
-function TodoActions() {
-  const handleAdd = () => {
-    todoCollection.insert({
-      id: crypto.randomUUID(),
-      text: 'New todo',
-      completed: false,
-      createdAt: Date.now(),
-    })
-  }
-  const handleToggle = (todo) => {
-    todoCollection.update(todo.id, (draft) => {
-      draft.completed = !draft.completed
-    })
-  }
-  const handleDelete = (todoId) => todoCollection.delete(todoId)
-}
-```
-
-### Custom optimistic actions
-
-```tsx
-import { createOptimisticAction } from '@tanstack/react-db'
-
-const bootstrapTodoListAction = createOptimisticAction<string>({
-  onMutate: (listId, itemText) => {
-    listCollection.insert({ id: listId })
-    todoCollection.insert({ id: crypto.randomUUID(), text: itemText, listId })
-  },
-  mutationFn: async (listId, itemText) => {
-    const { txid } = await api.todos.bootstrapTodoList({ listId, itemText })
-    await Promise.all([
-      listCollection.utils.awaitTxId(txid),
-      todoCollection.utils.awaitTxId(txid),
-    ])
-  },
-})
-```
-
-## Testing
-
-```ts
-shapeOptions: {
-  url: '/api/todos',
-  fetchClient: vi.fn(), // mock fetch
-  onError: (error) => // ... handle fetch errors
-}
-```
-
-## ⚠️ Critical Gotchas
-
-1. **Use latest packages** - Check npm for `@electric-sql/*` & `@tanstack/*-db`
-2. **txid handshake required** - Prevents UI flicker when optimistic→synced state
-3. **Local dev slow shapes** - HTTP/1.1 6-connection limit. Fix: HTTP/2 proxy (Caddy/nginx) or Electric Cloud ([Electric][18])
-4. **Proxy must forward headers/params** - Preserve Electric query params
-5. **Parse custom types:**
-
-```ts
-shapeOptions: {
-  parser: {
-    timestamptz: (date: string) => new Date(date)
-  }
-}
-```
-
-## Framework integrations
-
-```sh
-npm install @tanstack/{angular,react,solid,svelte,vue}-db
-```
-
-```ts
-import { useLiveQuery } from '...'
-const { data, isLoading } = useLiveQuery((q) =>
-  q.from({ todos: todosCollection })
-)
-```
-
-**React Native:** Requires `react-native-random-uuid` + import in entry point
-
-## Migration from TanStack Query
-
-1. Wrap `useQuery` in Query Collection (`queryCollectionOptions`)
-2. Replace selectors with live queries
-3. Port mutations to collection handlers
-4. Switch to Electric Collection (no component changes)
-
-## Deployment
-
-### Electric Cloud
-
-```sh
-npx @electric-sql/start my-app
-pnpm claim && pnpm deploy
-```
-
-### Self-hosted
-
-```sh
-docker run -e DATABASE_URL=postgres://... electricsql/electric
-```
-
-Docker compose:
-
-```yaml
-name: 'electric-backend'
-services:
-  postgres:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_DB: electric
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: password
-    ports: ['54321:5432']
-    volumes: ['./postgres.conf:/etc/postgresql/postgresql.conf:ro']
-    tmpfs: ['/var/lib/postgresql/data', '/tmp']
-    command: ['postgres', '-c', 'config_file=/etc/postgresql/postgresql.conf']
-
-  backend:
-    image: electricsql/electric:canary
-    environment:
-      DATABASE_URL: postgresql://postgres:password@postgres:5432/electric?sslmode=disable
-      ELECTRIC_INSECURE: true
-    ports: ['3000:3000']
-    depends_on: ['postgres']
-```
-
-**Postgres requirements:** v14+, logical replication, user with REPLICATION role, `wal_level=logical`
-
-## Stack (web/mobile)
-
-- **DB:** Postgres (Neon/Supabase/Crunchy with logical replication)
-- **Backend:** TanStack Start+Drizzle+tRPC/REST
-- **Proxy:** Edge function/server route
-- **Client:** TanStack DB (React/Expo)
-
-## Evolution from Old Electric
-
-**Old:** Bidirectional SQLite sync, handled reads+writes
-**New:** Electric (Read-only HTTP streaming from Postgres) + TanStack DB (optimistic writes via API)
-
-Avoid old patterns:
-
-```ts
-// ❌ OLD (doesn't exist)
-const { db } = await electrify(conn, schema)
-await db.todos.create({ text: 'New todo' })
-```
-
-Write path: `todos.insert()`→optimistic→`onInsert`→API→Postgres txid→Electric streams→reconcile→drop optimistic
-Prefer TanStack DB collections over lower-level Shape/ShapeStream/useShape APIs.
-
-## References
-
-[1]: https://electric-sql.com/docs/api/http.md
-[2]: https://tanstack.com/db/latest/docs/overview.md
-[3]: https://tanstack.com/db/latest/docs/collections/electric-collection.md
-[4]: https://electric-sql.com/docs/guides/auth.md
-[5]: https://electric-sql.com/docs/quickstart.md
-[6]: https://electric-sql.com/docs/guides/shapes.md
-[7]: https://tanstack.com/db/latest/docs/guides/live-queries.md
-[8]: https://electric-sql.com/blog/2024/11/21/local-first-with-your-existing-api.md
-[9]: https://electric-sql.com/docs/api/clients/typescript.md
-[10]: https://electric-sql.com/docs/guides/security.md
-[11]: https://electric-sql.com/product/cloud.md
-[12]: https://tanstack.com/db/latest/docs/collections/query-collection.md
-[13]: https://tanstack.com/db/latest/docs/guides/error-handling.md
-[14]: https://electric-sql.com/docs/stacks.md
-[15]: https://electric-sql.com/blog/2025/07/29/local-first-sync-with-tanstack-db.md
-[16]: https://tanstack.com/blog/tanstack-db-0.1-the-embedded-client-database-for-tanstack-query.md
-[17]: https://frontendatscale.com/blog/tanstack-db/
-[18]: https://electric-sql.com/docs/guides/troubleshooting.md#slow-shapes
+- **Electric website**: https://electric-sql.com
+- **Electric docs**: https://electric-sql.com/docs
+- **TanStack DB**: https://tanstack.com/db
+- **GitHub issues**: https://github.com/electric-sql/electric/issues
