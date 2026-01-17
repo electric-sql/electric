@@ -82,7 +82,7 @@ See the [starter template README](https://github.com/electric-sql/electric/blob/
 
 ### Deploy your app
 
-Claim the [Electric Cloud](/product/cloud) resources:
+Claim the [Electric Cloud](/cloud) resources:
 
 ```shell
 pnpm claim

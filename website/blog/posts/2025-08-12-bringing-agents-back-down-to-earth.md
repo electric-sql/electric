@@ -6,7 +6,7 @@ excerpt: >-
   Agentic AI, beneath all the hype, is actually just normal software. You can build agentic systems with a database, standard web tooling and real-time sync.
 authors: [thruflo]
 image: /img/blog/bringing-agents-back-down-to-earth/header2.jpg
-tags: [db]
+tags: [db, tanstack-db, postgres-sync]
 outline: [2, 3]
 post: true
 ---
@@ -330,7 +330,7 @@ export const userCollection = createCollection(
 )
 ```
 
-Electric collections use the [Electric sync engine](/product/electric) (in this case via Phoenix.Sync) to keep the data in the collection up-to-date and in-sync with the contents of the Postgres database. Components then read data from the collections using live queries:
+Electric collections use the [Electric sync engine](/products/postgres-sync) (in this case via Phoenix.Sync) to keep the data in the collection up-to-date and in-sync with the contents of the Postgres database. Components then read data from the collections using live queries:
 
 ```tsx
 // From `assets/src/components/ChatArea.tsx`

@@ -37,7 +37,7 @@ and scales to millions of users
 <div class="cloud-cta">
   <VPButton
       href="https://dashboard.electric-sql.cloud/"
-      text="Sign up "
+      text="Sign up "
       theme="brand"
   />
 </div>
@@ -47,7 +47,7 @@ and scales to millions of users
 
 ## Hosted Electric
 
-Electric Cloud is a hosted Electric service. We provision, run and operate the [Electric sync engine](/product/electric) for you.
+Electric Cloud is a hosted Electric service. We provision, run and operate the [Electric sync engine](/products/postgres-sync) for you.
 
 ## Data delivery network
 
@@ -171,7 +171,7 @@ Let us know if you have any questions. We'll be very happy to help. You can ask 
 <div class="actions cta-actions page-footer-actions left">
   <div class="action cloud-cta">
     <VPButton
-        href="/product/cloud/sign-up"
+        href="https://dashboard.electric-sql.cloud/"
         text="Sign-up for Cloud"
         theme="brand"
     />

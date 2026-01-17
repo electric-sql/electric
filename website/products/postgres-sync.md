@@ -1,5 +1,5 @@
 ---
-title: Electric
+title: Postgres Sync
 description: >-
   Sync little subsets of your Postgres data into
   local apps and services.
@@ -13,7 +13,7 @@ import { data as initialStarCounts } from '../data/count.data.ts'
 import { getStarCount } from '../src/lib/star-count.ts'
 
 const formatStarCount = (count) => (
-  `<span class="muted">(</span><span> ☆ </span><span>${Math.round(count / 100) / 10}k</span><span> </span><span class="muted">)</span>`
+  `<span class="muted">(</span><span> ☆ </span><span>${Math.round(count / 100) / 10}k</span><span> </span><span class="muted">)</span>`
 )
 
 const renderStarCount = async (repoName, initialStarCount) => {
@@ -43,7 +43,7 @@ onMounted(async () => {
 
 <img src="/img/icons/electric.svg" class="product-icon" />
 
-# Electric
+# Postgres Sync
 
 Sync little subsets of your Postgres data into
 local apps and services.
@@ -80,10 +80,10 @@ The Electric sync engine syncs [little subsets](/docs/guides/shapes) of data out
 
 You can sync data into:
 
-- web and mobile apps, [replacing data fetching with data sync](/use-cases/data-sync)
-- edge workers and services, for example maintaining a low-latency [edge data cache](/use-cases/cache-invalidation)
-- local AI systems, for example [running RAG using pgvector](/use-cases/local-ai)
-- dev and test environments, for example syncing data into [an embedded PGlite](/product/pglite) database
+- web and mobile apps, replacing data fetching with data sync
+- edge workers and services, for example maintaining a low-latency edge data cache
+- local AI systems, for example running RAG using pgvector
+- dev and test environments, for example syncing data into [an embedded PGlite](/products/pglite) database
 
 ## How does it work?
 
@@ -108,7 +108,7 @@ This enables a massive number of clients to query and get real-time updates to s
 
 ## More information
 
-See the [Docs](/docs/intro), [Quickstart](/docs/quickstart) and [Demos](/demos). You can [self-host](/docs/guides/deployment) or use the [Electric&nbsp;Cloud](/product/cloud).
+See the [Docs](/docs/intro), [Quickstart](/docs/quickstart) and [Demos](/demos). You can [self-host](/docs/guides/deployment) or use the [Electric Cloud](/cloud).
 
 <div class="actions cta-actions page-footer-actions left">
   <div class="action">

@@ -4,15 +4,12 @@ title: "Electric"
 titleTemplate: ":title | Sync with your stack"
 hero:
   name: 'Sync'
-  text: 'solved'
+  text: 'with your stack'
   tagline: >-
-    Composable sync primitives.<br />That work with your stack.
+    Composable sync primitives for building<br />fast, collaborative, resilient apps.
   actions:
     - theme: brand
       text: Sign-up to Cloud
-      link: https://dashboard.electric-sql.cloud/
-    - theme: brand
-      text: Sign-up
       link: https://dashboard.electric-sql.cloud/
     - theme: alt
       text: Quickstart
@@ -33,15 +30,16 @@ hero:
 import { onMounted } from 'vue'
 
 import {
+  AIThesisSection,
   BackedBySection,
+  DeploymentSection,
   GetStartedStrap,
   LatestNewsSection,
   NoSilosStrap,
   OpenSourceSection,
-  PGliteStrap,
+  ProductsSection,
   ScalesToSection,
-  SolvesSyncSection,
-  SyncAwesomeSection,
+  SolutionsSection,
   UsedBySection,
   WorksWithSection
 } from './src/components/home'
@@ -93,14 +91,15 @@ function Component({ project }) {
 
 </div>
 
-<SyncAwesomeSection />
-<SolvesSyncSection />
+<AIThesisSection />
+<SolutionsSection />
+<ProductsSection />
 <WorksWithSection />
+<DeploymentSection />
 <ScalesToSection />
 <NoSilosStrap />
 <UsedBySection />
 <BackedBySection />
 <OpenSourceSection />
-<PGliteStrap />
 <LatestNewsSection />
 <GetStartedStrap />

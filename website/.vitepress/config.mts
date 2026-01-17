@@ -160,12 +160,9 @@ export default defineConfig({
     },
     logo: '/img/brand/logo.svg',
     nav: [
-      { text: 'Product', link: '/product/electric', activeMatch: '/product/' },
-      {
-        text: 'Use cases',
-        link: '/use-cases/data-sync',
-        activeMatch: '/use-cases/',
-      },
+      { text: 'Sync', link: '/sync', activeMatch: '/sync' },
+      { text: 'Products', link: '/products', activeMatch: '/products' },
+      { text: 'Cloud', link: '/cloud', activeMatch: '/cloud' },
       { text: 'Docs', link: '/docs/intro', activeMatch: '/docs/' },
       { text: 'Demos', link: '/demos', activeMatch: '/demos' },
       { text: 'Blog', link: '/blog', activeMatch: '/blog' },
@@ -176,13 +173,15 @@ export default defineConfig({
       provider: 'local',
     },
     sidebar: {
-      '/product': [
+      '/products': [
         {
-          text: 'Product',
+          text: 'Products',
           items: [
-            { text: 'Electric', link: '/product/electric' },
-            { text: 'Cloud', link: '/product/cloud' },
-            { text: 'PGlite', link: '/product/pglite' },
+            { text: 'Overview', link: '/products/' },
+            { text: 'Postgres Sync', link: '/products/postgres-sync' },
+            { text: 'Durable Streams', link: '/products/durable-streams' },
+            { text: 'TanStack DB', link: '/products/tanstack-db' },
+            { text: 'PGlite', link: '/products/pglite' },
           ],
         },
       ],

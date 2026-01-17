@@ -6,7 +6,7 @@ excerpt: >-
   A behind‑the‑scenes look at Electric's new storage engine: why we built it, how it works, and how it improves performance in production.
 authors: [icehaunter, balegas]
 image: /img/blog/electric-1.1-released/header.png
-tags: [ai, sync]
+tags: [ai, sync, postgres-sync]
 outline: [2, 3]
 post: true
 ---

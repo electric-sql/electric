@@ -13,7 +13,7 @@ import { data as initialStarCounts } from '../data/count.data.ts'
 import { getStarCount } from '../src/lib/star-count.ts'
 
 const formatStarCount = (count) => (
-  `<span class="muted">(</span><span> ☆ </span><span>${Math.round(count / 100) / 10}k</span><span> </span><span class="muted">)</span>`
+  `<span class="muted">(</span><span> ☆ </span><span>${Math.round(count / 100) / 10}k</span><span> </span><span class="muted">)</span>`
 )
 
 const renderStarCount = async (repoName, initialStarCount) => {
@@ -87,7 +87,7 @@ It can be used as an ephemeral [in-memory database](https://pglite.dev/docs/file
 
 ### Syncing into PGlite
 
-You can use [Electric](/product/electric) to sync between a cloud Postgres and an embedded PGlite instance. For example, to sync an `items` [Shape](/docs/guides/shapes) into an `items` table:
+You can use [Postgres Sync](/products/postgres-sync) to sync between a cloud Postgres and an embedded PGlite instance. For example, to sync an `items` [Shape](/docs/guides/shapes) into an `items` table:
 
 <<< @/src/partials/sync-into-pglite.tsx
 
