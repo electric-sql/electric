@@ -8,7 +8,7 @@ excerpt: >-
   interruptibility, multi‑tab, multi‑device and multi‑user.
 authors: [samwillis]
 image: /img/blog/building-ai-apps-on-sync/header.jpg
-tags: [ai, sync]
+tags: [ai, sync, postgres-sync, durable-streams]
 outline: [2, 3]
 post: true
 ---

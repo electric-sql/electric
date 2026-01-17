@@ -8,7 +8,7 @@ excerpt: >-
   sync engine is ready for mission critical, production apps.
 authors: [thruflo]
 image: /img/blog/electric-1.0-released/header2.jpg
-tags: [release]
+tags: [release, postgres-sync]
 outline: [2, 3]
 post: true
 ---

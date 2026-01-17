@@ -8,7 +8,7 @@ excerpt: >-
   and inspired by new insight from Kyle Mathews.
 authors: [thruflo]
 image: /img/blog/electric-next/header.jpg
-tags: [release]
+tags: [release, postgres-sync]
 outline: [2, 3]
 post: true
 ---
