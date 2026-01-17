@@ -108,15 +108,19 @@ defmodule Electric.Shapes.Consumer.Materializer do
     stack_storage = Storage.for_stack(stack_id)
     shape_storage = Storage.for_shape(shape_handle, stack_storage)
 
-    :started = Consumer.await_snapshot_start(stack_id, shape_handle, :infinity)
+    case Consumer.await_snapshot_start(stack_id, shape_handle, :infinity) do
+      :started ->
+        Consumer.subscribe_materializer(stack_id, shape_handle, self())
 
-    Consumer.subscribe_materializer(stack_id, shape_handle, self())
+        Process.monitor(Consumer.whereis(stack_id, shape_handle),
+          tag: {:consumer_down, state.shape_handle}
+        )
 
-    Process.monitor(Consumer.whereis(stack_id, shape_handle),
-      tag: {:consumer_down, state.shape_handle}
-    )
+        {:noreply, state, {:continue, {:read_stream, shape_storage}}}
 
-    {:noreply, state, {:continue, {:read_stream, shape_storage}}}
+      {:error, _reason} ->
+        {:stop, :shutdown, state}
+    end
   end
 
   def handle_continue({:read_stream, storage}, state) do
