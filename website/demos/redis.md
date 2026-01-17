@@ -15,7 +15,7 @@ order: 10
 
 ## Syncing into a Redis data structure
 
-Redis is often used as a cache. Electric can sync into Redis and automatically manage [cache invalidation](/use-cases/cache-invalidation).
+Redis is often used as a cache. Electric can sync into Redis and automatically manage [cache invalidation](/sync).
 
 The main example code is in [`./src/index.ts`](https://github.com/electric-sql/electric/blob/main/examples/redis/src/index.ts):
 

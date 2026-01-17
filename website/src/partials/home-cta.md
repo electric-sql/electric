@@ -64,7 +64,7 @@ And you can level-up
 all the way</span>
 to syncing into a local embedded
 <span class="no-wrap">
-[PGlite database](/product/pglite)</span>.
+[PGlite database](/products/pglite)</span>.
 <span class="no-wrap-md hidden-sm">
 With
 <span class="no-wrap">

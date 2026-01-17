@@ -52,11 +52,11 @@ onMounted(async () => {
 })
 </script>
 
-One of the exciting things about [local-first software](/use-cases/local-first-software) is the potential to eliminate APIs and microservices. Instead of coding across the network, you code against a local store, data syncs in the background and your stack is suddenly much simpler.
+One of the exciting things about [local-first software](/sync) is the potential to eliminate APIs and microservices. Instead of coding across the network, you code against a local store, data syncs in the background and your stack is suddenly much simpler.
 
 But what if you don't want to eliminate your API? What if you want or need to keep it. How do you develop local-first software then?
 
-With [Electric](/product/electric), you can develop local-first apps incrementally, [using your existing API](#how-it-works).
+With [Electric](/products/postgres-sync), you can develop local-first apps incrementally, [using your existing API](#how-it-works).
 
 I gave a talk on this subject at the second Local-first meetup in Berlin in December 2024:
 
@@ -83,9 +83,9 @@ For example, REST APIs are stateless. We know how to scale them. We know how to 
 
 ### Electric's approach
 
-At Electric, our mission is to make [sync](/use-cases/data-sync) and [local-first](/use-cases/local-first-software) adoptable for mainstream software. So, one of the main challenges we've focused on is how to use Electric with your existing software stack.
+At Electric, our mission is to make [sync](/sync) and [local-first](/sync) adoptable for mainstream software. So, one of the main challenges we've focused on is how to use Electric with your existing software stack.
 
-This is why we work with [any data model](/docs/guides/deployment#data-model-compatibility) in [any standard Postgres](/docs/guides/deployment#_1-running-postgres). It's why we allow you to sync data into anything from a [JavaScript object](/docs/api/clients/typescript#shape) to a [local database](/product/pglite). And it's why we focus on providing [composable primitives](/blog/2024/07/17/electric-next) rather than a one-size-fits-all solution.
+This is why we work with [any data model](/docs/guides/deployment#data-model-compatibility) in [any standard Postgres](/docs/guides/deployment#_1-running-postgres). It's why we allow you to sync data into anything from a [JavaScript object](/docs/api/clients/typescript#shape) to a [local database](/products/pglite). And it's why we focus on providing [composable primitives](/blog/2024/07/17/electric-next) rather than a one-size-fits-all solution.
 
 As a result, with Electric, you can develop local-first apps incrementally, using your existing API. So you can get the benefits of local-first, without having to re-engineer your stack or re-invent sliced bread, just to make toast in the morning.
 
@@ -115,9 +115,9 @@ To build local-first you have to have the data locally. If you're doing that wit
   </a>
 </figure>
 
-This is why you need [data sync](/use-cases/data-sync). To keep the local data fresh when it changes.
+This is why you need [data sync](/sync). To keep the local data fresh when it changes.
 
-Happily, this is exactly what Electric does. It [syncs data into local apps and services](/product/electric) and keeps it fresh for you. Practically what does this look like? Well, instead of fetching data using web service calls, i.e.: something like this:
+Happily, this is exactly what Electric does. It [syncs data into local apps and services](/products/postgres-sync) and keeps it fresh for you. Practically what does this look like? Well, instead of fetching data using web service calls, i.e.: something like this:
 
 ```jsx
 import React, { useState, useEffect } from 'react'
@@ -162,7 +162,7 @@ For example:
 - [Trigger.dev](https://trigger.dev/) started out with Electric by syncing status data from their background jobs platform into their [Realtime dashboard](https://trigger.dev/launchweek/0/realtime)
 - [Otto](https://ottogrid.ai) swapped out the way they loaded data into their [AI spreadsheet](https://ottogrid.ai)
 
-You can go much further with Electric, all the way to [syncing into a local database](/product/pglite). But you can do this _incrementally_ as and when you need to.
+You can go much further with Electric, all the way to [syncing into a local database](/products/pglite). But you can do this _incrementally_ as and when you need to.
 
 #### Read-path
 
@@ -412,7 +412,7 @@ You can also see the [shared persistent optimistic state](https://github.com/ele
 
 Another pattern covered in the Writes guide is [through the database sync](/docs/guides/writes#through-the-db). This approach uses Electric to sync into an local, embedded database and then syncs changes made to the local database back to Postgres, via your API.
 
-The [example implementation](https://github.com/electric-sql/electric/tree/main/examples/write-patterns/patterns/4-through-the-db) uses Electric to sync into [PGlite](/product/pglite) as the local embedded database. All the application code needs to do is read and write to the local database. The [database schema](https://github.com/electric-sql/electric/blob/main/examples/write-patterns/patterns/4-through-the-db/local-schema.sql) takes care of everything else, including keeping a log of local changes to send to the server.
+The [example implementation](https://github.com/electric-sql/electric/tree/main/examples/write-patterns/patterns/4-through-the-db) uses Electric to sync into [PGlite](/products/pglite) as the local embedded database. All the application code needs to do is read and write to the local database. The [database schema](https://github.com/electric-sql/electric/blob/main/examples/write-patterns/patterns/4-through-the-db/local-schema.sql) takes care of everything else, including keeping a log of local changes to send to the server.
 
 This is then processed by a sync utility that sends data to a:
 
@@ -488,7 +488,7 @@ You don't need to implement custom tooling to get visibility in what's happening
 
 ## Next steps
 
-This post has outlined how you can develop [local-first software](/use-cases/local-first-software) incrementally, using your existing API alongside [Electric](/product/electric) for read-path sync.
+This post has outlined how you can develop [local-first software](/sync) incrementally, using your existing API alongside [Electric](/products/postgres-sync) for read-path sync.
 
 To learn more and get started with Electric, see the [Quickstart](/docs/quickstart), [Documentation](/docs/intro) and source code on GitHub:
 

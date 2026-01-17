@@ -16,7 +16,7 @@ example: true
 
 ## Handling writes with Electric
 
-This example implements and describes four different patterns for handling writes in an application built with [Electric](/product/electric).
+This example implements and describes four different patterns for handling writes in an application built with [Electric](/products/postgres-sync).
 
 These patterns are described in the [Writes guide](/docs/guides/writes). The idea is that if you walk through the patterns in turn, you can get a sense of the range of techniques and their evolution in both power and complexity.
 

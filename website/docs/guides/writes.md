@@ -28,7 +28,7 @@ With accompanying code in the [write-patterns example](https://github.com/electr
 
 ## Local writes with Electric
 
-Electric does [read-path sync](/product/electric). It syncs data out-of Postgres, into local apps and services.
+Electric does [read-path sync](/products/postgres-sync). It syncs data out-of Postgres, into local apps and services.
 
 Electric does not do write-path sync. It doesn't provide (or prescribe) a built-in solution for getting data back into Postgres from local apps and services.
 

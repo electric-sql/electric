@@ -330,7 +330,7 @@ export const userCollection = createCollection(
 )
 ```
 
-Electric collections use the [Electric sync engine](/product/electric) (in this case via Phoenix.Sync) to keep the data in the collection up-to-date and in-sync with the contents of the Postgres database. Components then read data from the collections using live queries:
+Electric collections use the [Electric sync engine](/products/postgres-sync) (in this case via Phoenix.Sync) to keep the data in the collection up-to-date and in-sync with the contents of the Postgres database. Components then read data from the collections using live queries:
 
 ```tsx
 // From `assets/src/components/ChatArea.tsx`

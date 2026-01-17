@@ -106,13 +106,13 @@ So, hopefully now our motivation is clear. We needed to find a way to simplify E
 
 ## What's changed?
 
-Electric Next is a [sync engine](/product/electric), not a local-first software platform.
+Electric Next is a [sync engine](/products/postgres-sync), not a local-first software platform.
 
-It can be used for a wide range of [use cases](/use-cases/data-sync), syncing data into apps, workers, services, agents and environments. These include but are not limited to local-first software development.
+It can be used for a wide range of [use cases](/sync), syncing data into apps, workers, services, agents and environments. These include but are not limited to local-first software development.
 
 ### Sync engine
 
-When we look at our stack, the part that we see as most core is the [sync engine](/product/electric).
+When we look at our stack, the part that we see as most core is the [sync engine](/products/postgres-sync).
 
 This is the component of Electric that syncs data between Postgres and local clients. Consuming Postgres logical replication, managing partial replication using Shapes and syncing data to and from clients over a replication protocol. It’s where there’s the most complexity. Where we can add the most value and is hardest to develop yourself.
 
@@ -235,7 +235,7 @@ The core use case for Electric is to sync subsets of data out of Postgres into l
 You can sync data into:
 
 - apps, replacing data fetching with data sync
-- development environments, for example syncing data into [an embedded PGlite](/product/pglite)
+- development environments, for example syncing data into [an embedded PGlite](/products/pglite)
 - edge workers and services, for example maintaining a low-latency [edge data cache](/docs/integrations/redis)
 - local AI systems running RAG, as per the example below
 

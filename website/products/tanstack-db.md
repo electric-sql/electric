@@ -65,7 +65,7 @@ Data flows from your backend through Electric's sync primitives into TanStack DB
 
 ## More information
 
-See the [Products overview](/products) for guidance on how to combine TanStack DB with other Electric products. Check out the [Sync page](/sync) for outcome-focused solutions.
+See the [Products overview]((/products/) for guidance on how to combine TanStack DB with other Electric products. Check out the [Sync page](/sync) for outcome-focused solutions.
 
 <div class="actions cta-actions page-footer-actions left">
   <div class="action">

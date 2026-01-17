@@ -30,7 +30,7 @@ It also demonstrates using a [shape-proxy endpoint](https://github.com/electric-
 
 #### ElectroDrizzle
 
-[ElectroDrizzle](https://github.com/LeonAlvarez/ElectroDrizzle) is an example application by [Leon Alvarez](https://github.com/LeonAlvarez) using Next.js, [Drizzle](https://orm.drizzle.team), [PGLite](/product/pglite) and Electric together.
+[ElectroDrizzle](https://github.com/LeonAlvarez/ElectroDrizzle) is an example application by [Leon Alvarez](https://github.com/LeonAlvarez) using Next.js, [Drizzle](https://orm.drizzle.team), [PGLite](/products/pglite) and Electric together.
 
 See the [Getting Started guide here](https://github.com/LeonAlvarez/ElectroDrizzle?tab=readme-ov-file#getting-started).
 
