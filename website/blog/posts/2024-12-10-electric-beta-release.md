@@ -56,11 +56,11 @@ If you haven't checked out Electric recently, it's a great time to [take another
 
 ## What is Electric?
 
-[Electric](/product/electric) is a Postgres sync engine. We do real-time [partial replication](/docs/guides/shapes) of Postgres data into local apps and services.
+[Electric](/products/postgres-sync) is a Postgres sync engine. We do real-time [partial replication](/docs/guides/shapes) of Postgres data into local apps and services.
 
-Use Electric to swap out data _fetching_ for [data _sync_](/use-cases/data-sync). Build apps on instant, real-time, local data. Without having to roll your own sync engine or change your stack.
+Use Electric to swap out data _fetching_ for [data _sync_](/sync). Build apps on instant, real-time, local data. Without having to roll your own sync engine or change your stack.
 
-We also develop [PGlite](/product/pglite), a lightweight WASM Postgres you can run in the browser.
+We also develop [PGlite](/products/pglite), a lightweight WASM Postgres you can run in the browser.
 
 ## The path to BETA
 
@@ -206,14 +206,14 @@ With this BETA release, Electric is stable and ready for prime time use. If you 
 
 ### Signup for early access to Electric Cloud
 
-We're also building [Electric Cloud](/product/cloud), which provides managed Electric hosting (for those that don't want to [host Electric themselves](/docs/guides/deployment)).
+We're also building [Electric Cloud](/cloud), which provides managed Electric hosting (for those that don't want to [host Electric themselves](/docs/guides/deployment)).
 
 If you're interested in using Electric Cloud, you can sign up for early access here:
 
 <div class="actions cta-actions page-footer-actions left">
   <div class="action cloud-cta">
     <VPButton
-        href="/product/cloud/sign-up"
+        href="/cloud/sign-up"
         text="Sign up "
         theme="brand"
     />
