@@ -6,7 +6,7 @@ hero:
   name: 'Sync'
   text: 'with your stack'
   tagline: >-
-    Composable sync primitives for local-first apps,<br />real-time dashboards, and resilient AI agents.
+    Composable sync primitives for building<br />fast, collaborative, resilient apps.
   actions:
     - theme: brand
       text: Sign-up to Cloud
