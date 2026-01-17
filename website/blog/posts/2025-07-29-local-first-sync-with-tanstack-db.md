@@ -10,7 +10,7 @@ excerpt: >-
   local-first app development.
 authors: [thruflo]
 image: /img/blog/local-first-sync-with-tanstack-db/header2.jpg
-tags: [db]
+tags: [db, tanstack-db, postgres-sync]
 outline: [2, 3]
 post: true
 ---

@@ -10,7 +10,7 @@ excerpt: >-
   great time to take another look.
 authors: [kyle]
 image: /img/blog/electric-beta-release/header.jpg
-tags: [release]
+tags: [release, postgres-sync]
 outline: [2, 3]
 post: true
 homepage: false

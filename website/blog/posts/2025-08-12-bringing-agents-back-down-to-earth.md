@@ -6,7 +6,7 @@ excerpt: >-
   Agentic AI, beneath all the hype, is actually just normal software. You can build agentic systems with a database, standard web tooling and real-time sync.
 authors: [thruflo]
 image: /img/blog/bringing-agents-back-down-to-earth/header2.jpg
-tags: [db]
+tags: [db, tanstack-db, postgres-sync]
 outline: [2, 3]
 post: true
 ---

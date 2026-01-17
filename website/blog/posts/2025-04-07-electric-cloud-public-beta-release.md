@@ -8,7 +8,7 @@ excerpt: >-
   This means it's open to everyone for immediate access.
 authors: [kyle, thruflo]
 image: '/img/blog/electric-cloud-public-beta-release/header.jpg'
-tags: [release]
+tags: [release, postgres-sync]
 outline: [2, 3]
 post: true
 ---

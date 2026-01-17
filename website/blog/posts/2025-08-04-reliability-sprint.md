@@ -6,7 +6,7 @@ excerpt: >-
   Our last quarter was a reliability sprint. We set one goal: make ElectricSQL so boring‑reliable that you stop thinking about it and just build.
 authors: [kyle]
 image: /img/blog/reliability-sprint/header.png
-tags: [product, engineering]
+tags: [product, engineering, postgres-sync]
 outline: deep
 post: true
 ---

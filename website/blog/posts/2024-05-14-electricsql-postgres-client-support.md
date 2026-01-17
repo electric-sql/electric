@@ -7,7 +7,7 @@ excerpt: >-
   support for syncing to Postgres in the client.
 authors: [samwillis]
 image: /img/blog/electric-released-with-postgres-support/header.jpg
-tags: [release]
+tags: [release, pglite]
 outline: deep
 post: true
 ---
