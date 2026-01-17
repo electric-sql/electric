@@ -19,8 +19,8 @@ const props = defineProps<{
 }>()
 
 const filteredPosts = computed(() => {
-  const filtered = (posts as Post[]).filter((post) =>
-    post.tags && post.tags.includes(props.tag)
+  const filtered = (posts as Post[]).filter(
+    (post) => post.tags && post.tags.includes(props.tag)
   )
 
   if (props.limit) {
@@ -64,8 +64,6 @@ const filteredPosts = computed(() => {
         :post="post"
       />
     </div>
-    <p v-else class="no-posts">
-      No posts found with this tag.
-    </p>
+    <p v-else class="no-posts">No posts found with this tag.</p>
   </div>
 </template>

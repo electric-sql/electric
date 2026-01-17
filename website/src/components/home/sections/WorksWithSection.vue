@@ -386,8 +386,7 @@ onMounted(() => {
       </div>
     </div>
     <template #outline>
-      Adopt sync incrementally, one component at a time<span
-        class="hidden-lg"
+      Adopt sync incrementally, one component at a time<span class="hidden-lg"
         >, into greenfield and brownfield apps alike</span
       >.
     </template>
