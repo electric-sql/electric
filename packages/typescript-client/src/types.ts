@@ -125,6 +125,7 @@ export type ChangeMessage<T extends Row<unknown> = Row> = {
   headers: Header & {
     operation: Operation
     txids?: number[]
+    lsn?: `${bigint}`
     /** Tags will always be present for changes if the shape has a subquery in its where clause, and are omitted otherwise.*/
     tags?: MoveTag[]
     removed_tags?: MoveTag[]
