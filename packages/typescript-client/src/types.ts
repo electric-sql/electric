@@ -43,7 +43,19 @@ export type NormalizedPgSnapshot = {
 }
 
 interface Header {
-  [key: Exclude<string, `operation` | `control` | `event`>]: Value
+  [
+    key: Exclude<
+      string,
+      | `operation`
+      | `control`
+      | `event`
+      | `txids`
+      | `lsn`
+      | `op_position`
+      | `tags`
+      | `removed_tags`
+    >
+  ]: Value
 }
 
 export type Operation = `insert` | `update` | `delete`
