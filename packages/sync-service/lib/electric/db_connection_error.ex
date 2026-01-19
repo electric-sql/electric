@@ -198,6 +198,24 @@ defmodule Electric.DbConnectionError do
     }
   end
 
+  def from_error(
+        %Postgrex.Error{
+          postgres: %{
+            code: :invalid_authorization_specification,
+            message: "branch " <> _,
+            severity: "FATAL",
+            pg_code: "28000"
+          }
+        } = error
+      ) do
+    %DbConnectionError{
+      message: error.postgres.message,
+      type: :branch_does_not_exist,
+      original_error: error,
+      retry_may_fix?: false
+    }
+  end
+
   def from_error(%Postgrex.Error{postgres: %{code: :admin_shutdown, severity: "FATAL"}} = error) do
     %DbConnectionError{
       message: error.postgres.message,
