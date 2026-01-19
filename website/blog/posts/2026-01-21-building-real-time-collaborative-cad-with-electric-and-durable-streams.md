@@ -9,7 +9,7 @@ imageHeight: 1024
 tags: [agents, collaboration, durable-streams, tanstack-db, CAD, AI, LLMs]
 outline: [2, 3]
 post: true
-date: 2026-01-20
+date: 2026-01-21
 ---
 
 In my [previous post](./2026-01-19-from-science-finction-to-reality-you-can-build-difficult-things-now.md), I described building a parametric CAD editor with LLMs in about a week. This post is about the infrastructure choices that made that possible — and why they matter if you're building complex, collaborative, AI-integrated applications.
@@ -173,7 +173,7 @@ export const projectsCollection = createCollection(
 
 **The mutation path:**
 
-While reads come through Electric's real-time sync, writes go through **TanStack Start server functions**. This ensures:
+While reads come through Electric's real-time sync, writes go through **TanStack Start server functions**. This enables:
 
 - Server-side validation (don't trust client input)
 - Complex business logic (workspace quotas, cascade creates)
@@ -555,7 +555,7 @@ This is the payoff of treating infrastructure as a shared coordination layer rat
 
 ## Why this stack worked for agents
 
-Agents are strongest when they're copying well-known patterns. I biased the stack toward boring primitives: SQL schemas, async iteration, established libraries. The agents didn't need to "learn" exotic patterns—they recognized standard approaches and applied them correctly. Contrast this with custom binary protocols (would need extensive explanation), novel state sync algorithms (would get the details wrong), or bespoke APIs (would hallucinate methods).
+Agents are strongest when they're copying well-known patterns. I biased the stack toward boring primitives: SQL schemas, established libraries, and those that are new used well known patterns (Tanstack DB having a query builder modeled on Drizzle). The agents didn't need to "learn" exotic patterns—they recognized standard approaches and applied them correctly. Contrast this with custom binary protocols (would need extensive explanation), novel state sync algorithms (would get the details wrong), or bespoke APIs (would hallucinate methods).
 
 ## What having solid infrastructure actually enabled
 

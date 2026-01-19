@@ -9,7 +9,7 @@ imageHeight: 1024
 tags: [agents, collaboration, durable-streams, tanstack-db, CAD, AI, LLMs]
 outline: [2, 3]
 post: true
-date: 2026-01-19
+date: 2026-01-20
 ---
 
 The simple truth is that it's now possible to build 'difficult things' at speed. Two years ago, this project wouldn't have been seen as not much more than science fiction; one year ago, it would have taken months; but by late 2025, it only took a week.
@@ -274,3 +274,9 @@ Build the rails. The agent will run on them.
 ---
 
 _SolidType is open source: [github.com/samwillis/solidtype](https://github.com/samwillis/solidtype)_
+
+_My AI sessions from building this:_
+
+- _[Initial chat with ChatGPT arround the idea](#)_
+- _[Development of the implementation plan with ChatGPT](#)_
+- [TODO: going to export all my sessions from Cursor and put in a Gist linked here]
