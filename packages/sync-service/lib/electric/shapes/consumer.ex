@@ -546,6 +546,11 @@ defmodule Electric.Shapes.Consumer do
         # All changes were filtered out (didn't match shape)
         state
       else
+        # If pending_txn is nil (edge case: received middle fragment without begin),
+        # create one now. This can happen during recovery if the begin fragment was
+        # already processed but not the middle fragments.
+        pending = pending || PendingTxn.new(xid)
+
         writer = ShapeCache.Storage.append_fragment_to_log!(lines, writer)
         # Use the actual offset from the last line written, not the fragment's last_log_offset
         # since the fragment may contain changes for other shapes that were filtered out
@@ -569,8 +574,16 @@ defmodule Electric.Shapes.Consumer do
     state
   end
 
-  defp maybe_complete_pending_txn(state, %TransactionFragment{commit: commit} = fragment) do
+  defp maybe_complete_pending_txn(
+         state,
+         %TransactionFragment{commit: commit, xid: xid} = fragment
+       ) do
+    alias Electric.Shapes.Consumer.PendingTxn
     %{pending_txn: pending, writer: writer, shape: shape, shape_handle: shape_handle} = state
+
+    # If pending_txn is nil (edge case: commit-only fragment or recovery scenario),
+    # create one now to ensure we can complete the transaction properly.
+    pending = pending || PendingTxn.new(xid)
 
     # Signal commit to storage for potential chunk boundary calculation
     writer = ShapeCache.Storage.signal_txn_commit!(pending.xid, writer)
@@ -607,12 +620,40 @@ defmodule Electric.Shapes.Consumer do
             state.txn_offset_mapping ++ [{pending.last_log_offset, fragment.last_log_offset}]
       }
     else
-      # No changes were written, just update offset tracking
+      # No changes were written - notify flush boundary like consider_flushed does
       Logger.debug(fn ->
         "No relevant changes in fragment-direct transaction xid=#{pending.xid}"
       end)
 
-      %{state | writer: writer, pending_txn: nil}
+      state = %{state | writer: writer, pending_txn: nil}
+      consider_flushed_fragment(state, fragment.last_log_offset)
+    end
+  end
+
+  # Like consider_flushed/2 but works with a LogOffset directly instead of a Transaction
+  defp consider_flushed_fragment(%State{} = state, new_boundary) do
+    if state.txn_offset_mapping == [] do
+      # No relevant txns have been observed and unflushed, we can notify immediately
+      ShapeLogCollector.notify_flushed(state.stack_id, state.shape_handle, new_boundary)
+      state
+    else
+      # We're looking to "relabel" the next flush to include this txn, so we're looking for the
+      # boundary that has a highest boundary less than this offset
+      {head, tail} =
+        Enum.split_while(
+          state.txn_offset_mapping,
+          &(LogOffset.compare(elem(&1, 1), new_boundary) == :lt)
+        )
+
+      case Enum.reverse(head) do
+        [] ->
+          # Nothing lower than this, any flush will advance beyond this txn point
+          state
+
+        [{offset, _} | rest] ->
+          # Found one to relabel the upper boundary to include this txn
+          %{state | txn_offset_mapping: Enum.reverse([{offset, new_boundary} | rest], tail)}
+      end
     end
   end
 
