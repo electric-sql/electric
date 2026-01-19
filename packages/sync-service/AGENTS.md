@@ -62,6 +62,17 @@ iex -S mix      # run service locally
 - Unit tests live in `test/`; integration tests in `test/integration/`.
 - Run a single file: `mix test test/path/to_test.exs`.
 - Integration tests expect local docker services from `mix start_dev`.
+- Prefer a single assert with pattern matching for returned structures when it
+  keeps the test clear; avoid multiple asserts on individual elements unless it
+  improves readability.
+
+```elixir
+# Prefer a single, structural assert:
+assert [
+         %{key: ^expected_value1},
+         %{key: ^expected_value2}
+       ] = SomeModule.some_function()
+```
 
 ## Boundaries (avoid editing/committing)
 
