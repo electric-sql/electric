@@ -30,6 +30,35 @@ defmodule Electric.Shapes.ConsumerTest do
 
   @receive_timeout 1_000
 
+  # Helper to assert storage writes - accepts either append_to_log! or append_fragment_to_log!
+  # since shapes without subquery dependencies now use fragment-direct streaming
+  defmacrop assert_storage_append(shape_handle, timeout \\ 1_000) do
+    quote do
+      receive do
+        {Support.TestStorage, :append_to_log!, unquote(shape_handle), items} ->
+          items
+
+        {Support.TestStorage, :append_fragment_to_log!, unquote(shape_handle), items} ->
+          items
+      after
+        unquote(timeout) ->
+          flunk(
+            "Expected storage append for #{inspect(unquote(shape_handle))} within #{unquote(timeout)}ms"
+          )
+      end
+    end
+  end
+
+  defmacrop refute_storage_append(shape_handle, timeout \\ 100) do
+    quote do
+      refute_receive {Support.TestStorage, :append_to_log!, unquote(shape_handle), _},
+                     unquote(timeout)
+
+      refute_receive {Support.TestStorage, :append_fragment_to_log!, unquote(shape_handle), _},
+                     unquote(timeout)
+    end
+  end
+
   @base_inspector StubInspector.new(
                     tables: [
                       "test_table",
@@ -208,8 +237,8 @@ defmodule Electric.Shapes.ConsumerTest do
 
       assert :ok = ShapeLogCollector.handle_event(txn, ctx.stack_id)
       assert_receive {^ref, :new_changes, ^last_log_offset}, @receive_timeout
-      assert_receive {Support.TestStorage, :append_to_log!, @shape_handle1, _}
-      refute_receive {Support.TestStorage, :append_to_log!, @shape_handle2, _}
+      assert_storage_append(@shape_handle1)
+      refute_storage_append(@shape_handle2)
 
       txn2 =
         transaction(xid, next_lsn, [
@@ -222,8 +251,8 @@ defmodule Electric.Shapes.ConsumerTest do
 
       assert :ok = ShapeLogCollector.handle_event(txn2, ctx.stack_id)
       assert_receive {^ref, :new_changes, ^next_log_offset}, @receive_timeout
-      assert_receive {Support.TestStorage, :append_to_log!, @shape_handle1, _}
-      refute_receive {Support.TestStorage, :append_to_log!, @shape_handle2, _}
+      assert_storage_append(@shape_handle1)
+      refute_storage_append(@shape_handle2)
     end
 
     test "correctly writes only relevant changes to multiple shape logs", ctx do
@@ -266,14 +295,10 @@ defmodule Electric.Shapes.ConsumerTest do
       assert_receive {^ref1, :new_changes, ^change1_offset}, @receive_timeout
       assert_receive {^ref2, :new_changes, ^change2_offset}, @receive_timeout
 
-      assert_receive {Support.TestStorage, :append_to_log!, @shape_handle1,
-                      [{_offset, _key, _type, serialized_record}]}
-
+      [{_offset, _key, _type, serialized_record}] = assert_storage_append(@shape_handle1)
       assert %{"value" => %{"id" => "1"}} = Jason.decode!(serialized_record)
 
-      assert_receive {Support.TestStorage, :append_to_log!, @shape_handle2,
-                      [{_offset, _key, _type, serialized_record}]}
-
+      [{_offset, _key, _type, serialized_record}] = assert_storage_append(@shape_handle2)
       assert %{"value" => %{"id" => "2"}} = Jason.decode!(serialized_record)
     end
 
@@ -302,8 +327,8 @@ defmodule Electric.Shapes.ConsumerTest do
 
       assert :ok = ShapeLogCollector.handle_event(txn, ctx.stack_id)
 
-      assert_receive {Support.TestStorage, :append_to_log!, @shape_handle2, _}
-      refute_receive {Support.TestStorage, :append_to_log!, @shape_handle1, _}
+      assert_storage_append(@shape_handle2)
+      refute_storage_append(@shape_handle1)
 
       refute_receive {^ref1, :new_changes, _}
       assert_receive {^ref2, :new_changes, _}
@@ -384,7 +409,7 @@ defmodule Electric.Shapes.ConsumerTest do
         assert :ok = ShapeLogCollector.handle_event(txn, ctx.stack_id)
       end)
 
-      refute_receive {Support.TestStorage, :append_to_log!, @shape_handle1, _}
+      refute_storage_append(@shape_handle1)
 
       assert_shape_cleanup(@shape_handle1)
 
@@ -410,7 +435,7 @@ defmodule Electric.Shapes.ConsumerTest do
 
       assert :ok = ShapeLogCollector.handle_event(txn, ctx.stack_id)
       assert_receive {^ref, :new_changes, ^last_log_offset}, @receive_timeout
-      assert_receive {Support.TestStorage, :append_to_log!, @shape_handle1, _}
+      assert_storage_append(@shape_handle1)
     end
 
     test "does not clean shapes if relation didn't change", ctx do

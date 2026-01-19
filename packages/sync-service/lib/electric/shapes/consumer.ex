@@ -452,11 +452,175 @@ defmodule Electric.Shapes.Consumer do
   end
 
   defp handle_event(%TransactionFragment{} = txn_fragment, state) do
-    {txns, transaction_builder} =
-      TransactionBuilder.build(txn_fragment, state.transaction_builder)
+    # Use fragment-direct streaming for shapes without subquery dependencies
+    # when not in buffering mode (waiting for initial snapshot) and
+    # when no materializer is subscribed (inner shapes need full transaction handling)
+    if can_use_fragment_direct?(state) do
+      handle_fragment_direct(txn_fragment, state)
+    else
+      # Fall back to TransactionBuilder for shapes with dependencies or during buffering
+      {txns, transaction_builder} =
+        TransactionBuilder.build(txn_fragment, state.transaction_builder)
 
-    state = %{state | transaction_builder: transaction_builder}
-    handle_txns(txns, state)
+      state = %{state | transaction_builder: transaction_builder}
+      handle_txns(txns, state)
+    end
+  end
+
+  # Fragment-direct mode can only be used when:
+  # - The shape has no subquery dependencies (fragment_direct? flag)
+  # - We're not buffering for initial snapshot
+  # - No materializer is subscribed (inner shapes have materializers and need full txn handling)
+  # - Initial snapshot filtering is complete (needs_initial_filtering check)
+  defp can_use_fragment_direct?(state) do
+    state.fragment_direct? and
+      not state.buffering? and
+      not state.materializer_subscribed? and
+      not needs_initial_filtering(state)
+  end
+
+  # Fragment-direct streaming: write fragments directly to storage without
+  # buffering the complete transaction in memory.
+  defp handle_fragment_direct(%TransactionFragment{} = fragment, state) do
+    alias Electric.Shapes.Consumer.PendingTxn
+
+    # Skip if we've already processed this fragment (recovery case)
+    if skip_fragment?(fragment, state) do
+      Logger.debug(fn -> "Skipping already processed fragment xid=#{fragment.xid}" end)
+      # If fragment contains commit, notify flush boundary even for skipped fragments
+      maybe_notify_flush_boundary_for_skipped(fragment, state)
+    else
+      state
+      |> maybe_start_pending_txn(fragment)
+      |> write_fragment_to_storage(fragment)
+      |> maybe_complete_pending_txn(fragment)
+    end
+  end
+
+  # Notify flush boundary for skipped fragments that contain a commit
+  defp maybe_notify_flush_boundary_for_skipped(%TransactionFragment{commit: nil}, state),
+    do: state
+
+  defp maybe_notify_flush_boundary_for_skipped(
+         %TransactionFragment{commit: _commit, last_log_offset: offset},
+         state
+       ) do
+    # Notify that we're done with this transaction boundary
+    if state.txn_offset_mapping == [] do
+      ShapeLogCollector.notify_flushed(state.stack_id, state.shape_handle, offset)
+    end
+
+    state
+  end
+
+  defp skip_fragment?(%TransactionFragment{last_log_offset: offset}, state) do
+    LogOffset.is_log_offset_lte(offset, state.latest_offset)
+  end
+
+  defp maybe_start_pending_txn(state, %TransactionFragment{has_begin?: false}), do: state
+
+  defp maybe_start_pending_txn(state, %TransactionFragment{has_begin?: true, xid: xid}) do
+    alias Electric.Shapes.Consumer.PendingTxn
+    Logger.debug(fn -> "Starting pending transaction xid=#{xid}" end)
+    %{state | pending_txn: PendingTxn.new(xid)}
+  end
+
+  defp write_fragment_to_storage(state, %TransactionFragment{changes: []}), do: state
+
+  defp write_fragment_to_storage(state, %TransactionFragment{changes: changes} = fragment) do
+    alias Electric.Shapes.Consumer.PendingTxn
+    %{shape: shape, writer: writer, pending_txn: pending} = state
+
+    # Check for truncate operations - these require special handling
+    if Enum.any?(changes, &match?(%Changes.TruncatedRelation{}, &1)) do
+      Logger.warning(
+        "Truncate operation encountered in fragment xid=#{fragment.xid} for #{state.shape_handle}"
+      )
+
+      mark_for_removal(state)
+    else
+      xid = fragment.xid
+      {lines, total_size} = prepare_log_entries(changes, xid, shape)
+
+      if lines == [] do
+        # All changes were filtered out (didn't match shape)
+        state
+      else
+        writer = ShapeCache.Storage.append_fragment_to_log!(lines, writer)
+        # Use the actual offset from the last line written, not the fragment's last_log_offset
+        # since the fragment may contain changes for other shapes that were filtered out
+        {last_written_offset, _key, _op, _json} = List.last(lines)
+
+        pending = PendingTxn.add_changes(pending, last_written_offset, length(lines), total_size)
+
+        Logger.debug(fn ->
+          "Wrote #{length(lines)} changes for fragment xid=#{xid}, total_bytes=#{total_size}"
+        end)
+
+        %{state | writer: writer, pending_txn: pending}
+      end
+    end
+  end
+
+  defp maybe_complete_pending_txn(state, %TransactionFragment{commit: nil}), do: state
+
+  defp maybe_complete_pending_txn(%{terminating?: true} = state, _fragment) do
+    # If we're terminating (e.g., due to truncate), don't complete the transaction
+    state
+  end
+
+  defp maybe_complete_pending_txn(state, %TransactionFragment{commit: commit} = fragment) do
+    %{pending_txn: pending, writer: writer, shape: shape, shape_handle: shape_handle} = state
+
+    # Signal commit to storage for potential chunk boundary calculation
+    writer = ShapeCache.Storage.signal_txn_commit!(pending.xid, writer)
+
+    # Only notify if we actually wrote changes
+    if pending.num_changes > 0 do
+      # In fragment-direct mode, we only notify clients (not materializer)
+      # since fragment_direct? is only true for shapes without dependencies
+      notify_clients_of_new_changes(state, pending.last_log_offset)
+
+      lag = calculate_replication_lag_from_commit(commit)
+
+      Electric.Telemetry.OpenTelemetry.execute(
+        [:electric, :storage, :transaction_stored],
+        %{
+          bytes: pending.total_bytes,
+          count: 1,
+          operations: pending.num_changes,
+          replication_lag: lag
+        },
+        Map.new(shape_attrs(shape_handle, shape))
+      )
+
+      Logger.debug(fn ->
+        "Completed fragment-direct transaction xid=#{pending.xid}, changes=#{pending.num_changes}"
+      end)
+
+      %{
+        state
+        | writer: writer,
+          latest_offset: pending.last_log_offset,
+          pending_txn: nil,
+          txn_offset_mapping:
+            state.txn_offset_mapping ++ [{pending.last_log_offset, fragment.last_log_offset}]
+      }
+    else
+      # No changes were written, just update offset tracking
+      Logger.debug(fn ->
+        "No relevant changes in fragment-direct transaction xid=#{pending.xid}"
+      end)
+
+      %{state | writer: writer, pending_txn: nil}
+    end
+  end
+
+  defp calculate_replication_lag_from_commit(%Changes.Commit{commit_timestamp: nil}), do: 0
+
+  defp calculate_replication_lag_from_commit(%Changes.Commit{commit_timestamp: commit_timestamp}) do
+    now = DateTime.utc_now()
+    Kernel.max(0, DateTime.diff(now, commit_timestamp, :millisecond))
   end
 
   defp handle_txns(txns, %State{} = state), do: Enum.reduce_while(txns, state, &handle_txn/2)
@@ -617,6 +781,23 @@ defmodule Electric.Shapes.Consumer do
     )
 
     state
+  end
+
+  # Notify clients only (not materializer) - used by fragment-direct mode
+  # since shapes in fragment-direct mode have no dependencies/materializer
+  defp notify_clients_of_new_changes(state, latest_log_offset) do
+    Registry.dispatch(
+      Electric.StackSupervisor.registry_name(state.stack_id),
+      state.shape_handle,
+      fn registered ->
+        Logger.debug(fn ->
+          "Notifying ~#{length(registered)} clients about new changes to #{state.shape_handle}"
+        end)
+
+        for {pid, ref} <- registered,
+            do: send(pid, {ref, :new_changes, latest_log_offset})
+      end
+    )
   end
 
   # termination and cleanup is now done in stages.
