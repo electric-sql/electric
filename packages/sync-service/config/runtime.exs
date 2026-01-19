@@ -196,6 +196,15 @@ if config_env() != :test do
   Electric.Config.validate_security_config!(secret, insecure)
 end
 
+max_concurrent_requests =
+  case env!("ELECTRIC_MAX_CONCURRENT_REQUESTS", :string, nil) do
+    nil ->
+      nil
+
+    json when is_binary(json) ->
+      Jason.decode!(json, keys: :atoms)
+  end
+
 config :electric,
   provided_database_id: provided_database_id,
   allow_shape_deletion?: enable_integration_testing?,
@@ -204,6 +213,7 @@ config :electric,
   chunk_bytes_threshold: chunk_bytes_threshold,
   # The ELECTRIC_EXPERIMENTAL_MAX_SHAPES is undocumented and will be removed in future versions.
   max_shapes: env!("ELECTRIC_EXPERIMENTAL_MAX_SHAPES", :integer, nil),
+  max_concurrent_requests: dbg(max_concurrent_requests),
   # Used in telemetry
   instance_id: instance_id,
   call_home_telemetry?: env!("ELECTRIC_USAGE_REPORTING", :boolean, config_env() == :prod),
