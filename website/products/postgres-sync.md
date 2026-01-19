@@ -9,6 +9,7 @@ outline: deep
 <script setup>
 import { onMounted } from 'vue'
 
+import BlogPostsByTag from '../src/components/BlogPostsByTag.vue'
 import { data as initialStarCounts } from '../data/count.data.ts'
 import { getStarCount } from '../src/lib/star-count.ts'
 
@@ -105,6 +106,10 @@ It connects to your Postgres using a [`DATABASE_URL`](/docs/api/config#database-
 </figure>
 
 This enables a massive number of clients to query and get real-time updates to subsets of the database. In this way, Electric turns Postgres into a real-time database.
+
+## Related posts
+
+<BlogPostsByTag tag="postgres-sync" :limit="4" />
 
 ## More information
 

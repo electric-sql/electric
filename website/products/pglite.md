@@ -9,6 +9,7 @@ outline: deep
 <script setup>
 import { onMounted } from 'vue'
 
+import BlogPostsByTag from '../src/components/BlogPostsByTag.vue'
 import { data as initialStarCounts } from '../data/count.data.ts'
 import { getStarCount } from '../src/lib/star-count.ts'
 
@@ -90,6 +91,10 @@ It can be used as an ephemeral [in-memory database](https://pglite.dev/docs/file
 You can use [Postgres Sync](/products/postgres-sync) to sync between a cloud Postgres and an embedded PGlite instance. For example, to sync an `items` [Shape](/docs/guides/shapes) into an `items` table:
 
 <<< @/src/partials/sync-into-pglite.tsx
+
+## Related posts
+
+<BlogPostsByTag tag="pglite" :limit="4" />
 
 ## More information
 
