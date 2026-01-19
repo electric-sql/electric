@@ -22,7 +22,7 @@ const expandedActions =
     : []
 
 onMounted(() => {
-  if (typeof window !== 'undefined' && document.querySelector) {
+  if (typeof window !== 'undefined' && document.querySelector && section.value) {
     section.value
       .querySelectorAll('a[href^="https://github.com"]')
       .forEach((link) => {
