@@ -11,6 +11,9 @@ hero:
     - theme: brand
       text: Sign-up to Cloud
       link: https://dashboard.electric-sql.cloud/
+    - theme: brand
+      text: Sign-up
+      link: https://dashboard.electric-sql.cloud/
     - theme: alt
       text: Quickstart
       link: /docs/quickstart
