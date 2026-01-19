@@ -14,6 +14,7 @@ defmodule Electric.MonitoredCoreSupervisor do
   @impl true
   def init(opts) do
     stack_id = Keyword.fetch!(opts, :stack_id)
+    tweaks = get_in(opts, [:connection_manager_opts, :tweaks]) || []
 
     Process.set_label({:monitored_core_supervisor, stack_id})
     Logger.metadata(stack_id: stack_id)
@@ -21,6 +22,8 @@ defmodule Electric.MonitoredCoreSupervisor do
 
     children = [
       {Electric.StatusMonitor, stack_id: stack_id},
+      {Electric.ShapeCache.ShapeCleaner.CleanupTaskSupervisor,
+       [stack_id: stack_id] ++ Keyword.get(tweaks, :shape_cleaner_opts, [])},
       {Electric.ShapeCache.ShapeStatus.ShapeDb.Supervisor,
        Keyword.take(opts, [:stack_id, :storage_dir])},
       {Electric.ShapeCache.ShapeStatusOwner, [stack_id: stack_id]},
