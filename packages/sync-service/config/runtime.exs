@@ -213,7 +213,7 @@ config :electric,
   chunk_bytes_threshold: chunk_bytes_threshold,
   # The ELECTRIC_EXPERIMENTAL_MAX_SHAPES is undocumented and will be removed in future versions.
   max_shapes: env!("ELECTRIC_EXPERIMENTAL_MAX_SHAPES", :integer, nil),
-  max_concurrent_requests: dbg(max_concurrent_requests),
+  max_concurrent_requests: max_concurrent_requests,
   # Used in telemetry
   instance_id: instance_id,
   call_home_telemetry?: env!("ELECTRIC_USAGE_REPORTING", :boolean, config_env() == :prod),
