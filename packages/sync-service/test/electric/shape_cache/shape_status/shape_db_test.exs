@@ -363,4 +363,82 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDbTest do
 
     assert {:ok, 0} = ShapeDb.count_shapes(ctx.stack_id)
   end
+
+  describe "write buffer" do
+    test "shapes visible while buffered and after flush", ctx do
+      shape = Shape.new!("items", inspector: @stub_inspector)
+      handle = "handle-1"
+
+      {:ok, _hash} = ShapeDb.add_shape(ctx.stack_id, shape, handle)
+
+      assert {:ok, [{^handle, ^shape}]} = ShapeDb.list_shapes(ctx.stack_id)
+      assert {:ok, ^shape} = ShapeDb.shape_for_handle(ctx.stack_id, handle)
+      assert {:ok, ^handle} = ShapeDb.handle_for_shape(ctx.stack_id, shape)
+
+      ShapeDb.WriteBuffer.flush_sync(ctx.stack_id)
+
+      assert {:ok, [{^handle, ^shape}]} = ShapeDb.list_shapes(ctx.stack_id)
+      assert {:ok, ^shape} = ShapeDb.shape_for_handle(ctx.stack_id, handle)
+      assert {:ok, ^handle} = ShapeDb.handle_for_shape(ctx.stack_id, shape)
+    end
+
+    test "snapshot functions work on shapes only in SQLite", ctx do
+      shape = Shape.new!("items", inspector: @stub_inspector)
+      handle = "handle-1"
+
+      {:ok, _hash} = ShapeDb.add_shape(ctx.stack_id, shape, handle)
+      ShapeDb.WriteBuffer.flush_sync(ctx.stack_id)
+
+      assert :ok = ShapeDb.mark_snapshot_started(ctx.stack_id, handle)
+      assert ShapeDb.snapshot_started?(ctx.stack_id, handle)
+
+      ShapeDb.WriteBuffer.flush_sync(ctx.stack_id)
+      assert ShapeDb.snapshot_started?(ctx.stack_id, handle)
+
+      assert :ok = ShapeDb.mark_snapshot_complete(ctx.stack_id, handle)
+      assert ShapeDb.snapshot_complete?(ctx.stack_id, handle)
+
+      ShapeDb.WriteBuffer.flush_sync(ctx.stack_id)
+      assert ShapeDb.snapshot_complete?(ctx.stack_id, handle)
+    end
+
+    test "snapshot functions fail for shapes pending removal", ctx do
+      shape = Shape.new!("items", inspector: @stub_inspector)
+      handle = "handle-1"
+
+      {:ok, _hash} = ShapeDb.add_shape(ctx.stack_id, shape, handle)
+      ShapeDb.WriteBuffer.flush_sync(ctx.stack_id)
+
+      assert :ok = ShapeDb.remove_shape(ctx.stack_id, handle)
+
+      assert :error = ShapeDb.mark_snapshot_started(ctx.stack_id, handle)
+      assert :error = ShapeDb.mark_snapshot_complete(ctx.stack_id, handle)
+    end
+
+    test "remove cancels buffered add", ctx do
+      shape = Shape.new!("items", inspector: @stub_inspector)
+      handle = "handle-1"
+
+      {:ok, _hash} = ShapeDb.add_shape(ctx.stack_id, shape, handle)
+      assert {:ok, [{^handle, ^shape}]} = ShapeDb.list_shapes(ctx.stack_id)
+
+      assert :ok = ShapeDb.remove_shape(ctx.stack_id, handle)
+      assert {:ok, []} = ShapeDb.list_shapes(ctx.stack_id)
+
+      ShapeDb.WriteBuffer.flush_sync(ctx.stack_id)
+      assert {:ok, []} = ShapeDb.list_shapes(ctx.stack_id)
+    end
+
+    test "handle_exists? respects pending removes", ctx do
+      shape = Shape.new!("items", inspector: @stub_inspector)
+      handle = "handle-1"
+
+      {:ok, _hash} = ShapeDb.add_shape(ctx.stack_id, shape, handle)
+      ShapeDb.WriteBuffer.flush_sync(ctx.stack_id)
+      assert ShapeDb.handle_exists?(ctx.stack_id, handle)
+
+      assert :ok = ShapeDb.remove_shape(ctx.stack_id, handle)
+      refute ShapeDb.handle_exists?(ctx.stack_id, handle)
+    end
+  end
 end
