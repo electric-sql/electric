@@ -319,6 +319,18 @@ defmodule Electric.ShapeCache.InMemoryStorage do
   end
 
   @impl Electric.ShapeCache.Storage
+  def append_fragment_to_log!(log_items, %MS{} = opts) do
+    # For in-memory storage, fragment writes work the same as full transaction writes
+    append_to_log!(log_items, opts)
+  end
+
+  @impl Electric.ShapeCache.Storage
+  def signal_txn_commit!(_xid, %MS{} = opts) do
+    # No-op for in-memory storage - all writes are already complete
+    opts
+  end
+
+  @impl Electric.ShapeCache.Storage
   def write_move_in_snapshot!(stream, name, %MS{log_table: log_table}) do
     stream
     |> Stream.map(fn [key, tags, json] -> {{:movein, {name, key}}, {tags, json}} end)

@@ -151,6 +151,20 @@ defmodule Support.TestStorage do
   end
 
   @impl Electric.ShapeCache.Storage
+  def append_fragment_to_log!(log_items, {parent, shape_handle, data, storage}) do
+    send(parent, {__MODULE__, :append_fragment_to_log!, shape_handle, log_items})
+    storage = Storage.append_fragment_to_log!(log_items, storage)
+    {parent, shape_handle, data, storage}
+  end
+
+  @impl Electric.ShapeCache.Storage
+  def signal_txn_commit!(xid, {parent, shape_handle, data, storage}) do
+    send(parent, {__MODULE__, :signal_txn_commit!, shape_handle, xid})
+    storage = Storage.signal_txn_commit!(xid, storage)
+    {parent, shape_handle, data, storage}
+  end
+
+  @impl Electric.ShapeCache.Storage
   def append_move_in_snapshot_to_log!(name, {parent, shape_handle, data, storage}) do
     send(parent, {__MODULE__, :append_move_in_snapshot_to_log!, shape_handle, name})
     {range, storage} = Storage.append_move_in_snapshot_to_log!(name, storage)

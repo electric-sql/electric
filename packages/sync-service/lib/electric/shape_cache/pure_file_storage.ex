@@ -1306,6 +1306,36 @@ defmodule Electric.ShapeCache.PureFileStorage do
     end
   end
 
+  @doc """
+  Append log items from a transaction fragment.
+
+  For now, this is functionally identical to `append_to_log!/2` since the
+  underlying write loop handles chunk boundaries based on byte thresholds.
+  The separation exists to allow future optimization where chunk boundaries
+  are only placed at transaction commits.
+  """
+  def append_fragment_to_log!(fragment_lines, state) do
+    # For now, delegate to append_to_log! - the chunk boundary logic
+    # is based on byte thresholds and works correctly with fragments.
+    # Future optimization: track fragment state and defer chunk boundary
+    # decisions until signal_txn_commit!/2 is called.
+    append_to_log!(fragment_lines, state)
+  end
+
+  @doc """
+  Signal that a transaction has committed.
+
+  Currently a no-op as chunk boundaries are calculated based on byte thresholds
+  in append_to_log!/append_fragment_to_log!. Future optimization could defer
+  chunk boundary calculations to this point for more precise transaction-aligned
+  boundaries.
+  """
+  def signal_txn_commit!(_xid, state) do
+    # No-op for now - chunk boundaries are already handled in append_*_to_log!
+    # based on byte thresholds. The state is already correctly updated.
+    state
+  end
+
   def update_chunk_boundaries_cache(opts, boundaries) do
     :ets.update_element(
       opts.stack_ets,
