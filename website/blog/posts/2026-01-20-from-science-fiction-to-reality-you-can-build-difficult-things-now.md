@@ -24,7 +24,7 @@ This isn't about agents replacing engineers, it's about a phase change in what's
 
 *Today, I wanted to share my build process and what I learned from the experience. Then, in the next post (coming soon), I'll focus on the infrastructure that made it possible.*
 
-<!-- Today, I wanted to share my build process and what I learned from the experience. Then, in the [follow-up post](part-02.md), I focus on the infrastructure that made it possible. -->
+<!-- Today, I wanted to share my build process and what I learned from the experience. Then, in the [follow-up post](/blog/posts/2026-01-21-building-real-time-collaborative-cad-with-electric-and-durable-streams.md), I focus on the infrastructure that made it possible. -->
 
 _Video slot #1: sketch a rough profile and extrude it._
 
@@ -179,7 +179,7 @@ This is where "infrastructure that gets out of the way" becomes real. CAD is com
 
 _I'm writing a companion post on the sync architecture that will be published soon_
 
-<!-- I wrote a companion post on the sync architecture, Durable Streams implementation, AI orchestration patterns, and why these infrastructure choices mattered: **[Building real-time collaborative CAD with Electric and Durable Streams](part-02.md)** -->
+<!-- I wrote a companion post on the sync architecture, Durable Streams implementation, AI orchestration patterns, and why these infrastructure choices mattered: **[Building real-time collaborative CAD with Electric and Durable Streams](/blog/posts/2026-01-21-building-real-time-collaborative-cad-with-electric-and-durable-streams.md)** -->
 
 _Video slot #3: two browsers showing shared edits + presence + follow mode._
 
@@ -205,7 +205,7 @@ The first moment where it felt "real" wasn't from a clever response, but somethi
 
 The full pattern of how AI sessions work with Durable Streams, how tools execute against the same model humans edit, and why this enables collaborative AI, will be covered in detail in Part 2**.
 
-<!-- The full pattern of how AI sessions work with Durable Streams, how tools execute against the same model humans edit, and why this enables collaborative AI, is be covered in detail in **[Part 2](part-02.md)**. -->
+<!-- The full pattern of how AI sessions work with Durable Streams, how tools execute against the same model humans edit, and why this enables collaborative AI, is be covered in detail in **[Part 2](/blog/posts/2026-01-21-building-real-time-collaborative-cad-with-electric-and-durable-streams.md)**. -->
 
 _Video slot #4: AI creates a sketch, then extrudes it._
 
@@ -269,7 +269,7 @@ Build the rails. The agent will run on them.
 
 ---
 
-**Want the technical deep-dive?** I wrote a companion post on the infrastructure that made this possible: **[Building real-time collaborative CAD with Electric and Durable Streams](part-02.md)** — covering the sync architecture, Durable Streams implementation, AI orchestration in a SharedWorker, and code patterns worth stealing.
+**Want the technical deep-dive?** I wrote a companion post on the infrastructure that made this possible: **[Building real-time collaborative CAD with Electric and Durable Streams](/blog/posts/2026-01-21-building-real-time-collaborative-cad-with-electric-and-durable-streams.md)** — covering the sync architecture, Durable Streams implementation, AI orchestration in a SharedWorker, and code patterns worth stealing.
 
 ---
 
@@ -277,6 +277,6 @@ _SolidType is open source: [github.com/samwillis/solidtype](https://github.com/s
 
 _My AI sessions from building this:_
 
-- _[Initial chat with ChatGPT arround the idea](#)_
-- _[Development of the implementation plan with ChatGPT](#)_
+- _[Initial chat with ChatGPT arround the idea](#TODO)_
+- _[Development of the implementation plan with ChatGPT](#TODO)_
 - [TODO: going to export all my sessions from Cursor and put in a Gist linked here]

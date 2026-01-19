@@ -12,7 +12,7 @@ post: true
 date: 2026-01-21
 ---
 
-In my [previous post](./2026-01-19-from-science-finction-to-reality-you-can-build-difficult-things-now.md), I described building a parametric CAD editor with LLMs in about a week. This post is about the infrastructure choices that made that possible — and why they matter if you're building complex, collaborative, AI-integrated applications.
+In my [previous post](/blog/posts/2026-01-20-from-science-fiction-to-reality-you-can-build-difficult-things-now.md), I described building a parametric CAD editor with LLMs in about a week. This post is about the infrastructure choices that made that possible — and why they matter if you're building complex, collaborative, AI-integrated applications.
 
 The short version is that I wanted the "hard parts" to be CAD-specific (geometry, constraints, rebuild stability), not infrastructure fights. The stack needed to handle multi-user state, real-time sync, durable AI sessions, and concurrent edits—while getting out of the way so I could focus on the actual application.
 
