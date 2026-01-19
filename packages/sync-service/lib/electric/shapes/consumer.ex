@@ -527,9 +527,19 @@ defmodule Electric.Shapes.Consumer do
 
   defp write_fragment_to_storage(state, %TransactionFragment{changes: []}), do: state
 
-  defp write_fragment_to_storage(state, %TransactionFragment{changes: changes} = fragment) do
+  defp write_fragment_to_storage(
+         state,
+         %TransactionFragment{changes: changes, commit: commit} = fragment
+       ) do
     alias Electric.Shapes.Consumer.PendingTxn
-    %{shape: shape, writer: writer, pending_txn: pending} = state
+
+    %{
+      shape: shape,
+      writer: writer,
+      pending_txn: pending,
+      stack_id: stack_id,
+      shape_handle: shape_handle
+    } = state
 
     # Check for truncate operations - these require special handling
     if Enum.any?(changes, &match?(%Changes.TruncatedRelation{}, &1)) do
@@ -540,7 +550,24 @@ defmodule Electric.Shapes.Consumer do
       mark_for_removal(state)
     else
       xid = fragment.xid
-      {lines, total_size} = prepare_log_entries(changes, xid, shape)
+
+      # Apply Shape.convert_change to each change to:
+      # 1. Filter out changes not matching the shape's table
+      # 2. Apply WHERE clause filtering
+      # 3. Convert UPDATEs to INSERTs/DELETEs for move-in/move-out
+      # Note: For fragment-direct mode (no subquery dependencies), extra_refs is empty
+      converted_changes =
+        changes
+        |> Enum.flat_map(fn change ->
+          Shape.convert_change(shape, change,
+            stack_id: stack_id,
+            shape_handle: shape_handle,
+            extra_refs: {%{}, %{}}
+          )
+        end)
+        |> maybe_mark_last_change(commit)
+
+      {lines, total_size} = prepare_log_entries(converted_changes, xid, shape)
 
       if lines == [] do
         # All changes were filtered out (didn't match shape)
@@ -565,6 +592,17 @@ defmodule Electric.Shapes.Consumer do
         %{state | writer: writer, pending_txn: pending}
       end
     end
+  end
+
+  # Mark the last change in the list as last? when this is a commit fragment
+  # This is needed for clients to know when a transaction is complete
+  defp maybe_mark_last_change([], _commit), do: []
+  defp maybe_mark_last_change(changes, nil), do: changes
+
+  defp maybe_mark_last_change(changes, _commit) do
+    # This is a commit fragment, mark the last change as last?
+    {last, rest} = List.pop_at(changes, -1)
+    rest ++ [%{last | last?: true}]
   end
 
   defp maybe_complete_pending_txn(state, %TransactionFragment{commit: nil}), do: state
