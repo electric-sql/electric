@@ -2,9 +2,10 @@ defmodule Electric.Shapes.Consumer do
   use GenServer, restart: :temporary
 
   alias Electric.Shapes.Consumer.ChangeHandling
-  alias Electric.Shapes.Consumer.MoveIns
   alias Electric.Shapes.Consumer.InitialSnapshot
   alias Electric.Shapes.Consumer.MoveHandling
+  alias Electric.Shapes.Consumer.MoveIns
+  alias Electric.Shapes.Consumer.PendingTxn
   alias Electric.Shapes.Consumer.State
 
   import Electric.Shapes.Consumer.State, only: :macros
@@ -482,8 +483,6 @@ defmodule Electric.Shapes.Consumer do
   # Fragment-direct streaming: write fragments directly to storage without
   # buffering the complete transaction in memory.
   defp handle_fragment_direct(%TransactionFragment{} = fragment, state) do
-    alias Electric.Shapes.Consumer.PendingTxn
-
     # Skip if we've already processed this fragment (recovery case)
     if skip_fragment?(fragment, state) do
       Logger.debug(fn -> "Skipping already processed fragment xid=#{fragment.xid}" end)
@@ -520,7 +519,6 @@ defmodule Electric.Shapes.Consumer do
   defp maybe_start_pending_txn(state, %TransactionFragment{has_begin?: false}), do: state
 
   defp maybe_start_pending_txn(state, %TransactionFragment{has_begin?: true, xid: xid}) do
-    alias Electric.Shapes.Consumer.PendingTxn
     Logger.debug(fn -> "Starting pending transaction xid=#{xid}" end)
     %{state | pending_txn: PendingTxn.new(xid)}
   end
@@ -531,8 +529,6 @@ defmodule Electric.Shapes.Consumer do
          state,
          %TransactionFragment{changes: changes, commit: commit} = fragment
        ) do
-    alias Electric.Shapes.Consumer.PendingTxn
-
     %{
       shape: shape,
       writer: writer,
@@ -616,7 +612,6 @@ defmodule Electric.Shapes.Consumer do
          state,
          %TransactionFragment{commit: commit, xid: xid} = fragment
        ) do
-    alias Electric.Shapes.Consumer.PendingTxn
     %{pending_txn: pending, writer: writer, shape: shape, shape_handle: shape_handle} = state
 
     # If pending_txn is nil (edge case: commit-only fragment or recovery scenario),
