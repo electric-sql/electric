@@ -203,7 +203,7 @@ defmodule ElectricTelemetry.CallHomeReporter do
     |> Enum.map(fn path ->
       default =
         case state.summary_types[path] do
-          :summary -> %{min: 0, max: 0, mean: 0}
+          :summary -> %{min: 0, max: 0, mean: 0, median: 0, mode: nil}
           _ -> 0
         end
 

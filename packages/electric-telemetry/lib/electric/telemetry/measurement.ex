@@ -18,10 +18,18 @@ defmodule ElectricTelemetry.Measurement do
   estimated using the linear probabilistic counting formula based on the
   proportion of unset bits in the bitmap.
 
-  Summaries only contain min, max, and mean, and they are calculated by
-  keeping running tallies of min, max, count, and sum, which are updated
-  atomically using :ets.select_replace. This allows efficient computation
-  of summary statistics without storing all individual measurements.
+  Summaries are returned as maps with the following shape:
+
+      %{min: number, max: number, mean: number, median: 0, mode: nil}
+
+  Only `min`, `max`, and `mean` are calculated from actual measurements using
+  running tallies of min, max, count, and sum, which are updated atomically
+  using :ets.select_replace. This allows efficient computation of summary
+  statistics without storing all individual measurements.
+
+  The `median` and `mode` fields are included as placeholders (defaulting to
+  `0` and `nil` respectively) for compatibility with downstream consumers that
+  expect these fields in the summary structure.
 
   In order to implement a fixed-memory calculation of the median or other
   percentiles, approaches like a t-digest or P^2 quantile estimation could
@@ -153,7 +161,9 @@ defmodule ElectricTelemetry.Measurement do
           %{
             min: min,
             max: max,
-            mean: mean
+            mean: mean,
+            median: 0,
+            mode: nil
           }
         rescue
           ArithmeticError -> default
