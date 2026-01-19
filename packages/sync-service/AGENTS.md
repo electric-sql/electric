@@ -2,6 +2,30 @@
 
 > **Scope:** This file applies to `packages/sync-service` only.
 > **Goal:** help agents work on the Elixir sync service reliably.
+> **Related:** for Electric client usage and system-wide guidance, see
+> `../../AGENTS.md`.
+
+## What this service is
+
+Electric Sync is an Elixir service that tails Postgres logical replication and
+serves "Shapes" over HTTP to clients. It is read-path only: it does not accept
+write mutations; it streams subsets of Postgres tables defined by shapes.
+
+## Major subsystems and interactions (high level)
+
+- **HTTP API** (`lib/electric/plug/*`) serves shape requests and health checks.
+- **Shapes** (`lib/electric/shapes/*`) define what data is included and manage
+  shape lifecycle (creation, handles, checkpoints).
+- **Replication** (`lib/electric/replication/*`) consumes WAL and produces
+  change events for shapes.
+- **Shape cache** (`lib/electric/shape_cache/*`) persists per-shape data and
+  supports snapshot/changelog serving.
+- **Postgres integration** (`lib/electric/postgres/*`, `lib/pg_interop/*`)
+  handles connections, identifiers, and type handling.
+- **Telemetry** (`lib/electric/telemetry/*`) emits metrics/traces.
+
+Flow: HTTP request -> shape lookup/creation -> replication stream + cache ->
+snapshot/changelog response streaming to client.
 
 ## Commands (run from this directory)
 
@@ -50,4 +74,3 @@ iex -S mix      # run service locally
 - `ELECTRIC_INSECURE=true` is dev-only; prod requires `ELECTRIC_SECRET`.
 - The HTTP API is public unless gated by external auth; be careful when
   changing `lib/electric/plug/*`.
-
