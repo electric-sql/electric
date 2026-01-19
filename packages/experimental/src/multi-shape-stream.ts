@@ -130,7 +130,7 @@ export class MultiShapeStream<
   #lastUpToDateLsns: { [K in keyof TShapeRows]: bigint }
 
   readonly #subscribers = new Map<
-    number,
+    object,
     [
       (messages: MultiShapeMessages<TShapeRows>[]) => MaybePromise<void>,
       ((error: Error) => void) | undefined,
@@ -293,7 +293,7 @@ export class MultiShapeStream<
     ) => MaybePromise<void>,
     onError?: (error: FetchError | Error) => void
   ) {
-    const subscriptionId = Math.random()
+    const subscriptionId = {}
 
     this.#subscribers.set(subscriptionId, [callback, onError])
     if (!this.#started) this.#start()
