@@ -92,6 +92,19 @@ assert [
   `junit/`, `node_modules/`, `erl_crash.dump`.
 - Do not commit real secrets; `.env.*` is for local dev only.
 
+## Cross-package APIs
+
+`Electric.Application` exposes APIs for embedding sync-service in other apps:
+
+- `api/1` – returns a configured `Electric.Shapes.Api` for programmatic access;
+  used by **elixir-client** (`packages/elixir-client`) for embedded mode.
+- `api_plug_opts/1` – returns plug options for mounting the shapes router;
+  used by **Phoenix.Sync** (external Hex package).
+- `configuration/1` – returns full config for `StackSupervisor`.
+
+These are marked `@doc false` but are required public APIs. Changes here can
+break downstream consumers.
+
 ## Security/ops notes
 
 - `ELECTRIC_INSECURE=true` is dev-only; prod requires `ELECTRIC_SECRET`.
