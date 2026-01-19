@@ -40,7 +40,8 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb do
     true =
       :ets.insert(
         WriteBuffer.pending_table_name(stack_id),
-        {{:add, shape_handle}, {seq, shape_binary, comparable_binary, shape_hash, relations}, false}
+        {{:add, shape_handle}, {seq, shape_binary, comparable_binary, shape_hash, relations},
+         false}
       )
 
     {:ok, shape_hash}
@@ -48,33 +49,9 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb do
 
   def remove_shape(stack_id, shape_handle) when is_stack_id(stack_id) do
     table = WriteBuffer.pending_table_name(stack_id)
-
-    case :ets.lookup(table, {:add, shape_handle}) do
-      [{_key, _data, false = _flushing}] ->
-        :ets.delete(table, {:add, shape_handle})
-        :ets.delete(table, {:snapshot_started, shape_handle})
-        :ets.delete(table, {:snapshot_complete, shape_handle})
-        :ok
-
-      [{_key, _data, true = _flushing}] ->
-        # Being flushed to SQLite - must queue remove since shape will exist after flush
-        seq = WriteBuffer.timestamp()
-        true = :ets.insert(table, {{:remove, shape_handle}, {seq}, false})
-        :ok
-
-      [] ->
-        case checkout!(stack_id, :handle_exists?, fn %Connection{} = conn ->
-               Query.handle_exists?(conn, shape_handle)
-             end) do
-          true ->
-            seq = WriteBuffer.timestamp()
-            true = :ets.insert(table, {{:remove, shape_handle}, {seq}, false})
-            :ok
-
-          false ->
-            {:error, "No shape matching #{inspect(shape_handle)}"}
-        end
-    end
+    ts = WriteBuffer.timestamp()
+    true = :ets.insert(table, {{:remove, shape_handle}, {ts}, false})
+    :ok
   end
 
   def handle_for_shape(stack_id, %Shape{} = shape) when is_stack_id(stack_id) do
@@ -99,8 +76,11 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb do
 
   def shape_for_handle(stack_id, shape_handle) when is_stack_id(stack_id) do
     case lookup_buffered_shape(stack_id, shape_handle) do
-      {:ok, shape} -> {:ok, shape}
-      :not_found -> checkout!(stack_id, :shape_for_handle, &Query.shape_for_handle(&1, shape_handle))
+      {:ok, shape} ->
+        {:ok, shape}
+
+      :not_found ->
+        checkout!(stack_id, :shape_for_handle, &Query.shape_for_handle(&1, shape_handle))
     end
   end
 
@@ -121,8 +101,14 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb do
 
   def shape_handles_for_relations(stack_id, relations) when is_stack_id(stack_id) do
     with {:ok, sqlite_handles} <-
-           checkout!(stack_id, :shape_handles_for_relations, &Query.shape_handles_for_relations(&1, relations)) do
-      {buffered_handles, pending_removes} = get_buffered_handles_for_relations(stack_id, relations)
+           checkout!(
+             stack_id,
+             :shape_handles_for_relations,
+             &Query.shape_handles_for_relations(&1, relations)
+           ) do
+      {buffered_handles, pending_removes} =
+        get_buffered_handles_for_relations(stack_id, relations)
+
       filtered_sqlite = Enum.reject(sqlite_handles, &MapSet.member?(pending_removes, &1))
       {:ok, (buffered_handles ++ filtered_sqlite) |> Enum.uniq() |> Enum.sort()}
     end
@@ -208,8 +194,11 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb do
 
       [] ->
         case :ets.lookup(table, {:snapshot_complete, shape_handle}) do
-          [_] -> {:ok, true}
-          [] -> checkout!(stack_id, :snapshot_started?, &Query.snapshot_started?(&1, shape_handle))
+          [_] ->
+            {:ok, true}
+
+          [] ->
+            checkout!(stack_id, :snapshot_started?, &Query.snapshot_started?(&1, shape_handle))
         end
     end
   end

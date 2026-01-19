@@ -31,6 +31,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
 
   alias Electric.ShapeCache.ShapeStatus.ShapeDb.Connection
   alias Electric.ShapeCache.ShapeStatus.ShapeDb.Query
+  alias Electric.Telemetry.OpenTelemetry
 
   import Electric, only: [is_stack_id: 1]
 
@@ -63,6 +64,10 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
     stack_id = Keyword.fetch!(opts, :stack_id)
     manual_flush_only = Keyword.get(opts, :manual_flush_only, false)
     table = pending_table_name(stack_id)
+
+    Process.set_label({:shape_db_write_buffer, stack_id})
+    Logger.metadata(stack_id: stack_id)
+    Electric.Telemetry.Sentry.set_tags_context(stack_id: stack_id)
 
     :ets.new(table, [
       :named_table,
@@ -103,7 +108,12 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
     entries = mark_and_collect_entries(table, @max_drain_per_cycle)
 
     if entries != [] do
-      do_batch_write(stack_id, entries)
+      OpenTelemetry.with_span(
+        "shape_db.write_buffer.flush",
+        [entry_count: length(entries)],
+        stack_id,
+        fn -> do_batch_write(stack_id, entries) end
+      )
 
       Enum.each(entries, fn {key, _data} ->
         :ets.select_delete(table, [{{key, :_, true}, [], [true]}])
