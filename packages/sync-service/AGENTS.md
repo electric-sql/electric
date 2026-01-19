@@ -59,12 +59,12 @@ iex -S mix      # run service locally
 
 ## Tests
 
-- Unit tests live in `test/`; integration tests in `test/integration/`.
+- Unit tests live in `test/`;
 - Run a single file: `mix test test/path/to_test.exs`.
-- Integration tests expect local docker services from `mix start_dev`.
-- Prefer a single assert with pattern matching for returned structures when it
-  keeps the test clear; avoid multiple asserts on individual elements unless it
-  improves readability.
+- Tests expect local docker services from `mix start_dev`.
+
+### Writing tests
+
 - Add higher-level coverage as appropriate (pick the level that best proves the change):
   - Router tests: `test/electric/plug/router_test.exs` and
     `test/electric/plug/low_privilege_router_test.exs` exercise the service as
@@ -73,6 +73,10 @@ iex -S mix      # run service locally
     is important when client logic is non-trivial (e.g., subqueries/tags).
   - System-level Lux tests live in `../../integration-tests/` and are slow but
     validate the full stack.
+
+- Prefer a single assert with pattern matching for returned structures when it
+  keeps the test clear; avoid multiple asserts on individual elements unless it
+  improves readability.
 
 ```elixir
 # Prefer a single, structural assert:
