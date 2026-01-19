@@ -735,6 +735,15 @@ iframe {
   }
 }
 
+/* Hero headline inline display - make "Sync" and "with your stack" flow together */
+.VPHomeHero .main .name,
+.VPHomeHero .main .text {
+  display: inline;
+}
+.VPHomeHero .main .name::after {
+  content: ' ';
+}
+
 .VPFeatures {
   padding-top: 15px !important;
   padding-bottom: 45px;
