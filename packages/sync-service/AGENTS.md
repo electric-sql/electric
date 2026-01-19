@@ -65,6 +65,14 @@ iex -S mix      # run service locally
 - Prefer a single assert with pattern matching for returned structures when it
   keeps the test clear; avoid multiple asserts on individual elements unless it
   improves readability.
+- Add higher-level coverage as appropriate (pick the level that best proves the change):
+  - Router tests: `test/electric/plug/router_test.exs` and
+    `test/electric/plug/low_privilege_router_test.exs` exercise the service as
+    a whole.
+  - Client integration tests: `test/integration/` uses an example client and
+    is important when client logic is non-trivial (e.g., subqueries/tags).
+  - System-level Lux tests live in `../../integration-tests/` and are slow but
+    validate the full stack.
 
 ```elixir
 # Prefer a single, structural assert:
