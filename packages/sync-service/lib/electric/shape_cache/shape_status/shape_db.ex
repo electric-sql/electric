@@ -291,11 +291,17 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb do
     pattern = {{:add, :"$1"}, {:_, :_, comparable_binary, :_, :_}, :_}
 
     case :ets.match(table, pattern) do
-      [[handle]] ->
-        if :ets.member(table, {:remove, handle}), do: :not_found, else: {:ok, handle}
-
       [] ->
         :not_found
+
+      matches ->
+        matches
+        |> Enum.map(fn [handle] -> handle end)
+        |> Enum.find(fn handle -> not :ets.member(table, {:remove, handle}) end)
+        |> case do
+          nil -> :not_found
+          handle -> {:ok, handle}
+        end
     end
   end
 
