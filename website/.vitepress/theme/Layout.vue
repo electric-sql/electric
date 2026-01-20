@@ -34,7 +34,7 @@ const { hasSidebar } = useSidebar()
             <img src="https://vuejs.org/logo.svg" alt="Vue.js logo" style="width: 20px; height: 20px; vertical-align: middle; margin-right: 8px;" />
           </template>
           <template #title>
-            <span style="font-weight: bold; text-decoration: none; background: -webkit-linear-gradient(315deg,#42d392 25%,#647eff); background-clip: border-box; background-clip: text; -webkit-background-clip: text; -webkit-text-fill-color: transparent;">Introducing Vue Composables</span>
+            <span class="vue-text-gradient">Introducing Vue Composables</span>
           </template>
         </ReleaseBanner>
       </template>

@@ -979,3 +979,14 @@ ul.demo-actions li .VPButton {
     margin-bottom: 1rem;
   }
 }
+
+
+.vue-text-gradient {
+	font-weight: bold;
+	text-decoration: none;
+	background: -webkit-linear-gradient(315deg, #42d392 25%, #647eff);
+	background-clip: border-box;
+	background-clip: text;
+	-webkit-background-clip: text;
+	-webkit-text-fill-color: transparent;
+}

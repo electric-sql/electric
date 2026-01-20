@@ -1,4 +1,5 @@
 ---
+layout: StickyHeader
 title: Vue
 description: >-
   Integration guide for using ElectricSQL with Vue 3 applications.
@@ -6,11 +7,8 @@ deployed_url: https://basic.examples.electric-sql.com
 source_url: https://github.com/electric-sql/electric/tree/main/examples/vue
 image: /img/integrations/vue.svg
 example: true
+titleClass: 'vue-text-gradient'
 ---
-
-<img src="/img/integrations/vue.svg" class="product-icon" />
-
-# Vue
 
 Vue is a progressive JavaScript framework for building user interfaces with a focus on declarative rendering and component composition.
 
@@ -289,4 +287,3 @@ const isLoading = computed(() => users.isLoading.value || posts.isLoading.value)
 - Move complex data transformations to computed properties
 
 You can read more on Shape Performance [here](/docs/guides/shapes).
-
