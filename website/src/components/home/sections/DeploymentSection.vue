@@ -87,12 +87,8 @@ const secondaryOptions = [
   position: relative;
   display: block;
   border-radius: 12px;
-  background: linear-gradient(
-    135deg,
-    rgba(101, 96, 255, 0.15) 0%,
-    rgba(101, 96, 255, 0.05) 100%
-  );
-  border: 1px solid rgba(101, 96, 255, 0.3);
+  background: var(--vp-c-bg-soft);
+  border: 1px solid rgba(42, 44, 52, 0.5);
   overflow: hidden;
   padding: 40px;
 }
@@ -126,9 +122,9 @@ const secondaryOptions = [
 
 .cloud-actions {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
-  gap: 12px;
+  gap: 20px;
   margin-top: 8px;
 }
 
