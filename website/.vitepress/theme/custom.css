@@ -167,6 +167,9 @@
 .vpi-social-tanstack {
   --icon: url('/img/icons/tanstack-social.svg') !important;
 }
+.vpi-social-durable-streams {
+  --icon: url('/img/icons/durable-streams-social.svg') !important;
+}
 
 .vpi-social-linkedin {
   --icon: url('/img/icons/linkedin.svg') !important;

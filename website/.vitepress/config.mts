@@ -378,6 +378,7 @@ export default defineConfig({
     },
     siteTitle: false,
     socialLinks: [
+      { icon: 'durable-streams', link: 'https://github.com/electric-sql/durable-streams' },
       { icon: 'tanstack', link: 'https://tanstack.com/db' },
       { icon: 'pglite', link: 'https://pglite.dev' },
       { icon: 'x', link: 'https://x.com/ElectricSQL' },
