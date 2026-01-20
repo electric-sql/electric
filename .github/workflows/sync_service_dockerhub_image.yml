@@ -114,11 +114,27 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+      - name: Create a temporary per-platform Dockerfile (CI only)
+        run: |
+          set -euo pipefail
+
+          source_dockerfile="packages/sync-service/Dockerfile"
+
+          # Make the Dockerfile path unique per platform so Blacksmith uses separate sticky
+          # disks for image layer caching.
+          # Without this, caches produced by builds for different platforms trample each other
+          # and only the last written cache is persistent for subsequent builds.
+          dst="/tmp/sync-service.Dockerfile.${{ matrix.platform_id }}"
+          { echo "# blacksmith-cache-scope: sync-service/${{ matrix.platform_id }}"; cat "$source_dockerfile"; } > "$dst"
+
+          echo "SYNC_SERVICE_DOCKERFILE=$dst" >> "$GITHUB_ENV"
+
       - name: Build and push by digest
         id: build
         uses: useblacksmith/build-push-action@v2
         with:
           context: packages/sync-service
+          file: ${{ env.SYNC_SERVICE_DOCKERFILE }}
           build-contexts: |
             electric-telemetry=packages/electric-telemetry
           build-args: |
