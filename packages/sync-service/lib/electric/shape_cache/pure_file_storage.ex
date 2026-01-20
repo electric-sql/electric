@@ -1112,7 +1112,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
     end
   end
 
-  defp stream_main_log(min_offset, max_offset, %__MODULE__{} = opts) do
+  defp stream_main_log(min_offset, max_offset, %__MODULE__{} = opts, retried? \\ false) do
     storage_meta(
       ets_table: ets,
       last_persisted_offset: last_persisted,
@@ -1140,18 +1140,34 @@ defmodule Electric.ShapeCache.PureFileStorage do
         []
 
       is_log_offset_lte(last_persisted, min_offset) ->
-        read_range_from_ets_cache(ets, min_offset, upper_read_bound)
+        # Pure ETS read case
+        case read_range_from_ets_cache(ets, min_offset, upper_read_bound) do
+          [] when not retried? ->
+            # ETS might have been cleared by a flush - retry with fresh metadata.
+            # After a flush, last_persisted is updated BEFORE ETS is cleared,
+            # so retry will read from disk instead.
+            stream_main_log(min_offset, max_offset, opts, true)
+
+          data ->
+            data
+        end
 
       is_log_offset_lte(upper_read_bound, last_persisted) ->
         stream_from_disk(opts, min_offset, upper_read_bound, boundary_info)
 
       true ->
+        # Mixed disk + ETS case
         # Because ETS may be cleared by a flush in a parallel process, we're reading it out into memory.
         # It's expected to be fairly small in the worst case, up 64KB
-        upper_range = read_range_from_ets_cache(ets, last_persisted, upper_read_bound)
+        case read_range_from_ets_cache(ets, last_persisted, upper_read_bound) do
+          [] when not retried? ->
+            # ETS might have been cleared by a flush - retry with fresh metadata
+            stream_main_log(min_offset, max_offset, opts, true)
 
-        stream_from_disk(opts, min_offset, last_persisted, boundary_info)
-        |> Stream.concat(upper_range)
+          upper_range ->
+            stream_from_disk(opts, min_offset, last_persisted, boundary_info)
+            |> Stream.concat(upper_range)
+        end
     end
   end
 
