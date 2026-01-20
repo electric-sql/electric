@@ -216,8 +216,10 @@ defmodule Electric.Shapes.Consumer.StateTest do
           {"flag = true AND parent_id NOT IN (SELECT id FROM parent)", true},
 
           # Multiple subqueries with NOT
-          {"parent_id NOT IN (SELECT id FROM parent) AND id IN (SELECT id FROM grandparent)", true},
-          {"parent_id IN (SELECT id FROM parent) AND id NOT IN (SELECT id FROM grandparent)", true},
+          {"parent_id NOT IN (SELECT id FROM parent) AND id IN (SELECT id FROM grandparent)",
+           true},
+          {"parent_id IN (SELECT id FROM parent) AND id NOT IN (SELECT id FROM grandparent)",
+           true},
 
           # Double NOT (cancels out, but still has NOT wrapping subquery in AST)
           {"NOT(NOT(parent_id IN (SELECT id FROM parent)))", true},
