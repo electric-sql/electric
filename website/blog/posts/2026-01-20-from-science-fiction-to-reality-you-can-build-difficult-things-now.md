@@ -39,16 +39,16 @@ In **just two weeks**, I built [SolidType](https://github.com/samwillis/solidtyp
 
 This post isn't about agents replacing engineers, it's about a phase change in what's possible. Problems that required teams are now feasible for a solo developer, and projects that required months or years now take weeks. The constraint is no longer "can it be built?" but "can you design the right boundaries and feedback loops?"
 
-*This is part 1 of a two part series. In this post, I wanted to share my build process and what I learned from the experience. In the next post, I'll focus on the infrastructure that made it possible.*
+*This is part 1 of a two-part series. In this post, I wanted to share my build process and what I learned from the experience. In the next post, I'll focus on the infrastructure that made it possible.*
 
-<!-- *This is part 1 of a part 2 series. In this post, I wanted to share my build process and what I learned from the experience. Then, in the [follow-up post](/blog/posts/2026-01-21-building-real-time-collaborative-cad-with-electric-and-durable-streams.md), I focus on the infrastructure that made it possible.* -->
+<!-- *This is part 1 of a two-part series. In this post, I wanted to share my build process and what I learned from the experience. Then, in the [follow-up post](/blog/posts/2026-01-21-building-real-time-collaborative-cad-with-electric-and-durable-streams.md), I focus on the infrastructure that made it possible.* -->
 
 :::info
 SolidType is open source: [github.com/samwillis/solidtype](https://github.com/samwillis/solidtype)
 
 My ChatGPT sessions from building this:
 
-- [Initial chat with ChatGPT arround the idea](https://chatgpt.com/share/6960f2a8-6abc-8005-aa4d-9be2d95f8046)
+- [Initial chat with ChatGPT around the idea](https://chatgpt.com/share/6960f2a8-6abc-8005-aa4d-9be2d95f8046)
 - [Development of the implementation plan with ChatGPT](https://chatgpt.com/share/6960f377-0de8-8005-adf5-cd185b61e9d7)
 - [Investigations into topological naming](https://chatgpt.com/share/69610538-ab28-8005-8317-297d3afd9a60)
 
@@ -70,7 +70,7 @@ The established players — SolidWorks, Fusion 360, OnShape, and even FreeCAD �
 
 **Constraint solving**: Sketches need geometric constraints (parallel, perpendicular, coincident, distance, equal length) solved numerically in real-time as users drag geometry. This is a classic constraint satisfaction problem, where you're minimising residuals across a system of nonlinear equations while the user expects sub-50ms convergence. If you get the solver wrong then sketches fail to converge on a stable state resulting in entities jumping around, or they over-constrain trivially solvable geometry.
 
-**3D visualization pipeline**: The B-Rep geometry from the kernel needs to be meshed (tessellated into triangles), uploaded to the GPU, kept in sync with model changes, and handle the interactive selection of faces, edges, and vertices. This includes managing level-of-detail, handling large assemblies, and providing visual feedback for constraints and dimensions.
+**3D visualisation pipeline**: The B-Rep geometry from the kernel needs to be meshed (tessellated into triangles), uploaded to the GPU, kept in sync with model changes, and handle the interactive selection of faces, edges, and vertices. This includes managing level-of-detail, handling large assemblies, and providing visual feedback for constraints and dimensions.
 
 **Parametric rebuild**: The entire feature tree has to regenerate correctly when any parameter changes, maintaining dependencies and propagating updates without accumulating numerical errors or breaking references.
 
@@ -168,7 +168,7 @@ This was collaborative engineering where the collaborator happens to be an LLM, 
 
 ## Engineering discipline doesn't disappear — it only shifts
 
-I read very little code, choosing instead to work at 10-000 feet: Is the system well-structured? Are responsibilities clean? Is the plan being followed? Are we staying inside constraints?
+I read very little code, choosing instead to work at 10k feet: Is the system well-structured? Are responsibilities clean? Is the plan being followed? Are we staying inside constraints?
 
 I used the LLM as both mirror and advisor: to explain the architecture back to me, to justify trade-offs, to propose safer options, and to critique implementation against docs and invariants.
 
