@@ -12,39 +12,53 @@ post: true
 date: 2026-01-20
 ---
 
-The simple truth is that it's now possible to build 'difficult things' at speed. Two years ago, this project wouldn't have been seen as not much more than science fiction; one year ago, it would have taken months; but by late 2025, it only took a week.
-
-When a telescope is being commissioned, there's a moment known as "first light", which is the first time a real image is captured. Even though the image might be blurry or imperfect, it proves that the whole system works end-to-end.
-
-On December 20, 2025, I had my own "first light" moment. It confirmed not only that this project was actually possible, but also that the way we build has fundamentally changed forever.
-
-My project, [SolidType](https://github.com/samwillis/solidtype), is a browser-based parametric CAD editor with sketching, a real B-Rep kernel, collaboration features such as presence and follow mode, and AI that can generate geometry through tool calls against the same model that humans edit. It's roughly **70k lines of TypeScript**, and **coding agents wrote essentially all of it**.
-
-This isn't about agents replacing engineers, it's about a phase change in what's possible. Problems that required teams are now solo-feasible, and projects that required months now take weeks. The constraint is no longer "can it be built?" but "can you design the right boundaries and feedback loops?"
-
-*Today, I wanted to share my build process and what I learned from the experience. Then, in the next post (coming soon), I'll focus on the infrastructure that made it possible.*
-
-<!-- Today, I wanted to share my build process and what I learned from the experience. Then, in the [follow-up post](/blog/posts/2026-01-21-building-real-time-collaborative-cad-with-electric-and-durable-streams.md), I focus on the infrastructure that made it possible. -->
-
-_Video slot #1: sketch a rough profile and extrude it._
-
-## Years in the making
-
-Four years ago I left [a Hacker News comment](https://news.ycombinator.com/item?id=30235385) describing a "real-time collaborative parametric CAD app using CRDTs... combining OpenCascade compiled to WASM with Yjs... a kind of Figma but for 3D CAD."
+Four years ago I left [a Hacker News comment](https://news.ycombinator.com/item?id=30235385) describing a _"real-time collaborative parametric CAD app using CRDTs... combining OpenCascade compiled to WASM with Yjs... a kind of Figma but for 3D CAD."_
 
 <figure>
   <img src="/img/blog/from-science-fiction-to-reality-you-can-build-difficult-things-now/hn-comment.png" alt="Hacker News comment" />
 </figure>
 
-Before LLMs, this was out of reach. Not just the building of it, but even doing the research to get started. I had enough CAD background to understand how deep the technical challenges went, what the concepts were, and what I needed to learn more about, but I had nowhere near enough time to tackle any of it. In late-2025 LLMs changed the equation; not by making CAD easier, but by making it possible to navigate the complexity without spending months on each subsystem.
+Before LLMs, this was completely out of my reach. Not just the building of it, but even doing the research to get started would have been a substantial undertaking. I had enough CAD background to know where to start, but I had nowhere near enough time to tackle any of it.  I thought it was never going to be possible to disrupt the big CAD companies.
 
-The established players — SolidWorks, Fusion 360, OnShape, and even FreeCAD — represent decades of accumulated engineering. The technical moats are all too real: boundary-representation geometry kernels, topological naming across rebuilds, constraint solvers, and robust Boolean operations. These aren't just weekend projects for the vaguely interested.
+In late-2025 LLMs changed the equation. The simple truth is that it's now possible to build 'difficult things' at speed, on your own.
+
+Over the holiday period I set out to see if, with the help of coding agents, I could build the editor I'd described on Hacker News.
+
+When a telescope is being commissioned, there's a moment known as "first light", which is the first time a real image is captured. Even though the image might be blurry or imperfect, it proves that the whole system works end-to-end.
+
+On December 20, 2025, I had my own "first light" moment. It confirmed not only that this project was actually possible, but also that the way we build has fundamentally changed forever.
+
+<!-- <video class="w-full" controls poster="/videos/blog/from-science-fiction-to-reality-you-can-build-difficult-things-now/solidtype-sketch-and-extrude.jpg"> -->
+<figure>
+  <video class="w-full" controls>
+    <source src="/videos/blog/from-science-fiction-to-reality-you-can-build-difficult-things-now/solidtype1.mp4" />
+  </video>
+  <figcaption>First light: the first time I saw the model build itself.</figcaption>
+</figure>
+
+In **just two weeks**, I built [SolidType](https://github.com/samwillis/solidtype), a browser-based parametric CAD editor with sketching, a real B-Rep kernel, collaboration features such as presence and follow mode, and AI that can generate geometry through tool calls against the same model that humans edit. It's roughly **70k lines of TypeScript**, and **coding agents wrote essentially all of it**.
+
+This post isn't about agents replacing engineers, it's about a phase change in what's possible. Problems that required teams are now feasible for a solo developer, and projects that required months or years now take weeks. The constraint is no longer "can it be built?" but "can you design the right boundaries and feedback loops?"
+
+*This is part 1 of a two part series. In this post, I wanted to share my build process and what I learned from the experience. In the next post, I'll focus on the infrastructure that made it possible.*
+
+<!-- *This is part 1 of a part 2 series. In this post, I wanted to share my build process and what I learned from the experience. Then, in the [follow-up post](/blog/posts/2026-01-21-building-real-time-collaborative-cad-with-electric-and-durable-streams.md), I focus on the infrastructure that made it possible.* -->
+
+:::info
+SolidType is open source: [github.com/samwillis/solidtype](https://github.com/samwillis/solidtype)
+
+My ChatGPT sessions from building this:
+
+- [Initial chat with ChatGPT arround the idea](https://chatgpt.com/share/6960f2a8-6abc-8005-aa4d-9be2d95f8046)
+- [Development of the implementation plan with ChatGPT](https://chatgpt.com/share/6960f377-0de8-8005-adf5-cd185b61e9d7)
+- [Investigations into topological naming](https://chatgpt.com/share/69610538-ab28-8005-8317-297d3afd9a60)
+:::
 
 ## Why CAD is a genuine test
 
 CAD isn't a CRUD app. It isn't just about moving state around.
 
-A parametric CAD system has to solve a cluster of genuinely difficult problems:
+The established players — SolidWorks, Fusion 360, OnShape, and even FreeCAD — represent decades of accumulated engineering. The technical moats are all too real. A parametric CAD system has to solve a cluster of genuinely difficult problems:
 
 **Geometric kernel complexity**: You need a boundary-representation (B-Rep) engine that can construct, intersect, trim, and Boolean-combine 3D solids reliably. This is computational geometry at industrial strength, and the established kernels — Parasolid, ACIS, OpenCascade — represent 20-30 years of continuous development.
 
@@ -116,7 +130,13 @@ This was the pivot point. I'd proven LLM-assisted kernel work could get surprisi
 
 So I made a trade-off: **use an established kernel** and focus on the _system_ around it instead.
 
-_Video slot #2: reproduce the "angled cut" failure, then show it working after the pivot._
+<!-- <video class="w-full" controls poster="/videos/blog/from-science-fiction-to-reality-you-can-build-difficult-things-now/solidtype2.jpg"> -->
+<figure>
+  <video class="w-full" controls>
+    <source src="/videos/blog/from-science-fiction-to-reality-you-can-build-difficult-things-now/solidtype2.mp4" />
+  </video>
+  <figcaption>The angle cut failure that prompted the pivot to OpenCascade.</figcaption>
+</figure>
 
 ## The OpenCascade pivot: the trade-off that unlocked everything
 
@@ -181,7 +201,13 @@ _I'm writing a companion post on the sync architecture that will be published so
 
 <!-- I wrote a companion post on the sync architecture, Durable Streams implementation, AI orchestration patterns, and why these infrastructure choices mattered: **[Building real-time collaborative CAD with Electric and Durable Streams](/blog/posts/2026-01-21-building-real-time-collaborative-cad-with-electric-and-durable-streams.md)** -->
 
-_Video slot #3: two browsers showing shared edits + presence + follow mode._
+<!-- <video class="w-full" controls poster="/videos/blog/from-science-fiction-to-reality-you-can-build-difficult-things-now/solidtype3.jpg"> -->
+<figure>
+  <video class="w-full" controls>
+  <source src="/videos/blog/from-science-fiction-to-reality-you-can-build-difficult-things-now/solidtype3.mp4" />
+  </video>
+  <figcaption>Collaboration: multiple users can see the same model, edit it, and follow each other in real-time.</figcaption>
+</figure>
 
 ## Integrating AI with Durable Streams
 
@@ -203,11 +229,17 @@ But that's an implementation choice. The runtime could just as easily be on a se
 
 The first moment where it felt "real" wasn't from a clever response, but something much more concrete: I typed, "Draw a sketch on the XY plane with a circle of radius 20mm" and it _did it_, producing geometry that I could see, edit, undo, and share. It wasn't a description, or code; it was actual CAD primitives in the model, indistinguishable from manual creation.
 
-The full pattern of how AI sessions work with Durable Streams, how tools execute against the same model humans edit, and why this enables collaborative AI, will be covered in detail in Part 2**.
+_The full pattern of how AI sessions work with Durable Streams, how tools execute against the same model humans edit, and why this enables collaborative AI, will be covered in detail in Part 2._
 
-<!-- The full pattern of how AI sessions work with Durable Streams, how tools execute against the same model humans edit, and why this enables collaborative AI, is be covered in detail in **[Part 2](/blog/posts/2026-01-21-building-real-time-collaborative-cad-with-electric-and-durable-streams.md)**. -->
+<!-- _The full pattern of how AI sessions work with Durable Streams, how tools execute against the same model humans edit, and why this enables collaborative AI, is be covered in detail in **[Part 2](/blog/posts/2026-01-21-building-real-time-collaborative-cad-with-electric-and-durable-streams.md)._ -->
 
-_Video slot #4: AI creates a sketch, then extrudes it._
+<!-- <video class="w-full" controls poster="/videos/blog/from-science-fiction-to-reality-you-can-build-difficult-things-now/solidtype4.jpg"> -->
+<figure>
+  <video class="w-full" controls>
+  <source src="/videos/blog/from-science-fiction-to-reality-you-can-build-difficult-things-now/solidtype4.mp4" />
+  </video>
+  <figcaption>AI creates a part in a project, then adds a sketch and extrudes it.</figcaption>
+</figure>
 
 ## The reality check: CSS and taste
 
@@ -269,14 +301,6 @@ Build the rails. The agent will run on them.
 
 ---
 
-**Want the technical deep-dive?** I wrote a companion post on the infrastructure that made this possible: **[Building real-time collaborative CAD with Electric and Durable Streams](/blog/posts/2026-01-21-building-real-time-collaborative-cad-with-electric-and-durable-streams.md)** — covering the sync architecture, Durable Streams implementation, AI orchestration in a SharedWorker, and code patterns worth stealing.
+<!-- **Want the technical deep-dive?** I wrote a companion post on the infrastructure that made this possible: **[Building real-time collaborative CAD with Electric and Durable Streams](/blog/posts/2026-01-21-building-real-time-collaborative-cad-with-electric-and-durable-streams.md)** — covering the sync architecture, Durable Streams implementation, AI orchestration in a SharedWorker, and code patterns worth stealing. -->
 
----
-
-_SolidType is open source: [github.com/samwillis/solidtype](https://github.com/samwillis/solidtype)_
-
-_My AI sessions from building this:_
-
-- _[Initial chat with ChatGPT arround the idea](#TODO)_
-- _[Development of the implementation plan with ChatGPT](#TODO)_
-- [TODO: going to export all my sessions from Cursor and put in a Gist linked here]
+**Want the technical deep-dive?** Stay tuned, I'm writing a companion post on the infrastructure that made this possible: covering the sync architecture, Durable Streams implementation, AI orchestration in a SharedWorker, and code patterns worth stealing.
