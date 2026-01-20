@@ -1020,7 +1020,7 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
 
       # Patch LogOffset.min to signal when the first read starts
       # This gives us a synchronization point during the read
-      Repatch.patch(LogOffset, :min, fn a, b ->
+      Repatch.patch(LogOffset, :min, [mode: :shared], fn a, b ->
         count = Agent.get_and_update(call_counter, fn n -> {n, n + 1} end)
 
         # On first call (during first read attempt), update metadata to fresh
@@ -1112,7 +1112,7 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
       # Insert stale metadata first
       :ets.insert(stack_ets, stale_meta)
 
-      Repatch.patch(LogOffset, :min, fn a, b ->
+      Repatch.patch(LogOffset, :min, [mode: :shared], fn a, b ->
         count = Agent.get_and_update(call_counter, fn n -> {n, n + 1} end)
 
         # On first call, update metadata to fresh but DON'T clear ETS yet
