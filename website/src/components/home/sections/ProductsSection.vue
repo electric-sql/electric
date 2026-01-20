@@ -20,7 +20,7 @@ const products = [
   },
   {
     slug: 'durable-streams',
-    icon: '/img/home/sync-targets/worker.svg',
+    icon: '/img/icons/durable-streams.svg',
     title: 'Durable Streams',
     body: `Resumable streaming protocol for AI responses and multi-step workflows.`,
     href: '/products/durable-streams',
