@@ -200,10 +200,6 @@ defmodule Electric.ShapeCache.ShapeStatus do
     end)
   end
 
-  def snapshot_complete?(stack_id, shape_handle) do
-    ShapeDb.snapshot_complete?(stack_id, shape_handle)
-  end
-
   @doc """
   Updates the last read time for the given shape to the current time.
   """
@@ -300,7 +296,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
     ShapeDb.reduce_shape_meta(
       stack_id,
       :ets.whereis(shape_meta_table(stack_id)),
-      fn {handle, hash, snapshot_started}, table ->
+      fn {handle, hash, snapshot_started, _snapshot_complete}, table ->
         true = :ets.insert(table, {handle, hash, snapshot_started, start_time})
         table
       end

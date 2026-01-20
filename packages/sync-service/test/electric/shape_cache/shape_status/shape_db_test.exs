@@ -183,33 +183,22 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDbTest do
         # Mark some shapes as snapshot_started
         if rem(n, 2) == 0 do
           :ok = ShapeDb.mark_snapshot_started(ctx.stack_id, handle)
-          {handle, hash, true}
+          {handle, hash, true, false}
         else
-          {handle, hash, false}
+          {handle, hash, false, false}
         end
       end)
+
+    # reduce_shape_meta reads snapshot state from SQLite, so flush first
+    ShapeDb.WriteBuffer.flush_sync(ctx.stack_id)
 
     assert ShapeDb.reduce_shape_meta(
              ctx.stack_id,
              MapSet.new(),
-             fn {handle, hash, snapshot_started}, acc ->
-               MapSet.put(acc, {handle, hash, snapshot_started})
+             fn {handle, hash, snapshot_started, snapshot_complete}, acc ->
+               MapSet.put(acc, {handle, hash, snapshot_started, snapshot_complete})
              end
            ) == MapSet.new(expected)
-  end
-
-  test "shape_hash/2", ctx do
-    shape1 = Shape.new!("items", inspector: @stub_inspector)
-    handle1 = "handle-1"
-    {:ok, hash1} = ShapeDb.add_shape(ctx.stack_id, shape1, handle1)
-    shape2 = Shape.new!("items", inspector: @stub_inspector, where: "id = 1")
-    handle2 = "handle-2"
-    {:ok, hash2} = ShapeDb.add_shape(ctx.stack_id, shape2, handle2)
-
-    assert {:ok, ^hash1} = ShapeDb.shape_hash(ctx.stack_id, handle1)
-    assert {:ok, ^hash2} = ShapeDb.shape_hash(ctx.stack_id, handle2)
-
-    assert :error = ShapeDb.shape_hash(ctx.stack_id, "no-handle")
   end
 
   test "count_shapes/1", ctx do
@@ -232,20 +221,16 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDbTest do
   end
 
   test "mark_snapshot_started/2", ctx do
-    refute ShapeDb.snapshot_started?(ctx.stack_id, "no-such-handle")
     assert :error = ShapeDb.mark_snapshot_started(ctx.stack_id, "no-such-handle")
 
     shape1 = Shape.new!("items", inspector: @stub_inspector)
     handle1 = "handle-1"
     {:ok, _hash1} = ShapeDb.add_shape(ctx.stack_id, shape1, handle1)
 
-    refute ShapeDb.snapshot_started?(ctx.stack_id, handle1)
-    :ok = ShapeDb.mark_snapshot_started(ctx.stack_id, handle1)
-    assert ShapeDb.snapshot_started?(ctx.stack_id, handle1)
+    assert :ok = ShapeDb.mark_snapshot_started(ctx.stack_id, handle1)
   end
 
   test "mark_snapshot_complete/2", ctx do
-    refute ShapeDb.snapshot_complete?(ctx.stack_id, "no-such-handle")
     assert :error = ShapeDb.mark_snapshot_complete(ctx.stack_id, "no-such-handle")
 
     shape1 = Shape.new!("items", inspector: @stub_inspector)
@@ -255,20 +240,13 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDbTest do
     # should allow for marking a snapshot complete before the snapshot
     # has been marked started
     assert :ok = ShapeDb.mark_snapshot_complete(ctx.stack_id, handle1)
-    assert ShapeDb.snapshot_started?(ctx.stack_id, handle1)
-    assert ShapeDb.snapshot_complete?(ctx.stack_id, handle1)
 
     shape2 = Shape.new!("items", inspector: @stub_inspector, where: "id = 2")
     handle2 = "handle-2"
     {:ok, _hash2} = ShapeDb.add_shape(ctx.stack_id, shape2, handle2)
 
-    refute ShapeDb.snapshot_started?(ctx.stack_id, handle2)
-    :ok = ShapeDb.mark_snapshot_started(ctx.stack_id, handle2)
-    assert ShapeDb.snapshot_started?(ctx.stack_id, handle2)
-
-    refute ShapeDb.snapshot_complete?(ctx.stack_id, handle2)
+    assert :ok = ShapeDb.mark_snapshot_started(ctx.stack_id, handle2)
     assert :ok = ShapeDb.mark_snapshot_complete(ctx.stack_id, handle2)
-    assert ShapeDb.snapshot_complete?(ctx.stack_id, handle2)
   end
 
   defp make_valid_shape(ctx, shape, handle) do
@@ -292,6 +270,12 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDbTest do
     {handle, shape}
   end
 
+  defp get_snapshot_states(stack_id) do
+    ShapeDb.reduce_shape_meta(stack_id, %{}, fn {handle, _hash, started?, complete?}, acc ->
+      Map.put(acc, handle, {started?, complete?})
+    end)
+  end
+
   test "validate_existing_shapes/1", ctx do
     valid_shapes =
       Enum.map(1..10, fn n ->
@@ -313,21 +297,6 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDbTest do
         handle = "handle-#{n}"
         make_shape_with_snapshot_status(ctx, shape, handle, snapshot_started: true)
       end)
-
-    for {handle, _shape} <- valid_shapes do
-      assert ShapeDb.snapshot_started?(ctx.stack_id, handle)
-      assert ShapeDb.snapshot_complete?(ctx.stack_id, handle)
-    end
-
-    for {handle, _shape} <- not_started do
-      refute ShapeDb.snapshot_started?(ctx.stack_id, handle)
-      refute ShapeDb.snapshot_complete?(ctx.stack_id, handle)
-    end
-
-    for {handle, _shape} <- not_completed do
-      assert ShapeDb.snapshot_started?(ctx.stack_id, handle)
-      refute ShapeDb.snapshot_complete?(ctx.stack_id, handle)
-    end
 
     {remove_handles, _shapes} = Enum.unzip(not_started ++ not_completed)
 
@@ -389,17 +358,20 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDbTest do
       {:ok, _hash} = ShapeDb.add_shape(ctx.stack_id, shape, handle)
       ShapeDb.WriteBuffer.flush_sync(ctx.stack_id)
 
-      assert :ok = ShapeDb.mark_snapshot_started(ctx.stack_id, handle)
-      assert ShapeDb.snapshot_started?(ctx.stack_id, handle)
+      # Verify initial state: not started, not complete
+      assert %{^handle => {false, false}} = get_snapshot_states(ctx.stack_id)
 
+      assert :ok = ShapeDb.mark_snapshot_started(ctx.stack_id, handle)
       ShapeDb.WriteBuffer.flush_sync(ctx.stack_id)
-      assert ShapeDb.snapshot_started?(ctx.stack_id, handle)
+
+      # Verify snapshot started, not complete
+      assert %{^handle => {true, false}} = get_snapshot_states(ctx.stack_id)
 
       assert :ok = ShapeDb.mark_snapshot_complete(ctx.stack_id, handle)
-      assert ShapeDb.snapshot_complete?(ctx.stack_id, handle)
-
       ShapeDb.WriteBuffer.flush_sync(ctx.stack_id)
-      assert ShapeDb.snapshot_complete?(ctx.stack_id, handle)
+
+      # Verify snapshot started and complete
+      assert %{^handle => {true, true}} = get_snapshot_states(ctx.stack_id)
     end
 
     test "snapshot functions fail for shapes pending removal", ctx do

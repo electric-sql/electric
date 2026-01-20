@@ -1,5 +1,12 @@
 defmodule Electric.ShapeCache.ShapeStatus.ShapeDb do
-  @moduledoc false
+  @moduledoc """
+  SQLite-backed persistent storage for shape metadata.
+
+  The WriteBuffer provides buffering for writes to prevent timeout cascades.
+  Only `handle_for_shape` and `shape_for_handle` need buffer awareness since
+  they are entry points for new requests. Other functions are called after
+  ShapeStatus has already updated its ETS cache.
+  """
 
   alias Electric.Shapes.Shape
   alias Electric.ShapeCache.ShapeStatus.ShapeDb.Connection
@@ -29,6 +36,10 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb do
     end
   end
 
+  # ============================================================================
+  # Write operations - go through WriteBuffer
+  # ============================================================================
+
   def add_shape(stack_id, %Shape{} = shape, shape_handle)
       when is_stack_id(stack_id) and is_shape_handle(shape_handle) do
     {comparable_shape, shape_hash} = Shape.comparable_hash(shape)
@@ -50,28 +61,56 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb do
   end
 
   def remove_shape(stack_id, shape_handle) when is_stack_id(stack_id) do
-    if shape_exists_in_buffer_or_sqlite?(stack_id, shape_handle) do
+    if handle_exists?(stack_id, shape_handle) do
       WriteBuffer.remove_shape(stack_id, shape_handle)
     else
       {:error, "No shape matching #{inspect(shape_handle)}"}
     end
   end
 
+  def mark_snapshot_started(stack_id, shape_handle) do
+    if handle_exists?(stack_id, shape_handle) do
+      WriteBuffer.queue_snapshot_started(stack_id, shape_handle)
+    else
+      :error
+    end
+  end
+
+  def mark_snapshot_complete(stack_id, shape_handle) do
+    if handle_exists?(stack_id, shape_handle) do
+      WriteBuffer.queue_snapshot_complete(stack_id, shape_handle)
+    else
+      :error
+    end
+  end
+
+  def reset(stack_id) when is_stack_id(stack_id) do
+    WriteBuffer.clear(stack_id)
+    checkout_write!(stack_id, :reset, &Query.reset/1)
+  end
+
+  # ============================================================================
+  # Lookup operations - need buffer awareness (entry points for new requests)
+  # ============================================================================
+
+  @doc """
+  Find a handle for a shape. Checks buffer first, then SQLite.
+  Returns :error if the handle is tombstoned (being deleted).
+  """
   def handle_for_shape(stack_id, %Shape{} = shape) when is_stack_id(stack_id) do
     {comparable_shape, _shape_hash} = Shape.comparable_hash(shape)
     comparable_binary = :erlang.term_to_binary(comparable_shape)
 
+    # Check buffer first (includes tombstone check)
     case WriteBuffer.lookup_handle(stack_id, comparable_binary) do
       {:ok, handle} ->
         {:ok, handle}
 
       :not_found ->
-        # Check SQLite, but filter out handles with pending removes
+        # Check SQLite, but reject tombstoned handles
         case checkout!(stack_id, :handle_for_shape, &Query.handle_for_shape(&1, comparable_shape)) do
           {:ok, handle} ->
-            pending_removes = WriteBuffer.pending_removes(stack_id)
-
-            if MapSet.member?(pending_removes, handle) do
+            if WriteBuffer.is_tombstoned?(stack_id, handle) do
               :error
             else
               {:ok, handle}
@@ -83,29 +122,53 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb do
     end
   end
 
+  @doc """
+  Find a shape by its handle. Checks buffer first, then SQLite.
+  Returns :error if the handle is tombstoned (being deleted).
+  """
   def shape_for_handle(stack_id, shape_handle) when is_stack_id(stack_id) do
+    # Check buffer first (includes tombstone check)
     case WriteBuffer.lookup_shape(stack_id, shape_handle) do
       {:ok, shape} ->
         {:ok, shape}
 
       :not_found ->
-        checkout!(stack_id, :shape_for_handle, &Query.shape_for_handle(&1, shape_handle))
+        # Check SQLite, but reject tombstoned handles
+        if WriteBuffer.is_tombstoned?(stack_id, shape_handle) do
+          :error
+        else
+          checkout!(stack_id, :shape_for_handle, &Query.shape_for_handle(&1, shape_handle))
+        end
     end
   end
 
+  # ============================================================================
+  # Read operations - go directly to SQLite (ShapeStatus ETS is source of truth)
+  # ============================================================================
+
   def list_shapes(stack_id) when is_stack_id(stack_id) do
-    with {:ok, sqlite_shapes} <- checkout!(stack_id, :list_shapes, &Query.list_shapes/1) do
-      buffered_shapes = WriteBuffer.list_shapes(stack_id)
-      pending_removes = WriteBuffer.pending_removes(stack_id)
-      buffered_handles = MapSet.new(buffered_shapes, &elem(&1, 0))
+    # Get shapes from buffer (newly added, not yet in SQLite)
+    buffered = WriteBuffer.list_buffered_shapes(stack_id)
+    buffered_handles = buffered |> Enum.map(fn {h, _} -> h end) |> MapSet.new()
 
-      # Filter SQLite shapes: exclude those with pending removes or already in buffer
-      filtered_sqlite =
-        Enum.reject(sqlite_shapes, fn {handle, _} ->
-          MapSet.member?(pending_removes, handle) or MapSet.member?(buffered_handles, handle)
-        end)
+    # Get tombstoned handles
+    tombstones = WriteBuffer.tombstoned_handles(stack_id)
 
-      {:ok, Enum.sort_by(buffered_shapes ++ filtered_sqlite, &elem(&1, 0))}
+    # Get shapes from SQLite
+    case checkout!(stack_id, :list_shapes, &Query.list_shapes/1) do
+      {:ok, sqlite_shapes} ->
+        # Filter SQLite shapes: remove tombstoned and already-in-buffer handles
+        filtered_sqlite =
+          sqlite_shapes
+          |> Enum.reject(fn {handle, _shape} ->
+            MapSet.member?(tombstones, handle) or MapSet.member?(buffered_handles, handle)
+          end)
+
+        # Merge: buffered shapes + filtered SQLite shapes
+        {:ok, buffered ++ filtered_sqlite}
+
+      error ->
+        error
     end
   end
 
@@ -114,23 +177,28 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb do
   end
 
   def shape_handles_for_relations(stack_id, relations) when is_stack_id(stack_id) do
-    with {:ok, sqlite_handles} <-
-           checkout!(
-             stack_id,
-             :shape_handles_for_relations,
-             &Query.shape_handles_for_relations(&1, relations)
-           ) do
-      buffered_handles = WriteBuffer.handles_for_relations(stack_id, relations)
-      pending_removes = WriteBuffer.pending_removes(stack_id)
-      buffered_set = MapSet.new(buffered_handles)
+    # Get handles from buffer
+    buffered_handles = WriteBuffer.handles_for_relations(stack_id, relations)
+    buffered_set = MapSet.new(buffered_handles)
+    tombstones = WriteBuffer.tombstoned_handles(stack_id)
 
-      # Filter SQLite handles: exclude those with pending removes or already in buffer
-      filtered_sqlite =
-        Enum.reject(sqlite_handles, fn handle ->
-          MapSet.member?(pending_removes, handle) or MapSet.member?(buffered_set, handle)
-        end)
+    case checkout!(
+           stack_id,
+           :shape_handles_for_relations,
+           &Query.shape_handles_for_relations(&1, relations)
+         ) do
+      {:ok, sqlite_handles} ->
+        # Filter SQLite handles: remove tombstoned and already-in-buffer
+        filtered_sqlite =
+          sqlite_handles
+          |> Enum.reject(fn handle ->
+            MapSet.member?(tombstones, handle) or MapSet.member?(buffered_set, handle)
+          end)
 
-      {:ok, (buffered_handles ++ filtered_sqlite) |> Enum.sort()}
+        {:ok, buffered_handles ++ filtered_sqlite}
+
+      error ->
+        error
     end
   end
 
@@ -141,81 +209,45 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb do
   end
 
   def reduce_shapes(stack_id, acc, reducer_fun) when is_function(reducer_fun, 2) do
-    buffered_shapes = WriteBuffer.list_shapes(stack_id)
-    pending_removes = WriteBuffer.pending_removes(stack_id)
-    buffered_handles = MapSet.new(buffered_shapes, &elem(&1, 0))
-    acc = Enum.reduce(buffered_shapes, acc, reducer_fun)
+    # Get all shapes (buffer + SQLite, excluding tombstones)
+    case list_shapes(stack_id) do
+      {:ok, shapes} ->
+        Enum.reduce(shapes, acc, reducer_fun)
 
-    checkout!(stack_id, :reduce_shapes, fn %Connection{} = conn ->
-      conn
-      |> Query.list_shape_stream()
-      |> Stream.reject(fn {handle, _} ->
-        MapSet.member?(pending_removes, handle) or MapSet.member?(buffered_handles, handle)
-      end)
-      |> Enum.reduce(acc, reducer_fun)
-    end)
+      {:error, _} = error ->
+        error
+    end
   end
 
   def reduce_shape_meta(stack_id, acc, reducer_fun) when is_function(reducer_fun, 2) do
-    buffered_meta = WriteBuffer.list_shape_meta(stack_id)
-    pending_removes = WriteBuffer.pending_removes(stack_id)
-    pending_snapshot_started = WriteBuffer.pending_snapshot_started(stack_id)
-    buffered_handles = MapSet.new(buffered_meta, &elem(&1, 0))
-    acc = Enum.reduce(buffered_meta, acc, reducer_fun)
-
+    # Only used during boot when buffer is empty, reads directly from SQLite
     checkout!(stack_id, :reduce_shape_meta, fn %Connection{} = conn ->
       conn
       |> Query.list_shape_meta_stream()
-      |> Stream.reject(fn {handle, _, _} ->
-        MapSet.member?(pending_removes, handle) or MapSet.member?(buffered_handles, handle)
-      end)
-      |> Stream.map(fn {handle, hash, snapshot_started} ->
-        # Update snapshot_started if there's a pending operation
-        if MapSet.member?(pending_snapshot_started, handle) do
-          {handle, hash, true}
-        else
-          {handle, hash, snapshot_started}
-        end
-      end)
       |> Enum.reduce(acc, reducer_fun)
     end)
   end
 
-  def shape_hash(stack_id, shape_handle) do
-    case WriteBuffer.lookup_hash(stack_id, shape_handle) do
-      {:ok, hash} -> {:ok, hash}
-      :not_found -> checkout!(stack_id, :shape_hash, &Query.shape_hash(&1, shape_handle))
-    end
-  end
-
-  def handle_exists?(stack_id, shape_handle) do
-    # Check buffer first - if shape is there, it exists
-    if WriteBuffer.handle_exists?(stack_id, shape_handle) do
-      true
-    else
-      # Shape not in buffer - check if there's a pending remove or check SQLite
-      pending_removes = WriteBuffer.pending_removes(stack_id)
-
-      if MapSet.member?(pending_removes, shape_handle) do
-        false
-      else
-        checkout!(stack_id, :handle_exists?, &Query.handle_exists?(&1, shape_handle))
-      end
-    end
-  end
-
   def count_shapes(stack_id) do
-    with {:ok, sqlite_count} <- checkout!(stack_id, :count_shapes, &Query.count_shapes/1) do
-      buffered_count = WriteBuffer.shapes_count(stack_id)
-      pending_adds = WriteBuffer.pending_adds(stack_id)
-      pending_removes = WriteBuffer.pending_removes(stack_id)
+    # Get buffered count
+    buffered_count = WriteBuffer.buffered_shape_count(stack_id)
+    buffered_handles = WriteBuffer.list_buffered_shapes(stack_id) |> Enum.map(fn {h, _} -> h end) |> MapSet.new()
+    tombstones = WriteBuffer.tombstoned_handles(stack_id)
 
-      # Only count removes for shapes that are actually in SQLite (not pending adds)
-      # If a shape has both pending add and pending remove, they cancel out
-      removes_from_sqlite = MapSet.difference(pending_removes, pending_adds)
+    # Get SQLite shapes and count those not in buffer/tombstones
+    case checkout!(stack_id, :list_shapes, &Query.list_shapes/1) do
+      {:ok, sqlite_shapes} ->
+        sqlite_not_in_buffer =
+          sqlite_shapes
+          |> Enum.reject(fn {handle, _} ->
+            MapSet.member?(buffered_handles, handle) or MapSet.member?(tombstones, handle)
+          end)
+          |> length()
 
-      # Total = buffer shapes + SQLite shapes - removes that will affect SQLite
-      {:ok, buffered_count + sqlite_count - MapSet.size(removes_from_sqlite)}
+        {:ok, buffered_count + sqlite_not_in_buffer}
+
+      error ->
+        error
     end
   end
 
@@ -223,45 +255,14 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb do
     stack_id |> count_shapes() |> raise_on_error!(:count_shapes)
   end
 
-  def mark_snapshot_started(stack_id, shape_handle) do
-    if shape_exists_in_buffer_or_sqlite?(stack_id, shape_handle) do
-      WriteBuffer.queue_snapshot_started(stack_id, shape_handle)
-    else
-      :error
-    end
-  end
-
-  def snapshot_started?(stack_id, shape_handle) do
-    case WriteBuffer.snapshot_started?(stack_id, shape_handle) do
-      {:ok, true} ->
-        true
-
-      {:ok, false} ->
-        checkout!(stack_id, :snapshot_started?, &Query.snapshot_started?(&1, shape_handle))
-
-      :not_found ->
-        checkout!(stack_id, :snapshot_started?, &Query.snapshot_started?(&1, shape_handle))
-    end
-  end
-
-  def mark_snapshot_complete(stack_id, shape_handle) do
-    if shape_exists_in_buffer_or_sqlite?(stack_id, shape_handle) do
-      WriteBuffer.queue_snapshot_complete(stack_id, shape_handle)
-    else
-      :error
-    end
-  end
-
-  def snapshot_complete?(stack_id, shape_handle) do
-    case WriteBuffer.snapshot_complete?(stack_id, shape_handle) do
-      {:ok, true} ->
-        true
-
-      {:ok, false} ->
-        checkout!(stack_id, :snapshot_complete?, &Query.snapshot_complete?(&1, shape_handle))
-
-      :not_found ->
-        checkout!(stack_id, :snapshot_complete?, &Query.snapshot_complete?(&1, shape_handle))
+  @doc false
+  # Internal function used by remove_shape, mark_snapshot_started, mark_snapshot_complete.
+  # Checks buffer first, then SQLite. Returns false if tombstoned.
+  def handle_exists?(stack_id, shape_handle) when is_stack_id(stack_id) do
+    case WriteBuffer.has_handle?(stack_id, shape_handle) do
+      true -> true
+      false -> false
+      :unknown -> checkout!(stack_id, :handle_exists?, &Query.handle_exists?(&1, shape_handle))
     end
   end
 
@@ -290,11 +291,6 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb do
     end
   end
 
-  def reset(stack_id) when is_stack_id(stack_id) do
-    WriteBuffer.clear(stack_id)
-    checkout_write!(stack_id, :reset, &Query.reset/1)
-  end
-
   def explain(stack_id) do
     Connection.explain(stack_id)
 
@@ -311,23 +307,5 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb do
 
   defp raise_on_error!({:error, reason}, action) do
     raise Error, error: reason, action: action
-  end
-
-  defp shape_exists_in_buffer_or_sqlite?(stack_id, shape_handle) do
-    # Check buffer first - if shape is there, it exists
-    if WriteBuffer.handle_exists?(stack_id, shape_handle) do
-      true
-    else
-      # Shape not in buffer - check if there's a pending remove
-      pending_removes = WriteBuffer.pending_removes(stack_id)
-
-      if MapSet.member?(pending_removes, shape_handle) do
-        # Shape is being removed, treat as non-existent
-        false
-      else
-        # Check SQLite
-        checkout!(stack_id, :handle_exists?, &Query.handle_exists?(&1, shape_handle))
-      end
-    end
   end
 end

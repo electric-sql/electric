@@ -15,17 +15,11 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Query do
     shape_lookup: """
     SELECT shape FROM shapes WHERE handle = ?1 LIMIT 1
     """,
-    hash_lookup: """
-    SELECT hash FROM shapes WHERE handle = ?1 LIMIT 1
-    """,
     relation_handle_lookup: """
     SELECT handle FROM relations WHERE oid = ?1 LIMIT 1
     """,
     shape_count: """
     SELECT count FROM shape_count WHERE id = 1 LIMIT 1
-    """,
-    snapshot_state: """
-    SELECT snapshot_state FROM shapes WHERE handle = ?1 LIMIT 1
     """
   ]
   @write_queries [
@@ -142,12 +136,6 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Query do
     end)
   end
 
-  def shape_hash(%Conn{conn: conn, stmts: %{hash_lookup: stmt}}, shape_handle) do
-    with {:ok, [hash]} <- fetch_one(conn, stmt, [{:blob, shape_handle}]) do
-      {:ok, hash}
-    end
-  end
-
   def handle_for_shape(%Conn{conn: conn, stmts: %{handle_lookup: stmt}}, comparable_shape) do
     with {:ok, [handle]} <- fetch_one(conn, stmt, [{:blob, term_to_binary(comparable_shape)}]) do
       {:ok, handle}
@@ -194,20 +182,6 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Query do
     end
   end
 
-  def snapshot_started?(%Conn{conn: conn, stmts: %{snapshot_state: stmt}}, shape_handle) do
-    case fetch_one(conn, stmt, [{:blob, shape_handle}]) do
-      {:ok, [s]} -> s > 0
-      :error -> false
-    end
-  end
-
-  def snapshot_complete?(%Conn{conn: conn, stmts: %{snapshot_state: stmt}}, shape_handle) do
-    case fetch_one(conn, stmt, [{:blob, shape_handle}]) do
-      {:ok, [s]} -> Bitwise.band(s, 2) == 2
-      :error -> false
-    end
-  end
-
   def mark_snapshot_complete(
         %Conn{conn: conn, stmts: %{mark_snapshot_complete: stmt}},
         shape_handle
@@ -248,7 +222,10 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Query do
 
   def list_shape_meta_stream(%Conn{conn: conn, stmts: %{list_shape_meta: stmt}}) do
     stream_query(conn, stmt, fn [handle, hash, snapshot_state] ->
-      {handle, hash, snapshot_state > 0}
+      # snapshot_state is a bitmask: bit 0 = started, bit 1 = complete
+      snapshot_started? = snapshot_state > 0
+      snapshot_complete? = Bitwise.band(snapshot_state, 2) == 2
+      {handle, hash, snapshot_started?, snapshot_complete?}
     end)
   end
 
