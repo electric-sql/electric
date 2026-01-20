@@ -1,6 +1,5 @@
 <script setup>
 import Section from '../Section.vue'
-import Card from '../Card.vue'
 
 const actions = [
   {
@@ -17,33 +16,35 @@ const actions = [
 const solutions = [
   {
     slug: 'app',
-    title: 'Fast, modern apps',
+    title: 'Reactivity',
+    subtitle: 'Fast, modern apps',
     body: `Build apps like Linear and Figma with instant, optimistic UI.`,
-    href: '/sync#fast-modern-apps',
+    href: '/sync#reactivity',
+    cta: 'Learn more',
   },
   {
     slug: 'agent',
-    title: 'Resilient AI apps',
+    title: 'Resilience',
+    subtitle: 'Resilient AI apps',
     body: `AI apps that work reliably, even with patchy connectivity.`,
-    href: '/sync#resilient-ai-apps',
+    href: '/sync#resilience',
+    cta: 'Learn more',
   },
   {
     slug: 'agent',
-    title: 'Collaborative AI apps',
+    title: 'Collaboration',
+    subtitle: 'Collaborative AI apps',
     body: `Multi-user, multi-agent apps with real-time collaboration.`,
-    href: '/sync#collaborative-ai-apps',
-  },
-  {
-    slug: 'dashboard',
-    title: 'Real-time dashboards',
-    body: `Live analytics and monitoring dashboards that update instantly.`,
-    href: '/sync#real-time-dashboards',
+    href: '/sync#collaboration',
+    cta: 'Learn more',
   },
   {
     slug: 'worker',
-    title: 'Durable workflows',
+    title: 'Durability',
+    subtitle: 'Durable workflows',
     body: `Multi-step agentic workflows that resume after failures.`,
-    href: '/sync#durable-workflows',
+    href: '/sync#durability',
+    cta: 'Learn more',
   },
 ]
 </script>
@@ -59,18 +60,22 @@ const solutions = [
       products that combine AI with team-based collaboration and fast, modern UX.
     </template>
     <div class="solutions-grid">
-      <div
-        v-for="(solution, index) in solutions"
+      <a
+        v-for="solution in solutions"
         :key="solution.title"
-        :class="['solution-card', { 'bottom-row': index >= 3 }]"
+        :href="solution.href"
+        class="solution-panel no-visual"
       >
-        <Card
-          :href="solution.href"
-          :icon="`/img/home/sync-targets/${solution.slug}.svg`"
-          :title="solution.title"
-          :body="solution.body"
-        />
-      </div>
+        <div class="panel-icon">
+          <img :src="`/img/home/sync-targets/${solution.slug}.svg`" :alt="solution.title" />
+        </div>
+        <div class="panel-content">
+          <h3 class="panel-title">{{ solution.title }}</h3>
+          <p class="panel-subtitle">{{ solution.subtitle }}</p>
+          <p class="panel-body">{{ solution.body }}</p>
+          <span class="panel-cta">{{ solution.cta }} &rarr;</span>
+        </div>
+      </a>
     </div>
   </Section>
 </template>
@@ -78,74 +83,96 @@ const solutions = [
 <style scoped>
 .solutions-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 32px;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 24px;
   margin: 32px 0px 40px;
+  align-items: stretch;
 }
 
-/* Bottom row: 2 cards centered */
-.solutions-grid .solution-card.bottom-row {
-  grid-column: span 1;
+.solution-panel {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 20px;
+  padding: 24px;
+  background-color: var(--vp-c-bg-soft);
+  border: 1px solid rgba(42, 44, 52, 0.5);
+  border-radius: 12px;
+  text-decoration: none;
+  transition: border-color 0.2s ease, background-color 0.2s ease;
+  height: 100%;
 }
 
-/* Center the bottom 2 cards */
-.solutions-grid .solution-card:nth-child(4) {
-  grid-column: 1 / 2;
-  margin-left: auto;
+.solution-panel:hover {
+  border-color: var(--vp-c-brand-1);
+  background-color: var(--vp-c-bg-soft-up);
+}
+
+.panel-icon {
+  flex-shrink: 0;
+  width: 48px;
+  height: 48px;
+}
+
+.panel-icon img {
   width: 100%;
-  max-width: calc(100% + 50%);
-  transform: translateX(25%);
+  height: 100%;
+  object-fit: contain;
 }
 
-.solutions-grid .solution-card:nth-child(5) {
-  grid-column: 3 / 4;
-  margin-right: auto;
-  width: 100%;
-  max-width: calc(100% + 50%);
-  transform: translateX(-25%);
+.panel-content {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
 }
 
-@media (max-width: 959px) {
+.panel-title {
+  margin: 0 0 4px 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--vp-c-text-1);
+}
+
+.panel-subtitle {
+  margin: 0 0 8px 0;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--vp-c-brand-1);
+}
+
+.panel-body {
+  margin: 0 0 12px 0;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  color: var(--vp-c-text-2);
+  flex: 1;
+}
+
+.panel-cta {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--vp-c-brand-1);
+  margin-top: auto;
+}
+
+.solution-panel:hover .panel-cta {
+  text-decoration: underline;
+}
+
+@media (max-width: 768px) {
   .solutions-grid {
-    gap: 30px;
-    grid-template-columns: repeat(2, 1fr);
-  }
-
-  .solutions-grid .solution-card:nth-child(4),
-  .solutions-grid .solution-card:nth-child(5) {
-    grid-column: span 1;
-    margin: 0;
-    max-width: none;
-    transform: none;
-  }
-
-  /* Center the 5th card on tablet */
-  .solutions-grid .solution-card:nth-child(5) {
-    grid-column: 1 / -1;
-    max-width: 340px;
-    margin: 0 auto;
-  }
-}
-
-@media (max-width: 518px) {
-  .solutions-grid {
-    margin: 32px 24px 40px;
-    gap: 24px;
     grid-template-columns: 1fr;
+    gap: 20px;
   }
 
-  .solutions-grid .solution-card {
-    position: relative;
-    display: block;
-    width: 100%;
-    max-width: 340px;
-    margin: 0 auto;
+  .solution-panel {
+    padding: 20px;
   }
 
-  .solutions-grid .solution-card:nth-child(4),
-  .solutions-grid .solution-card:nth-child(5) {
-    max-width: 340px;
-    transform: none;
+  .panel-icon {
+    width: 40px;
+    height: 40px;
   }
 }
 </style>
