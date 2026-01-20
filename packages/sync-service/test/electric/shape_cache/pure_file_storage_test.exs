@@ -1,6 +1,5 @@
 defmodule Electric.ShapeCache.PureFileStorageTest do
   use ExUnit.Case, async: true
-  use Repatch.ExUnit
 
   import Support.ComponentSetup
   import Support.TestUtils
@@ -976,7 +975,7 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
     setup :with_started_writer
     @describetag flush_period: 50
 
-    test "reader retries when ETS is unexpectedly empty due to concurrent flush", %{
+    test "reader falls back to disk when ETS is empty due to concurrent flush", %{
       writer: writer,
       opts: opts,
       stack_id: stack_id
@@ -994,7 +993,7 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
       assert_receive {Storage, {PureFileStorage, :perform_scheduled_flush, [0]}}
       writer = PureFileStorage.perform_scheduled_flush(writer, 0)
 
-      # Get the fresh (correct) metadata after flush
+      # Get the fresh metadata after flush
       stack_ets = PureFileStorage.stack_ets(stack_id)
       [fresh_meta] = :ets.lookup(stack_ets, @shape_handle)
 
@@ -1007,36 +1006,17 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
       # Create stale metadata - same as fresh but with old last_persisted
       # This simulates what a reader would see if it read metadata BEFORE the flush
       stale_meta =
-        storage_meta(fresh_meta, last_persisted_offset: LogOffset.last_before_real_offsets())
+        storage_meta(fresh_meta,
+          last_persisted_offset: LogOffset.last_before_real_offsets(),
+          # Also set last_seen so upper_read_bound covers our data
+          last_seen_txn_offset: LogOffset.new(10, 0)
+        )
 
-      # Simulate the race condition by patching LogOffset.min to synchronize:
-      # 1. First call to LogOffset.min (during first read) updates metadata to fresh
-      # 2. First read continues with stale metadata, tries ETS, gets empty
-      # 3. Retry reads fresh metadata and reads from disk
-      {:ok, call_counter} = start_supervised({Agent, fn -> 0 end})
-
-      # Insert stale metadata first
+      # Insert stale metadata - reader will think data is in ETS
       :ets.insert(stack_ets, stale_meta)
 
-      # Patch LogOffset.min to signal when the first read starts
-      # This gives us a synchronization point during the read
-      Repatch.patch(LogOffset, :min, [mode: :shared], fn a, b ->
-        count = Agent.get_and_update(call_counter, fn n -> {n, n + 1} end)
-
-        # On first call (during first read attempt), update metadata to fresh
-        # The retry will then see fresh metadata
-        if count == 0 do
-          :ets.insert(stack_ets, fresh_meta)
-        end
-
-        # Call original implementation
-        Repatch.real(LogOffset, :min, [a, b])
-      end)
-
-      # THE FIX TEST: Reader should recover data despite seeing stale metadata initially
-      # First read: sees stale metadata (last_persisted = before_real), tries ETS, gets empty
-      # During first read, LogOffset.min is called, which updates metadata to fresh
-      # Retry: sees fresh metadata (last_persisted = 10,0), reads from disk
+      # Reader sees stale metadata (last_persisted = before_real), tries ETS, gets empty.
+      # Fix detects empty ETS and falls back to disk using upper_read_bound.
       result =
         PureFileStorage.get_log_stream(
           LogOffset.new(0, 0),
@@ -1046,12 +1026,12 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
         |> Enum.to_list()
 
       assert result == [~S|{"test": 1}|],
-             "Reader should recover data via retry after seeing stale metadata"
+             "Reader should fall back to disk when ETS is empty"
 
       PureFileStorage.terminate(writer)
     end
 
-    test "reader retries when ETS returns partial data due to concurrent flush", %{
+    test "reader falls back to disk when ETS returns partial data due to concurrent flush", %{
       writer: writer,
       opts: opts,
       stack_id: stack_id
@@ -1061,25 +1041,19 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
       # Write multiple entries - all go to ETS buffer
       writer =
         PureFileStorage.append_to_log!(
-          [
-            {LogOffset.new(10, 0), "test_key", :insert, ~S|{"test": 1}|}
-          ],
+          [{LogOffset.new(10, 0), "test_key", :insert, ~S|{"test": 1}|}],
           writer
         )
 
       writer =
         PureFileStorage.append_to_log!(
-          [
-            {LogOffset.new(11, 0), "test_key", :insert, ~S|{"test": 2}|}
-          ],
+          [{LogOffset.new(11, 0), "test_key", :insert, ~S|{"test": 2}|}],
           writer
         )
 
       writer =
         PureFileStorage.append_to_log!(
-          [
-            {LogOffset.new(12, 0), "test_key", :insert, ~S|{"test": 3}|}
-          ],
+          [{LogOffset.new(12, 0), "test_key", :insert, ~S|{"test": 3}|}],
           writer
         )
 
@@ -1087,7 +1061,7 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
       assert_receive {Storage, {PureFileStorage, :perform_scheduled_flush, [0]}}
       writer = PureFileStorage.perform_scheduled_flush(writer, 0)
 
-      # Get the fresh (correct) metadata after flush
+      # Get the fresh metadata after flush
       stack_ets = PureFileStorage.stack_ets(stack_id)
       [fresh_meta] = :ets.lookup(stack_ets, @shape_handle)
 
@@ -1104,32 +1078,17 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
 
       # Create stale metadata - reader thinks all data should be in ETS
       stale_meta =
-        storage_meta(fresh_meta, last_persisted_offset: LogOffset.last_before_real_offsets())
+        storage_meta(fresh_meta,
+          last_persisted_offset: LogOffset.last_before_real_offsets(),
+          # Set last_seen so upper_read_bound covers all our data
+          last_seen_txn_offset: LogOffset.new(12, 0)
+        )
 
-      # Simulate the race condition by patching LogOffset.min to synchronize
-      {:ok, call_counter} = start_supervised({Agent, fn -> 0 end})
-
-      # Insert stale metadata first
+      # Insert stale metadata
       :ets.insert(stack_ets, stale_meta)
 
-      Repatch.patch(LogOffset, :min, [mode: :shared], fn a, b ->
-        count = Agent.get_and_update(call_counter, fn n -> {n, n + 1} end)
-
-        # On first call, update metadata to fresh but DON'T clear ETS yet
-        # This allows the reader to get partial data from ETS
-        # The key insight: reader already decided to read from ETS based on stale metadata,
-        # but ETS only has partial data (entry 10, missing 11 and 12)
-        if count == 0 do
-          :ets.insert(stack_ets, fresh_meta)
-        end
-
-        Repatch.real(LogOffset, :min, [a, b])
-      end)
-
-      # THE FIX TEST: Reader should recover ALL data despite partial ETS read
-      # First read: sees stale metadata, tries ETS, gets only entry at offset 10
-      # Fix detects: last_offset_read (10,0) < upper_read_bound, retries
-      # Retry: sees fresh metadata (last_persisted = 12,0), reads from disk
+      # Reader sees stale metadata, tries ETS, gets only entry at offset 10.
+      # Fix detects partial read (last_offset < upper_read_bound) and falls back to disk.
       result =
         PureFileStorage.get_log_stream(
           LogOffset.new(0, 0),
@@ -1139,7 +1098,7 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
         |> Enum.to_list()
 
       assert result == [~S|{"test": 1}|, ~S|{"test": 2}|, ~S|{"test": 3}|],
-             "Reader should recover ALL data via retry after partial ETS read"
+             "Reader should fall back to disk when ETS returns partial data"
 
       PureFileStorage.terminate(writer)
     end
