@@ -29,7 +29,8 @@ defmodule Electric.Shapes.Consumer.State do
     materializer_subscribed?: false,
     terminating?: false,
     buffering?: false,
-    or_with_subquery?: false
+    or_with_subquery?: false,
+    not_with_subquery?: false
   ]
 
   @type pg_snapshot() :: SnapshotQuery.pg_snapshot()
@@ -141,7 +142,8 @@ defmodule Electric.Shapes.Consumer.State do
           Electric.Config.default(:shape_hibernate_after)
         ),
       buffering?: true,
-      or_with_subquery?: has_or_with_subquery?(shape)
+      or_with_subquery?: has_or_with_subquery?(shape),
+      not_with_subquery?: has_not_with_subquery?(shape)
     }
   end
 
@@ -172,6 +174,27 @@ defmodule Electric.Shapes.Consumer.State do
       fn
         %Parser.Ref{path: ["$sublink", _]}, _acc, _ctx ->
           {:ok, true}
+
+        _node, acc, _ctx ->
+          {:ok, acc}
+      end,
+      false
+    )
+  end
+
+  defp has_not_with_subquery?(%Shape{shape_dependencies: []}), do: false
+  defp has_not_with_subquery?(%Shape{where: nil}), do: false
+
+  defp has_not_with_subquery?(%Shape{where: where}) do
+    Walker.reduce!(
+      where.eval,
+      fn
+        %Parser.Func{name: "not"} = not_node, acc, _ctx ->
+          if subtree_has_sublink?(not_node) do
+            {:ok, true}
+          else
+            {:ok, acc}
+          end
 
         _node, acc, _ctx ->
           {:ok, acc}

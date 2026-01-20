@@ -164,4 +164,82 @@ defmodule Electric.Shapes.Consumer.StateTest do
       end
     end
   end
+
+  describe "not_with_subquery? field in new/3" do
+    setup [:with_stack_id_from_test]
+
+    for {where, expected} <- [
+          # No WHERE clause
+          {nil, false},
+
+          # WHERE clause without subquery (NOT doesn't matter without subquery)
+          {"id = 1", false},
+          {"NOT (id = 1)", false},
+          {"NOT (id = 1 AND flag = true)", false},
+          {"id = 1 AND NOT flag = true", false},
+
+          # Subquery without NOT
+          {"id IN (SELECT id FROM parent)", false},
+          {"id = 1 AND parent_id IN (SELECT id FROM parent)", false},
+          {"parent_id IN (SELECT id FROM parent) AND id = 1", false},
+          {"parent_id IN (SELECT id FROM parent) OR flag = true", false},
+
+          # x NOT IN (subquery) - the most common case
+          {"parent_id NOT IN (SELECT id FROM parent)", true},
+          {"parent_id NOT IN (SELECT id FROM parent) AND id = 1", true},
+          {"id = 1 AND parent_id NOT IN (SELECT id FROM parent)", true},
+
+          # NOT(x IN subquery) - equivalent to NOT IN
+          {"NOT(parent_id IN (SELECT id FROM parent))", true},
+          {"NOT (parent_id IN (SELECT id FROM parent))", true},
+
+          # NOT(condition AND x IN subquery) - NOT wrapping expression with subquery
+          {"NOT(flag = true AND parent_id IN (SELECT id FROM parent))", true},
+          {"NOT(parent_id IN (SELECT id FROM parent) AND flag = true)", true},
+
+          # NOT(condition OR x IN subquery) - NOT wrapping OR with subquery
+          {"NOT(flag = true OR parent_id IN (SELECT id FROM parent))", true},
+          {"NOT(parent_id IN (SELECT id FROM parent) OR flag = true)", true},
+
+          # Nested NOT with subquery
+          {"NOT(id = 1 AND (flag = true OR parent_id IN (SELECT id FROM parent)))", true},
+          {"NOT((parent_id IN (SELECT id FROM parent)) AND id = 1)", true},
+
+          # NOT inside subquery (shouldn't affect outer query)
+          {"id IN (SELECT id FROM parent WHERE NOT flag = true)", false},
+          {"id IN (SELECT id FROM parent WHERE id NOT IN (SELECT id FROM grandparent))", false},
+
+          # NOT combined with AND/OR at outer level
+          {"parent_id NOT IN (SELECT id FROM parent) OR flag = true", true},
+          {"parent_id NOT IN (SELECT id FROM parent) AND flag = true", true},
+          {"flag = true OR parent_id NOT IN (SELECT id FROM parent)", true},
+          {"flag = true AND parent_id NOT IN (SELECT id FROM parent)", true},
+
+          # Multiple subqueries with NOT
+          {"parent_id NOT IN (SELECT id FROM parent) AND id IN (SELECT id FROM grandparent)",
+           true},
+          {"parent_id IN (SELECT id FROM parent) AND id NOT IN (SELECT id FROM grandparent)",
+           true},
+
+          # Double NOT (cancels out, but still has NOT wrapping subquery in AST)
+          {"NOT(NOT(parent_id IN (SELECT id FROM parent)))", true},
+
+          # NOT on non-subquery part, subquery without NOT
+          {"NOT(flag = true) AND parent_id IN (SELECT id FROM parent)", false},
+          {"parent_id IN (SELECT id FROM parent) AND NOT(flag = true)", false}
+        ] do
+      @tag where: where, expected: expected
+      test "#{inspect(where)} -> not_with_subquery?=#{expected}", %{
+        stack_id: stack_id,
+        where: where,
+        expected: expected
+      } do
+        shape = Shape.new!("items", where: where, inspector: @inspector)
+
+        state = State.new(stack_id, "test-handle", shape)
+
+        assert state.not_with_subquery? == expected
+      end
+    end
+  end
 end
