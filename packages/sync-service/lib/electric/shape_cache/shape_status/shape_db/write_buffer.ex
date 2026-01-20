@@ -158,12 +158,10 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
       []
     else
       tombstones = tombstones_table_name(stack_id)
-      # Extract just the OIDs for matching (Query only matches by OID)
+      # Match by OID only, consistent with Query.shape_handles_for_relations
       oids_set = relations |> Enum.map(fn {oid, _relation} -> oid end) |> MapSet.new()
       ops_table = operations_table_name(stack_id)
 
-      # Scan ops_table for :add operations with matching OIDs
-      # Include flushing entries - they may not be in SQLite yet
       ops_table
       |> :ets.tab2list()
       |> Enum.filter(fn
