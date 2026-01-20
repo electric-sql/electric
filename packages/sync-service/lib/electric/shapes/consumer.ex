@@ -518,6 +518,14 @@ defmodule Electric.Shapes.Consumer do
 
   defp maybe_start_pending_txn(state, %TransactionFragment{has_begin?: false}), do: state
 
+  defp maybe_start_pending_txn(
+         %{pending_txn: %PendingTxn{xid: pending_xid}} = _state,
+         %TransactionFragment{has_begin?: true, xid: new_xid}
+       )
+       when pending_xid != new_xid do
+    raise "unexpected_interleaved_txns: received begin for xid=#{new_xid} while xid=#{pending_xid} is still pending"
+  end
+
   defp maybe_start_pending_txn(state, %TransactionFragment{has_begin?: true, xid: xid}) do
     Logger.debug(fn -> "Starting pending transaction xid=#{xid}" end)
     %{state | pending_txn: PendingTxn.new(xid)}
