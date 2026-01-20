@@ -44,7 +44,7 @@ const products = [
 
 <template>
   <Section :actions="actions">
-    <template #title> Composable sync primitives </template>
+    <template #title> With composable sync primitives </template>
     <template #tagline>
       Build with modular components that combine to power any sync scenario.
     </template>
