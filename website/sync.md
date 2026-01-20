@@ -2,35 +2,27 @@
 title: Sync
 description: >-
   Build fast, resilient, and collaborative applications with composable sync primitives
-outline: deep
+layout: home
+aside: false
+hero:
+  name: 'Sync'
+  text: 'makes apps awesome'
+  tagline: >-
+    Sync is the magic ingredient behind fast, modern software.<br />From apps like Figma and Linear to multi-user, multi-agent AI applications.
+  actions:
+    - theme: brand
+      text: View products
+      link: /products
+    - theme: alt
+      text: Quickstart
+      link: /docs/quickstart
+  image:
+    src: /img/icons/electric.svg
 ---
 
 <script setup>
 import { VPButton } from 'vitepress/theme'
 </script>
-
-<img src="/img/icons/electric.svg" class="product-icon" />
-
-# Sync makes apps awesome
-
-Sync is the magic ingredient behind fast, modern software. From apps like Figma and Linear to multi-user, multi-agent AI applications.
-
-<div class="actions cta-actions">
-  <div class="action">
-    <VPButton
-        href="/products"
-        text="View products"
-        theme="brand"
-    />
-  </div>
-  <div class="action">
-    <VPButton
-        href="https://dashboard.electric-sql.cloud/"
-        text="Sign up"
-        theme="alt"
-    />
-  </div>
-</div>
 
 ## Why sync?
 
@@ -42,47 +34,55 @@ Sync provides a fundamentally better approach: instead of fetching data on deman
 
 ## What you can build {#solutions}
 
-<div class="sync-cards">
+<div class="solutions-grid">
 
-### Fast, modern apps {#fast-modern-apps}
+<div class="solution-panel" id="reactivity">
+<div class="panel-icon">
+<img src="/img/home/sync-targets/app.svg" alt="Reactivity" />
+</div>
+<div class="panel-content">
+<h3 class="panel-title">Reactivity</h3>
+<p class="panel-subtitle">Fast, modern apps</p>
+<p class="panel-body">Build apps like Linear and Figma with instant, optimistic UI. Sync data into a local store for sub-millisecond reads and updates that feel instantaneous.</p>
+<p><strong>Use:</strong> <a href="/products/postgres-sync">Postgres Sync</a> + <a href="/products/tanstack-db">TanStack DB</a></p>
+</div>
+</div>
 
-<img src="/img/home/sync-targets/app.svg" class="sync-card-icon" />
+<div class="solution-panel" id="resilience">
+<div class="panel-icon">
+<img src="/img/home/sync-targets/agent.svg" alt="Resilience" />
+</div>
+<div class="panel-content">
+<h3 class="panel-title">Resilience</h3>
+<p class="panel-subtitle">Resilient AI apps</p>
+<p class="panel-body">AI apps that work reliably, even with patchy connectivity. Durable streams ensure AI responses are never lost and can resume from any point.</p>
+<p><strong>Use:</strong> <a href="/products/durable-streams">Durable Streams</a></p>
+</div>
+</div>
 
-Build apps like Linear and Figma with instant, optimistic UI. Sync data into a local store for sub-millisecond reads and updates that feel instantaneous.
+<div class="solution-panel" id="collaboration">
+<div class="panel-icon">
+<img src="/img/home/sync-targets/agent.svg" alt="Collaboration" />
+</div>
+<div class="panel-content">
+<h3 class="panel-title">Collaboration</h3>
+<p class="panel-subtitle">Collaborative AI apps</p>
+<p class="panel-body">Multi-user, multi-agent apps with real-time collaboration. Sync shared state between users and AI agents with automatic conflict resolution.</p>
+<p><strong>Use:</strong> <a href="/products/durable-streams">Durable Streams</a> + <a href="/products/tanstack-db">TanStack DB</a></p>
+</div>
+</div>
 
-**Use:** [Postgres Sync](/products/postgres-sync) + [TanStack DB](/products/tanstack-db)
-
-### Resilient AI apps {#resilient-ai-apps}
-
-<img src="/img/home/sync-targets/agent.svg" class="sync-card-icon" />
-
-AI apps that work reliably, even with patchy connectivity. Durable streams ensure AI responses are never lost and can resume from any point.
-
-**Use:** [Durable Streams](/products/durable-streams)
-
-### Collaborative AI apps {#collaborative-ai-apps}
-
-<img src="/img/home/sync-targets/agent.svg" class="sync-card-icon" />
-
-Multi-user, multi-agent apps with real-time collaboration. Sync shared state between users and AI agents with automatic conflict resolution.
-
-**Use:** [Durable Streams](/products/durable-streams) + [TanStack DB](/products/tanstack-db)
-
-### Real-time dashboards {#real-time-dashboards}
-
-<img src="/img/home/sync-targets/dashboard.svg" class="sync-card-icon" />
-
-Live analytics and monitoring dashboards that update instantly. Stream changes from Postgres to dashboards without polling or complex infrastructure.
-
-**Use:** [Postgres Sync](/products/postgres-sync) + [TanStack DB](/products/tanstack-db)
-
-### Durable workflows {#durable-workflows}
-
-<img src="/img/home/sync-targets/worker.svg" class="sync-card-icon" />
-
-Multi-step agentic workflows that resume after failures. Build reliable, long-running processes with durable state and event streams.
-
-**Use:** [Durable Streams](/products/durable-streams)
+<div class="solution-panel" id="durability">
+<div class="panel-icon">
+<img src="/img/home/sync-targets/worker.svg" alt="Durability" />
+</div>
+<div class="panel-content">
+<h3 class="panel-title">Durability</h3>
+<p class="panel-subtitle">Durable workflows</p>
+<p class="panel-body">Multi-step agentic workflows that resume after failures. Build reliable, long-running processes with durable state and event streams.</p>
+<p><strong>Use:</strong> <a href="/products/durable-streams">Durable Streams</a></p>
+</div>
+</div>
 
 </div>
 
@@ -110,36 +110,85 @@ Ready to build with sync? Explore our products to find the right tools for your 
 </div>
 
 <style>
-.sync-cards {
-  margin: 32px 0;
+.solutions-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 24px;
+  margin: 32px 0px 40px;
+  align-items: stretch;
 }
 
-.sync-cards h3 {
+.solution-panel {
   display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-top: 32px;
-  padding-top: 24px;
-  border-top: 1px solid var(--vp-c-divider);
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 20px;
+  padding: 24px;
+  background-color: var(--vp-c-bg-soft);
+  border: 1px solid rgba(42, 44, 52, 0.5);
+  border-radius: 12px;
+  height: 100%;
 }
 
-.sync-cards h3:first-of-type {
-  border-top: none;
-  padding-top: 0;
+.panel-icon {
+  flex-shrink: 0;
+  width: 48px;
+  height: 48px;
 }
 
-.sync-card-icon {
-  width: 32px;
-  height: 32px;
-  display: none;
+.panel-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 
-.sync-cards p {
-  margin: 8px 0;
+.panel-content {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
 }
 
-.sync-cards p strong {
+.panel-title {
+  margin: 0 0 4px 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--vp-c-text-1);
+}
+
+.panel-subtitle {
+  margin: 0 0 8px 0;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--vp-c-brand-1);
+}
+
+.panel-body {
+  margin: 0 0 12px 0;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  color: var(--vp-c-text-2);
+  flex: 1;
+}
+
+.panel-content p strong {
   color: var(--vp-c-text-2);
   font-weight: 500;
+}
+
+@media (max-width: 768px) {
+  .solutions-grid {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+
+  .solution-panel {
+    padding: 20px;
+  }
+
+  .panel-icon {
+    width: 40px;
+    height: 40px;
+  }
 }
 </style>
