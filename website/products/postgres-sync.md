@@ -54,7 +54,7 @@ local apps and services.
     <VPButton
         href="/docs/quickstart"
         text="Quickstart"
-        theme="electric"
+        theme="brand"
     />
   </div>
   <div class="action">
@@ -120,7 +120,7 @@ See the [Docs](/docs/intro), [Quickstart](/docs/quickstart) and [Demos](/demos).
     <VPButton
         href="/docs/quickstart"
         text="Quickstart"
-        theme="electric"
+        theme="brand"
     />
   </div>
   <div class="action">
