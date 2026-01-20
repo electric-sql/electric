@@ -61,27 +61,48 @@ PGlite = WASM Postgres (dev, CI, test, sandboxed runtimes)
 
 ## Which product should I use?
 
-<div class="guidance-grid">
-  <Card
-    icon="/img/home/sync-targets/app.svg"
-    title="Building fast, modern apps?"
-    body="Use <a href='/products/postgres-sync'>Postgres Sync</a> for data and <a href='/products/tanstack-db'>TanStack DB</a> for reactive state."
-  />
-  <Card
-    icon="/img/home/sync-targets/agent.svg"
-    title="Building collaborative AI apps?"
-    body="Use <a href='/products/durable-streams'>Durable Streams</a> for AI responses and <a href='/products/tanstack-db'>TanStack DB</a> for state."
-  />
-  <Card
-    icon="/img/home/sync-targets/worker.svg"
-    title="Need drop-in AI SDK resilience?"
-    body="Use the <a href='/products/durable-streams'>Durable Streams</a> transport adapter for Vercel AI SDK."
-  />
-  <Card
-    icon="/img/icons/pglite.svg"
-    title="Building sandboxed environments?"
-    body="Use <a href='/products/pglite'>PGlite</a> for WASM Postgres with optional sync via Postgres Sync."
-  />
+<div class="guidance-list">
+
+<div class="guidance-item">
+<img src="/img/home/sync-targets/app.svg" class="guidance-icon" />
+
+### Building fast, modern apps?
+
+Use [Postgres Sync](/products/postgres-sync) for data and [TanStack DB](/products/tanstack-db) for reactive state.
+
+[Get started with Postgres Sync &rarr;](/products/postgres-sync)
+</div>
+
+<div class="guidance-item">
+<img src="/img/home/sync-targets/agent.svg" class="guidance-icon" />
+
+### Building collaborative AI apps?
+
+Use [Durable Streams](/products/durable-streams) for AI responses and [TanStack DB](/products/tanstack-db) for state.
+
+[Get started with Durable Streams &rarr;](/products/durable-streams)
+</div>
+
+<div class="guidance-item">
+<img src="/img/home/sync-targets/worker.svg" class="guidance-icon" />
+
+### Need drop-in AI SDK resilience?
+
+Use the [Durable Streams](/products/durable-streams) transport adapter for Vercel AI SDK.
+
+[Get started with Vercel AI SDK &rarr;](/docs/integrations/vercel)
+</div>
+
+<div class="guidance-item">
+<img src="/img/icons/pglite.svg" class="guidance-icon" />
+
+### Building sandboxed environments?
+
+Use [PGlite](/products/pglite) for WASM Postgres with optional sync via Postgres Sync.
+
+[Get started with PGlite &rarr;](/products/pglite)
+</div>
+
 </div>
 
 ---
@@ -89,25 +110,52 @@ PGlite = WASM Postgres (dev, CI, test, sandboxed runtimes)
 Learn how these products enable different [sync solutions](/sync).
 
 <style>
-.guidance-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 20px;
+.guidance-list {
   margin: 24px 0 40px;
-  align-items: stretch;
 }
 
-.guidance-grid :deep(.card) {
-  height: 100%;
+.guidance-item {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 20px;
+  padding: 24px 0;
+  border-bottom: 1px solid var(--vp-c-divider);
 }
 
-.guidance-grid :deep(.body p a) {
-  color: var(--electric-color);
+.guidance-item:last-child {
+  border-bottom: none;
 }
 
-@media (max-width: 768px) {
-  .guidance-grid {
-    grid-template-columns: 1fr;
+.guidance-icon {
+  width: 48px;
+  height: 48px;
+  flex-shrink: 0;
+}
+
+.guidance-item h3 {
+  margin: 0 0 8px 0;
+  font-size: 18px;
+}
+
+.guidance-item p {
+  margin: 0 0 12px 0;
+  color: var(--vp-c-text-2);
+}
+
+.guidance-item a {
+  color: var(--vp-c-brand-1);
+  font-weight: 500;
+}
+
+@media (max-width: 640px) {
+  .guidance-item {
+    flex-direction: column;
+    gap: 12px;
+  }
+  .guidance-icon {
+    width: 40px;
+    height: 40px;
   }
 }
 
