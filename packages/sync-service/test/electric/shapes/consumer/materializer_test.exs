@@ -711,8 +711,10 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
 
       ref = Process.monitor(pid)
 
-      # The Materializer should shut down gracefully when the GenServer.call exits
-      assert_receive {:DOWN, ^ref, :process, ^pid, :shutdown}, 1000
+      # The Materializer should shut down gracefully when the GenServer.call exits.
+      # We accept :shutdown (normal case) or :noproc (if process exited before monitor was set up)
+      assert_receive {:DOWN, ^ref, :process, ^pid, reason}, 1000
+      assert reason in [:shutdown, :noproc]
     end
 
     test "shuts down gracefully when Consumer dies during subscribe_materializer call",
@@ -757,7 +759,9 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
 
       ref = Process.monitor(pid)
 
-      assert_receive {:DOWN, ^ref, :process, ^pid, :shutdown}, 1000
+      # We accept :shutdown (normal case) or :noproc (if process exited before monitor was set up)
+      assert_receive {:DOWN, ^ref, :process, ^pid, reason}, 1000
+      assert reason in [:shutdown, :noproc]
     end
   end
 end
