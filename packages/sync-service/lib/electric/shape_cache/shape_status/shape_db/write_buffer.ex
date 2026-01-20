@@ -178,9 +178,19 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
     end
   end
 
-  @doc "Returns the count of tombstoned handles"
-  def tombstone_count(stack_id) do
-    :ets.info(tombstones_table_name(stack_id), :size)
+  @doc "Returns the count of tombstoned handles that are in SQLite (not buffer-only)"
+  def sqlite_tombstone_count(stack_id) do
+    ops_table = operations_table_name(stack_id)
+
+    tombstones_table_name(stack_id)
+    |> :ets.tab2list()
+    |> Enum.count(fn {handle, _ts} ->
+      not has_buffered_add?(ops_table, handle)
+    end)
+  end
+
+  defp has_buffered_add?(ops_table, handle) do
+    :ets.match_object(ops_table, {:_, {:add, handle, :_, :_, :_, :_}, :_}) != []
   end
 
   @doc "Returns all tombstoned handles as a MapSet"

@@ -223,10 +223,14 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb do
     end)
   end
 
+  # May be slightly inaccurate during concurrent modifications due to
+  # non-atomic reads of buffer, tombstones, and SQLite count.
   def count_shapes(stack_id) do
-    # Use list_shapes which handles deduplication
-    case list_shapes(stack_id) do
-      {:ok, shapes} -> {:ok, length(shapes)}
+    buffered_count = WriteBuffer.buffered_shape_count(stack_id)
+    sqlite_tombstone_count = WriteBuffer.sqlite_tombstone_count(stack_id)
+
+    case checkout!(stack_id, :count_shapes, &Query.count_shapes/1) do
+      {:ok, sqlite_count} -> {:ok, sqlite_count - sqlite_tombstone_count + buffered_count}
       error -> error
     end
   end
