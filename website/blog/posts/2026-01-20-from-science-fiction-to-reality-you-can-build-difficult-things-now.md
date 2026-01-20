@@ -28,10 +28,9 @@ When a telescope is being commissioned, there's a moment known as "first light",
 
 On December 20, 2025, I had my own "first light" moment. It confirmed not only that this project was actually possible, but also that the way we build has fundamentally changed forever.
 
-<!-- <video class="w-full" controls poster="/videos/blog/from-science-fiction-to-reality-you-can-build-difficult-things-now/solidtype-sketch-and-extrude.jpg"> -->
 <figure>
-  <video class="w-full" controls>
-    <source src="/videos/blog/from-science-fiction-to-reality-you-can-build-difficult-things-now/solidtype1.mp4" />
+  <video class="w-full" width="1844" height="1630" controls preload="metadata" poster="/videos/blog/from-science-fiction-to-reality-you-can-build-difficult-things-now/solidtype1.jpg">
+    <source src="/videos/blog/from-science-fiction-to-reality-you-can-build-difficult-things-now/solidtype1.mp4" type="video/mp4" />
   </video>
   <figcaption>First light: the first time I saw the model build itself.</figcaption>
 </figure>
@@ -52,6 +51,11 @@ My ChatGPT sessions from building this:
 - [Initial chat with ChatGPT arround the idea](https://chatgpt.com/share/6960f2a8-6abc-8005-aa4d-9be2d95f8046)
 - [Development of the implementation plan with ChatGPT](https://chatgpt.com/share/6960f377-0de8-8005-adf5-cd185b61e9d7)
 - [Investigations into topological naming](https://chatgpt.com/share/69610538-ab28-8005-8317-297d3afd9a60)
+
+In the git repo you can find:
+
+- The [implementation plan](https://github.com/samwillis/solidtype/tree/main/plan) that I used to guide the agent
+- The [design docs](https://github.com/samwillis/solidtype/tree/main/docs) that where drafted and maintained throughout the process by the agent
 :::
 
 ## Why CAD is a genuine test
@@ -130,9 +134,8 @@ This was the pivot point. I'd proven LLM-assisted kernel work could get surprisi
 
 So I made a trade-off: **use an established kernel** and focus on the _system_ around it instead.
 
-<!-- <video class="w-full" controls poster="/videos/blog/from-science-fiction-to-reality-you-can-build-difficult-things-now/solidtype2.jpg"> -->
 <figure>
-  <video class="w-full" controls>
+  <video class="w-full" width="1844" height="1630" controls preload="none" poster="/videos/blog/from-science-fiction-to-reality-you-can-build-difficult-things-now/solidtype2.jpg">
     <source src="/videos/blog/from-science-fiction-to-reality-you-can-build-difficult-things-now/solidtype2.mp4" />
   </video>
   <figcaption>The angle cut failure that prompted the pivot to OpenCascade.</figcaption>
@@ -201,9 +204,8 @@ _I'm writing a companion post on the sync architecture that will be published so
 
 <!-- I wrote a companion post on the sync architecture, Durable Streams implementation, AI orchestration patterns, and why these infrastructure choices mattered: **[Building real-time collaborative CAD with Electric and Durable Streams](/blog/posts/2026-01-21-building-real-time-collaborative-cad-with-electric-and-durable-streams.md)** -->
 
-<!-- <video class="w-full" controls poster="/videos/blog/from-science-fiction-to-reality-you-can-build-difficult-things-now/solidtype3.jpg"> -->
 <figure>
-  <video class="w-full" controls>
+  <video class="w-full" width="1920" height="1174" controls preload="none" poster="/videos/blog/from-science-fiction-to-reality-you-can-build-difficult-things-now/solidtype3.jpg">
   <source src="/videos/blog/from-science-fiction-to-reality-you-can-build-difficult-things-now/solidtype3.mp4" />
   </video>
   <figcaption>Collaboration: multiple users can see the same model, edit it, and follow each other in real-time.</figcaption>
@@ -233,9 +235,8 @@ _The full pattern of how AI sessions work with Durable Streams, how tools execut
 
 <!-- _The full pattern of how AI sessions work with Durable Streams, how tools execute against the same model humans edit, and why this enables collaborative AI, is be covered in detail in **[Part 2](/blog/posts/2026-01-21-building-real-time-collaborative-cad-with-electric-and-durable-streams.md)._ -->
 
-<!-- <video class="w-full" controls poster="/videos/blog/from-science-fiction-to-reality-you-can-build-difficult-things-now/solidtype4.jpg"> -->
 <figure>
-  <video class="w-full" controls>
+  <video class="w-full" width="1844" height="1630" controls preload="none" poster="/videos/blog/from-science-fiction-to-reality-you-can-build-difficult-things-now/solidtype4.jpg">
   <source src="/videos/blog/from-science-fiction-to-reality-you-can-build-difficult-things-now/solidtype4.mp4" />
   </video>
   <figcaption>AI creates a part in a project, then adds a sketch and extrudes it.</figcaption>
