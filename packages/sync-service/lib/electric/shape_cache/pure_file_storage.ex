@@ -1112,7 +1112,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
     end
   end
 
-  defp stream_main_log(min_offset, max_offset, %__MODULE__{} = opts, retried? \\ false) do
+  defp stream_main_log(min_offset, max_offset, %__MODULE__{} = opts) do
     storage_meta(
       ets_table: ets,
       last_persisted_offset: last_persisted,
@@ -1146,11 +1146,11 @@ defmodule Electric.ShapeCache.PureFileStorage do
         # Pure ETS read case
         case read_range_from_ets_cache(ets, min_offset, upper_read_bound) do
           {_data, last_offset}
-          when not retried? and (is_nil(last_offset) or last_offset < upper_read_bound_tuple) ->
-            # Empty or partial read detected - ETS might have been cleared by a flush.
-            # Retry with fresh metadata. After a flush, last_persisted is updated
-            # BEFORE ETS is cleared, so retry will read from disk instead.
-            stream_main_log(min_offset, max_offset, opts, true)
+          when is_nil(last_offset) or last_offset < upper_read_bound_tuple ->
+            # Empty or partial read - ETS was cleared by a concurrent flush.
+            # Data is now on disk (flush writes to disk before clearing ETS),
+            # so read directly from there using existing boundary info.
+            stream_from_disk(opts, min_offset, upper_read_bound, boundary_info)
 
           {data, _last_offset} ->
             data
@@ -1165,10 +1165,10 @@ defmodule Electric.ShapeCache.PureFileStorage do
         # It's expected to be fairly small in the worst case, up 64KB
         case read_range_from_ets_cache(ets, last_persisted, upper_read_bound) do
           {_upper_range, last_offset}
-          when not retried? and (is_nil(last_offset) or last_offset < upper_read_bound_tuple) ->
-            # Empty or partial read detected - ETS might have been cleared by a flush.
-            # Retry with fresh metadata to read from disk instead.
-            stream_main_log(min_offset, max_offset, opts, true)
+          when is_nil(last_offset) or last_offset < upper_read_bound_tuple ->
+            # Empty or partial read - ETS was cleared by a concurrent flush.
+            # Data is now on disk, so read the full range from there.
+            stream_from_disk(opts, min_offset, upper_read_bound, boundary_info)
 
           {upper_range, _last_offset} ->
             stream_from_disk(opts, min_offset, last_persisted, boundary_info)
