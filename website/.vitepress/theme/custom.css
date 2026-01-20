@@ -171,6 +171,25 @@
   --icon: url('/img/icons/durable-streams-social.svg') !important;
 }
 
+/* Divider between product icons (durable-streams, tanstack, pglite) and social icons (x, discord, github) */
+@media (min-width: 960px) {
+  .VPNavBarSocialLinks .VPSocialLink:nth-child(3)::after {
+    content: '';
+    display: block;
+    position: absolute;
+    right: -8px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 1px;
+    height: 20px;
+    background-color: var(--vp-c-divider);
+  }
+  .VPNavBarSocialLinks .VPSocialLink:nth-child(3) {
+    position: relative;
+    margin-right: 8px;
+  }
+}
+
 .vpi-social-linkedin {
   --icon: url('/img/icons/linkedin.svg') !important;
 }
