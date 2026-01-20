@@ -6,6 +6,18 @@ import Section from '../Section.vue'
 
 const integrations = [
   {
+    slug: 'neon',
+    name: 'Neon',
+  },
+  {
+    slug: 'supabase',
+    name: 'Supabase',
+  },
+  {
+    slug: 'vercel',
+    name: 'Vercel',
+  },
+  {
     slug: 'tanstack',
     name: 'TanStack',
   },
@@ -16,18 +28,6 @@ const integrations = [
   {
     slug: 'react',
     name: 'React',
-  },
-  {
-    slug: 'next',
-    name: 'Next.js',
-  },
-  {
-    slug: 'neon',
-    name: 'Neon',
-  },
-  {
-    slug: 'supabase',
-    name: 'Supabase',
   },
 ]
 
