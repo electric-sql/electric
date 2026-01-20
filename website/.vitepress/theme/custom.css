@@ -86,6 +86,7 @@
   --electric-color: #00d2a0;
   --ddn-color: #d0bcff;
   --pglite-color: #f6f95c;
+  --durable-streams-color: rgb(117, 251, 253);
 
   --vp-code-bg: var(--vp-c-bg-elv);
   --vp-code-color: #9ecbff;
@@ -635,6 +636,12 @@ span.no-visual {
 .VPButton.pglite:hover {
   background-color: var(--pglite-color);
   border-color: var(--pglite-color);
+  color: var(--vp-c-bg);
+}
+.VPButton.durable-streams,
+.VPButton.durable-streams:hover {
+  background-color: var(--durable-streams-color);
+  border-color: var(--durable-streams-color);
   color: var(--vp-c-bg);
 }
 .VPButton.small {

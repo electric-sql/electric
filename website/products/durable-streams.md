@@ -9,7 +9,7 @@ outline: deep
 import BlogPostsByTag from '../src/components/BlogPostsByTag.vue'
 </script>
 
-<img src="/img/home/sync-targets/worker.svg" class="product-icon" />
+<img src="/img/icons/durable-streams.svg" class="product-icon" />
 
 # Durable Streams
 
@@ -18,17 +18,10 @@ Resilient data streams for AI agents and real-time applications.
 <div class="actions cta-actions page-footer-actions left">
   <div class="action">
     <VPButton
-        href="https://github.com/electric-sql/electric/tree/main/packages/durable-streams"
-        text="Documentation"
-        target="_blank"
-        theme="electric"
-    />
-  </div>
-  <div class="action">
-    <VPButton href="https://github.com/electric-sql/electric"
+        href="https://github.com/electric-sql/durable-streams"
         text="GitHub"
         target="_blank"
-        theme="alt"
+        theme="durable-streams"
     />
   </div>
 </div>
@@ -64,6 +57,18 @@ Durable Streams ──────────┘     (reactive client DB)
 (streams, AI, sessions)
 ```
 
+## Wrapper protocols
+
+Durable Streams support multiple wrapper protocols for different use cases:
+
+- **Binary streams** &mdash; efficient binary encoding for high-throughput data
+- **JSON mode** &mdash; human-readable JSON for debugging and interoperability
+- **Proxy** &mdash; transparent proxy mode for existing SSE endpoints
+- **Durable state** &mdash; persisted session state with automatic recovery
+- **TanStack AI** &mdash; integration with TanStack Query for AI responses
+- **Vercel AI SDK** &mdash; drop-in transport adapter for Vercel AI SDK
+- **Yjs** &mdash; CRDT-based collaborative editing with Yjs
+
 ## Related posts
 
 <BlogPostsByTag tag="durable-streams" />
@@ -75,17 +80,10 @@ See the [Products overview](/products/) for guidance on how to combine Durable S
 <div class="actions cta-actions page-footer-actions left">
   <div class="action">
     <VPButton
-        href="https://github.com/electric-sql/electric/tree/main/packages/durable-streams"
-        text="Documentation"
-        target="_blank"
-        theme="electric"
-    />
-  </div>
-  <div class="action">
-    <VPButton href="https://github.com/electric-sql/electric"
+        href="https://github.com/electric-sql/durable-streams"
         text="GitHub"
         target="_blank"
-        theme="alt"
+        theme="durable-streams"
     />
   </div>
 </div>
