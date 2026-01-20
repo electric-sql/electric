@@ -86,16 +86,6 @@ defmodule Electric.MixProject do
   defp elixirc_paths(_), do: ["lib"]
 
   defp deps do
-    # Only include telemetry deps when building for the telemetry target.
-    # This avoids issues with hex.pm when the deps include path dependencies or overrides
-    # that would otherwise prevent package building.
-    telemetry_deps =
-      if Mix.target() == @telemetry_target do
-        telemetry_deps()
-      else
-        []
-      end
-
     List.flatten([
       [
         {:backoff, "~> 1.1"},
@@ -118,7 +108,10 @@ defmodule Electric.MixProject do
         {:tz, "~> 0.28"}
       ],
       dev_and_test_deps(),
-      telemetry_deps
+      # Only include telemetry deps when building for the telemetry target.
+      # This avoids issues with hex.pm when the deps include path dependencies or overrides
+      # that would otherwise prevent package building.
+      telemetry_deps(Mix.target())
     ])
   end
 
@@ -134,7 +127,7 @@ defmodule Electric.MixProject do
     ]
   end
 
-  defp telemetry_deps do
+  defp telemetry_deps(@telemetry_target) do
     [
       {:electric_telemetry, path: "../electric-telemetry"},
       {:opentelemetry, "~> 1.6"},
@@ -145,6 +138,8 @@ defmodule Electric.MixProject do
       {:sentry, "~> 11.0"}
     ]
   end
+
+  defp telemetry_deps(_), do: []
 
   defp aliases do
     [
