@@ -1,5 +1,14 @@
 # @core/sync-service
 
+## 1.3.1
+
+### Patch Changes
+
+- 5a767e6: Add Move-Out Support for Subqueries in Elixir Client
+- af2a1f4: fix: mark one more service-specific error as known
+- bcda65b: Fix: Return 409 on move-ins/outs for where clauses of the form 'NOT IN (subquery)' since this is not supported yet
+- 795a35d: fix: ensure materializer starting after consumer died doesn't log an error
+
 ## 1.3.0
 
 ### Minor Changes
