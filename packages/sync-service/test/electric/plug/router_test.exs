@@ -2326,6 +2326,45 @@ defmodule Electric.Plug.RouterTest do
     end
 
     @tag with_sql: [
+           "CREATE TABLE parent (id INT PRIMARY KEY, excluded BOOLEAN NOT NULL DEFAULT FALSE)",
+           "CREATE TABLE child (id INT PRIMARY KEY, parent_id INT NOT NULL REFERENCES parent(id), value INT NOT NULL)",
+           "INSERT INTO parent (id, excluded) VALUES (1, false), (2, true)",
+           "INSERT INTO child (id, parent_id, value) VALUES (1, 1, 10), (2, 2, 20)"
+         ]
+    test "NOT IN subquery should return 409 on move-in to subquery", %{
+      opts: opts,
+      db_conn: db_conn
+    } do
+      # Child rows where parent_id is NOT IN the set of excluded parents
+      # Initially: parent 1 is not excluded, so child 1 is in the shape
+      # parent 2 is excluded, so child 2 is NOT in the shape
+      req =
+        make_shape_req("child",
+          where: "parent_id NOT IN (SELECT id FROM parent WHERE excluded = true)"
+        )
+
+      assert {req, 200, [data, snapshot_end]} = shape_req(req, opts)
+
+      # Only child 1 should be in the shape (parent 1 is not excluded)
+      assert %{
+               "value" => %{"id" => "1", "parent_id" => "1", "value" => "10"},
+               "headers" => %{"operation" => "insert"}
+             } = data
+
+      assert %{"headers" => %{"control" => "snapshot-end"}} = snapshot_end
+
+      task = live_shape_req(req, opts)
+
+      # Now set parent 1 to excluded = true
+      # This causes parent 1 to move INTO the subquery result
+      # Which should cause child 1 to move OUT of the outer shape
+      # Since NOT IN subquery move-out isn't implemented, we expect a 409
+      Postgrex.query!(db_conn, "UPDATE parent SET excluded = true WHERE id = 1", [])
+
+      assert {_req, 409, _response} = Task.await(task)
+    end
+
+    @tag with_sql: [
            "CREATE TABLE parent (id INT PRIMARY KEY, value INT NOT NULL, other_value INT NOT NULL)",
            "CREATE TABLE child (id INT PRIMARY KEY, value INT NOT NULL, other_value INT NOT NULL)",
            "INSERT INTO parent (id, value, other_value) VALUES (1, 10, 10), (2, 20, 5)",
