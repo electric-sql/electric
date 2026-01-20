@@ -108,6 +108,61 @@ onMounted(() => {
   margin-top: 14px;
 }
 
+.data-sources {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  height: 288px;
+}
+
+.data-source {
+  flex: 1;
+  border-radius: 12px;
+  border: 1px solid rgba(42, 44, 52, 0.5);
+  background: var(--vp-c-bg-soft);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.data-source-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+}
+
+.data-source-icon {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+}
+
+.data-source-label {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--vp-c-text-2);
+  line-height: 1.4;
+}
+
+.data-source-code {
+  flex: 1;
+  background: var(--vp-c-bg-alt);
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  border-top: 1px solid rgba(42, 44, 52, 0.3);
+}
+
+.data-source-code code {
+  font-family: var(--vp-font-family-mono);
+  font-size: 12px;
+  color: var(--vp-c-text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .layers {
   text-align: center;
 }
@@ -177,7 +232,7 @@ onMounted(() => {
     margin-right: auto !important;
   }
 
-  .your-database-col {
+  .your-data-col {
     order: 0;
   }
   .your-stack-col {
@@ -211,7 +266,7 @@ onMounted(() => {
     grid-template-columns: 1fr;
     gap: 32px;
   }
-  .your-database-col {
+  .your-data-col {
     order: 0;
   }
   .your-stack-col {
@@ -222,7 +277,8 @@ onMounted(() => {
     order: 2;
   }
   .layers,
-  .your-stack :deep(div[class*='language-']) {
+  .your-stack :deep(div[class*='language-']),
+  .data-sources {
     max-width: 448px;
     margin-left: auto !important;
     margin-right: auto !important;
@@ -232,17 +288,25 @@ onMounted(() => {
     grid-template-columns: 1fr;
     gap: 24px;
   }
+  .data-sources {
+    height: auto;
+  }
 }
 @media (max-width: 639px) {
   .layers,
-  .your-stack :deep(div[class*='language-']) {
+  .your-stack :deep(div[class*='language-']),
+  .data-sources {
     max-width: 384px;
   }
 }
 @media (max-width: 518px) {
   .layers,
-  .your-stack :deep(div[class*='language-']) {
+  .your-stack :deep(div[class*='language-']),
+  .data-sources {
     max-width: 320px;
+  }
+  .data-source-code code {
+    font-size: 11px;
   }
 }
 
@@ -335,12 +399,28 @@ onMounted(() => {
       </p>
     </template>
     <div class="your-stack">
-      <div class="col your-database-col">
-        <div id="works-with-sql">
-          <div v-if="sql" v-html="sql"></div>
-          <div v-else class="language-sql placeholder" />
+      <div class="col your-data-col">
+        <div class="data-sources">
+          <div class="data-source">
+            <div class="data-source-header">
+              <img src="/img/integrations/postgres.svg" class="data-source-icon" />
+              <span class="data-source-label">Structured data from your database</span>
+            </div>
+            <div class="data-source-code">
+              <code>INSERT INTO items (id, value) VALUES ('abc', 123);</code>
+            </div>
+          </div>
+          <div class="data-source">
+            <div class="data-source-header">
+              <img src="/img/icons/durable-streams.svg" class="data-source-icon" />
+              <span class="data-source-label">AI token streams and real-time data</span>
+            </div>
+            <div class="data-source-code">
+              <code>data: {"token": "Hello", "index": 0}</code>
+            </div>
+          </div>
         </div>
-        <div class="stack-label">Your database</div>
+        <div class="stack-label">Your data</div>
       </div>
       <div class="col your-stack-col">
         <div class="layers">
