@@ -320,14 +320,54 @@ defmodule Electric.ShapeCache.InMemoryStorage do
 
   @impl Electric.ShapeCache.Storage
   def append_fragment_to_log!(log_items, %MS{} = opts) do
-    # For in-memory storage, fragment writes work the same as full transaction writes
-    append_to_log!(log_items, opts)
+    # For in-memory storage, fragment writes are similar to full transaction writes
+    # but we do NOT update @latest_offset_key until commit, and we do NOT send
+    # the :flushed message. This ensures fetch_latest_offset returns the last
+    # committed transaction offset, not a mid-transaction offset.
+    log_table = opts.log_table
+    chunk_checkpoint_table = opts.chunk_checkpoint_table
+
+    {processed_log_items, _last_offset} =
+      Enum.map_reduce(log_items, nil, fn
+        {:chunk_boundary, offset}, curr ->
+          {{storage_offset(offset), :checkpoint}, curr}
+
+        {offset, _key, _op_type, json_log_item}, _ ->
+          {{{:offset, storage_offset(offset)}, json_log_item}, offset}
+      end)
+
+    processed_log_items
+    |> Enum.split_with(fn item -> match?({_, :checkpoint}, item) end)
+    |> then(fn {checkpoints, log_items} ->
+      :ets.insert(chunk_checkpoint_table, checkpoints)
+      :ets.insert(log_table, log_items)
+      # Note: NOT updating @latest_offset_key until signal_txn_commit!
+    end)
+
+    opts
   end
 
   @impl Electric.ShapeCache.Storage
   def signal_txn_commit!(_xid, %MS{} = opts) do
-    # No-op for in-memory storage - all writes are already complete
-    opts
+    # For in-memory storage, the commit signal updates @latest_offset_key
+    # to the last written offset and sends the :flushed message
+    log_table = opts.log_table
+
+    # Find the last written offset in the log table
+    case :ets.last(log_table) do
+      :"$end_of_table" ->
+        opts
+
+      {:offset, offset_tuple} ->
+        last_offset = LogOffset.new(offset_tuple)
+        :ets.insert(opts.snapshot_table, {@latest_offset_key, last_offset})
+        send(self(), {Storage, :flushed, last_offset})
+        opts
+
+      _ ->
+        # Other keys (like :movein) - no update needed
+        opts
+    end
   end
 
   @impl Electric.ShapeCache.Storage

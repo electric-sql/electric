@@ -1309,31 +1309,39 @@ defmodule Electric.ShapeCache.PureFileStorage do
   @doc """
   Append log items from a transaction fragment.
 
-  For now, this is functionally identical to `append_to_log!/2` since the
-  underlying write loop handles chunk boundaries based on byte thresholds.
-  The separation exists to allow future optimization where chunk boundaries
-  are only placed at transaction commits.
+  Unlike `append_to_log!/2`, this does NOT advance `last_seen_txn_offset` or
+  call `register_complete_txn`. Transaction completion should be signaled
+  separately via `signal_txn_commit!/2`.
+
+  This ensures that on crash/recovery, `fetch_latest_offset` returns the
+  last committed transaction offset, not a mid-transaction offset.
   """
-  def append_fragment_to_log!(fragment_lines, state) do
-    # For now, delegate to append_to_log! - the chunk boundary logic
-    # is based on byte thresholds and works correctly with fragments.
-    # Future optimization: track fragment state and defer chunk boundary
-    # decisions until signal_txn_commit!/2 is called.
-    append_to_log!(fragment_lines, state)
+  def append_fragment_to_log!(fragment_lines, writer_state(writer_acc: acc) = state) do
+    fragment_lines
+    |> normalize_log_stream()
+    |> WriteLoop.append_fragment_to_log!(acc, state)
+    |> case do
+      {acc, cancel_flush_timer: true} ->
+        timer_ref = writer_state(state, :write_timer)
+        if not is_nil(timer_ref), do: Process.cancel_timer(timer_ref)
+        writer_state(state, writer_acc: acc, write_timer: nil)
+
+      {acc, schedule_flush: times_flushed} ->
+        writer_state(state, writer_acc: acc)
+        |> schedule_flush(times_flushed)
+    end
   end
 
   @doc """
   Signal that a transaction has committed.
 
-  Currently a no-op as chunk boundaries are calculated based on byte thresholds
-  in append_to_log!/append_fragment_to_log!. Future optimization could defer
-  chunk boundary calculations to this point for more precise transaction-aligned
-  boundaries.
+  Updates `last_seen_txn_offset` and persists metadata to mark the transaction
+  as complete. Should be called after all fragments have been written via
+  `append_fragment_to_log!/2`.
   """
-  def signal_txn_commit!(_xid, state) do
-    # No-op for now - chunk boundaries are already handled in append_*_to_log!
-    # based on byte thresholds. The state is already correctly updated.
-    state
+  def signal_txn_commit!(_xid, writer_state(writer_acc: acc) = state) do
+    acc = WriteLoop.signal_txn_commit(acc, state)
+    writer_state(state, writer_acc: acc)
   end
 
   def update_chunk_boundaries_cache(opts, boundaries) do
