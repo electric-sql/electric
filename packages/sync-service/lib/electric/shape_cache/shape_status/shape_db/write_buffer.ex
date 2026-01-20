@@ -163,6 +163,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
       ops_table = operations_table_name(stack_id)
 
       # Scan ops_table for :add operations with matching OIDs
+      # Include flushing entries - they may not be in SQLite yet
       ops_table
       |> :ets.tab2list()
       |> Enum.filter(fn

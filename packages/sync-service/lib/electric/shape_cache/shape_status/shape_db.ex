@@ -149,7 +149,6 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb do
   def list_shapes(stack_id) when is_stack_id(stack_id) do
     # Get shapes from buffer (newly added, not yet in SQLite)
     buffered = WriteBuffer.list_buffered_shapes(stack_id)
-    buffered_handles = buffered |> Enum.map(fn {h, _} -> h end) |> MapSet.new()
 
     # Get tombstoned handles
     tombstones = WriteBuffer.tombstoned_handles(stack_id)
@@ -157,15 +156,15 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb do
     # Get shapes from SQLite
     case checkout!(stack_id, :list_shapes, &Query.list_shapes/1) do
       {:ok, sqlite_shapes} ->
-        # Filter SQLite shapes: remove tombstoned and already-in-buffer handles
+        # Filter SQLite shapes: remove tombstoned
         filtered_sqlite =
-          sqlite_shapes
-          |> Enum.reject(fn {handle, _shape} ->
-            MapSet.member?(tombstones, handle) or MapSet.member?(buffered_handles, handle)
+          Enum.reject(sqlite_shapes, fn {handle, _shape} ->
+            MapSet.member?(tombstones, handle)
           end)
 
-        # Merge: buffered shapes + filtered SQLite shapes
-        {:ok, buffered ++ filtered_sqlite}
+        # Merge and deduplicate by handle (handles race between buffer and SQLite)
+        # Buffered shapes take precedence (listed first)
+        {:ok, Enum.uniq_by(buffered ++ filtered_sqlite, fn {handle, _} -> handle end)}
 
       error ->
         error
@@ -179,7 +178,6 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb do
   def shape_handles_for_relations(stack_id, relations) when is_stack_id(stack_id) do
     # Get handles from buffer
     buffered_handles = WriteBuffer.handles_for_relations(stack_id, relations)
-    buffered_set = MapSet.new(buffered_handles)
     tombstones = WriteBuffer.tombstoned_handles(stack_id)
 
     case checkout!(
@@ -188,14 +186,11 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb do
            &Query.shape_handles_for_relations(&1, relations)
          ) do
       {:ok, sqlite_handles} ->
-        # Filter SQLite handles: remove tombstoned and already-in-buffer
-        filtered_sqlite =
-          sqlite_handles
-          |> Enum.reject(fn handle ->
-            MapSet.member?(tombstones, handle) or MapSet.member?(buffered_set, handle)
-          end)
+        # Filter SQLite handles: remove tombstoned
+        filtered_sqlite = Enum.reject(sqlite_handles, &MapSet.member?(tombstones, &1))
 
-        {:ok, buffered_handles ++ filtered_sqlite}
+        # Merge and deduplicate (handles race between buffer and SQLite)
+        {:ok, Enum.uniq(buffered_handles ++ filtered_sqlite)}
 
       error ->
         error
@@ -229,28 +224,10 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb do
   end
 
   def count_shapes(stack_id) do
-    # Get buffered count
-    buffered_count = WriteBuffer.buffered_shape_count(stack_id)
-
-    buffered_handles =
-      WriteBuffer.list_buffered_shapes(stack_id) |> Enum.map(fn {h, _} -> h end) |> MapSet.new()
-
-    tombstones = WriteBuffer.tombstoned_handles(stack_id)
-
-    # Get SQLite shapes and count those not in buffer/tombstones
-    case checkout!(stack_id, :list_shapes, &Query.list_shapes/1) do
-      {:ok, sqlite_shapes} ->
-        sqlite_not_in_buffer =
-          sqlite_shapes
-          |> Enum.reject(fn {handle, _} ->
-            MapSet.member?(buffered_handles, handle) or MapSet.member?(tombstones, handle)
-          end)
-          |> length()
-
-        {:ok, buffered_count + sqlite_not_in_buffer}
-
-      error ->
-        error
+    # Use list_shapes which handles deduplication
+    case list_shapes(stack_id) do
+      {:ok, shapes} -> {:ok, length(shapes)}
+      error -> error
     end
   end
 
