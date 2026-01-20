@@ -1913,6 +1913,305 @@ defmodule Electric.Shapes.ConsumerTest do
 
       stop_supervised!(ctx.consumer_supervisor)
     end
+
+    # P1.1: Test pending_txn: nil edge cases
+    # These simulate recovery scenarios where the consumer restarts mid-transaction
+    # Use pg_snapshot with empty xip_list so filtering can be disabled
+
+    @tag pg_snapshot: {10, 11, []}
+    test "mid-fragment without prior begin creates pending_txn on-the-fly", ctx do
+      # This simulates a recovery scenario where:
+      # 1. Begin fragment was processed before crash
+      # 2. Consumer restarts and receives middle fragment
+      # The consumer should create a pending_txn on-the-fly and process normally
+
+      %{storage: storage} = ctx
+
+      {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape1, ctx.stack_id)
+      :started = ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id)
+
+      # First, send a transaction with high xid to complete the initial filtering phase
+      # This is needed because filtering? starts as true and is only disabled after
+      # processing a transaction with xid > xmax
+      lsn_init = Lsn.from_integer(50)
+
+      init_txn =
+        transaction(100, lsn_init, [
+          %Changes.NewRecord{
+            relation: {"public", "test_table"},
+            record: %{"id" => "init"},
+            log_offset: LogOffset.new(lsn_init, 0)
+          }
+        ])
+
+      assert :ok = ShapeLogCollector.handle_event(init_txn, ctx.stack_id)
+      Process.sleep(50)
+
+      ref = Shapes.Consumer.register_for_changes(ctx.stack_id, shape_handle)
+
+      lsn = Lsn.from_integer(100)
+      xid = 200
+
+      # Send a middle fragment directly (no begin) - simulates recovery after begin was processed
+      mid_fragment = %TransactionFragment{
+        xid: xid,
+        lsn: lsn,
+        last_log_offset: LogOffset.new(lsn, 1),
+        has_begin?: false,
+        commit: nil,
+        changes: [
+          %Changes.NewRecord{
+            relation: {"public", "test_table"},
+            record: %{"id" => "1"},
+            log_offset: LogOffset.new(lsn, 0)
+          },
+          %Changes.NewRecord{
+            relation: {"public", "test_table"},
+            record: %{"id" => "2"},
+            log_offset: LogOffset.new(lsn, 1)
+          }
+        ],
+        affected_relations: MapSet.new([{"public", "test_table"}])
+      }
+
+      # Should process without error
+      assert :ok = ShapeLogCollector.handle_event(mid_fragment, ctx.stack_id)
+
+      # No notification yet - transaction not committed
+      refute_receive {^ref, :new_changes, _}, 100
+
+      # Now send commit fragment
+      commit_fragment = %TransactionFragment{
+        xid: xid,
+        lsn: lsn,
+        last_log_offset: LogOffset.new(lsn, 2),
+        has_begin?: false,
+        commit: %Commit{},
+        changes: [
+          %Changes.NewRecord{
+            relation: {"public", "test_table"},
+            record: %{"id" => "3"},
+            log_offset: LogOffset.new(lsn, 2)
+          }
+        ],
+        affected_relations: MapSet.new([{"public", "test_table"}])
+      }
+
+      assert :ok = ShapeLogCollector.handle_event(commit_fragment, ctx.stack_id)
+
+      # Now we should get notification
+      assert_receive {^ref, :new_changes, offset}, @receive_timeout
+      assert offset == LogOffset.new(lsn, 2)
+
+      # Verify all 3 records were written (plus 1 from init_txn)
+      shape_storage = Storage.for_shape(shape_handle, storage)
+
+      records =
+        Storage.get_log_stream(LogOffset.last_before_real_offsets(), shape_storage)
+        |> Enum.map(&Jason.decode!/1)
+
+      assert length(records) == 4
+      ids = Enum.map(records, & &1["value"]["id"])
+      assert ids == ["init", "1", "2", "3"]
+
+      stop_supervised!(ctx.consumer_supervisor)
+    end
+
+    @tag pg_snapshot: {10, 11, []}
+    test "commit-only fragment with no prior fragments processes correctly", ctx do
+      # This simulates a recovery scenario where:
+      # 1. All prior fragments were processed before crash
+      # 2. Consumer restarts and receives only the commit fragment
+      # The consumer should create a pending_txn on-the-fly and complete the transaction
+
+      %{storage: storage} = ctx
+
+      {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape1, ctx.stack_id)
+      :started = ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id)
+
+      # First, send a transaction with high xid to complete the initial filtering phase
+      lsn_init = Lsn.from_integer(50)
+
+      init_txn =
+        transaction(100, lsn_init, [
+          %Changes.NewRecord{
+            relation: {"public", "test_table"},
+            record: %{"id" => "init"},
+            log_offset: LogOffset.new(lsn_init, 0)
+          }
+        ])
+
+      assert :ok = ShapeLogCollector.handle_event(init_txn, ctx.stack_id)
+      Process.sleep(50)
+
+      ref = Shapes.Consumer.register_for_changes(ctx.stack_id, shape_handle)
+
+      lsn = Lsn.from_integer(100)
+      xid = 200
+
+      # Send only a commit fragment (no begin, has commit) with changes
+      commit_only_fragment = %TransactionFragment{
+        xid: xid,
+        lsn: lsn,
+        last_log_offset: LogOffset.new(lsn, 1),
+        has_begin?: false,
+        commit: %Commit{},
+        changes: [
+          %Changes.NewRecord{
+            relation: {"public", "test_table"},
+            record: %{"id" => "1"},
+            log_offset: LogOffset.new(lsn, 0)
+          },
+          %Changes.NewRecord{
+            relation: {"public", "test_table"},
+            record: %{"id" => "2"},
+            log_offset: LogOffset.new(lsn, 1)
+          }
+        ],
+        affected_relations: MapSet.new([{"public", "test_table"}])
+      }
+
+      # Should process without error and complete the transaction
+      assert :ok = ShapeLogCollector.handle_event(commit_only_fragment, ctx.stack_id)
+
+      # Should get notification since transaction is complete
+      assert_receive {^ref, :new_changes, offset}, @receive_timeout
+      assert offset == LogOffset.new(lsn, 1)
+
+      # Verify records were written (plus 1 from init_txn)
+      shape_storage = Storage.for_shape(shape_handle, storage)
+
+      records =
+        Storage.get_log_stream(LogOffset.last_before_real_offsets(), shape_storage)
+        |> Enum.map(&Jason.decode!/1)
+
+      assert length(records) == 3
+      ids = Enum.map(records, & &1["value"]["id"])
+      assert ids == ["init", "1", "2"]
+
+      stop_supervised!(ctx.consumer_supervisor)
+    end
+
+    # P1.2: Test that uncommitted fragments don't advance the durable offset
+    # This verifies the core invariant for crash recovery safety
+
+    @tag pg_snapshot: {10, 11, []}, with_pure_file_storage_opts: [flush_period: 10]
+    test "uncommitted fragments flushed to disk do not advance latest_offset", ctx do
+      # This test verifies the key invariant for crash safety:
+      # 1. Uncommitted fragment data can be written and flushed to disk
+      # 2. fetch_latest_offset still returns the last committed offset
+      # 3. Completing the transaction advances the offset correctly
+
+      %{storage: storage} = ctx
+
+      {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape1, ctx.stack_id)
+      :started = ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id)
+
+      # First, send a transaction with high xid to complete the initial filtering phase
+      lsn_init = Lsn.from_integer(50)
+
+      init_txn =
+        transaction(100, lsn_init, [
+          %Changes.NewRecord{
+            relation: {"public", "test_table"},
+            record: %{"id" => "committed-first"},
+            log_offset: LogOffset.new(lsn_init, 0)
+          }
+        ])
+
+      ref = Shapes.Consumer.register_for_changes(ctx.stack_id, shape_handle)
+      assert :ok = ShapeLogCollector.handle_event(init_txn, ctx.stack_id)
+      assert_receive {^ref, :new_changes, _}, @receive_timeout
+
+      # Wait for flush
+      Process.sleep(50)
+
+      # Get the offset after the committed transaction
+      shape_storage = Storage.for_shape(shape_handle, storage)
+      {:ok, offset_after_committed} = Storage.fetch_latest_offset(shape_storage)
+      assert offset_after_committed == LogOffset.new(lsn_init, 0)
+
+      # Now send an uncommitted fragment (begin, no commit)
+      lsn_uncommitted = Lsn.from_integer(100)
+      xid_uncommitted = 200
+
+      uncommitted_fragment = %TransactionFragment{
+        xid: xid_uncommitted,
+        lsn: lsn_uncommitted,
+        last_log_offset: LogOffset.new(lsn_uncommitted, 1),
+        has_begin?: true,
+        commit: nil,
+        changes: [
+          %Changes.NewRecord{
+            relation: {"public", "test_table"},
+            record: %{"id" => "uncommitted-1"},
+            log_offset: LogOffset.new(lsn_uncommitted, 0)
+          },
+          %Changes.NewRecord{
+            relation: {"public", "test_table"},
+            record: %{"id" => "uncommitted-2"},
+            log_offset: LogOffset.new(lsn_uncommitted, 1)
+          }
+        ],
+        affected_relations: MapSet.new([{"public", "test_table"}])
+      }
+
+      assert :ok = ShapeLogCollector.handle_event(uncommitted_fragment, ctx.stack_id)
+
+      # No notification - transaction not committed
+      refute_receive {^ref, :new_changes, _}, 100
+
+      # Wait for flush to disk (short flush_period ensures this happens)
+      Process.sleep(50)
+
+      # KEY ASSERTION: fetch_latest_offset still returns the committed offset
+      # even though uncommitted fragment data has been flushed to disk
+      {:ok, offset_after_flush} = Storage.fetch_latest_offset(shape_storage)
+
+      assert offset_after_flush == offset_after_committed,
+             "fetch_latest_offset should return #{inspect(offset_after_committed)} but got #{inspect(offset_after_flush)}"
+
+      # Now send the commit fragment to complete the transaction
+      commit_fragment = %TransactionFragment{
+        xid: xid_uncommitted,
+        lsn: lsn_uncommitted,
+        last_log_offset: LogOffset.new(lsn_uncommitted, 2),
+        has_begin?: false,
+        commit: %Commit{},
+        changes: [
+          %Changes.NewRecord{
+            relation: {"public", "test_table"},
+            record: %{"id" => "now-committed"},
+            log_offset: LogOffset.new(lsn_uncommitted, 2)
+          }
+        ],
+        affected_relations: MapSet.new([{"public", "test_table"}])
+      }
+
+      assert :ok = ShapeLogCollector.handle_event(commit_fragment, ctx.stack_id)
+
+      # Now we should get notification
+      assert_receive {^ref, :new_changes, offset}, @receive_timeout
+      assert offset == LogOffset.new(lsn_uncommitted, 2)
+
+      # Wait for flush
+      Process.sleep(50)
+
+      # After commit, fetch_latest_offset should return the new committed offset
+      {:ok, offset_after_commit} = Storage.fetch_latest_offset(shape_storage)
+      assert offset_after_commit == LogOffset.new(lsn_uncommitted, 2)
+
+      # Verify all records are in storage
+      records =
+        Storage.get_log_stream(LogOffset.last_before_real_offsets(), shape_storage)
+        |> Enum.map(&Jason.decode!/1)
+
+      assert length(records) == 4
+      ids = Enum.map(records, & &1["value"]["id"])
+      assert ids == ["committed-first", "uncommitted-1", "uncommitted-2", "now-committed"]
+
+      stop_supervised!(ctx.consumer_supervisor)
+    end
   end
 
   defp transaction(xid, lsn, changes) do
