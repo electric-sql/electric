@@ -12,6 +12,53 @@ import Card from '../src/components/home/Card.vue'
 
 Composable sync primitives that work with your stack.
 
+<div class="products-grid">
+  <Card
+    href="/products/postgres-sync"
+    icon="/img/icons/electric.svg"
+    title="Postgres Sync"
+    body="Sync data from Postgres into local apps with partial replication and live queries."
+  />
+  <Card
+    href="/products/durable-streams"
+    icon="/img/icons/durable-streams.svg"
+    title="Durable Streams"
+    body="Resumable streaming protocol for AI responses and multi-step workflows."
+  />
+  <Card
+    href="/products/tanstack-db"
+    icon="/img/icons/tanstack-social.svg"
+    title="TanStack DB"
+    body="Reactive client database with optimistic updates and sync integration."
+  />
+  <Card
+    href="/products/pglite"
+    icon="/img/icons/pglite.svg"
+    title="PGlite"
+    body="Lightweight WASM Postgres for browser, Node.js, and embedded use."
+  />
+</div>
+
+## How they fit together {#how-they-fit-together}
+
+The sync primitives are designed to compose. Postgres Sync and Durable Streams provide different data sources. TanStack DB provides a unified reactive client. PGlite provides embeddable Postgres.
+
+<div class="composition-diagram">
+<pre>
+Data Sources                          Client
+──────────────────────────────────────────────────────────────
+
+Postgres Sync ─────────────────┐
+(structured data)              │
+                               ├────→  TanStack DB
+Durable Streams ───────────────┘       (reactive client DB)
+(streams, AI, sessions)
+
+
+PGlite = WASM Postgres (dev, CI, test, sandboxed runtimes)
+</pre>
+</div>
+
 ## Which product should I use?
 
 <div class="guidance-grid">
@@ -34,55 +81,6 @@ Composable sync primitives that work with your stack.
     icon="/img/icons/pglite.svg"
     title="Building sandboxed environments?"
     body="Use <a href='/products/pglite'>PGlite</a> for WASM Postgres with optional sync via Postgres Sync."
-  />
-</div>
-
-## How they work together
-
-The sync primitives are designed to compose. Postgres Sync and Durable Streams provide different data sources. TanStack DB provides a unified reactive client. PGlite provides embeddable Postgres.
-
-<div class="composition-diagram">
-<pre>
-Data Sources                          Client
-──────────────────────────────────────────────────────────────
-
-Postgres Sync ─────────────────┐
-(structured data)              │
-                               ├────→  TanStack DB
-Durable Streams ───────────────┘       (reactive client DB)
-(streams, AI, sessions)
-
-
-PGlite = WASM Postgres (dev, CI, test, sandboxed runtimes)
-</pre>
-</div>
-
-## Our products
-
-<div class="products-grid">
-  <Card
-    href="/products/postgres-sync"
-    icon="/img/icons/electric.svg"
-    title="Postgres Sync"
-    body="Sync data from Postgres into local apps with partial replication and live queries."
-  />
-  <Card
-    href="/products/durable-streams"
-    icon="/img/home/sync-targets/worker.svg"
-    title="Durable Streams"
-    body="Resumable streaming protocol for AI responses and multi-step workflows."
-  />
-  <Card
-    href="/products/tanstack-db"
-    icon="/img/icons/tanstack-social.svg"
-    title="TanStack DB"
-    body="Reactive client database with optimistic updates and sync integration."
-  />
-  <Card
-    href="/products/pglite"
-    icon="/img/icons/pglite.svg"
-    title="PGlite"
-    body="Lightweight WASM Postgres for browser, Node.js, and embedded use."
   />
 </div>
 
