@@ -96,6 +96,7 @@ Learn how these products enable different [sync solutions](/sync).
   grid-template-columns: repeat(2, 1fr);
   gap: 20px;
   margin: 24px 0 40px;
+  align-items: stretch;
 }
 
 .guidance-grid :deep(.card) {
@@ -134,6 +135,11 @@ Learn how these products enable different [sync solutions](/sync).
   grid-template-columns: repeat(2, 1fr);
   gap: 20px;
   margin: 24px 0 40px;
+  align-items: stretch;
+}
+
+.products-grid :deep(.card) {
+  height: 100%;
 }
 
 @media (max-width: 768px) {
