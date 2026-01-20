@@ -81,7 +81,7 @@ See applications built with TanStack DB in the [TanStack Showcase](https://tanst
 
 ## More information
 
-See the [Products overview](/products/) for guidance on how to combine TanStack DB with other Electric products. Check out the [Sync page](/sync) for outcome-focused solutions.
+See [how you can combine](/products/#how-they-fit-together) TanStack DB with other Electric products to [build fast, modern UIs](/sync#reactivity).
 
 <div class="actions cta-actions page-footer-actions left">
   <div class="action">

@@ -113,6 +113,8 @@ This enables a massive number of clients to query and get real-time updates to s
 
 ## More information
 
+See [how you can combine](/products/#how-they-fit-together) Postgres Sync with other Electric products to [build fast, reactive apps](/sync#reactivity).
+
 See the [Docs](/docs/intro), [Quickstart](/docs/quickstart) and [Demos](/demos). You can [self-host](/docs/guides/deployment) or use the [Electric Cloud](/cloud).
 
 <div class="actions cta-actions page-footer-actions left">

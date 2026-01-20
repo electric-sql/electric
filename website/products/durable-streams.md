@@ -75,7 +75,7 @@ Durable Streams support multiple wrapper protocols for different use cases:
 
 ## More information
 
-See the [Products overview](/products/) for guidance on how to combine Durable Streams with other Electric products. Check out the [Sync page](/sync) for outcome-focused solutions.
+See [how you can combine](/products/#how-they-fit-together) Durable Streams with other Electric products to [build resilient, collaborative AI apps](/sync#resilience).
 
 <div class="actions cta-actions page-footer-actions left">
   <div class="action">
