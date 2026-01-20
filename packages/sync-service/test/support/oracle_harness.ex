@@ -41,7 +41,8 @@ defmodule Support.OracleHarness do
       case_names: env_list("ELECTRIC_ORACLE_CASES"),
       mutation_limit: env_int("ELECTRIC_ORACLE_MUTATION_LIMIT"),
       shape_limit: env_int("ELECTRIC_ORACLE_SHAPE_LIMIT"),
-      timeout_ms: env_int("ELECTRIC_ORACLE_TIMEOUT_MS") || @default_timeout_ms
+      timeout_ms: env_int("ELECTRIC_ORACLE_TIMEOUT_MS") || @default_timeout_ms,
+      verbose: System.get_env("ELECTRIC_ORACLE_VERBOSE") == "1"
     }
   end
 
@@ -55,10 +56,16 @@ defmodule Support.OracleHarness do
   end
 
   defp run_case(ctx, case_spec, opts) do
+    log(opts, "case=#{case_spec.name}")
     apply_sql(ctx, case_spec.schema_sql)
     apply_sql(ctx, case_spec.seed_sql)
 
     {states, pid_map} = start_shapes(ctx, case_spec.shapes, opts)
+
+    Enum.each(states, fn state ->
+      where_display = state.where || "true"
+      log(opts, "  shape=#{state.name} where=#{inspect(where_display)}")
+    end)
 
     states = await_up_to_date(states, pid_map, opts.timeout_ms, case_spec, "initial snapshot")
 
@@ -69,7 +76,10 @@ defmodule Support.OracleHarness do
       apply_sql(ctx, mutation.sql)
       states = await_up_to_date(states, pid_map, opts.timeout_ms, case_spec, mutation.name)
       oracle_after = oracle_snapshot(ctx, states)
+      view_changed? = oracle_before != oracle_after
       assert_consistent(case_spec, mutation, states, oracle_before, oracle_after)
+      view_status = if view_changed?, do: "view changed", else: "view unchanged"
+      log(opts, "  mutation=#{mutation.name} (#{view_status}) PASS")
       states
     end)
 
@@ -349,5 +359,9 @@ defmodule Support.OracleHarness do
 
   defp quote_ident(value) do
     ~s|"#{value}"|
+  end
+
+  defp log(opts, message) do
+    if opts.verbose, do: IO.puts("[oracle] #{message}")
   end
 end
