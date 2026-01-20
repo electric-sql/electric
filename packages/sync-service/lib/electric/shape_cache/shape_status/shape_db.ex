@@ -231,7 +231,10 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb do
   def count_shapes(stack_id) do
     # Get buffered count
     buffered_count = WriteBuffer.buffered_shape_count(stack_id)
-    buffered_handles = WriteBuffer.list_buffered_shapes(stack_id) |> Enum.map(fn {h, _} -> h end) |> MapSet.new()
+
+    buffered_handles =
+      WriteBuffer.list_buffered_shapes(stack_id) |> Enum.map(fn {h, _} -> h end) |> MapSet.new()
+
     tombstones = WriteBuffer.tombstoned_handles(stack_id)
 
     # Get SQLite shapes and count those not in buffer/tombstones

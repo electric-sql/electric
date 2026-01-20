@@ -138,7 +138,9 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
     shapes_table_name(stack_id)
     |> :ets.tab2list()
     |> Enum.reject(fn {handle, _, _} -> :ets.member(tombstones, handle) end)
-    |> Enum.map(fn {handle, shape_binary, _} -> {handle, :erlang.binary_to_term(shape_binary)} end)
+    |> Enum.map(fn {handle, shape_binary, _} ->
+      {handle, :erlang.binary_to_term(shape_binary)}
+    end)
   end
 
   @doc "Returns the count of buffered shapes (excluding tombstoned)"
