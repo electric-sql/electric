@@ -120,7 +120,7 @@ export default defineConfig({
       },
     ],
   ],
-  ignoreDeadLinks: [/localhost/, /^\/AGENTS(\.md)?$/],
+  ignoreDeadLinks: [/localhost/, /^\/AGENTS(\.md)?$/, /^\/cloud$/],
   markdown: {
     theme: 'github-dark',
     languages: [
@@ -182,6 +182,17 @@ export default defineConfig({
             { text: 'Durable Streams', link: '/products/durable-streams' },
             { text: 'TanStack DB', link: '/products/tanstack-db' },
             { text: 'PGlite', link: '/products/pglite' },
+          ],
+        },
+      ],
+      '/cloud': [
+        {
+          text: 'Electric Cloud',
+          items: [
+            { text: 'Overview', link: '/cloud/' },
+            { text: 'Usage', link: '/cloud/usage' },
+            { text: 'Protocols', link: '/cloud/protocols' },
+            { text: 'Pricing', link: '/cloud/pricing' },
           ],
         },
       ],

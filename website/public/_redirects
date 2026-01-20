@@ -94,5 +94,5 @@ https://next.electric-sql.com/* https://electric-sql.com/:splat 301!
 /use-cases/state-transfer             /use-cases/data-sync
 /product/cloud/sign-up                https://dashboard.electric-sql.cloud
 /product/cloud/onboarding             https://dashboard.electric-sql.cloud
-/product/cloud/usage                  /product/cloud
+/product/cloud/usage                  /cloud/usage
 /docs/guides/llms                     /docs/agents
