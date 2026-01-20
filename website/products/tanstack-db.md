@@ -67,6 +67,14 @@ Durable Streams ──────────┘     (client DB)      (reactive
 
 Data flows from your backend through Electric's sync primitives into TanStack DB, which then powers your reactive UI components.
 
+## Learn more
+
+For an interactive guide to TanStack DB, how it works and why it might change the way you build apps, see [What TanStack DB is](https://frontendatscale.com/blog/tanstack-db).
+
+## Showcase
+
+See applications built with TanStack DB in the [TanStack Showcase](https://tanstack.com/showcase?page=1&libraryIds=%5B%22db%22%5D).
+
 ## Related posts
 
 <BlogPostsByTag tag="tanstack-db" :limit="4" />

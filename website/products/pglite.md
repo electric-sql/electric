@@ -44,7 +44,7 @@ onMounted(async () => {
 
 <img src="/img/icons/pglite.svg" class="product-icon" />
 
-# PGlite <Badge type="danger" text="alpha" />
+# PGlite <Badge type="warning" text="beta" />
 
 Sync into a lightweight WASM Postgres with
 real-time, reactive bindings.
