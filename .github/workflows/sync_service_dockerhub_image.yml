@@ -1,7 +1,7 @@
 name: Publish Electric images to Docker Hub
 
 # If you decide to modify the list of triggers for this action, don't forget to also update the
-# conditional logic based on ${{ github.event_name }} in the derive_build_vars job.
+# conditional logic in the derive_build_vars job below.
 on:
   push:
     branches: ['main']
@@ -39,23 +39,21 @@ jobs:
     steps:
       - name: Determine the ref to check out
         id: git_ref
+        env:
+          INPUT_RELEASE_TAG: ${{ inputs.release_tag }}
+          EVENT_RELEASE_TAG: ${{ github.event.release.tag_name }}
+          COMMIT_SHA: ${{ github.sha }}
         run: |
-          case ${{ github.event_name }} in
-            push)
-              ref="${{ github.sha }}"
-              is_release=false
-              ;;
-
-            release)
-              ref="refs/tags/${{ github.event.release.tag_name }}"
-              is_release=true
-              ;;
-
-            workflow_dispatch | workflow_call)
-              ref="refs/tags/${{ inputs.release_tag }}"
-              is_release=true
-              ;;
-          esac
+          if [ -n "$INPUT_RELEASE_TAG" ]; then
+            ref="refs/tags/$INPUT_RELEASE_TAG"
+            is_release=true
+          elif [ -n "$EVENT_RELEASE_TAG" ]; then
+            ref="refs/tags/$EVENT_RELEASE_TAG"
+            is_release=true
+          else
+            ref="$COMMIT_SHA"
+            is_release=false
+          fi
 
           echo "git_ref=$ref" >> $GITHUB_OUTPUT
           echo "is_release=$is_release" >> $GITHUB_OUTPUT
