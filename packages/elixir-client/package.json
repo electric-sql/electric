@@ -3,6 +3,6 @@
   "private": true,
   "version": "0.8.1",
   "scripts": {
-    "publish:hex": "mix do deps.get + hex.publish --yes || true"
+    "publish:hex": "VERSION=$(node -p \"require('./package.json').version\") && if curl -sf \"https://hex.pm/api/packages/electric_client/releases/$VERSION\" > /dev/null; then echo \"Version $VERSION already published to hex.pm, skipping\"; else mix do deps.get + hex.publish --yes; fi"
   }
 }
