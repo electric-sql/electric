@@ -6,10 +6,12 @@ on:
     paths:
       - 'packages/electric-telemetry/**'
       - 'packages/sync-service/**'
+      - '.github/workflows/sync_service_tests.yml'
   pull_request:
     paths:
       - 'packages/electric-telemetry/**'
       - 'packages/sync-service/**'
+      - '.github/workflows/sync_service_tests.yml'
 
 permissions:
   contents: read
