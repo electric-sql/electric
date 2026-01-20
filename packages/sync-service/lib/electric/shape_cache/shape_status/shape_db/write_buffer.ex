@@ -56,6 +56,9 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
   @doc "Returns a monotonic timestamp for ordering writes"
   def timestamp, do: System.monotonic_time()
 
+  @doc "Returns a unique, ordered key for operations table entries"
+  def op_key, do: {System.monotonic_time(), System.unique_integer([:positive, :monotonic])}
+
   def start_link(args) do
     stack_id = Keyword.fetch!(args, :stack_id)
     GenServer.start_link(__MODULE__, args, name: name(stack_id))
@@ -205,7 +208,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
   def add_shape(stack_id, handle, shape_binary, comparable_binary, hash, relations) do
     shapes_table = shapes_table_name(stack_id)
     ops_table = operations_table_name(stack_id)
-    ts = timestamp()
+    ts = op_key()
 
     # Add to shapes lookup table (transient cache for handle_for_shape/shape_for_handle)
     true = :ets.insert(shapes_table, {handle, shape_binary, comparable_binary})
@@ -225,7 +228,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
     shapes_table = shapes_table_name(stack_id)
     tombstones_table = tombstones_table_name(stack_id)
     ops_table = operations_table_name(stack_id)
-    ts = timestamp()
+    ts = op_key()
 
     # Add to tombstones first (so has_handle? returns false immediately)
     true = :ets.insert(tombstones_table, {handle, ts})
@@ -242,7 +245,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
   @doc "Queue a snapshot_started operation"
   def queue_snapshot_started(stack_id, handle) do
     ops_table = operations_table_name(stack_id)
-    ts = timestamp()
+    ts = op_key()
     true = :ets.insert(ops_table, {ts, {:snapshot_started, handle}, false})
     :ok
   end
@@ -250,7 +253,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
   @doc "Queue a snapshot_complete operation"
   def queue_snapshot_complete(stack_id, handle) do
     ops_table = operations_table_name(stack_id)
-    ts = timestamp()
+    ts = op_key()
     true = :ets.insert(ops_table, {ts, {:snapshot_complete, handle}, false})
     :ok
   end
@@ -378,6 +381,11 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
         if length(entries) >= @max_drain_per_cycle do
           flush_until_empty(state)
         end
+      else
+        # Reset flushing flag so entries can be retried on next poll
+        Enum.each(entries, fn {ts, _op} ->
+          :ets.update_element(ops_table, ts, {3, false})
+        end)
       end
     end
   end
@@ -407,13 +415,13 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
           :ok = Query.add_shape(conn, handle, shape, comparable_shape, hash, relations)
 
         {_ts, {:remove, handle}} ->
-          Query.remove_shape(conn, handle)
+          :ok = Query.remove_shape(conn, handle)
 
         {_ts, {:snapshot_started, handle}} ->
-          Query.mark_snapshot_started(conn, handle)
+          :ok = Query.mark_snapshot_started(conn, handle)
 
         {_ts, {:snapshot_complete, handle}} ->
-          Query.mark_snapshot_complete(conn, handle)
+          :ok = Query.mark_snapshot_complete(conn, handle)
       end)
 
       :ok
