@@ -2,6 +2,7 @@ import DefaultTheme, { VPButton } from 'vitepress/theme-without-fonts'
 import { enhanceAppWithTabs } from 'vitepress-plugin-tabs/client'
 
 import Layout from './Layout.vue'
+import StickyHeader from './StickyHeader.vue'
 
 import DemoCTAs from '../../src/components/DemoCTAs.vue'
 import DemoEmbed from '../../src/components/DemoEmbed.vue'
@@ -15,14 +16,15 @@ import './custom.css'
 
 export default {
   enhanceApp({ app }) {
-    app.component(`DemoCTAs`, DemoCTAs)
-    app.component(`DemoEmbed`, DemoEmbed)
-    app.component(`DemoListing`, DemoListing)
-    app.component(`HelpWanted`, HelpWanted)
-    app.component(`HTML5Video`, HTML5Video)
-    app.component(`NavSignupButton`, NavSignupButton)
-    app.component(`VPButton`, VPButton)
-    app.component(`YoutubeEmbed`, YoutubeEmbed)
+    app.component('DemoCTAs', DemoCTAs)
+    app.component('DemoEmbed', DemoEmbed)
+    app.component('DemoListing', DemoListing)
+    app.component('HelpWanted', HelpWanted)
+    app.component('HTML5Video', HTML5Video)
+    app.component('NavSignupButton', NavSignupButton)
+    app.component('VPButton', VPButton)
+    app.component('YoutubeEmbed', YoutubeEmbed)
+    app.component('StickyHeader', StickyHeader)
     enhanceAppWithTabs(app)
   },
   extends: DefaultTheme,
