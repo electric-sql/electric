@@ -17,6 +17,10 @@ if [ -z "$1" ]; then
 fi
 
 HEX_PACKAGE_NAME="$1"
+
+# Note: This script must be run from the package directory containing package.json.
+# When invoked via `pnpm run publish:hex`, pnpm automatically sets the cwd to
+# the package directory, so this requirement is satisfied.
 VERSION=$(node -p "require('./package.json').version")
 
 echo "Checking if ${HEX_PACKAGE_NAME} version ${VERSION} exists on hex.pm..."
