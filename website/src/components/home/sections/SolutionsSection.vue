@@ -5,12 +5,12 @@ import Card from '../Card.vue'
 const actions = [
   {
     href: '/sync',
-    text: 'Learn more',
+    text: 'Why sync',
     theme: 'brand',
   },
   {
-    href: '/products',
-    text: 'View products',
+    href: '/sync#solutions',
+    text: 'Solutions',
   },
 ]
 
@@ -50,10 +50,13 @@ const solutions = [
 
 <template>
   <Section :actions="actions">
-    <template #title> What you can build </template>
+    <template #title> Build collaborative AI apps </template>
     <template #tagline>
-      Sync enables a new generation of fast, collaborative, and resilient
-      applications. Here are the outcomes you can achieve.
+      The new wave of software combines <strong>AI</strong> with
+      <strong>team-based&nbsp;collaboration</strong> and
+      <strong>fast, modern&nbsp;UX</strong>. These apps need real-time sync,
+      durable sessions, and local-first data to deliver &mdash; the winners are
+      products that combine AI with team-based collaboration and fast, modern UX.
     </template>
     <div class="solutions-grid">
       <div

@@ -33,7 +33,6 @@ hero:
 import { onMounted } from 'vue'
 
 import {
-  AIThesisSection,
   BackedBySection,
   DeploymentSection,
   GetStartedStrap,
@@ -94,7 +93,6 @@ function Component({ project }) {
 
 </div>
 
-<AIThesisSection />
 <SolutionsSection />
 <ProductsSection />
 <WorksWithSection />
