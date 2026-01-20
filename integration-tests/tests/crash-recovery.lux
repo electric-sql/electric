@@ -47,6 +47,9 @@
 
 ## Crash electric
 [shell electric]
+  # flush pending writes so that the shape we just created is definitely in the db
+  !Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer.flush_sync("single_stack")
+  ??:ok
   !System.halt()
   ??$PS1
 
