@@ -86,6 +86,16 @@ defmodule Electric.MixProject do
   defp elixirc_paths(_), do: ["lib"]
 
   defp deps do
+    # Only include telemetry deps when building for the telemetry target.
+    # This avoids issues with hex.pm when the deps include path dependencies or overrides
+    # that would otherwise prevent package building.
+    telemetry_deps =
+      if Mix.target() == @telemetry_target do
+        telemetry_deps()
+      else
+        []
+      end
+
     List.flatten([
       [
         {:backoff, "~> 1.1"},
@@ -108,7 +118,7 @@ defmodule Electric.MixProject do
         {:tz, "~> 0.28"}
       ],
       dev_and_test_deps(),
-      telemetry_deps()
+      telemetry_deps
     ])
   end
 
@@ -134,20 +144,6 @@ defmodule Electric.MixProject do
       {:protobuf, "~> 0.13.0", override: true},
       {:sentry, "~> 11.0"}
     ]
-    |> Enum.map(fn
-      {package, version} when is_binary(version) ->
-        {package, version, telemetry_dep_opts([])}
-
-      {package, opts} when is_list(opts) ->
-        {package, telemetry_dep_opts(opts)}
-
-      {package, version, opts} when is_binary(version) and is_list(opts) ->
-        {package, version, telemetry_dep_opts(opts)}
-    end)
-  end
-
-  defp telemetry_dep_opts(source_opts) do
-    Keyword.merge(source_opts, targets: @telemetry_target)
   end
 
   defp aliases do
