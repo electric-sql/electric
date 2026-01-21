@@ -125,7 +125,17 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb do
         if WriteBuffer.is_tombstoned?(stack_id, shape_handle) do
           :error
         else
-          checkout!(stack_id, :shape_for_handle, &Query.shape_for_handle(&1, shape_handle))
+          case checkout!(stack_id, :shape_for_handle, &Query.shape_for_handle(&1, shape_handle)) do
+            {:ok, shape} ->
+              # Re-check tombstone after SQLite read to avoid race where
+              # shape was tombstoned between the first check and SQLite query
+              if WriteBuffer.is_tombstoned?(stack_id, shape_handle),
+                do: :error,
+                else: {:ok, shape}
+
+            :error ->
+              :error
+          end
         end
     end
   end

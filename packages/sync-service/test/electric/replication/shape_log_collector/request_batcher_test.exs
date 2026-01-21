@@ -115,9 +115,11 @@ defmodule Electric.Replication.ShapeLogCollector.RequestBatcherTest do
         end)
 
       assert_receive :adding_shape_2
-      # Small delay to ensure the add_shape GenServer.call is processed before remove
-      Process.sleep(5)
+
       assert :ok = RequestBatcher.remove_shape(stack_id, @shape_handle_2)
+
+      expected_msg = {:processor_called, %{}, MapSet.new([@shape_handle_2])}
+      assert_receive ^expected_msg
 
       assert [:ok, {:error, "Shape #{@shape_handle_2} removed before registration completed"}] ==
                Task.await_many([task1, task2], 500)

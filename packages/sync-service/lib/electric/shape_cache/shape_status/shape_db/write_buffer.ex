@@ -8,30 +8,27 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
 
   ## Architecture
 
-  Three ETS tables are used:
+  Two ETS tables are used:
 
-  1. **Operations table** - ordered queue of operations to flush to SQLite
-  2. **Shapes table** - buffered shapes for fast handle_for_shape/shape_for_handle lookups
-  3. **Tombstones table** - handles marked for deletion (cleaned up after flush)
+  1. **Operations table** (ordered_set) - queue of operations to flush to SQLite
+  2. **Shapes table** (set) - buffered shapes, comparable index, and tombstones with namespaced keys
 
   ## How it works
 
   1. When a shape is added, insert into shapes table and queue :add operation
-  2. When a shape is removed, insert into tombstones table and queue :remove operation
+  2. When a shape is removed, insert tombstone and queue :remove operation
   3. GenServer polls every 50ms and flushes pending operations to SQLite
-  4. After successful flush, clean up shapes table (for adds) and tombstones (for removes)
+  4. After successful flush, clean up entries from shapes table
 
   ## Operations table format
 
-  `{timestamp, operation, flushing}`
+  `{{monotonic_time, unique_int}, operation, flushing}`
 
-  ## Shapes table format
+  ## Shapes table key formats
 
-  `{handle, shape_binary, comparable_binary}`
-
-  ## Tombstones table format
-
-  `{handle, timestamp}`
+  - `{{:shape, handle}, shape_binary, comparable_binary}` - shape data
+  - `{{:comparable, comparable_binary}, handle}` - reverse index for O(1) lookup
+  - `{{:tombstone, handle}, timestamp}` - handles marked for deletion
   """
 
   use GenServer
@@ -49,7 +46,6 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
 
   def operations_table_name(stack_id), do: :"write_buffer_ops:#{stack_id}"
   def shapes_table_name(stack_id), do: :"write_buffer_shapes:#{stack_id}"
-  def tombstones_table_name(stack_id), do: :"write_buffer_tombstones:#{stack_id}"
 
   def name(stack_id), do: Electric.ProcessRegistry.name(stack_id, __MODULE__)
 
@@ -75,12 +71,14 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
 
   @doc "Look up a shape by its handle. Returns {:ok, shape} or :not_found."
   def lookup_shape(stack_id, handle) do
+    shapes_table = shapes_table_name(stack_id)
+
     # Check tombstones first - if handle is being deleted, return not_found
-    if :ets.member(tombstones_table_name(stack_id), handle) do
+    if :ets.member(shapes_table, {:tombstone, handle}) do
       :not_found
     else
-      case :ets.lookup(shapes_table_name(stack_id), handle) do
-        [{^handle, shape_binary, _comparable}] ->
+      case :ets.lookup(shapes_table, {:shape, handle}) do
+        [{{:shape, ^handle}, shape_binary, _comparable}] ->
           {:ok, :erlang.binary_to_term(shape_binary)}
 
         [] ->
@@ -91,27 +89,20 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
 
   @doc "Look up a handle by comparable shape binary. Returns {:ok, handle} or :not_found."
   def lookup_handle(stack_id, comparable_binary) do
-    tombstones = tombstones_table_name(stack_id)
-    pattern = {:_, :_, comparable_binary}
+    shapes_table = shapes_table_name(stack_id)
 
-    case :ets.match_object(shapes_table_name(stack_id), pattern) do
-      results when is_list(results) ->
-        # Find first handle that's not in tombstones
-        results
-        |> Enum.find(fn {handle, _, _} -> not :ets.member(tombstones, handle) end)
-        |> case do
-          {handle, _, _} -> {:ok, handle}
-          nil -> :not_found
-        end
+    case :ets.lookup(shapes_table, {:comparable, comparable_binary}) do
+      [{{:comparable, ^comparable_binary}, handle}] ->
+        if :ets.member(shapes_table, {:tombstone, handle}), do: :not_found, else: {:ok, handle}
 
       [] ->
         :not_found
     end
   end
 
-  @doc "Check if a handle is in the tombstones table (marked for deletion)"
+  @doc "Check if a handle is in the tombstones (marked for deletion)"
   def is_tombstoned?(stack_id, handle) do
-    :ets.member(tombstones_table_name(stack_id), handle)
+    :ets.member(shapes_table_name(stack_id), {:tombstone, handle})
   end
 
   @doc """
@@ -120,11 +111,18 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
     - `false` if tombstoned (being deleted)
     - `true` if in shapes table (buffered, not yet in SQLite)
     - `:unknown` if not in buffer (may or may not exist in SQLite)
+
+  Note: Checks tombstone last since it's the authoritative "delete in progress"
+  signal, avoiding a race where tombstone is added between checks.
   """
   def has_handle?(stack_id, handle) do
+    shapes_table = shapes_table_name(stack_id)
+    has_shape = :ets.member(shapes_table, {:shape, handle})
+    is_tombstoned = :ets.member(shapes_table, {:tombstone, handle})
+
     cond do
-      :ets.member(tombstones_table_name(stack_id), handle) -> false
-      :ets.member(shapes_table_name(stack_id), handle) -> true
+      is_tombstoned -> false
+      has_shape -> true
       true -> :unknown
     end
   end
@@ -134,25 +132,24 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
     :ets.info(operations_table_name(stack_id), :size)
   end
 
-  @doc "Returns all buffered shapes as a list of {handle, shape} tuples, excluding tombstoned handles"
+  @doc "Returns all buffered shapes as a list of {handle, shape} tuples, excluding tombstoned handles, sorted by handle"
   def list_buffered_shapes(stack_id) do
-    tombstones = tombstones_table_name(stack_id)
+    tombstones = tombstoned_handles(stack_id)
 
     shapes_table_name(stack_id)
-    |> :ets.tab2list()
-    |> Enum.reject(fn {handle, _, _} -> :ets.member(tombstones, handle) end)
-    |> Enum.map(fn {handle, shape_binary, _} ->
-      {handle, :erlang.binary_to_term(shape_binary)}
-    end)
+    |> :ets.match({{:shape, :"$1"}, :"$2", :_})
+    |> Enum.reject(fn [handle, _] -> MapSet.member?(tombstones, handle) end)
+    |> Enum.map(fn [handle, shape_binary] -> {handle, :erlang.binary_to_term(shape_binary)} end)
+    |> Enum.sort_by(fn {handle, _} -> handle end)
   end
 
   @doc "Returns the count of buffered shapes (excluding tombstoned)"
   def buffered_shape_count(stack_id) do
-    tombstones = tombstones_table_name(stack_id)
+    tombstones = tombstoned_handles(stack_id)
 
     shapes_table_name(stack_id)
-    |> :ets.tab2list()
-    |> Enum.count(fn {handle, _, _} -> not :ets.member(tombstones, handle) end)
+    |> :ets.match({{:shape, :"$1"}, :_, :_})
+    |> Enum.count(fn [handle] -> not MapSet.member?(tombstones, handle) end)
   end
 
   @doc "Returns handles from the buffer that match any of the given relations (by OID)"
@@ -160,46 +157,36 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
     if relations == [] do
       []
     else
-      tombstones = tombstones_table_name(stack_id)
-      # Match by OID only, consistent with Query.shape_handles_for_relations
+      tombstones = tombstoned_handles(stack_id)
       oids_set = relations |> Enum.map(fn {oid, _relation} -> oid end) |> MapSet.new()
-      ops_table = operations_table_name(stack_id)
 
-      ops_table
-      |> :ets.tab2list()
-      |> Enum.filter(fn
-        {_ts, {:add, handle, _, _, _hash, shape_relations}, _flushing} ->
-          not :ets.member(tombstones, handle) and
-            Enum.any?(shape_relations, fn {oid, _} -> MapSet.member?(oids_set, oid) end)
-
-        _ ->
-          false
+      operations_table_name(stack_id)
+      |> :ets.match({:_, {:add, :"$1", :_, :_, :_, :"$2"}, :_})
+      |> Enum.filter(fn [handle, shape_relations] ->
+        not MapSet.member?(tombstones, handle) and
+          Enum.any?(shape_relations, fn {oid, _} -> MapSet.member?(oids_set, oid) end)
       end)
-      |> Enum.map(fn {_ts, {:add, handle, _, _, _, _}, _} -> handle end)
+      |> Enum.map(fn [handle, _] -> handle end)
     end
   end
 
   @doc "Returns the count of tombstoned handles that are in SQLite (not buffer-only)"
   def sqlite_tombstone_count(stack_id) do
-    ops_table = operations_table_name(stack_id)
+    buffered_add_handles =
+      operations_table_name(stack_id)
+      |> :ets.match({:_, {:add, :"$1", :_, :_, :_, :_}, :_})
+      |> MapSet.new(fn [h] -> h end)
 
-    tombstones_table_name(stack_id)
-    |> :ets.tab2list()
-    |> Enum.count(fn {handle, _ts} ->
-      not has_buffered_add?(ops_table, handle)
-    end)
-  end
-
-  defp has_buffered_add?(ops_table, handle) do
-    :ets.match_object(ops_table, {:_, {:add, handle, :_, :_, :_, :_}, :_}) != []
+    shapes_table_name(stack_id)
+    |> :ets.match({{:tombstone, :"$1"}, :_})
+    |> Enum.count(fn [handle] -> not MapSet.member?(buffered_add_handles, handle) end)
   end
 
   @doc "Returns all tombstoned handles as a MapSet"
   def tombstoned_handles(stack_id) do
-    tombstones_table_name(stack_id)
-    |> :ets.tab2list()
-    |> Enum.map(fn {handle, _ts} -> handle end)
-    |> MapSet.new()
+    shapes_table_name(stack_id)
+    |> :ets.match({{:tombstone, :"$1"}, :_})
+    |> MapSet.new(fn [h] -> h end)
   end
 
   # Write functions
@@ -210,8 +197,11 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
     ops_table = operations_table_name(stack_id)
     ts = op_key()
 
-    # Add to shapes lookup table (transient cache for handle_for_shape/shape_for_handle)
-    true = :ets.insert(shapes_table, {handle, shape_binary, comparable_binary})
+    true =
+      :ets.insert(shapes_table, [
+        {{:shape, handle}, shape_binary, comparable_binary},
+        {{:comparable, comparable_binary}, handle}
+      ])
 
     # Queue operation for SQLite (contains full data including hash and relations)
     true =
@@ -226,20 +216,29 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
   @doc "Mark a shape for removal"
   def remove_shape(stack_id, handle) do
     shapes_table = shapes_table_name(stack_id)
-    tombstones_table = tombstones_table_name(stack_id)
-    ops_table = operations_table_name(stack_id)
     ts = op_key()
 
-    # Add to tombstones first (so has_handle? returns false immediately)
-    true = :ets.insert(tombstones_table, {handle, ts})
+    # insert_new is atomic - returns false if already tombstoned, preventing double-remove
+    case :ets.insert_new(shapes_table, {{:tombstone, handle}, ts}) do
+      true ->
+        case :ets.lookup(shapes_table, {:shape, handle}) do
+          [{{:shape, ^handle}, _shape_binary, comparable_binary}] ->
+            :ets.delete(shapes_table, {:comparable, comparable_binary})
 
-    # Remove from shapes lookup table (if present)
-    :ets.delete(shapes_table, handle)
+          [] ->
+            :ok
+        end
 
-    # Queue operation for SQLite
-    true = :ets.insert(ops_table, {ts, {:remove, handle}, false})
+        :ets.delete(shapes_table, {:shape, handle})
 
-    :ok
+        ops_table = operations_table_name(stack_id)
+        true = :ets.insert(ops_table, {ts, {:remove, handle}, false})
+
+        :ok
+
+      false ->
+        :ok
+    end
   end
 
   @doc "Queue a snapshot_started operation"
@@ -261,7 +260,6 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
   @doc "Clear all data from all tables"
   def clear(stack_id) do
     :ets.delete_all_objects(shapes_table_name(stack_id))
-    :ets.delete_all_objects(tombstones_table_name(stack_id))
     :ets.delete_all_objects(operations_table_name(stack_id))
     :ok
   end
@@ -279,7 +277,6 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
 
     ops_table = operations_table_name(stack_id)
     shapes_table = shapes_table_name(stack_id)
-    tombstones_table = tombstones_table_name(stack_id)
 
     :ets.new(ops_table, [
       :named_table,
@@ -297,14 +294,6 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
       read_concurrency: true
     ])
 
-    :ets.new(tombstones_table, [
-      :named_table,
-      :public,
-      :set,
-      write_concurrency: :auto,
-      read_concurrency: true
-    ])
-
     unless manual_flush_only, do: schedule_poll()
 
     {:ok,
@@ -312,7 +301,6 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
        stack_id: stack_id,
        ops_table: ops_table,
        shapes_table: shapes_table,
-       tombstones_table: tombstones_table,
        manual_flush_only: manual_flush_only
      }}
   end
@@ -343,7 +331,6 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
          %{
            ops_table: ops_table,
            shapes_table: shapes_table,
-           tombstones_table: tombstones_table,
            stack_id: stack_id
          } = state
        ) do
@@ -361,13 +348,14 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
       if result == :ok do
         # Clean up after successful flush
         Enum.each(entries, fn
-          {_ts, {:add, handle, _, _, _, _}} ->
+          {_ts, {:add, handle, _shape_binary, comparable_binary, _hash, _relations}} ->
             # Remove from shapes table - it's now in SQLite
-            :ets.delete(shapes_table, handle)
+            :ets.delete(shapes_table, {:shape, handle})
+            :ets.delete(shapes_table, {:comparable, comparable_binary})
 
           {_ts, {:remove, handle}} ->
-            # Remove from tombstones - removal is now in SQLite
-            :ets.delete(tombstones_table, handle)
+            # Remove tombstone - removal is now in SQLite
+            :ets.delete(shapes_table, {:tombstone, handle})
 
           _ ->
             :ok
