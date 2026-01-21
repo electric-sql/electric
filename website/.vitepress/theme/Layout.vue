@@ -1,12 +1,13 @@
 <script setup>
-import { watch, onMounted, computed } from 'vue'
+import { watch, onMounted, computed, ref } from 'vue'
 import { useData, useRouter } from 'vitepress'
 import { posthog } from 'posthog-js'
-import { useSidebar } from 'vitepress/theme'
+import { useSidebar, useLocalNav } from 'vitepress/theme'
 
 import DefaultTheme from 'vitepress/theme-without-fonts'
 
 import BlogPostHeader from '../../src/components/BlogPostHeader.vue'
+import LocalNavOutlineDropdown from '../../src/components/LocalNavOutlineDropdown.vue'
 import MarkdownLink from '../../src/components/MarkdownLink.vue'
 import NavSignupButton from '../../src/components/NavSignupButton.vue'
 import SiteFooter from '../../src/components/SiteFooter.vue'
@@ -42,10 +43,20 @@ const { Layout } = DefaultTheme
 
 const { frontmatter, page } = useData()
 const { hasSidebar } = useSidebar()
+const { headers } = useLocalNav()
 
 // Show markdown link on docs pages (same pages that show edit link)
 const showMarkdownLink = computed(() => {
   return page.value.relativePath?.startsWith('docs') ?? false
+})
+
+// Local nav height for dropdown positioning
+const navHeight = ref(0)
+
+onMounted(() => {
+  navHeight.value = parseInt(
+    getComputedStyle(document.documentElement).getPropertyValue('--vp-nav-height')
+  )
 })
 </script>
 
@@ -59,14 +70,14 @@ const showMarkdownLink = computed(() => {
     <template #nav-bar-content-after>
       <NavSignupButton />
     </template>
-    <template #nav-screen-content-after>
-      <!-- Mobile menu: Add markdown link -->
-      <MarkdownLink v-if="showMarkdownLink" variant="menu" />
-    </template>
     <template #doc-top>
-      <!-- Local nav bar: Medium/small screens - markdown link floats right -->
+      <!-- Local nav bar: Medium screens - markdown link floats right -->
       <div v-if="showMarkdownLink" class="markdown-link-local-nav-container">
         <MarkdownLink variant="local-nav" />
+      </div>
+      <!-- Small screens: Custom dropdown with markdown link -->
+      <div v-if="showMarkdownLink" class="custom-local-nav-dropdown">
+        <LocalNavOutlineDropdown :headers="headers" :navHeight="navHeight" />
       </div>
     </template>
     <template #doc-before>

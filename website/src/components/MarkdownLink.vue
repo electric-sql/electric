@@ -81,13 +81,13 @@ const markdownUrl = computed(() => {
   color: var(--vp-c-text-2);
 }
 
-/* Local nav link: Medium/small screens - matches "On this page" style */
+/* Local nav link: Medium screens (960px - 1279px) */
 .markdown-link-local-nav {
   display: flex;
   align-items: center;
   padding: 12px 12px 11px;
-  font-size: 12px;
-  font-weight: 500;
+  font-size: 13px;
+  font-weight: 600;
   color: var(--vp-c-text-2);
   transition: color 0.25s;
   white-space: nowrap;

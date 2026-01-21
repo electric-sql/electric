@@ -1063,8 +1063,36 @@ ul.demo-actions li .VPButton {
   }
 }
 
-/* Hide on small screens (< 960px) - "On this page" moves to right and would overlap */
 /* Hide on wide screens (>= 1280px) - aside is visible with its own markdown link */
+
+/* Custom local nav dropdown: replaces default at small screens to include markdown link */
+.custom-local-nav-dropdown {
+  display: none;
+}
+
+@media (max-width: 959px) {
+  /* Show our custom dropdown at small screens */
+  .custom-local-nav-dropdown {
+    display: flex;
+    justify-content: flex-end;
+    position: fixed;
+    top: calc(var(--vp-nav-height) + var(--vp-layout-top-height, 0px));
+    left: 0;
+    right: 0;
+    z-index: calc(var(--vp-z-index-local-nav) + 1);
+    pointer-events: none;
+  }
+
+  .custom-local-nav-dropdown > * {
+    pointer-events: auto;
+  }
+
+  /* Hide the default dropdown button at small screens but keep spacing */
+  .VPLocalNav .VPLocalNavOutlineDropdown {
+    opacity: 0;
+    pointer-events: none;
+  }
+}
 
 /* Footer: Position the markdown link right-aligned next to Edit this page */
 
