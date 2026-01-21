@@ -150,15 +150,18 @@ defmodule Electric.Shapes.Querying do
     Enum.map(tag_structure, fn pattern ->
       Enum.map(pattern, fn
         column_name when is_binary(column_name) ->
-          col = ~s[coalesce(#{pg_cast_column_to_text(column_name)}, '__NULL__')]
-          ~s[md5('#{stack_id}#{shape_handle}' || #{col})]
+          # Namespace values with 'v:' prefix, NULL becomes 'NULL' (no prefix)
+          # This ensures NULL and the string 'NULL' hash differently
+          col = pg_cast_column_to_text(column_name)
+          namespaced = ~s[CASE WHEN #{col} IS NULL THEN 'NULL' ELSE 'v:' || #{col} END]
+          ~s[md5('#{stack_id}#{shape_handle}' || #{namespaced})]
 
         {:hash_together, columns} ->
           column_parts =
-            Enum.map(
-              columns,
-              &~s['#{&1}:' || coalesce(#{pg_cast_column_to_text(&1)}, '__NULL__')]
-            )
+            Enum.map(columns, fn col_name ->
+              col = pg_cast_column_to_text(col_name)
+              ~s['#{col_name}:' || CASE WHEN #{col} IS NULL THEN 'NULL' ELSE 'v:' || #{col} END]
+            end)
 
           ~s[md5('#{stack_id}#{shape_handle}' || #{Enum.join(column_parts, " || ")})]
       end)

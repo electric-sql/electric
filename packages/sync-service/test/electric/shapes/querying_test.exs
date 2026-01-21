@@ -288,15 +288,15 @@ defmodule Electric.Shapes.QueryingTest do
         )
 
       tag1 =
-        :crypto.hash(:md5, "dummy-stack-id" <> "dummy-shape-handle" <> "1")
+        :crypto.hash(:md5, "dummy-stack-id" <> "dummy-shape-handle" <> "v:1")
         |> Base.encode16(case: :lower)
 
       tag2 =
-        :crypto.hash(:md5, "dummy-stack-id" <> "dummy-shape-handle" <> "2")
+        :crypto.hash(:md5, "dummy-stack-id" <> "dummy-shape-handle" <> "v:2")
         |> Base.encode16(case: :lower)
 
       tag3 =
-        :crypto.hash(:md5, "dummy-stack-id" <> "dummy-shape-handle" <> "3")
+        :crypto.hash(:md5, "dummy-stack-id" <> "dummy-shape-handle" <> "v:3")
         |> Base.encode16(case: :lower)
 
       assert [
@@ -328,17 +328,18 @@ defmodule Electric.Shapes.QueryingTest do
           inspector: {DirectInspector, conn}
         )
 
-      # Tag for NULL uses '__NULL__' sentinel to produce a distinct hash
+      # Tag for NULL uses 'NULL' (no prefix), values use 'v:' prefix
+      # This ensures NULL and the string 'NULL' produce different hashes
       tag_null =
-        :crypto.hash(:md5, "dummy-stack-id" <> "dummy-shape-handle" <> "__NULL__")
+        :crypto.hash(:md5, "dummy-stack-id" <> "dummy-shape-handle" <> "NULL")
         |> Base.encode16(case: :lower)
 
       tag1 =
-        :crypto.hash(:md5, "dummy-stack-id" <> "dummy-shape-handle" <> "1")
+        :crypto.hash(:md5, "dummy-stack-id" <> "dummy-shape-handle" <> "v:1")
         |> Base.encode16(case: :lower)
 
       tag2 =
-        :crypto.hash(:md5, "dummy-stack-id" <> "dummy-shape-handle" <> "2")
+        :crypto.hash(:md5, "dummy-stack-id" <> "dummy-shape-handle" <> "v:2")
         |> Base.encode16(case: :lower)
 
       result =
@@ -357,21 +358,21 @@ defmodule Electric.Shapes.QueryingTest do
       tag1 =
         :crypto.hash(
           :md5,
-          "dummy-stack-id" <> "dummy-shape-handle" <> "parent_id1:1" <> "parent_id2:1"
+          "dummy-stack-id" <> "dummy-shape-handle" <> "parent_id1:v:1" <> "parent_id2:v:1"
         )
         |> Base.encode16(case: :lower)
 
       tag2 =
         :crypto.hash(
           :md5,
-          "dummy-stack-id" <> "dummy-shape-handle" <> "parent_id1:2" <> "parent_id2:2"
+          "dummy-stack-id" <> "dummy-shape-handle" <> "parent_id1:v:2" <> "parent_id2:v:2"
         )
         |> Base.encode16(case: :lower)
 
       tag3 =
         :crypto.hash(
           :md5,
-          "dummy-stack-id" <> "dummy-shape-handle" <> "parent_id1:3" <> "parent_id2:3"
+          "dummy-stack-id" <> "dummy-shape-handle" <> "parent_id1:v:3" <> "parent_id2:v:3"
         )
         |> Base.encode16(case: :lower)
 
@@ -415,15 +416,15 @@ defmodule Electric.Shapes.QueryingTest do
         )
 
       tag1 =
-        :crypto.hash(:md5, "dummy-stack-id" <> "dummy-shape-handle" <> "1")
+        :crypto.hash(:md5, "dummy-stack-id" <> "dummy-shape-handle" <> "v:1")
         |> Base.encode16(case: :lower)
 
       tag2 =
-        :crypto.hash(:md5, "dummy-stack-id" <> "dummy-shape-handle" <> "2")
+        :crypto.hash(:md5, "dummy-stack-id" <> "dummy-shape-handle" <> "v:2")
         |> Base.encode16(case: :lower)
 
       tag3 =
-        :crypto.hash(:md5, "dummy-stack-id" <> "dummy-shape-handle" <> "3")
+        :crypto.hash(:md5, "dummy-stack-id" <> "dummy-shape-handle" <> "v:3")
         |> Base.encode16(case: :lower)
 
       assert [
@@ -464,11 +465,11 @@ defmodule Electric.Shapes.QueryingTest do
                )
 
       tag1 =
-        :crypto.hash(:md5, "dummy-stack-id" <> "dummy-shape-handle" <> "1")
+        :crypto.hash(:md5, "dummy-stack-id" <> "dummy-shape-handle" <> "v:1")
         |> Base.encode16(case: :lower)
 
       tag2 =
-        :crypto.hash(:md5, "dummy-stack-id" <> "dummy-shape-handle" <> "2")
+        :crypto.hash(:md5, "dummy-stack-id" <> "dummy-shape-handle" <> "v:2")
         |> Base.encode16(case: :lower)
 
       assert [
@@ -514,14 +515,14 @@ defmodule Electric.Shapes.QueryingTest do
       tag1 =
         :crypto.hash(
           :md5,
-          "dummy-stack-id" <> "dummy-shape-handle" <> "parent_id1:1" <> "parent_id2:1"
+          "dummy-stack-id" <> "dummy-shape-handle" <> "parent_id1:v:1" <> "parent_id2:v:1"
         )
         |> Base.encode16(case: :lower)
 
       tag2 =
         :crypto.hash(
           :md5,
-          "dummy-stack-id" <> "dummy-shape-handle" <> "parent_id1:2" <> "parent_id2:2"
+          "dummy-stack-id" <> "dummy-shape-handle" <> "parent_id1:v:2" <> "parent_id2:v:2"
         )
         |> Base.encode16(case: :lower)
 
