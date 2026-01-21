@@ -327,20 +327,39 @@ defmodule Electric.Shapes.Consumer.Materializer do
           },
           {{index, tag_indices}, counts_and_events} ->
             # TODO: this is written as if it supports multiple selected columns, but it doesn't for now
-            if Enum.any?(state.columns, &is_map_key(record, &1)) do
-              {value, original_string} = cast!(record, state)
-              old_value = Map.fetch!(index, key)
-              index = Map.put(index, key, value)
+            # Check if this change has any relevant updates for the materializer.
+            # A change is relevant if either:
+            # 1. The selected columns are present in the record (value might have changed)
+            # 2. There are tag updates (removed_move_tags is non-empty), even if value unchanged
+            columns_present = Enum.any?(state.columns, &is_map_key(record, &1))
+            has_tag_updates = removed_move_tags != []
 
+            if columns_present or has_tag_updates do
+              # Always update tag_indices if there are tag updates
               tag_indices =
                 tag_indices
                 |> remove_row_from_tag_indices(key, removed_move_tags)
                 |> add_row_to_tag_indices(key, move_tags)
 
-              {{index, tag_indices},
-               counts_and_events
-               |> decrement_value(old_value, value_to_string(old_value, state))
-               |> increment_value(value, original_string)}
+              # Only update value_counts if the selected column value actually changed
+              if columns_present do
+                {value, original_string} = cast!(record, state)
+                old_value = Map.fetch!(index, key)
+                index = Map.put(index, key, value)
+
+                # Skip decrement/increment dance if value hasn't changed to avoid
+                # spurious move_out/move_in events when only the tag changed
+                if old_value == value do
+                  {{index, tag_indices}, counts_and_events}
+                else
+                  {{index, tag_indices},
+                   counts_and_events
+                   |> decrement_value(old_value, value_to_string(old_value, state))
+                   |> increment_value(value, original_string)}
+                end
+              else
+                {{index, tag_indices}, counts_and_events}
+              end
             else
               # Nothing relevant to this materializer has been updated
               {{index, tag_indices}, counts_and_events}

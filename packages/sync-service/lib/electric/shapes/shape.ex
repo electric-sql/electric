@@ -684,6 +684,17 @@ defmodule Electric.Shapes.Shape do
     end)
   end
 
+  # Keep changes that have tag updates, even if the selected columns are unchanged.
+  # This is needed for the materializer to update its tag tracking when intermediate
+  # rows (like a team) move to a different parent (org) without changing the tracked column (id).
+  defp filtered_columns_changed?(%Changes.UpdatedRecord{
+         old_record: record,
+         record: record,
+         removed_move_tags: removed_move_tags
+       })
+       when removed_move_tags != [],
+       do: true
+
   defp filtered_columns_changed?(%Changes.UpdatedRecord{old_record: record, record: record}),
     do: false
 
