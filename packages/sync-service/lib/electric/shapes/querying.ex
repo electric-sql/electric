@@ -150,15 +150,19 @@ defmodule Electric.Shapes.Querying do
     Enum.map(tag_structure, fn pattern ->
       Enum.map(pattern, fn
         column_name when is_binary(column_name) ->
-          # Use coalesce to handle NULL column values - without this, NULL propagates
-          # through the entire row JSON construction causing [nil] rows from Postgrex
-          ~s[coalesce(md5('#{stack_id}#{shape_handle}' || #{pg_cast_column_to_text(column_name)}), '')]
+          # Coalesce NULL to sentinel to avoid NULL propagating through string concat.
+          # Using a sentinel (not empty string) so NULL and '' produce different hashes.
+          col = ~s[coalesce(#{pg_cast_column_to_text(column_name)}, '__NULL__')]
+          ~s[md5('#{stack_id}#{shape_handle}' || #{col})]
 
         {:hash_together, columns} ->
           column_parts =
-            Enum.map(columns, &~s[coalesce('#{&1}:' || #{pg_cast_column_to_text(&1)}, '')])
+            Enum.map(
+              columns,
+              &~s['#{&1}:' || coalesce(#{pg_cast_column_to_text(&1)}, '__NULL__')]
+            )
 
-          ~s[coalesce(md5('#{stack_id}#{shape_handle}' || #{Enum.join(column_parts, " || ")}), '')]
+          ~s[md5('#{stack_id}#{shape_handle}' || #{Enum.join(column_parts, " || ")})]
       end)
       |> Enum.join("|| '/' ||")
     end)
