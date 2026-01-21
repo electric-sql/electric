@@ -95,6 +95,7 @@ defmodule Electric.Plug.ServeShapePlug do
             get_in(config, [:api]),
             %{code: "overloaded", message: "Server is currently overloaded, please retry"},
             status: 503,
+            known_error: true,
             retry_after: retry_after
           )
 
