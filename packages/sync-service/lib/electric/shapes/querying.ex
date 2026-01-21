@@ -4,6 +4,11 @@ defmodule Electric.Shapes.Querying do
   alias Electric.Shapes.Shape
   alias Electric.Telemetry.OpenTelemetry
 
+  # Value namespacing constants - MUST match SubqueryMoves.namespace_value/1
+  # See lib/electric/shapes/shape/subquery_moves.ex for the Elixir implementation
+  @value_prefix "v:"
+  @null_sentinel "NULL"
+
   def query_move_in(conn, stack_id, shape_handle, shape, {where, params}) do
     table = Utils.relation_to_sql(shape.root_table)
 
@@ -150,17 +155,15 @@ defmodule Electric.Shapes.Querying do
     Enum.map(tag_structure, fn pattern ->
       Enum.map(pattern, fn
         column_name when is_binary(column_name) ->
-          # Namespace values with 'v:' prefix, NULL becomes 'NULL' (no prefix)
-          # This ensures NULL and the string 'NULL' hash differently
           col = pg_cast_column_to_text(column_name)
-          namespaced = ~s[CASE WHEN #{col} IS NULL THEN 'NULL' ELSE 'v:' || #{col} END]
+          namespaced = pg_namespace_value_sql(col)
           ~s[md5('#{stack_id}#{shape_handle}' || #{namespaced})]
 
         {:hash_together, columns} ->
           column_parts =
             Enum.map(columns, fn col_name ->
               col = pg_cast_column_to_text(col_name)
-              ~s['#{col_name}:' || CASE WHEN #{col} IS NULL THEN 'NULL' ELSE 'v:' || #{col} END]
+              ~s['#{col_name}:' || #{pg_namespace_value_sql(col)}]
             end)
 
           ~s[md5('#{stack_id}#{shape_handle}' || #{Enum.join(column_parts, " || ")})]
@@ -275,4 +278,11 @@ defmodule Electric.Shapes.Querying do
   defp pg_cast_column_to_text(column), do: ~s["#{Utils.escape_quotes(column)}"::text]
   defp pg_escape_string_for_json(str), do: ~s[to_json(#{str})::text]
   defp pg_coalesce_json_string(str), do: ~s[coalesce(#{str} , 'null')]
+
+  # Generates SQL to namespace a value for tag hashing.
+  # This MUST produce identical output to SubqueryMoves.namespace_value/1 for
+  # the same input values, or Elixir-side and SQL-side tag computation will diverge.
+  defp pg_namespace_value_sql(col_sql) do
+    ~s[CASE WHEN #{col_sql} IS NULL THEN '#{@null_sentinel}' ELSE '#{@value_prefix}' || #{col_sql} END]
+  end
 end

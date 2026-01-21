@@ -4,6 +4,11 @@ defmodule Electric.Shapes.Shape.SubqueryMoves do
   alias Electric.Replication.Eval.Walker
   alias Electric.Shapes.Shape
 
+  # Value namespacing constants - MUST match Querying.pg_namespace_value_sql/1
+  # See lib/electric/shapes/querying.ex for the SQL implementation
+  @value_prefix "v:"
+  @null_sentinel "NULL"
+
   @doc """
   Given a shape with a where clause that contains a subquery, make a query that can use a
   list of value in place of the subquery.
@@ -140,10 +145,11 @@ defmodule Electric.Shapes.Shape.SubqueryMoves do
   Namespace a value for hashing.
 
   To distinguish NULL from the literal string 'NULL', values are prefixed with
-  'v:' and NULL becomes 'NULL' (no prefix). This matches the SQL in `querying.ex`.
+  'v:' and NULL becomes 'NULL' (no prefix). This MUST match the SQL logic in
+  `Querying.pg_namespace_value_sql/1` - see lib/electric/shapes/querying.ex.
   """
-  def namespace_value(nil), do: "NULL"
-  def namespace_value(value), do: "v:#{value}"
+  def namespace_value(nil), do: @null_sentinel
+  def namespace_value(value), do: @value_prefix <> value
 
   @doc """
   Generate a tag structure for a shape.
