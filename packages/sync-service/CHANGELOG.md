@@ -1,5 +1,13 @@
 # @core/sync-service
 
+## 1.3.3
+
+### Patch Changes
+
+- b2d28cf: Fix race condition in Materializer startup where the Materializer would crash if the Consumer died during `await_snapshot_start` or `subscribe_materializer` calls. The Materializer now handles GenServer.call exits gracefully and shuts down cleanly.
+- edd8fe3: Fix race condition crash in ConsumerRegistry when shape is removed during transaction processing
+- d3a79b0: Make rate limit error a known error
+
 ## 1.3.2
 
 ### Patch Changes
