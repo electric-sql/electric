@@ -346,29 +346,23 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
         )
 
       if result == :ok do
-        # Clean up after successful flush
-        Enum.each(entries, fn
-          {_ts, {:add, handle, _shape_binary, comparable_binary, _hash, _relations}} ->
-            # Remove from shapes table - it's now in SQLite
-            :ets.delete(shapes_table, {:shape, handle})
-            :ets.delete(shapes_table, {:comparable, comparable_binary})
+        Enum.each(entries, fn {ts, op} ->
+          case op do
+            {:add, handle, _shape_binary, comparable_binary, _hash, _relations} ->
+              :ets.delete(shapes_table, {:shape, handle})
+              :ets.delete(shapes_table, {:comparable, comparable_binary})
 
-          {_ts, {:remove, handle}} ->
-            # Remove tombstone - removal is now in SQLite
-            :ets.delete(shapes_table, {:tombstone, handle})
+            {:remove, handle} ->
+              :ets.delete(shapes_table, {:tombstone, handle})
 
-          _ ->
-            :ok
+            _ ->
+              :ok
+          end
+
+          :ets.delete(ops_table, ts)
         end)
 
-        # Delete flushed entries from ops table
-        Enum.each(entries, fn {ts, _op} ->
-          :ets.select_delete(ops_table, [{{ts, :_, true}, [], [true]}])
-        end)
-
-        if length(entries) >= @max_drain_per_cycle do
-          flush_until_empty(state)
-        end
+        flush_until_empty(state)
       else
         # Reset flushing flag so entries can be retried on next poll
         Enum.each(entries, fn {ts, _op} ->
