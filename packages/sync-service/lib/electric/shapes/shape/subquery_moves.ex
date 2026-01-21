@@ -4,10 +4,11 @@ defmodule Electric.Shapes.Shape.SubqueryMoves do
   alias Electric.Replication.Eval.Walker
   alias Electric.Shapes.Shape
 
-  # Value namespacing constants - MUST match Querying.pg_namespace_value_sql/1
-  # See lib/electric/shapes/querying.ex for the SQL implementation
   @value_prefix "v:"
   @null_sentinel "NULL"
+
+  def value_prefix, do: @value_prefix
+  def null_sentinel, do: @null_sentinel
 
   @doc """
   Given a shape with a where clause that contains a subquery, make a query that can use a

@@ -2,12 +2,11 @@ defmodule Electric.Shapes.Querying do
   alias Electric.ShapeCache.LogChunker
   alias Electric.Utils
   alias Electric.Shapes.Shape
+  alias Electric.Shapes.Shape.SubqueryMoves
   alias Electric.Telemetry.OpenTelemetry
 
-  # Value namespacing constants - MUST match SubqueryMoves.namespace_value/1
-  # See lib/electric/shapes/shape/subquery_moves.ex for the Elixir implementation
-  @value_prefix "v:"
-  @null_sentinel "NULL"
+  @value_prefix SubqueryMoves.value_prefix()
+  @null_sentinel SubqueryMoves.null_sentinel()
 
   def query_move_in(conn, stack_id, shape_handle, shape, {where, params}) do
     table = Utils.relation_to_sql(shape.root_table)
