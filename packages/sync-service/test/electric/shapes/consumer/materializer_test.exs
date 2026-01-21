@@ -645,4 +645,123 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
     |> Enum.map(&Map.put(&1, :log_offset, Electric.Replication.LogOffset.first()))
     |> Enum.map(&Changes.fill_key(&1, pk_cols))
   end
+
+  describe "startup race condition handling" do
+    # Tests for the race condition where Consumer dies between await_snapshot_start
+    # and subscribe_materializer. See concurrency_analysis/MATERIALIZER_RACE_ANALYSIS.md
+
+    test "shuts down gracefully when await_snapshot_start returns error",
+         %{storage: storage, stack_id: stack_id, shape_handle: shape_handle} do
+      # Trap exits so the test process doesn't die when Materializer shuts down
+      Process.flag(:trap_exit, true)
+
+      {:ok, pid} =
+        Materializer.start_link(%{
+          stack_id: stack_id,
+          shape_handle: shape_handle,
+          storage: storage,
+          columns: ["value"],
+          materialized_type: {:array, :int8}
+        })
+
+      ref = Process.monitor(pid)
+
+      respond_to_call(:await_snapshot_start, {:error, "Consumer terminated"})
+
+      assert_receive {:DOWN, ^ref, :process, ^pid, :shutdown}
+    end
+
+    test "shuts down gracefully when Consumer dies during await_snapshot_start call",
+         %{storage: storage, stack_id: stack_id} do
+      # This test exercises the try/catch by having the "consumer" die mid-call.
+      # We spawn a short-lived process as the consumer that dies before responding.
+      Process.flag(:trap_exit, true)
+
+      # Use a unique shape handle for this test
+      dying_handle = "dying-consumer-#{System.unique_integer()}"
+
+      # Set up storage for the dying handle
+      Storage.for_shape(dying_handle, storage) |> Storage.start_link()
+      writer = Storage.for_shape(dying_handle, storage) |> Storage.init_writer!(@shape)
+      Storage.for_shape(dying_handle, storage) |> Storage.mark_snapshot_as_started()
+      Storage.hibernate(writer)
+      Storage.for_shape(dying_handle, storage) |> then(&Storage.make_new_snapshot!([], &1))
+
+      # Spawn a process that will die immediately when it receives the call
+      dying_consumer =
+        spawn(fn ->
+          receive do
+            {:"$gen_call", _from, :await_snapshot_start} ->
+              # Die without responding - this causes GenServer.call to exit with :noproc
+              exit(:normal)
+          end
+        end)
+
+      # Register it as the consumer
+      ConsumerRegistry.register_consumer(dying_consumer, dying_handle, stack_id)
+
+      {:ok, pid} =
+        Materializer.start_link(%{
+          stack_id: stack_id,
+          shape_handle: dying_handle,
+          storage: storage,
+          columns: ["value"],
+          materialized_type: {:array, :int8}
+        })
+
+      ref = Process.monitor(pid)
+
+      # The Materializer should shut down gracefully when the GenServer.call exits.
+      # We accept :shutdown (normal case) or :noproc (if process exited before monitor was set up)
+      assert_receive {:DOWN, ^ref, :process, ^pid, reason}, 1000
+      assert reason in [:shutdown, :noproc]
+    end
+
+    test "shuts down gracefully when Consumer dies during subscribe_materializer call",
+         %{storage: storage, stack_id: stack_id} do
+      # This test exercises the try/catch for subscribe_materializer failure
+      Process.flag(:trap_exit, true)
+
+      dying_handle = "dying-consumer-subscribe-#{System.unique_integer()}"
+
+      Storage.for_shape(dying_handle, storage) |> Storage.start_link()
+      writer = Storage.for_shape(dying_handle, storage) |> Storage.init_writer!(@shape)
+      Storage.for_shape(dying_handle, storage) |> Storage.mark_snapshot_as_started()
+      Storage.hibernate(writer)
+      Storage.for_shape(dying_handle, storage) |> then(&Storage.make_new_snapshot!([], &1))
+
+      # Spawn a process that responds to await_snapshot_start but dies on subscribe
+      dying_consumer =
+        spawn(fn ->
+          receive do
+            {:"$gen_call", {from, ref}, :await_snapshot_start} ->
+              # Respond successfully to await_snapshot_start
+              send(from, {ref, :started})
+          end
+
+          receive do
+            {:"$gen_call", _from, {:subscribe_materializer, _}} ->
+              # Die without responding
+              exit(:normal)
+          end
+        end)
+
+      ConsumerRegistry.register_consumer(dying_consumer, dying_handle, stack_id)
+
+      {:ok, pid} =
+        Materializer.start_link(%{
+          stack_id: stack_id,
+          shape_handle: dying_handle,
+          storage: storage,
+          columns: ["value"],
+          materialized_type: {:array, :int8}
+        })
+
+      ref = Process.monitor(pid)
+
+      # We accept :shutdown (normal case) or :noproc (if process exited before monitor was set up)
+      assert_receive {:DOWN, ^ref, :process, ^pid, reason}, 1000
+      assert reason in [:shutdown, :noproc]
+    end
+  end
 end

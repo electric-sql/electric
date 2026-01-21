@@ -16,6 +16,8 @@ defmodule Electric.Shapes.Consumer.Materializer do
   # and restarting would make no sense.
   use GenServer, restart: :temporary
 
+  require Logger
+
   alias Electric.Utils
   alias Electric.Replication.Changes
   alias Electric.Shapes.Consumer
@@ -108,17 +110,24 @@ defmodule Electric.Shapes.Consumer.Materializer do
     stack_storage = Storage.for_stack(stack_id)
     shape_storage = Storage.for_shape(shape_handle, stack_storage)
 
-    case Consumer.await_snapshot_start(stack_id, shape_handle, :infinity) do
-      :started ->
-        Consumer.subscribe_materializer(stack_id, shape_handle, self())
+    try do
+      case Consumer.await_snapshot_start(stack_id, shape_handle, :infinity) do
+        :started ->
+          Consumer.subscribe_materializer(stack_id, shape_handle, self())
 
-        Process.monitor(Consumer.whereis(stack_id, shape_handle),
-          tag: {:consumer_down, state.shape_handle}
-        )
+          Process.monitor(Consumer.whereis(stack_id, shape_handle),
+            tag: {:consumer_down, state.shape_handle}
+          )
 
-        {:noreply, state, {:continue, {:read_stream, shape_storage}}}
+          {:noreply, state, {:continue, {:read_stream, shape_storage}}}
 
-      {:error, _reason} ->
+        {:error, _reason} ->
+          {:stop, :shutdown, state}
+      end
+    catch
+      # GenServer.call fails with :exit when Consumer is dead or dies mid-call
+      :exit, reason ->
+        Logger.warning("Materializer startup failed with exit reason: #{inspect(reason)}")
         {:stop, :shutdown, state}
     end
   end
