@@ -1040,3 +1040,78 @@ ul.demo-actions li .VPButton {
 .plugin-tabs--content {
   padding: 16px 0 !important;
 }
+
+/* Markdown Link Styles */
+
+/* Local nav container: hidden by default */
+.markdown-link-local-nav-container {
+  display: none;
+}
+
+/* Medium screens only (960px - 1279px): Position in local nav bar area */
+/* This is when sidebar is visible but aside is hidden */
+@media (min-width: 960px) and (max-width: 1279px) {
+  .markdown-link-local-nav-container {
+    display: flex;
+    position: fixed;
+    /* Local nav bar is 48px tall, positioned below main nav */
+    top: calc(var(--vp-nav-height) + var(--vp-layout-top-height, 0px));
+    right: 32px;
+    z-index: 20;
+    height: 48px;
+    align-items: center;
+  }
+}
+
+/* Hide on wide screens (>= 1280px) - aside is visible with its own markdown link */
+
+/* Custom local nav dropdown: replaces default at small screens to include markdown link */
+.custom-local-nav-dropdown {
+  display: none;
+}
+
+@media (max-width: 959px) {
+  /* Show our custom dropdown at small screens */
+  .custom-local-nav-dropdown {
+    display: flex;
+    justify-content: flex-end;
+    position: fixed;
+    top: calc(var(--vp-nav-height) + var(--vp-layout-top-height, 0px));
+    left: 0;
+    right: 0;
+    z-index: calc(var(--vp-z-index-local-nav) + 1);
+    pointer-events: none;
+  }
+
+  .custom-local-nav-dropdown > * {
+    pointer-events: auto;
+  }
+
+  /* Hide the default dropdown button at small screens but keep spacing */
+  .VPLocalNav .VPLocalNavOutlineDropdown {
+    opacity: 0;
+    pointer-events: none;
+  }
+}
+
+/* Footer: Position the markdown link right-aligned next to Edit this page */
+
+/* Make VPDocFooter relative for absolute positioning of children */
+.VPDocFooter {
+  position: relative;
+}
+
+/* The container wraps around edit-info height and positions link at right */
+.markdown-link-footer-container {
+  position: absolute;
+  right: 0;
+  top: 0;
+  height: auto;
+  display: flex;
+  align-items: center;
+}
+
+/* Make sure edit-info doesn't overlap with our positioned link */
+.VPDocFooter .edit-info {
+  padding-right: 120px;
+}
