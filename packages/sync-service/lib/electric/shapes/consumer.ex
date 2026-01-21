@@ -145,7 +145,7 @@ defmodule Electric.Shapes.Consumer do
       # block and prevent await_snapshot_start calls from adding snapshot subscribers.
 
       {:ok, _pid} =
-        Shapes.DynamicConsumerSupervisor.start_snapshotter(
+        Shapes.SnapshotterSupervisor.start_snapshotter(
           stack_id,
           %{
             stack_id: stack_id,

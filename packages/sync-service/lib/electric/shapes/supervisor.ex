@@ -42,6 +42,7 @@ defmodule Electric.Shapes.Supervisor do
     log_collector = Keyword.fetch!(opts, :log_collector)
     publication_manager = Keyword.fetch!(opts, :publication_manager)
     consumer_supervisor = Keyword.fetch!(opts, :consumer_supervisor)
+    snapshotter_supervisor = Keyword.fetch!(opts, :snapshotter_supervisor)
     shape_cache = Keyword.fetch!(opts, :shape_cache)
     expiry_manager = Keyword.fetch!(opts, :expiry_manager)
     schema_reconciler = Keyword.fetch!(opts, :schema_reconciler)
@@ -51,6 +52,7 @@ defmodule Electric.Shapes.Supervisor do
        name: Electric.ProcessRegistry.name(stack_id, Electric.StackTaskSupervisor)},
       log_collector,
       publication_manager,
+      snapshotter_supervisor,
       consumer_supervisor,
       shape_cache,
       expiry_manager,

@@ -21,7 +21,7 @@ defmodule Electric.Shapes.SnapshotterSupervisor do
     # need to call `super()` to obtain the original DynamicSupervisor child_spec() to pass as an option to
     # PartitionSupervisor.
     PartitionSupervisor.child_spec(
-      child_spec: Supervisor.child_spec(super(opts), shutdown: :infinity),
+      child_spec: Supervisor.child_spec(super(opts), shutdown: :brutal_kill),
       name: name
     )
   end
