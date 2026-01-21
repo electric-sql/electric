@@ -17,6 +17,12 @@ A user reported crashes when using shapes with WHERE clauses containing `IN (SEL
 
 **Key Finding:** Adding a 50ms delay on the client side makes tests pass, but the server-side encoder error (`iolist_size(["[", [nil], "]"])`) **still appears in logs**. The delay is a workaround, not a fix.
 
+### User's Final Confirmation
+
+> "If there are no sessions with a null task_id then there are no errors. If there are sessions with a null task_id, then the error happens - but we can get it to work anyways if we have a small delay."
+
+**Bottom line:** The bug is specifically triggered by NULL values in the `task_id` column. Electric needs ~5ms after shape creation to properly initialize subquery dependencies. The delay allows retries to succeed.
+
 ---
 
 ## User's Setup
