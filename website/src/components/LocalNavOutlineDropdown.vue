@@ -65,6 +65,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   document.removeEventListener('keydown', onEscapeKey)
+  document.removeEventListener('click', closeOnClickOutside)
 })
 
 onContentUpdated(() => {
