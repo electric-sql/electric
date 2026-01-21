@@ -598,12 +598,6 @@ defmodule Electric.Shapes.ConsumerTest do
         snapshot_fun.([])
       end)
 
-      Electric.StackConfig.put(
-        ctx.stack_id,
-        :shape_hibernate_after,
-        Map.get(ctx, :hibernate_after, 10_000)
-      )
-
       %{consumer_supervisor: consumer_supervisor, shape_cache: shape_cache} =
         Support.ComponentSetup.with_shape_cache(ctx)
 
@@ -1132,7 +1126,6 @@ defmodule Electric.Shapes.ConsumerTest do
         snapshot_fun.([])
       end)
 
-      Electric.StackConfig.put(ctx.stack_id, :shape_hibernate_after, 10_000)
 
       %{consumer_supervisor: consumer_supervisor, shape_cache: shape_cache} =
         Support.ComponentSetup.with_shape_cache(ctx)
