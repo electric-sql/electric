@@ -16,6 +16,12 @@ const markdownUrl = computed(() => {
   const path = page.value.relativePath.replace(/\.md$/, '')
   return `/${path}.md`
 })
+
+// Force full page navigation to bypass VitePress client-side router
+function navigateToMarkdown(event) {
+  event.preventDefault()
+  window.location.href = markdownUrl.value
+}
 </script>
 
 <template>
@@ -23,6 +29,7 @@ const markdownUrl = computed(() => {
     v-if="variant === 'aside'"
     class="markdown-link-aside pager-link"
     :href="markdownUrl"
+    @click="navigateToMarkdown"
   >
     <span class="title">✨ Markdown</span>
   </a>
@@ -30,6 +37,7 @@ const markdownUrl = computed(() => {
     v-else-if="variant === 'local-nav'"
     class="markdown-link-local-nav"
     :href="markdownUrl"
+    @click="navigateToMarkdown"
   >
     <span class="title">✨ Markdown</span>
   </a>
@@ -37,6 +45,7 @@ const markdownUrl = computed(() => {
     v-else-if="variant === 'footer'"
     class="markdown-link-footer"
     :href="markdownUrl"
+    @click="navigateToMarkdown"
   >
     <span class="title">✨ Markdown</span>
   </a>

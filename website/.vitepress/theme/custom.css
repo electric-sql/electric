@@ -1043,46 +1043,28 @@ ul.demo-actions li .VPButton {
 
 /* Markdown Link Styles */
 
-/* Local nav container: positioned in the local nav bar area */
+/* Local nav container: hidden by default */
 .markdown-link-local-nav-container {
   display: none;
 }
 
-/* Medium and small screens: Position in local nav bar area */
-@media (max-width: 1279px) {
+/* Medium screens only (960px - 1279px): Position in local nav bar area */
+/* This is when sidebar is visible but aside is hidden */
+@media (min-width: 960px) and (max-width: 1279px) {
   .markdown-link-local-nav-container {
-    display: block;
+    display: flex;
     position: fixed;
     /* Local nav bar is 48px tall, positioned below main nav */
     top: calc(var(--vp-nav-height) + var(--vp-layout-top-height, 0px));
     right: 32px;
     z-index: 20;
     height: 48px;
-    display: flex;
     align-items: center;
   }
 }
 
-/* Adjust for when sidebar is visible (medium screens) */
-@media (min-width: 960px) and (max-width: 1279px) {
-  .markdown-link-local-nav-container {
-    right: 32px;
-  }
-}
-
-/* Adjust for small screens */
-@media (max-width: 959px) {
-  .markdown-link-local-nav-container {
-    right: 16px;
-  }
-}
-
-/* Hide local nav link on wide screens when aside is visible */
-@media (min-width: 1280px) {
-  .markdown-link-local-nav-container {
-    display: none !important;
-  }
-}
+/* Hide on small screens (< 960px) - "On this page" moves to right and would overlap */
+/* Hide on wide screens (>= 1280px) - aside is visible with its own markdown link */
 
 /* Footer: Position the markdown link right-aligned next to Edit this page */
 
