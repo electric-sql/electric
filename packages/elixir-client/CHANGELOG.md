@@ -1,5 +1,11 @@
 # @core/elixir-client
 
+## 0.8.2
+
+### Patch Changes
+
+- 8fa682c: Skip hex.pm publish when version already exists to avoid unnecessary CI builds
+
 ## 0.8.1
 
 ### Patch Changes
