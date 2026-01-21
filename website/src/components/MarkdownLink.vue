@@ -13,7 +13,7 @@ const { page } = useData()
 
 const markdownUrl = computed(() => {
   // Get current path and append .md
-  const path = page.value.relativePath.replace(/\.md$/, '')
+  const path = (page.value.relativePath ?? '').replace(/\.md$/, '')
   return `/${path}.md`
 })
 </script>
