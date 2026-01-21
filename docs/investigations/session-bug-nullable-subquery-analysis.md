@@ -317,6 +317,38 @@ Try to ensure:
 
 ---
 
+## Critical Finding: Empty Dependent Shapes
+
+**User Test Results:**
+
+| Session task_id | Tasks in DB | ACL tables likely | Result |
+|-----------------|-------------|-------------------|--------|
+| NULL | No tasks seeded | Empty | **CRASH** |
+| NULL | Task seeded (not referenced by session) | Has entries | Works |
+| task.id | Task seeded | Has entries | Works |
+
+**The crash correlates with EMPTY dependent shapes, not NULL values in sessions!**
+
+When no tasks exist:
+1. The ACL tables (`task_user_acl`, `task_organization_acl`) are likely empty
+2. The dependent shapes created for `SELECT task_id FROM task_user_acl WHERE ...` have **no data**
+3. Something about serializing a response when dependent shapes are empty causes the crash
+
+### Hypothesis
+
+The materializer's `get_link_values` returns an empty `MapSet.new([])` when dependent shapes have no data. This empty set is used somewhere in the response serialization, and there's a bug handling the empty case.
+
+**File to investigate:** `lib/pg_interop/sublink.ex`
+```elixir
+def member?(value, %MapSet{} = set) do
+  MapSet.member?(set, value)
+end
+```
+
+The membership check itself is fine, but somewhere in the serialization path, an empty dependent shape result may be causing NULL to be written to the response.
+
+---
+
 ## Electric Logs Analysis
 
 ```
