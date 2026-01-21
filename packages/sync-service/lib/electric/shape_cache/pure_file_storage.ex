@@ -149,8 +149,8 @@ defmodule Electric.ShapeCache.PureFileStorage do
   end
 
   defp shape_data_dir(%__MODULE__{stack_id: stack_id, shape_handle: shape_handle}, suffix) do
-    {__MODULE__, stack_opts} = Storage.for_stack(stack_id)
-    shape_data_dir(stack_opts.base_path, shape_handle, suffix)
+    base_path = Storage.opt_for_stack(stack_id, :base_path)
+    shape_data_dir(base_path, shape_handle, suffix)
   end
 
   defp shape_data_dir(base_path, shape_handle, suffix \\ [])
@@ -167,10 +167,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
   defp shape_snapshot_dir(opts), do: shape_data_dir(opts, [@snapshot_dir])
   defp shape_snapshot_path(opts, filename), do: shape_data_dir(opts, [@snapshot_dir, filename])
 
-  defp tmp_dir(%__MODULE__{} = opts) do
-    {__MODULE__, stack_opts} = Storage.for_stack(opts.stack_id)
-    stack_opts.tmp_dir
-  end
+  defp tmp_dir(%__MODULE__{} = opts), do: Storage.opt_for_stack(opts.stack_id, :tmp_dir)
 
   def stack_start_link(opts) do
     Supervisor.start_link(
@@ -537,8 +534,9 @@ defmodule Electric.ShapeCache.PureFileStorage do
     )
 
     if shape_definition.storage.compaction == :enabled do
-      {__MODULE__, stack_opts} = Storage.for_stack(shape_opts.stack_id)
-      schedule_compaction(stack_opts.compaction_config)
+      shape_opts.stack_id
+      |> Storage.opt_for_stack(:compaction_config)
+      |> schedule_compaction()
     end
 
     writer_state(
@@ -1358,13 +1356,13 @@ defmodule Electric.ShapeCache.PureFileStorage do
     if WriteLoop.has_flushed_since?(acc, old) or is_nil(timer) do
       if not is_nil(timer), do: Process.cancel_timer(timer)
 
-      {__MODULE__, stack_opts} = Storage.for_stack(opts.stack_id)
+      flush_period = Storage.opt_for_stack(opts.stack_id, :flush_period)
 
       ref =
         Process.send_after(
           self(),
           {Storage, {__MODULE__, :perform_scheduled_flush, [WriteLoop.times_flushed(acc)]}},
-          stack_opts.flush_period
+          flush_period
         )
 
       writer_state(state, write_timer: ref)
