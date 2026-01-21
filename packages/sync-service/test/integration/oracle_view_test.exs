@@ -1,6 +1,9 @@
 defmodule Electric.Integration.OracleViewTest do
   @moduledoc """
-  Differential tests that compare Electric shape streams to Postgres queries.
+  Hand-written oracle tests using the standard schema.
+
+  These tests verify specific scenarios with explicit shapes and mutations
+  to ensure coverage of important edge cases.
   """
 
   use ExUnit.Case, async: false
@@ -16,139 +19,272 @@ defmodule Electric.Integration.OracleViewTest do
   setup :with_complete_stack
   setup :with_electric_client
 
-  @oracle_cases [
-    %{
-      name: "simple_subquery_move_in_out",
-      schema_sql: [
-        "DROP TABLE IF EXISTS child",
-        "DROP TABLE IF EXISTS parent",
-        """
-        CREATE TABLE parent (
-          id TEXT PRIMARY KEY,
-          active BOOLEAN NOT NULL DEFAULT true
-        )
-        """,
-        """
-        CREATE TABLE child (
-          id TEXT PRIMARY KEY,
-          parent_id TEXT NOT NULL REFERENCES parent(id) ON DELETE CASCADE,
-          value TEXT NOT NULL
-        )
-        """
-      ],
-      seed_sql: [
-        "INSERT INTO parent (id, active) VALUES ('parent-1', true), ('parent-2', false)",
-        "INSERT INTO child (id, parent_id, value) VALUES ('child-1', 'parent-1', 'a'), ('child-2', 'parent-2', 'b')"
-      ],
-      shapes: [
+  setup ctx do
+    setup_standard_schema(ctx)
+    :ok
+  end
+
+  describe "simple where clauses" do
+    test "equality on parent_id", ctx do
+      shapes = [
         %{
-          name: "active_children",
-          table: "child",
-          where: "parent_id IN (SELECT id FROM parent WHERE active = true)",
-          columns: ["id", "parent_id", "value"],
+          name: "l4_by_l3",
+          table: "level_4",
+          where: "level_3_id = 'l3-1'",
+          columns: ["id", "level_3_id", "value"],
           pk: ["id"],
           optimized: true
         }
-      ],
-      mutations: [
-        %{
-          name: "noop_parent_update",
-          sql: "UPDATE parent SET active = false WHERE id = 'parent-2'"
-        },
-        %{
-          name: "deactivate_parent",
-          sql: "UPDATE parent SET active = false WHERE id = 'parent-1'"
-        },
-        %{
-          name: "activate_parent",
-          sql: "UPDATE parent SET active = true WHERE id = 'parent-2'"
-        },
-        %{
-          name: "update_child_value",
-          sql: "UPDATE child SET value = 'b2' WHERE id = 'child-2'"
-        },
-        %{
-          name: "move_child_out",
-          sql: "UPDATE child SET parent_id = 'parent-1' WHERE id = 'child-2'"
-        }
       ]
-    },
-    %{
-      name: "nested_subquery_of_subquery",
-      schema_sql: [
-        "DROP TABLE IF EXISTS tasks",
-        "DROP TABLE IF EXISTS projects",
-        "DROP TABLE IF EXISTS org_tags",
-        "DROP TABLE IF EXISTS orgs",
-        """
-        CREATE TABLE orgs (
-          id TEXT PRIMARY KEY,
-          active BOOLEAN NOT NULL DEFAULT true
-        )
-        """,
-        """
-        CREATE TABLE org_tags (
-          org_id TEXT NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
-          tag TEXT NOT NULL
-        )
-        """,
-        """
-        CREATE TABLE projects (
-          id TEXT PRIMARY KEY,
-          org_id TEXT NOT NULL REFERENCES orgs(id) ON DELETE CASCADE
-        )
-        """,
-        """
-        CREATE TABLE tasks (
-          id TEXT PRIMARY KEY,
-          project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-          title TEXT NOT NULL
-        )
-        """
-      ],
-      seed_sql: [
-        "INSERT INTO orgs (id, active) VALUES ('org-1', true), ('org-2', true)",
-        "INSERT INTO org_tags (org_id, tag) VALUES ('org-1', 'alpha'), ('org-2', 'beta')",
-        "INSERT INTO projects (id, org_id) VALUES ('proj-1', 'org-1'), ('proj-2', 'org-2')",
-        "INSERT INTO tasks (id, project_id, title) VALUES ('task-1', 'proj-1', 't1'), ('task-2', 'proj-2', 't2')"
-      ],
-      shapes: [
+
+      mutations = [
+        %{name: "update_value", sql: "UPDATE level_4 SET value = 'updated' WHERE id = 'l4-1'"},
+        %{name: "move_out", sql: "UPDATE level_4 SET level_3_id = 'l3-2' WHERE id = 'l4-1'"},
+        %{name: "move_in", sql: "UPDATE level_4 SET level_3_id = 'l3-1' WHERE id = 'l4-6'"}
+      ]
+
+      run_with_shapes(ctx, shapes, mutations)
+    end
+  end
+
+  describe "1-level subqueries" do
+    test "IN subquery on active parent", ctx do
+      shapes = [
         %{
-          name: "alpha_tasks",
-          table: "tasks",
-          where:
-            "project_id IN (SELECT id FROM projects WHERE org_id IN (SELECT id FROM orgs WHERE id IN (SELECT org_id FROM org_tags WHERE tag = 'alpha')))",
-          columns: ["id", "project_id", "title"],
+          name: "active_l3_children",
+          table: "level_4",
+          where: "level_3_id IN (SELECT id FROM level_3 WHERE active = true)",
+          columns: ["id", "level_3_id", "value"],
           pk: ["id"],
           optimized: false
         }
-      ],
-      mutations: [
+      ]
+
+      mutations = [
+        %{name: "noop_toggle", sql: "UPDATE level_3 SET active = false WHERE id = 'l3-2'"},
+        %{name: "deactivate_l3", sql: "UPDATE level_3 SET active = false WHERE id = 'l3-1'"},
+        %{name: "activate_l3", sql: "UPDATE level_3 SET active = true WHERE id = 'l3-2'"},
+        %{name: "update_child", sql: "UPDATE level_4 SET value = 'changed' WHERE id = 'l4-2'"},
+        %{name: "move_child", sql: "UPDATE level_4 SET level_3_id = 'l3-3' WHERE id = 'l4-1'"}
+      ]
+
+      run_with_shapes(ctx, shapes, mutations)
+    end
+
+    test "IN subquery on specific grandparent", ctx do
+      shapes = [
         %{
-          name: "toggle_unrelated_org",
-          sql: "UPDATE orgs SET active = false WHERE id = 'org-2'"
-        },
-        %{
-          name: "add_alpha_tag",
-          sql: "INSERT INTO org_tags (org_id, tag) VALUES ('org-2', 'alpha')"
-        },
-        %{
-          name: "remove_alpha_tag",
-          sql: "DELETE FROM org_tags WHERE org_id = 'org-1' AND tag = 'alpha'"
-        },
-        %{
-          name: "update_task_title",
-          sql: "UPDATE tasks SET title = 't2b' WHERE id = 'task-2'"
-        },
-        %{
-          name: "move_project_org",
-          sql: "UPDATE projects SET org_id = 'org-1' WHERE id = 'proj-2'"
+          name: "l2_1_descendants",
+          table: "level_4",
+          where: "level_3_id IN (SELECT id FROM level_3 WHERE level_2_id = 'l2-1')",
+          columns: ["id", "level_3_id", "value"],
+          pk: ["id"],
+          optimized: false
         }
       ]
-    }
-  ]
 
-  test "Electric behaves like Postgres for oracle cases", ctx do
-    run_cases(ctx, @oracle_cases)
+      mutations = [
+        %{name: "move_l3_out", sql: "UPDATE level_3 SET level_2_id = 'l2-2' WHERE id = 'l3-1'"},
+        %{name: "move_l3_in", sql: "UPDATE level_3 SET level_2_id = 'l2-1' WHERE id = 'l3-2'"},
+        %{name: "move_l4", sql: "UPDATE level_4 SET level_3_id = 'l3-3' WHERE id = 'l4-1'"}
+      ]
+
+      run_with_shapes(ctx, shapes, mutations)
+    end
+  end
+
+  describe "2-level subqueries" do
+    test "nested active flags", ctx do
+      shapes = [
+        %{
+          name: "active_l2_l3_children",
+          table: "level_4",
+          where:
+            "level_3_id IN (SELECT id FROM level_3 WHERE active = true AND level_2_id IN (SELECT id FROM level_2 WHERE active = true))",
+          columns: ["id", "level_3_id", "value"],
+          pk: ["id"],
+          optimized: false
+        }
+      ]
+
+      mutations = [
+        %{name: "toggle_l2", sql: "UPDATE level_2 SET active = NOT active WHERE id = 'l2-1'"},
+        %{name: "toggle_l3", sql: "UPDATE level_3 SET active = NOT active WHERE id = 'l3-1'"},
+        %{name: "move_l3", sql: "UPDATE level_3 SET level_2_id = 'l2-3' WHERE id = 'l3-1'"},
+        %{name: "move_l4", sql: "UPDATE level_4 SET level_3_id = 'l3-4' WHERE id = 'l4-1'"}
+      ]
+
+      run_with_shapes(ctx, shapes, mutations)
+    end
+
+    test "through specific level_1", ctx do
+      shapes = [
+        %{
+          name: "l1_1_descendants",
+          table: "level_4",
+          where:
+            "level_3_id IN (SELECT id FROM level_3 WHERE level_2_id IN (SELECT id FROM level_2 WHERE level_1_id = 'l1-1'))",
+          columns: ["id", "level_3_id", "value"],
+          pk: ["id"],
+          optimized: false
+        }
+      ]
+
+      mutations = [
+        %{name: "move_l2", sql: "UPDATE level_2 SET level_1_id = 'l1-2' WHERE id = 'l2-1'"},
+        %{name: "move_l3", sql: "UPDATE level_3 SET level_2_id = 'l2-3' WHERE id = 'l3-1'"},
+        %{name: "move_l4", sql: "UPDATE level_4 SET level_3_id = 'l3-3' WHERE id = 'l4-1'"}
+      ]
+
+      run_with_shapes(ctx, shapes, mutations)
+    end
+  end
+
+  describe "3-level subqueries" do
+    test "through active level_1", ctx do
+      shapes = [
+        %{
+          name: "active_l1_descendants",
+          table: "level_4",
+          where:
+            "level_3_id IN (SELECT id FROM level_3 WHERE level_2_id IN (SELECT id FROM level_2 WHERE level_1_id IN (SELECT id FROM level_1 WHERE active = true)))",
+          columns: ["id", "level_3_id", "value"],
+          pk: ["id"],
+          optimized: false
+        }
+      ]
+
+      mutations = [
+        %{name: "toggle_l1_1", sql: "UPDATE level_1 SET active = NOT active WHERE id = 'l1-1'"},
+        %{name: "toggle_l1_2", sql: "UPDATE level_1 SET active = NOT active WHERE id = 'l1-2'"},
+        %{name: "move_l2", sql: "UPDATE level_2 SET level_1_id = 'l1-3' WHERE id = 'l2-1'"},
+        %{name: "move_l3", sql: "UPDATE level_3 SET level_2_id = 'l2-4' WHERE id = 'l3-1'"},
+        %{name: "update_l4", sql: "UPDATE level_4 SET value = 'new' WHERE id = 'l4-1'"}
+      ]
+
+      run_with_shapes(ctx, shapes, mutations)
+    end
+  end
+
+  describe "tag-based subqueries" do
+    test "1-level tag filter", ctx do
+      shapes = [
+        %{
+          name: "alpha_l3_children",
+          table: "level_4",
+          where:
+            "level_3_id IN (SELECT id FROM level_3 WHERE id IN (SELECT level_3_id FROM level_3_tags WHERE tag = 'alpha'))",
+          columns: ["id", "level_3_id", "value"],
+          pk: ["id"],
+          optimized: false
+        }
+      ]
+
+      mutations = [
+        %{
+          name: "add_alpha_tag",
+          sql:
+            "INSERT INTO level_3_tags (level_3_id, tag) VALUES ('l3-2', 'alpha') ON CONFLICT DO NOTHING"
+        },
+        %{name: "remove_alpha_tag", sql: "DELETE FROM level_3_tags WHERE level_3_id = 'l3-1' AND tag = 'alpha'"},
+        %{name: "move_l4", sql: "UPDATE level_4 SET level_3_id = 'l3-3' WHERE id = 'l4-1'"}
+      ]
+
+      run_with_shapes(ctx, shapes, mutations)
+    end
+
+    test "2-level tag filter through level_2", ctx do
+      shapes = [
+        %{
+          name: "beta_l2_descendants",
+          table: "level_4",
+          where:
+            "level_3_id IN (SELECT id FROM level_3 WHERE level_2_id IN (SELECT id FROM level_2 WHERE id IN (SELECT level_2_id FROM level_2_tags WHERE tag = 'beta')))",
+          columns: ["id", "level_3_id", "value"],
+          pk: ["id"],
+          optimized: false
+        }
+      ]
+
+      mutations = [
+        %{
+          name: "add_beta_tag",
+          sql:
+            "INSERT INTO level_2_tags (level_2_id, tag) VALUES ('l2-3', 'beta') ON CONFLICT DO NOTHING"
+        },
+        %{name: "remove_beta_tag", sql: "DELETE FROM level_2_tags WHERE level_2_id = 'l2-2' AND tag = 'beta'"},
+        %{name: "move_l3", sql: "UPDATE level_3 SET level_2_id = 'l2-4' WHERE id = 'l3-1'"}
+      ]
+
+      run_with_shapes(ctx, shapes, mutations)
+    end
+
+    test "3-level tag filter through level_1", ctx do
+      shapes = [
+        %{
+          name: "gamma_l1_descendants",
+          table: "level_4",
+          where:
+            "level_3_id IN (SELECT id FROM level_3 WHERE level_2_id IN (SELECT id FROM level_2 WHERE level_1_id IN (SELECT id FROM level_1 WHERE id IN (SELECT level_1_id FROM level_1_tags WHERE tag = 'gamma'))))",
+          columns: ["id", "level_3_id", "value"],
+          pk: ["id"],
+          optimized: false
+        }
+      ]
+
+      mutations = [
+        %{
+          name: "add_gamma_tag",
+          sql:
+            "INSERT INTO level_1_tags (level_1_id, tag) VALUES ('l1-2', 'gamma') ON CONFLICT DO NOTHING"
+        },
+        %{name: "remove_gamma_tag", sql: "DELETE FROM level_1_tags WHERE level_1_id = 'l1-3' AND tag = 'gamma'"},
+        %{name: "move_l2", sql: "UPDATE level_2 SET level_1_id = 'l1-4' WHERE id = 'l2-1'"}
+      ]
+
+      run_with_shapes(ctx, shapes, mutations)
+    end
+  end
+
+  describe "multiple parallel shapes" do
+    test "same mutation affects different shapes differently", ctx do
+      shapes = [
+        %{
+          name: "l3_1_children",
+          table: "level_4",
+          where: "level_3_id = 'l3-1'",
+          columns: ["id", "level_3_id", "value"],
+          pk: ["id"],
+          optimized: true
+        },
+        %{
+          name: "l3_2_children",
+          table: "level_4",
+          where: "level_3_id = 'l3-2'",
+          columns: ["id", "level_3_id", "value"],
+          pk: ["id"],
+          optimized: true
+        },
+        %{
+          name: "active_l3_children",
+          table: "level_4",
+          where: "level_3_id IN (SELECT id FROM level_3 WHERE active = true)",
+          columns: ["id", "level_3_id", "value"],
+          pk: ["id"],
+          optimized: false
+        }
+      ]
+
+      mutations = [
+        # This moves l4-1 from l3-1 to l3-2, affecting first two shapes
+        %{name: "move_l4_1", sql: "UPDATE level_4 SET level_3_id = 'l3-2' WHERE id = 'l4-1'"},
+        # This affects the subquery shape by changing which l3s are active
+        %{name: "toggle_l3_1", sql: "UPDATE level_3 SET active = NOT active WHERE id = 'l3-1'"},
+        # Move it back
+        %{name: "move_l4_1_back", sql: "UPDATE level_4 SET level_3_id = 'l3-1' WHERE id = 'l4-1'"}
+      ]
+
+      run_with_shapes(ctx, shapes, mutations)
+    end
   end
 end

@@ -1,6 +1,16 @@
 defmodule Electric.Integration.OraclePropertyTest do
   @moduledoc """
-  Property tests that generate oracle cases with bounded runtime.
+  Property-based oracle tests that run many parallel shapes with generated
+  where clauses and mutations.
+
+  Configuration via environment variables:
+    - ELECTRIC_ORACLE_SHAPE_COUNT: Number of shapes to run in parallel (default: 100)
+    - ELECTRIC_ORACLE_MUTATION_COUNT: Number of mutations per test (default: 20)
+    - ELECTRIC_ORACLE_PROP_RUNS: Number of property test iterations (default: 5)
+    - ELECTRIC_ORACLE_WHERE_SEED: Seed for where clause generation (default: random)
+    - ELECTRIC_ORACLE_MUTATION_SEED: Seed for mutation generation (default: random)
+    - ELECTRIC_ORACLE_TIMEOUT_MS: Timeout per shape wait (default: 20000)
+    - ELECTRIC_ORACLE_VERBOSE: Set to "1" for verbose logging
   """
 
   use ExUnit.Case, async: false
@@ -17,174 +27,75 @@ defmodule Electric.Integration.OraclePropertyTest do
   setup :with_complete_stack
   setup :with_electric_client
 
-  @org_ids ["org-1", "org-2", "org-3"]
-  @project_ids ["proj-1", "proj-2", "proj-3"]
-  @task_ids ["task-1", "task-2", "task-3", "task-4"]
-  @tags ["alpha", "beta", "gamma"]
+  setup ctx do
+    setup_standard_schema(ctx)
+    :ok
+  end
 
-  @schema_sql [
-    "DROP TABLE IF EXISTS tasks",
-    "DROP TABLE IF EXISTS projects",
-    "DROP TABLE IF EXISTS org_tags",
-    "DROP TABLE IF EXISTS orgs",
-    """
-    CREATE TABLE orgs (
-      id TEXT PRIMARY KEY,
-      active BOOLEAN NOT NULL DEFAULT true
-    )
-    """,
-    """
-    CREATE TABLE org_tags (
-      org_id TEXT NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
-      tag TEXT NOT NULL
-    )
-    """,
-    """
-    CREATE TABLE projects (
-      id TEXT PRIMARY KEY,
-      org_id TEXT NOT NULL REFERENCES orgs(id) ON DELETE CASCADE
-    )
-    """,
-    """
-    CREATE TABLE tasks (
-      id TEXT PRIMARY KEY,
-      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-      title TEXT NOT NULL
-    )
-    """
-  ]
+  @doc """
+  Run parallel shapes with fully generated where clauses and mutations.
 
-  @seed_sql [
-    "INSERT INTO orgs (id, active) VALUES ('org-1', true), ('org-2', true), ('org-3', false)",
-    "INSERT INTO org_tags (org_id, tag) VALUES ('org-1', 'alpha'), ('org-2', 'beta')",
-    "INSERT INTO projects (id, org_id) VALUES ('proj-1', 'org-1'), ('proj-2', 'org-2'), ('proj-3', 'org-3')",
-    "INSERT INTO tasks (id, project_id, title) VALUES ('task-1', 'proj-1', 't1'), ('task-2', 'proj-2', 't2'), ('task-3', 'proj-3', 't3'), ('task-4', 'proj-1', 't4')"
-  ]
-
-  test "property oracle cases (bounded)", ctx do
+  Each iteration:
+  1. Resets data to initial seed state
+  2. Generates shape_count where clauses (with new seed each iteration)
+  3. Generates mutation_count mutations (with new seed each iteration)
+  4. Runs all shapes in parallel, applying mutations and verifying consistency
+  """
+  test "parallel shapes with generated where clauses and mutations", ctx do
     max_runs = env_int("ELECTRIC_ORACLE_PROP_RUNS") || 5
 
-    check all case_spec <- oracle_case_gen(),
+    check all iteration_seed <- StreamData.integer(),
               max_runs: max_runs do
-      run_cases(ctx, [case_spec])
+      # Reset data for clean state each iteration
+      reset_standard_data(ctx)
+
+      # Use iteration seed to generate different shapes/mutations each run
+      run_parallel(ctx, %{
+        where_seed: iteration_seed,
+        mutation_seed: iteration_seed + 1
+      })
     end
   end
 
-  defp oracle_case_gen do
-    import StreamData
+  @doc """
+  Run with fixed where clauses but varying mutations.
 
-    bind({where_gen(), list_of(mutation_gen(), min_length: 1, max_length: 4), integer(1..1_000_000)}, fn {where_spec, mutations, case_id} ->
-      {where_clause, optimized?} = where_spec
+  This tests that the same set of shapes handles different mutation sequences correctly.
+  """
+  test "fixed shapes with varying mutations", ctx do
+    max_runs = env_int("ELECTRIC_ORACLE_PROP_RUNS") || 5
+    fixed_where_seed = env_int("ELECTRIC_ORACLE_WHERE_SEED") || 12345
 
-      case_name = "prop_#{case_id}"
+    check all mutation_seed <- StreamData.integer(),
+              max_runs: max_runs do
+      reset_standard_data(ctx)
 
-      mutations =
-        mutations
-        |> Enum.with_index(1)
-        |> Enum.map(fn {mutation, index} ->
-          %{name: "#{mutation_name(mutation)}_#{index}", sql: mutation_sql(mutation)}
-        end)
-
-      constant(%{
-        name: case_name,
-        schema_sql: @schema_sql,
-        seed_sql: @seed_sql,
-        shapes: [
-          %{
-            name: "tasks_shape",
-            table: "tasks",
-            where: where_clause,
-            columns: ["id", "project_id", "title"],
-            pk: ["id"],
-            optimized: optimized?
-          }
-        ],
-        mutations: mutations
+      run_parallel(ctx, %{
+        where_seed: fixed_where_seed,
+        mutation_seed: mutation_seed
       })
-    end)
+    end
   end
 
-  defp where_gen do
-    import StreamData
+  @doc """
+  Run with fixed mutations but varying where clauses.
 
-    simple =
-      member_of([
-        {"title LIKE 't%'", true},
-        {"title = 't1'", true},
-        {"project_id = 'proj-1'", true}
-      ])
+  This tests that different shape definitions all produce correct results
+  for the same mutation sequence.
+  """
+  test "varying shapes with fixed mutations", ctx do
+    max_runs = env_int("ELECTRIC_ORACLE_PROP_RUNS") || 5
+    fixed_mutation_seed = env_int("ELECTRIC_ORACLE_MUTATION_SEED") || 54321
 
-    nested =
-      bind({member_of(@tags), member_of(@org_ids)}, fn {tag, org_id} ->
-        member_of([
-          {
-            "project_id IN (SELECT id FROM projects WHERE org_id IN (SELECT id FROM orgs WHERE active = true))",
-            false
-          },
-          {
-            "project_id IN (SELECT id FROM projects WHERE org_id IN (SELECT id FROM orgs WHERE id IN (SELECT org_id FROM org_tags WHERE tag = '#{tag}')))",
-            false
-          },
-          {
-            "project_id IN (SELECT id FROM projects WHERE org_id IN (SELECT id FROM orgs WHERE id IN (SELECT org_id FROM org_tags WHERE tag IN (SELECT tag FROM org_tags WHERE org_id = '#{org_id}'))))",
-            false
-          }
-        ])
-      end)
+    check all where_seed <- StreamData.integer(),
+              max_runs: max_runs do
+      reset_standard_data(ctx)
 
-    one_of([simple, nested])
-  end
-
-  defp mutation_gen do
-    import StreamData
-
-    one_of([
-      map(member_of(@org_ids), fn org_id -> {:toggle_org, org_id} end),
-      map({member_of(@org_ids), member_of(@tags)}, fn {org_id, tag} ->
-        {:add_tag, org_id, tag}
-      end),
-      map({member_of(@org_ids), member_of(@tags)}, fn {org_id, tag} ->
-        {:remove_tag, org_id, tag}
-      end),
-      map({member_of(@project_ids), member_of(@org_ids)}, fn {project_id, org_id} ->
-        {:move_project, project_id, org_id}
-      end),
-      map({member_of(@task_ids), member_of(@project_ids)}, fn {task_id, project_id} ->
-        {:move_task, task_id, project_id}
-      end),
-      map(member_of(@task_ids), fn task_id -> {:update_task_title, task_id} end)
-    ])
-  end
-
-  defp mutation_name({:toggle_org, _}), do: "toggle_org"
-  defp mutation_name({:add_tag, _, _}), do: "add_tag"
-  defp mutation_name({:remove_tag, _, _}), do: "remove_tag"
-  defp mutation_name({:move_project, _, _}), do: "move_project"
-  defp mutation_name({:move_task, _, _}), do: "move_task"
-  defp mutation_name({:update_task_title, _}), do: "update_task_title"
-
-  defp mutation_sql({:toggle_org, org_id}) do
-    "UPDATE orgs SET active = NOT active WHERE id = '#{org_id}'"
-  end
-
-  defp mutation_sql({:add_tag, org_id, tag}) do
-    "INSERT INTO org_tags (org_id, tag) VALUES ('#{org_id}', '#{tag}')"
-  end
-
-  defp mutation_sql({:remove_tag, org_id, tag}) do
-    "DELETE FROM org_tags WHERE org_id = '#{org_id}' AND tag = '#{tag}'"
-  end
-
-  defp mutation_sql({:move_project, project_id, org_id}) do
-    "UPDATE projects SET org_id = '#{org_id}' WHERE id = '#{project_id}'"
-  end
-
-  defp mutation_sql({:move_task, task_id, project_id}) do
-    "UPDATE tasks SET project_id = '#{project_id}' WHERE id = '#{task_id}'"
-  end
-
-  defp mutation_sql({:update_task_title, task_id}) do
-    "UPDATE tasks SET title = 't#{task_id}-x' WHERE id = '#{task_id}'"
+      run_parallel(ctx, %{
+        where_seed: where_seed,
+        mutation_seed: fixed_mutation_seed
+      })
+    end
   end
 
   defp env_int(name) do
