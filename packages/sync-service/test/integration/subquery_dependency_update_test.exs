@@ -76,7 +76,11 @@ defmodule Electric.Integration.SubqueryDependencyUpdateTest do
         # Both orgs have premium, so task-1 should STAY in the shape.
         # Path changes from: task-1 -> backend -> engineering -> acme (premium)
         #                to: task-1 -> backend -> engineering -> globex (premium)
-        Postgrex.query!(ctx.db_conn, "UPDATE teams SET org_id = 'globex' WHERE id = 'engineering'", [])
+        Postgrex.query!(
+          ctx.db_conn,
+          "UPDATE teams SET org_id = 'globex' WHERE id = 'engineering'",
+          []
+        )
 
         # Should NOT delete task-1 - it's still under a premium org
         messages_after_move = collect_messages(consumer, timeout: 1000)
@@ -90,7 +94,11 @@ defmodule Electric.Integration.SubqueryDependencyUpdateTest do
         # This should have NO EFFECT because:
         #   - Engineering team no longer belongs to Acme
         #   - task-1's path is now via Globex (which still has premium)
-        Postgrex.query!(ctx.db_conn, "DELETE FROM organization_tags WHERE org_id = 'acme' AND tag = 'premium'", [])
+        Postgrex.query!(
+          ctx.db_conn,
+          "DELETE FROM organization_tags WHERE org_id = 'acme' AND tag = 'premium'",
+          []
+        )
 
         # BUG: Electric incorrectly deletes task-1 here!
         # It still thinks task-1 is connected to Acme.
@@ -142,11 +150,17 @@ defmodule Electric.Integration.SubqueryDependencyUpdateTest do
         Postgrex.query!(ctx.db_conn, "UPDATE teams SET org_id = 'globex' WHERE id = 'team-c'", [])
 
         messages1 = collect_messages(consumer, timeout: 1000)
-        assert filter_deletes(messages1) == [], "No deletes expected when moving between premium orgs"
+
+        assert filter_deletes(messages1) == [],
+               "No deletes expected when moving between premium orgs"
 
         # Remove premium from Initech (team-c's OLD org)
         # task-c should stay because it's now under Globex
-        Postgrex.query!(ctx.db_conn, "DELETE FROM organization_tags WHERE org_id = 'initech' AND tag = 'premium'", [])
+        Postgrex.query!(
+          ctx.db_conn,
+          "DELETE FROM organization_tags WHERE org_id = 'initech' AND tag = 'premium'",
+          []
+        )
 
         messages2 = collect_messages(consumer, timeout: 1000)
         deletes = filter_deletes(messages2)
@@ -183,44 +197,64 @@ defmodule Electric.Integration.SubqueryDependencyUpdateTest do
   # ---- Test Schema Setup ----
 
   def with_org_team_project_task_tables(%{db_conn: conn} = _context) do
-    Postgrex.query!(conn, """
-      CREATE TABLE organizations (
-        id TEXT PRIMARY KEY,
-        name TEXT NOT NULL
-      )
-    """, [])
+    Postgrex.query!(
+      conn,
+      """
+        CREATE TABLE organizations (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL
+        )
+      """,
+      []
+    )
 
-    Postgrex.query!(conn, """
-      CREATE TABLE organization_tags (
-        org_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-        tag TEXT NOT NULL,
-        PRIMARY KEY (org_id, tag)
-      )
-    """, [])
+    Postgrex.query!(
+      conn,
+      """
+        CREATE TABLE organization_tags (
+          org_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+          tag TEXT NOT NULL,
+          PRIMARY KEY (org_id, tag)
+        )
+      """,
+      []
+    )
 
-    Postgrex.query!(conn, """
-      CREATE TABLE teams (
-        id TEXT PRIMARY KEY,
-        name TEXT NOT NULL,
-        org_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE
-      )
-    """, [])
+    Postgrex.query!(
+      conn,
+      """
+        CREATE TABLE teams (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          org_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE
+        )
+      """,
+      []
+    )
 
-    Postgrex.query!(conn, """
-      CREATE TABLE projects (
-        id TEXT PRIMARY KEY,
-        name TEXT NOT NULL,
-        team_id TEXT NOT NULL REFERENCES teams(id) ON DELETE CASCADE
-      )
-    """, [])
+    Postgrex.query!(
+      conn,
+      """
+        CREATE TABLE projects (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          team_id TEXT NOT NULL REFERENCES teams(id) ON DELETE CASCADE
+        )
+      """,
+      []
+    )
 
-    Postgrex.query!(conn, """
-      CREATE TABLE tasks (
-        id TEXT PRIMARY KEY,
-        title TEXT NOT NULL,
-        project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE
-      )
-    """, [])
+    Postgrex.query!(
+      conn,
+      """
+        CREATE TABLE tasks (
+          id TEXT PRIMARY KEY,
+          title TEXT NOT NULL,
+          project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE
+        )
+      """,
+      []
+    )
 
     %{
       tables: [
