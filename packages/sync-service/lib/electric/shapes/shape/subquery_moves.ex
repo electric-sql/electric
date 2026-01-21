@@ -103,7 +103,9 @@ defmodule Electric.Shapes.Shape.SubqueryMoves do
 
         {:hash_together, columns} ->
           column_parts =
-            &(Enum.zip_with(&1, columns, fn value, column -> column <> ":" <> value end)
+            &(Enum.zip_with(&1, columns, fn value, column ->
+                column <> ":" <> namespace_value(value)
+              end)
               |> Enum.join())
 
           Enum.map(
@@ -111,7 +113,11 @@ defmodule Electric.Shapes.Shape.SubqueryMoves do
             &%{
               pos: 0,
               value:
-                make_value_hash(stack_id, shape_handle, column_parts.(Tuple.to_list(elem(&1, 1))))
+                make_value_hash_raw(
+                  stack_id,
+                  shape_handle,
+                  column_parts.(Tuple.to_list(elem(&1, 1)))
+                )
             }
           )
       end
@@ -119,9 +125,25 @@ defmodule Electric.Shapes.Shape.SubqueryMoves do
   end
 
   def make_value_hash(stack_id, shape_handle, value) do
-    :crypto.hash(:md5, "#{stack_id}#{shape_handle}#{value}")
+    make_value_hash_raw(stack_id, shape_handle, namespace_value(value))
+  end
+
+  @doc """
+  Hash a pre-namespaced value. Use `make_value_hash/3` for single values that need namespacing.
+  """
+  def make_value_hash_raw(stack_id, shape_handle, namespaced_value) do
+    :crypto.hash(:md5, "#{stack_id}#{shape_handle}#{namespaced_value}")
     |> Base.encode16(case: :lower)
   end
+
+  @doc """
+  Namespace a value for hashing.
+
+  To distinguish NULL from the literal string 'NULL', values are prefixed with
+  'v:' and NULL becomes 'NULL' (no prefix). This matches the SQL in `querying.ex`.
+  """
+  def namespace_value(nil), do: "NULL"
+  def namespace_value(value), do: "v:#{value}"
 
   @doc """
   Generate a tag structure for a shape.
