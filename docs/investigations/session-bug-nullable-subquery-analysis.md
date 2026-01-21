@@ -9,7 +9,7 @@
 
 ## Executive Summary
 
-A user reported crashes when using shapes with WHERE clauses containing `IN (SELECT ...)` subqueries where the column used in the membership check is nullable. Investigation revealed **two distinct issues**:
+A user reported crashes when using shapes with WHERE clauses containing `IN (SELECT ...)` subqueries where the column used in the membership check is nullable. **The bug is intermittent** - sometimes it works, sometimes it crashes. Investigation revealed **two distinct issues**:
 
 1. **Primary Bug:** The `subset` encoder doesn't properly handle NULL values in the response stream, causing an `ArgumentError` crash
 2. **Design Limitation:** Shapes with OR conditions containing subqueries trigger frequent 409 responses due to intentional invalidation behavior
@@ -267,6 +267,53 @@ const ownershipOrAcl = sql`(
 > "I added a guard to not run the inarray if it's null but that appears to be breaking something because in certain cases things don't sync"
 
 The "breaking" is likely the continued 409 invalidation cycle, not the IS NOT NULL guard itself.
+
+---
+
+## Intermittent Behavior Analysis
+
+**User Report:** "the weird thing is that sometimes this works and sometimes it doesn't"
+
+### Possible Causes for Intermittent Failures
+
+#### 1. Data-Dependent (Most Likely)
+The crash only occurs when ALL conditions are met:
+- A row with `task_id = NULL` exists in `sessions` table
+- That row matches the WHERE clause (e.g., via `resource_owner_user_id` match)
+- That row is included in the current response
+
+If the matching rows all have non-NULL `task_id` values, no crash occurs.
+
+#### 2. Response Path Dependent
+Different request types use different encoders:
+
+| Request Type | Encoder | Has Bug? |
+|--------------|---------|----------|
+| Initial snapshot from storage | `log/1` | No |
+| Subset query (on-demand sync) | `subset/1` | **Yes** |
+| Live/polling requests | `log/1` | No |
+| Cached/stored log reads | `log/1` | No |
+
+With TanStack DB's `syncMode: 'on-demand'`, subset queries are triggered dynamically. But if:
+- Shape already exists with cached snapshot → serves via `log/1` (works)
+- Fresh subset query triggered → uses `subset/1` (may crash)
+
+#### 3. Timing/Race Conditions
+- Shape exists and is up-to-date → log path (works)
+- Shape being created → might hit subset path (crashes)
+- Shape invalidated via 409 → refetch might take different path
+- Dependent shape changes → triggers invalidation → different behavior
+
+### To Reproduce Consistently
+Try to ensure:
+1. Shape doesn't exist yet (delete shape or use new handle)
+2. Query specifically requests subset (`subset` param in request)
+3. Data includes rows where `task_id IS NULL` but row matches via `resource_owner_user_id`
+
+### Questions to Clarify
+- Does it fail more on first load vs subsequent loads?
+- Does failure correlate with rows where `task_id` is NULL?
+- Does it happen specifically after a 409 refresh cycle?
 
 ---
 
