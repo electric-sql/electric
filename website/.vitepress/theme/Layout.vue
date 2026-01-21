@@ -59,6 +59,10 @@ const showMarkdownLink = computed(() => {
     <template #nav-bar-content-after>
       <NavSignupButton />
     </template>
+    <template #nav-screen-content-after>
+      <!-- Mobile menu: Add markdown link -->
+      <MarkdownLink v-if="showMarkdownLink" variant="menu" />
+    </template>
     <template #doc-top>
       <!-- Local nav bar: Medium/small screens - markdown link floats right -->
       <div v-if="showMarkdownLink" class="markdown-link-local-nav-container">

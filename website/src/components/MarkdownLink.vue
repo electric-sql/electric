@@ -49,6 +49,14 @@ function navigateToMarkdown(event) {
   >
     <span class="title">✨ Markdown</span>
   </a>
+  <a
+    v-else-if="variant === 'menu'"
+    class="markdown-link-menu"
+    :href="markdownUrl"
+    @click="navigateToMarkdown"
+  >
+    ✨ Markdown
+  </a>
 </template>
 
 <style scoped>
@@ -105,5 +113,22 @@ function navigateToMarkdown(event) {
 
 .markdown-link-footer:hover {
   color: var(--vp-c-brand-2);
+}
+
+/* Menu link: Mobile nav screen */
+.markdown-link-menu {
+  display: block;
+  border-top: 1px solid var(--vp-c-divider);
+  padding: 12px 0 0 0;
+  margin-top: 12px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--vp-c-text-1);
+  transition: color 0.25s;
+  text-decoration: none;
+}
+
+.markdown-link-menu:hover {
+  color: var(--vp-c-brand-1);
 }
 </style>
