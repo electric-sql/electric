@@ -1109,13 +1109,13 @@ defmodule Electric.Shapes.ConsumerTest do
       :with_pure_file_storage,
       :with_shape_status,
       :with_lsn_tracker,
-      :with_log_chunking,
+      # :with_log_chunking,
       :with_persistent_kv,
       :with_async_deleter,
       :with_shape_cleaner,
       :with_shape_log_collector,
-      :with_noop_publication_manager,
-      :with_status_monitor
+      :with_noop_publication_manager
+      # :with_status_monitor
     ]
 
     setup(ctx) do
@@ -1126,19 +1126,28 @@ defmodule Electric.Shapes.ConsumerTest do
         snapshot_fun.([])
       end)
 
+      storage =
+        Support.TestStorage.wrap(ctx.storage, %{})
+
+      #   @shape_handle1 => [
+      #     {:mark_snapshot_as_started, []},
+      #     {:set_pg_snapshot, [%{xmin: 10, xmax: 11, xip_list: [10]}]}
+      #   ]
+      # })
+
+      Electric.StackConfig.put(ctx.stack_id, Electric.ShapeCache.Storage, storage)
 
       %{consumer_supervisor: consumer_supervisor, shape_cache: shape_cache} =
         Support.ComponentSetup.with_shape_cache(ctx)
 
       [
         consumer_supervisor: consumer_supervisor,
-        shape_cache: shape_cache
+        shape_cache: shape_cache,
+        storage: storage
       ]
     end
 
-    test "multi-fragment transaction is written correctly", ctx do
-      %{storage: storage} = ctx
-
+    test "multi-fragment transaction writes each fragment to storage before commit", ctx do
       {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape1, ctx.stack_id)
       :started = ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id)
 
@@ -1213,33 +1222,72 @@ defmodule Electric.Shapes.ConsumerTest do
         affected_relations: MapSet.new([{"public", "test_table"}])
       }
 
-      # Send all fragments
+      # Await snapshot completion message from the patched snapshotter fun.
+      assert_receive {:snapshot, ^shape_handle}
+
+      # Consume the init_writer! and for_shape messages from TestStorage setup
+      assert_receive {Support.TestStorage, :for_shape, ^shape_handle}
+      assert_receive {Support.TestStorage, :init_writer!, ^shape_handle, _shape}
+
+      # Send first fragment (begin) and verify it's written to storage immediately
       assert :ok = ShapeLogCollector.handle_event(fragment1, ctx.stack_id)
-      # No notification yet - transaction not committed
+
+      # Verify append_fragment_to_log! was called BEFORE commit (key fragment-direct behavior)
+      assert_receive {Support.TestStorage, :append_fragment_to_log!, ^shape_handle, frag1_lines},
+                     @receive_timeout
+
+      assert length(frag1_lines) == 2,
+             "First fragment should write 2 log entries, got #{length(frag1_lines)}"
+
+      # Verify signal_txn_commit! was NOT called yet
+      refute_receive {Support.TestStorage, :signal_txn_commit!, ^shape_handle, _xid}, 100
+
+      # No client notification yet - transaction not committed
       refute_receive {^ref, :new_changes, _}, 100
 
+      # Send second fragment (middle)
       assert :ok = ShapeLogCollector.handle_event(fragment2, ctx.stack_id)
-      # Still no notification
+
+      # Verify append_fragment_to_log! was called for second fragment BEFORE commit
+      assert_receive {Support.TestStorage, :append_fragment_to_log!, ^shape_handle, frag2_lines},
+                     @receive_timeout
+
+      assert length(frag2_lines) == 2,
+             "Second fragment should write 2 log entries, got #{length(frag2_lines)}"
+
+      # Verify signal_txn_commit! still NOT called
+      refute_receive {Support.TestStorage, :signal_txn_commit!, ^shape_handle, _xid}, 100
+
+      # Still no client notification
       refute_receive {^ref, :new_changes, _}, 100
 
+      # Send third fragment (commit)
       assert :ok = ShapeLogCollector.handle_event(fragment3, ctx.stack_id)
-      # Now we should get notification
+
+      # Verify append_fragment_to_log! was called for third fragment
+      assert_receive {Support.TestStorage, :append_fragment_to_log!, ^shape_handle, frag3_lines},
+                     @receive_timeout
+
+      assert length(frag3_lines) == 2,
+             "Third fragment should write 2 log entries, got #{length(frag3_lines)}"
+
+      # NOW signal_txn_commit! should be called (only after commit fragment)
+      assert_receive {Support.TestStorage, :signal_txn_commit!, ^shape_handle, ^xid},
+                     @receive_timeout
+
+      # Now we should get client notification
       assert_receive {^ref, :new_changes, offset}, @receive_timeout
       assert offset == LogOffset.new(lsn, 5)
 
-      # Verify all 6 records were written
-      shape_storage = Storage.for_shape(shape_handle, storage)
+      # Verify all 6 records were written (final state verification)
+      shape_storage = Storage.for_shape(shape_handle, ctx.storage)
 
       records =
         Storage.get_log_stream(LogOffset.last_before_real_offsets(), shape_storage)
         |> Enum.map(&Jason.decode!/1)
 
       assert length(records) == 6
-
-      ids = Enum.map(records, & &1["value"]["id"])
-      assert ids == ["1", "2", "3", "4", "5", "6"]
-
-      stop_supervised!(ctx.consumer_supervisor)
+      assert Enum.map(records, & &1["value"]["id"]) == ["1", "2", "3", "4", "5", "6"]
     end
 
     test "empty transaction (no relevant changes) notifies flush boundary", ctx do
