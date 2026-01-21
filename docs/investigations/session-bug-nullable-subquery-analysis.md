@@ -11,8 +11,11 @@
 
 A user reported crashes when using shapes with WHERE clauses containing `IN (SELECT ...)` subqueries where the column used in the membership check is nullable. **The bug is intermittent** - sometimes it works, sometimes it crashes. Investigation revealed **two distinct issues**:
 
-1. **Primary Bug:** The `subset` encoder doesn't properly handle NULL values in the response stream, causing an `ArgumentError` crash
-2. **Design Limitation:** Shapes with OR conditions containing subqueries trigger frequent 409 responses due to intentional invalidation behavior
+1. **Primary Bug (CONFIRMED):** The `subset` encoder doesn't properly handle NULL values in the response stream, causing an `ArgumentError` crash. **This is a real server-side bug that still occurs even when client-side workarounds make tests pass.**
+2. **Secondary Bug:** Race condition where shapes report "ready" before dependent materializers finish initializing
+3. **Design Limitation:** Shapes with OR conditions containing subqueries trigger frequent 409 responses due to intentional invalidation behavior
+
+**Key Finding:** Adding a 50ms delay on the client side makes tests pass, but the server-side encoder error (`iolist_size(["[", [nil], "]"])`) **still appears in logs**. The delay is a workaround, not a fix.
 
 ---
 
@@ -404,6 +407,62 @@ The dependent shape materializers need to signal when they've finished their ini
 
 ---
 
+## FINAL CONFIRMATION: Server-Side Encoder Bug Is Real
+
+**Critical Discovery:** When examining Electric container logs with the 50ms delay that makes tests pass, **the `iolist_size(["[", [nil], "]"])` error STILL appears in the logs**.
+
+```
+electric-1  | 2026-01-20 23:05:47.260 pid=<0.3359.0> request_id=GIyS9_FZOZk_vfIAAAHC [error]
+** (ArgumentError) errors were found at the given arguments:
+  * 1st argument: not an iodata term
+    :erlang.iolist_size(["[", [nil], "]"])
+```
+
+### What This Confirms
+
+1. **The original encoder bug hypothesis was CORRECT** - Electric has a real bug where the `subset/1` encoder doesn't handle NULL values properly
+
+2. **The 50ms delay is a WORKAROUND, not a fix** - It doesn't prevent the server error; it likely:
+   - Allows time for retries to succeed on non-NULL paths
+   - Allows client to fall back to a different code path (e.g., `log/1` instead of `subset/1`)
+   - Gives materializers time to initialize so subsequent requests don't hit the race condition
+
+3. **Two bugs are interacting:**
+   - **Bug A (encoder):** `subset/1` crashes on NULL values in response stream
+   - **Bug B (timing):** Queries can arrive before materializers finish loading, causing empty/NULL responses
+
+### Why Delay Makes Tests Pass Despite Server Error
+
+The delay doesn't prevent the error - it changes the client behavior:
+- Without delay: Client immediately queries, hits uninitialized materializer, gets NULL, crashes, test fails
+- With delay: Client queries, might hit the error BUT has time to retry or receive data via different path
+
+The server still crashes internally on some requests, but subsequent retries succeed.
+
+### Root Cause Confirmation
+
+The `subset/1` function in `encoder.ex` must be fixed to handle items the same way `log/1` does:
+
+```elixir
+# Current (buggy):
+def subset({metadata, item_stream}) do
+  ...
+  to_json_stream(item_stream)  # Items not encoded!
+  ...
+end
+
+# Should be:
+def subset({metadata, item_stream}) do
+  ...
+  item_stream |> Stream.map(&ensure_json/1) |> to_json_stream()
+  ...
+end
+```
+
+OR the query path needs to filter out NULL rows before they reach the encoder.
+
+---
+
 ## Electric Logs Analysis
 
 ```
@@ -431,10 +490,34 @@ The dependent shape materializers need to signal when they've finished their ini
 
 ## Recommendations
 
-### Immediate Fix (Bug)
-Fix the encoder to handle NULL values in subset responses. This is a clear bug.
+### Priority 1: Fix Encoder Bug (CRITICAL)
+Fix the `subset/1` function in `encoder.ex` to handle items the same way `log/1` does. This is a **confirmed server-side bug** that crashes on NULL values.
 
-### Documentation (Limitation)
+**Suggested fix in `lib/electric/shapes/api/encoder.ex`:**
+```elixir
+def subset({metadata, item_stream}) do
+  metadata =
+    metadata
+    |> Map.update!(:xmin, &to_string/1)
+    |> Map.update!(:xmax, &to_string/1)
+    |> Map.update!(:xip_list, &Enum.map(&1, fn xid -> to_string(xid) end))
+
+  Stream.concat([
+    [
+      ~s|{"metadata":|,
+      Jason.encode_to_iodata!(metadata),
+      ~s|, "data": |
+    ],
+    item_stream |> Stream.map(&ensure_json/1) |> to_json_stream(),  # FIX: Add ensure_json
+    [~s|}|]
+  ])
+end
+```
+
+### Priority 2: Fix Materializer Race Condition
+Ensure dependent shape materializers complete their initial `handle_continue({:read_stream, ...})` before the main shape reports as ready. The TODO at line 4 of `materializer.ex` acknowledges this issue.
+
+### Priority 3: Documentation (Limitation)
 Document the limitation that OR conditions with subqueries trigger shape invalidation. Users should be aware this causes frequent 409 responses.
 
 ### Future Enhancement (Feature)
