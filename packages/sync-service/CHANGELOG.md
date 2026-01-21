@@ -1,5 +1,27 @@
 # @core/sync-service
 
+## 1.3.2
+
+### Patch Changes
+
+- 8fa682c: Skip hex.pm publish when version already exists to avoid unnecessary CI builds
+- c162905: Fix crash when subquery column is NULL
+
+  Fixes a crash (`ArgumentError: not an iodata term`) when using on-demand sync with subqueries (e.g., `task_id IN (SELECT ...)`) and rows have NULL values in the referenced column.
+
+  **Root cause:** In `make_tags`, the SQL expression `md5('...' || col::text)` returns NULL when `col` is NULL (because `|| NULL` = NULL in PostgreSQL). This NULL propagates through all string concatenation in the row's JSON construction, causing the encoder to receive `nil` instead of valid iodata.
+
+  **Fix:** Namespace column values with a `v:` prefix, and represent NULL as `NULL` (no prefix). This ensures:
+  - NULL values don't propagate through concatenation
+  - NULL and the string literal `'NULL'` produce distinct hashes
+  - No restrictions on what values users can have in their columns
+
+- fe2c6b2: Fix ETS read/write race condition in PureFileStorage
+
+  Fixed a race condition where readers could miss data when using stale metadata to read from ETS while a concurrent flush was clearing the ETS buffer. The fix detects both empty and partial ETS reads and retries with fresh metadata, which will correctly read from disk after the flush completes.
+
+- c4dc4c6: Fix hex.pm publishing for Electric package
+
 ## 1.3.1
 
 ### Patch Changes
