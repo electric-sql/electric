@@ -1135,23 +1135,45 @@ defmodule Electric.ShapeCache.PureFileStorage do
 
     upper_read_bound = LogOffset.min(max_offset, last_seen)
 
+    # Convert upper_read_bound to tuple for comparison with ETS offsets
+    upper_read_bound_tuple = LogOffset.to_tuple(upper_read_bound)
+
     cond do
       is_log_offset_lte(last_persisted, min_offset) and is_nil(ets) ->
         []
 
       is_log_offset_lte(last_persisted, min_offset) ->
-        read_range_from_ets_cache(ets, min_offset, upper_read_bound)
+        # Pure ETS read case
+        case read_range_from_ets_cache(ets, min_offset, upper_read_bound) do
+          {_data, last_offset}
+          when is_nil(last_offset) or last_offset < upper_read_bound_tuple ->
+            # Empty or partial read - ETS was cleared by a concurrent flush.
+            # Data is now on disk (flush writes to disk before clearing ETS),
+            # so read directly from there using existing boundary info.
+            stream_from_disk(opts, min_offset, upper_read_bound, boundary_info)
+
+          {data, _last_offset} ->
+            data
+        end
 
       is_log_offset_lte(upper_read_bound, last_persisted) ->
         stream_from_disk(opts, min_offset, upper_read_bound, boundary_info)
 
       true ->
+        # Mixed disk + ETS case
         # Because ETS may be cleared by a flush in a parallel process, we're reading it out into memory.
         # It's expected to be fairly small in the worst case, up 64KB
-        upper_range = read_range_from_ets_cache(ets, last_persisted, upper_read_bound)
+        case read_range_from_ets_cache(ets, last_persisted, upper_read_bound) do
+          {_upper_range, last_offset}
+          when is_nil(last_offset) or last_offset < upper_read_bound_tuple ->
+            # Empty or partial read - ETS was cleared by a concurrent flush.
+            # Data is now on disk, so read the full range from there.
+            stream_from_disk(opts, min_offset, upper_read_bound, boundary_info)
 
-        stream_from_disk(opts, min_offset, last_persisted, boundary_info)
-        |> Stream.concat(upper_range)
+          {upper_range, _last_offset} ->
+            stream_from_disk(opts, min_offset, last_persisted, boundary_info)
+            |> Stream.concat(upper_range)
+        end
     end
   end
 
@@ -1194,23 +1216,34 @@ defmodule Electric.ShapeCache.PureFileStorage do
     end
   end
 
-  defp read_range_from_ets_cache(ets, %LogOffset{} = min, %LogOffset{} = max)
-       when is_reference(ets) do
-    read_range_from_ets_cache(ets, LogOffset.to_tuple(min), LogOffset.to_tuple(max), [])
+  # Returns {data, last_offset_read} where last_offset_read is the offset tuple of the
+  # last entry read, or nil if no entries were read. This allows callers to detect
+  # partial reads due to concurrent ETS clearing.
+  @spec read_range_from_ets_cache(:ets.tid() | nil, LogOffset.t(), LogOffset.t()) ::
+          {list(), LogOffset.t_tuple() | nil}
+  defp read_range_from_ets_cache(nil, _min, _max), do: {[], nil}
+
+  defp read_range_from_ets_cache(ets, %LogOffset{} = min, %LogOffset{} = max) do
+    read_range_from_ets_cache(ets, LogOffset.to_tuple(min), LogOffset.to_tuple(max), [], nil)
   end
 
-  defp read_range_from_ets_cache(nil, _min, _max), do: []
-
-  defp read_range_from_ets_cache(ets, min, {max_tx, max_op} = max, acc) when is_reference(ets) do
+  @spec read_range_from_ets_cache(
+          :ets.tid(),
+          LogOffset.t_tuple(),
+          LogOffset.t_tuple(),
+          list(),
+          LogOffset.t_tuple() | nil
+        ) :: {list(), LogOffset.t_tuple() | nil}
+  defp read_range_from_ets_cache(ets, min, {max_tx, max_op} = max, acc, last_offset) do
     case :ets.next_lookup(ets, min) do
       :"$end_of_table" ->
-        Enum.reverse(acc)
+        {Enum.reverse(acc), last_offset}
 
       {{min_tx, min_op}, _} when min_tx > max_tx or (min_tx == max_tx and min_op > max_op) ->
-        Enum.reverse(acc)
+        {Enum.reverse(acc), last_offset}
 
       {new_min, [{_, item}]} ->
-        read_range_from_ets_cache(ets, new_min, max, [item | acc])
+        read_range_from_ets_cache(ets, new_min, max, [item | acc], new_min)
     end
   end
 
