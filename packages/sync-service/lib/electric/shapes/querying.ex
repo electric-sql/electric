@@ -150,8 +150,6 @@ defmodule Electric.Shapes.Querying do
     Enum.map(tag_structure, fn pattern ->
       Enum.map(pattern, fn
         column_name when is_binary(column_name) ->
-          # Coalesce NULL to sentinel to avoid NULL propagating through string concat.
-          # Using a sentinel (not empty string) so NULL and '' produce different hashes.
           col = ~s[coalesce(#{pg_cast_column_to_text(column_name)}, '__NULL__')]
           ~s[md5('#{stack_id}#{shape_handle}' || #{col})]
 
