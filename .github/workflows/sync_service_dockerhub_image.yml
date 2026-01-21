@@ -23,8 +23,8 @@ on:
         type: string
 
 env:
-  DOCKERHUB_REPO: electricsql/electric
-  DOCKERHUB_CANARY_REPO: electricsql/electric-canary
+  DOCKERHUB_REPO: alco/electric
+  DOCKERHUB_CANARY_REPO: alco/electric-canary
 
 jobs:
   derive_build_vars:
@@ -111,8 +111,8 @@ jobs:
       - uses: docker/login-action@v3
         with:
           registry: docker.io
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          username: ${{ secrets.DOCKERHUB_USERNAME_ALCO }}
+          password: ${{ secrets.DOCKERHUB_TOKEN_ALCO }}
 
       - name: Create a temporary per-platform Dockerfile (CI only)
         run: |
@@ -165,8 +165,8 @@ jobs:
     steps:
       - uses: docker/login-action@v3
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          username: ${{ secrets.DOCKERHUB_USERNAME_ALCO }}
+          password: ${{ secrets.DOCKERHUB_TOKEN_ALCO }}
 
       - uses: useblacksmith/setup-docker-builder@v1
 
