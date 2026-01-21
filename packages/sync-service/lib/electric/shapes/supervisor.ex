@@ -58,6 +58,9 @@ defmodule Electric.Shapes.Supervisor do
       canary_spec(stack_id)
     ]
 
+    # TEMPORARY DEBUG: Insert sentinels between each child
+    children = Electric.Debug.ShutdownTimer.insert_sentinels(children, "Shapes.Supervisor")
+
     Supervisor.init(children, strategy: :one_for_all)
   end
 

@@ -383,6 +383,9 @@ defmodule Electric.StackSupervisor do
       ]
       |> Enum.reject(&is_nil/1)
 
+    # TEMPORARY DEBUG: Insert sentinels between each child
+    children = Electric.Debug.ShutdownTimer.insert_sentinels(children, "StackSupervisor")
+
     Supervisor.init(children, strategy: :one_for_one, auto_shutdown: :any_significant)
   end
 end

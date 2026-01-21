@@ -63,6 +63,9 @@ defmodule Electric.Connection.Supervisor do
       {Electric.Connection.Manager.Supervisor, opts}
     ]
 
+    # TEMPORARY DEBUG: Insert sentinels between each child
+    children = Electric.Debug.ShutdownTimer.insert_sentinels(children, "Connection.Supervisor")
+
     Supervisor.init(children, strategy: :rest_for_one)
   end
 end

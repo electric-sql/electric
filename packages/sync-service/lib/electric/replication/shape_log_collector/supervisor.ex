@@ -30,6 +30,9 @@ defmodule Electric.Replication.ShapeLogCollector.Supervisor do
       {ShapeLogCollector.RequestBatcher, stack_id: stack_id}
     ]
 
+    # TEMPORARY DEBUG: Insert sentinels between each child
+    children = Electric.Debug.ShutdownTimer.insert_sentinels(children, "ShapeLogCollector.Supervisor")
+
     # Prevent any restarts until the whole system is capable of sustaining
     # the SLC dying without any other shape machinery being restarted
     Supervisor.init(children, strategy: :one_for_all, max_restarts: 0)

@@ -48,6 +48,9 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Supervisor do
       {ShapeDb.WriteBuffer, args}
     ]
 
+    # TEMPORARY DEBUG: Insert sentinels between each child
+    children = Electric.Debug.ShutdownTimer.insert_sentinels(children, "ShapeDb.Supervisor")
+
     Supervisor.init(children, strategy: :one_for_one)
   end
 end

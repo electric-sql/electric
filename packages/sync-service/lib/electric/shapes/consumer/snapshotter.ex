@@ -31,7 +31,16 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
     Logger.metadata(metadata)
     Electric.Telemetry.Sentry.set_tags_context(metadata)
 
+    # TEMPORARY DEBUG: Track snapshotter count
+    Electric.Debug.ShutdownTimer.snapshotter_started()
+
     {:ok, config, {:continue, :start_snapshot}}
+  end
+
+  # TEMPORARY DEBUG: Track snapshotter count on termination
+  def terminate(_reason, _state) do
+    Electric.Debug.ShutdownTimer.snapshotter_stopped()
+    :ok
   end
 
   def handle_continue(:start_snapshot, state) do
