@@ -5,7 +5,7 @@ import { useData } from 'vitepress'
 const props = defineProps({
   variant: {
     type: String,
-    default: 'aside', // 'aside', 'local-nav', 'footer'
+    default: 'aside', // 'aside', 'local-nav', 'footer', 'menu'
   },
 })
 
@@ -16,12 +16,6 @@ const markdownUrl = computed(() => {
   const path = page.value.relativePath.replace(/\.md$/, '')
   return `/${path}.md`
 })
-
-// Force full page navigation to bypass VitePress client-side router
-function navigateToMarkdown(event) {
-  event.preventDefault()
-  window.location.href = markdownUrl.value
-}
 </script>
 
 <template>
@@ -29,7 +23,8 @@ function navigateToMarkdown(event) {
     v-if="variant === 'aside'"
     class="markdown-link-aside pager-link"
     :href="markdownUrl"
-    @click="navigateToMarkdown"
+    target="_blank"
+    rel="noopener"
   >
     <span class="title">✨ Markdown</span>
   </a>
@@ -37,7 +32,8 @@ function navigateToMarkdown(event) {
     v-else-if="variant === 'local-nav'"
     class="markdown-link-local-nav"
     :href="markdownUrl"
-    @click="navigateToMarkdown"
+    target="_blank"
+    rel="noopener"
   >
     <span class="title">✨ Markdown</span>
   </a>
@@ -45,7 +41,8 @@ function navigateToMarkdown(event) {
     v-else-if="variant === 'footer'"
     class="markdown-link-footer"
     :href="markdownUrl"
-    @click="navigateToMarkdown"
+    target="_blank"
+    rel="noopener"
   >
     <span class="title">✨ Markdown</span>
   </a>
@@ -53,7 +50,8 @@ function navigateToMarkdown(event) {
     v-else-if="variant === 'menu'"
     class="markdown-link-menu"
     :href="markdownUrl"
-    @click="navigateToMarkdown"
+    target="_blank"
+    rel="noopener"
   >
     ✨ Markdown
   </a>
