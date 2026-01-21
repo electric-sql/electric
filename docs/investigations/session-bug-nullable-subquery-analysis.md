@@ -347,6 +347,61 @@ end
 
 The membership check itself is fine, but somewhere in the serialization path, an empty dependent shape result may be causing NULL to be written to the response.
 
+### Further Testing Revealed: Race Condition
+
+**Critical Finding:** User added SELECT statements (just reading DB, no data changes) to the failing test, and it started passing!
+
+This confirms the issue is a **timing/race condition**, not a data issue:
+- Inserting a task adds delay → works
+- Running SELECT statements adds delay → works
+- No delay → crashes
+
+**The bug:** Electric reports a shape as "ready" before the dependent shape materializers have finished initializing.
+
+### Evidence in Code
+
+**File:** `lib/electric/shapes/consumer/materializer.ex:4`
+```elixir
+# - [ ] Think about initial materialization needing to finish before we can continue
+```
+
+This TODO suggests developers are aware of this issue.
+
+**`wait_until_ready` implementation (line 162-163):**
+```elixir
+def handle_call(:wait_until_ready, _from, state) do
+  {:reply, :ok, state}  # Returns immediately!
+end
+```
+
+But actual data loading happens in `handle_continue({:read_stream, storage}, state)` which is **async**.
+
+### Race Condition Flow
+
+```
+1. Client requests shape with subquery dependencies
+2. Electric creates main shape + dependent shapes (task_user_acl, task_organization_acl)
+3. Dependent shape consumers start → materializers start
+4. Main shape says "snapshot started!" (too early)
+5. Client makes query request
+6. Materializer.get_all_as_refs() called
+7. get_link_values() returns before materializer has read stream
+8. Something wrong is returned (nil? wrong format?)
+9. Encoder crashes with ["[", [nil], "]"]
+```
+
+### Files to Investigate
+
+| File | Concern |
+|------|---------|
+| `lib/electric/shapes/consumer/materializer.ex` | `handle_continue({:read_stream, ...})` is async - race with `get_link_values` |
+| `lib/electric/shape_cache.ex` | How shapes with deps report readiness |
+| `lib/electric/shapes/consumer.ex` | `await_snapshot_start` doesn't wait for dependent materializers |
+
+### Suggested Fix
+
+The dependent shape materializers need to signal when they've finished their initial `handle_continue({:read_stream, ...})` before the main shape can report as ready.
+
 ---
 
 ## Electric Logs Analysis
