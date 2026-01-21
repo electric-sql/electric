@@ -67,6 +67,8 @@
   [invoke shape_get items $handle "0_inf"]
   ??HTTP/1.1 200 OK
   ??electric-handle: $handle
+  ?electric-offset: ([\w\d_]+)
+  [local offset=$1]
   ??[{"headers":{"control":"up-to-date","global_last_seen_lsn":
 
 # Add more data before another crash
