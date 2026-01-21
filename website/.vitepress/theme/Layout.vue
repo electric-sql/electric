@@ -1,5 +1,5 @@
 <script setup>
-import { watch, onMounted } from 'vue'
+import { watch, onMounted, computed } from 'vue'
 import { useData, useRouter } from 'vitepress'
 import { posthog } from 'posthog-js'
 import { useSidebar } from 'vitepress/theme'
@@ -7,6 +7,7 @@ import { useSidebar } from 'vitepress/theme'
 import DefaultTheme from 'vitepress/theme-without-fonts'
 
 import BlogPostHeader from '../../src/components/BlogPostHeader.vue'
+import CopyMarkdownButton from '../../src/components/CopyMarkdownButton.vue'
 import NavSignupButton from '../../src/components/NavSignupButton.vue'
 import SiteFooter from '../../src/components/SiteFooter.vue'
 import UseCaseHeader from '../../src/components/UseCaseHeader.vue'
@@ -39,8 +40,13 @@ onMounted(() => {
 
 const { Layout } = DefaultTheme
 
-const { frontmatter } = useData()
+const { frontmatter, page } = useData()
 const { hasSidebar } = useSidebar()
+
+// Show markdown button on docs pages (same pages that show edit link)
+const showMarkdownButton = computed(() => {
+  return page.value.relativePath.startsWith('docs')
+})
 </script>
 
 <template>
@@ -53,12 +59,28 @@ const { hasSidebar } = useSidebar()
     <template #nav-bar-content-after>
       <NavSignupButton />
     </template>
+    <template #doc-top>
+      <!-- Local nav bar: Medium screens - markdown button floats right -->
+      <div v-if="showMarkdownButton" class="copy-markdown-local-nav-container">
+        <CopyMarkdownButton variant="local-nav" />
+      </div>
+    </template>
     <template #doc-before>
       <div class="vp-doc" v-if="frontmatter.case">
         <UseCaseHeader />
       </div>
       <div class="vp-doc" v-if="frontmatter.post">
         <BlogPostHeader />
+      </div>
+    </template>
+    <template #aside-outline-before>
+      <!-- Wide screens: Above "On this page" -->
+      <CopyMarkdownButton v-if="showMarkdownButton" variant="aside" />
+    </template>
+    <template #doc-footer-before>
+      <!-- Footer: Right-aligned next to "Edit this page" -->
+      <div v-if="showMarkdownButton" class="copy-markdown-footer-container">
+        <CopyMarkdownButton variant="footer" />
       </div>
     </template>
     <template #layout-bottom>

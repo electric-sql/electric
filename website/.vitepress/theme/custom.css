@@ -1040,3 +1040,68 @@ ul.demo-actions li .VPButton {
 .plugin-tabs--content {
   padding: 16px 0 !important;
 }
+
+/* Copy Markdown Button Styles */
+
+/* Local nav container: positioned in the local nav bar area */
+.copy-markdown-local-nav-container {
+  display: none;
+}
+
+/* Medium and small screens: Position in local nav bar area */
+@media (max-width: 1279px) {
+  .copy-markdown-local-nav-container {
+    display: block;
+    position: fixed;
+    /* Local nav bar is 48px tall, positioned below main nav */
+    top: calc(var(--vp-nav-height) + var(--vp-layout-top-height, 0px));
+    right: 32px;
+    z-index: 20;
+    height: 48px;
+    display: flex;
+    align-items: center;
+  }
+}
+
+/* Adjust for when sidebar is visible (medium screens) */
+@media (min-width: 960px) and (max-width: 1279px) {
+  .copy-markdown-local-nav-container {
+    right: 32px;
+  }
+}
+
+/* Adjust for small screens */
+@media (max-width: 959px) {
+  .copy-markdown-local-nav-container {
+    right: 16px;
+  }
+}
+
+/* Hide local nav button on wide screens when aside is visible */
+@media (min-width: 1280px) {
+  .copy-markdown-local-nav-container {
+    display: none !important;
+  }
+}
+
+/* Footer: Position the markdown button right-aligned next to Edit this page */
+
+/* Make VPDocFooter relative for absolute positioning of children */
+.VPDocFooter {
+  position: relative;
+}
+
+/* The container wraps around edit-info height and positions button at right */
+.copy-markdown-footer-container {
+  position: absolute;
+  right: 0;
+  top: 0;
+  height: auto;
+  display: flex;
+  align-items: center;
+}
+
+/* Make sure edit-info doesn't overlap with our positioned button */
+.VPDocFooter .edit-info {
+  padding-right: 100px;
+}
