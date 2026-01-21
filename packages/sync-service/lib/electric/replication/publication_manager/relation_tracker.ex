@@ -180,8 +180,11 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
           "Restored publication filters in #{System.convert_time_unit(System.monotonic_time() - start, :native, :millisecond)}ms"
         )
 
-        # filters will be pulled by the configurator on startup, so no
-        # need to explicitly call for an update here
+        # Notify the Configurator of the restored filters. This is necessary
+        # when the RelationTracker restarts while the Configurator is still
+        # running, as the Configurator only fetches filters on its own startup.
+        state = update_publication_if_necessary(state)
+
         {:noreply, state, state.publication_refresh_period}
       end
     )
