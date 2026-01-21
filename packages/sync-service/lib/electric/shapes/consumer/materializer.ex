@@ -16,6 +16,8 @@ defmodule Electric.Shapes.Consumer.Materializer do
   # and restarting would make no sense.
   use GenServer, restart: :temporary
 
+  require Logger
+
   alias Electric.Utils
   alias Electric.Replication.Changes
   alias Electric.Shapes.Consumer
@@ -124,7 +126,8 @@ defmodule Electric.Shapes.Consumer.Materializer do
       end
     catch
       # GenServer.call fails with :exit when Consumer is dead or dies mid-call
-      :exit, _ ->
+      :exit, reason ->
+        Logger.warning("Materializer startup failed with exit reason: #{inspect(reason)}")
         {:stop, :shutdown, state}
     end
   end
