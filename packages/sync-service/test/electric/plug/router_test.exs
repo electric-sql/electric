@@ -2300,7 +2300,7 @@ defmodule Electric.Plug.RouterTest do
       assert {req, 200, [data, snapshot_end]} = shape_req(req, opts)
 
       tag =
-        :crypto.hash(:md5, stack_id <> req.handle <> "1")
+        :crypto.hash(:md5, stack_id <> req.handle <> "v:1")
         |> Base.encode16(case: :lower)
 
       assert %{"id" => "1", "parent_id" => "1", "value" => "10"} = data["value"]
@@ -2313,7 +2313,7 @@ defmodule Electric.Plug.RouterTest do
       Postgrex.query!(db_conn, "UPDATE parent SET value = 1 WHERE id = 2", [])
 
       tag2 =
-        :crypto.hash(:md5, stack_id <> req.handle <> "2")
+        :crypto.hash(:md5, stack_id <> req.handle <> "v:2")
         |> Base.encode16(case: :lower)
 
       assert {_, 200, [data, %{"headers" => %{"control" => "snapshot-end"}}, up_to_date_ctl()]} =
@@ -2624,7 +2624,7 @@ defmodule Electric.Plug.RouterTest do
       Postgrex.query!(ctx.db_conn, "INSERT INTO members (user_id, team_id) VALUES (1, 2)")
 
       tag =
-        :crypto.hash(:md5, ctx.stack_id <> req.handle <> "2")
+        :crypto.hash(:md5, ctx.stack_id <> req.handle <> "v:2")
         |> Base.encode16(case: :lower)
 
       assert {req, 200,
@@ -2701,7 +2701,7 @@ defmodule Electric.Plug.RouterTest do
       )
 
       tag =
-        :crypto.hash(:md5, ctx.stack_id <> req.handle <> "user_id:2" <> "team_id:2")
+        :crypto.hash(:md5, ctx.stack_id <> req.handle <> "user_id:v:2" <> "team_id:v:2")
         |> Base.encode16(case: :lower)
 
       assert {req, 200,
@@ -2772,7 +2772,7 @@ defmodule Electric.Plug.RouterTest do
       Postgrex.query!(ctx.db_conn, "UPDATE parent SET other_value = 10 WHERE id = 2")
 
       tag =
-        :crypto.hash(:md5, ctx.stack_id <> req.handle <> "20")
+        :crypto.hash(:md5, ctx.stack_id <> req.handle <> "v:20")
         |> Base.encode16(case: :lower)
 
       assert {_, 200,
@@ -2802,7 +2802,7 @@ defmodule Electric.Plug.RouterTest do
       # Should contain the data record and the snapshot-end control message
       assert length(response) == 2
 
-      tag = :crypto.hash(:md5, ctx.stack_id <> req.handle <> "1") |> Base.encode16(case: :lower)
+      tag = :crypto.hash(:md5, ctx.stack_id <> req.handle <> "v:1") |> Base.encode16(case: :lower)
 
       assert %{
                "value" => %{"id" => "1", "parentId" => "1", "Value" => "10"},

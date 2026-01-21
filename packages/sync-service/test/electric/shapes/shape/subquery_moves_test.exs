@@ -109,15 +109,15 @@ defmodule Electric.Shapes.Shape.SubqueryMovesTest do
         SubqueryMoves.make_move_out_control_message(shape, "stack-id", "shape-handle", move_outs)
 
       tag1 =
-        :crypto.hash(:md5, "stack-id" <> "shape-handle" <> "1")
+        :crypto.hash(:md5, "stack-id" <> "shape-handle" <> "v:1")
         |> Base.encode16(case: :lower)
 
       tag2 =
-        :crypto.hash(:md5, "stack-id" <> "shape-handle" <> "2")
+        :crypto.hash(:md5, "stack-id" <> "shape-handle" <> "v:2")
         |> Base.encode16(case: :lower)
 
       tag3 =
-        :crypto.hash(:md5, "stack-id" <> "shape-handle" <> "3")
+        :crypto.hash(:md5, "stack-id" <> "shape-handle" <> "v:3")
         |> Base.encode16(case: :lower)
 
       assert message == %{
@@ -147,11 +147,11 @@ defmodule Electric.Shapes.Shape.SubqueryMovesTest do
         SubqueryMoves.make_move_out_control_message(shape, "stack-id", "shape-handle", move_outs)
 
       tag1 =
-        :crypto.hash(:md5, "stack-id" <> "shape-handle" <> "col1:1col2:a")
+        :crypto.hash(:md5, "stack-id" <> "shape-handle" <> "col1:v:1col2:v:a")
         |> Base.encode16(case: :lower)
 
       tag2 =
-        :crypto.hash(:md5, "stack-id" <> "shape-handle" <> "col1:2col2:b")
+        :crypto.hash(:md5, "stack-id" <> "shape-handle" <> "col1:v:2col2:v:b")
         |> Base.encode16(case: :lower)
 
       assert message == %{

@@ -673,8 +673,12 @@ defmodule Electric.Shapes.Shape do
           SubqueryMoves.make_value_hash(stack_id, shape_handle, Map.get(record, column_name))
 
         {:hash_together, columns} ->
-          column_parts = Enum.map(columns, &(&1 <> ":" <> Map.get(record, &1)))
-          SubqueryMoves.make_value_hash(stack_id, shape_handle, Enum.join(column_parts, ":"))
+          column_parts =
+            Enum.map(columns, fn col ->
+              col <> ":" <> SubqueryMoves.namespace_value(Map.get(record, col))
+            end)
+
+          SubqueryMoves.make_value_hash_raw(stack_id, shape_handle, Enum.join(column_parts))
       end)
       |> Enum.join("/")
     end)
