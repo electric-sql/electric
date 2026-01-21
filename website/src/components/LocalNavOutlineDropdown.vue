@@ -138,7 +138,8 @@ function onOutlineLinkClick(e) {
                 :href="item.link"
                 :title="item.title"
                 @click="onOutlineLinkClick"
-              >{{ item.title }}</a>
+                >{{ item.title }}</a
+              >
               <ul v-if="item.children?.length" class="outline-list nested">
                 <li v-for="child in item.children" :key="child.link">
                   <a
@@ -146,7 +147,8 @@ function onOutlineLinkClick(e) {
                     :href="child.link"
                     :title="child.title"
                     @click="onOutlineLinkClick"
-                  >{{ child.title }}</a>
+                    >{{ child.title }}</a
+                  >
                 </li>
               </ul>
             </li>
