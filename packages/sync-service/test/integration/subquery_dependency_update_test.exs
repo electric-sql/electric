@@ -1,6 +1,6 @@
 defmodule Electric.Integration.SubqueryDependencyUpdateTest do
   @moduledoc """
-  BUG REPRODUCTION: Dependency tracking not updated when intermediate row moves.
+  Tests for dependency tracking when intermediate rows move between parents.
 
   Scenario: A SaaS app where premium organizations get access to certain data.
   - Organizations can have a "premium" tag
@@ -10,10 +10,10 @@ defmodule Electric.Integration.SubqueryDependencyUpdateTest do
 
   Shape: "All tasks belonging to projects in teams under premium organizations"
 
-  The bug: When a team moves from one premium org to another premium org,
-  Electric doesn't update its internal tracking. Later, when the OLD org
-  loses its premium tag, Electric incorrectly removes the tasks - even though
-  they're now under a DIFFERENT org that still has premium.
+  When a team moves from one premium org to another premium org, the tasks
+  should remain in the shape. The dependency tracking must be updated so that
+  removing the premium tag from the OLD org does not affect tasks that are
+  now under a DIFFERENT org.
   """
   use ExUnit.Case, async: false
 
@@ -42,7 +42,7 @@ defmodule Electric.Integration.SubqueryDependencyUpdateTest do
   )
   """
 
-  describe "BUG: stale dependency tracking after intermediate row moves" do
+  describe "dependency tracking when intermediate rows move between parents" do
     setup [:with_unique_db, :with_org_team_project_task_tables, :with_sql_execute]
     setup :with_complete_stack
     setup :with_electric_client
@@ -58,7 +58,7 @@ defmodule Electric.Integration.SubqueryDependencyUpdateTest do
            # A task in the Backend project
            "INSERT INTO tasks (id, title, project_id) VALUES ('task-1', 'Fix login bug', 'backend')"
          ]
-    test "task deleted when old org loses tag, even though team moved", ctx do
+    test "task remains when team moves to another premium org and old org loses tag", ctx do
       # SETUP:
       #   task-1 -> backend project -> engineering team -> acme org (PREMIUM)
       #
@@ -100,22 +100,14 @@ defmodule Electric.Integration.SubqueryDependencyUpdateTest do
           []
         )
 
-        # BUG: Electric incorrectly deletes task-1 here!
-        # It still thinks task-1 is connected to Acme.
+        # Task should NOT be deleted - it's now connected via Globex
         messages_after_tag_removal = collect_messages(consumer, timeout: 1000)
         deletes_after_tag_removal = filter_deletes(messages_after_tag_removal)
 
         assert deletes_after_tag_removal == [],
-               """
-               BUG REPRODUCED!
-
-               Task was incorrectly deleted when Acme lost premium tag.
-               But the task is now under Globex (which still has premium).
-
-               Electric's dependency tracking wasn't updated when the team moved.
-
-               Deleted: #{inspect(deletes_after_tag_removal)}
-               """
+               "Task should NOT be deleted when old org loses premium tag. " <>
+                 "Task is now under Globex (which still has premium). " <>
+                 "Got unexpected deletes: #{inspect(deletes_after_tag_removal)}"
       end
     end
 
@@ -130,7 +122,7 @@ defmodule Electric.Integration.SubqueryDependencyUpdateTest do
            # Tasks under each project
            "INSERT INTO tasks (id, title, project_id) VALUES ('task-a', 'Task A', 'proj-a'), ('task-b', 'Task B', 'proj-b'), ('task-c', 'Task C', 'proj-c'), ('task-d', 'Task D', 'proj-d')"
          ]
-    test "multiple teams - same bug with more data", ctx do
+    test "multiple teams moving between premium orgs", ctx do
       # SETUP:
       #   task-a -> proj-a -> team-a -> acme (PREMIUM)     ✓ in shape
       #   task-b -> proj-b -> team-b -> globex (PREMIUM)   ✓ in shape
@@ -166,13 +158,9 @@ defmodule Electric.Integration.SubqueryDependencyUpdateTest do
         deletes = filter_deletes(messages2)
 
         assert deletes == [],
-               """
-               BUG REPRODUCED!
-
-               task-c was deleted when Initech lost premium, but team-c is now under Globex!
-
-               Deleted: #{inspect(deletes)}
-               """
+               "task-c should NOT be deleted when Initech loses premium. " <>
+                 "team-c is now under Globex (which still has premium). " <>
+                 "Got unexpected deletes: #{inspect(deletes)}"
       end
     end
   end

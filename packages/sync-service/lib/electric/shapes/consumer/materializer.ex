@@ -327,10 +327,6 @@ defmodule Electric.Shapes.Consumer.Materializer do
           },
           {{index, tag_indices}, counts_and_events} ->
             # TODO: this is written as if it supports multiple selected columns, but it doesn't for now
-            # Check if this change has any relevant updates for the materializer.
-            # A change is relevant if either:
-            # 1. The selected columns are present in the record (value might have changed)
-            # 2. There are tag updates (removed_move_tags is non-empty), even if value unchanged
             columns_present = Enum.any?(state.columns, &is_map_key(record, &1))
             has_tag_updates = removed_move_tags != []
 
