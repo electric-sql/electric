@@ -309,6 +309,50 @@ defmodule Electric.Shapes.QueryingTest do
                )
     end
 
+    test "if shape has a subquery, computes correct tags for NULL column values", %{
+      db_conn: conn
+    } do
+      for statement <- [
+            "CREATE TABLE parent (id SERIAL PRIMARY KEY, value INTEGER)",
+            # parent_id is nullable
+            "CREATE TABLE child (id SERIAL PRIMARY KEY, value INTEGER, parent_id INTEGER REFERENCES parent(id))",
+            "INSERT INTO parent (value) VALUES (1), (2)",
+            # Insert rows with both non-NULL and NULL parent_id
+            "INSERT INTO child (value, parent_id) VALUES (10, 1), (20, NULL), (30, 2)"
+          ],
+          do: Postgrex.query!(conn, statement)
+
+      shape =
+        Shape.new!("child",
+          where: "parent_id IN (SELECT id FROM parent) OR parent_id IS NULL",
+          inspector: {DirectInspector, conn}
+        )
+
+      # Tag for NULL uses '__NULL__' sentinel to produce a distinct hash
+      tag_null =
+        :crypto.hash(:md5, "dummy-stack-id" <> "dummy-shape-handle" <> "__NULL__")
+        |> Base.encode16(case: :lower)
+
+      tag1 =
+        :crypto.hash(:md5, "dummy-stack-id" <> "dummy-shape-handle" <> "1")
+        |> Base.encode16(case: :lower)
+
+      tag2 =
+        :crypto.hash(:md5, "dummy-stack-id" <> "dummy-shape-handle" <> "2")
+        |> Base.encode16(case: :lower)
+
+      result =
+        decode_stream(
+          Querying.stream_initial_data(conn, "dummy-stack-id", "dummy-shape-handle", shape)
+        )
+
+      assert [
+               %{value: %{value: "10", parent_id: "1"}, headers: %{tags: [^tag1]}},
+               %{value: %{value: "20", parent_id: nil}, headers: %{tags: [^tag_null]}},
+               %{value: %{value: "30", parent_id: "2"}, headers: %{tags: [^tag2]}}
+             ] = result
+    end
+
     test "if shape has a subquery, tags the results (with composite keys)", %{db_conn: conn} do
       tag1 =
         :crypto.hash(
