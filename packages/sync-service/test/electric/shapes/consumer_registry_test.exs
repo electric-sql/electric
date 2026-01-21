@@ -385,5 +385,25 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
       assert_receive :message_received
       assert_receive :message_received
     end
+
+    test "filters out nil pids without crashing" do
+      # Handles race condition where shape is removed but events still arrive.
+      # start_consumer_for_handle returns {:error, :no_shape} -> nil pid.
+      parent = self()
+
+      {:ok, subscriber} =
+        TestSubscriber.start_link(fn message, state ->
+          send(parent, {:broadcast, message})
+          {:reply, :ok, state}
+        end)
+
+      assert %{} =
+               ConsumerRegistry.broadcast([
+                 {"valid-shape", :event, subscriber},
+                 {"removed-shape", :event, nil}
+               ])
+
+      assert_receive {:broadcast, :event}
+    end
   end
 end
