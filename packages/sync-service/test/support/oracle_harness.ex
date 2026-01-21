@@ -495,9 +495,15 @@ defmodule Support.OracleHarness do
   Faster than full schema recreation.
   """
   def reset_standard_data(ctx) do
-    # Truncate in reverse order of dependencies
+    # Delete in reverse order of dependencies (avoid TRUNCATE which invalidates shapes via replication)
     apply_sql(ctx, [
-      "TRUNCATE level_4, level_3_tags, level_3, level_2_tags, level_2, level_1_tags, level_1 CASCADE"
+      "DELETE FROM level_4",
+      "DELETE FROM level_3_tags",
+      "DELETE FROM level_3",
+      "DELETE FROM level_2_tags",
+      "DELETE FROM level_2",
+      "DELETE FROM level_1_tags",
+      "DELETE FROM level_1"
     ])
 
     apply_sql(ctx, standard_seed_sql())
@@ -546,6 +552,22 @@ defmodule Support.OracleHarness do
     opts = Map.merge(default_opts_from_env(), opts)
 
     log(opts, "Starting #{length(shapes)} shapes")
+
+    if opts[:verbose] do
+      IO.puts("\n=== SHAPES ===")
+
+      Enum.each(shapes, fn shape ->
+        IO.puts("  #{shape.name}: #{shape.where}")
+      end)
+
+      IO.puts("\n=== MUTATIONS ===")
+
+      Enum.each(mutations, fn mutation ->
+        IO.puts("  #{mutation.name}: #{mutation.sql}")
+      end)
+
+      IO.puts("")
+    end
 
     {states, pid_map} = start_shapes(ctx, shapes, opts)
 
@@ -814,10 +836,19 @@ defmodule Support.OracleHarness do
 
     %Postgrex.Result{columns: columns, rows: rows} = Postgrex.query!(conn, sql, [])
 
+    # Convert all values to strings to match Electric's string-based output
     Enum.map(rows, fn row ->
-      columns |> Enum.zip(row) |> Map.new()
+      columns
+      |> Enum.zip(row)
+      |> Map.new(fn {col, val} -> {col, to_string_value(val)} end)
     end)
   end
+
+  defp to_string_value(nil), do: nil
+  defp to_string_value(true), do: "true"
+  defp to_string_value(false), do: "false"
+  defp to_string_value(val) when is_binary(val), do: val
+  defp to_string_value(val), do: to_string(val)
 
   defp assert_all_consistent(mutation, states, oracle_before, oracle_after, opts) do
     Enum.each(states, fn state ->
