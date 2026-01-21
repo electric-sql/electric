@@ -47,23 +47,22 @@
 
 ## Crash electric
 [shell electric]
-  # flush pending writes so that the shape we just created is definitely in the db
-  !Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer.flush_sync("single_stack")
-  ??:ok
   !System.halt()
   ??$PS1
 
 ## Start the sync service again.
 [invoke setup_electric]
 [shell electric]
+  ??[info] Found 0 existing valid shapes and 1 shapes in an invalid state
   ??[info] Starting replication from postgres
 
 # Client should be able to continue same with old offset or 0_inf offset
 [shell client]
   [invoke shape_get items $handle $offset]
-  ??HTTP/1.1 200 OK
-  ??electric-handle: $handle
-  ??[{"headers":{"control":"up-to-date","global_last_seen_lsn":
+  ??HTTP/1.1 409 Conflict
+  ?electric-handle: ([\d-]+)
+  [local handle=$1]
+  ??[{"headers":{"control":"must-refetch"
 
   [invoke shape_get items $handle "0_inf"]
   ??HTTP/1.1 200 OK
