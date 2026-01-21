@@ -45,7 +45,7 @@ const { hasSidebar } = useSidebar()
 
 // Show markdown link on docs pages (same pages that show edit link)
 const showMarkdownLink = computed(() => {
-  return page.value.relativePath.startsWith('docs')
+  return page.value.relativePath?.startsWith('docs') ?? false
 })
 </script>
 
