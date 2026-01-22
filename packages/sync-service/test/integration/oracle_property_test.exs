@@ -48,9 +48,6 @@ defmodule Electric.Integration.OraclePropertyTest do
 
     check all iteration_seed <- StreamData.integer(),
               max_runs: max_runs do
-      # Reset data for clean state each iteration
-      reset_standard_data(ctx)
-
       # Use iteration seed to generate different shapes/mutations each run
       run_parallel(ctx, %{
         where_seed: iteration_seed,
@@ -70,8 +67,6 @@ defmodule Electric.Integration.OraclePropertyTest do
 
     check all mutation_seed <- StreamData.integer(),
               max_runs: max_runs do
-      reset_standard_data(ctx)
-
       run_parallel(ctx, %{
         where_seed: fixed_where_seed,
         mutation_seed: mutation_seed
@@ -91,8 +86,6 @@ defmodule Electric.Integration.OraclePropertyTest do
 
     check all where_seed <- StreamData.integer(),
               max_runs: max_runs do
-      reset_standard_data(ctx)
-
       run_parallel(ctx, %{
         where_seed: where_seed,
         mutation_seed: fixed_mutation_seed
