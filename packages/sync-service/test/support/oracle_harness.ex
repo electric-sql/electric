@@ -471,12 +471,10 @@ defmodule Support.OracleHarness do
 
   def default_opts_from_env do
     %{
-      shape_count: env_int("ELECTRIC_ORACLE_SHAPE_COUNT") || @default_shape_count,
-      mutation_count: env_int("ELECTRIC_ORACLE_MUTATION_COUNT") || @default_mutation_count,
-      timeout_ms: env_int("ELECTRIC_ORACLE_TIMEOUT_MS") || @default_timeout_ms,
-      where_seed: env_int("ELECTRIC_ORACLE_WHERE_SEED"),
-      mutation_seed: env_int("ELECTRIC_ORACLE_MUTATION_SEED"),
-      verbose: System.get_env("ELECTRIC_ORACLE_VERBOSE") == "1"
+      shape_count: env_int("SHAPE_COUNT") || @default_shape_count,
+      mutation_count: env_int("MUTATION_COUNT") || @default_mutation_count,
+      where_seed: env_int("WHERE_SEED"),
+      mutation_seed: env_int("MUTATION_SEED")
     }
   end
 
@@ -524,8 +522,14 @@ defmodule Support.OracleHarness do
   def run_parallel(ctx, opts \\ %{}) do
     opts = Map.merge(default_opts_from_env(), opts)
 
-    where_clauses = generate_where_clauses(opts.shape_count, opts.where_seed)
-    mutations = generate_mutations(opts.mutation_count, opts.mutation_seed)
+    # Use provided seeds or generate random ones
+    where_seed = opts[:where_seed] || :erlang.monotonic_time()
+    mutation_seed = opts[:mutation_seed] || :erlang.monotonic_time()
+
+    log("Generating shapes with WHERE_SEED=#{where_seed} MUTATION_SEED=#{mutation_seed}")
+
+    where_clauses = generate_where_clauses(opts.shape_count, where_seed)
+    mutations = generate_mutations(opts.mutation_count, mutation_seed)
 
     shapes =
       where_clauses
@@ -550,38 +554,37 @@ defmodule Support.OracleHarness do
   """
   def run_with_shapes(ctx, shapes, mutations, opts \\ %{}) do
     opts = Map.merge(default_opts_from_env(), opts)
+    timeout_ms = opts[:timeout_ms] || @default_timeout_ms
 
-    log(opts, "Starting #{length(shapes)} shapes")
+    log("Starting #{length(shapes)} shapes")
 
-    if opts[:verbose] do
-      IO.puts("\n=== SHAPES ===")
+    IO.puts("\n=== SHAPES ===")
 
-      Enum.each(shapes, fn shape ->
-        IO.puts("  #{shape.name}: #{shape.where}")
-      end)
+    Enum.each(shapes, fn shape ->
+      IO.puts("  #{shape.name}: #{shape.where}")
+    end)
 
-      IO.puts("\n=== MUTATIONS ===")
+    IO.puts("\n=== MUTATIONS ===")
 
-      Enum.each(mutations, fn mutation ->
-        IO.puts("  #{mutation.name}: #{mutation.sql}")
-      end)
+    Enum.each(mutations, fn mutation ->
+      IO.puts("  #{mutation.name}: #{mutation.sql}")
+    end)
 
-      IO.puts("")
-    end
+    IO.puts("")
 
     {states, pid_map} = start_shapes(ctx, shapes, opts)
 
-    log(opts, "Waiting for initial snapshot")
-    states = await_up_to_date(states, pid_map, opts.timeout_ms, "parallel", "initial snapshot")
+    log("Waiting for initial snapshot")
+    states = await_up_to_date(states, pid_map, timeout_ms, "parallel", "initial snapshot")
 
-    log(opts, "Running #{length(mutations)} mutations")
+    log("Running #{length(mutations)} mutations")
 
     Enum.reduce(mutations, states, fn mutation, states ->
       oracle_before = oracle_snapshot(ctx, states)
       apply_sql(ctx, mutation.sql)
-      states = await_up_to_date(states, pid_map, opts.timeout_ms, "parallel", mutation.name)
+      states = await_up_to_date(states, pid_map, timeout_ms, "parallel", mutation.name)
       oracle_after = oracle_snapshot(ctx, states)
-      assert_all_consistent(mutation, states, oracle_before, oracle_after, opts)
+      assert_all_consistent(mutation, states, oracle_before, oracle_after)
       states
     end)
 
@@ -607,7 +610,9 @@ defmodule Support.OracleHarness do
   end
 
   defp run_case(ctx, case_spec, opts) do
-    log(opts, "case=#{case_spec.name}")
+    timeout_ms = opts[:timeout_ms] || @default_timeout_ms
+
+    log("case=#{case_spec.name}")
     apply_sql(ctx, case_spec.schema_sql)
     apply_sql(ctx, case_spec.seed_sql)
 
@@ -615,21 +620,21 @@ defmodule Support.OracleHarness do
 
     Enum.each(states, fn state ->
       where_display = state.where || "true"
-      log(opts, "  shape=#{state.name} where=#{inspect(where_display)}")
+      log("  shape=#{state.name} where=#{inspect(where_display)}")
     end)
 
-    states = await_up_to_date(states, pid_map, opts.timeout_ms, case_spec.name, "initial snapshot")
+    states = await_up_to_date(states, pid_map, timeout_ms, case_spec.name, "initial snapshot")
 
     case_spec.mutations
     |> Enum.reduce(states, fn mutation, states ->
       oracle_before = oracle_snapshot(ctx, states)
       apply_sql(ctx, mutation.sql)
-      states = await_up_to_date(states, pid_map, opts.timeout_ms, case_spec.name, mutation.name)
+      states = await_up_to_date(states, pid_map, timeout_ms, case_spec.name, mutation.name)
       oracle_after = oracle_snapshot(ctx, states)
       assert_case_consistent(case_spec, mutation, states, oracle_before, oracle_after)
       view_changed? = oracle_before != oracle_after
       view_status = if view_changed?, do: "view changed", else: "view unchanged"
-      log(opts, "  mutation=#{mutation.name} (#{view_status}) PASS")
+      log("  mutation=#{mutation.name} (#{view_status}) PASS")
       states
     end)
 
@@ -656,7 +661,7 @@ defmodule Support.OracleHarness do
             errors: :stream
           )
 
-        {:ok, consumer} = StreamConsumer.start(stream, timeout: opts.timeout_ms)
+        {:ok, consumer} = StreamConsumer.start(stream, timeout: opts[:timeout_ms] || @default_timeout_ms)
 
         %ShapeState{
           name: shape.name,
@@ -850,7 +855,7 @@ defmodule Support.OracleHarness do
   defp to_string_value(val) when is_binary(val), do: val
   defp to_string_value(val), do: to_string(val)
 
-  defp assert_all_consistent(mutation, states, oracle_before, oracle_after, opts) do
+  defp assert_all_consistent(mutation, states, oracle_before, oracle_after) do
     Enum.each(states, fn state ->
       view_changed? = oracle_before[state.name] != oracle_after[state.name]
 
@@ -878,7 +883,7 @@ defmodule Support.OracleHarness do
       end
 
       view_status = if view_changed?, do: "changed", else: "unchanged"
-      log(opts, "  #{mutation.name} shape=#{state.name} (#{view_status}) PASS")
+      log("  #{mutation.name} shape=#{state.name} (#{view_status}) PASS")
     end)
   end
 
@@ -941,7 +946,7 @@ defmodule Support.OracleHarness do
     ~s|"#{value}"|
   end
 
-  defp log(opts, message) do
-    if opts.verbose, do: IO.puts("[oracle] #{message}")
+  defp log(message) do
+    IO.puts("[oracle] #{message}")
   end
 end

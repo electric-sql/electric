@@ -4,13 +4,13 @@ defmodule Electric.Integration.OraclePropertyTest do
   where clauses and mutations.
 
   Configuration via environment variables:
-    - ELECTRIC_ORACLE_SHAPE_COUNT: Number of shapes to run in parallel (default: 100)
-    - ELECTRIC_ORACLE_MUTATION_COUNT: Number of mutations per test (default: 20)
-    - ELECTRIC_ORACLE_PROP_RUNS: Number of property test iterations (default: 5)
-    - ELECTRIC_ORACLE_WHERE_SEED: Seed for where clause generation (default: random)
-    - ELECTRIC_ORACLE_MUTATION_SEED: Seed for mutation generation (default: random)
-    - ELECTRIC_ORACLE_TIMEOUT_MS: Timeout per shape wait (default: 20000)
-    - ELECTRIC_ORACLE_VERBOSE: Set to "1" for verbose logging
+    - SHAPE_COUNT: Number of shapes to run in parallel (default: 100)
+    - MUTATION_COUNT: Number of mutations per test (default: 20)
+    - PROP_RUNS: Number of property test iterations (default: 5)
+    - WHERE_SEED: Seed for where clause generation (default: random)
+    - MUTATION_SEED: Seed for mutation generation (default: random)
+
+  Run with: mix test --include oracle
   """
 
   use ExUnit.Case, async: false
@@ -21,6 +21,8 @@ defmodule Electric.Integration.OraclePropertyTest do
   import Support.IntegrationSetup
   import Support.OracleHarness
 
+  @moduletag :oracle
+  @moduletag timeout: :infinity
   @moduletag :tmp_dir
 
   setup [:with_unique_db]
@@ -42,7 +44,7 @@ defmodule Electric.Integration.OraclePropertyTest do
   4. Runs all shapes in parallel, applying mutations and verifying consistency
   """
   test "parallel shapes with generated where clauses and mutations", ctx do
-    max_runs = env_int("ELECTRIC_ORACLE_PROP_RUNS") || 5
+    max_runs = env_int("PROP_RUNS") || 5
 
     check all iteration_seed <- StreamData.integer(),
               max_runs: max_runs do
@@ -63,8 +65,8 @@ defmodule Electric.Integration.OraclePropertyTest do
   This tests that the same set of shapes handles different mutation sequences correctly.
   """
   test "fixed shapes with varying mutations", ctx do
-    max_runs = env_int("ELECTRIC_ORACLE_PROP_RUNS") || 5
-    fixed_where_seed = env_int("ELECTRIC_ORACLE_WHERE_SEED") || 12345
+    max_runs = env_int("PROP_RUNS") || 5
+    fixed_where_seed = env_int("WHERE_SEED") || 12345
 
     check all mutation_seed <- StreamData.integer(),
               max_runs: max_runs do
@@ -84,8 +86,8 @@ defmodule Electric.Integration.OraclePropertyTest do
   for the same mutation sequence.
   """
   test "varying shapes with fixed mutations", ctx do
-    max_runs = env_int("ELECTRIC_ORACLE_PROP_RUNS") || 5
-    fixed_mutation_seed = env_int("ELECTRIC_ORACLE_MUTATION_SEED") || 54321
+    max_runs = env_int("PROP_RUNS") || 5
+    fixed_mutation_seed = env_int("MUTATION_SEED") || 54321
 
     check all where_seed <- StreamData.integer(),
               max_runs: max_runs do
