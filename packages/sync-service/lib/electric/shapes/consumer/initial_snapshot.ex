@@ -43,11 +43,16 @@ defmodule Electric.Shapes.Consumer.InitialSnapshot do
 
   def needs_buffering?(%__MODULE__{pg_snapshot: snapshot}), do: is_nil(snapshot)
 
+  def maybe_stop_initial_filtering(%__MODULE__{} = state, storage, %Transaction{xid: xid}) do
+    maybe_stop_initial_filtering(state, storage, xid)
+  end
+
   def maybe_stop_initial_filtering(
         %__MODULE__{pg_snapshot: {xmin, xmax, xip_list} = snapshot} = state,
         storage,
-        %Transaction{xid: xid}
-      ) do
+        xid
+      )
+      when is_integer(xid) and xid > 0 do
     if Xid.after_snapshot?(xid, snapshot) do
       Storage.set_pg_snapshot(
         %{xmin: xmin, xmax: xmax, xip_list: xip_list, filter_txns?: false},
@@ -89,11 +94,15 @@ defmodule Electric.Shapes.Consumer.InitialSnapshot do
     %{state | snapshot_started?: true}
   end
 
-  def filter(state, storage, %Transaction{} = txn) do
-    if Transaction.visible_in_snapshot?(txn, state.pg_snapshot) do
+  def filter(state, storage, %Transaction{xid: xid}) do
+    filter(state, storage, xid)
+  end
+
+  def filter(state, storage, xid) when is_integer(xid) and xid > 0 do
+    if Transaction.visible_in_snapshot?(xid, state.pg_snapshot) do
       {:consider_flushed, state}
     else
-      state = maybe_stop_initial_filtering(state, storage, txn)
+      state = maybe_stop_initial_filtering(state, storage, xid)
       {:continue, state}
     end
   end

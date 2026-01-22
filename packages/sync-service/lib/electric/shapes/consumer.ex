@@ -167,16 +167,12 @@ defmodule Electric.Shapes.Consumer do
     stop_and_clean(state)
   end
 
-  def handle_continue(:consume_buffer, %State{buffer: buffer} = state) do
-    Logger.debug(fn -> "Consumer catching up on #{length(buffer)} transactions" end)
-    state = %{state | buffer: [], buffering?: false}
-
-    case handle_txns(Enum.reverse(buffer), state) do
-      %State{terminating?: true} = state ->
-        {:noreply, state, {:continue, :stop_and_clean}}
-
-      state ->
-        {:noreply, state, state.hibernate_after}
+  def handle_continue(:consume_buffer, %State{} = state) do
+    with state = %{terminating?: false} <- consume_buffer(state),
+         state = %{terminating?: false} <- maybe_consume_buffered_txn_fragments(state) do
+      {:noreply, state, state.hibernate_after}
+    else
+      state -> {:noreply, state, {:continue, :stop_and_clean}}
     end
   end
 
@@ -453,46 +449,99 @@ defmodule Electric.Shapes.Consumer do
   end
 
   defp handle_event(%TransactionFragment{} = txn_fragment, state) do
-    # Use fragment-direct streaming for shapes without subquery dependencies
-    # when not in buffering mode (waiting for initial snapshot) and
-    # when no materializer is subscribed (inner shapes need full transaction handling)
-    if can_use_fragment_direct?(state) do
-      handle_fragment_direct(txn_fragment, state)
-    else
-      # Fall back to TransactionBuilder for shapes with dependencies or during buffering
-      {txns, transaction_builder} =
-        TransactionBuilder.build(txn_fragment, state.transaction_builder)
+    handle_txn_fragment(txn_fragment, state)
+  end
 
-      state = %{state | transaction_builder: transaction_builder}
-      handle_txns(txns, state)
+  # A consumer process starts with buffering?=true before it has PG snapshot info (xmin, xmax, xip_list).
+  # In this phase, we have to buffer incoming txn fragments because we can't yet decide what to
+  # do with the transaction: skip it or write it to the shape log.
+
+  # TODO:
+  # Even in fragment_direct? false, we can avoid accumulating the txn if we already know it'll be skipped based on xid.
+  # Only start accumulating changes when fragment_direct?=false AND needs_initial_filtering() says the txn is needed
+  defp handle_txn_fragment(%TransactionFragment{} = txn_fragment, state)
+       when state.buffering? or not state.fragment_direct? do
+    # If we have managed to assemble a complete transaction while buffering, keep it in the
+    # state's buffer until it can be processed later. Otherwise, if we haven't yet received a
+    # txn fragment containing Commit, txns below will be an empty list.
+    #
+    # Txn fragments that haven't been assembled into a complete transaction yet are
+    # accumulating in state.transaction_builder.
+    {txns, transaction_builder} =
+      TransactionBuilder.build(txn_fragment, state.transaction_builder)
+
+    state = %{state | transaction_builder: transaction_builder}
+
+    cond do
+      state.buffering? ->
+        Enum.reduce(txns, state, fn txn, state -> State.add_to_buffer(state, txn) end)
+
+      not state.fragment_direct? ->
+        handle_txns(txns, state)
     end
   end
 
-  # Fragment-direct mode can only be used when:
-  # - The shape has no subquery dependencies (fragment_direct? flag)
-  # - We're not buffering for initial snapshot
-  # - No materializer is subscribed (inner shapes have materializers and need full txn handling)
-  # - Initial snapshot filtering is complete (needs_initial_filtering check)
-  defp can_use_fragment_direct?(state) do
-    state.fragment_direct? and
-      not state.buffering? and
-      not state.materializer_subscribed? and
-      not needs_initial_filtering(state)
+  # No longer buffering and the fragment_direct? mode is active.We now have the necessary info
+  # to decide what to do with the txn even if we haven't yet seen all of its changes.
+  defp handle_txn_fragment(
+         %TransactionFragment{has_begin?: true, xid: xid} = txn_fragment,
+         %{pending_txn: nil} = state
+       ) do
+    Logger.debug("Starting pending transaction xid=#{xid}")
+    # TODO: we don't yet know size in bytes at this point to pass to PendingTxn.add_changes()
+    pending_txn = PendingTxn.new(xid)
+    state = %{state | pending_txn: pending_txn}
+
+    if needs_initial_filtering(state) do
+      case InitialSnapshot.filter(state.initial_snapshot_state, state.storage, xid) do
+        {:consider_flushed, initial_snapshot_state} ->
+          # TODO: it could be the case the multiple txns are seen while InitialSnapshot needs
+          # filtering. And the outcomes for those txns could be different.
+          %{
+            state
+            | pending_txn: PendingTxn.consider_flushed(pending_txn),
+              initial_snapshot_state: initial_snapshot_state
+          }
+
+        {:continue, new_initial_snapshot_state} ->
+          # Txn is good, we can start writing the fragment to storage if fragment_direct mode is active
+          # TODO: maybe_write_fragment_to_storage
+          # |> PendingTxn.add_changes(txn_fragment.last_log_offset, txn_fragment.change_count, 0)
+          %{state | initial_snapshot_state: new_initial_snapshot_state}
+      end
+    else
+      # TODO: maybe_write_fragment_to_storage
+    end
   end
 
-  # Fragment-direct streaming: write fragments directly to storage without
-  # buffering the complete transaction in memory.
-  defp handle_fragment_direct(%TransactionFragment{} = fragment, state) do
+  defp handle_txn_fragment(%TransactionFragment{has_begin?: true, xid: new_xid}, %{
+         pending_txn: %PendingTxn{xid: pending_xid}
+       }) do
+    raise "unexpected_interleaved_txns: received begin for xid=#{new_xid} while xid=#{pending_xid} is still pending"
+  end
+
+  # A fragment with has_begin?=false. We must have a pending_txn by this point.
+  # Drop the fragment if the pending txn is already included in the snapshot.
+  # TODO: decide when to call consider_flushed() or consider_flushed_fragment()
+  defp handle_txn_fragment(_txn_fragment, %State{pending_txn: pending_txn} = state)
+       when pending_txn.consider_flushed? do
+    state
+  end
+
+  defp handle_txn_fragment(txn_fragment, state) do
+    process_txn_fragment_changes(txn_fragment, state)
+  end
+
+  defp process_txn_fragment_changes(txn_fragment, state) do
     # Skip if we've already processed this fragment (recovery case)
-    if skip_fragment?(fragment, state) do
-      Logger.debug(fn -> "Skipping already processed fragment xid=#{fragment.xid}" end)
+    if skip_fragment?(txn_fragment, state) do
+      Logger.debug(fn -> "Skipping already processed fragment xid=#{txn_fragment.xid}" end)
       # If fragment contains commit, notify flush boundary even for skipped fragments
-      maybe_notify_flush_boundary_for_skipped(fragment, state)
+      maybe_notify_flush_boundary_for_skipped(txn_fragment, state)
     else
       state
-      |> maybe_start_pending_txn(fragment)
-      |> write_fragment_to_storage(fragment)
-      |> maybe_complete_pending_txn(fragment)
+      |> write_fragment_to_storage(txn_fragment)
+      |> maybe_complete_pending_txn(txn_fragment)
     end
   end
 
@@ -514,20 +563,6 @@ defmodule Electric.Shapes.Consumer do
 
   defp skip_fragment?(%TransactionFragment{last_log_offset: offset}, state) do
     LogOffset.is_log_offset_lte(offset, state.latest_offset)
-  end
-
-  defp maybe_start_pending_txn(state, %TransactionFragment{has_begin?: false}), do: state
-
-  defp maybe_start_pending_txn(
-         %{pending_txn: %PendingTxn{xid: pending_xid}} = _state,
-         %TransactionFragment{has_begin?: true, xid: new_xid}
-       ) do
-    raise "unexpected_interleaved_txns: received begin for xid=#{new_xid} while xid=#{pending_xid} is still pending"
-  end
-
-  defp maybe_start_pending_txn(state, %TransactionFragment{has_begin?: true, xid: xid}) do
-    Logger.debug(fn -> "Starting pending transaction xid=#{xid}" end)
-    %{state | pending_txn: PendingTxn.new(xid)}
   end
 
   defp write_fragment_to_storage(state, %TransactionFragment{changes: []}), do: state
@@ -704,11 +739,29 @@ defmodule Electric.Shapes.Consumer do
     Kernel.max(0, DateTime.diff(now, commit_timestamp, :millisecond))
   end
 
-  defp handle_txns(txns, %State{} = state), do: Enum.reduce_while(txns, state, &handle_txn/2)
+  def consume_buffer(%State{buffer: buffer} = state) do
+    Logger.debug(fn -> "Consumer catching up on #{length(buffer)} transactions" end)
+    {txns, state} = State.pop_buffered_txns(state)
+    handle_txns(txns, state)
+  end
 
-  # Keep buffering for initial snapshot
-  defp handle_txn(txn, %State{buffering?: true} = state),
-    do: {:cont, State.add_to_buffer(state, txn)}
+  def maybe_consume_buffered_txn_fragments(%State{fragment_direct?: false} = state), do: state
+
+  def maybe_consume_buffered_txn_fragments(%State{} = state) do
+    {txn_fragment, transaction_builder} =
+      TransactionBuilder.pop_incomplete_transaction_as_fragment(state.transaction_builder)
+
+    state = %{state | transaction_builder: transaction_builder}
+
+    if txn_fragment do
+      handle_txn_fragment(txn_fragment, state)
+    else
+      state
+    end
+  end
+
+  defp handle_txns(txns, %State{buffering?: false} = state),
+    do: Enum.reduce_while(txns, state, &handle_txn/2)
 
   defp handle_txn(txn, state) when needs_initial_filtering(state) do
     case InitialSnapshot.filter(state.initial_snapshot_state, state.storage, txn) do

@@ -253,6 +253,11 @@ defmodule Electric.Shapes.Consumer.State do
     %{state | buffer: [txn | buffer]}
   end
 
+  @spec pop_buffered_txns(t()) :: {[Transaction.t()], t()}
+  def pop_buffered_txns(%__MODULE__{buffer: buffer} = state) do
+    {Enum.reverse(buffer), %{state | buffer: [], buffering?: false}}
+  end
+
   @spec add_waiter(t(), GenServer.from()) :: t()
   def add_waiter(%__MODULE__{initial_snapshot_state: initial_snapshot_state} = state, from) do
     %{

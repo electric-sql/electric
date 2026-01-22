@@ -5,6 +5,12 @@ defmodule Electric.Shapes.Consumer.PendingTxn do
   When a consumer streams transaction fragments directly to storage (for shapes
   without subquery dependencies), this struct tracks the transaction metadata
   until commit is received.
+
+  This is an antipod module to Electric.Replication.TransactionBuilder. This module only tracks
+  metadata related to the current transaction for which txn fragments are processed as the
+  fragments themselves are written to strorage and are discarded from memory immediately, while
+  the TransactionBuilder module accumulates all changes in memory and returns a complete
+  transaction after seeing a Commit.
   """
 
   alias Electric.Replication.LogOffset
@@ -12,6 +18,7 @@ defmodule Electric.Shapes.Consumer.PendingTxn do
   defstruct [
     :xid,
     :last_log_offset,
+    consider_flushed?: false,
     num_changes: 0,
     total_bytes: 0
   ]
@@ -19,6 +26,7 @@ defmodule Electric.Shapes.Consumer.PendingTxn do
   @type t :: %__MODULE__{
           xid: pos_integer(),
           last_log_offset: LogOffset.t() | nil,
+          consider_flushed?: boolean(),
           num_changes: non_neg_integer(),
           total_bytes: non_neg_integer()
         }
@@ -35,12 +43,16 @@ defmodule Electric.Shapes.Consumer.PendingTxn do
   Update the pending transaction with changes that were written to storage.
   """
   @spec add_changes(t(), LogOffset.t(), non_neg_integer(), non_neg_integer()) :: t()
-  def add_changes(%__MODULE__{} = pending, log_offset, count, bytes) do
+  def add_changes(%__MODULE__{} = pending_txn, log_offset, count, bytes) do
     %{
-      pending
+      pending_txn
       | last_log_offset: log_offset,
-        num_changes: pending.num_changes + count,
-        total_bytes: pending.total_bytes + bytes
+        num_changes: pending_txn.num_changes + count,
+        total_bytes: pending_txn.total_bytes + bytes
     }
+  end
+
+  def consider_flushed(%__MODULE__{} = pending_txn) do
+    %{pending_txn | consider_flushed?: true}
   end
 end

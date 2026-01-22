@@ -35,18 +35,39 @@ defmodule Electric.Replication.TransactionBuilder do
     |> maybe_complete_transaction(fragment)
   end
 
+  @spec pop_incomplete_transaction_as_fragment(t()) :: {TransactionFragment.t() | nil, t()}
+  def pop_incomplete_transaction_as_fragment(%__MODULE__{transaction: nil}) do
+    {nil, new()}
+  end
+
+  def pop_incomplete_transaction_as_fragment(%__MODULE__{transaction: txn}) do
+    txn = finalize_txn_changes(txn)
+
+    fragment =
+      %TransactionFragment{
+        has_begin?: true,
+        xid: txn.xid,
+        lsn: txn.lsn,
+        last_log_offset: txn.last_log_offset,
+        changes: txn.changes,
+        change_count: txn.num_changes
+      }
+
+    {fragment, new()}
+  end
+
   defp maybe_start_transaction(state, %TransactionFragment{has_begin?: false}), do: state
 
   defp maybe_start_transaction(
          %__MODULE__{} = state,
-         %TransactionFragment{xid: xid, has_begin?: true}
+         %TransactionFragment{has_begin?: true} = fragment
        ) do
     txn = %Transaction{
-      xid: xid,
+      xid: fragment.xid,
       changes: [],
       commit_timestamp: nil,
-      lsn: nil,
-      last_log_offset: nil
+      lsn: fragment.lsn,
+      last_log_offset: fragment.last_log_offset
     }
 
     %{state | transaction: txn}
@@ -79,12 +100,16 @@ defmodule Electric.Replication.TransactionBuilder do
         txn
         | lsn: lsn,
           commit_timestamp: commit.commit_timestamp,
-          changes: Enum.reverse(txn.changes),
           # The transaction may have had some changes filtered
           # out, so we need to set the last_log_offset from the fragment
           last_log_offset: last_log_offset
       }
+      |> finalize_txn_changes()
 
-    {[completed_txn], %__MODULE__{transaction: nil}}
+    {[completed_txn], new()}
+  end
+
+  defp finalize_txn_changes(txn) do
+    %{txn | changes: Enum.reverse(txn.changes)}
   end
 end
