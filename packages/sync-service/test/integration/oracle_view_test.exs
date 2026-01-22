@@ -14,6 +14,7 @@ defmodule Electric.Integration.OracleViewTest do
   import Support.DbSetup
   import Support.IntegrationSetup
   import Support.OracleHarness
+  import Support.OracleHarness.StandardSchema
 
   @moduletag :oracle
   @moduletag timeout: :infinity
@@ -47,7 +48,7 @@ defmodule Electric.Integration.OracleViewTest do
         %{name: "move_in", sql: "UPDATE level_4 SET level_3_id = 'l3-1' WHERE id = 'l4-6'"}
       ]
 
-      run_with_shapes(ctx, shapes, mutations)
+      test_against_oracle(ctx, shapes, mutations)
     end
   end
 
@@ -72,7 +73,7 @@ defmodule Electric.Integration.OracleViewTest do
         %{name: "move_child", sql: "UPDATE level_4 SET level_3_id = 'l3-3' WHERE id = 'l4-1'"}
       ]
 
-      run_with_shapes(ctx, shapes, mutations)
+      test_against_oracle(ctx, shapes, mutations)
     end
 
     test "IN subquery on specific grandparent", ctx do
@@ -93,7 +94,7 @@ defmodule Electric.Integration.OracleViewTest do
         %{name: "move_l4", sql: "UPDATE level_4 SET level_3_id = 'l3-3' WHERE id = 'l4-1'"}
       ]
 
-      run_with_shapes(ctx, shapes, mutations)
+      test_against_oracle(ctx, shapes, mutations)
     end
   end
 
@@ -118,7 +119,7 @@ defmodule Electric.Integration.OracleViewTest do
         %{name: "move_l4", sql: "UPDATE level_4 SET level_3_id = 'l3-4' WHERE id = 'l4-1'"}
       ]
 
-      run_with_shapes(ctx, shapes, mutations)
+      test_against_oracle(ctx, shapes, mutations)
     end
 
     test "through specific level_1", ctx do
@@ -140,7 +141,7 @@ defmodule Electric.Integration.OracleViewTest do
         %{name: "move_l4", sql: "UPDATE level_4 SET level_3_id = 'l3-3' WHERE id = 'l4-1'"}
       ]
 
-      run_with_shapes(ctx, shapes, mutations)
+      test_against_oracle(ctx, shapes, mutations)
     end
   end
 
@@ -166,7 +167,7 @@ defmodule Electric.Integration.OracleViewTest do
         %{name: "update_l4", sql: "UPDATE level_4 SET value = 'new' WHERE id = 'l4-1'"}
       ]
 
-      run_with_shapes(ctx, shapes, mutations)
+      test_against_oracle(ctx, shapes, mutations)
     end
   end
 
@@ -197,7 +198,7 @@ defmodule Electric.Integration.OracleViewTest do
         %{name: "move_l4", sql: "UPDATE level_4 SET level_3_id = 'l3-3' WHERE id = 'l4-1'"}
       ]
 
-      run_with_shapes(ctx, shapes, mutations)
+      test_against_oracle(ctx, shapes, mutations)
     end
 
     test "2-level tag filter through level_2", ctx do
@@ -226,7 +227,7 @@ defmodule Electric.Integration.OracleViewTest do
         %{name: "move_l3", sql: "UPDATE level_3 SET level_2_id = 'l2-4' WHERE id = 'l3-1'"}
       ]
 
-      run_with_shapes(ctx, shapes, mutations)
+      test_against_oracle(ctx, shapes, mutations)
     end
 
     test "3-level tag filter through level_1", ctx do
@@ -255,7 +256,7 @@ defmodule Electric.Integration.OracleViewTest do
         %{name: "move_l2", sql: "UPDATE level_2 SET level_1_id = 'l1-4' WHERE id = 'l2-1'"}
       ]
 
-      run_with_shapes(ctx, shapes, mutations)
+      test_against_oracle(ctx, shapes, mutations)
     end
   end
 
@@ -297,7 +298,7 @@ defmodule Electric.Integration.OracleViewTest do
         %{name: "move_l4_1_back", sql: "UPDATE level_4 SET level_3_id = 'l3-1' WHERE id = 'l4-1'"}
       ]
 
-      run_with_shapes(ctx, shapes, mutations)
+      test_against_oracle(ctx, shapes, mutations)
     end
   end
 end
