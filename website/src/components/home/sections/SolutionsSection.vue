@@ -1,5 +1,12 @@
 <script setup>
+import { data } from '../../../../data/posts.data.ts'
+import LandscapeBlogPostListing from '../../LandscapeBlogPostListing.vue'
 import Section from '../Section.vue'
+
+const posts =
+  data
+    .filter(post => post.homepageSolution)
+    .sort((a, b) => parseInt(a.homepageOrder) - parseInt(b.homepageOrder))
 
 const actions = [
   {
@@ -62,6 +69,11 @@ const solutions = [
           collaborative&nbsp;AI&nbsp;apps</a><span class="hidden-sm"> and </span></span><span class="hidden-sm"> agentic&nbsp;systems</span>.
     </template>
     <div class="solutions-grid">
+      <LandscapeBlogPostListing v-for="post in posts"
+          :key="post.slug"
+          :post="post"
+      />
+      <!--
       <a
         v-for="solution in solutions"
         :key="solution.title"
@@ -73,15 +85,12 @@ const solutions = [
         </div>
         <div class="panel-content">
           <h3 class="panel-title">{{ solution.title }}</h3>
-          <!--
           <p class="panel-body">{{ solution.body }}</p>
           <p class="panel-subtitle">{{ solution.subtitle }}</p>
-          -->
-          <!--
           <span class="panel-cta">{{ solution.cta }} &rarr;</span>
-          -->
         </div>
       </a>
+      -->
     </div>
   </Section>
 </template>
@@ -89,9 +98,9 @@ const solutions = [
 <style scoped>
 .solutions-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 24px;
-  margin: 32px 0px 40px;
+  margin: 40px 0px;
   align-items: stretch;
 }
 

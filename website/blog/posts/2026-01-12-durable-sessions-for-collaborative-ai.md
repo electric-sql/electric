@@ -1,5 +1,5 @@
 ---
-title: Durable Sessions — the key pattern for collaborative AI
+title: Durable Sessions — the key pattern for collaborative AI
 description: >
   This post introduces the Durable Session pattern for building collaborative AI apps with Durable Streams and TanStack DB.
 excerpt: >
@@ -10,6 +10,8 @@ imageWidth: 1536
 imageHeight: 947
 tags: [agents, collaboration, durable-streams, tanstack-db]
 outline: [2, 3]
+homepageSolution: true
+homepageOrder: 20
 post: true
 ---
 
