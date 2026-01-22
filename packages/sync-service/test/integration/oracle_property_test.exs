@@ -10,6 +10,7 @@ defmodule Electric.Integration.OraclePropertyTest do
     - WHERE_SEED: Seed for where clause generation (if unset, varies each iteration)
     - MUTATION_SEED: Seed for mutation generation (if unset, varies each iteration)
     - LONG_POLL_TIMEOUT: Server long-poll timeout in ms (default: 100)
+    - RETRY_WINDOW_MS: Max time to wait for changes after up_to_date (default: 2000)
 
   Run with: mix test --include oracle
   """
