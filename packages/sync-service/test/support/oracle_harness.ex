@@ -20,17 +20,12 @@ defmodule Support.OracleHarness do
   This supports testing subqueries up to 4 levels deep.
   """
 
-  import ExUnit.Assertions
-
-  alias Electric.Client
-  alias Electric.Client.Message.ChangeMessage
-  alias Electric.Client.Message.ControlMessage
-  alias Electric.Client.ShapeDefinition
-  alias Support.StreamConsumer
+  alias Support.OracleHarness.ShapeChecker
 
   @default_timeout_ms 20_000
   @default_shape_count 100
   @default_mutation_count 100
+  @default_oracle_pool_size 50
 
   # Standard IDs for seeded data
   @level_1_ids Enum.map(1..5, &"l1-#{&1}")
@@ -38,28 +33,6 @@ defmodule Support.OracleHarness do
   @level_3_ids Enum.map(1..5, &"l3-#{&1}")
   @level_4_ids Enum.map(1..20, &"l4-#{&1}")
   @tags ["alpha", "beta", "gamma", "delta"]
-
-  defmodule ShapeState do
-    @moduledoc false
-    defstruct [
-      :name,
-      :table,
-      :where,
-      :columns,
-      :pk,
-      :optimized,
-      :consumer,
-      :pid,
-      rows: %{},
-      events: %{
-        change_count: 0,
-        up_to_date?: false,
-        must_refetch?: false,
-        error: nil,
-        timed_out?: false
-      }
-    ]
-  end
 
   # ----------------------------------------------------------------------------
   # Standard Schema
@@ -477,6 +450,7 @@ defmodule Support.OracleHarness do
     %{
       shape_count: env_int("SHAPE_COUNT") || @default_shape_count,
       mutation_count: env_int("MUTATION_COUNT") || @default_mutation_count,
+      oracle_pool_size: env_int("ORACLE_POOL_SIZE") || @default_oracle_pool_size,
       where_seed: env_int("WHERE_SEED"),
       mutation_seed: env_int("MUTATION_SEED")
     }
@@ -555,6 +529,9 @@ defmodule Support.OracleHarness do
   @doc """
   Runs with explicit shapes and mutations.
   Useful for hand-written test cases that use the standard schema.
+
+  Options:
+    - :oracle_pool_size - number of parallel oracle connections (default: 50, env: ORACLE_POOL_SIZE)
   """
   def run_with_shapes(ctx, shapes, mutations, opts \\ %{}) do
     opts = Map.merge(default_opts_from_env(), opts)
@@ -576,23 +553,24 @@ defmodule Support.OracleHarness do
 
     IO.puts("")
 
-    {states, pid_map} = start_shapes(ctx, shapes, opts)
+    # Start oracle pool for parallel Postgres queries
+    {:ok, oracle_pool} = start_oracle_pool(ctx, opts)
+
+    # Create all checkers (starts StreamConsumers)
+    checkers = start_checkers(ctx, shapes, oracle_pool, opts)
 
     log("Waiting for initial snapshot")
-    states = await_up_to_date(states, pid_map, timeout_ms, "parallel", "initial snapshot")
+    checkers = await_all_up_to_date(checkers, timeout_ms, "initial snapshot")
 
     log("Running #{length(mutations)} mutations")
 
-    Enum.reduce(mutations, states, fn mutation, states ->
-      oracle_before = oracle_snapshot(ctx, states)
-      apply_sql(ctx, mutation.sql)
-      states = await_up_to_date(states, pid_map, timeout_ms, "parallel", mutation.name)
-      oracle_after = oracle_snapshot(ctx, states)
-      assert_all_consistent(mutation, states, oracle_before, oracle_after)
-      states
-    end)
+    checkers =
+      Enum.reduce(mutations, checkers, fn mutation, checkers ->
+        run_mutation_cycle(ctx, checkers, mutation, timeout_ms)
+      end)
 
-    stop_shapes(states)
+    stop_checkers(checkers)
+    GenServer.stop(oracle_pool)
     :ok
   end
 
@@ -620,310 +598,216 @@ defmodule Support.OracleHarness do
     apply_sql(ctx, case_spec.schema_sql)
     apply_sql(ctx, case_spec.seed_sql)
 
-    {states, pid_map} = start_shapes(ctx, case_spec.shapes, opts)
+    # Start oracle pool for parallel Postgres queries
+    {:ok, oracle_pool} = start_oracle_pool(ctx, opts)
 
-    Enum.each(states, fn state ->
-      where_display = state.where || "true"
-      log("  shape=#{state.name} where=#{inspect(where_display)}")
+    checkers = start_checkers(ctx, case_spec.shapes, oracle_pool, opts)
+
+    Enum.each(checkers, fn checker ->
+      where_display = checker.where || "true"
+      log("  shape=#{checker.name} where=#{inspect(where_display)}")
     end)
 
-    states = await_up_to_date(states, pid_map, timeout_ms, case_spec.name, "initial snapshot")
+    checkers = await_all_up_to_date(checkers, timeout_ms, "initial snapshot")
 
-    case_spec.mutations
-    |> Enum.reduce(states, fn mutation, states ->
-      oracle_before = oracle_snapshot(ctx, states)
-      apply_sql(ctx, mutation.sql)
-      states = await_up_to_date(states, pid_map, timeout_ms, case_spec.name, mutation.name)
-      oracle_after = oracle_snapshot(ctx, states)
-      assert_case_consistent(case_spec, mutation, states, oracle_before, oracle_after)
-      view_changed? = oracle_before != oracle_after
-      view_status = if view_changed?, do: "view changed", else: "view unchanged"
-      log("  mutation=#{mutation.name} (#{view_status}) PASS")
-      states
-    end)
-
-    stop_shapes(states)
-  end
-
-  # ----------------------------------------------------------------------------
-  # Internal Implementation
-  # ----------------------------------------------------------------------------
-
-  defp start_shapes(ctx, shapes, opts) do
-    shapes =
-      Enum.map(shapes, fn shape ->
-        validate_identifier!(shape.table, "table")
-        Enum.each(shape.columns, &validate_identifier!(&1, "column"))
-        Enum.each(shape.pk, &validate_identifier!(&1, "pk column"))
-
-        shape_def = ShapeDefinition.new!(shape.table, where: shape.where)
-
-        stream =
-          Client.stream(ctx.client, shape_def,
-            live: true,
-            replica: :full,
-            errors: :stream
-          )
-
-        {:ok, consumer} =
-          StreamConsumer.start(stream, timeout: opts[:timeout_ms] || @default_timeout_ms)
-
-        %ShapeState{
-          name: shape.name,
-          table: shape.table,
-          where: shape.where,
-          columns: shape.columns,
-          pk: shape.pk,
-          optimized: Map.get(shape, :optimized, false),
-          consumer: consumer,
-          pid: consumer.task_pid
-        }
+    checkers =
+      case_spec.mutations
+      |> Enum.reduce(checkers, fn mutation, checkers ->
+        checkers = run_mutation_cycle(ctx, checkers, mutation, timeout_ms)
+        log("  mutation=#{mutation.name} PASS")
+        checkers
       end)
 
-    pid_map = Map.new(shapes, &{&1.pid, &1.name})
-    {shapes, pid_map}
+    stop_checkers(checkers)
+    GenServer.stop(oracle_pool)
   end
 
-  defp stop_shapes(states) do
-    Enum.each(states, fn state ->
-      StreamConsumer.stop(state.consumer)
+  # ----------------------------------------------------------------------------
+  # Internal Implementation - Parallel Coordination
+  # ----------------------------------------------------------------------------
+
+  defp start_oracle_pool(ctx, opts) do
+    pool_size = opts[:oracle_pool_size] || @default_oracle_pool_size
+
+    conn_opts =
+      ctx.db_config
+      |> Electric.Utils.deobfuscate_password()
+      |> Keyword.put(:pool_size, pool_size)
+      |> Keyword.put(:types, PgInterop.Postgrex.Types)
+      |> Keyword.put(:backoff_type, :stop)
+      |> Keyword.put(:max_restarts, 0)
+
+    Postgrex.start_link(conn_opts)
+  end
+
+  defp start_checkers(ctx, shapes, oracle_pool, opts) do
+    timeout_ms = opts[:timeout_ms] || @default_timeout_ms
+
+    Enum.map(shapes, fn shape ->
+      ShapeChecker.new(ctx, shape, oracle_pool, timeout_ms: timeout_ms)
     end)
   end
 
-  defp await_up_to_date(states, pid_map, timeout_ms, case_name, step_name) do
-    states = Enum.map(states, &reset_events/1)
-    pending = MapSet.new(Enum.map(states, & &1.pid))
-    start_ms = System.monotonic_time(:millisecond)
-
-    do_await(states, pid_map, pending, timeout_ms, start_ms, case_name, step_name)
+  defp stop_checkers(checkers) do
+    Enum.each(checkers, &ShapeChecker.stop/1)
   end
 
-  defp do_await(states, pid_map, pending, timeout_ms, start_ms, case_name, step_name) do
+  # Central message handling - messages are sent to the main process,
+  # so we need a central receive loop (can't parallelize this part)
+  defp await_all_up_to_date(checkers, timeout_ms, step_name) do
+    import ExUnit.Assertions
+
+    pid_to_checker = Map.new(checkers, &{&1.pid, &1})
+    pending = MapSet.new(Enum.map(checkers, & &1.pid))
+    start_ms = System.monotonic_time(:millisecond)
+
+    updated_checkers = do_await_all(checkers, pid_to_checker, pending, timeout_ms, start_ms)
+
+    # Check for timeouts
+    Enum.each(updated_checkers, fn checker ->
+      if checker.timed_out? do
+        flunk("Oracle timeout in step=#{step_name} shape=#{checker.name}")
+      end
+    end)
+
+    updated_checkers
+  end
+
+  defp do_await_all(checkers, pid_to_checker, pending, timeout_ms, start_ms) do
     if MapSet.size(pending) == 0 do
-      states
+      checkers
     else
       elapsed = System.monotonic_time(:millisecond) - start_ms
       remaining = max(0, timeout_ms - elapsed)
 
       receive do
         {:stream_message, pid, msg} ->
-          case Map.get(pid_map, pid) do
+          case Map.get(pid_to_checker, pid) do
             nil ->
-              do_await(states, pid_map, pending, timeout_ms, start_ms, case_name, step_name)
+              # Unknown pid, ignore
+              do_await_all(checkers, pid_to_checker, pending, timeout_ms, start_ms)
 
-            _name ->
-              {states, pending} = handle_message(states, pending, pid, msg)
-              do_await(states, pid_map, pending, timeout_ms, start_ms, case_name, step_name)
+            checker ->
+              {updated_checker, done?} = handle_checker_message(checker, msg)
+              updated_checkers = update_checker_in_list(checkers, updated_checker)
+              updated_pid_to_checker = Map.put(pid_to_checker, pid, updated_checker)
+              pending = if done?, do: MapSet.delete(pending, pid), else: pending
+
+              do_await_all(
+                updated_checkers,
+                updated_pid_to_checker,
+                pending,
+                timeout_ms,
+                start_ms
+              )
           end
       after
         remaining ->
-          mark_timeouts(states, pending, case_name, step_name)
+          # Mark all pending checkers as timed out
+          Enum.map(checkers, fn checker ->
+            if MapSet.member?(pending, checker.pid) do
+              %{checker | timed_out?: true}
+            else
+              checker
+            end
+          end)
       end
     end
   end
 
-  defp handle_message(states, pending, pid, %ChangeMessage{} = msg) do
-    states =
-      Enum.map(states, fn state ->
-        if state.pid == pid do
-          state
-          |> apply_change(msg)
-          |> increment_change()
-        else
-          state
-        end
-      end)
-
-    {states, pending}
+  defp handle_checker_message(checker, %Electric.Client.Message.ChangeMessage{} = msg) do
+    updated = ShapeChecker.apply_message(checker, msg)
+    {updated, false}
   end
 
-  defp handle_message(states, pending, pid, %ControlMessage{control: :up_to_date}) do
-    states =
-      Enum.map(states, fn state ->
-        if state.pid == pid do
-          put_in(state.events.up_to_date?, true)
-        else
-          state
-        end
-      end)
-
-    {states, MapSet.delete(pending, pid)}
+  defp handle_checker_message(checker, %Electric.Client.Message.ControlMessage{
+         control: :up_to_date
+       }) do
+    {checker, true}
   end
 
-  defp handle_message(states, pending, pid, %ControlMessage{control: :must_refetch}) do
-    states =
-      Enum.map(states, fn state ->
-        if state.pid == pid do
-          state
-          |> put_in([Access.key(:events), :must_refetch?], true)
-          |> Map.put(:rows, %{})
-        else
-          state
-        end
-      end)
-
-    {states, pending}
+  defp handle_checker_message(checker, %Electric.Client.Message.ControlMessage{
+         control: :must_refetch
+       }) do
+    updated = %{checker | rows: %{}, must_refetch?: true}
+    {updated, false}
   end
 
-  defp handle_message(states, pending, pid, %Client.Error{} = error) do
-    states =
-      Enum.map(states, fn state ->
-        if state.pid == pid do
-          put_in(state.events.error, error)
-        else
-          state
-        end
-      end)
-
-    {states, MapSet.delete(pending, pid)}
+  defp handle_checker_message(checker, %Electric.Client.Error{} = error) do
+    updated = %{checker | error: error}
+    {updated, true}
   end
 
-  defp handle_message(states, pending, _pid, _msg) do
-    {states, pending}
+  defp handle_checker_message(checker, _msg) do
+    {checker, false}
   end
 
-  defp mark_timeouts(states, pending, case_name, step_name) do
-    pending_names =
-      states
-      |> Enum.filter(&MapSet.member?(pending, &1.pid))
-      |> Enum.map(& &1.name)
-      |> Enum.take(10)
+  defp update_checker_in_list(checkers, updated_checker) do
+    Enum.map(checkers, fn checker ->
+      if checker.pid == updated_checker.pid, do: updated_checker, else: checker
+    end)
+  end
 
-    flunk(
-      "Oracle timeout in case=#{case_name} step=#{step_name} pending_shapes=#{inspect(pending_names)} (#{MapSet.size(pending)} total)"
+  defp run_mutation_cycle(ctx, checkers, mutation, timeout_ms) do
+    # Phase 1: Query oracle_before in parallel (oracle queries can be parallelized)
+    oracle_before = query_all_oracles_parallel(checkers)
+
+    # Phase 2: Apply mutation
+    apply_sql(ctx, mutation.sql)
+
+    # Phase 3: Wait for all clients to be up_to_date (central receive loop)
+    checkers = await_all_up_to_date(checkers, timeout_ms, mutation.name)
+
+    # Phase 4: Query oracle_after and verify in parallel
+    verify_all_parallel(checkers, mutation, oracle_before)
+  end
+
+  defp query_all_oracles_parallel(checkers) do
+    checkers
+    |> Task.async_stream(
+      fn checker -> {checker.name, ShapeChecker.query_oracle(checker)} end,
+      max_concurrency: length(checkers),
+      ordered: false
     )
-
-    states
+    |> Enum.into(%{}, fn {:ok, {name, rows}} -> {name, rows} end)
   end
 
-  defp reset_events(state) do
-    %{
-      state
-      | events: %{
-          change_count: 0,
-          up_to_date?: false,
-          must_refetch?: false,
-          error: nil,
-          timed_out?: false
-        }
-    }
-  end
+  defp verify_all_parallel(checkers, mutation, oracle_before) do
+    checkers
+    |> Task.async_stream(
+      fn checker ->
+        oracle_after = ShapeChecker.query_oracle(checker)
 
-  defp increment_change(state) do
-    update_in(state.events.change_count, &(&1 + 1))
-  end
+        ShapeChecker.assert_consistent!(
+          checker,
+          mutation.name,
+          oracle_before[checker.name],
+          oracle_after
+        )
 
-  defp apply_change(state, %ChangeMessage{headers: %{operation: :delete}, value: value}) do
-    key = key_from_value(state.pk, value)
-    %{state | rows: Map.delete(state.rows, key)}
-  end
+        checker
+      end,
+      max_concurrency: length(checkers),
+      timeout: 30_000,
+      on_timeout: :kill_task
+    )
+    |> Enum.map(fn
+      {:ok, checker} ->
+        checker
 
-  defp apply_change(state, %ChangeMessage{value: value}) do
-    key = key_from_value(state.pk, value)
-    row = Map.take(value, state.columns)
-    %{state | rows: Map.put(state.rows, key, row)}
-  end
+      {:exit, :timeout} ->
+        import ExUnit.Assertions
+        flunk("Oracle query timeout in mutation=#{mutation.name}")
 
-  defp key_from_value(pk, value) do
-    pk
-    |> Enum.map(&Map.get(value, &1))
-    |> List.to_tuple()
-  end
-
-  defp oracle_snapshot(ctx, states) do
-    Map.new(states, fn state ->
-      {state.name, query_oracle(ctx.db_conn, state)}
+      {:exit, reason} ->
+        import ExUnit.Assertions
+        flunk("Checker failed in mutation=#{mutation.name}: #{inspect(reason)}")
     end)
   end
 
-  defp query_oracle(conn, state) do
-    where_sql = state.where || "TRUE"
-    columns_sql = Enum.map(state.columns, &quote_ident/1) |> Enum.join(", ")
-    order_sql = Enum.map(state.pk, &quote_ident/1) |> Enum.join(", ")
-
-    sql =
-      "SELECT #{columns_sql} FROM #{quote_ident(state.table)} WHERE #{where_sql} ORDER BY #{order_sql}"
-
-    %Postgrex.Result{columns: columns, rows: rows} = Postgrex.query!(conn, sql, [])
-
-    # Convert all values to strings to match Electric's string-based output
-    Enum.map(rows, fn row ->
-      columns
-      |> Enum.zip(row)
-      |> Map.new(fn {col, val} -> {col, to_string_value(val)} end)
-    end)
-  end
-
-  defp to_string_value(nil), do: nil
-  defp to_string_value(true), do: "true"
-  defp to_string_value(false), do: "false"
-  defp to_string_value(val) when is_binary(val), do: val
-  defp to_string_value(val), do: to_string(val)
-
-  defp assert_all_consistent(mutation, states, oracle_before, oracle_after) do
-    Enum.each(states, fn state ->
-      view_changed? = oracle_before[state.name] != oracle_after[state.name]
-
-      if state.events.error do
-        flunk(
-          "Oracle error in step=#{mutation.name} shape=#{state.name} where=#{state.where} error=#{inspect(state.events.error)}"
-        )
-      end
-
-      if state.optimized and state.events.must_refetch? do
-        flunk(
-          "Unexpected 409 (must-refetch) in optimized shape step=#{mutation.name} shape=#{state.name} where=#{state.where}"
-        )
-      end
-
-      materialized = materialized_rows(state)
-      oracle_view = oracle_after[state.name]
-
-      if materialized != oracle_view do
-        flunk(
-          "View mismatch in step=#{mutation.name} shape=#{state.name} where=#{state.where} view_changed?=#{view_changed?}\n" <>
-            "  materialized: #{inspect(materialized)}\n" <>
-            "  oracle:       #{inspect(oracle_view)}"
-        )
-      end
-
-      view_status = if view_changed?, do: "changed", else: "unchanged"
-      log("  #{mutation.name} shape=#{state.name} (#{view_status}) PASS")
-    end)
-  end
-
-  defp assert_case_consistent(case_spec, mutation, states, oracle_before, oracle_after) do
-    Enum.each(states, fn state ->
-      view_changed? = oracle_before[state.name] != oracle_after[state.name]
-
-      if state.events.error do
-        flunk(
-          "Oracle error in case=#{case_spec.name} step=#{mutation.name} shape=#{state.name} error=#{inspect(state.events.error)}"
-        )
-      end
-
-      if state.optimized and state.events.must_refetch? do
-        flunk(
-          "Unexpected 409 (must-refetch) in optimized shape case=#{case_spec.name} step=#{mutation.name} shape=#{state.name}"
-        )
-      end
-
-      materialized = materialized_rows(state)
-      oracle_view = oracle_after[state.name]
-
-      if materialized != oracle_view do
-        flunk(
-          "View mismatch in case=#{case_spec.name} step=#{mutation.name} shape=#{state.name} view_changed?=#{view_changed?}"
-        )
-      end
-    end)
-  end
-
-  defp materialized_rows(state) do
-    state.rows
-    |> Map.values()
-    |> Enum.sort_by(&key_from_value(state.pk, &1))
-  end
+  # ----------------------------------------------------------------------------
+  # Helpers
+  # ----------------------------------------------------------------------------
 
   defp apply_sql(_ctx, nil), do: :ok
   defp apply_sql(ctx, sql) when is_list(sql), do: Enum.each(sql, &apply_sql(ctx, &1))
@@ -937,18 +821,6 @@ defmodule Support.OracleHarness do
       nil -> nil
       value -> String.to_integer(value)
     end
-  end
-
-  defp validate_identifier!(value, label) do
-    if String.match?(value, ~r/^[A-Za-z_][A-Za-z0-9_]*$/) do
-      :ok
-    else
-      raise ArgumentError, "invalid #{label} identifier: #{inspect(value)}"
-    end
-  end
-
-  defp quote_ident(value) do
-    ~s|"#{value}"|
   end
 
   defp log(message) do
