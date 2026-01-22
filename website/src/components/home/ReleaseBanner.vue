@@ -2,7 +2,10 @@
   <div class="banner">
     <div class="container">
       <div>
-        <a href="#">✨ Durable Streams <span class="hidden-xs">are</span> now <span class="hidden-sm">available</span> on Electric&nbsp;Cloud!</a>
+        <a href="#"
+          >✨ Durable Streams <span class="hidden-xs">are</span> now
+          <span class="hidden-sm">available</span> on Electric&nbsp;Cloud!</a
+        >
       </div>
     </div>
   </div>

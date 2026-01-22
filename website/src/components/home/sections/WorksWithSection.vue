@@ -403,8 +403,13 @@ onMounted(() => {
         <div class="data-sources">
           <div class="data-source">
             <div class="data-source-header">
-              <img src="/img/integrations/postgres.svg" class="data-source-icon" />
-              <span class="data-source-label">Structured data from your database</span>
+              <img
+                src="/img/integrations/postgres.svg"
+                class="data-source-icon"
+              />
+              <span class="data-source-label"
+                >Structured data from your database</span
+              >
             </div>
             <div class="data-source-code">
               <code>INSERT INTO items (id, value) VALUES ('abc', 123);</code>
@@ -412,8 +417,13 @@ onMounted(() => {
           </div>
           <div class="data-source">
             <div class="data-source-header">
-              <img src="/img/icons/durable-streams.svg" class="data-source-icon" />
-              <span class="data-source-label">AI token streams and real-time data</span>
+              <img
+                src="/img/icons/durable-streams.svg"
+                class="data-source-icon"
+              />
+              <span class="data-source-label"
+                >AI token streams and real-time data</span
+              >
             </div>
             <div class="data-source-code">
               <code>data: {"token": "Hello", "index": 0}</code>

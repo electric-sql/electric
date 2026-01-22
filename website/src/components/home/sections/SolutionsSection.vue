@@ -3,10 +3,9 @@ import { data } from '../../../../data/posts.data.ts'
 import LandscapeBlogPostListing from '../../LandscapeBlogPostListing.vue'
 import Section from '../Section.vue'
 
-const posts =
-  data
-    .filter(post => post.homepageSolution)
-    .sort((a, b) => parseInt(a.homepageOrder) - parseInt(b.homepageOrder))
+const posts = data
+  .filter((post) => post.homepageSolution)
+  .sort((a, b) => parseInt(a.homepageOrder) - parseInt(b.homepageOrder))
 
 const actions = [
   {
@@ -62,16 +61,20 @@ const solutions = [
     <template #tagline>
       Sync is the magic behind
       <a href="/blog/2025/07/29/super-fast-apps-on-sync-with-tanstack-db">
-        fast, modern software</a>
+        fast, modern software</a
+      >
       and the&nbsp;key to building
       <span class="no-wrap">
         <a href="/blog/2026/01/12/durable-sessions-for-collaborative-ai">
-          collaborative&nbsp;AI&nbsp;apps</a><span class="hidden-sm"> and </span></span><span class="hidden-sm"> agentic&nbsp;systems</span>.
+          collaborative&nbsp;AI&nbsp;apps</a
+        ><span class="hidden-sm"> and </span></span
+      ><span class="hidden-sm"> agentic&nbsp;systems</span>.
     </template>
     <div class="solutions-grid">
-      <LandscapeBlogPostListing v-for="post in posts"
-          :key="post.slug"
-          :post="post"
+      <LandscapeBlogPostListing
+        v-for="post in posts"
+        :key="post.slug"
+        :post="post"
       />
       <!--
       <a
@@ -114,7 +117,9 @@ const solutions = [
   border: 1px solid rgba(42, 44, 52, 0.5);*/
   border-radius: 12px;
   text-decoration: none;
-  transition: border-color 0.2s ease, background-color 0.2s ease;
+  transition:
+    border-color 0.2s ease,
+    background-color 0.2s ease;
   height: 100%;
 }
 
