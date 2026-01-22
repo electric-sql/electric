@@ -25,7 +25,7 @@ import YoutubeEmbed from '../../src/components/YoutubeEmbed.vue'
 
 We spent 3 years building a Postgres-native sync engine. Along the way, we realized the most important thing we built wasn't Postgres sync—it was the primitive underneath.
 
-A year ago, AI apps barely worked because models weren't good enough. Now Claude Code refactors across fifty files and the tests still pass. Cursor is the new VSCode. The models are great.
+A year ago, AI apps barely worked because models weren't good enough. Claude Code refactors across fifty files and the tests still pass. Cursor is the new VSCode. The models are great.
 
 Now infrastructure is the bottleneck—but it's not just infrastructure, it's a shift in *coordination model*. Request/response assumes two parties taking turns. Agentic apps have three agents and two users all acting at once. That requires a different primitive. And people are cobbling together Redis, WebSockets, and retry logic to build it.
 
@@ -51,7 +51,7 @@ With 0.2.0, the protocol is mature—we're ready for more people to build with i
 
 ## What's shipping
 
-Hosted durable streams is now live on [Electric Cloud](https://electric-sql.com/product/cloud), our managed sync platform.
+Hosted durable streams is now live on [Electric Cloud](https://electric-sql.com/product/cloud), our managed sync platform. Electric Cloud also hosts [Postgres sync](/product/sync), so you can combine real-time streams with synced relational data in the same app.
 
 - **Reads don't hit origin.** Electric Cloud's Sync CDN serves all reads. We've tested to 1M concurrent connections per stream.
 - **Simple pricing.** Reads are free. 5 million writes/month free, then pay as you scale.
