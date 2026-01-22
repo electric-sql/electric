@@ -546,6 +546,103 @@ describe.for(fetchAndSse)(`Shape  (liveSSE=$liveSse)`, ({ liveSse }) => {
     ])
   })
 
+  it(`should delay pausing the stream when backgroundPauseDelayMs is set`, async ({
+    issuesTableUrl,
+    insertIssues,
+    aborter,
+  }) => {
+    const { pause, resume } = mockVisibilityApi()
+    const shapeStream = new ShapeStream({
+      url: `${BASE_URL}/v1/shape`,
+      params: {
+        table: issuesTableUrl,
+      },
+      signal: aborter.signal,
+      liveSse,
+      backgroundPauseDelayMs: 500, // 500ms delay before pausing
+    })
+    const shape = new Shape(shapeStream)
+
+    const values: Row[][] = []
+    shape.subscribe(({ rows }) => {
+      values.push(rows)
+    })
+
+    // Insert an issue and wait for the initial sync
+    await insertIssues({ title: `test title` })
+    await vi.waitFor(() => expect(values.length).toBeGreaterThan(0))
+    await vi.waitFor(() => expect(shapeStream.isConnected()).true)
+
+    // Pause (hide tab)
+    pause()
+
+    // Stream should still be connected immediately after pausing
+    // because of the 500ms delay
+    expect(shapeStream.isConnected()).true
+
+    // Insert another issue while the delay is pending
+    const [id2] = await insertIssues({ title: `during delay` })
+
+    // Wait a bit but less than the delay
+    await sleep(100)
+
+    // Should still be connected
+    expect(shapeStream.isConnected()).true
+
+    // Wait for the update to arrive (stream should still be active)
+    await vi.waitFor(
+      () => expect(values.some((rows) => rows.some((r) => r.id === id2))).true
+    )
+
+    // Now wait for the full delay to expire
+    await sleep(500)
+
+    // Stream should now be paused
+    await vi.waitFor(() => expect(shapeStream.isConnected()).false)
+
+    // Resume
+    resume()
+    await vi.waitFor(() => expect(shapeStream.isConnected()).true)
+  })
+
+  it(`should cancel delayed pause when tab becomes visible again`, async ({
+    issuesTableUrl,
+    aborter,
+  }) => {
+    const { pause, resume } = mockVisibilityApi()
+    const shapeStream = new ShapeStream({
+      url: `${BASE_URL}/v1/shape`,
+      params: {
+        table: issuesTableUrl,
+      },
+      signal: aborter.signal,
+      liveSse,
+      backgroundPauseDelayMs: 500,
+    })
+
+    const unsubscribe = shapeStream.subscribe(() => unsubscribe())
+
+    await vi.waitFor(() => expect(shapeStream.isConnected()).true)
+
+    // Pause (hide tab)
+    pause()
+
+    // Wait less than the delay
+    await sleep(100)
+
+    // Should still be connected
+    expect(shapeStream.isConnected()).true
+
+    // Resume before the delay expires
+    resume()
+
+    // Wait longer than the original delay
+    await sleep(600)
+
+    // Stream should still be connected (pause was cancelled)
+    expect(shapeStream.isConnected()).true
+  })
+
   it(`should not throw error if an error handler is provided`, async ({
     issuesTableUrl,
     aborter,

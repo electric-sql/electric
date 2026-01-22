@@ -429,6 +429,28 @@ export interface ShapeStreamOptions<T = never> {
    * ```
    */
   onError?: ShapeStreamErrorHandler
+
+  /**
+   * Delay in milliseconds before pausing sync when the tab is backgrounded.
+   * This allows sync to continue for a period after the user switches tabs,
+   * reducing the perceived "jump" when returning to the tab.
+   *
+   * Some browsers forcibly terminate long-running fetches in background tabs,
+   * so this is a trade-off between responsiveness and reliability.
+   *
+   * Defaults to 0 (immediate pause when tab is backgrounded).
+   *
+   * @example
+   * ```typescript
+   * // Keep syncing for 5 minutes after tab is backgrounded
+   * const stream = new ShapeStream({
+   *   url: 'http://localhost:3000/v1/shape',
+   *   params: { table: 'todos' },
+   *   backgroundPauseDelayMs: 5 * 60 * 1000 // 5 minutes
+   * })
+   * ```
+   */
+  backgroundPauseDelayMs?: number
 }
 
 export interface ShapeStreamInterface<T extends Row<unknown> = Row> {
@@ -577,6 +599,8 @@ export class ShapeStream<T extends Row<unknown> = Row>
   #sseBackoffBaseDelay = 100 // Base delay for exponential backoff (ms)
   #sseBackoffMaxDelay = 5000 // Maximum delay cap (ms)
   #unsubscribeFromVisibilityChanges?: () => void
+  #backgroundPauseDelayMs: number
+  #backgroundPauseTimeoutId?: ReturnType<typeof setTimeout>
   #staleCacheBuster?: string // Cache buster set when stale CDN response detected, used on retry requests to bypass cache
   #staleCacheRetryCount = 0
   #maxStaleCacheRetries = 3
@@ -621,6 +645,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
     this.#onError = this.options.onError
     this.#mode = this.options.log ?? `full`
+    this.#backgroundPauseDelayMs = this.options.backgroundPauseDelayMs ?? 0
 
     const baseFetchClient =
       options.fetchClient ??
@@ -1406,6 +1431,11 @@ export class ShapeStream<T extends Row<unknown> = Row>
   unsubscribeAll(): void {
     this.#subscribers.clear()
     this.#unsubscribeFromVisibilityChanges?.()
+    // Clear any pending background pause timeout
+    if (this.#backgroundPauseTimeoutId !== undefined) {
+      clearTimeout(this.#backgroundPauseTimeoutId)
+      this.#backgroundPauseTimeoutId = undefined
+    }
   }
 
   /** Unix time at which we last synced. Undefined when `isLoading` is true. */
@@ -1525,8 +1555,28 @@ export class ShapeStream<T extends Row<unknown> = Row>
     ) {
       const visibilityHandler = () => {
         if (document.hidden) {
-          this.#pause()
+          // Clear any existing timeout
+          if (this.#backgroundPauseTimeoutId !== undefined) {
+            clearTimeout(this.#backgroundPauseTimeoutId)
+            this.#backgroundPauseTimeoutId = undefined
+          }
+
+          if (this.#backgroundPauseDelayMs > 0) {
+            // Schedule a delayed pause
+            this.#backgroundPauseTimeoutId = setTimeout(() => {
+              this.#backgroundPauseTimeoutId = undefined
+              this.#pause()
+            }, this.#backgroundPauseDelayMs)
+          } else {
+            // Pause immediately (default behavior)
+            this.#pause()
+          }
         } else {
+          // Clear any pending pause timeout when tab becomes visible
+          if (this.#backgroundPauseTimeoutId !== undefined) {
+            clearTimeout(this.#backgroundPauseTimeoutId)
+            this.#backgroundPauseTimeoutId = undefined
+          }
           this.#resume()
         }
       }
