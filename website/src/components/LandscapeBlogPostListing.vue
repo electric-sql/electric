@@ -1,7 +1,5 @@
 <script setup>
-import { Image } from '@unpic/vue'
-
-const fallback = import.meta.env.DEV ? undefined : 'netlify'
+import NetlifyImage from './NetlifyImage.vue'
 
 const { post } = defineProps(['post'])
 </script>
@@ -44,6 +42,7 @@ const { post } = defineProps(['post'])
 .post-body h3 {
   font-size: 18px;
   margin: 0 0 8px 0;
+  line-height: 1.7;
   max-width: 245px;
 }
 
@@ -95,9 +94,26 @@ const { post } = defineProps(['post'])
     font-size: 13px;
   }
 }
+@media (max-width: 849px) {
+  .post-image img {
+    width: calc(26px + 14.5vw);
+  }
+  .post-body {
+    padding: 19px 22px 23px;
+  }
+  .post-body h3 {
+    font-size: 15px;
+  }
+  .post-link {
+    font-size: 13px;
+  }
+}
 @media (max-width: 799px) {
   .post-image img {
-    width: calc(30px + 14vw);
+    width: calc(22px + 14vw);
+  }
+  .post-body {
+    padding: 18px 20px 22px;
   }
   .post-body h3 {
     font-size: 14.5px;
@@ -111,9 +127,27 @@ const { post } = defineProps(['post'])
   .post-image img {
     width: 33vw;
   }
+  .post-body {
+    padding: 28px 26px 32px;
+  }
   .post-body h3 {
     font-size: 15px;
     max-width: 275px;
+  }
+  .post-link {
+    font-size: 13px;
+  }
+}
+
+@media (max-width: 499px) {
+  .post-image img {
+    width: 35vw;
+  }
+  .post-body {
+    padding: 18px 20px 22px;
+  }
+  .post-body h3 {
+    font-size: 14.5px;
   }
   .post-link {
     font-size: 13px;
@@ -125,14 +159,7 @@ const { post } = defineProps(['post'])
   <div class="post">
     <a :href="post.path" class="no-visual">
       <div class="post-image">
-        <Image
-          :src="post.image"
-          :width="400"
-          :height="300"
-          :fallback="fallback"
-          layout="constrained"
-          background="auto"
-        />
+        <NetlifyImage :src="post.image" :width="400" :height="300" />
       </div>
       <div class="post-body">
         <h3>{{ post.title }}</h3>
