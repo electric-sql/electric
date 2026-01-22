@@ -27,7 +27,7 @@ We spent 3 years building a Postgres-native sync engine. Along the way, we reali
 
 A year ago, AI apps barely worked because models weren't good enough. Now Claude Code refactors across fifty files and the tests still pass. Cursor is the new VSCode. The models are great.
 
-Now infrastructure is the bottleneck. Token streams that are reliable, sessions that survive a refresh, agents coordinating without race conditions—none of this works out of the box. People are cobbling together Redis, WebSockets, and retry logic.
+Now infrastructure is the bottleneck—but it's not just infrastructure, it's a shift in *coordination model*. Request/response assumes two parties taking turns. Agentic apps have three agents and two users all acting at once. That's not a better HTTP client—that's a different primitive. And people are cobbling together Redis, WebSockets, and retry logic to build it.
 
 So it turns out we'd built exactly the right primitive for this moment: durable streams. Persistent, resumable event streams over HTTP.
 
