@@ -83,7 +83,7 @@ export default defineConfig({
   lang: 'en',
   title: 'Electric',
   description:
-    "Composable sync primitives that work with your stack. Postgres sync, Durable Streams, TanStack DB, PGlite.",
+    "Build fast, modern, collaborative apps without changing your stack. Using Electric's composable sync primitives, including Postgres Sync, Durable Streams, TanStack DB and PGlite.",
   appearance: 'force-dark',
   base: '/',
   cleanUrls: true,

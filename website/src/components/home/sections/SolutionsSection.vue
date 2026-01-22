@@ -51,13 +51,15 @@ const solutions = [
 
 <template>
   <Section :actions="actions">
-    <template #title> Build collaborative AI apps </template>
+    <template #title>Unlock&nbsp;collaboration, unlock&nbsp;adoption</template>
     <template #tagline>
-      The new wave of software combines <strong>AI</strong> with
-      <strong>team-based&nbsp;collaboration</strong> and
-      <strong>fast, modern&nbsp;UX</strong>. These apps need real-time sync,
-      durable sessions, and local-first data to deliver &mdash; the winners are
-      products that combine AI with team-based collaboration and fast, modern UX.
+      Sync is the magic behind
+      <a href="/blog/2025/07/29/local-first-sync-with-tanstack-db">
+        fast, modern software</a>
+      and the&nbsp;key to building
+      <span class="no-wrap">
+        <a href="/blog/2026/01/12/durable-sessions-for-collaborative-ai">
+          collaborative&nbsp;AI&nbsp;apps</a><span class="hidden-sm"> and </span></span><span class="hidden-sm"> agentic&nbsp;systems</span>.
     </template>
     <div class="solutions-grid">
       <a
@@ -71,9 +73,13 @@ const solutions = [
         </div>
         <div class="panel-content">
           <h3 class="panel-title">{{ solution.title }}</h3>
-          <p class="panel-subtitle">{{ solution.subtitle }}</p>
+          <!--
           <p class="panel-body">{{ solution.body }}</p>
+          <p class="panel-subtitle">{{ solution.subtitle }}</p>
+          -->
+          <!--
           <span class="panel-cta">{{ solution.cta }} &rarr;</span>
+          -->
         </div>
       </a>
     </div>
@@ -83,7 +89,7 @@ const solutions = [
 <style scoped>
 .solutions-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 24px;
   margin: 32px 0px 40px;
   align-items: stretch;
@@ -95,8 +101,8 @@ const solutions = [
   align-items: flex-start;
   gap: 20px;
   padding: 24px;
-  background-color: var(--vp-c-bg-soft);
-  border: 1px solid rgba(42, 44, 52, 0.5);
+  /*background-color: var(--vp-c-bg-soft);
+  border: 1px solid rgba(42, 44, 52, 0.5);*/
   border-radius: 12px;
   text-decoration: none;
   transition: border-color 0.2s ease, background-color 0.2s ease;

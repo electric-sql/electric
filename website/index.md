@@ -4,9 +4,9 @@ title: "Electric"
 titleTemplate: ":title | Sync with your stack"
 hero:
   name: 'Sync'
-  text: 'with your stack'
+  text: '<br />with your stack'
   tagline: >-
-    Composable sync primitives for building<br />fast, collaborative, resilient apps.
+    Build fast, modern, collaborative apps without&nbsp;changing&nbsp;your&nbsp;stack.
   actions:
     - theme: brand
       text: Sign-up to Cloud
