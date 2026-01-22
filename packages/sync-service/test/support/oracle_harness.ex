@@ -580,58 +580,6 @@ defmodule Support.OracleHarness do
   end
 
   # ----------------------------------------------------------------------------
-  # Legacy API (for backwards compatibility during transition)
-  # ----------------------------------------------------------------------------
-
-  @doc """
-  Runs explicit test cases. Each case specifies its own schema, seed, shapes, and mutations.
-
-  DEPRECATED: Prefer run_parallel/2 or run_with_shapes/4 for better performance.
-  """
-  def run_cases(ctx, cases, opts \\ %{}) do
-    opts = Map.merge(default_opts_from_env(), opts)
-
-    Enum.each(cases, fn case_spec ->
-      run_case(ctx, case_spec, opts)
-    end)
-  end
-
-  defp run_case(ctx, case_spec, opts) do
-    timeout_ms = opts[:timeout_ms] || @default_timeout_ms
-
-    log("case=#{case_spec.name}")
-    apply_sql(ctx, case_spec.schema_sql)
-    apply_sql(ctx, case_spec.seed_sql)
-
-    # Start oracle pool for parallel Postgres queries
-    {:ok, oracle_pool} = start_oracle_pool(ctx, opts)
-
-    checkers = start_checkers(ctx, case_spec.shapes, oracle_pool, opts)
-
-    Enum.each(checkers, fn checker ->
-      where_display = checker.where || "true"
-      log("  shape=#{checker.name} where=#{inspect(where_display)}")
-    end)
-
-    checkers = await_all_up_to_date(checkers, timeout_ms, "initial snapshot")
-
-    # Get initial oracle state to pass to first mutation
-    initial_oracle = query_all_oracles_parallel(checkers)
-
-    # Pass oracle_after from each mutation as oracle_before for the next one
-    {checkers, _final_oracle} =
-      case_spec.mutations
-      |> Enum.reduce({checkers, initial_oracle}, fn mutation, {checkers, prev_oracle} ->
-        {checkers, oracle_after} = run_mutation_cycle(ctx, checkers, mutation, timeout_ms, prev_oracle)
-        log("  mutation=#{mutation.name} PASS")
-        {checkers, oracle_after}
-      end)
-
-    stop_checkers(checkers)
-    GenServer.stop(oracle_pool)
-  end
-
-  # ----------------------------------------------------------------------------
   # Internal Implementation - Parallel Coordination
   # ----------------------------------------------------------------------------
 
