@@ -31,11 +31,11 @@ Now infrastructure is the bottleneck—but it's not just infrastructure, it's a 
 
 So it turns out we'd built exactly the right primitive for this moment: durable streams. Persistent, resumable event streams over HTTP.
 
-We first [released the Durable Streams protocol](/blog/2025/12/09/announcing-durable-streams) in December. Today we're announcing 0.2.0—with idempotent producers and exactly-once semantics—*and* hosted durable streams on Electric Cloud.
+We [released the Durable Streams protocol](/blog/2025/12/09/announcing-durable-streams) in December. Today we're announcing 0.2.0—with idempotent producers and exactly-once semantics—*and* hosted durable streams on Electric Cloud.
 
-## How it works
+## A new coordination model
 
-A durable stream is an addressable, append-only log with its own URL. Clients can read from any position and tail for live updates.
+A durable stream is an addressable, append-only log with its own URL. Clients can read from the log from any position and tail for live updates.
 
 Existing streaming infrastructure wasn't designed for this. WebSockets and SSE are ephemeral. Kafka and Redis Streams are backend primitives—durable, but you're still building the client protocol yourself.
 
