@@ -44,9 +44,9 @@ const products = [
 
 <template>
   <Section :actions="actions">
-    <template #title> With composable sync primitives </template>
+    <template #title>With composable sync&nbsp;primitives</template>
     <template #tagline>
-      Build with modular components that combine to power any sync scenario.
+      Compose your own end-to-end reactive sync stack.
     </template>
     <div class="products-grid">
       <div v-for="product in products" :key="product.slug" class="product-card">

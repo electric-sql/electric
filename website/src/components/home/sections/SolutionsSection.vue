@@ -61,12 +61,11 @@ const solutions = [
     <template #tagline>
       Sync is the magic behind
       <a href="/blog/2025/07/29/super-fast-apps-on-sync-with-tanstack-db">
-        fast, modern software</a
+        <span class="hidden-xs">fast, modern software</span>
+        <span class="inline-xs">fast apps</span></a
       >
-      and the&nbsp;key to building
-      <span class="no-wrap">
-        <a href="/blog/2026/01/12/durable-sessions-for-collaborative-ai">
-          collaborative&nbsp;AI&nbsp;apps</a
+      and <span class="no-wrap-xs">the key&nbsp;to&nbsp;building</span> <span class="no-wrap">
+        <a href="/blog/2026/01/12/durable-sessions-for-collaborative-ai">collaborative&nbsp;AI<span class="hidden-sm">&nbsp;apps</span></a
         ><span class="hidden-sm"> and </span></span
       ><span class="hidden-sm"> agentic&nbsp;systems</span>.
     </template>
