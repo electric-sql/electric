@@ -30,7 +30,7 @@ defmodule Support.OracleHarness do
 
   @default_timeout_ms 20_000
   @default_shape_count 100
-  @default_mutation_count 20
+  @default_mutation_count 100
 
   # Standard IDs for seeded data
   @level_1_ids Enum.map(1..5, &"l1-#{&1}")
@@ -462,7 +462,11 @@ defmodule Support.OracleHarness do
   defp update_level_4_value do
     id = Enum.random(@level_4_ids)
     new_value = "v#{:rand.uniform(1000)}"
-    %{name: "update_l4_#{id}", sql: "UPDATE level_4 SET value = '#{new_value}' WHERE id = '#{id}'"}
+
+    %{
+      name: "update_l4_#{id}",
+      sql: "UPDATE level_4 SET value = '#{new_value}' WHERE id = '#{id}'"
+    }
   end
 
   # ----------------------------------------------------------------------------
@@ -661,7 +665,8 @@ defmodule Support.OracleHarness do
             errors: :stream
           )
 
-        {:ok, consumer} = StreamConsumer.start(stream, timeout: opts[:timeout_ms] || @default_timeout_ms)
+        {:ok, consumer} =
+          StreamConsumer.start(stream, timeout: opts[:timeout_ms] || @default_timeout_ms)
 
         %ShapeState{
           name: shape.name,
