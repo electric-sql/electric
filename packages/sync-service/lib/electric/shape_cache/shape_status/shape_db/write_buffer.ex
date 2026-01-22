@@ -20,6 +20,16 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
   3. GenServer polls every 50ms and flushes pending operations to SQLite
   4. After successful flush, clean up entries from shapes table
 
+  ## Crash recovery
+
+  If the system crashes, all in-flight writes in the operations table will be
+  lost. On reboot clients of the in-flight shapes will receive `must-refetch`
+  responses and the shapes will be re-inserted into the buffer.
+
+  This will leave orphaned shape data in the storage implementation, as we are
+  losing all references to the handle. We will need some background
+  reconcilation process that culls orphaned storage data.
+
   ## Operations table format
 
   `{{monotonic_time, unique_int}, operation, flushing}`
@@ -67,23 +77,36 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
     GenServer.call(name(stack_id), :flush_sync, timeout)
   end
 
+  @doc """
+  Disable flushing of buffered actions to db. Useful for testing
+  """
+  def pause_flush(stack_id) when is_stack_id(stack_id) do
+    GenServer.call(name(stack_id), {:pause, true})
+  end
+
+  @doc """
+  Re-enable flushing of buffered actions to db. Useful for testing
+  """
+  def resume_flush(stack_id) when is_stack_id(stack_id) do
+    GenServer.call(name(stack_id), {:pause, false})
+  end
+
   # Lookup functions
 
   @doc "Look up a shape by its handle. Returns {:ok, shape} or :not_found."
   def lookup_shape(stack_id, handle) do
     shapes_table = shapes_table_name(stack_id)
 
-    # Check tombstones first - if handle is being deleted, return not_found
-    if :ets.member(shapes_table, {:tombstone, handle}) do
-      :not_found
-    else
-      case :ets.lookup(shapes_table, {:shape, handle}) do
-        [{{:shape, ^handle}, shape_binary, _comparable}] ->
-          {:ok, :erlang.binary_to_term(shape_binary)}
-
-        [] ->
+    case :ets.lookup(shapes_table, {:shape, handle}) do
+      [{{:shape, ^handle}, shape_binary, _comparable}] ->
+        if :ets.member(shapes_table, {:tombstone, handle}) do
           :not_found
-      end
+        else
+          {:ok, :erlang.binary_to_term(shape_binary)}
+        end
+
+      [] ->
+        :not_found
     end
   end
 
@@ -294,28 +317,30 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
       read_concurrency: true
     ])
 
-    unless manual_flush_only, do: schedule_poll()
-
     {:ok,
-     %{
+     schedule_poll(%{
        stack_id: stack_id,
        ops_table: ops_table,
        shapes_table: shapes_table,
-       manual_flush_only: manual_flush_only
-     }}
+       manual_flush_only: manual_flush_only,
+       paused: false
+     })}
   end
 
   @impl GenServer
   def handle_info(:poll, %{manual_flush_only: false} = state) do
     flush_until_empty(state)
-    schedule_poll()
-    {:noreply, state}
+
+    {:noreply, schedule_poll(state)}
   end
 
   @impl GenServer
   def handle_call(:flush_sync, _from, state) do
-    flush_until_empty(state)
-    {:reply, :ok, state}
+    {:reply, flush_until_empty(%{state | paused: false}), state}
+  end
+
+  def handle_call({:pause, paused?}, _from, state) do
+    {:reply, :ok, %{state | paused: paused?}}
   end
 
   @impl GenServer
@@ -323,56 +348,74 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
     flush_until_empty(state)
   end
 
-  defp schedule_poll do
+  defp schedule_poll(%{manual_flush_only: true} = state) do
+    state
+  end
+
+  defp schedule_poll(state) do
     Process.send_after(self(), :poll, @poll_interval)
+    state
   end
 
-  defp flush_until_empty(
-         %{
-           ops_table: ops_table,
-           shapes_table: shapes_table,
-           stack_id: stack_id
-         } = state
+  defp flush_until_empty(%{paused: true} = _state) do
+    :ok
+  end
+
+  defp flush_until_empty(state) do
+    state
+    |> mark_and_collect_entries(@max_drain_per_cycle)
+    |> flush_entries(state)
+  end
+
+  defp flush_entries([], _state) do
+    :ok
+  end
+
+  defp flush_entries(
+         entries,
+         %{ops_table: ops_table, shapes_table: shapes_table, stack_id: stack_id} = state
        ) do
-    entries = mark_and_collect_entries(ops_table, @max_drain_per_cycle)
+    OpenTelemetry.with_span(
+      "shape_db.write_buffer.flush",
+      [entry_count: length(entries)],
+      stack_id,
+      fn ->
+        case do_batch_write(stack_id, entries) do
+          :ok ->
+            Enum.each(entries, fn {ts, op} ->
+              case op do
+                {:add, handle, _shape_binary, comparable_binary, _hash, _relations} ->
+                  :ets.delete(shapes_table, {:shape, handle})
+                  :ets.delete(shapes_table, {:comparable, comparable_binary})
+                  {:add, handle}
 
-    if entries != [] do
-      result =
-        OpenTelemetry.with_span(
-          "shape_db.write_buffer.flush",
-          [entry_count: length(entries)],
-          stack_id,
-          fn -> do_batch_write(stack_id, entries) end
-        )
+                {:remove, handle} ->
+                  :ets.delete(shapes_table, {:tombstone, handle})
+                  op
 
-      if result == :ok do
-        Enum.each(entries, fn {ts, op} ->
-          case op do
-            {:add, handle, _shape_binary, comparable_binary, _hash, _relations} ->
-              :ets.delete(shapes_table, {:shape, handle})
-              :ets.delete(shapes_table, {:comparable, comparable_binary})
+                _ ->
+                  op
+              end
+              |> tap(&Logger.debug(fn -> ["ShapeDb: committed ", inspect(&1)] end))
 
-            {:remove, handle} ->
-              :ets.delete(shapes_table, {:tombstone, handle})
+              :ets.delete(ops_table, ts)
+            end)
 
-            _ ->
-              :ok
-          end
+            flush_until_empty(state)
 
-          :ets.delete(ops_table, ts)
-        end)
+          {:error, _reason} = error ->
+            # Reset flushing flag so entries can be retried on next poll
+            Enum.each(entries, fn {ts, _op} ->
+              :ets.update_element(ops_table, ts, {3, false})
+            end)
 
-        flush_until_empty(state)
-      else
-        # Reset flushing flag so entries can be retried on next poll
-        Enum.each(entries, fn {ts, _op} ->
-          :ets.update_element(ops_table, ts, {3, false})
-        end)
+            error
+        end
       end
-    end
+    )
   end
 
-  defp mark_and_collect_entries(ops_table, limit) do
+  defp mark_and_collect_entries(%{ops_table: ops_table}, limit) do
     # Select entries with flushing=false
     match_spec = [{{:"$1", :"$2", false}, [], [{{:"$1", :"$2"}}]}]
 
@@ -410,7 +453,10 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
     end)
   rescue
     e ->
-      Logger.error("WriteBuffer batch write failed: #{inspect(e)}")
-      :error
+      Logger.error(
+        "WriteBuffer batch write failed: #{Exception.format(:error, e, __STACKTRACE__)}"
+      )
+
+      {:error, Exception.message(e)}
   end
 end

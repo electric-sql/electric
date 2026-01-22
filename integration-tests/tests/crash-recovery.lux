@@ -3,6 +3,7 @@
 [include _macros.luxinc]
 
 [global pg_container_name=crash-recovery__pg]
+[global handle_valid=""]
 
 ###
 
@@ -13,7 +14,15 @@
 [invoke start_psql]
 [shell psql]
   """!
-  CREATE TABLE items (
+  CREATE TABLE items1 (
+    id UUID PRIMARY KEY,
+    val TEXT
+  );
+  """
+  ??CREATE TABLE
+
+  """!
+  CREATE TABLE items2 (
     id UUID PRIMARY KEY,
     val TEXT
   );
@@ -22,7 +31,18 @@
 
   """!
   INSERT INTO
-    items (id, val)
+    items1 (id, val)
+  SELECT
+    gen_random_uuid(),
+    '#' || generate_series || ' test val'
+  FROM
+    generate_series(1, 10);
+  """
+  ??INSERT 0 10
+
+  """!
+  INSERT INTO
+    items2 (id, val)
   SELECT
     gen_random_uuid(),
     '#' || generate_series || ' test val'
@@ -37,13 +57,30 @@
 [shell electric]
   ??[info] Starting replication from postgres
 
-# Initialize a shape and collect the offset
+# Initialize a shape, wait for it to persist and collect the offset
 [shell client]
-  [invoke shape_get_snapshot items]
+  [invoke shape_get_snapshot items1]
   ?electric-handle: ([\d-]+)
-  [local handle=$1]
+  [global handle_valid=$1]
   ?electric-offset: ([\w\d_]+)
-  [local offset=$1]
+  [global offset_valid=$1]
+
+[shell electric]
+  ??[debug] ShapeDb: committed {:add, "$handle_valid"}
+  ??[debug] ShapeDb: committed {:snapshot_complete, "$handle_valid"}
+  # prevent timing issues by turning off the background writes
+  # this way we know that the items2 shape is definitely not in
+  # the db in any way.
+  !Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer.pause_flush("single_stack")
+  ?:ok
+
+# Initialize another shape and collect the offset
+[shell client]
+  [invoke shape_get_snapshot items2]
+  ?electric-handle: ([\d-]+)
+  [local handle2=$1]
+  ?electric-offset: ([\w\d_]+)
+  [local offset2=$1]
 
 ## Crash electric
 [shell electric]
@@ -53,44 +90,67 @@
 ## Start the sync service again.
 [invoke setup_electric]
 [shell electric]
-  ??[info] Found 0 existing valid shapes and 1 shapes in an invalid state
+  # no invalid shapes because the items2 shape wasn't persisted
+  ??[info] Found 1 existing valid shapes and 0 shapes in an invalid state
   ??[info] Starting replication from postgres
 
 # Client should be able to continue same with old offset or 0_inf offset
 [shell client]
-  [invoke shape_get items $handle $offset]
+  [invoke shape_get items1 $handle_valid $offset_valid]
+  ??HTTP/1.1 200 OK
+  ??electric-handle: $handle_valid
+  ??[{"headers":{"control":"up-to-date","global_last_seen_lsn":
+
+  [invoke shape_get items1 $handle_valid "0_inf"]
+  ??HTTP/1.1 200 OK
+  ??electric-handle: $handle_valid
+  ?electric-offset: ([\w\d_]+)
+  [local offset_valid=$1]
+  ??[{"headers":{"control":"up-to-date","global_last_seen_lsn":
+
+# Unflushed shape is gone
+[shell client]
+  [invoke shape_get items2 $handle2 $offset2]
   ??HTTP/1.1 409 Conflict
   ?electric-handle: ([\d-]+)
-  [local handle=$1]
+  [local handle2=$1]
   ??[{"headers":{"control":"must-refetch"
 
-  [invoke shape_get items $handle "0_inf"]
+  [invoke shape_get items2 $handle2 "0_inf"]
   ??HTTP/1.1 200 OK
-  ??electric-handle: $handle
+  ??electric-handle: $handle2
   ?electric-offset: ([\w\d_]+)
-  [local offset=$1]
+  [local offset2=$1]
   ??[{"headers":{"control":"up-to-date","global_last_seen_lsn":
 
 # Add more data before another crash
 [shell psql]
   """!
-  INSERT INTO items (id, val)
+  INSERT INTO items2 (id, val)
   VALUES (gen_random_uuid(), '#pre-crash test val');
   """
   ??INSERT 0 1
 
 # Should see pre crash update
 [shell client]
-  [invoke shape_get_live items $handle $offset]
+  [invoke shape_get_live items2 $handle2 $offset2]
   ??HTTP/1.1 200 OK
   ?electric-offset: ([\w\d_]+)
-  [local offset=$1]
+  [local offset2=$1]
   ??"val":"#pre-crash test val"
 
 ## Crash electric again
 [shell electric]
   !System.halt()
   ??$PS1
+
+# Add to ensure that we receive a txn after restarting
+[shell psql]
+  """!
+  INSERT INTO items1 (id, val)
+  VALUES (gen_random_uuid(), '#pre-crash test val');
+  """
+  ??INSERT 0 1
 
 ## Start the sync service again.
 [invoke setup_electric]
@@ -107,24 +167,24 @@
 
 # Client should be able to continue same shape
 [shell client]
-  [invoke shape_get items $handle $offset]
+  [invoke shape_get items2 $handle2 $offset2]
   ??HTTP/1.1 200 OK
-  ??electric-handle: $handle
+  ??electric-handle: $handle2
   ??[{"headers":{"control":"up-to-date","global_last_seen_lsn":
 
 
 # Recovered shape should handle new data
 [shell psql]
   """!
-  INSERT INTO items (id, val)
+  INSERT INTO items2 (id, val)
   VALUES (gen_random_uuid(), '#post-crash test val');
   """
   ??INSERT 0 1
 
 [shell client]
-  [invoke shape_get_live items $handle $offset]
+  [invoke shape_get_live items2 $handle2 $offset2]
   ??HTTP/1.1 200 OK
-  ??electric-handle: $handle
+  ??electric-handle: $handle2
   ??"val":"#post-crash test val"
 
 [cleanup]
