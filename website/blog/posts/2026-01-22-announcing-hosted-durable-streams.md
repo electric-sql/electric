@@ -56,7 +56,7 @@ Hosted durable streams is now live on [Electric Cloud](https://electric-sql.com/
 
 ## Get started
 
-Here's a multiplayer AI chat built on durable streams—multiple users and agents sharing a session, with full history replay and seamless reconnection:
+Here's a demo of Durable Sessions—a multiplayer AI chat where multiple users and agents share a session with full history replay and seamless reconnection:
 
 <div class="embed-container" style="padding-bottom: 62.283737%">
   <YoutubeEmbed video-id="81KXwxld7dw" />
