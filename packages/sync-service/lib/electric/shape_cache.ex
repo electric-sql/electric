@@ -66,11 +66,20 @@ defmodule Electric.ShapeCache do
       {handle, offset}
     else
       :error ->
-        GenServer.call(
-          name(stack_id),
-          {:create_or_wait_shape_handle, shape, opts[:otel_ctx]},
-          @call_timeout
-        )
+        try do
+          GenServer.call(
+            name(stack_id),
+            {:create_or_wait_shape_handle, shape, opts[:otel_ctx]},
+            @call_timeout
+          )
+        catch
+          :exit, {:shutdown, _} ->
+            {:error, "Stack is down"}
+
+          :exit, reason ->
+            dbg(exit: reason)
+            {:error, "?"}
+        end
     end
   end
 
@@ -143,6 +152,10 @@ defmodule Electric.ShapeCache do
             # we'll just retry after waiting for a short time to avoid busy waiting.
             Process.sleep(50)
             await_snapshot_start(shape_handle, stack_id)
+
+          :exit, reason ->
+            dbg(exit: reason)
+            {:error, reason}
         end
     end
   rescue
