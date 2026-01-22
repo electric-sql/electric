@@ -190,7 +190,10 @@ defmodule Electric.Integration.OracleViewTest do
           sql:
             "INSERT INTO level_3_tags (level_3_id, tag) VALUES ('l3-2', 'alpha') ON CONFLICT DO NOTHING"
         },
-        %{name: "remove_alpha_tag", sql: "DELETE FROM level_3_tags WHERE level_3_id = 'l3-1' AND tag = 'alpha'"},
+        %{
+          name: "remove_alpha_tag",
+          sql: "DELETE FROM level_3_tags WHERE level_3_id = 'l3-1' AND tag = 'alpha'"
+        },
         %{name: "move_l4", sql: "UPDATE level_4 SET level_3_id = 'l3-3' WHERE id = 'l4-1'"}
       ]
 
@@ -216,7 +219,10 @@ defmodule Electric.Integration.OracleViewTest do
           sql:
             "INSERT INTO level_2_tags (level_2_id, tag) VALUES ('l2-3', 'beta') ON CONFLICT DO NOTHING"
         },
-        %{name: "remove_beta_tag", sql: "DELETE FROM level_2_tags WHERE level_2_id = 'l2-2' AND tag = 'beta'"},
+        %{
+          name: "remove_beta_tag",
+          sql: "DELETE FROM level_2_tags WHERE level_2_id = 'l2-2' AND tag = 'beta'"
+        },
         %{name: "move_l3", sql: "UPDATE level_3 SET level_2_id = 'l2-4' WHERE id = 'l3-1'"}
       ]
 
@@ -242,7 +248,10 @@ defmodule Electric.Integration.OracleViewTest do
           sql:
             "INSERT INTO level_1_tags (level_1_id, tag) VALUES ('l1-2', 'gamma') ON CONFLICT DO NOTHING"
         },
-        %{name: "remove_gamma_tag", sql: "DELETE FROM level_1_tags WHERE level_1_id = 'l1-3' AND tag = 'gamma'"},
+        %{
+          name: "remove_gamma_tag",
+          sql: "DELETE FROM level_1_tags WHERE level_1_id = 'l1-3' AND tag = 'gamma'"
+        },
         %{name: "move_l2", sql: "UPDATE level_2 SET level_1_id = 'l1-4' WHERE id = 'l2-1'"}
       ]
 
