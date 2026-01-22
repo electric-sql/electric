@@ -41,7 +41,7 @@ Existing streaming infrastructure wasn't designed for this. WebSockets and SSE a
 
 Every write persists synchronously to Cloudflare's distributed storage before acknowledgment—zero data-loss window.
 
-This shape turns out to be exactly what multi-agent and multi-user systems need. Shared mutable state breaks down when you have three agents and two users all updating at once. Request-response doesn't work when every participant needs to see every tool call. A shared log that everyone can read, resume, and react to is the only coordination primitive that survives multiplayer.
+This shape turns out to be exactly what multi-agent and multi-user systems need. Shared mutable state breaks down when you have three agents and two users all updating at once. Request-response doesn't work when every participant needs to see every tool call. A shared log that everyone can read, resume, and react to is the only coordination primitive that survives multiplayer. We call this pattern Durable Sessions—[read James' recent post about it](/blog/2026/01/12/durable-sessions-for-collaborative-ai).
 
 The details matter—readers don't hit origin, writes are idempotent, the protocol has layered semantics for different data shapes—but we covered all that in the [0.1.0 announcement](/blog/2025/12/09/announcing-durable-streams). What's new: the spec is mature, it's hosted, and it's the foundation for everything we're building next.
 
