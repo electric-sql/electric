@@ -44,7 +44,7 @@ This primitive turns out to be exactly what multi-agent and multi-user systems n
 Here's a demo—a multiplayer AI chat where multiple users and agents share a session with full history replay and seamless reconnection:
 
 <div class="embed-container" style="padding-bottom: 62.283737%">
-  <YoutubeEmbed video-id="81KXwxld7dw" />
+  <YoutubeEmbed video-id="y81PbquFq9I" />
 </div>
 
 With 0.2.0, the protocol is mature—we're ready for more people to build with it. For the full technical details, see the [0.1.0 announcement](/blog/2025/12/09/announcing-durable-streams).
