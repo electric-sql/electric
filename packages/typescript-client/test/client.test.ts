@@ -448,6 +448,7 @@ describe.for(fetchAndSse)(`Shape  (liveSSE=$liveSse)`, ({ liveSse }) => {
       },
       signal: aborter.signal,
       liveSse,
+      backgroundPauseDelayMs: 0, // Pause immediately for this test
     })
 
     const unsubscribe = shapeStream.subscribe(() => unsubscribe())
@@ -474,6 +475,7 @@ describe.for(fetchAndSse)(`Shape  (liveSSE=$liveSse)`, ({ liveSse }) => {
       },
       signal: aborter.signal,
       liveSse,
+      backgroundPauseDelayMs: 0, // Pause immediately for this test
     })
     const shape = new Shape(shapeStream)
 

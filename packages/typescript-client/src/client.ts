@@ -438,15 +438,15 @@ export interface ShapeStreamOptions<T = never> {
    * Some browsers forcibly terminate long-running fetches in background tabs,
    * so this is a trade-off between responsiveness and reliability.
    *
-   * Defaults to 0 (immediate pause when tab is backgrounded).
+   * Defaults to 600000 (10 minutes).
    *
    * @example
    * ```typescript
-   * // Keep syncing for 5 minutes after tab is backgrounded
+   * // Pause immediately when tab is backgrounded
    * const stream = new ShapeStream({
    *   url: 'http://localhost:3000/v1/shape',
    *   params: { table: 'todos' },
-   *   backgroundPauseDelayMs: 5 * 60 * 1000 // 5 minutes
+   *   backgroundPauseDelayMs: 0
    * })
    * ```
    */
@@ -645,7 +645,8 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
     this.#onError = this.options.onError
     this.#mode = this.options.log ?? `full`
-    this.#backgroundPauseDelayMs = this.options.backgroundPauseDelayMs ?? 0
+    this.#backgroundPauseDelayMs =
+      this.options.backgroundPauseDelayMs ?? 10 * 60 * 1000 // 10 minutes
 
     const baseFetchClient =
       options.fetchClient ??
