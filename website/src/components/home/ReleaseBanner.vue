@@ -2,15 +2,7 @@
   <div class="banner">
     <div class="container">
       <div>
-        🔥
-        <a href="/blog/2025/07/29/super-fast-apps-on-sync-with-tanstack-db">
-          Introducing Tanstack DB</a
-        >
-        &ndash;
-        <span class="inline-md"> now in BETA! </span>
-        <span class="hidden-md">
-          Reactive client store for building super fast apps on sync!
-        </span>
+        <a href="#">✨ Durable Streams <span class="hidden-xs">are</span> now <span class="hidden-sm">available</span> on Electric&nbsp;Cloud!</a>
       </div>
     </div>
   </div>
@@ -19,17 +11,36 @@
 <style scoped>
 .banner {
   color: var(--vp-c-text-1);
-  background-color: var(--vp-c-indigo-3);
+  border-bottom: 1px solid var(--vp-c-indigo-2);
   font-weight: 500;
 
-  padding: 12px 24px 14px;
+  padding: 20px;
   margin-bottom: 2px;
 
   font-size: 15px;
   text-align: center;
 }
 .banner a {
-  text-decoration: underline;
+  padding: 18px 24px;
+}
+.banner a:hover {
+  color: var(--vp-c-indigo-1);
+}
+@media (max-width: 559px) {
+  .banner {
+    font-size: 14.75px;
+  }
+  .banner a {
+    padding: 18px;
+  }
+}
+@media (max-width: 449px) {
+  .banner {
+    font-size: 14px;
+  }
+  .banner a {
+    padding: 18px 0px;
+  }
 }
 </style>
 <style>

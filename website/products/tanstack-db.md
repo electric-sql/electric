@@ -9,7 +9,7 @@ outline: deep
 import BlogPostsByTag from '../src/components/BlogPostsByTag.vue'
 </script>
 
-<img src="/img/icons/tanstack-social.svg" class="product-icon" />
+<img src="/img/icons/tanstack.svg" class="product-icon" />
 
 # TanStack DB
 

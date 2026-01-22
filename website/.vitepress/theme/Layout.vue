@@ -63,7 +63,7 @@ onMounted(() => {
 <template>
   <Layout :class="!hasSidebar ? 'nav-relative' : ''">
     <template #layout-top>
-      <template v-if="!hasSidebar && false">
+      <template v-if="!hasSidebar">
         <ReleaseBanner />
       </template>
     </template>

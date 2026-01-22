@@ -27,7 +27,7 @@ const products = [
   },
   {
     slug: 'tanstack-db',
-    icon: '/img/icons/tanstack-social.svg',
+    icon: '/img/icons/tanstack.svg',
     title: 'TanStack DB',
     body: `Reactive client database with optimistic updates and sync integration.`,
     href: '/products/tanstack-db',

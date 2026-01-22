@@ -144,7 +144,8 @@
 .demo-actions a .vpi-social-github,
 .feature-cta a .vpi-social-github,
 .feature-cta a .vpi-electric-icon,
-.cloud-cta a .vpi-electric-icon {
+.cloud-cta a .vpi-electric-icon,
+.vpi-durable-streams {
   display: block;
   width: 1.42rem;
   height: 1.42rem;
@@ -154,7 +155,8 @@
 @media (min-width: 768px) and (max-width: 825px) {
   .feature-cta a .vpi-social-github,
   .feature-cta a .vpi-electric-icon,
-  .cloud-cta a .vpi-electric-icon {
+  .cloud-cta a .vpi-electric-icon,
+  .vpi-durable-streams {
     width: 1.36rem;
     height: 1.36rem;
     margin-left: -0.2rem;
@@ -171,6 +173,9 @@
 .vpi-social-durable-streams {
   --icon: url('/img/icons/durable-streams-social.svg') !important;
 }
+.vpi-durable-streams {
+  --icon: url('/img/icons/durable-streams.square.svg');
+}
 
 /* Divider between product icons (durable-streams, tanstack, pglite) and social icons (x, discord, github) */
 @media (min-width: 960px) {
@@ -178,7 +183,7 @@
     content: '';
     display: block;
     position: absolute;
-    right: -8px;
+    right: -10px;
     top: 50%;
     transform: translateY(-50%);
     width: 1px;
@@ -187,7 +192,7 @@
   }
   .VPNavBarSocialLinks .VPSocialLink:nth-child(3) {
     position: relative;
-    margin-right: 8px;
+    margin-right: 16px;
   }
 }
 
@@ -374,8 +379,25 @@ span.no-visual {
   }
 }
 
+.VPNavBar.home,
+.VPNavBar.home .content-body,
+.VPNavBar.home .divider,
+.VPNavBar.home .divider-line {
+  transition: background-color 0s !important;
+}
 .VPNavBar .content-body {
   padding-top: 1px;
+}
+
+/* Hide navbar bottom divider on home pages regardless of scroll position */
+@media (min-width: 960px) {
+  .VPNavBar.home:not(.top) {
+    background-color: transparent !important;
+  }
+  .VPNavBar.home .divider,
+  .VPNavBar.home .divider-line {
+    background-color: transparent !important;
+  }
 }
 
 .VPNavBarTitle .logo {
@@ -436,6 +458,12 @@ span.no-visual {
 @media (min-width: 960px) {
   .VPNavBarCTA {
     padding: 0 10px 0 12px;
+  }
+}
+@media (min-width: 1200px) {
+  .VPSocialLink {
+    width: 32px !important;
+    height: 32px !important;
   }
 }
 @media (min-width: 1121px) and (max-width: 1199px) {
