@@ -4,6 +4,7 @@
 
 [global pg_container_name=crash-recovery__pg]
 [global handle_valid=""]
+[global handle2=""]
 
 ###
 
@@ -78,7 +79,7 @@
 [shell client]
   [invoke shape_get_snapshot items2]
   ?electric-handle: ([\d-]+)
-  [local handle2=$1]
+  [global handle2=$1]
   ?electric-offset: ([\w\d_]+)
   [local offset2=$1]
 
@@ -113,7 +114,7 @@
   [invoke shape_get items2 $handle2 $offset2]
   ??HTTP/1.1 409 Conflict
   ?electric-handle: ([\d-]+)
-  [local handle2=$1]
+  [global handle2=$1]
   ??[{"headers":{"control":"must-refetch"
 
   [invoke shape_get items2 $handle2 "0_inf"]
@@ -139,8 +140,10 @@
   [local offset2=$1]
   ??"val":"#pre-crash test val"
 
-## Crash electric again
+## Crash electric again after ensuring that our new shape is serialised
 [shell electric]
+  ??[debug] ShapeDb: committed {:add, "$handle2"}
+  ??[debug] ShapeDb: committed {:snapshot_complete, "$handle2"}
   !System.halt()
   ??$PS1
 
