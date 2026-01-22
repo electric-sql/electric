@@ -51,7 +51,7 @@ With 0.2.0, the protocol is mature—we're ready for more people to build with i
 
 ## What's shipping
 
-Hosted durable streams is now live on [Electric Cloud](https://electric-sql.com/product/cloud), our managed sync platform. Electric Cloud also hosts [Postgres sync](/product/sync), so you can combine real-time streams with synced relational data in the same app.
+Hosted durable streams is now live on [Electric Cloud](https://electric-sql.com/product/cloud), our managed sync platform. Electric Cloud also hosts [Postgres sync](/product/electric), so you can combine real-time streams with synced relational data in the same app.
 
 - **Reads don't hit origin.** Electric Cloud's Sync CDN serves all reads. We've tested to 1M concurrent connections per stream.
 - **Fast writes.** 240K writes/second for small messages, with 15-25 MB/sec sustained throughput.
