@@ -9,6 +9,7 @@ defmodule Electric.Integration.OraclePropertyTest do
     - PROP_RUNS: Number of property test iterations (default: 5)
     - WHERE_SEED: Seed for where clause generation (if unset, varies each iteration)
     - MUTATION_SEED: Seed for mutation generation (if unset, varies each iteration)
+    - LONG_POLL_TIMEOUT: Server long-poll timeout in ms (default: 100)
 
   Run with: mix test --include oracle
   """
@@ -25,13 +26,18 @@ defmodule Electric.Integration.OraclePropertyTest do
   @moduletag timeout: :infinity
   @moduletag :tmp_dir
 
+  @default_long_poll_timeout 100
+
   setup [:with_unique_db]
   setup :with_complete_stack
-  setup :with_electric_client
 
+  # Use a short long_poll_timeout to speed up tests - shapes with no changes
+  # will get up_to_date faster instead of waiting 4 seconds for the default timeout
   setup ctx do
+    long_poll_timeout = env_int("LONG_POLL_TIMEOUT") || @default_long_poll_timeout
+    ctx = with_electric_client(ctx, router_opts: [long_poll_timeout: long_poll_timeout])
     setup_standard_schema(ctx)
-    :ok
+    ctx
   end
 
   @doc """
