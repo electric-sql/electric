@@ -3,7 +3,6 @@ defmodule Electric.Shapes.Consumer.State do
   alias Electric.Shapes.Consumer.MoveIns
   alias Electric.Shapes.Consumer.InitialSnapshot
   alias Electric.Shapes.Shape
-  alias Electric.Replication.Changes.Transaction
   alias Electric.Replication.Eval.Parser
   alias Electric.Replication.Eval.Walker
   alias Electric.Replication.TransactionBuilder
@@ -34,7 +33,9 @@ defmodule Electric.Shapes.Consumer.State do
     # Fragment-direct streaming fields
     # When true, stream fragments directly to storage without buffering
     fragment_direct?: false,
-    # Tracks in-progress transaction during fragment-direct streaming
+    # Tracks in-progress transaction, initialized when a txn fragment with has_begin?=true is seen.
+    # It is used to check whether the entire txn is visible in the snapshot and to mark it
+    # as flushed in order to handle its remaining fragments appropriately.
     pending_txn: nil
   ]
 

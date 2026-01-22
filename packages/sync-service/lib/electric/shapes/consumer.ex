@@ -463,19 +463,18 @@ defmodule Electric.Shapes.Consumer do
     State.add_to_buffer(state, txn_fragment)
   end
 
-  # Always create a pending_txn when seeing a fragment for a new transaction
   defp handle_txn_fragment(
          %TransactionFragment{has_begin?: true, xid: xid} = txn_fragment,
          %State{pending_txn: nil} = state
        ) do
-    Logger.debug("Starting pending transaction xid=#{xid}")
     pending_txn = PendingTxn.new(xid)
     state = %{state | pending_txn: pending_txn}
     handle_txn_fragment(txn_fragment, state)
   end
 
   # We can use the initial filtering to our advantage here and avoid accumulating fragments for
-  # a transaction that is going to be skipped anyway. This works in both modes, regardless of the value of fragment_direct?.
+  # a transaction that is going to be skipped anyway. This works both in the regular mode and
+  # in the fragment-direct mode.
   defp handle_txn_fragment(
          %TransactionFragment{has_begin?: true, xid: xid} = txn_fragment,
          %State{} = state
@@ -483,7 +482,7 @@ defmodule Electric.Shapes.Consumer do
        when needs_initial_filtering(state) do
     case InitialSnapshot.filter(state.initial_snapshot_state, state.storage, xid) do
       {:consider_flushed, initial_snapshot_state} ->
-        # This transaction is already included in the snapshot, no need to accumulate it.
+        # This transaction is already included in the snapshot, all of its constituent fragments can be dropped.
         # TODO: it could be the case the multiple txns are seen while InitialSnapshot needs
         # filtering. And the outcomes for those txns could be different.
         %{
@@ -493,31 +492,21 @@ defmodule Electric.Shapes.Consumer do
         }
 
       {:continue, new_initial_snapshot_state} ->
-        # Okay, the fragment is needed, so process it according to the consumer's fragment_direct mode
-
-        # Txn is good, we can start writing the fragment to storage if fragment_direct mode is active
-        # TODO: maybe_write_fragment_to_storage
-        # |> PendingTxn.add_changes(txn_fragment.last_log_offset, txn_fragment.change_count, 0)
+        # The transaction is not part of the initial snapshot, process the fragment the regular
+        # way.
         state = %{state | initial_snapshot_state: new_initial_snapshot_state}
         apply_txn_fragment(txn_fragment, state)
     end
   end
 
-  defp handle_txn_fragment(%TransactionFragment{has_begin?: true, xid: new_xid}, %{
-         pending_txn: %PendingTxn{xid: pending_xid}
-       }) do
-    raise "unexpected_interleaved_txns: received begin for xid=#{new_xid} while xid=#{pending_xid} is still pending"
-  end
-
-  # A fragment with has_begin?=false. We must have a pending_txn by this point.
-  # Drop the fragment if the pending txn is already included in the snapshot.
   defp handle_txn_fragment(txn_fragment, %State{pending_txn: pending_txn} = state) do
-    if not pending_txn.consider_flushed? do
-      apply_txn_fragment(txn_fragment, state)
-    else
+    if pending_txn.consider_flushed? or
+         LogOffset.is_log_offset_lte(txn_fragment.last_log_offset, state.latest_offset) do
       # TODO: decide when to call consider_flushed() or consider_flushed_fragment()
       # We likely need to check if the fragment has a commit.
       state
+    else
+      apply_txn_fragment(txn_fragment, state)
     end
   end
 
@@ -760,14 +749,6 @@ defmodule Electric.Shapes.Consumer do
         do_handle_txn(txn, state)
       end
     )
-  end
-
-  # TODO: see if this can be merged with txn fragment's similar check
-  defp do_handle_txn(%Transaction{} = txn, state)
-       when LogOffset.is_log_offset_lte(txn.last_log_offset, state.latest_offset) do
-    Logger.debug(fn -> "Skipping already processed txn #{txn.xid}" end)
-
-    {:cont, consider_flushed(state, txn)}
   end
 
   defp do_handle_txn(%Transaction{xid: xid, changes: changes} = txn, state) do
