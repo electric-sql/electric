@@ -28,7 +28,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
 
   This will leave orphaned shape data in the storage implementation, as we are
   losing all references to the handle. We will need some background
-  reconcilation process that culls orphaned storage data.
+  reconciliation process that culls orphaned storage data.
 
   ## Operations table format
 
@@ -36,6 +36,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
 
   ## Shapes table key formats
 
+  - `{:pending_count, integer}` - count of shapes pending addition
   - `{{:shape, handle}, shape_binary, comparable_binary}` - shape data
   - `{{:comparable, comparable_binary}, handle}` - reverse index for O(1) lookup
   - `{{:tombstone, handle}, timestamp}` - handles marked for deletion
@@ -155,6 +156,12 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
     :ets.info(operations_table_name(stack_id), :size)
   end
 
+  @doc "Gives the change to the total count of shapes in the database once all buffered writes are applied"
+  def pending_count_diff(stack_id) do
+    :ets.lookup_element(shapes_table_name(stack_id), :count_add, 2) -
+      :ets.lookup_element(shapes_table_name(stack_id), :count_remove, 2)
+  end
+
   @doc "Returns all buffered shapes as a list of {handle, shape} tuples, excluding tombstoned handles, sorted by handle"
   def list_buffered_shapes(stack_id) do
     tombstones = tombstoned_handles(stack_id)
@@ -164,15 +171,6 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
     |> Enum.reject(fn [handle, _] -> MapSet.member?(tombstones, handle) end)
     |> Enum.map(fn [handle, shape_binary] -> {handle, :erlang.binary_to_term(shape_binary)} end)
     |> Enum.sort_by(fn {handle, _} -> handle end)
-  end
-
-  @doc "Returns the count of buffered shapes (excluding tombstoned)"
-  def buffered_shape_count(stack_id) do
-    tombstones = tombstoned_handles(stack_id)
-
-    shapes_table_name(stack_id)
-    |> :ets.match({{:shape, :"$1"}, :_, :_})
-    |> Enum.count(fn [handle] -> not MapSet.member?(tombstones, handle) end)
   end
 
   @doc "Returns handles from the buffer that match any of the given relations (by OID)"
@@ -191,18 +189,6 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
       end)
       |> Enum.map(fn [handle, _] -> handle end)
     end
-  end
-
-  @doc "Returns the count of tombstoned handles that are in SQLite (not buffer-only)"
-  def sqlite_tombstone_count(stack_id) do
-    buffered_add_handles =
-      operations_table_name(stack_id)
-      |> :ets.match({:_, {:add, :"$1", :_, :_, :_, :_}, :_})
-      |> MapSet.new(fn [h] -> h end)
-
-    shapes_table_name(stack_id)
-    |> :ets.match({{:tombstone, :"$1"}, :_})
-    |> Enum.count(fn [handle] -> not MapSet.member?(buffered_add_handles, handle) end)
   end
 
   @doc "Returns all tombstoned handles as a MapSet"
@@ -225,6 +211,8 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
         {{:shape, handle}, shape_binary, comparable_binary},
         {{:comparable, comparable_binary}, handle}
       ])
+
+    :ets.update_counter(shapes_table, :count_add, 1)
 
     # Queue operation for SQLite (contains full data including hash and relations)
     true =
@@ -253,6 +241,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
         end
 
         :ets.delete(shapes_table, {:shape, handle})
+        :ets.update_counter(shapes_table, :count_remove, 1)
 
         ops_table = operations_table_name(stack_id)
         true = :ets.insert(ops_table, {ts, {:remove, handle}, false})
@@ -284,6 +273,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
   def clear(stack_id) do
     :ets.delete_all_objects(shapes_table_name(stack_id))
     :ets.delete_all_objects(operations_table_name(stack_id))
+    initialize_counts(shapes_table_name(stack_id))
     :ok
   end
 
@@ -317,6 +307,8 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
       read_concurrency: true
     ])
 
+    initialize_counts(shapes_table)
+
     {:ok,
      schedule_poll(%{
        stack_id: stack_id,
@@ -325,6 +317,10 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
        manual_flush_only: manual_flush_only,
        paused: false
      })}
+  end
+
+  defp initialize_counts(shapes_table) do
+    :ets.insert(shapes_table, [{:count_add, 0}, {:count_remove, 0}])
   end
 
   @impl GenServer
@@ -387,10 +383,12 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
                 {:add, handle, _shape_binary, comparable_binary, _hash, _relations} ->
                   :ets.delete(shapes_table, {:shape, handle})
                   :ets.delete(shapes_table, {:comparable, comparable_binary})
+                  :ets.update_counter(shapes_table, :count_add, {2, -1, 0, 0})
                   {:add, handle}
 
                 {:remove, handle} ->
                   :ets.delete(shapes_table, {:tombstone, handle})
+                  :ets.update_counter(shapes_table, :count_remove, {2, -1, 0, 0})
                   op
 
                 _ ->

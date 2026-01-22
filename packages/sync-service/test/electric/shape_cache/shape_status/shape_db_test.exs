@@ -412,5 +412,60 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDbTest do
       assert :ok = ShapeDb.remove_shape(ctx.stack_id, handle)
       refute ShapeDb.handle_exists?(ctx.stack_id, handle)
     end
+
+    test "pending_count_diff/1", ctx do
+      assert 0 = ShapeDb.WriteBuffer.pending_count_diff(ctx.stack_id)
+
+      shape = Shape.new!("items", inspector: @stub_inspector)
+      handle = "handle-0"
+
+      {:ok, _hash} = ShapeDb.add_shape(ctx.stack_id, shape, handle)
+
+      assert 1 = ShapeDb.WriteBuffer.pending_count_diff(ctx.stack_id)
+
+      ShapeDb.WriteBuffer.flush_sync(ctx.stack_id)
+      assert 0 = ShapeDb.WriteBuffer.pending_count_diff(ctx.stack_id)
+
+      assert :ok = ShapeDb.remove_shape(ctx.stack_id, handle)
+
+      assert -1 = ShapeDb.WriteBuffer.pending_count_diff(ctx.stack_id)
+
+      ShapeDb.WriteBuffer.flush_sync(ctx.stack_id)
+      assert 0 = ShapeDb.WriteBuffer.pending_count_diff(ctx.stack_id)
+
+      {_handles1, _shapes} =
+        Enum.map(1..10, fn n ->
+          shape = Shape.new!("items", inspector: @stub_inspector, where: "id = #{n}")
+          handle = "handle-#{n}"
+
+          make_shape_with_snapshot_status(ctx, shape, handle,
+            snapshot_started: false,
+            snapshot_complete: false
+          )
+        end)
+        |> Enum.unzip()
+
+      {handles2, _shapes} =
+        Enum.map(11..20, fn n ->
+          shape = Shape.new!("items", inspector: @stub_inspector, where: "id = #{n}")
+          handle = "handle-#{n}"
+
+          make_shape_with_snapshot_status(ctx, shape, handle,
+            snapshot_started: false,
+            snapshot_complete: false
+          )
+        end)
+        |> Enum.unzip()
+
+      assert 20 = ShapeDb.WriteBuffer.pending_count_diff(ctx.stack_id)
+
+      Enum.each(handles2, &ShapeDb.remove_shape(ctx.stack_id, &1))
+
+      assert 10 = ShapeDb.WriteBuffer.pending_count_diff(ctx.stack_id)
+
+      ShapeDb.WriteBuffer.flush_sync(ctx.stack_id)
+
+      assert 0 = ShapeDb.WriteBuffer.pending_count_diff(ctx.stack_id)
+    end
   end
 end

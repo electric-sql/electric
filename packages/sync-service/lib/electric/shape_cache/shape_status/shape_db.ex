@@ -208,13 +208,11 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb do
   end
 
   # May be slightly inaccurate during concurrent modifications due to
-  # non-atomic reads of buffer, tombstones, and SQLite count.
+  # the `pending_count_diff` being updated after writes are in the database
+  # meaning that changes may be counted twice for a (very) short period.
   def count_shapes(stack_id) do
-    buffered_count = WriteBuffer.buffered_shape_count(stack_id)
-    sqlite_tombstone_count = WriteBuffer.sqlite_tombstone_count(stack_id)
-
     case checkout!(stack_id, :count_shapes, &Query.count_shapes/1) do
-      {:ok, sqlite_count} -> {:ok, sqlite_count - sqlite_tombstone_count + buffered_count}
+      {:ok, sqlite_count} -> {:ok, sqlite_count + WriteBuffer.pending_count_diff(stack_id)}
       error -> error
     end
   end

@@ -179,9 +179,11 @@ defmodule Electric.ShapeCache.ShapeStatus do
   @spec mark_snapshot_started(stack_id(), shape_handle()) :: :ok | :error
   def mark_snapshot_started(stack_id, shape_handle) when is_stack_id(stack_id) do
     OpenTelemetry.with_span("shape_status.mark_snapshot_started", [], stack_id, fn ->
-      with :ok <- ShapeDb.mark_snapshot_started(stack_id, shape_handle) do
-        :ets.update_element(shape_meta_table(stack_id), shape_handle, {3, true})
+      with :ok <- ShapeDb.mark_snapshot_started(stack_id, shape_handle),
+           true <- :ets.update_element(shape_meta_table(stack_id), shape_handle, {3, true}) do
         :ok
+      else
+        _ -> :error
       end
     end)
   end
