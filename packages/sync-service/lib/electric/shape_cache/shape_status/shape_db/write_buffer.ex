@@ -37,8 +37,8 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
   ## Shapes table key formats
 
   - `{:pending_count, integer}` - count of shapes pending addition
-  - `{{:shape, handle}, shape_binary, comparable_binary}` - shape data
-  - `{{:comparable, comparable_binary}, handle}` - reverse index for O(1) lookup
+  - `{{:shape, handle}, shape, comparable}` - shape data
+  - `{{:comparable, comparable}, handle}` - reverse index for O(1) lookup
   - `{{:tombstone, handle}, timestamp}` - handles marked for deletion
   """
 
@@ -99,11 +99,11 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
     shapes_table = shapes_table_name(stack_id)
 
     case :ets.lookup(shapes_table, {:shape, handle}) do
-      [{{:shape, ^handle}, shape_binary, _comparable}] ->
+      [{{:shape, ^handle}, shape, _comparable}] ->
         if :ets.member(shapes_table, {:tombstone, handle}) do
           :not_found
         else
-          {:ok, :erlang.binary_to_term(shape_binary)}
+          {:ok, shape}
         end
 
       [] ->
@@ -112,11 +112,11 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
   end
 
   @doc "Look up a handle by comparable shape binary. Returns {:ok, handle} or :not_found."
-  def lookup_handle(stack_id, comparable_binary) do
+  def lookup_handle(stack_id, comparable_shape) do
     shapes_table = shapes_table_name(stack_id)
 
-    case :ets.lookup(shapes_table, {:comparable, comparable_binary}) do
-      [{{:comparable, ^comparable_binary}, handle}] ->
+    case :ets.lookup(shapes_table, {:comparable, comparable_shape}) do
+      [{{:comparable, ^comparable_shape}, handle}] ->
         if :ets.member(shapes_table, {:tombstone, handle}), do: :not_found, else: {:ok, handle}
 
       [] ->
@@ -169,7 +169,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
     shapes_table_name(stack_id)
     |> :ets.match({{:shape, :"$1"}, :"$2", :_})
     |> Enum.reject(fn [handle, _] -> MapSet.member?(tombstones, handle) end)
-    |> Enum.map(fn [handle, shape_binary] -> {handle, :erlang.binary_to_term(shape_binary)} end)
+    |> Enum.map(fn [handle, shape] -> {handle, shape} end)
     |> Enum.sort_by(fn {handle, _} -> handle end)
   end
 
@@ -201,27 +201,28 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
   # Write functions
 
   @doc "Add a shape to the buffer"
-  def add_shape(stack_id, handle, shape_binary, comparable_binary, hash, relations) do
+  def add_shape(stack_id, handle, shape, comparable, hash, relations) do
     shapes_table = shapes_table_name(stack_id)
     ops_table = operations_table_name(stack_id)
     ts = op_key()
 
-    true =
-      :ets.insert(shapes_table, [
-        {{:shape, handle}, shape_binary, comparable_binary},
-        {{:comparable, comparable_binary}, handle}
-      ])
+    if :ets.insert_new(shapes_table, [
+         {{:shape, handle}, shape, comparable},
+         {{:comparable, comparable}, handle}
+       ]) do
+      :ets.update_counter(shapes_table, :count_add, 1)
 
-    :ets.update_counter(shapes_table, :count_add, 1)
+      # Queue operation for SQLite (contains full data including hash and relations)
+      true =
+        :ets.insert(
+          ops_table,
+          {ts, {:add, handle, shape, comparable, hash, relations}, false}
+        )
 
-    # Queue operation for SQLite (contains full data including hash and relations)
-    true =
-      :ets.insert(
-        ops_table,
-        {ts, {:add, handle, shape_binary, comparable_binary, hash, relations}, false}
-      )
-
-    :ok
+      :ok
+    else
+      {:error, "duplicate shape #{handle} #{inspect(shape)}"}
+    end
   end
 
   @doc "Mark a shape for removal"
@@ -233,8 +234,8 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
     case :ets.insert_new(shapes_table, {{:tombstone, handle}, ts}) do
       true ->
         case :ets.lookup(shapes_table, {:shape, handle}) do
-          [{{:shape, ^handle}, _shape_binary, comparable_binary}] ->
-            :ets.delete(shapes_table, {:comparable, comparable_binary})
+          [{{:shape, ^handle}, _shape, comparable}] ->
+            :ets.delete(shapes_table, {:comparable, comparable})
 
           [] ->
             :ok
@@ -380,9 +381,9 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
           :ok ->
             Enum.each(entries, fn {ts, op} ->
               case op do
-                {:add, handle, _shape_binary, comparable_binary, _hash, _relations} ->
+                {:add, handle, _shape, comparable, _hash, _relations} ->
                   :ets.delete(shapes_table, {:shape, handle})
-                  :ets.delete(shapes_table, {:comparable, comparable_binary})
+                  :ets.delete(shapes_table, {:comparable, comparable})
                   :ets.update_counter(shapes_table, :count_add, {2, -1, 0, 0})
                   {:add, handle}
 
@@ -432,10 +433,8 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
   defp do_batch_write(stack_id, entries) do
     Connection.checkout_write!(stack_id, :batch_write, fn conn ->
       Enum.each(entries, fn
-        {_ts, {:add, handle, shape_binary, comparable_binary, hash, relations}} ->
-          shape = :erlang.binary_to_term(shape_binary)
-          comparable_shape = :erlang.binary_to_term(comparable_binary)
-          :ok = Query.add_shape(conn, handle, shape, comparable_shape, hash, relations)
+        {_ts, {:add, handle, shape, comparable, hash, relations}} ->
+          :ok = Query.add_shape(conn, handle, shape, comparable, hash, relations)
 
         {_ts, {:remove, handle}} ->
           :ok = Query.remove_shape(conn, handle)

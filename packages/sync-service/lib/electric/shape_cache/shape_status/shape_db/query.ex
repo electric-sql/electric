@@ -285,5 +285,5 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Query do
     end
   end
 
-  defp term_to_binary(term), do: :erlang.term_to_binary(term, [:deterministic])
+  def term_to_binary(term), do: :erlang.term_to_binary(term, [:deterministic])
 end

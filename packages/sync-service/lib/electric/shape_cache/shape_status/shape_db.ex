@@ -40,20 +40,20 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb do
       when is_stack_id(stack_id) and is_shape_handle(shape_handle) do
     {comparable_shape, shape_hash} = Shape.comparable_hash(shape)
     relations = Shape.list_relations(shape)
-    shape_binary = :erlang.term_to_binary(shape)
-    comparable_binary = :erlang.term_to_binary(comparable_shape)
+    # shape_binary = :erlang.term_to_binary(shape)
+    # comparable_binary = :erlang.term_to_binary(comparable_shape)
 
-    :ok =
-      WriteBuffer.add_shape(
-        stack_id,
-        shape_handle,
-        shape_binary,
-        comparable_binary,
-        shape_hash,
-        relations
-      )
-
-    {:ok, shape_hash}
+    with :ok <-
+           WriteBuffer.add_shape(
+             stack_id,
+             shape_handle,
+             shape,
+             comparable_shape,
+             shape_hash,
+             relations
+           ) do
+      {:ok, shape_hash}
+    end
   end
 
   def remove_shape(stack_id, shape_handle) when is_stack_id(stack_id) do
@@ -91,9 +91,8 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb do
   """
   def handle_for_shape(stack_id, %Shape{} = shape) when is_stack_id(stack_id) do
     {comparable_shape, _shape_hash} = Shape.comparable_hash(shape)
-    comparable_binary = :erlang.term_to_binary(comparable_shape)
 
-    case WriteBuffer.lookup_handle(stack_id, comparable_binary) do
+    case WriteBuffer.lookup_handle(stack_id, comparable_shape) do
       {:ok, handle} ->
         {:ok, handle}
 
