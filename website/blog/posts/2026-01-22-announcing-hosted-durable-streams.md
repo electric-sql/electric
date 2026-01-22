@@ -43,6 +43,12 @@ Every write persists synchronously to Cloudflare's distributed storage before ac
 
 This primitive turns out to be exactly what multi-agent and multi-user systems need. Shared mutable state breaks down when you have three agents and two users all updating at once. Request-response doesn't work when every participant needs to see every tool call. A shared log that everyone can read, resume, and react to is the only coordination primitive that survives multiplayer. We call this pattern Durable Sessions—[read James' recent post about it](/blog/2026/01/12/durable-sessions-for-collaborative-ai).
 
+Here's a demo—a multiplayer AI chat where multiple users and agents share a session with full history replay and seamless reconnection:
+
+<div class="embed-container" style="padding-bottom: 62.283737%">
+  <YoutubeEmbed video-id="81KXwxld7dw" />
+</div>
+
 With 0.2.0, the protocol is mature—we're ready for more people to build with it. For the full technical details, see the [0.1.0 announcement](/blog/2025/12/09/announcing-durable-streams).
 
 ## What's shipping
@@ -55,12 +61,6 @@ Hosted durable streams is now live on [Electric Cloud](https://electric-sql.com/
 - **Client libraries in 10 languages:** TypeScript, Python, Go, Rust, Java, Swift, PHP, Ruby, Elixir, and .NET—all passing full conformance.
 
 ## Get started
-
-Here's a demo of Durable Sessions—a multiplayer AI chat where multiple users and agents share a session with full history replay and seamless reconnection:
-
-<div class="embed-container" style="padding-bottom: 62.283737%">
-  <YoutubeEmbed video-id="81KXwxld7dw" />
-</div>
 
 Sign up for [Electric Cloud](https://electric-sql.com/product/cloud) and create a service. Then create your first stream:
 
