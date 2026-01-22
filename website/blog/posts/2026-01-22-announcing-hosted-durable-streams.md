@@ -27,7 +27,7 @@ We spent 3 years building a Postgres-native sync engine. Along the way, we reali
 
 A year ago, AI apps barely worked because models weren't good enough. Now Claude Code refactors across fifty files and the tests still pass. Cursor is the new VSCode. The models are great.
 
-Now infrastructure is the bottleneck—but it's not just infrastructure, it's a shift in *coordination model*. Request/response assumes two parties taking turns. Agentic apps have three agents and two users all acting at once. That's not a better HTTP client—that's a different primitive. And people are cobbling together Redis, WebSockets, and retry logic to build it.
+Now infrastructure is the bottleneck—but it's not just infrastructure, it's a shift in *coordination model*. Request/response assumes two parties taking turns. Agentic apps have three agents and two users all acting at once. That requires a different primitive. And people are cobbling together Redis, WebSockets, and retry logic to build it.
 
 So it turns out we'd built exactly the right primitive for this moment: durable streams. Persistent, resumable event streams over HTTP.
 
@@ -39,7 +39,7 @@ A durable stream is an addressable, append-only log with its own URL. Clients ca
 
 Existing streaming infrastructure wasn't designed for this. WebSockets and SSE are ephemeral. Kafka and Redis Streams are backend primitives—durable, but you're still building the client protocol yourself.
 
-This primitive turns out to be exactly what multi-agent and multi-user systems need. Shared mutable state breaks down when you have three agents and two users all updating at once. Request-response doesn't work when every participant needs to see every tool call. A shared log that everyone can read, resume, and react to is the only coordination primitive that survives multiplayer. We call this pattern Durable Sessions—[read James' recent post about it](/blog/2026/01/12/durable-sessions-for-collaborative-ai).
+This is the coordination model that multi-agent and multi-user systems need. A shared log that everyone can read, resume, and react to. We call this pattern Durable Sessions—[read James' recent post about it](/blog/2026/01/12/durable-sessions-for-collaborative-ai).
 
 Here's a demo—a multiplayer AI chat where multiple users and agents share a session with full history replay and seamless reconnection:
 
