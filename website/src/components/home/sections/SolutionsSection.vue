@@ -100,7 +100,7 @@ const solutions = [
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 24px;
-  margin: 40px 0px;
+  margin: 36px 0px 42px;
   align-items: stretch;
 }
 

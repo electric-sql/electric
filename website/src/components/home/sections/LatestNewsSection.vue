@@ -8,17 +8,13 @@ const posts = data.filter((post) => post.homepage !== false).slice(0, 4)
 
 const actions = [
   {
-    href: 'https://dashboard.electric-sql.cloud/',
-    text: 'Subscribe',
+    href: '/blog',
+    text: 'Blog',
     theme: 'brand',
   },
   {
-    href: '/blog',
-    text: 'Blog',
-  },
-  {
-    href: 'https://bsky.app/profile/electric-sql.com',
-    text: 'Follow',
+    href: 'https://x.com/ElectricSQL',
+    text: 'Follow @ElectricSQL',
   },
 ]
 </script>
@@ -75,7 +71,7 @@ const actions = [
     <div class="listing">
       <BlogPostListing v-for="post in posts" :key="post.slug" :post="post" />
     </div>
-    <template #outline>
+    <!--template #outline>
       Follow
       <a href="https://bsky.app/profile/electric-sql.com"> @electric-sql.com</a>
       on Bluesky and&nbsp;<a href="https://x.com/ElectricSQL"> @ElectricSQL</a>
@@ -83,6 +79,6 @@ const actions = [
     </template>
     <template #outbody>
       <BlueskyPosts did="did:plc:kuwyhfwegvfzugctjd6cwrlg" :limit="2" />
-    </template>
+    </template-->
   </Section>
 </template>
