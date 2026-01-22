@@ -734,6 +734,22 @@ defmodule Electric.Shapes.Api do
       {^shape_handle, latest_log_offset} when is_log_offset_lt(last_offset, latest_log_offset) ->
         send(self(), {ref, :new_changes, latest_log_offset})
 
+      {^shape_handle, _latest_log_offset} ->
+        # Fix for issue #3760: Handle offset regression during shape invalidation.
+        #
+        # This case handles a race condition where:
+        # 1. Shape invalidation spawns an async cleanup task
+        # 2. Between consumer termination and async cleanup completion, the writer
+        #    ETS gets deleted while ShapeStatus retains the shape entry
+        # 3. A pending API request queries the shape
+        # 4. Validation succeeds (shape exists in ShapeStatus), but metadata reading
+        #    fails, causing resolve_shape_handle to return LogOffset.last_before_real_offsets()
+        # 5. This offset is less than the client's stored offset (offset regression)
+        #
+        # When the offset goes backwards, the shape has effectively been invalidated
+        # and the client should refetch from the beginning.
+        send(self(), {ref, :shape_rotation})
+
       {other_shape_handle, _} when other_shape_handle != shape_handle ->
         send(self(), {ref, :shape_rotation, other_shape_handle})
 
