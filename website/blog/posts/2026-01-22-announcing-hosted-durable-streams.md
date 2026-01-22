@@ -25,21 +25,19 @@ import YoutubeEmbed from '../../src/components/YoutubeEmbed.vue'
 
 We spent 3 years building a Postgres-native sync engine. Along the way, we realized the most important thing we built wasn't Postgres sync—it was the primitive underneath.
 
-A year ago, AI apps barely worked because models couldn't follow instructions. That's solved. Claude Code refactors across fifty files and the tests still pass. Cursor is the new VSCode. The models are great.
+A year ago, AI apps barely worked because models weren't good enough. Now Claude Code refactors across fifty files and the tests still pass. Cursor is the new VSCode. The models are great.
 
-Now infrastructure is the bottleneck. Token streams that resume when your train emerges from the tunnel, sessions that survive a refresh, agents coordinating without race conditions—none of this works out of the box. People cobble together Redis, WebSockets, and retry logic every time.
+Now infrastructure is the bottleneck. Token streams that are reliable, sessions that survive a refresh, agents coordinating without race conditions—none of this works out of the box. People are cobbling together Redis, WebSockets, and retry logic.
 
-Turns out we'd built exactly the right primitive: durable streams. Persistent, resumable event streams over HTTP.
+So it turns out we'd built exactly the right primitive for this moment: durable streams. Persistent, resumable event streams over HTTP.
 
-We [released the spec as 0.1.0](/blog/2025/12/09/announcing-durable-streams) in December. Today we're announcing 0.2.0—with idempotent producers and exactly-once semantics—and hosted durable streams on Electric Cloud.
+We first [released the Durable Streams protocol](/blog/2025/12/09/announcing-durable-streams) in December. Today we're announcing 0.2.0—with idempotent producers and exactly-once semantics—*and* hosted durable streams on Electric Cloud.
 
 ## How it works
 
-A durable stream is an addressable, append-only log with its own URL. Clients can read from any position, tail for live updates, or do both in one request—catch up on history, then seamlessly switch to real-time.
+A durable stream is an addressable, append-only log with its own URL. Clients can read from any position and tail for live updates.
 
-Existing streaming infrastructure wasn't designed for this. WebSockets and SSE are ephemeral. Kafka and Redis Streams are backend primitives—durable, but you're still building the client protocol yourself. Durable streams is the protocol: persistent, replayable, HTTP-native, with catch-up-and-tail built in.
-
-Every write persists synchronously to Cloudflare's distributed storage before acknowledgment—zero data-loss window.
+Existing streaming infrastructure wasn't designed for this. WebSockets and SSE are ephemeral. Kafka and Redis Streams are backend primitives—durable, but you're still building the client protocol yourself.
 
 This primitive turns out to be exactly what multi-agent and multi-user systems need. Shared mutable state breaks down when you have three agents and two users all updating at once. Request-response doesn't work when every participant needs to see every tool call. A shared log that everyone can read, resume, and react to is the only coordination primitive that survives multiplayer. We call this pattern Durable Sessions—[read James' recent post about it](/blog/2026/01/12/durable-sessions-for-collaborative-ai).
 
@@ -75,7 +73,6 @@ Write to it, read from it, tail for live updates—all plain HTTP.
 
 <!-- TODO: Add CLI demo video showing stream creation and writes -->
 
-We're early—docs are sparse, guides are coming, and you'll be figuring some things out alongside us.
 
 **Coming soon:** Drop-in AI SDK transports for Vercel AI SDK and TanStack AI, Yjs support for collaborative editing, and an HTTP proxy that makes your existing token streams resumable with no code changes.
 
@@ -83,6 +80,8 @@ We're early—docs are sparse, guides are coming, and you'll be figuring some th
 
 You've written the agent loop. You've debugged the WebSocket reconnection race. You've wondered if Redis PUBLISH actually delivered that message. You can stop now.
 
-The protocol is production-ready. What we're still learning is ergonomics. What does it feel like to build with this? What do you wish it did? Tell us on Discord.
+We're early—docs are sparse, guides are coming, and you'll be figuring some things out alongside us.
+
+But the protocol is production-ready. What we're still learning is ergonomics. What does it feel like to build with this? What do you wish it did? We're all learning together how to build sophisticated, malleable, agentic applications.
 
 [Get started](https://electric-sql.com/product/cloud) · [Discord](https://discord.electric-sql.com)
