@@ -4,6 +4,8 @@ defmodule Electric.Integration.OracleViewTest do
 
   These tests verify specific scenarios with explicit shapes and mutations
   to ensure coverage of important edge cases.
+
+  Run with: mix test --include oracle
   """
 
   use ExUnit.Case, async: false
@@ -13,6 +15,8 @@ defmodule Electric.Integration.OracleViewTest do
   import Support.IntegrationSetup
   import Support.OracleHarness
 
+  @moduletag :oracle
+  @moduletag timeout: :infinity
   @moduletag :tmp_dir
 
   setup [:with_unique_db]
