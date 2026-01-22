@@ -261,7 +261,7 @@ defmodule Support.OracleHarness.StandardSchema do
 
         %{
           where: "level_3_id IN (SELECT id FROM level_3 WHERE active = #{active})",
-          optimized: false
+          optimized: true
         }
 
       2 ->
@@ -270,7 +270,7 @@ defmodule Support.OracleHarness.StandardSchema do
 
         %{
           where: "level_3_id IN (SELECT id FROM level_3 WHERE level_2_id = '#{l2_id}')",
-          optimized: false
+          optimized: true
         }
     end
   end
@@ -285,7 +285,7 @@ defmodule Support.OracleHarness.StandardSchema do
         %{
           where:
             "level_3_id IN (SELECT id FROM level_3 WHERE active = #{active_l3} AND level_2_id IN (SELECT id FROM level_2 WHERE active = #{active_l2}))",
-          optimized: false
+          optimized: true
         }
 
       2 ->
@@ -295,7 +295,7 @@ defmodule Support.OracleHarness.StandardSchema do
         %{
           where:
             "level_3_id IN (SELECT id FROM level_3 WHERE level_2_id IN (SELECT id FROM level_2 WHERE level_1_id = '#{l1_id}'))",
-          optimized: false
+          optimized: true
         }
     end
   end
@@ -306,7 +306,7 @@ defmodule Support.OracleHarness.StandardSchema do
     %{
       where:
         "level_3_id IN (SELECT id FROM level_3 WHERE level_2_id IN (SELECT id FROM level_2 WHERE level_1_id IN (SELECT id FROM level_1 WHERE active = #{active_l1})))",
-      optimized: false
+      optimized: true
     }
   end
 
@@ -319,21 +319,21 @@ defmodule Support.OracleHarness.StandardSchema do
         %{
           where:
             "level_3_id IN (SELECT id FROM level_3 WHERE id IN (SELECT level_3_id FROM level_3_tags WHERE tag = '#{tag}'))",
-          optimized: false
+          optimized: true
         }
 
       2 ->
         %{
           where:
             "level_3_id IN (SELECT id FROM level_3 WHERE level_2_id IN (SELECT id FROM level_2 WHERE id IN (SELECT level_2_id FROM level_2_tags WHERE tag = '#{tag}')))",
-          optimized: false
+          optimized: true
         }
 
       3 ->
         %{
           where:
             "level_3_id IN (SELECT id FROM level_3 WHERE level_2_id IN (SELECT id FROM level_2 WHERE level_1_id IN (SELECT id FROM level_1 WHERE id IN (SELECT level_1_id FROM level_1_tags WHERE tag = '#{tag}'))))",
-          optimized: false
+          optimized: true
         }
     end
   end
