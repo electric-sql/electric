@@ -331,13 +331,11 @@ defmodule Electric.Shapes.Consumer.Materializer do
             has_tag_updates = removed_move_tags != []
 
             if columns_present or has_tag_updates do
-              # Always update tag_indices if there are tag updates
               tag_indices =
                 tag_indices
                 |> remove_row_from_tag_indices(key, removed_move_tags)
                 |> add_row_to_tag_indices(key, move_tags)
 
-              # Only update value_counts if the selected column value actually changed
               if columns_present do
                 {value, original_string} = cast!(record, state)
                 old_value = Map.fetch!(index, key)
