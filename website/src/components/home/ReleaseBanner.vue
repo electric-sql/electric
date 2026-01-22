@@ -3,7 +3,7 @@
     <div class="container">
       <div>
         🔥
-        <a href="/blog/2025/07/29/local-first-sync-with-tanstack-db">
+        <a href="/blog/2025/07/29/super-fast-apps-on-sync-with-tanstack-db">
           Introducing Tanstack DB</a
         >
         &ndash;

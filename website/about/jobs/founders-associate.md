@@ -27,7 +27,7 @@ active: false
 
 You are a generalist and future founder. You want to join an existing, Seed-stage startup with product market fit to work directly with the founding team and grow a startup into and through the Series stages.
 
-[Electric](/) is a devtools startup. We solve [reactive, real-time sync](/blog/2025/07/29/local-first-sync-with-tanstack-db) across client and server. We have a large developer community, millions of downloads a week, high profile customers and [top-tier investors](/about/team#investors), including the founders of companies like Supabase and Heroku. Our software is built into platforms like Firebase, Prisma and TanStack. Our cloud product is growing 7% week on week.
+[Electric](/) is a devtools startup. We solve [reactive, real-time sync](/blog/2025/07/29/super-fast-apps-on-sync-with-tanstack-db) across client and server. We have a large developer community, millions of downloads a week, high profile customers and [top-tier investors](/about/team#investors), including the founders of companies like Supabase and Heroku. Our software is built into platforms like Firebase, Prisma and TanStack. Our cloud product is growing 7% week on week.
 
 This is a hands-on, operational role. Your job will be to take over and manage as much of the company operations as you can. You'll work directly with [the founders and founding team](/about/team). Reporting to and working closely with the CEO. You must be the opposite of a prevaricator. You have to drive and get stuff done yourself. As the company grows, your role will grow. There is no ceiling here.
 

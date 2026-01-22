@@ -61,7 +61,7 @@ const solutions = [
     <template #title>Unlock&nbsp;collaboration, unlock&nbsp;adoption</template>
     <template #tagline>
       Sync is the magic behind
-      <a href="/blog/2025/07/29/local-first-sync-with-tanstack-db">
+      <a href="/blog/2025/07/29/super-fast-apps-on-sync-with-tanstack-db">
         fast, modern software</a>
       and the&nbsp;key to building
       <span class="no-wrap">

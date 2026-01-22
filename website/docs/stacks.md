@@ -235,7 +235,7 @@ You can learn more about these by following <!-- the Tutorial and -->[Deployment
 
 ### Choosing a stack
 
-We recommend using [TanStack DB](#tanstack-db) for web and mobile app development. It's super fast, lightweight, type-safe and gives you an [optimal, end-to-end, local-first sync stack](/blog/2025/07/29/local-first-sync-with-tanstack-db).
+We recommend using [TanStack DB](#tanstack-db) for web and mobile app development. It's super fast, lightweight, type-safe and gives you an [optimal, end-to-end, local-first sync stack](/blog/2025/07/29/super-fast-apps-on-sync-with-tanstack-db).
 
 You can also combine TanStack DB with [Phoenix.Sync](#phoenix-sync) if you're building agentic systems with Elixir or looking for a batteries-included backend framework.
 
@@ -267,7 +267,7 @@ For example, sync into [LiveStore](https://docs.livestore.dev/reference/syncing/
 
 [Tanstack DB](https://tanstack.com/db) is a reactive client store for [building super fast apps on&nbsp;sync](https://tanstack.com/blog/tanstack-db-0.1-the-embedded-client-database-for-tanstack-query).
 
-[Paired with Electric](/blog/2025/07/29/local-first-sync-with-tanstack-db) and [TanStack Start](https://tanstack.com/start), it gives you an end-to-end sync stack that's type-safe, declarative, incrementally adoptable and insanely fast.
+[Paired with Electric](/blog/2025/07/29/super-fast-apps-on-sync-with-tanstack-db) and [TanStack Start](https://tanstack.com/start), it gives you an end-to-end sync stack that's type-safe, declarative, incrementally adoptable and insanely fast.
 
 ### End-to-end Typescript
 
@@ -294,7 +294,7 @@ Components use [live queries](https://tanstack.com/db/latest/docs/guides/live-qu
 
 #### More information
 
-- [Local-first sync with TanStack DB and Electric](/blog/2025/07/29/local-first-sync-with-tanstack-db)
+- [Local-first sync with TanStack DB and Electric](/blog/2025/07/29/super-fast-apps-on-sync-with-tanstack-db)
 - [TanStack DB, the embedded client database for TanStack Query](https://tanstack.com/blog/tanstack-db-0.1-the-embedded-client-database-for-tanstack-query)
 - [An interactive guide to TanStack DB](https://frontendatscale.com/blog/tanstack-db)
 

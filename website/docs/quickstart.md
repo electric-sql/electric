@@ -14,7 +14,7 @@ outline: 2
 
 # Quickstart
 
-Let's make a super-fast, reactive web app using <span class="no-wrap-xs">[Electric with TanStack&nbsp;DB](/blog/2025/07/29/local-first-sync-with-tanstack-db)</span>.
+Let's make a super-fast, reactive web app using <span class="no-wrap-xs">[Electric with TanStack&nbsp;DB](/blog/2025/07/29/super-fast-apps-on-sync-with-tanstack-db)</span>.
 
 <div style="max-width: 632px">
 
@@ -170,5 +170,5 @@ See the [starter template README](https://github.com/electric-sql/electric/blob/
 ## Next steps
 
 <!-- - follow the [Tutorial](/docs/tutorial) to evolve your starter into a production-quality app. -->
-- learn more about [Local-first sync with Electric and TanStack DB](/blog/2025/07/29/local-first-sync-with-tanstack-db)
+- learn more about [Local-first sync with Electric and TanStack DB](/blog/2025/07/29/super-fast-apps-on-sync-with-tanstack-db)
 - see the [Interactive guide to TanStack DB](https://frontendatscale.com/blog/tanstack-db).
