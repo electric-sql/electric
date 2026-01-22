@@ -29,7 +29,7 @@ A year ago, AI apps barely worked because models couldn't follow instructions. T
 
 Now infrastructure is the bottleneck. Token streams that resume when your train emerges from the tunnel, sessions that survive a refresh, agents coordinating without race conditions—none of this works out of the box. People cobble together Redis, WebSockets, and retry logic every time.
 
-Turns out we'd built exactly the right primitive: durable streams. Crash-safe, resumable event streams over HTTP.
+Turns out we'd built exactly the right primitive: durable streams. Persistent, resumable event streams over HTTP.
 
 We [released the spec as 0.1.0](/blog/2025/12/09/announcing-durable-streams) in December. Today we're announcing 0.2.0—with idempotent producers and exactly-once semantics—and hosted durable streams on Electric Cloud.
 
@@ -41,6 +41,8 @@ Existing streaming infrastructure wasn't designed for this. WebSockets and SSE a
 
 Every write persists synchronously to Cloudflare's distributed storage before acknowledgment—zero data-loss window.
 
+This shape turns out to be exactly what multi-agent and multi-user systems need. Shared mutable state breaks down when you have three agents and two users all updating at once. Request-response doesn't work when every participant needs to see every tool call. A shared log that everyone can read, resume, and react to is the only coordination primitive that survives multiplayer.
+
 The details matter—readers don't hit origin, writes are idempotent, the protocol has layered semantics for different data shapes—but we covered all that in the [0.1.0 announcement](/blog/2025/12/09/announcing-durable-streams). What's new: the spec is mature, it's hosted, and it's the foundation for everything we're building next.
 
 ## What's shipping
@@ -51,17 +53,10 @@ Hosted durable streams is now live on [Electric Cloud](https://electric-sql.com/
 - **Simple pricing.** Reads are free. 5 million writes/month free, then pay as you scale.
 - **400+ conformance tests** (192 server, 212 client) ensuring protocol correctness.
 - **Client libraries in 10 languages:** TypeScript, Python, Go, Rust, Java, Swift, PHP, Ruby, Elixir, and .NET—all passing full conformance.
-- **AI SDK transports** for Vercel AI SDK and TanStack AI. Resumable token streaming without changing your backend.
 
 ## Get started
 
-You don't have to rearchitect everything:
-
-**Level one: Drop-in proxy.** Add our HTTP proxy with AI SDK transports to your existing stack. Your token streams become resumable—no code changes. You keep your existing backend, database, and deployment. Good for: making an existing AI app resumable without rearchitecting.
-
-**Level two: Durable sessions.** Build directly on durable streams as your persistence layer. Persistent, multiplayer agent sessions that survive refreshes and maintain full history. Good for: new builds, multi-agent coordination, or apps where every participant needs to see every event. [Read more →](/blog/2026/01/12/durable-sessions-for-collaborative-ai)
-
-The demo below shows Level two in action—multiple users and agents sharing a durable session, with full history replay and seamless reconnection:
+Here's a multiplayer AI chat built on durable streams—multiple users and agents sharing a session, with full history replay and seamless reconnection:
 
 <div class="embed-container" style="padding-bottom: 62.283737%">
   <YoutubeEmbed video-id="81KXwxld7dw" />
@@ -81,6 +76,8 @@ Write to it, read from it, tail for live updates—all plain HTTP.
 <!-- TODO: Add CLI demo video showing stream creation and writes -->
 
 We're early—docs are sparse, guides are coming, and you'll be figuring some things out alongside us.
+
+**Coming soon:** Drop-in AI SDK transports for Vercel AI SDK and TanStack AI, Yjs support for collaborative editing, and an HTTP proxy that makes your existing token streams resumable with no code changes.
 
 ---
 
