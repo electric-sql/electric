@@ -564,9 +564,14 @@ defmodule Support.OracleHarness do
 
     log("Running #{length(mutations)} mutations")
 
-    checkers =
-      Enum.reduce(mutations, checkers, fn mutation, checkers ->
-        run_mutation_cycle(ctx, checkers, mutation, timeout_ms)
+    # Get initial oracle state to pass to first mutation
+    initial_oracle = query_all_oracles_parallel(checkers)
+
+    # Pass oracle_after from each mutation as oracle_before for the next one
+    # This cuts oracle queries in half since oracle_before is typically the same as previous oracle_after
+    {checkers, _final_oracle} =
+      Enum.reduce(mutations, {checkers, initial_oracle}, fn mutation, {checkers, prev_oracle} ->
+        run_mutation_cycle(ctx, checkers, mutation, timeout_ms, prev_oracle)
       end)
 
     stop_checkers(checkers)
@@ -610,12 +615,16 @@ defmodule Support.OracleHarness do
 
     checkers = await_all_up_to_date(checkers, timeout_ms, "initial snapshot")
 
-    checkers =
+    # Get initial oracle state to pass to first mutation
+    initial_oracle = query_all_oracles_parallel(checkers)
+
+    # Pass oracle_after from each mutation as oracle_before for the next one
+    {checkers, _final_oracle} =
       case_spec.mutations
-      |> Enum.reduce(checkers, fn mutation, checkers ->
-        checkers = run_mutation_cycle(ctx, checkers, mutation, timeout_ms)
+      |> Enum.reduce({checkers, initial_oracle}, fn mutation, {checkers, prev_oracle} ->
+        {checkers, oracle_after} = run_mutation_cycle(ctx, checkers, mutation, timeout_ms, prev_oracle)
         log("  mutation=#{mutation.name} PASS")
-        checkers
+        {checkers, oracle_after}
       end)
 
     stop_checkers(checkers)
@@ -748,17 +757,15 @@ defmodule Support.OracleHarness do
     end)
   end
 
-  defp run_mutation_cycle(ctx, checkers, mutation, timeout_ms) do
-    # Phase 1: Query oracle_before in parallel (oracle queries can be parallelized)
-    oracle_before = query_all_oracles_parallel(checkers)
-
-    # Phase 2: Apply mutation
+  defp run_mutation_cycle(ctx, checkers, mutation, timeout_ms, oracle_before) do
+    # Phase 1: Apply mutation
     apply_sql(ctx, mutation.sql)
 
-    # Phase 3: Wait for all clients to be up_to_date (central receive loop)
+    # Phase 2: Wait for all clients to be up_to_date (central receive loop)
     checkers = await_all_up_to_date(checkers, timeout_ms, mutation.name)
 
-    # Phase 4: Query oracle_after and verify in parallel
+    # Phase 3: Query oracle_after and verify in parallel
+    # Returns {checkers, oracle_after} so oracle_after can be reused as next oracle_before
     verify_all_parallel(checkers, mutation, oracle_before)
   end
 
@@ -773,36 +780,41 @@ defmodule Support.OracleHarness do
   end
 
   defp verify_all_parallel(checkers, mutation, oracle_before) do
-    checkers
-    |> Task.async_stream(
-      fn checker ->
-        oracle_after = ShapeChecker.query_oracle(checker)
+    results =
+      checkers
+      |> Task.async_stream(
+        fn checker ->
+          oracle_after = ShapeChecker.query_oracle(checker)
 
-        ShapeChecker.assert_consistent!(
-          checker,
-          mutation.name,
-          oracle_before[checker.name],
-          oracle_after
-        )
+          ShapeChecker.assert_consistent!(
+            checker,
+            mutation.name,
+            oracle_before[checker.name],
+            oracle_after
+          )
 
-        checker
-      end,
-      max_concurrency: length(checkers),
-      timeout: 30_000,
-      on_timeout: :kill_task
-    )
-    |> Enum.map(fn
-      {:ok, checker} ->
-        checker
+          {checker, oracle_after}
+        end,
+        max_concurrency: length(checkers),
+        timeout: 30_000,
+        on_timeout: :kill_task
+      )
+      |> Enum.map(fn
+        {:ok, {checker, oracle_after}} ->
+          {checker, oracle_after}
 
-      {:exit, :timeout} ->
-        import ExUnit.Assertions
-        flunk("Oracle query timeout in mutation=#{mutation.name}")
+        {:exit, :timeout} ->
+          import ExUnit.Assertions
+          flunk("Oracle query timeout in mutation=#{mutation.name}")
 
-      {:exit, reason} ->
-        import ExUnit.Assertions
-        flunk("Checker failed in mutation=#{mutation.name}: #{inspect(reason)}")
-    end)
+        {:exit, reason} ->
+          import ExUnit.Assertions
+          flunk("Checker failed in mutation=#{mutation.name}: #{inspect(reason)}")
+      end)
+
+    checkers = Enum.map(results, fn {checker, _oracle} -> checker end)
+    oracle_after = Map.new(results, fn {checker, oracle} -> {checker.name, oracle} end)
+    {checkers, oracle_after}
   end
 
   # ----------------------------------------------------------------------------
