@@ -26,6 +26,10 @@ defmodule Support.OracleHarness do
   @default_shape_count 100
   @default_mutation_count 100
   @default_oracle_pool_size 50
+  # Max time to wait for changes after receiving up_to_date without changes (in ms)
+  # This handles the case where LONG_POLL_TIMEOUT is short and Electric hasn't
+  # processed changes yet. With 100ms timeout, this gives us 20 retries.
+  @default_retry_window_ms 2_000
 
   # Standard IDs for seeded data
   @level_1_ids Enum.map(1..5, &"l1-#{&1}")
@@ -611,14 +615,24 @@ defmodule Support.OracleHarness do
 
   # Central message handling - messages are sent to the main process,
   # so we need a central receive loop (can't parallelize this part)
+  #
+  # The retry logic handles the case where LONG_POLL_TIMEOUT is short (e.g., 100ms)
+  # and Electric hasn't processed changes yet. When up_to_date is received without
+  # any changes, we retry for up to RETRY_WINDOW_MS before considering it truly done.
+  # This is time-based so it works with any LONG_POLL_TIMEOUT setting.
   defp await_all_up_to_date(checkers, timeout_ms, step_name) do
     import ExUnit.Assertions
 
+    retry_window_ms = env_int("RETRY_WINDOW_MS") || @default_retry_window_ms
+
     pid_to_checker = Map.new(checkers, &{&1.pid, &1})
     pending = MapSet.new(Enum.map(checkers, & &1.pid))
+    # Track retry start time and whether changes were received
+    # Format: %{pid => %{retry_start: nil | timestamp_ms, got_changes: false}}
+    retry_state = Map.new(Enum.map(checkers, & &1.pid), fn pid -> {pid, %{retry_start: nil, got_changes: false}} end)
     start_ms = System.monotonic_time(:millisecond)
 
-    updated_checkers = do_await_all(checkers, pid_to_checker, pending, timeout_ms, start_ms)
+    updated_checkers = do_await_all(checkers, pid_to_checker, pending, retry_state, retry_window_ms, timeout_ms, start_ms)
 
     # Check for timeouts
     Enum.each(updated_checkers, fn checker ->
@@ -630,7 +644,7 @@ defmodule Support.OracleHarness do
     updated_checkers
   end
 
-  defp do_await_all(checkers, pid_to_checker, pending, timeout_ms, start_ms) do
+  defp do_await_all(checkers, pid_to_checker, pending, retry_state, retry_window_ms, timeout_ms, start_ms) do
     if MapSet.size(pending) == 0 do
       checkers
     else
@@ -642,10 +656,12 @@ defmodule Support.OracleHarness do
           case Map.get(pid_to_checker, pid) do
             nil ->
               # Unknown pid, ignore
-              do_await_all(checkers, pid_to_checker, pending, timeout_ms, start_ms)
+              do_await_all(checkers, pid_to_checker, pending, retry_state, retry_window_ms, timeout_ms, start_ms)
 
             checker ->
-              {updated_checker, done?} = handle_checker_message(checker, msg)
+              {updated_checker, updated_retry_state, done?} =
+                handle_checker_message(checker, msg, retry_state, retry_window_ms)
+
               updated_checkers = update_checker_in_list(checkers, updated_checker)
               updated_pid_to_checker = Map.put(pid_to_checker, pid, updated_checker)
               pending = if done?, do: MapSet.delete(pending, pid), else: pending
@@ -654,6 +670,8 @@ defmodule Support.OracleHarness do
                 updated_checkers,
                 updated_pid_to_checker,
                 pending,
+                updated_retry_state,
+                retry_window_ms,
                 timeout_ms,
                 start_ms
               )
@@ -672,31 +690,65 @@ defmodule Support.OracleHarness do
     end
   end
 
-  defp handle_checker_message(checker, %Electric.Client.Message.ChangeMessage{} = msg) do
+  defp handle_checker_message(checker, %Electric.Client.Message.ChangeMessage{} = msg, retry_state, _retry_window_ms) do
     updated = ShapeChecker.apply_message(checker, msg)
-    {updated, false}
+    # Got a change, mark that we received changes and reset retry timer
+    updated_retry_state = Map.put(retry_state, checker.pid, %{retry_start: nil, got_changes: true})
+    {updated, updated_retry_state, false}
   end
 
   defp handle_checker_message(checker, %Electric.Client.Message.ControlMessage{
          control: :up_to_date
-       }) do
-    {checker, true}
+       }, retry_state, retry_window_ms) do
+    state = Map.get(retry_state, checker.pid, %{retry_start: nil, got_changes: false})
+    now = System.monotonic_time(:millisecond)
+
+    cond do
+      # If we got changes since we started waiting, we're done
+      state.got_changes ->
+        {checker, retry_state, true}
+
+      # No changes received - check if oracle matches materialized state
+      # If they match, we're done (no changes expected). If they differ, retry.
+      true ->
+        oracle_rows = ShapeChecker.query_oracle(checker)
+        materialized = ShapeChecker.materialized_rows(checker)
+
+        if materialized == oracle_rows do
+          # Oracle matches - no changes expected or Electric already processed them
+          {checker, retry_state, true}
+        else
+          # Oracle differs - Electric hasn't processed changes yet
+          # Start or continue retry window
+          retry_start = state.retry_start || now
+
+          if now - retry_start >= retry_window_ms do
+            # Exceeded retry window - give up (will fail in verify step)
+            {checker, retry_state, true}
+          else
+            updated_retry_state = Map.put(retry_state, checker.pid, %{retry_start: retry_start, got_changes: false})
+            {checker, updated_retry_state, false}
+          end
+        end
+    end
   end
 
   defp handle_checker_message(checker, %Electric.Client.Message.ControlMessage{
          control: :must_refetch
-       }) do
+       }, retry_state, _retry_window_ms) do
     updated = %{checker | rows: %{}, must_refetch?: true}
-    {updated, false}
+    # Reset retry state after must_refetch
+    updated_retry_state = Map.put(retry_state, checker.pid, %{retry_start: nil, got_changes: false})
+    {updated, updated_retry_state, false}
   end
 
-  defp handle_checker_message(checker, %Electric.Client.Error{} = error) do
+  defp handle_checker_message(checker, %Electric.Client.Error{} = error, retry_state, _retry_window_ms) do
     updated = %{checker | error: error}
-    {updated, true}
+    {updated, retry_state, true}
   end
 
-  defp handle_checker_message(checker, _msg) do
-    {checker, false}
+  defp handle_checker_message(checker, _msg, retry_state, _retry_window_ms) do
+    {checker, retry_state, false}
   end
 
   defp update_checker_in_list(checkers, updated_checker) do
