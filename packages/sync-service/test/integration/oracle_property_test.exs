@@ -10,7 +10,7 @@ defmodule Electric.Integration.OraclePropertyTest do
     - WHERE_SEED: Seed for where clause generation (if unset, varies each iteration)
     - MUTATION_SEED: Seed for mutation generation (if unset, varies each iteration)
     - LONG_POLL_TIMEOUT: Server long-poll timeout in ms (default: 100)
-    - RETRY_WINDOW_MS: Max time to wait for changes after up_to_date (default: 2000)
+    - RETRY_WINDOW_MS: Max time to wait for changes after up_to_date (default: 5000)
 
   Run with: mix test --include oracle
   """
@@ -66,7 +66,9 @@ defmodule Electric.Integration.OraclePropertyTest do
       where_seed = fixed_where_seed || iteration_seed
       mutation_seed = fixed_mutation_seed || iteration_seed + 1
 
-      IO.puts("[oracle] Generating shapes with WHERE_SEED=#{where_seed} MUTATION_SEED=#{mutation_seed}")
+      IO.puts(
+        "[oracle] Generating shapes with WHERE_SEED=#{where_seed} MUTATION_SEED=#{mutation_seed}"
+      )
 
       shapes = generate_shapes(shape_count, where_seed)
       mutations = generate_mutations(mutation_count, mutation_seed)

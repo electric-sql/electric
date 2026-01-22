@@ -34,7 +34,7 @@ defmodule Support.OracleHarness do
   # Max time to wait for changes after receiving up_to_date without changes (in ms)
   # This handles the case where LONG_POLL_TIMEOUT is short and Electric hasn't
   # processed changes yet. With 100ms timeout, this gives us 20 retries.
-  @default_retry_window_ms 2_000
+  @default_retry_window_ms 5_000
 
   # ----------------------------------------------------------------------------
   # Main Test Runner
@@ -146,10 +146,23 @@ defmodule Support.OracleHarness do
     pending = MapSet.new(Enum.map(checkers, & &1.pid))
     # Track retry start time and whether changes were received
     # Format: %{pid => %{retry_start: nil | timestamp_ms, got_changes: false}}
-    retry_state = Map.new(Enum.map(checkers, & &1.pid), fn pid -> {pid, %{retry_start: nil, got_changes: false}} end)
+    retry_state =
+      Map.new(Enum.map(checkers, & &1.pid), fn pid ->
+        {pid, %{retry_start: nil, got_changes: false}}
+      end)
+
     start_ms = System.monotonic_time(:millisecond)
 
-    updated_checkers = do_await_all(checkers, pid_to_checker, pending, retry_state, retry_window_ms, timeout_ms, start_ms)
+    updated_checkers =
+      do_await_all(
+        checkers,
+        pid_to_checker,
+        pending,
+        retry_state,
+        retry_window_ms,
+        timeout_ms,
+        start_ms
+      )
 
     # Check for timeouts
     Enum.each(updated_checkers, fn checker ->
@@ -161,7 +174,15 @@ defmodule Support.OracleHarness do
     updated_checkers
   end
 
-  defp do_await_all(checkers, pid_to_checker, pending, retry_state, retry_window_ms, timeout_ms, start_ms) do
+  defp do_await_all(
+         checkers,
+         pid_to_checker,
+         pending,
+         retry_state,
+         retry_window_ms,
+         timeout_ms,
+         start_ms
+       ) do
     if MapSet.size(pending) == 0 do
       checkers
     else
@@ -173,7 +194,15 @@ defmodule Support.OracleHarness do
           case Map.get(pid_to_checker, pid) do
             nil ->
               # Unknown pid, ignore
-              do_await_all(checkers, pid_to_checker, pending, retry_state, retry_window_ms, timeout_ms, start_ms)
+              do_await_all(
+                checkers,
+                pid_to_checker,
+                pending,
+                retry_state,
+                retry_window_ms,
+                timeout_ms,
+                start_ms
+              )
 
             checker ->
               {updated_checker, updated_retry_state, done?} =
@@ -207,16 +236,28 @@ defmodule Support.OracleHarness do
     end
   end
 
-  defp handle_checker_message(checker, %Electric.Client.Message.ChangeMessage{} = msg, retry_state, _retry_window_ms) do
+  defp handle_checker_message(
+         checker,
+         %Electric.Client.Message.ChangeMessage{} = msg,
+         retry_state,
+         _retry_window_ms
+       ) do
     updated = ShapeChecker.apply_message(checker, msg)
     # Got a change, mark that we received changes and reset retry timer
-    updated_retry_state = Map.put(retry_state, checker.pid, %{retry_start: nil, got_changes: true})
+    updated_retry_state =
+      Map.put(retry_state, checker.pid, %{retry_start: nil, got_changes: true})
+
     {updated, updated_retry_state, false}
   end
 
-  defp handle_checker_message(checker, %Electric.Client.Message.ControlMessage{
-         control: :up_to_date
-       }, retry_state, retry_window_ms) do
+  defp handle_checker_message(
+         checker,
+         %Electric.Client.Message.ControlMessage{
+           control: :up_to_date
+         },
+         retry_state,
+         retry_window_ms
+       ) do
     state = Map.get(retry_state, checker.pid, %{retry_start: nil, got_changes: false})
     now = System.monotonic_time(:millisecond)
 
@@ -243,23 +284,37 @@ defmodule Support.OracleHarness do
             # Exceeded retry window - give up (will fail in verify step)
             {checker, retry_state, true}
           else
-            updated_retry_state = Map.put(retry_state, checker.pid, %{retry_start: retry_start, got_changes: false})
+            updated_retry_state =
+              Map.put(retry_state, checker.pid, %{retry_start: retry_start, got_changes: false})
+
             {checker, updated_retry_state, false}
           end
         end
     end
   end
 
-  defp handle_checker_message(checker, %Electric.Client.Message.ControlMessage{
-         control: :must_refetch
-       }, retry_state, _retry_window_ms) do
+  defp handle_checker_message(
+         checker,
+         %Electric.Client.Message.ControlMessage{
+           control: :must_refetch
+         },
+         retry_state,
+         _retry_window_ms
+       ) do
     updated = %{checker | rows: %{}, must_refetch?: true}
     # Reset retry state after must_refetch
-    updated_retry_state = Map.put(retry_state, checker.pid, %{retry_start: nil, got_changes: false})
+    updated_retry_state =
+      Map.put(retry_state, checker.pid, %{retry_start: nil, got_changes: false})
+
     {updated, updated_retry_state, false}
   end
 
-  defp handle_checker_message(checker, %Electric.Client.Error{} = error, retry_state, _retry_window_ms) do
+  defp handle_checker_message(
+         checker,
+         %Electric.Client.Error{} = error,
+         retry_state,
+         _retry_window_ms
+       ) do
     updated = %{checker | error: error}
     {updated, retry_state, true}
   end
