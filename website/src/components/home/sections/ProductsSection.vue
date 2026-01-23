@@ -19,32 +19,32 @@ const products = [
     slug: 'postgres-sync',
     icon: '/img/icons/electric.svg',
     title: 'Postgres Sync',
-    body: `Sync from your database into&nbsp;your apps.`,
-    detail: `For partial replication, data&nbsp;delivery and fan-out.`,
+    body: `Sync from your database <span class="breaker no-wrap">into your apps.</span>`,
+    detail: `For partial replication, <span class="breaker no-wrap">data delivery and fan-out.</span>`,
     href: '/products/postgres-sync',
   },
   {
     slug: 'durable-streams',
     icon: '/img/icons/durable-streams.svg',
     title: 'Durable Streams',
-    body: `Persistent, addressable, <span class="no-wrap">real-time</span> streams.`,
-    detail: `For resilient AI sessions and&nbsp;ultra low-latency.`,
+    body: `Persistent, addressable, <span class="breaker no-wrap">real-time streams.</span>`,
+    detail: `For resilient AI sessions <span class="breaker no-wrap">and ultra low-latency.</span>`,
     href: '/products/durable-streams',
   },
   {
     slug: 'tanstack-db',
     icon: '/img/icons/tanstack.svg',
     title: 'TanStack DB',
-    body: `Reactive client store for&nbsp;super-fast apps.`,
-    detail: `For sub-millisecond reactivity&nbsp;and instant writes.`,
+    body: `Reactive client store <span class="breaker no-wrap">for super-fast apps.</span>`,
+    detail: `For sub-millisecond <span class="breaker no-wrap">reactivity and instant writes.</span>`,
     href: '/products/tanstack-db',
   },
   {
     slug: 'pglite',
     icon: '/img/icons/pglite.svg',
     title: 'PGlite',
-    body: `Embeddable Postgres with&nbsp;reactivity and sync.`,
-    detail: `For a full database inside your&nbsp;client or runtime.`,
+    body: `Embeddable Postgres <span class="breaker no-wrap">with reactivity and sync.</span>`,
+    detail: `For a full database inside <span class="breaker no-wrap">your client or runtime.</span>`,
     href: '/products/pglite',
   },
 ]
@@ -54,7 +54,8 @@ const products = [
   <Section :actions="actions">
     <template #title>Composable sync&nbsp;primitives</template>
     <template #tagline>
-      Compose your own end-to-end reactive sync stack.
+      Compose your own end-to-end
+      <span class="no-wrap">reactive sync stack</span>.
     </template>
     <div class="products-grid">
       <div v-for="product in products" :key="product.slug" class="product-card">
@@ -101,6 +102,10 @@ const products = [
   margin: -4px -2px;
 }
 
+.products-grid :deep(.breaker) {
+  display: inline;
+}
+
 @media (min-width: 1149px) {
   .products-grid :deep(.icon),
   .products-grid :deep(.body) {
@@ -112,6 +117,12 @@ const products = [
   .products-grid {
     grid-template-columns: repeat(2, 1fr);
     gap: 24px;
+  }
+}
+
+@media (max-width: 930px) {
+  .products-grid :deep(.breaker) {
+    display: block;
   }
 }
 

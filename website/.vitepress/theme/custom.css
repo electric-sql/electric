@@ -934,6 +934,10 @@ ul.benefits {
   }
 }
 
+.vp-doc h1 {
+  line-height: 1.3;
+}
+
 .vp-doc h1 > .VPBadge {
   margin-top: 8px;
   font-size: 14px;
