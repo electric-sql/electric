@@ -68,13 +68,14 @@ defmodule Electric.ShapeCache.ShapeStatus do
       # Add the lookup last as it is the one that enables clients to find the shape
       with {:ok, shape_hash} <- ShapeDb.add_shape(stack_id, shape, shape_handle) do
         # Cache shape metadata: {handle, hash, snapshot_started, last_read_time}
-        true =
-          :ets.insert_new(
-            shape_meta_table(stack_id),
-            {shape_handle, shape_hash, false, System.monotonic_time()}
-          )
-
-        {:ok, shape_handle}
+        if :ets.insert_new(
+             shape_meta_table(stack_id),
+             {shape_handle, shape_hash, false, System.monotonic_time()}
+           ) do
+          {:ok, shape_handle}
+        else
+          {:error, "duplicate shape #{inspect(shape_handle)}: #{inspect(shape)}"}
+        end
       end
     end)
   end
@@ -143,6 +144,24 @@ defmodule Electric.ShapeCache.ShapeStatus do
   def fetch_handle_by_shape(stack_id, %Shape{} = shape) when is_stack_id(stack_id) do
     OpenTelemetry.with_span("shape_status.fetch_handle_by_shape", [], stack_id, fn ->
       ShapeDb.handle_for_shape(stack_id, shape)
+    end)
+  end
+
+  @doc """
+  Where as `fetch_handle_by_shape/2` *may* under high-write load return stale
+  data -- not finding a shape that has been written -- due to SQLite's
+  cross-connection durability when in WAL mode, where a connection reads
+  against a snapshot of the data, this version does the lookup via the write
+  connection, which is guaranteed to see all writes (SQLite connections can
+  always see their own writes).
+
+  This guarantees that will will return consistent restults at the cost of slower
+  lookups as we're contending with access to the single write connection.
+  """
+  @spec fetch_handle_by_shape_critical(stack_id(), Shape.t()) :: {:ok, shape_handle()} | :error
+  def fetch_handle_by_shape_critical(stack_id, %Shape{} = shape) when is_stack_id(stack_id) do
+    OpenTelemetry.with_span("shape_status.fetch_handle_by_shape_critical", [], stack_id, fn ->
+      ShapeDb.handle_for_shape_critical(stack_id, shape)
     end)
   end
 

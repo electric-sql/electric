@@ -147,6 +147,17 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDbTest do
     assert :error = ShapeDb.handle_for_shape(ctx.stack_id, shape2)
   end
 
+  test "handle_for_shape_critical/2", ctx do
+    shape1 = Shape.new!("items", inspector: @stub_inspector)
+    handle1 = "handle-1"
+    {:ok, _hash1} = ShapeDb.add_shape(ctx.stack_id, shape1, handle1)
+    shape2 = Shape.new!("items", inspector: @stub_inspector, where: "id = 99")
+
+    assert {:ok, ^handle1} = ShapeDb.handle_for_shape_critical(ctx.stack_id, shape1)
+
+    assert :error = ShapeDb.handle_for_shape_critical(ctx.stack_id, shape2)
+  end
+
   test "shape_for_handle", ctx do
     shape1 = Shape.new!("items", inspector: @stub_inspector)
     handle1 = "handle-1"

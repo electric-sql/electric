@@ -22,32 +22,37 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Query do
     SELECT count FROM shape_count WHERE id = 1 LIMIT 1
     """
   ]
-  @write_queries [
-    insert_shape: """
-    INSERT INTO shapes (handle, shape, comparable, hash) VALUES (?1, ?2, ?3, ?4)
-    """,
-    insert_relation: """
-    INSERT INTO relations (handle, oid) VALUES (?1, ?2)
-    """,
-    increment_counter: """
-    UPDATE shape_count SET count = count + ?1 WHERE id = 1
-    """,
-    delete_shape: """
-    DELETE FROM shapes WHERE handle = ?1
-    """,
-    delete_relation: """
-    DELETE FROM relations WHERE handle = ?1
-    """,
-    mark_snapshot_complete: """
-    UPDATE shapes SET snapshot_complete = 1 WHERE handle = ?1
-    """,
-    # only shapes that have completed their snapshot are valid
-    select_invalid: """
-    SELECT handle FROM shapes WHERE snapshot_complete = 0 ORDER BY handle
-    """
-  ]
+  @write_queries Keyword.merge(
+                   [
+                     insert_shape: """
+                     INSERT INTO shapes (handle, shape, comparable, hash) VALUES (?1, ?2, ?3, ?4)
+                     """,
+                     insert_relation: """
+                     INSERT INTO relations (handle, oid) VALUES (?1, ?2)
+                     """,
+                     increment_counter: """
+                     UPDATE shape_count SET count = count + ?1 WHERE id = 1
+                     """,
+                     delete_shape: """
+                     DELETE FROM shapes WHERE handle = ?1
+                     """,
+                     delete_relation: """
+                     DELETE FROM relations WHERE handle = ?1
+                     """,
+                     mark_snapshot_complete: """
+                     UPDATE shapes SET snapshot_complete = 1 WHERE handle = ?1
+                     """,
+                     # only shapes that have completed their snapshot are valid
+                     select_invalid: """
+                     SELECT handle FROM shapes WHERE snapshot_complete = 0 ORDER BY handle
+                     """
+                   ],
+                   # need the handle_lookup query in the write connection to
+                   # allow for handle lookup to definitely read all writes
+                   Keyword.take(@read_queries, [:handle_lookup])
+                 )
 
-  defstruct Keyword.keys(@read_queries) ++ Keyword.keys(@write_queries)
+  defstruct Enum.uniq(Keyword.keys(@read_queries) ++ Keyword.keys(@write_queries))
 
   alias Electric.ShapeCache.ShapeStatus.ShapeDb.Connection, as: Conn
 

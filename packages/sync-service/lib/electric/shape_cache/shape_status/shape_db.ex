@@ -82,6 +82,19 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb do
   Returns :error if the handle is tombstoned (being deleted).
   """
   def handle_for_shape(stack_id, %Shape{} = shape) when is_stack_id(stack_id) do
+    checkout_fun = &checkout!(stack_id, :handle_for_shape, &1)
+    handle_for_shape_inner(stack_id, shape, checkout_fun)
+  end
+
+  @doc """
+  Find a handle for a shape using the write connection to guarantee consistency.
+  """
+  def handle_for_shape_critical(stack_id, %Shape{} = shape) when is_stack_id(stack_id) do
+    checkout_fun = &checkout_write!(stack_id, :handle_for_shape_critical, &1)
+    handle_for_shape_inner(stack_id, shape, checkout_fun)
+  end
+
+  defp handle_for_shape_inner(stack_id, %Shape{} = shape, checkout_fun) do
     {comparable_shape, _shape_hash} = Shape.comparable_hash(shape)
 
     case WriteBuffer.lookup_handle(stack_id, comparable_shape) do
@@ -89,7 +102,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb do
         {:ok, handle}
 
       :not_found ->
-        case checkout!(stack_id, :handle_for_shape, &Query.handle_for_shape(&1, comparable_shape)) do
+        case checkout_fun.(&Query.handle_for_shape(&1, comparable_shape)) do
           {:ok, handle} ->
             if WriteBuffer.is_tombstoned?(stack_id, handle) do
               :error
