@@ -498,15 +498,15 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverterTest do
       {:buffering, converter} = MessageConverter.convert(insert_msg, converter)
       {:buffering, converter} = MessageConverter.convert(insert_msg, converter)
 
-      # Third change triggers flush (3 inserts = max_batch_size)
+      # Third change triggers flush (3 inserts = max_batch_size). All but the last changes are included in the txn fragment.
       assert {:ok,
               %TransactionFragment{
                 xid: 456,
                 lsn: @test_lsn,
-                last_log_offset: %LogOffset{tx_offset: 123, op_offset: 4},
+                last_log_offset: %LogOffset{tx_offset: 123, op_offset: 2},
                 has_begin?: true,
                 commit: nil,
-                changes: [%NewRecord{}, %NewRecord{}, %NewRecord{}],
+                changes: [%NewRecord{}, %NewRecord{}],
                 affected_relations: affected
               }, converter} = MessageConverter.convert(insert_msg, converter)
 
@@ -523,7 +523,8 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverterTest do
                 last_log_offset: %LogOffset{tx_offset: 123, op_offset: 6},
                 has_begin?: false,
                 commit: %Commit{},
-                changes: [%NewRecord{}]
+                changes: [%NewRecord{}, %NewRecord{}],
+                affected_relations: affected
               }, _converter} =
                MessageConverter.convert(
                  %LR.Commit{
@@ -533,6 +534,8 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverterTest do
                  },
                  converter
                )
+
+      assert MapSet.equal?(affected, MapSet.new([{"public", "users"}]))
     end
 
     test "maintains correct log offsets across batches", %{converter: _converter} do
@@ -558,8 +561,7 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverterTest do
                 commit: nil,
                 changes: [
                   %NewRecord{log_offset: %LogOffset{tx_offset: 123, op_offset: 0}},
-                  %NewRecord{log_offset: %LogOffset{tx_offset: 123, op_offset: 2}},
-                  %NewRecord{log_offset: %LogOffset{tx_offset: 123, op_offset: 4}}
+                  %NewRecord{log_offset: %LogOffset{tx_offset: 123, op_offset: 2}}
                 ]
               }, converter} = MessageConverter.convert(insert_msg, converter)
 
@@ -572,6 +574,7 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverterTest do
                 has_begin?: false,
                 commit: %Commit{},
                 changes: [
+                  %NewRecord{log_offset: %LogOffset{tx_offset: 123, op_offset: 4}},
                   %NewRecord{log_offset: %LogOffset{tx_offset: 123, op_offset: 6}}
                 ]
               }, _converter} =
@@ -583,6 +586,66 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverterTest do
                  },
                  converter
                )
+    end
+
+    test "commit fragment has greater offset than the preceding fragment when txn has exactly max_batch_size changes",
+         %{converter: _converter} do
+      # Use a small batch size for this test
+      converter = MessageConverter.new(max_batch_size: 3)
+      {:ok, %Relation{}, converter} = MessageConverter.convert(@relation, converter)
+
+      {:buffering, converter} =
+        MessageConverter.convert(
+          %LR.Begin{final_lsn: @test_lsn, commit_timestamp: DateTime.utc_now(), xid: 456},
+          converter
+        )
+
+      insert_msg = %LR.Insert{relation_id: 1, tuple_data: ["123"], bytes: 3}
+
+      # Insert exactly 3 changes (= max_batch_size)
+      {:buffering, converter} = MessageConverter.convert(insert_msg, converter)
+      {:buffering, converter} = MessageConverter.convert(insert_msg, converter)
+
+      # Third change triggers flush, but only two changes are returned.
+      assert {:ok,
+              %TransactionFragment{
+                xid: 456,
+                has_begin?: true,
+                commit: nil,
+                last_log_offset: data_fragment_offset,
+                changes: [_, _],
+                affected_relations: affected
+              }, converter} = MessageConverter.convert(insert_msg, converter)
+
+      assert affected == MapSet.new([{"public", "users"}])
+
+      # The previous change is immediately followed by a Commit
+      assert {:ok,
+              %TransactionFragment{
+                xid: 456,
+                has_begin?: false,
+                commit: %Commit{},
+                last_log_offset: commit_fragment_offset,
+                changes: [_],
+                affected_relations: affected
+              }, _converter} =
+               MessageConverter.convert(
+                 %LR.Commit{
+                   lsn: @test_lsn,
+                   end_lsn: @test_end_lsn,
+                   commit_timestamp: ~U[2024-01-01 00:00:00Z]
+                 },
+                 converter
+               )
+
+      assert affected == MapSet.new([{"public", "users"}])
+
+      # The commit fragment's offset must be strictly greater than the previous fragment's offset
+      assert LogOffset.compare(commit_fragment_offset, data_fragment_offset) == :gt
+
+      # Commit fragment offset is based on the same final_lsn as the preceding changes. It's
+      # basically the log offset of the most recent change.
+      assert commit_fragment_offset == LogOffset.new(Lsn.to_integer(@test_lsn), 4)
     end
 
     test "returns Relation immediately without flushing buffered operations", %{
