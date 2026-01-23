@@ -9,7 +9,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
 
   @behaviour NimblePool
 
-  @schema_version 2
+  @schema_version 3
 
   @migration_sqls [
     """
@@ -18,7 +18,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
       shape BLOB NOT NULL,
       comparable BLOB NOT NULL,
       hash INTEGER NOT NULL,
-      snapshot_state INTEGER NOT NULL DEFAULT 0
+      snapshot_complete INTEGER NOT NULL DEFAULT 0
     ) STRICT
     """,
     """
@@ -31,10 +31,10 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
     CREATE INDEX shapes_comparable_cover_idx ON shapes (comparable, handle)
     """,
     """
-    CREATE INDEX shapes_handle_cover_idx ON shapes (handle, shape, hash, snapshot_state)
+    CREATE INDEX shapes_handle_cover_idx ON shapes (handle, shape, hash, snapshot_complete)
     """,
     """
-    CREATE INDEX shapes_snapshot_idx ON shapes (snapshot_state, handle)
+    CREATE INDEX shapes_snapshot_idx ON shapes (snapshot_complete, handle)
     """,
     """
     CREATE TABLE relations (

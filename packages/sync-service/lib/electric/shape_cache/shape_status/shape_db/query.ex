@@ -4,7 +4,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Query do
     SELECT handle, shape FROM shapes ORDER BY handle
     """,
     list_shape_meta: """
-    SELECT handle, hash, snapshot_state FROM shapes ORDER BY handle
+    SELECT handle, hash, snapshot_complete FROM shapes ORDER BY handle
     """,
     handle_exists: """
     SELECT 1 FROM shapes WHERE handle = ?1
@@ -38,19 +38,12 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Query do
     delete_relation: """
     DELETE FROM relations WHERE handle = ?1
     """,
-    mark_snapshot_started: """
-    UPDATE shapes SET snapshot_state = snapshot_state | 1 WHERE handle = ?1
-    """,
     mark_snapshot_complete: """
-    UPDATE shapes SET snapshot_state = 3 WHERE handle = ?1
+    UPDATE shapes SET snapshot_complete = 1 WHERE handle = ?1
     """,
-    # snapshot state is a bitmask to handle the snapshot completion message arriving before the
-    # snapshot start event for small snapshots (since the snapshot start message goes through
-    # more indirection via the consumer process)
-    # snapshot_state &&& 1: snapshot started
-    # snapshot_state &&& 2: snapshot completed
+    # only shapes that have completed their snapshot are valid
     select_invalid: """
-    SELECT handle FROM shapes WHERE snapshot_state IN (0, 1) ORDER BY handle
+    SELECT handle FROM shapes WHERE snapshot_complete = 0 ORDER BY handle
     """
   ]
 
@@ -221,11 +214,8 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Query do
   end
 
   def list_shape_meta_stream(%Conn{conn: conn, stmts: %{list_shape_meta: stmt}}) do
-    stream_query(conn, stmt, fn [handle, hash, snapshot_state] ->
-      # snapshot_state is a bitmask: bit 0 = started, bit 1 = complete
-      snapshot_started? = snapshot_state > 0
-      snapshot_complete? = Bitwise.band(snapshot_state, 2) == 2
-      {handle, hash, snapshot_started?, snapshot_complete?}
+    stream_query(conn, stmt, fn [handle, hash, snapshot_complete] ->
+      {handle, hash, snapshot_complete == 1}
     end)
   end
 

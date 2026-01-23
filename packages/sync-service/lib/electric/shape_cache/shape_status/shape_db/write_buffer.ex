@@ -254,14 +254,6 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
     end
   end
 
-  @doc "Queue a snapshot_started operation"
-  def queue_snapshot_started(stack_id, handle) do
-    ops_table = operations_table_name(stack_id)
-    ts = op_key()
-    true = :ets.insert(ops_table, {ts, {:snapshot_started, handle}, false})
-    :ok
-  end
-
   @doc "Queue a snapshot_complete operation"
   def queue_snapshot_complete(stack_id, handle) do
     ops_table = operations_table_name(stack_id)
@@ -438,9 +430,6 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
 
         {_ts, {:remove, handle}} ->
           :ok = Query.remove_shape(conn, handle)
-
-        {_ts, {:snapshot_started, handle}} ->
-          :ok = Query.mark_snapshot_started(conn, handle)
 
         {_ts, {:snapshot_complete, handle}} ->
           :ok = Query.mark_snapshot_complete(conn, handle)

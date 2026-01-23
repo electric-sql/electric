@@ -64,14 +64,6 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb do
     end
   end
 
-  def mark_snapshot_started(stack_id, shape_handle) do
-    if handle_exists?(stack_id, shape_handle) do
-      WriteBuffer.queue_snapshot_started(stack_id, shape_handle)
-    else
-      :error
-    end
-  end
-
   def mark_snapshot_complete(stack_id, shape_handle) do
     if handle_exists?(stack_id, shape_handle) do
       WriteBuffer.queue_snapshot_complete(stack_id, shape_handle)

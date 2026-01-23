@@ -179,8 +179,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
   @spec mark_snapshot_started(stack_id(), shape_handle()) :: :ok | :error
   def mark_snapshot_started(stack_id, shape_handle) when is_stack_id(stack_id) do
     OpenTelemetry.with_span("shape_status.mark_snapshot_started", [], stack_id, fn ->
-      with :ok <- ShapeDb.mark_snapshot_started(stack_id, shape_handle),
-           true <- :ets.update_element(shape_meta_table(stack_id), shape_handle, {3, true}) do
+      with true <- :ets.update_element(shape_meta_table(stack_id), shape_handle, {3, true}) do
         :ok
       else
         _ -> :error
@@ -298,8 +297,11 @@ defmodule Electric.ShapeCache.ShapeStatus do
     ShapeDb.reduce_shape_meta(
       stack_id,
       :ets.whereis(shape_meta_table(stack_id)),
-      fn {handle, hash, snapshot_started, _snapshot_complete}, table ->
-        true = :ets.insert(table, {handle, hash, snapshot_started, start_time})
+      fn {handle, hash, snapshot_complete?}, table ->
+        # any shapes where the snapshot didn't complete have been deleted
+        # so there is no intermediate started-but-not-complete state
+        # and completed implies started
+        true = :ets.insert(table, {handle, hash, snapshot_complete?, start_time})
         table
       end
     )
