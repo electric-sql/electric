@@ -1,5 +1,5 @@
 ---
-title: Agent Instructions & Skills
+title: AGENTS.md & SKILL.md
 description: >-
   Documentation for guiding coding agents and loading agent skills to develop apps with Electric.
 outline: [2, 3, 4]
