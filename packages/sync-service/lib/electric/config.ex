@@ -48,6 +48,7 @@ defmodule Electric.Config do
     replication_slot_temporary?: false,
     replication_slot_temporary_random_name?: false,
     max_txn_size: 250 * 1024 * 1024,
+    max_batch_size: 100,
     # Scaling down on idle is disabled by default
     replication_idle_timeout: 0,
     manual_table_publishing?: false,
