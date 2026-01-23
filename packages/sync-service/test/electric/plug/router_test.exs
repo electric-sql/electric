@@ -359,10 +359,13 @@ defmodule Electric.Plug.RouterTest do
         conn("GET", "/v1/shape?table=items&offset=#{@first_offset}&handle=#{shape_handle}")
         |> Router.call(opts)
 
+      # global_last_seen_lsn is based on end_lsn which is always >= the operation's lsn
       assert [
-               %{"headers" => %{"operation" => "insert", "lsn" => lsn}},
-               %{"headers" => %{"control" => "up-to-date", "global_last_seen_lsn" => lsn}}
+               %{"headers" => %{"operation" => "insert", "lsn" => op_lsn}},
+               %{"headers" => %{"control" => "up-to-date", "global_last_seen_lsn" => global_lsn}}
              ] = Jason.decode!(conn.resp_body)
+
+      assert global_lsn >= op_lsn
 
       # Make another insert unrelated to observed shape and wait for that to be propagated
       task =
@@ -377,21 +380,26 @@ defmodule Electric.Plug.RouterTest do
       Postgrex.query!(db_conn, "INSERT INTO serial_ids (id) VALUES (2)", [])
       assert %{status: 200} = conn = Task.await(task)
 
-      assert [%{"headers" => %{"operation" => "insert", "lsn" => lsn}}, _] =
+      assert [%{"headers" => %{"operation" => "insert", "lsn" => serial_ids_lsn}}, _] =
                Jason.decode!(conn.resp_body)
 
-      # Now the "tail" on the original shape should have a different lsn
+      # Now the "tail" on the original shape should have a global_last_seen_lsn
+      # that reflects the latest transaction (even though it didn't affect items)
       conn =
         conn("GET", "/v1/shape?table=items&offset=#{@first_offset}&handle=#{shape_handle}")
         |> Router.call(opts)
 
       assert [
-               %{"headers" => %{"operation" => "insert", "lsn" => lsn1}},
-               %{"headers" => %{"control" => "up-to-date", "global_last_seen_lsn" => lsn2}}
+               %{"headers" => %{"operation" => "insert", "lsn" => items_lsn}},
+               %{"headers" => %{"control" => "up-to-date", "global_last_seen_lsn" => global_lsn2}}
              ] = Jason.decode!(conn.resp_body)
 
-      assert lsn2 > lsn1
-      assert lsn2 == lsn
+      # global_last_seen_lsn should be greater than the items operation's lsn
+      # (from an earlier transaction)
+      assert global_lsn2 > items_lsn
+      # global_last_seen_lsn should reflect the latest transaction (serial_ids insert)
+      # Note: global_last_seen_lsn is based on end_lsn which is >= the operation's lsn
+      assert global_lsn2 >= serial_ids_lsn
     end
 
     @tag with_sql: [
