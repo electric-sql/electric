@@ -4,7 +4,7 @@
       <div>
         <a href="#"
           >✨ Durable Streams <span class="hidden-xs">are</span> now
-          <span class="hidden-sm">available</span> on Electric&nbsp;Cloud!</a
+          <span class="hidden-sm">available</span> on Electric&nbsp;Cloud</a
         >
       </div>
     </div>
@@ -17,7 +17,7 @@
   border-bottom: 1px solid var(--vp-c-indigo-2);
   font-weight: 500;
 
-  padding: 20px;
+  padding: 22px 20px 17px;
   margin-bottom: 2px;
 
   font-size: 15px;

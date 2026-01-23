@@ -56,10 +56,13 @@ const solutions = [
 </script>
 
 <template>
+  <br />
   <Section :actions="actions">
     <template #title>Unlock&nbsp;collaboration, unlock&nbsp;adoption</template>
     <template #tagline>
-      Sync is the magic behind
+      Sync is the magic behind fast apps and the key to collaborative&nbsp;AI.
+
+      <!--Sync is the magic behind
       <a href="/blog/2025/07/29/super-fast-apps-on-sync-with-tanstack-db">
         <span class="hidden-xs">fast, modern software</span>
         <span class="inline-xs">fast apps</span></a
@@ -68,6 +71,7 @@ const solutions = [
         <a href="/blog/2026/01/12/durable-sessions-for-collaborative-ai">collaborative&nbsp;AI<span class="hidden-sm">&nbsp;apps</span></a
         ><span class="hidden-sm"> and </span></span
       ><span class="hidden-sm"> agentic&nbsp;systems</span>.
+      -->
     </template>
     <div class="solutions-grid">
       <LandscapeBlogPostListing
@@ -75,8 +79,7 @@ const solutions = [
         :key="post.slug"
         :post="post"
       />
-      <!--
-      <a
+      <!-- <a
         v-for="solution in solutions"
         :key="solution.title"
         :href="solution.href"
@@ -91,8 +94,7 @@ const solutions = [
           <p class="panel-subtitle">{{ solution.subtitle }}</p>
           <span class="panel-cta">{{ solution.cta }} &rarr;</span>
         </div>
-      </a>
-      -->
+      </a> -->
     </div>
   </Section>
 </template>

@@ -63,31 +63,28 @@ onMounted(() => {
 <div data-template="true" class="hidden" id="works-with-sql-template">
 
 ```sql
-CREATE TABLE projects (
-  id SERIAL PRIMARY KEY,
-  title TEXT UNIQUE
-);
+INSERT INTO todos VALUES ('sync');
+```
 
-CREATE TABLE issues (
-  id SERIAL PRIMARY KEY,
-  project_id INTEGER
-    REFERENCES projects(id)
-);
+</div>
+<div data-template="true" class="hidden" id="works-with-sse-template">
+
+```json
+data: {"type": "text-delta", "delta": "Hi, "}
 ```
 
 </div>
 <div data-template="true" class="hidden" id="works-with-tsx-template">
 
 ```tsx
-function Component({ project }) {
-  const { data } = useShape({
-    params: {
-      table: 'issues',
-      where: `project_id = ${project.id}`,
-    },
-  })
+const Todos = () => {
+  const { data } = useLiveQuery(query =>
+    query
+      .from({ todo: todoCollection })
+      .where(({ todo }) => todo.completed)
+  )
 
-  return <List issues={data} />
+  return <List todos={data} />
 }
 ```
 

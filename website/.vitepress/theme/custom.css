@@ -80,7 +80,9 @@
   --vp-nav-logo-height: 30px;
 
   --vp-c-text-1: rgba(255, 255, 245, 0.92);
+  --vp-c-text-1-5: rgba(235, 235, 245, 0.86);
   --vp-c-text-2: rgba(235, 235, 245, 0.8);
+  --vp-c-text-2-5: rgba(235, 235, 245, 0.74);
   --vp-c-text-3: rgba(235, 235, 245, 0.68);
 
   --electric-color: #00d2a0;

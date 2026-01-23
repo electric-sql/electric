@@ -24,7 +24,7 @@ const secondaryOptions = [
 
 <template>
   <Section>
-    <template #title> Deploy your way </template>
+    <template #title>Deploy on your&nbsp;terms</template>
     <template #tagline>
       Get started with Electric Cloud or run it yourself.
     </template>
