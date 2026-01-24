@@ -5,39 +5,21 @@ outline: deep
 ---
 
 <script setup>
-import Card from '../src/components/home/Card.vue'
+import ProductsGrid from '../src/components/home/ProductsGrid.vue'
 </script>
 
-# Products
+<p class="intro-zap-container">
+  <img src="/img/home/zap-with-halo.svg"
+      alt="Electric zap with halo"
+      class="intro-zap"
+  />
+</p>
+
+# Electric products
 
 Composable sync primitives that work with your stack.
 
-<div class="products-grid">
-  <Card
-    href="/products/postgres-sync"
-    icon="/img/icons/electric.svg"
-    title="Postgres Sync"
-    body="Sync data from Postgres into local apps with partial replication and live queries."
-  />
-  <Card
-    href="/products/durable-streams"
-    icon="/img/icons/durable-streams.svg"
-    title="Durable Streams"
-    body="Resumable streaming protocol for AI responses and multi-step workflows."
-  />
-  <Card
-    href="/products/tanstack-db"
-    icon="/img/icons/tanstack.svg"
-    title="TanStack DB"
-    body="Reactive client database with optimistic updates and sync integration."
-  />
-  <Card
-    href="/products/pglite"
-    icon="/img/icons/pglite.svg"
-    title="PGlite"
-    body="Lightweight WASM Postgres for browser, Node.js, and embedded use."
-  />
-</div>
+<ProductsGrid fullWidth />
 
 ## How they fit together {#how-they-fit-together}
 
@@ -176,21 +158,4 @@ Learn how these products enable different [sync solutions](/sync).
   color: var(--vp-c-text-1);
 }
 
-.products-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 20px;
-  margin: 24px 0 40px;
-  align-items: stretch;
-}
-
-.products-grid :deep(.card) {
-  height: 100%;
-}
-
-@media (max-width: 768px) {
-  .products-grid {
-    grid-template-columns: 1fr;
-  }
-}
 </style>

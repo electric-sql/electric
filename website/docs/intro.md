@@ -13,13 +13,6 @@ const burn = demos.find(x => x.link === '/demos/burn')
 const linearlite = demos.find(x => x.link === '/demos/linearlite')
 </script>
 
-<p class="intro-zap-container">
-  <img src="/img/home/zap-with-halo.svg"
-      alt="Electric zap with halo"
-      class="intro-zap"
-  />
-</p>
-
 # Documentation
 
 Welcome to the Electric developer documentation!

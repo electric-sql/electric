@@ -31,21 +31,9 @@ const { post } = defineProps(['post'])
 }
 .post-image img {
   width: 448px;
-  height: 244px;
+  height: 214px;
   object-fit: cover;
   min-width: 100%;
-}
-@media (min-width: 750px) and (max-width: 949px) {
-  .post-image img {
-    width: 336px;
-    height: 191px;
-  }
-}
-@media (max-width: 549px) {
-  .post-image img {
-    width: 336px;
-    height: 171px;
-  }
 }
 .post-body {
   padding: 0px 24px 0px;
@@ -84,6 +72,39 @@ const { post } = defineProps(['post'])
 
   padding: 18px 0 24px;
   margin: 6px 24px 0;
+}
+@media (max-width: 1151px) {
+  .post-image img {
+    width: 448px;
+    height: 191px;
+  }
+  .post-body p {
+    font-size: 14.5px;
+    line-height: 1.7;
+  }
+}
+@media (max-width: 949px) {
+  .post-image img {
+    width: 448px;
+    height: 151px;
+  }
+  .post-body p {
+    font-size: 14px;
+    line-height: 1.6;
+  }
+}
+@media (max-width: 749px) {
+  .post-image img {
+    width: 448px;
+    height: calc(30px + 25vw);
+  }
+}
+
+@media (max-width: 549px) {
+  .post-image img {
+    width: 448px;
+    height: calc(50px + 25vw);
+  }
 }
 </style>
 
