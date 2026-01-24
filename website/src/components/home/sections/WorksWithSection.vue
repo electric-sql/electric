@@ -395,11 +395,11 @@ onMounted(() => {
 
 <template>
   <Section :actions="actions" :wideSectionHead="false">
-    <template #title>Work with your&nbsp;stack</template>
+    <template #title>Works with your&nbsp;stack</template>
     <template #override-tagline>
       <p>
         Any web framework and client that
-        <span class="no-wrap">speaks HTTP and JSON</span>.
+        <span class="no-wrap">speaks HTTP and JSON</span>
       </p>
     </template>
     <div class="your-stack">

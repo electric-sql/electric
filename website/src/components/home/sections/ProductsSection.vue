@@ -19,32 +19,32 @@ const products = [
     slug: 'postgres-sync',
     icon: '/img/icons/electric.svg',
     title: 'Postgres Sync',
-    body: `Sync from your database <span class="breaker no-wrap">into your apps.</span>`,
-    detail: `For partial replication, <span class="breaker no-wrap">data delivery and fan-out.</span>`,
+    body: `Sync from your database <span class="breaker no-wrap">into your apps</span>`,
+    detail: `For partial replication, <span class="breaker no-wrap">data delivery and fan-out</span>`,
     href: '/products/postgres-sync',
   },
   {
     slug: 'durable-streams',
     icon: '/img/icons/durable-streams.svg',
     title: 'Durable Streams',
-    body: `Persistent, addressable, <span class="breaker no-wrap">real-time streams.</span>`,
-    detail: `For resilient AI sessions <span class="breaker no-wrap">and ultra low-latency.</span>`,
+    body: `Persistent, addressable, <span class="breaker no-wrap">real-time streams</span>`,
+    detail: `For resilient AI sessions <span class="breaker no-wrap">and ultra low-latency</span>`,
     href: '/products/durable-streams',
   },
   {
     slug: 'tanstack-db',
     icon: '/img/icons/tanstack.svg',
     title: 'TanStack DB',
-    body: `Reactive client store <span class="breaker no-wrap">for super-fast apps.</span>`,
-    detail: `For sub-millisecond <span class="breaker no-wrap">reactivity and instant writes.</span>`,
+    body: `Reactive client store <span class="breaker no-wrap">for super-fast apps</span>`,
+    detail: `For sub-millisecond <span class="breaker no-wrap">reactivity and instant writes</span>`,
     href: '/products/tanstack-db',
   },
   {
     slug: 'pglite',
-    icon: '/img/icons/pglite.svg',
+    icon: '/img/icons/pglite.product.svg',
     title: 'PGlite',
-    body: `Embeddable Postgres <span class="breaker no-wrap">with reactivity and sync.</span>`,
-    detail: `For a full database inside <span class="breaker no-wrap">your client or runtime.</span>`,
+    body: `Embeddable Postgres <span class="breaker no-wrap">with reactivity and sync</span>`,
+    detail: `For a full database inside <span class="breaker no-wrap">your client or runtime</span>`,
     href: '/products/pglite',
   },
 ]
@@ -55,7 +55,7 @@ const products = [
     <template #title>Composable sync&nbsp;primitives</template>
     <template #tagline>
       Compose your own end-to-end
-      <span class="no-wrap">reactive sync stack</span>.
+      <span class="no-wrap">reactive sync stack</span>
     </template>
     <div class="products-grid">
       <div v-for="product in products" :key="product.slug" class="product-card">

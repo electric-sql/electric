@@ -7,16 +7,16 @@ const cloudUrl = 'https://dashboard.electric-sql.cloud/'
 const secondaryOptions = [
   {
     slug: 'open-source',
-    icon: '/img/icons/github.svg',
-    title: 'Open Source',
-    body: `Self-host Electric with Docker or run it directly on your infrastructure.`,
-    href: '/docs/guides/deployment',
+    icon: '/img/icons/github.light.svg',
+    title: 'Open source',
+    body: `Apache 2.0 license, <span class="no-wrap">thriving community</span>`,
+    href: '/about/community',
   },
   {
     slug: 'local-dev',
     icon: '/img/icons/coding.svg',
-    title: 'Local Development',
-    body: `Run Electric locally with a single command for development and testing.`,
+    title: 'Local development',
+    body: `Skills, guides and starter templates`,
     href: '/docs/quickstart',
   },
 ]
@@ -24,9 +24,10 @@ const secondaryOptions = [
 
 <template>
   <Section>
-    <template #title>Deploy on your&nbsp;terms</template>
+    <template #title>Managed cloud, open&nbsp;source</template>
     <template #tagline>
-      Get started with Electric Cloud or run it yourself.
+      Vendor agnostic,
+      <span class="no-wrap">infra agnostic</span>
     </template>
     <div class="deployment-grid">
       <div class="cloud-card">
@@ -34,20 +35,23 @@ const secondaryOptions = [
           <div class="card primary">
             <div class="cloud-content">
               <div class="cloud-icon">
-                <img src="/img/icons/electric.svg" alt="Electric" />
+                <img src="/img/icons/ddn.svg" alt="Electric" />
               </div>
               <div class="cloud-text">
                 <h3>Electric Cloud</h3>
                 <p>
-                  The fastest way to get started. Managed hosting with automatic
-                  scaling, monitoring, and zero-ops deployment.
+                  <span class="hidden-sm">Scalable, turnkey</span>
+                  <span class="inline-sm">Scalable</span>
+                  hosting with
+                  <span class="no-wrap">usage-based pricing</span>
                 </p>
               </div>
               <div class="cloud-actions">
-                <span class="cta-button primary-cta">Sign up free</span>
-                <a :href="'/cloud'" class="secondary-link" @click.stop>
-                  Learn more &rarr;
-                </a>
+                <VPButton
+                    href="/cloud"
+                    text="Learn more"
+                    theme="brand"
+                />
               </div>
             </div>
           </div>
@@ -87,23 +91,26 @@ const secondaryOptions = [
   position: relative;
   display: block;
   border-radius: 12px;
-  background: var(--vp-c-bg-soft);
+  background:
+    linear-gradient(to right, var(--vp-c-bg-soft) 45%, transparent 85%),
+    linear-gradient(rgba(26, 27, 30, 0.5), rgba(26, 27, 30, 0.5)),
+    url('/img/home/dashboard-stream.jpg') right top / auto 109% no-repeat,
+    var(--vp-c-bg-soft);
   border: 1px solid rgba(42, 44, 52, 0.5);
   overflow: hidden;
-  padding: 40px;
+  padding: 32px;
 }
 
 .cloud-content {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  text-align: center;
+  align-items: flex-start;
+  text-align: left;
   gap: 20px;
 }
 
 .cloud-icon img {
   width: 64px;
-  height: 64px;
 }
 
 .cloud-text h3 {
@@ -125,7 +132,6 @@ const secondaryOptions = [
   flex-direction: row;
   align-items: center;
   gap: 20px;
-  margin-top: 8px;
 }
 
 .cta-button.primary-cta {
@@ -160,9 +166,32 @@ const secondaryOptions = [
   gap: 24px;
 }
 
+@media (min-width: 1280px) {
+  .cloud-card .card.primary {
+    padding: 52px 32px;
+  }
+}
+
+@media (min-width: 1024px) and (max-width: 1279px) {
+  .cloud-card .card.primary {
+    padding: 48px 32px;
+  }
+}
+
+@media (min-width: 769px) and (max-width: 1023px) {
+  .cloud-card .card.primary {
+    padding: 42px 32px;
+  }
+}
+
 @media (max-width: 768px) {
   .cloud-card .card.primary {
-    padding: 32px 24px;
+    padding: 32px;
+    background:
+      linear-gradient(to right, var(--vp-c-bg-soft) 40%, transparent 85%),
+      linear-gradient(rgba(26, 27, 30, 0.6), rgba(26, 27, 30, 0.6)),
+      url('/img/home/dashboard-stream.jpg') right top / auto 109% no-repeat,
+      var(--vp-c-bg-soft);
   }
 
   .cloud-icon img {
@@ -185,7 +214,8 @@ const secondaryOptions = [
   }
 
   .cloud-card .card.primary {
-    padding: 24px 20px;
+    padding: 24px;
+    background: var(--vp-c-bg-soft);
   }
 }
 </style>

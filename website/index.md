@@ -6,7 +6,8 @@ hero:
   name: 'Sync'
   text: '<br />with your stack'
   tagline: >-
-    Build fast, modern, collaborative apps without&nbsp;changing&nbsp;your&nbsp;stack.
+    Build fast, modern, collaborative apps
+    <span class="no-wrap">without changing your stack</span>
   actions:
     - theme: brand
       text: Sign-up to Cloud

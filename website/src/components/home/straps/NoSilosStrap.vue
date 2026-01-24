@@ -4,17 +4,9 @@ import CTAStrap from '../CTAStrap.vue'
 const actions = [
   {
     href: '/docs/quickstart',
-    text: 'Quickstart',
+    text: 'Get started',
     theme: 'brand',
-  },
-  // {
-  //   href: '/docs/tutorial',
-  //   text: 'Tutorial'
-  // },
-  {
-    href: '/docs/intro',
-    text: 'Docs',
-  },
+  }
 ]
 </script>
 
@@ -24,14 +16,13 @@ const actions = [
     <template #tagline>
       Just
       <span class="hidden-sm"> real-time</span>
-      sync, solved. It’s all
+      sync, solved &mdash; it’s all
       <a href="https://github.com/electric-sql" class="no-wrap"> open source</a>
       <span class="no-wrap-xs">
-        and it’s all just
-        <span class="no-wrap">
-          <a href="/docs/api/http"> Postgres and HTTP</a></span
-        ></span
-      >.
+        and it’s
+        <a href="/docs/api/http" class="no-wrap">
+          all just HTTP</a>
+      </span>
     </template>
   </CTAStrap>
 </template>

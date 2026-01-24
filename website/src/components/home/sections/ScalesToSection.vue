@@ -3,18 +3,6 @@ import ScalabilityChart from '../../ScalabilityChart.vue'
 
 import Card from '../Card.vue'
 import Section from '../Section.vue'
-
-const actions = [
-  {
-    href: '/product/cloud',
-    text: 'Electric Cloud',
-    theme: 'brand',
-  },
-  {
-    href: '/docs/reference/benchmarks',
-    text: 'Benchmarks',
-  },
-]
 </script>
 
 <style scoped>
@@ -27,7 +15,7 @@ const actions = [
 </style>
 
 <template>
-  <Section :actions="actions" :wideSectionHead="true">
+  <Section :wideSectionHead="true">
     <template #title>
       Scales to
       <span class="no-wrap"> millions of users</span>
@@ -78,15 +66,5 @@ const actions = [
         <ScalabilityChart />
       </div>
     </div>
-    <template #outline>
-      You can
-      <a href="/docs/guides/deployment"> host it yourself</a>
-      or use the
-      <a href="/product/cloud"> Electric Cloud</a>&nbsp;platform<span
-        class="hidden-lg"
-      >
-        for managed sync with a built-in data delivery network</span
-      >.
-    </template>
   </Section>
 </template>
