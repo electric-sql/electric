@@ -88,7 +88,7 @@ import Section from '../Section.vue'
           at scale. It has dramatically simplified our&nbsp;architecture<span
             class="hidden-md"
           >
-            while delivering cell-level reactive updates</span
+            while delivering cell-level reactivity</span
           >.
         </template>
         <template #attribution>

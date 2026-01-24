@@ -40,10 +40,12 @@ const { post } = defineProps(['post'])
 }
 
 .post-body h3 {
-  font-size: 18px;
+  font-size: 17px;
   margin: 0 0 8px 0;
   line-height: 1.7;
   max-width: 245px;
+  font-weight: 500;
+  color: var(--vp-c-text-1-5);
 }
 
 .post-body p {
@@ -66,7 +68,7 @@ const { post } = defineProps(['post'])
     font-size: 17px;
   }
   .post-link {
-    font-size: 13px;
+    font-size: 13.5px;
   }
 }
 @media (max-width: 999px) {
@@ -77,7 +79,7 @@ const { post } = defineProps(['post'])
     font-size: 16px;
   }
   .post-link {
-    font-size: 13px;
+    font-size: 13.5px;
   }
 }
 @media (max-width: 899px) {
@@ -134,6 +136,7 @@ const { post } = defineProps(['post'])
   .post-body h3 {
     font-size: 15px;
     max-width: 275px;
+    color: var(--vp-c-text-2);
   }
   .post-link {
     font-size: 13px;

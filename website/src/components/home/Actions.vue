@@ -11,13 +11,12 @@ const expandedActions =
           ? '_blank'
           : '_self'
         const defaultTheme = 'alt'
-
+        const classes = action.classes || ''
+        const key = `${action.href}-${action.text}`
         const target = action.target || defaultTarget
         const theme = action.theme || defaultTheme
 
-        const key = `${action.href}-${action.text}`
-
-        return { ...action, key, target, theme }
+        return { ...action, classes, key, target, theme }
       })
     : []
 
@@ -64,8 +63,8 @@ onMounted(() => {
     :class="`actions cta-actions ${isStrap ? 'is-strap' : ''}`"
   >
     <div
-      class="action"
-      v-for="{ href, key, target, text, theme } in expandedActions"
+      v-for="{ classes, href, key, target, text, theme } in expandedActions"
+      :class="`action ${classes}`"
     >
       <VPButton
         :href="href"

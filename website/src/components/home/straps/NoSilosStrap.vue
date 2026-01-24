@@ -12,16 +12,14 @@ const actions = [
 
 <template>
   <CTAStrap :actions="actions">
-    <template #title> No&nbsp;siloes. No&nbsp;black&nbsp;boxes. </template>
+    <template #title>
+      No&nbsp;siloes. No&nbsp;black&nbsp;boxes
+    </template>
     <template #tagline>
-      Just
-      <span class="hidden-sm"> real-time</span>
-      sync, solved &mdash; it’s all
-      <a href="https://github.com/electric-sql" class="no-wrap"> open source</a>
-      <span class="no-wrap-xs">
-        and it’s
-        <a href="/docs/api/http" class="no-wrap">
-          all just HTTP</a>
+      Just sync, solved, with
+      <span class="no-wrap">
+        <a href="/docs/api/http">
+          standard web tech</a>
       </span>
     </template>
   </CTAStrap>

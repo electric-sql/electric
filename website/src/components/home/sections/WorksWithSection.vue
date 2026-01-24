@@ -158,6 +158,8 @@ onMounted(() => {
   display: flex;
   align-items: center;
   border-top: 1px solid rgba(42, 44, 52, 0.3);
+  min-width: 0;
+  overflow: hidden;
 }
 
 .data-source-code code {
@@ -334,13 +336,20 @@ onMounted(() => {
     /*max-width: 384px;*/
   }
 }
-@media (max-width: 518px) {
+@media (max-width: 559px) {
+  .your-stack .col {
+    min-width: 0;
+    width: 100%;
+  }
   .layers,
   .your-stack :deep(div[class*='language-']),
   .data-sources,
   .data-source-full {
-    /*max-width: 320px;*/
+    max-width: 100%;
+    width: 100%;
   }
+}
+@media (max-width: 518px) {
   .data-source-code code {
     font-size: 11px;
   }

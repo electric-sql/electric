@@ -84,14 +84,14 @@ const products = [
   color: var(--vp-c-text-2);
   font-size: 14.25px;
   font-weight: 500;
-  max-width: none;
+  max-width: none !important;
 }
 .products-grid hr {
   margin: 8px 0 10px;
 }
 .products-grid .detail-p {
   color: var(--vp-c-text-3);
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 450;
 }
 .products-grid :deep(.card .icon img) {
@@ -146,7 +146,12 @@ const products = [
   }
 
   .products-grid :deep(.breaker) {
-    display: inline
+    display: inline;
+  }
+}
+@media (max-width: 429px) {
+  .products-grid :deep(.breaker) {
+    display: block;
   }
 }
 </style>

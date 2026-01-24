@@ -9,13 +9,19 @@ const posts = data.filter((post) => post.homepage !== false).slice(0, 4)
 const actions = [
   {
     href: '/blog',
-    text: 'Blog',
+    text: 'Electric Blog',
     theme: 'brand',
   },
   {
     href: 'https://x.com/ElectricSQL',
     text: 'Follow @ElectricSQL',
+    classes: 'hidden-xs',
   },
+  {
+    href: 'https://x.com/ElectricSQL',
+    text: 'Follow',
+    classes: 'block-xs',
+  }
 ]
 </script>
 
@@ -63,10 +69,10 @@ const actions = [
 
 <template>
   <Section :actions="actions">
-    <template #title> Latest news and updates </template>
+    <template #title> Latest <span class="hidden-sm">news and</span> updates</template>
     <template #tagline>
       Subscribe to the
-      <a href="/blog">Electric Blog</a> for the latest news and updates.
+      <a href="/blog">Electric Blog</a>
     </template>
     <div class="listing">
       <BlogPostListing v-for="post in posts" :key="post.slug" :post="post" />
