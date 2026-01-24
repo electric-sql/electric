@@ -1,9 +1,9 @@
 ---
 title: 'Announcing Hosted Durable Streams'
 description: >-
-  Hosted durable streams is now live on Electric Cloud—persistent, resumable event streams over HTTP with unlimited streams, reads, and writes.
+  Hosted durable streams are now live on Electric Cloud. Persistent, resumable event streams over HTTP with unlimited streams, reads, and writes.
 excerpt: >-
-  We spent 3 years building a Postgres-native sync engine. Along the way, we realized the most important thing we built wasn't Postgres sync—it was the primitive underneath. With this release, you can stream and sync any kind of data through a single cloud platform.
+  Hosted durable streams are live on Electric Cloud. You can now sync and stream AI sessions and low-latency real-time data alongside structured database changes.
 authors: [kyle]
 image: /img/blog/announcing-hosted-durable-streams/hero.png
 tags: [durable-streams, cloud, agentic, AI]
@@ -23,17 +23,21 @@ import YoutubeEmbed from '../../src/components/YoutubeEmbed.vue'
   }
 </style>
 
-We spent 3 years building a Postgres-native sync engine. Along the way, we realized the most important thing we built wasn't Postgres sync—it was the primitive underneath.
+We spent 3 years [building a Postgres-native sync engine](/blog/2025/03/17/electricsql-1.0-released). Along the way, we realized the most important thing we built wasn't Postgres sync. It was the primitive underneath.
 
-A year ago, AI apps barely worked because models weren't good enough. Claude Code refactors across fifty files and the tests still pass. Cursor is the new VSCode. The models are great.
-
-Now infrastructure is the bottleneck—but it's not just infrastructure, it's a shift in *coordination model*. Request/response assumes two parties taking turns. Agentic apps have three agents and two users all acting at once. That requires a different primitive. And people are cobbling together Redis, WebSockets, and retry logic to build it.
-
-So it turns out we'd built exactly the right primitive for this moment: durable streams. Persistent, resumable event streams over HTTP.
-
-We [released the Durable Streams protocol](/blog/2025/12/09/announcing-durable-streams) in December. Today we're announcing 0.2.0—with idempotent producers and exactly-once semantics—*and* hosted durable streams on Electric Cloud.
+We released this primitive as [Durable Streams](/blog/2025/12/09/announcing-durable-streams) in December. Today we're releasing version 0.2.0. This brings new features (like idempotent producers and exactly-once semantics) and turnkey, scalable hosting of Durable Streams on [Electric Cloud](/product/cloud).
 
 ## A new coordination model
+
+A year ago, AI apps barely worked because models weren't good enough. Now, Claude Code refactors 50 files and the tests still pass. Cursor is the new VSCode. The models are more than good enough.
+
+Today infrastructure is the bottleneck. However, it's not just infrastructure, it's a shift in the ***coordination model***.
+
+[Request/response assumes two parties taking turns](/blog/2026/01/12/durable-sessions-for-collaborative-ai#evolving-the-interaction-paradigm). Agentic apps have multiple agents and multiple users all acting at once. That requires a different primitive. And people are cobbling together Redis, WebSockets, and retry logic to build it.
+
+So it turns out we'd built exactly the right primitive for this moment: [Durable Streams](https://github.com/durable-streams/durable-streams). Persistent, resumable event streams over HTTP.
+
+## The missing primitive
 
 A durable stream is an addressable, append-only log with its own URL. Clients can read from the log from any position and tail for live updates.
 
@@ -76,15 +80,16 @@ Write to it, read from it, tail for live updates—all plain HTTP.
   <YoutubeEmbed video-id="y81PbquFq9I" />
 </div>
 
+### Coming soon
 
-**Coming soon:** Drop-in AI SDK transports for Vercel AI SDK and TanStack AI, Yjs support for collaborative editing, and an HTTP proxy that makes your existing token streams resumable with no code changes.
+Drop-in AI SDK transports for Vercel AI SDK and TanStack AI. Yjs support for collaborative editing. An HTTP proxy that makes your existing token streams resumable with no code changes.
 
----
+## Next steps
 
-You've written the agent loop. You've debugged the WebSocket reconnection race. You've wondered if Redis PUBLISH actually delivered that message. You can stop now.
+You've written the agent loop. You've debugged the WebSocket reconnection race. You've wondered if Redis `PUBLISH` actually delivered that message. You can stop now.
 
-We're early—docs are sparse, guides are coming, and you'll be figuring some things out alongside us.
+We're early. Docs are sparse, guides are coming, and you'll be figuring some things out alongside us. However the [protocol is production-ready](/blog/2025/03/17/electricsql-1.0-released).
 
-But the protocol is production-ready. What we're still learning is ergonomics. What does it feel like to build with this? What do you wish it did? We're all learning together how to build sophisticated, malleable, agentic applications.
+What we're still learning is ergonomics. What does it feel like to build with this? What do you wish it did? We're all learning together how to build sophisticated, malleable, agentic applications and we'd love your feedback and contributions to building the infra we all need.
 
-[Get started](https://electric-sql.com/product/cloud) · [Discord](https://discord.electric-sql.com)
+You can [get started with Cloud here](/product/cloud) and you can [join our community Discord here](https://discord.electric-sql.com).
