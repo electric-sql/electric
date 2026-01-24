@@ -124,11 +124,15 @@ const products = [
   .products-grid :deep(.breaker) {
     display: block;
   }
+  .products-grid hr,
+  .products-grid .detail-p {
+    display: none;
+  }
 }
 
-@media (max-width: 518px) {
+@media (max-width: 559px) {
   .products-grid {
-    margin: 32px 24px 40px;
+    margin: 32px 0px 40px;
     gap: 20px;
     grid-template-columns: 1fr;
   }
@@ -137,8 +141,12 @@ const products = [
     position: relative;
     display: block;
     width: 100%;
-    max-width: 340px;
+    /*max-width: 340px;*/
     margin: 0 auto;
+  }
+
+  .products-grid :deep(.breaker) {
+    display: inline
   }
 }
 </style>

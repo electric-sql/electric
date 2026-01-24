@@ -305,18 +305,22 @@ onMounted(() => {
   .your-app-col {
     order: 2;
   }
+  .data-sources {
+    gap: 20px;
+  }
+
   .layers,
   .your-stack :deep(div[class*='language-']),
   .data-sources,
   .data-source-full {
-    max-width: 448px;
+    max-width: 511px;
     margin-left: auto !important;
     margin-right: auto !important;
   }
   .layers {
     display: grid;
     grid-template-columns: 1fr;
-    gap: 24px;
+    gap: 20px;
   }
   .data-sources {
     height: auto;
@@ -327,7 +331,7 @@ onMounted(() => {
   .your-stack :deep(div[class*='language-']),
   .data-sources,
   .data-source-full {
-    max-width: 384px;
+    /*max-width: 384px;*/
   }
 }
 @media (max-width: 518px) {
@@ -335,7 +339,7 @@ onMounted(() => {
   .your-stack :deep(div[class*='language-']),
   .data-sources,
   .data-source-full {
-    max-width: 320px;
+    /*max-width: 320px;*/
   }
   .data-source-code code {
     font-size: 11px;

@@ -126,6 +126,7 @@ const { post } = defineProps(['post'])
 @media (max-width: 768px) {
   .post-image img {
     width: 33vw;
+    max-width: 200px;
   }
   .post-body {
     padding: 28px 26px 32px;

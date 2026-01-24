@@ -98,7 +98,7 @@ const secondaryOptions = [
     var(--vp-c-bg-soft);
   border: 1px solid rgba(42, 44, 52, 0.5);
   overflow: hidden;
-  padding: 32px;
+  padding: 40px 32px 48px;
 }
 
 .cloud-content {
@@ -168,25 +168,25 @@ const secondaryOptions = [
 
 @media (min-width: 1280px) {
   .cloud-card .card.primary {
-    padding: 52px 32px;
+    padding: 56px 32px;
   }
 }
 
 @media (min-width: 1024px) and (max-width: 1279px) {
   .cloud-card .card.primary {
-    padding: 48px 32px;
+    padding: 50px 32px;
   }
 }
 
 @media (min-width: 769px) and (max-width: 1023px) {
   .cloud-card .card.primary {
-    padding: 42px 32px;
+    padding: 46px 32px;
   }
 }
 
 @media (max-width: 768px) {
   .cloud-card .card.primary {
-    padding: 32px;
+    padding: 40px 32px 46px;
     background:
       linear-gradient(to right, var(--vp-c-bg-soft) 40%, transparent 85%),
       linear-gradient(rgba(26, 27, 30, 0.6), rgba(26, 27, 30, 0.6)),
@@ -210,12 +210,16 @@ const secondaryOptions = [
 
 @media (max-width: 518px) {
   .deployment-grid {
-    margin: 32px 24px 40px;
+    margin: 32px 0px 40px;
   }
 
   .cloud-card .card.primary {
-    padding: 24px;
-    background: var(--vp-c-bg-soft);
+    padding: 32px 24px 40px;
+    background:
+      linear-gradient(to right, var(--vp-c-bg-soft) 40%, transparent 85%),
+      linear-gradient(rgba(26, 27, 30, 0.8), rgba(26, 27, 30, 0.8)),
+      url('/img/home/dashboard-stream.jpg') right top / auto 109% no-repeat,
+      var(--vp-c-bg-soft);
   }
 }
 </style>

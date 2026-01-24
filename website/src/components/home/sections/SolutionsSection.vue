@@ -51,5 +51,9 @@ const actions = [
     grid-template-columns: 1fr;
     gap: 20px;
   }
+  .solutions-grid .post {
+    max-width: 511px;
+    margin: auto;
+  }
 }
 </style>

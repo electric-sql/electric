@@ -49,7 +49,7 @@ import Section from '../Section.vue'
     <template #title> Used by world leading&nbsp;companies </template>
     <template #tagline>
       Built into
-      <span class="hidden-sm"> developer tools like </span>
+      <span class="hidden-sm"> tools like </span>
       <a
         href="https://www.npmjs.com/package/firebase-tools?activeTab=dependencies"
         target="_blank"
@@ -58,15 +58,10 @@ import Section from '../Section.vue'
       and
       <a href="https://supabase.com/blog/database-build-v2" target="_blank">
         Supabase</a
-      >. Used
-      <span class="hidden-sm"> in production</span>
-      by
-      <span class="hidden-sm"> products like</span>
+      >. Used by
+      <span class="hidden-sm"> products like </span>
       <span class="no-wrap">
-        <a href="https://trigger.dev/product/realtime" target="_blank">
-          Trigger.dev</a
-        >, <a href="https://ottogrid.ai" target="_blank"> Otto</a> and
-        <a href="https://doorboost.com" target="_blank"> Doorboost</a></span
+        <a href="https://trigger.dev/product/realtime" target="_blank">Trigger</a> and <a href="https://ottogrid.ai" target="_blank">Otto</a></span
       >.
     </template>
     <div class="quotes">
