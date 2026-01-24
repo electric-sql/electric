@@ -2,6 +2,8 @@
 title: Secure transactions with local-first
 description: >-
   You don't need to expose an API to perform secure transactions with local-first. Just emulate request - response over the in-paradigm sync.
+excerpt: >-
+  One of the most common questions we get asked about developing on ElectricSQL is how to do secure, confirmed transactions like bookings and payments.
 authors: [thruflo]
 image: /img/blog/secure-transactions-with-local-first/header.png
 tags: [local-first, example app]

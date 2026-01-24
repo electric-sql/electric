@@ -1,7 +1,7 @@
 ---
-title: From science fiction to reality — you can build difficult things with LLMs now
+title: From fiction to reality, you can now build difficult things
 description: Four years ago I dreamed of building a browser-based collaborative CAD editor. In late 2025, LLMs made it possible — here's how I built SolidType in two weeks, and what it reveals about the shift in what's now feasible for a solo developer.
-excerpt: Four years ago, I described a "real-time collaborative parametric CAD app" on Hacker News — completely out of reach for a solo developer. In late 2025, LLMs changed the equation. Over the holidays, I built it — 70k lines of TypeScript, essentially all written by coding agents.
+excerpt: Four years ago, building a collaborative parametric CAD app was completely out of reach for a solo developer. I built one in a week, using the Electric stack and coding agents.
 authors: [samwillis]
 image: /img/blog/from-science-fiction-to-reality-you-can-build-difficult-things-now/header.jpg
 imageWidth: 1536

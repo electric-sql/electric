@@ -9,7 +9,7 @@ outline: deep
 post: true
 ---
 
-To set the tone for 2024, we're kicking January off with a fresh release of Electric that introduces a whole slew of improvements to the experience of configuring, deploying, and developing with Electric.
+We're kicking off the year with a fresh release of Electric that introduces a whole slew of improvements to the experience of configuring, deploying, and developing with Electric.
 
 <!--truncate-->
 

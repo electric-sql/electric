@@ -3,7 +3,7 @@ title: Durable Sessions — the key pattern for collaborative AI
 description: >
   This post introduces the Durable Session pattern for building collaborative AI apps with Durable Streams and TanStack DB.
 excerpt: >
-  As the world moves to getting things done through agents, the winners are going to be the products that combine AI with team-based collaboration. Building AI apps on a Durable Session architecture is the best way to do that.
+  As the world moves to getting things done through agents, products need to combine AI with team-based collaboration. Durable Sessions are the best way to do that.
 authors: [thruflo]
 image: /img/blog/durable-sessions-for-collaborative-ai/header.jpg
 imageWidth: 1536

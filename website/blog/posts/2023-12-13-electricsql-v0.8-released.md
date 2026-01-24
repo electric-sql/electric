@@ -3,7 +3,7 @@ title: ElectricSQL v0.8 released with JSON and Supabase support
 description: >-
   Version 0.8 of ElectricSQL. A local-first sync layer that you can use to build reactive, realtime, offline-capable apps directly on Postgres with your existing data model.
 excerpt: >-
-  Version 0.8 of ElectricSQL has now been released. This release improves data model and deployment compatibility, including support for JSON and running on popular managed Postgres and, such as Supabase and Digital Ocean.
+  Improved data model and and deployment compatibility including JSON support and integration with popular Postgres hosts like Supabase and Digital Ocean.
 authors: [samwillis]
 image: /img/blog/electricsql-v0.8-released/Electric+Supabase.png
 tags: [release]
