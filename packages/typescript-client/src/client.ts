@@ -183,6 +183,9 @@ export async function resolveValue<T>(
 async function toInternalParams(
   params: ExternalParamsRecord<Row>
 ): Promise<InternalParamsRecord> {
+  if (params.params) {
+    params = { ...params, params: convertWhereParamsToObj(params.params) }
+  }
   const entries = Object.entries(params)
   const resolvedEntries = await Promise.all(
     entries.map(async ([key, value]) => {
@@ -851,9 +854,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
     // Resolve headers and params in parallel
     const [requestHeaders, params] = await Promise.all([
       resolveHeaders(this.options.headers),
-      this.options.params
-        ? toInternalParams(convertWhereParamsToObj(this.options.params))
-        : undefined,
+      this.options.params ? toInternalParams(this.options.params) : undefined,
     ])
 
     // Validate params after resolution
@@ -937,7 +938,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
         // Serialize params as JSON to keep the parameter name constant for proxy configs
         fetchUrl.searchParams.set(
           SUBSET_PARAM_WHERE_PARAMS,
-          JSON.stringify(subsetParams.params)
+          JSON.stringify(convertWhereParamsToObj(subsetParams.params))
         )
       if (subsetParams.limit)
         setQueryParam(fetchUrl, SUBSET_PARAM_LIMIT, subsetParams.limit)
@@ -1758,13 +1759,10 @@ function setQueryParam(
 }
 
 function convertWhereParamsToObj(
-  allPgParams: ExternalParamsRecord<Row>
-): ExternalParamsRecord<Row> {
-  if (Array.isArray(allPgParams.params)) {
-    return {
-      ...allPgParams,
-      params: Object.fromEntries(allPgParams.params.map((v, i) => [i + 1, v])),
-    }
+  whereParams: Record<`${number}`, string> | string[]
+): Record<`${number}`, string> {
+  if (Array.isArray(whereParams)) {
+    return Object.fromEntries(whereParams.map((v, i) => [i + 1, v]))
   }
-  return allPgParams
+  return whereParams
 }
