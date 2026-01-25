@@ -13,7 +13,7 @@ hero:
       text: Sign-up to Cloud
       link: https://dashboard.electric-sql.cloud/
     - theme: brand
-      text: Sign-up
+      text: Cloud
       link: https://dashboard.electric-sql.cloud/
     - theme: alt
       text: Quickstart
@@ -43,7 +43,6 @@ import {
   ProductsSection,
   ScalesToSection,
   SolutionsSection,
-  UsedBySection,
   WorksWithSection
 } from './src/components/home'
 
@@ -97,8 +96,7 @@ const Todos = () => {
 <DeploymentSection />
 <ScalesToSection />
 <NoSilosStrap />
-<UsedBySection />
-<BackedBySection />
-<OpenSourceSection />
 <LatestNewsSection />
 <GetStartedStrap />
+<BackedBySection />
+<OpenSourceSection />

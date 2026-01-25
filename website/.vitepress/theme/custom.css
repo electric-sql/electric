@@ -804,6 +804,15 @@ iframe {
   content: ' ';
 }
 
+/* Sync page hero: 4-action pattern (two responsive pairs) */
+/* Position 3 needs to be hidden on small screens */
+@media (max-width: 639px) {
+  .sync-page .VPHomeHero .actions .action:nth-child(3) {
+    position: absolute;
+    visibility: hidden;
+  }
+}
+
 .VPFeatures {
   padding-top: 15px !important;
   padding-bottom: 45px;
