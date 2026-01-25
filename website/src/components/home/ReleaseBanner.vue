@@ -2,7 +2,7 @@
   <div class="banner">
     <div class="container">
       <div>
-        <a href="#"
+        <a href="/blog/2026/01/22/announcing-hosted-durable-streams"
           >✨ Durable Streams <span class="hidden-xs">are</span> now
           <span class="hidden-sm">available</span> on Electric&nbsp;Cloud</a
         >
