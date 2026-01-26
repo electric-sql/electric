@@ -25,7 +25,7 @@ import YoutubeEmbed from '../../src/components/YoutubeEmbed.vue'
 
 We spent 3 years [building a Postgres-native sync engine](/blog/2025/03/17/electricsql-1.0-released). Along the way, we realized the most important thing we built wasn't Postgres sync. It was the primitive underneath.
 
-We released this primitive as [Durable Streams](/blog/2025/12/09/announcing-durable-streams) in December. Today we're releasing version 0.2.0. This brings new features (like idempotent producers and exactly-once semantics) and turnkey, scalable hosting of Durable Streams on [Electric Cloud](/product/cloud).
+We released this primitive as [Durable Streams](/blog/2025/12/09/announcing-durable-streams) in December. Today we're releasing version 0.2.0. This brings new features (like idempotent producers and exactly-once semantics) and turnkey, scalable hosting of Durable Streams on [Electric Cloud](/cloud).
 
 ## A new coordination model
 
@@ -55,7 +55,7 @@ With 0.2.0, the protocol is mature—we're ready for more people to build with i
 
 ## What's shipping
 
-Hosted durable streams is now live on [Electric Cloud](https://electric-sql.com/product/cloud), our managed sync platform. Electric Cloud also hosts [Postgres sync](/product/electric), so you can combine real-time streams with synced relational data in the same app.
+Hosted durable streams is now live on [Electric Cloud](/cloud), our managed sync platform. Electric Cloud also hosts [Postgres sync](/products/postgres-sync), so you can combine real-time streams with synced relational data in the same app.
 
 - **Reads don't hit origin.** Electric Cloud's Sync CDN serves all reads. We've tested to 1M concurrent connections per stream.
 - **Fast writes.** 240K writes/second for small messages, with 15-25 MB/sec sustained throughput.
@@ -65,7 +65,7 @@ Hosted durable streams is now live on [Electric Cloud](https://electric-sql.com/
 
 ## Get started
 
-Sign up for [Electric Cloud](https://electric-sql.com/product/cloud) and create a service. Then create your first stream:
+Sign up for [Electric Cloud](/cloud) and create a service. Then create your first stream:
 
 ```bash
 curl -X PUT \
@@ -92,4 +92,4 @@ We're early. Docs are sparse, guides are coming, and you'll be figuring some thi
 
 What we're still learning is ergonomics. What does it feel like to build with this? What do you wish it did? We're all learning together how to build sophisticated, malleable, agentic applications and we'd love your feedback and contributions to building the infra we all need.
 
-You can [get started with Cloud here](/product/cloud) and you can [join our community Discord here](https://discord.electric-sql.com).
+You can [get started with Cloud here](/cloud) and you can [join our community Discord here](https://discord.electric-sql.com).

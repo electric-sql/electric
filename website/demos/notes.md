@@ -26,6 +26,6 @@ Notes demonstrates our [Yjs integration](/docs/integrations/yjs). By combining Y
 - Electric provides real-time sync that scales to millions of concurrent users while keeping your data consistent
 - Yjs handles the collaborative editing with battle-tested conflict resolution
 
-[`y-electric.ts`](https://github.com/KyleAMathews/electric-notes/blob/main/src/y-electric/index.ts) provides a standard Yjs provider similar to y-websocket. Internally it syncs Yjs operations using the standard [`ShapeStream`](https://electric-sql.com/docs/api/clients/typescript#shapestream) class from the Electric [Typescript client](https://electric-sql.com/docs/api/clients/typescript).
+[`y-electric.ts`](https://github.com/KyleAMathews/electric-notes/blob/main/src/y-electric/index.ts) provides a standard Yjs provider similar to y-websocket. Internally it syncs Yjs operations using the standard [`ShapeStream`](/docs/api/clients/typescript#shapestream) class from the Electric [Typescript client](/docs/api/clients/typescript).
 
 <DemoCTAs :demo="$frontmatter" />

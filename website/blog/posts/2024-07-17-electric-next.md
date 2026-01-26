@@ -31,7 +31,7 @@ The new approach provides an [HTTP API](/docs/api/http) for syncing [Shapes](/do
 
 ## Why build a new system?
 
-Electric has its [heritage](https://electric-sql.com/about/team#advisors) in [distributed database research](https://electric-sql.com/docs/reference/literature). When we started, our plan was to use this research to build a next-generation distributed database. Cockroach for the AP side of the CAP theorem. However, the adoption dynamics for creating a new database from scratch are tough. So we pivoted to building a replication layer for existing databases.
+Electric has its [heritage](https://electric-sql.com/about/team#advisors) in [distributed database research](/docs/reference/literature). When we started, our plan was to use this research to build a next-generation distributed database. Cockroach for the AP side of the CAP theorem. However, the adoption dynamics for creating a new database from scratch are tough. So we pivoted to building a replication layer for existing databases.
 
 This allowed us to do active-active replication between multiple Postgres instances, in the cloud or at the edge. However, rather than stopping at the edge, we kept seeing that it was more optimal to take the database-grade replication guarantees all the way into the client.
 

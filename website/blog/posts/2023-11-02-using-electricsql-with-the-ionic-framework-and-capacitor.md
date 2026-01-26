@@ -101,7 +101,7 @@ async function initCapacitorSQLite(dbName: string, config: ElectricConfig) {
 }
 ```
 
-There are more details of how to [initialise an Electric client database in the documentation](https://electric-sql.com/docs/api/clients/typescript#instantiation).
+There are more details of how to [initialise an Electric client database in the documentation](/docs/api/clients/typescript#instantiation).
 
 ## Conclusion
 
