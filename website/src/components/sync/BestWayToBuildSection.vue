@@ -19,7 +19,7 @@ const actions = [
 
 <template>
   <div id="solutions">
-    <Section :actions="actions" :dark="true">
+    <Section :actions="actions">
       <template #title>
         The best way to <span class="no-wrap">build apps</span>
       </template>
