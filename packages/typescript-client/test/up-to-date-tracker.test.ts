@@ -324,4 +324,118 @@ describe(`UpToDateTracker`, () => {
     // Shape2 should not (no previous up-to-date)
     expect(tracker.shouldEnterReplayMode(shapeKey2)).toBe(null)
   })
+
+  it(`should not infinite loop when CDN keeps returning same cursor`, async () => {
+    // This test reproduces a bug where the client gets stuck in an infinite loop
+    // when the CDN keeps returning cached responses with the same cursor as localStorage.
+    //
+    // Scenario:
+    // 1. User was on page, got up-to-date with cursor=1000, stored in localStorage
+    // 2. User refreshes page within 60s (localStorage entry still valid)
+    // 3. Client enters replay mode with lastSeenCursor=1000
+    // 4. First request (offset=-1) → CDN returns cached initial response with cursor=1000
+    // 5. Client processes, sets isUpToDate=true, cursor matches → SUPPRESSES notification
+    // 6. BUG: #lastSeenCursor is NOT cleared, stays in replay mode
+    // 7. Next request (live=true&cursor=1000) → CDN cache hit, returns cursor=1000
+    // 8. Cursor still matches → SUPPRESSES again, loop continues forever
+    //
+    // The fix: clear #lastSeenCursor after first suppression to exit replay mode.
+
+    let fetchCallCount = 0
+    const maxFetchCalls = 10 // Safety limit to detect infinite loop
+
+    // Simulate CDN cache: maps URL patterns to cached responses
+    const cdnCache: Record<string, { cursor: string; offset: string }> = {
+      // Initial request (no live param) - cached from previous session
+      initial: { cursor: `1000`, offset: `0_0` },
+      // Live request with cursor=1000 - also cached
+      live_1000: { cursor: `1000`, offset: `0_0` },
+    }
+
+    // Pre-populate localStorage: user got up-to-date 1 second ago with cursor=1000
+    const shapeKey = `${shapeUrl}?table=cdn_loop_test`
+    localStorage.setItem(
+      `electric_up_to_date_tracker`,
+      JSON.stringify({
+        [shapeKey]: {
+          timestamp: Date.now() - 1000, // 1 second ago
+          cursor: `1000`,
+        },
+      })
+    )
+
+    // Mock CDN that caches responses based on URL
+    const cdnMock = vi.fn((input: RequestInfo | URL) => {
+      fetchCallCount++
+      const url = new URL(input.toString())
+      const isLive = url.searchParams.get(`live`) === `true`
+      const cursor = url.searchParams.get(`cursor`)
+
+      // Safety valve: abort if we're in an infinite loop
+      if (fetchCallCount > maxFetchCalls) {
+        aborter.abort()
+        return Promise.reject(
+          new Error(`Infinite loop detected after ${maxFetchCalls} requests`)
+        )
+      }
+
+      // Determine which cached response to return
+      let cacheKey: string
+      if (isLive && cursor) {
+        cacheKey = `live_${cursor}`
+      } else {
+        cacheKey = `initial`
+      }
+
+      const cached = cdnCache[cacheKey] || cdnCache[`initial`]
+
+      return Promise.resolve(
+        new Response(JSON.stringify([{ headers: { control: `up-to-date` } }]), {
+          status: 200,
+          headers: {
+            'electric-handle': `test-handle`,
+            'electric-offset': cached.offset,
+            'electric-schema': `{}`,
+            'electric-cursor': cached.cursor,
+          },
+        })
+      )
+    })
+
+    const stream = new ShapeStream({
+      url: shapeUrl,
+      params: { table: `cdn_loop_test` },
+      signal: aborter.signal,
+      fetchClient: cdnMock,
+      subscribe: true, // Keep subscribing to live updates (this is where the loop happens)
+    })
+
+    const notifications: unknown[] = []
+    stream.subscribe((messages) => {
+      notifications.push(messages)
+    })
+
+    // Wait for requests to settle - with the bug, it will hit maxFetchCalls quickly
+    await new Promise((resolve) => setTimeout(resolve, 200))
+
+    // With the bug: fetchCallCount hits maxFetchCalls (10+) in milliseconds because:
+    //   - Each request returns cursor=1000
+    //   - Cursor matches localStorage → suppressed
+    //   - #lastSeenCursor is NOT cleared → stays in replay mode
+    //   - Next request also returns cursor=1000 → suppressed again
+    //   - Tight loop with no delay
+    //
+    // With the fix: should stabilize after 2 requests:
+    //   1. Initial request → cursor matches → suppressed, BUT now exits replay mode
+    //   2. Live request → not in replay mode → notifies subscribers, continues normally
+    //   (subsequent requests would still return cursor=1000 but wouldn't loop rapidly
+    //    because subscriber notifications happen normally)
+
+    // This is the key assertion: without the fix, we'll have hit maxFetchCalls (10+)
+    // With the fix, we should have at most a few requests
+    expect(fetchCallCount).toBeLessThanOrEqual(3)
+
+    // Should have received at least one notification once we exit replay mode
+    expect(notifications.length).toBeGreaterThanOrEqual(1)
+  })
 })
