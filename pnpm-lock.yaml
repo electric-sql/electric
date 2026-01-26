@@ -1523,6 +1523,15 @@ importers:
         specifier: ^5.3.4
         version: 5.4.10(@types/node@22.19.1)(lightningcss@1.30.1)(terser@5.44.0)
 
+  packages/agent:
+    devDependencies:
+      tsup:
+        specifier: ^8.0.1
+        version: 8.3.5(@swc/core@1.9.1(@swc/helpers@0.5.5))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.3)(typescript@5.8.3)(yaml@2.8.1)
+      typescript:
+        specifier: ^5.5.2
+        version: 5.8.3
+
   packages/electric-telemetry: {}
 
   packages/elixir-client: {}
@@ -8443,10 +8452,6 @@ packages:
     resolution: {integrity: sha512-ZqRXc+tZukToSNmh5C2iWMSoV3X1YUcPbqEM4DkEG5tNQXrQUZCNVGGv3IuicnkMtPfGf3Xtp8WCXs295iQ1pQ==}
     engines: {node: '>= 0.10.0'}
 
-  consola@3.2.3:
-    resolution: {integrity: sha512-I5qxpzLv+sJhTVEoLYNcTW+bThDCPsit0vLNKShZx6rLtpilNpmmeTPaeqJb9ZE9dV3DGaeby6Vuhrw38WjeyQ==}
-    engines: {node: ^14.18.0 || >=16.10.0}
-
   consola@3.4.2:
     resolution: {integrity: sha512-5IKcdX0nnYavi6G7TtOhwkYzyjfJlatbjMjuLSfE2kYT5pMDOilZ4OvMhi637CcDICTmz3wARPoyhqyX1Y+XvA==}
     engines: {node: ^14.18.0 || >=16.10.0}
@@ -14368,10 +14373,6 @@ packages:
 
   tr46@1.0.1:
     resolution: {integrity: sha512-dTpowEjclQ7Kgx5SdBkqRzVhERQXov8/l9Ft9dVM9fmg0W0KQSVaXX9T4i6twCPNtYiZM53lpSSUAwJbFPOHxA==}
-
-  tr46@5.0.0:
-    resolution: {integrity: sha512-tk2G5R2KRwBd+ZN0zaEXpmzdKyOYksXwywulIX95MBODjSzMIuQnQ3m8JxgbhnL1LeVo7lqQKsYa1O3Htl7K5g==}
-    engines: {node: '>=18'}
 
   tr46@5.1.1:
     resolution: {integrity: sha512-hdF5ZgjTqgAntKkklYw0R03MG2x/bSzTtkxmIRw/sTNV8YXsCJ1tfLAX23lhxhHJlEf3CRCOCGGWw3vI3GaSPw==}
@@ -22475,7 +22476,7 @@ snapshots:
       '@babel/plugin-syntax-typescript': 7.25.9(@babel/core@7.28.4)
       '@vanilla-extract/babel-plugin-debug-ids': 1.1.0
       '@vanilla-extract/css': 1.16.0
-      esbuild: 0.18.20
+      esbuild: 0.19.12
       eval: 0.1.8
       find-up: 5.0.0
       javascript-stringify: 2.1.0
@@ -23742,8 +23743,6 @@ snapshots:
       utils-merge: 1.0.1
     transitivePeerDependencies:
       - supports-color
-
-  consola@3.2.3: {}
 
   consola@3.4.2: {}
 
@@ -30744,10 +30743,6 @@ snapshots:
     dependencies:
       punycode: 2.3.1
 
-  tr46@5.0.0:
-    dependencies:
-      punycode: 2.3.1
-
   tr46@5.1.1:
     dependencies:
       punycode: 2.3.1
@@ -30810,18 +30805,18 @@ snapshots:
       bundle-require: 5.0.0(esbuild@0.24.0)
       cac: 6.7.14
       chokidar: 4.0.1
-      consola: 3.2.3
-      debug: 4.3.7(supports-color@5.5.0)
+      consola: 3.4.2
+      debug: 4.4.3
       esbuild: 0.24.0
       joycon: 3.1.1
       picocolors: 1.1.1
       postcss-load-config: 6.0.1(jiti@2.6.1)(postcss@8.5.6)(tsx@4.19.2)(yaml@2.8.1)
       resolve-from: 5.0.0
-      rollup: 4.24.4
+      rollup: 4.46.1
       source-map: 0.8.0-beta.0
       sucrase: 3.35.0
       tinyexec: 0.3.1
-      tinyglobby: 0.2.10
+      tinyglobby: 0.2.15
       tree-kill: 1.2.2
     optionalDependencies:
       '@swc/core': 1.9.1(@swc/helpers@0.5.5)
@@ -30838,18 +30833,18 @@ snapshots:
       bundle-require: 5.0.0(esbuild@0.24.0)
       cac: 6.7.14
       chokidar: 4.0.1
-      consola: 3.2.3
-      debug: 4.3.7(supports-color@5.5.0)
+      consola: 3.4.2
+      debug: 4.4.3
       esbuild: 0.24.0
       joycon: 3.1.1
       picocolors: 1.1.1
       postcss-load-config: 6.0.1(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.3)(yaml@2.8.1)
       resolve-from: 5.0.0
-      rollup: 4.24.4
+      rollup: 4.46.1
       source-map: 0.8.0-beta.0
       sucrase: 3.35.0
       tinyexec: 0.3.1
-      tinyglobby: 0.2.10
+      tinyglobby: 0.2.15
       tree-kill: 1.2.2
     optionalDependencies:
       '@swc/core': 1.9.1(@swc/helpers@0.5.5)
@@ -30866,18 +30861,18 @@ snapshots:
       bundle-require: 5.0.0(esbuild@0.24.0)
       cac: 6.7.14
       chokidar: 4.0.1
-      consola: 3.2.3
-      debug: 4.3.7(supports-color@5.5.0)
+      consola: 3.4.2
+      debug: 4.4.3
       esbuild: 0.24.0
       joycon: 3.1.1
       picocolors: 1.1.1
       postcss-load-config: 6.0.1(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.3)(yaml@2.8.1)
       resolve-from: 5.0.0
-      rollup: 4.24.4
+      rollup: 4.46.1
       source-map: 0.8.0-beta.0
       sucrase: 3.35.0
       tinyexec: 0.3.1
-      tinyglobby: 0.2.10
+      tinyglobby: 0.2.15
       tree-kill: 1.2.2
     optionalDependencies:
       '@swc/core': 1.9.1(@swc/helpers@0.5.5)
@@ -31783,7 +31778,7 @@ snapshots:
 
   whatwg-url@14.0.0:
     dependencies:
-      tr46: 5.0.0
+      tr46: 5.1.1
       webidl-conversions: 7.0.0
 
   whatwg-url@14.2.0:

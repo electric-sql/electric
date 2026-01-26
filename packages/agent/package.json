@@ -1,0 +1,44 @@
+{
+  "name": "@electric-sql/agent",
+  "version": "0.1.0",
+  "description": "Agent skills for building apps with Electric",
+  "type": "module",
+  "license": "Apache-2.0",
+  "author": "ElectricSQL team and contributors.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/electric-sql/electric.git",
+    "directory": "packages/agent"
+  },
+  "bugs": {
+    "url": "https://github.com/electric-sql/electric/issues"
+  },
+  "homepage": "https://electric-sql.com",
+  "bin": {
+    "electric-agent": "./dist/cli/index.js"
+  },
+  "files": [
+    "dist",
+    "skills",
+    "README.md"
+  ],
+  "exports": {
+    "./package.json": "./package.json",
+    "./skills/*": "./skills/*",
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    }
+  },
+  "scripts": {
+    "build": "tsup",
+    "prepack": "pnpm build",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "tsup": "^8.0.1",
+    "typescript": "^5.5.2"
+  }
+}

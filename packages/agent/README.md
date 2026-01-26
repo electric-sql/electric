@@ -1,0 +1,66 @@
+# @electric-sql/agent
+
+Agent skills for building apps with [Electric](https://electric-sql.com).
+
+## Overview
+
+This package provides AI agent skills that help coding assistants (Claude, Cursor, Copilot, etc.) build local-first applications with Electric and TanStack DB.
+
+## Installation
+
+```bash
+npm install @electric-sql/agent
+```
+
+## Usage
+
+### CLI Commands
+
+Install thin skill pointers to your agent's skills directory:
+
+```bash
+npx @electric-sql/agent install
+```
+
+Install globally (to `~/.claude/skills`, etc.):
+
+```bash
+npx @electric-sql/agent install --global
+```
+
+List available skills:
+
+```bash
+npx @electric-sql/agent list-skills
+```
+
+Output the full content of a skill:
+
+```bash
+npx @electric-sql/agent read-skill electric
+```
+
+### Skills
+
+This package includes the following skills:
+
+| Skill                           | Description                                               |
+| ------------------------------- | --------------------------------------------------------- |
+| `electric`                      | Router skill - Electric ecosystem overview and navigation |
+| `electric-quickstart`           | Getting started with Electric + TanStack DB               |
+| `electric-tanstack-integration` | Deep integration patterns for Electric with TanStack DB   |
+| `electric-security-check`       | Security audit checklist for Electric apps                |
+| `electric-go-live`              | Production readiness checklist                            |
+| `deploying-electric`            | Deployment patterns (Cloud, Docker, self-hosted)          |
+
+Additional skills are available in other Electric packages:
+
+- `@electric-sql/client` - `electric-shapes`, `electric-auth`, `electric-http-api`
+
+## How It Works
+
+Skills are markdown files with YAML frontmatter that provide context and instructions to AI coding assistants. When installed, thin pointers are created in your agent's skills directory that reference the full skill content in the npm package.
+
+## License
+
+Apache-2.0
