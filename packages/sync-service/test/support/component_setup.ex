@@ -253,7 +253,7 @@ defmodule Support.ComponentSetup do
   def with_shape_db(ctx) do
     start_supervised!(
       {Electric.ShapeCache.ShapeStatus.ShapeDb.Supervisor,
-       stack_id: ctx.stack_id, storage_dir: ctx.tmp_dir},
+       stack_id: ctx.stack_id, storage_dir: ctx.tmp_dir, manual_flush_only: true},
       id: "shape_db"
     )
 

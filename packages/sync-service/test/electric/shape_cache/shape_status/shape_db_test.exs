@@ -147,6 +147,17 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDbTest do
     assert :error = ShapeDb.handle_for_shape(ctx.stack_id, shape2)
   end
 
+  test "handle_for_shape_critical/2", ctx do
+    shape1 = Shape.new!("items", inspector: @stub_inspector)
+    handle1 = "handle-1"
+    {:ok, _hash1} = ShapeDb.add_shape(ctx.stack_id, shape1, handle1)
+    shape2 = Shape.new!("items", inspector: @stub_inspector, where: "id = 99")
+
+    assert {:ok, ^handle1} = ShapeDb.handle_for_shape_critical(ctx.stack_id, shape1)
+
+    assert :error = ShapeDb.handle_for_shape_critical(ctx.stack_id, shape2)
+  end
+
   test "shape_for_handle", ctx do
     shape1 = Shape.new!("items", inspector: @stub_inspector)
     handle1 = "handle-1"
@@ -173,35 +184,32 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDbTest do
            ) == MapSet.new(handles)
   end
 
-  test "reduce_shape_handles/3", ctx do
-    {handles, _shapes} =
+  test "reduce_shape_meta/3", ctx do
+    expected =
       Enum.map(1..100, fn n ->
         shape = Shape.new!("items", inspector: @stub_inspector, where: "id = #{n}")
         handle = "handle-#{n}"
-        {:ok, _hash} = ShapeDb.add_shape(ctx.stack_id, shape, handle)
-        {handle, shape}
-      end)
-      |> Enum.unzip()
+        {:ok, hash} = ShapeDb.add_shape(ctx.stack_id, shape, handle)
 
-    assert ShapeDb.reduce_shape_handles(
+        # Mark some shapes as snapshot_complete
+        if rem(n, 2) == 0 do
+          :ok = ShapeDb.mark_snapshot_complete(ctx.stack_id, handle)
+          {handle, hash, true}
+        else
+          {handle, hash, false}
+        end
+      end)
+
+    # reduce_shape_meta reads snapshot state from SQLite, so flush first
+    ShapeDb.WriteBuffer.flush_sync(ctx.stack_id)
+
+    assert ShapeDb.reduce_shape_meta(
              ctx.stack_id,
              MapSet.new(),
-             fn handle, acc -> MapSet.put(acc, handle) end
-           ) == MapSet.new(handles)
-  end
-
-  test "shape_hash/2", ctx do
-    shape1 = Shape.new!("items", inspector: @stub_inspector)
-    handle1 = "handle-1"
-    {:ok, hash1} = ShapeDb.add_shape(ctx.stack_id, shape1, handle1)
-    shape2 = Shape.new!("items", inspector: @stub_inspector, where: "id = 1")
-    handle2 = "handle-2"
-    {:ok, hash2} = ShapeDb.add_shape(ctx.stack_id, shape2, handle2)
-
-    assert {:ok, ^hash1} = ShapeDb.shape_hash(ctx.stack_id, handle1)
-    assert {:ok, ^hash2} = ShapeDb.shape_hash(ctx.stack_id, handle2)
-
-    assert :error = ShapeDb.shape_hash(ctx.stack_id, "no-handle")
+             fn {handle, hash, snapshot_complete}, acc ->
+               MapSet.put(acc, {handle, hash, snapshot_complete})
+             end
+           ) == MapSet.new(expected)
   end
 
   test "count_shapes/1", ctx do
@@ -223,21 +231,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDbTest do
     assert {:ok, 0} = ShapeDb.count_shapes(ctx.stack_id)
   end
 
-  test "mark_snapshot_started/2", ctx do
-    refute ShapeDb.snapshot_started?(ctx.stack_id, "no-such-handle")
-    assert :error = ShapeDb.mark_snapshot_started(ctx.stack_id, "no-such-handle")
-
-    shape1 = Shape.new!("items", inspector: @stub_inspector)
-    handle1 = "handle-1"
-    {:ok, _hash1} = ShapeDb.add_shape(ctx.stack_id, shape1, handle1)
-
-    refute ShapeDb.snapshot_started?(ctx.stack_id, handle1)
-    :ok = ShapeDb.mark_snapshot_started(ctx.stack_id, handle1)
-    assert ShapeDb.snapshot_started?(ctx.stack_id, handle1)
-  end
-
   test "mark_snapshot_complete/2", ctx do
-    refute ShapeDb.snapshot_complete?(ctx.stack_id, "no-such-handle")
     assert :error = ShapeDb.mark_snapshot_complete(ctx.stack_id, "no-such-handle")
 
     shape1 = Shape.new!("items", inspector: @stub_inspector)
@@ -247,41 +241,33 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDbTest do
     # should allow for marking a snapshot complete before the snapshot
     # has been marked started
     assert :ok = ShapeDb.mark_snapshot_complete(ctx.stack_id, handle1)
-    assert ShapeDb.snapshot_started?(ctx.stack_id, handle1)
-    assert ShapeDb.snapshot_complete?(ctx.stack_id, handle1)
 
     shape2 = Shape.new!("items", inspector: @stub_inspector, where: "id = 2")
     handle2 = "handle-2"
     {:ok, _hash2} = ShapeDb.add_shape(ctx.stack_id, shape2, handle2)
 
-    refute ShapeDb.snapshot_started?(ctx.stack_id, handle2)
-    :ok = ShapeDb.mark_snapshot_started(ctx.stack_id, handle2)
-    assert ShapeDb.snapshot_started?(ctx.stack_id, handle2)
-
-    refute ShapeDb.snapshot_complete?(ctx.stack_id, handle2)
     assert :ok = ShapeDb.mark_snapshot_complete(ctx.stack_id, handle2)
-    assert ShapeDb.snapshot_complete?(ctx.stack_id, handle2)
   end
 
   defp make_valid_shape(ctx, shape, handle) do
-    make_shape_with_snapshot_status(ctx, shape, handle,
-      snapshot_started: true,
-      snapshot_complete: true
-    )
+    make_shape_with_snapshot_status(ctx, shape, handle, snapshot_complete: true)
   end
 
   defp make_shape_with_snapshot_status(%{stack_id: stack_id}, shape, handle, opts \\ []) do
-    snapshot_started? = Keyword.get(opts, :snapshot_started, false)
     snapshot_complete? = Keyword.get(opts, :snapshot_complete, false)
 
     {:ok, _hash1} = ShapeDb.add_shape(stack_id, shape, handle)
 
-    if snapshot_started?, do: :ok = ShapeDb.mark_snapshot_started(stack_id, handle)
-
-    if snapshot_started? and snapshot_complete?,
+    if snapshot_complete?,
       do: :ok = ShapeDb.mark_snapshot_complete(stack_id, handle)
 
     {handle, shape}
+  end
+
+  defp get_snapshot_states(stack_id) do
+    ShapeDb.reduce_shape_meta(stack_id, %{}, fn {handle, _hash, complete}, acc ->
+      Map.put(acc, handle, complete)
+    end)
   end
 
   test "validate_existing_shapes/1", ctx do
@@ -292,36 +278,14 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDbTest do
         make_valid_shape(ctx, shape, handle)
       end)
 
-    not_started =
-      Enum.map(11..20, fn n ->
+    not_completed =
+      Enum.map(21..30, fn n ->
         shape = Shape.new!("items", inspector: @stub_inspector, where: "id = #{n}")
         handle = "handle-#{n}"
         make_shape_with_snapshot_status(ctx, shape, handle)
       end)
 
-    not_completed =
-      Enum.map(21..30, fn n ->
-        shape = Shape.new!("items", inspector: @stub_inspector, where: "id = #{n}")
-        handle = "handle-#{n}"
-        make_shape_with_snapshot_status(ctx, shape, handle, snapshot_started: true)
-      end)
-
-    for {handle, _shape} <- valid_shapes do
-      assert ShapeDb.snapshot_started?(ctx.stack_id, handle)
-      assert ShapeDb.snapshot_complete?(ctx.stack_id, handle)
-    end
-
-    for {handle, _shape} <- not_started do
-      refute ShapeDb.snapshot_started?(ctx.stack_id, handle)
-      refute ShapeDb.snapshot_complete?(ctx.stack_id, handle)
-    end
-
-    for {handle, _shape} <- not_completed do
-      assert ShapeDb.snapshot_started?(ctx.stack_id, handle)
-      refute ShapeDb.snapshot_complete?(ctx.stack_id, handle)
-    end
-
-    {remove_handles, _shapes} = Enum.unzip(not_started ++ not_completed)
+    {remove_handles, _shapes} = Enum.unzip(not_completed)
 
     {:ok, invalid_handles, 10} = ShapeDb.validate_existing_shapes(ctx.stack_id)
 
@@ -354,5 +318,128 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDbTest do
            end) == 0
 
     assert {:ok, 0} = ShapeDb.count_shapes(ctx.stack_id)
+  end
+
+  describe "write buffer" do
+    test "shapes visible while buffered and after flush", ctx do
+      shape = Shape.new!("items", inspector: @stub_inspector)
+      handle = "handle-1"
+
+      {:ok, _hash} = ShapeDb.add_shape(ctx.stack_id, shape, handle)
+
+      assert {:ok, [{^handle, ^shape}]} = ShapeDb.list_shapes(ctx.stack_id)
+      assert {:ok, ^shape} = ShapeDb.shape_for_handle(ctx.stack_id, handle)
+      assert {:ok, ^handle} = ShapeDb.handle_for_shape(ctx.stack_id, shape)
+
+      ShapeDb.WriteBuffer.flush_sync(ctx.stack_id)
+
+      assert {:ok, [{^handle, ^shape}]} = ShapeDb.list_shapes(ctx.stack_id)
+      assert {:ok, ^shape} = ShapeDb.shape_for_handle(ctx.stack_id, handle)
+      assert {:ok, ^handle} = ShapeDb.handle_for_shape(ctx.stack_id, shape)
+    end
+
+    test "snapshot functions work on shapes only in SQLite", ctx do
+      shape = Shape.new!("items", inspector: @stub_inspector)
+      handle = "handle-1"
+
+      {:ok, _hash} = ShapeDb.add_shape(ctx.stack_id, shape, handle)
+      ShapeDb.WriteBuffer.flush_sync(ctx.stack_id)
+
+      # Verify initial state: not complete
+      assert %{^handle => false} = get_snapshot_states(ctx.stack_id)
+
+      assert :ok = ShapeDb.mark_snapshot_complete(ctx.stack_id, handle)
+      ShapeDb.WriteBuffer.flush_sync(ctx.stack_id)
+
+      # Verify snapshot complete
+      assert %{^handle => true} = get_snapshot_states(ctx.stack_id)
+    end
+
+    test "snapshot functions fail for shapes pending removal", ctx do
+      shape = Shape.new!("items", inspector: @stub_inspector)
+      handle = "handle-1"
+
+      {:ok, _hash} = ShapeDb.add_shape(ctx.stack_id, shape, handle)
+      ShapeDb.WriteBuffer.flush_sync(ctx.stack_id)
+
+      assert :ok = ShapeDb.remove_shape(ctx.stack_id, handle)
+
+      assert :error = ShapeDb.mark_snapshot_complete(ctx.stack_id, handle)
+    end
+
+    test "remove cancels buffered add", ctx do
+      shape = Shape.new!("items", inspector: @stub_inspector)
+      handle = "handle-1"
+
+      {:ok, _hash} = ShapeDb.add_shape(ctx.stack_id, shape, handle)
+      assert {:ok, [{^handle, ^shape}]} = ShapeDb.list_shapes(ctx.stack_id)
+
+      assert :ok = ShapeDb.remove_shape(ctx.stack_id, handle)
+      assert {:ok, []} = ShapeDb.list_shapes(ctx.stack_id)
+
+      ShapeDb.WriteBuffer.flush_sync(ctx.stack_id)
+      assert {:ok, []} = ShapeDb.list_shapes(ctx.stack_id)
+    end
+
+    test "handle_exists? respects pending removes", ctx do
+      shape = Shape.new!("items", inspector: @stub_inspector)
+      handle = "handle-1"
+
+      {:ok, _hash} = ShapeDb.add_shape(ctx.stack_id, shape, handle)
+      ShapeDb.WriteBuffer.flush_sync(ctx.stack_id)
+      assert ShapeDb.handle_exists?(ctx.stack_id, handle)
+
+      assert :ok = ShapeDb.remove_shape(ctx.stack_id, handle)
+      refute ShapeDb.handle_exists?(ctx.stack_id, handle)
+    end
+
+    test "pending_count_diff/1", ctx do
+      assert 0 = ShapeDb.WriteBuffer.pending_count_diff(ctx.stack_id)
+
+      shape = Shape.new!("items", inspector: @stub_inspector)
+      handle = "handle-0"
+
+      {:ok, _hash} = ShapeDb.add_shape(ctx.stack_id, shape, handle)
+
+      assert 1 = ShapeDb.WriteBuffer.pending_count_diff(ctx.stack_id)
+
+      ShapeDb.WriteBuffer.flush_sync(ctx.stack_id)
+      assert 0 = ShapeDb.WriteBuffer.pending_count_diff(ctx.stack_id)
+
+      assert :ok = ShapeDb.remove_shape(ctx.stack_id, handle)
+
+      assert -1 = ShapeDb.WriteBuffer.pending_count_diff(ctx.stack_id)
+
+      ShapeDb.WriteBuffer.flush_sync(ctx.stack_id)
+      assert 0 = ShapeDb.WriteBuffer.pending_count_diff(ctx.stack_id)
+
+      {_handles1, _shapes} =
+        Enum.map(1..10, fn n ->
+          shape = Shape.new!("items", inspector: @stub_inspector, where: "id = #{n}")
+          handle = "handle-#{n}"
+
+          make_shape_with_snapshot_status(ctx, shape, handle, snapshot_complete: false)
+        end)
+        |> Enum.unzip()
+
+      {handles2, _shapes} =
+        Enum.map(11..20, fn n ->
+          shape = Shape.new!("items", inspector: @stub_inspector, where: "id = #{n}")
+          handle = "handle-#{n}"
+
+          make_shape_with_snapshot_status(ctx, shape, handle, snapshot_complete: false)
+        end)
+        |> Enum.unzip()
+
+      assert 20 = ShapeDb.WriteBuffer.pending_count_diff(ctx.stack_id)
+
+      Enum.each(handles2, &ShapeDb.remove_shape(ctx.stack_id, &1))
+
+      assert 10 = ShapeDb.WriteBuffer.pending_count_diff(ctx.stack_id)
+
+      ShapeDb.WriteBuffer.flush_sync(ctx.stack_id)
+
+      assert 0 = ShapeDb.WriteBuffer.pending_count_diff(ctx.stack_id)
+    end
   end
 end

@@ -43,7 +43,9 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Supervisor do
          pool_size: 1,
          name: ShapeDb.Connection.pool_name(stack_id, :write)},
         id: {:pool, :write}
-      )
+      ),
+      # write buffer for batching SQLite writes to avoid timeout cascades
+      {ShapeDb.WriteBuffer, args}
     ]
 
     Supervisor.init(children, strategy: :one_for_one)

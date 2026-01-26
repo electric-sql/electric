@@ -44,6 +44,7 @@ defmodule Electric.StackSupervisor.Telemetry do
       [
         Telemetry.Metrics.last_value("electric.shapes.total_shapes.count"),
         Telemetry.Metrics.last_value("electric.shapes.active_shapes.count"),
+        Telemetry.Metrics.last_value("electric.shape_db.write_buffer.pending_writes.count"),
         Telemetry.Metrics.last_value("electric.postgres.replication.pg_wal_offset"),
         Telemetry.Metrics.last_value("electric.postgres.replication.slot_retained_wal_size",
           unit: :byte
@@ -57,6 +58,7 @@ defmodule Electric.StackSupervisor.Telemetry do
     defp default_periodic_measurements(%{stack_id: stack_id} = config) do
       [
         {__MODULE__, :count_shapes, [stack_id]},
+        {__MODULE__, :report_write_buffer_size, [stack_id]},
         {__MODULE__, :report_retained_wal_size, [stack_id, config.replication_opts[:slot_name]]}
       ]
     end
@@ -77,6 +79,20 @@ defmodule Electric.StackSupervisor.Telemetry do
         %{count: Electric.Shapes.ConsumerRegistry.active_consumer_count(stack_id)},
         %{stack_id: stack_id}
       )
+    end
+
+    def report_write_buffer_size(stack_id, _telemetry_opts) do
+      alias Electric.ShapeCache.ShapeStatus.ShapeDb
+
+      pending_count = ShapeDb.pending_buffer_size(stack_id)
+
+      Electric.Telemetry.OpenTelemetry.execute(
+        [:electric, :shape_db, :write_buffer, :pending_writes],
+        %{count: pending_count},
+        %{stack_id: stack_id}
+      )
+    rescue
+      ArgumentError -> :ok
     end
 
     @min_signed_int8 -2 ** 63

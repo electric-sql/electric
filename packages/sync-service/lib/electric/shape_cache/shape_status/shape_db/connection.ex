@@ -3,12 +3,13 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
 
   alias Exqlite.Sqlite3
   alias Electric.ShapeCache.ShapeStatus.ShapeDb.Query
+  alias Electric.Telemetry.OpenTelemetry
 
   require Logger
 
   @behaviour NimblePool
 
-  @schema_version 2
+  @schema_version 3
 
   @migration_sqls [
     """
@@ -17,7 +18,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
       shape BLOB NOT NULL,
       comparable BLOB NOT NULL,
       hash INTEGER NOT NULL,
-      snapshot_state INTEGER NOT NULL DEFAULT 0
+      snapshot_complete INTEGER NOT NULL DEFAULT 0
     ) STRICT
     """,
     """
@@ -30,10 +31,10 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
     CREATE INDEX shapes_comparable_cover_idx ON shapes (comparable, handle)
     """,
     """
-    CREATE INDEX shapes_handle_cover_idx ON shapes (handle, shape, hash, snapshot_state)
+    CREATE INDEX shapes_handle_cover_idx ON shapes (handle, shape, hash, snapshot_complete)
     """,
     """
-    CREATE INDEX shapes_snapshot_idx ON shapes (snapshot_state, handle)
+    CREATE INDEX shapes_snapshot_idx ON shapes (snapshot_complete, handle)
     """,
     """
     CREATE TABLE relations (
@@ -54,9 +55,6 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
       id INTEGER NOT NULL,
       count INTEGER DEFAULT 0
     ) STRICT
-    """,
-    """
-    CREATE INDEX shape_count_idx ON shape_count (id, count)
     """,
     """
     INSERT INTO shape_count (id, count) VALUES (1, 0)
@@ -105,24 +103,25 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
   end
 
   @impl NimblePool
-  def handle_enqueue(:checkout, pool_state) do
-    {:ok, {:checkout, now()}, pool_state}
+  def handle_enqueue({:checkout, label}, pool_state) do
+    {:ok, {:checkout, label, now()}, pool_state}
   end
 
   @impl NimblePool
-  def handle_checkout(cmd, _from, conn, pool_state) do
-    case cmd do
-      {:checkout, enqueued_at} ->
-        # TODO: drop this enqueued_duration into the metrics
-        _enqueued_duration_ms =
-          System.convert_time_unit(now() - enqueued_at, :native, :millisecond)
+  def handle_checkout({:checkout, label, enqueued_at}, _from, conn, pool_state) do
+    enqueued_duration_us = System.convert_time_unit(now() - enqueued_at, :native, :microsecond)
 
-        :ok
+    OpenTelemetry.execute(
+      [:electric, :shape_db, :pool, :checkout],
+      %{queue_time_μs: enqueued_duration_us},
+      %{label: label, stack_id: Keyword.get(pool_state, :stack_id)}
+    )
 
-      :checkout ->
-        :ok
-    end
+    {:ok, conn, conn, pool_state}
+  end
 
+  # handles checkouts that were not enqueued.
+  def handle_checkout({:checkout, _label}, _from, conn, pool_state) do
     {:ok, conn, conn, pool_state}
   end
 
@@ -135,7 +134,10 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
     # for our current deployment mode synchronous = OFF would be enough (hand
     # data to kernel, don't fsync) but for oss deploys we should keep it at a
     # higher durability setting
-    "PRAGMA synchronous=NORMAL"
+    "PRAGMA synchronous=NORMAL",
+    # Reduce page cache since hot-path lookups now use ETS cache.
+    # -512 means 512KB (negative values are in KiB, default is often 2MB)
+    "PRAGMA cache_size=-512"
   ]
 
   def open(pool_state) do
@@ -155,19 +157,19 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
     end
   end
 
-  def checkout!(stack_id, function, timeout \\ 5000) do
+  def checkout!(stack_id, label, function, timeout \\ 5000) do
     NimblePool.checkout!(
       pool_name(stack_id, :read),
-      :checkout,
+      {:checkout, label},
       fn _from, conn -> {function.(conn), conn} end,
       timeout
     )
   end
 
-  def checkout_write!(stack_id, function, timeout \\ 5000) do
+  def checkout_write!(stack_id, label, function, timeout \\ 5000) do
     NimblePool.checkout!(
       pool_name(stack_id, :write),
-      :checkout,
+      {:checkout, label},
       fn _from, conn ->
         {
           transaction(conn, fn -> function.(conn) end),
@@ -322,11 +324,11 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
   end
 
   def explain(stack_id) do
-    checkout!(stack_id, fn %__MODULE__{} = conn ->
+    checkout!(stack_id, :explain, fn %__MODULE__{} = conn ->
       Query.explain(conn, :read)
     end)
 
-    checkout_write!(stack_id, fn %__MODULE__{} = conn ->
+    checkout_write!(stack_id, :explain, fn %__MODULE__{} = conn ->
       Query.explain(conn, :write)
     end)
   end
