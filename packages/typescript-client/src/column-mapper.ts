@@ -4,6 +4,14 @@ type DbColumnName = string
 type AppColumnName = string
 
 /**
+ * Symbol used to brand ColumnMapper objects.
+ * This helps TypeScript distinguish between a ColumnMapper object
+ * and a function that returns a ColumnMapper.
+ * @internal
+ */
+export const COLUMN_MAPPER_BRAND = Symbol.for(`electric.columnMapper`)
+
+/**
  * Quote a PostgreSQL identifier for safe use in query parameters.
  *
  * Wraps the identifier in double quotes and escapes any internal
@@ -36,6 +44,15 @@ export function quoteIdentifier(identifier: string): string {
  * For type conversions (e.g., string → Date), use the `parser` option.
  * For value transformations (e.g., encryption), use the `transformer` option.
  *
+ * **Important**: Always call the factory function to get a ColumnMapper:
+ * ```typescript
+ * // ✓ Correct - call the function
+ * columnMapper: snakeCamelMapper()
+ *
+ * // ✗ Wrong - passing the function itself
+ * columnMapper: snakeCamelMapper
+ * ```
+ *
  * @example
  * ```typescript
  * const mapper = snakeCamelMapper()
@@ -44,6 +61,14 @@ export function quoteIdentifier(identifier: string): string {
  * ```
  */
 export interface ColumnMapper {
+  /**
+   * Brand marker to distinguish ColumnMapper objects from functions.
+   * This helps catch the common mistake of passing `snakeCamelMapper`
+   * instead of `snakeCamelMapper()`.
+   * @internal
+   */
+  readonly [COLUMN_MAPPER_BRAND]: true
+
   /**
    * Transform a column name from database format to application format.
    * Applied to column names in query results.
@@ -55,6 +80,29 @@ export interface ColumnMapper {
    * Applied to column names in WHERE clauses and other query parameters.
    */
   encode: (appColumnName: AppColumnName) => DbColumnName
+}
+
+/**
+ * Validates that a value is a valid ColumnMapper object.
+ * Throws an InvalidColumnMapperError with a helpful message if the value
+ * appears to be a factory function passed without being called.
+ *
+ * @param value - The value to validate
+ * @returns true if valid
+ * @throws {InvalidColumnMapperError} if the value is not a valid ColumnMapper
+ * @internal
+ */
+export function isValidColumnMapper(value: unknown): value is ColumnMapper {
+  if (typeof value === `function`) {
+    return false
+  }
+
+  if (typeof value !== `object` || value === null) {
+    return false
+  }
+
+  const obj = value as Record<string, unknown>
+  return typeof obj.encode === `function` && typeof obj.decode === `function`
 }
 
 /**
@@ -156,6 +204,8 @@ export function createColumnMapper(
   }
 
   return {
+    [COLUMN_MAPPER_BRAND]: true as const,
+
     decode: (dbColumnName: string) => {
       return mapping[dbColumnName] ?? dbColumnName
     },
@@ -371,6 +421,8 @@ export function snakeCamelMapper(schema?: Schema): ColumnMapper {
 
   // Otherwise, map dynamically
   return {
+    [COLUMN_MAPPER_BRAND]: true as const,
+
     decode: (dbColumnName: string) => {
       return snakeToCamel(dbColumnName)
     },

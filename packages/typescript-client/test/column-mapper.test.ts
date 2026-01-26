@@ -6,6 +6,8 @@ import {
   snakeCamelMapper,
   encodeWhereClause,
   quoteIdentifier,
+  isValidColumnMapper,
+  COLUMN_MAPPER_BRAND,
 } from '../src/column-mapper'
 import type { Schema } from '../src/types'
 
@@ -424,5 +426,75 @@ describe(`columnMapper and transformer together`, () => {
       userId: `123`, // Column renamed by mapper
       createdAt: new Date(`2025-01-17T00:00:00Z`), // Value transformed by transformer
     })
+  })
+})
+
+describe(`isValidColumnMapper`, () => {
+  it(`should return true for valid ColumnMapper objects`, () => {
+    const mapper = snakeCamelMapper()
+    expect(isValidColumnMapper(mapper)).toBe(true)
+  })
+
+  it(`should return true for ColumnMapper created with createColumnMapper`, () => {
+    const mapper = createColumnMapper({ user_id: `userId` })
+    expect(isValidColumnMapper(mapper)).toBe(true)
+  })
+
+  it(`should return true for custom ColumnMapper objects with encode and decode`, () => {
+    const customMapper = {
+      encode: (name: string) => name.toLowerCase(),
+      decode: (name: string) => name.toUpperCase(),
+    }
+    expect(isValidColumnMapper(customMapper)).toBe(true)
+  })
+
+  it(`should return false for functions`, () => {
+    expect(isValidColumnMapper(snakeCamelMapper)).toBe(false)
+    expect(isValidColumnMapper(createColumnMapper)).toBe(false)
+    expect(isValidColumnMapper(() => {})).toBe(false)
+  })
+
+  it(`should return false for null and undefined`, () => {
+    expect(isValidColumnMapper(null)).toBe(false)
+    expect(isValidColumnMapper(undefined)).toBe(false)
+  })
+
+  it(`should return false for primitive values`, () => {
+    expect(isValidColumnMapper(`string`)).toBe(false)
+    expect(isValidColumnMapper(123)).toBe(false)
+    expect(isValidColumnMapper(true)).toBe(false)
+  })
+
+  it(`should return false for objects missing encode`, () => {
+    const incomplete = { decode: (name: string) => name }
+    expect(isValidColumnMapper(incomplete)).toBe(false)
+  })
+
+  it(`should return false for objects missing decode`, () => {
+    const incomplete = { encode: (name: string) => name }
+    expect(isValidColumnMapper(incomplete)).toBe(false)
+  })
+
+  it(`should return false for objects with non-function encode/decode`, () => {
+    const invalid = { encode: `not a function`, decode: `not a function` }
+    expect(isValidColumnMapper(invalid)).toBe(false)
+  })
+})
+
+describe(`ColumnMapper brand`, () => {
+  it(`should include the brand symbol in snakeCamelMapper result`, () => {
+    const mapper = snakeCamelMapper()
+    expect(mapper[COLUMN_MAPPER_BRAND]).toBe(true)
+  })
+
+  it(`should include the brand symbol in createColumnMapper result`, () => {
+    const mapper = createColumnMapper({ user_id: `userId` })
+    expect(mapper[COLUMN_MAPPER_BRAND]).toBe(true)
+  })
+
+  it(`should include the brand symbol when using schema with snakeCamelMapper`, () => {
+    const schema: Schema = { user_id: { type: `int4` } }
+    const mapper = snakeCamelMapper(schema)
+    expect(mapper[COLUMN_MAPPER_BRAND]).toBe(true)
   })
 })

@@ -1,6 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { ShapeStream, isChangeMessage, Message, Row } from '../src'
-import { snakeCamelMapper } from '../src/column-mapper'
+import {
+  ShapeStream,
+  isChangeMessage,
+  Message,
+  Row,
+  InvalidColumnMapperError,
+} from '../src'
+import { snakeCamelMapper, createColumnMapper } from '../src/column-mapper'
 import { resolveInMacrotask } from './support/test-helpers'
 
 describe(`ShapeStream`, () => {
@@ -406,5 +412,103 @@ describe(`ShapeStream`, () => {
     // Verify original db column names are not present
     expect(changeMessage!.value).not.toHaveProperty(`user_id`)
     expect(changeMessage!.value).not.toHaveProperty(`created_at`)
+  })
+
+  describe(`columnMapper validation`, () => {
+    it(`should throw InvalidColumnMapperError when passing snakeCamelMapper without calling it`, () => {
+      expect(() => {
+        new ShapeStream({
+          url: shapeUrl,
+          params: { table: `foo` },
+          // Common mistake: passing the function instead of calling it
+          // @ts-expect-error - intentionally testing invalid input
+          columnMapper: snakeCamelMapper,
+        })
+      }).toThrow(InvalidColumnMapperError)
+    })
+
+    it(`should throw InvalidColumnMapperError with helpful message mentioning the function name`, () => {
+      expect(() => {
+        new ShapeStream({
+          url: shapeUrl,
+          params: { table: `foo` },
+          // @ts-expect-error - intentionally testing invalid input
+          columnMapper: snakeCamelMapper,
+        })
+      }).toThrow(/snakeCamelMapper\(\)/)
+    })
+
+    it(`should throw InvalidColumnMapperError when passing createColumnMapper without calling it`, () => {
+      expect(() => {
+        new ShapeStream({
+          url: shapeUrl,
+          params: { table: `foo` },
+          // @ts-expect-error - intentionally testing invalid input
+          columnMapper: createColumnMapper,
+        })
+      }).toThrow(InvalidColumnMapperError)
+    })
+
+    it(`should throw InvalidColumnMapperError for invalid columnMapper object`, () => {
+      expect(() => {
+        new ShapeStream({
+          url: shapeUrl,
+          params: { table: `foo` },
+          // @ts-expect-error - intentionally testing invalid input
+          columnMapper: { notEncode: () => ``, notDecode: () => `` },
+        })
+      }).toThrow(InvalidColumnMapperError)
+    })
+
+    it(`should throw InvalidColumnMapperError for null columnMapper`, () => {
+      expect(() => {
+        new ShapeStream({
+          url: shapeUrl,
+          params: { table: `foo` },
+          // @ts-expect-error - intentionally testing invalid input
+          columnMapper: null,
+        })
+      }).toThrow(InvalidColumnMapperError)
+    })
+
+    it(`should accept valid columnMapper from snakeCamelMapper()`, () => {
+      expect(() => {
+        const stream = new ShapeStream({
+          url: shapeUrl,
+          params: { table: `foo` },
+          columnMapper: snakeCamelMapper(),
+          signal: aborter.signal,
+        })
+        stream.unsubscribeAll()
+      }).not.toThrow()
+    })
+
+    it(`should accept valid columnMapper from createColumnMapper()`, () => {
+      expect(() => {
+        const stream = new ShapeStream({
+          url: shapeUrl,
+          params: { table: `foo` },
+          columnMapper: createColumnMapper({ user_id: `userId` }),
+          signal: aborter.signal,
+        })
+        stream.unsubscribeAll()
+      }).not.toThrow()
+    })
+
+    it(`should accept valid custom columnMapper object`, () => {
+      expect(() => {
+        const stream = new ShapeStream({
+          url: shapeUrl,
+          params: { table: `foo` },
+          // Custom mapper that works but lacks the brand (for backwards compatibility)
+          columnMapper: {
+            encode: (name: string) => name.toLowerCase(),
+            decode: (name: string) => name.toUpperCase(),
+          } as ReturnType<typeof snakeCamelMapper>,
+          signal: aborter.signal,
+        })
+        stream.unsubscribeAll()
+      }).not.toThrow()
+    })
   })
 })

@@ -14,6 +14,7 @@ import {
   ColumnMapper,
   encodeWhereClause,
   quoteIdentifier,
+  isValidColumnMapper,
 } from './column-mapper'
 import { getOffset, isUpToDateMessage, isChangeMessage } from './helpers'
 import {
@@ -25,6 +26,7 @@ import {
   ReservedParamError,
   MissingHeadersError,
   StaleCacheError,
+  InvalidColumnMapperError,
 } from './error'
 import {
   BackoffDefaults,
@@ -1734,6 +1736,31 @@ function validateOptions<T>(options: Partial<ShapeStreamOptions<T>>): void {
   }
 
   validateParams(options.params)
+
+  // Validate columnMapper if provided
+  // Note: Runtime validation catches common mistakes like passing the factory function
+  // instead of calling it, even though TypeScript types should prevent this.
+  if (options.columnMapper !== undefined) {
+    // Cast to unknown to handle runtime cases where user passes wrong type
+    const mapper = options.columnMapper as unknown
+    if (typeof mapper === `function`) {
+      // Common mistake: passing the factory function instead of calling it
+      const fnName =
+        (mapper as { name?: string }).name || `columnMapper function`
+      throw new InvalidColumnMapperError(
+        `columnMapper must be a ColumnMapper object, not a function. ` +
+          `Did you forget to call ${fnName}()? ` +
+          `Use columnMapper: snakeCamelMapper() instead of columnMapper: snakeCamelMapper`
+      )
+    }
+
+    if (!isValidColumnMapper(mapper)) {
+      throw new InvalidColumnMapperError(
+        `columnMapper must be an object with encode and decode functions. ` +
+          `Use snakeCamelMapper() or createColumnMapper() to create a valid ColumnMapper.`
+      )
+    }
+  }
 
   return
 }
