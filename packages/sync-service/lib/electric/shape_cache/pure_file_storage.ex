@@ -967,8 +967,8 @@ defmodule Electric.ShapeCache.PureFileStorage do
           with {:meta, <<key_size::32, json_size::64, op_type::8, tag_count::16>>} <-
                  {:meta, IO.binread(file, 15)},
                _tags = read_tags(file, tag_count),
-               <<key::binary-size(key_size)>> <- IO.binread(file, key_size),
-               <<json::binary-size(json_size)>> <- IO.binread(file, json_size) do
+               <<key::binary-size(^key_size)>> <- IO.binread(file, key_size),
+               <<json::binary-size(^json_size)>> <- IO.binread(file, json_size) do
             {[{offset, key_size, key, op_type, 0, json_size, json}],
              {file, LogOffset.increment(offset)}}
           else
@@ -995,7 +995,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
   defp read_tags(file, tag_count) do
     for _ <- 1..tag_count//1 do
       <<tag_size::16>> = IO.binread(file, 2)
-      <<tag::binary-size(tag_size)>> = IO.binread(file, tag_size)
+      <<tag::binary-size(^tag_size)>> = IO.binread(file, tag_size)
       tag
     end
   end
@@ -1020,8 +1020,8 @@ defmodule Electric.ShapeCache.PureFileStorage do
           with {:meta, <<key_size::32, json_size::64, op_type::8, tag_count::16>>} <-
                  {:meta, IO.binread(file, 15)},
                tags = read_tags(file, tag_count),
-               <<key::binary-size(key_size)>> <- IO.binread(file, key_size),
-               <<json::binary-size(json_size)>> <- IO.binread(file, json_size) do
+               <<key::binary-size(^key_size)>> <- IO.binread(file, key_size),
+               <<json::binary-size(^json_size)>> <- IO.binread(file, json_size) do
             # Check if this row should be skipped
             if all_parents_moved_out?(tags, tags_to_skip) or
                  Electric.Shapes.Consumer.MoveIns.should_skip_query_row?(

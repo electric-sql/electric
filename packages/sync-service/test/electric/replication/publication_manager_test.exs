@@ -152,7 +152,7 @@ defmodule Electric.Replication.PublicationManagerTest do
 
       assert_pub_tables(ctx, [ctx.relation])
       assert_received {:alter_publication, _, _}
-      refute_received {:alter_publication, _, _}, 200
+      refute_received({:alter_publication, _, _}, 200, nil)
     end
 
     test "accepts multiple relations", ctx do
@@ -188,7 +188,7 @@ defmodule Electric.Replication.PublicationManagerTest do
 
       assert_pub_tables(ctx, [ctx.relation])
       assert_received {:alter_publication, _, _}
-      refute_received {:alter_publication, _, _}, 200
+      refute_received({:alter_publication, _, _}, 200, nil)
     end
 
     test "keeps the table in the publication when shapes with different where clauses are added and removed",
@@ -284,7 +284,7 @@ defmodule Electric.Replication.PublicationManagerTest do
 
       assert_pub_tables(ctx, [ctx.relation])
       assert_received {:alter_publication, _, _}
-      refute_received {:alter_publication, _, _}, 300
+      refute_received({:alter_publication, _, _}, 300, nil)
     end
 
     @tag update_debounce_timeout: 50

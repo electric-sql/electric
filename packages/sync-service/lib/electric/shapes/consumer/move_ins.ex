@@ -4,8 +4,6 @@ defmodule Electric.Shapes.Consumer.MoveIns do
   alias Electric.Postgres.Xid
   alias Electric.Postgres.SnapshotQuery
 
-  require Xid
-
   defstruct waiting_move_ins: %{},
             filtering_move_ins: [],
             touch_tracker: %{},

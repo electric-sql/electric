@@ -129,13 +129,6 @@ storage_spec =
         "fast_file" ->
           {Electric.ShapeCache.PureFileStorage, storage_dir: shape_path}
 
-        "crashing_file" ->
-          num_calls_until_crash =
-            env!("CRASHING_FILE_ELECTRIC_STORAGE__NUM_CALLS_UNTIL_CRASH", :integer)
-
-          {Electric.ShapeCache.CrashingFileStorage,
-           storage_dir: shape_path, num_calls_until_crash: num_calls_until_crash}
-
         _ ->
           raise Dotenvy.Error, message: "storage must be one of: MEMORY, FAST_FILE, LEGACY_FILE"
       end
