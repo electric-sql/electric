@@ -210,6 +210,40 @@ defmodule Electric.Shapes.ShapeTest do
       assert Shape.convert_change(shape, non_matching_update) == []
     end
 
+    test "keeps update with tag changes even if filtered columns have not changed" do
+      shape = %Shape{
+        root_table: {"public", "table"},
+        root_table_id: @relation_id,
+        selected_columns: ["id"],
+        # tag_structure means this shape tracks tags based on the "parent_id" column
+        tag_structure: [["parent_id"]]
+      }
+
+      # Update where only parent_id changed (tag change), but id (selected column) didn't
+      update_with_tag_change = %UpdatedRecord{
+        relation: {"public", "table"},
+        old_record: %{"id" => 1, "parent_id" => "old_parent"},
+        record: %{"id" => 1, "parent_id" => "new_parent"}
+      }
+
+      result =
+        Shape.convert_change(shape, update_with_tag_change,
+          stack_id: "test_stack",
+          shape_handle: "test_handle"
+        )
+
+      # The change should be kept (not filtered out) because it has tag changes
+      assert length(result) == 1
+      [converted] = result
+
+      # The converted change should have removed_move_tags set (indicating the old tag)
+      assert converted.removed_move_tags != []
+      # And move_tags for the new tag
+      assert converted.move_tags != []
+      # Tags should be different since parent_id changed
+      assert converted.move_tags != converted.removed_move_tags
+    end
+
     test "correctly keeps updates with subqueries if the referenced set has not changed" do
       shape = %Shape{
         root_table: {"public", "table"},

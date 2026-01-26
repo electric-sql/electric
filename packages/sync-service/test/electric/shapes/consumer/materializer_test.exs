@@ -370,6 +370,150 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
     end
   end
 
+  describe "tag-only updates (value unchanged)" do
+    @tag snapshot_data: [%Changes.NewRecord{record: %{"id" => "1", "value" => "10"}}]
+    test "update with tag change but unchanged value updates tags without events", ctx do
+      ctx = with_materializer(ctx)
+
+      assert Materializer.get_link_values(ctx) == MapSet.new([10])
+
+      # Update where tags change but the tracked value stays the same
+      Materializer.new_changes(
+        ctx,
+        [
+          %Changes.UpdatedRecord{
+            key: ~s("public"."test_table"/"1"),
+            record: %{"id" => "1", "value" => "10"},
+            old_record: %{"id" => "1", "value" => "10"},
+            move_tags: ["new_tag"],
+            removed_move_tags: ["old_tag"]
+          }
+        ]
+      )
+
+      # Value should still be present
+      assert Materializer.get_link_values(ctx) == MapSet.new([10])
+
+      # No move events should be emitted since the value didn't change
+      refute_received {:materializer_changes, _, _}
+    end
+
+    @tag snapshot_data: {
+           [%Changes.NewRecord{record: %{"id" => "1", "value" => "10"}, move_tags: ["old_tag"]}],
+           []
+         }
+    test "tag is updated so subsequent move_out for old tag finds nothing", ctx do
+      ctx = with_materializer(ctx)
+
+      assert Materializer.get_link_values(ctx) == MapSet.new([10])
+
+      # Update that changes the tag from old_tag to new_tag but keeps value the same
+      Materializer.new_changes(
+        ctx,
+        [
+          %Changes.UpdatedRecord{
+            key: ~s("public"."test_table"/"1"),
+            record: %{"id" => "1", "value" => "10"},
+            old_record: %{"id" => "1", "value" => "10"},
+            move_tags: ["new_tag"],
+            removed_move_tags: ["old_tag"]
+          }
+        ]
+      )
+
+      # No events from the tag-only update
+      refute_received {:materializer_changes, _, _}
+
+      # Now send a move_out for the OLD tag - should find nothing since the row moved to new_tag
+      Materializer.new_changes(ctx, [
+        %{headers: %{event: "move-out", patterns: [%{pos: 0, value: "old_tag"}]}}
+      ])
+
+      # Value should still be present (row wasn't removed)
+      assert Materializer.get_link_values(ctx) == MapSet.new([10])
+
+      # No move events since the row was already moved to new_tag
+      refute_received {:materializer_changes, _, _}
+    end
+
+    @tag snapshot_data: {
+           [%Changes.NewRecord{record: %{"id" => "1", "value" => "10"}, move_tags: ["old_tag"]}],
+           []
+         }
+    test "move_out for new tag after tag update removes the row", ctx do
+      ctx = with_materializer(ctx)
+
+      assert Materializer.get_link_values(ctx) == MapSet.new([10])
+
+      # Update that changes the tag from old_tag to new_tag
+      Materializer.new_changes(
+        ctx,
+        [
+          %Changes.UpdatedRecord{
+            key: ~s("public"."test_table"/"1"),
+            record: %{"id" => "1", "value" => "10"},
+            old_record: %{"id" => "1", "value" => "10"},
+            move_tags: ["new_tag"],
+            removed_move_tags: ["old_tag"]
+          }
+        ]
+      )
+
+      refute_received {:materializer_changes, _, _}
+
+      # Now send a move_out for the NEW tag - should find and remove the row
+      Materializer.new_changes(ctx, [
+        %{headers: %{event: "move-out", patterns: [%{pos: 0, value: "new_tag"}]}}
+      ])
+
+      # Value should be gone
+      assert Materializer.get_link_values(ctx) == MapSet.new([])
+
+      # Should emit move_out event
+      assert_receive {:materializer_changes, _, %{move_out: [{10, "10"}]}}
+    end
+
+    @tag snapshot_data: {
+           [
+             %Changes.NewRecord{record: %{"id" => "1", "value" => "10"}, move_tags: ["tag_a"]},
+             %Changes.NewRecord{record: %{"id" => "2", "value" => "20"}, move_tags: ["tag_a"]}
+           ],
+           []
+         }
+    test "multiple rows with same tag, one updates tag, move_out only affects remaining", ctx do
+      ctx = with_materializer(ctx)
+
+      assert Materializer.get_link_values(ctx) == MapSet.new([10, 20])
+
+      # Row 1 moves from tag_a to tag_b, row 2 stays in tag_a
+      Materializer.new_changes(
+        ctx,
+        [
+          %Changes.UpdatedRecord{
+            key: ~s("public"."test_table"/"1"),
+            record: %{"id" => "1", "value" => "10"},
+            old_record: %{"id" => "1", "value" => "10"},
+            move_tags: ["tag_b"],
+            removed_move_tags: ["tag_a"]
+          }
+        ]
+      )
+
+      refute_received {:materializer_changes, _, _}
+
+      # move_out for tag_a should only affect row 2 (row 1 moved to tag_b)
+      Materializer.new_changes(ctx, [
+        %{headers: %{event: "move-out", patterns: [%{pos: 0, value: "tag_a"}]}}
+      ])
+
+      # Only value 10 should remain (row 1 is now under tag_b)
+      assert Materializer.get_link_values(ctx) == MapSet.new([10])
+
+      # Should emit move_out only for row 2's value
+      assert_receive {:materializer_changes, _, %{move_out: [{20, "20"}]}}
+    end
+  end
+
   describe "move_out events" do
     test "runtime move_out event removes rows matching the pattern", ctx do
       ctx = with_materializer(ctx)
