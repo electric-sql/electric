@@ -1162,7 +1162,9 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
           if (currentCursor === this.#lastSeenCursor) {
             // Same cursor = still replaying cached responses
-            // Suppress this up-to-date notification
+            // Suppress this up-to-date notification, but exit replay mode
+            // to prevent infinite loop if CDN keeps returning same cursor
+            this.#lastSeenCursor = undefined
             return
           }
         }
