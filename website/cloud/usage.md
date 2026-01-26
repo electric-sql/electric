@@ -5,6 +5,8 @@ image: /img/meta/electric-cloud.jpg
 outline: deep
 ---
 
+<img src="/img/icons/ddn.svg" class="product-icon" />
+
 # Usage
 
 Learn how to register your database and make API requests with Electric Cloud.

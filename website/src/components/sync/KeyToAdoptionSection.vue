@@ -22,13 +22,12 @@ const actions = [
 <template>
   <Section :actions="actions">
     <template #title>
-      Unlock collaboration, unlock&nbsp;adoption
+      The key to collaborative&nbsp;AI
     </template>
     <template #tagline>
-      As the world moves to getting things done through agents,
-      <span class="no-wrap">the winners are going to be the products</span>
-      that combine AI with
-      <span class="no-wrap">team-based collaboration</span>
+      As the world moves to getting things done through agents, the&nbsp;winners
+      are going to be the&nbsp;products that combine AI with
+      <span class="no-wrap">team-based collaboration</span>.
     </template>
     <div class="paradigm-comparison">
       <div class="paradigm-panel">

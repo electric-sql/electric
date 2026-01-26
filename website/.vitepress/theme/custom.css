@@ -847,6 +847,46 @@ iframe {
   margin-bottom: 20px;
 }
 
+.cloud-header {
+  position: relative;
+  background:
+    linear-gradient(to right, var(--vp-c-bg) 45%, transparent 85%),
+    linear-gradient(to top, var(--vp-c-bg) 0%, transparent 25%),
+    linear-gradient(rgba(26, 27, 30, 0.5), rgba(26, 27, 30, 0.5)),
+    url('/img/home/dashboard-stream.jpg') right top / auto 100% no-repeat;
+  overflow: hidden;
+  padding: 20px 0 88px;
+  margin-bottom: 0;
+}
+
+.cloud-header + h2 {
+  margin-top: 0;
+}
+
+@media (max-width: 768px) {
+  .cloud-header {
+    background:
+      linear-gradient(to right, var(--vp-c-bg) 35%, transparent 80%),
+      linear-gradient(to top, var(--vp-c-bg) 0%, transparent 25%),
+      linear-gradient(rgba(26, 27, 30, 0.6), rgba(26, 27, 30, 0.6)),
+      url('/img/home/dashboard-stream.jpg') right top / auto 100% no-repeat;
+  }
+}
+
+@media (max-width: 518px) {
+  .cloud-header {
+    background:
+      linear-gradient(to right, var(--vp-c-bg) 25%, transparent 75%),
+      linear-gradient(to top, var(--vp-c-bg) 0%, transparent 25%),
+      linear-gradient(rgba(26, 27, 30, 0.8), rgba(26, 27, 30, 0.8)),
+      url('/img/home/dashboard-stream.jpg') right top / auto 100% no-repeat;
+  }
+
+  .cloud-header .product-icon {
+    width: 64px;
+  }
+}
+
 .intro-zap {
   --width: min(calc(150px + 25vw), 360px);
   max-width: var(--width);

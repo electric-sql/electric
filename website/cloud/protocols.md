@@ -5,6 +5,8 @@ image: /img/meta/electric-cloud.jpg
 outline: deep
 ---
 
+<img src="/img/icons/ddn.svg" class="product-icon" />
+
 # Protocols
 
 Electric Cloud supports multiple sync protocols.

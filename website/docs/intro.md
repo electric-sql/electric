@@ -13,6 +13,10 @@ const burn = demos.find(x => x.link === '/demos/burn')
 const linearlite = demos.find(x => x.link === '/demos/linearlite')
 </script>
 
+<img src="/img/icons/docs.svg" class="product-icon"
+    style="width: 72px"
+/>
+
 # Documentation
 
 Welcome to the Electric developer documentation!
