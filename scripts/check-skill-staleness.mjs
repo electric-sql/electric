@@ -76,7 +76,10 @@ function parseFrontmatter(content) {
  */
 function extractSources(frontmatter) {
   // Handle nested metadata.sources
-  if (typeof frontmatter.metadata === 'object' && frontmatter.metadata?.sources) {
+  if (
+    typeof frontmatter.metadata === 'object' &&
+    frontmatter.metadata?.sources
+  ) {
     return frontmatter.metadata.sources
   }
 
@@ -96,7 +99,10 @@ function extractSources(frontmatter) {
 function findSkillFiles() {
   const skillsDirs = [
     { dir: 'packages/agent/skills', package: '@electric-sql/agent' },
-    { dir: 'packages/typescript-client/skills', package: '@electric-sql/client' },
+    {
+      dir: 'packages/typescript-client/skills',
+      package: '@electric-sql/client',
+    },
   ]
 
   const skills = []
@@ -125,7 +131,8 @@ function matchesSource(changedFile, sources) {
     if (changedFile === source) return true
 
     // Partial match (source is a prefix or suffix)
-    if (changedFile.includes(source) || source.includes(changedFile)) return true
+    if (changedFile.includes(source) || source.includes(changedFile))
+      return true
 
     // Glob-like match for directories
     if (source.includes('*')) {
@@ -145,7 +152,9 @@ function main() {
   const changedFilesArg = process.argv[2]
 
   if (!changedFilesArg) {
-    console.log('Usage: node scripts/check-skill-staleness.mjs <changed-files.txt>')
+    console.log(
+      'Usage: node scripts/check-skill-staleness.mjs <changed-files.txt>'
+    )
     console.log('')
     console.log('Checks which skills may need updating based on changed files.')
     process.exit(0)
@@ -179,7 +188,9 @@ function main() {
 
       if (sources.length === 0) continue
 
-      const matchedSources = changedFiles.filter((f) => matchesSource(f, sources))
+      const matchedSources = changedFiles.filter((f) =>
+        matchesSource(f, sources)
+      )
 
       if (matchedSources.length > 0) {
         affectedSkills.push({
@@ -200,7 +211,9 @@ function main() {
   }
 
   console.log('## Skills potentially affected by this PR\n')
-  console.log('The following skills reference source files that were modified:\n')
+  console.log(
+    'The following skills reference source files that were modified:\n'
+  )
 
   for (const skill of affectedSkills) {
     console.log(`### ${skill.name} (${skill.package})`)
@@ -214,7 +227,9 @@ function main() {
 
   console.log('---')
   console.log('**Action needed**: Review these skills and update if necessary.')
-  console.log('Run `npx @electric-sql/agent read-skill <name>` to view current content.')
+  console.log(
+    'Run `npx @electric-sql/agent read-skill <name>` to view current content.'
+  )
 
   // Exit with non-zero if skills are affected (for CI to detect)
   process.exit(1)

@@ -1525,6 +1525,9 @@ importers:
 
   packages/agent:
     devDependencies:
+      '@types/node':
+        specifier: ^20.10.0
+        version: 20.17.6
       tsup:
         specifier: ^8.0.1
         version: 8.3.5(@swc/core@1.9.1(@swc/helpers@0.5.5))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.3)(typescript@5.8.3)(yaml@2.8.1)
