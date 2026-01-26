@@ -461,12 +461,14 @@ describe(`ShapeStream`, () => {
     })
 
     it(`should throw InvalidColumnMapperError with fallback message for anonymous functions`, () => {
+      // Extract function via array to prevent JavaScript from inferring a name
+      const anonFn = [() => ({ encode: () => ``, decode: () => `` })][0]
       expect(() => {
         new ShapeStream({
           url: shapeUrl,
           params: { table: `foo` },
           // @ts-expect-error - intentionally testing invalid input
-          columnMapper: () => ({ encode: () => ``, decode: () => `` }),
+          columnMapper: anonFn,
         })
       }).toThrow(/columnMapper function\(\)/)
     })
