@@ -329,7 +329,52 @@ defmodule Support.OracleHarness do
     end)
   end
 
+  # Flush stale messages from the mailbox that accumulated while not listening.
+  # This is important because StreamConsumers continue polling during verify phase,
+  # which can queue thousands of up_to_date messages. Processing these before the
+  # actual change messages arrive causes the retry window to expire.
+  defp flush_stale_messages(checkers, pid_to_checker) do
+    do_flush_stale_messages(checkers, pid_to_checker, 0)
+  end
+
+  defp do_flush_stale_messages(checkers, pid_to_checker, count) do
+    receive do
+      {:stream_message, pid, msg} ->
+        case Map.get(pid_to_checker, pid) do
+          nil ->
+            # Unknown pid, ignore
+            do_flush_stale_messages(checkers, pid_to_checker, count + 1)
+
+          checker ->
+            # Apply ChangeMessages to keep checker state current
+            # Discard ControlMessages (stale up_to_date)
+            updated_checker =
+              case msg do
+                %Electric.Client.Message.ChangeMessage{} ->
+                  ShapeChecker.apply_message(checker, msg)
+
+                _ ->
+                  checker
+              end
+
+            updated_checkers = update_checker_in_list(checkers, updated_checker)
+            updated_pid_to_checker = Map.put(pid_to_checker, pid, updated_checker)
+            do_flush_stale_messages(updated_checkers, updated_pid_to_checker, count + 1)
+        end
+    after
+      0 ->
+        # No more messages in mailbox
+        {checkers, count}
+    end
+  end
+
   defp run_mutation_cycle(ctx, checkers, mutation, timeout_ms, oracle_before) do
+    # Phase 0: Flush stale messages that accumulated while not listening
+    # This prevents old up_to_date messages from triggering oracle checks
+    # while the actual change messages are still queued
+    pid_to_checker = Map.new(checkers, &{&1.pid, &1})
+    {checkers, _flushed_count} = flush_stale_messages(checkers, pid_to_checker)
+
     # Phase 1: Apply mutation
     apply_sql(ctx, mutation.sql)
 
