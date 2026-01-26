@@ -276,8 +276,11 @@ defmodule Support.OracleHarness.WhereClauseGenerator do
   defp and_composition(depth) do
     bind({base_expr_gen(depth - 1), base_expr_gen(depth - 1)}, fn
       {{left, left_opt}, {right, right_opt}} ->
-        # AND preserves optimization if both sides are optimized
-        optimized = left_opt and right_opt
+        has_left_subquery = contains_subquery?(left)
+        has_right_subquery = contains_subquery?(right)
+
+        # AND with multiple subqueries at same level is NOT optimized
+        optimized = left_opt and right_opt and not (has_left_subquery and has_right_subquery)
         constant({"(#{left}) AND (#{right})", optimized})
     end)
   end
