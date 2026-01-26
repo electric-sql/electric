@@ -1,5 +1,5 @@
 import { Message, Offset, Row } from './types'
-import { isChangeMessage, isControlMessage } from './helpers'
+import { isChangeMessage, isControlMessage, isEventMessage } from './helpers'
 import { FetchError } from './error'
 import { LogMode, ShapeStreamInterface } from './client'
 
@@ -57,6 +57,8 @@ export class Shape<T extends Row<unknown> = Row> {
   #reexecuteSnapshotsPending = false
   #status: ShapeStatus = `syncing`
   #error: FetchError | false = false
+  readonly #rowTags = new Map<string, Set<string>>() // key -> set of tag values (simplified for length-1 tags)
+  readonly #tagIndex = new Map<string, Set<string>>() // tag value -> set of keys
 
   constructor(stream: ShapeStreamInterface<T>) {
     this.stream = stream
@@ -176,15 +178,39 @@ export class Shape<T extends Row<unknown> = Row> {
           switch (message.headers.operation) {
             case `insert`:
               this.#data.set(message.key, message.value)
+              // Track tags if present
+              if (message.headers.tags) {
+                const tags = new Set(message.headers.tags)
+                this.#rowTags.set(message.key, tags)
+                tags.forEach((tag) => this.#addTagToIndex(tag, message.key))
+              }
               break
             case `update`:
               this.#data.set(message.key, {
                 ...this.#data.get(message.key)!,
                 ...message.value,
               })
+              // Update tags if present
+              if (message.headers.tags) {
+                // Remove old tags from index
+                const oldTags = this.#rowTags.get(message.key)
+                if (oldTags) {
+                  oldTags.forEach((tag) =>
+                    this.#removeTagFromIndex(tag, message.key)
+                  )
+                }
+                // Set new tags
+                const newTags = new Set(message.headers.tags)
+                this.#rowTags.set(message.key, newTags)
+                newTags.forEach((tag) => this.#addTagToIndex(tag, message.key))
+                // If no tags left, remove the row
+                this.#removeRowIfNoTags(message.key)
+              }
               break
             case `delete`:
               this.#data.delete(message.key)
+              // Clean up tag indices
+              this.#removeRowFromTagIndices(message.key)
               break
           }
         } else {
@@ -193,6 +219,12 @@ export class Shape<T extends Row<unknown> = Row> {
             case `insert`:
               this.#insertedKeys.add(message.key)
               this.#data.set(message.key, message.value)
+              // Track tags if present
+              if (message.headers.tags) {
+                const tags = new Set(message.headers.tags)
+                this.#rowTags.set(message.key, tags)
+                tags.forEach((tag) => this.#addTagToIndex(tag, message.key))
+              }
               break
             case `update`:
               if (this.#insertedKeys.has(message.key)) {
@@ -200,19 +232,49 @@ export class Shape<T extends Row<unknown> = Row> {
                   ...this.#data.get(message.key)!,
                   ...message.value,
                 })
+                // Update tags if present
+                if (message.headers.tags) {
+                  // Remove old tags from index
+                  const oldTags = this.#rowTags.get(message.key)
+                  if (oldTags) {
+                    oldTags.forEach((tag) =>
+                      this.#removeTagFromIndex(tag, message.key)
+                    )
+                  }
+                  // Set new tags
+                  const newTags = new Set(message.headers.tags)
+                  this.#rowTags.set(message.key, newTags)
+                  newTags.forEach((tag) =>
+                    this.#addTagToIndex(tag, message.key)
+                  )
+                  // If no tags left, remove the row
+                  this.#removeRowIfNoTags(message.key)
+                }
               }
               break
             case `delete`:
               if (this.#insertedKeys.has(message.key)) {
                 this.#data.delete(message.key)
                 this.#insertedKeys.delete(message.key)
+                // Clean up tag indices
+                this.#removeRowFromTagIndices(message.key)
               }
               break
           }
         }
-      }
+      } else if (isEventMessage(message)) {
+        shouldNotify = this.#updateShapeStatus(`syncing`)
 
-      if (isControlMessage(message)) {
+        switch (message.headers.event) {
+          case `move-out`:
+            for (const { pos, value } of message.headers.patterns) {
+              if (pos != 0)
+                throw new Error(`Only 1-width tags are currently supported`)
+              this.#removeAllByTagPattern(pos, value)
+            }
+            break
+        }
+      } else if (isControlMessage(message)) {
         switch (message.headers.control) {
           case `up-to-date`:
             shouldNotify = this.#updateShapeStatus(`up-to-date`)
@@ -224,6 +286,8 @@ export class Shape<T extends Row<unknown> = Row> {
           case `must-refetch`:
             this.#data.clear()
             this.#insertedKeys.clear()
+            this.#rowTags.clear()
+            this.#tagIndex.clear()
             this.#error = false
             shouldNotify = this.#updateShapeStatus(`syncing`)
             // Flag to re-execute sub-snapshots once the new shape is up-to-date
@@ -289,5 +353,76 @@ export class Shape<T extends Row<unknown> = Row> {
     this.#subscribers.forEach((callback) => {
       callback({ value: this.currentValue, rows: this.currentRows })
     })
+  }
+
+  /**
+   * Adds a key to the tag index for the given tag.
+   */
+  #addTagToIndex(tag: string, key: string): void {
+    let keys = this.#tagIndex.get(tag)
+    if (!keys) {
+      keys = new Set()
+      this.#tagIndex.set(tag, keys)
+    }
+    keys.add(key)
+  }
+
+  /**
+   * Removes a key from the tag index for the given tag.
+   * If the tag has no more keys, removes the tag from the index.
+   */
+  #removeTagFromIndex(tag: string, key: string): void {
+    const keys = this.#tagIndex.get(tag)
+    if (keys) {
+      keys.delete(key)
+      if (keys.size === 0) {
+        this.#tagIndex.delete(tag)
+      }
+    }
+  }
+
+  /**
+   * Removes a row from all tag indices.
+   * Should be called when a row is being deleted.
+   */
+  #removeRowFromTagIndices(key: string): void {
+    const tags = this.#rowTags.get(key)
+    if (tags) {
+      tags.forEach((tag) => this.#removeTagFromIndex(tag, key))
+      this.#rowTags.delete(key)
+    }
+  }
+
+  /**
+   * Checks if a row has no tags and removes it if so.
+   * Returns true if the row was removed.
+   */
+  #removeRowIfNoTags(key: string): boolean {
+    const tags = this.#rowTags.get(key)
+    if (tags && tags.size === 0) {
+      this.#data.delete(key)
+      this.#rowTags.delete(key)
+      this.#insertedKeys.delete(key)
+      return true
+    }
+    return false
+  }
+
+  #removeAllByTagPattern(_pos: number, tag: string): void {
+    // TODO: This is naive, working only while tags are single-width
+
+    const keys = this.#tagIndex.get(tag)
+    if (keys) {
+      for (const key of keys) {
+        if (this.#rowTags.get(key)?.delete(tag)) {
+          if (this.#rowTags.get(key)?.size === 0) {
+            this.#data.delete(key)
+            this.#rowTags.delete(key)
+            this.#insertedKeys.delete(key)
+          }
+        }
+      }
+      this.#tagIndex.delete(tag)
+    }
   }
 }
