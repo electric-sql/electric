@@ -429,6 +429,13 @@ export interface ShapeStreamOptions<T = never> {
    * ```
    */
   onError?: ShapeStreamErrorHandler
+
+  /**
+   * Warn in browser console when using HTTP URLs (default: true).
+   * HTTP limits browsers to 6 concurrent connections which can cause
+   * slow shapes with multiple subscriptions.
+   */
+  warnOnHttp?: boolean
 }
 
 export interface ShapeStreamInterface<T extends Row<unknown> = Row> {
@@ -1716,6 +1723,47 @@ function validateParams(params: Record<string, unknown> | undefined): void {
   }
 }
 
+// Module-level flag to ensure HTTP warning is only shown once per process/module
+let didWarnOnHttp = false
+
+/**
+ * Safely gets NODE_ENV without throwing ReferenceError in browser builds
+ * where `process` may not be defined.
+ */
+function getNodeEnvSafely(): string | undefined {
+  return typeof process !== `undefined` ? process.env?.NODE_ENV : undefined
+}
+
+/**
+ * Attempts to resolve a URL string, optionally with a base URL.
+ * Returns undefined if the URL cannot be parsed.
+ */
+function resolveUrlMaybe(url: string, base?: string): URL | undefined {
+  try {
+    return new URL(url, base)
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * Checks if we're in a browser environment (has window object).
+ */
+function isBrowserEnvironment(): boolean {
+  return typeof window !== `undefined`
+}
+
+/**
+ * Gets the current page URL in browser environments.
+ * Returns undefined in non-browser environments.
+ */
+function getWindowLocationHref(): string | undefined {
+  if (isBrowserEnvironment() && typeof window.location !== `undefined`) {
+    return window.location.href
+  }
+  return undefined
+}
+
 function validateOptions<T>(options: Partial<ShapeStreamOptions<T>>): void {
   if (!options.url) {
     throw new MissingShapeUrlError()
@@ -1735,7 +1783,40 @@ function validateOptions<T>(options: Partial<ShapeStreamOptions<T>>): void {
 
   validateParams(options.params)
 
+  // Warn about HTTP URLs in browser environments (unless disabled or in tests)
+  // HTTP forces HTTP/1.1 which typically limits browsers to ~6 concurrent connections per origin
+  const nodeEnv = getNodeEnvSafely()
+  const warnOnHttp = options.warnOnHttp ?? nodeEnv !== `test`
+
+  if (warnOnHttp && !didWarnOnHttp && isBrowserEnvironment()) {
+    if (typeof console !== `undefined`) {
+      // Try to resolve the URL, using window.location.href as base for relative URLs
+      const baseUrl = getWindowLocationHref()
+      const resolvedUrl = resolveUrlMaybe(options.url, baseUrl)
+
+      // Check if the resolved URL (or the page itself for relative URLs) uses HTTP
+      const isHttp = resolvedUrl?.protocol === `http:`
+
+      if (isHttp) {
+        didWarnOnHttp = true
+        console.warn(
+          `[Electric] Using HTTP (not HTTPS) typically limits browsers to ~6 concurrent connections per origin under HTTP/1.1. ` +
+            `This can cause slow shapes and app freezes with multiple shapes. ` +
+            `Use HTTPS for HTTP/2 support. See: https://electric-sql.com/r/electric-http2`
+        )
+      }
+    }
+  }
+
   return
+}
+
+/**
+ * Resets the HTTP warning flag. Only for testing purposes.
+ * @internal
+ */
+export function _resetHttpWarningForTesting(): void {
+  didWarnOnHttp = false
 }
 
 // `unknown` being in the value is a bit of defensive programming if user doesn't use TS
