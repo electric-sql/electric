@@ -45,7 +45,7 @@ defmodule Electric.Integration.OraclePropertyTest do
   end
 
   @doc """
-  Run parallel shapes with generated where clauses and mutations.
+  Run shapes with generated where clauses and mutations.
 
   Each seed is either taken from the environment variable (if set) or generated
   randomly. This allows:
@@ -54,7 +54,7 @@ defmodule Electric.Integration.OraclePropertyTest do
   - MUTATION_SEED set → varying shapes, fixed mutations
   - Both set → fully deterministic (useful for reproducing failures)
   """
-  test "parallel shapes with generated where clauses and mutations", ctx do
+  test "shapes with generated where clauses and mutations", ctx do
     max_runs = env_int("PROP_RUNS") || 1
     shape_count = env_int("SHAPE_COUNT") || @default_shape_count
     mutation_count = env_int("MUTATION_COUNT") || @default_mutation_count
