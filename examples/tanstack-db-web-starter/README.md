@@ -149,9 +149,9 @@ const serve = async ({ request }: { request: Request }) => {
   // 2. Build the Electric URL with row-level filtering
   const originUrl = prepareElectricUrl(request.url)
   originUrl.searchParams.set("table", "todos")
-  // Only sync rows where the user has access
-  const filter = `'${session.user.id}' = ANY(user_ids)`
-  originUrl.searchParams.set("where", filter)
+  // Only sync rows where the user has access (using parameterized query)
+  originUrl.searchParams.set("where", "$1 = ANY(user_ids)")
+  originUrl.searchParams.set("params[1]", session.user.id)
 
   // 3. Proxy the request to Electric
   return proxyElectricRequest(originUrl)
@@ -262,9 +262,9 @@ const serve = async ({ request }: { request: Request }) => {
 
   const originUrl = prepareElectricUrl(request.url)
   originUrl.searchParams.set("table", "categories")
-  // Filter to user's own categories
-  const filter = `user_id = '${session.user.id}'`
-  originUrl.searchParams.set("where", filter)
+  // Filter to user's own categories (using parameterized query)
+  originUrl.searchParams.set("where", "user_id = $1")
+  originUrl.searchParams.set("params[1]", session.user.id)
 
   return proxyElectricRequest(originUrl)
 }
