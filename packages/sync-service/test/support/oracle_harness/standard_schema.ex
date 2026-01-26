@@ -16,6 +16,7 @@ defmodule Support.OracleHarness.StandardSchema do
   """
 
   alias Support.OracleHarness
+  alias Support.OracleHarness.WhereClauseGenerator
 
   # Standard IDs for seeded data
   @level_1_ids Enum.map(1..5, &"l1-#{&1}")
@@ -204,6 +205,36 @@ defmodule Support.OracleHarness.StandardSchema do
 
     1..count
     |> Enum.map(&generate_one_where_clause/1)
+    |> Enum.with_index(1)
+    |> Enum.map(fn {where_spec, idx} ->
+      %{
+        name: "shape_#{idx}",
+        table: "level_4",
+        where: where_spec.where,
+        columns: ["id", "level_3_id", "value"],
+        pk: ["id"],
+        optimized: where_spec.optimized
+      }
+    end)
+  end
+
+  @doc """
+  Generates a list of diverse shape specs using StreamData-based generator.
+
+  This exercises the full range of SQL patterns supported by the parser including:
+  - OR/AND combinations with subqueries
+  - NOT patterns (NOT IN, NOT LIKE, NOT BETWEEN)
+  - Comparison operators (<, >, <=, >=, <>)
+  - BETWEEN/NOT BETWEEN
+  - LIKE/NOT LIKE with various patterns
+  - Nested subqueries (1-3 levels)
+  - Tag-based subqueries
+  - Mixed compositions
+
+  Uses the provided seed for deterministic generation.
+  """
+  def generate_diverse_shapes(count, seed) do
+    WhereClauseGenerator.generate_where_clauses(count, seed)
     |> Enum.with_index(1)
     |> Enum.map(fn {where_spec, idx} ->
       %{
