@@ -1,7 +1,8 @@
 ---
 title: Durable Streams
 description: >-
-  Resilient data streams for AI agents and real-time applications.
+  Persistent, addressable, real-time streams. For resilient AI sessions and ultra low-latency.
+image: /img/meta/durable-streams.jpg
 outline: deep
 ---
 
@@ -13,7 +14,8 @@ import BlogPostsByTag from '../src/components/BlogPostsByTag.vue'
 
 # Durable Streams
 
-Resilient data streams for AI agents and real-time applications.
+Persistent, addressable, <span class="no-wrap">real-time streams</span>.
+For resilient AI sessions <span class="no-wrap">and ultra low-latency</span>.
 
 <div class="actions cta-actions page-footer-actions left">
   <div class="action">

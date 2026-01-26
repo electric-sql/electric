@@ -1,7 +1,8 @@
 ---
 title: TanStack DB
 description: >-
-  A reactive client database for building local-first web applications.
+  Reactive client store for building super-fast apps. With sub-millisecond reactivity and instant local writes.
+image: /img/meta/tanstack-db.jpg
 outline: deep
 ---
 
@@ -13,7 +14,7 @@ import BlogPostsByTag from '../src/components/BlogPostsByTag.vue'
 
 # TanStack DB
 
-A reactive client database for building local-first web applications.
+Reactive client store for building <span class="no-wrap">super-fast apps</span>. With sub-millisecond reactivity <span class="no-wrap">and instant local writes</span>.
 
 <div class="actions cta-actions page-footer-actions left">
   <div class="action">

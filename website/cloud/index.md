@@ -3,6 +3,7 @@ title: Cloud
 description: >-
   Hosted Electric sync that's blazing fast
   and scales to millions of users
+image: /img/meta/electric-cloud.jpg
 outline: deep
 ---
 

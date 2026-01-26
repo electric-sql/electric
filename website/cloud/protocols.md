@@ -1,6 +1,7 @@
 ---
 title: Protocols
 description: Electric Cloud supported protocols
+image: /img/meta/electric-cloud.jpg
 outline: deep
 ---
 

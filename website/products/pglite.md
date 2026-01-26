@@ -1,8 +1,8 @@
 ---
 title: PGlite
 description: >-
-  Sync into a lightweight WASM Postgres with
-  real-time, reactive bindings.
+  Embeddable Postgres with reactivity and sync. For a full database inside your client or runtime.
+image: /img/meta/pglite.jpg
 outline: deep
 ---
 
@@ -46,8 +46,7 @@ onMounted(async () => {
 
 # PGlite <Badge type="warning" text="beta" />
 
-Sync into a lightweight WASM Postgres with
-real-time, reactive bindings.
+Embeddable Postgres <span class="no-wrap">with reactivity and sync</span>. For a full database inside <span class="no-wrap">your client or runtime</span>.
 
 <div class="actions cta-actions page-footer-actions left">
   <div class="action">

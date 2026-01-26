@@ -408,7 +408,7 @@ export default defineConfig({
 
     const PRODUCTION_URL = 'https://electric-sql.com'
     const LOCAL_DEV_URL = 'http://localhost:5173'
-    const DEFAULT_IMAGE = '/img/meta/sync-solved.jpg'
+    const DEFAULT_IMAGE = '/img/meta/electric-sync-primitives.jpg'
 
     const siteOrigin =
       process.env.CONTEXT === 'production'

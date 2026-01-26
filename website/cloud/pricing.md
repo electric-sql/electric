@@ -1,6 +1,7 @@
 ---
 title: Pricing
 description: Electric Cloud pricing information
+image: /img/meta/electric-cloud.jpg
 outline: deep
 ---
 

@@ -1,8 +1,8 @@
 ---
 title: Postgres Sync
 description: >-
-  Sync little subsets of your Postgres data into
-  local apps and services.
+  Sync from your database into your apps. For partial replication, data delivery and fan-out.
+image: /img/meta/postgres-sync.jpg
 outline: deep
 ---
 
@@ -46,8 +46,12 @@ onMounted(async () => {
 
 # Postgres Sync
 
-Sync little subsets of your Postgres data into
-local apps and services.
+Sync from your database into your apps.
+For partial replication,
+<span class="no-wrap-sm">
+  data delivery
+  <span class="no-wrap">
+    and fan-out</span></span>.
 
 <div class="actions cta-actions page-footer-actions left">
   <div class="action">

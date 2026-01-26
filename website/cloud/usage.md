@@ -1,6 +1,7 @@
 ---
 title: Usage
 description: How to use Electric Cloud
+image: /img/meta/electric-cloud.jpg
 outline: deep
 ---
 

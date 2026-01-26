@@ -1,6 +1,7 @@
 ---
 title: Products
 description: Composable sync primitives from ElectricSQL
+image: /img/meta/electric-sync-primitives.jpg
 outline: deep
 ---
 
