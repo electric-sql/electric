@@ -449,7 +449,7 @@ describe(`ShapeStream`, () => {
       }).toThrow(InvalidColumnMapperError)
     })
 
-    it(`should throw InvalidColumnMapperError for invalid columnMapper object`, () => {
+    it(`should throw InvalidColumnMapperError for invalid columnMapper object with helpful guidance`, () => {
       expect(() => {
         new ShapeStream({
           url: shapeUrl,
@@ -457,7 +457,18 @@ describe(`ShapeStream`, () => {
           // @ts-expect-error - intentionally testing invalid input
           columnMapper: { notEncode: () => ``, notDecode: () => `` },
         })
-      }).toThrow(InvalidColumnMapperError)
+      }).toThrow(/snakeCamelMapper\(\) or createColumnMapper\(\)/)
+    })
+
+    it(`should throw InvalidColumnMapperError with fallback message for anonymous functions`, () => {
+      expect(() => {
+        new ShapeStream({
+          url: shapeUrl,
+          params: { table: `foo` },
+          // @ts-expect-error - intentionally testing invalid input
+          columnMapper: () => ({ encode: () => ``, decode: () => `` }),
+        })
+      }).toThrow(/columnMapper function\(\)/)
     })
 
     it(`should throw InvalidColumnMapperError for null columnMapper`, () => {

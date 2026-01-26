@@ -84,19 +84,19 @@ export interface ColumnMapper {
 
 /**
  * Validates that a value is a valid ColumnMapper object.
- * Throws an InvalidColumnMapperError with a helpful message if the value
- * appears to be a factory function passed without being called.
+ * Returns false if the value is a function (common mistake of passing
+ * the factory without calling it) or if it lacks encode/decode methods.
+ *
+ * Note: This intentionally does NOT check for COLUMN_MAPPER_BRAND to maintain
+ * backwards compatibility with custom ColumnMapper implementations that use
+ * plain objects with encode/decode methods. The brand is used for TypeScript
+ * type narrowing and documentation, not runtime enforcement.
  *
  * @param value - The value to validate
- * @returns true if valid
- * @throws {InvalidColumnMapperError} if the value is not a valid ColumnMapper
+ * @returns true if the value is a valid ColumnMapper, false otherwise
  * @internal
  */
 export function isValidColumnMapper(value: unknown): value is ColumnMapper {
-  if (typeof value === `function`) {
-    return false
-  }
-
   if (typeof value !== `object` || value === null) {
     return false
   }

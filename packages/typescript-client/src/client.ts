@@ -1737,14 +1737,10 @@ function validateOptions<T>(options: Partial<ShapeStreamOptions<T>>): void {
 
   validateParams(options.params)
 
-  // Validate columnMapper if provided
-  // Note: Runtime validation catches common mistakes like passing the factory function
-  // instead of calling it, even though TypeScript types should prevent this.
   if (options.columnMapper !== undefined) {
-    // Cast to unknown to handle runtime cases where user passes wrong type
     const mapper = options.columnMapper as unknown
+
     if (typeof mapper === `function`) {
-      // Common mistake: passing the factory function instead of calling it
       const fnName =
         (mapper as { name?: string }).name || `columnMapper function`
       throw new InvalidColumnMapperError(
@@ -1761,8 +1757,6 @@ function validateOptions<T>(options: Partial<ShapeStreamOptions<T>>): void {
       )
     }
   }
-
-  return
 }
 
 // `unknown` being in the value is a bit of defensive programming if user doesn't use TS
