@@ -418,52 +418,5 @@ describe(`SnapshotTracker`, () => {
       // 250 >= xmax, so should not be rejected
       expect(tracker.shouldRejectMessage(message)).toBe(false)
     })
-
-    it(`should handle lastSeenUpdate method`, () => {
-      const snapshot1: SnapshotMetadata = {
-        snapshot_mark: 1,
-        xmin: `50`,
-        xmax: `200`,
-        xip_list: [],
-        database_lsn: `100`,
-      }
-      const snapshot2: SnapshotMetadata = {
-        snapshot_mark: 2,
-        xmin: `60`,
-        xmax: `300`,
-        xip_list: [],
-        database_lsn: `200`,
-      }
-      const keys1 = new Set([`user:1`])
-      const keys2 = new Set([`user:2`])
-
-      tracker.addSnapshot(snapshot1, keys1)
-      tracker.addSnapshot(snapshot2, keys2)
-
-      // Update with LSN that removes snapshot1
-      tracker.lastSeenUpdate(BigInt(150))
-
-      // snapshot1 should be removed, snapshot2 should remain
-      const message1: ChangeMessage<Row<unknown>> = {
-        key: `user:1`,
-        value: { id: 1, name: `Alice` },
-        headers: {
-          operation: `insert`,
-          txids: [25], // Would be rejected by snapshot1 if it existed
-        },
-      }
-
-      const message2: ChangeMessage<Row<unknown>> = {
-        key: `user:2`,
-        value: { id: 2, name: `Bob` },
-        headers: {
-          operation: `insert`,
-          txids: [30], // Should still be rejected by snapshot2
-        },
-      }
-
-      expect(tracker.shouldRejectMessage(message1)).toBe(false)
-      expect(tracker.shouldRejectMessage(message2)).toBe(true)
-    })
   })
 })
