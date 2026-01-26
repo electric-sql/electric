@@ -86,6 +86,9 @@ defmodule ElectricTelemetry.ApplicationTelemetry do
   def metrics(telemetry_opts) do
     [
       last_value("process.memory.total", tags: [:process_type], unit: :byte),
+      last_value("process.memory.binary", tags: [:process_type], unit: :byte),
+      last_value("process.memory.avg_bin_count", tags: [:process_type]),
+      last_value("process.memory.avg_ref_count", tags: [:process_type]),
       last_value("system.cpu.core_count"),
       last_value("system.cpu.utilization.total"),
       last_value("system.load_percent.avg1"),
@@ -170,9 +173,17 @@ defmodule ElectricTelemetry.ApplicationTelemetry do
   end
 
   def process_memory(%{intervals_and_thresholds: %{top_process_count: process_count}}) do
-    for %{type: type, memory: memory} <-
-          ElectricTelemetry.Processes.top_memory_by_type(process_count) do
-      :telemetry.execute([:process, :memory], %{total: memory}, %{process_type: to_string(type)})
+    for map <- ElectricTelemetry.Processes.top_memory_by_type(process_count) do
+      :telemetry.execute(
+        [:process, :memory],
+        %{
+          total: map.proc_mem,
+          binary: map.binary_mem,
+          avg_bin_count: map.avg_bin_count,
+          avg_ref_count: map.avg_ref_count
+        },
+        %{process_type: to_string(map.type)}
+      )
     end
   end
 
