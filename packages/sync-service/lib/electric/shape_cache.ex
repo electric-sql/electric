@@ -60,12 +60,12 @@ defmodule Electric.ShapeCache do
   @spec get_or_create_shape_handle(shape_def(), stack_id(), opts :: Access.t()) ::
           handle_position()
   def get_or_create_shape_handle(shape, stack_id, opts \\ []) when is_stack_id(stack_id) do
-    # Get or create the shape handle and fire a snapshot if necessary
+    # Get or create the shape handle and fire a snapshot if necessary.
     with {:ok, handle} <- fetch_handle_by_shape(shape, stack_id),
          {:ok, offset} <- fetch_latest_offset(stack_id, handle) do
       {handle, offset}
     else
-      :error ->
+      _ ->
         GenServer.call(
           name(stack_id),
           {:create_or_wait_shape_handle, shape, opts[:otel_ctx]},
