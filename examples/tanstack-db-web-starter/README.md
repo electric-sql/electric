@@ -203,6 +203,63 @@ For more details on Electric's authentication model, see:
 - [Electric Auth Guide](https://electric-sql.com/docs/guides/auth) - comprehensive auth documentation
 - [Electric Shapes](https://electric-sql.com/docs/guides/shapes) - how partial replication works
 
+# Naming Conventions
+
+This starter uses **snake_case** for all database column names. This is the PostgreSQL convention and is important for consistency with Electric.
+
+## Why snake_case?
+
+1. **PostgreSQL convention** - snake_case is the standard naming convention for PostgreSQL columns
+2. **Electric compatibility** - Electric syncs data using the exact column names from your database
+3. **Consistency** - keeping names the same from database to frontend reduces confusion
+
+## Column naming in practice
+
+When defining Drizzle schemas, use snake_case for column names:
+
+```ts
+// src/db/schema.ts
+export const todosTable = pgTable("todos", {
+  id: integer().primaryKey().generatedAlwaysAsIdentity(),
+  text: varchar({ length: 500 }).notNull(),
+  completed: boolean().notNull().default(false),
+  created_at: timestamp({ withTimezone: true }).notNull().defaultNow(), // snake_case
+  user_id: text("user_id").notNull(), // snake_case
+  project_id: integer("project_id").notNull(), // snake_case
+})
+```
+
+Your TypeScript types and Zod schemas will then also use snake_case:
+
+```ts
+type Todo = {
+  id: number
+  text: string
+  completed: boolean
+  created_at: Date // matches database
+  user_id: string // matches database
+  project_id: number // matches database
+}
+```
+
+## Using camelCase instead
+
+If you prefer camelCase in your TypeScript code, Electric provides a `columnMapper` option that automatically transforms column names:
+
+```ts
+import { ShapeStream, snakeCamelMapper } from "@electric-sql/client"
+
+const stream = new ShapeStream<Todo>({
+  url: "http://localhost:3000/v1/shape",
+  params: { table: "todos" },
+  columnMapper: snakeCamelMapper(), // created_at → createdAt
+})
+```
+
+The mapper also handles where clauses, so `where: "userId = $1"` becomes `user_id = $1` when sent to Electric.
+
+See the [Electric TypeScript client docs](https://electric-sql.com/docs/api/clients/typescript#column-mapping) for more details.
+
 # Developing your app
 
 ## Adding a New Table

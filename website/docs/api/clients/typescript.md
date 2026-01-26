@@ -21,6 +21,10 @@ The client is published on NPM as [`@electric-sql/client`](https://www.npmjs.com
 npm i @electric-sql/client
 ```
 
+:::tip Naming Conventions
+Electric uses the exact column names from your PostgreSQL database. If your database uses **snake_case** columns (e.g., `created_at`) but your TypeScript types use **camelCase** (e.g., `createdAt`), you can use [column mapping](#column-mapping) to transform names automatically.
+:::
+
 ## How to use
 
 The client exports:

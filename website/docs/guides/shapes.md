@@ -99,6 +99,10 @@ The where clause must be a valid [PostgreSQL query expression](https://www.postg
 - `title='Electric'`
 - `status IN ('backlog', 'todo')`
 
+:::tip Column Names
+Where clauses use your **database column names** exactly as they appear in PostgreSQL. If your database uses `snake_case` columns (e.g., `user_id`, `created_at`), use those names in your where clauses. If you're using [column mapping](/docs/api/clients/typescript#column-mapping) in your TypeScript client, the mapper will automatically transform where clause column names for you.
+:::
+
 Where clauses support:
 
 1. columns of numerical types, `boolean`, `uuid`, `text`, `interval`, date and time types (with the exception of `timetz`), [Arrays](https://github.com/electric-sql/electric/issues/1767) (but not yet [Enums](https://github.com/electric-sql/electric/issues/1709), except when explicitly casting them to `text`)
