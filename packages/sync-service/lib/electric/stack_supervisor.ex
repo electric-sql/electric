@@ -379,7 +379,15 @@ defmodule Electric.StackSupervisor do
         {Electric.MonitoredCoreSupervisor,
          stack_id: stack_id,
          connection_manager_opts: connection_manager_opts,
-         storage_dir: config.storage_dir}
+         storage_dir: config.storage_dir},
+        {Agent,
+         fn ->
+           Electric.ShapeCache.ShapeStatus.reduce_shapes(stack_id, 0, fn {handle, _shape}, n ->
+             {:ok, _pid} = Electric.ShapeCache.start_consumer_for_handle(handle, stack_id)
+             n + 1
+           end)
+           |> tap(fn n -> IO.puts("started #{n} consumers") end)
+         end}
       ]
       |> Enum.reject(&is_nil/1)
 
