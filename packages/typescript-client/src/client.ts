@@ -449,7 +449,7 @@ export interface ShapeStreamOptions<T = never> {
    * })
    * ```
    */
-  subsetMethod?: 'GET' | 'POST'
+  subsetMethod?: `GET` | `POST`
 }
 
 export interface ShapeStreamInterface<T extends Row<unknown> = Row> {
@@ -1182,8 +1182,10 @@ export class ShapeStream<T extends Row<unknown> = Row>
           const currentCursor = this.#liveCacheBuster
 
           if (currentCursor === this.#lastSeenCursor) {
-            // Same cursor = still replaying cached responses
-            // Suppress this up-to-date notification
+            // Same cursor as previous session - suppress this up-to-date notification.
+            // Exit replay mode after first suppression to ensure we don't get stuck
+            // if CDN keeps returning the same cursor indefinitely.
+            this.#lastSeenCursor = undefined
             return
           }
         }
@@ -1651,9 +1653,9 @@ export class ShapeStream<T extends Row<unknown> = Row>
    * Fetch a snapshot for subset of data.
    * Returns the metadata and the data, but does not inject it into the subscribed data stream.
    *
-   * By default, uses POST to send subset parameters in the request body, avoiding URL length
-   * limits that can occur with large WHERE clauses or many parameters. Set `method: 'GET'`
-   * to use query parameters instead (deprecated, will be removed in Electric 2.0).
+   * By default, uses GET to send subset parameters as query parameters. This may hit URL length
+   * limits (HTTP 414) with large WHERE clauses or many parameters. Set `method: 'POST'` or use
+   * `subsetMethod: 'POST'` on the stream to send parameters in the request body instead.
    *
    * @param opts - The options for the snapshot request.
    * @returns The metadata and the data for the snapshot.
@@ -1662,129 +1664,35 @@ export class ShapeStream<T extends Row<unknown> = Row>
     metadata: SnapshotMetadata
     data: Array<ChangeMessage<T>>
   }> {
-    // Determine method: per-request override > stream option > default (GET)
     const method = opts.method ?? this.options.subsetMethod ?? `GET`
     const usePost = method === `POST`
 
+    let fetchUrl: URL
+    let fetchOptions: RequestInit
+
     if (usePost) {
-      // POST: Build URL without subset params (they go in POST body)
-      const { fetchUrl, requestHeaders } = await this.#constructUrl(
-        this.options.url,
-        true
-        // Note: not passing opts here - subset params go in POST body
-      )
-
-      // Build the POST body with subset params
-      // Apply columnMapper encoding if present
-      const subsetBody: Record<string, unknown> = {}
-
-      if (opts.whereExpr) {
-        // Compile structured expression with columnMapper applied
-        const compiledWhere = compileExpression(
-          opts.whereExpr,
-          this.options.columnMapper?.encode
-        )
-        subsetBody.where = compiledWhere
-        subsetBody.where_expr = opts.whereExpr
-      } else if (opts.where && typeof opts.where === `string`) {
-        // Legacy string format
-        const encodedWhere = encodeWhereClause(
-          opts.where,
-          this.options.columnMapper?.encode
-        )
-        subsetBody.where = encodedWhere
-      }
-
-      if (opts.params) {
-        subsetBody.params = opts.params
-      }
-
-      if (opts.limit !== undefined) {
-        subsetBody.limit = opts.limit
-      }
-
-      if (opts.offset !== undefined) {
-        subsetBody.offset = opts.offset
-      }
-
-      if (opts.orderByExpr) {
-        // Compile structured ORDER BY with columnMapper applied
-        const compiledOrderBy = compileOrderBy(
-          opts.orderByExpr,
-          this.options.columnMapper?.encode
-        )
-        subsetBody.order_by = compiledOrderBy
-        subsetBody.order_by_expr = opts.orderByExpr
-      } else if (opts.orderBy && typeof opts.orderBy === `string`) {
-        // Legacy string format
-        const encodedOrderBy = encodeWhereClause(
-          opts.orderBy,
-          this.options.columnMapper?.encode
-        )
-        subsetBody.order_by = encodedOrderBy
-      }
-
-      const response = await this.#fetchClient(fetchUrl.toString(), {
+      const result = await this.#constructUrl(this.options.url, true)
+      fetchUrl = result.fetchUrl
+      fetchOptions = {
         method: `POST`,
         headers: {
-          ...requestHeaders,
+          ...result.requestHeaders,
           'Content-Type': `application/json`,
         },
-        body: JSON.stringify(subsetBody),
-      })
-
-      if (!response.ok) {
-        throw new FetchError(
-          response.status,
-          undefined,
-          undefined,
-          Object.fromEntries([...response.headers.entries()]),
-          fetchUrl.toString()
-        )
+        body: JSON.stringify(this.#buildSubsetBody(opts)),
       }
-
-      // Use schema from stream if available, otherwise extract from response header
-      const schema: Schema =
-        this.#schema ??
-        getSchemaFromHeaders(response.headers, {
-          required: true,
-          url: fetchUrl.toString(),
-        })
-
-      const { metadata, data: rawData } = await response.json()
-      const data = this.#messageParser.parseSnapshotData<ChangeMessage<T>>(
-        rawData,
-        schema
-      )
-
-      return {
-        metadata,
-        data,
-      }
+    } else {
+      const result = await this.#constructUrl(this.options.url, true, opts)
+      fetchUrl = result.fetchUrl
+      fetchOptions = { headers: result.requestHeaders }
     }
 
-    // GET (legacy): Include subset params in URL query string
-    const { fetchUrl, requestHeaders } = await this.#constructUrl(
-      this.options.url,
-      true,
-      opts
-    )
-
-    const response = await this.#fetchClient(fetchUrl.toString(), {
-      headers: requestHeaders,
-    })
+    const response = await this.#fetchClient(fetchUrl.toString(), fetchOptions)
 
     if (!response.ok) {
-      throw new FetchError(
-        response.status,
-        undefined,
-        undefined,
-        Object.fromEntries([...response.headers.entries()]),
-        fetchUrl.toString()
-      )
+      throw await FetchError.fromResponse(response, fetchUrl.toString())
     }
 
-    // Use schema from stream if available, otherwise extract from response header
     const schema: Schema =
       this.#schema ??
       getSchemaFromHeaders(response.headers, {
@@ -1798,10 +1706,51 @@ export class ShapeStream<T extends Row<unknown> = Row>
       schema
     )
 
-    return {
-      metadata,
-      data,
+    return { metadata, data }
+  }
+
+  #buildSubsetBody(opts: SubsetParams): Record<string, unknown> {
+    const body: Record<string, unknown> = {}
+
+    if (opts.whereExpr) {
+      body.where = compileExpression(
+        opts.whereExpr,
+        this.options.columnMapper?.encode
+      )
+      body.where_expr = opts.whereExpr
+    } else if (opts.where && typeof opts.where === `string`) {
+      body.where = encodeWhereClause(
+        opts.where,
+        this.options.columnMapper?.encode
+      )
     }
+
+    if (opts.params) {
+      body.params = opts.params
+    }
+
+    if (opts.limit !== undefined) {
+      body.limit = opts.limit
+    }
+
+    if (opts.offset !== undefined) {
+      body.offset = opts.offset
+    }
+
+    if (opts.orderByExpr) {
+      body.order_by = compileOrderBy(
+        opts.orderByExpr,
+        this.options.columnMapper?.encode
+      )
+      body.order_by_expr = opts.orderByExpr
+    } else if (opts.orderBy && typeof opts.orderBy === `string`) {
+      body.order_by = encodeWhereClause(
+        opts.orderBy,
+        this.options.columnMapper?.encode
+      )
+    }
+
+    return body
   }
 }
 

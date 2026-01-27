@@ -44,22 +44,36 @@ defmodule Electric.Plug.ServeShapePlug do
             assign(conn, :body_params, body_params)
 
           {:ok, _} ->
+            Logger.debug("Received non-object JSON body from client")
+
             conn
             |> send_resp(400, Jason.encode!(%{error: "Request body must be a JSON object"}))
             |> halt()
 
-          {:error, _} ->
+          {:error, %Jason.DecodeError{} = error} ->
+            Logger.debug("Invalid JSON in request body: #{Exception.message(error)}")
+
             conn
-            |> send_resp(400, Jason.encode!(%{error: "Invalid JSON in request body"}))
+            |> send_resp(
+              400,
+              Jason.encode!(%{
+                error: "Invalid JSON in request body",
+                details: Exception.message(error)
+              })
+            )
             |> halt()
         end
 
       {:more, _, conn} ->
+        Logger.warning("Request body exceeded size limit")
+
         conn
         |> send_resp(413, Jason.encode!(%{error: "Request body too large"}))
         |> halt()
 
-      {:error, _} ->
+      {:error, reason} ->
+        Logger.warning("Failed to read request body: #{inspect(reason)}")
+
         conn
         |> send_resp(400, Jason.encode!(%{error: "Failed to read request body"}))
         |> halt()
@@ -68,40 +82,13 @@ defmodule Electric.Plug.ServeShapePlug do
 
   defp parse_body(conn, _), do: assign(conn, :body_params, %{})
 
+  @subset_keys ~w(where order_by limit offset params where_expr order_by_expr)
+
   defp validate_request(%Conn{assigns: %{config: config, body_params: body_params}} = conn, _) do
     Logger.debug("Query String: #{conn.query_string}")
 
-    # Extract subset params from query string (subset__where -> %{"subset" => %{"where" => ...}})
     query_params = Utils.extract_prefixed_keys_into_map(conn.query_params, "subset", "__")
-
-    # For POST requests, merge body params (body params can override query params for subset)
-    # Body params can contain subset params directly in a "subset" key, or be flat subset params
-    merged_params =
-      case body_params do
-        %{"subset" => subset_params} when is_map(subset_params) ->
-          # Body has nested subset params, merge them
-          existing_subset = Map.get(query_params, "subset", %{})
-          merged_subset = Map.merge(existing_subset, subset_params)
-          Map.merge(query_params, body_params)
-          |> Map.put("subset", merged_subset)
-
-        %{} when map_size(body_params) > 0 ->
-          # Check if body has flat subset params (where, order_by, limit, offset, params)
-          subset_keys = ["where", "order_by", "limit", "offset", "params", "where_expr", "order_by_expr"]
-          {subset_params, other_params} = Map.split(body_params, subset_keys)
-
-          if map_size(subset_params) > 0 do
-            existing_subset = Map.get(query_params, "subset", %{})
-            merged_subset = Map.merge(existing_subset, subset_params)
-            Map.merge(query_params, other_params)
-            |> Map.put("subset", merged_subset)
-          else
-            Map.merge(query_params, body_params)
-          end
-
-        _ ->
-          query_params
-      end
+    merged_params = merge_body_params(query_params, body_params)
 
     api = Access.fetch!(config, :api)
 
@@ -123,6 +110,34 @@ defmodule Electric.Plug.ServeShapePlug do
         conn
         |> Api.Response.send(response)
         |> halt()
+    end
+  end
+
+  # Merge body params into query params, handling subset params specially
+  defp merge_body_params(query_params, body_params) when map_size(body_params) == 0 do
+    query_params
+  end
+
+  defp merge_body_params(query_params, %{"subset" => subset_params} = body_params)
+       when is_map(subset_params) do
+    existing_subset = Map.get(query_params, "subset", %{})
+
+    query_params
+    |> Map.merge(body_params)
+    |> Map.put("subset", Map.merge(existing_subset, subset_params))
+  end
+
+  defp merge_body_params(query_params, body_params) do
+    {subset_params, other_params} = Map.split(body_params, @subset_keys)
+
+    if map_size(subset_params) > 0 do
+      existing_subset = Map.get(query_params, "subset", %{})
+
+      query_params
+      |> Map.merge(other_params)
+      |> Map.put("subset", Map.merge(existing_subset, subset_params))
+    else
+      Map.merge(query_params, body_params)
     end
   end
 
