@@ -486,58 +486,60 @@ defmodule Electric.Shapes.Consumer do
          %State{} = state
        )
        when needs_initial_filtering(state) do
-    case InitialSnapshot.filter(state.initial_snapshot_state, state.storage, xid) do
-      {:consider_flushed, initial_snapshot_state} ->
-        # This transaction is already included in the snapshot, so just ignore all of its fragments.
-        # TODO: it could be the case the multiple txns are seen while InitialSnapshot needs
-        # filtering. And the outcomes for those txns could be different.
-        %{
-          state
-          | pending_txn: PendingTxn.consider_flushed(state.pending_txn),
-            initial_snapshot_state: initial_snapshot_state
-        }
+    state =
+      case InitialSnapshot.filter(state.initial_snapshot_state, state.storage, xid) do
+        {:consider_flushed, initial_snapshot_state} ->
+          # This transaction is already included in the snapshot, so just ignore all of its fragments.
+          # TODO: it could be the case the multiple txns are seen while InitialSnapshot needs
+          # filtering. And the outcomes for those txns could be different.
+          %{
+            state
+            | pending_txn: PendingTxn.consider_flushed(state.pending_txn),
+              initial_snapshot_state: initial_snapshot_state
+          }
 
-      {:continue, new_initial_snapshot_state} ->
-        # The transaction is not part of the initial snapshot.
-        state = %{state | initial_snapshot_state: new_initial_snapshot_state}
-        process_txn_fragment(txn_fragment, state)
-    end
+        {:continue, new_initial_snapshot_state} ->
+          # The transaction is not part of the initial snapshot.
+          %{state | initial_snapshot_state: new_initial_snapshot_state}
+      end
+
+    process_txn_fragment(txn_fragment, state)
   end
 
-  defp handle_txn_fragment(
+  defp handle_txn_fragment(txn_fragment, state), do: process_txn_fragment(txn_fragment, state)
+
+  # Fragments belonging to the same transaction can all be skipped either via xid-filtering or log offset filtering.
+  defp process_txn_fragment(
          %TransactionFragment{last_log_offset: last_log_offset} = txn_fragment,
          %State{pending_txn: txn} = state
        ) do
-    if txn.consider_flushed? or fragment_already_processed?(txn_fragment, state) do
+    cond do
       # TODO: Do not mark the fragment itself flushed. When the cnnection restarts, we want to
       # receive all fragments starting from the one with has_begin? so as not to overcomplicate
       # the consumer logic.
-      consider_flushed(state, last_log_offset)
-    else
-      process_txn_fragment(txn_fragment, state)
+      txn.consider_flushed? or fragment_already_processed?(txn_fragment, state) ->
+        consider_flushed(state, last_log_offset)
+
+      # In the regular mode all fragments are buffered until the Commit change is seen. At that
+      # point, a transaction struct is produced from the buffered fragments and is written to
+      # storage.
+      not state.fragment_direct? ->
+        {txns, transaction_builder} =
+          TransactionBuilder.build(txn_fragment, state.transaction_builder)
+
+        state = %{state | transaction_builder: transaction_builder}
+
+        case txns do
+          [] -> state
+          [txn] -> handle_txn(txn, state)
+        end
+
+      # In the fragment-direct mode, each transaction fragment is written to storage individually.
+      true ->
+        state
+        |> write_txn_fragment_to_storage(txn_fragment)
+        |> maybe_complete_pending_txn(txn_fragment)
     end
-  end
-
-  # In the regular mode all fragments are buffered until the Commit change is seen. At that
-  # point, a transaction struct is produced from the buffered fragments and is written to
-  # storage.
-  defp process_txn_fragment(txn_fragment, %State{fragment_direct?: false} = state) do
-    {txns, transaction_builder} =
-      TransactionBuilder.build(txn_fragment, state.transaction_builder)
-
-    state = %{state | transaction_builder: transaction_builder}
-
-    case txns do
-      [] -> state
-      [txn] -> handle_txn(txn, state)
-    end
-  end
-
-  # In the fragment-direct mode, each transaction fragment is written to storage individually.
-  defp process_txn_fragment(txn_fragment, state) do
-    state
-    |> write_txn_fragment_to_storage(txn_fragment)
-    |> maybe_complete_pending_txn(txn_fragment)
   end
 
   # This function does similar things to do_handle_txn/2 but with the following simplifications:
