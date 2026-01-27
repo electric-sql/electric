@@ -4,6 +4,7 @@ defmodule Electric.Shapes.Shape do
   """
   alias Electric.Shapes.Shape.SubqueryMoves
   alias Electric.Replication.Eval.Expr
+  alias Electric.Replication.Eval.Decomposer
   alias Electric.Postgres.Inspector
   alias Electric.Replication.Eval.Parser
   alias Electric.Replication.Changes
@@ -38,6 +39,10 @@ defmodule Electric.Shapes.Shape do
     shape_dependencies_handles: [],
     tag_structure: [],
     subquery_comparison_expressions: %{},
+    # DNF decomposition for arbitrary boolean expressions with subqueries
+    dnf_decomposition: nil,
+    # Maps position -> dependency_handle for move-in/move-out handling
+    position_to_dependency_map: %{},
     log_mode: :full,
     flags: %{},
     storage: %{compaction: :disabled},
@@ -267,12 +272,97 @@ defmodule Electric.Shapes.Shape do
   defp fill_tag_structure(shape) do
     {tag_structure, comparison_expressions} = SubqueryMoves.move_in_tag_structure(shape)
 
+    # Compute DNF decomposition for complex boolean expressions
+    {dnf_decomposition, position_to_dependency_map} =
+      compute_dnf_decomposition(shape, comparison_expressions)
+
     %{
       shape
       | tag_structure: tag_structure,
-        subquery_comparison_expressions: comparison_expressions
+        subquery_comparison_expressions: comparison_expressions,
+        dnf_decomposition: dnf_decomposition,
+        position_to_dependency_map: position_to_dependency_map
     }
   end
+
+  # Compute DNF decomposition and position-to-dependency mapping
+  defp compute_dnf_decomposition(%{where: nil}, _comparison_expressions), do: {nil, %{}}
+  defp compute_dnf_decomposition(%{shape_dependencies: []}, _comparison_expressions), do: {nil, %{}}
+
+  defp compute_dnf_decomposition(shape, comparison_expressions) do
+    case Decomposer.decompose(shape.where.eval) do
+      {:ok, decomposition} ->
+        # Build position to dependency handle mapping
+        position_to_dep =
+          build_position_to_dependency_map(
+            decomposition,
+            comparison_expressions,
+            shape.shape_dependencies_handles
+          )
+
+        {decomposition, position_to_dep}
+
+      {:error, _reason} ->
+        # If decomposition fails, fall back to no DNF
+        {nil, %{}}
+    end
+  end
+
+  # Build a map from DNF position to dependency handle
+  # This tells us which dependency shape affects which position
+  defp build_position_to_dependency_map(decomposition, comparison_expressions, dep_handles) do
+    decomposition.subexpressions
+    |> Enum.filter(fn {_pos, info} -> info.is_subquery end)
+    |> Enum.reduce(%{}, fn {pos, info}, acc ->
+      # Find which sublink_ref this subexpression corresponds to
+      case find_sublink_ref_for_expression(info.ast, comparison_expressions) do
+        nil ->
+          acc
+
+        sublink_ref_path ->
+          # sublink_ref_path is like ["$sublink", "0"]
+          case sublink_ref_path do
+            ["$sublink", idx_str] ->
+              idx = String.to_integer(idx_str)
+
+              if idx < length(dep_handles) do
+                Map.put(acc, pos, Enum.at(dep_handles, idx))
+              else
+                acc
+              end
+
+            _ ->
+              acc
+          end
+      end
+    end)
+  end
+
+  # Find the sublink_ref for a given subquery expression
+  defp find_sublink_ref_for_expression(ast, comparison_expressions) do
+    # The comparison_expressions map has {["$sublink", idx] => testexpr}
+    # We need to match our ast's testexpr to find the right sublink_ref
+    Enum.find_value(comparison_expressions, fn {sublink_ref_path, testexpr} ->
+      if expressions_match?(ast, testexpr) do
+        sublink_ref_path
+      end
+    end)
+  end
+
+  # Check if two expressions match (simplified comparison)
+  defp expressions_match?(%Parser.Func{name: "sublink_membership_check", args: [test1, _]}, test2) do
+    expressions_match?(test1, test2)
+  end
+
+  defp expressions_match?(%Parser.Ref{path: path1}, %Parser.Ref{path: path2}) do
+    path1 == path2
+  end
+
+  defp expressions_match?(%Parser.RowExpr{elements: e1}, %Parser.RowExpr{elements: e2}) do
+    length(e1) == length(e2) and Enum.all?(Enum.zip(e1, e2), fn {a, b} -> expressions_match?(a, b) end)
+  end
+
+  defp expressions_match?(_, _), do: false
 
   defp validate_where_clause(nil, _opts, _refs), do: {:ok, nil, []}
 
