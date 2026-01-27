@@ -208,6 +208,7 @@ defmodule Electric.Shapes.Api.Response do
     |> Plug.Conn.put_resp_header("electric-snapshot", "true")
     |> put_shape_handle_header(response)
     |> put_schema_header(response)
+    |> put_offset_header(response)
     |> put_known_error_header(response)
   end
 
