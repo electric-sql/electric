@@ -369,21 +369,41 @@ defmodule Support.OracleHarness do
   end
 
   defp run_mutation_cycle(ctx, checkers, mutation, timeout_ms, oracle_before) do
+    cycle_start = System.monotonic_time(:millisecond)
+
     # Phase 0: Flush stale messages that accumulated while not listening
     # This prevents old up_to_date messages from triggering oracle checks
     # while the actual change messages are still queued
     pid_to_checker = Map.new(checkers, &{&1.pid, &1})
-    {checkers, _flushed_count} = flush_stale_messages(checkers, pid_to_checker)
+    {checkers, flushed_count} = flush_stale_messages(checkers, pid_to_checker)
+
+    flush_end = System.monotonic_time(:millisecond)
 
     # Phase 1: Apply mutation
     apply_sql(ctx, mutation.sql)
 
+    apply_end = System.monotonic_time(:millisecond)
+
     # Phase 2: Wait for all clients to be up_to_date (central receive loop)
     checkers = await_all_up_to_date(checkers, timeout_ms, mutation.name)
 
+    await_end = System.monotonic_time(:millisecond)
+
     # Phase 3: Query oracle_after and verify in parallel
     # Returns {checkers, oracle_after} so oracle_after can be reused as next oracle_before
-    verify_all_parallel(checkers, mutation, oracle_before)
+    result = verify_all_parallel(checkers, mutation, oracle_before)
+
+    verify_end = System.monotonic_time(:millisecond)
+
+    log(
+      "#{mutation.name} timing: total=#{verify_end - cycle_start}ms " <>
+        "(flush=#{flush_end - cycle_start}ms/#{flushed_count}msgs, " <>
+        "apply=#{apply_end - flush_end}ms, " <>
+        "await=#{await_end - apply_end}ms, " <>
+        "verify=#{verify_end - await_end}ms)"
+    )
+
+    result
   end
 
   defp query_all_oracles_parallel(checkers) do
