@@ -326,13 +326,20 @@ defmodule Electric.Shapes.Shape do
 
       _ ->
         # Fall back to finding via comparison_expressions
-        Enum.find_value(comparison_expressions, fn {_path, %{eval: testexpr}} ->
-          if expressions_match?(ast, testexpr) do
-            extract_column_from_testexpr(testexpr)
-          end
+        Enum.find_value(comparison_expressions, fn
+          {_path, %{eval: testexpr}} ->
+            if expressions_match?(ast, testexpr) do
+              extract_column_from_testexpr(testexpr)
+            end
+
+          _ ->
+            nil
         end)
     end
   end
+
+  # Fallback clause for unexpected subexpression formats
+  defp extract_tag_column(_subexpr, _comparison_expressions), do: nil
 
   defp extract_column_from_testexpr(%Parser.Ref{path: [column_name]}), do: column_name
 
