@@ -11,8 +11,6 @@ defmodule Electric.Integration.OraclePropertyTest do
     - MUTATION_SEED: Seed for mutation generation (if unset, varies each iteration)
     - LONG_POLL_TIMEOUT: Server long-poll timeout in ms (default: 100)
     - RETRY_WINDOW_MS: Max time to wait for changes after up_to_date (default: 5000)
-    - DIVERSE_SHAPES: Set to "true" to use the StreamData-based diverse shape generator
-                      which exercises the full range of SQL patterns (OR, NOT, BETWEEN, etc.)
 
   Run with: mix test --include oracle
   """
@@ -62,25 +60,17 @@ defmodule Electric.Integration.OraclePropertyTest do
     mutation_count = env_int("MUTATION_COUNT") || @default_mutation_count
     fixed_where_seed = env_int("WHERE_SEED")
     fixed_mutation_seed = env_int("MUTATION_SEED")
-    use_diverse_shapes = env_bool("DIVERSE_SHAPES")
 
     check all iteration_seed <- StreamData.integer(),
               max_runs: max_runs do
       where_seed = fixed_where_seed || iteration_seed
       mutation_seed = fixed_mutation_seed || iteration_seed + 1
 
-      generator_type = if use_diverse_shapes, do: "diverse", else: "standard"
-
       IO.puts(
-        "[oracle] Generating #{generator_type} shapes with WHERE_SEED=#{where_seed} MUTATION_SEED=#{mutation_seed}"
+        "[oracle] Generating shapes with WHERE_SEED=#{where_seed} MUTATION_SEED=#{mutation_seed}"
       )
 
-      shapes =
-        if use_diverse_shapes do
-          generate_diverse_shapes(shape_count, where_seed)
-        else
-          generate_shapes(shape_count, where_seed)
-        end
+      shapes = generate_diverse_shapes(shape_count, where_seed)
 
       mutations = generate_mutations(mutation_count, mutation_seed)
 
@@ -88,14 +78,4 @@ defmodule Electric.Integration.OraclePropertyTest do
     end
   end
 
-  defp env_bool(name) do
-    case System.get_env(name) do
-      nil -> false
-      "" -> false
-      "0" -> false
-      "false" -> false
-      "FALSE" -> false
-      _ -> true
-    end
-  end
 end
