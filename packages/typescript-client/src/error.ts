@@ -123,3 +123,10 @@ export class StaleCacheError extends Error {
     this.name = `StaleCacheError`
   }
 }
+
+export class InvalidColumnMapperError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = `InvalidColumnMapperError`
+  }
+}
