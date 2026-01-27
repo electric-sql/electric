@@ -38,7 +38,6 @@ import { UsedBySection } from './src/components/home'
 </script>
 
 <BestWayToBuildSection />
-
 <KeyToAdoptionSection />
 <NextStepsSection />
 <UsedBySection />

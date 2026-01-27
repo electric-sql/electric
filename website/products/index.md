@@ -9,6 +9,16 @@ outline: deep
 import ProductsGrid from '../src/components/home/ProductsGrid.vue'
 </script>
 
+<style scoped>
+.guidance-icon {
+  width: 3rem;
+  display: block;
+  margin-top: 32px;
+  margin-bottom: -12px;
+}
+</style>
+
+
 <p class="intro-zap-container">
   <img src="/img/home/zap-with-halo.svg"
       alt="Electric zap with halo"
@@ -42,119 +52,48 @@ PGlite is mainly used in [dev, test and sandbox environments](/blog/2025/06/05/d
 
 ## Which product should I use?
 
-<div class="guidance-list">
-
-<div class="guidance-item">
 <img src="/img/home/sync-targets/app.svg" class="guidance-icon" />
 
-### Building fast, modern apps?
+### Building web, mobile and desktop apps?
 
-Use [Postgres Sync](/products/postgres-sync) for data and [TanStack DB](/products/tanstack-db) for reactive state.
+There are lots of options here. However, for most apps we recommend using [Postgres&nbsp;Sync](/products/postgres-sync) for data sync and [TanStack&nbsp;DB](/products/tanstack-db) for reactive state-management and optimistic mutations in the&nbsp;client.
 
-[Get started with Postgres Sync &rarr;](/products/postgres-sync)
-</div>
+See the [building super-fast apps on sync](/blog/2025/07/29/super-fast-apps-on-sync-with-tanstack-db) post for more&nbsp;info.
 
-<div class="guidance-item">
+::: details App development alternatives
+
+- simple apps can use the [TypeScript&nbsp;client](/docs/api/clients/typescript) directly
+- TanStack&nbsp;DB apps can load data [from your API](https://tanstack.com/db/latest/docs/overview#1-tanstack-query) instead of using a sync&nbsp;engine
+- apps can sync data [through Durable Streams](/products/durable-streams#wrapper-protocols) when it doesn't make sense to go through Postgres, including using [Durable State](https://github.com/durable-streams/durable-streams/tree/main/packages/state) for structured state sync alongside <span class="no-wrap">real-time streams</span>
+- web and desktop apps can use [PGlite](/products/pglite) in the client to access the Postgres query engine, data types and extensions like `pgvector` (if they can tolerate a slightly heavier WASM dependency)
+- Elixir apps can use [Phoenix.Sync](https://hexdocs.pm/phoenix_sync/readme.html) with both LiveView and TanStack&nbsp;DB
+
+:::
+
 <img src="/img/home/sync-targets/agent.svg" class="guidance-icon" />
 
-### Building collaborative AI apps?
+### Building AI apps and agentic systems?
 
-Use [Durable Streams](/products/durable-streams) for AI responses and [TanStack DB](/products/tanstack-db) for state.
+Use [Durable Streams](/products/durable-streams) for core durable transport for resilience and resumeability. Combine with [TanStack&nbsp;DB](/products/tanstack-db) for [Durable Sessions](http://localhost:5173/blog/2026/01/12/durable-sessions-for-collaborative-ai#durable-session-pattern) with persistence and natural support for multi-user, multi-agent collaboration.
 
-[Get started with Durable Streams &rarr;](/products/durable-streams)
-</div>
+You can also use [Postgres&nbsp;Sync](/products/postgres-sync) to sync message history, metadata and structured elements and then [join this up into a single, unified, reactive, client data model](https://tanstack.com/db/latest/docs/overview#defining-collections) that combines structured and unstructured data using TanStack&nbsp;DB.
 
-<div class="guidance-item">
-<img src="/img/home/sync-targets/worker.svg" class="guidance-icon" />
+<img src="/img/icons/durable-streams.square.svg" class="guidance-icon" />
 
-### Need drop-in AI SDK resilience?
+### Building your own database or sync protocol?
 
-Use the [Durable Streams](/products/durable-streams) transport adapter for Vercel AI SDK.
+You can use the lower-level [protocol layers]() of [Durable Streams](/products/durable-streams) to craft your own sync protocol. Including passing a [Standard Schema](https://standardschema.dev/) to the [Durable State](https://github.com/durable-streams/durable-streams/tree/main/packages/state) layer for an instant, type-safe sync protocol tailored to your data schema.
 
-[Get started with Vercel AI SDK &rarr;](/docs/integrations/vercel)
-</div>
+You can also integrate [your own sync engine or data source](https://tanstack.com/db/latest/docs/guides/collection-options-creator) into TanStack&nbsp;DB.
 
-<div class="guidance-item">
 <img src="/img/icons/pglite.svg" class="guidance-icon" />
 
-### Building sandboxed environments?
+### Building a platform or agent runtime?
 
-Use [PGlite](/products/pglite) for WASM Postgres with optional sync via Postgres Sync.
+Embed [PGlite](/products/pglite) for a full, reactive Postgres in your runtime. Including support for extensions like `pgvector`. This works in any Javascript runtime, [including WebContainers](/blog/2025/06/05/database-in-the-sandbox), avoiding the need for external infra dependencies.
 
-[Get started with PGlite &rarr;](/products/pglite)
-</div>
+You can also design your own [TanStack DB collections](https://tanstack.com/db/latest/docs/guides/collection-options-creator), to bake reactive data management and [custom actions](https://tanstack.com/db/latest/docs/guides/mutations#creating-custom-actions) into your runtime APIs.
 
-</div>
+## Next steps
 
----
-
-Learn how these products enable different [sync solutions](/sync).
-
-<style>
-.guidance-list {
-  margin: 24px 0 40px;
-}
-
-.guidance-item {
-  display: flex;
-  flex-direction: row;
-  align-items: flex-start;
-  gap: 20px;
-  padding: 24px 0;
-  border-bottom: 1px solid var(--vp-c-divider);
-}
-
-.guidance-item:last-child {
-  border-bottom: none;
-}
-
-.guidance-icon {
-  width: 48px;
-  height: 48px;
-  flex-shrink: 0;
-}
-
-.guidance-item h3 {
-  margin: 0 0 8px 0;
-  font-size: 18px;
-}
-
-.guidance-item p {
-  margin: 0 0 12px 0;
-  color: var(--vp-c-text-2);
-}
-
-.guidance-item a {
-  color: var(--vp-c-brand-1);
-  font-weight: 500;
-}
-
-@media (max-width: 640px) {
-  .guidance-item {
-    flex-direction: column;
-    gap: 12px;
-  }
-  .guidance-icon {
-    width: 40px;
-    height: 40px;
-  }
-}
-
-.composition-diagram {
-  margin: 24px 0;
-  padding: 24px;
-  background: var(--vp-c-bg-soft);
-  border-radius: 12px;
-  border: 1px solid rgba(42, 44, 52, 0.5);
-  overflow-x: auto;
-}
-
-.composition-diagram pre {
-  margin: 0;
-  font-family: var(--vp-font-family-mono);
-  font-size: 14px;
-  line-height: 1.6;
-  color: var(--vp-c-text-1);
-}
-
-</style>
+Dive into the [individual product pages](/products/postgres-sync) and [documentation](/docs/intro).

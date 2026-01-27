@@ -23,5 +23,5 @@
   icon: /img/icons/pglite.product.svg
   title: PGlite
   body: Embeddable Postgres <span class="breaker no-wrap">with reactivity and sync</span>
-  detail: For a full database inside <span class="breaker no-wrap">your client or runtime</span>
+  detail: A full database inside <span class="breaker no-wrap">your client or runtime</span>
   href: /products/pglite
