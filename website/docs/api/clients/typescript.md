@@ -931,6 +931,32 @@ const { metadata, data } = await stream.requestSnapshot({
 // with proper change tracking
 ```
 
+:::warning URL Length Limits
+GET requests (the default) with subset parameters in the URL can fail with `414 Request-URI Too Long` errors when queries involve many parameters (e.g., `WHERE id = ANY($1)` with hundreds of IDs in join queries).
+
+To avoid this, use POST requests by setting `subsetMethod: 'POST'` on the stream:
+
+```typescript
+const stream = new ShapeStream({
+  url: 'http://localhost:3000/v1/shape',
+  params: { table: 'items' },
+  log: 'changes_only',
+  subsetMethod: 'POST', // Use POST for all subset requests
+})
+```
+
+Or override per-request with `method: 'POST'`:
+
+```typescript
+const { metadata, data } = await stream.requestSnapshot({
+  where: "status = 'active'",
+  method: 'POST', // Use POST body instead of query parameters
+})
+```
+
+In Electric 2.0, GET for subset snapshots will be deprecated and only POST will be supported.
+:::
+
 The `requestSnapshot` method accepts the following parameters:
 
 - `where` (optional) - WHERE clause to filter the subset
@@ -938,6 +964,7 @@ The `requestSnapshot` method accepts the following parameters:
 - `orderBy` (required when using limit/offset) - ORDER BY clause
 - `limit` (optional) - Maximum number of rows to return
 - `offset` (optional) - Number of rows to skip for pagination
+- `method` (optional) - HTTP method: `'GET'` (default) or `'POST'`
 
 The method returns a promise with:
 

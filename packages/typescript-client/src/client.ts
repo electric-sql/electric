@@ -429,6 +429,27 @@ export interface ShapeStreamOptions<T = never> {
    * ```
    */
   onError?: ShapeStreamErrorHandler
+
+  /**
+   * HTTP method to use for subset snapshot requests (`requestSnapshot`/`fetchSnapshot`).
+   *
+   * - `'GET'` (default): Sends subset params as URL query parameters. May fail with
+   *   HTTP 414 errors for large queries with many parameters.
+   * - `'POST'`: Sends subset params in request body as JSON. Recommended for queries
+   *   with large parameter lists (e.g., `WHERE id = ANY($1)` with hundreds of IDs).
+   *
+   * This can be overridden per-request by passing `method` in the subset params.
+   *
+   * @example
+   * ```typescript
+   * const stream = new ShapeStream({
+   *   url: 'http://localhost:3000/v1/shape',
+   *   params: { table: 'items' },
+   *   subsetMethod: 'POST', // Use POST for all subset requests
+   * })
+   * ```
+   */
+  subsetMethod?: `GET` | `POST`
 }
 
 export interface ShapeStreamInterface<T extends Row<unknown> = Row> {
@@ -1632,6 +1653,10 @@ export class ShapeStream<T extends Row<unknown> = Row>
    * Fetch a snapshot for subset of data.
    * Returns the metadata and the data, but does not inject it into the subscribed data stream.
    *
+   * By default, uses GET to send subset parameters as query parameters. This may hit URL length
+   * limits (HTTP 414) with large WHERE clauses or many parameters. Set `method: 'POST'` or use
+   * `subsetMethod: 'POST'` on the stream to send parameters in the request body instead.
+   *
    * @param opts - The options for the snapshot request.
    * @returns The metadata and the data for the snapshot.
    */
@@ -1639,27 +1664,35 @@ export class ShapeStream<T extends Row<unknown> = Row>
     metadata: SnapshotMetadata
     data: Array<ChangeMessage<T>>
   }> {
-    const { fetchUrl, requestHeaders } = await this.#constructUrl(
-      this.options.url,
-      true,
-      opts
-    )
+    const method = opts.method ?? this.options.subsetMethod ?? `GET`
+    const usePost = method === `POST`
 
-    const response = await this.#fetchClient(fetchUrl.toString(), {
-      headers: requestHeaders,
-    })
+    let fetchUrl: URL
+    let fetchOptions: RequestInit
 
-    if (!response.ok) {
-      throw new FetchError(
-        response.status,
-        undefined,
-        undefined,
-        Object.fromEntries([...response.headers.entries()]),
-        fetchUrl.toString()
-      )
+    if (usePost) {
+      const result = await this.#constructUrl(this.options.url, true)
+      fetchUrl = result.fetchUrl
+      fetchOptions = {
+        method: `POST`,
+        headers: {
+          ...result.requestHeaders,
+          'Content-Type': `application/json`,
+        },
+        body: JSON.stringify(this.#buildSubsetBody(opts)),
+      }
+    } else {
+      const result = await this.#constructUrl(this.options.url, true, opts)
+      fetchUrl = result.fetchUrl
+      fetchOptions = { headers: result.requestHeaders }
     }
 
-    // Use schema from stream if available, otherwise extract from response header
+    const response = await this.#fetchClient(fetchUrl.toString(), fetchOptions)
+
+    if (!response.ok) {
+      throw await FetchError.fromResponse(response, fetchUrl.toString())
+    }
+
     const schema: Schema =
       this.#schema ??
       getSchemaFromHeaders(response.headers, {
@@ -1673,10 +1706,51 @@ export class ShapeStream<T extends Row<unknown> = Row>
       schema
     )
 
-    return {
-      metadata,
-      data,
+    return { metadata, data }
+  }
+
+  #buildSubsetBody(opts: SubsetParams): Record<string, unknown> {
+    const body: Record<string, unknown> = {}
+
+    if (opts.whereExpr) {
+      body.where = compileExpression(
+        opts.whereExpr,
+        this.options.columnMapper?.encode
+      )
+      body.where_expr = opts.whereExpr
+    } else if (opts.where && typeof opts.where === `string`) {
+      body.where = encodeWhereClause(
+        opts.where,
+        this.options.columnMapper?.encode
+      )
     }
+
+    if (opts.params) {
+      body.params = opts.params
+    }
+
+    if (opts.limit !== undefined) {
+      body.limit = opts.limit
+    }
+
+    if (opts.offset !== undefined) {
+      body.offset = opts.offset
+    }
+
+    if (opts.orderByExpr) {
+      body.order_by = compileOrderBy(
+        opts.orderByExpr,
+        this.options.columnMapper?.encode
+      )
+      body.order_by_expr = opts.orderByExpr
+    } else if (opts.orderBy && typeof opts.orderBy === `string`) {
+      body.order_by = encodeWhereClause(
+        opts.orderBy,
+        this.options.columnMapper?.encode
+      )
+    }
+
+    return body
   }
 }
 

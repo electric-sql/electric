@@ -269,3 +269,70 @@ However, the proxy might not keep the response headers in which case the client 
 ##### Solution &mdash; configure proxy to keep headers
 
 Verify the proxy configuration and make sure it doesn't remove any of the `electric-...` headers.
+
+### 414 Request-URI Too Long &mdash; why are my subset snapshot requests failing?
+
+When using subset snapshots (via `requestSnapshot` or `fetchSnapshot`), you might encounter a `414 Request-URI Too Long` error:
+
+```
+Bandit.HTTPError: Request URI is too long
+```
+
+This happens when the subset parameters (especially `WHERE` clauses with many values) exceed the maximum URL length. This is common when:
+- Using `WHERE id = ANY($1)` with hundreds of IDs (typical in join queries)
+- TanStack DB generates large filter lists from JOIN operations
+- Any query with many positional parameters
+
+##### Solution &mdash; use POST requests for subset snapshots
+
+Instead of sending subset parameters as URL query parameters (GET), send them in the request body (POST). The Electric server supports both methods.
+
+**TypeScript Client**
+
+Set `subsetMethod: 'POST'` on the stream to use POST for all subset requests:
+
+```typescript
+const stream = new ShapeStream({
+  url: 'http://localhost:3000/v1/shape',
+  params: { table: 'items' },
+  log: 'changes_only',
+  subsetMethod: 'POST', // Use POST for all subset requests
+})
+
+// All subset requests will now use POST
+const { metadata, data } = await stream.requestSnapshot({
+  where: "id = ANY($1)",
+  params: { '1': '{id1,id2,id3,...hundreds more...}' },
+})
+```
+
+Or override per-request:
+
+```typescript
+const { metadata, data } = await stream.requestSnapshot({
+  where: "id = ANY($1)",
+  params: { '1': '{id1,id2,id3,...}' },
+  method: 'POST', // Use POST for this request only
+})
+```
+
+**Direct HTTP**
+
+Use POST with subset parameters in the JSON body:
+
+```sh
+curl -X POST 'http://localhost:3000/v1/shape?table=items&offset=123_4&handle=abc-123' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "where": "id = ANY($1)",
+    "params": {"1": "{id1,id2,id3,...}"},
+    "order_by": "created_at",
+    "limit": 100
+  }'
+```
+
+See the [HTTP API documentation](/docs/api/http#subset-snapshots) for more details.
+
+:::info Future change
+In Electric 2.0, GET requests for subset snapshots will be deprecated. Only POST will be supported. We recommend migrating to POST now to avoid future breaking changes.
+:::
