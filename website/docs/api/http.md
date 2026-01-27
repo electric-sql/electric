@@ -207,13 +207,46 @@ This is particularly useful when combined with `log=changes_only` mode and `repl
 
 ### Subset snapshots
 
-When using `changes_only` mode, you can request subset snapshots to fetch specific portions of data on-demand. This is done by adding `subset__*` query parameters to your request:
+When using `changes_only` mode, you can request subset snapshots to fetch specific portions of data on-demand.
+
+#### Using POST (recommended)
+
+**We strongly recommend using POST requests for subset snapshots.** POST requests send subset parameters in the request body as JSON, avoiding URL length limits that can occur with complex WHERE clauses or many parameters.
+
+:::warning URL Length Limits
+GET requests with subset parameters in the URL can fail with `414 Request-URI Too Long` errors when queries involve many parameters (e.g., `WHERE id = ANY($1)` with hundreds of IDs). This is a common issue with join queries that generate large filter lists. **Use POST to avoid this limitation.**
+
+In Electric 2.0, GET requests for subset snapshots will be deprecated. Only POST will be supported.
+:::
+
+```sh
+curl -i -X POST 'http://localhost:3000/v1/shape?table=foo&offset=123_4&handle=abc-123' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "where": "priority = $1",
+    "params": {"1": "high"},
+    "order_by": "created_at",
+    "limit": 10
+  }'
+```
+
+The POST body accepts these parameters:
+
+- `where` - WHERE clause to filter the subset
+- `params` - Parameters for the WHERE clause as an object (e.g., `{"1":"value1","2":"value2"}` for `$1` and `$2`)
+- `limit` - Maximum number of rows to return
+- `offset` - Number of rows to skip (for pagination)
+- `order_by` - ORDER BY clause (required when using limit/offset)
+
+#### Using GET (legacy)
+
+GET requests are still supported for backwards compatibility, using `subset__*` query parameters:
 
 ```sh
 curl -i 'http://localhost:3000/v1/shape?table=foo&offset=123_4&handle=abc-123&subset__where=priority=high&subset__order_by=created_at&subset__limit=10'
 ```
 
-The subset parameters include:
+The query parameters include:
 
 - `subset__where` - Additional WHERE clause to filter the subset
 - `subset__params` - Parameters for the subset WHERE clause as a JSON-encoded object (e.g., `{"1":"value1","2":"value2"}` for `$1` and `$2`)
@@ -221,13 +254,15 @@ The subset parameters include:
 - `subset__offset` - Number of rows to skip (for pagination)
 - `subset__order_by` - ORDER BY clause (required when using limit/offset)
 
+#### Response format
+
 The response includes the requested data along with PostgreSQL snapshot metadata in a `snapshot-end` control message. This metadata allows clients to determine which subsequent changes have already been incorporated into the snapshot and should be skipped.
 
 Response here has a different format from normal responses - instead of just an array of operations, we return an object with `data` and `metadata` keys, where `data` are insert
 operations (it's up to the client to treat them as upserts if needed) and `metadata` tells
 the client which transactions are part of the snapshot and thus must be skipped on the main shape stream.
 
-The minimal request to get an equivalent of initial snapshot would be `subset__where=TRUE`
+The minimal request to get an equivalent of initial snapshot would be `where=TRUE` (POST) or `subset__where=TRUE` (GET)
 
 ### Clients
 

@@ -1630,6 +1630,9 @@ export class ShapeStream<T extends Row<unknown> = Row>
    * Fetch a snapshot for subset of data.
    * Returns the metadata and the data, but does not inject it into the subscribed data stream.
    *
+   * Uses POST to send subset parameters in the request body, avoiding URL length limits
+   * that can occur with large WHERE clauses or many parameters.
+   *
    * @param opts - The options for the snapshot request.
    * @returns The metadata and the data for the snapshot.
    */
@@ -1637,14 +1640,70 @@ export class ShapeStream<T extends Row<unknown> = Row>
     metadata: SnapshotMetadata
     data: Array<ChangeMessage<T>>
   }> {
+    // Build URL without subset params (they go in POST body)
     const { fetchUrl, requestHeaders } = await this.#constructUrl(
       this.options.url,
-      true,
-      opts
+      true
+      // Note: not passing opts here - subset params go in POST body
     )
 
+    // Build the POST body with subset params
+    // Apply columnMapper encoding if present
+    const subsetBody: Record<string, unknown> = {}
+
+    if (opts.whereExpr) {
+      // Compile structured expression with columnMapper applied
+      const compiledWhere = compileExpression(
+        opts.whereExpr,
+        this.options.columnMapper?.encode
+      )
+      subsetBody.where = compiledWhere
+      subsetBody.where_expr = opts.whereExpr
+    } else if (opts.where && typeof opts.where === `string`) {
+      // Legacy string format
+      const encodedWhere = encodeWhereClause(
+        opts.where,
+        this.options.columnMapper?.encode
+      )
+      subsetBody.where = encodedWhere
+    }
+
+    if (opts.params) {
+      subsetBody.params = opts.params
+    }
+
+    if (opts.limit !== undefined) {
+      subsetBody.limit = opts.limit
+    }
+
+    if (opts.offset !== undefined) {
+      subsetBody.offset = opts.offset
+    }
+
+    if (opts.orderByExpr) {
+      // Compile structured ORDER BY with columnMapper applied
+      const compiledOrderBy = compileOrderBy(
+        opts.orderByExpr,
+        this.options.columnMapper?.encode
+      )
+      subsetBody.order_by = compiledOrderBy
+      subsetBody.order_by_expr = opts.orderByExpr
+    } else if (opts.orderBy && typeof opts.orderBy === `string`) {
+      // Legacy string format
+      const encodedOrderBy = encodeWhereClause(
+        opts.orderBy,
+        this.options.columnMapper?.encode
+      )
+      subsetBody.order_by = encodedOrderBy
+    }
+
     const response = await this.#fetchClient(fetchUrl.toString(), {
-      headers: requestHeaders,
+      method: `POST`,
+      headers: {
+        ...requestHeaders,
+        'Content-Type': `application/json`,
+      },
+      body: JSON.stringify(subsetBody),
     })
 
     if (!response.ok) {

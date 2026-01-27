@@ -931,6 +931,12 @@ const { metadata, data } = await stream.requestSnapshot({
 // with proper change tracking
 ```
 
+:::tip POST Requests for URL Length Safety
+The TypeScript client uses HTTP POST requests for subset snapshots, sending parameters in the request body instead of the URL. This avoids `414 Request-URI Too Long` errors that can occur when queries involve many parameters (e.g., `WHERE id = ANY($1)` with hundreds of IDs in join queries).
+
+This is handled automatically by the client - you don't need to do anything special.
+:::
+
 The `requestSnapshot` method accepts the following parameters:
 
 - `where` (optional) - WHERE clause to filter the subset

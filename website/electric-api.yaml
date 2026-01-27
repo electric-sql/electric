@@ -821,6 +821,231 @@ paths:
                 example:
                   message: 'Could not establish connection to database - try again later'
 
+    post:
+      summary: Get Shape with Subset (POST)
+      description: |-
+        Request a subset snapshot using POST with parameters in the request body.
+
+        **This is the recommended method for subset snapshots.** POST requests send
+        subset parameters in the request body as JSON, avoiding URL length limits
+        (HTTP 414 errors) that can occur with complex WHERE clauses or many parameters.
+
+        This is particularly important for queries with large parameter lists, such as
+        `WHERE id = ANY($1)` with hundreds of IDs (common in join queries).
+
+        In Electric 2.0, GET requests for subset snapshots will be deprecated and
+        only POST will be supported.
+
+        The shape definition (`table`, `handle`, `offset`, etc.) is still provided
+        as query parameters, while subset parameters (`where`, `params`, `limit`,
+        `offset`, `order_by`) are provided in the JSON request body.
+      parameters:
+        - name: table
+          in: query
+          schema:
+            type: string
+          required: true
+          description: |-
+            Root table of the shape. Must match a table in your Postgres database.
+        - name: offset
+          in: query
+          schema:
+            type: string
+          required: true
+          description: |-
+            The offset in the shape stream.
+        - name: handle
+          in: query
+          schema:
+            type: string
+          description: |-
+            The shape handle returned by the initial shape request.
+            Required when offset is not `-1`.
+        - name: where
+          in: query
+          schema:
+            type: string
+          description: |-
+            Optional main shape WHERE clause to filter rows in the `table`.
+        - name: columns
+          in: query
+          schema:
+            type: string
+          description: |-
+            Optional list of columns to include in the rows.
+        - name: replica
+          in: query
+          schema:
+            type: string
+            enum:
+              - default
+              - full
+          description: |-
+            Modifies the data sent in update and delete change messages.
+        - name: log
+          in: query
+          schema:
+            type: string
+            enum:
+              - full
+              - changes_only
+            default: full
+          description: |-
+            Controls the initial data loading mode for the shape.
+        - $ref: '#/components/parameters/secret'
+        - $ref: '#/components/parameters/api_secret'
+      requestBody:
+        required: false
+        description: |-
+          JSON object containing subset parameters. These parameters define
+          the filter, ordering, and pagination for the subset snapshot.
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                where:
+                  type: string
+                  description: |-
+                    WHERE clause to filter the subset of data.
+
+                    This filter is applied in addition to the main shape's WHERE clause.
+                  example: "priority = $1 AND status = $2"
+                params:
+                  type: object
+                  additionalProperties:
+                    type: string
+                  description: |-
+                    Parameters for the WHERE clause as an object mapping positional
+                    parameter numbers to their values.
+                  example:
+                    '1': 'high'
+                    '2': 'open'
+                limit:
+                  type: integer
+                  minimum: 1
+                  description: |-
+                    Maximum number of rows to return in the subset snapshot.
+                  example: 50
+                offset:
+                  type: integer
+                  minimum: 0
+                  description: |-
+                    Number of rows to skip in the subset snapshot (for pagination).
+                  example: 0
+                order_by:
+                  type: string
+                  description: |-
+                    ORDER BY clause for the subset snapshot. Required when using
+                    `limit` or `offset`.
+                  example: "created_at DESC"
+            examples:
+              simple_filter:
+                summary: Simple WHERE filter
+                value:
+                  where: "status = 'active'"
+              parameterized_filter:
+                summary: Parameterized filter
+                value:
+                  where: "priority = $1"
+                  params:
+                    '1': 'high'
+              paginated_query:
+                summary: Paginated query with ordering
+                value:
+                  where: "status = $1"
+                  params:
+                    '1': 'open'
+                  order_by: "created_at DESC"
+                  limit: 20
+                  offset: 0
+              large_in_list:
+                summary: Large IN list (common in join queries)
+                value:
+                  where: "id = ANY($1)"
+                  params:
+                    '1': '{id1,id2,id3,id4,id5,id6,id7,id8,id9,id10}'
+      responses:
+        '200':
+          description: The subset snapshot request was successful.
+          headers:
+            electric-handle:
+              schema:
+                type: string
+              description: The shape handle.
+            electric-offset:
+              schema:
+                type: string
+              description: The latest offset in the response.
+            electric-schema:
+              schema:
+                type: string
+              description: JSON string mapping column names to schema objects.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                  - metadata
+                properties:
+                  metadata:
+                    type: object
+                    description: PostgreSQL snapshot metadata.
+                    properties:
+                      xmin:
+                        type: string
+                        description: Minimum transaction ID in the snapshot.
+                      xmax:
+                        type: string
+                        description: Maximum transaction ID in the snapshot.
+                      xip_list:
+                        type: array
+                        items:
+                          type: string
+                        description: Transaction IDs in progress during snapshot.
+                      snapshot_mark:
+                        type: integer
+                        description: Random number identifying this snapshot.
+                      database_lsn:
+                        type: string
+                        description: Database LSN at snapshot time.
+                  data:
+                    type: array
+                    description: Array of operation messages.
+                    items:
+                      type: object
+                      properties:
+                        headers:
+                          type: object
+                        key:
+                          type: string
+                        value:
+                          type: object
+              examples:
+                subset_response:
+                  summary: Subset snapshot response
+                  value:
+                    metadata:
+                      xmin: '1000'
+                      xmax: '1050'
+                      xip_list: ['1025', '1030']
+                      snapshot_mark: 42
+                      database_lsn: '0/16B3F70'
+                    data:
+                      - headers:
+                          operation: insert
+                          snapshot_mark: 42
+                        key: 'item-1'
+                        value:
+                          id: 'item-1'
+                          title: 'High Priority Item'
+                          status: 'open'
+        '400':
+          description: Bad request (invalid JSON, missing required parameters, etc.).
+        '413':
+          description: Request body too large.
+
     delete:
       summary: Delete Shape
       description: |-

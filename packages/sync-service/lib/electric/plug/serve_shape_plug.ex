@@ -13,6 +13,7 @@ defmodule Electric.Plug.ServeShapePlug do
   require Logger
 
   plug :fetch_query_params
+  plug :parse_body
 
   # start_telemetry_span needs to always be the first plug after fetching query params.
   plug :start_telemetry_span
@@ -30,19 +31,87 @@ defmodule Electric.Plug.ServeShapePlug do
   # end_telemetry_span needs to always be the last plug here.
   plug :end_telemetry_span
 
-  defp validate_request(%Conn{assigns: %{config: config}} = conn, _) do
+  # Parse JSON body for POST requests to support subset parameters in body
+  # This allows clients to send longer subset queries that would exceed URL length limits
+  defp parse_body(%Conn{method: "POST"} = conn, _) do
+    case Conn.read_body(conn) do
+      {:ok, "", conn} ->
+        assign(conn, :body_params, %{})
+
+      {:ok, body, conn} ->
+        case Jason.decode(body) do
+          {:ok, body_params} when is_map(body_params) ->
+            assign(conn, :body_params, body_params)
+
+          {:ok, _} ->
+            conn
+            |> send_resp(400, Jason.encode!(%{error: "Request body must be a JSON object"}))
+            |> halt()
+
+          {:error, _} ->
+            conn
+            |> send_resp(400, Jason.encode!(%{error: "Invalid JSON in request body"}))
+            |> halt()
+        end
+
+      {:more, _, conn} ->
+        conn
+        |> send_resp(413, Jason.encode!(%{error: "Request body too large"}))
+        |> halt()
+
+      {:error, _} ->
+        conn
+        |> send_resp(400, Jason.encode!(%{error: "Failed to read request body"}))
+        |> halt()
+    end
+  end
+
+  defp parse_body(conn, _), do: assign(conn, :body_params, %{})
+
+  defp validate_request(%Conn{assigns: %{config: config, body_params: body_params}} = conn, _) do
     Logger.debug("Query String: #{conn.query_string}")
+
+    # Extract subset params from query string (subset__where -> %{"subset" => %{"where" => ...}})
     query_params = Utils.extract_prefixed_keys_into_map(conn.query_params, "subset", "__")
+
+    # For POST requests, merge body params (body params can override query params for subset)
+    # Body params can contain subset params directly in a "subset" key, or be flat subset params
+    merged_params =
+      case body_params do
+        %{"subset" => subset_params} when is_map(subset_params) ->
+          # Body has nested subset params, merge them
+          existing_subset = Map.get(query_params, "subset", %{})
+          merged_subset = Map.merge(existing_subset, subset_params)
+          Map.merge(query_params, body_params)
+          |> Map.put("subset", merged_subset)
+
+        %{} when map_size(body_params) > 0 ->
+          # Check if body has flat subset params (where, order_by, limit, offset, params)
+          subset_keys = ["where", "order_by", "limit", "offset", "params", "where_expr", "order_by_expr"]
+          {subset_params, other_params} = Map.split(body_params, subset_keys)
+
+          if map_size(subset_params) > 0 do
+            existing_subset = Map.get(query_params, "subset", %{})
+            merged_subset = Map.merge(existing_subset, subset_params)
+            Map.merge(query_params, other_params)
+            |> Map.put("subset", merged_subset)
+          else
+            Map.merge(query_params, body_params)
+          end
+
+        _ ->
+          query_params
+      end
 
     api = Access.fetch!(config, :api)
 
     all_params =
-      Map.merge(query_params, conn.path_params)
+      Map.merge(merged_params, conn.path_params)
       |> Map.update("live", "false", &(&1 != "false"))
       |> Map.update(
         "live_sse",
         # TODO: remove experimental_live_sse after proper deprecation
-        Map.get(query_params, "experimental_live_sse", "false"),
+        Map.get(merged_params, "experimental_live_sse", "false"),
         &(&1 != "false")
       )
 
