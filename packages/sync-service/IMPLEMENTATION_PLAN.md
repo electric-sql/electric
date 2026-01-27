@@ -1116,3 +1116,90 @@ Before enabling `dnf_subqueries` feature flag in production:
    - [ ] Multi-disjunct tag storage size
    - [ ] Move-in exclusion query performance
 7. [ ] Shape handle invalidation strategy decided (if needed)
+
+---
+
+## Implementation Progress (2026-01-27)
+
+### Completed Work
+
+1. **Phase 1: DNF Decomposer** ✅
+   - Created `lib/electric/replication/eval/decomposer.ex`
+   - Implements DNF conversion with De Morgan's laws
+   - Position assignment for atomic expressions
+   - Subquery detection and column extraction
+   - Full test coverage in `test/electric/replication/eval/decomposer_test.exs`
+
+2. **Phase 2: Shape Module Updates** ✅
+   - Added `dnf_decomposition` and `position_to_dependency_map` fields to Shape struct
+   - Implemented `compute_dnf_decomposition/2`
+   - Implemented `build_position_to_dependency_map/3`
+   - Implemented `build_dnf_tag_structure/2` for DNF-aware tags
+
+3. **Phase 3: Active Conditions Computation** ✅
+   - Updated `lib/electric/shapes/where_clause.ex` with:
+     - `compute_active_conditions/4` - evaluates each atomic subexpression
+     - `evaluate_dnf/2` - evaluates DNF against active conditions
+     - `evaluate_conjunction/2` - evaluates single conjunction
+     - `satisfied_disjuncts/2` - finds which disjuncts are satisfied
+   - Full test coverage in `test/electric/shapes/where_clause_test.exs`
+
+4. **Partial Phase 8: Consumer Updates** ⏳
+   - Updated invalidation logic in `consumer.ex` to not invalidate when valid DNF exists
+   - Updated `subquery_moves.ex` for DNF-aware move-out patterns
+
+5. **Integration Tests** ✅
+   - Created `test/electric/plug/subquery_router_test.exs`
+   - Tests for OR with subqueries, NOT with subqueries, and edge cases
+
+### Current Test Status
+
+- All shape tests pass (48 tests)
+- All decomposer tests pass (17 tests)
+- All WhereClause tests pass (19 tests)
+- 9 integration test failures remain (5 in subquery_router_test, 4 in router_test)
+
+### Remaining Work
+
+1. **MoveHandling NOT Inversion** (Critical)
+   - When a position is negated in DNF, invert move semantics
+   - Move-in to dependency → Move-out from outer shape
+   - Move-out from dependency → Move-in to outer shape
+
+2. **OR Move-Out Logic** (Critical)
+   - Only remove a row when ALL disjuncts become false
+   - Requires tracking which disjuncts each row satisfies
+   - May need to query database or track per-row state
+
+3. **Deduplication** (Critical)
+   - Don't send duplicate inserts for rows already in shape
+   - Need to check if row is already visible via another disjunct
+
+4. **Update Existing Tests**
+   - Tests in router_test.exs expecting 409 for OR/NOT need updating
+   - They should now test proper move-in/move-out behavior
+
+5. **Protocol and Message Format** (Lower priority)
+   - Add active_conditions to log items
+   - Update client protocol for DNF-aware tags
+
+### Key Commits
+
+1. `1ac38ab08` - Add integration tests for arbitrary boolean expressions
+2. `ca4e72864` - Add DNF decomposer for arbitrary boolean expressions
+3. `700cc642e` - Add DNF decomposition to Shape module
+4. `25ccd18db` - Add active conditions computation to WhereClause
+5. `e07208434` - Update invalidation logic and tag structure for DNF
+6. `afecd0f58` - Add fallback clause for extract_tag_column edge cases
+
+### Next Steps
+
+The most impactful next step is implementing NOT inversion in MoveHandling:
+1. When processing a move-in, check if the affected position is negated
+2. If negated, treat it as a move-out instead
+3. Similarly for move-outs of negated positions
+
+This requires:
+- Access to DNF decomposition in MoveHandling
+- Checking position polarity in each disjunct
+- Inverting the move direction appropriately
