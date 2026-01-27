@@ -102,6 +102,14 @@ export type SubsetParams = {
   whereExpr?: SerializedExpression
   /** Structured ORDER BY clauses (preferred when available) */
   orderByExpr?: SerializedOrderByClause[]
+  /**
+   * HTTP method to use for the request.
+   * - `POST` (default): Sends subset params in request body as JSON. Recommended
+   *   to avoid URL length limits with large WHERE clauses or many parameters.
+   * - `GET`: Sends subset params as query parameters. May fail with 414 errors
+   *   for large queries. Deprecated and will be removed in Electric 2.0.
+   */
+  method?: 'GET' | 'POST'
 }
 
 export type ControlMessage = {

@@ -932,9 +932,18 @@ const { metadata, data } = await stream.requestSnapshot({
 ```
 
 :::tip POST Requests for URL Length Safety
-The TypeScript client uses HTTP POST requests for subset snapshots, sending parameters in the request body instead of the URL. This avoids `414 Request-URI Too Long` errors that can occur when queries involve many parameters (e.g., `WHERE id = ANY($1)` with hundreds of IDs in join queries).
+The TypeScript client uses HTTP POST requests by default for subset snapshots, sending parameters in the request body instead of the URL. This avoids `414 Request-URI Too Long` errors that can occur when queries involve many parameters (e.g., `WHERE id = ANY($1)` with hundreds of IDs in join queries).
 
-This is handled automatically by the client - you don't need to do anything special.
+If you need to use GET requests for backwards compatibility, you can set `method: 'GET'`:
+
+```typescript
+const { metadata, data } = await stream.requestSnapshot({
+  where: "status = 'active'",
+  method: 'GET', // Use query parameters instead of POST body (deprecated)
+})
+```
+
+Note: GET for subset snapshots is deprecated and will be removed in Electric 2.0.
 :::
 
 The `requestSnapshot` method accepts the following parameters:
@@ -944,6 +953,7 @@ The `requestSnapshot` method accepts the following parameters:
 - `orderBy` (required when using limit/offset) - ORDER BY clause
 - `limit` (optional) - Maximum number of rows to return
 - `offset` (optional) - Number of rows to skip for pagination
+- `method` (optional) - HTTP method: `'POST'` (default) or `'GET'` (deprecated)
 
 The method returns a promise with:
 
