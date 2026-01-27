@@ -760,14 +760,14 @@ defmodule Electric.Shapes.Consumer do
            %{xid: xid, extra_refs: {extra_refs_before_move_ins, extra_refs_full}}
          ) do
       :includes_truncate ->
-        {:halt, handle_txn_with_truncate(txn.xid, state)}
+        handle_txn_with_truncate(txn.xid, state)
 
       {_, state, 0, _} ->
         Logger.debug(fn ->
           "No relevant changes found for #{inspect(shape)} in txn #{txn.xid}"
         end)
 
-        {:cont, consider_flushed(state, txn.last_log_offset)}
+        consider_flushed(state, txn.last_log_offset)
 
       {changes, state, num_changes, last_log_offset} ->
         timestamp = System.monotonic_time()
@@ -797,14 +797,13 @@ defmodule Electric.Shapes.Consumer do
           Map.new(shape_attrs(state.shape_handle, state.shape))
         )
 
-        {:cont,
-         %{
-           state
-           | writer: writer,
-             latest_offset: last_log_offset,
-             txn_offset_mapping:
-               state.txn_offset_mapping ++ [{last_log_offset, txn.last_log_offset}]
-         }}
+        %{
+          state
+          | writer: writer,
+            latest_offset: last_log_offset,
+            txn_offset_mapping:
+              state.txn_offset_mapping ++ [{last_log_offset, txn.last_log_offset}]
+        }
     end
   end
 
