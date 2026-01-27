@@ -30,7 +30,14 @@ defmodule Electric.Shapes.Consumer.State do
     terminating?: false,
     buffering?: false,
     or_with_subquery?: false,
-    not_with_subquery?: false
+    not_with_subquery?: false,
+    # Buffer for notifications that arrive before the materializer subscribes.
+    # These are flushed when the materializer subscribes.
+    pending_materializer_notifications: [],
+    # Move-out events that have been processed but may need to be re-applied
+    # to rows that enter the shape in the same transaction.
+    # Format: [{dep_handle, removed_values}, ...]
+    recent_move_outs: []
   ]
 
   @type pg_snapshot() :: SnapshotQuery.pg_snapshot()

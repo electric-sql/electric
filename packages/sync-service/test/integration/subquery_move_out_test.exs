@@ -312,6 +312,83 @@ defmodule Electric.Integration.SubqueryMoveOutTest do
     end
   end
 
+  describe "move-out for rows entering via direct FK update in same transaction" do
+    # This test reproduces a bug where rows that enter a shape via direct FK update
+    # (rather than via a move-in snapshot query) don't get properly tagged for move-out.
+    #
+    # Scenario:
+    # 1. parent-1 is active, child-1 belongs to parent-1 (child-1 is in shape)
+    # 2. child-2 exists but belongs to a different (inactive) parent
+    # 3. In a SINGLE transaction:
+    #    a. child-2's parent_id is updated to parent-1 (enters shape via direct UPDATE)
+    #    b. parent-1 is deactivated (should trigger move-out for both children)
+    # 4. Expected: both child-1 and child-2 should be deleted from shape
+    # 5. Bug: child-2 is NOT deleted because it entered via direct update, not move-in snapshot
+
+    setup [:with_unique_db, :with_parent_child_tables, :with_sql_execute]
+    setup :with_complete_stack
+    setup :with_electric_client
+
+    setup _ctx do
+      shape = ShapeDefinition.new!("child", where: @subquery_where)
+      %{shape: shape}
+    end
+
+    @tag with_sql: [
+           "INSERT INTO parent (id, active) VALUES ('parent-1', true)",
+           "INSERT INTO parent (id, active) VALUES ('parent-2', false)",
+           "INSERT INTO child (id, parent_id, value) VALUES ('child-1', 'parent-1', 'original child')",
+           "INSERT INTO child (id, parent_id, value) VALUES ('child-2', 'parent-2', 'will be moved')"
+         ]
+    test "row entering shape via FK update in same txn as dependency removal gets deleted", %{
+      client: client,
+      shape: shape,
+      db_conn: db_conn
+    } do
+      stream = Client.stream(client, shape, live: true)
+
+      with_consumer stream do
+        # Wait for initial snapshot - only child-1 should be present
+        # (child-2 belongs to inactive parent-2)
+        assert_insert(consumer, %{"id" => "child-1"})
+        assert_up_to_date(consumer)
+
+        # In a SINGLE transaction:
+        # 1. Move child-2 to parent-1 (enters shape via direct UPDATE)
+        # 2. Deactivate parent-1 (should trigger move-out for BOTH children)
+        Postgrex.transaction(db_conn, fn conn ->
+          # child-2 enters the shape by updating its parent_id to point to active parent-1
+          Postgrex.query!(
+            conn,
+            "UPDATE child SET parent_id = 'parent-1' WHERE id = 'child-2'",
+            []
+          )
+
+          # Deactivate parent-1 - both child-1 and child-2 should now leave the shape
+          Postgrex.query!(conn, "UPDATE parent SET active = false WHERE id = 'parent-1'", [])
+        end)
+
+        # We should receive deletes for BOTH children
+        # child-1 was in shape originally (entered via initial snapshot)
+        # child-2 entered in this transaction but should also be deleted
+        #
+        # Collect all messages and check we got both deletes
+        messages = collect_messages(consumer, timeout: 2000)
+
+        delete_ids =
+          messages
+          |> Enum.filter(&match?(%ChangeMessage{headers: %{operation: :delete}}, &1))
+          |> Enum.map(& &1.value["id"])
+          |> Enum.sort()
+
+        assert delete_ids == ["child-1", "child-2"],
+               "Both children should be deleted when parent is deactivated. " <>
+                 "child-2 entered via direct FK update in the same transaction. " <>
+                 "Got deletes for: #{inspect(delete_ids)}"
+      end
+    end
+  end
+
   describe "resume preserves move-out state" do
     setup [:with_unique_db, :with_parent_child_tables, :with_sql_execute]
     setup :with_complete_stack

@@ -46,31 +46,39 @@ defmodule Electric.Shapes.Consumer.Materializer do
 
   def whereis(stack_id, shape_handle), do: GenServer.whereis(name(stack_id, shape_handle))
 
-  @spec new_changes(map(), list(Changes.change()) | {LogOffset.t(), LogOffset.t()}) :: :ok
-  def new_changes(state, changes) do
-    GenServer.call(name(state), {:new_changes, changes}, :infinity)
+  @spec new_changes(
+          map(),
+          list(Changes.change()) | {LogOffset.t(), LogOffset.t()},
+          pos_integer() | nil
+        ) ::
+          :ok
+  def new_changes(state, changes, xid \\ nil) do
+    GenServer.call(name(state), {:new_changes, changes, xid}, :infinity)
   end
 
   def wait_until_ready(state) do
     GenServer.call(name(state), :wait_until_ready, :infinity)
   end
 
-  def get_link_values(opts) do
-    GenServer.call(name(opts), :get_link_values)
+  def get_link_values(opts, xid \\ nil) do
+    GenServer.call(name(opts), {:get_link_values, xid})
   catch
     :exit, _reason ->
       raise ~s|Materializer for stack "#{opts.stack_id}" and handle "#{opts.shape_handle}" is not available|
   end
 
-  def get_all_as_refs(shape, stack_id) when are_deps_filled(shape) do
+  def get_all_as_refs(shape, stack_id, xid \\ nil) when are_deps_filled(shape) do
     shape.shape_dependencies_handles
     |> Enum.with_index()
     |> Map.new(fn {shape_handle, index} ->
       {["$sublink", Integer.to_string(index)],
-       get_link_values(%{
-         shape_handle: shape_handle,
-         stack_id: stack_id
-       })}
+       get_link_values(
+         %{
+           shape_handle: shape_handle,
+           stack_id: stack_id
+         },
+         xid
+       )}
     end)
   end
 
@@ -98,7 +106,13 @@ defmodule Electric.Shapes.Consumer.Materializer do
         value_counts: %{},
         offset: LogOffset.before_all(),
         ref: nil,
-        subscribers: MapSet.new()
+        subscribers: MapSet.new(),
+        # Track recently removed values so child consumers can include them in extra_refs
+        # even if they query before receiving the move-out notification.
+        # Also track the xid that caused the removal, so we only return recently_removed
+        # for queries from the same transaction.
+        recently_removed: MapSet.new(),
+        recently_removed_xid: nil
       })
 
     {:ok, state, {:continue, :start_materializer}}
@@ -162,8 +176,26 @@ defmodule Electric.Shapes.Consumer.Materializer do
     end
   end
 
-  def handle_call(:get_link_values, _from, %{value_counts: value_counts} = state) do
-    values = MapSet.new(Map.keys(value_counts))
+  def handle_call(
+        {:get_link_values, xid},
+        _from,
+        %{
+          value_counts: value_counts,
+          recently_removed: recently_removed,
+          recently_removed_xid: recently_removed_xid
+        } = state
+      ) do
+    # Include recently removed values ONLY if the xid matches.
+    # This ensures that recently_removed values are only used for the same transaction
+    # that caused them, not for later transactions.
+    recently_removed_for_query =
+      if xid != nil and xid == recently_removed_xid do
+        recently_removed
+      else
+        MapSet.new()
+      end
+
+    values = MapSet.union(MapSet.new(Map.keys(value_counts)), recently_removed_for_query)
 
     {:reply, values, state}
   end
@@ -172,18 +204,22 @@ defmodule Electric.Shapes.Consumer.Materializer do
     {:reply, :ok, state}
   end
 
-  def handle_call({:new_changes, {range_start, range_end}}, _from, state) do
+  def handle_call({:new_changes, {range_start, range_end}, xid}, _from, state) do
     stack_storage = Storage.for_stack(state.stack_id)
     storage = Storage.for_shape(state.shape_handle, stack_storage)
 
-    Storage.get_log_stream(range_start, range_end, storage)
-    |> decode_json_stream()
-    |> apply_changes_and_notify(state)
-    |> then(fn state -> {:reply, :ok, state} end)
+    new_state =
+      Storage.get_log_stream(range_start, range_end, storage)
+      |> decode_json_stream()
+      |> apply_changes_and_notify(state, xid)
+
+    {:reply, :ok, new_state}
   end
 
-  def handle_call({:new_changes, changes}, _from, state) when is_list(changes) do
-    {:reply, :ok, apply_changes_and_notify(changes, state)}
+  def handle_call({:new_changes, changes, xid}, _from, state) when is_list(changes) do
+    new_state = apply_changes_and_notify(changes, state, xid)
+
+    {:reply, :ok, new_state}
   end
 
   def handle_call(:subscribe, {pid, _ref} = _from, state) do
@@ -288,7 +324,12 @@ defmodule Electric.Shapes.Consumer.Materializer do
     Eval.Env.const_to_pg_string(Eval.Env.new(), value, type)
   end
 
-  defp apply_changes_and_notify(changes, state) do
+  defp apply_changes_and_notify(changes, state, xid) do
+    # Clear recently_removed from the previous transaction before processing this one.
+    # This ensures we don't accumulate removed values indefinitely, while still
+    # allowing child consumers to see removed values during the current transaction.
+    state = %{state | recently_removed: MapSet.new(), recently_removed_xid: nil}
+
     {state, events} = apply_changes(changes, state)
 
     if events != %{} do
@@ -297,12 +338,29 @@ defmodule Electric.Shapes.Consumer.Materializer do
         |> Map.put_new(:move_in, [])
         |> Map.put_new(:move_out, [])
 
+      # Track removed values so child consumers can see them in get_link_values.
+      # This handles the race condition where the child queries extra_refs before
+      # receiving the move-out notification.
+      # Also track the xid so we only return recently_removed for the same transaction.
+      state =
+        if events[:move_out] != [] do
+          removed_values = MapSet.new(events[:move_out], fn {value, _} -> value end)
+          new_recently_removed = MapSet.union(state.recently_removed, removed_values)
+          %{state | recently_removed: new_recently_removed, recently_removed_xid: xid}
+        else
+          state
+        end
+
       for pid <- state.subscribers do
         send(pid, {:materializer_changes, state.shape_handle, events})
       end
-    end
 
-    state
+      # Return the modified state (with recently_removed updated)
+      state
+    else
+      # No events - return state unchanged
+      state
+    end
   end
 
   defp apply_changes(changes, state) do

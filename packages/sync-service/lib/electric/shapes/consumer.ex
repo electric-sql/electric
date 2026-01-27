@@ -210,7 +210,25 @@ defmodule Electric.Shapes.Consumer do
   def handle_call({:subscribe_materializer, pid}, _from, state) do
     Logger.debug("Subscribing materializer for #{state.shape_handle}")
     Process.monitor(pid, tag: :materializer_down)
-    {:reply, :ok, %{state | materializer_subscribed?: true}, state.hibernate_after}
+
+    # Flush any buffered notifications that arrived before the materializer subscribed
+    if state.pending_materializer_notifications != [] do
+      Logger.info(
+        "Flushing #{length(state.pending_materializer_notifications)} buffered notifications to materializer for #{state.shape_handle}"
+      )
+
+      for {changes_or_bounds, _latest_log_offset, xid} <- state.pending_materializer_notifications do
+        Materializer.new_changes(
+          Map.take(state, [:stack_id, :shape_handle]),
+          changes_or_bounds,
+          xid
+        )
+      end
+    end
+
+    {:reply, :ok,
+     %{state | materializer_subscribed?: true, pending_materializer_notifications: []},
+     state.hibernate_after}
   end
 
   def handle_call({:stop, reason}, _from, state) do
@@ -274,6 +292,10 @@ defmodule Electric.Shapes.Consumer do
         state
       ) do
     Logger.debug(fn ->
+      "Consumer #{state.shape_handle} received materializer_changes from #{dep_handle}: move_in=#{length(move_in)}, move_out=#{length(move_out)}"
+    end)
+
+    Logger.debug(fn ->
       "Consumer reacting to #{length(move_in)} move ins and #{length(move_out)} move outs from its #{dep_handle} dependency"
     end)
 
@@ -295,12 +317,23 @@ defmodule Electric.Shapes.Consumer do
     if should_invalidate? do
       stop_and_clean(state)
     else
-      {state, notification} =
-        state
-        |> MoveHandling.process_move_ins(dep_handle, move_in)
-        |> MoveHandling.process_move_outs(dep_handle, move_out)
+      # Process move-ins immediately (they trigger async queries)
+      state = MoveHandling.process_move_ins(state, dep_handle, move_in)
 
-      notify_new_changes(state, notification)
+      # Process move-outs immediately. The dependency materializer includes recently_removed
+      # values in get_link_values, so when the transaction is processed, it will
+      # have the correct extra_refs including the removed value.
+      {state, notification} = MoveHandling.process_move_outs(state, dep_handle, move_out)
+      state = notify_new_changes(state, notification)
+
+      # Store recent move-outs so we can re-apply them to rows that enter the shape
+      # in the same transaction (which will be processed after this message).
+      state =
+        if move_out != [] do
+          %{state | recent_move_outs: state.recent_move_outs ++ [{dep_handle, move_out}]}
+        else
+          state
+        end
 
       {:noreply, state}
     end
@@ -456,10 +489,34 @@ defmodule Electric.Shapes.Consumer do
       TransactionBuilder.build(txn_fragment, state.transaction_builder)
 
     state = %{state | transaction_builder: transaction_builder}
-    handle_txns(txns, state)
+    state = handle_txns(txns, state)
+
+    # Re-apply recent move-outs. This handles the case where a row enters the shape
+    # in the same transaction that a dependency is removed. The move-out control message
+    # was written BEFORE the insert, so we need to write another move-out AFTER.
+    reapply_recent_move_outs(state)
   end
 
   defp handle_txns(txns, %State{} = state), do: Enum.reduce_while(txns, state, &handle_txn/2)
+
+  defp reapply_recent_move_outs(%{recent_move_outs: []} = state), do: state
+
+  defp reapply_recent_move_outs(%{recent_move_outs: recent_move_outs} = state) do
+    # Re-apply move-outs that were processed before this transaction.
+    # This handles the race condition where:
+    # 1. Parent materializer sends move-out notification
+    # 2. Child consumer processes move-out (writes to storage)
+    # 3. Child consumer processes transaction (writes inserts to storage)
+    # Without re-applying, any rows inserted in step 3 would not be deleted,
+    # because the move-out in step 2 happened before they existed.
+    state =
+      Enum.reduce(recent_move_outs, state, fn {dep_handle, move_out}, state ->
+        {state, notification} = MoveHandling.process_move_outs(state, dep_handle, move_out)
+        notify_new_changes(state, notification)
+      end)
+
+    %{state | recent_move_outs: []}
+  end
 
   # Keep buffering for initial snapshot
   defp handle_txn(txn, %State{buffering?: true} = state),
@@ -511,8 +568,10 @@ defmodule Electric.Shapes.Consumer do
 
     Logger.debug(fn -> "Txn received in Shapes.Consumer: #{inspect(txn)}" end)
 
+    # Pass xid to get_all_as_refs so the materializer can match it against
+    # recently_removed_xid and only include recently_removed values for the same transaction.
     extra_refs_full =
-      Materializer.get_all_as_refs(shape, state.stack_id)
+      Materializer.get_all_as_refs(shape, state.stack_id, xid)
 
     extra_refs_before_move_ins =
       Enum.reduce(state.move_handling_state.in_flight_values, extra_refs_full, fn {key, value},
@@ -559,7 +618,7 @@ defmodule Electric.Shapes.Consumer do
           actual_num_changes: num_changes
         })
 
-        notify_new_changes(state, changes, last_log_offset)
+        notify_new_changes(state, changes, last_log_offset, xid)
 
         lag = calculate_replication_lag(txn)
         OpenTelemetry.add_span_attributes(replication_lag: lag)
@@ -590,18 +649,34 @@ defmodule Electric.Shapes.Consumer do
   defp notify_new_changes(state, nil), do: state
 
   defp notify_new_changes(state, {changes, upper_bound}) do
-    notify_new_changes(state, changes, upper_bound)
+    notify_new_changes(state, changes, upper_bound, nil)
   end
 
   @spec notify_new_changes(
           state :: map(),
           changes_or_bounds :: list(Changes.change()) | {LogOffset.t(), LogOffset.t()},
-          latest_log_offset :: LogOffset.t()
+          latest_log_offset :: LogOffset.t(),
+          xid :: pos_integer() | nil
         ) :: map()
-  defp notify_new_changes(state, changes_or_bounds, latest_log_offset) do
-    if state.materializer_subscribed? do
-      Materializer.new_changes(Map.take(state, [:stack_id, :shape_handle]), changes_or_bounds)
-    end
+  defp notify_new_changes(state, changes_or_bounds, latest_log_offset, xid) do
+    state =
+      if state.materializer_subscribed? do
+        Materializer.new_changes(
+          Map.take(state, [:stack_id, :shape_handle]),
+          changes_or_bounds,
+          xid
+        )
+
+        state
+      else
+        # Buffer notifications until the materializer subscribes
+        %{
+          state
+          | pending_materializer_notifications:
+              state.pending_materializer_notifications ++
+                [{changes_or_bounds, latest_log_offset, xid}]
+        }
+      end
 
     Registry.dispatch(
       Electric.StackSupervisor.registry_name(state.stack_id),
