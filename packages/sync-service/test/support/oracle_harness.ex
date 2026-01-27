@@ -47,14 +47,17 @@ defmodule Support.OracleHarness do
   end
 
   @doc """
-  Runs with explicit shapes and mutations, comparing Electric's output against Postgres.
+  Runs with explicit shapes and transactions, comparing Electric's output against Postgres.
+
+  Each transaction is a list of mutations that will be executed atomically within a
+  single Postgres transaction (BEGIN/COMMIT).
 
   ## Options
 
     - :oracle_pool_size - number of parallel oracle connections (default: 50, env: ORACLE_POOL_SIZE)
     - :timeout_ms - timeout for waiting on shapes (default: 20_000)
   """
-  def test_against_oracle(ctx, shapes, mutations, opts \\ %{}) do
+  def test_against_oracle(ctx, shapes, transactions, opts \\ %{}) do
     opts = Map.merge(default_opts_from_env(), opts)
     timeout_ms = opts[:timeout_ms] || @default_timeout_ms
 
@@ -66,10 +69,18 @@ defmodule Support.OracleHarness do
       IO.puts("  #{shape.name}: #{shape.where}")
     end)
 
-    IO.puts("\n=== MUTATIONS ===")
+    total_mutations = transactions |> Enum.map(&length/1) |> Enum.sum()
 
-    Enum.each(mutations, fn mutation ->
-      IO.puts("  #{mutation.name}: #{mutation.sql}")
+    IO.puts("\n=== TRANSACTIONS (#{length(transactions)} txns, #{total_mutations} mutations) ===")
+
+    transactions
+    |> Enum.with_index(1)
+    |> Enum.each(fn {mutations, txn_idx} ->
+      IO.puts("  txn_#{txn_idx} (#{length(mutations)} mutations):")
+
+      Enum.each(mutations, fn mutation ->
+        IO.puts("    #{mutation.name}: #{mutation.sql}")
+      end)
     end)
 
     IO.puts("")
@@ -83,16 +94,18 @@ defmodule Support.OracleHarness do
     log("Waiting for initial snapshot")
     checkers = await_all_up_to_date(checkers, timeout_ms, "initial snapshot")
 
-    log("Running #{length(mutations)} mutations")
+    log("Running #{length(transactions)} transactions (#{total_mutations} mutations)")
 
-    # Get initial oracle state to pass to first mutation
+    # Get initial oracle state to pass to first transaction
     initial_oracle = query_all_oracles_parallel(checkers)
 
-    # Pass oracle_after from each mutation as oracle_before for the next one
+    # Pass oracle_after from each transaction as oracle_before for the next one
     # This cuts oracle queries in half since oracle_before is typically the same as previous oracle_after
     {checkers, _final_oracle} =
-      Enum.reduce(mutations, {checkers, initial_oracle}, fn mutation, {checkers, prev_oracle} ->
-        run_mutation_cycle(ctx, checkers, mutation, timeout_ms, prev_oracle)
+      transactions
+      |> Enum.with_index(1)
+      |> Enum.reduce({checkers, initial_oracle}, fn {mutations, txn_idx}, {checkers, prev_oracle} ->
+        run_transaction_cycle(ctx, checkers, mutations, txn_idx, timeout_ms, prev_oracle)
       end)
 
     stop_checkers(checkers)
@@ -368,7 +381,8 @@ defmodule Support.OracleHarness do
     end
   end
 
-  defp run_mutation_cycle(ctx, checkers, mutation, timeout_ms, oracle_before) do
+  defp run_transaction_cycle(ctx, checkers, mutations, txn_idx, timeout_ms, oracle_before) do
+    txn_name = "txn_#{txn_idx} (#{length(mutations)} mutations)"
     cycle_start = System.monotonic_time(:millisecond)
 
     # Phase 0: Flush stale messages that accumulated while not listening
@@ -379,24 +393,25 @@ defmodule Support.OracleHarness do
 
     flush_end = System.monotonic_time(:millisecond)
 
-    # Phase 1: Apply mutation
-    apply_sql(ctx, mutation.sql)
+    # Phase 1: Apply all mutations in a single transaction
+    sql_statements = Enum.map(mutations, & &1.sql)
+    apply_sql_transaction(ctx, sql_statements)
 
     apply_end = System.monotonic_time(:millisecond)
 
     # Phase 2: Wait for all clients to be up_to_date (central receive loop)
-    checkers = await_all_up_to_date(checkers, timeout_ms, mutation.name)
+    checkers = await_all_up_to_date(checkers, timeout_ms, txn_name)
 
     await_end = System.monotonic_time(:millisecond)
 
     # Phase 3: Query oracle_after and verify in parallel
     # Returns {checkers, oracle_after} so oracle_after can be reused as next oracle_before
-    result = verify_all_parallel(checkers, mutation, oracle_before)
+    result = verify_all_parallel(checkers, txn_name, oracle_before)
 
     verify_end = System.monotonic_time(:millisecond)
 
     log(
-      "#{mutation.name} timing: total=#{verify_end - cycle_start}ms " <>
+      "#{txn_name} timing: total=#{verify_end - cycle_start}ms " <>
         "(flush=#{flush_end - cycle_start}ms/#{flushed_count}msgs, " <>
         "apply=#{apply_end - flush_end}ms, " <>
         "await=#{await_end - apply_end}ms, " <>
@@ -416,7 +431,7 @@ defmodule Support.OracleHarness do
     |> Enum.into(%{}, fn {:ok, {name, rows}} -> {name, rows} end)
   end
 
-  defp verify_all_parallel(checkers, mutation, oracle_before) do
+  defp verify_all_parallel(checkers, step_name, oracle_before) do
     results =
       checkers
       |> Task.async_stream(
@@ -425,7 +440,7 @@ defmodule Support.OracleHarness do
 
           ShapeChecker.assert_consistent!(
             checker,
-            mutation.name,
+            step_name,
             oracle_before[checker.name],
             oracle_after
           )
@@ -442,11 +457,11 @@ defmodule Support.OracleHarness do
 
         {:exit, :timeout} ->
           import ExUnit.Assertions
-          flunk("Oracle query timeout in mutation=#{mutation.name}")
+          flunk("Oracle query timeout in step=#{step_name}")
 
         {:exit, reason} ->
           import ExUnit.Assertions
-          flunk("Checker failed in mutation=#{mutation.name}: #{inspect(reason)}")
+          flunk("Checker failed in step=#{step_name}: #{inspect(reason)}")
       end)
 
     checkers = Enum.map(results, fn {checker, _oracle} -> checker end)
@@ -464,6 +479,20 @@ defmodule Support.OracleHarness do
 
   def apply_sql(ctx, sql) when is_binary(sql) do
     Postgrex.query!(ctx.db_conn, sql, [])
+  end
+
+  @doc """
+  Executes multiple SQL statements atomically within a single Postgres transaction.
+  Uses Postgrex.transaction/3 which handles rollback on error automatically.
+  """
+  def apply_sql_transaction(_ctx, []), do: :ok
+
+  def apply_sql_transaction(ctx, sql_statements) when is_list(sql_statements) do
+    Postgrex.transaction(ctx.db_conn, fn conn ->
+      Enum.each(sql_statements, fn sql ->
+        Postgrex.query!(conn, sql, [])
+      end)
+    end)
   end
 
   @doc """

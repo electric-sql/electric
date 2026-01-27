@@ -5,7 +5,8 @@ defmodule Electric.Integration.OraclePropertyTest do
 
   Configuration via environment variables:
     - SHAPE_COUNT: Number of shapes to run in parallel (default: 100)
-    - MUTATION_COUNT: Number of mutations per test (default: 100)
+    - TXN_COUNT: Number of transactions per test (default: 100)
+    - MUTATIONS_PER_TXN: Number of mutations per transaction (default: 5)
     - PROP_RUNS: Number of property test iterations (default: 1)
     - WHERE_SEED: Seed for where clause generation (if unset, varies each iteration)
     - MUTATION_SEED: Seed for mutation generation (if unset, varies each iteration)
@@ -30,7 +31,8 @@ defmodule Electric.Integration.OraclePropertyTest do
 
   @default_long_poll_timeout 100
   @default_shape_count 100
-  @default_mutation_count 100
+  @default_txn_count 100
+  @default_mutations_per_txn 5
 
   setup [:with_unique_db]
   setup :with_complete_stack
@@ -57,7 +59,8 @@ defmodule Electric.Integration.OraclePropertyTest do
   test "shapes with generated where clauses and mutations", ctx do
     max_runs = env_int("PROP_RUNS") || 1
     shape_count = env_int("SHAPE_COUNT") || @default_shape_count
-    mutation_count = env_int("MUTATION_COUNT") || @default_mutation_count
+    txn_count = env_int("TXN_COUNT") || @default_txn_count
+    mutations_per_txn = env_int("MUTATIONS_PER_TXN") || @default_mutations_per_txn
     fixed_where_seed = env_int("WHERE_SEED")
     fixed_mutation_seed = env_int("MUTATION_SEED")
 
@@ -72,9 +75,10 @@ defmodule Electric.Integration.OraclePropertyTest do
 
       shapes = generate_diverse_shapes(shape_count, where_seed)
 
-      mutations = generate_mutations(mutation_count, mutation_seed)
+      mutations = generate_mutations(txn_count * mutations_per_txn, mutation_seed)
+      transactions = Enum.chunk_every(mutations, mutations_per_txn)
 
-      test_against_oracle(ctx, shapes, mutations)
+      test_against_oracle(ctx, shapes, transactions)
     end
   end
 
