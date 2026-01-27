@@ -2354,10 +2354,10 @@ describe.for(fetchAndSse)(
         })
         new Shape(shapeStream)
 
-        // Wait for stream to initialize
+        // Wait for stream to be up-to-date
         await vi.waitFor(
           () => {
-            expect(shapeStream.hasStarted()).toBe(true)
+            expect(shapeStream.isUpToDate).toBe(true)
           },
           { timeout: 5000 }
         )
@@ -2419,10 +2419,10 @@ describe.for(fetchAndSse)(
         })
         new Shape(shapeStream)
 
-        // Wait for stream to initialize
+        // Wait for stream to be up-to-date
         await vi.waitFor(
           () => {
-            expect(shapeStream.hasStarted()).toBe(true)
+            expect(shapeStream.isUpToDate).toBe(true)
           },
           { timeout: 5000 }
         )
@@ -2478,10 +2478,10 @@ describe.for(fetchAndSse)(
         })
         new Shape(shapeStream)
 
-        // Wait for stream to initialize
+        // Wait for stream to be up-to-date
         await vi.waitFor(
           () => {
-            expect(shapeStream.hasStarted()).toBe(true)
+            expect(shapeStream.isUpToDate).toBe(true)
           },
           { timeout: 5000 }
         )
@@ -2529,10 +2529,10 @@ describe.for(fetchAndSse)(
         })
         new Shape(shapeStream)
 
-        // Wait for stream to initialize
+        // Wait for stream to be up-to-date
         await vi.waitFor(
           () => {
-            expect(shapeStream.hasStarted()).toBe(true)
+            expect(shapeStream.isUpToDate).toBe(true)
           },
           { timeout: 5000 }
         )
