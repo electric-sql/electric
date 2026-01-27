@@ -270,11 +270,19 @@ defmodule Electric.Shapes.Shape do
   end
 
   defp fill_tag_structure(shape) do
-    {tag_structure, comparison_expressions} = SubqueryMoves.move_in_tag_structure(shape)
+    {legacy_tag_structure, comparison_expressions} = SubqueryMoves.move_in_tag_structure(shape)
 
     # Compute DNF decomposition for complex boolean expressions
     {dnf_decomposition, position_to_dependency_map} =
       compute_dnf_decomposition(shape, comparison_expressions)
+
+    # Generate DNF-aware tag structure if we have a valid decomposition with subqueries
+    tag_structure =
+      if dnf_decomposition != nil and dnf_decomposition.has_subqueries do
+        build_dnf_tag_structure(dnf_decomposition, comparison_expressions)
+      else
+        legacy_tag_structure
+      end
 
     %{
       shape
@@ -284,6 +292,65 @@ defmodule Electric.Shapes.Shape do
         position_to_dependency_map: position_to_dependency_map
     }
   end
+
+  # Build DNF-aware tag structure: one pattern per disjunct
+  # Each pattern contains the column(s) for subquery positions in that disjunct
+  defp build_dnf_tag_structure(decomposition, comparison_expressions) do
+    decomposition.disjuncts
+    |> Enum.map(fn conjunction ->
+      # Get the subquery positions in this conjunction (ignoring non-subquery positions)
+      conjunction
+      |> Enum.filter(fn {pos, _polarity} ->
+        Map.get(decomposition.subexpressions, pos, %{})[:is_subquery] == true
+      end)
+      |> Enum.map(fn {pos, _polarity} ->
+        subexpr = Map.fetch!(decomposition.subexpressions, pos)
+        # Get the column name(s) from the subexpression
+        extract_tag_column(subexpr, comparison_expressions)
+      end)
+      |> Enum.reject(&is_nil/1)
+    end)
+    |> Enum.reject(&Enum.empty?/1)
+  end
+
+  # Extract the column name or hash_together tuple for a subexpression
+  defp extract_tag_column(%{column: column}, _comparison_expressions) when is_binary(column) do
+    column
+  end
+
+  defp extract_tag_column(%{ast: ast}, comparison_expressions) do
+    # Try to find column info from the AST or comparison_expressions
+    case ast do
+      %Parser.Func{name: "sublink_membership_check", args: [testexpr, _]} ->
+        extract_column_from_testexpr(testexpr)
+
+      _ ->
+        # Fall back to finding via comparison_expressions
+        Enum.find_value(comparison_expressions, fn {_path, %{eval: testexpr}} ->
+          if expressions_match?(ast, testexpr) do
+            extract_column_from_testexpr(testexpr)
+          end
+        end)
+    end
+  end
+
+  defp extract_column_from_testexpr(%Parser.Ref{path: [column_name]}), do: column_name
+
+  defp extract_column_from_testexpr(%Parser.RowExpr{elements: elements}) do
+    columns =
+      Enum.map(elements, fn
+        %Parser.Ref{path: [column_name]} -> column_name
+        _ -> nil
+      end)
+
+    if Enum.any?(columns, &is_nil/1) do
+      nil
+    else
+      {:hash_together, columns}
+    end
+  end
+
+  defp extract_column_from_testexpr(_), do: nil
 
   # Compute DNF decomposition and position-to-dependency mapping
   defp compute_dnf_decomposition(%{where: nil}, _comparison_expressions), do: {nil, %{}}

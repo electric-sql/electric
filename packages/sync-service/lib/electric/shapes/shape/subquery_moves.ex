@@ -80,8 +80,7 @@ defmodule Electric.Shapes.Shape.SubqueryMoves do
           {dep_handle :: String.t(), gone_values :: String.t()},
           ...
         ]) :: map()
-  # Stub guard to allow only one dependency for now.
-  def make_move_out_control_message(shape, stack_id, shape_handle, [_] = move_outs) do
+  def make_move_out_control_message(shape, stack_id, shape_handle, move_outs) do
     %{
       headers: %{
         event: "move-out",
@@ -91,43 +90,79 @@ defmodule Electric.Shapes.Shape.SubqueryMoves do
     }
   end
 
-  # This is a stub implementation valid only for when there is exactly one dependency.
+  # Generate move-out patterns for DNF-aware tag structure
+  # Each pattern corresponds to a disjunct, and we need to identify which disjunct(s)
+  # are affected by this dependency
   defp make_move_out_pattern(
-         %{tag_structure: patterns},
+         %{tag_structure: patterns, shape_dependencies_handles: dep_handles} = _shape,
          stack_id,
          shape_handle,
-         {_dep_handle, gone_values}
+         {dep_handle, gone_values}
        ) do
-    # TODO: This makes the assumption of only one column per pattern.
-    Enum.flat_map(patterns, fn [column_or_expr] ->
-      case column_or_expr do
-        column_name when is_binary(column_name) ->
-          Enum.map(
-            gone_values,
-            &%{pos: 0, value: make_value_hash(stack_id, shape_handle, elem(&1, 1))}
-          )
+    # Find which dependency index this handle corresponds to
+    dep_index = Enum.find_index(dep_handles, &(&1 == dep_handle)) || 0
 
-        {:hash_together, columns} ->
-          column_parts =
-            &(Enum.zip_with(&1, columns, fn value, column ->
-                column <> ":" <> namespace_value(value)
-              end)
-              |> Enum.join())
-
-          Enum.map(
-            gone_values,
-            &%{
-              pos: 0,
-              value:
-                make_value_hash_raw(
-                  stack_id,
-                  shape_handle,
-                  column_parts.(Tuple.to_list(elem(&1, 1)))
-                )
-            }
-          )
+    # With DNF, each pattern (disjunct) may have columns from different subqueries
+    # We need to find patterns that contain the column for this dependency
+    patterns
+    |> Enum.with_index()
+    |> Enum.flat_map(fn {pattern, pattern_idx} ->
+      # Check if this pattern references the affected dependency
+      # For simplicity, we check if the pattern index matches the dependency index
+      # This assumes disjuncts are ordered to match dependencies
+      if pattern_idx == dep_index or length(dep_handles) == 1 do
+        make_pattern_values(pattern, pattern_idx, gone_values, stack_id, shape_handle)
+      else
+        []
       end
     end)
+  end
+
+  # Generate move-out values for a single pattern (disjunct)
+  defp make_pattern_values(pattern, pattern_idx, gone_values, stack_id, shape_handle) do
+    case pattern do
+      [column_name] when is_binary(column_name) ->
+        Enum.map(
+          gone_values,
+          &%{pos: pattern_idx, value: make_value_hash(stack_id, shape_handle, elem(&1, 1))}
+        )
+
+      [{:hash_together, columns}] ->
+        column_parts =
+          &(Enum.zip_with(&1, columns, fn value, column ->
+              column <> ":" <> namespace_value(value)
+            end)
+            |> Enum.join())
+
+        Enum.map(
+          gone_values,
+          &%{
+            pos: pattern_idx,
+            value:
+              make_value_hash_raw(
+                stack_id,
+                shape_handle,
+                column_parts.(Tuple.to_list(elem(&1, 1)))
+              )
+          }
+        )
+
+      # Handle multi-column patterns (shouldn't happen with DNF but be safe)
+      columns when is_list(columns) ->
+        # Take the first column that matches a string
+        case Enum.find(columns, &is_binary/1) do
+          nil -> []
+          _column_name ->
+            Enum.map(
+              gone_values,
+              &%{pos: pattern_idx, value: make_value_hash(stack_id, shape_handle, elem(&1, 1))}
+            )
+        end
+
+      # Empty pattern
+      [] ->
+        []
+    end
   end
 
   def make_value_hash(stack_id, shape_handle, value) do
