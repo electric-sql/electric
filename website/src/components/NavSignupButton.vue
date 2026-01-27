@@ -11,7 +11,7 @@ const extraClasses = [screenMenu ? 'is-mobile' : '']
       <VPButton
         href="https://dashboard.electric-sql.cloud/"
         theme="brand"
-        text="Cloud"
+        text="Go to Cloud"
       />
     </div>
     <div class="cta-md">
@@ -25,7 +25,7 @@ const extraClasses = [screenMenu ? 'is-mobile' : '']
       <VPButton
         href="https://dashboard.electric-sql.cloud/"
         theme="brand"
-        text="Cloud"
+        text="Go to Cloud"
       />
     </div>
   </div>

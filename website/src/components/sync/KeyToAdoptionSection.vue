@@ -13,9 +13,13 @@ const post = data.find((p) => p.path.includes('durable-sessions-for-collaborativ
 const actions = [
   {
     href: post?.path || '/blog',
-    text: 'Read more',
+    text: 'Learn more',
     theme: 'brand',
   },
+  {
+    href: '/cloud',
+    text: 'Cloud'
+  }
 ]
 </script>
 
@@ -26,33 +30,37 @@ const actions = [
     </template>
     <template #tagline>
       As the world moves to getting things done through agents, the&nbsp;winners
-      are going to be the&nbsp;products that combine AI with
+      are the&nbsp;products that combine AI with
       <span class="no-wrap">team-based collaboration</span>.
     </template>
     <div class="paradigm-comparison">
       <div class="paradigm-panel">
-        <h3>Traditional: request <span class="no-wrap">&lt;&gt; response</span></h3>
-        <p>
-          Today's AI SDKs assume single-user &lt;&gt; single-agent. The UI
-          blocks while requests stream back. Local state isn't shared.
-          <span class="hidden-sm">
-            It doesn't support the kind of team-based collaboration that
-            enterprise software depends on.
-          </span>
-        </p>
+        <h3>❌&nbsp; Single-user <span class="no-wrap">&lt;&gt; single-agent</span></h3>
+        <div>
+          <p>
+            AI apps and agentic systems built on a single-user &lt;&gt; single-agent,
+            request &lt;&gt; response paradigm don't cut it.
+          </p>
+          <p>
+            Requests are fragile and hard to resume. The UI blocks while they stream back. Local state isn't shared.
+          </p>
+          <p>
+            It's hard to support either the real-time or async collaboration that are
+            key to product-led-growth and enterprise adoption.
+          </p>
+        </div>
         <figure>
           <img :src="RequestResponse" class="hidden-sm" />
           <img :src="RequestResponseSmall" class="block-sm" />
         </figure>
       </div>
       <div class="paradigm-panel">
-        <h3>Sync-based: multi-user <span class="no-wrap">&lt;&gt; multi-agent</span></h3>
+        <h3>✅&nbsp; Multi-user <span class="no-wrap">&lt;&gt; multi-agent</span></h3>
         <p>
-          With sync, state is persistent, addressable and shared. Multiple users and
-          agents collaborate on durable sessions.
-          <span class="hidden-sm">
-            This allows you to weave AI into the fabric of team-based, enterprise software.
-          </span>
+          With sync, state is persistent, addressable and shared. You get multi-tab, multi-device, multi-user and multi-agent built in.
+        </p>
+        <p>
+          You unlock product-led growth and can weave your product into your customers' workflows and governance stuctures.
         </p>
         <figure>
           <img :src="SyncBased" class="hidden-sm" />
@@ -67,17 +75,16 @@ const actions = [
 .paradigm-comparison {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 32px;
-  margin-top: 32px;
+  gap: 24px;
+  align-items: stretch;
+  margin-top: 40px;
+  margin-bottom: 40px;
 }
 
-@media (max-width: 849px) {
+@media (max-width: 768px) {
   .paradigm-comparison {
     grid-template-columns: 1fr;
-    gap: 40px;
-    max-width: 560px;
-    margin-left: auto;
-    margin-right: auto;
+    gap: 20px;
   }
 }
 
@@ -85,29 +92,67 @@ const actions = [
   background-color: var(--vp-c-bg-soft);
   border: 1px solid rgba(42, 44, 52, 0.5);
   border-radius: 12px;
-  padding: 28px;
   display: flex;
   flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  padding: var(--padding-height) var(--padding-width);
+
+  --padding-width: 40px;
+  --padding-height: 40px;
+}
+
+@media (min-width: 1020px) and (max-width: 1099px) {
+  .paradigm-panel {
+    --padding-width: 32px;
+    --padding-height: 32px;
+  }
+}
+@media (min-width: 960px) and (max-width: 1019px) {
+  .paradigm-panel {
+    --padding-width: 30px;
+    --padding-height: 32px;
+  }
+}
+@media (min-width: 960px) and (max-width: 989px) {
+  .paradigm-panel {
+    --padding-width: 29px;
+    --padding-height: 30px;
+  }
+}
+@media (min-width: 760px) and (max-width: 959px) {
+  .paradigm-panel {
+    --padding-width: 28px;
+    --padding-height: 28px;
+  }
+}
+@media (max-width: 518px) {
+  .paradigm-panel {
+    --padding-height: 28px;
+    --padding-width: 28px;
+  }
 }
 
 .paradigm-panel h3 {
-  margin: 0 0 12px 0;
-  font-size: 1.1rem;
+  margin: 0 0 1rem 0;
+  font-size: 22px;
   font-weight: 600;
+  line-height: 28px;
+  letter-spacing: -0.02em;
   color: var(--vp-c-text-1);
 }
 
 .paradigm-panel p {
-  margin: 0 0 20px 0;
-  font-size: 0.95rem;
-  line-height: 1.6;
-  color: var(--vp-c-text-2);
+  margin: 0;
+  font-size: 15px !important;
+  line-height: 1.7;
+  color: var(--vp-c-text-3) !important;
   font-weight: 500;
   flex: 1;
 }
 
 .paradigm-panel figure {
-  margin: 0;
+  margin: 20px 0 0 0;
   border-radius: 8px;
   overflow: hidden;
 }
@@ -115,19 +160,5 @@ const actions = [
 .paradigm-panel figure img {
   width: 100%;
   display: block;
-}
-
-@media (max-width: 559px) {
-  .paradigm-panel {
-    padding: 22px;
-  }
-
-  .paradigm-panel h3 {
-    font-size: 1rem;
-  }
-
-  .paradigm-panel p {
-    font-size: 0.9rem;
-  }
 }
 </style>

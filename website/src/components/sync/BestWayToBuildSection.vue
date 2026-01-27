@@ -7,12 +7,43 @@ const post = data.find((p) => p.path.includes('super-fast-apps-on-sync'))
 const actions = [
   {
     href: post?.path || '/blog',
-    text: 'Read more',
+    text: 'Learn more',
     theme: 'brand',
   },
   {
     href: '/products',
-    text: 'View products',
+    text: 'Products',
+  },
+]
+
+const panels = [
+  {
+    id: 'reactivity',
+    title: 'Super-fast reactivity',
+    body: 'Build fast, modern apps like Figma and Linear. <span class="no-wrap-md">With sub-millisecond</span> reactivity and <span class="no-wrap-sm">instant local&nbsp;writes</span>.',
+    icon: '/img/home/sync-targets/app.svg',
+    link: '/blog/posts/2025-07-29-super-fast-apps-on-sync-with-tanstack-db',
+  },
+  {
+    id: 'resilience',
+    title: 'Resilient transport',
+    body: 'Build apps that work reliably, even with patchy connectivity. With resilient transport that ensures data is never&nbsp;lost.',
+    icon: '/img/icons/resilience.svg',
+    link: '/blog/posts/2025-04-09-building-ai-apps-on-sync',
+  },
+  {
+    id: 'collaboration',
+    title: 'Real-time collaboration',
+    body: 'Build multi-user, multi-agent apps that naturally support both real-time and asynchronous collaboration.',
+    icon: '/img/home/sync-targets/agent.svg',
+    link: '/blog/posts/2026-01-12-durable-sessions-for-collaborative-ai',
+  },
+  {
+    id: 'durability',
+    title: 'Durable state',
+    body: 'Build multi-step agentic workflows that resume after failures. With agents and workers syncing and resuming from durable&nbsp;state.',
+    icon: '/img/icons/durable-streams.square.svg',
+    link: '/blog/2025/12/23/durable-streams-0.1.0#introducing-the-state-protocol',
   },
 ]
 </script>
@@ -24,88 +55,32 @@ const actions = [
         The best way to <span class="no-wrap">build apps</span>
       </template>
       <template #tagline>
-        Sync is the magic behind fast, modern, AI-native apps.
-        <span class="no-wrap">Build with sync primitives for instant</span>
-        reactivity, resilience, and real-time collaboration.
+        Sync makes your apps super-fast, with end-to-end reactivity, resilience and
+        <span class="no-wrap-sm">
+          built-in
+          <span class="no-wrap">
+            multi-user</span>
+          collaboration.
+        </span>
       </template>
       <div class="solutions-grid">
-        <div class="solution-panel" id="reactivity">
+        <a
+          v-for="panel in panels"
+          :key="panel.id"
+          :href="panel.link"
+          class="solution-panel no-visual"
+          :id="panel.id"
+        >
           <div class="panel-icon">
-            <img src="/img/home/sync-targets/app.svg" alt="Reactivity" />
+            <img :src="panel.icon" :alt="panel.title" />
           </div>
           <div class="panel-content">
-            <h3 class="panel-title">Reactivity</h3>
-            <p class="panel-subtitle">Fast, modern apps</p>
-            <p class="panel-body">
-              Build apps like Linear and Figma with instant, optimistic UI.
-              Sync data into a local store for sub-millisecond reads and
-              updates that feel instantaneous.
-            </p>
-            <p class="panel-products">
-              <strong>Use:</strong>
-              <a href="/products/postgres-sync">Postgres Sync</a> +
-              <a href="/products/tanstack-db">TanStack DB</a>
-            </p>
+            <h3 class="panel-title" v-html="panel.title" />
+            <p class="panel-body" v-html="panel.body" />
+            <hr />
+            <span class="panel-link">Read more &rarr;</span>
           </div>
-        </div>
-
-        <div class="solution-panel" id="resilience">
-          <div class="panel-icon">
-            <img src="/img/home/sync-targets/agent.svg" alt="Resilience" />
-          </div>
-          <div class="panel-content">
-            <h3 class="panel-title">Resilience</h3>
-            <p class="panel-subtitle">Resilient AI apps</p>
-            <p class="panel-body">
-              AI apps that work reliably, even with patchy connectivity.
-              Durable streams ensure AI responses are never lost and can
-              resume from any point.
-            </p>
-            <p class="panel-products">
-              <strong>Use:</strong>
-              <a href="/products/durable-streams">Durable Streams</a>
-            </p>
-          </div>
-        </div>
-
-        <div class="solution-panel" id="collaboration">
-          <div class="panel-icon">
-            <img src="/img/home/sync-targets/agent.svg" alt="Collaboration" />
-          </div>
-          <div class="panel-content">
-            <h3 class="panel-title">Collaboration</h3>
-            <p class="panel-subtitle">Collaborative AI apps</p>
-            <p class="panel-body">
-              Multi-user, multi-agent apps with real-time collaboration.
-              Sync shared state between users and AI agents with automatic
-              conflict resolution.
-            </p>
-            <p class="panel-products">
-              <strong>Use:</strong>
-              <a href="/products/durable-streams">Durable Streams</a> +
-              <a href="/products/tanstack-db">TanStack DB</a>
-            </p>
-          </div>
-        </div>
-
-        <div class="solution-panel" id="durability">
-          <div class="panel-icon">
-            <img src="/img/home/sync-targets/worker.svg" alt="Durability" />
-          </div>
-          <div class="panel-content">
-            <h3 class="panel-title">Durability</h3>
-            <p class="panel-subtitle">Durable workflows</p>
-            <p class="panel-body">
-              Multi-step agentic workflows that resume after failures.
-              Build reliable, long-running processes with durable state
-              and event streams.
-            </p>
-            <p class="panel-products">
-              <strong>Use:</strong>
-              <a href="/products/durable-streams">Durable Streams</a>
-            </p>
-          </div>
-        </div>
+        </a>
       </div>
     </Section>
   </div>
@@ -117,86 +92,118 @@ const actions = [
   grid-template-columns: repeat(2, 1fr);
   gap: 24px;
   align-items: stretch;
-  margin-top: 32px;
+  margin-top: 40px;
+  margin-bottom: 40px;
 }
 
 .solution-panel {
   display: flex;
   flex-direction: row;
   align-items: flex-start;
-  gap: 20px;
-  padding: 24px;
   background-color: var(--vp-c-bg-soft);
   border: 1px solid rgba(42, 44, 52, 0.5);
   border-radius: 12px;
   height: 100%;
+  overflow: hidden;
+
+  --padding-width: 40px;
+  --padding-height: 40px;
+  --extra-padding-width: 8px;
+}
+
+@media (min-width: 1020px) and (max-width: 1099px) {
+  .solution-panel {
+    --padding-width: 32px;
+    --padding-height: 32px;
+    --extra-padding-width: 6px;
+  }
+}
+@media (min-width: 960px) and (max-width: 1019px) {
+  .solution-panel {
+    --padding-width: 30px;
+    --padding-height: 32px;
+    --extra-padding-width: 6px;
+  }
+}
+@media (min-width: 960px) and (max-width: 989px) {
+  .solution-panel {
+    --padding-width: 29px;
+    --padding-height: 30px;
+    --extra-padding-width: 5px;
+  }
+}
+@media (min-width: 760px) and (max-width: 959px) {
+  .solution-panel {
+    --padding-width: 28px;
+    --padding-height: 28px;
+    --extra-padding-width: 4px;
+  }
+}
+@media (max-width: 518px) {
+  .solution-panel {
+    --padding-height: 28px;
+    --padding-width: 28px;
+    --extra-padding-width: 4px;
+  }
 }
 
 .panel-icon {
   flex-shrink: 0;
-  width: 48px;
-  height: 48px;
+  padding: calc(var(--padding-height) + 8px) 0 4px var(--padding-width);
 }
 
 .panel-icon img {
-  width: 100%;
-  height: 100%;
+  width: calc(40px + 1.5vw);
+  height: calc(40px + 1.5vw);
+  min-width: 50px;
+  min-height: 50px;
+  margin: -4px -2px;
   object-fit: contain;
 }
 
 .panel-content {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
   min-width: 0;
+  padding:
+    var(--padding-height)
+    var(--padding-width)
+    calc(var(--padding-height))
+    calc(var(--padding-width) - var(--extra-padding-width));
 }
 
 .panel-title {
-  margin: 0 0 4px 0;
-  font-size: 1.1rem;
+  margin: 0 0 1rem 0;
+  font-size: 22px;
   font-weight: 600;
+  line-height: 28px;
+  letter-spacing: -0.02em;
   color: var(--vp-c-text-1);
 }
 
-.panel-subtitle {
-  margin: 0 0 8px 0;
-  font-size: 0.9rem;
-  font-weight: 500;
-  color: var(--vp-c-brand-1);
-}
-
 .panel-body {
-  margin: 0 0 12px 0;
-  font-size: 0.9rem;
-  line-height: 1.5;
-  color: var(--vp-c-text-2);
+  margin: 0;
+  font-size: 15px !important;
+  line-height: 1.7;
+  font-weight: 500;
+  color: var(--vp-c-text-3) !important;
   flex: 1;
 }
 
-.panel-products {
-  margin: 0;
-  font-size: 0.9rem;
-  line-height: 1.5;
+hr {
+  margin: 16px 0 16px;
+  border: none;
+  border-top: 1px solid var(--vp-c-divider);
 }
 
-.panel-products strong {
-  color: var(--vp-c-text-2);
-  font-weight: 500;
+.panel-link {
+  color: var(--vp-c-indigo-1);
+  font-size: 13px;
+  font-weight: 450;
 }
 
 @media (max-width: 768px) {
   .solutions-grid {
     grid-template-columns: 1fr;
     gap: 20px;
-  }
-
-  .solution-panel {
-    padding: 20px;
-  }
-
-  .panel-icon {
-    width: 40px;
-    height: 40px;
   }
 }
 </style>

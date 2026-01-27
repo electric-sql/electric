@@ -2,7 +2,7 @@
 import Section from '../Section.vue'
 import Card from '../Card.vue'
 
-const cloudUrl = 'https://dashboard.electric-sql.cloud/'
+const cloudUrl = '/cloud'
 
 const secondaryOptions = [
   {
