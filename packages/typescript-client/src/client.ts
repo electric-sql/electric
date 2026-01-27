@@ -429,6 +429,27 @@ export interface ShapeStreamOptions<T = never> {
    * ```
    */
   onError?: ShapeStreamErrorHandler
+
+  /**
+   * HTTP method to use for subset snapshot requests (`requestSnapshot`/`fetchSnapshot`).
+   *
+   * - `'GET'` (default): Sends subset params as URL query parameters. May fail with
+   *   HTTP 414 errors for large queries with many parameters.
+   * - `'POST'`: Sends subset params in request body as JSON. Recommended for queries
+   *   with large parameter lists (e.g., `WHERE id = ANY($1)` with hundreds of IDs).
+   *
+   * This can be overridden per-request by passing `method` in the subset params.
+   *
+   * @example
+   * ```typescript
+   * const stream = new ShapeStream({
+   *   url: 'http://localhost:3000/v1/shape',
+   *   params: { table: 'items' },
+   *   subsetMethod: 'POST', // Use POST for all subset requests
+   * })
+   * ```
+   */
+  subsetMethod?: 'GET' | 'POST'
 }
 
 export interface ShapeStreamInterface<T extends Row<unknown> = Row> {
@@ -1641,7 +1662,9 @@ export class ShapeStream<T extends Row<unknown> = Row>
     metadata: SnapshotMetadata
     data: Array<ChangeMessage<T>>
   }> {
-    const usePost = opts.method !== `GET`
+    // Determine method: per-request override > stream option > default (GET)
+    const method = opts.method ?? this.options.subsetMethod ?? `GET`
+    const usePost = method === `POST`
 
     if (usePost) {
       // POST: Build URL without subset params (they go in POST body)
