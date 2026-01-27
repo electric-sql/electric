@@ -2324,6 +2324,259 @@ describe.for(fetchAndSse)(
         expect(snapshotRequestCount).toBeGreaterThan(0)
       }
     )
+
+    it(
+      `fetchSnapshot with method: 'POST' sends subset params in request body`,
+      { timeout: 10000 },
+      async ({ issuesTableUrl, insertIssues, aborter }) => {
+        await insertIssues({ title: `A` }, { title: `B` }, { title: `C` })
+
+        let capturedRequest: { method: string; body: string | null } | undefined
+
+        const fetchWrapper = async (
+          input: string | URL | Request,
+          init?: RequestInit
+        ) => {
+          // Capture POST requests for subset snapshots
+          if (init?.method === `POST`) {
+            capturedRequest = {
+              method: init.method,
+              body: init.body as string | null,
+            }
+          }
+
+          return fetch(input, init)
+        }
+
+        const shapeStream = new ShapeStream({
+          url: `${BASE_URL}/v1/shape`,
+          params: { table: issuesTableUrl },
+          log: `changes_only`,
+          liveSse,
+          signal: aborter.signal,
+          fetchClient: fetchWrapper,
+        })
+
+        // Wait for stream to initialize
+        await vi.waitFor(
+          () => {
+            expect(shapeStream.hasStarted()).toBe(true)
+          },
+          { timeout: 5000 }
+        )
+
+        // Test with method: 'POST' option
+        const { data } = await shapeStream.fetchSnapshot({
+          where: `title = 'B'`,
+          orderBy: `title ASC`,
+          limit: 100,
+          method: `POST`,
+        })
+
+        // Verify POST request was made
+        expect(capturedRequest).toBeDefined()
+        expect(capturedRequest!.method).toBe(`POST`)
+
+        // Verify body contains subset params
+        const body = JSON.parse(capturedRequest!.body!)
+        expect(body.where).toBe(`title = 'B'`)
+        expect(body.order_by).toBe(`title ASC`)
+        expect(body.limit).toBe(100)
+
+        // Verify data was returned correctly
+        expect(data.length).toBe(1)
+        expect(data[0].value.title).toBe(`B`)
+      }
+    )
+
+    it(
+      `fetchSnapshot with subsetMethod: 'POST' on stream uses POST by default`,
+      { timeout: 10000 },
+      async ({ issuesTableUrl, insertIssues, aborter }) => {
+        await insertIssues({ title: `X` }, { title: `Y` }, { title: `Z` })
+
+        const requestMethods: string[] = []
+
+        const fetchWrapper = async (
+          input: string | URL | Request,
+          init?: RequestInit
+        ) => {
+          const url = input instanceof Request ? input.url : input.toString()
+          const urlObj = new URL(url)
+
+          // Track methods for subset requests (POST or GET with subset params)
+          const isSubsetRequest =
+            init?.method === `POST` ||
+            urlObj.searchParams.has(`subset__where`) ||
+            urlObj.searchParams.has(`subset__limit`) ||
+            urlObj.searchParams.has(`subset__order_by`)
+
+          if (isSubsetRequest) {
+            requestMethods.push(init?.method ?? `GET`)
+          }
+
+          return fetch(input, init)
+        }
+
+        const shapeStream = new ShapeStream({
+          url: `${BASE_URL}/v1/shape`,
+          params: { table: issuesTableUrl },
+          log: `changes_only`,
+          liveSse,
+          signal: aborter.signal,
+          fetchClient: fetchWrapper,
+          subsetMethod: `POST`, // Default to POST for subset requests
+        })
+
+        // Wait for stream to initialize
+        await vi.waitFor(
+          () => {
+            expect(shapeStream.hasStarted()).toBe(true)
+          },
+          { timeout: 5000 }
+        )
+
+        // fetchSnapshot should use POST by default now
+        const { data } = await shapeStream.fetchSnapshot({
+          orderBy: `title ASC`,
+          limit: 100,
+        })
+
+        // Verify POST was used
+        expect(requestMethods).toContain(`POST`)
+        expect(requestMethods.filter((m) => m === `GET`)).toHaveLength(0)
+
+        // Verify data was returned correctly
+        expect(data.length).toBe(3)
+        const titles = data.map((m) => m.value.title)
+        expect(titles).toEqual([`X`, `Y`, `Z`])
+      }
+    )
+
+    it(
+      `fetchSnapshot method option overrides subsetMethod`,
+      { timeout: 10000 },
+      async ({ issuesTableUrl, insertIssues, aborter }) => {
+        await insertIssues({ title: `One` }, { title: `Two` })
+
+        const requestMethods: string[] = []
+
+        const fetchWrapper = async (
+          input: string | URL | Request,
+          init?: RequestInit
+        ) => {
+          const url = input instanceof Request ? input.url : input.toString()
+          const urlObj = new URL(url)
+
+          // Track methods for subset requests
+          const isSubsetRequest =
+            init?.method === `POST` ||
+            urlObj.searchParams.has(`subset__where`) ||
+            urlObj.searchParams.has(`subset__limit`) ||
+            urlObj.searchParams.has(`subset__order_by`)
+
+          if (isSubsetRequest) {
+            requestMethods.push(init?.method ?? `GET`)
+          }
+
+          return fetch(input, init)
+        }
+
+        const shapeStream = new ShapeStream({
+          url: `${BASE_URL}/v1/shape`,
+          params: { table: issuesTableUrl },
+          log: `changes_only`,
+          liveSse,
+          signal: aborter.signal,
+          fetchClient: fetchWrapper,
+          subsetMethod: `POST`, // Default to POST
+        })
+
+        // Wait for stream to initialize
+        await vi.waitFor(
+          () => {
+            expect(shapeStream.hasStarted()).toBe(true)
+          },
+          { timeout: 5000 }
+        )
+
+        // Override to GET for this specific request
+        const { data } = await shapeStream.fetchSnapshot({
+          orderBy: `title ASC`,
+          limit: 100,
+          method: `GET`, // Override the default POST
+        })
+
+        // Verify GET was used (not POST)
+        expect(requestMethods).toContain(`GET`)
+        expect(requestMethods.filter((m) => m === `POST`)).toHaveLength(0)
+
+        // Verify data was returned correctly
+        expect(data.length).toBe(2)
+      }
+    )
+
+    it(
+      `fetchSnapshot POST with params sends params in body`,
+      { timeout: 10000 },
+      async ({ issuesTableUrl, insertIssues, aborter }) => {
+        await insertIssues(
+          { title: `alpha` },
+          { title: `beta` },
+          { title: `gamma` }
+        )
+
+        let capturedBody: Record<string, unknown> | undefined
+
+        const fetchWrapper = async (
+          input: string | URL | Request,
+          init?: RequestInit
+        ) => {
+          if (init?.method === `POST` && init.body) {
+            capturedBody = JSON.parse(init.body as string)
+          }
+          return fetch(input, init)
+        }
+
+        const shapeStream = new ShapeStream({
+          url: `${BASE_URL}/v1/shape`,
+          params: { table: issuesTableUrl },
+          log: `changes_only`,
+          liveSse,
+          signal: aborter.signal,
+          fetchClient: fetchWrapper,
+        })
+
+        // Wait for stream to initialize
+        await vi.waitFor(
+          () => {
+            expect(shapeStream.hasStarted()).toBe(true)
+          },
+          { timeout: 5000 }
+        )
+
+        // Test with parametrised where clause via POST
+        const { data } = await shapeStream.fetchSnapshot({
+          where: `title = $1 OR title = $2`,
+          params: { '1': `alpha`, '2': `gamma` },
+          orderBy: `title ASC`,
+          limit: 100,
+          method: `POST`,
+        })
+
+        // Verify body contains params
+        expect(capturedBody).toBeDefined()
+        expect(capturedBody!.where).toBe(`title = $1 OR title = $2`)
+        expect(capturedBody!.params).toEqual({ '1': `alpha`, '2': `gamma` })
+        expect(capturedBody!.order_by).toBe(`title ASC`)
+        expect(capturedBody!.limit).toBe(100)
+
+        // Verify data was returned correctly
+        expect(data.length).toBe(2)
+        const titles = data.map((m) => m.value.title).sort()
+        expect(titles).toEqual([`alpha`, `gamma`])
+      }
+    )
   }
 )
 
