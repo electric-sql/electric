@@ -7,7 +7,6 @@ import {
   encodeWhereClause,
   quoteIdentifier,
   isValidColumnMapper,
-  COLUMN_MAPPER_BRAND,
 } from '../src/column-mapper'
 import type { Schema } from '../src/types'
 
@@ -478,23 +477,5 @@ describe(`isValidColumnMapper`, () => {
   it(`should return false for objects with non-function encode/decode`, () => {
     const invalid = { encode: `not a function`, decode: `not a function` }
     expect(isValidColumnMapper(invalid)).toBe(false)
-  })
-})
-
-describe(`ColumnMapper brand`, () => {
-  it(`should include the brand symbol in snakeCamelMapper result`, () => {
-    const mapper = snakeCamelMapper()
-    expect(mapper[COLUMN_MAPPER_BRAND]).toBe(true)
-  })
-
-  it(`should include the brand symbol in createColumnMapper result`, () => {
-    const mapper = createColumnMapper({ user_id: `userId` })
-    expect(mapper[COLUMN_MAPPER_BRAND]).toBe(true)
-  })
-
-  it(`should include the brand symbol when using schema with snakeCamelMapper`, () => {
-    const schema: Schema = { user_id: { type: `int4` } }
-    const mapper = snakeCamelMapper(schema)
-    expect(mapper[COLUMN_MAPPER_BRAND]).toBe(true)
   })
 })

@@ -4,14 +4,6 @@ type DbColumnName = string
 type AppColumnName = string
 
 /**
- * Symbol used to brand ColumnMapper objects.
- * This helps TypeScript distinguish between a ColumnMapper object
- * and a function that returns a ColumnMapper.
- * @internal
- */
-export const COLUMN_MAPPER_BRAND = Symbol.for(`electric.columnMapper`)
-
-/**
  * Quote a PostgreSQL identifier for safe use in query parameters.
  *
  * Wraps the identifier in double quotes and escapes any internal
@@ -62,14 +54,6 @@ export function quoteIdentifier(identifier: string): string {
  */
 export interface ColumnMapper {
   /**
-   * Brand marker to distinguish ColumnMapper objects from functions.
-   * This helps catch the common mistake of passing `snakeCamelMapper`
-   * instead of `snakeCamelMapper()`.
-   * @internal
-   */
-  readonly [COLUMN_MAPPER_BRAND]: true
-
-  /**
    * Transform a column name from database format to application format.
    * Applied to column names in query results.
    */
@@ -86,11 +70,6 @@ export interface ColumnMapper {
  * Validates that a value is a valid ColumnMapper object.
  * Returns false if the value is a function (common mistake of passing
  * the factory without calling it) or if it lacks encode/decode methods.
- *
- * Note: This intentionally does NOT check for COLUMN_MAPPER_BRAND to maintain
- * backwards compatibility with custom ColumnMapper implementations that use
- * plain objects with encode/decode methods. The brand is used for TypeScript
- * type narrowing and documentation, not runtime enforcement.
  *
  * @param value - The value to validate
  * @returns true if the value is a valid ColumnMapper, false otherwise
@@ -204,8 +183,6 @@ export function createColumnMapper(
   }
 
   return {
-    [COLUMN_MAPPER_BRAND]: true as const,
-
     decode: (dbColumnName: string) => {
       return mapping[dbColumnName] ?? dbColumnName
     },
@@ -421,8 +398,6 @@ export function snakeCamelMapper(schema?: Schema): ColumnMapper {
 
   // Otherwise, map dynamically
   return {
-    [COLUMN_MAPPER_BRAND]: true as const,
-
     decode: (dbColumnName: string) => {
       return snakeToCamel(dbColumnName)
     },

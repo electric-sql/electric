@@ -513,11 +513,11 @@ describe(`ShapeStream`, () => {
         const stream = new ShapeStream({
           url: shapeUrl,
           params: { table: `foo` },
-          // Custom mapper that works but lacks the brand (for backwards compatibility)
+          // Custom mapper with encode/decode methods
           columnMapper: {
             encode: (name: string) => name.toLowerCase(),
             decode: (name: string) => name.toUpperCase(),
-          } as ReturnType<typeof snakeCamelMapper>,
+          },
           signal: aborter.signal,
         })
         stream.unsubscribeAll()
