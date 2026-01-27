@@ -538,9 +538,8 @@ defmodule Electric.Shapes.Consumer do
 
       # In the fragment-direct mode, each transaction fragment is written to storage individually.
       true ->
-        state
-        |> write_txn_fragment_to_storage(txn_fragment)
-        |> maybe_complete_pending_txn(txn_fragment)
+        {state, persisted_changes} = write_txn_fragment_to_storage(state, txn_fragment)
+        maybe_complete_pending_txn(state, txn_fragment, persisted_changes)
     end
   end
 
@@ -548,7 +547,7 @@ defmodule Electric.Shapes.Consumer do
   #   - it doesn't account for move-ins or move-outs or converting update operations into insert/delete
   #   - the fragment is written directly to storage if it has changes matching this shape
   #   - if the fragment has a commit message, the ShapeLogCollector is informed about the new flush boundary
-  defp write_txn_fragment_to_storage(state, %TransactionFragment{changes: []}), do: state
+  defp write_txn_fragment_to_storage(state, %TransactionFragment{changes: []}), do: {state, []}
 
   defp write_txn_fragment_to_storage(
          state,
@@ -564,7 +563,7 @@ defmodule Electric.Shapes.Consumer do
 
     case convert_fragment_changes(changes, stack_id, shape_handle, shape) do
       :includes_truncate ->
-        handle_txn_with_truncate(xid, state)
+        {handle_txn_with_truncate(xid, state), []}
 
       {[], 0} ->
         Logger.debug(fn ->
@@ -572,7 +571,7 @@ defmodule Electric.Shapes.Consumer do
         end)
 
         # TODO: this needs to signal something to the subsequent maybe_complete_pending_txn call
-        consider_flushed(state, fragment.last_log_offset)
+        {consider_flushed(state, fragment.last_log_offset), []}
 
       {reversed_changes, num_changes, last_log_offset} ->
         converted_changes =
@@ -589,14 +588,14 @@ defmodule Electric.Shapes.Consumer do
           "Wrote #{num_changes} changes for fragment xid=#{xid}, total_bytes=#{total_size}"
         end)
 
-        %{
-          state
-          | writer: writer,
-            latest_offset: last_log_offset,
-            pending_txn: txn,
-            txn_offset_mapping:
-              state.txn_offset_mapping ++ [{last_log_offset, fragment.last_log_offset}]
-        }
+        {%{
+           state
+           | writer: writer,
+             latest_offset: last_log_offset,
+             pending_txn: txn,
+             txn_offset_mapping:
+               state.txn_offset_mapping ++ [{last_log_offset, fragment.last_log_offset}]
+         }, converted_changes}
     end
   end
 
@@ -645,23 +644,28 @@ defmodule Electric.Shapes.Consumer do
     |> consider_flushed(txn_fragment.last_log_offset)
   end
 
-  defp maybe_complete_pending_txn(state, %TransactionFragment{commit: nil}), do: state
+  defp maybe_complete_pending_txn(%State{} = state, %TransactionFragment{commit: nil}, _changes),
+    do: state
 
-  defp maybe_complete_pending_txn(%{terminating?: true} = state, _fragment) do
+  defp maybe_complete_pending_txn(%State{terminating?: true} = state, _fragment, _changes) do
     # If we're terminating (e.g., due to truncate), don't complete the transaction
     state
   end
 
-  defp maybe_complete_pending_txn(state, %TransactionFragment{commit: commit} = fragment) do
+  defp maybe_complete_pending_txn(
+         %State{} = state,
+         %TransactionFragment{commit: commit} = txn_fragment,
+         persisted_changes
+       ) do
     %{pending_txn: txn, writer: writer, shape: shape, shape_handle: shape_handle} = state
 
     # Signal commit to storage for potential chunk boundary calculation
     writer = ShapeCache.Storage.signal_txn_commit!(txn.xid, writer)
 
     # Only notify if we actually wrote changes
-    if txn.num_changes > 0 do
+    if persisted_changes != [] do
       # TODO: Only notify upon writing the full txn to storage
-      notify_new_changes(state, fragment.changes, txn.last_log_offset)
+      notify_new_changes(state, persisted_changes, txn.last_log_offset)
 
       lag = calculate_replication_lag_from_commit(commit)
 
@@ -686,16 +690,19 @@ defmodule Electric.Shapes.Consumer do
           latest_offset: txn.last_log_offset,
           pending_txn: nil,
           txn_offset_mapping:
-            state.txn_offset_mapping ++ [{txn.last_log_offset, fragment.last_log_offset}]
+            state.txn_offset_mapping ++ [{txn.last_log_offset, txn_fragment.last_log_offset}]
       }
     else
+      # TODO: is this even reachable???
+
       # No changes were written - notify flush boundary like consider_flushed does
       Logger.debug(fn ->
         "No relevant changes in fragment-direct transaction xid=#{txn.xid}"
       end)
 
       state = %{state | writer: writer, pending_txn: nil}
-      consider_flushed(state, fragment.last_log_offset)
+      # OR pending_txn.last_log_offset ???
+      consider_flushed(state, txn_fragment.last_log_offset)
     end
   end
 
