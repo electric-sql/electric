@@ -529,6 +529,8 @@ defmodule Electric.Shapes.Consumer do
 
         state = %{state | transaction_builder: transaction_builder}
 
+        # TODO: need to reset pending_txn in this code path
+
         case txns do
           [] -> state
           [txn] -> handle_txn(txn, state)
