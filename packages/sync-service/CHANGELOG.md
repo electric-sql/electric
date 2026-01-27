@@ -1,5 +1,11 @@
 # @core/sync-service
 
+## 1.4.0
+
+### Minor Changes
+
+- 3f257aa: Add POST support for subset snapshots to avoid URL length limits. Clients can now send subset parameters (WHERE clauses, ordering, pagination) in the request body instead of URL query parameters, preventing HTTP 414 errors with complex queries or large IN lists.
+
 ## 1.3.4
 
 ### Patch Changes
