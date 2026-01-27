@@ -466,9 +466,8 @@ defmodule Electric.Shapes.Consumer do
     State.add_to_buffer(state, txn_fragment)
   end
 
-  # The first fragment of a new transaction: initialize pending txn metadata and check if the
-  # transaction xid is already part of the snapshot. If it is, all subsequent fragments of this
-  # transaction will be ignored.
+  # pending_txn struct is initialized to keep track of all fragments comprising this txn and
+  # store the "consider_flushed" state on it.
   defp handle_txn_fragment(
          %TransactionFragment{has_begin?: true, xid: xid} = txn_fragment,
          %State{pending_txn: nil} = state
@@ -478,9 +477,12 @@ defmodule Electric.Shapes.Consumer do
     handle_txn_fragment(txn_fragment, state)
   end
 
-  # We can use the initial filtering to our advantage here and avoid accumulating fragments for
-  # a transaction that is going to be skipped anyway. This works both in the regular mode and
-  # in the fragment-direct mode.
+  # Upon seeing the first fragment of a new transaction, check if its xid is already included in the
+  # initial snapshot. If it is, all subsequent fragments of this transaction will be ignored.
+  #
+  # Initial filtering is giving us the advantage of not accumulating fragments for a
+  # transaction that is going to be skipped anyway. This works both in the regular mode and in
+  # the fragment-direct mode.
   defp handle_txn_fragment(
          %TransactionFragment{has_begin?: true, xid: xid} = txn_fragment,
          %State{} = state
@@ -489,18 +491,17 @@ defmodule Electric.Shapes.Consumer do
     state =
       case InitialSnapshot.filter(state.initial_snapshot_state, state.storage, xid) do
         {:consider_flushed, initial_snapshot_state} ->
-          # This transaction is already included in the snapshot, so just ignore all of its fragments.
-          # TODO: it could be the case the multiple txns are seen while InitialSnapshot needs
-          # filtering. And the outcomes for those txns could be different.
+          # This transaction is already included in the snapshot, so mark it as flushed to
+          # ignore any of its follow-up fragments.
           %{
             state
             | pending_txn: PendingTxn.consider_flushed(state.pending_txn),
               initial_snapshot_state: initial_snapshot_state
           }
 
-        {:continue, new_initial_snapshot_state} ->
+        {:continue, initial_snapshot_state} ->
           # The transaction is not part of the initial snapshot.
-          %{state | initial_snapshot_state: new_initial_snapshot_state}
+          %{state | initial_snapshot_state: initial_snapshot_state}
       end
 
     process_txn_fragment(txn_fragment, state)
@@ -529,11 +530,12 @@ defmodule Electric.Shapes.Consumer do
 
         state = %{state | transaction_builder: transaction_builder}
 
-        # TODO: need to reset pending_txn in this code path
-
         case txns do
-          [] -> state
-          [txn] -> handle_txn(txn, state)
+          [] ->
+            state
+
+          [txn] ->
+            handle_txn(txn, %{state | pending_txn: nil})
         end
 
       # In the fragment-direct mode, each transaction fragment is written to storage individually.
