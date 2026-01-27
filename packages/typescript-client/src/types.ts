@@ -111,7 +111,7 @@ export type SubsetParams = {
    *
    * In Electric 2.0, GET will be deprecated and only POST will be supported.
    */
-  method?: 'GET' | 'POST'
+  method?: `GET` | `POST`
 }
 
 export type ControlMessage = {
