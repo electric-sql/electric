@@ -2,9 +2,10 @@ defmodule Electric.Shapes.Consumer do
   use GenServer, restart: :temporary
 
   alias Electric.Shapes.Consumer.ChangeHandling
-  alias Electric.Shapes.Consumer.MoveIns
   alias Electric.Shapes.Consumer.InitialSnapshot
   alias Electric.Shapes.Consumer.MoveHandling
+  alias Electric.Shapes.Consumer.MoveIns
+  alias Electric.Shapes.Consumer.PendingTxn
   alias Electric.Shapes.Consumer.State
 
   import Electric.Shapes.Consumer.State, only: :macros
@@ -452,33 +453,81 @@ defmodule Electric.Shapes.Consumer do
   end
 
   defp handle_event(%TransactionFragment{} = txn_fragment, state) do
+    handle_txn_fragment(txn_fragment, state)
+  end
+
+  # The first fragment of a new transaction: initialize pending txn metadata and check if the
+  # transaction xid is already part of the snapshot. If it is, all subsequent fragments of this
+  # transaction will be ignored.
+  defp handle_txn_fragment(
+         %TransactionFragment{has_begin?: true, xid: xid} = txn_fragment,
+         %State{pending_txn: nil} = state
+       ) do
+    txn = PendingTxn.new(xid)
+    state = %{state | pending_txn: txn}
+    handle_txn_fragment(txn_fragment, state)
+  end
+
+  # We can use the initial filtering to our advantage here and avoid accumulating fragments for
+  # a transaction that is going to be skipped anyway. This works both in the regular mode and
+  # in the fragment-direct mode.
+  defp handle_txn_fragment(
+         %TransactionFragment{has_begin?: true, xid: xid} = txn_fragment,
+         %State{} = state
+       )
+       when needs_initial_filtering(state) do
+    case InitialSnapshot.filter(state.initial_snapshot_state, state.storage, xid) do
+      {:consider_flushed, initial_snapshot_state} ->
+        # This transaction is already included in the snapshot, so just ignore all of its fragments.
+        # TODO: it could be the case the multiple txns are seen while InitialSnapshot needs
+        # filtering. And the outcomes for those txns could be different.
+        %{
+          state
+          | pending_txn: PendingTxn.consider_flushed(state.pending_txn),
+            initial_snapshot_state: initial_snapshot_state
+        }
+
+      {:continue, new_initial_snapshot_state} ->
+        # The transaction is not part of the initial snapshot.
+        state = %{state | initial_snapshot_state: new_initial_snapshot_state}
+        process_txn_fragment(txn_fragment, state)
+    end
+  end
+
+  defp handle_txn_fragment(
+         %TransactionFragment{last_log_offset: last_log_offset} = txn_fragment,
+         %State{pending_txn: txn} = state
+       ) do
+    if txn.consider_flushed? or fragment_already_processed?(txn_fragment, state) do
+      # TODO: Do not mark the fragment itself flushed. When the cnnection restarts, we want to
+      # receive all fragments starting from the one with has_begin? so as not to overcomplicate
+      # the consumer logic.
+      consider_flushed(state, last_log_offset)
+    else
+      process_txn_fragment(txn_fragment, state)
+    end
+  end
+
+  # In the regular mode all fragments are buffered until the Commit change is seen. At that
+  # point, a transaction struct is produced from the buffered fragments and is written to
+  # storage.
+  defp process_txn_fragment(txn_fragment, %State{fragment_direct?: false} = state) do
     {txns, transaction_builder} =
       TransactionBuilder.build(txn_fragment, state.transaction_builder)
 
     state = %{state | transaction_builder: transaction_builder}
-    handle_txns(txns, state)
-  end
 
-  defp handle_txns(txns, %State{} = state), do: Enum.reduce_while(txns, state, &handle_txn/2)
-
-  # Keep buffering for initial snapshot
-  defp handle_txn(txn, %State{buffering?: true} = state),
-    do: {:cont, State.add_to_buffer(state, txn)}
-
-  defp handle_txn(txn, state) when needs_initial_filtering(state) do
-    case InitialSnapshot.filter(state.initial_snapshot_state, state.storage, txn) do
-      {:consider_flushed, initial_snapshot_state} ->
-        {:cont, consider_flushed(%{state | initial_snapshot_state: initial_snapshot_state}, txn)}
-
-      {:continue, new_initial_snapshot_state} ->
-        handle_txn_in_span(txn, %{state | initial_snapshot_state: new_initial_snapshot_state})
+    case txns do
+      [] -> state
+      [txn] -> handle_txn(txn, state)
     end
   end
 
-  # Remove the move-in buffering check - just process immediately
-  defp handle_txn(txn, state), do: handle_txn_in_span(txn, state)
+  # In the fragment-direct mode, each transaction fragment is written to storage individually.
+  defp process_txn_fragment(txn_fragment, state) do
+  end
 
-  defp handle_txn_in_span(txn, %State{} = state) do
+  defp handle_txn(txn, %State{} = state) do
     ot_attrs =
       [xid: txn.xid, total_num_changes: txn.num_changes] ++
         shape_attrs(state.shape_handle, state.shape)
@@ -487,17 +536,8 @@ defmodule Electric.Shapes.Consumer do
       "shape_write.consumer.handle_txn",
       ot_attrs,
       state.stack_id,
-      fn ->
-        do_handle_txn(txn, state)
-      end
+      fn -> do_handle_txn(txn, state) end
     )
-  end
-
-  defp do_handle_txn(%Transaction{} = txn, state)
-       when LogOffset.is_log_offset_lte(txn.last_log_offset, state.latest_offset) do
-    Logger.debug(fn -> "Skipping already processed txn #{txn.xid}" end)
-
-    {:cont, consider_flushed(state, txn)}
   end
 
   defp do_handle_txn(%Transaction{xid: xid, changes: changes} = txn, state) do
@@ -546,7 +586,7 @@ defmodule Electric.Shapes.Consumer do
           "No relevant changes found for #{inspect(shape)} in txn #{txn.xid}"
         end)
 
-        {:cont, consider_flushed(state, txn)}
+        {:cont, consider_flushed(state, txn.last_log_offset)}
 
       {changes, state, num_changes, last_log_offset} ->
         timestamp = System.monotonic_time()
@@ -685,14 +725,19 @@ defmodule Electric.Shapes.Consumer do
     Kernel.max(0, DateTime.diff(now, commit_timestamp, :millisecond))
   end
 
-  defp consider_flushed(%State{} = state, %Transaction{last_log_offset: new_boundary}) do
+  defp fragment_already_processed?(%TransactionFragment{last_log_offset: offset}, state) do
+    LogOffset.is_log_offset_lte(offset, state.latest_offset)
+  end
+
+  defp consider_flushed(%State{} = state, log_offset) do
     if state.txn_offset_mapping == [] do
       # No relevant txns have been observed and unflushed, we can notify immediately
-      ShapeLogCollector.notify_flushed(state.stack_id, state.shape_handle, new_boundary)
+      ShapeLogCollector.notify_flushed(state.stack_id, state.shape_handle, log_offset)
       state
     else
       # We're looking to "relabel" the next flush to include this txn, so we're looking for the
       # boundary that has a highest boundary less than this offset
+      new_boundary = log_offset
 
       {head, tail} =
         Enum.split_while(

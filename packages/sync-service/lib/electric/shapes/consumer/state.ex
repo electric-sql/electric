@@ -30,7 +30,14 @@ defmodule Electric.Shapes.Consumer.State do
     terminating?: false,
     buffering?: false,
     or_with_subquery?: false,
-    not_with_subquery?: false
+    not_with_subquery?: false,
+    # Fragment-direct streaming fields
+    # When true, stream fragments directly to storage without buffering
+    fragment_direct?: false,
+    # Tracks in-progress transaction, initialized when a txn fragment with has_begin?=true is seen.
+    # It is used to check whether the entire txn is visible in the snapshot and to mark it
+    # as flushed in order to handle its remaining fragments appropriately.
+    pending_txn: nil
   ]
 
   @type pg_snapshot() :: SnapshotQuery.pg_snapshot()
@@ -143,7 +150,9 @@ defmodule Electric.Shapes.Consumer.State do
         ),
       buffering?: true,
       or_with_subquery?: has_or_with_subquery?(shape),
-      not_with_subquery?: has_not_with_subquery?(shape)
+      not_with_subquery?: has_not_with_subquery?(shape),
+      # Enable fragment-direct streaming for shapes without subquery dependencies
+      fragment_direct?: shape.shape_dependencies == []
     }
   end
 
