@@ -535,6 +535,163 @@ defmodule Electric.Shapes.Consumer do
 
   # In the fragment-direct mode, each transaction fragment is written to storage individually.
   defp process_txn_fragment(txn_fragment, state) do
+    state
+    |> write_txn_fragment_to_storage(txn_fragment)
+    |> maybe_complete_pending_txn(txn_fragment)
+  end
+
+  # This function does similar things to do_handle_txn/2 but with the following simplifications:
+  #   - it doesn't account for move-ins or move-outs or converting update operations into insert/delete
+  #   - the fragment is written directly to storage if it has changes matching this shape
+  #   - if the fragment has a commit message, the ShapeLogCollector is informed about the new flush boundary
+  defp write_txn_fragment_to_storage(state, %TransactionFragment{changes: []}), do: state
+
+  defp write_txn_fragment_to_storage(
+         state,
+         %TransactionFragment{changes: changes, commit: commit, xid: xid} = fragment
+       ) do
+    %{
+      shape: shape,
+      writer: writer,
+      pending_txn: txn,
+      stack_id: stack_id,
+      shape_handle: shape_handle
+    } = state
+
+    case convert_fragment_changes(changes, stack_id, shape_handle, shape) do
+      :includes_truncate ->
+        handle_txn_with_truncate(xid, state)
+
+      {[], 0} ->
+        Logger.debug(fn ->
+          "No relevant changes found for #{inspect(shape)} in txn fragment of txn #{xid}"
+        end)
+
+        # TODO: this needs to signal something to the subsequent maybe_complete_pending_txn call
+        consider_flushed(state, fragment.last_log_offset)
+
+      {reversed_changes, num_changes, last_log_offset} ->
+        converted_changes =
+          reversed_changes
+          |> maybe_mark_last_change(commit)
+          |> Enum.reverse()
+
+        {lines, total_size} = prepare_log_entries(converted_changes, xid, shape)
+        writer = ShapeCache.Storage.append_fragment_to_log!(lines, writer)
+
+        txn = PendingTxn.update_with_changes(txn, last_log_offset, num_changes, total_size)
+
+        Logger.debug(fn ->
+          "Wrote #{num_changes} changes for fragment xid=#{xid}, total_bytes=#{total_size}"
+        end)
+
+        %{
+          state
+          | writer: writer,
+            latest_offset: last_log_offset,
+            pending_txn: txn,
+            txn_offset_mapping:
+              state.txn_offset_mapping ++ [{last_log_offset, fragment.last_log_offset}]
+        }
+    end
+  end
+
+  defp convert_fragment_changes(changes, stack_id, shape_handle, shape) do
+    Enum.reduce_while(changes, {[], 0}, fn
+      %Changes.TruncatedRelation{}, _acc ->
+        {:halt, :includes_truncate}
+
+      change, {changes, count} = acc ->
+        # Apply Shape.convert_change to each change to:
+        # 1. Filter out changes not matching the shape's table
+        # 2. Apply WHERE clause filtering
+        case Shape.convert_change(shape, change, stack_id: stack_id, shape_handle: shape_handle) do
+          [] ->
+            {:cont, acc}
+
+          [change] ->
+            {:cont, {[change | changes], count + 1}}
+        end
+    end)
+    |> case do
+      {[change | _] = changes, num_changes} ->
+        {changes, num_changes, LogItems.expected_offset_after_split(change)}
+
+      acc ->
+        acc
+    end
+  end
+
+  # Mark the last change in the list as last? when this is a commit fragment
+  # This is needed for clients to know when a transaction is complete
+  # The changes passed to this function are in reversed order, i.e. the last change is the head of the list.
+  defp maybe_mark_last_change([], _commit), do: []
+  defp maybe_mark_last_change(changes, nil), do: changes
+
+  defp maybe_mark_last_change(changes, _commit) do
+    [head | tail] = changes
+    [%{head | last?: true} | tail]
+  end
+
+  defp maybe_complete_pending_txn(state, %TransactionFragment{commit: nil}), do: state
+
+  defp maybe_complete_pending_txn(%{terminating?: true} = state, _fragment) do
+    # If we're terminating (e.g., due to truncate), don't complete the transaction
+    state
+  end
+
+  defp maybe_complete_pending_txn(state, %TransactionFragment{commit: commit} = fragment) do
+    %{pending_txn: txn, writer: writer, shape: shape, shape_handle: shape_handle} = state
+
+    # Signal commit to storage for potential chunk boundary calculation
+    writer = ShapeCache.Storage.signal_txn_commit!(txn.xid, writer)
+
+    # Only notify if we actually wrote changes
+    if txn.num_changes > 0 do
+      # TODO: Only notify upon writing the full txn to storage
+      notify_new_changes(state, fragment.changes, txn.last_log_offset)
+
+      lag = calculate_replication_lag_from_commit(commit)
+
+      Electric.Telemetry.OpenTelemetry.execute(
+        [:electric, :storage, :transaction_stored],
+        %{
+          bytes: txn.total_bytes,
+          count: 1,
+          operations: txn.num_changes,
+          replication_lag: lag
+        },
+        Map.new(shape_attrs(shape_handle, shape))
+      )
+
+      Logger.debug(fn ->
+        "Completed fragment-direct transaction xid=#{txn.xid}, changes=#{txn.num_changes}"
+      end)
+
+      %{
+        state
+        | writer: writer,
+          latest_offset: txn.last_log_offset,
+          pending_txn: nil,
+          txn_offset_mapping:
+            state.txn_offset_mapping ++ [{txn.last_log_offset, fragment.last_log_offset}]
+      }
+    else
+      # No changes were written - notify flush boundary like consider_flushed does
+      Logger.debug(fn ->
+        "No relevant changes in fragment-direct transaction xid=#{txn.xid}"
+      end)
+
+      state = %{state | writer: writer, pending_txn: nil}
+      consider_flushed(state, fragment.last_log_offset)
+    end
+  end
+
+  defp calculate_replication_lag_from_commit(%Changes.Commit{commit_timestamp: nil}), do: 0
+
+  defp calculate_replication_lag_from_commit(%Changes.Commit{commit_timestamp: commit_timestamp}) do
+    now = DateTime.utc_now()
+    Kernel.max(0, DateTime.diff(now, commit_timestamp, :millisecond))
   end
 
   def process_buffered_txn_fragments(%State{buffer: buffer} = state) do
@@ -558,11 +715,7 @@ defmodule Electric.Shapes.Consumer do
   end
 
   defp do_handle_txn(%Transaction{xid: xid, changes: changes} = txn, state) do
-    %{
-      shape: shape,
-      shape_handle: shape_handle,
-      writer: writer
-    } = state
+    %{shape: shape, writer: writer} = state
 
     state = State.remove_completed_move_ins(state, txn)
 
@@ -587,16 +740,7 @@ defmodule Electric.Shapes.Consumer do
            %{xid: xid, extra_refs: {extra_refs_before_move_ins, extra_refs_full}}
          ) do
       :includes_truncate ->
-        # TODO: This is a very naive way to handle truncations: if ANY relevant truncates are
-        #       present in the transaction, we're considering the whole transaction empty, and
-        #       just rotate the shape handle. "Correct" way to handle truncates is to be designed.
-        Logger.warning(
-          "Truncate operation encountered while processing txn #{txn.xid} for #{shape_handle}"
-        )
-
-        state = mark_for_removal(state)
-
-        {:halt, state}
+        {:halt, handle_txn_with_truncate(txn.xid, state)}
 
       {_, state, 0, _} ->
         Logger.debug(fn ->
@@ -642,6 +786,17 @@ defmodule Electric.Shapes.Consumer do
                state.txn_offset_mapping ++ [{last_log_offset, txn.last_log_offset}]
          }}
     end
+  end
+
+  defp handle_txn_with_truncate(xid, state) do
+    # TODO: This is a very naive way to handle truncations: if ANY relevant truncates are
+    #       present in the transaction, we're considering the whole transaction empty, and
+    #       just rotate the shape handle. "Correct" way to handle truncates is to be designed.
+    Logger.warning(
+      "Truncate operation encountered while processing txn #{xid} for #{state.shape_handle}"
+    )
+
+    mark_for_removal(state)
   end
 
   defp notify_new_changes(state, nil), do: state
