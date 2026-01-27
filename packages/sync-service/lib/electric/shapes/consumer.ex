@@ -510,7 +510,7 @@ defmodule Electric.Shapes.Consumer do
 
   # Fragments belonging to the same transaction can all be skipped either via xid-filtering or log offset filtering.
   defp process_txn_fragment(
-         %TransactionFragment{last_log_offset: last_log_offset} = txn_fragment,
+         %TransactionFragment{} = txn_fragment,
          %State{pending_txn: txn} = state
        ) do
     cond do
@@ -518,7 +518,7 @@ defmodule Electric.Shapes.Consumer do
       # receive all fragments starting from the one with has_begin? so as not to overcomplicate
       # the consumer logic.
       txn.consider_flushed? or fragment_already_processed?(txn_fragment, state) ->
-        consider_flushed(state, last_log_offset)
+        skip_txn_fragment(state, txn_fragment)
 
       # In the regular mode all fragments are buffered until the Commit change is seen. At that
       # point, a transaction struct is produced from the buffered fragments and is written to
@@ -635,6 +635,14 @@ defmodule Electric.Shapes.Consumer do
     [%{head | last?: true} | tail]
   end
 
+  defp skip_txn_fragment(state, %TransactionFragment{commit: nil}), do: state
+
+  defp skip_txn_fragment(state, %TransactionFragment{} = txn_fragment) do
+    # Reset the pending_txn field to be ready for the first txn fragment of the next incoming transaction.
+    %{state | pending_txn: nil}
+    |> consider_flushed(txn_fragment.last_log_offset)
+  end
+
   defp maybe_complete_pending_txn(state, %TransactionFragment{commit: nil}), do: state
 
   defp maybe_complete_pending_txn(%{terminating?: true} = state, _fragment) do
@@ -699,8 +707,16 @@ defmodule Electric.Shapes.Consumer do
   def process_buffered_txn_fragments(%State{buffer: buffer} = state) do
     Logger.debug(fn -> "Consumer catching up on #{length(buffer)} transaction fragments" end)
     {txn_fragments, state} = State.pop_buffered(state)
-    # TODO: verify the "while" condition here, when will it terminate early?
-    Enum.reduce_while(txn_fragments, state, &handle_txn_fragment/2)
+
+    Enum.reduce_while(txn_fragments, state, fn txn_fragment, state ->
+      state = handle_txn_fragment(txn_fragment, state)
+
+      if state.terminating? do
+        {:halt, state}
+      else
+        {:cont, state}
+      end
+    end)
   end
 
   defp handle_txn(txn, %State{} = state) do
