@@ -42,8 +42,8 @@ defmodule Electric.Shapes.Consumer.PendingTxn do
   @doc """
   Update the pending transaction with changes that were written to storage.
   """
-  @spec add_changes(t(), LogOffset.t(), non_neg_integer(), non_neg_integer()) :: t()
-  def add_changes(%__MODULE__{} = pending_txn, log_offset, count, bytes) do
+  @spec update_stats(t(), LogOffset.t(), non_neg_integer(), non_neg_integer()) :: t()
+  def update_stats(%__MODULE__{} = pending_txn, log_offset, count, bytes) do
     %{
       pending_txn
       | last_log_offset: log_offset,
