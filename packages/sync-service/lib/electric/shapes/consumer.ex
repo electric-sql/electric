@@ -450,6 +450,7 @@ defmodule Electric.Shapes.Consumer do
   end
 
   defp handle_event(%TransactionFragment{} = txn_fragment, state) do
+    Logger.debug(fn -> "Txn fragment received in Shapes.Consumer: #{inspect(txn_fragment)}" end)
     handle_txn_fragment(txn_fragment, state)
   end
 
@@ -535,6 +536,7 @@ defmodule Electric.Shapes.Consumer do
             state
 
           [txn] ->
+            Logger.debug(fn -> "Txn assembled in Shapes.Consumer: #{inspect(txn)}" end)
             handle_txn(txn, %{state | pending_txn: nil})
         end
 
@@ -747,8 +749,6 @@ defmodule Electric.Shapes.Consumer do
     %{shape: shape, writer: writer} = state
 
     state = State.remove_completed_move_ins(state, txn)
-
-    Logger.debug(fn -> "Txn received in Shapes.Consumer: #{inspect(txn)}" end)
 
     extra_refs_full =
       Materializer.get_all_as_refs(shape, state.stack_id)

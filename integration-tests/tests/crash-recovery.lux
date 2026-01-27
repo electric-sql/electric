@@ -166,7 +166,7 @@
   # slower than the pure-ets version (~50ms vs ~5ms) which means that this request
   # arrives before the stack has received the pending operation.
   # To mitigate this we ensure the txn has been processed.
-  ??[debug] Txn received in Shapes.Consumer
+  ??[debug] Txn fragment received in Shapes.Consumer
 
 # Client should be able to continue same shape
 [shell client]
