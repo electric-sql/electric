@@ -167,16 +167,13 @@ defmodule Electric.Shapes.Consumer do
     stop_and_clean(state)
   end
 
-  def handle_continue(:consume_buffer, %State{buffer: buffer} = state) do
-    Logger.debug(fn -> "Consumer catching up on #{length(buffer)} transactions" end)
-    state = %{state | buffer: [], buffering?: false}
+  def handle_continue(:consume_buffer, state) do
+    state = process_buffered_txn_fragments(state)
 
-    case handle_txns(Enum.reverse(buffer), state) do
-      %State{terminating?: true} = state ->
-        {:noreply, state, {:continue, :stop_and_clean}}
-
-      state ->
-        {:noreply, state, state.hibernate_after}
+    if state.terminating? do
+      {:noreply, state, {:continue, :stop_and_clean}}
+    else
+      {:noreply, state, state.hibernate_after}
     end
   end
 
@@ -456,6 +453,19 @@ defmodule Electric.Shapes.Consumer do
     handle_txn_fragment(txn_fragment, state)
   end
 
+  # A consumer process starts with buffering?=true before it has PG snapshot info (xmin, xmax, xip_list).
+  # In this phase we have to buffer incoming txn fragments because we can't yet decide what to
+  # do with the transaction: skip it or write it to the shape log.
+  #
+  # When snapshot info arrives, `process_buffered_txn_fragments/1` will be called to process
+  # buffered fragments in order.
+  defp handle_txn_fragment(
+         %TransactionFragment{} = txn_fragment,
+         %State{buffering?: true} = state
+       ) do
+    State.add_to_buffer(state, txn_fragment)
+  end
+
   # The first fragment of a new transaction: initialize pending txn metadata and check if the
   # transaction xid is already part of the snapshot. If it is, all subsequent fragments of this
   # transaction will be ignored.
@@ -525,6 +535,13 @@ defmodule Electric.Shapes.Consumer do
 
   # In the fragment-direct mode, each transaction fragment is written to storage individually.
   defp process_txn_fragment(txn_fragment, state) do
+  end
+
+  def process_buffered_txn_fragments(%State{buffer: buffer} = state) do
+    Logger.debug(fn -> "Consumer catching up on #{length(buffer)} transaction fragments" end)
+    {txn_fragments, state} = State.pop_buffered(state)
+    # TODO: verify the "while" condition here, when will it terminate early?
+    Enum.reduce_while(txn_fragments, state, &handle_txn_fragment/2)
   end
 
   defp handle_txn(txn, %State{} = state) do

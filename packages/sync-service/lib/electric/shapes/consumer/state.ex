@@ -3,7 +3,6 @@ defmodule Electric.Shapes.Consumer.State do
   alias Electric.Shapes.Consumer.MoveIns
   alias Electric.Shapes.Consumer.InitialSnapshot
   alias Electric.Shapes.Shape
-  alias Electric.Replication.Changes.Transaction
   alias Electric.Replication.Eval.Parser
   alias Electric.Replication.Eval.Walker
   alias Electric.Replication.TransactionBuilder
@@ -250,9 +249,14 @@ defmodule Electric.Shapes.Consumer.State do
     end
   end
 
-  @spec add_to_buffer(t(), Transaction.t()) :: t()
+  @spec add_to_buffer(t(), TransactionFragment.t()) :: t()
   def add_to_buffer(%__MODULE__{buffer: buffer} = state, txn) do
     %{state | buffer: [txn | buffer]}
+  end
+
+  @spec pop_buffered(t()) :: {[TransactionFragment.t()], t()}
+  def pop_buffered(%__MODULE__{buffer: buffer} = state) do
+    {Enum.reverse(buffer), %{state | buffer: [], buffering?: false}}
   end
 
   @spec add_waiter(t(), GenServer.from()) :: t()
