@@ -1,5 +1,11 @@
 # @core/elixir-client
 
+## 0.8.3
+
+### Patch Changes
+
+- 571ed07: Update electric dependency to allow for v1.3.3
+
 ## 0.8.2
 
 ### Patch Changes
