@@ -2326,7 +2326,7 @@ describe.for(fetchAndSse)(
     )
 
     it(
-      `fetchSnapshot with method: 'POST' sends subset params in request body`,
+      `fetchSnapshot with POST method sends subset params in request body`,
       { timeout: 10000 },
       async ({ issuesTableUrl, insertIssues, aborter }) => {
         await insertIssues({ title: `A` }, { title: `B` }, { title: `C` })
@@ -2390,7 +2390,7 @@ describe.for(fetchAndSse)(
     )
 
     it(
-      `fetchSnapshot with subsetMethod: 'POST' on stream uses POST by default`,
+      `fetchSnapshot with subsetMethod POST uses POST by default`,
       { timeout: 10000 },
       async ({ issuesTableUrl, insertIssues, aborter }) => {
         await insertIssues({ title: `X` }, { title: `Y` }, { title: `Z` })
