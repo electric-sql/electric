@@ -1,10 +1,9 @@
 defmodule Support.OracleHarness.ShapeChecker do
   @moduledoc """
-  Per-shape checker that owns its StreamConsumer and handles verification independently.
+  Per-shape checker that uses polling to verify consistency with the oracle.
 
   Each checker:
-  - Owns its Electric client stream consumer
-  - Receives messages from its consumer only
+  - Uses Electric.Client.poll/4 to fetch shape changes
   - Queries the oracle (Postgres) via a shared pool
   - Verifies consistency between materialized client state and oracle
   """
@@ -15,7 +14,12 @@ defmodule Support.OracleHarness.ShapeChecker do
   alias Electric.Client.Message.ChangeMessage
   alias Electric.Client.Message.ControlMessage
   alias Electric.Client.ShapeDefinition
-  alias Support.StreamConsumer
+  alias Electric.Client.ShapeState
+
+  # Max time to wait for changes after receiving up_to_date without changes (in ms)
+  # This handles the case where LONG_POLL_TIMEOUT is short and Electric hasn't
+  # processed changes yet.
+  @default_retry_window_ms 5_000
 
   defstruct [
     :name,
@@ -24,39 +28,29 @@ defmodule Support.OracleHarness.ShapeChecker do
     :columns,
     :pk,
     :optimized,
-    :consumer,
-    :pid,
+    :client,
+    :shape_def,
     :oracle_pool,
-    :caller_pid,
+    poll_state: nil,
     rows: %{},
     must_refetch?: false,
     error: nil,
-    timed_out?: false
+    timed_out?: false,
+    # Track if we received any changes during current await cycle
+    got_changes?: false,
+    # When we started retrying due to oracle mismatch
+    retry_start_ms: nil
   ]
 
   @doc """
-  Creates a new checker for a shape, starting its StreamConsumer.
-
-  The StreamConsumer sends messages to the calling process, which should be
-  the process that will later call `await_up_to_date/2`.
+  Creates a new checker for a shape.
   """
-  def new(ctx, shape, oracle_pool, opts \\ []) do
+  def new(ctx, shape, oracle_pool, _opts \\ []) do
     validate_identifier!(shape.table, "table")
     Enum.each(shape.columns, &validate_identifier!(&1, "column"))
     Enum.each(shape.pk, &validate_identifier!(&1, "pk column"))
 
-    timeout_ms = opts[:timeout_ms] || 20_000
-
     shape_def = ShapeDefinition.new!(shape.table, where: shape.where)
-
-    stream =
-      Client.stream(ctx.client, shape_def,
-        live: true,
-        replica: :full,
-        errors: :stream
-      )
-
-    {:ok, consumer} = StreamConsumer.start(stream, timeout: timeout_ms)
 
     %__MODULE__{
       name: shape.name,
@@ -65,10 +59,10 @@ defmodule Support.OracleHarness.ShapeChecker do
       columns: shape.columns,
       pk: shape.pk,
       optimized: Map.get(shape, :optimized, false),
-      consumer: consumer,
-      pid: consumer.task_pid,
+      client: ctx.client,
+      shape_def: shape_def,
       oracle_pool: oracle_pool,
-      caller_pid: self()
+      poll_state: ShapeState.new()
     }
   end
 
@@ -96,7 +90,12 @@ defmodule Support.OracleHarness.ShapeChecker do
 
   @doc """
   Wait for up_to_date control message and return updated checker with all applied changes.
-  Only receives messages from this checker's consumer (matched by pid).
+  Uses polling instead of a stream consumer.
+
+  Includes retry logic to handle the case where LONG_POLL_TIMEOUT is short and
+  Electric hasn't processed all changes yet. When up_to_date is received without
+  changes, we check if the oracle matches the materialized state. If not, we
+  retry polling for up to @default_retry_window_ms.
   """
   def await_up_to_date(%__MODULE__{} = checker, timeout_ms) do
     checker = reset_events(checker)
@@ -105,42 +104,88 @@ defmodule Support.OracleHarness.ShapeChecker do
 
   defp do_await(checker, timeout_ms, start_ms) do
     elapsed = System.monotonic_time(:millisecond) - start_ms
-    remaining = max(0, timeout_ms - elapsed)
 
-    receive do
-      {:stream_message, pid, %ControlMessage{control: :up_to_date}} when pid == checker.pid ->
-        checker
+    if elapsed >= timeout_ms do
+      %{checker | timed_out?: true}
+    else
+      case Client.poll(checker.client, checker.shape_def, checker.poll_state, replica: :full) do
+        {:ok, messages, new_state} ->
+          got_changes? = checker.got_changes? or has_change_messages?(messages)
+          checker = %{checker | poll_state: new_state, got_changes?: got_changes?}
+          checker = apply_messages(checker, messages)
 
-      {:stream_message, pid, %ChangeMessage{} = msg} when pid == checker.pid ->
-        checker
-        |> apply_change(msg)
-        |> do_await(timeout_ms, start_ms)
+          cond do
+            # Still fetching snapshot
+            not new_state.up_to_date? ->
+              do_await(checker, timeout_ms, start_ms)
 
-      {:stream_message, pid, %ControlMessage{control: :must_refetch}} when pid == checker.pid ->
-        %{checker | rows: %{}, must_refetch?: true}
-        |> do_await(timeout_ms, start_ms)
+            # Up to date - check if oracle matches (might need more changes)
+            true ->
+              handle_up_to_date(checker, timeout_ms, start_ms)
+          end
 
-      {:stream_message, pid, %Client.Error{} = error} when pid == checker.pid ->
-        %{checker | error: error}
+        {:must_refetch, messages, new_state} ->
+          checker = %{checker | poll_state: new_state, rows: %{}, must_refetch?: true, got_changes?: false, retry_start_ms: nil}
+          checker = apply_messages(checker, messages)
+          do_await(checker, timeout_ms, start_ms)
 
-      {:stream_message, pid, _msg} when pid == checker.pid ->
-        # Ignore other message types
-        do_await(checker, timeout_ms, start_ms)
-    after
-      remaining ->
-        %{checker | timed_out?: true}
+        {:error, error} ->
+          %{checker | error: error}
+      end
     end
   end
 
+  defp has_change_messages?(messages) do
+    Enum.any?(messages, &match?(%ChangeMessage{}, &1))
+  end
+
+  defp handle_up_to_date(checker, timeout_ms, start_ms) do
+    now = System.monotonic_time(:millisecond)
+    oracle_rows = query_oracle(checker)
+    materialized = materialized_rows(checker)
+
+    if materialized == oracle_rows do
+      # Oracle matches - we have all the expected data
+      checker
+    else
+      # Oracle differs - Electric hasn't sent all changes yet
+      # Start or continue retry window
+      retry_start = checker.retry_start_ms || now
+
+      if now - retry_start >= @default_retry_window_ms do
+        # Exceeded retry window - give up (will fail in verify step)
+        checker
+      else
+        # Continue retrying - reset got_changes? so we keep polling
+        checker = %{checker | retry_start_ms: retry_start, got_changes?: false}
+        do_await(checker, timeout_ms, start_ms)
+      end
+    end
+  end
+
+  defp apply_messages(checker, messages) do
+    Enum.reduce(messages, checker, fn msg, acc ->
+      apply_message(acc, msg)
+    end)
+  end
+
   @doc """
-  Apply a change message to update the checker's materialized rows.
+  Apply a message to update the checker's materialized rows.
   """
   def apply_message(checker, %ChangeMessage{} = msg) do
     apply_change(checker, msg)
   end
 
+  def apply_message(checker, %ControlMessage{}) do
+    checker
+  end
+
+  def apply_message(checker, _other) do
+    checker
+  end
+
   defp reset_events(checker) do
-    %{checker | must_refetch?: false, error: nil, timed_out?: false}
+    %{checker | must_refetch?: false, error: nil, timed_out?: false, got_changes?: false, retry_start_ms: nil}
   end
 
   defp apply_change(checker, %ChangeMessage{headers: %{operation: :delete}, value: value}) do
@@ -212,10 +257,10 @@ defmodule Support.OracleHarness.ShapeChecker do
   end
 
   @doc """
-  Stop the checker's StreamConsumer.
+  Stop the checker. No-op with polling (no background process).
   """
-  def stop(%__MODULE__{consumer: consumer}) do
-    StreamConsumer.stop(consumer)
+  def stop(%__MODULE__{}) do
+    :ok
   end
 
   # Private helpers
