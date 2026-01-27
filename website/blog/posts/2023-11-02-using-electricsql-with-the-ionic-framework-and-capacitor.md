@@ -46,7 +46,7 @@ The full source code of the app is here: [electric/examples/ionic-demo/](https:/
 
 ## Using Electric in an Ionic React app
 
-The `/src/electric.ts` file from our starter contains an `initElectric` function that first creates a local SQLite database, and then “Electrifies” it. This needs to be modified to use the Capacitor driver rather than the wa-sqlite based driver. However, in order to support both web deployments and Capacitor, we modify `initElectric` to conditionally set up either a wa-sqlite, or a Capacitor SQLite drive, depending on whether it is running in a native app or otherwise.
+The `/src/electric.ts` file from our starter contains an `initElectric` function that first creates a local SQLite database, and then “Electrifies” it. This needs to be modified to use the Capacitor driver rather than the wa-sqlite based driver. However, in order to support both web deployments and Capacitor, we modify `initElectric` to conditionally set up either a wa-sqlite, or a Capacitor SQLite driver, depending on whether it is running in a native app or otherwise.
 
 ```typescript
 // src/electric.ts

@@ -601,24 +601,24 @@ span.no-visual {
 .vp-doc .features-content a.header-anchor {
   display: none;
 }
-.home-use-cases-diagramme {
+.home-use-cases-diagram {
   max-width: 920px !important;
   margin: 10px auto !important;
 }
-.home-use-cases-diagramme img {
+.home-use-cases-diagram img {
   width: 100%;
 }
-.home-use-cases-diagramme .sm-diagramme {
+.home-use-cases-diagram .sm-diagram {
   margin-top: 24px;
 }
 @media (max-width: 449px) {
-  .home-use-cases-diagramme {
+  .home-use-cases-diagram {
     margin-left: -10px !important;
     margin-right: -10px !important;
   }
 }
 @media (max-width: 409px) {
-  .home-use-cases-diagramme {
+  .home-use-cases-diagram {
     margin-left: -15px !important;
     margin-right: -15px !important;
   }

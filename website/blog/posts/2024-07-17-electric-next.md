@@ -46,13 +46,13 @@ To go from core database replication technology to a viable solution for buildin
     <div class="img-border">
       <a href="/img/about/schema-evolution.jpg">
         <img src="/img/about/schema-evolution.jpg"
-            alt="Schema evolution diagramme"
+            alt="Schema evolution diagram"
         />
       </a>
     </div>
   </div>
   <figcaption class="figure-caption text-end">
-    Schema evolution diagramme from the previous
+    Schema evolution diagram from the previous
     <a href="https://legacy.electric-sql.com/docs/reference/architecture" target="_blank">
       architecture&nbsp;page</a>.
   </figcaption>
@@ -102,7 +102,7 @@ Gabriel contrasts "Worse is Better" with a make the "Right Thing" approach that 
 
 #### The motivation for Electric Next
 
-So, hopefully now our motivation is clear. We needed to find a way to simplify Electric and make it more loosely coupled. To pare it back to it's core and iterate on solid foundations.
+So, hopefully now our motivation is clear. We needed to find a way to simplify Electric and make it more loosely coupled. To pare it back to its core and iterate on solid foundations.
 
 ## What's changed?
 
@@ -125,7 +125,7 @@ We now see Electric as a sync engine that does partial replication on top of Pos
     <div class="img-border">
       <a href="/img/about/in-and-out-of-scope.jpg">
         <img src="/img/about/in-and-out-of-scope.png"
-            alt="System responsibilities diagramme"
+            alt="System responsibilities diagram"
         />
       </a>
     </div>
@@ -135,7 +135,7 @@ We now see Electric as a sync engine that does partial replication on top of Pos
   </figcaption>
 </figure>
 
-The diagramme above and table below summarise what we see as core and what we've pushed out of scope.
+The diagram above and table below summarise what we see as core and what we've pushed out of scope.
 
 | Aspect                                              | Is it core? | Who should/can provide?                                                                                                                                                                                                                      |
 | --------------------------------------------------- | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -153,9 +153,9 @@ The diagramme above and table below summarise what we see as core and what we've
 
 ### HTTP Protocol
 
-One of the key aspects that has changed in the core sync engine is a switch from the [Satellite web socket replication prototol](https://legacy.electric-sql.com/docs/api/satellite) to an HTTP replication protocol.
+One of the key aspects that has changed in the core sync engine is a switch from the [Satellite web socket replication protocol](https://legacy.electric-sql.com/docs/api/satellite) to an HTTP replication protocol.
 
-Switching to an HTTP protocol may at first seem like a regression or a strange fit. Web sockets are build on top of HTTP specifically to serve the kind of realtime data stream that Electric provides. However, they are also more stateful and harder to cache.
+Switching to an HTTP protocol may at first seem like a regression or a strange fit. Web sockets are built on top of HTTP specifically to serve the kind of realtime data stream that Electric provides. However, they are also more stateful and harder to cache.
 
 By switching to the [new HTTP API](/docs/api/http), the new system:
 
@@ -175,13 +175,13 @@ The previous Electric supported a single primary write-path pattern &mdash; [wri
     <div class="img-border">
       <a href="/img/about/data-flow.jpg">
         <img src="/img/about/data-flow.jpg"
-            alt="Data flow diagramme"
+            alt="Data flow diagram"
         />
       </a>
     </div>
   </div>
   <figcaption class="figure-caption text-end">
-    Data flow diagramme from the previous
+    Data flow diagram from the previous
     <a href="https://legacy.electric-sql.com/docs/reference/architecture" target="_blank">
       architecture&nbsp;page</a>.
   </figcaption>
@@ -222,7 +222,7 @@ The core use case for Electric is to sync subsets of data out of Postgres into l
         <img srcset="/img/about/use-cases.sm.png 1098w, /img/about/use-cases.png 1484w"
             sizes="(max-width: 767px) 600px, 1484px"
             src="/img/about/use-cases.png"
-            alt="Use cases diagramme"
+            alt="Use cases diagram"
         />
       </a>
     </div>
@@ -254,7 +254,7 @@ You can sync data into:
 
 ### Previous system
 
-Electric Next has superceded the previous Electric.
+Electric Next has superseded the previous Electric.
 
 - some parts of the old system were cherry-picked and ported over
 - some parts may be cut out into optional libraries, for example the [DDLX implementation](https://github.com/electric-sql/electric/pull/1393)

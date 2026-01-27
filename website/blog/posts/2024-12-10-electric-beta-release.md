@@ -97,7 +97,7 @@ The chart below is from our [cloud benchmarks](/docs/reference/benchmarks#cloud)
   <ScalabilityChart />
 </figure>
 
-You can also see how large-scale apps built with Electric feel to use with our updated [ Linearlite](/demos/linearlite) demo. This is a [Linear](https://linear.app) clone that loads 100,000k issues and their comments through Electric into PGlite (~150mb of data). Once loaded, it's fully interactive and feels instant to use:
+You can also see how large-scale apps built with Electric feel to use with our updated [ Linearlite](/demos/linearlite) demo. This is a [Linear](https://linear.app) clone that loads 100k issues and their comments through Electric into PGlite (~150mb of data). Once loaded, it's fully interactive and feels instant to use:
 
 <figure>
   <p>

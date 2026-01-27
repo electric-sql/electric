@@ -130,7 +130,7 @@ const conn = new pg.Client({
 await conn.connect()
 
 // Instantiate your electric client.
-const electric = await electrify(conn, schema, , {
+const electric = await electrify(conn, schema, {
   url: 'https://example.com:5133'
 })
 ```

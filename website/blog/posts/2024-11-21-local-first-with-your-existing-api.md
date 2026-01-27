@@ -16,7 +16,7 @@ import AuthorizingProxy from '/static/img/docs/guides/auth/authorizing-proxy.png
 import AuthorizingProxySmall from '/static/img/docs/guides/auth/authorizing-proxy.sm.png?url'
 import AuthorizingProxyJPG from '/static/img/docs/guides/auth/authorizing-proxy.jpg?url'
 import BrowserConsolePNG from '/static/img/blog/browser-console.png?url'
-import NoStaleDataJGP from '/static/img/blog/no-stale-data.jpg?url'
+import NoStaleDataJPG from '/static/img/blog/no-stale-data.jpg?url'
 
 import { onMounted } from 'vue'
 
@@ -110,8 +110,8 @@ Because Electric syncs data [over HTTP](#http-and-json), you can use existing mi
 To build local-first you have to have the data locally. If you're doing that with data fetching then you have a stale data problem. Because if you're working with local data without keeping it in sync, then how do you know that it's not stale?
 
 <figure style="max-width: 512px">
-  <a :href="NoStaleDataJGP">
-    <img :src="NoStaleDataJGP" />
+  <a :href="NoStaleDataJPG">
+    <img :src="NoStaleDataJPG" />
   </a>
 </figure>
 
@@ -358,7 +358,7 @@ $ curl -sX POST "http://localhost:4000/gatekeeper/items" | jq
 }
 ```
 
-Then use the token to authorize requests to Electic, via the proxy, e.g.:
+Then use the token to authorize requests to Electric, via the proxy, e.g.:
 
 ```console
 $ curl -sv --header "Authorization: Bearer <token>" \
@@ -368,20 +368,20 @@ $ curl -sv --header "Authorization: Bearer <token>" \
 ...
 ```
 
-The [Typescript client](/docs/api/clients/typescript) supports auth headers and `401` / `403`error handling, so you can wrap this up using, e.g.:
+The [Typescript client](/docs/api/clients/typescript) supports auth headers and `401` / `403` error handling, so you can wrap this up using, e.g.:
 
 <<< @../../examples/gatekeeper-auth/client/index.ts{ts}
 
 ### Writes
 
-Electric does [read-path](#read-path) sync. That's the bit between Postgres and the client in the diagramme below. Electric **does not** handle writes. That's the dashed blue arrows around the outside, back from the client into Postgres:
+Electric does [read-path](#read-path) sync. That's the bit between Postgres and the client in the diagram below. Electric **does not** handle writes. That's the dashed blue arrows around the outside, back from the client into Postgres:
 
 <figure>
   <a href="/img/api/shape-log.jpg">
     <img srcset="/img/api/shape-log.sm.png 1064w, /img/api/shape-log.png 1396w"
         sizes="(max-width: 767px) 600px, 1396px"
         src="/img/api/shape-log.png"
-        alt="Shape log flow diagramme"
+        alt="Shape log flow diagram"
     />
   </a>
 </figure>
@@ -406,7 +406,7 @@ If you then look at the [optimistic state pattern](/docs/guides/writes#optimisti
 
 <<< @../../examples/write-patterns/patterns/2-optimistic-state/index.tsx{tsx}
 
-You can also see the [shared persistent optimistic state](https://github.com/electric-sql/electric/tree/main/examples/write-ptterns/patterns/3-shared-persistent) pattern for a more resilient, comprehensive approach to building local-first apps with Electric on optimistic state.
+You can also see the [shared persistent optimistic state](https://github.com/electric-sql/electric/tree/main/examples/write-patterns/patterns/3-shared-persistent) pattern for a more resilient, comprehensive approach to building local-first apps with Electric on optimistic state.
 
 #### Write-path sync
 
@@ -476,7 +476,7 @@ You can debug on the command line [using `curl`](/docs/quickstart#http-api).
 
 ### Browser console
 
-One of the most aspects of this is being able to see and easily introspect sync requests in the browser console. This allows you to see what data is being sent through when and also allows you to observe caching and and offline behaviour.
+One of the most important aspects of this is being able to see and easily introspect sync requests in the browser console. This allows you to see what data is being sent through when and also allows you to observe caching and offline behaviour.
 
 <p style="max-width: 512px">
   <a :href="BrowserConsolePNG">

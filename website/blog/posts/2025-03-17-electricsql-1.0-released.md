@@ -63,7 +63,7 @@ Electric is stable, reliable and scales. It's been stress-tested in production f
 
 We process millions of requests and transactions each day. With hundreds of thousands of active [shapes](/docs/guides/shapes) and application users.
 
-The chart below is from our [cloud benchmarks](/docs/reference/benchmarks#cloud), showing flat, low latency and memory use scaling sync to 1 million concurrent clients on a single community Postgres:
+The chart below is from our [cloud benchmarks](/docs/reference/benchmarks#cloud), showing flat, low latency and memory use scaling sync to 1 million concurrent clients on a single commodity Postgres:
 
 <figure>
   <ScalabilityChart />

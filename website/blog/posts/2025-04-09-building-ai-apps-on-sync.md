@@ -22,10 +22,10 @@ post: true
   figure {
     margin: 32px 0;
   }
-  .partial-replication-diagramme {
+  .partial-replication-diagram {
     margin: 32px 0;
   }
-  .partial-replication-diagramme :deep(.container) {
+  .partial-replication-diagram :deep(.container) {
     margin: 0px 0px 10px;
   }
   video {
@@ -178,7 +178,7 @@ That's what sync engines like Electric and [Figma's LiveGraph](https://www.figma
 
 For example, with Electric, you can define partial replication using [Shapes](/docs/guides/shapes):
 
-<div class="partial-replication-diagramme">
+<div class="partial-replication-diagram">
   <a href="/docs/guides/shapes" class="no-visual">
     <Card background="var(--vp-code-block-bg)">
       <PartialReplicationDiagramme />

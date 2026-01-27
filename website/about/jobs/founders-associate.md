@@ -29,7 +29,7 @@ You are a generalist and future founder. You want to join an existing, Seed-stag
 
 [Electric](/) is a devtools startup. We solve [reactive, real-time sync](/blog/2025/07/29/super-fast-apps-on-sync-with-tanstack-db) across client and server. We have a large developer community, millions of downloads a week, high profile customers and [top-tier investors](/about/team#investors), including the founders of companies like Supabase and Heroku. Our software is built into platforms like Firebase, Prisma and TanStack. Our cloud product is growing 7% week on week.
 
-This is a hands-on, operational role. Your job will be to take over and manage as much of the company operations as you can. You'll work directly with [the founders and founding team](/about/team). Reporting to and working closely with the CEO. You must be the opposite of a prevaricator. You have to drive and get stuff done yourself. As the company grows, your role will grow. There is no ceiling here.
+This is a hands-on, operational role. Your job will be to take over and manage as much of the company operations as you can. You'll work directly with [the founders and founding team](/about/team), reporting to and working closely with the CEO. You must be the opposite of a prevaricator. You have to drive and get stuff done yourself. As the company grows, your role will grow. There is no ceiling here.
 
 You'll handle everything and anything. From paying invoices, tracking metrics and organising events to marketing automation, customer success and solving scaling problems. You need to pick things up, handle them and then either resource or automate them. Everything is either a technology problem or a team design problem. With agents, those lines are blurring.
 

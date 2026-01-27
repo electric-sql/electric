@@ -80,7 +80,7 @@ The Electric sync engine syncs [little subsets](/docs/guides/shapes) of data out
 <img srcset="/img/about/use-cases.sm.png 1098w, /img/about/use-cases.png 1484w"
     sizes="(max-width: 767px) 600px, 1484px"
     src="/img/about/use-cases.png"
-    alt="Use cases diagramme"
+    alt="Use cases diagram"
 />
 
 You can sync data into:
@@ -101,11 +101,11 @@ It connects to your Postgres using a [`DATABASE_URL`](/docs/api/config#database-
     <img srcset="/img/api/shape-log.sm.png 1064w, /img/api/shape-log.png 1396w"
         sizes="(max-width: 767px) 600px, 1396px"
         src="/img/api/shape-log.png"
-        alt="Shape log flow diagramme"
+        alt="Shape log flow diagram"
     />
   </a>
   <figcaption class="figure-caption text-end">
-    Shape log flow diagramme.
+    Shape log flow diagram.
   </figcaption>
 </figure>
 
