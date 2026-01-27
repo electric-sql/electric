@@ -910,7 +910,7 @@ paths:
                     WHERE clause to filter the subset of data.
 
                     This filter is applied in addition to the main shape's WHERE clause.
-                  example: "priority = $1 AND status = $2"
+                  example: 'priority = $1 AND status = $2'
                 params:
                   type: object
                   additionalProperties:
@@ -938,7 +938,7 @@ paths:
                   description: |-
                     ORDER BY clause for the subset snapshot. Required when using
                     `limit` or `offset`.
-                  example: "created_at DESC"
+                  example: 'created_at DESC'
             examples:
               simple_filter:
                 summary: Simple WHERE filter
@@ -947,22 +947,22 @@ paths:
               parameterized_filter:
                 summary: Parameterized filter
                 value:
-                  where: "priority = $1"
+                  where: 'priority = $1'
                   params:
                     '1': 'high'
               paginated_query:
                 summary: Paginated query with ordering
                 value:
-                  where: "status = $1"
+                  where: 'status = $1'
                   params:
                     '1': 'open'
-                  order_by: "created_at DESC"
+                  order_by: 'created_at DESC'
                   limit: 20
                   offset: 0
               large_in_list:
                 summary: Large IN list (common in join queries)
                 value:
-                  where: "id = ANY($1)"
+                  where: 'id = ANY($1)'
                   params:
                     '1': '{id1,id2,id3,id4,id5,id6,id7,id8,id9,id10}'
       responses:
