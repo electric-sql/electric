@@ -61,7 +61,10 @@ import Section from '../Section.vue'
       >. Used by
       <span class="hidden-sm"> products like </span>
       <span class="no-wrap">
-        <a href="https://trigger.dev/product/realtime" target="_blank">Trigger</a> and <a href="https://ottogrid.ai" target="_blank">Otto</a></span
+        <a href="https://trigger.dev/product/realtime" target="_blank"
+          >Trigger</a
+        >
+        and <a href="https://ottogrid.ai" target="_blank">Otto</a></span
       >.
     </template>
     <div class="quotes">

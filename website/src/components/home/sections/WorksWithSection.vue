@@ -420,11 +420,10 @@ onMounted(() => {
         <div class="data-sources">
           <div class="data-source">
             <div class="data-source-header">
-              <img
-                src="/img/icons/electric.svg"
-                class="data-source-icon"
-              />
-              <a href="/products/postgres-sync" class="data-source-label no-visual"
+              <img src="/img/icons/electric.svg" class="data-source-icon" />
+              <a
+                href="/products/postgres-sync"
+                class="data-source-label no-visual"
                 >Database sync</a
               >
             </div>
@@ -438,7 +437,9 @@ onMounted(() => {
                 src="/img/icons/durable-streams.svg"
                 class="data-source-icon"
               />
-              <a href="/products/durable-streams" class="data-source-label no-visual"
+              <a
+                href="/products/durable-streams"
+                class="data-source-label no-visual"
                 >Real-time streams</a
               >
             </div>
@@ -494,11 +495,13 @@ onMounted(() => {
       <div class="col your-app-col">
         <div class="data-source data-source-full">
           <div class="data-source-header">
-            <img
-              src="/img/icons/tanstack.svg"
-              class="data-source-icon"
-            />
-            <a href="/products/tanstack-db" class="data-source-label no-visual" style="margin-left: 2px">Live data</a>
+            <img src="/img/icons/tanstack.svg" class="data-source-icon" />
+            <a
+              href="/products/tanstack-db"
+              class="data-source-label no-visual"
+              style="margin-left: 2px"
+              >Live data</a
+            >
           </div>
           <div class="data-source-code" id="works-with-tsx">
             <div v-if="tsx !== undefined" v-html="tsx"></div>

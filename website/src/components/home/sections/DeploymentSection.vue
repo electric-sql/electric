@@ -47,11 +47,7 @@ const secondaryOptions = [
                 </p>
               </div>
               <div class="cloud-actions">
-                <VPButton
-                    href="/cloud"
-                    text="Learn more"
-                    theme="brand"
-                />
+                <VPButton href="/cloud" text="Learn more" theme="brand" />
               </div>
             </div>
           </div>

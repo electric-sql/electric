@@ -6,12 +6,12 @@ const actions = [
   {
     href: '/products',
     text: 'Products',
-    theme: 'brand'
+    theme: 'brand',
   },
   {
     href: '/docs',
-    text: 'Docs'
-  }
+    text: 'Docs',
+  },
 ]
 </script>
 

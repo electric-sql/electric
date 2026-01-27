@@ -55,11 +55,11 @@ const panels = [
         The best way to <span class="no-wrap">build apps</span>
       </template>
       <template #tagline>
-        Sync makes your apps super-fast, with end-to-end reactivity, resilience and
+        Sync makes your apps super-fast, with end-to-end reactivity, resilience
+        and
         <span class="no-wrap-sm">
           built-in
-          <span class="no-wrap">
-            multi-user</span>
+          <span class="no-wrap"> multi-user</span>
           collaboration.
         </span>
       </template>
@@ -163,9 +163,7 @@ const panels = [
 
 .panel-content {
   min-width: 0;
-  padding:
-    var(--padding-height)
-    var(--padding-width)
+  padding: var(--padding-height) var(--padding-width)
     calc(var(--padding-height))
     calc(var(--padding-width) - var(--extra-padding-width));
 }

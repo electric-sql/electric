@@ -21,7 +21,7 @@ const actions = [
     href: 'https://x.com/ElectricSQL',
     text: 'Follow',
     classes: 'block-xs',
-  }
+  },
 ]
 </script>
 
@@ -69,7 +69,9 @@ const actions = [
 
 <template>
   <Section :actions="actions">
-    <template #title> Latest <span class="hidden-sm">news and</span> updates</template>
+    <template #title>
+      Latest <span class="hidden-sm">news and</span> updates</template
+    >
     <template #tagline>
       Subscribe to the
       <a href="/blog">Electric Blog</a>

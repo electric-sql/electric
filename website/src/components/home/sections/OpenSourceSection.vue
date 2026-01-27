@@ -107,7 +107,12 @@ onUnmounted(() => {
           width="350"
           height="523"
           sandbox="allow-popups allow-same-origin allow-popups-to-escape-sandbox allow-scripts"
-          style="width: 100%; border: 1px solid rgba(48, 54, 61, 0.5); border-radius: 8px; overflow: hidden"
+          style="
+            width: 100%;
+            border: 1px solid rgba(48, 54, 61, 0.5);
+            border-radius: 8px;
+            overflow: hidden;
+          "
         >
         </iframe>
         <div v-else class="discord-placeholder">Loading Discord...</div>

@@ -8,7 +8,9 @@ import RequestResponseSmall from '/static/img/blog/durable-sessions-for-collabor
 import SyncBased from '/static/img/blog/durable-sessions-for-collaborative-ai/sync-based-architecture.jpg?url'
 import SyncBasedSmall from '/static/img/blog/durable-sessions-for-collaborative-ai/sync-based-architecture.sm.jpg?url'
 
-const post = data.find((p) => p.path.includes('durable-sessions-for-collaborative-ai'))
+const post = data.find((p) =>
+  p.path.includes('durable-sessions-for-collaborative-ai')
+)
 
 const actions = [
   {
@@ -18,16 +20,14 @@ const actions = [
   },
   {
     href: '/cloud',
-    text: 'Cloud'
-  }
+    text: 'Cloud',
+  },
 ]
 </script>
 
 <template>
   <Section :actions="actions">
-    <template #title>
-      The key to collaborative&nbsp;AI
-    </template>
+    <template #title> The key to collaborative&nbsp;AI </template>
     <template #tagline>
       As the world moves to getting things done through agents, the&nbsp;winners
       are the&nbsp;products that combine AI with
@@ -35,18 +35,22 @@ const actions = [
     </template>
     <div class="paradigm-comparison">
       <div class="paradigm-panel">
-        <h3>❌&nbsp; Single-user <span class="no-wrap">&lt;&gt; single-agent</span></h3>
+        <h3>
+          ❌&nbsp; Single-user
+          <span class="no-wrap">&lt;&gt; single-agent</span>
+        </h3>
         <div>
           <p>
-            AI apps and agentic systems built on a single-user &lt;&gt; single-agent,
-            request &lt;&gt; response paradigm don't cut it.
+            AI apps and agentic systems built on a single-user &lt;&gt;
+            single-agent, request &lt;&gt; response paradigm don't cut it.
           </p>
           <p>
-            Requests are fragile and hard to resume. The UI blocks while they stream back. Local state isn't shared.
+            Requests are fragile and hard to resume. The UI blocks while they
+            stream back. Local state isn't shared.
           </p>
           <p>
-            It's hard to support either the real-time or async collaboration that are
-            key to product-led-growth and enterprise adoption.
+            It's hard to support either the real-time or async collaboration
+            that are key to product-led-growth and enterprise adoption.
           </p>
         </div>
         <figure>
@@ -55,12 +59,16 @@ const actions = [
         </figure>
       </div>
       <div class="paradigm-panel">
-        <h3>✅&nbsp; Multi-user <span class="no-wrap">&lt;&gt; multi-agent</span></h3>
+        <h3>
+          ✅&nbsp; Multi-user <span class="no-wrap">&lt;&gt; multi-agent</span>
+        </h3>
         <p>
-          With sync, state is persistent, addressable and shared. You get multi-tab, multi-device, multi-user and multi-agent built in.
+          With sync, state is persistent, addressable and shared. You get
+          multi-tab, multi-device, multi-user and multi-agent built in.
         </p>
         <p>
-          You unlock product-led growth and can weave your product into your customers' workflows and governance stuctures.
+          You unlock product-led growth and can weave your product into your
+          customers' workflows and governance stuctures.
         </p>
         <figure>
           <img :src="SyncBased" class="hidden-sm" />

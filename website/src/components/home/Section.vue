@@ -1,7 +1,11 @@
 <script setup>
 import Actions from './Actions.vue'
 
-const { actions, dark, wideSectionHead } = defineProps(['actions', 'dark', 'wideSectionHead'])
+const { actions, dark, wideSectionHead } = defineProps([
+  'actions',
+  'dark',
+  'wideSectionHead',
+])
 </script>
 
 <style scoped>

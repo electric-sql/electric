@@ -5,20 +5,20 @@ import { data as products } from '../../../data/products.data.ts'
 const { productPage } = defineProps({
   productPage: {
     type: Boolean,
-    default: false
-  }
+    default: false,
+  },
 })
 </script>
 
 <template>
   <div class="products-grid" :class="{ 'product-page': productPage }">
     <div v-for="product in products" :key="product.slug" class="product-card">
-      <Card
-        :href="product.href"
-        :icon="product.icon"
-        :title="product.title">
+      <Card :href="product.href" :icon="product.icon" :title="product.title">
         <template v-if="productPage">
-          <p class="body-p"><span v-html="product.body" />. <span class="detail" v-html="`${product.detail}.`" /></p>
+          <p class="body-p">
+            <span v-html="product.body" />.
+            <span class="detail" v-html="`${product.detail}.`" />
+          </p>
         </template>
         <template v-else>
           <p class="body-p" v-html="product.body" />
@@ -85,7 +85,6 @@ const { productPage } = defineProps({
 .products-grid :deep(.breaker) {
   display: inline;
 }
-
 
 @media (min-width: 1149px) {
   .products-grid:not(.product-page) :deep(.icon),
