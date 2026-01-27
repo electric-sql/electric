@@ -1,0 +1,31 @@
+# Sprite VM override - use host networking (bridge networking not supported)
+# Usage: docker compose -f docker-compose.yml -f docker-compose.sprite.yml up -d
+
+services:
+  postgres:
+    network_mode: host
+    command:
+      - -c
+      - config_file=/etc/postgresql.conf
+      - -p
+      - "54321"
+    healthcheck:
+      test: ["CMD", "pg_isready", "-p", "54321"]
+
+  postgres2:
+    network_mode: host
+    command:
+      - -c
+      - config_file=/etc/postgresql.conf
+      - -p
+      - "54322"
+
+  pgbouncer:
+    network_mode: host
+    environment:
+      PGBOUNCER_PORT: 65432
+      POSTGRESQL_HOST: 127.0.0.1
+      POSTGRESQL_PORT: 54321
+
+  nginx:
+    network_mode: host

@@ -57,6 +57,25 @@ iex -S mix      # run service locally
 - `dev/docker-compose.yml` provides Postgres (54321), Postgres2 (54322),
   pgbouncer (65432), nginx (3002).
 
+### Sprite VM
+
+Docker bridge networking is not supported in Sprite (namespace creation is
+blocked). Use the override file for host networking:
+
+```sh
+docker compose -f dev/docker-compose.yml -f dev/docker-compose.sprite.yml up -d
+```
+
+Or detect automatically in scripts:
+
+```sh
+if [ -e "/.sprite/api.sock" ]; then
+  docker compose -f dev/docker-compose.yml -f dev/docker-compose.sprite.yml up -d
+else
+  docker compose -f dev/docker-compose.yml up -d
+fi
+```
+
 ## Tests
 
 - Unit tests live in `test/`;
