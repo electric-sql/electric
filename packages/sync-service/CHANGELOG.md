@@ -1,5 +1,16 @@
 # @core/sync-service
 
+## 1.3.4
+
+### Patch Changes
+
+- a1b736f: Fix dependency tracking for nested subqueries when intermediate rows change their linking column without changing the tracked column. Previously, such updates were incorrectly filtered out, causing stale tag tracking that led to incorrect row deletions when the old parent lost its qualifying status.
+- dba090e: Fix RelationTracker not syncing with Configurator after restart
+
+  When the RelationTracker restarts while the Configurator is still running, it now properly notifies the Configurator of the restored filters. Previously, after a RelationTracker restart, subsequent shape removals would not update the publication because the internal filter state was inconsistent.
+
+- ba6dd2c: Optimize shape metadata operations by introducing an ETS-based write-through cache with asynchronous SQLite writes
+
 ## 1.3.3
 
 ### Patch Changes

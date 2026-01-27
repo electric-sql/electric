@@ -1,5 +1,11 @@
 # @electric-sql/client
 
+## 1.4.2
+
+### Patch Changes
+
+- a428324: Fix infinite loop in replay mode when CDN returns the same cursor repeatedly. The client now exits replay mode after the first suppressed up-to-date notification, preventing the loop while still correctly suppressing duplicate notifications from cached responses.
+
 ## 1.4.1
 
 ### Patch Changes
