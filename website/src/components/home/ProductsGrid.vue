@@ -2,8 +2,8 @@
 import Card from './Card.vue'
 import { data as products } from '../../../data/products.data.ts'
 
-const { fullWidth } = defineProps({
-  fullWidth: {
+const { productPage } = defineProps({
+  productPage: {
     type: Boolean,
     default: false
   }
@@ -11,14 +11,14 @@ const { fullWidth } = defineProps({
 </script>
 
 <template>
-  <div class="products-grid" :class="{ 'full-width': fullWidth }">
+  <div class="products-grid" :class="{ 'product-page': productPage }">
     <div v-for="product in products" :key="product.slug" class="product-card">
       <Card
         :href="product.href"
         :icon="product.icon"
         :title="product.title">
-        <template v-if="fullWidth">
-          <p class="body-p" v-html="`${product.body}. <span class='no-wrap-md'>${product.detail}.</span>`" />
+        <template v-if="productPage">
+          <p class="body-p"><span v-html="product.body" />. <span class="detail" v-html="`${product.detail}.`" /></p>
         </template>
         <template v-else>
           <p class="body-p" v-html="product.body" />
@@ -37,12 +37,27 @@ const { fullWidth } = defineProps({
   gap: 24px;
   margin: 32px 0px 40px;
 }
-.products-grid.full-width {
-  grid-template-columns: 1fr;
+.products-grid.product-page {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
-.products-grid.full-width .body-p {
+.products-grid.product-page .body-p {
   max-width: 450px;
   padding-bottom: 8px;
+}
+.products-grid.product-page :deep(.no-wrap),
+.products-grid.product-page :deep(.no-wrap-xs),
+.products-grid.product-page :deep(.no-wrap-sm),
+.products-grid.product-page :deep(.no-wrap-md) {
+  white-space: normal;
+}
+@media (max-width: 559px) {
+  .products-grid.product-page {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+  .products-grid.product-page .detail {
+    display: none;
+  }
 }
 .products-grid .body-p {
   margin-top: 8px !important;
@@ -71,59 +86,51 @@ const { fullWidth } = defineProps({
   display: inline;
 }
 
-.products-grid.full-width :deep(.no-wrap-md) {
-  white-space: nowrap;
-}
-@media (max-width: 640px) {
-  .products-grid.full-width :deep(.no-wrap-md) {
-    white-space: normal;
-  }
-}
 
 @media (min-width: 1149px) {
-  .products-grid:not(.full-width) :deep(.icon),
-  .products-grid:not(.full-width) :deep(.body) {
+  .products-grid:not(.product-page) :deep(.icon),
+  .products-grid:not(.product-page) :deep(.body) {
     margin: 0 calc(-15px + 1vw);
   }
 }
 
 @media (max-width: 1149px) {
-  .products-grid:not(.full-width) {
+  .products-grid:not(.product-page) {
     grid-template-columns: repeat(2, 1fr);
     gap: 24px;
   }
 }
 
 @media (max-width: 930px) {
-  .products-grid:not(.full-width) :deep(.breaker) {
+  .products-grid:not(.product-page) :deep(.breaker) {
     display: block;
   }
-  .products-grid:not(.full-width) hr,
-  .products-grid:not(.full-width) .detail-p {
+  .products-grid:not(.product-page) hr,
+  .products-grid:not(.product-page) .detail-p {
     display: none;
   }
 }
 
 @media (max-width: 559px) {
-  .products-grid:not(.full-width) {
+  .products-grid:not(.product-page) {
     margin: 32px 0px 40px;
     gap: 20px;
     grid-template-columns: 1fr;
   }
 
-  .products-grid:not(.full-width) .product-card {
+  .products-grid:not(.product-page) .product-card {
     position: relative;
     display: block;
     width: 100%;
     margin: 0 auto;
   }
 
-  .products-grid:not(.full-width) :deep(.breaker) {
+  .products-grid:not(.product-page) :deep(.breaker) {
     display: inline;
   }
 }
 @media (max-width: 429px) {
-  .products-grid:not(.full-width) :deep(.breaker) {
+  .products-grid:not(.product-page) :deep(.breaker) {
     display: block;
   }
 }

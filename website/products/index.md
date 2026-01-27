@@ -20,27 +20,25 @@ import ProductsGrid from '../src/components/home/ProductsGrid.vue'
 
 Composable sync primitives that work with your stack.
 
-<ProductsGrid fullWidth />
+<ProductsGrid productPage />
 
 ## How they fit together {#how-they-fit-together}
 
-The sync primitives are designed to compose. Postgres Sync and Durable Streams provide different data sources. TanStack DB provides a unified reactive client. PGlite provides embeddable Postgres.
+The sync primitives in the Electric stack are designed to work together and work with your API and existing infrastructure.
 
-<div class="composition-diagram">
-<pre>
-Data Sources                          Client
-──────────────────────────────────────────────────────────────
+In the diagram below, the white boxes are your components / infra.
 
-Postgres Sync ─────────────────┐
-(structured data)              │
-                               ├────→  TanStack DB
-Durable Streams ───────────────┘       (reactive client DB)
-(streams, AI, sessions)
+<figure>
+  <a href="/img/products/electric-stack-overview.lg.jpg" target="_blank">
+    <img src="/img/products/electric-stack-overview.png" />
+  </a>
+</figure>
 
+Postgres Sync connects to [your Postgres](/docs/guides/deployment#_1-running-postgres) and syncs data [over HTTP](/docs/api/http).
 
-PGlite = WASM Postgres (dev, CI, test, sandboxed runtimes)
-</pre>
-</div>
+TanStack DB is the recommended client for application development. You can sync data into TanStack DB [from Electric](https://tanstack.com/db/latest/docs/collections/electric-collection) and/or [from a Durable Stream](/blog/2026/01/12/durable-sessions-for-collaborative-ai#reference-implementation). It also provides mutation primitives that work with your backend API.
+
+PGlite is mainly used in [dev, test and sandbox environments](/blog/2025/06/05/database-in-the-sandbox). You can use it as a standalone embedded database or you can sync data into it [using Postgres Sync](https://pglite.dev/docs/sync).
 
 ## Which product should I use?
 
