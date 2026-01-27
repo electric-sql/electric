@@ -1161,9 +1161,9 @@ export class ShapeStream<T extends Row<unknown> = Row>
           const currentCursor = this.#liveCacheBuster
 
           if (currentCursor === this.#lastSeenCursor) {
-            // Same cursor = still replaying cached responses
-            // Suppress this up-to-date notification, but exit replay mode
-            // to prevent infinite loop if CDN keeps returning same cursor
+            // Same cursor as previous session - suppress this up-to-date notification.
+            // Exit replay mode after first suppression to ensure we don't get stuck
+            // if CDN keeps returning the same cursor indefinitely.
             this.#lastSeenCursor = undefined
             return
           }

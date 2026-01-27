@@ -378,26 +378,27 @@ describe(`UpToDateTracker`, () => {
     })
 
     // Wait for up-to-date message or timeout
-    await Promise.race([
-      new Promise<void>((resolve) => {
-        stream.subscribe((messages) => {
-          for (const msg of messages) {
-            if (`headers` in msg && msg.headers.control === `up-to-date`) {
-              gotUpToDate = true
-              aborter.abort()
-              resolve()
-              return
-            }
-          }
-        })
-      }),
-      new Promise<void>((resolve) => {
-        setTimeout(() => {
+    const upToDatePromise = new Promise<void>((resolve) => {
+      stream.subscribe((messages) => {
+        const hasUpToDate = messages.some(
+          (msg) => `headers` in msg && msg.headers.control === `up-to-date`
+        )
+        if (hasUpToDate) {
+          gotUpToDate = true
           aborter.abort()
           resolve()
-        }, 500)
-      }),
-    ])
+        }
+      })
+    })
+
+    const timeoutPromise = new Promise<void>((resolve) => {
+      setTimeout(() => {
+        aborter.abort()
+        resolve()
+      }, 500)
+    })
+
+    await Promise.race([upToDatePromise, timeoutPromise])
 
     // With the fix: should get up-to-date within 2-3 requests
     // Without the fix: would hit maxCalls without getting up-to-date
