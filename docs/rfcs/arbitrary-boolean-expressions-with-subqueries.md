@@ -270,6 +270,42 @@ When value 'a' moves out of subquery at position 0:
 
 No server query needed — clients have all information to determine if row should be removed.
 
+### Replication Stream Updates
+
+When the outer shape receives an insert/update/delete from the replication stream:
+
+1. **Compute `active_conditions`** — For each position in the DNF, determine if the condition is satisfied:
+   - **Subquery positions**: Check `MapSet.member?(materialized_values, row_value)` using the dependency shape's materializer
+   - **Field positions**: Evaluate the simple comparison against the row's data
+
+   This replaces the current `includes_record?` call — we compute per-position results rather than a single boolean.
+
+2. **Derive inclusion** — Evaluate the DNF using `active_conditions`:
+   ```
+   included = OR over disjuncts, where each disjunct = AND over its non-null positions
+   ```
+   If not included, skip the row (don't emit to shape log).
+
+3. **Compute tags** — For each disjunct, extract column values at participating positions and hash them (same as current `fill_move_tags`, extended for multiple disjuncts).
+
+4. **Emit message** — Include `tags` and `active_conditions` in the row message:
+   ```json
+   {
+     "key": "...",
+     "value": {...},
+     "headers": {
+       "operation": "update",
+       "tags": [["hash1", "hash2", null], [null, null, "hash3"]],
+       "active_conditions": [true, true, false],
+       "removed_tags": [["hash1", "hash4", null]]
+     }
+   }
+   ```
+
+This is a single pass — no separate `includes_record?` call followed by re-evaluation for `active_conditions`.
+
+For updates, if the row's tag-relevant columns changed, include `removed_tags` for the old values (as today).
+
 ### Client Requirements
 
 Clients must:
@@ -308,13 +344,15 @@ The tag-based approach is more complex than shape invalidation, but invalidation
 
 This RFC. The decomposer exists, the tag infrastructure exists, we're extending it to handle the full DNF case rather than single conditions.
 
-## Open Questions
+## Design Decisions
 
-| Question | Options | Resolution Path |
-|----------|---------|-----------------|
-| **Maximum disjuncts/positions** | Limit to 16? 32? No limit? | Benchmark memory/performance during implementation |
-| **Tag storage format** | JSON arrays vs packed binary | Prototype both, measure storage overhead |
-| **Subquery result caching** | Per-shape vs shared across shapes | Defer to future RFC if needed |
+Questions resolved during RFC development:
+
+| Question | Resolution |
+|----------|------------|
+| **Maximum disjuncts/positions** | No limit. Document trade-offs (storage, client indexing) and let users discover natural limits. |
+| **Tag storage format** | JSON arrays of hash strings, same as current implementation. |
+| **Subquery result caching** | Use current approach: subqueries are their own shapes with materializers, multiple outer shapes can reference the same inner shape. |
 
 ## Definition of Success
 
@@ -396,4 +434,4 @@ Before submitting for review, verify:
 **Completeness**
 - [x] Happy path is clear (DNF decomposition → tags → active_conditions → broadcast)
 - [x] Critical failure modes addressed (protocol versioning, client evaluation)
-- [x] Open questions acknowledged
+- [x] Design decisions documented
