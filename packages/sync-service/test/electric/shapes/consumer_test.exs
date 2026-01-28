@@ -1121,6 +1121,13 @@ defmodule Electric.Shapes.ConsumerTest do
     }
   end
 
+  defp assert_storage_calls_for_txn_fragment(shape_handle, log_offset, txn_xid, txn_op) do
+    assert_receive {Support.TestStorage, :append_fragment_to_log!, ^shape_handle,
+                    [{^log_offset, _key, ^txn_op, _json}]}
+
+    assert_receive {Support.TestStorage, :signal_txn_commit!, ^shape_handle, ^txn_xid}
+  end
+
   defp refute_storage_calls_for_txn_fragment(shape_handle) do
     refute_receive {Support.TestStorage, :append_to_log!, ^shape_handle, _}
     refute_receive {Support.TestStorage, :append_fragment_to_log!, ^shape_handle, _}
