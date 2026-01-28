@@ -253,10 +253,14 @@ defmodule Electric.Replication.ShapeLogCollector do
             fn {shape_handle, shape}, {partitions, event_router, layers, count} ->
               {:ok, partitions} = Partitions.add_shape(partitions, shape_handle, shape)
 
+              # Crash if dependencies are missing during restore - all persisted shapes
+              # should have their dependencies present since they were valid when saved.
+              {:ok, layers} = DependencyLayers.add_dependency(layers, shape, shape_handle)
+
               {
                 partitions,
                 EventRouter.add_shape(event_router, shape_handle, shape),
-                DependencyLayers.add_dependency(layers, shape, shape_handle),
+                layers,
                 count + 1
               }
             end
@@ -357,23 +361,32 @@ defmodule Electric.Replication.ShapeLogCollector do
               fn ->
                 case Partitions.add_shape(state.partitions, shape_handle, shape) do
                   {:ok, partitions} ->
-                    state =
-                      %{
-                        state
-                        | partitions: partitions,
-                          event_router:
-                            EventRouter.add_shape(state.event_router, shape_handle, shape),
-                          dependency_layers:
-                            DependencyLayers.add_dependency(
-                              state.dependency_layers,
-                              shape,
-                              shape_handle
-                            )
-                      }
-                      |> Map.update!(:subscriptions, &(&1 + 1))
-                      |> log_subscription_status()
+                    case DependencyLayers.add_dependency(
+                           state.dependency_layers,
+                           shape,
+                           shape_handle
+                         ) do
+                      {:ok, dependency_layers} ->
+                        state =
+                          %{
+                            state
+                            | partitions: partitions,
+                              event_router:
+                                EventRouter.add_shape(state.event_router, shape_handle, shape),
+                              dependency_layers: dependency_layers
+                          }
+                          |> Map.update!(:subscriptions, &(&1 + 1))
+                          |> log_subscription_status()
 
-                    {state, Map.put(results, shape_handle, :ok)}
+                        {state, Map.put(results, shape_handle, :ok)}
+
+                      {:error, {:missing_dependencies, missing_deps}} ->
+                        Logger.warning(
+                          "Shape #{shape_handle} cannot be added: missing dependencies #{inspect(MapSet.to_list(missing_deps))}"
+                        )
+
+                        {state, Map.put(results, shape_handle, {:error, :missing_dependencies})}
+                    end
 
                   {:error, :connection_not_available} ->
                     {state, Map.put(results, shape_handle, {:error, :connection_not_available})}
