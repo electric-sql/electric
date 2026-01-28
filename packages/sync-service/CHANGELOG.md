@@ -1,5 +1,11 @@
 # @core/sync-service
 
+## 1.4.1
+
+### Patch Changes
+
+- b3aa571: Fix missing `electric-offset` header in subset snapshot responses. This header was not being set for subset responses, causing POST subset requests to fail with `MissingHeadersError` in the TypeScript client.
+
 ## 1.4.0
 
 ### Minor Changes
