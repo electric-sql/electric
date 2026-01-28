@@ -39,7 +39,8 @@ defmodule Electric.Shapes.WhereClause do
       iex> compute_active_conditions(decomposition, %{"x" => 1, "y" => 2}, %{}, used_refs)
       {:ok, [true, false, true]}
   """
-  @spec compute_active_conditions(map() | nil, map(), map(), map()) :: {:ok, [boolean()]} | {:error, term()}
+  @spec compute_active_conditions(map() | nil, map(), map(), map()) ::
+          {:ok, [boolean()]} | {:error, term()}
   def compute_active_conditions(nil, _record, _extra_refs, _used_refs), do: {:ok, []}
 
   def compute_active_conditions(decomposition, record, extra_refs, used_refs) do
@@ -99,12 +100,14 @@ defmodule Electric.Shapes.WhereClause do
 
   Returns true if all literals in the conjunction are satisfied.
   """
-  @spec evaluate_conjunction([boolean()], [{non_neg_integer(), :positive | :negated}]) :: boolean()
+  @spec evaluate_conjunction([boolean()], [{non_neg_integer(), :positive | :negated}]) ::
+          boolean()
   def evaluate_conjunction(_active_conditions, []), do: true
 
   def evaluate_conjunction(active_conditions, conjunction) do
     Enum.all?(conjunction, fn {pos, polarity} ->
       value = Enum.at(active_conditions, pos, false)
+
       case polarity do
         :positive -> value == true
         :negated -> value == false
@@ -117,7 +120,9 @@ defmodule Electric.Shapes.WhereClause do
 
   Returns a list of indices (0-based) of satisfied disjuncts.
   """
-  @spec satisfied_disjuncts([boolean()], [[{non_neg_integer(), :positive | :negated}]]) :: [non_neg_integer()]
+  @spec satisfied_disjuncts([boolean()], [[{non_neg_integer(), :positive | :negated}]]) :: [
+          non_neg_integer()
+        ]
   def satisfied_disjuncts(active_conditions, disjuncts) do
     disjuncts
     |> Enum.with_index()
@@ -163,7 +168,10 @@ defmodule Electric.Shapes.WhereClause do
     end
   end
 
-  defp try_apply(%Func{implementation: impl, map_over_array_in_pos: map_over_array_in_pos} = func, args) do
+  defp try_apply(
+         %Func{implementation: impl, map_over_array_in_pos: map_over_array_in_pos} = func,
+         args
+       ) do
     case {impl, map_over_array_in_pos} do
       {{module, fun}, nil} ->
         apply(module, fun, args)
@@ -184,7 +192,10 @@ defmodule Electric.Shapes.WhereClause do
         )
 
       {function, pos} when is_function(function) ->
-        Electric.Utils.deep_map(Enum.at(args, pos), &apply(function, List.replace_at(args, pos, &1)))
+        Electric.Utils.deep_map(
+          Enum.at(args, pos),
+          &apply(function, List.replace_at(args, pos, &1))
+        )
 
       _ ->
         throw({:could_not_compute, %{func | args: args}})

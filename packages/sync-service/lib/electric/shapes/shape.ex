@@ -184,7 +184,9 @@ defmodule Electric.Shapes.Shape do
   Get all disjuncts (conjunctions) that contain the given position.
   Returns a list of {disjunct_index, conjunction} tuples.
   """
-  @spec get_disjuncts_for_position(t(), non_neg_integer()) :: [{non_neg_integer(), [{non_neg_integer(), :positive | :negated}]}]
+  @spec get_disjuncts_for_position(t(), non_neg_integer()) :: [
+          {non_neg_integer(), [{non_neg_integer(), :positive | :negated}]}
+        ]
   def get_disjuncts_for_position(%__MODULE__{dnf_decomposition: nil}, _position), do: []
 
   def get_disjuncts_for_position(%__MODULE__{dnf_decomposition: decomposition}, position) do
@@ -200,7 +202,9 @@ defmodule Electric.Shapes.Shape do
   Get all disjuncts that do NOT contain the given position.
   These are the "other" disjuncts that might still satisfy a row.
   """
-  @spec get_other_disjuncts(t(), non_neg_integer()) :: [[{non_neg_integer(), :positive | :negated}]]
+  @spec get_other_disjuncts(t(), non_neg_integer()) :: [
+          [{non_neg_integer(), :positive | :negated}]
+        ]
   def get_other_disjuncts(%__MODULE__{dnf_decomposition: nil}, _position), do: []
 
   def get_other_disjuncts(%__MODULE__{dnf_decomposition: decomposition}, position) do
@@ -215,6 +219,7 @@ defmodule Electric.Shapes.Shape do
   """
   @spec has_multiple_disjuncts?(t()) :: boolean()
   def has_multiple_disjuncts?(%__MODULE__{dnf_decomposition: nil}), do: false
+
   def has_multiple_disjuncts?(%__MODULE__{dnf_decomposition: %{disjuncts: disjuncts}}) do
     length(disjuncts) > 1
   end
@@ -478,7 +483,9 @@ defmodule Electric.Shapes.Shape do
 
   # Compute DNF decomposition and position-to-dependency mapping
   defp compute_dnf_decomposition(%{where: nil}, _comparison_expressions), do: {nil, %{}}
-  defp compute_dnf_decomposition(%{shape_dependencies: []}, _comparison_expressions), do: {nil, %{}}
+
+  defp compute_dnf_decomposition(%{shape_dependencies: []}, _comparison_expressions),
+    do: {nil, %{}}
 
   defp compute_dnf_decomposition(shape, comparison_expressions) do
     case Decomposer.decompose(shape.where.eval) do
@@ -560,7 +567,8 @@ defmodule Electric.Shapes.Shape do
   end
 
   defp expressions_match?(%Parser.RowExpr{elements: e1}, %Parser.RowExpr{elements: e2}) do
-    length(e1) == length(e2) and Enum.all?(Enum.zip(e1, e2), fn {a, b} -> expressions_match?(a, b) end)
+    length(e1) == length(e2) and
+      Enum.all?(Enum.zip(e1, e2), fn {a, b} -> expressions_match?(a, b) end)
   end
 
   defp expressions_match?(_, _), do: false

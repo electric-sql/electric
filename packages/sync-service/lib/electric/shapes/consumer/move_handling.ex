@@ -76,7 +76,12 @@ defmodule Electric.Shapes.Consumer.MoveHandling do
         if positive_positions != [] do
           # For positive positions (IN), move-out means the row should be excluded
           # If there are other disjuncts, only exclude if no longer satisfied by any
-          do_move_out_for_positions_with_check(state, dep_handle, removed_values, positive_positions)
+          do_move_out_for_positions_with_check(
+            state,
+            dep_handle,
+            removed_values,
+            positive_positions
+          )
         else
           {state, nil}
         end
@@ -91,7 +96,9 @@ defmodule Electric.Shapes.Consumer.MoveHandling do
         # removed_values is already in {tag, value} tuple format from the materializer
         # which is exactly what do_move_in_query expects
         # Pass remove_not: true to strip NOT from the WHERE clause
-        new_state = do_move_in_query(state, dep_handle, removed_values, negated_positions, remove_not: true)
+        new_state =
+          do_move_in_query(state, dep_handle, removed_values, negated_positions, remove_not: true)
+
         {new_state, notification}
       else
         {state, notification}
@@ -114,13 +121,18 @@ defmodule Electric.Shapes.Consumer.MoveHandling do
   # Query for new rows to add to the shape
   # Options:
   # - :remove_not - if true, removes NOT from the WHERE clause (for NOT IN shapes)
-  defp do_move_in_query(%State{shape: shape} = state, dep_handle, new_values, _positions, opts \\ []) do
+  defp do_move_in_query(
+         %State{shape: shape} = state,
+         dep_handle,
+         new_values,
+         _positions,
+         opts \\ []
+       ) do
     # Build the WHERE clause for the move-in query
     values = Enum.map(new_values, &elem(&1, 1))
 
     formed_where_clause =
       SubqueryMoves.move_in_where_clause(shape, dep_handle, values, opts)
-
 
     # If there are multiple disjuncts, we should exclude rows already in shape via other disjuncts
     # For now, we use the standard query - deduplication will be handled later

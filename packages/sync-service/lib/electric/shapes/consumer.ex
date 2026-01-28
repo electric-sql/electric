@@ -289,7 +289,8 @@ defmodule Electric.Shapes.Consumer do
     #   should cause move-out from the outer shape - UNLESS we have a valid DNF decomposition
     # - the shape has multiple subqueries at the same level since we can't correctly determine
     #   which dependency caused the move-in/out - UNLESS we have a valid DNF decomposition
-    has_valid_dnf? = state.shape.dnf_decomposition != nil and state.shape.dnf_decomposition.has_subqueries
+    has_valid_dnf? =
+      state.shape.dnf_decomposition != nil and state.shape.dnf_decomposition.has_subqueries
 
     should_invalidate? =
       not tagged_subqueries_enabled? or
