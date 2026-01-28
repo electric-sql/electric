@@ -463,105 +463,55 @@ describe(`ExpiredShapesCache`, () => {
   })
 
   it(`should not update offset from stale response when client already has a handle`, async () => {
-    // This test verifies a bug where:
-    // 1. Client has a valid handle (handle-B) and offset (0_0)
-    // 2. CDN returns stale cached response with expired handle (handle-A) and different offset (0_inf)
-    // 3. Third branch is taken: warning logged, handle stays as handle-B
-    // 4. BUG: Offset is updated to 0_inf from the stale response!
-    // 5. Now client has handle=B but offset=0_inf (which was for handle-A)
-    // 6. Next request uses mismatched handle/offset, causing server errors
-    //
-    // The fix: offset should NOT be updated when a stale response is detected
+    // Regression test: When CDN returns a stale response with an expired handle,
+    // the client should ignore the entire response (including offset) to prevent
+    // a mismatch between handle and offset that would cause server errors.
 
-    const expectedShapeUrl = `${shapeUrl}?table=test`
     const expiredHandle = `expired-handle-A`
     const currentHandle = `current-handle-B`
     const originalOffset = `0_0`
-    const staleOffset = `0_inf`
 
-    // Pre-populate expiredShapesCache with expired handle A
-    expiredShapesCache.markExpired(expectedShapeUrl, expiredHandle)
+    expiredShapesCache.markExpired(`${shapeUrl}?table=test`, expiredHandle)
 
-    let requestCount = 0
     let resolveFirstResponse: () => void
     const firstResponseProcessed = new Promise<void>((resolve) => {
       resolveFirstResponse = resolve
     })
 
-    fetchMock.mockImplementation((_input: RequestInfo | URL) => {
-      requestCount++
-
-      if (requestCount === 1) {
-        // First request: client has handle-B, offset is 0_0
-        // CDN returns stale cached response with expired handle-A and offset 0_inf
-        // The response also includes up-to-date so the client thinks it's done
-        return Promise.resolve(
-          new Response(
-            JSON.stringify([{ headers: { control: `up-to-date` } }]),
-            {
-              status: 200,
-              headers: {
-                'electric-handle': expiredHandle, // Stale expired handle!
-                'electric-offset': staleOffset, // Different offset from stale response
-                'electric-schema': `{"id":"int4"}`,
-                'electric-cursor': `cursor-1`,
-              },
-            }
-          )
-        )
-      } else {
-        aborter.abort()
-        return Promise.resolve(
-          new Response(
-            JSON.stringify([{ headers: { control: `up-to-date` } }]),
-            {
-              status: 200,
-              headers: {
-                'electric-handle': currentHandle,
-                'electric-offset': originalOffset,
-                'electric-schema': `{"id":"int4"}`,
-                'electric-cursor': `cursor-2`,
-              },
-            }
-          )
-        )
-      }
+    fetchMock.mockImplementation(() => {
+      return Promise.resolve(
+        new Response(JSON.stringify([{ headers: { control: `up-to-date` } }]), {
+          status: 200,
+          headers: {
+            'electric-handle': expiredHandle,
+            'electric-offset': `0_inf`, // Different offset from stale response
+            'electric-schema': `{"id":"int4"}`,
+            'electric-cursor': `cursor-1`,
+          },
+        })
+      )
     })
 
     const stream = new ShapeStream({
       url: shapeUrl,
       params: { table: `test` },
-      handle: currentHandle, // Client starts with valid handle B
-      offset: originalOffset, // Client starts at offset 0_0
+      handle: currentHandle,
+      offset: originalOffset,
       signal: aborter.signal,
       fetchClient: fetchMock,
       subscribe: false,
     })
 
-    // Subscribe and wait for the up-to-date message to be processed
     stream.subscribe(() => {
-      // Resolve after the up-to-date message is processed
       if (stream.isUpToDate) {
         resolveFirstResponse()
       }
     })
 
-    // Wait for first response to be fully processed
     await firstResponseProcessed
-
-    // Small delay to ensure all state updates are complete
     await new Promise((resolve) => setTimeout(resolve, 10))
 
-    // The handle should still be handle-B (not the expired handle-A)
     expect(stream.shapeHandle).toBe(currentHandle)
-
-    // CRITICAL: The offset should NOT have been updated from the stale response
-    // If the bug exists, lastOffset would be "0_inf" (from stale response)
-    // If fixed, lastOffset should stay at "0_0"
-    //
-    // This is the failing assertion that demonstrates the bug:
-    // The offset gets incorrectly updated from the stale response even though
-    // the handle is correctly ignored
     expect(stream.lastOffset).toBe(originalOffset)
   })
 
