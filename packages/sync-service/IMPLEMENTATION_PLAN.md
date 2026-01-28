@@ -1179,15 +1179,25 @@ Before enabling `dnf_subqueries` feature flag in production:
 - All decomposer tests pass
 - All WhereClause tests pass
 
+8. **Phase 6: Log Items Format** ✅
+   - Added `active_conditions` to log item headers
+   - Updated `lib/electric/log_items.ex` to include `active_conditions` when present
+   - Added `active_conditions` field to change structs in `lib/electric/replication/changes.ex`
+
+9. **Phase 7: Querying Updates** ✅
+   - Updated `lib/electric/shapes/querying.ex` to compute `active_conditions` in SQL
+   - Added `make_active_conditions/1` to generate SQL for each DNF position
+   - Modified `build_headers_part/4` to include `active_conditions` in JSON headers
+
+10. **Client Protocol Updates** ✅
+    - Added `active_conditions` field to `Electric.Client.Message.Headers` struct
+    - Updated `Headers.from_message/2` to parse `active_conditions` from messages
+
 ### Remaining Work (Lower Priority)
 
-1. **Protocol and Message Format** (Lower priority)
-   - Add active_conditions to log items
-   - Update client protocol for DNF-aware tags
-   - Protocol version validation for complex shapes
-
-2. **removed_tags for Updates** (Lower priority)
-   - Track tags from old record that no longer apply on updates
+1. **Protocol Version Validation** (Optional)
+   - Add protocol version check to reject complex shapes for v1 clients
+   - This is optional since v1 clients can still work by ignoring unknown fields
 
 ### Key Commits
 
@@ -1199,3 +1209,4 @@ Before enabling `dnf_subqueries` feature flag in production:
 6. `afecd0f58` - Add fallback clause for extract_tag_column edge cases
 7. `e657649e6` - Add implementation progress update to plan
 8. `b57ef1a0a` - Add OR deduplication and fix tests for DNF semantics
+9. `018a09cba` - Add active_conditions to row messages for DNF tracking
