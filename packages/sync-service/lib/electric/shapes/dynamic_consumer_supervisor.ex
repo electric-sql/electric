@@ -46,10 +46,6 @@ defmodule Electric.Shapes.DynamicConsumerSupervisor do
     start_child(supervisor_ref, {Electric.Shapes.Consumer, config})
   end
 
-  def start_snapshotter(supervisor_ref, config) do
-    start_child(supervisor_ref, {Electric.Shapes.Consumer.Snapshotter, config})
-  end
-
   def start_materializer(supervisor_ref, config) do
     start_child(supervisor_ref, {Electric.Shapes.Consumer.Materializer, config})
   end

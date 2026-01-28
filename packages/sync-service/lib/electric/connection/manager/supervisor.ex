@@ -23,6 +23,9 @@ defmodule Electric.Connection.Manager.Supervisor do
       {Electric.Connection.Manager.ConnectionResolver, stack_id: opts[:stack_id]}
     ]
 
+    # TEMPORARY DEBUG: Insert sentinels between each child
+    children = Electric.Debug.ShutdownTimer.insert_sentinels(children, "Connection.Manager.Supervisor")
+
     # Electric.Connection.Manager is a permanent child of the supervisor, so when it dies, the
     # :one_for_all strategy will kick in and restart the other children.
     Supervisor.init(children, strategy: :one_for_all)

@@ -30,6 +30,9 @@ defmodule Electric.MonitoredCoreSupervisor do
       {Electric.CoreSupervisor, opts}
     ]
 
+    # TEMPORARY DEBUG: Insert sentinels between each child
+    children = Electric.Debug.ShutdownTimer.insert_sentinels(children, "MonitoredCoreSupervisor")
+
     # The :rest_for_one strategy is used here to ensure that if the StatusMonitor unexpectedly dies,
     # all the processes it is monitoring are also restarted. Since the StatusMonitor keeps track of the
     # statuses of the other processes, losing it means losing that state. Restarting the other children
