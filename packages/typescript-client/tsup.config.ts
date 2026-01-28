@@ -8,6 +8,7 @@ export default defineConfig((options) => {
     },
     tsconfig: `./tsconfig.build.json`,
     sourcemap: true,
+    noExternal: [`@microsoft/fetch-event-source`],
     ...options,
   }
 
