@@ -54,7 +54,8 @@ defmodule Electric.Shapes.Consumer do
     |> GenServer.call(:await_snapshot_start, timeout)
   end
 
-  @spec subscribe_materializer(Electric.stack_id(), Electric.shape_handle(), pid()) :: :ok
+  @spec subscribe_materializer(Electric.stack_id(), Electric.shape_handle(), pid()) ::
+          {:ok, LogOffset.t()}
   def subscribe_materializer(stack_id, shape_handle, pid) do
     stack_id
     |> consumer_pid(shape_handle)
@@ -210,7 +211,9 @@ defmodule Electric.Shapes.Consumer do
   def handle_call({:subscribe_materializer, pid}, _from, state) do
     Logger.debug("Subscribing materializer for #{state.shape_handle}")
     Process.monitor(pid, tag: :materializer_down)
-    {:reply, :ok, %{state | materializer_subscribed?: true}, state.hibernate_after}
+
+    {:reply, {:ok, state.latest_offset}, %{state | materializer_subscribed?: true},
+     state.hibernate_after}
   end
 
   def handle_call({:stop, reason}, _from, state) do
