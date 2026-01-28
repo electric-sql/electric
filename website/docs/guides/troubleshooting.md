@@ -126,7 +126,7 @@ During development, you may want to clear this state. However, just restarting E
 
 ##### Solution &mdash; clear shape logs
 
-You can remove [`STORAGE_DIR`](https://electric-sql.com/docs/api/config#storage-dir) to delete all shape logs. This will ensure that following shape requests will be re-synced from scratch.
+You can remove [`STORAGE_DIR`](/docs/api/config#storage-dir) to delete all shape logs. This will ensure that following shape requests will be re-synced from scratch.
 
 ###### Using docker
 
@@ -165,7 +165,7 @@ This indicates that your client library or proxy layer is caching requests to El
 
 ##### Solution &mdash; clear your cache
 
-The problem will resolve itself as client/proxy caches empty. You can force this by clearing your client or proxy cache. See https://electric-sql.com/docs/api/http#control-messages for context on 409 messages.
+The problem will resolve itself as client/proxy caches empty. You can force this by clearing your client or proxy cache. See [Control messages](/docs/api/http#control-messages) for more context on 409 messages.
 
 ## Production
 

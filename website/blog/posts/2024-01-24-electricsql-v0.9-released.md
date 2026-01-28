@@ -9,7 +9,7 @@ outline: deep
 post: true
 ---
 
-To set the tone for 2024, we're kicking January off with a fresh release of Electric that introduces a whole slew of improvements to the experience of configuring, deploying, and developing with Electric.
+We're kicking off the year with a fresh release of Electric that introduces a whole slew of improvements to the experience of configuring, deploying, and developing with Electric.
 
 <!--truncate-->
 
@@ -100,7 +100,7 @@ In this new release, we're changing the default behaviour of Electric to use SSL
 
 Now, when you run Electric with a local Postgres database in development or if you know that your Electric + Postgres deployment is secured by your infrastructure (e.g. by making sure Electric connects to Postgres over a VPN), set `DATABASE_REQUIRE_SSL=false` and Electric will fallback to using unencrypted connections.
 
-Security is always on our minds when we're working on new Electric features. There's still more to be done for SSL support, such as adding ceritificate verification checks and ways to configure which certificate store Electric should use. Stay tuned for more security improvements in future releases.
+Security is always on our minds when we're working on new Electric features. There's still more to be done for SSL support, such as adding certificate verification checks and ways to configure which certificate store Electric should use. Stay tuned for more security improvements in future releases.
 
 ### Config validation at startup for easier troubleshooting
 

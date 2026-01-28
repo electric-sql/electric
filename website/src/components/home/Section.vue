@@ -1,7 +1,11 @@
 <script setup>
 import Actions from './Actions.vue'
 
-const { actions, wideSectionHead } = defineProps(['actions', 'wideSectionHead'])
+const { actions, dark, wideSectionHead } = defineProps([
+  'actions',
+  'dark',
+  'wideSectionHead',
+])
 </script>
 
 <style scoped>
@@ -10,6 +14,11 @@ const { actions, wideSectionHead } = defineProps(['actions', 'wideSectionHead'])
 }
 .page-section:first-child {
   padding-top: 60px;
+}
+.page-section.dark {
+  margin: 0 -400px;
+  padding: 60px 400px 50px;
+  background: var(--vp-sidebar-bg-color);
 }
 .section-head {
   max-width: 725px;
@@ -52,7 +61,7 @@ const { actions, wideSectionHead } = defineProps(['actions', 'wideSectionHead'])
 </style>
 
 <template>
-  <div class="page-section">
+  <div :class="`page-section ${dark ? 'dark' : ''}`">
     <slot name="override-section-head">
       <div
         :class="`section-head ${wideSectionHead ? 'wide-section-head' : ''}`"

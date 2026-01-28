@@ -3,7 +3,7 @@ title: ElectricSQL v0.8 released with JSON and Supabase support
 description: >-
   Version 0.8 of ElectricSQL. A local-first sync layer that you can use to build reactive, realtime, offline-capable apps directly on Postgres with your existing data model.
 excerpt: >-
-  Version 0.8 of ElectricSQL has now been released. This release improves data model and deployment compatibility, including support for JSON and running on popular managed Postgres and, such as Supabase and Digital Ocean.
+  Improved data model and deployment compatibility including JSON support and integration with popular Postgres hosts like Supabase and Digital Ocean.
 authors: [samwillis]
 image: /img/blog/electricsql-v0.8-released/Electric+Supabase.png
 tags: [release]
@@ -20,7 +20,7 @@ Version 0.8 of ElectricSQL has now been released. This release improves data mod
 
 This release brings a [wider range of supported Postgres types](https://legacy.electric-sql.com/docs/usage/data-modelling/types#supported-data-types):
 
-- Electric now supports JSON with Postgres `JSONB` columns - When using our DAL, javascript objects are automatically serialised to JSON when inserted into a JSON column, and, in reverse, converted back to an object when loading from the database.As the client is backed by a local SQLite database you can use all of SQLite’s JSON function to query and modify JSON within the database.
+- Electric now supports JSON with Postgres `JSONB` columns - When using our DAL, javascript objects are automatically serialised to JSON when inserted into a JSON column, and, in reverse, converted back to an object when loading from the database. As the client is backed by a local SQLite database you can use all of SQLite’s JSON function to query and modify JSON within the database.
 - Support for `BIGINT`/`INT8` and `REAL`/`FLOAT` Postgres types
 
 ## From Superuser to Supabase
@@ -33,7 +33,7 @@ One of the key platforms that this unlocks compatibility with is Supabase. Supab
 
 We have published [details on how to use Electric with Supabase](https://legacy.electric-sql.com/docs/deployment/supabase), and there are updated [deployment instructions for additional platforms](https://legacy.electric-sql.com/docs/deployment).
 
-There is also have a great new [Checkout Example](https://legacy.electric-sql.com/docs/examples/checkout) app showing how to build a local-first checkout flow with Electric, using Supabase Postgres, Edge Functions and Auth.
+There is also a great new [Checkout Example](https://legacy.electric-sql.com/docs/examples/checkout) app showing how to build a local-first checkout flow with Electric, using Supabase Postgres, Edge Functions and Auth.
 
 ## The Proxy Tunnel
 

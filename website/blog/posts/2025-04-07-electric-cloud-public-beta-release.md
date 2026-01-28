@@ -8,7 +8,7 @@ excerpt: >-
   This means it's open to everyone for immediate access.
 authors: [kyle, thruflo]
 image: '/img/blog/electric-cloud-public-beta-release/header.jpg'
-tags: [release]
+tags: [release, postgres-sync]
 outline: [2, 3]
 post: true
 ---
@@ -23,7 +23,7 @@ You can [create your account here](https://dashboard.electric-sql.cloud) and sta
 
 Use the new dashboard to connect and manage backing Postgres databases, and see system logs and service health and status.
 
-Electric Cloud is our managed service for our [open-source Postgres sync engine](https://electric-sql.com/). It solves the hard problems of sync for you, including [partial replication](https://electric-sql.com/docs/guides/shapes), [fan-out](https://electric-sql.com/docs/api/http#caching), and [data delivery](https://electric-sql.com/docs/api/http).
+Electric Cloud is our managed service for our [open-source Postgres sync engine](https://electric-sql.com/). It solves the hard problems of sync for you, including [partial replication](/docs/guides/shapes), [fan-out](/docs/api/http#caching), and [data delivery](/docs/api/http).
 
 <a href="https://dashboard.electric-sql.cloud" class="no-visual">
   <img src="/img/blog/electric-cloud-public-beta-release/dashboard.png" />
@@ -114,4 +114,4 @@ We can't wait to see what you build with it 🚀
 
 ---
 
-_Have questions? Join our[ Discord community](https://discord.gg/electric), check out our[ documentation](https://electric-sql.com/docs), or find us on[ GitHub](https://github.com/electric-sql/electric)._
+_Have questions? Join our[ Discord community](https://discord.gg/electric), check out our[ documentation](/docs/intro), or find us on[ GitHub](https://github.com/electric-sql/electric)._

@@ -6,6 +6,18 @@ import Section from '../Section.vue'
 
 const integrations = [
   {
+    slug: 'neon',
+    name: 'Neon',
+  },
+  {
+    slug: 'supabase',
+    name: 'Supabase',
+  },
+  {
+    slug: 'vercel',
+    name: 'Vercel',
+  },
+  {
     slug: 'tanstack',
     name: 'TanStack',
   },
@@ -16,18 +28,6 @@ const integrations = [
   {
     slug: 'react',
     name: 'React',
-  },
-  {
-    slug: 'next',
-    name: 'Next.js',
-  },
-  {
-    slug: 'neon',
-    name: 'Neon',
-  },
-  {
-    slug: 'supabase',
-    name: 'Supabase',
   },
 ]
 
@@ -48,11 +48,13 @@ const actions = [
 ]
 
 const sql = ref(undefined)
+const sse = ref(undefined)
 const tsx = ref(undefined)
 
 onMounted(() => {
   if (typeof window !== 'undefined' && document.querySelector) {
     sql.value = document.getElementById('works-with-sql-template').innerHTML
+    sse.value = document.getElementById('works-with-sse-template').innerHTML
     tsx.value = document.getElementById('works-with-tsx-template').innerHTML
   }
 })
@@ -108,12 +110,96 @@ onMounted(() => {
   margin-top: 14px;
 }
 
+.data-sources {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  height: 288px;
+}
+
+.data-source {
+  flex: 1;
+  border-radius: 12px;
+  border: 1px solid rgba(42, 44, 52, 0.5);
+  background: var(--vp-c-bg-soft);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.data-source-full {
+  height: 288px;
+}
+
+.data-source-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+}
+
+.data-source-icon {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  margin-right: -6px;
+}
+
+.data-source-label {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--vp-c-text-2);
+  line-height: 1.4;
+}
+
+.data-source-code {
+  flex: 1;
+  background: var(--vp-c-bg);
+  display: flex;
+  align-items: center;
+  border-top: 1px solid rgba(42, 44, 52, 0.3);
+  min-width: 0;
+  overflow: hidden;
+}
+
+.data-source-code code {
+  font-family: var(--vp-font-family-mono);
+  font-size: 12px;
+  color: var(--vp-c-text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.data-source-code :deep(div[class*='language-']) {
+  margin: 0 !important;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent !important;
+  height: auto;
+}
+
+.data-source-code :deep(pre) {
+  margin: 0;
+  padding: 14px 16px;
+  background: transparent !important;
+}
+
+.data-source-code :deep(code) {
+  font-size: 12px;
+}
+
+.data-source-code :deep(p) {
+  margin: 0;
+}
+
 .layers {
   text-align: center;
 }
 .layer {
-  padding: 17px;
-  margin-bottom: 15px;
+  padding: 15.5px 17px;
+  margin-bottom: 18.3333px;
   border-radius: 12px;
   border: 1px solid rgba(42, 44, 52, 0.5);
   background: var(--vp-c-bg-soft);
@@ -177,7 +263,7 @@ onMounted(() => {
     margin-right: auto !important;
   }
 
-  .your-database-col {
+  .your-data-col {
     order: 0;
   }
   .your-stack-col {
@@ -211,7 +297,7 @@ onMounted(() => {
     grid-template-columns: 1fr;
     gap: 32px;
   }
-  .your-database-col {
+  .your-data-col {
     order: 0;
   }
   .your-stack-col {
@@ -221,28 +307,51 @@ onMounted(() => {
   .your-app-col {
     order: 2;
   }
+  .data-sources {
+    gap: 20px;
+  }
+
   .layers,
-  .your-stack :deep(div[class*='language-']) {
-    max-width: 448px;
+  .your-stack :deep(div[class*='language-']),
+  .data-sources,
+  .data-source-full {
+    max-width: 511px;
     margin-left: auto !important;
     margin-right: auto !important;
   }
   .layers {
     display: grid;
     grid-template-columns: 1fr;
-    gap: 24px;
+    gap: 20px;
+  }
+  .data-sources {
+    height: auto;
   }
 }
 @media (max-width: 639px) {
   .layers,
-  .your-stack :deep(div[class*='language-']) {
-    max-width: 384px;
+  .your-stack :deep(div[class*='language-']),
+  .data-sources,
+  .data-source-full {
+    /*max-width: 384px;*/
+  }
+}
+@media (max-width: 559px) {
+  .your-stack .col {
+    min-width: 0;
+    width: 100%;
+  }
+  .layers,
+  .your-stack :deep(div[class*='language-']),
+  .data-sources,
+  .data-source-full {
+    max-width: 100%;
+    width: 100%;
   }
 }
 @media (max-width: 518px) {
-  .layers,
-  .your-stack :deep(div[class*='language-']) {
-    max-width: 320px;
+  .data-source-code code {
+    font-size: 11px;
   }
 }
 
@@ -299,48 +408,47 @@ onMounted(() => {
 
 <template>
   <Section :actions="actions" :wideSectionHead="false">
-    <template #title> With your existing&nbsp;stack </template>
+    <template #title>Works with your&nbsp;stack</template>
     <template #override-tagline>
       <p>
-        Electric works with <span class="inline-sm">any </span>
-        <a href="/docs/guides/deployment#_1-running-postgres">
-          <span class="hidden-sm">any </span>Postgres</a
-        >,
-        <a href="/docs/guides/deployment#data-model-compatibility">
-          <span class="hidden-sm">any </span>data model</a
-        >
-        and
-        <a href="/docs/integrations">
-          <span class="hidden-sm">any </span>web framework</a
-        >.
-        <span class="hidden -hidden-lg">
-          that speaks
-          <a href="/docs/guides/client-development"> HTTP and JSON</a></span
-        >
-        <span class="no-wrap-sm"> It syncs data</span>
-        <span class="hidden -hidden-lg"> out of Postgres</span>
-        into anything
-        <span class="hidden-lg"> you like, </span>
-        from a
-        <a href="/docs/integrations/react">
-          <span class="hidden -hidden-lg"> Javascript</span>
-          state variable</a
-        >
-        to a
-        <a href="/product/pglite">
-          local
-          <span class="hidden -hidden-lg"> SQL</span>
-          database</a
-        >.
+        Any web framework and client that
+        <span class="no-wrap">speaks HTTP and JSON</span>
       </p>
     </template>
     <div class="your-stack">
-      <div class="col your-database-col">
-        <div id="works-with-sql">
-          <div v-if="sql" v-html="sql"></div>
-          <div v-else class="language-sql placeholder" />
+      <div class="col your-data-col">
+        <div class="data-sources">
+          <div class="data-source">
+            <div class="data-source-header">
+              <img src="/img/icons/electric.svg" class="data-source-icon" />
+              <a
+                href="/products/postgres-sync"
+                class="data-source-label no-visual"
+                >Database sync</a
+              >
+            </div>
+            <div class="data-source-code">
+              <div v-if="sql !== undefined" v-html="sql"></div>
+            </div>
+          </div>
+          <div class="data-source">
+            <div class="data-source-header">
+              <img
+                src="/img/icons/durable-streams.svg"
+                class="data-source-icon"
+              />
+              <a
+                href="/products/durable-streams"
+                class="data-source-label no-visual"
+                >Real-time streams</a
+              >
+            </div>
+            <div class="data-source-code">
+              <div v-if="sse !== undefined" v-html="sse"></div>
+            </div>
+          </div>
         </div>
-        <div class="stack-label">Your database</div>
+        <div class="stack-label">Your data</div>
       </div>
       <div class="col your-stack-col">
         <div class="layers">
@@ -350,7 +458,7 @@ onMounted(() => {
             </div>
             <div class="body">
               <h4>Auth</h4>
-              <p>Control data&nbsp;access</p>
+              <p>With your API</p>
             </div>
           </a>
           <a class="layer no-visual" href="/docs/guides/writes">
@@ -358,8 +466,8 @@ onMounted(() => {
               <img src="/img/icons/writes.svg" />
             </div>
             <div class="body">
-              <h4>Writes</h4>
-              <p>Handle writes</p>
+              <h4>Write</h4>
+              <p>Through your backend</p>
             </div>
           </a>
           <a class="layer no-visual" href="/docs/api/http">
@@ -385,13 +493,25 @@ onMounted(() => {
         <div class="stack-label">Your stack</div>
       </div>
       <div class="col your-app-col">
-        <div id="works-with-tsx">
-          <div v-if="tsx !== undefined" v-html="tsx"></div>
-          <div v-else class="language-tsx placeholder" />
+        <div class="data-source data-source-full">
+          <div class="data-source-header">
+            <img src="/img/icons/tanstack.svg" class="data-source-icon" />
+            <a
+              href="/products/tanstack-db"
+              class="data-source-label no-visual"
+              style="margin-left: 2px"
+              >Live data</a
+            >
+          </div>
+          <div class="data-source-code" id="works-with-tsx">
+            <div v-if="tsx !== undefined" v-html="tsx"></div>
+            <div v-else class="language-tsx placeholder" />
+          </div>
         </div>
         <div class="stack-label">Your app</div>
       </div>
     </div>
+    <!--
     <template #outline>
       So you can adopt sync incrementally, one route at a time<span
         class="hidden-lg"
@@ -418,5 +538,6 @@ onMounted(() => {
         </a>
       </div>
     </template>
+    -->
   </Section>
 </template>

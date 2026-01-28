@@ -19,7 +19,7 @@ import GatekeeperFlowJPG from '/static/img/docs/guides/auth/gatekeeper-flow.jpg?
 
 ## Gatekeeper auth with Electric
 
-This example demonstrates a number of ways of implementing the [gatekeeper auth](/docs/guides/auth#gatekeeper-auth) pattern for [securing access](/docs/guides/auth) to the [Electric sync service](/product/electric).
+This example demonstrates a number of ways of implementing the [gatekeeper auth](/docs/guides/auth#gatekeeper-auth) pattern for [securing access](/docs/guides/auth) to the [Electric sync service](/products/postgres-sync).
 
 The Gatekeeper pattern works as follows:
 

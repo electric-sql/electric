@@ -1,5 +1,5 @@
 ---
-title: Local-first sync with Electric and TanStack DB
+title: Super-fast apps on sync with Electric and TanStack DB
 description: >-
   Tanstack DB is a reactive client store for building super fast apps on sync.
   Paired with Electric, it provides an optimal end-to-end sync stack for
@@ -10,8 +10,10 @@ excerpt: >-
   local-first app development.
 authors: [thruflo]
 image: /img/blog/local-first-sync-with-tanstack-db/header2.jpg
-tags: [db]
+tags: [db, tanstack-db, postgres-sync]
 outline: [2, 3]
+homepageSolution: true
+homepageOrder: 10
 post: true
 ---
 
@@ -43,14 +45,14 @@ import ScalabilityChart from '../../src/components/ScalabilityChart.vue'
 
 <div class="hidden-xs">
 
-[Tanstack DB](https://tanstack.com/db) is a [reactive client store for building super fast apps on sync](https://tanstack.com/blog/tanstack-db-0.1-the-embedded-client-database-for-tanstack-query). Paired with [Electric](/), it provides an optimal end-to-end sync stack for building <span class="no-wrap-sm">[local-first apps](/use-cases/local-first-software)</span>.
+[Tanstack DB](https://tanstack.com/db) is a [reactive client store for building super fast apps on sync](https://tanstack.com/blog/tanstack-db-0.1-the-embedded-client-database-for-tanstack-query). Paired with [Electric](/), it provides an optimal end-to-end sync stack for building <span class="no-wrap-sm">local-first apps</span>.
 
 </div>
 <div class="block-xs">
 
 [Tanstack DB](https://tanstack.com/db) is a reactive client store for [building super fast apps on&nbsp;sync](https://tanstack.com/blog/tanstack-db-0.1-the-embedded-client-database-for-tanstack-query).
 
-Paired with [Electric](/), it provides an optimal end-to-end sync stack for [local-first app&nbsp;development](/use-cases/local-first-software).
+Paired with [Electric](/), it provides an optimal end-to-end sync stack for local-first app&nbsp;development.
 
 </div>
 
@@ -66,7 +68,7 @@ Type-safe, declarative, incrementally adoptable and insanely fast, it's the futu
 
 ## The next frontier for front&#8209;end
 
-Front-end has long been about reactivity frameworks and client-side state management. However, the alpha in these is receding. The next frontier, with much bigger gains<span class="inline-md">,</span> <span class="hidden-md">across UX, DX and AX</span> lies in [local-first<span class="hidden-md">,</span> sync<span class="hidden-md"> engine architecture</span>](/use-cases/local-first-software).
+Front-end has long been about reactivity frameworks and client-side state management. However, the alpha in these is receding. The next frontier, with much bigger gains<span class="inline-md">,</span> <span class="hidden-md">across UX, DX and AX</span> lies in [local-first<span class="hidden-md">,</span> sync<span class="hidden-md"> engine architecture</span>](/sync).
 
 Sync-based apps like [Linear](https://linear.app/blog/scaling-the-linear-sync-engine) and [Figma](https://www.figma.com/blog/how-figmas-multiplayer-technology-works) are instant to use and naturally collaborative. Eliminating stale data, loading spinners and manual data&nbsp;wiring.
 
@@ -147,7 +149,7 @@ function Todos() {
 
 So, we see that TanStack already handles data loading and local optimistic writes. What exactly do we need to add to TanStack for it to support local-first sync?
 
-Well, local-first application code talks directly to a local store interface. This takes the [network off the interaction path](/use-cases/data-sync#replace-data-fetching-with-data-sync) and [abstracts data transfer and placement](/blog/2022/12/16/evolution-state-transfer#optimal-placement-and-movement-of-data) out of the app code (into the sync engine where it can be system optimized).
+Well, local-first application code talks directly to a local store interface. This takes the [network off the interaction path](/sync#replace-data-fetching-with-data-sync) and [abstracts data transfer and placement](/blog/2022/12/16/evolution-state-transfer#optimal-placement-and-movement-of-data) out of the app code (into the sync engine where it can be system optimized).
 
 So, the first thing we need is a local store primitive to sync data into that the app code can talk to. Let's call it a **Collection**.
 

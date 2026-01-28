@@ -1,19 +1,20 @@
 ---
 title: PGlite
 description: >-
-  Sync into a lightweight WASM Postgres with
-  real-time, reactive bindings.
+  Embeddable Postgres with reactivity and sync. For a full database inside your client or runtime.
+image: /img/meta/pglite.jpg
 outline: deep
 ---
 
 <script setup>
 import { onMounted } from 'vue'
 
+import BlogPostsByTag from '../src/components/BlogPostsByTag.vue'
 import { data as initialStarCounts } from '../data/count.data.ts'
 import { getStarCount } from '../src/lib/star-count.ts'
 
 const formatStarCount = (count) => (
-  `<span class="muted">(</span><span> ☆ </span><span>${Math.round(count / 100) / 10}k</span><span> </span><span class="muted">)</span>`
+  `<span class="muted">(</span><span> ☆ </span><span>${Math.round(count / 100) / 10}k</span><span> </span><span class="muted">)</span>`
 )
 
 const renderStarCount = async (repoName, initialStarCount) => {
@@ -43,10 +44,9 @@ onMounted(async () => {
 
 <img src="/img/icons/pglite.svg" class="product-icon" />
 
-# PGlite <Badge type="danger" text="alpha" />
+# PGlite <Badge type="warning" text="beta" />
 
-Sync into a lightweight WASM Postgres with
-real-time, reactive bindings.
+Embeddable Postgres <span class="no-wrap">with reactivity and sync</span>. For a full database inside <span class="no-wrap">your client or runtime</span>.
 
 <div class="actions cta-actions page-footer-actions left">
   <div class="action">
@@ -87,11 +87,17 @@ It can be used as an ephemeral [in-memory database](https://pglite.dev/docs/file
 
 ### Syncing into PGlite
 
-You can use [Electric](/product/electric) to sync between a cloud Postgres and an embedded PGlite instance. For example, to sync an `items` [Shape](/docs/guides/shapes) into an `items` table:
+You can use [Postgres Sync](/products/postgres-sync) to sync between a cloud Postgres and an embedded PGlite instance. For example, to sync an `items` [Shape](/docs/guides/shapes) into an `items` table:
 
 <<< @/src/partials/sync-into-pglite.tsx
 
+## Related posts
+
+<BlogPostsByTag tag="pglite" :limit="4" />
+
 ## More information
+
+See [how you can combine](/products/#how-they-fit-together) PGlite with other Electric products to [run Postgres anywhere](/sync#durability).
 
 See the PGlite website at [pglite.dev](https://pglite.dev) for comprehensive [Docs](https://pglite.dev/docs/), a list of [Examples](https://pglite.dev/examples) and a [live in-browser REPL](https://pglite.dev/repl/). The source code is on GitHub at [electric-sql/pglite](https://github.com/electric-sql/pglite).
 

@@ -1,7 +1,7 @@
 ---
 title: Documentation
 description: >-
-  Welcome to the ElectricSQL developer documentation!
+  How to build fast, modern, collaborative apps with the Electric stack.
 outline: deep
 ---
 
@@ -13,34 +13,57 @@ const burn = demos.find(x => x.link === '/demos/burn')
 const linearlite = demos.find(x => x.link === '/demos/linearlite')
 </script>
 
-<p class="intro-zap-container">
-  <img src="/img/home/zap-with-halo.svg"
-      alt="Electric zap with halo"
-      class="intro-zap"
-  />
-</p>
+<img src="/img/icons/docs.svg" class="product-icon"
+    style="width: 72px"
+/>
 
 # Documentation
 
-Welcome to the ElectricSQL developer documentation!
+How to build [fast, modern, collaborative apps](/sync) with the Electric stack.
 
-ElectricSQL is a Postgres sync engine. Use it to sync [subsets](/docs/guides/shapes) of your Postgres data into [local apps](/use-cases/data-sync), services and [environments](/use-cases/dev-and-test).
+## Getting started
 
-> [!Tip] 🔥 TanStack DB - now in BETA!
-> [Introducing TanStack DB](/blog/2025/07/29/local-first-sync-with-tanstack-db) - a reactive client store for building super fast apps on sync!
+Start with the [Quickstart](/docs/quickstart) for the fastest way to get up-and-running.
 
-## New to ElectricSQL?
+The easiest way to use Electric in production is the [Electric Cloud](/cloud). Alternatively, the [Deployment](/docs/guides/deployment) guide covers how to self host.
 
-Start with the [Quickstart](/docs/quickstart) to get up-and-running.
+## What's documented where?
 
-The [HTTP API](/docs/api/http) and [TypeScript Client](/docs/api/clients/typescript) docs and the guides on [Auth](/docs/guides/auth) and [Shapes](/docs/guides/shapes) are good entrypoints and helpful to understand how Electric works.
+> [!Warning] 🔭&nbsp; Product documentation is split across multiple sites
+> It's worth taking a moment to understand what's documented where.
 
-The [TanStack integration page](/docs/integrations/tanstack) then links to resources showing how to build super fast apps with Electric and TanStack DB.
+This website contains the main documentation for [Postgres Sync](/products/postgres-sync).
 
-The easiest way to use Electric in production is the [Electric Cloud](/product/cloud). Alternatively, the [Deployment](/docs/guides/deployment) guide covers how to self host.
+Usage examples and recipes often use Postgres Sync together with [TanStack&nbsp;DB](/products/tanstack-db). Guides like [Auth](/docs/guides/auth) and [Security](/docs/guides/security) are also generally relevant for [Durable Streams](/products/durable-streams).
 
-> [!warning] Looking for TanStack DB or PGlite?
-> TanStack DB docs are at [tanstack.com/db](https://tanstack.com/db) and PGlite docs are at [pglite.dev/docs](https://pglite.dev/docs).
+### Project websites
+
+[Durable Streams](/products/durable-streams), [TanStack DB](/products/tanstack-db) and [PGlite](/products/pglite) each have their own docs:
+
+<div class="product-signposts">
+  <a href="https://github.com/durable-streams/durable-streams"
+      class="product-signpost no-visual">
+    <img src="/img/icons/durable-streams.svg" alt="Durable Streams" />
+    <div>
+      <h3>Durable Streams</h3>
+      <p>github.com/durable-streams</p>
+    </div>
+  </a>
+  <a href="https://tanstack.com/db" class="product-signpost no-visual">
+    <img src="/img/icons/tanstack.svg" alt="TanStack DB" />
+    <div>
+      <h3>TanStack DB</h3>
+      <p>tanstack.com/db</p>
+    </div>
+  </a>
+  <a href="https://pglite.dev" class="product-signpost no-visual">
+    <img src="/img/icons/pglite.product.svg" alt="PGlite" class="pglite" />
+    <div>
+      <h3>PGlite</h3>
+      <p>pglite.dev</p>
+    </div>
+  </a>
+</div>
 
 ## Examples
 
@@ -55,8 +78,65 @@ The integration docs also illustrate common patterns, e.g. using Electric with f
 
 ## Source code
 
-ElectricSQL is an open source project developed at [github.com/electric-sql](https://github.com/electric-sql). Check out the source code, issues and development in progress there.
+Electric is an open source project developed at [github.com/electric-sql](https://github.com/electric-sql). Check out the source code, issues and development in progress there.
 
 ## Support
 
 See the [Community page](/about/community) for information on support and events, including our [community Discord](https://discord.electric-sql.com) where you can ask questions and get support.
+
+<style>
+.product-signposts {
+  display: grid;
+  grid-template-columns: repeat(1, 1fr);
+  gap: 16px;
+  margin: 24px 0 32px;
+}
+
+.product-signpost {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 20px;
+  background-color: var(--vp-c-bg-soft);
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 8px;
+  text-decoration: none;
+  transition: border-color 0.2s ease;
+}
+
+.product-signpost:hover {
+  border-color: var(--vp-c-brand-1);
+}
+
+.product-signpost img {
+  width: 52px;
+  height: 52px;
+  flex-shrink: 0;
+}
+.product-signpost img.pglite {
+  width: 48px;
+  height: 48px;
+  flex-shrink: 0;
+  padding: 2px;
+}
+
+.product-signpost h3 {
+  margin: 0 0 4px 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--vp-c-text-1);
+}
+
+.product-signpost p {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--vp-c-text-2);
+  line-height: 1.4;
+}
+
+@media (max-width: 640px) {
+  .product-signposts {
+    grid-template-columns: 1fr;
+  }
+}
+</style>

@@ -1,19 +1,20 @@
 ---
-title: Electric
+title: Postgres Sync
 description: >-
-  Sync little subsets of your Postgres data into
-  local apps and services.
+  Sync from your database into your apps. For partial replication, data delivery and fan-out.
+image: /img/meta/postgres-sync.jpg
 outline: deep
 ---
 
 <script setup>
 import { onMounted } from 'vue'
 
+import BlogPostsByTag from '../src/components/BlogPostsByTag.vue'
 import { data as initialStarCounts } from '../data/count.data.ts'
 import { getStarCount } from '../src/lib/star-count.ts'
 
 const formatStarCount = (count) => (
-  `<span class="muted">(</span><span> ☆ </span><span>${Math.round(count / 100) / 10}k</span><span> </span><span class="muted">)</span>`
+  `<span class="muted">(</span><span> ☆ </span><span>${Math.round(count / 100) / 10}k</span><span> </span><span class="muted">)</span>`
 )
 
 const renderStarCount = async (repoName, initialStarCount) => {
@@ -43,17 +44,21 @@ onMounted(async () => {
 
 <img src="/img/icons/electric.svg" class="product-icon" />
 
-# Electric
+# Postgres Sync
 
-Sync little subsets of your Postgres data into
-local apps and services.
+Sync from your database into your apps.
+For partial replication,
+<span class="no-wrap-sm">
+  data delivery
+  <span class="no-wrap">
+    and fan-out</span></span>.
 
 <div class="actions cta-actions page-footer-actions left">
   <div class="action">
     <VPButton
         href="/docs/quickstart"
         text="Quickstart"
-        theme="electric"
+        theme="brand"
     />
   </div>
   <div class="action">
@@ -75,15 +80,15 @@ The Electric sync engine syncs [little subsets](/docs/guides/shapes) of data out
 <img srcset="/img/about/use-cases.sm.png 1098w, /img/about/use-cases.png 1484w"
     sizes="(max-width: 767px) 600px, 1484px"
     src="/img/about/use-cases.png"
-    alt="Use cases diagramme"
+    alt="Use cases diagram"
 />
 
 You can sync data into:
 
-- web and mobile apps, [replacing data fetching with data sync](/use-cases/data-sync)
-- edge workers and services, for example maintaining a low-latency [edge data cache](/use-cases/cache-invalidation)
-- local AI systems, for example [running RAG using pgvector](/use-cases/local-ai)
-- dev and test environments, for example syncing data into [an embedded PGlite](/product/pglite) database
+- web and mobile apps, replacing data fetching with data sync
+- edge workers and services, for example maintaining a low-latency edge data cache
+- local AI systems, for example running RAG using pgvector
+- dev and test environments, for example syncing data into [an embedded PGlite](/products/pglite) database
 
 ## How does it work?
 
@@ -96,26 +101,32 @@ It connects to your Postgres using a [`DATABASE_URL`](/docs/api/config#database-
     <img srcset="/img/api/shape-log.sm.png 1064w, /img/api/shape-log.png 1396w"
         sizes="(max-width: 767px) 600px, 1396px"
         src="/img/api/shape-log.png"
-        alt="Shape log flow diagramme"
+        alt="Shape log flow diagram"
     />
   </a>
   <figcaption class="figure-caption text-end">
-    Shape log flow diagramme.
+    Shape log flow diagram.
   </figcaption>
 </figure>
 
 This enables a massive number of clients to query and get real-time updates to subsets of the database. In this way, Electric turns Postgres into a real-time database.
 
+## Related posts
+
+<BlogPostsByTag tag="postgres-sync" :limit="4" />
+
 ## More information
 
-See the [Docs](/docs/intro), [Quickstart](/docs/quickstart) and [Demos](/demos). You can [self-host](/docs/guides/deployment) or use the [Electric&nbsp;Cloud](/product/cloud).
+See [how you can combine](/products/#how-they-fit-together) Postgres Sync with other Electric products to [build fast, reactive apps](/sync#reactivity).
+
+See the [Docs](/docs/intro), [Quickstart](/docs/quickstart) and [Demos](/demos). You can [self-host](/docs/guides/deployment) or use the [Electric Cloud](/cloud).
 
 <div class="actions cta-actions page-footer-actions left">
   <div class="action">
     <VPButton
         href="/docs/quickstart"
         text="Quickstart"
-        theme="electric"
+        theme="brand"
     />
   </div>
   <div class="action">

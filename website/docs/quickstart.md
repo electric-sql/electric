@@ -14,7 +14,7 @@ outline: 2
 
 # Quickstart
 
-Let's make a super-fast, reactive web app using <span class="no-wrap-xs">[Electric with TanStack&nbsp;DB](/blog/2025/07/29/local-first-sync-with-tanstack-db)</span>.
+Let's make a super-fast, reactive web app using <span class="no-wrap-xs">[Electric with TanStack&nbsp;DB](/blog/2025/07/29/super-fast-apps-on-sync-with-tanstack-db)</span>.
 
 <div style="max-width: 632px">
 
@@ -31,7 +31,7 @@ You'll need [Node](https://nodejs.org/en), [pnpm](https://pnpm.io) and [Caddy](h
 caddy trust # may require sudo
 ```
 
-<small><em>Why Caddy? Electric [uses HTTP/2](https://electric-sql.com/docs/guides/troubleshooting#slow-shapes-mdash-why-are-my-shapes-slow-in-the-browser-in-local-development). Caddy enables HTTP/2 in local development.</em></small>
+<small><em>Why Caddy? Electric [uses HTTP/2](/docs/guides/troubleshooting#slow-shapes-mdash-why-are-my-shapes-slow-in-the-browser-in-local-development). Caddy enables HTTP/2 in local development.</em></small>
 
 ## Get started
 
@@ -82,7 +82,7 @@ See the [starter template README](https://github.com/electric-sql/electric/blob/
 
 ### Deploy your app
 
-Claim the [Electric Cloud](/product/cloud) resources:
+Claim the [Electric Cloud](/cloud) resources:
 
 ```shell
 pnpm claim
@@ -170,5 +170,5 @@ See the [starter template README](https://github.com/electric-sql/electric/blob/
 ## Next steps
 
 <!-- - follow the [Tutorial](/docs/tutorial) to evolve your starter into a production-quality app. -->
-- learn more about [Local-first sync with Electric and TanStack DB](/blog/2025/07/29/local-first-sync-with-tanstack-db)
+- learn more about [Local-first sync with Electric and TanStack DB](/blog/2025/07/29/super-fast-apps-on-sync-with-tanstack-db)
 - see the [Interactive guide to TanStack DB](https://frontendatscale.com/blog/tanstack-db).

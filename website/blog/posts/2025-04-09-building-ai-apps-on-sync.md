@@ -8,7 +8,7 @@ excerpt: >-
   interruptibility, multi‑tab, multi‑device and multi‑user.
 authors: [samwillis]
 image: /img/blog/building-ai-apps-on-sync/header.jpg
-tags: [ai, sync]
+tags: [ai, sync, postgres-sync, durable-streams]
 outline: [2, 3]
 post: true
 ---
@@ -22,10 +22,10 @@ post: true
   figure {
     margin: 32px 0;
   }
-  .partial-replication-diagramme {
+  .partial-replication-diagram {
     margin: 32px 0;
   }
-  .partial-replication-diagramme :deep(.container) {
+  .partial-replication-diagram :deep(.container) {
     margin: 0px 0px 10px;
   }
   video {
@@ -88,7 +88,7 @@ If, instead, you stream tokens into a store and then subscribe to that store, yo
   />
 </figure>
 
-For example, here's our [Electric AI chat app](https://github.com/electric-sql/electric-ai-chat), streaming tokens via a store (in this case [a Postgres database](https://electric-sql.com/docs/guides/deployment#_1-running-postgres)). It handles offline, patchy connectivity and page refreshes without a problem:
+For example, here's our [Electric AI chat app](https://github.com/electric-sql/electric-ai-chat), streaming tokens via a store (in this case [a Postgres database](/docs/guides/deployment#_1-running-postgres)). It handles offline, patchy connectivity and page refreshes without a problem:
 
 <figure>
   <HTML5Video
@@ -178,7 +178,7 @@ That's what sync engines like Electric and [Figma's LiveGraph](https://www.figma
 
 For example, with Electric, you can define partial replication using [Shapes](/docs/guides/shapes):
 
-<div class="partial-replication-diagramme">
+<div class="partial-replication-diagram">
   <a href="/docs/guides/shapes" class="no-visual">
     <Card background="var(--vp-code-block-bg)">
       <PartialReplicationDiagramme />

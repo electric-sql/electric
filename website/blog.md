@@ -3,7 +3,7 @@ layout: page
 title: Blog
 description: >-
   The latest news and updates from ElectricSQL.
-image: /img/blog/electric-elephant.jpg
+image: /static/img/blog/electric-elephant.jpg
 sidebar: false
 ---
 

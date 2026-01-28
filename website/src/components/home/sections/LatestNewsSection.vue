@@ -8,17 +8,19 @@ const posts = data.filter((post) => post.homepage !== false).slice(0, 4)
 
 const actions = [
   {
-    href: 'https://dashboard.electric-sql.cloud/',
-    text: 'Subscribe',
+    href: '/blog',
+    text: 'Electric Blog',
     theme: 'brand',
   },
   {
-    href: '/blog',
-    text: 'Blog',
+    href: 'https://x.com/ElectricSQL',
+    text: 'Follow @ElectricSQL',
+    classes: 'hidden-xs',
   },
   {
-    href: 'https://bsky.app/profile/electric-sql.com',
+    href: 'https://x.com/ElectricSQL',
     text: 'Follow',
+    classes: 'block-xs',
   },
 ]
 </script>
@@ -67,15 +69,17 @@ const actions = [
 
 <template>
   <Section :actions="actions">
-    <template #title> Latest news and updates </template>
+    <template #title>
+      Latest <span class="hidden-sm">news and</span> updates</template
+    >
     <template #tagline>
       Subscribe to the
-      <a href="/blog">Electric Blog</a> for the latest news and updates.
+      <a href="/blog">Electric Blog</a>
     </template>
     <div class="listing">
       <BlogPostListing v-for="post in posts" :key="post.slug" :post="post" />
     </div>
-    <template #outline>
+    <!--template #outline>
       Follow
       <a href="https://bsky.app/profile/electric-sql.com"> @electric-sql.com</a>
       on Bluesky and&nbsp;<a href="https://x.com/ElectricSQL"> @ElectricSQL</a>
@@ -83,6 +87,6 @@ const actions = [
     </template>
     <template #outbody>
       <BlueskyPosts did="did:plc:kuwyhfwegvfzugctjd6cwrlg" :limit="2" />
-    </template>
+    </template-->
   </Section>
 </template>

@@ -1,53 +1,60 @@
 ---
 title: Cloud
 description: >-
-  Hosted Electric sync that's blazing fast
-  and scales to millions of users
+  Scalable, turnkey hosting of sync and streams with low-cost, usage-based pricing.
+image: /img/meta/electric-cloud.jpg
 outline: deep
 ---
 
-<script setup>
-import { onMounted } from 'vue'
-
-onMounted(async () => {
-  if (typeof window !== 'undefined' && document.querySelector) {
-    let links = document.querySelectorAll('.cloud-cta a.VPButton.brand')
-
-    links.forEach((link) => {
-      if (link.querySelector('span.vpi-electric-icon')) {
-        return
-      }
-
-      const icon = document.createElement('span')
-      icon.classList.add('vpi-electric-icon')
-
-      link.prepend(icon)
-    })
+<style scoped>
+  .cloud-header p {
+    max-width: 360px
   }
-})
-</script>
+  .data-source-icon {
+    width: 2rem;
+    display: inline;
+    vertical-align: middle;
+    margin-top: -4px;
+  }
+</style>
+
+<div class="cloud-header">
 
 <img src="/img/icons/ddn.svg" class="product-icon" />
 
-# Cloud <Badge type="warning" text="public beta" />
+# Electric Cloud
 
-Hosted Electric sync that's blazing fast
-and scales to millions of users
+Scalable, turnkey hosting of sync and streams with
+<span class="no-wrap">
+  low-cost</span>,
+<span class="no-wrap">
+  usage-based pricing</span>.
 
 <div class="cloud-cta">
   <VPButton
       href="https://dashboard.electric-sql.cloud/"
-      text="Sign up "
+      text="Sign-up to Cloud"
       theme="brand"
   />
 </div>
 
-> [!Warning] Electric Cloud public BETA
-> Electric Cloud is now in public BETA! See the [release post here](/blog/2025/04/07/electric-cloud-public-beta-release).
+</div>
 
-## Hosted Electric
+## Hosted sync and streams
 
-Electric Cloud is a hosted Electric service. We provision, run and operate the [Electric sync engine](/product/electric) for you.
+Electric Cloud provides turnkey hosting of Postgres Sync and Durable Streams.
+
+### <img src="/img/icons/electric.svg" class="data-source-icon"> Postgres Sync
+
+We provision, run and operate the [Postgres sync engine](/products/postgres-sync) for you.
+
+This connects to your Postgres, consumes changes over logical replication and provides a service endpoint for [syncing shapes](/docs/guides/shapes) into your client.
+
+### <img src="/img/icons/durable-streams.svg" class="data-source-icon"> Durable Streams
+
+We now also host [Durable Streams](/products/durable-streams). See the [announcement blog post here](/blog/2025/04/07/electric-cloud-public-beta-release).
+
+Streams support [multiple protocols](./protocols), from raw binary streams, to JSON mode, to protocol specific transports and user-defined sync protocols using Durable State.
 
 ## Data delivery network
 
@@ -171,7 +178,7 @@ Let us know if you have any questions. We'll be very happy to help. You can ask 
 <div class="actions cta-actions page-footer-actions left">
   <div class="action cloud-cta">
     <VPButton
-        href="/product/cloud/sign-up"
+        href="https://dashboard.electric-sql.cloud/"
         text="Sign-up for Cloud"
         theme="brand"
     />

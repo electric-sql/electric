@@ -6,23 +6,6 @@ import LogoStripXxs from '/static/img/blog/electric-beta-release/logo-strip.xxs.
 
 import Quote from '../Quote.vue'
 import Section from '../Section.vue'
-
-const actions = [
-  // {
-  //   href: '/why/case-studies',
-  //   text: 'Case studies',
-  //   theme: 'brand'
-  // },
-  {
-    href: '/use-cases/data-sync',
-    text: 'Use cases',
-    theme: 'brand',
-  },
-  {
-    href: '/demos',
-    text: 'Examples',
-  },
-]
 </script>
 
 <style scoped>
@@ -62,11 +45,11 @@ const actions = [
     <img :src="LogoStripXxs" class="block-md hidden-sm logo-strap-md" />
     <img :src="LogoStripXxs" class="block-sm hidden-md logo-strap-sm" />
   </figure>
-  <Section :actions="actions" id="dashboard-examples">
+  <Section id="dashboard-examples">
     <template #title> Used by world leading&nbsp;companies </template>
     <template #tagline>
       Built into
-      <span class="hidden-sm"> developer tools like</span>
+      <span class="hidden-sm"> tools like </span>
       <a
         href="https://www.npmjs.com/package/firebase-tools?activeTab=dependencies"
         target="_blank"
@@ -75,15 +58,13 @@ const actions = [
       and
       <a href="https://supabase.com/blog/database-build-v2" target="_blank">
         Supabase</a
-      >. Used
-      <span class="hidden-sm"> in production</span>
-      by
-      <span class="hidden-sm"> products like</span>
+      >. Used by
+      <span class="hidden-sm"> products like </span>
       <span class="no-wrap">
-        <a href="https://trigger.dev/product/realtime" target="_blank">
-          Trigger.dev</a
-        >, <a href="https://ottogrid.ai" target="_blank"> Otto</a> and
-        <a href="https://doorboost.com" target="_blank"> Doorboost</a></span
+        <a href="https://trigger.dev/product/realtime" target="_blank"
+          >Trigger</a
+        >
+        and <a href="https://ottogrid.ai" target="_blank">Otto</a></span
       >.
     </template>
     <div class="quotes">
@@ -110,7 +91,7 @@ const actions = [
           at scale. It has dramatically simplified our&nbsp;architecture<span
             class="hidden-md"
           >
-            while delivering cell-level reactive updates</span
+            while delivering cell-level reactivity</span
           >.
         </template>
         <template #attribution>

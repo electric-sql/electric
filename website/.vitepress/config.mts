@@ -83,7 +83,7 @@ export default defineConfig({
   lang: 'en',
   title: 'Electric',
   description:
-    "Composable sync primitives that work with your stack. Postgres sync, Durable Streams, TanStack DB, PGlite.",
+    "Build fast, modern, collaborative apps without changing your stack. Using Electric's composable sync primitives, including Postgres Sync, Durable Streams, TanStack DB and PGlite.",
   appearance: 'force-dark',
   base: '/',
   cleanUrls: true,
@@ -120,7 +120,7 @@ export default defineConfig({
       },
     ],
   ],
-  ignoreDeadLinks: [/localhost/, /^\/AGENTS(\.md)?$/],
+  ignoreDeadLinks: [/localhost/, /^\/AGENTS(\.md)?$/, /^\/cloud$/],
   markdown: {
     theme: 'github-dark',
     languages: [
@@ -160,12 +160,9 @@ export default defineConfig({
     },
     logo: '/img/brand/logo.svg',
     nav: [
-      { text: 'Product', link: '/product/electric', activeMatch: '/product/' },
-      {
-        text: 'Use cases',
-        link: '/use-cases/data-sync',
-        activeMatch: '/use-cases/',
-      },
+      { text: 'Sync', link: '/sync', activeMatch: '/sync' },
+      { text: 'Products', link: '/products', activeMatch: '/products' },
+      { text: 'Cloud', link: '/cloud', activeMatch: '/cloud' },
       { text: 'Docs', link: '/docs/intro', activeMatch: '/docs/' },
       { text: 'Demos', link: '/demos', activeMatch: '/demos' },
       { text: 'Blog', link: '/blog', activeMatch: '/blog' },
@@ -176,13 +173,26 @@ export default defineConfig({
       provider: 'local',
     },
     sidebar: {
-      '/product': [
+      '/products': [
         {
-          text: 'Product',
+          text: 'Products',
           items: [
-            { text: 'Electric', link: '/product/electric' },
-            { text: 'Cloud', link: '/product/cloud' },
-            { text: 'PGlite', link: '/product/pglite' },
+            { text: 'Overview', link: '/products/' },
+            { text: 'Postgres Sync', link: '/products/postgres-sync' },
+            { text: 'Durable Streams', link: '/products/durable-streams' },
+            { text: 'TanStack DB', link: '/products/tanstack-db' },
+            { text: 'PGlite', link: '/products/pglite' },
+          ],
+        },
+      ],
+      '/cloud': [
+        {
+          text: 'Electric Cloud',
+          items: [
+            { text: 'Overview', link: '/cloud/' },
+            { text: 'Usage', link: '/cloud/usage' },
+            { text: 'Protocols', link: '/cloud/protocols' },
+            { text: 'Pricing', link: '/cloud/pricing' },
           ],
         },
       ],
@@ -379,6 +389,7 @@ export default defineConfig({
     },
     siteTitle: false,
     socialLinks: [
+      { icon: 'durable-streams', link: 'https://github.com/electric-sql/durable-streams' },
       { icon: 'tanstack', link: 'https://tanstack.com/db' },
       { icon: 'pglite', link: 'https://pglite.dev' },
       { icon: 'x', link: 'https://x.com/ElectricSQL' },
@@ -397,7 +408,7 @@ export default defineConfig({
 
     const PRODUCTION_URL = 'https://electric-sql.com'
     const LOCAL_DEV_URL = 'http://localhost:5173'
-    const DEFAULT_IMAGE = '/img/meta/sync-solved.jpg'
+    const DEFAULT_IMAGE = '/img/meta/electric-sync-primitives.jpg'
 
     const siteOrigin =
       process.env.CONTEXT === 'production'

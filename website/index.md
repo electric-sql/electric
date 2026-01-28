@@ -4,15 +4,16 @@ title: "Electric"
 titleTemplate: ":title | Sync with your stack"
 hero:
   name: 'Sync'
-  text: 'solved'
+  text: '<br />with your stack'
   tagline: >-
-    Composable sync primitives.<br />That work with your stack.
+    Build fast, modern, collaborative apps
+    <span class="no-wrap">without changing your stack</span>
   actions:
     - theme: brand
       text: Sign-up to Cloud
       link: https://dashboard.electric-sql.cloud/
     - theme: brand
-      text: Sign-up
+      text: Cloud
       link: https://dashboard.electric-sql.cloud/
     - theme: alt
       text: Quickstart
@@ -34,15 +35,14 @@ import { onMounted } from 'vue'
 
 import {
   BackedBySection,
+  DeploymentSection,
   GetStartedStrap,
   LatestNewsSection,
   NoSilosStrap,
   OpenSourceSection,
-  PGliteStrap,
+  ProductsSection,
   ScalesToSection,
-  SolvesSyncSection,
-  SyncAwesomeSection,
-  UsedBySection,
+  SolutionsSection,
   WorksWithSection
 } from './src/components/home'
 
@@ -63,44 +63,40 @@ onMounted(() => {
 <div data-template="true" class="hidden" id="works-with-sql-template">
 
 ```sql
-CREATE TABLE projects (
-  id SERIAL PRIMARY KEY,
-  title TEXT UNIQUE
-);
+INSERT INTO todos VALUES ('sync');
+```
 
-CREATE TABLE issues (
-  id SERIAL PRIMARY KEY,
-  project_id INTEGER
-    REFERENCES projects(id)
-);
+</div>
+<div data-template="true" class="hidden" id="works-with-sse-template">
+
+```json
+data: {"type": "text-delta", "delta": "Hi, "}
 ```
 
 </div>
 <div data-template="true" class="hidden" id="works-with-tsx-template">
 
 ```tsx
-function Component({ project }) {
-  const { data } = useShape({
-    params: {
-      table: 'issues',
-      where: `project_id = ${project.id}`,
-    },
-  })
+const Todos = () => {
+  const { data } = useLiveQuery(query =>
+    query
+      .from({ todo: todoCollection })
+      .where(({ todo }) => todo.completed)
+  )
 
-  return <List issues={data} />
+  return <List todos={data} />
 }
 ```
 
 </div>
 
-<SyncAwesomeSection />
-<SolvesSyncSection />
+<SolutionsSection />
+<ProductsSection />
 <WorksWithSection />
+<DeploymentSection />
 <ScalesToSection />
 <NoSilosStrap />
-<UsedBySection />
-<BackedBySection />
-<OpenSourceSection />
-<PGliteStrap />
 <LatestNewsSection />
 <GetStartedStrap />
+<BackedBySection />
+<OpenSourceSection />

@@ -6,7 +6,7 @@ excerpt: >-
   Local-first is often seen as eliminating your API. But what if you like your API or need to keep it as part of your stack? This post shows how you can develop local-first apps incrementally, using your existing API.
 authors: [thruflo]
 image: /img/blog/local-first-with-your-existing-api/humble-toaster.jpg
-tags: [local-first example]
+tags: [local-first example, postgres-sync]
 outline: [2, 4]
 post: true
 ---
@@ -16,7 +16,7 @@ import AuthorizingProxy from '/static/img/docs/guides/auth/authorizing-proxy.png
 import AuthorizingProxySmall from '/static/img/docs/guides/auth/authorizing-proxy.sm.png?url'
 import AuthorizingProxyJPG from '/static/img/docs/guides/auth/authorizing-proxy.jpg?url'
 import BrowserConsolePNG from '/static/img/blog/browser-console.png?url'
-import NoStaleDataJGP from '/static/img/blog/no-stale-data.jpg?url'
+import NoStaleDataJPG from '/static/img/blog/no-stale-data.jpg?url'
 
 import { onMounted } from 'vue'
 
@@ -52,11 +52,11 @@ onMounted(async () => {
 })
 </script>
 
-One of the exciting things about [local-first software](/use-cases/local-first-software) is the potential to eliminate APIs and microservices. Instead of coding across the network, you code against a local store, data syncs in the background and your stack is suddenly much simpler.
+One of the exciting things about [local-first software](/sync) is the potential to eliminate APIs and microservices. Instead of coding across the network, you code against a local store, data syncs in the background and your stack is suddenly much simpler.
 
 But what if you don't want to eliminate your API? What if you want or need to keep it. How do you develop local-first software then?
 
-With [Electric](/product/electric), you can develop local-first apps incrementally, [using your existing API](#how-it-works).
+With [Electric](/products/postgres-sync), you can develop local-first apps incrementally, [using your existing API](#how-it-works).
 
 I gave a talk on this subject at the second Local-first meetup in Berlin in December 2024:
 
@@ -83,9 +83,9 @@ For example, REST APIs are stateless. We know how to scale them. We know how to 
 
 ### Electric's approach
 
-At Electric, our mission is to make [sync](/use-cases/data-sync) and [local-first](/use-cases/local-first-software) adoptable for mainstream software. So, one of the main challenges we've focused on is how to use Electric with your existing software stack.
+At Electric, our mission is to make [sync](/sync) and [local-first](/sync) adoptable for mainstream software. So, one of the main challenges we've focused on is how to use Electric with your existing software stack.
 
-This is why we work with [any data model](/docs/guides/deployment#data-model-compatibility) in [any standard Postgres](/docs/guides/deployment#_1-running-postgres). It's why we allow you to sync data into anything from a [JavaScript object](/docs/api/clients/typescript#shape) to a [local database](/product/pglite). And it's why we focus on providing [composable primitives](/blog/2024/07/17/electric-next) rather than a one-size-fits-all solution.
+This is why we work with [any data model](/docs/guides/deployment#data-model-compatibility) in [any standard Postgres](/docs/guides/deployment#_1-running-postgres). It's why we allow you to sync data into anything from a [JavaScript object](/docs/api/clients/typescript#shape) to a [local database](/products/pglite). And it's why we focus on providing [composable primitives](/blog/2024/07/17/electric-next) rather than a one-size-fits-all solution.
 
 As a result, with Electric, you can develop local-first apps incrementally, using your existing API. So you can get the benefits of local-first, without having to re-engineer your stack or re-invent sliced bread, just to make toast in the morning.
 
@@ -110,14 +110,14 @@ Because Electric syncs data [over HTTP](#http-and-json), you can use existing mi
 To build local-first you have to have the data locally. If you're doing that with data fetching then you have a stale data problem. Because if you're working with local data without keeping it in sync, then how do you know that it's not stale?
 
 <figure style="max-width: 512px">
-  <a :href="NoStaleDataJGP">
-    <img :src="NoStaleDataJGP" />
+  <a :href="NoStaleDataJPG">
+    <img :src="NoStaleDataJPG" />
   </a>
 </figure>
 
-This is why you need [data sync](/use-cases/data-sync). To keep the local data fresh when it changes.
+This is why you need [data sync](/sync). To keep the local data fresh when it changes.
 
-Happily, this is exactly what Electric does. It [syncs data into local apps and services](/product/electric) and keeps it fresh for you. Practically what does this look like? Well, instead of fetching data using web service calls, i.e.: something like this:
+Happily, this is exactly what Electric does. It [syncs data into local apps and services](/products/postgres-sync) and keeps it fresh for you. Practically what does this look like? Well, instead of fetching data using web service calls, i.e.: something like this:
 
 ```jsx
 import React, { useState, useEffect } from 'react'
@@ -162,7 +162,7 @@ For example:
 - [Trigger.dev](https://trigger.dev/) started out with Electric by syncing status data from their background jobs platform into their [Realtime dashboard](https://trigger.dev/launchweek/0/realtime)
 - [Otto](https://ottogrid.ai) swapped out the way they loaded data into their [AI spreadsheet](https://ottogrid.ai)
 
-You can go much further with Electric, all the way to [syncing into a local database](/product/pglite). But you can do this _incrementally_ as and when you need to.
+You can go much further with Electric, all the way to [syncing into a local database](/products/pglite). But you can do this _incrementally_ as and when you need to.
 
 #### Read-path
 
@@ -358,7 +358,7 @@ $ curl -sX POST "http://localhost:4000/gatekeeper/items" | jq
 }
 ```
 
-Then use the token to authorize requests to Electic, via the proxy, e.g.:
+Then use the token to authorize requests to Electric, via the proxy, e.g.:
 
 ```console
 $ curl -sv --header "Authorization: Bearer <token>" \
@@ -368,20 +368,20 @@ $ curl -sv --header "Authorization: Bearer <token>" \
 ...
 ```
 
-The [Typescript client](/docs/api/clients/typescript) supports auth headers and `401` / `403`error handling, so you can wrap this up using, e.g.:
+The [Typescript client](/docs/api/clients/typescript) supports auth headers and `401` / `403` error handling, so you can wrap this up using, e.g.:
 
 <<< @../../examples/gatekeeper-auth/client/index.ts{ts}
 
 ### Writes
 
-Electric does [read-path](#read-path) sync. That's the bit between Postgres and the client in the diagramme below. Electric **does not** handle writes. That's the dashed blue arrows around the outside, back from the client into Postgres:
+Electric does [read-path](#read-path) sync. That's the bit between Postgres and the client in the diagram below. Electric **does not** handle writes. That's the dashed blue arrows around the outside, back from the client into Postgres:
 
 <figure>
   <a href="/img/api/shape-log.jpg">
     <img srcset="/img/api/shape-log.sm.png 1064w, /img/api/shape-log.png 1396w"
         sizes="(max-width: 767px) 600px, 1396px"
         src="/img/api/shape-log.png"
-        alt="Shape log flow diagramme"
+        alt="Shape log flow diagram"
     />
   </a>
 </figure>
@@ -406,13 +406,13 @@ If you then look at the [optimistic state pattern](/docs/guides/writes#optimisti
 
 <<< @../../examples/write-patterns/patterns/2-optimistic-state/index.tsx{tsx}
 
-You can also see the [shared persistent optimistic state](https://github.com/electric-sql/electric/tree/main/examples/write-ptterns/patterns/3-shared-persistent) pattern for a more resilient, comprehensive approach to building local-first apps with Electric on optimistic state.
+You can also see the [shared persistent optimistic state](https://github.com/electric-sql/electric/tree/main/examples/write-patterns/patterns/3-shared-persistent) pattern for a more resilient, comprehensive approach to building local-first apps with Electric on optimistic state.
 
 #### Write-path sync
 
 Another pattern covered in the Writes guide is [through the database sync](/docs/guides/writes#through-the-db). This approach uses Electric to sync into an local, embedded database and then syncs changes made to the local database back to Postgres, via your API.
 
-The [example implementation](https://github.com/electric-sql/electric/tree/main/examples/write-patterns/patterns/4-through-the-db) uses Electric to sync into [PGlite](/product/pglite) as the local embedded database. All the application code needs to do is read and write to the local database. The [database schema](https://github.com/electric-sql/electric/blob/main/examples/write-patterns/patterns/4-through-the-db/local-schema.sql) takes care of everything else, including keeping a log of local changes to send to the server.
+The [example implementation](https://github.com/electric-sql/electric/tree/main/examples/write-patterns/patterns/4-through-the-db) uses Electric to sync into [PGlite](/products/pglite) as the local embedded database. All the application code needs to do is read and write to the local database. The [database schema](https://github.com/electric-sql/electric/blob/main/examples/write-patterns/patterns/4-through-the-db/local-schema.sql) takes care of everything else, including keeping a log of local changes to send to the server.
 
 This is then processed by a sync utility that sends data to a:
 
@@ -476,7 +476,7 @@ You can debug on the command line [using `curl`](/docs/quickstart#http-api).
 
 ### Browser console
 
-One of the most aspects of this is being able to see and easily introspect sync requests in the browser console. This allows you to see what data is being sent through when and also allows you to observe caching and and offline behaviour.
+One of the most important aspects of this is being able to see and easily introspect sync requests in the browser console. This allows you to see what data is being sent through when and also allows you to observe caching and offline behaviour.
 
 <p style="max-width: 512px">
   <a :href="BrowserConsolePNG">
@@ -488,7 +488,7 @@ You don't need to implement custom tooling to get visibility in what's happening
 
 ## Next steps
 
-This post has outlined how you can develop [local-first software](/use-cases/local-first-software) incrementally, using your existing API alongside [Electric](/product/electric) for read-path sync.
+This post has outlined how you can develop [local-first software](/sync) incrementally, using your existing API alongside [Electric](/products/postgres-sync) for read-path sync.
 
 To learn more and get started with Electric, see the [Quickstart](/docs/quickstart), [Documentation](/docs/intro) and source code on GitHub:
 

@@ -29,7 +29,7 @@ You can create a client for Electric by:
 
 ## Consume the HTTP API
 
-The [Electric sync service](/product/electric) syncs data over an [HTTP API](/docs/api/http). The primary job of a client is to consume this API using HTTP requests.
+The [Electric sync service](/products/postgres-sync) syncs data over an [HTTP API](/docs/api/http). The primary job of a client is to consume this API using HTTP requests.
 
 :::tip Production Best Practice
 While this guide shows direct HTTP API consumption, **production applications should proxy Electric requests through your backend API** rather than connecting clients directly to Electric. This provides security, authorization, and a clean API interface. See the [authentication guide](/docs/guides/auth) for implementation patterns.
@@ -149,7 +149,7 @@ Note that control messages should be skipped if you client doesn't know how to i
 
 ### Into a database
 
-As well as just a single data structure, it's possible to materialise one or more shapes into a local store. This can be very simple -- just update entries in a normalised store, no matter which shape they came through -- or can be complex, when aiming to maintain database invariants in a local embedded database such as [PGlite](/product/pglite).
+As well as just a single data structure, it's possible to materialise one or more shapes into a local store. This can be very simple -- just update entries in a normalised store, no matter which shape they came through -- or can be complex, when aiming to maintain database invariants in a local embedded database such as [PGlite](/products/pglite).
 
 > [!Tip] Syncing into a database is out of scope of this guide
 > If you're interested in implementing it, [raise an Issue](https://github.com/electric-sql/electric) or [ask on Discord](https://discord.electric-sql.com).
