@@ -26,12 +26,6 @@ defmodule Electric.Shapes.DependencyLayers do
     end
   end
 
-  # All dependencies found, add shape to new layer
-  defp add_after_dependencies([], shape_handle, deps_to_find) when map_size(deps_to_find) == 0 do
-    {:ok, [MapSet.new([shape_handle])]}
-  end
-
-  # Dependencies are missing - return error with the missing dependency handles
   defp add_after_dependencies([], _shape_handle, deps_to_find) do
     {:error, {:missing_dependencies, deps_to_find}}
   end
