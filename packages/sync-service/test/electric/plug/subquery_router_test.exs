@@ -321,7 +321,17 @@ defmodule Electric.Plug.SubqueryRouterTest do
         end)
 
         # Should receive a delete for t1
-        assert_delete(consumer, %{"id" => "t1"})
+        # Use collect_messages since control messages may arrive before the delete
+        messages = collect_messages(consumer, timeout: 1000)
+
+        delete_msgs =
+          Enum.filter(messages, fn
+            %ChangeMessage{headers: %{operation: :delete}, value: %{"id" => "t1"}} -> true
+            _ -> false
+          end)
+
+        assert length(delete_msgs) == 1,
+               "Expected delete for t1 when all disjuncts become false. Got messages: #{inspect(messages)}"
       end
     end
   end

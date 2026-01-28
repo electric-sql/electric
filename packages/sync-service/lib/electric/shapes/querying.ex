@@ -123,7 +123,11 @@ defmodule Electric.Shapes.Querying do
       {json_like_select, params} = json_like_select(shape, [], stack_id, shape_handle)
 
       query =
-        Postgrex.prepare!(conn, table, ~s|SELECT #{json_like_select} FROM #{table} #{where}|)
+        Postgrex.prepare!(
+          conn,
+          table,
+          ~s|SELECT #{json_like_select} FROM #{table} #{where}|
+        )
 
       Postgrex.stream(conn, query, params)
       |> Stream.flat_map(& &1.rows)
@@ -151,12 +155,16 @@ defmodule Electric.Shapes.Querying do
   # Converts a tag structure to something PG select can fill, but returns a list of separate strings for each tag
   # - it's up to the caller to interpolate them into the query correctly
   defp make_tags(%Shape{tag_structure: tag_structure}, stack_id, shape_handle) do
+    # Escape single quotes for SQL string interpolation
+    # Use to_string to handle nil values gracefully
+    escaped_prefix = escape_sql_string(to_string(stack_id) <> to_string(shape_handle))
+
     Enum.map(tag_structure, fn pattern ->
       Enum.map(pattern, fn
         column_name when is_binary(column_name) ->
           col = pg_cast_column_to_text(column_name)
           namespaced = pg_namespace_value_sql(col)
-          ~s[md5('#{stack_id}#{shape_handle}' || #{namespaced})]
+          ~s[md5('#{escaped_prefix}' || #{namespaced})]
 
         {:hash_together, columns} ->
           column_parts =
@@ -165,11 +173,13 @@ defmodule Electric.Shapes.Querying do
               ~s['#{col_name}:' || #{pg_namespace_value_sql(col)}]
             end)
 
-          ~s[md5('#{stack_id}#{shape_handle}' || #{Enum.join(column_parts, " || ")})]
+          ~s[md5('#{escaped_prefix}' || #{Enum.join(column_parts, " || ")})]
       end)
       |> Enum.join("|| '/' ||")
     end)
   end
+
+  defp escape_sql_string(str), do: String.replace(str, "'", "''")
 
   defp json_like_select(
          %Shape{

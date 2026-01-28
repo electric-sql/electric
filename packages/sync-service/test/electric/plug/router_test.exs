@@ -2331,7 +2331,7 @@ defmodule Electric.Plug.RouterTest do
            "INSERT INTO parent (id, excluded) VALUES (1, false), (2, true)",
            "INSERT INTO child (id, parent_id, value) VALUES (1, 1, 10), (2, 2, 20)"
          ]
-    test "NOT IN subquery should return 409 on move-in to subquery", %{
+    test "NOT IN subquery generates move-out when value enters subquery", %{
       opts: opts,
       db_conn: db_conn
     } do
@@ -2358,10 +2358,12 @@ defmodule Electric.Plug.RouterTest do
       # Now set parent 1 to excluded = true
       # This causes parent 1 to move INTO the subquery result
       # Which should cause child 1 to move OUT of the outer shape
-      # Since NOT IN subquery move-out isn't implemented, we expect a 409
       Postgrex.query!(db_conn, "UPDATE parent SET excluded = true WHERE id = 1", [])
 
-      assert {_req, 409, _response} = Task.await(task)
+      # Should receive a move-out control message for the tag
+      assert {_req, 200, response} = Task.await(task)
+
+      assert [%{"headers" => %{"event" => "move-out"}}, _] = response
     end
 
     @tag with_sql: [
@@ -2492,7 +2494,7 @@ defmodule Electric.Plug.RouterTest do
            "INSERT INTO parent (id, include_parent) VALUES (1, true)",
            "INSERT INTO child (id, parent_id, include_child) VALUES (1, 1, true)"
          ]
-    test "subquery combined with OR should return a 409 on move-out", %{
+    test "subquery combined with OR does not move-out when another disjunct is satisfied", %{
       opts: opts,
       db_conn: db_conn
     } do
@@ -2511,11 +2513,16 @@ defmodule Electric.Plug.RouterTest do
 
       task = live_shape_req(req, opts)
 
-      # Setting include_parent to false may cause a move out, but it doesn't in this case because include_child is still true
+      # Setting include_parent to false would cause a move out from subquery,
+      # but include_child is still true, so the row stays in the shape.
+      # We should receive a move-out control message (tag removal), but no delete.
       Postgrex.query!(db_conn, "UPDATE parent SET include_parent = false WHERE id = 1", [])
 
-      # Rather than working out whether this is a move out or not we return a 409
-      assert {_req, 409, _response} = Task.await(task)
+      # Should receive move-out control message but row stays in shape
+      assert {_req, 200, response} = Task.await(task)
+
+      # Response should contain move-out control message and up-to-date
+      assert [%{"headers" => %{"event" => "move-out"}}, _] = response
     end
 
     @tag with_sql: [
@@ -2524,7 +2531,7 @@ defmodule Electric.Plug.RouterTest do
            "INSERT INTO parent (id, include_parent) VALUES (1, false)",
            "INSERT INTO child (id, parent_id, include_child) VALUES (1, 1, true)"
          ]
-    test "subquery combined with OR should return a 409 on move-in", %{
+    test "subquery combined with OR - move-in adds tag even when row already in shape", %{
       opts: opts,
       db_conn: db_conn
     } do
@@ -2543,11 +2550,22 @@ defmodule Electric.Plug.RouterTest do
 
       task = live_shape_req(req, opts)
 
-      # Setting include_parent to true may cause a move in, but it doesn't in this case because include_child is already true
+      # Setting include_parent to true causes a move-in from the subquery.
+      # Note: Server-side deduplication only works for OR with other subqueries,
+      # not for simple column conditions like include_child = true.
+      # The insert will have is_move_in=true, and the client should handle
+      # deduplication using the tags (the row will have an additional tag).
       Postgrex.query!(db_conn, "UPDATE parent SET include_parent = true WHERE id = 1", [])
 
-      # Rather than working out whether this is a move in or not we return a 409
-      assert {_req, 409, _response} = Task.await(task)
+      # Should receive move-in insert with the new tag
+      assert {_req, 200, response} = Task.await(task)
+
+      # An insert with is_move_in=true will be generated (client handles deduplication)
+      insert_msgs =
+        Enum.filter(response, fn msg -> get_in(msg, ["headers", "operation"]) == "insert" end)
+
+      assert length(insert_msgs) == 1
+      assert %{"is_move_in" => true} = hd(insert_msgs)["headers"]
     end
 
     @tag with_sql: [
@@ -2982,7 +3000,7 @@ defmodule Electric.Plug.RouterTest do
            "INSERT INTO project_members (project_id, user_id) VALUES (1, 100), (3, 100)",
            "INSERT INTO projects (id, workspace_id, name) VALUES (1, 1, 'project 1'), (2, 1, 'project 2')"
          ]
-    test "supports two subqueries at the same level but returns 409 on move-in", %{
+    test "supports two subqueries at the same level with move-in", %{
       opts: opts,
       db_conn: db_conn
     } do
@@ -3050,8 +3068,13 @@ defmodule Electric.Plug.RouterTest do
         []
       )
 
-      # Should get a 409 because multiple same-level subqueries cannot currently correctly handle move-ins
-      assert %{status: 409} = Task.await(task)
+      # Project 2 should now move into the shape via the move-in query
+      assert %{status: 200} = conn = Task.await(task)
+
+      # Should receive an insert for project 2 with a move_in tag
+      [msg | _] = Jason.decode!(conn.resp_body)
+      assert %{"operation" => "insert", "is_move_in" => true} = msg["headers"]
+      assert %{"id" => "2", "workspace_id" => "1", "name" => "project 2"} = msg["value"]
     end
   end
 

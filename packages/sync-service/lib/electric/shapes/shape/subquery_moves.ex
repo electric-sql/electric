@@ -43,12 +43,14 @@ defmodule Electric.Shapes.Shape.SubqueryMoves do
   def move_in_where_clause(shape, shape_handle, move_ins) do
     move_in_where_clause(shape, shape_handle, move_ins, remove_not: false)
   end
+
   def move_in_where_clause(
         %Shape{
           where: %{query: query, used_refs: used_refs},
           shape_dependencies: shape_dependencies,
-          shape_dependencies_handles: shape_dependencies_handles
-        },
+          shape_dependencies_handles: shape_dependencies_handles,
+          subquery_comparison_expressions: comparison_expressions
+        } = shape,
         shape_handle,
         move_ins,
         opts
@@ -65,6 +67,20 @@ defmodule Electric.Shapes.Shape.SubqueryMoves do
         query
       end
 
+    # Build exclusion clauses for other subqueries to avoid duplicate inserts
+    # when a row is already in the shape via another disjunct
+    exclusion_clauses =
+      if Shape.has_multiple_disjuncts?(shape) do
+        build_exclusion_clauses(
+          shape_dependencies,
+          shape_dependencies_handles,
+          comparison_expressions,
+          index
+        )
+      else
+        ""
+      end
+
     case used_refs[["$sublink", "#{index}"]] do
       {:array, {:row, cols}} ->
         unnest_sections =
@@ -73,12 +89,81 @@ defmodule Electric.Shapes.Shape.SubqueryMoves do
           |> Enum.with_index(fn col, index -> "$#{index + 1}::text[]::#{col}[]" end)
           |> Enum.join(", ")
 
-        {String.replace(query, target_section, "IN (SELECT * FROM unnest(#{unnest_sections}))"),
-         Electric.Utils.unzip_any(move_ins) |> Tuple.to_list()}
+        base_query =
+          String.replace(query, target_section, "IN (SELECT * FROM unnest(#{unnest_sections}))")
+
+        # Wrap in parentheses to avoid precedence issues with OR and AND
+        final_query =
+          if exclusion_clauses != "", do: "(#{base_query})#{exclusion_clauses}", else: base_query
+
+        {final_query, Electric.Utils.unzip_any(move_ins) |> Tuple.to_list()}
 
       col ->
         type = Electric.Replication.Eval.type_to_pg_cast(col)
-        {String.replace(query, target_section, "= ANY ($1::text[]::#{type})"), [move_ins]}
+        base_query = String.replace(query, target_section, "= ANY ($1::text[]::#{type})")
+        # Wrap in parentheses to avoid precedence issues with OR and AND
+        final_query =
+          if exclusion_clauses != "", do: "(#{base_query})#{exclusion_clauses}", else: base_query
+
+        {final_query, [move_ins]}
+    end
+  end
+
+  # Build exclusion clauses for other subqueries to prevent duplicate inserts
+  # This generates SQL like: AND NOT (column IN (SELECT ...))
+  defp build_exclusion_clauses(
+         shape_dependencies,
+         _handles,
+         comparison_expressions,
+         current_index
+       ) do
+    other_indices =
+      0..(length(shape_dependencies) - 1)
+      |> Enum.reject(&(&1 == current_index))
+
+    clauses =
+      Enum.map(other_indices, fn idx ->
+        subquery_shape = Enum.at(shape_dependencies, idx)
+        subquery_section = rebuild_subquery_section(subquery_shape)
+
+        # Get the column reference for this subquery
+        column_sql = get_column_sql(comparison_expressions, idx)
+
+        if column_sql do
+          " AND NOT (#{column_sql} #{subquery_section})"
+        else
+          ""
+        end
+      end)
+
+    Enum.join(clauses)
+  end
+
+  # Get the SQL for the column that references a subquery
+  defp get_column_sql(comparison_expressions, subquery_index) do
+    path = ["$sublink", "#{subquery_index}"]
+
+    case Map.get(comparison_expressions, path) do
+      %{eval: %Eval.Parser.Ref{path: [column_name]}} ->
+        # Simple column reference
+        ~s["#{column_name}"]
+
+      %{eval: %Eval.Parser.RowExpr{elements: elements}} ->
+        # Multi-column reference (ROW expression)
+        columns =
+          Enum.map(elements, fn
+            %Eval.Parser.Ref{path: [col]} -> ~s["#{col}"]
+            _ -> nil
+          end)
+
+        if Enum.any?(columns, &is_nil/1) do
+          nil
+        else
+          "(#{Enum.join(columns, ", ")})"
+        end
+
+      _ ->
+        nil
     end
   end
 
@@ -191,7 +276,9 @@ defmodule Electric.Shapes.Shape.SubqueryMoves do
       columns when is_list(columns) ->
         # Take the first column that matches a string
         case Enum.find(columns, &is_binary/1) do
-          nil -> []
+          nil ->
+            []
+
           _column_name ->
             Enum.map(
               gone_values,
