@@ -4,6 +4,8 @@
 
 This plan implements RFC "Arbitrary Boolean Expressions with Subqueries" which extends Electric's subquery support from single `IN (SELECT ...)` conditions to arbitrary boolean expressions with OR, NOT, and multiple subqueries. The implementation introduces DNF-based decomposition, per-row `active_conditions` arrays, and position-based move-in/move-out broadcasts.
 
+RFC: ../../docs/rfcs/arbitrary-boolean-expressions-with-subqueries.md
+
 ## Current State Analysis
 
 ### Key Files and Their Roles
