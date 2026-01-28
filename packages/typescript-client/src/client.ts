@@ -1697,10 +1697,12 @@ export class ShapeStream<T extends Row<unknown> = Row>
         expiredShapesCache.markExpired(shapeKey, this.#shapeHandle)
       }
 
-      const newShapeHandle =
+      // Update handle for retry, but don't call #reset() as that would
+      // clear #activeSnapshotRequests and break requestSnapshot's
+      // pause/resume logic
+      this.#shapeHandle =
         response.headers.get(SHAPE_HANDLE_HEADER) ||
         `${this.#shapeHandle!}-next`
-      this.#reset(newShapeHandle)
 
       // Retry the snapshot request with the new handle
       return this.fetchSnapshot(opts)
