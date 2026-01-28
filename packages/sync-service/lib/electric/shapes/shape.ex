@@ -907,18 +907,23 @@ defmodule Electric.Shapes.Shape do
         {true, true} ->
           # Update stays as update - use new extra_refs for current record
           [{change, extra_refs_new}]
+
         {true, false} ->
           # Converted to delete - use old extra_refs for old record
           [{Changes.convert_update(change, to: :deleted_record), extra_refs_old}]
+
         {false, true} ->
           # Converted to insert - use new extra_refs for new record
           [{Changes.convert_update(change, to: :new_record), extra_refs_new}]
+
         {false, false} ->
           []
       end
 
     converted_changes
-    |> Enum.map(fn {c, refs} -> fill_move_tags(c, shape, opts[:stack_id], opts[:shape_handle], extra_refs: refs) end)
+    |> Enum.map(fn {c, refs} ->
+      fill_move_tags(c, shape, opts[:stack_id], opts[:shape_handle], extra_refs: refs)
+    end)
     |> Enum.map(&filter_change_columns(&1, selected_columns))
     |> Enum.filter(&should_keep_change?/1)
   end
@@ -935,8 +940,12 @@ defmodule Electric.Shapes.Shape do
   def fill_move_tags(change, %__MODULE__{tag_structure: []}, _, _, _opts), do: change
 
   def fill_move_tags(%Changes.NewRecord{move_tags: [_ | _]} = change, _, _, _, _opts), do: change
-  def fill_move_tags(%Changes.UpdatedRecord{move_tags: [_ | _]} = change, _, _, _, _opts), do: change
-  def fill_move_tags(%Changes.DeletedRecord{move_tags: [_ | _]} = change, _, _, _, _opts), do: change
+
+  def fill_move_tags(%Changes.UpdatedRecord{move_tags: [_ | _]} = change, _, _, _, _opts),
+    do: change
+
+  def fill_move_tags(%Changes.DeletedRecord{move_tags: [_ | _]} = change, _, _, _, _opts),
+    do: change
 
   def fill_move_tags(
         %Changes.NewRecord{record: record} = change,
@@ -955,7 +964,10 @@ defmodule Electric.Shapes.Shape do
     active_conditions =
       if dnf_decomposition != nil do
         used_refs = if where, do: where.used_refs, else: %{}
-        {:ok, conditions} = WhereClause.compute_active_conditions(dnf_decomposition, record, extra_refs, used_refs)
+
+        {:ok, conditions} =
+          WhereClause.compute_active_conditions(dnf_decomposition, record, extra_refs, used_refs)
+
         conditions
       else
         nil
@@ -966,7 +978,11 @@ defmodule Electric.Shapes.Shape do
 
   def fill_move_tags(
         %Changes.UpdatedRecord{record: record, old_record: old_record} = change,
-        %__MODULE__{tag_structure: tag_structure, dnf_decomposition: dnf_decomposition, where: where},
+        %__MODULE__{
+          tag_structure: tag_structure,
+          dnf_decomposition: dnf_decomposition,
+          where: where
+        },
         stack_id,
         shape_handle,
         opts
@@ -982,13 +998,21 @@ defmodule Electric.Shapes.Shape do
     active_conditions =
       if dnf_decomposition != nil do
         used_refs = if where, do: where.used_refs, else: %{}
-        {:ok, conditions} = WhereClause.compute_active_conditions(dnf_decomposition, record, extra_refs, used_refs)
+
+        {:ok, conditions} =
+          WhereClause.compute_active_conditions(dnf_decomposition, record, extra_refs, used_refs)
+
         conditions
       else
         nil
       end
 
-    %{change | move_tags: move_tags, removed_move_tags: old_move_tags, active_conditions: active_conditions}
+    %{
+      change
+      | move_tags: move_tags,
+        removed_move_tags: old_move_tags,
+        active_conditions: active_conditions
+    }
   end
 
   def fill_move_tags(
@@ -1008,7 +1032,10 @@ defmodule Electric.Shapes.Shape do
     active_conditions =
       if dnf_decomposition != nil do
         used_refs = if where, do: where.used_refs, else: %{}
-        {:ok, conditions} = WhereClause.compute_active_conditions(dnf_decomposition, record, extra_refs, used_refs)
+
+        {:ok, conditions} =
+          WhereClause.compute_active_conditions(dnf_decomposition, record, extra_refs, used_refs)
+
         conditions
       else
         nil
