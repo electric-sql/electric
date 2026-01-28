@@ -36,6 +36,10 @@ defmodule Electric.Shapes.Consumer do
   @stop_and_clean_timeout 30_000
   @stop_and_clean_reason ShapeCleaner.consumer_cleanup_reason()
 
+  defguardp txn_fragment_has_entire_txn?(txn_fragment)
+            when is_struct(txn_fragment, TransactionFragment) and txn_fragment.has_begin? and
+                   not is_nil(txn_fragment.commit)
+
   def name(stack_id, shape_handle) when is_binary(shape_handle) do
     ConsumerRegistry.name(stack_id, shape_handle)
   end
@@ -467,6 +471,28 @@ defmodule Electric.Shapes.Consumer do
     State.add_to_buffer(state, txn_fragment)
   end
 
+  # Short-circuit clauses for the most common case of a single-fragment transaction
+  defp handle_txn_fragment(%TransactionFragment{} = txn_fragment, state)
+       when txn_fragment_has_entire_txn?(txn_fragment) and needs_initial_filtering(state) do
+    case InitialSnapshot.filter(state.initial_snapshot_state, state.storage, txn_fragment.xid) do
+      {:consider_flushed, initial_snapshot_state} ->
+        # This transaction is already included in the snapshot, flush it immediately and skip
+        # writing it to the shape log.
+        state = %{state | initial_snapshot_state: initial_snapshot_state}
+        consider_flushed(state, txn_fragment.last_log_offset)
+
+      {:continue, initial_snapshot_state} ->
+        # The transaction is not part of the initial snapshot.
+        state = %{state | initial_snapshot_state: initial_snapshot_state}
+        build_and_handle_txn(txn_fragment, state)
+    end
+  end
+
+  defp handle_txn_fragment(%TransactionFragment{} = txn_fragment, state)
+       when txn_fragment_has_entire_txn?(txn_fragment) do
+    build_and_handle_txn(txn_fragment, state)
+  end
+
   # pending_txn struct is initialized to keep track of all fragments comprising this txn and
   # store the "consider_flushed" state on it.
   defp handle_txn_fragment(
@@ -510,12 +536,12 @@ defmodule Electric.Shapes.Consumer do
 
   defp handle_txn_fragment(txn_fragment, state), do: process_txn_fragment(txn_fragment, state)
 
-  # Fragments belonging to the same transaction can all be skipped either via xid-filtering or log offset filtering.
   defp process_txn_fragment(
          %TransactionFragment{} = txn_fragment,
          %State{pending_txn: txn} = state
        ) do
     cond do
+      # Fragments belonging to the same transaction can all be skipped either via xid-filtering or log offset filtering.
       # TODO: Do not mark the fragment itself flushed. When the cnnection restarts, we want to
       # receive all fragments starting from the one with has_begin? so as not to overcomplicate
       # the consumer logic.
@@ -540,8 +566,8 @@ defmodule Electric.Shapes.Consumer do
             handle_txn(txn, %{state | pending_txn: nil})
         end
 
-      # In the fragment-direct mode, each transaction fragment is written to storage individually.
       true ->
+        # If we've ended up in this branch, we know for sure that the current fragment is one of a few for the transaction.
         {state, persisted_changes} = write_txn_fragment_to_storage(state, txn_fragment)
         maybe_complete_pending_txn(state, txn_fragment, persisted_changes)
     end
@@ -730,6 +756,11 @@ defmodule Electric.Shapes.Consumer do
         {:cont, state}
       end
     end)
+  end
+
+  defp build_and_handle_txn(%TransactionFragment{} = txn_fragment, %State{} = state) do
+    {[txn], _} = TransactionBuilder.build(txn_fragment, TransactionBuilder.new())
+    handle_txn(txn, state)
   end
 
   defp handle_txn(txn, %State{} = state) do
