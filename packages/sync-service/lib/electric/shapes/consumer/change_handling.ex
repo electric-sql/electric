@@ -2,6 +2,7 @@ defmodule Electric.Shapes.Consumer.ChangeHandling do
   alias Electric.Shapes.Consumer.MoveIns
   alias Electric.Replication.Eval.Runner
   alias Electric.Shapes.Shape
+  alias Electric.Shapes.WhereClause
   alias Electric.Replication.LogOffset
   alias Electric.LogItems
   alias Electric.Shapes.Consumer.State
@@ -81,8 +82,27 @@ defmodule Electric.Shapes.Consumer.ChangeHandling do
   defp change_will_be_covered_by_move_in?(%Changes.DeletedRecord{}, _, _), do: false
 
   defp change_will_be_covered_by_move_in?(change, state, ctx) do
+    # First check if the new record's sublink values are in pending move-ins
     referenced_values = get_referenced_values(change, state)
-    change_visible_in_unresolved_move_ins_for_values?(referenced_values, state, ctx)
+
+    if change_visible_in_unresolved_move_ins_for_values?(referenced_values, state, ctx) do
+      # Even if the sublink value is in a pending move-in, we should only skip
+      # this change if the new record actually matches the full WHERE clause.
+      # The move-in query uses the full WHERE clause, so if the record doesn't
+      # match other non-subquery conditions in the WHERE clause, the move-in
+      # won't return this row and we need to process this change normally.
+      case ctx.extra_refs do
+        {_extra_refs_old, extra_refs_new} ->
+          WhereClause.includes_record?(state.shape.where, change.record, extra_refs_new)
+
+        _ ->
+          # If extra_refs is not a tuple (e.g., empty map in tests), fall back to
+          # the old behavior of skipping the change
+          true
+      end
+    else
+      false
+    end
   end
 
   defp get_referenced_values(change, state) do
