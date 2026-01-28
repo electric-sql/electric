@@ -165,6 +165,132 @@ defmodule Electric.Integration.SubqueryDependencyUpdateTest do
     end
   end
 
+  describe "subquery combined with other conditions" do
+    # Tests for shapes that have a subquery ANDed with other non-subquery conditions.
+    # The bug occurred when a change's sublink value was in a pending move-in, but
+    # the record didn't match other parts of the WHERE clause. The old code would
+    # incorrectly skip the change, assuming the move-in would cover it.
+
+    setup [:with_unique_db, :with_simple_parent_child_tables, :with_sql_execute]
+    setup :with_complete_stack
+    setup :with_electric_client
+
+    # Shape: children of active parents, but only if child is published
+    # This combines a subquery with a simple column condition using AND
+    @active_parents_published_children_where """
+    parent_id IN (SELECT id FROM parents WHERE active = true) AND status = 'published'
+    """
+
+    @tag with_sql: [
+           # Two parents: parent-a (active), parent-b (initially inactive)
+           "INSERT INTO parents (id, name, active) VALUES ('parent-a', 'Parent A', true), ('parent-b', 'Parent B', false)",
+           # A published child in parent-a (active) - in shape
+           "INSERT INTO children (id, name, parent_id, status) VALUES ('child-1', 'Child One', 'parent-a', 'published')"
+         ]
+    test "child is deleted when moved to parent that satisfies subquery but child status fails", ctx do
+      # SETUP:
+      #   child-1 -> parent-a (ACTIVE), status=published -> in shape
+      #   parent-b is NOT active
+      #   Shape requires: parent is active AND status = 'published'
+      #
+      # In a SINGLE TRANSACTION we:
+      #   1. Make parent-b active (triggers move-in for parent-b)
+      #   2. Move child-1 to parent-b AND change status to 'draft'
+      #
+      # After the transaction:
+      #   - parent-b IS now active (satisfies subquery)
+      #   - But child-1 has status='draft' (fails the other condition)
+      #   - child-1 should be DELETED from the shape (not covered by the move-in)
+
+      shape = ShapeDefinition.new!("children", where: @active_parents_published_children_where)
+      stream = Client.stream(ctx.client, shape, live: true)
+
+      with_consumer stream do
+        # Verify child-1 is in the shape initially
+        assert_insert(consumer, %{"id" => "child-1", "name" => "Child One"})
+        assert_up_to_date(consumer)
+
+        # In a single transaction:
+        # 1. Make parent-b active (triggers a move-in)
+        # 2. Move child-1 to parent-b and change status to draft
+        Postgrex.transaction(ctx.db_conn, fn conn ->
+          Postgrex.query!(conn, "UPDATE parents SET active = true WHERE id = 'parent-b'", [])
+          Postgrex.query!(conn, "UPDATE children SET parent_id = 'parent-b', status = 'draft' WHERE id = 'child-1'", [])
+        end)
+
+        # child-1 should be deleted because status='draft' fails the WHERE clause,
+        # even though parent-b became active in the same transaction
+        assert_delete(consumer, %{"id" => "child-1"})
+      end
+    end
+
+    @tag with_sql: [
+           # Two parents: parent-a (active), parent-b (initially inactive)
+           "INSERT INTO parents (id, name, active) VALUES ('parent-a', 'Parent A', true), ('parent-b', 'Parent B', false)",
+           # A published child in parent-b (inactive) - NOT in shape
+           "INSERT INTO children (id, name, parent_id, status) VALUES ('child-1', 'Child One', 'parent-b', 'published')"
+         ]
+    test "child moves into shape when parent becomes active and child satisfies other conditions", ctx do
+      # SETUP:
+      #   child-1 -> parent-b (NOT active), status=published -> NOT in shape
+      #   Shape requires: parent is active AND status = 'published'
+      #
+      # When parent-b becomes active:
+      #   - parent-b IS now active (satisfies subquery)
+      #   - child-1 has status='published' (satisfies other condition)
+      #   - Both conditions satisfied, child-1 should be INSERTED into shape
+
+      shape = ShapeDefinition.new!("children", where: @active_parents_published_children_where)
+      stream = Client.stream(ctx.client, shape, live: true)
+
+      with_consumer stream do
+        # Initially no children in the shape (parent-b is not active)
+        assert_up_to_date(consumer)
+
+        # Make parent-b active
+        Postgrex.query!(
+          ctx.db_conn,
+          "UPDATE parents SET active = true WHERE id = 'parent-b'",
+          []
+        )
+
+        # child-1 should now appear in the shape (both conditions now satisfied)
+        assert_insert(consumer, %{"id" => "child-1", "name" => "Child One"})
+      end
+    end
+  end
+
+  # ---- Simple Parent/Child Schema for 1-level subquery tests ----
+
+  def with_simple_parent_child_tables(%{db_conn: conn} = _context) do
+    Postgrex.query!(
+      conn,
+      """
+        CREATE TABLE parents (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          active BOOLEAN NOT NULL DEFAULT false
+        )
+      """,
+      []
+    )
+
+    Postgrex.query!(
+      conn,
+      """
+        CREATE TABLE children (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          parent_id TEXT NOT NULL REFERENCES parents(id) ON DELETE CASCADE,
+          status TEXT NOT NULL DEFAULT 'draft'
+        )
+      """,
+      []
+    )
+
+    %{tables: [{"public", "parents"}, {"public", "children"}]}
+  end
+
   # ---- Helpers ----
 
   defp filter_deletes(messages) do
