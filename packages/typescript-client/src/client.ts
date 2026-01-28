@@ -1689,6 +1689,23 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
     const response = await this.#fetchClient(fetchUrl.toString(), fetchOptions)
 
+    // Handle 409 "must-refetch" - shape handle changed/expired
+    if (response.status === 409) {
+      // Store the current shape URL as expired to avoid future 409s
+      if (this.#shapeHandle) {
+        const shapeKey = canonicalShapeKey(fetchUrl)
+        expiredShapesCache.markExpired(shapeKey, this.#shapeHandle)
+      }
+
+      const newShapeHandle =
+        response.headers.get(SHAPE_HANDLE_HEADER) ||
+        `${this.#shapeHandle!}-next`
+      this.#reset(newShapeHandle)
+
+      // Retry the snapshot request with the new handle
+      return this.fetchSnapshot(opts)
+    }
+
     if (!response.ok) {
       throw await FetchError.fromResponse(response, fetchUrl.toString())
     }

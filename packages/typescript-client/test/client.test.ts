@@ -2326,6 +2326,110 @@ describe.for(fetchAndSse)(
     )
 
     it(
+      `fetchSnapshot handles 409 must-refetch errors gracefully`,
+      { timeout: 10000 },
+      async ({ issuesTableUrl, aborter }) => {
+        // Track snapshot request count to verify retry behavior
+        let snapshotRequestCount = 0
+        const snapshotData = [
+          {
+            key: `test-key-1`,
+            value: { id: `1`, title: `Test Item` },
+            headers: { operation: `insert` },
+          },
+        ]
+        const snapshotMetadata = { offset: `0_0` }
+
+        const fetchClient = vi.fn(
+          async (input: string | URL | Request, init?: RequestInit) => {
+            const url = input instanceof Request ? input.url : input.toString()
+            const urlObj = new URL(url)
+
+            // Check if this is a snapshot request (has subset params)
+            const isSnapshotRequest =
+              urlObj.searchParams.has(`subset__where`) ||
+              urlObj.searchParams.has(`subset__limit`) ||
+              urlObj.searchParams.has(`subset__order_by`) ||
+              (init?.method === `POST` &&
+                init?.body &&
+                typeof init.body === `string` &&
+                (init.body.includes(`where`) || init.body.includes(`limit`)))
+
+            if (isSnapshotRequest) {
+              snapshotRequestCount++
+              // First snapshot request: return 409 to trigger retry
+              if (snapshotRequestCount === 1) {
+                return new Response(
+                  JSON.stringify([{ headers: { control: `must-refetch` } }]),
+                  {
+                    status: 409,
+                    statusText: `Conflict`,
+                    headers: new Headers({
+                      'Content-Type': `application/json`,
+                      [SHAPE_HANDLE_HEADER]: `new-handle-after-409`,
+                    }),
+                  }
+                )
+              }
+              // Subsequent requests: return successful snapshot
+              return new Response(
+                JSON.stringify({
+                  metadata: snapshotMetadata,
+                  data: snapshotData,
+                }),
+                {
+                  status: 200,
+                  headers: new Headers({
+                    'Content-Type': `application/json`,
+                    'electric-schema': JSON.stringify({
+                      id: { type: `text` },
+                      title: { type: `text` },
+                    }),
+                    'electric-handle': `new-handle-after-409`,
+                    'electric-offset': `0_0`,
+                  }),
+                }
+              )
+            }
+
+            // For normal stream requests, return minimal response
+            return new Response(`[]`, {
+              status: 200,
+              headers: new Headers({
+                'electric-schema': JSON.stringify({
+                  id: { type: `text` },
+                  title: { type: `text` },
+                }),
+                'electric-offset': `0_0`,
+                'electric-handle': `initial-handle`,
+              }),
+            })
+          }
+        )
+
+        const shapeStream = new ShapeStream({
+          url: `${BASE_URL}/v1/shape`,
+          params: { table: issuesTableUrl },
+          log: `changes_only`,
+          liveSse,
+          signal: aborter.signal,
+          fetchClient,
+        })
+
+        // fetchSnapshot should handle 409 gracefully and retry
+        const result = await shapeStream.fetchSnapshot({
+          orderBy: `title ASC`,
+          limit: 100,
+        })
+
+        // Verify fetchSnapshot retried after 409 and returned data
+        expect(snapshotRequestCount).toBe(2) // First 409, then successful retry
+        expect(result.data).toHaveLength(1)
+        expect(result.metadata).toEqual(snapshotMetadata)
+      }
+    )
+
+    it(
       `fetchSnapshot with POST method sends subset params in request body`,
       { timeout: 10000 },
       async ({ issuesTableUrl, insertIssues, aborter }) => {
