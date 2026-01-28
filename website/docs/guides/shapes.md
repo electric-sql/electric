@@ -229,12 +229,6 @@ We currently optimize the evaluation of the following clauses:
 > [!Warning] Need additional where clause optimization?
 > We plan to optimize a much larger subset of Postgres where clauses. If you need a particular clause optimized, please [raise an issue on GitHub](https://github.com/electric-sql/electric) or [let us know on Discord](https://discord.electric-sql.com).
 
-### Row filtering
-
-We use [row filtering](https://www.postgresql.org/docs/17/logical-replication-row-filter.html) where possible to reduce the amount of data sent over the replication stream. Based on the active shapes and their where clauses, we can determine which rows should be included in the replication stream to be filtered directly in Postgres.
-
-When using custom data types in where clauses, like enums or domains, row filtering at the replication level [is not available](https://www.postgresql.org/docs/17/sql-createpublication.html#:~:text=The%20row%20filter%20allows%20simple%20expressions%20that%20don%27t%20have%20user%2Ddefined%20functions%2C%20user%2Ddefined%20operators%2C%20user%2Ddefined%20types%2C%20user%2Ddefined%20collations%2C%20non%2Dimmutable%20built%2Din%20functions%2C%20or%20references%20to%20system%20columns.), and thus all changes will be sent over the replication stream for the relevant tables.
-
 ## Limitations
 
 ### Single table
