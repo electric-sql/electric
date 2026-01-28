@@ -18,9 +18,8 @@ import SyncShapeSVG from '/static/img/docs/guides/shapes/sync-shape.svg?url'
 
 Shapes are the core primitive for controlling sync in the ElectricSQL system.
 
-:::tip Production Best Practice
-While shapes can be requested directly from Electric, **production applications should request shapes through your backend API**. This allows your server to control table access, construct where clauses for authorization, and maintain security. See the [authentication guide](/docs/guides/auth) for implementation patterns.
-:::
+> [!Warning] TanStack DB
+> You can use shapes with [TanStack DB](/products/tanstack-db) for expressive, [query-driven sync](https://tanstack.com/blog/tanstack-db-0.5-query-driven-sync).
 
 ## What is a Shape?
 
@@ -52,7 +51,10 @@ Shapes are defined by:
 A shape contains all of the rows in the table that match the where clause, if provided. If a columns clause is provided, the synced rows will only contain those selected columns.
 
 > [!Warning] Limitations
-> Shapes are currently [single table](#single-table). Shape definitions are [immutable](#immutable).
+> Shapes are currently [single table](#single-table), though you can use [subqueries](#subqueries-experimental) to filter based on related data. Shape definitions are [immutable](#immutable).
+
+> [!Warning] Security
+> Production apps should request shapes through your backend API for authorization and security. See the [auth guide](/docs/guides/auth).
 
 ### Table
 
@@ -110,11 +112,29 @@ You can use `AND` and `OR` to group multiple conditions, e.g.:
 - `title='Electric' OR title='SQL'`
 - `title='Electric' AND status='todo'`
 
-Where clauses are limited in that they:
+Where clauses have the following constraints:
 
-1. can only refer to columns in the target row
-1. can't perform joins or refer to other tables
 1. can't use non-deterministic SQL functions like `count()` or `now()`
+
+#### Subqueries (experimental)
+
+Electric supports subqueries in where clauses, allowing you to filter rows based on data in other tables. This enables cross-table filtering patterns like:
+
+```sql
+WHERE id IN (SELECT user_id FROM memberships WHERE org_id = 'org_123')
+```
+
+Or filtering based on related data:
+
+```sql
+WHERE project_id IN (SELECT id FROM projects WHERE archived = false)
+```
+
+When a shape uses a subquery, Electric tracks the dependency between tables. If the data in the subquery changes (e.g., a project becomes archived), rows will automatically move in or out of the shape without the row itself being modified.
+
+:::warning Experimental feature
+Subqueries require enabling feature flags. Set `ELECTRIC_FEATURE_FLAGS=allow_subqueries,tagged_subqueries` to enable. See the [configuration docs](/docs/api/config#allow_subqueries) for details.
+:::
 
 When constructing a where clause with user input as a filter, it's recommended to use a positional placeholder (`$1`) to avoid
 SQL injection-like situations. For example, if filtering a table on a user id, it's better to use `where=user = $1` with
@@ -200,6 +220,148 @@ Or you can use framework integrations like the [`useShape`](/docs/integrations/r
 
 See the [Quickstart](/docs/quickstart) and [HTTP API](/docs/api/http) docs for more information.
 
+### TanStack DB
+
+Or with [TanStack DB](/products/tanstack-db), you can sync shapes into collections:
+
+```ts
+import { electricCollectionOptions } from '@tanstack/electric-db-collection'
+import { createCollection } from '@tanstack/react-db'
+
+const todosCollection = createCollection(
+  electricCollectionOptions({
+    id: 'todos',
+    shapeOptions: {
+      url: 'http://localhost:3000/v1/shape',
+      params: {
+        table: 'todos',
+      },
+    },
+  })
+)
+```
+
+Then query your collections with live queries:
+
+```tsx
+import { useLiveQuery, eq } from '@tanstack/react-db'
+
+const Todos = () => {
+  const { data } = useLiveQuery((q) =>
+    q
+      .from({ todo: todosCollection })
+      .where(({ todo }) => eq(todo.completed, false))
+  )
+
+  return <List items={data} />
+}
+```
+
+See the [TanStack DB docs](https://tanstack.com/db/latest/docs/overview) for more information.
+
+## Progressive data loading
+
+For applications that need fine-grained control over data loading, Electric supports **progressive data loading** using subset snapshots. This allows you to:
+
+- Load data on-demand instead of syncing everything upfront
+- Implement pagination, search, and filtered queries
+- Reduce initial sync time by only loading visible data
+
+### Changes-only mode
+
+By default, shapes sync an initial snapshot of all matching data, then deliver real-time updates. With `changes_only` mode, you skip the initial snapshot and only receive changes:
+
+```ts
+const stream = new ShapeStream({
+  url: `http://localhost:3000/v1/shape`,
+  params: {
+    table: `items`,
+  },
+  log: 'changes_only', // Skip initial snapshot
+})
+```
+
+### Requesting subset snapshots
+
+In `changes_only` mode, you can request specific subsets of data on-demand using `requestSnapshot()`:
+
+```ts
+const stream = new ShapeStream({
+  url: 'http://localhost:3000/v1/shape',
+  params: { table: 'items' },
+  log: 'changes_only',
+})
+
+// Load high-priority items with pagination
+const { metadata, data } = await stream.requestSnapshot({
+  where: "priority = $1",
+  params: { '1': 'high' },
+  orderBy: 'created_at DESC',
+  limit: 20,
+  offset: 0,
+})
+```
+
+The snapshot data is automatically injected into the message stream with proper change tracking. Electric uses PostgreSQL snapshot metadata to filter out changes that were already incorporated, preventing duplicates.
+
+:::warning Use POST for large queries
+When using subset queries with many parameters (e.g., `WHERE id = ANY($1)` with hundreds of IDs), use POST requests to avoid URL length limits:
+
+```ts
+const stream = new ShapeStream({
+  url: 'http://localhost:3000/v1/shape',
+  params: { table: 'items' },
+  log: 'changes_only',
+  subsetMethod: 'POST', // Recommended for large queries
+})
+```
+
+See the [TypeScript client docs](/docs/api/clients/typescript#requesting-subset-snapshots) and [HTTP API docs](/docs/api/http#subset-snapshots) for more details.
+:::
+
+### TanStack DB
+
+Or with [TanStack DB](/products/tanstack-db), you can use [query-driven sync](https://tanstack.com/blog/tanstack-db-0.5-query-driven-sync) where your live queries define what data to sync:
+
+```ts
+import { electricCollectionOptions } from '@tanstack/electric-db-collection'
+import { createCollection } from '@tanstack/react-db'
+
+const itemsCollection = createCollection(
+  electricCollectionOptions({
+    id: 'items',
+    shapeOptions: {
+      url: 'http://localhost:3000/v1/shape',
+      params: {
+        table: 'items',
+      },
+    },
+    syncMode: 'progressive',
+  })
+)
+```
+
+Then query data progressively with live queries:
+
+```tsx
+import { useLiveQuery, eq } from '@tanstack/react-db'
+
+const ItemsList = ({ priority }: { priority: string }) => {
+  const { data } = useLiveQuery((q) =>
+    q
+      .from({ item: itemsCollection })
+      .where(({ item }) => eq(item.priority, priority))
+      .orderBy(({ item }) => item.created_at, 'desc')
+      .limit(20),
+    [priority]
+  )
+
+  return <List items={data} />
+}
+```
+
+When `priority` changes, TanStack DB automatically requests the matching data from Electric. The collection syncs only the rows matching the current query, plus any rows from previous queries that are still in the collection. This keeps your local data set minimal while ensuring real-time updates for all synced rows.
+
 ## Throughput
 
 Electric evaluates [where clauses](#where-clause) when processing changes from Postgres and matching them to [shape logs](/docs/api/http#shape-log). If there are lots of shapes, this means we have to evaluate lots of where clauses. This has an impact on data throughput.
@@ -239,9 +401,9 @@ When using custom data types in where clauses, like enums or domains, row filter
 
 ### Single table
 
-Shapes are currently single table only.
+Shapes sync data from a single table. While you can use [subqueries](#subqueries-experimental) to filter rows based on data in other tables, the shape only contains rows from the root table—not the related data itself.
 
-In the [old version of Electric](https://legacy.electric-sql.com/docs/usage/data-access/shapes), Shapes had an include tree that allowed you to sync nested relations. The new Electric has not yet implemented support for include trees.
+For syncing related data across tables, you currently need to use multiple shapes. In the [old version of Electric](https://legacy.electric-sql.com/docs/usage/data-access/shapes), Shapes had an include tree that allowed you to sync nested relations. The new Electric has not yet implemented support for include trees.
 
 You can upvote and discuss adding support for include trees here:
 
