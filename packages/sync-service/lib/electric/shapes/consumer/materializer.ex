@@ -97,6 +97,7 @@ defmodule Electric.Shapes.Consumer.Materializer do
         tag_indices: %{},
         value_counts: %{},
         offset: LogOffset.before_all(),
+        subscribed_offset: nil,
         ref: nil,
         subscribers: MapSet.new()
       })
@@ -113,13 +114,15 @@ defmodule Electric.Shapes.Consumer.Materializer do
     try do
       case Consumer.await_snapshot_start(stack_id, shape_handle, :infinity) do
         :started ->
-          Consumer.subscribe_materializer(stack_id, shape_handle, self())
+          {:ok, subscribed_offset} =
+            Consumer.subscribe_materializer(stack_id, shape_handle, self())
 
           Process.monitor(Consumer.whereis(stack_id, shape_handle),
             tag: {:consumer_down, state.shape_handle}
           )
 
-          {:noreply, state, {:continue, {:read_stream, shape_storage}}}
+          {:noreply, %{state | subscribed_offset: subscribed_offset},
+           {:continue, {:read_stream, shape_storage}}}
 
         {:error, _reason} ->
           {:stop, :shutdown, state}
@@ -133,7 +136,8 @@ defmodule Electric.Shapes.Consumer.Materializer do
   end
 
   def handle_continue({:read_stream, storage}, state) do
-    {:ok, offset, stream} = get_stream_up_to_date(state.offset, storage)
+    {:ok, offset, stream} =
+      get_stream_up_to_offset(state.offset, state.subscribed_offset, storage)
 
     {state, _} =
       stream
@@ -143,22 +147,20 @@ defmodule Electric.Shapes.Consumer.Materializer do
     {:noreply, %{state | offset: offset}}
   end
 
-  def get_stream_up_to_date(min_offset, storage) do
-    case Storage.get_chunk_end_log_offset(min_offset, storage) do
-      nil ->
-        {:ok, max_offset} = Storage.fetch_latest_offset(storage)
+  @doc """
+  Get a stream of log entries from storage, bounded by the subscribed offset.
 
-        if is_log_offset_lte(max_offset, min_offset) do
-          {:ok, min_offset, []}
-        else
-          stream = Storage.get_log_stream(min_offset, max_offset, storage)
-          {:ok, max_offset, stream}
-        end
-
-      max_offset ->
-        stream1 = Storage.get_log_stream(min_offset, max_offset, storage)
-        {:ok, offset, stream2} = get_stream_up_to_date(max_offset, storage)
-        {:ok, offset, Stream.concat(stream1, stream2)}
+  The subscribed_offset is the Consumer's latest_offset at the time of subscription.
+  We only read up to this offset to avoid duplicates - any changes after this offset
+  will be delivered via new_changes messages from the Consumer.
+  """
+  def get_stream_up_to_offset(min_offset, subscribed_offset, storage) do
+    # If subscribed_offset is nil or at/before min_offset, nothing to read
+    if is_nil(subscribed_offset) or is_log_offset_lte(subscribed_offset, min_offset) do
+      {:ok, min_offset, []}
+    else
+      stream = Storage.get_log_stream(min_offset, subscribed_offset, storage)
+      {:ok, subscribed_offset, stream}
     end
   end
 
