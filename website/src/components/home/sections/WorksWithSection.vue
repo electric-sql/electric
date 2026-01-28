@@ -113,7 +113,7 @@ onMounted(() => {
 .data-sources {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 24px;
   height: 288px;
 }
 
@@ -198,8 +198,8 @@ onMounted(() => {
   text-align: center;
 }
 .layer {
-  padding: 17px;
-  margin-bottom: 15px;
+  padding: 15.5px 17px;
+  margin-bottom: 18.3333px;
   border-radius: 12px;
   border: 1px solid rgba(42, 44, 52, 0.5);
   background: var(--vp-c-bg-soft);
