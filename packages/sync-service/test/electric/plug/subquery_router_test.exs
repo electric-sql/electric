@@ -123,8 +123,10 @@ defmodule Electric.Plug.SubqueryRouterTest do
         assert_up_to_date(consumer)
 
         # active_conditions should be present when subqueries are involved
-        # For a simple single-subquery case, this might be [true]
-        assert Map.has_key?(msg.headers, :tags) or Map.has_key?(msg.headers, :active_conditions)
+        # For a simple single-subquery case, this is [true] (one position, satisfied)
+        assert Map.has_key?(msg.headers, :tags), "Expected tags in headers"
+        assert Map.has_key?(msg.headers, :active_conditions), "Expected active_conditions in headers"
+        assert msg.headers.active_conditions == [true], "Expected active_conditions to be [true] for satisfied condition"
       end
     end
 

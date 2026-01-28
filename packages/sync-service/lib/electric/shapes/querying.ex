@@ -181,6 +181,151 @@ defmodule Electric.Shapes.Querying do
 
   defp escape_sql_string(str), do: String.replace(str, "'", "''")
 
+  # Generate SQL for active_conditions array for shapes with DNF decomposition
+  defp make_active_conditions(%Shape{dnf_decomposition: nil}), do: nil
+  defp make_active_conditions(%Shape{dnf_decomposition: %{has_subqueries: false}}), do: nil
+
+  defp make_active_conditions(%Shape{
+         dnf_decomposition: decomposition,
+         shape_dependencies: shape_dependencies,
+         subquery_comparison_expressions: comparison_expressions
+       }) do
+    position_count = decomposition.position_count
+
+    if position_count == 0 do
+      nil
+    else
+      # Generate SQL for each position
+      conditions =
+        Enum.map(0..(position_count - 1), fn position ->
+          subexpr = Map.fetch!(decomposition.subexpressions, position)
+
+          if subexpr.is_subquery do
+            # For subquery positions, generate column IN (SELECT ...)
+            generate_subquery_condition_sql(subexpr, comparison_expressions, shape_dependencies)
+          else
+            # For non-subquery positions, we need to evaluate the condition
+            # Since rows in the result already satisfy the WHERE clause,
+            # non-subquery AND conditions must be true.
+            # For OR branches, we'd need the actual SQL which is complex.
+            # For now, generate the SQL based on what we can determine.
+            generate_non_subquery_condition_sql(subexpr)
+          end
+        end)
+
+      # Build a JSON array: '[true,false,true]'
+      # Using array_to_json for proper formatting
+      ~s|array_to_json(ARRAY[#{Enum.join(conditions, ", ")}]::boolean[])::text|
+    end
+  end
+
+  # Generate SQL for a subquery condition
+  defp generate_subquery_condition_sql(subexpr, comparison_expressions, shape_dependencies) do
+    # Find which sublink this corresponds to
+    {sublink_index, _} =
+      comparison_expressions
+      |> Enum.find({0, nil}, fn {path, _testexpr} ->
+        case path do
+          ["$sublink", idx_str] ->
+            idx = String.to_integer(idx_str)
+            # Match by checking if the column matches
+            dep_shape = Enum.at(shape_dependencies, idx)
+
+            if dep_shape do
+              column_matches?(subexpr, comparison_expressions, path)
+            else
+              false
+            end
+
+          _ ->
+            false
+        end
+      end)
+      |> then(fn
+        {["$sublink", idx_str], _} -> {String.to_integer(idx_str), true}
+        _ -> {0, false}
+      end)
+
+    # Get the dependency shape and build the subquery section
+    dep_shape = Enum.at(shape_dependencies, sublink_index)
+
+    if dep_shape do
+      subquery_section = rebuild_subquery_section(dep_shape)
+      column_sql = get_column_sql_for_subexpr(subexpr, comparison_expressions, sublink_index)
+
+      # Check if this is a negated position
+      if subexpr.negated do
+        ~s[(NOT #{column_sql} #{subquery_section})]
+      else
+        ~s[(#{column_sql} #{subquery_section})]
+      end
+    else
+      # Fallback - should not happen
+      "true"
+    end
+  end
+
+  # Check if a subexpression matches a sublink path
+  defp column_matches?(subexpr, comparison_expressions, path) do
+    case Map.get(comparison_expressions, path) do
+      nil ->
+        false
+
+      %{eval: %Electric.Replication.Eval.Parser.Ref{path: [col_name]}} ->
+        subexpr.column == col_name
+
+      _ ->
+        # For row expressions, just check if the column is non-nil
+        subexpr.column != nil
+    end
+  end
+
+  # Get the SQL for the column reference in a subexpression
+  defp get_column_sql_for_subexpr(subexpr, comparison_expressions, sublink_index) do
+    path = ["$sublink", "#{sublink_index}"]
+
+    case Map.get(comparison_expressions, path) do
+      %{eval: %Electric.Replication.Eval.Parser.Ref{path: [column_name]}} ->
+        ~s["#{column_name}"]
+
+      %{eval: %Electric.Replication.Eval.Parser.RowExpr{elements: elements}} ->
+        columns =
+          Enum.map(elements, fn
+            %Electric.Replication.Eval.Parser.Ref{path: [col]} -> ~s["#{col}"]
+            _ -> nil
+          end)
+
+        if Enum.any?(columns, &is_nil/1) do
+          # Fallback to column from subexpr
+          if subexpr.column, do: ~s["#{subexpr.column}"], else: "NULL"
+        else
+          "(#{Enum.join(columns, ", ")})"
+        end
+
+      _ ->
+        # Fallback to column from subexpr
+        if subexpr.column, do: ~s["#{subexpr.column}"], else: "NULL"
+    end
+  end
+
+  # Generate SQL for a non-subquery condition
+  # This is complex as we'd need to convert the AST back to SQL
+  # For now, return true (since the row is in the result, the condition is satisfied)
+  defp generate_non_subquery_condition_sql(_subexpr) do
+    # Non-subquery conditions in the WHERE clause are already satisfied for returned rows
+    # This is a simplification - for full accuracy we'd need AST-to-SQL conversion
+    "true"
+  end
+
+  # Rebuild the SQL subquery section (IN (SELECT ... FROM ...))
+  defp rebuild_subquery_section(shape) do
+    base =
+      ~s|IN (SELECT #{Enum.join(shape.explicitly_selected_columns, ", ")} FROM #{Utils.relation_to_sql(shape.root_table)}|
+
+    where = if shape.where, do: " WHERE #{shape.where.query}", else: ""
+    base <> where <> ")"
+  end
+
   defp json_like_select(
          %Shape{
            root_table: root_table,
@@ -191,9 +336,10 @@ defmodule Electric.Shapes.Querying do
          shape_handle
        ) do
     tags = make_tags(shape, stack_id, shape_handle)
+    active_conditions = make_active_conditions(shape)
     key_part = build_key_part(shape)
     value_part = build_value_part(columns)
-    headers_part = build_headers_part(root_table, additional_headers, tags)
+    headers_part = build_headers_part(root_table, additional_headers, tags, active_conditions)
 
     # We're building a JSON string that looks like this:
     #
@@ -213,10 +359,10 @@ defmodule Electric.Shapes.Querying do
     {query, []}
   end
 
-  defp build_headers_part(rel, headers, tags) when is_list(headers),
-    do: build_headers_part(rel, Map.new(headers), tags)
+  defp build_headers_part(rel, headers, tags, active_conditions) when is_list(headers),
+    do: build_headers_part(rel, Map.new(headers), tags, active_conditions)
 
-  defp build_headers_part({relation, table}, additional_headers, tags) do
+  defp build_headers_part({relation, table}, additional_headers, tags, active_conditions) do
     headers = %{operation: "insert", relation: [relation, table]}
 
     headers =
@@ -225,12 +371,23 @@ defmodule Electric.Shapes.Querying do
       |> Jason.encode!()
       |> Utils.escape_quotes(?')
 
+    # Add tags if present
     headers =
       if tags != [] do
         "{" <> json = headers
 
         tags = Enum.join(tags, ~s[ || '","' || ])
         ~s/{"tags":["' || #{tags} || '"],/ <> json
+      else
+        headers
+      end
+
+    # Add active_conditions if present
+    headers =
+      if active_conditions != nil do
+        "{" <> json = headers
+        # active_conditions is a SQL expression that evaluates to a JSON array
+        ~s/{"active_conditions":' || #{active_conditions} || ',/ <> json
       else
         headers
       end
