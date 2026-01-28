@@ -251,18 +251,26 @@ defmodule Electric.Replication.ShapeLogCollector do
           |> Enum.reduce(
             {state.partitions, state.event_router, state.dependency_layers, 0},
             fn {shape_handle, shape}, {partitions, event_router, layers, count} ->
-              {:ok, partitions} = Partitions.add_shape(partitions, shape_handle, shape)
+              # Check dependencies first - if a parent shape failed to restore,
+              # we should skip this shape (and its children will also be skipped)
+              case DependencyLayers.add_dependency(layers, shape, shape_handle) do
+                {:ok, layers} ->
+                  {:ok, partitions} = Partitions.add_shape(partitions, shape_handle, shape)
 
-              # Crash if dependencies are missing during restore - all persisted shapes
-              # should have their dependencies present since they were valid when saved.
-              {:ok, layers} = DependencyLayers.add_dependency(layers, shape, shape_handle)
+                  {
+                    partitions,
+                    EventRouter.add_shape(event_router, shape_handle, shape),
+                    layers,
+                    count + 1
+                  }
 
-              {
-                partitions,
-                EventRouter.add_shape(event_router, shape_handle, shape),
-                layers,
-                count + 1
-              }
+                {:error, {:missing_dependencies, missing_deps}} ->
+                  Logger.warning(
+                    "Skipping shape #{shape_handle} during restore: missing dependencies #{inspect(MapSet.to_list(missing_deps))}"
+                  )
+
+                  {partitions, event_router, layers, count}
+              end
             end
           )
 
