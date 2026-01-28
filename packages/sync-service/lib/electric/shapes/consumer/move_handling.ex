@@ -90,7 +90,8 @@ defmodule Electric.Shapes.Consumer.MoveHandling do
 
         # removed_values is already in {tag, value} tuple format from the materializer
         # which is exactly what do_move_in_query expects
-        new_state = do_move_in_query(state, dep_handle, removed_values, negated_positions)
+        # Pass remove_not: true to strip NOT from the WHERE clause
+        new_state = do_move_in_query(state, dep_handle, removed_values, negated_positions, remove_not: true)
         {new_state, notification}
       else
         {state, notification}
@@ -111,12 +112,15 @@ defmodule Electric.Shapes.Consumer.MoveHandling do
   end
 
   # Query for new rows to add to the shape
-  defp do_move_in_query(%State{shape: shape} = state, dep_handle, new_values, _positions) do
+  # Options:
+  # - :remove_not - if true, removes NOT from the WHERE clause (for NOT IN shapes)
+  defp do_move_in_query(%State{shape: shape} = state, dep_handle, new_values, _positions, opts \\ []) do
     # Build the WHERE clause for the move-in query
     values = Enum.map(new_values, &elem(&1, 1))
 
     formed_where_clause =
-      SubqueryMoves.move_in_where_clause(shape, dep_handle, values)
+      SubqueryMoves.move_in_where_clause(shape, dep_handle, values, opts)
+
 
     # If there are multiple disjuncts, we should exclude rows already in shape via other disjuncts
     # For now, we use the standard query - deduplication will be handled later

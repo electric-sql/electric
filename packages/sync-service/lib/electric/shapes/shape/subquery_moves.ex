@@ -11,6 +11,8 @@ defmodule Electric.Shapes.Shape.SubqueryMoves do
   def null_sentinel, do: @null_sentinel
 
   @doc """
+  Build a WHERE clause for querying rows that should move into the shape.
+
   Given a shape with a where clause that contains a subquery, make a query that can use a
   list of value in place of the subquery.
 
@@ -32,7 +34,15 @@ defmodule Electric.Shapes.Shape.SubqueryMoves do
   And the parameters will be:
 
       [["1", "2", "3"]]
+
+  Options:
+  - `:remove_not` - if true, removes any NOT prefix before the IN subquery.
+    This is needed for NOT IN shapes where move-out from the subquery
+    triggers move-in to the outer shape.
   """
+  def move_in_where_clause(shape, shape_handle, move_ins) do
+    move_in_where_clause(shape, shape_handle, move_ins, remove_not: false)
+  end
   def move_in_where_clause(
         %Shape{
           where: %{query: query, used_refs: used_refs},
@@ -40,10 +50,20 @@ defmodule Electric.Shapes.Shape.SubqueryMoves do
           shape_dependencies_handles: shape_dependencies_handles
         },
         shape_handle,
-        move_ins
+        move_ins,
+        opts
       ) do
     index = Enum.find_index(shape_dependencies_handles, &(&1 == shape_handle))
     target_section = Enum.at(shape_dependencies, index) |> rebuild_subquery_section()
+
+    # For NOT IN shapes, we need to remove the NOT when querying for new rows
+    # because the values are now NOT in the subquery (they were removed)
+    query =
+      if Keyword.get(opts, :remove_not, false) do
+        remove_not_before_section(query, target_section)
+      else
+        query
+      end
 
     case used_refs[["$sublink", "#{index}"]] do
       {:array, {:row, cols}} ->
@@ -59,6 +79,26 @@ defmodule Electric.Shapes.Shape.SubqueryMoves do
       col ->
         type = Electric.Replication.Eval.type_to_pg_cast(col)
         {String.replace(query, target_section, "= ANY ($1::text[]::#{type})"), [move_ins]}
+    end
+  end
+
+  # Remove "NOT " prefix before the subquery column and IN clause
+  # The query has form like "NOT column_name IN (SELECT ...)"
+  # We need to find and remove the "NOT " that precedes this pattern
+  defp remove_not_before_section(query, target_section) do
+    # The target_section is like "IN (SELECT id FROM table WHERE ...)"
+    # We need to find "NOT <anything> IN (SELECT..." and remove "NOT "
+    # Using regex to match "NOT " followed by anything then the target_section
+    pattern = ~r/NOT\s+(\S+\s+)#{Regex.escape(target_section)}/i
+
+    case Regex.run(pattern, query) do
+      [match, column_part] ->
+        # Found pattern, remove the "NOT " but keep the column_part and target_section
+        String.replace(query, match, column_part <> target_section)
+
+      nil ->
+        # No match found, return query unchanged
+        query
     end
   end
 
