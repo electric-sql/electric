@@ -1,11 +1,90 @@
 defmodule Electric.Replication.ChangesTest do
   use ExUnit.Case, async: true
 
+  alias Electric.Replication.Changes.Commit
   alias Electric.Replication.Changes.NewRecord
   alias Electric.Replication.Changes.UpdatedRecord
   alias Electric.Replication.Changes.DeletedRecord
 
   doctest Electric.Replication.Changes, import: true
+
+  describe "Commit.calculate_initial_receive_lag/2" do
+    test "returns positive lag when commit timestamp is in the past" do
+      commit_timestamp = ~U[2024-01-01 12:00:00.000Z]
+      current_time = ~U[2024-01-01 12:00:00.500Z]
+
+      lag = Commit.calculate_initial_receive_lag(commit_timestamp, current_time)
+
+      assert lag == 500
+    end
+
+    test "returns zero when commit timestamp equals current time" do
+      timestamp = ~U[2024-01-01 12:00:00.000Z]
+
+      lag = Commit.calculate_initial_receive_lag(timestamp, timestamp)
+
+      assert lag == 0
+    end
+
+    test "clamps to zero when commit timestamp is in the future (clock skew)" do
+      commit_timestamp = ~U[2024-01-01 12:00:01.000Z]
+      current_time = ~U[2024-01-01 12:00:00.000Z]
+
+      lag = Commit.calculate_initial_receive_lag(commit_timestamp, current_time)
+
+      assert lag == 0
+    end
+  end
+
+  describe "Commit.calculate_final_receive_lag/2" do
+    test "returns initial lag plus elapsed time in Electric" do
+      received_at_mono = System.monotonic_time()
+      initial_lag = 100
+      elapsed_ms = 50
+
+      commit = %Commit{
+        commit_timestamp: ~U[2024-01-01 12:00:00.000Z],
+        received_at_mono: received_at_mono,
+        initial_receive_lag: initial_lag
+      }
+
+      current_mono =
+        received_at_mono + System.convert_time_unit(elapsed_ms, :millisecond, :native)
+
+      lag = Commit.calculate_final_receive_lag(commit, current_mono)
+
+      assert lag == initial_lag + elapsed_ms
+    end
+
+    test "returns initial lag when no time has elapsed" do
+      mono_time = System.monotonic_time()
+      initial_lag = 250
+
+      commit = %Commit{
+        commit_timestamp: ~U[2024-01-01 12:00:00.000Z],
+        received_at_mono: mono_time,
+        initial_receive_lag: initial_lag
+      }
+
+      lag = Commit.calculate_final_receive_lag(commit, mono_time)
+
+      assert lag == initial_lag
+    end
+
+    test "never returns negative values even with zero initial lag" do
+      mono_time = System.monotonic_time()
+
+      commit = %Commit{
+        commit_timestamp: ~U[2024-01-01 12:00:00.000Z],
+        received_at_mono: mono_time,
+        initial_receive_lag: 0
+      }
+
+      lag = Commit.calculate_final_receive_lag(commit, mono_time)
+
+      assert lag >= 0
+    end
+  end
 
   describe "UpdatedRecord.changed_columns" do
     test "is empty when old_record is nil" do

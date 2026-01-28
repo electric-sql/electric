@@ -38,10 +38,60 @@ defmodule Electric.Replication.Changes do
     @type t() :: %__MODULE__{
             commit_timestamp: DateTime.t() | nil,
             transaction_size: non_neg_integer(),
-            txn_change_count: non_neg_integer()
+            txn_change_count: non_neg_integer(),
+            received_at_mono: integer() | nil,
+            initial_receive_lag: non_neg_integer() | nil
           }
 
-    defstruct [:commit_timestamp, transaction_size: 0, txn_change_count: 0]
+    defstruct [
+      :commit_timestamp,
+      :received_at_mono,
+      :initial_receive_lag,
+      transaction_size: 0,
+      txn_change_count: 0
+    ]
+
+    @doc """
+    Calculate the initial receive lag in milliseconds, clamped to >= 0.
+
+    This handles clock skew between Postgres and Electric by ensuring
+    the lag is never negative even if the commit timestamp appears to
+    be in the future from Electric's perspective.
+
+    Note: When clocks are skewed such that the commit timestamp is ahead
+    of Electric's clock, this function clamps the result to 0. This means
+    information about actual network/replication lag is lost, and the
+    final receive lag reported by `calculate_final_receive_lag/2` will
+    only reflect Electric's internal processing time, not the true
+    end-to-end lag from Postgres commit to Electric receipt.
+    """
+    @spec calculate_initial_receive_lag(DateTime.t(), DateTime.t()) :: non_neg_integer()
+    def calculate_initial_receive_lag(commit_timestamp, current_time) do
+      max(0, DateTime.diff(current_time, commit_timestamp, :millisecond))
+    end
+
+    @doc """
+    Calculate the final receive lag in milliseconds.
+
+    Combines the initial receive lag (captured when the commit was received)
+    with the time elapsed within Electric (measured using monotonic time).
+
+    Note: If the initial receive lag was clamped to 0 due to clock skew
+    (see `calculate_initial_receive_lag/2`), the value returned here
+    represents only Electric's internal processing time, not the true
+    end-to-end lag from Postgres commit to acknowledgement.
+    """
+    @spec calculate_final_receive_lag(t(), integer()) :: non_neg_integer()
+    def calculate_final_receive_lag(%__MODULE__{} = commit, current_mono) do
+      elapsed_in_electric =
+        System.convert_time_unit(
+          current_mono - commit.received_at_mono,
+          :native,
+          :millisecond
+        )
+
+      commit.initial_receive_lag + elapsed_in_electric
+    end
   end
 
   defmodule TransactionFragment do
