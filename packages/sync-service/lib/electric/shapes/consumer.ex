@@ -2,9 +2,10 @@ defmodule Electric.Shapes.Consumer do
   use GenServer, restart: :temporary
 
   alias Electric.Shapes.Consumer.ChangeHandling
-  alias Electric.Shapes.Consumer.MoveIns
   alias Electric.Shapes.Consumer.InitialSnapshot
   alias Electric.Shapes.Consumer.MoveHandling
+  alias Electric.Shapes.Consumer.MoveIns
+  alias Electric.Shapes.Consumer.PendingTxn
   alias Electric.Shapes.Consumer.State
 
   import Electric.Shapes.Consumer.State, only: :macros
@@ -166,16 +167,13 @@ defmodule Electric.Shapes.Consumer do
     stop_and_clean(state)
   end
 
-  def handle_continue(:consume_buffer, %State{buffer: buffer} = state) do
-    Logger.debug(fn -> "Consumer catching up on #{length(buffer)} transactions" end)
-    state = %{state | buffer: [], buffering?: false}
+  def handle_continue(:consume_buffer, state) do
+    state = process_buffered_txn_fragments(state)
 
-    case handle_txns(Enum.reverse(buffer), state) do
-      %State{terminating?: true} = state ->
-        {:noreply, state, {:continue, :stop_and_clean}}
-
-      state ->
-        {:noreply, state, state.hibernate_after}
+    if state.terminating? do
+      {:noreply, state, {:continue, :stop_and_clean}}
+    else
+      {:noreply, state, state.hibernate_after}
     end
   end
 
@@ -452,33 +450,261 @@ defmodule Electric.Shapes.Consumer do
   end
 
   defp handle_event(%TransactionFragment{} = txn_fragment, state) do
+    handle_txn_fragment(txn_fragment, state)
+  end
+
+  # A consumer process starts with buffering?=true before it has PG snapshot info (xmin, xmax, xip_list).
+  # In this phase we have to buffer incoming txn fragments because we can't yet decide what to
+  # do with the transaction: skip it or write it to the shape log.
+  #
+  # When snapshot info arrives, `process_buffered_txn_fragments/1` will be called to process
+  # buffered fragments in order.
+  defp handle_txn_fragment(
+         %TransactionFragment{} = txn_fragment,
+         %State{buffering?: true} = state
+       ) do
+    State.add_to_buffer(state, txn_fragment)
+  end
+
+  # The first fragment of a new transaction: initialize pending txn metadata and check if the
+  # transaction xid is already part of the snapshot. If it is, all subsequent fragments of this
+  # transaction will be ignored.
+  defp handle_txn_fragment(
+         %TransactionFragment{xid: xid} = txn_fragment,
+         %State{pending_txn: nil} = state
+       ) do
+    txn = PendingTxn.new(xid)
+    state = %{state | pending_txn: txn}
+    handle_txn_fragment(txn_fragment, state)
+  end
+
+  # We can use the initial filtering to our advantage here and avoid accumulating fragments for
+  # a transaction that is going to be skipped anyway. This works both in the regular mode and
+  # in the fragment-direct mode.
+  defp handle_txn_fragment(
+         %TransactionFragment{has_begin?: true, xid: xid} = txn_fragment,
+         %State{} = state
+       )
+       when needs_initial_filtering(state) do
+    case InitialSnapshot.filter(state.initial_snapshot_state, state.storage, xid) do
+      {:consider_flushed, initial_snapshot_state} ->
+        # This transaction is already included in the snapshot, so just ignore all of its fragments.
+        # TODO: it could be the case the multiple txns are seen while InitialSnapshot needs
+        # filtering. And the outcomes for those txns could be different.
+        %{
+          state
+          | pending_txn: PendingTxn.consider_flushed(state.pending_txn),
+            initial_snapshot_state: initial_snapshot_state
+        }
+
+      {:continue, new_initial_snapshot_state} ->
+        # The transaction is not part of the initial snapshot.
+        state = %{state | initial_snapshot_state: new_initial_snapshot_state}
+        process_txn_fragment(txn_fragment, state)
+    end
+  end
+
+  defp handle_txn_fragment(
+         %TransactionFragment{last_log_offset: last_log_offset} = txn_fragment,
+         %State{pending_txn: txn} = state
+       ) do
+    if txn.consider_flushed? or fragment_already_processed?(txn_fragment, state) do
+      # TODO: Do not mark the fragment itself flushed. When the cnnection restarts, we want to
+      # receive all fragments starting from the one with has_begin? so as not to overcomplicate
+      # the consumer logic.
+      consider_flushed(state, last_log_offset)
+    else
+      process_txn_fragment(txn_fragment, state)
+    end
+  end
+
+  # In the regular mode all fragments are buffered until the Commit change is seen. At that
+  # point, a transaction struct is produced from the buffered fragments and is written to
+  # storage.
+  defp process_txn_fragment(txn_fragment, %State{fragment_direct?: false} = state) do
     {txns, transaction_builder} =
       TransactionBuilder.build(txn_fragment, state.transaction_builder)
 
     state = %{state | transaction_builder: transaction_builder}
-    handle_txns(txns, state)
-  end
 
-  defp handle_txns(txns, %State{} = state), do: Enum.reduce_while(txns, state, &handle_txn/2)
-
-  # Keep buffering for initial snapshot
-  defp handle_txn(txn, %State{buffering?: true} = state),
-    do: {:cont, State.add_to_buffer(state, txn)}
-
-  defp handle_txn(txn, state) when needs_initial_filtering(state) do
-    case InitialSnapshot.filter(state.initial_snapshot_state, state.storage, txn) do
-      {:consider_flushed, initial_snapshot_state} ->
-        {:cont, consider_flushed(%{state | initial_snapshot_state: initial_snapshot_state}, txn)}
-
-      {:continue, new_initial_snapshot_state} ->
-        handle_txn_in_span(txn, %{state | initial_snapshot_state: new_initial_snapshot_state})
+    case txns do
+      [] -> state
+      [txn] -> handle_txn(txn, state)
     end
   end
 
-  # Remove the move-in buffering check - just process immediately
-  defp handle_txn(txn, state), do: handle_txn_in_span(txn, state)
+  # In the fragment-direct mode, each transaction fragment is written to storage individually.
+  defp process_txn_fragment(txn_fragment, state) do
+    state
+    |> write_txn_fragment_to_storage(txn_fragment)
+    |> maybe_complete_pending_txn(txn_fragment)
+  end
 
-  defp handle_txn_in_span(txn, %State{} = state) do
+  defp fragment_already_processed?(%TransactionFragment{last_log_offset: offset}, state) do
+    LogOffset.is_log_offset_lte(offset, state.latest_offset)
+  end
+
+  # This function does similar things to do_handle_txn/2 but with the following simplifications:
+  #   - it doesn't account for move-ins or move-outs or converting update operations into insert/delete
+  #   - the fragment is written directly to storage if it has changes matching this shape
+  #   - if the fragment has a commit message, the ShapeLogCollector is informed about the new flush boundary
+  defp write_txn_fragment_to_storage(state, %TransactionFragment{changes: []}), do: state
+
+  defp write_txn_fragment_to_storage(
+         state,
+         %TransactionFragment{changes: changes, commit: commit, xid: xid} = fragment
+       ) do
+    %{
+      shape: shape,
+      writer: writer,
+      pending_txn: txn,
+      stack_id: stack_id,
+      shape_handle: shape_handle
+    } = state
+
+    case convert_fragment_changes(changes, stack_id, shape_handle, shape) do
+      :includes_truncate ->
+        handle_txn_with_truncate(xid, state)
+
+      {[], 0} ->
+        Logger.debug(fn ->
+          "No relevant changes found for #{inspect(shape)} in txn fragment of txn #{xid}"
+        end)
+
+        {:cont, consider_flushed(state, fragment.last_log_offset)}
+
+      {reversed_changes, num_changes, last_log_offset} ->
+        converted_changes =
+          reversed_changes
+          |> maybe_mark_last_change(commit)
+          |> Enum.reverse()
+
+        {lines, total_size} = prepare_log_entries(converted_changes, xid, shape)
+        writer = ShapeCache.Storage.append_fragment_to_log!(lines, writer)
+
+        txn = PendingTxn.update_stats(txn, last_log_offset, num_changes, total_size)
+
+        Logger.debug(fn ->
+          "Wrote #{num_changes} changes for fragment xid=#{xid}, total_bytes=#{total_size}"
+        end)
+
+        %{
+          state
+          | writer: writer,
+            latest_offset: last_log_offset,
+            pending_txn: txn,
+            txn_offset_mapping:
+              state.txn_offset_mapping ++ [{last_log_offset, fragment.last_log_offset}]
+        }
+    end
+  end
+
+  defp convert_fragment_changes(changes, stack_id, shape_handle, shape) do
+    Enum.reduce_while(changes, {[], 0}, fn
+      %Changes.TruncatedRelation{}, _acc ->
+        {:halt, :includes_truncate}
+
+      change, {changes, count} = acc ->
+        # Apply Shape.convert_change to each change to:
+        # 1. Filter out changes not matching the shape's table
+        # 2. Apply WHERE clause filtering
+        case Shape.convert_change(shape, change, stack_id: stack_id, shape_handle: shape_handle) do
+          [] ->
+            {:cont, acc}
+
+          [change] ->
+            {:cont, {[change | changes], count + 1}}
+        end
+    end)
+    |> case do
+      {[change | _] = changes, num_changes} ->
+        {changes, num_changes, LogItems.expected_offset_after_split(change)}
+
+      acc ->
+        acc
+    end
+  end
+
+  # Mark the last change in the list as last? when this is a commit fragment
+  # This is needed for clients to know when a transaction is complete
+  # The changes passed to this function are in reversed order, i.e. the last change is the head of the list.
+  defp maybe_mark_last_change([], _commit), do: []
+  defp maybe_mark_last_change(changes, nil), do: changes
+
+  defp maybe_mark_last_change(changes, _commit) do
+    [head | tail] = changes
+    [%{head | last?: true} | tail]
+  end
+
+  defp maybe_complete_pending_txn(state, %TransactionFragment{commit: nil}), do: state
+
+  defp maybe_complete_pending_txn(%{terminating?: true} = state, _fragment) do
+    # If we're terminating (e.g., due to truncate), don't complete the transaction
+    state
+  end
+
+  defp maybe_complete_pending_txn(state, %TransactionFragment{commit: commit} = fragment) do
+    %{pending_txn: txn, writer: writer, shape: shape, shape_handle: shape_handle} = state
+
+    # Signal commit to storage for potential chunk boundary calculation
+    writer = ShapeCache.Storage.signal_txn_commit!(txn.xid, writer)
+
+    # Only notify if we actually wrote changes
+    if txn.num_changes > 0 do
+      # TODO: Only notify upon writing the full txn to storage
+      notify_new_changes(state, fragment.changes, txn.last_log_offset)
+
+      lag = calculate_replication_lag_from_commit(commit)
+
+      Electric.Telemetry.OpenTelemetry.execute(
+        [:electric, :storage, :transaction_stored],
+        %{
+          bytes: txn.total_bytes,
+          count: 1,
+          operations: txn.num_changes,
+          replication_lag: lag
+        },
+        Map.new(shape_attrs(shape_handle, shape))
+      )
+
+      Logger.debug(fn ->
+        "Completed fragment-direct transaction xid=#{txn.xid}, changes=#{txn.num_changes}"
+      end)
+
+      %{
+        state
+        | writer: writer,
+          latest_offset: txn.last_log_offset,
+          pending_txn: nil,
+          txn_offset_mapping:
+            state.txn_offset_mapping ++ [{txn.last_log_offset, fragment.last_log_offset}]
+      }
+    else
+      # No changes were written - notify flush boundary like consider_flushed does
+      Logger.debug(fn ->
+        "No relevant changes in fragment-direct transaction xid=#{txn.xid}"
+      end)
+
+      state = %{state | writer: writer, pending_txn: nil}
+      consider_flushed(state, fragment.last_log_offset)
+    end
+  end
+
+  defp calculate_replication_lag_from_commit(%Changes.Commit{commit_timestamp: nil}), do: 0
+
+  defp calculate_replication_lag_from_commit(%Changes.Commit{commit_timestamp: commit_timestamp}) do
+    now = DateTime.utc_now()
+    Kernel.max(0, DateTime.diff(now, commit_timestamp, :millisecond))
+  end
+
+  def process_buffered_txn_fragments(%State{buffer: buffer} = state) do
+    Logger.debug(fn -> "Consumer catching up on #{length(buffer)} transaction fragments" end)
+    {txn_fragments, state} = State.pop_buffered(state)
+    # TODO: verify the "while" condition here, when will it terminate early?
+    Enum.reduce_while(txn_fragments, state, &handle_txn_fragment/2)
+  end
+
+  defp handle_txn(txn, %State{} = state) do
     ot_attrs =
       [xid: txn.xid, total_num_changes: txn.num_changes] ++
         shape_attrs(state.shape_handle, state.shape)
@@ -487,25 +713,12 @@ defmodule Electric.Shapes.Consumer do
       "shape_write.consumer.handle_txn",
       ot_attrs,
       state.stack_id,
-      fn ->
-        do_handle_txn(txn, state)
-      end
+      fn -> do_handle_txn(txn, state) end
     )
   end
 
-  defp do_handle_txn(%Transaction{} = txn, state)
-       when LogOffset.is_log_offset_lte(txn.last_log_offset, state.latest_offset) do
-    Logger.debug(fn -> "Skipping already processed txn #{txn.xid}" end)
-
-    {:cont, consider_flushed(state, txn)}
-  end
-
   defp do_handle_txn(%Transaction{xid: xid, changes: changes} = txn, state) do
-    %{
-      shape: shape,
-      shape_handle: shape_handle,
-      writer: writer
-    } = state
+    %{shape: shape, writer: writer} = state
 
     state = State.remove_completed_move_ins(state, txn)
 
@@ -530,23 +743,14 @@ defmodule Electric.Shapes.Consumer do
            %{xid: xid, extra_refs: {extra_refs_before_move_ins, extra_refs_full}}
          ) do
       :includes_truncate ->
-        # TODO: This is a very naive way to handle truncations: if ANY relevant truncates are
-        #       present in the transaction, we're considering the whole transaction empty, and
-        #       just rotate the shape handle. "Correct" way to handle truncates is to be designed.
-        Logger.warning(
-          "Truncate operation encountered while processing txn #{txn.xid} for #{shape_handle}"
-        )
-
-        state = mark_for_removal(state)
-
-        {:halt, state}
+        {:halt, handle_txn_with_truncate(txn.xid, state)}
 
       {_, state, 0, _} ->
         Logger.debug(fn ->
           "No relevant changes found for #{inspect(shape)} in txn #{txn.xid}"
         end)
 
-        {:cont, consider_flushed(state, txn)}
+        {:cont, consider_flushed(state, txn.last_log_offset)}
 
       {changes, state, num_changes, last_log_offset} ->
         timestamp = System.monotonic_time()
@@ -585,6 +789,17 @@ defmodule Electric.Shapes.Consumer do
                state.txn_offset_mapping ++ [{last_log_offset, txn.last_log_offset}]
          }}
     end
+  end
+
+  defp handle_txn_with_truncate(xid, state) do
+    # TODO: This is a very naive way to handle truncations: if ANY relevant truncates are
+    #       present in the transaction, we're considering the whole transaction empty, and
+    #       just rotate the shape handle. "Correct" way to handle truncates is to be designed.
+    Logger.warning(
+      "Truncate operation encountered while processing txn #{xid} for #{state.shape_handle}"
+    )
+
+    mark_for_removal(state)
   end
 
   defp notify_new_changes(state, nil), do: state
@@ -685,14 +900,15 @@ defmodule Electric.Shapes.Consumer do
     Kernel.max(0, DateTime.diff(now, commit_timestamp, :millisecond))
   end
 
-  defp consider_flushed(%State{} = state, %Transaction{last_log_offset: new_boundary}) do
+  defp consider_flushed(%State{} = state, log_offset) do
     if state.txn_offset_mapping == [] do
       # No relevant txns have been observed and unflushed, we can notify immediately
-      ShapeLogCollector.notify_flushed(state.stack_id, state.shape_handle, new_boundary)
+      ShapeLogCollector.notify_flushed(state.stack_id, state.shape_handle, log_offset)
       state
     else
       # We're looking to "relabel" the next flush to include this txn, so we're looking for the
       # boundary that has a highest boundary less than this offset
+      new_boundary = log_offset
 
       {head, tail} =
         Enum.split_while(

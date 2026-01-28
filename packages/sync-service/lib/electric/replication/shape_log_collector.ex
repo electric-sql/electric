@@ -318,8 +318,11 @@ defmodule Electric.Replication.ShapeLogCollector do
 
   def handle_cast({:writer_flushed, shape_id, offset}, state) do
     {:noreply,
-     state
-     |> Map.update!(:flush_tracker, &FlushTracker.handle_flush_notification(&1, shape_id, offset))}
+     Map.update!(
+       state,
+       :flush_tracker,
+       &FlushTracker.handle_flush_notification(&1, shape_id, offset)
+     )}
   end
 
   def handle_cast(
