@@ -462,6 +462,59 @@ describe(`ExpiredShapesCache`, () => {
     expect(stream.shapeHandle).not.toBe(undefined)
   })
 
+  it(`should not update offset from stale response when client already has a handle`, async () => {
+    // Regression test: When CDN returns a stale response with an expired handle,
+    // the client should ignore the entire response (including offset) to prevent
+    // a mismatch between handle and offset that would cause server errors.
+
+    const expiredHandle = `expired-handle-A`
+    const currentHandle = `current-handle-B`
+    const originalOffset = `0_0`
+
+    expiredShapesCache.markExpired(`${shapeUrl}?table=test`, expiredHandle)
+
+    let resolveFirstResponse: () => void
+    const firstResponseProcessed = new Promise<void>((resolve) => {
+      resolveFirstResponse = resolve
+    })
+
+    fetchMock.mockImplementation(() => {
+      return Promise.resolve(
+        new Response(JSON.stringify([{ headers: { control: `up-to-date` } }]), {
+          status: 200,
+          headers: {
+            'electric-handle': expiredHandle,
+            'electric-offset': `0_inf`, // Different offset from stale response
+            'electric-schema': `{"id":"int4"}`,
+            'electric-cursor': `cursor-1`,
+          },
+        })
+      )
+    })
+
+    const stream = new ShapeStream({
+      url: shapeUrl,
+      params: { table: `test` },
+      handle: currentHandle,
+      offset: originalOffset,
+      signal: aborter.signal,
+      fetchClient: fetchMock,
+      subscribe: false,
+    })
+
+    stream.subscribe(() => {
+      if (stream.isUpToDate) {
+        resolveFirstResponse()
+      }
+    })
+
+    await firstResponseProcessed
+    await new Promise((resolve) => setTimeout(resolve, 10))
+
+    expect(stream.shapeHandle).toBe(currentHandle)
+    expect(stream.lastOffset).toBe(originalOffset)
+  })
+
   it(`should throw error after max stale cache retries exceeded`, async () => {
     // This test verifies that the client doesn't retry forever when CDN
     // continues serving stale responses despite cache buster
