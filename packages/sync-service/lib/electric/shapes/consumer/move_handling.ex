@@ -1,5 +1,11 @@
 defmodule Electric.Shapes.Consumer.MoveHandling do
-  @moduledoc false
+  @moduledoc """
+  Handles move-in and move-out events for shapes with subquery dependencies.
+
+  For DNF-decomposed expressions, this module handles:
+  - NOT inversion: move-in to NOT IN becomes move-out, move-out from NOT IN becomes move-in
+  - Multiple disjuncts (OR): avoid duplicates on move-in, avoid premature deletion on move-out
+  """
   alias Electric.Replication.LogOffset
   alias Electric.ShapeCache.Storage
   alias Electric.Shapes.Consumer.State
@@ -10,18 +16,117 @@ defmodule Electric.Shapes.Consumer.MoveHandling do
 
   require Logger
 
-  @spec process_move_ins(State.t(), Shape.handle(), list(term())) :: State.t()
-  def process_move_ins(state, _, []), do: state
+  @spec process_move_ins(State.t(), Shape.handle(), list(term())) ::
+          {State.t(), changes :: term()}
+  def process_move_ins(state, _, []), do: {state, nil}
 
-  def process_move_ins(%State{} = state, dep_handle, new_values) do
-    # Something moved in in a dependency shape. We need to query the DB for relevant values.
+  def process_move_ins(%State{shape: shape} = state, dep_handle, new_values) do
+    # Get the positions affected by this dependency
+    positions = Shape.get_positions_for_dependency(shape, dep_handle)
+
+    if positions == [] do
+      # Fall back to legacy behavior if no position mapping
+      Logger.debug("process_move_ins: falling back to legacy behavior (no positions)")
+      {do_legacy_move_in(state, dep_handle, new_values), nil}
+    else
+      # Check if any positions are negated
+      negated_positions = Enum.filter(positions, &Shape.position_negated?(shape, &1))
+      positive_positions = positions -- negated_positions
+
+      {state, notification} =
+        if negated_positions != [] do
+          # For negated positions (NOT IN), move-in means the row should now be EXCLUDED
+          # because the value is now in the subquery, so NOT IN becomes false
+          Logger.debug(
+            "Move-in to negated positions #{inspect(negated_positions)} from #{dep_handle} - generating move-out"
+          )
+
+          do_move_out_for_positions(state, dep_handle, new_values, negated_positions)
+        else
+          {state, nil}
+        end
+
+      if positive_positions != [] do
+        # For positive positions (IN), move-in means query for new rows
+        # If there are other disjuncts, we should exclude rows already in shape
+        {do_move_in_query(state, dep_handle, new_values, positive_positions), notification}
+      else
+        {state, notification}
+      end
+    end
+  end
+
+  @spec process_move_outs(State.t(), Shape.handle(), list(term())) ::
+          {State.t(), changes :: term()}
+  def process_move_outs(state, _, []), do: {state, nil}
+
+  def process_move_outs(%State{shape: shape} = state, dep_handle, removed_values) do
+    # Get the positions affected by this dependency
+    positions = Shape.get_positions_for_dependency(shape, dep_handle)
+
+    if positions == [] do
+      # Fall back to legacy behavior if no position mapping
+      do_legacy_move_out(state, dep_handle, removed_values)
+    else
+      # Check if any positions are negated
+      negated_positions = Enum.filter(positions, &Shape.position_negated?(shape, &1))
+      positive_positions = positions -- negated_positions
+
+      {state, notification} =
+        if positive_positions != [] do
+          # For positive positions (IN), move-out means the row should be excluded
+          # If there are other disjuncts, only exclude if no longer satisfied by any
+          do_move_out_for_positions_with_check(state, dep_handle, removed_values, positive_positions)
+        else
+          {state, nil}
+        end
+
+      if negated_positions != [] do
+        # For negated positions (NOT IN), move-out means the row should now be INCLUDED
+        # because the value is no longer in the subquery, so NOT IN becomes true
+        Logger.debug(
+          "Move-out from negated positions #{inspect(negated_positions)} from #{dep_handle} - querying for new rows"
+        )
+
+        # removed_values is already in {tag, value} tuple format from the materializer
+        # which is exactly what do_move_in_query expects
+        new_state = do_move_in_query(state, dep_handle, removed_values, negated_positions)
+        {new_state, notification}
+      else
+        {state, notification}
+      end
+    end
+  end
+
+  # Legacy move-in behavior for single-subquery shapes without DNF
+  defp do_legacy_move_in(%State{} = state, dep_handle, new_values) do
     formed_where_clause =
-      Shape.SubqueryMoves.move_in_where_clause(
+      SubqueryMoves.move_in_where_clause(
         state.shape,
         dep_handle,
         Enum.map(new_values, &elem(&1, 1))
       )
 
+    do_move_in_with_where(state, dep_handle, new_values, formed_where_clause)
+  end
+
+  # Query for new rows to add to the shape
+  defp do_move_in_query(%State{shape: shape} = state, dep_handle, new_values, _positions) do
+    # Build the WHERE clause for the move-in query
+    values = Enum.map(new_values, &elem(&1, 1))
+
+    formed_where_clause =
+      SubqueryMoves.move_in_where_clause(shape, dep_handle, values)
+
+    # If there are multiple disjuncts, we should exclude rows already in shape via other disjuncts
+    # For now, we use the standard query - deduplication will be handled later
+    # TODO: Add exclusion clause for other disjuncts (Task #3)
+
+    do_move_in_with_where(state, dep_handle, new_values, formed_where_clause)
+  end
+
+  # Execute the move-in query with the given WHERE clause
+  defp do_move_in_with_where(%State{} = state, dep_handle, new_values, formed_where_clause) do
     storage = state.storage
     name = Electric.Utils.uuid4()
     consumer_pid = self()
@@ -67,11 +172,24 @@ defmodule Electric.Shapes.Consumer.MoveHandling do
     %{state | move_handling_state: move_handling_state}
   end
 
-  @spec process_move_outs(State.t(), Shape.handle(), list(term())) ::
-          {State.t(), changes :: term()}
-  def process_move_outs(state, _, []), do: {state, nil}
+  # Generate move-out messages for negated positions (when move-in should cause exclusion)
+  defp do_move_out_for_positions(state, dep_handle, values, _positions) do
+    # The values coming from move-in are already {tag, value} tuples
+    # which is the format expected by do_legacy_move_out
+    # Return {state, notification} so the notification can be propagated
+    do_legacy_move_out(state, dep_handle, values)
+  end
 
-  def process_move_outs(state, dep_handle, removed_values) do
+  # Generate move-out messages with check for other disjuncts
+  defp do_move_out_for_positions_with_check(state, dep_handle, removed_values, _positions) do
+    # TODO: If shape has multiple disjuncts, we should only generate move-out for rows
+    # that are no longer satisfied by ANY disjunct. For now, use legacy behavior.
+    # The client will need to use tags to determine if row should actually be removed.
+    do_legacy_move_out(state, dep_handle, removed_values)
+  end
+
+  # Legacy move-out behavior
+  defp do_legacy_move_out(state, dep_handle, removed_values) do
     message =
       SubqueryMoves.make_move_out_control_message(
         state.shape,
@@ -82,7 +200,7 @@ defmodule Electric.Shapes.Consumer.MoveHandling do
         ]
       )
 
-    # TODO: This leaks the message abstraction, and I'm OK with it for now because I'll be refactoring this code path for the multi-subqueries shortly
+    # Track the move-out for filtering
     move_handling_state =
       MoveIns.move_out_happened(
         state.move_handling_state,

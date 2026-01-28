@@ -43,6 +43,10 @@ defmodule Electric.Shapes.Shape do
     dnf_decomposition: nil,
     # Maps position -> dependency_handle for move-in/move-out handling
     position_to_dependency_map: %{},
+    # Maps dependency_handle -> [position] for reverse lookup
+    dependency_to_positions_map: %{},
+    # Set of positions that are negated (NOT IN)
+    negated_positions: MapSet.new(),
     log_mode: :full,
     flags: %{},
     storage: %{compaction: :disabled},
@@ -124,6 +128,96 @@ defmodule Electric.Shapes.Shape do
 
   def dependency_handles_known?(%__MODULE__{} = shape),
     do: shape.shape_dependencies_handles != []
+
+  @doc """
+  Fill in the dependency handles for a shape.
+  This also computes the position-to-dependency mappings.
+  """
+  @spec with_dependency_handles(t(), [handle()]) :: t()
+  def with_dependency_handles(%__MODULE__{} = shape, handles) do
+    shape = %{shape | shape_dependencies_handles: handles}
+    fill_dependency_mappings(shape)
+  end
+
+  # Compute the dependency mappings after handles are known
+  defp fill_dependency_mappings(%__MODULE__{dnf_decomposition: nil} = shape), do: shape
+
+  defp fill_dependency_mappings(
+         %__MODULE__{
+           dnf_decomposition: decomposition,
+           subquery_comparison_expressions: comparison_expressions,
+           shape_dependencies_handles: dep_handles
+         } = shape
+       ) do
+    position_to_dependency_map =
+      build_position_to_dependency_map(decomposition, comparison_expressions, dep_handles)
+
+    dependency_to_positions_map =
+      position_to_dependency_map
+      |> Enum.group_by(fn {_pos, handle} -> handle end, fn {pos, _handle} -> pos end)
+
+    %{
+      shape
+      | position_to_dependency_map: position_to_dependency_map,
+        dependency_to_positions_map: dependency_to_positions_map
+    }
+  end
+
+  @doc """
+  Get the positions affected by a given dependency handle.
+  Returns a list of position integers.
+  """
+  @spec get_positions_for_dependency(t(), handle()) :: [non_neg_integer()]
+  def get_positions_for_dependency(%__MODULE__{dependency_to_positions_map: map}, dep_handle) do
+    Map.get(map, dep_handle, [])
+  end
+
+  @doc """
+  Check if a position is negated (NOT IN).
+  """
+  @spec position_negated?(t(), non_neg_integer()) :: boolean()
+  def position_negated?(%__MODULE__{negated_positions: negated}, position) do
+    MapSet.member?(negated, position)
+  end
+
+  @doc """
+  Get all disjuncts (conjunctions) that contain the given position.
+  Returns a list of {disjunct_index, conjunction} tuples.
+  """
+  @spec get_disjuncts_for_position(t(), non_neg_integer()) :: [{non_neg_integer(), [{non_neg_integer(), :positive | :negated}]}]
+  def get_disjuncts_for_position(%__MODULE__{dnf_decomposition: nil}, _position), do: []
+
+  def get_disjuncts_for_position(%__MODULE__{dnf_decomposition: decomposition}, position) do
+    decomposition.disjuncts
+    |> Enum.with_index()
+    |> Enum.filter(fn {conjunction, _idx} ->
+      Enum.any?(conjunction, fn {pos, _polarity} -> pos == position end)
+    end)
+    |> Enum.map(fn {conjunction, idx} -> {idx, conjunction} end)
+  end
+
+  @doc """
+  Get all disjuncts that do NOT contain the given position.
+  These are the "other" disjuncts that might still satisfy a row.
+  """
+  @spec get_other_disjuncts(t(), non_neg_integer()) :: [[{non_neg_integer(), :positive | :negated}]]
+  def get_other_disjuncts(%__MODULE__{dnf_decomposition: nil}, _position), do: []
+
+  def get_other_disjuncts(%__MODULE__{dnf_decomposition: decomposition}, position) do
+    decomposition.disjuncts
+    |> Enum.reject(fn conjunction ->
+      Enum.any?(conjunction, fn {pos, _polarity} -> pos == position end)
+    end)
+  end
+
+  @doc """
+  Check if this shape has multiple disjuncts that could independently include a row.
+  """
+  @spec has_multiple_disjuncts?(t()) :: boolean()
+  def has_multiple_disjuncts?(%__MODULE__{dnf_decomposition: nil}), do: false
+  def has_multiple_disjuncts?(%__MODULE__{dnf_decomposition: %{disjuncts: disjuncts}}) do
+    length(disjuncts) > 1
+  end
 
   def hash(%__MODULE__{} = shape) do
     {_comparable, hash} = comparable_hash(shape)
@@ -284,13 +378,36 @@ defmodule Electric.Shapes.Shape do
         legacy_tag_structure
       end
 
+    # Build reverse lookup map (dependency_handle -> [positions])
+    dependency_to_positions_map =
+      position_to_dependency_map
+      |> Enum.group_by(fn {_pos, handle} -> handle end, fn {pos, _handle} -> pos end)
+
+    # Extract negated positions from DNF decomposition
+    negated_positions =
+      if dnf_decomposition != nil do
+        extract_negated_positions(dnf_decomposition)
+      else
+        MapSet.new()
+      end
+
     %{
       shape
       | tag_structure: tag_structure,
         subquery_comparison_expressions: comparison_expressions,
         dnf_decomposition: dnf_decomposition,
-        position_to_dependency_map: position_to_dependency_map
+        position_to_dependency_map: position_to_dependency_map,
+        dependency_to_positions_map: dependency_to_positions_map,
+        negated_positions: negated_positions
     }
+  end
+
+  # Extract positions that are negated in the DNF
+  defp extract_negated_positions(decomposition) do
+    decomposition.subexpressions
+    |> Enum.filter(fn {_pos, subexpr} -> subexpr[:negated] == true end)
+    |> Enum.map(fn {pos, _} -> pos end)
+    |> MapSet.new()
   end
 
   # Build DNF-aware tag structure: one pattern per disjunct
@@ -424,8 +541,18 @@ defmodule Electric.Shapes.Shape do
   end
 
   # Check if two expressions match (simplified comparison)
+  # Handle sublink_membership_check by extracting the testexpr
   defp expressions_match?(%Parser.Func{name: "sublink_membership_check", args: [test1, _]}, test2) do
     expressions_match?(test1, test2)
+  end
+
+  # Handle wrapped Expr types (from Eval.Expr.wrap_parser_part)
+  defp expressions_match?(expr1, %Expr{eval: inner}) do
+    expressions_match?(expr1, inner)
+  end
+
+  defp expressions_match?(%Expr{eval: inner}, expr2) do
+    expressions_match?(inner, expr2)
   end
 
   defp expressions_match?(%Parser.Ref{path: path1}, %Parser.Ref{path: path2}) do
