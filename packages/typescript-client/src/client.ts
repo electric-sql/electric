@@ -1687,29 +1687,25 @@ export class ShapeStream<T extends Row<unknown> = Row>
       fetchOptions = { headers: result.requestHeaders }
     }
 
-    const response = await this.#fetchClient(fetchUrl.toString(), fetchOptions)
+    let response: Response
+    try {
+      response = await this.#fetchClient(fetchUrl.toString(), fetchOptions)
+    } catch (e) {
+      // Handle 409 "must-refetch" - shape handle changed/expired.
+      // Unlike #requestShape, we don't call #reset() here as that would
+      // clear #activeSnapshotRequests and break requestSnapshot's pause/resume logic.
+      if (e instanceof FetchError && e.status === 409) {
+        if (this.#shapeHandle) {
+          const shapeKey = canonicalShapeKey(fetchUrl)
+          expiredShapesCache.markExpired(shapeKey, this.#shapeHandle)
+        }
 
-    // Handle 409 "must-refetch" - shape handle changed/expired
-    if (response.status === 409) {
-      // Store the current shape URL as expired to avoid future 409s
-      if (this.#shapeHandle) {
-        const shapeKey = canonicalShapeKey(fetchUrl)
-        expiredShapesCache.markExpired(shapeKey, this.#shapeHandle)
+        this.#shapeHandle =
+          e.headers[SHAPE_HANDLE_HEADER] || `${this.#shapeHandle!}-next`
+
+        return this.fetchSnapshot(opts)
       }
-
-      // Update handle for retry, but don't call #reset() as that would
-      // clear #activeSnapshotRequests and break requestSnapshot's
-      // pause/resume logic
-      this.#shapeHandle =
-        response.headers.get(SHAPE_HANDLE_HEADER) ||
-        `${this.#shapeHandle!}-next`
-
-      // Retry the snapshot request with the new handle
-      return this.fetchSnapshot(opts)
-    }
-
-    if (!response.ok) {
-      throw await FetchError.fromResponse(response, fetchUrl.toString())
+      throw e
     }
 
     const schema: Schema =
