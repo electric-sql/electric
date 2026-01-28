@@ -251,14 +251,26 @@ defmodule Electric.Replication.ShapeLogCollector do
           |> Enum.reduce(
             {state.partitions, state.event_router, state.dependency_layers, 0},
             fn {shape_handle, shape}, {partitions, event_router, layers, count} ->
-              {:ok, partitions} = Partitions.add_shape(partitions, shape_handle, shape)
+              # Check dependencies first - if a parent shape failed to restore,
+              # we should skip this shape (and its children will also be skipped)
+              case DependencyLayers.add_dependency(layers, shape, shape_handle) do
+                {:ok, layers} ->
+                  {:ok, partitions} = Partitions.add_shape(partitions, shape_handle, shape)
 
-              {
-                partitions,
-                EventRouter.add_shape(event_router, shape_handle, shape),
-                DependencyLayers.add_dependency(layers, shape, shape_handle),
-                count + 1
-              }
+                  {
+                    partitions,
+                    EventRouter.add_shape(event_router, shape_handle, shape),
+                    layers,
+                    count + 1
+                  }
+
+                {:error, {:missing_dependencies, missing_deps}} ->
+                  Logger.warning(
+                    "Skipping shape #{shape_handle} during restore: missing dependencies #{inspect(MapSet.to_list(missing_deps))}"
+                  )
+
+                  {partitions, event_router, layers, count}
+              end
             end
           )
 
@@ -357,23 +369,32 @@ defmodule Electric.Replication.ShapeLogCollector do
               fn ->
                 case Partitions.add_shape(state.partitions, shape_handle, shape) do
                   {:ok, partitions} ->
-                    state =
-                      %{
-                        state
-                        | partitions: partitions,
-                          event_router:
-                            EventRouter.add_shape(state.event_router, shape_handle, shape),
-                          dependency_layers:
-                            DependencyLayers.add_dependency(
-                              state.dependency_layers,
-                              shape,
-                              shape_handle
-                            )
-                      }
-                      |> Map.update!(:subscriptions, &(&1 + 1))
-                      |> log_subscription_status()
+                    case DependencyLayers.add_dependency(
+                           state.dependency_layers,
+                           shape,
+                           shape_handle
+                         ) do
+                      {:ok, dependency_layers} ->
+                        state =
+                          %{
+                            state
+                            | partitions: partitions,
+                              event_router:
+                                EventRouter.add_shape(state.event_router, shape_handle, shape),
+                              dependency_layers: dependency_layers
+                          }
+                          |> Map.update!(:subscriptions, &(&1 + 1))
+                          |> log_subscription_status()
 
-                    {state, Map.put(results, shape_handle, :ok)}
+                        {state, Map.put(results, shape_handle, :ok)}
+
+                      {:error, {:missing_dependencies, missing_deps}} ->
+                        Logger.warning(
+                          "Shape #{shape_handle} cannot be added: missing dependencies #{inspect(MapSet.to_list(missing_deps))}"
+                        )
+
+                        {state, Map.put(results, shape_handle, {:error, :missing_dependencies})}
+                    end
 
                   {:error, :connection_not_available} ->
                     {state, Map.put(results, shape_handle, {:error, :connection_not_available})}

@@ -6,7 +6,7 @@ defmodule Electric.Shapes.DependencyLayers do
   def add_dependency(layers, shape, shape_handle) do
     case shape.shape_dependencies_handles do
       [] ->
-        add_to_first_layer(layers, shape_handle)
+        {:ok, add_to_first_layer(layers, shape_handle)}
 
       dependency_handles ->
         add_after_dependencies(layers, shape_handle, MapSet.new(dependency_handles))
@@ -17,14 +17,17 @@ defmodule Electric.Shapes.DependencyLayers do
     remaining_deps = MapSet.difference(deps_to_find, layer)
 
     if MapSet.size(remaining_deps) == 0 do
-      [layer | add_to_first_layer(rest, shape_handle)]
+      {:ok, [layer | add_to_first_layer(rest, shape_handle)]}
     else
-      [layer | add_after_dependencies(rest, shape_handle, remaining_deps)]
+      case add_after_dependencies(rest, shape_handle, remaining_deps) do
+        {:ok, rest_layers} -> {:ok, [layer | rest_layers]}
+        {:error, _} = error -> error
+      end
     end
   end
 
-  defp add_after_dependencies([], shape_handle, deps_to_find) when map_size(deps_to_find) == 0 do
-    [MapSet.new([shape_handle])]
+  defp add_after_dependencies([], _shape_handle, deps_to_find) do
+    {:error, {:missing_dependencies, deps_to_find}}
   end
 
   def remove_dependency(layers, shape_handle) do
