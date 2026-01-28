@@ -1,6 +1,6 @@
 ---
-title: "RFC: Arbitrary Boolean Expressions with Subqueries"
-version: "1.0"
+title: 'RFC: Arbitrary Boolean Expressions with Subqueries'
+version: '1.0'
 status: draft
 owner: rob
 contributors:
@@ -72,6 +72,7 @@ The current implementation can't track which conditions caused a row's inclusion
 Convert WHERE clauses to Disjunctive Normal Form (DNF), where each disjunct is a conjunction of atomic conditions. Each position in the DNF corresponds to a condition that can be independently activated/deactivated.
 
 For a row:
+
 - **Tags**: One flat array per disjunct, containing hashed values at positions that participate
 - **`active_conditions`**: Flat boolean array indicating which positions are currently satisfied
 
@@ -99,6 +100,7 @@ Use the `Electric.Replication.Eval.Decomposer` module to convert WHERE clauses:
 ```
 
 Position mapping:
+
 - Position 0: `x IN subquery1`
 - Position 1: `status = 'active'`
 - Position 2: `y IN subquery2`
@@ -122,6 +124,7 @@ active_conditions: [true, true, false]
 ```
 
 Client evaluation:
+
 - Tag 1: `active_conditions[0] AND active_conditions[1]` = true AND true = **true**
 - Tag 2: `active_conditions[2]` = **false**
 - Result: true OR false = **included**
@@ -129,6 +132,7 @@ Client evaluation:
 ### Negation Handling
 
 NOT conditions are handled via De Morgan's laws in the decomposer:
+
 - `NOT (a OR b)` → `(NOT a) AND (NOT b)`
 - `NOT (a AND b)` → `(NOT a) OR (NOT b)`
 
@@ -147,6 +151,7 @@ active_conditions: [true, false]
 ```
 
 The server tracks which positions are negated. When 'a' moves into the subquery:
+
 - Position 0 activates (positive condition now true)
 - Position 1 deactivates (negated condition now false)
 
@@ -161,6 +166,7 @@ hash = md5(stack_id <> shape_handle <> namespaced_value)
 ```
 
 Where `namespaced_value` is:
+
 - `"v:" <> value` for non-null values
 - `"NULL"` for null values
 
@@ -173,7 +179,7 @@ Extend existing insert/update/delete messages with `active_conditions`:
 ```json
 {
   "key": "public.tasks/123",
-  "value": {"id": 123, "title": "..."},
+  "value": { "id": 123, "title": "..." },
   "headers": {
     "operation": "insert",
     "tags": [
@@ -281,9 +287,11 @@ When the outer shape receives an insert/update/delete from the replication strea
    This replaces the current `includes_record?` call — we compute per-position results rather than a single boolean.
 
 2. **Derive inclusion** — Evaluate the DNF using `active_conditions`:
+
    ```
    included = OR over disjuncts, where each disjunct = AND over its non-null positions
    ```
+
    If not included, skip the row (don't emit to shape log).
 
 3. **Compute tags** — For each disjunct, extract column values at participating positions and hash them (same as current `fill_move_tags`, extended for multiple disjuncts).
@@ -309,6 +317,7 @@ For updates, if the row's tag-relevant columns changed, include `removed_tags` f
 ### Client Requirements
 
 Clients must:
+
 1. Store tags and `active_conditions` for each row
 2. Index rows by `(position, hash_value)` for efficient move-in/move-out handling
 3. Evaluate inclusion: OR over tags, where each tag is AND over non-null `active_conditions`
@@ -325,6 +334,7 @@ Simple single-subquery shapes continue working on v1.
 ### `changes_only` Mode
 
 Works the same as today:
+
 - Tags and `active_conditions` included on all operations (insert, update, delete)
 - Clients build state incrementally
 - Move-in/move-out broadcasts for unknown rows are ignored
@@ -348,11 +358,11 @@ This RFC. The decomposer exists, the tag infrastructure exists, we're extending 
 
 Questions resolved during RFC development:
 
-| Question | Resolution |
-|----------|------------|
-| **Maximum disjuncts/positions** | No limit. Document trade-offs (storage, client indexing) and let users discover natural limits. |
-| **Tag storage format** | JSON arrays of hash strings, same as current implementation. |
-| **Subquery result caching** | Use current approach: subqueries are their own shapes with materializers, multiple outer shapes can reference the same inner shape. |
+| Question                        | Resolution                                                                                                                          |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| **Maximum disjuncts/positions** | No limit. Document trade-offs (storage, client indexing) and let users discover natural limits.                                     |
+| **Tag storage format**          | JSON arrays of hash strings, same as current implementation.                                                                        |
+| **Subquery result caching**     | Use current approach: subqueries are their own shapes with materializers, multiple outer shapes can reference the same inner shape. |
 
 ## Definition of Success
 
@@ -366,15 +376,15 @@ Questions resolved during RFC development:
 
 ### Functional Requirements
 
-| Requirement | Acceptance Criteria |
-|-------------|---------------------|
-| OR with subqueries | `WHERE x IN sq1 OR y IN sq2` handles move-in/out correctly |
-| NOT with subqueries | `WHERE x NOT IN sq1` handles move-in/out correctly |
-| Mixed conditions | `WHERE (x IN sq1 AND status='active') OR y IN sq2` works |
-| Nested NOT | `WHERE NOT (x IN sq1 AND y IN sq2)` decomposes correctly |
-| Move-in efficiency | No Postgres query when row already present for another disjunct |
-| Move-out correctness | Row removed only when no disjunct evaluates to true |
-| Protocol compatibility | V1 clients get error for unsupported shapes |
+| Requirement            | Acceptance Criteria                                             |
+| ---------------------- | --------------------------------------------------------------- |
+| OR with subqueries     | `WHERE x IN sq1 OR y IN sq2` handles move-in/out correctly      |
+| NOT with subqueries    | `WHERE x NOT IN sq1` handles move-in/out correctly              |
+| Mixed conditions       | `WHERE (x IN sq1 AND status='active') OR y IN sq2` works        |
+| Nested NOT             | `WHERE NOT (x IN sq1 AND y IN sq2)` decomposes correctly        |
+| Move-in efficiency     | No Postgres query when row already present for another disjunct |
+| Move-out correctness   | Row removed only when no disjunct evaluates to true             |
+| Protocol compatibility | V1 clients get error for unsupported shapes                     |
 
 ### Learning Goals
 
@@ -395,6 +405,7 @@ Questions resolved during RFC development:
 **Description:** Server maintains `{condition_values → row_keys}` index to send targeted updates instead of broadcasts.
 
 **Why not:**
+
 - Significant server memory/disk overhead
 - Doesn't scale with large shapes
 - Requires persistence and recovery mechanisms
@@ -404,15 +415,16 @@ Questions resolved during RFC development:
 **Description:** Send WHERE clause AST to client, client evaluates conditions locally.
 
 **Why not:**
+
 - Clients need to implement PostgreSQL function subset
 - Exposes potentially sensitive constants in WHERE clause
 - Complex client implementation across all platforms
 
 ## Revision History
 
-| Version | Date | Author | Changes |
-|---------|------|--------|---------|
-| 1.0 | 2026-01-27 | rob | Initial version |
+| Version | Date       | Author | Changes         |
+| ------- | ---------- | ------ | --------------- |
+| 1.0     | 2026-01-27 | rob    | Initial version |
 
 ---
 
@@ -421,17 +433,20 @@ Questions resolved during RFC development:
 Before submitting for review, verify:
 
 **Alignment**
+
 - [x] RFC extends existing subquery infrastructure consistently
 - [x] Message format extends existing tags field
 - [x] Success criteria are testable
 
 **Calibration for Level 1-2 PMF**
+
 - [x] This is the simplest approach that enables the feature
 - [x] Non-goals explicitly defer optimizations
 - [x] Complexity Check section filled out
 - [x] An engineer could start implementing tomorrow
 
 **Completeness**
+
 - [x] Happy path is clear (DNF decomposition → tags → active_conditions → broadcast)
 - [x] Critical failure modes addressed (protocol versioning, client evaluation)
 - [x] Design decisions documented
