@@ -13,7 +13,8 @@ defmodule Electric.Client.Message do
       txids: [],
       op_position: 0,
       tags: [],
-      removed_tags: []
+      removed_tags: [],
+      active_conditions: nil
     ]
 
     @type operation :: :insert | :update | :delete
@@ -29,7 +30,8 @@ defmodule Electric.Client.Message do
             txids: txids(),
             op_position: non_neg_integer(),
             tags: [tag()],
-            removed_tags: [tag()]
+            removed_tags: [tag()],
+            active_conditions: [boolean()] | nil
           }
 
     @doc false
@@ -44,7 +46,8 @@ defmodule Electric.Client.Message do
         lsn: Map.get(msg, "lsn", nil),
         op_position: Map.get(msg, "op_position", 0),
         tags: Map.get(msg, "tags", []),
-        removed_tags: Map.get(msg, "removed_tags", [])
+        removed_tags: Map.get(msg, "removed_tags", []),
+        active_conditions: Map.get(msg, "active_conditions")
       }
     end
 

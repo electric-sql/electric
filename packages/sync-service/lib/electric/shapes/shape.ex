@@ -4,6 +4,7 @@ defmodule Electric.Shapes.Shape do
   """
   alias Electric.Shapes.Shape.SubqueryMoves
   alias Electric.Replication.Eval.Expr
+  alias Electric.Replication.Eval.Decomposer
   alias Electric.Postgres.Inspector
   alias Electric.Replication.Eval.Parser
   alias Electric.Replication.Changes
@@ -38,6 +39,14 @@ defmodule Electric.Shapes.Shape do
     shape_dependencies_handles: [],
     tag_structure: [],
     subquery_comparison_expressions: %{},
+    # DNF decomposition for arbitrary boolean expressions with subqueries
+    dnf_decomposition: nil,
+    # Maps position -> dependency_handle for move-in/move-out handling
+    position_to_dependency_map: %{},
+    # Maps dependency_handle -> [position] for reverse lookup
+    dependency_to_positions_map: %{},
+    # Set of positions that are negated (NOT IN)
+    negated_positions: MapSet.new(),
     log_mode: :full,
     flags: %{},
     storage: %{compaction: :disabled},
@@ -119,6 +128,101 @@ defmodule Electric.Shapes.Shape do
 
   def dependency_handles_known?(%__MODULE__{} = shape),
     do: shape.shape_dependencies_handles != []
+
+  @doc """
+  Fill in the dependency handles for a shape.
+  This also computes the position-to-dependency mappings.
+  """
+  @spec with_dependency_handles(t(), [handle()]) :: t()
+  def with_dependency_handles(%__MODULE__{} = shape, handles) do
+    shape = %{shape | shape_dependencies_handles: handles}
+    fill_dependency_mappings(shape)
+  end
+
+  # Compute the dependency mappings after handles are known
+  defp fill_dependency_mappings(%__MODULE__{dnf_decomposition: nil} = shape), do: shape
+
+  defp fill_dependency_mappings(
+         %__MODULE__{
+           dnf_decomposition: decomposition,
+           subquery_comparison_expressions: comparison_expressions,
+           shape_dependencies_handles: dep_handles
+         } = shape
+       ) do
+    position_to_dependency_map =
+      build_position_to_dependency_map(decomposition, comparison_expressions, dep_handles)
+
+    dependency_to_positions_map =
+      position_to_dependency_map
+      |> Enum.group_by(fn {_pos, handle} -> handle end, fn {pos, _handle} -> pos end)
+
+    %{
+      shape
+      | position_to_dependency_map: position_to_dependency_map,
+        dependency_to_positions_map: dependency_to_positions_map
+    }
+  end
+
+  @doc """
+  Get the positions affected by a given dependency handle.
+  Returns a list of position integers.
+  """
+  @spec get_positions_for_dependency(t(), handle()) :: [non_neg_integer()]
+  def get_positions_for_dependency(%__MODULE__{dependency_to_positions_map: map}, dep_handle) do
+    Map.get(map, dep_handle, [])
+  end
+
+  @doc """
+  Check if a position is negated (NOT IN).
+  """
+  @spec position_negated?(t(), non_neg_integer()) :: boolean()
+  def position_negated?(%__MODULE__{negated_positions: negated}, position) do
+    MapSet.member?(negated, position)
+  end
+
+  @doc """
+  Get all disjuncts (conjunctions) that contain the given position.
+  Returns a list of {disjunct_index, conjunction} tuples.
+  """
+  @spec get_disjuncts_for_position(t(), non_neg_integer()) :: [
+          {non_neg_integer(), [{non_neg_integer(), :positive | :negated}]}
+        ]
+  def get_disjuncts_for_position(%__MODULE__{dnf_decomposition: nil}, _position), do: []
+
+  def get_disjuncts_for_position(%__MODULE__{dnf_decomposition: decomposition}, position) do
+    decomposition.disjuncts
+    |> Enum.with_index()
+    |> Enum.filter(fn {conjunction, _idx} ->
+      Enum.any?(conjunction, fn {pos, _polarity} -> pos == position end)
+    end)
+    |> Enum.map(fn {conjunction, idx} -> {idx, conjunction} end)
+  end
+
+  @doc """
+  Get all disjuncts that do NOT contain the given position.
+  These are the "other" disjuncts that might still satisfy a row.
+  """
+  @spec get_other_disjuncts(t(), non_neg_integer()) :: [
+          [{non_neg_integer(), :positive | :negated}]
+        ]
+  def get_other_disjuncts(%__MODULE__{dnf_decomposition: nil}, _position), do: []
+
+  def get_other_disjuncts(%__MODULE__{dnf_decomposition: decomposition}, position) do
+    decomposition.disjuncts
+    |> Enum.reject(fn conjunction ->
+      Enum.any?(conjunction, fn {pos, _polarity} -> pos == position end)
+    end)
+  end
+
+  @doc """
+  Check if this shape has multiple disjuncts that could independently include a row.
+  """
+  @spec has_multiple_disjuncts?(t()) :: boolean()
+  def has_multiple_disjuncts?(%__MODULE__{dnf_decomposition: nil}), do: false
+
+  def has_multiple_disjuncts?(%__MODULE__{dnf_decomposition: %{disjuncts: disjuncts}}) do
+    length(disjuncts) > 1
+  end
 
   def hash(%__MODULE__{} = shape) do
     {_comparable, hash} = comparable_hash(shape)
@@ -265,14 +369,209 @@ defmodule Electric.Shapes.Shape do
   end
 
   defp fill_tag_structure(shape) do
-    {tag_structure, comparison_expressions} = SubqueryMoves.move_in_tag_structure(shape)
+    {legacy_tag_structure, comparison_expressions} = SubqueryMoves.move_in_tag_structure(shape)
+
+    # Compute DNF decomposition for complex boolean expressions
+    {dnf_decomposition, position_to_dependency_map} =
+      compute_dnf_decomposition(shape, comparison_expressions)
+
+    # Generate DNF-aware tag structure if we have a valid decomposition with subqueries
+    tag_structure =
+      if dnf_decomposition != nil and dnf_decomposition.has_subqueries do
+        build_dnf_tag_structure(dnf_decomposition, comparison_expressions)
+      else
+        legacy_tag_structure
+      end
+
+    # Build reverse lookup map (dependency_handle -> [positions])
+    dependency_to_positions_map =
+      position_to_dependency_map
+      |> Enum.group_by(fn {_pos, handle} -> handle end, fn {pos, _handle} -> pos end)
+
+    # Extract negated positions from DNF decomposition
+    negated_positions =
+      if dnf_decomposition != nil do
+        extract_negated_positions(dnf_decomposition)
+      else
+        MapSet.new()
+      end
 
     %{
       shape
       | tag_structure: tag_structure,
-        subquery_comparison_expressions: comparison_expressions
+        subquery_comparison_expressions: comparison_expressions,
+        dnf_decomposition: dnf_decomposition,
+        position_to_dependency_map: position_to_dependency_map,
+        dependency_to_positions_map: dependency_to_positions_map,
+        negated_positions: negated_positions
     }
   end
+
+  # Extract positions that are negated in the DNF
+  defp extract_negated_positions(decomposition) do
+    decomposition.subexpressions
+    |> Enum.filter(fn {_pos, subexpr} -> subexpr[:negated] == true end)
+    |> Enum.map(fn {pos, _} -> pos end)
+    |> MapSet.new()
+  end
+
+  # Build DNF-aware tag structure: one pattern per disjunct
+  # Each pattern contains the column(s) for subquery positions in that disjunct
+  defp build_dnf_tag_structure(decomposition, comparison_expressions) do
+    decomposition.disjuncts
+    |> Enum.map(fn conjunction ->
+      # Get the subquery positions in this conjunction (ignoring non-subquery positions)
+      conjunction
+      |> Enum.filter(fn {pos, _polarity} ->
+        Map.get(decomposition.subexpressions, pos, %{})[:is_subquery] == true
+      end)
+      |> Enum.map(fn {pos, _polarity} ->
+        subexpr = Map.fetch!(decomposition.subexpressions, pos)
+        # Get the column name(s) from the subexpression
+        extract_tag_column(subexpr, comparison_expressions)
+      end)
+      |> Enum.reject(&is_nil/1)
+    end)
+    |> Enum.reject(&Enum.empty?/1)
+  end
+
+  # Extract the column name or hash_together tuple for a subexpression
+  defp extract_tag_column(%{column: column}, _comparison_expressions) when is_binary(column) do
+    column
+  end
+
+  defp extract_tag_column(%{ast: ast}, comparison_expressions) do
+    # Try to find column info from the AST or comparison_expressions
+    case ast do
+      %Parser.Func{name: "sublink_membership_check", args: [testexpr, _]} ->
+        extract_column_from_testexpr(testexpr)
+
+      _ ->
+        # Fall back to finding via comparison_expressions
+        Enum.find_value(comparison_expressions, fn
+          {_path, %{eval: testexpr}} ->
+            if expressions_match?(ast, testexpr) do
+              extract_column_from_testexpr(testexpr)
+            end
+
+          _ ->
+            nil
+        end)
+    end
+  end
+
+  # Fallback clause for unexpected subexpression formats
+  defp extract_tag_column(_subexpr, _comparison_expressions), do: nil
+
+  defp extract_column_from_testexpr(%Parser.Ref{path: [column_name]}), do: column_name
+
+  defp extract_column_from_testexpr(%Parser.RowExpr{elements: elements}) do
+    columns =
+      Enum.map(elements, fn
+        %Parser.Ref{path: [column_name]} -> column_name
+        _ -> nil
+      end)
+
+    if Enum.any?(columns, &is_nil/1) do
+      nil
+    else
+      {:hash_together, columns}
+    end
+  end
+
+  defp extract_column_from_testexpr(_), do: nil
+
+  # Compute DNF decomposition and position-to-dependency mapping
+  defp compute_dnf_decomposition(%{where: nil}, _comparison_expressions), do: {nil, %{}}
+
+  defp compute_dnf_decomposition(%{shape_dependencies: []}, _comparison_expressions),
+    do: {nil, %{}}
+
+  defp compute_dnf_decomposition(shape, comparison_expressions) do
+    case Decomposer.decompose(shape.where.eval) do
+      {:ok, decomposition} ->
+        # Build position to dependency handle mapping
+        position_to_dep =
+          build_position_to_dependency_map(
+            decomposition,
+            comparison_expressions,
+            shape.shape_dependencies_handles
+          )
+
+        {decomposition, position_to_dep}
+
+      {:error, _reason} ->
+        # If decomposition fails, fall back to no DNF
+        {nil, %{}}
+    end
+  end
+
+  # Build a map from DNF position to dependency handle
+  # This tells us which dependency shape affects which position
+  defp build_position_to_dependency_map(decomposition, comparison_expressions, dep_handles) do
+    decomposition.subexpressions
+    |> Enum.filter(fn {_pos, info} -> info.is_subquery end)
+    |> Enum.reduce(%{}, fn {pos, info}, acc ->
+      # Find which sublink_ref this subexpression corresponds to
+      case find_sublink_ref_for_expression(info.ast, comparison_expressions) do
+        nil ->
+          acc
+
+        sublink_ref_path ->
+          # sublink_ref_path is like ["$sublink", "0"]
+          case sublink_ref_path do
+            ["$sublink", idx_str] ->
+              idx = String.to_integer(idx_str)
+
+              if idx < length(dep_handles) do
+                Map.put(acc, pos, Enum.at(dep_handles, idx))
+              else
+                acc
+              end
+
+            _ ->
+              acc
+          end
+      end
+    end)
+  end
+
+  # Find the sublink_ref for a given subquery expression
+  defp find_sublink_ref_for_expression(ast, comparison_expressions) do
+    # The comparison_expressions map has {["$sublink", idx] => testexpr}
+    # We need to match our ast's testexpr to find the right sublink_ref
+    Enum.find_value(comparison_expressions, fn {sublink_ref_path, testexpr} ->
+      if expressions_match?(ast, testexpr) do
+        sublink_ref_path
+      end
+    end)
+  end
+
+  # Check if two expressions match (simplified comparison)
+  # Handle sublink_membership_check by extracting the testexpr
+  defp expressions_match?(%Parser.Func{name: "sublink_membership_check", args: [test1, _]}, test2) do
+    expressions_match?(test1, test2)
+  end
+
+  # Handle wrapped Expr types (from Eval.Expr.wrap_parser_part)
+  defp expressions_match?(expr1, %Expr{eval: inner}) do
+    expressions_match?(expr1, inner)
+  end
+
+  defp expressions_match?(%Expr{eval: inner}, expr2) do
+    expressions_match?(inner, expr2)
+  end
+
+  defp expressions_match?(%Parser.Ref{path: path1}, %Parser.Ref{path: path2}) do
+    path1 == path2
+  end
+
+  defp expressions_match?(%Parser.RowExpr{elements: e1}, %Parser.RowExpr{elements: e2}) do
+    length(e1) == length(e2) and
+      Enum.all?(Enum.zip(e1, e2), fn {a, b} -> expressions_match?(a, b) end)
+  end
+
+  defp expressions_match?(_, _), do: false
 
   defp validate_where_clause(nil, _opts, _refs), do: {:ok, nil, []}
 
@@ -585,7 +884,7 @@ defmodule Electric.Shapes.Shape do
 
     if WhereClause.includes_record?(where, record, used_extra_refs) do
       change
-      |> fill_move_tags(shape, opts[:stack_id], opts[:shape_handle])
+      |> fill_move_tags(shape, opts[:stack_id], opts[:shape_handle], extra_refs: used_extra_refs)
       |> filter_change_columns(selected_columns)
       |> List.wrap()
     else
@@ -602,16 +901,29 @@ defmodule Electric.Shapes.Shape do
     old_record_in_shape = WhereClause.includes_record?(where, old_record, extra_refs_old)
     new_record_in_shape = WhereClause.includes_record?(where, record, extra_refs_new)
 
+    # For each converted change, determine the appropriate extra_refs
     converted_changes =
       case {old_record_in_shape, new_record_in_shape} do
-        {true, true} -> [change]
-        {true, false} -> [Changes.convert_update(change, to: :deleted_record)]
-        {false, true} -> [Changes.convert_update(change, to: :new_record)]
-        {false, false} -> []
+        {true, true} ->
+          # Update stays as update - use new extra_refs for current record
+          [{change, extra_refs_new}]
+
+        {true, false} ->
+          # Converted to delete - use old extra_refs for old record
+          [{Changes.convert_update(change, to: :deleted_record), extra_refs_old}]
+
+        {false, true} ->
+          # Converted to insert - use new extra_refs for new record
+          [{Changes.convert_update(change, to: :new_record), extra_refs_new}]
+
+        {false, false} ->
+          []
       end
 
     converted_changes
-    |> Enum.map(&fill_move_tags(&1, shape, opts[:stack_id], opts[:shape_handle]))
+    |> Enum.map(fn {c, refs} ->
+      fill_move_tags(c, shape, opts[:stack_id], opts[:shape_handle], extra_refs: refs)
+    end)
     |> Enum.map(&filter_change_columns(&1, selected_columns))
     |> Enum.filter(&should_keep_change?/1)
   end
@@ -622,29 +934,58 @@ defmodule Electric.Shapes.Shape do
     Changes.filter_columns(change, selected_columns)
   end
 
-  def fill_move_tags(change, %__MODULE__{tag_structure: []}, _, _), do: change
+  # Default arguments declaration
+  def fill_move_tags(change, shape, stack_id, shape_handle, opts \\ [])
 
-  def fill_move_tags(%Changes.NewRecord{move_tags: [_ | _]} = change, _, _, _), do: change
-  def fill_move_tags(%Changes.UpdatedRecord{move_tags: [_ | _]} = change, _, _, _), do: change
-  def fill_move_tags(%Changes.DeletedRecord{move_tags: [_ | _]} = change, _, _, _), do: change
+  def fill_move_tags(change, %__MODULE__{tag_structure: []}, _, _, _opts), do: change
+
+  def fill_move_tags(%Changes.NewRecord{move_tags: [_ | _]} = change, _, _, _, _opts), do: change
+
+  def fill_move_tags(%Changes.UpdatedRecord{move_tags: [_ | _]} = change, _, _, _, _opts),
+    do: change
+
+  def fill_move_tags(%Changes.DeletedRecord{move_tags: [_ | _]} = change, _, _, _, _opts),
+    do: change
 
   def fill_move_tags(
         %Changes.NewRecord{record: record} = change,
         %__MODULE__{
-          tag_structure: tag_structure
-        },
+          tag_structure: tag_structure,
+          dnf_decomposition: dnf_decomposition,
+          where: where
+        } = _shape,
         stack_id,
-        shape_handle
+        shape_handle,
+        opts
       ) do
     move_tags = make_tags_from_pattern(tag_structure, record, stack_id, shape_handle)
-    %{change | move_tags: move_tags}
+    extra_refs = opts[:extra_refs] || %{}
+
+    active_conditions =
+      if dnf_decomposition != nil do
+        used_refs = if where, do: where.used_refs, else: %{}
+
+        {:ok, conditions} =
+          WhereClause.compute_active_conditions(dnf_decomposition, record, extra_refs, used_refs)
+
+        conditions
+      else
+        nil
+      end
+
+    %{change | move_tags: move_tags, active_conditions: active_conditions}
   end
 
   def fill_move_tags(
         %Changes.UpdatedRecord{record: record, old_record: old_record} = change,
-        %__MODULE__{tag_structure: tag_structure},
+        %__MODULE__{
+          tag_structure: tag_structure,
+          dnf_decomposition: dnf_decomposition,
+          where: where
+        },
         stack_id,
-        shape_handle
+        shape_handle,
+        opts
       ) do
     move_tags = make_tags_from_pattern(tag_structure, record, stack_id, shape_handle)
 
@@ -652,18 +993,55 @@ defmodule Electric.Shapes.Shape do
       make_tags_from_pattern(tag_structure, old_record, stack_id, shape_handle) --
         move_tags
 
-    %{change | move_tags: move_tags, removed_move_tags: old_move_tags}
+    extra_refs = opts[:extra_refs] || %{}
+
+    active_conditions =
+      if dnf_decomposition != nil do
+        used_refs = if where, do: where.used_refs, else: %{}
+
+        {:ok, conditions} =
+          WhereClause.compute_active_conditions(dnf_decomposition, record, extra_refs, used_refs)
+
+        conditions
+      else
+        nil
+      end
+
+    %{
+      change
+      | move_tags: move_tags,
+        removed_move_tags: old_move_tags,
+        active_conditions: active_conditions
+    }
   end
 
   def fill_move_tags(
         %Changes.DeletedRecord{old_record: record} = change,
         %__MODULE__{
-          tag_structure: tag_structure
+          tag_structure: tag_structure,
+          dnf_decomposition: dnf_decomposition,
+          where: where
         },
         stack_id,
-        shape_handle
+        shape_handle,
+        opts
       ) do
-    %{change | move_tags: make_tags_from_pattern(tag_structure, record, stack_id, shape_handle)}
+    move_tags = make_tags_from_pattern(tag_structure, record, stack_id, shape_handle)
+    extra_refs = opts[:extra_refs] || %{}
+
+    active_conditions =
+      if dnf_decomposition != nil do
+        used_refs = if where, do: where.used_refs, else: %{}
+
+        {:ok, conditions} =
+          WhereClause.compute_active_conditions(dnf_decomposition, record, extra_refs, used_refs)
+
+        conditions
+      else
+        nil
+      end
+
+    %{change | move_tags: move_tags, active_conditions: active_conditions}
   end
 
   defp make_tags_from_pattern(patterns, record, stack_id, shape_handle) do
