@@ -1,13 +1,17 @@
 ---
 title: Postgres Sync
 description: >-
-  Sync from your database into your apps. For partial replication, data delivery and fan-out.
+  Read-path sync engine for Postgres that handles partial replication, data delivery and fan-out.
 image: /img/meta/postgres-sync.jpg
 outline: deep
 ---
 
 <script setup>
 import { onMounted } from 'vue'
+
+import ComponentsJPG from '/static/img/docs/guides/deployment/components.jpg?url'
+import ComponentsPNG from '/static/img/docs/guides/deployment/components.png?url'
+import ComponentsSmPNG from '/static/img/docs/guides/deployment/components.sm.png?url'
 
 import BlogPostsByTag from '../src/components/BlogPostsByTag.vue'
 import { data as initialStarCounts } from '../data/count.data.ts'
@@ -46,12 +50,11 @@ onMounted(async () => {
 
 # Postgres Sync
 
-Sync from your database into your apps.
-For partial replication,
+Read-path sync engine for Postgres that handles partial replication,
 <span class="no-wrap-sm">
-  data delivery
+  data delivery and
   <span class="no-wrap">
-    and fan-out</span></span>.
+    fan-out</span></span>.
 
 <div class="actions cta-actions page-footer-actions left">
   <div class="action">
@@ -70,12 +73,9 @@ For partial replication,
   </div>
 </div>
 
-> [!Warning] Electric 1.0 release
-> Electric is now 1.0! See the [release post here](/blog/2025/03/17/electricsql-1.0-released).
+## Postgres sync engine
 
-## Electric sync engine
-
-The Electric sync engine syncs [little subsets](/docs/guides/shapes) of data out of Postgres into local apps and services &mdash; wherever you need the data.
+Postgres Sync is a sync engine that syncs [subsets of your data](/docs/guides/shapes) out of your Postgres database, into local apps and services.
 
 <img srcset="/img/about/use-cases.sm.png 1098w, /img/about/use-cases.png 1484w"
     sizes="(max-width: 767px) 600px, 1484px"
@@ -83,18 +83,11 @@ The Electric sync engine syncs [little subsets](/docs/guides/shapes) of data out
     alt="Use cases diagram"
 />
 
-You can sync data into:
-
-- web and mobile apps, replacing data fetching with data sync
-- edge workers and services, for example maintaining a low-latency edge data cache
-- local AI systems, for example running RAG using pgvector
-- dev and test environments, for example syncing data into [an embedded PGlite](/products/pglite) database
+You can sync data into anything you like. From web, mobile and desktop apps and client stores like [TanStack DB](/products/tanstack-db) to databases like [PGlite](/products/pglite).
 
 ## How does it work?
 
-The Electric sync engine is an [Elixir](https://elixir-lang.org) application, developed at [packages/sync-service](https://github.com/electric-sql/electric/tree/main/packages/sync-service).
-
-It connects to your Postgres using a [`DATABASE_URL`](/docs/api/config#database-url), consumes the logical replication stream and fans out data into [Shapes](/docs/guides/shapes), which [Clients](/docs/api/clients/typescript) then consume and sync.
+Postgres Sync connects to your Postgres using a [`DATABASE_URL`](/docs/api/config#database-url), consumes the logical replication stream and fans out data into [Shapes](/docs/guides/shapes), which [Clients](/docs/api/clients/typescript) then consume and sync.
 
 <figure>
   <a href="/img/api/shape-log.jpg">
@@ -109,7 +102,21 @@ It connects to your Postgres using a [`DATABASE_URL`](/docs/api/config#database-
   </figcaption>
 </figure>
 
-This enables a massive number of clients to query and get real-time updates to subsets of the database. In this way, Electric turns Postgres into a real-time database.
+Technically, Postgres Sync is an [Elixir](https://elixir-lang.org) application, developed at [packages/sync-service](https://github.com/electric-sql/electric/tree/main/packages/sync-service). It runs as a seperate service, [between your API and your database](/docs/guides/deployment). Clients consume data over an [HTTP API](/docs/api/http) that [works with CDNs](/api/http#caching) to scale data delivery and fan-out.
+
+<figure>
+  <a :href="ComponentsJPG">
+    <img :src="ComponentsPNG" class="hidden-sm"
+        alt="Illustration of the main components of a successfull deployment"
+    />
+    <img :src="ComponentsSmPNG" class="block-sm"
+        style="max-width: 360px"
+        alt="Illustration of the main components of a successfull deployment"
+    />
+  </a>
+</figure>
+
+This allows you to have [millions of concurrent users](/docs/reference/benchmarks) subscribing to real-time updates to your database with minimal additional load on your database.
 
 ## Related posts
 
@@ -117,9 +124,7 @@ This enables a massive number of clients to query and get real-time updates to s
 
 ## More information
 
-See [how you can combine](/products/#how-they-fit-together) Postgres Sync with other Electric products to [build fast, reactive apps](/sync#reactivity).
-
-See the [Docs](/docs/intro), [Quickstart](/docs/quickstart) and [Demos](/demos). You can [self-host](/docs/guides/deployment) or use the [Electric Cloud](/cloud).
+See the [Quickstart](/docs/quickstart), [Docs](/docs/intro) and [Demos](/demos).
 
 <div class="actions cta-actions page-footer-actions left">
   <div class="action">
