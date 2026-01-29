@@ -70,7 +70,7 @@ Postgres Sync connects to your Postgres using a [`DATABASE_URL`](/docs/api/confi
   </figcaption>
 </figure>
 
-Technically, Postgres Sync is an [Elixir](https://elixir-lang.org) application, developed at [packages/sync-service](https://github.com/electric-sql/electric/tree/main/packages/sync-service). It runs as a seperate service, [between your API and your database](/docs/guides/deployment). Clients consume data over an [HTTP API](/docs/api/http) that [works with CDNs](/api/http#caching) to scale data delivery and fan-out.
+Technically, Postgres Sync is an [Elixir](https://elixir-lang.org) application, developed at [packages/sync-service](https://github.com/electric-sql/electric/tree/main/packages/sync-service). It runs as a seperate service, [between your API and your database](/docs/guides/deployment). Clients consume data over an [HTTP API](/docs/api/http) that [works with CDNs](/docs/api/http#caching) to scale data delivery and fan-out.
 
 <figure>
   <a :href="ComponentsJPG">
