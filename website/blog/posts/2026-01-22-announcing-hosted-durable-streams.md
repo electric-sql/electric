@@ -35,7 +35,7 @@ Today infrastructure is the bottleneck. However, it's not just infrastructure, i
 
 [Request/response assumes two parties taking turns](/blog/2026/01/12/durable-sessions-for-collaborative-ai#evolving-the-interaction-paradigm). Agentic apps have multiple agents and multiple users all acting at once. That requires a different primitive. And people are cobbling together Redis, WebSockets, and retry logic to build it.
 
-So it turns out we'd built exactly the right primitive for this moment: [Durable Streams](https://github.com/durable-streams/durable-streams). Persistent, resumable event streams over HTTP.
+So it turns out we'd built exactly the right primitive for this moment: [Durable Streams](/products/durable-streams). Persistent, resumable event streams over HTTP.
 
 ## The missing primitive
 

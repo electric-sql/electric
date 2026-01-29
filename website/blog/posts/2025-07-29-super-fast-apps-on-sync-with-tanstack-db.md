@@ -45,12 +45,12 @@ import ScalabilityChart from '../../src/components/ScalabilityChart.vue'
 
 <div class="hidden-xs">
 
-[Tanstack DB](https://tanstack.com/db) is a [reactive client store for building super fast apps on sync](https://tanstack.com/blog/tanstack-db-0.1-the-embedded-client-database-for-tanstack-query). Paired with [Electric](/), it provides an optimal end-to-end sync stack for building <span class="no-wrap-sm">local-first apps</span>.
+[Tanstack DB](/products/tanstack-db) is a [reactive client store for building super fast apps on sync](https://tanstack.com/blog/tanstack-db-0.1-the-embedded-client-database-for-tanstack-query). Paired with [Electric](/), it provides an optimal end-to-end sync stack for building <span class="no-wrap-sm">local-first apps</span>.
 
 </div>
 <div class="block-xs">
 
-[Tanstack DB](https://tanstack.com/db) is a reactive client store for [building super fast apps on&nbsp;sync](https://tanstack.com/blog/tanstack-db-0.1-the-embedded-client-database-for-tanstack-query).
+[Tanstack DB](/products/tanstack-db) is a reactive client store for [building super fast apps on&nbsp;sync](https://tanstack.com/blog/tanstack-db-0.1-the-embedded-client-database-for-tanstack-query).
 
 Paired with [Electric](/), it provides an optimal end-to-end sync stack for local-first app&nbsp;development.
 
@@ -196,7 +196,7 @@ If we have these three things &mdash; collections, live queries and mutations th
 
 ## Introducing TanStack DB
 
-[TanStack DB](https://tanstack.com/db) is a reactive client store that extends TanStack Query with:
+[TanStack DB](/products/tanstack-db) is a reactive client store that extends TanStack Query with:
 
 - [collections](#collections)
 - [live queries](#live-queries)
@@ -657,7 +657,7 @@ Each step will make your app faster and more resilient, as well as providing a p
 
 ## Next steps
 
-[TanStack DB](https://tanstack.com/db) with [Electric](/) provides a pathway to real-time without the re-write and an optimal, end-to-end local-first sync stack that just&nbsp;works.
+[TanStack DB](/products/tanstack-db) with Electric [Postgres Sync](/products/postgres-sync) provides a pathway to real-time without the re-write and an optimal, end-to-end local-first sync stack that just&nbsp;works.
 
 To get started, check out the [TanStack&nbsp;Start&nbsp;starter](https://github.com/electric-sql/electric/tree/main/examples/tanstack-db-web-starter) for web and [Expo&nbsp;starter](https://github.com/electric-sql/electric/tree/main/examples/tanstack-db-expo-starter) for&nbsp;mobile.
 

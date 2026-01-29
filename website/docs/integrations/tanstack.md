@@ -60,7 +60,7 @@ Developed by an open collective, stewarded by [Tanner Linsley](https://github.co
 
 ## TanStack DB
 
-Electric have [partnered with TanStack](https://tanstack.com/blog/tanstack-db-0.1-the-embedded-client-database-for-tanstack-query) to build [TanStack DB](https://tanstack.com/db), a reactive client store for building super fast apps on sync.
+Electric have [partnered with TanStack](https://tanstack.com/blog/tanstack-db-0.1-the-embedded-client-database-for-tanstack-query) to build [TanStack DB](/products/tanstack-db), a reactive client store for building super fast apps on sync.
 
 Type-safe, declarative, incrementally adoptable and insanely fast, it's the [future of app development with Electric](/blog/2025/07/29/super-fast-apps-on-sync-with-tanstack-db) and the best way of [building AI apps<span class="hidden-xs"> and agentic systems</span>](/blog/2025/04/09/building-ai-apps-on-sync).
 

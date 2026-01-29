@@ -45,7 +45,7 @@ As the world moves to getting things done through agents, the winners are going 
 
 A Durable Session is a state management pattern that naturally makes AI and agentic apps collaborative.
 
-This post introduces the [Durable Session pattern](#durable-session-pattern) and shows how you can implement it using [Durable Streams](https://github.com/durable-streams/durable-streams) and [TanStack DB](https://tanstack.com/db).
+This post introduces the [Durable Session pattern](#durable-session-pattern) and shows how you can implement it using [Durable Streams](/products/durable-streams) and [TanStack DB](/products/tanstack-db).
 
 > [!Warning] 🤝 ✨ Durable Sessions demo
 > See the TanStack AI - Durable Sessions [demo video](https://youtu.be/81KXwxld7dw) and [source code](https://github.com/electric-sql/transport).
@@ -188,13 +188,13 @@ Electric syncs data out of Postgres into client apps, handling partial replicati
 
 ### Durable Streams
 
-We've now generalized the Electric sync protocol into [Durable Streams](https://github.com/durable-streams/durable-streams).
+We've now generalized the Electric sync protocol into [Durable Streams](/products/durable-streams).
 
 This is a lower-level binary streaming protocol that supports more use cases, like token streaming, real-time presence and multi-modal binary data frames.
 
 ### TanStack DB
 
-[TanStack&nbsp;DB](https://tanstack.com/db) is a lightweight, reactive client store with:
+[TanStack&nbsp;DB](/products/tanstack-db) is a lightweight, reactive client store with:
 
 1. [collections](https://tanstack.com/db/latest/docs/overview#defining-collections) a unified data layer to load data into
 1. [live queries](https://tanstack.com/db/latest/docs/guides/live-queries) super-fast reactivity using differential dataflow
@@ -631,15 +631,15 @@ With minimal changes to your component code and zero changes to your real AI eng
 
 As the world moves to getting things done through agents, the winners are going to be the products that combine AI with team-based collaboration. Building AI apps on the Durable Session pattern is the best way to do that.
 
-[Durable Streams](https://github.com/durable-streams/durable-streams) and [TanStack DB](https://tanstack.com/db) allow you to build Durable Sessions with your existing stack, schema and AI SDK.
+[Durable Streams](/products/durable-streams) and [TanStack DB](/products/tanstack-db) allow you to build Durable Sessions with your existing stack, schema and AI SDK.
 
 ### Next steps
 
 Dive into the projects and docs for more information:
 
-- [Electric](/docs/intro)
-- [Durable Streams](https://github.com/durable-streams/durable-streams)
-- [TanStack DB](https://tanstack.com/db)
+- [Postgres Sync](/products/postgres-sync)
+- [Durable Streams](/products/durable-streams)
+- [TanStack DB](/products/tanstack-db)
 - [TanStack AI](https://tanstack.com/ai)
 
 Check out the reference implementations in the [electric-sql/transport](https://github.com/electric-sql/transport) repo:

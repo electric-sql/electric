@@ -110,8 +110,8 @@ Before going into development details, here's the system's shape:
 
 - **CAD model**: Lives in a **[Yjs document](https://yjs.dev)**—mergeable, syncable, acts like a file format
 - **Kernel**: **[OpenCascade](https://dev.opencascade.org)** compiled to WebAssembly via [`opencascade.js`](https://ocjs.org)—the mathematical engine that turns sketches and operations into solid 3D shapes
-- **App data** (workspaces, projects, metadata): Syncs via **[ElectricSQL](http://electric-sql.com)** from Postgres into **[TanStack DB](https://tanstack.com/db)**
-- **Presence, docs, AI sessions**: Append-only **[Durable Streams](https://github.com/durable-streams/durable-streams)**—resumable event logs you can tail and replay
+- **App data** (workspaces, projects, metadata): Syncs via **[Postgres Sync](/products/postgres-sync)** into **[TanStack DB](/products/tanstack-db)**
+- **Presence, docs, AI sessions**: Append-only **[Durable Streams](/products/durable-streams)**—resumable event logs you can tail and replay
 - **AI orchestration**: Runs client-side in a **SharedWorker** for durability across tab closes
 
 One authoritative doc model, one robust kernel, one sync system for relational data, and one stream substrate for durable multi-user state.

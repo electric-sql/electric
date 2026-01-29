@@ -447,7 +447,7 @@ There's a lot of hype around agentic system development. Concepts like agentic m
 
 When you dig into it, these all collapse down to processes and database state. You can build agentic systems with a database, standard web tooling and real-time sync.
 
-See the [🔥 Burn demo app](/demos/burn) and [source code](https://github.com/electric-sql/electric/tree/main/examples/burn) for an example and build your own agentic system with [Phoenix.Sync](https://hexdocs.pm/phoenix_sync) and [TanStack DB](https://tanstack.com/db).
+See the [🔥 Burn demo app](/demos/burn) and [source code](https://github.com/electric-sql/electric/tree/main/examples/burn) for an example and build your own agentic system with [Phoenix.Sync](https://hexdocs.pm/phoenix_sync) and [TanStack DB](/products/tanstack-db).
 
 <div class="actions cta-actions page-footer-actions left">
   <div class="action cloud-cta hidden-sm">
