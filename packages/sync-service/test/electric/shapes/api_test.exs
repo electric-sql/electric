@@ -1273,6 +1273,71 @@ defmodule Electric.Shapes.ApiTest do
     end
 
     @tag long_poll_timeout: 100
+    test "handles shape offset regression during live polling (issue #3760)", ctx do
+      # This test reproduces the CaseClauseError described in issue #3760.
+      # The bug occurs when:
+      # 1. A live request is waiting for changes
+      # 2. Shape invalidation spawns an async cleanup task
+      # 3. Between consumer termination and async cleanup completion,
+      #    the writer ETS gets deleted while ShapeStatus retains the shape entry
+      # 4. When notify_changes_since_request_start/1 calls resolve_shape_handle,
+      #    it returns {shape_handle, LogOffset.last_before_real_offsets()} as a fallback
+      # 5. This offset is *less than* the client's stored offset, causing a
+      #    CaseClauseError because no case clause handles offset regression
+
+      regressed_offset = LogOffset.last_before_real_offsets()
+
+      expect_shape_cache(
+        # First call during validation - returns valid offset
+        resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id ->
+          {@test_shape_handle, @test_offset}
+        end,
+        # Second call during notify_changes_since_request_start - simulates
+        # the race condition where shape metadata was partially cleaned up,
+        # causing offset to regress to last_before_real_offsets()
+        resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id ->
+          {@test_shape_handle, regressed_offset}
+        end
+      )
+
+      patch_shape_cache(
+        has_shape?: fn @test_shape_handle, _opts -> true end,
+        await_snapshot_start: fn @test_shape_handle, _ -> :started end
+      )
+
+      patch_storage(
+        for_shape: fn @test_shape_handle, _opts -> @test_opts end,
+        get_chunk_end_log_offset: fn _, @test_opts -> nil end,
+        get_log_stream: fn @test_offset, _, @test_opts -> [] end
+      )
+
+      # The flow is:
+      # 1. validate() calls resolve_shape_handle (first expectation - returns valid offset)
+      # 2. serve_shape_response() -> handle_live_request() -> notify_changes_since_request_start()
+      # 3. notify_changes_since_request_start() calls resolve_shape_handle (second expectation)
+      # 4. Second call returns regressed offset (last_before_real_offsets)
+      # 5. The fix detects offset regression and sends :shape_rotation message
+      # 6. hold_until_change() receives :shape_rotation and returns 409
+      assert {:ok, request} =
+               Api.validate(
+                 ctx.api,
+                 %{
+                   table: "public.users",
+                   offset: "#{@test_offset}",
+                   handle: @test_shape_handle,
+                   live: true
+                 }
+               )
+
+      response = Api.serve_shape_response(request)
+
+      # With the fix in place, offset regression should be treated as shape rotation
+      # and return a 409 with must-refetch control header
+      assert response.status == 409
+      assert [%{headers: %{control: "must-refetch"}}] = response_body(response)
+    end
+
+    @tag long_poll_timeout: 100
     test "sends an up-to-date response after a timeout if no changes are observed", ctx do
       patch_shape_cache(
         resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id ->
