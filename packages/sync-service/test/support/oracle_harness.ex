@@ -61,6 +61,81 @@ defmodule Support.OracleHarness do
     # Normalize transactions: wrap flat mutation lists into single-mutation transactions
     transactions = normalize_transactions(transactions)
 
+    log_test_config(shapes, transactions)
+
+    # Start oracle pool for parallel Postgres queries
+    {:ok, oracle_pool} = start_oracle_pool(ctx, opts)
+
+    # Start checker GenServers
+    pids = start_checkers(ctx, shapes, oracle_pool, timeout_ms)
+
+    # Check initial state (all in parallel)
+    log("Checking initial snapshot for #{length(pids)} shapes")
+    ShapeChecker.publish(pids, :check_initial_state)
+
+    # Run each transaction
+    log("Running #{length(transactions)} transactions")
+
+    transactions
+    |> Enum.with_index(1)
+    |> Enum.each(fn {mutations, txn_idx} ->
+      run_transaction(ctx, pids, mutations, txn_idx)
+    end)
+
+    # Cleanup
+    Enum.each(pids, &GenServer.stop/1)
+    GenServer.stop(oracle_pool)
+    :ok
+  end
+
+  # ----------------------------------------------------------------------------
+  # Internal Implementation
+  # ----------------------------------------------------------------------------
+
+  defp start_oracle_pool(ctx, opts) do
+    pool_size = opts[:oracle_pool_size] || @default_oracle_pool_size
+
+    conn_opts =
+      ctx.db_config
+      |> Electric.Utils.deobfuscate_password()
+      |> Keyword.put(:pool_size, pool_size)
+      |> Keyword.put(:types, PgInterop.Postgrex.Types)
+      |> Keyword.put(:backoff_type, :stop)
+      |> Keyword.put(:max_restarts, 0)
+
+    Postgrex.start_link(conn_opts)
+  end
+
+  defp start_checkers(ctx, shapes, oracle_pool, timeout_ms) do
+    Enum.map(shapes, fn shape ->
+      {:ok, pid} = ShapeChecker.start_link(ctx, shape, oracle_pool, timeout_ms: timeout_ms)
+      pid
+    end)
+  end
+
+  defp run_transaction(ctx, pids, mutations, txn_idx) do
+    txn_name = "txn_#{txn_idx}"
+    cycle_start = System.monotonic_time(:millisecond)
+
+    # Apply all mutations in a single transaction
+    sql_statements = Enum.map(mutations, & &1.sql)
+    apply_sql_transaction(ctx, sql_statements)
+
+    apply_end = System.monotonic_time(:millisecond)
+
+    # Check all shapes (polls until up_to_date, then verifies against oracle)
+    ShapeChecker.publish(pids, {:check_transaction, txn_name})
+
+    check_end = System.monotonic_time(:millisecond)
+
+    log(
+      "#{txn_name} (#{length(mutations)} mutations): " <>
+        "total=#{check_end - cycle_start}ms " <>
+        "(apply=#{apply_end - cycle_start}ms, check=#{check_end - apply_end}ms)"
+    )
+  end
+
+  defp log_test_config(shapes, transactions) do
     log("Starting #{length(shapes)} shapes")
 
     IO.puts("\n=== SHAPES ===")
@@ -84,175 +159,6 @@ defmodule Support.OracleHarness do
     end)
 
     IO.puts("")
-
-    # Start oracle pool for parallel Postgres queries
-    {:ok, oracle_pool} = start_oracle_pool(ctx, opts)
-
-    # Create all checkers
-    checkers = start_checkers(ctx, shapes, oracle_pool, opts)
-
-    log("Waiting for initial snapshot")
-    checkers = await_all_up_to_date(checkers, timeout_ms, "initial snapshot")
-
-    log("Running #{length(transactions)} transactions (#{total_mutations} mutations)")
-
-    # Get initial oracle state to pass to first transaction
-    initial_oracle = query_all_oracles_parallel(checkers)
-
-    # Pass oracle_after from each transaction as oracle_before for the next one
-    # This cuts oracle queries in half since oracle_before is typically the same as previous oracle_after
-    {checkers, _final_oracle} =
-      transactions
-      |> Enum.with_index(1)
-      |> Enum.reduce({checkers, initial_oracle}, fn {mutations, txn_idx}, {checkers, prev_oracle} ->
-        run_transaction_cycle(ctx, checkers, mutations, txn_idx, timeout_ms, prev_oracle)
-      end)
-
-    stop_checkers(checkers)
-    GenServer.stop(oracle_pool)
-    :ok
-  end
-
-  # ----------------------------------------------------------------------------
-  # Internal Implementation - Parallel Coordination
-  # ----------------------------------------------------------------------------
-
-  defp start_oracle_pool(ctx, opts) do
-    pool_size = opts[:oracle_pool_size] || @default_oracle_pool_size
-
-    conn_opts =
-      ctx.db_config
-      |> Electric.Utils.deobfuscate_password()
-      |> Keyword.put(:pool_size, pool_size)
-      |> Keyword.put(:types, PgInterop.Postgrex.Types)
-      |> Keyword.put(:backoff_type, :stop)
-      |> Keyword.put(:max_restarts, 0)
-
-    Postgrex.start_link(conn_opts)
-  end
-
-  defp start_checkers(ctx, shapes, oracle_pool, opts) do
-    timeout_ms = opts[:timeout_ms] || @default_timeout_ms
-
-    Enum.map(shapes, fn shape ->
-      ShapeChecker.new(ctx, shape, oracle_pool, timeout_ms: timeout_ms)
-    end)
-  end
-
-  defp stop_checkers(checkers) do
-    Enum.each(checkers, &ShapeChecker.stop/1)
-  end
-
-  # Poll all checkers in parallel using Task.async_stream
-  defp await_all_up_to_date(checkers, timeout_ms, step_name) do
-    import ExUnit.Assertions
-
-    updated_checkers =
-      checkers
-      |> Task.async_stream(
-        fn checker -> ShapeChecker.await_up_to_date(checker, timeout_ms) end,
-        max_concurrency: length(checkers),
-        timeout: timeout_ms + 5_000,
-        on_timeout: :kill_task
-      )
-      |> Enum.map(fn
-        {:ok, checker} ->
-          checker
-
-        {:exit, :timeout} ->
-          flunk("Task timeout in step=#{step_name}")
-
-        {:exit, reason} ->
-          flunk("Checker failed in step=#{step_name}: #{inspect(reason)}")
-      end)
-
-    # Check for individual checker timeouts
-    Enum.each(updated_checkers, fn checker ->
-      if checker.timed_out? do
-        flunk("Oracle timeout in step=#{step_name} shape=#{checker.name}")
-      end
-    end)
-
-    updated_checkers
-  end
-
-  defp run_transaction_cycle(ctx, checkers, mutations, txn_idx, timeout_ms, oracle_before) do
-    txn_name = "txn_#{txn_idx} (#{length(mutations)} mutations)"
-    cycle_start = System.monotonic_time(:millisecond)
-
-    # Phase 1: Apply all mutations in a single transaction
-    sql_statements = Enum.map(mutations, & &1.sql)
-    apply_sql_transaction(ctx, sql_statements)
-
-    apply_end = System.monotonic_time(:millisecond)
-
-    # Phase 2: Wait for all clients to be up_to_date (parallel polling)
-    checkers = await_all_up_to_date(checkers, timeout_ms, txn_name)
-
-    await_end = System.monotonic_time(:millisecond)
-
-    # Phase 3: Query oracle_after and verify in parallel
-    # Returns {checkers, oracle_after} so oracle_after can be reused as next oracle_before
-    result = verify_all_parallel(checkers, txn_name, oracle_before)
-
-    verify_end = System.monotonic_time(:millisecond)
-
-    log(
-      "#{txn_name} timing: total=#{verify_end - cycle_start}ms " <>
-        "(apply=#{apply_end - cycle_start}ms, " <>
-        "await=#{await_end - apply_end}ms, " <>
-        "verify=#{verify_end - await_end}ms)"
-    )
-
-    result
-  end
-
-  defp query_all_oracles_parallel(checkers) do
-    checkers
-    |> Task.async_stream(
-      fn checker -> {checker.name, ShapeChecker.query_oracle(checker)} end,
-      max_concurrency: length(checkers),
-      ordered: false
-    )
-    |> Enum.into(%{}, fn {:ok, {name, rows}} -> {name, rows} end)
-  end
-
-  defp verify_all_parallel(checkers, step_name, oracle_before) do
-    results =
-      checkers
-      |> Task.async_stream(
-        fn checker ->
-          oracle_after = ShapeChecker.query_oracle(checker)
-
-          ShapeChecker.assert_consistent!(
-            checker,
-            step_name,
-            oracle_before[checker.name],
-            oracle_after
-          )
-
-          {checker, oracle_after}
-        end,
-        max_concurrency: length(checkers),
-        timeout: 30_000,
-        on_timeout: :kill_task
-      )
-      |> Enum.map(fn
-        {:ok, {checker, oracle_after}} ->
-          {checker, oracle_after}
-
-        {:exit, :timeout} ->
-          import ExUnit.Assertions
-          flunk("Oracle query timeout in step=#{step_name}")
-
-        {:exit, reason} ->
-          import ExUnit.Assertions
-          flunk("Checker failed in step=#{step_name}: #{inspect(reason)}")
-      end)
-
-    checkers = Enum.map(results, fn {checker, _oracle} -> checker end)
-    oracle_after = Map.new(results, fn {checker, oracle} -> {checker.name, oracle} end)
-    {checkers, oracle_after}
   end
 
   # ----------------------------------------------------------------------------

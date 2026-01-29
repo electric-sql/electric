@@ -1,12 +1,31 @@
 defmodule Support.OracleHarness.ShapeChecker do
   @moduledoc """
-  Per-shape checker that uses polling to verify consistency with the oracle.
+  GenServer that verifies a single shape's consistency with the Postgres oracle.
 
   Each checker:
-  - Uses Electric.Client.poll/4 to fetch shape changes
+  - Maintains its own materialized view from Electric shape changes
   - Queries the oracle (Postgres) via a shared pool
   - Verifies consistency between materialized client state and oracle
+
+  ## Usage
+
+      {:ok, pid} = ShapeChecker.start_link(ctx, shape, oracle_pool, timeout_ms: 20_000)
+
+      # Check initial snapshot matches oracle
+      ShapeChecker.check_initial_state(pid)
+
+      # After mutations, check transaction result matches oracle
+      ShapeChecker.check_transaction(pid, "txn_1")
+
+  ## Parallel Checking
+
+  Use `publish/2` to call multiple checkers in parallel:
+
+      publish(pids, :check_initial_state)
+      publish(pids, {:check_transaction, "txn_1"})
   """
+
+  use GenServer
 
   import ExUnit.Assertions
 
@@ -16,10 +35,9 @@ defmodule Support.OracleHarness.ShapeChecker do
   alias Electric.Client.ShapeDefinition
   alias Electric.Client.ShapeState
 
-  # Max time to wait for changes after receiving up_to_date without changes (in ms)
-  # This handles the case where LONG_POLL_TIMEOUT is short and Electric hasn't
-  # processed changes yet.
+  # Max time to wait for changes after receiving up_to_date without changes
   @default_retry_window_ms 5_000
+  @default_timeout_ms 20_000
 
   defstruct [
     :name,
@@ -31,28 +49,94 @@ defmodule Support.OracleHarness.ShapeChecker do
     :client,
     :shape_def,
     :oracle_pool,
+    :timeout_ms,
     poll_state: nil,
     rows: %{},
-    must_refetch?: false,
-    error: nil,
-    timed_out?: false,
-    # Track if we received any changes during current await cycle
-    got_changes?: false,
-    # When we started retrying due to oracle mismatch
-    retry_start_ms: nil
+    # Cached oracle state from previous check (used as "before" for next check)
+    oracle_before: nil
   ]
 
+  # ---------------------------------------------------------------------------
+  # Public API
+  # ---------------------------------------------------------------------------
+
   @doc """
-  Creates a new checker for a shape.
+  Starts a ShapeChecker GenServer.
   """
-  def new(ctx, shape, oracle_pool, _opts \\ []) do
+  def start_link(ctx, shape, oracle_pool, opts \\ []) do
+    GenServer.start_link(__MODULE__, {ctx, shape, oracle_pool, opts})
+  end
+
+  @doc """
+  Checks the initial state: queries oracle, polls shape until up_to_date,
+  and verifies they match. Caches oracle state for subsequent transaction checks.
+
+  Raises on mismatch or timeout.
+  """
+  def check_initial_state(pid) do
+    GenServer.call(pid, :check_initial_state, :infinity)
+  end
+
+  @doc """
+  Checks after a transaction: polls shape until up_to_date, queries oracle,
+  and verifies they match. Uses cached "before" state for logging.
+
+  Raises on mismatch or timeout.
+  """
+  def check_transaction(pid, txn_name) do
+    GenServer.call(pid, {:check_transaction, txn_name}, :infinity)
+  end
+
+  @doc """
+  Calls multiple ShapeChecker GenServers in parallel with the same message
+  and waits for all responses.
+
+  Raises if any checker dies (e.g., from assertion failure).
+  """
+  def publish(pids, message) do
+    # Based on OTP GenServer.call, see:
+    # https://github.com/erlang/otp/blob/090c308d7c925e154240685174addaa516ea2f69/lib/stdlib/src/gen.erl#L243
+    refs =
+      Enum.map(pids, fn pid ->
+        ref = Process.monitor(pid)
+        send(pid, {:"$gen_call", {self(), ref}, message})
+        {ref, pid}
+      end)
+
+    Enum.each(refs, fn {ref, pid} ->
+      receive do
+        {^ref, :ok} ->
+          Process.demonitor(ref, [:flush])
+          :ok
+
+        {:DOWN, ^ref, _, ^pid, reason} ->
+          # Re-raise assertion errors with their original message
+          case reason do
+            {%ExUnit.AssertionError{message: message}, _stacktrace} ->
+              import ExUnit.Assertions
+              flunk(message)
+
+            _ ->
+              raise "ShapeChecker #{inspect(pid)} died: #{inspect(reason)}"
+          end
+      end
+    end)
+  end
+
+  # ---------------------------------------------------------------------------
+  # GenServer Callbacks
+  # ---------------------------------------------------------------------------
+
+  @impl true
+  def init({ctx, shape, oracle_pool, opts}) do
     validate_identifier!(shape.table, "table")
     Enum.each(shape.columns, &validate_identifier!(&1, "column"))
     Enum.each(shape.pk, &validate_identifier!(&1, "pk column"))
 
     shape_def = ShapeDefinition.new!(shape.table, where: shape.where)
+    timeout_ms = opts[:timeout_ms] || @default_timeout_ms
 
-    %__MODULE__{
+    state = %__MODULE__{
       name: shape.name,
       table: shape.table,
       where: shape.where,
@@ -62,24 +146,153 @@ defmodule Support.OracleHarness.ShapeChecker do
       client: ctx.client,
       shape_def: shape_def,
       oracle_pool: oracle_pool,
+      timeout_ms: timeout_ms,
       poll_state: ShapeState.new()
     }
+
+    {:ok, state}
   end
 
-  @doc """
-  Query the oracle (Postgres) for the expected rows for this shape.
-  Uses the shared oracle pool for parallel queries across shapes.
-  """
-  def query_oracle(%__MODULE__{} = checker) do
-    where_sql = checker.where || "TRUE"
-    columns_sql = Enum.map(checker.columns, &quote_ident/1) |> Enum.join(", ")
-    order_sql = Enum.map(checker.pk, &quote_ident/1) |> Enum.join(", ")
+  @impl true
+  def handle_call(:check_initial_state, _from, state) do
+    log("Checking initial state for shape=#{state.name}")
+
+    # Get oracle state (this becomes our "before" for the first transaction)
+    oracle = query_oracle(state)
+
+    # Poll until up_to_date
+    state = await_up_to_date(state)
+
+    # Verify consistency
+    assert_consistent!(state, "initial_snapshot", oracle, oracle)
+
+    # Cache oracle state for next check
+    state = %{state | oracle_before: oracle}
+
+    {:reply, :ok, state}
+  end
+
+  @impl true
+  def handle_call({:check_transaction, txn_name}, _from, state) do
+    # Poll until up_to_date
+    state = await_up_to_date(state)
+
+    # Get new oracle state
+    oracle_after = query_oracle(state)
+
+    # Verify consistency (uses cached oracle_before)
+    assert_consistent!(state, txn_name, state.oracle_before, oracle_after)
+
+    # Cache new oracle state for next check
+    state = %{state | oracle_before: oracle_after}
+
+    {:reply, :ok, state}
+  end
+
+  # ---------------------------------------------------------------------------
+  # Polling Logic
+  # ---------------------------------------------------------------------------
+
+  defp await_up_to_date(state) do
+    do_await(state, System.monotonic_time(:millisecond), _retry_start = nil)
+  end
+
+  defp do_await(state, start_ms, retry_start) do
+    elapsed = System.monotonic_time(:millisecond) - start_ms
+
+    if elapsed >= state.timeout_ms do
+      flunk("Timeout waiting for shape=#{state.name} where=#{state.where}")
+    end
+
+    case Client.poll(state.client, state.shape_def, state.poll_state, replica: :full) do
+      {:ok, messages, new_state} ->
+        state = %{state | poll_state: new_state}
+        state = apply_messages(state, messages)
+
+        if new_state.up_to_date? do
+          handle_up_to_date(state, start_ms, retry_start)
+        else
+          do_await(state, start_ms, retry_start)
+        end
+
+      {:must_refetch, messages, new_state} ->
+        if state.optimized do
+          flunk("Unexpected 409 (must-refetch) in optimized shape=#{state.name} where=#{state.where}")
+        end
+
+        state = %{state | poll_state: new_state, rows: %{}}
+        state = apply_messages(state, messages)
+        do_await(state, start_ms, _retry_start = nil)
+
+      {:error, error} ->
+        flunk("Poll error for shape=#{state.name} where=#{state.where}: #{inspect(error)}")
+    end
+  end
+
+  defp handle_up_to_date(state, start_ms, retry_start) do
+    now = System.monotonic_time(:millisecond)
+    oracle_rows = query_oracle(state)
+    materialized = materialized_rows(state)
+
+    if materialized == oracle_rows do
+      # Oracle matches - done
+      state
+    else
+      # Oracle differs - Electric may not have sent all changes yet
+      retry_start = retry_start || now
+
+      if now - retry_start >= @default_retry_window_ms do
+        # Exceeded retry window - return state (will fail in assert_consistent!)
+        state
+      else
+        # Continue polling
+        do_await(state, start_ms, retry_start)
+      end
+    end
+  end
+
+  # ---------------------------------------------------------------------------
+  # Message Application
+  # ---------------------------------------------------------------------------
+
+  defp apply_messages(state, messages) do
+    Enum.reduce(messages, state, &apply_message/2)
+  end
+
+  defp apply_message(%ChangeMessage{headers: %{operation: :delete}, value: value}, state) do
+    key = key_from_value(state.pk, value)
+    %{state | rows: Map.delete(state.rows, key)}
+  end
+
+  defp apply_message(%ChangeMessage{value: value}, state) do
+    key = key_from_value(state.pk, value)
+    row = Map.take(value, state.columns)
+    %{state | rows: Map.put(state.rows, key, row)}
+  end
+
+  defp apply_message(%ControlMessage{}, state), do: state
+  defp apply_message(_other, state), do: state
+
+  defp key_from_value(pk, value) do
+    pk
+    |> Enum.map(&Map.get(value, &1))
+    |> List.to_tuple()
+  end
+
+  # ---------------------------------------------------------------------------
+  # Oracle Queries
+  # ---------------------------------------------------------------------------
+
+  defp query_oracle(state) do
+    where_sql = state.where || "TRUE"
+    columns_sql = Enum.map(state.columns, &quote_ident/1) |> Enum.join(", ")
+    order_sql = Enum.map(state.pk, &quote_ident/1) |> Enum.join(", ")
 
     sql =
-      "SELECT #{columns_sql} FROM #{quote_ident(checker.table)} WHERE #{where_sql} ORDER BY #{order_sql}"
+      "SELECT #{columns_sql} FROM #{quote_ident(state.table)} WHERE #{where_sql} ORDER BY #{order_sql}"
 
     %Postgrex.Result{columns: columns, rows: rows} =
-      Postgrex.query!(checker.oracle_pool, sql, [])
+      Postgrex.query!(state.oracle_pool, sql, [])
 
     Enum.map(rows, fn row ->
       columns
@@ -88,182 +301,37 @@ defmodule Support.OracleHarness.ShapeChecker do
     end)
   end
 
-  @doc """
-  Wait for up_to_date control message and return updated checker with all applied changes.
-  Uses polling instead of a stream consumer.
+  # ---------------------------------------------------------------------------
+  # Assertions
+  # ---------------------------------------------------------------------------
 
-  Includes retry logic to handle the case where LONG_POLL_TIMEOUT is short and
-  Electric hasn't processed all changes yet. When up_to_date is received without
-  changes, we check if the oracle matches the materialized state. If not, we
-  retry polling for up to @default_retry_window_ms.
-  """
-  def await_up_to_date(%__MODULE__{} = checker, timeout_ms) do
-    checker = reset_events(checker)
-    do_await(checker, timeout_ms, System.monotonic_time(:millisecond))
-  end
-
-  defp do_await(checker, timeout_ms, start_ms) do
-    elapsed = System.monotonic_time(:millisecond) - start_ms
-
-    if elapsed >= timeout_ms do
-      %{checker | timed_out?: true}
-    else
-      case Client.poll(checker.client, checker.shape_def, checker.poll_state, replica: :full) do
-        {:ok, messages, new_state} ->
-          got_changes? = checker.got_changes? or has_change_messages?(messages)
-          checker = %{checker | poll_state: new_state, got_changes?: got_changes?}
-          checker = apply_messages(checker, messages)
-
-          cond do
-            # Still fetching snapshot
-            not new_state.up_to_date? ->
-              do_await(checker, timeout_ms, start_ms)
-
-            # Up to date - check if oracle matches (might need more changes)
-            true ->
-              handle_up_to_date(checker, timeout_ms, start_ms)
-          end
-
-        {:must_refetch, messages, new_state} ->
-          checker = %{checker | poll_state: new_state, rows: %{}, must_refetch?: true, got_changes?: false, retry_start_ms: nil}
-          checker = apply_messages(checker, messages)
-          do_await(checker, timeout_ms, start_ms)
-
-        {:error, error} ->
-          %{checker | error: error}
-      end
-    end
-  end
-
-  defp has_change_messages?(messages) do
-    Enum.any?(messages, &match?(%ChangeMessage{}, &1))
-  end
-
-  defp handle_up_to_date(checker, timeout_ms, start_ms) do
-    now = System.monotonic_time(:millisecond)
-    oracle_rows = query_oracle(checker)
-    materialized = materialized_rows(checker)
-
-    if materialized == oracle_rows do
-      # Oracle matches - we have all the expected data
-      checker
-    else
-      # Oracle differs - Electric hasn't sent all changes yet
-      # Start or continue retry window
-      retry_start = checker.retry_start_ms || now
-
-      if now - retry_start >= @default_retry_window_ms do
-        # Exceeded retry window - give up (will fail in verify step)
-        checker
-      else
-        # Continue retrying - reset got_changes? so we keep polling
-        checker = %{checker | retry_start_ms: retry_start, got_changes?: false}
-        do_await(checker, timeout_ms, start_ms)
-      end
-    end
-  end
-
-  defp apply_messages(checker, messages) do
-    Enum.reduce(messages, checker, fn msg, acc ->
-      apply_message(acc, msg)
-    end)
-  end
-
-  @doc """
-  Apply a message to update the checker's materialized rows.
-  """
-  def apply_message(checker, %ChangeMessage{} = msg) do
-    apply_change(checker, msg)
-  end
-
-  def apply_message(checker, %ControlMessage{}) do
-    checker
-  end
-
-  def apply_message(checker, _other) do
-    checker
-  end
-
-  defp reset_events(checker) do
-    %{checker | must_refetch?: false, error: nil, timed_out?: false, got_changes?: false, retry_start_ms: nil}
-  end
-
-  defp apply_change(checker, %ChangeMessage{headers: %{operation: :delete}, value: value}) do
-    key = key_from_value(checker.pk, value)
-    %{checker | rows: Map.delete(checker.rows, key)}
-  end
-
-  defp apply_change(checker, %ChangeMessage{value: value}) do
-    key = key_from_value(checker.pk, value)
-    row = Map.take(value, checker.columns)
-    %{checker | rows: Map.put(checker.rows, key, row)}
-  end
-
-  defp key_from_value(pk, value) do
-    pk
-    |> Enum.map(&Map.get(value, &1))
-    |> List.to_tuple()
-  end
-
-  @doc """
-  Assert this shape is consistent with oracle.
-  Raises on mismatch, error, or timeout.
-  Returns :ok on success.
-  """
-  def assert_consistent!(checker, mutation_name, oracle_before, oracle_after) do
+  defp assert_consistent!(state, step_name, oracle_before, oracle_after) do
     view_changed? = oracle_before != oracle_after
-
-    if checker.error do
-      flunk(
-        "Oracle error in step=#{mutation_name} shape=#{checker.name} where=#{checker.where} error=#{inspect(checker.error)}"
-      )
-    end
-
-    if checker.timed_out? do
-      flunk(
-        "Timeout waiting for shape=#{checker.name} in step=#{mutation_name} where=#{checker.where}"
-      )
-    end
-
-    if checker.optimized and checker.must_refetch? do
-      flunk(
-        "Unexpected 409 (must-refetch) in optimized shape step=#{mutation_name} shape=#{checker.name} where=#{checker.where}"
-      )
-    end
-
-    materialized = materialized_rows(checker)
+    materialized = materialized_rows(state)
 
     if materialized != oracle_after do
       flunk(
-        "View mismatch in step=#{mutation_name} shape=#{checker.name} where=#{checker.where} view_changed?=#{view_changed?}\n" <>
+        "View mismatch in step=#{step_name} shape=#{state.name} where=#{state.where} view_changed?=#{view_changed?}\n" <>
           "  materialized: #{inspect(materialized)}\n" <>
           "  oracle:       #{inspect(oracle_after)}"
       )
     end
 
     view_status = if view_changed?, do: "changed", else: "unchanged"
-    log("  #{mutation_name} shape=#{checker.name} (#{view_status}) PASS")
+    log("  #{step_name} shape=#{state.name} (#{view_status}) PASS")
 
     :ok
   end
 
-  @doc """
-  Get the materialized rows sorted by primary key.
-  """
-  def materialized_rows(%__MODULE__{} = checker) do
-    checker.rows
+  defp materialized_rows(state) do
+    state.rows
     |> Map.values()
-    |> Enum.sort_by(&key_from_value(checker.pk, &1))
+    |> Enum.sort_by(&key_from_value(state.pk, &1))
   end
 
-  @doc """
-  Stop the checker. No-op with polling (no background process).
-  """
-  def stop(%__MODULE__{}) do
-    :ok
-  end
-
-  # Private helpers
+  # ---------------------------------------------------------------------------
+  # Helpers
+  # ---------------------------------------------------------------------------
 
   defp validate_identifier!(value, label) do
     if String.match?(value, ~r/^[A-Za-z_][A-Za-z0-9_]*$/) do
@@ -273,9 +341,7 @@ defmodule Support.OracleHarness.ShapeChecker do
     end
   end
 
-  defp quote_ident(value) do
-    ~s|"#{value}"|
-  end
+  defp quote_ident(value), do: ~s|"#{value}"|
 
   defp to_string_value(nil), do: nil
   defp to_string_value(true), do: "true"
