@@ -38,9 +38,6 @@ Read-path sync engine for Postgres that handles partial replication,
   </div>
 </div>
 
-> [!Warning] 🎓&nbsp; A quick note on naming
-> Postgres&nbsp;Sync used to just be called "Electric" or the "Electric sync engine". Some docs and package names still use the old naming.
-
 ## Postgres sync engine
 
 Postgres&nbsp;Sync is a sync engine that syncs [subsets of your data](/docs/guides/shapes) out of your Postgres database, into local apps and services.
@@ -52,6 +49,13 @@ Postgres&nbsp;Sync is a sync engine that syncs [subsets of your data](/docs/guid
 />
 
 You can sync data into anything you like. From web, mobile and desktop apps and client stores like [TanStack&nbsp;DB](/products/tanstack-db) to databases like [PGlite](/products/pglite).
+
+<div style="margin-top: 40px;">
+
+> [!Warning] 🎓&nbsp; A quick note on naming
+> Postgres&nbsp;Sync used to just be called "Electric" or the "Electric sync engine". Some docs and package names still use the old naming.
+
+</div>
 
 ## How does it work?
 
