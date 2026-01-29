@@ -1,5 +1,5 @@
 ---
-title: Super-fast apps on sync with Electric and TanStack DB
+title: Super-fast apps on sync with Electric and TanStack DB
 description: >-
   Tanstack DB is a reactive client store for building super fast apps on sync.
   Paired with Electric, it provides an optimal end-to-end sync stack for app development.
