@@ -21,6 +21,7 @@ tsconfig.tsbuildinfo
 wal
 /shapes
 .sst
+sst-*.log
 **/deps/*
 **/junit
 **/coverage
