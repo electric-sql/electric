@@ -30,6 +30,9 @@ defmodule Electric.CoreSupervisor do
       {Electric.Connection.Supervisor, connection_manager_opts}
     ]
 
+    # TEMPORARY DEBUG: Insert sentinels between each child
+    children = Electric.Debug.ShutdownTimer.insert_sentinels(children, "CoreSupervisor")
+
     Supervisor.init(children, strategy: :one_for_one, auto_shutdown: :any_significant)
   end
 
@@ -46,6 +49,7 @@ defmodule Electric.CoreSupervisor do
     tweaks = Keyword.fetch!(opts, :tweaks)
 
     consumer_supervisor_spec = {Electric.Shapes.DynamicConsumerSupervisor, [stack_id: stack_id]}
+    snapshotter_supervisor_spec = {Electric.Shapes.SnapshotterSupervisor, stack_id: stack_id}
 
     shape_cache_spec = {Electric.ShapeCache, shape_cache_opts}
 
@@ -78,6 +82,7 @@ defmodule Electric.CoreSupervisor do
           Electric.Shapes.Supervisor,
           stack_id: stack_id,
           consumer_supervisor: consumer_supervisor_spec,
+          snapshotter_supervisor: snapshotter_supervisor_spec,
           shape_cache: shape_cache_spec,
           publication_manager: publication_manager_spec,
           log_collector: shape_log_collector_spec,

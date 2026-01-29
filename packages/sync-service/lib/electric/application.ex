@@ -21,6 +21,8 @@ defmodule Electric.Application do
 
   def children_library do
     [
+      # TEMPORARY DEBUG: Start the shutdown timer tracker
+      %{id: Electric.Debug.ShutdownTimer, start: {Electric.Debug.ShutdownTimer, :start_tracker, []}},
       {Registry, name: Electric.stack_events_registry(), keys: :duplicate},
       Electric.AdmissionControl
     ]
@@ -48,13 +50,17 @@ defmodule Electric.Application do
 
     config = configuration()
 
-    Enum.concat([
-      children_library(),
-      application_telemetry(config),
-      [{Electric.StackSupervisor, Keyword.put(config, :name, Electric.StackSupervisor)}],
-      api_server_children(config),
-      prometheus_endpoint(Electric.Config.get_env(:prometheus_port))
-    ])
+    children =
+      Enum.concat([
+        children_library(),
+        application_telemetry(config),
+        [{Electric.StackSupervisor, Keyword.put(config, :name, Electric.StackSupervisor)}],
+        api_server_children(config),
+        prometheus_endpoint(Electric.Config.get_env(:prometheus_port))
+      ])
+
+    # TEMPORARY DEBUG: Insert sentinels between each child
+    Electric.Debug.ShutdownTimer.insert_sentinels(children, "Electric.Supervisor")
   end
 
   @doc """

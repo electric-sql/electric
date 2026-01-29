@@ -285,6 +285,11 @@ defmodule Electric.Shapes.Api do
     Shapes.resolve_shape_handle(stack_id, handle, shape)
   end
 
+  defp handle_shape_info({:error, reason}, %Request{} = request) do
+    Logger.warning("Unable to load shape. Reason: #{reason}")
+    {:error, Response.error(request, reason, status: 503, retry_after: 5)}
+  end
+
   defp handle_shape_info(nil, %Request{} = request) do
     %{params: %{shape_definition: shape}, api: %{stack_id: stack_id}} = request
     # There is no shape that matches the shape definition (because shape info is `nil`).

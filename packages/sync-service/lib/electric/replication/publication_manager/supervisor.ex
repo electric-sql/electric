@@ -62,6 +62,9 @@ defmodule Electric.Replication.PublicationManager.Supervisor do
       {PublicationManager.Configurator, opts}
     ]
 
+    # TEMPORARY DEBUG: Insert sentinels between each child
+    children = Electric.Debug.ShutdownTimer.insert_sentinels(children, "PublicationManager.Supervisor")
+
     Supervisor.init(children, strategy: :one_for_one)
   end
 end
