@@ -13,7 +13,7 @@
     "api": "tsx api/index.ts"
   },
   "dependencies": {
-    "@electric-sql/client": "1.0.7",
+    "@electric-sql/client": "1.5.0",
     "@expo/metro-runtime": "~5.0.4",
     "@tanstack/electric-db-collection": "^0.0.15",
     "@tanstack/react-db": "^0.0.27",
