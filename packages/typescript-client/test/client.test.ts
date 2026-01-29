@@ -2326,6 +2326,92 @@ describe.for(fetchAndSse)(
     )
 
     it(
+      `fetchSnapshot handles 409 must-refetch errors gracefully`,
+      { timeout: 10000 },
+      async ({ issuesTableUrl, aborter }) => {
+        let snapshotRequestCount = 0
+        const schema = JSON.stringify({
+          id: { type: `text` },
+          title: { type: `text` },
+        })
+        const snapshotData = [
+          {
+            key: `test-key-1`,
+            value: { id: `1`, title: `Test Item` },
+            headers: { operation: `insert` },
+          },
+        ]
+        const snapshotMetadata = { offset: `0_0` }
+
+        const fetchClient = vi.fn(async (input: string | URL | Request) => {
+          const url = input instanceof Request ? input.url : input.toString()
+          const urlObj = new URL(url)
+
+          const isSnapshotRequest =
+            urlObj.searchParams.has(`subset__limit`) ||
+            urlObj.searchParams.has(`subset__order_by`)
+
+          if (isSnapshotRequest) {
+            snapshotRequestCount++
+            if (snapshotRequestCount === 1) {
+              // The fetch wrapper throws FetchError for non-OK responses
+              throw new FetchError(
+                409,
+                JSON.stringify([{ headers: { control: `must-refetch` } }]),
+                [{ headers: { control: `must-refetch` } }],
+                { [SHAPE_HANDLE_HEADER]: `new-handle-after-409` },
+                url
+              )
+            }
+            return new Response(
+              JSON.stringify({
+                metadata: snapshotMetadata,
+                data: snapshotData,
+              }),
+              {
+                status: 200,
+                headers: new Headers({
+                  'Content-Type': `application/json`,
+                  'electric-schema': schema,
+                  'electric-handle': `new-handle-after-409`,
+                  'electric-offset': `0_0`,
+                  'electric-up-to-date': `true`,
+                }),
+              }
+            )
+          }
+
+          return new Response(`[]`, {
+            status: 200,
+            headers: new Headers({
+              'electric-schema': schema,
+              'electric-offset': `0_0`,
+              'electric-handle': `initial-handle`,
+            }),
+          })
+        })
+
+        const shapeStream = new ShapeStream({
+          url: `${BASE_URL}/v1/shape`,
+          params: { table: issuesTableUrl },
+          log: `changes_only`,
+          liveSse,
+          signal: aborter.signal,
+          fetchClient,
+        })
+
+        const result = await shapeStream.fetchSnapshot({
+          orderBy: `title ASC`,
+          limit: 100,
+        })
+
+        expect(snapshotRequestCount).toBe(2)
+        expect(result.data).toHaveLength(1)
+        expect(result.metadata).toEqual(snapshotMetadata)
+      }
+    )
+
+    it(
       `fetchSnapshot with POST method sends subset params in request body`,
       { timeout: 10000 },
       async ({ issuesTableUrl, insertIssues, aborter }) => {

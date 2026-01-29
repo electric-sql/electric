@@ -1690,8 +1690,32 @@ export class ShapeStream<T extends Row<unknown> = Row>
       fetchOptions = { headers: result.requestHeaders }
     }
 
-    const response = await this.#fetchClient(fetchUrl.toString(), fetchOptions)
+    // Capture handle before fetch to avoid race conditions if it changes during the request
+    const usedHandle = this.#shapeHandle
 
+    let response: Response
+    try {
+      response = await this.#fetchClient(fetchUrl.toString(), fetchOptions)
+    } catch (e) {
+      // Handle 409 "must-refetch" - shape handle changed/expired.
+      // The fetch wrapper throws FetchError for non-OK responses, so we catch here.
+      // Unlike #requestShape, we don't call #reset() here as that would
+      // clear #activeSnapshotRequests and break requestSnapshot's pause/resume logic.
+      if (e instanceof FetchError && e.status === 409) {
+        if (usedHandle) {
+          const shapeKey = canonicalShapeKey(fetchUrl)
+          expiredShapesCache.markExpired(shapeKey, usedHandle)
+        }
+
+        this.#shapeHandle =
+          e.headers[SHAPE_HANDLE_HEADER] || `${usedHandle ?? `handle`}-next`
+
+        return this.fetchSnapshot(opts)
+      }
+      throw e
+    }
+
+    // Handle non-OK responses from custom fetch clients that bypass the wrapper chain
     if (!response.ok) {
       throw await FetchError.fromResponse(response, fetchUrl.toString())
     }
