@@ -118,16 +118,40 @@ Where clauses have the following constraints:
 
 #### Subqueries (experimental)
 
-Electric supports subqueries in where clauses, allowing you to filter rows based on data in other tables. This enables cross-table filtering patterns like:
+Electric supports subqueries in where clauses, allowing you to filter rows based on data in other tables. This enables cross-table filtering patterns—for example, syncing only users who belong to a specific organization:
 
-```sql
-WHERE id IN (SELECT user_id FROM memberships WHERE org_id = 'org_123')
+```ts
+import { electricCollectionOptions } from '@tanstack/electric-db-collection'
+import { createCollection } from '@tanstack/react-db'
+
+const usersCollection = createCollection(
+  electricCollectionOptions({
+    id: 'org-users',
+    shapeOptions: {
+      url: 'http://localhost:3000/v1/shape',
+      params: {
+        table: 'users',
+        where: `id IN (SELECT user_id FROM memberships WHERE org_id = $1)`,
+        params: { '1': 'org_123' },
+      },
+    },
+  })
+)
 ```
 
-Or filtering based on related data:
+Or with `ShapeStream` directly:
 
-```sql
-WHERE project_id IN (SELECT id FROM projects WHERE archived = false)
+```ts
+import { ShapeStream, Shape } from '@electric-sql/client'
+
+const stream = new ShapeStream({
+  url: `http://localhost:3000/v1/shape`,
+  params: {
+    table: `tasks`,
+    where: `project_id IN (SELECT id FROM projects WHERE archived = false)`,
+  },
+})
+const shape = new Shape(stream)
 ```
 
 When a shape uses a subquery, Electric tracks the dependency between tables. If the data in the subquery changes (e.g., a project becomes archived), rows will automatically move in or out of the shape without the row itself being modified.
