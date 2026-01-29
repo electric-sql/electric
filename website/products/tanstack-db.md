@@ -11,6 +11,22 @@ import BlogPostsByTag from '../src/components/BlogPostsByTag.vue'
 import GitHubButton from '../src/components/GitHubButton.vue'
 </script>
 
+<style scoped>
+figure.listing {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 24px;
+}
+figure.listing img {
+  border-radius: 16px;
+}
+@media (min-width: 650px) {
+  figure.listing {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+</style>
+
 <img src="/img/icons/tanstack.svg" class="product-icon" />
 
 # TanStack DB
@@ -20,10 +36,25 @@ Reactive client store for building <span class="no-wrap">super-fast apps</span>.
 <div class="actions cta-actions page-footer-actions left">
   <div class="action">
     <VPButton
+        href="/docs/quickstart"
+        text="Quickstart"
+        theme="brand"
+    />
+  </div>
+  <div class="action hidden-sm">
+    <VPButton
         href="https://tanstack.com/db/latest"
         text="TanStack/db ↗"
         target="_blank"
-        theme="tanstack-db"
+        theme="alt"
+    />
+  </div>
+  <div class="action inline-sm">
+    <VPButton
+        href="https://tanstack.com/db/latest"
+        text="Docs ↗"
+        target="_blank"
+        theme="alt"
     />
   </div>
   <div class="action">
@@ -33,41 +64,74 @@ Reactive client store for building <span class="no-wrap">super-fast apps</span>.
 
 ## What is TanStack DB?
 
-TanStack DB is a reactive client-side database designed for local-first web applications. It provides a unified data layer that integrates with multiple sync backends, including [Postgres Sync](/products/postgres-sync) and [Durable Streams](/products/durable-streams).
+[TanStack&nbsp;DB](https://tanstack.com/db) is a reactive, client-first store [for your API](https://tanstack.com/blog/tanstack-db-0.1-the-embedded-client-database-for-tanstack-query) thats keep your UI reactive, consistent and blazing fast 🔥
 
-Key features:
+It provides a unified data layer that can join up data from multiple sources, including [Postgres&nbsp;Sync](/products/postgres-sync) and [Durable&nbsp;Streams](/products/durable-streams).
 
-- **Reactive queries** &mdash; UI components automatically update when underlying data changes
-- **Optimistic updates** &mdash; instant responsiveness with automatic conflict resolution
-- **Multi-source sync** &mdash; combine data from Postgres Sync and Durable Streams in one client database
-- **Framework integrations** &mdash; first-class support for React, Vue, and other frameworks
+## Why do we need it?
 
-## Use cases
+TanStack DB lets you query your data however your components need it, with a blazing-fast local query engine, real-time reactivity and instant optimistic updates:
+
+- avoid endpoint sprawl and network waterfalls
+- optimise client performance and re-rendering
+- take the network off the interaction path
+
+Data loading is optimized. Interactions feel instantaneous. Your backend stays simple and your app stays blazing fast. No matter how much data you load.
+
+### Use cases
 
 TanStack DB is ideal for:
 
-- Local-first applications that need offline support and instant updates
-- Collaborative apps where multiple users edit shared data
-- Applications combining structured data (via Postgres Sync) with real-time streams (via Durable Streams)
-- Any app that needs a reactive, queryable client-side data store
+- modern apps that need fast, responsive UI
+- collaborative apps where multiple users edit shared data
+- applications combining structured data (via Postgres Sync) with real-time streams (via Durable Streams)
+- applications that combine real-time sync with API-based data fetching
+- any app that needs a reactive, queryable client-side data store
 
 ## How it works
 
-TanStack DB acts as the client-side data layer in the Electric ecosystem. It receives data from multiple sources and provides a unified, reactive interface for your application.
+Built on a Typescript implementation of [differential dataflow](https://github.com/electric-sql/d2ts), TanStack&nbsp;DB provides three core primitives:
 
-```
-Postgres Sync ────────────┐
-(structured data)         │
-                          ├───→ TanStack DB ───→ React/Vue/etc.
-Durable Streams ──────────┘     (client DB)      (reactive UI)
-(streams, AI, sessions)
-```
+1. [collections](https://tanstack.com/db/latest/docs/overview#defining-collections) a unified data layer to load data into
+1. [live queries](https://tanstack.com/db/latest/docs/guides/live-queries) super-fast reactivity using differential dataflow
+1. [optimistic mutations](https://tanstack.com/db/latest/docs/guides/mutations) that tie into the sync machinery
+
+### Data flow
+
+TanStack DB acts as the client-side data layer in the Electric ecosystem. It&nbsp;receives data from multiple sources and provides a unified, reactive interface for&nbsp;your application.
+
+<figure>
+  <a href="https://tanstack.com/db/latest/docs/overview#uni-directional-data-flow" class="no-visual">
+    <img src="/img/products/unidirectional-data-flow.png"
+        style="max-width: 640px; margin: -8px 0 -8px -2px"
+    />
+  </a>
+</figure>
 
 Data flows from your backend through Electric's sync primitives into TanStack DB, which then powers your reactive UI components.
 
-## Learn more
+### Query-driven sync
 
-For an interactive guide to TanStack DB, how it works and why it might change the way you build apps, see [What TanStack DB is](https://frontendatscale.com/blog/tanstack-db).
+When used with Postgres Sync, TanStack DB leverages [progressive data loading](/docs/guides/shapes#progressive-data-loading) to implement [query-driven sync](https://tanstack.com/blog/tanstack-db-0.5-query-driven-sync).
+
+This means that you can progressively sync data into your app, in response to navigation, user input and events, just by defining live queries against your local client store.
+
+### Learn more
+
+See the blog post on [query-driven sync]() and the [interactive guide to TanStack DB](https://frontendatscale.com/blog/tanstack-db), how it works and why it might change the way you build apps:
+
+<figure class="listing">
+  <a href="https://tanstack.com/blog/tanstack-db-0.5-query-driven-sync" class="no-visual">
+    <img alt="TanStack DB 0.5 . Query-Driven Sync"
+        src="/img/products/query-driven-sync.jpg"
+    />
+  </a>
+  <a href="https://frontendatscale.com/blog/tanstack-db" class="no-visual">
+    <img alt="An Interactive Guide to TanStack DB"
+        src="/img/blog/local-first-sync-with-tanstack-db/interactive-guide-to-tanstack-db.jpg"
+    />
+  </a>
+</figure>
 
 ## Showcase
 
@@ -79,15 +143,30 @@ See applications built with TanStack DB in the [TanStack Showcase](https://tanst
 
 ## More information
 
-See [how you can combine](/products/#how-they-fit-together) TanStack DB with other Electric products to [build fast, modern UIs](/sync#reactivity).
+See the [Quickstart](/docs/quickstart) and [TanStack docs](https://tanstack.com/db/latest/docs/overview).
 
 <div class="actions cta-actions page-footer-actions left">
   <div class="action">
     <VPButton
+        href="/docs/quickstart"
+        text="Quickstart"
+        theme="brand"
+    />
+  </div>
+  <div class="action hidden-sm">
+    <VPButton
         href="https://tanstack.com/db/latest"
-        text="Documentation"
+        text="TanStack/db ↗"
         target="_blank"
-        theme="electric"
+        theme="alt"
+    />
+  </div>
+  <div class="action inline-sm">
+    <VPButton
+        href="https://tanstack.com/db/latest"
+        text="Docs ↗"
+        target="_blank"
+        theme="alt"
     />
   </div>
   <div class="action">

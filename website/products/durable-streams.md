@@ -25,7 +25,7 @@ Persistent, addressable, real-time streams that power resilient,
   <div class="action">
     <VPButton
         href="https://github.com/durable-streams/durable-streams/blob/main/README.md"
-        text="Usage ↗"
+        text="README ↗"
         theme="durable-streams"
     />
   </div>
@@ -119,7 +119,7 @@ See the [project on GitHub](https://github.com/durable-streams/durable-streams) 
   <div class="action">
     <VPButton
         href="https://github.com/durable-streams/durable-streams/blob/main/README.md"
-        text="Usage ↗"
+        text="README ↗"
         theme="durable-streams"
     />
   </div>

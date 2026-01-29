@@ -22,7 +22,7 @@ const updateButtonContent = (count: number) => {
   const link = buttonRef.value.querySelector('a')
   if (!link) return
 
-  link.innerHTML = `<span class="vpi-social-github"></span>${props.text || 'GitHub'}&nbsp;<span class="count">${formatStarCount(count)}</span>`
+  link.innerHTML = `<span class="vpi-social-github"></span><span class="github-text">${props.text || 'GitHub'}</span>&nbsp;<span class="count">${formatStarCount(count)}</span>`
 }
 
 onMounted(async () => {
@@ -76,5 +76,12 @@ onMounted(async () => {
 
 .github-button-wrapper .count .muted {
   opacity: 0.5;
+}
+
+@media (max-width: 767px) {
+  .github-button-wrapper .github-text,
+  .github-button-wrapper .count .muted {
+    display: none;
+  }
 }
 </style>

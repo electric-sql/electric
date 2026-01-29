@@ -62,9 +62,9 @@ You can use [Postgres Sync](/products/postgres-sync) to sync between a cloud Pos
 
 ## More information
 
-See [how you can combine](/products/#how-they-fit-together) PGlite with other Electric products to [run Postgres anywhere](/sync#durability).
+See the PGlite website at [pglite.dev](https://pglite.dev) for comprehensive [Docs](https://pglite.dev/docs/), a list of [Examples](https://pglite.dev/examples) and a [live in-browser REPL](https://pglite.dev/repl/).
 
-See the PGlite website at [pglite.dev](https://pglite.dev) for comprehensive [Docs](https://pglite.dev/docs/), a list of [Examples](https://pglite.dev/examples) and a [live in-browser REPL](https://pglite.dev/repl/). The source code is on GitHub at [electric-sql/pglite](https://github.com/electric-sql/pglite).
+The source code is on GitHub at [electric-sql/pglite](https://github.com/electric-sql/pglite).
 
 <div class="actions cta-actions page-footer-actions left">
   <div class="action">
