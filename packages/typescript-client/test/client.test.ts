@@ -2375,6 +2375,7 @@ describe.for(fetchAndSse)(
                   'electric-schema': schema,
                   'electric-handle': `new-handle-after-409`,
                   'electric-offset': `0_0`,
+                  'electric-up-to-date': `true`,
                 }),
               }
             )
