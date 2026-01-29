@@ -174,7 +174,7 @@ Whereas what's needed is a ***standard protocol*** for persistence and addressab
 
 ## Composable sync primitives
 
-That's what we've been building at Electric. A suite of [composable sync primitives](/products) that give you durable state that's persistent, addressable and subscribable, including:
+That's what we've been building at Electric. A suite of [composable sync primitives](/products/) that give you durable state that's persistent, addressable and subscribable, including:
 
 - [Postgres&nbsp;Sync](#postgres-sync)
 - [Durable&nbsp;Streams](#durable-streams)
