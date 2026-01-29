@@ -1693,11 +1693,6 @@ export class ShapeStream<T extends Row<unknown> = Row>
     let response: Response
     try {
       response = await this.#fetchClient(fetchUrl.toString(), fetchOptions)
-
-      // Handle non-OK responses from custom fetch clients that don't throw
-      if (!response.ok) {
-        throw await FetchError.fromResponse(response, fetchUrl.toString())
-      }
     } catch (e) {
       // Handle 409 "must-refetch" - shape handle changed/expired.
       // The fetch wrapper throws FetchError for non-OK responses, so we catch here.
@@ -1715,6 +1710,11 @@ export class ShapeStream<T extends Row<unknown> = Row>
         return this.fetchSnapshot(opts)
       }
       throw e
+    }
+
+    // Handle non-OK responses from custom fetch clients that bypass the wrapper chain
+    if (!response.ok) {
+      throw await FetchError.fromResponse(response, fetchUrl.toString())
     }
 
     const schema: Schema =
