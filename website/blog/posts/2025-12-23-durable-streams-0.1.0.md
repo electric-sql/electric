@@ -15,7 +15,7 @@ post: true
 import Tweet from 'vue-tweet'
 </script>
 
-Two weeks ago we [announced Durable Streams](https://electric-sql.com/blog/2025/12/09/announcing-durable-streams)—an open protocol for reliable, resumable streaming to client applications. The response has been fantastic: we're approaching 1,000 GitHub stars, and people are already building with it.
+Two weeks ago we [announced Durable&nbsp;Streams](https://electric-sql.com/blog/2025/12/09/announcing-durable-streams)—an open protocol for reliable, resumable streaming to client applications. The response has been fantastic: we're approaching 1,000 GitHub stars, and people are already building with it.
 
 Today we're shipping **0.1.0 releases to npm**—the first official packages you can install and use in production. This post covers what's in the release, introduces the State Protocol for database-style sync semantics, and highlights some early experiments from the community.
 
@@ -66,7 +66,7 @@ The conformance test suite validates that all implementations behave identically
 
 ## Try It Out Now
 
-The fastest way to see Durable Streams in action is with the server binary and curl.
+The fastest way to see Durable&nbsp;Streams in action is with the server binary and curl.
 
 **1. Download and run the server:**
 
@@ -125,11 +125,11 @@ Watch it appear instantly in your first terminal. That's durable streaming—ord
 
 ## Introducing the State Protocol
 
-In the announcement post, we described a composable ecosystem with Durable Streams as the foundation and higher-level protocols built on top. The **State Protocol** is the first of those higher-level protocols.
+In the announcement post, we described a composable ecosystem with Durable&nbsp;Streams as the foundation and higher-level protocols built on top. The **State Protocol** is the first of those higher-level protocols.
 
-Like Durable Streams itself, the State Protocol is extracted from Electric's Postgres sync protocol—refined over 18 months of production use and now standardized as a standalone protocol that works over any durable stream.
+Like Durable&nbsp;Streams itself, the State Protocol is extracted from Electric's Postgres sync protocol—refined over 18 months of production use and now standardized as a standalone protocol that works over any durable stream.
 
-Durable Streams gives you ordered, resumable byte delivery. The State Protocol adds semantic meaning: **insert**, **update**, and **delete** operations on typed entities. It's the vocabulary you need for database-style sync—presence tracking, chat rooms, feature flags, collaborative state—without prescribing how you store or query that state.
+Durable&nbsp;Streams gives you ordered, resumable byte delivery. The State Protocol adds semantic meaning: **insert**, **update**, and **delete** operations on typed entities. It's the vocabulary you need for database-style sync—presence tracking, chat rooms, feature flags, collaborative state—without prescribing how you store or query that state.
 
 ### The Shape of a Change Event
 
@@ -153,7 +153,7 @@ Durable Streams gives you ordered, resumable byte delivery. The State Protocol a
 
 Separation means you can adopt what you need:
 
-- **AI token streaming?** Use Durable Streams directly—you don't need insert/update/delete semantics for tokens.
+- **AI token streaming?** Use Durable&nbsp;Streams directly—you don't need insert/update/delete semantics for tokens.
 - **Real-time database sync?** Add the State Protocol for typed collections with proper CRUD operations.
 - **Both in the same app?** Different streams can use different protocols.
 
@@ -176,7 +176,7 @@ state.apply({
 const user = state.get("user", "1")  // { name: "Kyle" }
 ```
 
-For applications that need reactive queries, filtering, joins, and optimistic updates, `@durable-streams/state` integrates with [TanStack DB](https://tanstack.com/db):
+For applications that need reactive queries, filtering, joins, and optimistic updates, `@durable-streams/state` integrates with [TanStack&nbsp;DB](/products/tanstack-db):
 
 ```typescript
 import { createStateSchema, createStreamDB } from "@durable-streams/state"
@@ -203,7 +203,7 @@ const activeUsers = useLiveQuery((q) =>
 )
 ```
 
-TanStack DB uses differential dataflow under the hood, so queries recompute incrementally when data changes, which is dramatically faster than filtering in JavaScript.
+TanStack&nbsp;DB uses differential dataflow under the hood, so queries recompute incrementally when data changes, which is dramatically faster than filtering in JavaScript.
 
 The full State Protocol specification is available at [STATE-PROTOCOL.md](https://github.com/durable-streams/durable-streams/blob/main/packages/state/STATE-PROTOCOL.md).
 
@@ -213,13 +213,13 @@ The best part of launching has been seeing what people build. Here's what the co
 
 ### AI Agents and Workflows
 
-The agent use case has resonated strongly. Nathan Flurry built an experimental integration combining [Durable Streams with Rivet Actors](https://www.rivet.dev/templates/experimental-durable-streams-ai-agent/)—actors as "the brains & memory" and Durable Streams as "the pipes":
+The agent use case has resonated strongly. Nathan Flurry built an experimental integration combining [Durable&nbsp;Streams with Rivet Actors](https://www.rivet.dev/templates/experimental-durable-streams-ai-agent/)—actors as "the brains & memory" and Durable&nbsp;Streams as "the pipes":
 
 <figure style="background: none">
   <Tweet tweet-id="1999512065682423861" conversation="none" theme="dark" />
 </figure>
 
-Kames has been building agent workflows with [Mastra](https://mastra.ai/) on top of Durable Streams:
+Kames has been building agent workflows with [Mastra](https://mastra.ai/) on top of Durable&nbsp;Streams:
 
 <figure style="background: none">
   <Tweet tweet-id="2002776849563431422" conversation="none" theme="dark" />
@@ -247,7 +247,7 @@ Sam Willis demonstrated multimodal GenAI streaming (text + audio) with reconnect
   <Tweet tweet-id="2002037670067806303" conversation="none" theme="dark" />
 </figure>
 
-Kyle built demos showing Durable Streams handling the Wikipedia events firehose with TanStack DB and real-time state sync:
+Kyle built demos showing Durable&nbsp;Streams handling the Wikipedia events firehose with TanStack&nbsp;DB and real-time state sync:
 
 <figure style="background: none">
   <Tweet tweet-id="2001304555267502499" conversation="none" theme="dark" />
@@ -259,7 +259,7 @@ Kyle built demos showing Durable Streams handling the Wikipedia events firehose 
 
 ### Integration Proposals
 
-The [LiveStore](https://github.com/livestorejs/livestore) team opened [an issue proposing a sync provider](https://github.com/livestorejs/livestore/issues/944) to integrate Durable Streams with their SQLite-powered local-first framework. The discussion explores how the two projects' shared philosophy—append-only event logs, offset-based resumption, local-first architecture—could combine to give users CDN-friendly sync with structured event schemas and reactive UI bindings.
+The [LiveStore](https://github.com/livestorejs/livestore) team opened [an issue proposing a sync provider](https://github.com/livestorejs/livestore/issues/944) to integrate Durable&nbsp;Streams with their SQLite-powered local-first framework. The discussion explores how the two projects' shared philosophy—append-only event logs, offset-based resumption, local-first architecture—could combine to give users CDN-friendly sync with structured event schemas and reactive UI bindings.
 
 ### The Protocol Advantage
 
@@ -287,17 +287,17 @@ And Nathan Flurry's making bold predictions:
 
 ### New Implementations
 
-The protocol is already attracting new implementations. [Ahimsa Labs released a Go client](https://github.com/ahimsalabs/durable-streams-go), and Evil Martians announced they're gradually adopting Durable Streams in [AnyCable](https://anycable.io/)—starting with implementing the read part of the protocol for consuming durable streams. Their post ["AnyCable, Rails, and the pitfalls of LLM-streaming"](https://evilmartians.com/chronicles/anycable-rails-and-the-pitfalls-of-llm-streaming) explores the exact reliability challenges Durable Streams solves.
+The protocol is already attracting new implementations. [Ahimsa Labs released a Go client](https://github.com/ahimsalabs/durable-streams-go), and Evil Martians announced they're gradually adopting Durable&nbsp;Streams in [AnyCable](https://anycable.io/)—starting with implementing the read part of the protocol for consuming durable streams. Their post ["AnyCable, Rails, and the pitfalls of LLM-streaming"](https://evilmartians.com/chronicles/anycable-rails-and-the-pitfalls-of-llm-streaming) explores the exact reliability challenges Durable&nbsp;Streams solves.
 
 <figure style="background: none">
   <Tweet tweet-id="2001719297651998841" conversation="none" theme="dark" />
 </figure>
 
-Valter Balegas built a [Yjs provider for Durable Streams](https://github.com/durable-streams/durable-streams/pull/81)—bringing real-time collaborative editing with conflict-free sync semantics to the protocol. The provider includes awareness/presence support and a demo application showcasing collaborative text editing with colored cursors.
+Valter Balegas built a [Yjs provider for Durable&nbsp;Streams](https://github.com/durable-streams/durable-streams/pull/81)—bringing real-time collaborative editing with conflict-free sync semantics to the protocol. The provider includes awareness/presence support and a demo application showcasing collaborative text editing with colored cursors.
 
 ## What's Next
 
-- **Hosted cloud version**: We're building our own cloud implementation of Durable Streams, launching in January 2026.
+- **Hosted cloud version**: We're building our own cloud implementation of Durable&nbsp;Streams, launching in January 2026.
 - **More language implementations**: The protocol is designed to have many implementations. We'd love to see servers and clients in Rust, Java, Swift, and more.
 - **Database adapters**: Postgres, MySQL, and SQLite adapters using the State Protocol—streaming database changes to clients with proper sync semantics.
 - **Electric 2.0**: This is all foundational work for the next version of Electric.

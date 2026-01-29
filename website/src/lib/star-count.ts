@@ -1,5 +1,7 @@
-const FALLBACK_ELECTRIC_COUNT = 6_000
-const FALLBACK_PGLITE_COUNT = 7_500
+const FALLBACK_DURABLE_STREAMS_COUNT = 1_000
+const FALLBACK_ELECTRIC_COUNT = 9_000
+const FALLBACK_PGLITE_COUNT = 14_000
+const FALLBACK_TANSTACK_DB_COUNT = 3_000
 
 export async function localStorageCache(
   key: string,
@@ -29,16 +31,16 @@ export async function localStorageCache(
   return value
 }
 
-export async function getStarCount(repoName, currentCount) {
+export async function getStarCount(repoPath, currentCount) {
   const ttl = 3_600 // 1 hour
 
-  return localStorageCache(`starCount.${repoName}`, ttl, async () => {
-    return await fetchStarCount(repoName, currentCount)
+  return localStorageCache(`starCount.${repoPath}`, ttl, async () => {
+    return await fetchStarCount(repoPath, currentCount)
   })
 }
 
-export async function fetchStarCount(repoName, currentCount) {
-  const url = `https://api.github.com/repos/electric-sql/${repoName}`
+export async function fetchStarCount(repoPath, currentCount) {
+  const url = `https://api.github.com/repos/${repoPath}`
   const response = await fetch(url)
 
   if (response.ok) {
@@ -54,12 +56,19 @@ export async function fetchStarCounts() {
   const counts = {}
 
   const results = await Promise.allSettled([
-    fetchStarCount(`electric`, FALLBACK_ELECTRIC_COUNT),
-    fetchStarCount(`pglite`, FALLBACK_PGLITE_COUNT),
+    fetchStarCount(
+      `durable-streams/durable-streams`,
+      FALLBACK_DURABLE_STREAMS_COUNT
+    ),
+    fetchStarCount(`electric-sql/electric`, FALLBACK_ELECTRIC_COUNT),
+    fetchStarCount(`electric-sql/pglite`, FALLBACK_PGLITE_COUNT),
+    fetchStarCount(`tanstack/db`, FALLBACK_TANSTACK_DB_COUNT),
   ])
 
-  counts[`electric`] = results[0].value
-  counts[`pglite`] = results[1].value
+  counts[`durable-streams/durable-streams`] = results[0].value
+  counts[`electric-sql/electric`] = results[1].value
+  counts[`electric-sql/pglite`] = results[2].value
+  counts[`tanstack/db`] = results[3].value
 
   return counts
 }

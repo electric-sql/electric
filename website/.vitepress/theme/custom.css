@@ -89,6 +89,7 @@
   --ddn-color: #d0bcff;
   --pglite-color: #f6f95c;
   --durable-streams-color: #75fbfd;
+  --tanstack-db-color: #FF8C3B;
 
   --vp-code-bg: var(--vp-c-bg-elv);
   --vp-code-color: #9ecbff;
@@ -657,6 +658,12 @@ span.no-visual {
   opacity: 1 !important;
 }
 
+.VPButton.durable-streams,
+.VPButton.durable-streams:hover {
+  background-color: var(--durable-streams-color);
+  border-color: var(--durable-streams-color);
+  color: var(--vp-c-bg);
+}
 .VPButton.electric,
 .VPButton.electric:hover {
   background-color: var(--electric-color);
@@ -669,10 +676,10 @@ span.no-visual {
   border-color: var(--pglite-color);
   color: var(--vp-c-bg);
 }
-.VPButton.durable-streams,
-.VPButton.durable-streams:hover {
-  background-color: var(--durable-streams-color);
-  border-color: var(--durable-streams-color);
+.VPButton.tanstack-db,
+.VPButton.tanstack-db:hover {
+  background-color: var(--tanstack-db-color);
+  border-color: var(--tanstack-db-color);
   color: var(--vp-c-bg);
 }
 .VPButton.small {
