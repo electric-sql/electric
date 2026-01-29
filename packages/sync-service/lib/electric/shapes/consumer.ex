@@ -283,11 +283,16 @@ defmodule Electric.Shapes.Consumer do
     feature_flags = Electric.StackConfig.lookup(state.stack_id, :feature_flags, [])
     tagged_subqueries_enabled? = "tagged_subqueries" in feature_flags
 
-    # We need a valid DNF decomposition with subqueries to handle move-ins/outs properly.
-    # If we receive materializer_changes without a valid DNF, something is wrong and we
-    # should invalidate. We also invalidate if tagged_subqueries feature is disabled.
     has_valid_dnf? =
       state.shape.dnf_decomposition != nil and state.shape.dnf_decomposition.has_subqueries
+
+    if not has_valid_dnf? do
+      Logger.error("""
+      Received materializer_changes for shape #{state.shape_handle}
+      without valid DNF decomposition. This indicates a bug. Invalidating shape.
+      DNF Decomposition: #{inspect(state.shape.dnf_decomposition)}
+      """)
+    end
 
     if not tagged_subqueries_enabled? or not has_valid_dnf? do
       stop_and_clean(state)
@@ -296,7 +301,8 @@ defmodule Electric.Shapes.Consumer do
       {state, move_in_notification} = MoveHandling.process_move_ins(state, dep_handle, move_in)
 
       # Process move-outs (may generate move-in queries for negated positions)
-      {state, move_out_notification} = MoveHandling.process_move_outs(state, dep_handle, move_out)
+      {state, move_out_notification} =
+        MoveHandling.process_move_outs(state, dep_handle, move_out)
 
       # Notify for both move-in generated move-outs and regular move-outs
       notify_new_changes(state, move_in_notification)
