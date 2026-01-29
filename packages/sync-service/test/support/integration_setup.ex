@@ -18,6 +18,7 @@ defmodule Support.IntegrationSetup do
     :ok = Electric.StatusMonitor.wait_until_active(ctx.stack_id, timeout: 2000)
 
     router_opts = build_router_opts(ctx, Keyword.get(opts, :router_opts, []))
+    num_clients = Keyword.get(opts, :num_clients, 1)
 
     {:ok, server_pid} =
       ExUnit.Callbacks.start_supervised(
@@ -30,7 +31,17 @@ defmodule Support.IntegrationSetup do
 
     {:ok, {_ip, port}} = ThousandIsland.listener_info(server_pid)
     base_url = "http://localhost:#{port}"
-    {:ok, client} = Electric.Client.new(base_url: base_url)
+
+    client_opts =
+      if num_clients > 1 do
+        finch_name = :"Electric.Client.Finch.Test.#{System.unique_integer([:positive])}"
+        {:ok, _} = Finch.start_link(name: finch_name, pools: %{default: [size: num_clients]})
+        [fetch: {Electric.Client.Fetch.HTTP, [request: [finch: finch_name]]}]
+      else
+        []
+      end
+
+    {:ok, client} = Electric.Client.new([base_url: base_url] ++ client_opts)
 
     Map.merge(ctx, %{
       client: client,
