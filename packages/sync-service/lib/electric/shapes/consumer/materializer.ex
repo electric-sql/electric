@@ -222,10 +222,10 @@ defmodule Electric.Shapes.Consumer.Materializer do
   defp decode_json_stream(stream) do
     stream
     |> Stream.map(&Jason.decode!/1)
-    |> Enum.filter(fn decoded ->
+    |> Stream.filter(fn decoded ->
       Map.has_key?(decoded, "key") || Map.has_key?(decoded["headers"], "event")
     end)
-    |> Enum.map(fn
+    |> Stream.map(fn
       %{
         "key" => key,
         "value" => value,
