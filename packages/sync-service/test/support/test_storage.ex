@@ -78,18 +78,6 @@ defmodule Support.TestStorage do
   end
 
   @impl Electric.ShapeCache.Storage
-  def get_stored_shapes({parent, _init, storage}, shape_handles) do
-    send(parent, {__MODULE__, :get_stored_shapes, shape_handles})
-    Storage.get_stored_shapes(storage, shape_handles)
-  end
-
-  @impl Electric.ShapeCache.Storage
-  def metadata_backup_dir({parent, _init, storage}) do
-    send(parent, {__MODULE__, :metadata_backup_dir})
-    Storage.metadata_backup_dir(storage)
-  end
-
-  @impl Electric.ShapeCache.Storage
   def get_total_disk_usage({parent, _init, storage}) do
     send(parent, {__MODULE__, :get_total_disk_usage})
     Storage.get_total_disk_usage(storage)
