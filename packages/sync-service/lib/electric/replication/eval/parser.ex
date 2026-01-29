@@ -996,7 +996,7 @@ defmodule Electric.Replication.Eval.Parser do
          comparisons = [left_comparison, right_comparison],
          {:ok, reduced} <-
            build_bool_chain(
-             %{name: "or", impl: &pg_and/2, strict?: false},
+             %{name: "and", impl: &pg_and/2, strict?: false},
              comparisons,
              expr.location
            ) do
