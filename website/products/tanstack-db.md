@@ -8,6 +8,7 @@ outline: deep
 
 <script setup>
 import BlogPostsByTag from '../src/components/BlogPostsByTag.vue'
+import GitHubButton from '../src/components/GitHubButton.vue'
 </script>
 
 <img src="/img/icons/tanstack.svg" class="product-icon" />
@@ -20,17 +21,13 @@ Reactive client store for building <span class="no-wrap">super-fast apps</span>.
   <div class="action">
     <VPButton
         href="https://tanstack.com/db/latest"
-        text="Documentation"
+        text="TanStack/db ↗"
         target="_blank"
-        theme="electric"
+        theme="tanstack-db"
     />
   </div>
   <div class="action">
-    <VPButton href="https://github.com/TanStack/db"
-        text="GitHub"
-        target="_blank"
-        theme="alt"
-    />
+    <GitHubButton repo="tanstack/db" />
   </div>
 </div>
 
@@ -94,10 +91,6 @@ See [how you can combine](/products/#how-they-fit-together) TanStack DB with oth
     />
   </div>
   <div class="action">
-    <VPButton href="https://github.com/TanStack/db"
-        text="GitHub"
-        target="_blank"
-        theme="alt"
-    />
+    <GitHubButton repo="tanstack/db" />
   </div>
 </div>

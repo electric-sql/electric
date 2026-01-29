@@ -106,8 +106,8 @@ const formatStarCount = (count) => (
   `<span class="muted">(</span><span> ☆ </span><span>${Math.round(count / 100) / 10}k</span><span> </span><span class="muted">)</span>`
 )
 
-const renderStarCount = async (repoName, initialStarCount) => {
-  let container = document.querySelector(`span.feature-cta.${repoName}-star-count`)
+const renderStarCount = async (containerClass, repoPath, initialStarCount) => {
+  let container = document.querySelector(`span.feature-cta.${containerClass}-star-count`)
 
   if (!container) {
     return
@@ -119,7 +119,7 @@ const renderStarCount = async (repoName, initialStarCount) => {
   }
 
   linkEl = document.createElement('a')
-  linkEl.setAttribute('href', `https://github.com/electric-sql/${repoName}`)
+  linkEl.setAttribute('href', `https://github.com/${repoPath}`)
   linkEl.setAttribute('_target', `_blank`)
   linkEl.classList.add('VPButton', 'medium', 'alt')
   linkEl.innerHTML = '<span class="vpi-social-github"></span> GitHub'
@@ -131,7 +131,7 @@ const renderStarCount = async (repoName, initialStarCount) => {
   linkEl.append(countEl)
   container.append(linkEl)
 
-  const count = await getStarCount(repoName, initialStarCount)
+  const count = await getStarCount(repoPath, initialStarCount)
   countEl.innerHTML = formatStarCount(count)
 }
 
@@ -166,8 +166,8 @@ onMounted(async () => {
     signUp.append(linkEl)
 
 
-    renderStarCount('electric', initialStarCounts.electric)
-    renderStarCount('pglite', initialStarCounts.pglite)
+    renderStarCount('electric', 'electric-sql/electric', initialStarCounts['electric-sql/electric'])
+    renderStarCount('pglite', 'electric-sql/pglite', initialStarCounts['electric-sql/pglite'])
   }
 })
 </script>

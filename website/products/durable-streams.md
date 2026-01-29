@@ -82,10 +82,12 @@ See [how you can combine](/products/#how-they-fit-together) Durable Streams with
 <div class="actions cta-actions page-footer-actions left">
   <div class="action">
     <VPButton
-        href="https://github.com/electric-sql/durable-streams"
-        text="GitHub"
-        target="_blank"
+        href="https://github.com/durable-streams/durable-streams/blob/main/README.md"
+        text="Usage ↗"
         theme="durable-streams"
     />
+  </div>
+  <div class="action">
+    <GitHubButton repo="durable-streams/durable-streams" />
   </div>
 </div>

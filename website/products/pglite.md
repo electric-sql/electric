@@ -7,39 +7,8 @@ outline: deep
 ---
 
 <script setup>
-import { onMounted } from 'vue'
-
 import BlogPostsByTag from '../src/components/BlogPostsByTag.vue'
-import { data as initialStarCounts } from '../data/count.data.ts'
-import { getStarCount } from '../src/lib/star-count.ts'
-
-const formatStarCount = (count) => (
-  `<span class="muted">(</span><span> ☆ </span><span>${Math.round(count / 100) / 10}k</span><span> </span><span class="muted">)</span>`
-)
-
-const renderStarCount = async (repoName, initialStarCount) => {
-  const links = document.querySelectorAll(
-    `.actions a[href="https://github.com/electric-sql/${repoName}"]`
-  )
-  links.forEach(async (link) => {
-    link.innerHTML = '<span class="vpi-social-github"></span> GitHub&nbsp;'
-
-    const countEl = document.createElement('span')
-    countEl.classList.add('count')
-    countEl.innerHTML = formatStarCount(initialStarCount)
-
-    link.append(countEl)
-
-    const count = await getStarCount(repoName, initialStarCount)
-    countEl.innerHTML = formatStarCount(count)
-  })
-}
-
-onMounted(async () => {
-  if (typeof window !== 'undefined' && document.querySelector) {
-    renderStarCount('pglite', initialStarCounts.pglite)
-  }
-})
+import GitHubButton from '../src/components/GitHubButton.vue'
 </script>
 
 <img src="/img/icons/pglite.svg" class="product-icon" />
@@ -58,11 +27,7 @@ Embeddable Postgres <span class="no-wrap">with reactivity and sync</span>. For a
     />
   </div>
   <div class="action">
-    <VPButton href="https://github.com/electric-sql/pglite"
-        target="_blank"
-        text="GitHub"
-        theme="alt"
-    />
+    <GitHubButton repo="electric-sql/pglite" />
   </div>
 </div>
 
@@ -111,10 +76,6 @@ See the PGlite website at [pglite.dev](https://pglite.dev) for comprehensive [Do
     />
   </div>
   <div class="action">
-    <VPButton href="https://github.com/electric-sql/pglite"
-        target="_blank"
-        text="GitHub"
-        theme="alt"
-    />
+    <GitHubButton repo="electric-sql/pglite" />
   </div>
 </div>
