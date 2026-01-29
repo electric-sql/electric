@@ -1,5 +1,12 @@
 # @electric-sql/client
 
+## 1.5.1
+
+### Patch Changes
+
+- 42aee8a: Fix 409 must-refetch error handling in fetchSnapshot. The method now correctly catches FetchError exceptions thrown by the fetch wrapper chain, matching the pattern used by the main request loop.
+- fef494e: Fix stale CDN response incorrectly updating client offset. When a CDN returns a cached response with an expired shape handle, the client now ignores the entire response (including offset) to prevent handle/offset mismatch that would cause server errors.
+
 ## 1.5.0
 
 ### Minor Changes

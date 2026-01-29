@@ -1,5 +1,22 @@
 # @core/sync-service
 
+## 1.4.2
+
+### Patch Changes
+
+- 2a0902e: Fix race condition crash in DependencyLayers when a dependency shape is removed before its dependent shape is registered.
+
+  When a dependency shape's materializer crashes and is removed while a dependent shape is being added, `DependencyLayers.add_after_dependencies/3` would crash with a `FunctionClauseError` due to a missing clause for exhausted layers with unfound dependencies. This would take down the ShapeLogCollector and cascade into OOM failures.
+
+  `add_dependency/3` now returns `{:ok, layers}` or `{:error, {:missing_dependencies, missing}}`, and the ShapeLogCollector handles the error case gracefully instead of crashing.
+
+- 1c20fac: Fix Materializer startup race condition that caused "Key already exists" crashes
+
+  The Materializer subscribed to the Consumer before reading from storage, creating a window where the same record could be delivered twice (via storage AND via new_changes). Now the Consumer returns its current offset on subscription, and the Materializer reads storage only up to that offset.
+
+- 0b9e38c: Fixed a bug where changes were incorrectly skipped when a record's subquery reference value was in a pending move-in, but the record didn't match other non-subquery conditions in the WHERE clause. For example, with a shape `parent_id IN (SELECT ...) AND status = 'published'`, if the parent became active (triggering a move-in) but the child had `status = 'draft'`, the change would incorrectly be skipped instead of being processed as a delete.
+- b134ccb: Fix memory spike during Materializer startup by using lazy stream operations instead of eager Enum functions in `decode_json_stream/1`.
+
 ## 1.4.1
 
 ### Patch Changes
