@@ -128,6 +128,55 @@ defmodule Electric.ShapeCache.PureFileStorage.WriteLoop do
     end
   end
 
+  @doc """
+  Append log lines from a transaction fragment.
+
+  Unlike `append_to_log!/3`, this does NOT advance `last_seen_txn_offset` or
+  call `register_complete_txn`. Transaction completion should be signaled
+  separately via `register_complete_txn/2` after the commit is received.
+
+  This ensures that on crash/recovery, `fetch_latest_offset` returns the
+  last committed transaction offset, not a mid-transaction offset.
+  """
+  def append_fragment_to_log!(
+        fragment_lines,
+        writer_acc(times_flushed: times_flushed) = acc,
+        state
+      ) do
+    acc = ensure_json_file_open(acc, state)
+
+    fragment_lines
+    |> Enum.reduce(acc, fn
+      {offset, _, _, _, _, _, _}, writer_acc(last_seen_txn_offset: min_offset) = acc
+      when is_log_offset_lte(offset, min_offset) ->
+        # Line already persisted, no-op
+        acc
+
+      {offset, _, _, _, _, _, _} = line, acc ->
+        acc
+        |> maybe_write_opening_chunk_boundary(state, offset)
+        |> add_to_buffer(line)
+        |> maybe_write_closing_chunk_boundary(state)
+        |> maybe_flush_buffer(state)
+    end)
+    |> case do
+      # If the buffer has been fully flushed, no need to schedule more flushes
+      # Note: We do NOT update last_seen_txn_offset or call register_complete_txn
+      # since the transaction is not yet complete
+      writer_acc(buffer_size: 0) = acc ->
+        acc = close_chunk_file(acc)
+        {acc, cancel_flush_timer: true}
+
+      acc ->
+        acc =
+          acc
+          |> store_lines_in_ets(state)
+          |> close_chunk_file()
+
+        {acc, schedule_flush: times_flushed}
+    end
+  end
+
   ### Working with the buffer
 
   defp add_to_buffer(
@@ -373,5 +422,16 @@ defmodule Electric.ShapeCache.PureFileStorage.WriteLoop do
       writer_acc(acc, last_seen_txn_offset: last_seen)
     end
     |> update_persistance_metadata(state, prev_persisted_txn)
+  end
+
+  @doc """
+  Signal that a transaction has been committed.
+
+  This updates `last_seen_txn_offset` and potentially `last_persisted_txn_offset`
+  to mark the transaction as complete. Should be called after all fragments
+  have been written via `append_fragment_to_log!/3`.
+  """
+  def signal_txn_commit(acc, state) do
+    register_complete_txn(acc, state)
   end
 end

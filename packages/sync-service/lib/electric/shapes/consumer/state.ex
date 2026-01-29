@@ -3,7 +3,6 @@ defmodule Electric.Shapes.Consumer.State do
   alias Electric.Shapes.Consumer.MoveIns
   alias Electric.Shapes.Consumer.InitialSnapshot
   alias Electric.Shapes.Shape
-  alias Electric.Replication.Changes.Transaction
   alias Electric.Replication.Eval.Parser
   alias Electric.Replication.Eval.Walker
   alias Electric.Replication.TransactionBuilder
@@ -30,7 +29,14 @@ defmodule Electric.Shapes.Consumer.State do
     terminating?: false,
     buffering?: false,
     or_with_subquery?: false,
-    not_with_subquery?: false
+    not_with_subquery?: false,
+    # Fragment-direct streaming fields
+    # When true, stream fragments directly to storage without buffering
+    fragment_direct?: false,
+    # Tracks in-progress transaction, initialized when a txn fragment with has_begin?=true is seen.
+    # It is used to check whether the entire txn is visible in the snapshot and to mark it
+    # as flushed in order to handle its remaining fragments appropriately.
+    pending_txn: nil
   ]
 
   @type pg_snapshot() :: SnapshotQuery.pg_snapshot()
@@ -143,7 +149,9 @@ defmodule Electric.Shapes.Consumer.State do
         ),
       buffering?: true,
       or_with_subquery?: has_or_with_subquery?(shape),
-      not_with_subquery?: has_not_with_subquery?(shape)
+      not_with_subquery?: has_not_with_subquery?(shape),
+      # Enable fragment-direct streaming for shapes without subquery dependencies
+      fragment_direct?: shape.shape_dependencies == []
     }
   end
 
@@ -241,9 +249,14 @@ defmodule Electric.Shapes.Consumer.State do
     end
   end
 
-  @spec add_to_buffer(t(), Transaction.t()) :: t()
+  @spec add_to_buffer(t(), TransactionFragment.t()) :: t()
   def add_to_buffer(%__MODULE__{buffer: buffer} = state, txn) do
     %{state | buffer: [txn | buffer]}
+  end
+
+  @spec pop_buffered(t()) :: {[TransactionFragment.t()], t()}
+  def pop_buffered(%__MODULE__{buffer: buffer} = state) do
+    {Enum.reverse(buffer), %{state | buffer: [], buffering?: false}}
   end
 
   @spec add_waiter(t(), GenServer.from()) :: t()
