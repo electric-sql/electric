@@ -182,7 +182,8 @@ defmodule Electric.Shapes.Consumer.ChangeHandlingTest do
       shape =
         Shape.new!(
           "children",
-          where: "parent_id IN (SELECT id FROM parents WHERE active = true) AND status = 'published'",
+          where:
+            "parent_id IN (SELECT id FROM parents WHERE active = true) AND status = 'published'",
           inspector: @parents_inspector
         )
 

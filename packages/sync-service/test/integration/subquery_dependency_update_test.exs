@@ -187,7 +187,8 @@ defmodule Electric.Integration.SubqueryDependencyUpdateTest do
            # A published child in parent-a (active) - in shape
            "INSERT INTO children (id, name, parent_id, status) VALUES ('child-1', 'Child One', 'parent-a', 'published')"
          ]
-    test "child is deleted when moved to parent that satisfies subquery but child status fails", ctx do
+    test "child is deleted when moved to parent that satisfies subquery but child status fails",
+         ctx do
       # SETUP:
       #   child-1 -> parent-a (ACTIVE), status=published -> in shape
       #   parent-b is NOT active
@@ -215,7 +216,12 @@ defmodule Electric.Integration.SubqueryDependencyUpdateTest do
         # 2. Move child-1 to parent-b and change status to draft
         Postgrex.transaction(ctx.db_conn, fn conn ->
           Postgrex.query!(conn, "UPDATE parents SET active = true WHERE id = 'parent-b'", [])
-          Postgrex.query!(conn, "UPDATE children SET parent_id = 'parent-b', status = 'draft' WHERE id = 'child-1'", [])
+
+          Postgrex.query!(
+            conn,
+            "UPDATE children SET parent_id = 'parent-b', status = 'draft' WHERE id = 'child-1'",
+            []
+          )
         end)
 
         # child-1 should be deleted because status='draft' fails the WHERE clause,
@@ -230,7 +236,8 @@ defmodule Electric.Integration.SubqueryDependencyUpdateTest do
            # A published child in parent-b (inactive) - NOT in shape
            "INSERT INTO children (id, name, parent_id, status) VALUES ('child-1', 'Child One', 'parent-b', 'published')"
          ]
-    test "child moves into shape when parent becomes active and child satisfies other conditions", ctx do
+    test "child moves into shape when parent becomes active and child satisfies other conditions",
+         ctx do
       # SETUP:
       #   child-1 -> parent-b (NOT active), status=published -> NOT in shape
       #   Shape requires: parent is active AND status = 'published'
