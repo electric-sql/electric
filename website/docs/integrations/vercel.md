@@ -16,11 +16,11 @@ description: >-
 Electric integrates with Vercel in two main ways:
 
 1. **Hosting** &mdash; deploy Electric-powered applications on Vercel's platform
-2. **Durable Transport** &mdash; use [Durable Streams](/products/durable-streams) with the [Vercel AI SDK](https://sdk.vercel.ai)
+2. **Durable Transport** &mdash; use [Durable&nbsp;Streams](/products/durable-streams) with the [Vercel AI SDK](https://sdk.vercel.ai)
 
 ## Durable Transport for AI
 
-The Vercel AI SDK is a popular toolkit for building AI-powered applications. Electric's [Durable Streams](/products/durable-streams) provide a **Durable Transport** layer that makes AI token streams resilient to network interruptions.
+The Vercel AI SDK is a popular toolkit for building AI-powered applications. Electric's [Durable&nbsp;Streams](/products/durable-streams) provide a **Durable Transport** layer that makes AI token streams resilient to network interruptions.
 
 ### Why Durable Transport?
 
@@ -62,9 +62,9 @@ const result = await streamText({
 
 ### Learn more
 
-- [Durable Streams documentation](/products/durable-streams)
+- [Durable&nbsp;Streams documentation](/products/durable-streams)
 - [Vercel AI SDK documentation](https://sdk.vercel.ai)
-- [Durable Streams GitHub](https://github.com/electric-sql/durable-streams)
+- [Durable&nbsp;Streams GitHub](https://github.com/electric-sql/durable-streams)
 
 ## Deploying Electric on Vercel
 

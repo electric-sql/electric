@@ -110,8 +110,8 @@ Before going into development details, here's the system's shape:
 
 - **CAD model**: Lives in a **[Yjs document](https://yjs.dev)**—mergeable, syncable, acts like a file format
 - **Kernel**: **[OpenCascade](https://dev.opencascade.org)** compiled to WebAssembly via [`opencascade.js`](https://ocjs.org)—the mathematical engine that turns sketches and operations into solid 3D shapes
-- **App data** (workspaces, projects, metadata): Syncs via **[ElectricSQL](http://electric-sql.com)** from Postgres into **[TanStack DB](https://tanstack.com/db)**
-- **Presence, docs, AI sessions**: Append-only **[Durable Streams](https://github.com/durable-streams/durable-streams)**—resumable event logs you can tail and replay
+- **App data** (workspaces, projects, metadata): Syncs via **[Postgres&nbsp;Sync](/products/postgres-sync)** into **[TanStack&nbsp;DB](/products/tanstack-db)**
+- **Presence, docs, AI sessions**: Append-only **[Durable&nbsp;Streams](/products/durable-streams)**—resumable event logs you can tail and replay
 - **AI orchestration**: Runs client-side in a **SharedWorker** for durability across tab closes
 
 One authoritative doc model, one robust kernel, one sync system for relational data, and one stream substrate for durable multi-user state.
@@ -193,8 +193,8 @@ It came together quickly because I didn't treat collaboration as a single featur
 
 This maps cleanly onto infrastructure:
 
-- **ElectricSQL + TanStack DB**: Live, query-driven sync from Postgres. The surrounding "app" behaves like a shared system by default.
-- **Durable Streams**: The CAD model lives in a Yjs document, and Durable Streams gives it durable event logs you can tail, resume after disconnects, and share across tabs and users.
+- **ElectricSQL + TanStack&nbsp;DB**: Live, query-driven sync from Postgres. The surrounding "app" behaves like a shared system by default.
+- **Durable&nbsp;Streams**: The CAD model lives in a Yjs document, and Durable&nbsp;Streams gives it durable event logs you can tail, resume after disconnects, and share across tabs and users.
 
 Once these layers were in place, "collaboration features" stopped being special cases. Presence is just another stream, as is follow mode; even AI sessions are just another stream. Same coordination mechanism, no ad-hoc plumbing.
 
@@ -202,7 +202,7 @@ This is where "infrastructure that gets out of the way" becomes real. CAD is com
 
 _I'm writing a companion post on the sync architecture that will be published soon_
 
-<!-- I wrote a companion post on the sync architecture, Durable Streams implementation, AI orchestration patterns, and why these infrastructure choices mattered: **[Building real-time collaborative CAD with Electric and Durable Streams](/blog/posts/2026-01-21-building-real-time-collaborative-cad-with-electric-and-durable-streams.md)** -->
+<!-- I wrote a companion post on the sync architecture, Durable&nbsp;Streams implementation, AI orchestration patterns, and why these infrastructure choices mattered: **[Building real-time collaborative CAD with Electric and Durable&nbsp;Streams](/blog/posts/2026-01-21-building-real-time-collaborative-cad-with-electric-and-durable-streams.md)** -->
 
 <figure>
   <video class="w-full" width="1920" height="1174" controls preload="none" poster="/videos/blog/from-science-fiction-to-reality-you-can-build-difficult-things-now/solidtype3.jpg">
@@ -211,13 +211,13 @@ _I'm writing a companion post on the sync architecture that will be published so
   <figcaption>Collaboration: multiple users can see the same model, edit it, and follow each other in real-time.</figcaption>
 </figure>
 
-## Integrating AI with Durable Streams
+## Integrating AI with Durable&nbsp;Streams
 
 People assume the hard part of "AI integration" is writing tool definitions, but that wasn't my experience. The tool calls were easy, but the difficulty was actually everything _around_ them: making an AI session durable, resumable, multi-user, and observable.
 
-That's where **Durable Streams** comes in.
+That's where **Durable&nbsp;Streams** comes in.
 
-Durable Streams turns an AI session into **a resumable, append-only log**. Not a websocket conversation, or an in-memory state, but a log you can tail, resume after disconnects, share across users, and treat as a first-class collaborative object.
+Durable&nbsp;Streams turns an AI session into **a resumable, append-only log**. Not a websocket conversation, or an in-memory state, but a log you can tail, resume after disconnects, share across users, and treat as a first-class collaborative object.
 
 Once you have that log, you get a useful property: you can run tool execution in **multiple environments** without changing the session model.
 
@@ -231,9 +231,9 @@ But that's an implementation choice. The runtime could just as easily be on a se
 
 The first moment where it felt "real" wasn't from a clever response, but something much more concrete: I typed, "Draw a sketch on the XY plane with a circle of radius 20mm" and it _did it_, producing geometry that I could see, edit, undo, and share. It wasn't a description, or code; it was actual CAD primitives in the model, indistinguishable from manual creation.
 
-_The full pattern of how AI sessions work with Durable Streams, how tools execute against the same model humans edit, and why this enables collaborative AI, will be covered in detail in Part 2._
+_The full pattern of how AI sessions work with Durable&nbsp;Streams, how tools execute against the same model humans edit, and why this enables collaborative AI, will be covered in detail in Part 2._
 
-<!-- _The full pattern of how AI sessions work with Durable Streams, how tools execute against the same model humans edit, and why this enables collaborative AI, is be covered in detail in **[Part 2](/blog/posts/2026-01-21-building-real-time-collaborative-cad-with-electric-and-durable-streams.md)._ -->
+<!-- _The full pattern of how AI sessions work with Durable&nbsp;Streams, how tools execute against the same model humans edit, and why this enables collaborative AI, is be covered in detail in **[Part 2](/blog/posts/2026-01-21-building-real-time-collaborative-cad-with-electric-and-durable-streams.md)._ -->
 
 <figure>
   <video class="w-full" width="1844" height="1630" controls preload="none" poster="/videos/blog/from-science-fiction-to-reality-you-can-build-difficult-things-now/solidtype4.jpg">
@@ -274,7 +274,7 @@ This project validates a number of fundamental truths about where we are right n
 
 **LLMs can build genuinely complex systems end-to-end.** Not "can they write a React component?" or "can they build a todo app?", but "can they navigate the dependency graph of a real geometric kernel, implement parametric rebuild logic, wire up constraint solvers, and produce something that actually works?" This project produced a working CAD editor with real geometry, real collaboration, and real AI integration. That would have been science fiction two years ago.
 
-**Established tech compounds that capability.** OpenCascade, Yjs, standard web APIs—the agent understood these immediately because patterns for using them exist in training data. Newer tools like TanStack DB that model their APIs on existing conventions work well for the same reason. The model already knows how to use mature libraries.
+**Established tech compounds that capability.** OpenCascade, Yjs, standard web APIs—the agent understood these immediately because patterns for using them exist in training data. Newer tools like TanStack&nbsp;DB that model their APIs on existing conventions work well for the same reason. The model already knows how to use mature libraries.
 
 **Collaboration and AI want the same primitives.** Shared state, resumable logs, fork/merge semantics. Once you treat an AI agent as another user, the infrastructure requirements converge. This isn't a coincidence—it's a design pattern.
 
@@ -302,6 +302,6 @@ Build the rails. The agent will run on them.
 
 ---
 
-<!-- **Want the technical deep-dive?** I wrote a companion post on the infrastructure that made this possible: **[Building real-time collaborative CAD with Electric and Durable Streams](/blog/posts/2026-01-21-building-real-time-collaborative-cad-with-electric-and-durable-streams.md)** — covering the sync architecture, Durable Streams implementation, AI orchestration in a SharedWorker, and code patterns worth stealing. -->
+<!-- **Want the technical deep-dive?** I wrote a companion post on the infrastructure that made this possible: **[Building real-time collaborative CAD with Electric and Durable&nbsp;Streams](/blog/posts/2026-01-21-building-real-time-collaborative-cad-with-electric-and-durable-streams.md)** — covering the sync architecture, Durable&nbsp;Streams implementation, AI orchestration in a SharedWorker, and code patterns worth stealing. -->
 
-**Want the technical deep-dive?** Stay tuned, I'm writing a companion post on the infrastructure that made this possible: covering the sync architecture, Durable Streams implementation, AI orchestration in a SharedWorker, and code patterns worth stealing.
+**Want the technical deep-dive?** Stay tuned, I'm writing a companion post on the infrastructure that made this possible: covering the sync architecture, Durable&nbsp;Streams implementation, AI orchestration in a SharedWorker, and code patterns worth stealing.
