@@ -25,7 +25,7 @@ import YoutubeEmbed from '../../src/components/YoutubeEmbed.vue'
 
 We spent 3 years [building a Postgres-native sync engine](/blog/2025/03/17/electricsql-1.0-released). Along the way, we realized the most important thing we built wasn't Postgres sync. It was the primitive underneath.
 
-We released this primitive as [Durable&nbsp;Streams](/blog/2025/12/09/announcing-durable-streams) in December. Today we're releasing version 0.2.0. This brings new features (like idempotent producers and exactly-once semantics) and turnkey, scalable hosting of Durable&nbsp;Streams on [Electric Cloud](/cloud).
+We [released](/blog/2025/12/09/announcing-durable-streams) this primitive as [Durable&nbsp;Streams](/products/durable-streams) in December. Today we're releasing version 0.2.0. This brings new features (like idempotent producers and exactly-once semantics) and turnkey, scalable hosting of Durable&nbsp;Streams on [Electric Cloud](/cloud).
 
 ## A new coordination model
 

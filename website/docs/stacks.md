@@ -294,7 +294,7 @@ Components use [live queries](https://tanstack.com/db/latest/docs/guides/live-qu
 
 #### More information
 
-- [Local-first sync with TanStack&nbsp;DB and Electric](/blog/2025/07/29/super-fast-apps-on-sync-with-tanstack-db)
+- [Super-fast apps on sync with TanStack&nbsp;DB and Electric](/blog/2025/07/29/super-fast-apps-on-sync-with-tanstack-db)
 - [TanStack&nbsp;DB, the embedded client database for TanStack Query](https://tanstack.com/blog/tanstack-db-0.1-the-embedded-client-database-for-tanstack-query)
 - [An interactive guide to TanStack&nbsp;DB](https://frontendatscale.com/blog/tanstack-db)
 
