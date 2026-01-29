@@ -34,7 +34,6 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverter do
             tx_size: 0,
             max_tx_size: nil,
             max_batch_size: nil,
-            last_log_offset: nil,
             txn_fragment: nil,
             current_xid: nil
 
@@ -45,7 +44,6 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverter do
           tx_size: non_neg_integer(),
           max_tx_size: non_neg_integer() | nil,
           max_batch_size: non_neg_integer(),
-          last_log_offset: LogOffset.t() | nil,
           txn_fragment: TransactionFragment.t() | nil,
           current_xid: Electric.Replication.Changes.xid() | nil
         }
@@ -83,7 +81,6 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverter do
        | tx_op_index: 0,
          tx_size: 0,
          tx_change_count: 0,
-         last_log_offset: nil,
          current_xid: msg.xid,
          txn_fragment: %TransactionFragment{
            xid: msg.xid,
@@ -227,7 +224,10 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverter do
       txn_change_count: state.tx_change_count
     }
 
-    last_log_offset = state.last_log_offset || LogOffset.new(Lsn.to_integer(fragment.lsn), 0)
+    # Use end_lsn to ensure commit fragment offset is always greater than any change offset.
+    # end_lsn points to the position immediately after the commit record, which is strictly
+    # greater than final_lsn (the commit record's position) used for change offsets.
+    last_log_offset = LogOffset.new(Lsn.to_integer(msg.end_lsn), 0)
 
     {:ok,
      %{
@@ -241,7 +241,6 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverter do
        | tx_op_index: nil,
          tx_size: 0,
          tx_change_count: 0,
-         last_log_offset: nil,
          current_xid: nil,
          txn_fragment: nil
      }}
@@ -276,8 +275,6 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverter do
       state
       | tx_size: state.tx_size + bytes,
         tx_change_count: state.tx_change_count + 1,
-        last_log_offset: current_offset(state),
-
         # We're adding 2 to the op index because it's possible we're splitting some of the operations before storage.
         # This gives us headroom for splitting any operation into 2.
         tx_op_index: state.tx_op_index + 2
@@ -312,10 +309,14 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverter do
          } = state
        )
        when change_count >= max_batch_size do
+    # Changes are accumulated in reverse order, so hd(changes) is the most recent change.
+    # We use its log_offset as the fragment's last_log_offset.
+    [%{log_offset: last_log_offset} | _] = fragment.changes
+
     {:ok,
      %{
        fragment
-       | last_log_offset: state.last_log_offset,
+       | last_log_offset: last_log_offset,
          changes: Enum.reverse(fragment.changes)
      }, %{state | txn_fragment: %TransactionFragment{xid: state.current_xid, lsn: fragment.lsn}}}
   end
