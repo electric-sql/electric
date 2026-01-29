@@ -1011,14 +1011,14 @@ importers:
   examples/tanstack-db-expo-starter:
     dependencies:
       '@electric-sql/client':
-        specifier: 1.0.7
-        version: 1.0.7
+        specifier: 1.5.0
+        version: link:../../packages/typescript-client
       '@expo/metro-runtime':
         specifier: ~5.0.4
         version: 5.0.4(react-native@0.80.1(@babel/core@7.28.0)(@types/react@19.1.8)(react@19.1.0))
       '@tanstack/electric-db-collection':
         specifier: ^0.0.15
-        version: 0.0.15(@electric-sql/client@1.0.7)(typescript@5.8.3)
+        version: 0.0.15(@electric-sql/client@packages+typescript-client)(typescript@5.8.3)
       '@tanstack/react-db':
         specifier: ^0.0.27
         version: 0.0.27(react@19.1.0)(typescript@5.8.3)
@@ -3334,9 +3334,6 @@ packages:
 
   '@electric-sql/client@1.0.0-beta.3':
     resolution: {integrity: sha512-x3bzYlX+IRwBAILPxzu3ARkXzmrAQtVOuJCKCxlSqENuJa4zvLPF4f8vC6HMOiiJiHPAntJjfI3Hb0lrt2PTxA==}
-
-  '@electric-sql/client@1.0.7':
-    resolution: {integrity: sha512-w9geRoZL1gn294Nn68YxicRvWFJEXWYPr+jZubSOyjaSa6tVQJk0rjYuFmOwpQyudFQrsL17HFrGga9UOaBhdA==}
 
   '@electric-sql/client@1.2.0':
     resolution: {integrity: sha512-K/MEjti3UF4aPKJJqO6Tp4f5noqc2/3icU1NPdpKfQaHwbzGtEX2aJmL2vxTEUJbfyrISkPKbOPnrz/lAvw1Vg==}
@@ -17775,12 +17772,6 @@ snapshots:
     optionalDependencies:
       '@rollup/rollup-darwin-arm64': 4.24.4
 
-  '@electric-sql/client@1.0.7':
-    dependencies:
-      '@microsoft/fetch-event-source': 2.0.1(patch_hash=46f4e76dd960e002a542732bb4323817a24fce1673cb71e2f458fe09776fa188)
-    optionalDependencies:
-      '@rollup/rollup-darwin-arm64': 4.46.1
-
   '@electric-sql/client@1.2.0':
     dependencies:
       '@microsoft/fetch-event-source': 2.0.1(patch_hash=46f4e76dd960e002a542732bb4323817a24fce1673cb71e2f458fe09776fa188)
@@ -21060,9 +21051,9 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@tanstack/electric-db-collection@0.0.15(@electric-sql/client@1.0.7)(typescript@5.8.3)':
+  '@tanstack/electric-db-collection@0.0.15(@electric-sql/client@packages+typescript-client)(typescript@5.8.3)':
     dependencies:
-      '@electric-sql/client': 1.0.7
+      '@electric-sql/client': link:packages/typescript-client
       '@standard-schema/spec': 1.0.0
       '@tanstack/db': 0.0.33(typescript@5.8.3)
       '@tanstack/store': 0.7.2
