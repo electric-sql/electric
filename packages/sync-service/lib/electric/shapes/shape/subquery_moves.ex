@@ -1,6 +1,7 @@
 defmodule Electric.Shapes.Shape.SubqueryMoves do
   @moduledoc false
   alias Electric.Replication.Eval
+  alias Electric.Replication.Eval.Decomposer
   alias Electric.Replication.Eval.Walker
   alias Electric.Shapes.Shape
 
@@ -70,7 +71,7 @@ defmodule Electric.Shapes.Shape.SubqueryMoves do
     # Build exclusion clauses for other subqueries to avoid duplicate inserts
     # when a row is already in the shape via another disjunct
     exclusion_clauses =
-      if Shape.has_multiple_disjuncts?(shape) do
+      if has_multiple_disjuncts?(shape) do
         build_exclusion_clauses(
           shape_dependencies,
           shape_dependencies_handles,
@@ -108,6 +109,19 @@ defmodule Electric.Shapes.Shape.SubqueryMoves do
         {final_query, [move_ins]}
     end
   end
+
+  # Check if a shape has multiple disjuncts in its DNF decomposition
+  # Computed lazily to avoid storing DNF data on the Shape struct
+  defp has_multiple_disjuncts?(%Shape{shape_dependencies: []}), do: false
+
+  defp has_multiple_disjuncts?(%Shape{where: where}) when where != nil do
+    case Decomposer.decompose(where.eval) do
+      {:ok, %{disjuncts: disjuncts}} when length(disjuncts) > 1 -> true
+      _ -> false
+    end
+  end
+
+  defp has_multiple_disjuncts?(_), do: false
 
   # Build exclusion clauses for other subqueries to prevent duplicate inserts
   # This generates SQL like: AND NOT (column IN (SELECT ...))

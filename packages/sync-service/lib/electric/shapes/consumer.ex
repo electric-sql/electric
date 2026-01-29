@@ -2,6 +2,7 @@ defmodule Electric.Shapes.Consumer do
   use GenServer, restart: :temporary
 
   alias Electric.Shapes.Consumer.ChangeHandling
+  alias Electric.Shapes.Consumer.DnfContext
   alias Electric.Shapes.Consumer.MoveIns
   alias Electric.Shapes.Consumer.InitialSnapshot
   alias Electric.Shapes.Consumer.MoveHandling
@@ -283,14 +284,13 @@ defmodule Electric.Shapes.Consumer do
     feature_flags = Electric.StackConfig.lookup(state.stack_id, :feature_flags, [])
     tagged_subqueries_enabled? = "tagged_subqueries" in feature_flags
 
-    has_valid_dnf? =
-      state.shape.dnf_decomposition != nil and state.shape.dnf_decomposition.has_subqueries
+    has_valid_dnf? = DnfContext.has_valid_dnf?(state.dnf_context)
 
     if not has_valid_dnf? do
       Logger.error("""
       Received materializer_changes for shape #{state.shape_handle}
       without valid DNF decomposition. This indicates a bug. Invalidating shape.
-      DNF Decomposition: #{inspect(state.shape.dnf_decomposition)}
+      DNF Context: #{inspect(state.dnf_context)}
       """)
     end
 

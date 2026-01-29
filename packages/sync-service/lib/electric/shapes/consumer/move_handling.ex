@@ -9,6 +9,7 @@ defmodule Electric.Shapes.Consumer.MoveHandling do
   alias Electric.Replication.LogOffset
   alias Electric.ShapeCache.Storage
   alias Electric.Shapes.Consumer.State
+  alias Electric.Shapes.Consumer.DnfContext
   alias Electric.Shapes.PartialModes
   alias Electric.Shapes.Shape
   alias Electric.Shapes.Shape.SubqueryMoves
@@ -20,9 +21,9 @@ defmodule Electric.Shapes.Consumer.MoveHandling do
           {State.t(), changes :: term()}
   def process_move_ins(state, _, []), do: {state, nil}
 
-  def process_move_ins(%State{shape: shape} = state, dep_handle, new_values) do
+  def process_move_ins(%State{dnf_context: dnf_context} = state, dep_handle, new_values) do
     # Get the positions affected by this dependency
-    positions = Shape.get_positions_for_dependency(shape, dep_handle)
+    positions = DnfContext.get_positions_for_dependency(dnf_context, dep_handle)
 
     if positions == [] do
       # Fall back to legacy behavior if no position mapping
@@ -30,7 +31,7 @@ defmodule Electric.Shapes.Consumer.MoveHandling do
       {do_legacy_move_in(state, dep_handle, new_values), nil}
     else
       # Check if any positions are negated
-      negated_positions = Enum.filter(positions, &Shape.position_negated?(shape, &1))
+      negated_positions = Enum.filter(positions, &DnfContext.position_negated?(dnf_context, &1))
       positive_positions = positions -- negated_positions
 
       {state, notification} =
@@ -60,16 +61,16 @@ defmodule Electric.Shapes.Consumer.MoveHandling do
           {State.t(), changes :: term()}
   def process_move_outs(state, _, []), do: {state, nil}
 
-  def process_move_outs(%State{shape: shape} = state, dep_handle, removed_values) do
+  def process_move_outs(%State{dnf_context: dnf_context} = state, dep_handle, removed_values) do
     # Get the positions affected by this dependency
-    positions = Shape.get_positions_for_dependency(shape, dep_handle)
+    positions = DnfContext.get_positions_for_dependency(dnf_context, dep_handle)
 
     if positions == [] do
       # Fall back to legacy behavior if no position mapping
       do_legacy_move_out(state, dep_handle, removed_values)
     else
       # Check if any positions are negated
-      negated_positions = Enum.filter(positions, &Shape.position_negated?(shape, &1))
+      negated_positions = Enum.filter(positions, &DnfContext.position_negated?(dnf_context, &1))
       positive_positions = positions -- negated_positions
 
       {state, notification} =

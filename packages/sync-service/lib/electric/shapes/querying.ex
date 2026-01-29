@@ -3,6 +3,7 @@ defmodule Electric.Shapes.Querying do
   alias Electric.Utils
   alias Electric.Shapes.Shape
   alias Electric.Shapes.Shape.SubqueryMoves
+  alias Electric.Replication.Eval.Decomposer
   alias Electric.Telemetry.OpenTelemetry
 
   @value_prefix SubqueryMoves.value_prefix()
@@ -182,14 +183,37 @@ defmodule Electric.Shapes.Querying do
   defp escape_sql_string(str), do: String.replace(str, "'", "''")
 
   # Generate SQL for active_conditions array for shapes with DNF decomposition
-  defp make_active_conditions(%Shape{dnf_decomposition: nil}), do: nil
-  defp make_active_conditions(%Shape{dnf_decomposition: %{has_subqueries: false}}), do: nil
+  # Computes decomposition lazily since it's no longer stored on the shape
+  defp make_active_conditions(%Shape{where: nil}), do: nil
+  defp make_active_conditions(%Shape{shape_dependencies: []}), do: nil
 
   defp make_active_conditions(%Shape{
-         dnf_decomposition: decomposition,
+         where: where,
          shape_dependencies: shape_dependencies,
          subquery_comparison_expressions: comparison_expressions
        }) do
+    decomposition =
+      case Decomposer.decompose(where.eval) do
+        {:ok, decomp} -> decomp
+        {:error, _} -> nil
+      end
+
+    if decomposition == nil or not decomposition.has_subqueries do
+      nil
+    else
+      make_active_conditions_from_decomposition(
+        decomposition,
+        shape_dependencies,
+        comparison_expressions
+      )
+    end
+  end
+
+  defp make_active_conditions_from_decomposition(
+         decomposition,
+         shape_dependencies,
+         comparison_expressions
+       ) do
     position_count = decomposition.position_count
 
     if position_count == 0 do

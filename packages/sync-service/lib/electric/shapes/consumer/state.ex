@@ -2,6 +2,7 @@ defmodule Electric.Shapes.Consumer.State do
   @moduledoc false
   alias Electric.Shapes.Consumer.MoveIns
   alias Electric.Shapes.Consumer.InitialSnapshot
+  alias Electric.Shapes.Consumer.DnfContext
   alias Electric.Shapes.Shape
   alias Electric.Replication.Changes.Transaction
   alias Electric.Replication.TransactionBuilder
@@ -19,6 +20,8 @@ defmodule Electric.Shapes.Consumer.State do
     :latest_offset,
     :storage,
     :writer,
+    # DNF context for handling complex boolean expressions with subqueries
+    dnf_context: nil,
     initial_snapshot_state: InitialSnapshot.new(nil),
     move_handling_state: MoveIns.new(),
     transaction_builder: TransactionBuilder.new(),
@@ -131,6 +134,7 @@ defmodule Electric.Shapes.Consumer.State do
       stack_id: stack_id,
       shape_handle: shape_handle,
       shape: shape,
+      dnf_context: DnfContext.from_shape(shape),
       hibernate_after:
         Electric.StackConfig.lookup(
           stack_id,
