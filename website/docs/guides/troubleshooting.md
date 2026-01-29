@@ -280,7 +280,7 @@ Bandit.HTTPError: Request URI is too long
 
 This happens when the subset parameters (especially `WHERE` clauses with many values) exceed the maximum URL length. This is common when:
 - Using `WHERE id = ANY($1)` with hundreds of IDs (typical in join queries)
-- TanStack DB generates large filter lists from JOIN operations
+- TanStack&nbsp;DB generates large filter lists from JOIN operations
 - Any query with many positional parameters
 
 ##### Solution &mdash; use POST requests for subset snapshots

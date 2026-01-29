@@ -52,7 +52,7 @@ It can be used as an ephemeral [in-memory database](https://pglite.dev/docs/file
 
 ### Syncing into PGlite
 
-You can use [Postgres Sync](/products/postgres-sync) to sync between a cloud Postgres and an embedded PGlite instance. For example, to sync an `items` [Shape](/docs/guides/shapes) into an `items` table:
+You can use [Postgres&nbsp;Sync](/products/postgres-sync) to sync between a cloud Postgres and an embedded PGlite instance. For example, to sync an `items` [Shape](/docs/guides/shapes) into an `items` table:
 
 <<< @/src/partials/sync-into-pglite.tsx
 

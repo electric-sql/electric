@@ -13,7 +13,7 @@ import GitHubButton from '../src/components/GitHubButton.vue'
 
 <img src="/img/icons/durable-streams.svg" class="product-icon" />
 
-# Durable Streams
+# Durable&nbsp;Streams
 
 Persistent, addressable, real-time streams that power resilient,
 <span class="no-wrap-sm">
@@ -34,9 +34,9 @@ Persistent, addressable, real-time streams that power resilient,
   </div>
 </div>
 
-## What are Durable Streams?
+## What are Durable&nbsp;Streams?
 
-Durable Streams are persistent, addressable, real-time streams. They're a flexible,
+Durable&nbsp;Streams are persistent, addressable, real-time streams. They're a flexible,
 <span class="no-wrap">
   swiss-army-knife</span>
 data primitive that's ideal for:
@@ -53,7 +53,7 @@ They're extensible, with [wrapper protocols](#wrapper-protocols) for everything 
 
 Modern applications frequently need ordered, durable sequences of data that can be replayed from arbitrary points and tailed in real time.
 
-Durable Streams addresses this gap for apps and agents across all platforms: web browsers, mobile apps, native clients, IoT devices, and edge workers.
+Durable&nbsp;Streams addresses this gap for apps and agents across all platforms: web browsers, mobile apps, native clients, IoT devices, and edge workers.
 
 ### Use cases
 
@@ -97,7 +97,7 @@ Clients can consume the stream from any position in the log, providing message h
 
 ## Wrapper protocols
 
-Durable Streams support multiple wrapper protocols for different use cases:
+Durable&nbsp;Streams support multiple wrapper protocols for different use cases:
 
 - **Binary streams** &mdash; efficient binary encoding for high-throughput data
 - **JSON mode** &mdash; human-readable JSON for debugging and interoperability

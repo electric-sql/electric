@@ -12,11 +12,11 @@ outline: [2, 3]
 post: true
 ---
 
-Today, we're open-sourcing [Durable Streams](/products/durable-streams): a persistent stream primitive and HTTP protocol for reliable, resumable, real-time data streaming into client applications.
+Today, we're open-sourcing [Durable&nbsp;Streams](/products/durable-streams): a persistent stream primitive and HTTP protocol for reliable, resumable, real-time data streaming into client applications.
 
-We originally built Durable Streams as the delivery layer inside Electric, our Postgres-native sync engine, and are now standardizing it as a standalone protocol.
+We originally built Durable&nbsp;Streams as the delivery layer inside Electric, our Postgres-native sync engine, and are now standardizing it as a standalone protocol.
 
-## Why Durable Streams
+## Why Durable&nbsp;Streams
 
 The internet has strong primitives for server-to-server messaging: Kafka, RabbitMQ, NATS. They give you ordering, delivery semantics, and fault tolerance between backend services—they're battle-tested, reliable, boring infrastructure. We love them for that.
 
@@ -24,11 +24,11 @@ Client streaming is different. WebSocket and SSE connections are easy to start, 
 
 AI products make this painfully visible. Token streaming is the UI for chat and copilots, and agentic apps often stream progress events, tool outputs, and partial results over long-running sessions. When the stream fails, the product fails—even if the model did the right thing.
 
-## What are Durable Streams?
+## What are Durable&nbsp;Streams?
 
 The core idea: streams are a first-class primitive that get their own URL. Each stream is an addressable, append-only log that clients can read from any position.
 
-Durable Streams is an open protocol that extends standard HTTP to support ordered, replayable streams with offset-based resumability. It's designed to work anywhere HTTP works: browsers, mobile, native clients, and IoT.
+Durable&nbsp;Streams is an open protocol that extends standard HTTP to support ordered, replayable streams with offset-based resumability. It's designed to work anywhere HTTP works: browsers, mobile, native clients, and IoT.
 
 **How it works:**
 
@@ -56,7 +56,7 @@ At the same time, conversations with users, customers, and industry peers kept s
 As we work on Electric 2.0, we're making a key architectural shift: separating the foundational transport layer from the protocols built on top of it. This creates a composable ecosystem where protocols can be used independently or mixed together.
 
 **Foundation:**
-- **Durable Streams** — Durable, resumable delivery over HTTP
+- **Durable&nbsp;Streams** — Durable, resumable delivery over HTTP
 
 **Ecosystem:**
 - **State Protocol** — A composable schema for state change events (insert/update/delete) that any protocol can adopt when it needs database-style sync semantics
@@ -64,11 +64,11 @@ As we work on Electric 2.0, we're making a key architectural shift: separating t
 - **AI transport plugins** — Durable transport adapters for AI SDKs (Vercel AI SDK, TanStack AI, etc.), enabling resumable token streaming and persistent agent sessions
 - **Application protocols** — Presence, CRDTs (Yjs, Automerge), real-time collaboration, and custom protocols built on the stream foundation
 
-Durable Streams is that foundational layer extracted as a standalone protocol: the thing we need for Electric, and the thing we keep seeing other teams reinvent for AI streaming and beyond.
+Durable&nbsp;Streams is that foundational layer extracted as a standalone protocol: the thing we need for Electric, and the thing we keep seeing other teams reinvent for AI streaming and beyond.
 
 ## How It Works
 
-Durable Streams uses standard HTTP methods:
+Durable&nbsp;Streams uses standard HTTP methods:
 
 - **Create + append**: create a stream with `PUT`, append data with `POST`. Each append returns the next offset in a response header.
 - **Read + resume**: read from an offset using `GET` for catch-up, or tail the stream using long-polling or an SSE mode. If a connection drops, reconnect using the last saved offset.
@@ -100,7 +100,7 @@ for await (const chunk of stream.read({
 
 ## Use Cases
 
-Durable Streams is a delivery primitive. A few places it fits well:
+Durable&nbsp;Streams is a delivery primitive. A few places it fits well:
 
 - **AI / LLM streaming**: resume token streams across refreshes and device switches instead of restarting generations.
 - **Agentic apps**: stream tool outputs and progress events with replay and clean reconnect semantics.
@@ -108,7 +108,7 @@ Durable Streams is a delivery primitive. A few places it fits well:
 - **Event sourcing**: deliver immutable logs clients can replay from any point in time.
 - **Real-time collaboration**: deliver CRDT / OT updates with replayable history and clean reconnects.
 
-The pattern is the same: consume events from backend systems (databases, LLMs, Kafka, queues), apply auth + transformation, then fan out to clients over HTTP using Durable Streams.
+The pattern is the same: consume events from backend systems (databases, LLMs, Kafka, queues), apply auth + transformation, then fan out to clients over HTTP using Durable&nbsp;Streams.
 
 ## What's in the Repo
 
@@ -119,21 +119,21 @@ The [durable-streams repository](https://github.com/durable-streams/durable-stre
 - A CLI tool for testing and development
 - A conformance test suite for cross-implementation compatibility
 
-The goal is for Durable Streams to be a *spec with many implementations*, not a single codebase. We'd love to see independent server and client implementations in other languages. The reference implementation includes a Node.js server and TypeScript/JavaScript client, but the ecosystem needs implementations in Python, Go, Rust, Java, Swift, Kotlin, and more—along with different storage backends (PostgreSQL, S3, Redis, etc.).
+The goal is for Durable&nbsp;Streams to be a *spec with many implementations*, not a single codebase. We'd love to see independent server and client implementations in other languages. The reference implementation includes a Node.js server and TypeScript/JavaScript client, but the ecosystem needs implementations in Python, Go, Rust, Java, Swift, Kotlin, and more—along with different storage backends (PostgreSQL, S3, Redis, etc.).
 
 If you're building one, the conformance test suite is there to help ensure compatibility. We're happy to link to implementations from the main repository, and we'd love to chat in [Discord](https://discord.electric-sql.com).
 
 ## What's Coming Next
 
-Today's launch focuses on Durable Streams—the foundational transport layer. Next, we're publishing the protocols built on top of it.
+Today's launch focuses on Durable&nbsp;Streams—the foundational transport layer. Next, we're publishing the protocols built on top of it.
 
 Electric's current protocol bundles everything together. As we build Electric 2.0, we're separating the foundation from the ecosystem so each piece can be used independently or composed together:
 
-- **Durable Streams** (launching today) — The foundational transport layer
+- **Durable&nbsp;Streams** (launching today) — The foundational transport layer
 - **State Protocol** (coming soon) — A composable protocol for state change events (insert/update/delete) that works over any durable stream
 - **Database adapters** (coming soon) — Postgres, MySQL, SQLite adapters that use the State Protocol
 
-This means you can use Durable Streams for AI token streaming today, then later adopt the State Protocol when you need database sync semantics. Or build your own protocol on top of Streams for presence, CRDTs, or custom real-time features.
+This means you can use Durable&nbsp;Streams for AI token streaming today, then later adopt the State Protocol when you need database sync semantics. Or build your own protocol on top of Streams for presence, CRDTs, or custom real-time features.
 
 Stay tuned for the State Protocol announcement.
 
@@ -143,23 +143,23 @@ Stay tuned for the State Protocol announcement.
 
 Both SSE and WebSockets are ephemeral—when a connection drops, in-flight data is lost. There's no standard way to resume from a specific position after reconnection, no defined protocol for retrieving historical data before switching to live mode, and neither integrates well with HTTP caching infrastructure or standard API gateways.
 
-Durable Streams keeps you in plain HTTP with standardized resumption through opaque, monotonic offsets, a unified catch-up and live protocol, and offset-based requests that CDNs and browsers can cache.
+Durable&nbsp;Streams keeps you in plain HTTP with standardized resumption through opaque, monotonic offsets, a unified catch-up and live protocol, and offset-based requests that CDNs and browsers can cache.
 
 ### How does this relate to Kafka, RabbitMQ, and other message queues?
 
-Durable Streams complements rather than replaces these systems. Kafka and RabbitMQ excel at server-to-server messaging in backend infrastructure. Durable Streams solves the distinct challenge of reliably streaming data to client applications—handling client diversity, network unreliability, and the economics of per-connection delivery.
+Durable&nbsp;Streams complements rather than replaces these systems. Kafka and RabbitMQ excel at server-to-server messaging in backend infrastructure. Durable&nbsp;Streams solves the distinct challenge of reliably streaming data to client applications—handling client diversity, network unreliability, and the economics of per-connection delivery.
 
-The recommended pattern: backend systems (Kafka, databases, queues) → application server → Durable Streams → clients.
+The recommended pattern: backend systems (Kafka, databases, queues) → application server → Durable&nbsp;Streams → clients.
 
 ### What about performance?
 
-Durable Streams is built for production scale. In Electric, we sync data through Postgres and Electric in under 15ms end-to-end. Throughput scales with your infrastructure—the protocol itself adds minimal overhead, and we've tested millions of concurrent clients subscribed to a single stream without degradation.
+Durable&nbsp;Streams is built for production scale. In Electric, we sync data through Postgres and Electric in under 15ms end-to-end. Throughput scales with your infrastructure—the protocol itself adds minimal overhead, and we've tested millions of concurrent clients subscribed to a single stream without degradation.
 
 The offset-based design enables aggressive caching at CDN edges, which means read-heavy workloads (common in sync and AI scenarios) scale horizontally without overwhelming origin servers.
 
 ### Will there be a hosted version?
 
-We'll be launching our own cloud implementation of Durable Streams early next year.
+We'll be launching our own cloud implementation of Durable&nbsp;Streams early next year.
 
 ## Get Started
 

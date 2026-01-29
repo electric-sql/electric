@@ -147,7 +147,7 @@ We've picked four different sync stacks to illustrate four different ways of int
 
 <Card title="TanStack" icon="/img/integrations/tanstack.svg" href="#tanstack">
   <p>
-    End-to-end Typescript, syncing through server functions into TanStack DB.
+    End-to-end Typescript, syncing through server functions into TanStack&nbsp;DB.
     <span class="hidden-sm"><span class="no-wrap-sm">Great for super fast</span> web, mobile and AI app development.</span>
   </p>
   <p class="hidden-xs block-sm">
@@ -235,9 +235,9 @@ You can learn more about these by following <!-- the Tutorial and -->[Deployment
 
 ### Choosing a stack
 
-We recommend using [TanStack DB](#tanstack-db) for web and mobile app development. It's super fast, lightweight, type-safe and gives you an [optimal, end-to-end, local-first sync stack](/blog/2025/07/29/super-fast-apps-on-sync-with-tanstack-db).
+We recommend using [TanStack&nbsp;DB](#tanstack-db) for web and mobile app development. It's super fast, lightweight, type-safe and gives you an [optimal, end-to-end, local-first sync stack](/blog/2025/07/29/super-fast-apps-on-sync-with-tanstack-db).
 
-You can also combine TanStack DB with [Phoenix.Sync](#phoenix-sync) if you're building agentic systems with Elixir or looking for a batteries-included backend framework.
+You can also combine TanStack&nbsp;DB with [Phoenix.Sync](#phoenix-sync) if you're building agentic systems with Elixir or looking for a batteries-included backend framework.
 
 [PGlite](#pglite) and [Yjs](#yjs) are more for specialist use-cases where you're syncing into a dev, test or CI environment or crafting a multi-user collaboration system, respectively.
 
@@ -275,28 +275,28 @@ See the [tanstack-db-web-starter](https://github.com/electric-sql/electric/tree/
 
 - based on Postgres, using [Drizzle](https://orm.drizzle.team/) for data schemas and migrations
 - syncing data out of Electric through [TanStack Start server functions](https://tanstack.com/start/latest/docs/framework/react/server-functions)
-- into [TanStack DB collections](https://tanstack.com/db/latest/docs/overview#defining-collections) for reactive, local-first client-side development
+- into [TanStack&nbsp;DB collections](https://tanstack.com/db/latest/docs/overview#defining-collections) for reactive, local-first client-side development
 - using [tRPC mutation proceedures](https://trpc.io/docs/server/procedures) for type-safe write handling on the server
 
 See also the [tanstack-db-expo-starter](https://github.com/electric-sql/electric/tree/main/examples/tanstack-db-expo-starter) for a similar stack for mobile app development.
 
 ### Incremental adoption
 
-TanStack DB is designed to be incrementally adoptable into existing applications.
+TanStack&nbsp;DB is designed to be incrementally adoptable into existing applications.
 
 It's tiny &mdash; a few Kbs &mdash; so doesn't introduce a big dependency. It works with all major front-end reactivity frameworks. It works with API-based data loading and sync. So you can progressively adopt by first migrating API-based apps using TanStack Query and then migrate to sync without affecting the component code.
 
 ### Super fast 🔥
 
-When you combine Electric with TanStack DB, you get blazing fast <span class="no-wrap-sm">end-to-end reactivity</span>.
+When you combine Electric with TanStack&nbsp;DB, you get blazing fast <span class="no-wrap-sm">end-to-end reactivity</span>.
 
 Components use [live queries](https://tanstack.com/db/latest/docs/guides/live-queries) to react and when data changes. These are based on a [Typescript implementation of differential dataflow](https://github.com/electric-sql/d2ts). This means you can build complex client apps where everything reacts instantly, within a single animation frame.
 
 #### More information
 
-- [Local-first sync with TanStack DB and Electric](/blog/2025/07/29/super-fast-apps-on-sync-with-tanstack-db)
-- [TanStack DB, the embedded client database for TanStack Query](https://tanstack.com/blog/tanstack-db-0.1-the-embedded-client-database-for-tanstack-query)
-- [An interactive guide to TanStack DB](https://frontendatscale.com/blog/tanstack-db)
+- [Local-first sync with TanStack&nbsp;DB and Electric](/blog/2025/07/29/super-fast-apps-on-sync-with-tanstack-db)
+- [TanStack&nbsp;DB, the embedded client database for TanStack Query](https://tanstack.com/blog/tanstack-db-0.1-the-embedded-client-database-for-tanstack-query)
+- [An interactive guide to TanStack&nbsp;DB](https://frontendatscale.com/blog/tanstack-db)
 
 ## <img class="heading-icon" src="/img/integrations/phoenix.svg" /> Phoenix
 
@@ -316,12 +316,12 @@ Electric is [developed in Elixir](/products/postgres-sync#how-does-it-work), has
 
 Phoenix.Sync enables real-time sync for Postgres-backed [Phoenix](https://www.phoenixframework.org/) applications. You can use it to sync data into Elixir, `LiveView` and frontend web and mobile applications.
 
-### Using with TanStack DB
+### Using with TanStack&nbsp;DB
 
-Read-path sync works naturally with TanStack DB. Plus it provides:
+Read-path sync works naturally with TanStack&nbsp;DB. Plus it provides:
 
-- a [`Writer`](https://hexdocs.pm/phoenix_sync/readme.html#write-path-sync) module for ingesting TanStack DB mutations
-- [`Igniter` and `Mix` commands](https://github.com/electric-sql/phoenix_sync/pull/102) to integrate TanStack DB with Phoenix
+- a [`Writer`](https://hexdocs.pm/phoenix_sync/readme.html#write-path-sync) module for ingesting TanStack&nbsp;DB mutations
+- [`Igniter` and `Mix` commands](https://github.com/electric-sql/phoenix_sync/pull/102) to integrate TanStack&nbsp;DB with Phoenix
 
 ### Building agentic systems
 

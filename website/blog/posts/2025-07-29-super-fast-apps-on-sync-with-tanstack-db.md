@@ -59,12 +59,12 @@ Paired with [Electric](/), it provides an optimal end-to-end sync stack for loca
 Type-safe, declarative, incrementally adoptable and insanely fast, it's the future of app development with Electric and the best way of [building AI apps<span class="hidden-xs"> and agentic systems</span>](/blog/2025/04/09/building-ai-apps-on-sync).
 
 > [!Warning] ✨&nbsp; TanStack&nbsp;DB <> Electric&nbsp;starters
-> Fire up TanStack DB with Electric using the [TanStack&nbsp;Start&nbsp;starter](https://github.com/electric-sql/electric/tree/main/examples/tanstack-db-web-starter) and [Expo&nbsp;starter](https://github.com/electric-sql/electric/tree/main/examples/tanstack-db-expo-starter) templates.
+> Fire up TanStack&nbsp;DB with Electric using the [TanStack&nbsp;Start&nbsp;starter](https://github.com/electric-sql/electric/tree/main/examples/tanstack-db-web-starter) and [Expo&nbsp;starter](https://github.com/electric-sql/electric/tree/main/examples/tanstack-db-expo-starter) templates.
 >
 > Docs are at [tanstack.com/db](https://tanstack.com/db) and there's an [example&nbsp;app](https://github.com/TanStack/db/tree/main/examples/react/todo) in&nbsp;the&nbsp;repo.
 
-> [!Info] ⚡&nbsp; Interactive guide to TanStack DB
-> [What TanStack DB is](https://frontendatscale.com/blog/tanstack-db) how it works and why it might change the way you build apps.
+> [!Info] ⚡&nbsp; Interactive guide to TanStack&nbsp;DB
+> [What TanStack&nbsp;DB is](https://frontendatscale.com/blog/tanstack-db) how it works and why it might change the way you build apps.
 
 ## The next frontier for front&#8209;end
 
@@ -90,7 +90,7 @@ When Electric co-founder [Kyle Mathews](/about/team#kyle) approached Tanner to w
 
 Enter [Sam Willis'](/about/team#sam) work on [d2ts](https://github.com/electric-sql/d2ts), a Typescript implementation of differential dataflow that can handle even the most complex reactive queries in microseconds.
 
-Suddenly we had all the primitives: the stack, the DX, the sync engine and a query engine fast enough to make it possible. To understand how this then came together in TanStack DB, let's briefly refresh on how TanStack works.
+Suddenly we had all the primitives: the stack, the DX, the sync engine and a query engine fast enough to make it possible. To understand how this then came together in TanStack&nbsp;DB, let's briefly refresh on how TanStack works.
 
 ### How TanStack works
 
@@ -194,9 +194,9 @@ If we have these three things &mdash; collections, live queries and mutations th
   </a>
 </figure>
 
-## Introducing TanStack DB
+## Introducing TanStack&nbsp;DB
 
-[TanStack DB](/products/tanstack-db) is a reactive client store that extends TanStack Query with:
+[TanStack&nbsp;DB](/products/tanstack-db) is a reactive client store that extends TanStack Query with:
 
 - [collections](#collections)
 - [live queries](#live-queries)
@@ -243,7 +243,7 @@ queryClient.invalidateQueries({
 })
 ```
 
-This allows you to take existing API-based applications and incrementally layer on TanStack DB where you need it, with minimal changes to your code.
+This allows you to take existing API-based applications and incrementally layer on TanStack&nbsp;DB where you need it, with minimal changes to your code.
 
 It also allows you to load data into your app from a variety of sources: anything that provides or can be wrapped by an API. That can be your backend API but can also be an external service, like an auth service or a weather API.
 
@@ -251,7 +251,7 @@ It also allows you to load data into your app from a variety of sources: anythin
 
 Sync collections automatically and efficiently keep the data in the collection up-to-date. You don't need to tell a sync-based collection to re-fetch data. It always keeps the local data live and up-to-date in real-time for you.
 
-There are already a number of TanStack DB collections for different sync engines built-in or under development, including [Electric](/), [Firebase](https://firebase.google.com/), [Materialize](https://materialize.com) and [Trailbase](https://trailbase.io).
+There are already a number of TanStack&nbsp;DB collections for different sync engines built-in or under development, including [Electric](/), [Firebase](https://firebase.google.com/), [Materialize](https://materialize.com) and [Trailbase](https://trailbase.io).
 
 Electric is our open-source, Postgres-native, super fast sync engine. To create a collection that syncs data using Electric, you use the same options that you’d pass to the [Electric client](/docs/api/clients/typescript) when defining a [Shape](/docs/guides/shapes). A shape is a [filtered view on a database table](/docs/guides/shapes#where-clause) that Electric syncs out-of Postgres, into the client for you:
 
@@ -301,7 +301,7 @@ const myRecentTodoCollection = createCollection(
 
 #### Other collections
 
-There are a range of other collections also built into TanStack DB. Such as an ephemoral [local collection](https://github.com/TanStack/db/blob/main/packages/db/src/local-only.ts) and a persistent [localStorage collection](https://github.com/TanStack/db/blob/main/packages/db/src/local-storage.ts). You can also create your own collections by following the [collection options creator guide](https://tanstack.com/db/latest/docs/collection-options-creator).
+There are a range of other collections also built into TanStack&nbsp;DB. Such as an ephemoral [local collection](https://github.com/TanStack/db/blob/main/packages/db/src/local-only.ts) and a persistent [localStorage collection](https://github.com/TanStack/db/blob/main/packages/db/src/local-storage.ts). You can also create your own collections by following the [collection options creator guide](https://tanstack.com/db/latest/docs/collection-options-creator).
 
 Once you have your data in collections, you can access it using live queries.
 
@@ -368,7 +368,7 @@ The live query engine is based on [a Typescript implementation of differential d
 
 Because the engine is so fast, you can have as many [complex queries and joins](https://tanstack.com/db/latest/docs/live-queries#table-of-contents) as you like, across lots of components and collections.
 
-For example, here we see a benchmark across three extremely complex queries. They’re all running multiple joins across multiple tables with lots of rows using with grouping and aggregates, etc. As you can see, TanStack DB queries are all sub-millisecond no matter what:
+For example, here we see a benchmark across three extremely complex queries. They’re all running multiple joins across multiple tables with lots of rows using with grouping and aggregates, etc. As you can see, TanStack&nbsp;DB queries are all sub-millisecond no matter what:
 
 <video class="w-full" controls poster="/videos/blog/local-first-sync-with-tanstack-db/tanstack-db-speed-3.jpg">
   <source src="/videos/blog/local-first-sync-with-tanstack-db/tanstack-db-speed-3.mp4" />
@@ -437,7 +437,7 @@ Collections and live queries are [composable](https://tanstack.com/db/latest/doc
 
 [Transactional mutations](https://tanstack.com/db/latest/docs/overview#making-optimistic-mutations) apply local optimistic writes transactionally across collections.
 
-Like with TanStack Query, mutations manage optimistic state for you. So the write is displayed immediately and then sent/synced to the server in the background. What's different is that TanStack DB mutations:
+Like with TanStack Query, mutations manage optimistic state for you. So the write is displayed immediately and then sent/synced to the server in the background. What's different is that TanStack&nbsp;DB mutations:
 
 - **are transactional** so they're applied, handled and can be rolled-back atomically across collections; and it
 - **tie the optimistic state lifecycle in with the sync machinery** so that the optimistic state can be discarded when local transactions sync back into the app
@@ -554,9 +554,9 @@ How you handle writes is entirely up-to-you. Mutation handlers are designed to b
 
 #### Write-path sync
 
-Write-path sync is a pattern where all writes made to the local database are automatically synced to a server database via a generic ingest endpoint. If you choose, you can implement write-path sync with TanStack DB using a generic ingest endpoint and `mutationFn`.
+Write-path sync is a pattern where all writes made to the local database are automatically synced to a server database via a generic ingest endpoint. If you choose, you can implement write-path sync with TanStack&nbsp;DB using a generic ingest endpoint and `mutationFn`.
 
-For example, when using TanStack DB with Electric, you can use the Electric collection `awaitTxId` utility to sync the changes to the server, monitor the replication stream and discard the optimistic state when the write syncs back into the app:
+For example, when using TanStack&nbsp;DB with Electric, you can use the Electric collection `awaitTxId` utility to sync the changes to the server, monitor the replication stream and discard the optimistic state when the write syncs back into the app:
 
 ```ts
 export const mutationFn = async (_variables, { transaction }) => {
@@ -580,7 +580,7 @@ export const mutationFn = async (_variables, { transaction }) => {
 
 ::: details A note on merge semantics
 
-TanStack DB supports rollbacks. This keeps things simple by allowing local writes to be validated (and if necessary rejected) by a central server.
+TanStack&nbsp;DB supports rollbacks. This keeps things simple by allowing local writes to be validated (and if necessary rejected) by a central server.
 
 Because writes go through your API, into your database, you can also easily implement more advanced concurrency semantics if you need to. Such as writing into conflict-free datatypes.
 
@@ -611,15 +611,15 @@ defmodule IngestController do
 end
 ```
 
-The key thing is for your write / ingest endpoint on the server to return the [Postgres transaction ID](https://www.postgresql.org/docs/current/transaction-id.html) that the changes are written under. This allows TanStack DB to tie the optimistic state lifecycle in with the sync machinery (using the `awaitTxId` utility).
+The key thing is for your write / ingest endpoint on the server to return the [Postgres transaction ID](https://www.postgresql.org/docs/current/transaction-id.html) that the changes are written under. This allows TanStack&nbsp;DB to tie the optimistic state lifecycle in with the sync machinery (using the `awaitTxId` utility).
 
 ## Optimal sync stack
 
-When TanStack DB is paired with Electric, it gives you an optimal, end-to-end local-first sync stack. The combination is super fast, scalable, declarative, type-safe, reactive, composable, extensible and incrementally adoptable.
+When TanStack&nbsp;DB is paired with Electric, it gives you an optimal, end-to-end local-first sync stack. The combination is super fast, scalable, declarative, type-safe, reactive, composable, extensible and incrementally adoptable.
 
 ### Super fast and scalable
 
-As we've seen, TanStack DB query engine is [based on differential dataflow](https://github.com/electric-sql/d2ts), when the data changes, it incrementally updates just the relevant part of the result set and the reactivity is sub-millisecond.
+As we've seen, TanStack&nbsp;DB query engine is [based on differential dataflow](https://github.com/electric-sql/d2ts), when the data changes, it incrementally updates just the relevant part of the result set and the reactivity is sub-millisecond.
 
 For data delivery and fan-out, Electric serves data through existing CDN infrastructure. This handles millions of concurrent users out of the box. For example, our [cloud benchmarks](/docs/reference/benchmarks#cloud) show Electric syncing an 80Gbps workload to a million concurrent clients with flat, low latency and memory use:
 
@@ -633,7 +633,7 @@ The combination is an end-to-end stack that's live, reactive, super fast and sca
 
 ### Declarative and type-safe
 
-TanStack DB [abstracts data transfer and placement](/blog/2022/12/16/evolution-state-transfer) out of your application code and supports fully type safe development.
+TanStack&nbsp;DB [abstracts data transfer and placement](/blog/2022/12/16/evolution-state-transfer) out of your application code and supports fully type safe development.
 
 Abstracting state transfer out of your app code allows it to be normalized and system optimised. This speeds up data loading, simplifies your codebase and avoids LLM-generated code [imperatively fetching data](/blog/2025/04/22/untangling-llm-spaghetti). App code and components just don't need to know how or where the data came from.
 
@@ -641,7 +641,7 @@ For type-safety, collections support passing in any [Standard Schema](https://st
 
 ### Composable, extensible and incrementally adoptable
 
-TanStack DB allows you to load data from different sources, including existing API and external services and handle writes with your existing API. It has framework adapters for [common reactivity frameworks](https://tanstack.com/db/latest/docs/framework) and allows you to incrementally adopt sync one fetch, one route, one component at a time.
+TanStack&nbsp;DB allows you to load data from different sources, including existing API and external services and handle writes with your existing API. It has framework adapters for [common reactivity frameworks](https://tanstack.com/db/latest/docs/framework) and allows you to incrementally adopt sync one fetch, one route, one component at a time.
 
 Electric syncs data through [standard HTTP and JSON](/docs/api/http) and works [with your existing API](/blog/2024/11/21/local-first-with-your-existing-api). The combination is designed to provide a practical pathway to incrementally adopting real-time sync, without needing to re-write your code.
 
@@ -650,14 +650,14 @@ For example, to migrate an existing API-based app using TanStack Query:
 1. take an existing route / loader
 2. adjust is to load data into a query collection (using the same `queryFn`)
 3. adjust your components to read data from that collection using live queries
-4. adjust your writes to use TanStack DB mutations (using the same `mutationFn`)
+4. adjust your writes to use TanStack&nbsp;DB mutations (using the same `mutationFn`)
 5. adjust your collection config from query to sync using Electric
 
 Each step will make your app faster and more resilient, as well as providing a practical migration pathway from data-fetching to real-time, local-first sync.
 
 ## Next steps
 
-[TanStack DB](/products/tanstack-db) with Electric [Postgres Sync](/products/postgres-sync) provides a pathway to real-time without the re-write and an optimal, end-to-end local-first sync stack that just&nbsp;works.
+[TanStack&nbsp;DB](/products/tanstack-db) with Electric [Postgres&nbsp;Sync](/products/postgres-sync) provides a pathway to real-time without the re-write and an optimal, end-to-end local-first sync stack that just&nbsp;works.
 
 To get started, check out the [TanStack&nbsp;Start&nbsp;starter](https://github.com/electric-sql/electric/tree/main/examples/tanstack-db-web-starter) for web and [Expo&nbsp;starter](https://github.com/electric-sql/electric/tree/main/examples/tanstack-db-expo-starter) for&nbsp;mobile.
 

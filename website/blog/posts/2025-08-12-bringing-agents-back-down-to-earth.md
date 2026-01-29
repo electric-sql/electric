@@ -119,7 +119,7 @@ Technically, it's built on:
 
 - [Postgres](#standard-postgres)
 - [Phoenix.Sync](#phoenix-sync)
-- [TanStack DB](#tanstack-db)
+- [TanStack&nbsp;DB](#tanstack-db)
 
 In the back-end, agents subscribe to events in their thread. When something happens, they instruct the LLM by making a request to the [Anthropic API](https://docs.anthropic.com/en/api/messages). The LLM responds with a tool call. Tool calls are handled by the system and potentially generate new events, triggering another instruction loop.
 
@@ -287,13 +287,13 @@ defmodule BurnWeb.Router do
 end
 ```
 
-In the front-end, we wire these sync endpoints into [TanStack DB collections](/blog/2025/07/29/super-fast-apps-on-sync-with-tanstack-db#collections).
+In the front-end, we wire these sync endpoints into [TanStack&nbsp;DB collections](/blog/2025/07/29/super-fast-apps-on-sync-with-tanstack-db#collections).
 
-### TanStack DB
+### TanStack&nbsp;DB
 
-[TanStack](https://tanstack.com) is a popular library for building web and mobile apps. TanStack DB is a new reactive client store built into TanStack for [building super fast apps on sync](https://tanstack.com/blog/tanstack-db-0.1-the-embedded-client-database-for-tanstack-query).
+[TanStack](https://tanstack.com) is a popular library for building web and mobile apps. TanStack&nbsp;DB is a new reactive client store built into TanStack for [building super fast apps on sync](https://tanstack.com/blog/tanstack-db-0.1-the-embedded-client-database-for-tanstack-query).
 
-You can read more about using TanStack DB with Electric on our [Local-first sync with TanStack DB and Electric](/blog/2025/07/29/super-fast-apps-on-sync-with-tanstack-db) blog post. It's a client store that provides a collection primitive to sync data into and a reactive, local-first programming model based on live queries and transactional mutations.
+You can read more about using TanStack&nbsp;DB with Electric on our [Super-fast apps on sync with TanStack&nbsp;DB and Electric](/blog/2025/07/29/super-fast-apps-on-sync-with-tanstack-db) blog post. It's a client store that provides a collection primitive to sync data into and a reactive, local-first programming model based on live queries and transactional mutations.
 
 <div class="listing">
   <BlogPostListing v-for="post in posts"
@@ -302,7 +302,7 @@ You can read more about using TanStack DB with Electric on our [Local-first sync
   />
 </div>
 
-Burn defines TanStack DB collections which map to the sync endpoints we saw above, exposed in the Router:
+Burn defines TanStack&nbsp;DB collections which map to the sync endpoints we saw above, exposed in the Router:
 
 ```ts
 // From `assets/src/db/collections.ts`
@@ -447,7 +447,7 @@ There's a lot of hype around agentic system development. Concepts like agentic m
 
 When you dig into it, these all collapse down to processes and database state. You can build agentic systems with a database, standard web tooling and real-time sync.
 
-See the [🔥 Burn demo app](/demos/burn) and [source code](https://github.com/electric-sql/electric/tree/main/examples/burn) for an example and build your own agentic system with [Phoenix.Sync](https://hexdocs.pm/phoenix_sync) and [TanStack DB](/products/tanstack-db).
+See the [🔥 Burn demo app](/demos/burn) and [source code](https://github.com/electric-sql/electric/tree/main/examples/burn) for an example and build your own agentic system with [Phoenix.Sync](https://hexdocs.pm/phoenix_sync) and [TanStack&nbsp;DB](/products/tanstack-db).
 
 <div class="actions cta-actions page-footer-actions left">
   <div class="action cloud-cta hidden-sm">
