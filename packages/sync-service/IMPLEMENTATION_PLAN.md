@@ -1193,6 +1193,13 @@ Before enabling `dnf_subqueries` feature flag in production:
     - Added `active_conditions` field to `Electric.Client.Message.Headers` struct
     - Updated `Headers.from_message/2` to parse `active_conditions` from messages
 
+11. **Phase 10: Code Cleanup** ✅
+    - Removed `or_with_subquery?` and `not_with_subquery?` fields from `Consumer.State`
+    - Removed helper functions `has_or_with_subquery?/1`, `has_not_with_subquery?/1`, `subtree_has_sublink?/1` from state.ex
+    - Simplified invalidation logic in `consumer.ex` - now only checks for valid DNF
+    - Removed unused `Parser` and `Walker` imports from state.ex
+    - Removed obsolete tests for removed state fields
+
 ### Remaining Work (Lower Priority)
 
 1. **Protocol Version Validation** (Optional)
