@@ -118,6 +118,7 @@ defmodule Electric.Connection.Manager do
   end
 
   use GenServer, shutdown: :infinity
+  alias Electric.Postgres.Configuration
   alias Electric.Postgres.LockBreakerConnection
   alias Electric.Connection.Manager.ConnectionBackoff
   alias Electric.Connection.Manager.ConnectionResolver
@@ -482,6 +483,9 @@ defmodule Electric.Connection.Manager do
         state
       )
     end
+
+    # Log all tables accessible to Electric
+    log_accessible_tables(state)
 
     repl_sup_opts = [
       stack_id: state.stack_id,
@@ -1232,6 +1236,27 @@ defmodule Electric.Connection.Manager do
       state.stack_id,
       event
     )
+  end
+
+  defp log_accessible_tables(state) do
+    pool = pool_name(state.stack_id, :admin)
+
+    case Configuration.run_handling_db_connection_errors(fn ->
+           Configuration.list_accessible_tables!(pool)
+         end) do
+      {:error, reason} ->
+        Logger.warning("Failed to list accessible tables: #{inspect(reason)}")
+
+      tables when is_list(tables) ->
+        table_names =
+          tables
+          |> Enum.map(fn {schema, table} -> Electric.Utils.relation_to_sql({schema, table}) end)
+          |> Enum.sort()
+
+        Logger.info(
+          "#{length(table_names)} tables are accessible to Electric: #{inspect(table_names)}"
+        )
+    end
   end
 
   defp should_retry_connection?(
