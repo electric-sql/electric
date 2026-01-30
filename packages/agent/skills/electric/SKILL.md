@@ -8,34 +8,55 @@ triggers:
   - postgres sync
   - real-time sync
   - tanstack db
+  - durable streams
 metadata:
   sources:
     - AGENTS.md
     - website/docs/quickstart.md
 ---
 
-# Electric
+# Electric Ecosystem
 
-Electric is a Postgres sync engine that streams data to apps via HTTP. Combined with TanStack DB, it enables local-first applications with instant UI, real-time sync, and optimistic mutations.
-
-## How It Works
+Build local-first apps with real-time Postgres sync. The ecosystem has three main components:
 
 ```
-Postgres → Electric → HTTP → Proxy (auth) → TanStack DB (client)
+Postgres → Electric → Durable Streams → TanStack DB (client)
 ```
 
-- **Electric**: Streams Postgres changes as "shapes" (table subsets) over HTTP
-- **TanStack DB**: Client-side collections with live queries and optimistic mutations
-- **Proxy**: Your server authenticates users and defines what data they can access
-- **Writes**: Client → API → Postgres → Electric streams back → UI reconciles
+| Component           | Purpose                                                            | Package                   |
+| ------------------- | ------------------------------------------------------------------ | ------------------------- |
+| **Electric**        | Postgres sync engine, streams changes as "shapes" over HTTP        | `@electric-sql/client`    |
+| **Durable Streams** | Reliable message streaming with exactly-once delivery              | `@durable-streams/client` |
+| **TanStack DB**     | Client-side collections with live queries and optimistic mutations | `@tanstack/db`            |
 
-## What I Can Help With
+## Loading Skills
 
-- **New projects**: Scaffold with TanStack Start + Electric Cloud
-- **Adding sync to existing apps**: Set up collections, proxies, live queries
-- **Security review**: Audit your Electric setup before production
-- **Production readiness**: Go-live checklist, deployment options
-- **TanStack DB patterns**: Collections, live queries, optimistic mutations, joins
+Each package has detailed skills. Load them as needed:
+
+**TanStack DB** (live queries, mutations, collections, schemas):
+
+```bash
+npx db-skills show tanstack-db        # Overview and routing
+npx db-skills show live-queries       # Reactive queries
+npx db-skills show mutations          # Optimistic updates
+npx db-skills show collections        # Data sources
+```
+
+**Durable Streams** (streaming, state sync):
+
+```bash
+cat node_modules/@durable-streams/client/skills/durable-streams/SKILL.md
+cat node_modules/@durable-streams/client/skills/durable-state/SKILL.md
+```
+
+**Electric** (shapes, auth, deployment):
+
+```bash
+npx @electric-sql/agent read-skill electric-quickstart
+npx @electric-sql/agent read-skill electric-security-check
+npx @electric-sql/agent read-skill electric-tanstack-integration
+npx @electric-sql/agent list-skills   # See all available
+```
 
 ## Security Essentials
 
@@ -84,4 +105,5 @@ const { data: todos } = useLiveQuery((q) =>
 
 - [Electric Docs](https://electric-sql.com/docs)
 - [TanStack DB](https://tanstack.com/db)
+- [Durable Streams](https://github.com/durable-streams/durable-streams)
 - [GitHub](https://github.com/electric-sql/electric)
