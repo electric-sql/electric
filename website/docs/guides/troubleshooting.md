@@ -15,11 +15,13 @@ Tips and answers to FAQs about how to run Electric successfully.
 
 ## Local development
 
-### Slow shapes &mdash; why are my shapes slow in the browser in local development?
+### Slow shapes / slow HMR / slow dev server &mdash; why is my local development slow?
 
-Sometimes people encounter a mysterious slow-down with Electric in local development, when your web app is subscribed to 6 or more shapes. This slow-down is caused by a limitation of the legacy version of HTTP, 1.1.
+Sometimes people encounter mysterious slow-downs with Electric in local development &mdash; slow shape loading, sluggish HMR (Hot Module Replacement), or an unresponsive development server. This commonly happens when your web app is subscribed to 6 or more shapes. The slow-down is caused by a limitation of the legacy version of HTTP, 1.1.
 
 With HTTP/1.1, browsers only allow 6 simultaneous requests to a specific backend. This is because each HTTP/1.1 request uses its own expensive TCP connection. As shapes are loaded over HTTP, this means only 6 shapes can be getting updates with HTTP/1.1 due to this browser restriction. All other requests pause until there's an opening.
+
+This also affects your development server (Vite, webpack, etc.) because the browser's TCP connection limit is shared across all requests to your dev server &mdash; including HMR updates, asset loading, and shape sync. If Electric shapes are holding connections open, your HMR may take minutes instead of milliseconds.
 
 Luckily, HTTP/2, introduced in 2015, fixes this problem by _multiplexing_ each request to a server over the same TCP connection. This allows essentially unlimited connections. HTTP/2 is standard across the vast majority of hosts now. Unfortunately it's not yet standard in local dev environments.
 
