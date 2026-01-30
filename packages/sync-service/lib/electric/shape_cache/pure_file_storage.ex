@@ -1104,7 +1104,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
 
       {nil, _offset} ->
         # Try streaming the next chunk if the file already exists, otherwise wait for the file or end of snapshot to be announced
-        # where either event should happen shortly, we just either hit a file switch or just before CubDB was updatred
+        # where either event should happen shortly, we just either hit a file switch or just before the storage was updated
         wait_for_chunk_file_or_snapshot_end(opts, op_offset + 1)
 
       {%LogOffset{}, offset} ->
