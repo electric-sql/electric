@@ -31,27 +31,27 @@ Postgres → Electric → Durable Streams → TanStack DB (client)
 
 ## Loading Skills
 
-Each package has detailed skills. Load them as needed:
+Each ecosystem has its own playbook package. Load skills as needed:
 
 **TanStack DB** (live queries, mutations, collections, schemas):
 
 ```bash
-npx db-skills list                    # See all available skills
-npx db-skills show <skill-name>       # Load a specific skill
+npx @tanstack/db-playbook list
+npx @tanstack/db-playbook show <skill-name>
 ```
 
 **Durable Streams** (streaming, state sync):
 
 ```bash
-cat node_modules/@durable-streams/client/skills/durable-streams/SKILL.md
-cat node_modules/@durable-streams/client/skills/durable-state/SKILL.md
+npx @durable-streams/playbook list
+npx @durable-streams/playbook show <skill-name>
 ```
 
 **Electric** (shapes, auth, deployment):
 
 ```bash
-npx @electric-sql/playbook list                 # See all available
-npx @electric-sql/playbook show <skill-name>    # Load a specific skill
+npx @electric-sql/playbook list
+npx @electric-sql/playbook show <skill-name>
 ```
 
 ## Security Essentials
