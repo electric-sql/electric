@@ -110,6 +110,7 @@ defmodule Electric.Connection.Manager do
       :max_shapes,
       :persistent_kv,
       purge_all_shapes?: false,
+      logged_accessible_tables?: false,
       # PIDs of the database connection pools
       pool_pids: %{admin: nil, snapshot: nil},
       validated_connection_opts: %{replication: nil, pool: nil},
@@ -484,8 +485,13 @@ defmodule Electric.Connection.Manager do
       )
     end
 
-    # Log all tables accessible to Electric
-    log_accessible_tables(state)
+    state =
+      if state.logged_accessible_tables? do
+        state
+      else
+        log_accessible_tables(state)
+        %{state | logged_accessible_tables?: true}
+      end
 
     repl_sup_opts = [
       stack_id: state.stack_id,
@@ -1245,13 +1251,10 @@ defmodule Electric.Connection.Manager do
            Configuration.list_accessible_tables!(pool)
          end) do
       {:error, reason} ->
-        Logger.warning("Failed to list accessible tables: #{inspect(reason)}")
+        Logger.warning("Failed to list accessible tables for stack #{state.stack_id}: #{inspect(reason)}")
 
       tables when is_list(tables) ->
-        table_names =
-          tables
-          |> Enum.map(fn {schema, table} -> Electric.Utils.relation_to_sql({schema, table}) end)
-          |> Enum.sort()
+        table_names = Enum.map(tables, &Electric.Utils.relation_to_sql/1)
 
         Logger.info(
           "#{length(table_names)} tables are accessible to Electric: #{inspect(table_names)}"
