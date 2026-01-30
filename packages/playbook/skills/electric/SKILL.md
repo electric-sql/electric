@@ -50,10 +50,8 @@ cat node_modules/@durable-streams/client/skills/durable-state/SKILL.md
 **Electric** (shapes, auth, deployment):
 
 ```bash
-npx @electric-sql/agent read-skill electric-quickstart
-npx @electric-sql/agent read-skill electric-security-check
-npx @electric-sql/agent read-skill electric-tanstack-integration
-npx @electric-sql/agent list-skills   # See all available
+npx @electric-sql/playbook list                 # See all available
+npx @electric-sql/playbook show <skill-name>    # Load a specific skill
 ```
 
 ## Security Essentials

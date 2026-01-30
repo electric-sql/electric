@@ -1,7 +1,7 @@
 import * as fs from 'node:fs'
 import * as path from 'node:path'
 import { SKILLS, type SkillName } from '../index.js'
-import { getSkillsDir } from './list-skills.js'
+import { getSkillsDir } from './list.js'
 
 /**
  * Reads and outputs the full content of a skill.

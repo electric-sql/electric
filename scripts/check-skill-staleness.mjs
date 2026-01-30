@@ -98,7 +98,7 @@ function extractSources(frontmatter) {
  */
 function findSkillFiles() {
   const skillsDirs = [
-    { dir: 'packages/agent/skills', package: '@electric-sql/agent' },
+    { dir: 'packages/playbook/skills', package: '@electric-sql/playbook' },
     {
       dir: 'packages/typescript-client/skills',
       package: '@electric-sql/client',
@@ -228,7 +228,7 @@ function main() {
   console.log('---')
   console.log('**Action needed**: Review these skills and update if necessary.')
   console.log(
-    'Run `npx @electric-sql/agent read-skill <name>` to view current content.'
+    'Run `npx @electric-sql/playbook show <name>` to view current content.'
   )
 
   // Exit with non-zero if skills are affected (for CI to detect)

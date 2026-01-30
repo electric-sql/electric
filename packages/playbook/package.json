@@ -1,21 +1,21 @@
 {
-  "name": "@electric-sql/agent",
+  "name": "@electric-sql/playbook",
   "version": "0.1.0",
-  "description": "Agent skills for building apps with Electric",
+  "description": "Electric Playbook - skills for building apps with Electric",
   "type": "module",
   "license": "Apache-2.0",
   "author": "ElectricSQL team and contributors.",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/electric-sql/electric.git",
-    "directory": "packages/agent"
+    "directory": "packages/playbook"
   },
   "bugs": {
     "url": "https://github.com/electric-sql/electric/issues"
   },
   "homepage": "https://electric-sql.com",
   "bin": {
-    "electric-agent": "./dist/cli/index.js"
+    "electric-playbook": "./dist/cli/index.js"
   },
   "files": [
     "dist",

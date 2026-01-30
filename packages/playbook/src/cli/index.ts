@@ -1,17 +1,17 @@
 import { runInstall } from './install.js'
-import { printSkillList } from './list-skills.js'
-import { printSkill } from './read-skill.js'
+import { printSkillList } from './list.js'
+import { printSkill } from './show.js'
 
 const HELP = `
-@electric-sql/agent - Agent skills for building apps with Electric
+@electric-sql/playbook - Electric Playbook for building apps with Electric
 
 Usage:
-  npx @electric-sql/agent <command> [options]
+  npx @electric-sql/playbook <command> [options]
 
 Commands:
   install              Install thin skill pointers to agent directories
-  list-skills          List all available skills
-  read-skill <name>    Output the full content of a skill
+  list                 List all available skills
+  show <name>          Output the full content of a skill
 
 Install Options:
   --global, -g         Install to global directories (~/.claude/skills, etc.)
@@ -19,17 +19,17 @@ Install Options:
   --target, -t <path>  Target directory (defaults to current directory)
 
 Environment Variables:
-  ELECTRIC_AGENT_SKILLS_DIR   Override skills source directory (for local development)
+  ELECTRIC_PLAYBOOK_SKILLS_DIR   Override skills source directory (for local development)
 
 Examples:
-  npx @electric-sql/agent install
-  npx @electric-sql/agent install --global
-  npx @electric-sql/agent install --target ~/projects/my-app
-  npx @electric-sql/agent list-skills
-  npx @electric-sql/agent read-skill electric
+  npx @electric-sql/playbook install
+  npx @electric-sql/playbook install --global
+  npx @electric-sql/playbook install --target ~/projects/my-app
+  npx @electric-sql/playbook list
+  npx @electric-sql/playbook show electric
 
 Local Development:
-  ELECTRIC_AGENT_SKILLS_DIR=./packages/agent/skills node dist/cli/index.js install
+  ELECTRIC_PLAYBOOK_SKILLS_DIR=./packages/playbook/skills node dist/cli/index.js install
 
 For more information, see: https://electric-sql.com
 `
@@ -43,17 +43,17 @@ function main(): void {
       runInstall(args.slice(1))
       break
 
-    case `list-skills`:
+    case `list`:
       printSkillList()
       break
 
-    case `read-skill`: {
+    case `show`: {
       const skillName = args[1]
       if (!skillName) {
         console.error(`Error: Please specify a skill name.`)
-        console.error(`Usage: npx @electric-sql/agent read-skill <name>`)
+        console.error(`Usage: npx @electric-sql/playbook show <name>`)
         console.error(
-          `Run "npx @electric-sql/agent list-skills" to see available skills.`
+          `Run "npx @electric-sql/playbook list" to see available skills.`
         )
         process.exit(1)
       }

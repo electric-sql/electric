@@ -13,11 +13,11 @@ interface SkillInfo {
 
 /**
  * Gets the path to the skills directory.
- * Set ELECTRIC_AGENT_SKILLS_DIR env var to override (for local development).
+ * Set ELECTRIC_PLAYBOOK_SKILLS_DIR env var to override (for local development).
  */
 export function getSkillsDir(): string {
-  if (process.env.ELECTRIC_AGENT_SKILLS_DIR) {
-    return process.env.ELECTRIC_AGENT_SKILLS_DIR
+  if (process.env.ELECTRIC_PLAYBOOK_SKILLS_DIR) {
+    return process.env.ELECTRIC_PLAYBOOK_SKILLS_DIR
   }
   // When running from dist/, skills/ is at package root
   return path.resolve(__dirname, `../../skills`)
@@ -85,7 +85,7 @@ export function listSkills(): SkillInfo[] {
 export function printSkillList(): void {
   const skills = listSkills()
 
-  console.log(`\nAvailable Electric Agent Skills:\n`)
+  console.log(`\nElectric Playbook Skills:\n`)
 
   const maxNameLen = Math.max(...skills.map((s) => s.name.length))
 
@@ -95,7 +95,7 @@ export function printSkillList(): void {
   }
 
   console.log(
-    `\nUse "npx @electric-sql/agent read-skill <name>" to view full content.`
+    `\nUse "npx @electric-sql/playbook show <name>" to view full content.`
   )
   console.log(``)
 }

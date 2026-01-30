@@ -10,13 +10,13 @@ const ROUTER_DESCRIPTION = `Electric - Postgres sync engine for local-first apps
 
 /**
  * Generates the thin skill content that points to the full skill.
- * If ELECTRIC_AGENT_SKILLS_DIR is set, uses cat for local testing.
+ * If ELECTRIC_PLAYBOOK_SKILLS_DIR is set, uses cat for local testing.
  */
 function generateThinSkill(skillName: string): string {
-  const localSkillsDir = process.env.ELECTRIC_AGENT_SKILLS_DIR
+  const localSkillsDir = process.env.ELECTRIC_PLAYBOOK_SKILLS_DIR
   const command = localSkillsDir
     ? `cat ${localSkillsDir}/${skillName}/SKILL.md`
-    : `npx @electric-sql/agent read-skill ${skillName}`
+    : `npx @electric-sql/playbook show ${skillName}`
 
   return `---
 name: ${skillName}
@@ -35,7 +35,7 @@ triggers:
   - durable streams
 ---
 
-# Electric Agent Skills
+# Electric Playbook
 
 Load the full skill content to get comprehensive guidance on building local-first apps with Electric.
 

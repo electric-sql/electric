@@ -1,6 +1,6 @@
-# @electric-sql/agent
+# @electric-sql/playbook
 
-Agent skills for building apps with [Electric](https://electric-sql.com).
+Electric Playbook - skills for building apps with [Electric](https://electric-sql.com).
 
 ## Overview
 
@@ -9,7 +9,7 @@ This package provides AI agent skills that help coding assistants (Claude, Curso
 ## Installation
 
 ```bash
-npm install @electric-sql/agent
+npm install @electric-sql/playbook
 ```
 
 ## Usage
@@ -19,25 +19,25 @@ npm install @electric-sql/agent
 Install thin skill pointers to your agent's skills directory:
 
 ```bash
-npx @electric-sql/agent install
+npx @electric-sql/playbook install
 ```
 
 Install globally (to `~/.claude/skills`, etc.):
 
 ```bash
-npx @electric-sql/agent install --global
+npx @electric-sql/playbook install --global
 ```
 
 List available skills:
 
 ```bash
-npx @electric-sql/agent list-skills
+npx @electric-sql/playbook list
 ```
 
 Output the full content of a skill:
 
 ```bash
-npx @electric-sql/agent read-skill electric
+npx @electric-sql/playbook show electric
 ```
 
 ### Skills
