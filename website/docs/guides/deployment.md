@@ -183,6 +183,40 @@ curl http://localhost:3000/v1/health
 # {"status":"active"}
 ```
 
+#### Kubernetes probes
+
+When deploying Electric on Kubernetes, note that standard `httpGet` probes consider any 2xx response as success. This means an `httpGet` readiness probe would incorrectly mark the pod as ready when Electric returns `202` (still starting up).
+
+For **liveness probes**, `httpGet` works fine since any response indicates the service is alive:
+
+```yaml
+livenessProbe:
+  httpGet:
+    path: /v1/health
+    port: 3000
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  timeoutSeconds: 2
+```
+
+For **readiness probes**, use an `exec` probe to check for exactly HTTP 200. The Electric container includes `curl`:
+
+```yaml
+readinessProbe:
+  exec:
+    command:
+      - sh
+      - -c
+      - |
+        test "$(curl -so /dev/null -w '%{http_code}' http://localhost:3000/v1/health)" = "200"
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  timeoutSeconds: 2
+  failureThreshold: 3
+```
+
+This ensures the pod is only marked ready when Electric is fully operational and ready to serve shape requests.
+
 ### Observability
 
 Electric supports [OpenTelemetry](https://opentelemetry.io/) for exporting traces, with built-in support for [Honeycomb.io](https://www.honeycomb.io/). Metrics are also available in StatsD and Prometheus formats.
