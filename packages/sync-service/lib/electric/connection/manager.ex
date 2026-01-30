@@ -113,7 +113,9 @@ defmodule Electric.Connection.Manager do
       # PIDs of the database connection pools
       pool_pids: %{admin: nil, snapshot: nil},
       validated_connection_opts: %{replication: nil, pool: nil},
-      drop_slot_requested: false
+      drop_slot_requested: false,
+      # Monotonic time when we started waiting for the lock (used for force-break threshold)
+      lock_wait_start: nil
     ]
   end
 
@@ -139,6 +141,13 @@ defmodule Electric.Connection.Manager do
   @type options :: [option]
 
   @connection_status_check_interval 10_000
+
+  # Time to wait before using force mode to break a stuck advisory lock.
+  # After this duration, we'll terminate any backend holding the lock that has been
+  # connected for more than 30 seconds, regardless of slot status.
+  # This helps during rolling deployments where the old instance may have died
+  # but the lock wasn't released properly.
+  @force_lock_break_threshold 30_000
 
   # Time after establishing replication connection before we consider it successful
   # from a retrying perspective, to allow for setup errors sent over the stream
@@ -553,7 +562,31 @@ defmodule Electric.Connection.Manager do
              LockBreakerConnection.start(connection_opts: conn_opts, stack_id: state.stack_id) do
         lock_name = Keyword.fetch!(state.replication_opts, :slot_name)
 
-        LockBreakerConnection.stop_backends_and_close(breaker_pid, lock_name, pg_backend_pid)
+        # Check if we've been waiting long enough to use force mode.
+        # Force mode will terminate any backend holding the lock (that has been connected
+        # for a while), regardless of whether the slot is active or not.
+        use_force =
+          case state.lock_wait_start do
+            nil ->
+              false
+
+            start_time ->
+              elapsed = System.monotonic_time(:millisecond) - start_time
+              elapsed >= @force_lock_break_threshold
+          end
+
+        if use_force do
+          Logger.warning(
+            "Lock acquisition taking too long, attempting force break of stuck lock"
+          )
+        end
+
+        LockBreakerConnection.stop_backends_and_close(
+          breaker_pid,
+          lock_name,
+          pg_backend_pid,
+          force: use_force
+        )
       else
         {:error, reason} ->
           # no-op, this is a one-shot attempt at fixing a lock
@@ -696,7 +729,8 @@ defmodule Electric.Connection.Manager do
     state = %{
       state
       | replication_lock_timer: tref,
-        current_step: {:start_replication_client, :acquiring_lock}
+        current_step: {:start_replication_client, :acquiring_lock},
+        lock_wait_start: System.monotonic_time(:millisecond)
     }
 
     {:noreply, state}
@@ -738,7 +772,8 @@ defmodule Electric.Connection.Manager do
     state = %{
       state
       | replication_configuration_timer: tref,
-        current_step: {:start_replication_client, :configuring_connection}
+        current_step: {:start_replication_client, :configuring_connection},
+        lock_wait_start: nil
     }
 
     {:noreply, state}
@@ -887,6 +922,13 @@ defmodule Electric.Connection.Manager do
     # acquiring the lock next will recreate the replication slot
     if state.drop_slot_requested, do: drop_publication(state)
 
+    # Kill the replication backend FIRST to release the advisory lock.
+    # This is critical for graceful handoff during rolling deployments.
+    # The advisory lock is held by the PostgreSQL backend, so terminating it
+    # ensures the lock is released even if the Elixir process cleanup is slow
+    # or if the connection doesn't close cleanly (common on some platforms like Neon).
+    state = kill_replication_backend(state)
+
     if is_pid(replication_client_pid) do
       # if we are acquiring the lock, we should kill the replication client brutally
       # to avoid hanging while the connection process is busy waiting for the lock
@@ -897,10 +939,6 @@ defmodule Electric.Connection.Manager do
 
       shutdown_child(replication_client_pid, reason, 1_000)
     end
-
-    # ensure the replication backend is killed to avoid orphaned locks and
-    # to ensure dropping the slot is possible if requested
-    state = kill_replication_backend(state)
 
     if state.drop_slot_requested, do: drop_slot(state)
 

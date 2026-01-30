@@ -46,8 +46,18 @@ defmodule Electric.Postgres.LockBreakerConnection do
     end
   end
 
-  def stop_backends_and_close(server, lock_name, lock_connection_pg_backend_pid \\ nil) do
-    send(server, {:stop_backends_and_close, lock_name, lock_connection_pg_backend_pid})
+  @doc """
+  Attempts to terminate backends holding the advisory lock for the given lock name.
+
+  By default, only terminates backends if the replication slot is inactive (safe mode).
+  When `force: true` is passed, will terminate any backend holding the lock that has
+  been connected for more than 30 seconds, regardless of slot status. This is useful
+  during rolling deployments where the old instance may have died but the lock wasn't
+  released properly.
+  """
+  def stop_backends_and_close(server, lock_name, lock_connection_pg_backend_pid \\ nil, opts \\ []) do
+    force = Keyword.get(opts, :force, false)
+    send(server, {:stop_backends_and_close, lock_name, lock_connection_pg_backend_pid, force})
   end
 
   @impl true
@@ -74,11 +84,11 @@ defmodule Electric.Postgres.LockBreakerConnection do
 
   @impl true
   def handle_info(
-        {:stop_backends_and_close, lock_name, lock_connection_pg_backend_pid},
+        {:stop_backends_and_close, lock_name, lock_connection_pg_backend_pid, force},
         state
       ) do
-    {:query, lock_breaker_query(lock_name, lock_connection_pg_backend_pid, state.database),
-     Map.put(state, :lock_name, lock_name)}
+    query = lock_breaker_query(lock_name, lock_connection_pg_backend_pid, state.database, force)
+    {:query, query, state |> Map.put(:lock_name, lock_name) |> Map.put(:force, force)}
   end
 
   @impl true
@@ -86,8 +96,13 @@ defmodule Electric.Postgres.LockBreakerConnection do
     if result.num_rows == 0 do
       Logger.debug("No stuck backends found")
     else
+      reason =
+        if state[:force],
+          do: "lock was held for too long (force mode)",
+          else: "slot with same name was inactive"
+
       Logger.notice(
-        "Terminated a stuck backend to free the lock #{state.lock_name} because slot with same name was inactive"
+        "Terminated a stuck backend to free the lock #{state.lock_name} because #{reason}"
       )
     end
 
@@ -101,8 +116,22 @@ defmodule Electric.Postgres.LockBreakerConnection do
   @impl true
   def notify(_, _, _), do: :ok
 
-  defp lock_breaker_query(lock_name, lock_connection_pg_backend_pid, database)
+  # Minimum time a backend must have been connected before we consider force-breaking its lock.
+  # This prevents accidentally breaking a lock from a freshly started Electric instance.
+  @force_break_min_backend_age_seconds 30
+
+  defp lock_breaker_query(lock_name, lock_connection_pg_backend_pid, database, force)
        when is_integer(lock_connection_pg_backend_pid) or is_nil(lock_connection_pg_backend_pid) do
+    if force do
+      lock_breaker_query_force(lock_name, lock_connection_pg_backend_pid, database)
+    else
+      lock_breaker_query_safe(lock_name, lock_connection_pg_backend_pid, database)
+    end
+  end
+
+  # Safe mode: only terminate backends if the replication slot is inactive.
+  # This is the original behavior.
+  defp lock_breaker_query_safe(lock_name, lock_connection_pg_backend_pid, database) do
     # We're using a `WITH` clause to execute all this in one statement
     # - See if there are existing but inactive replication slots with the given name
     # - Find all backends that are holding locks with the same name
@@ -126,6 +155,31 @@ defmodule Electric.Postgres.LockBreakerConnection do
           and database = (select oid from pg_database where datname = #{quote_string(database)})
           and granted
           and pid != #{lock_connection_pg_backend_pid || 0}
+    )
+    SELECT pg_terminate_backend(pid) FROM stuck_backends;
+    """
+  end
+
+  # Force mode: terminate any backend holding the lock that has been connected
+  # for more than @force_break_min_backend_age_seconds, regardless of slot status.
+  # This is useful during rolling deployments where the old instance may have died
+  # but the lock wasn't released properly (common on platforms like Neon).
+  defp lock_breaker_query_force(lock_name, lock_connection_pg_backend_pid, database) do
+    """
+    WITH stuck_backends AS (
+        select l.pid
+        from pg_locks l
+        join pg_stat_activity a on l.pid = a.pid
+        where
+          hashtext(#{quote_string(lock_name)}) = (l.classid::bigint << 32) | l.objid::bigint
+          and l.locktype = 'advisory'
+          and l.objsubid = 1
+          and l.database = (select oid from pg_database where datname = #{quote_string(database)})
+          and l.granted
+          and l.pid != #{lock_connection_pg_backend_pid || 0}
+          -- Only break locks held by backends that have been connected for a while.
+          -- This prevents accidentally breaking a lock from a freshly started instance.
+          and a.backend_start < now() - interval '#{@force_break_min_backend_age_seconds} seconds'
     )
     SELECT pg_terminate_backend(pid) FROM stuck_backends;
     """
