@@ -36,10 +36,8 @@ Each package has detailed skills. Load them as needed:
 **TanStack DB** (live queries, mutations, collections, schemas):
 
 ```bash
-npx db-skills show tanstack-db        # Overview and routing
-npx db-skills show live-queries       # Reactive queries
-npx db-skills show mutations          # Optimistic updates
-npx db-skills show collections        # Data sources
+npx db-skills list                    # See all available skills
+npx db-skills show <skill-name>       # Load a specific skill
 ```
 
 **Durable Streams** (streaming, state sync):
