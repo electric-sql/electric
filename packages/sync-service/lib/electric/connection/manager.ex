@@ -1251,7 +1251,9 @@ defmodule Electric.Connection.Manager do
            Configuration.list_accessible_tables!(pool)
          end) do
       {:error, reason} ->
-        Logger.warning("Failed to list accessible tables for stack #{state.stack_id}: #{inspect(reason)}")
+        Logger.warning(
+          "Failed to list accessible tables for stack #{state.stack_id}: #{inspect(reason)}"
+        )
 
       tables when is_list(tables) ->
         table_names = Enum.map(tables, &Electric.Utils.relation_to_sql/1)
