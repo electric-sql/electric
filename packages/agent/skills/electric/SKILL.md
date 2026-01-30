@@ -45,8 +45,6 @@ npx db-skills show collections        # Data sources
 **Durable Streams** (streaming, state sync):
 
 ```bash
-# Requires @durable-streams/client as a direct dependency
-# (pnpm only symlinks direct deps, so add it if you only have @durable-streams/state)
 cat node_modules/@durable-streams/client/skills/durable-streams/SKILL.md
 cat node_modules/@durable-streams/client/skills/durable-state/SKILL.md
 ```
