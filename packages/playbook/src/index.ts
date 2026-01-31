@@ -13,6 +13,7 @@ export const SKILLS = [
   `electric-security-check`,
   `electric-go-live`,
   `deploying-electric`,
+  `tanstack-start-quickstart`,
 ] as const
 
 export type SkillName = (typeof SKILLS)[number]
