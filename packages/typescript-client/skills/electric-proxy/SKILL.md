@@ -355,6 +355,143 @@ export async function proxyElectricRequest(originUrl: URL): Promise<Response> {
 
 **Why?** A generic `/api/shapes?table=X` endpoint lets clients query ANY table. Each route should hardcode its table server-side.
 
+## Passing Arguments to Shape Proxies
+
+**Treat shape URLs like API calls.** Pass arguments via query params or route params, and let the server construct the actual shape request.
+
+### Query Parameters
+
+Client passes business logic params, server converts to shape:
+
+```typescript
+// Client - passing projectId to filter todos
+const todoCollection = createCollection(
+  electricCollectionOptions({
+    id: 'todos',
+    schema: todoSchema,
+    shapeOptions: {
+      // Pass arguments just like any API call
+      url: `/api/todos?projectId=${projectId}`,
+    },
+  })
+)
+
+// Server - /api/todos.ts
+const serve = async ({ request }: { request: Request }) => {
+  const url = new URL(request.url)
+  const projectId = url.searchParams.get('projectId')
+
+  // Validate access (user must have access to this project)
+  const hasAccess = await checkProjectAccess(session.user.id, projectId)
+  if (!hasAccess) {
+    return new Response('Forbidden', { status: 403 })
+  }
+
+  const originUrl = prepareElectricUrl(request.url)
+  originUrl.searchParams.set('table', 'todos')
+  originUrl.searchParams.set('where', 'project_id = $1')
+  originUrl.searchParams.set('params', JSON.stringify([projectId]))
+
+  return proxyElectricRequest(originUrl)
+}
+```
+
+### Route Parameters
+
+Use dynamic route segments for RESTful patterns:
+
+```typescript
+// Client
+shapeOptions: {
+  url: `/api/projects/${projectId}/todos`
+}
+
+// Server - /api/projects/$projectId/todos.ts
+import { createFileRoute } from '@tanstack/react-router'
+
+const serve = async ({
+  request,
+  params,
+}: {
+  request: Request
+  params: { projectId: string }
+}) => {
+  const { projectId } = params
+
+  // Validate, then proxy
+  const originUrl = prepareElectricUrl(request.url)
+  originUrl.searchParams.set('table', 'todos')
+  originUrl.searchParams.set('where', 'project_id = $1')
+  originUrl.searchParams.set('params', JSON.stringify([projectId]))
+
+  return proxyElectricRequest(originUrl)
+}
+
+export const Route = createFileRoute('/api/projects/$projectId/todos')({
+  server: { handlers: { GET: serve } },
+})
+```
+
+### Multiple Filters
+
+Combine params for complex queries:
+
+```typescript
+// Client - filter by project, status, and assignee
+shapeOptions: {
+  url: `/api/todos?projectId=${projectId}&status=${status}&assigneeId=${assigneeId}`,
+}
+
+// Server
+const serve = async ({ request }: { request: Request }) => {
+  const url = new URL(request.url)
+  const projectId = url.searchParams.get('projectId')
+  const status = url.searchParams.get('status')
+  const assigneeId = url.searchParams.get('assigneeId')
+
+  // Build where clause dynamically
+  const conditions: string[] = []
+  const params: (string | null)[] = []
+
+  if (projectId) {
+    conditions.push(`project_id = $${params.length + 1}`)
+    params.push(projectId)
+  }
+  if (status) {
+    conditions.push(`status = $${params.length + 1}`)
+    params.push(status)
+  }
+  if (assigneeId) {
+    conditions.push(`assignee_id = $${params.length + 1}`)
+    params.push(assigneeId)
+  }
+
+  // Always scope to user's accessible data
+  conditions.push(`$${params.length + 1} = ANY(user_ids)`)
+  params.push(session.user.id)
+
+  const originUrl = prepareElectricUrl(request.url)
+  originUrl.searchParams.set('table', 'todos')
+  originUrl.searchParams.set('where', conditions.join(' AND '))
+  originUrl.searchParams.set('params', JSON.stringify(params))
+
+  return proxyElectricRequest(originUrl)
+}
+```
+
+### Key Principle
+
+```
+Client passes: Business logic arguments (projectId, status, filters)
+Server builds: Electric shape (table, where, params)
+
+/api/todos?projectId=123&status=active
+    ↓ Server transforms to ↓
+/v1/shape?table=todos&where=project_id=$1 AND status=$2&params=["123","active"]
+```
+
+The client never sees or controls the actual shape query - it just passes arguments like any API call, and the server decides how to map those to a shape.
+
 ## Anti-Patterns
 
 ```typescript

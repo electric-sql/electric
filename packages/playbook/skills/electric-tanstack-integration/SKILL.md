@@ -53,6 +53,32 @@ export const todoCollection = createCollection(
 )
 ```
 
+### Passing Arguments to Collections
+
+Treat shape URLs like API calls - pass arguments via query params:
+
+```typescript
+// Dynamic collection based on project
+const projectTodos = createCollection(
+  electricCollectionOptions({
+    id: `todos-${projectId}`,
+    schema: todoSchema,
+    getKey: (row) => row.id,
+    shapeOptions: {
+      // Pass projectId like you would to any API
+      url: new URL(
+        `/api/todos?projectId=${projectId}`,
+        typeof window !== 'undefined'
+          ? window.location.origin
+          : 'http://localhost:5173'
+      ).toString(),
+    },
+  })
+)
+```
+
+The server proxy receives these params and maps them to the actual shape query. See `electric-proxy` skill for server-side patterns.
+
 ### Preloading Collections
 
 Preload in route loaders to prevent flash of empty state:
