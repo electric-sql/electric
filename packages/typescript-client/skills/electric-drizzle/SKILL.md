@@ -111,6 +111,8 @@ Use `drizzle-zod` to generate Zod schemas from Drizzle tables.
 
 **Requirements:** Zod v3.25.1+, Drizzle ORM v0.36.0+
 
+**Zod v4 Note:** Support is being added but not fully stable yet. Stick with Zod v3.25.x for now. If using Zod v4, you may need `--legacy-peer-deps` and could encounter type issues with tRPC.
+
 ```typescript
 // src/db/schema.ts
 import { createSchemaFactory } from 'drizzle-zod'
