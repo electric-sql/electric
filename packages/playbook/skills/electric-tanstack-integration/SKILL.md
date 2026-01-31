@@ -320,43 +320,6 @@ const result = await db.transaction(async (tx) => {
 
 **Important:** Get txid inside the same transaction as the mutation.
 
-## Drizzle-Zod Schema Integration
-
-Generate Zod schemas from Drizzle tables for type safety:
-
-```typescript
-import { pgTable, varchar, boolean, timestamp } from 'drizzle-orm/pg-core'
-import { createSchemaFactory } from 'drizzle-zod'
-import { z } from 'zod'
-
-// Create schema factory
-const { createSelectSchema, createInsertSchema } = createSchemaFactory({
-  zodInstance: z,
-})
-
-// Drizzle table
-export const todosTable = pgTable('todos', {
-  id: integer().primaryKey().generatedAlwaysAsIdentity(),
-  text: varchar({ length: 500 }).notNull(),
-  completed: boolean().notNull().default(false),
-  created_at: timestamp({ withTimezone: true }).notNull().defaultNow(),
-})
-
-// Auto-generated Zod schemas
-export const selectTodoSchema = createSelectSchema(todosTable)
-export const createTodoSchema = createInsertSchema(todosTable).omit({
-  created_at: true, // Server-generated
-})
-
-// Use in collection
-const todoCollection = createCollection(
-  electricCollectionOptions({
-    schema: selectTodoSchema, // Type-safe!
-    // ...
-  })
-)
-```
-
 ## Framework Integrations
 
 ```bash
