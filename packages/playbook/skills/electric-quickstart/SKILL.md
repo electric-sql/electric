@@ -165,30 +165,35 @@ export const taskCollection = createCollection(
 )
 ```
 
-### 4. Proxy Route (`app/api/tasks.ts`)
+### 4. Proxy Route (`app/routes/api/tasks.ts`)
 
 ```typescript
-import { createServerFileRoute } from '@tanstack/react-start/server'
+import { createFileRoute } from '@tanstack/react-router'
 import { ELECTRIC_PROTOCOL_QUERY_PARAMS } from '@electric-sql/client'
 
 const serve = async ({ request }: { request: Request }) => {
   const url = new URL(request.url)
-  const origin = new URL(process.env.ELECTRIC_URL!)
+  const origin = new URL(`${process.env.ELECTRIC_URL}/v1/shape`)
 
   url.searchParams.forEach((v, k) => {
     if (ELECTRIC_PROTOCOL_QUERY_PARAMS.includes(k))
       origin.searchParams.set(k, v)
   })
 
-  // Shape defined server-side
+  // Shape defined server-side - never from client
   origin.searchParams.set('table', 'tasks')
-  origin.searchParams.set('source_id', process.env.SOURCE_ID!)
-  origin.searchParams.set('secret', process.env.SOURCE_SECRET!)
+
+  // Electric Cloud auth (if configured)
+  if (process.env.ELECTRIC_SOURCE_ID && process.env.ELECTRIC_SECRET) {
+    origin.searchParams.set('source_id', process.env.ELECTRIC_SOURCE_ID)
+    origin.searchParams.set('secret', process.env.ELECTRIC_SECRET)
+  }
 
   const res = await fetch(origin)
   const headers = new Headers(res.headers)
   headers.delete('content-encoding')
   headers.delete('content-length')
+  headers.set('vary', 'cookie')
 
   return new Response(res.body, {
     status: res.status,
@@ -197,8 +202,12 @@ const serve = async ({ request }: { request: Request }) => {
   })
 }
 
-export const ServerRoute = createServerFileRoute('/api/tasks').methods({
-  GET: serve,
+export const Route = createFileRoute('/api/tasks')({
+  server: {
+    handlers: {
+      GET: serve,
+    },
+  },
 })
 ```
 
@@ -257,8 +266,10 @@ const result = await db.execute(sql`
 return { txid: parseInt(result.rows[0].txid) }
 ```
 
-## Next Steps
+## Related Skills
 
-- `npx @electric-sql/agent read-skill electric-tanstack-integration` - Deep patterns
-- `npx @electric-sql/agent read-skill electric-security-check` - Before production
-- `npx @electric-sql/agent read-skill deploying-electric` - Deployment options
+- `npx @electric-sql/playbook show tanstack-start-quickstart` - Complete TanStack Start setup
+- `npx @electric-sql/playbook show electric-proxy` - Proxy implementation patterns
+- `npx @electric-sql/playbook show electric-tanstack-integration` - Deep TanStack DB patterns
+- `npx @electric-sql/playbook show electric-security-check` - Before production
+- `npx @electric-sql/playbook show deploying-electric` - Deployment options
