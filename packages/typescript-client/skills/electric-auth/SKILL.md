@@ -377,6 +377,12 @@ export async function GET(request: Request) {
 return new Response(response.body, { headers }) // No Vary = cache leaks
 ```
 
+## Related Skills
+
+- `npx @electric-sql/playbook show electric-proxy` - Complete proxy implementation
+- `npx @electric-sql/playbook show tanstack-start-quickstart` - TanStack Start setup
+- `npx @electric-sql/playbook show electric-security-check` - Security audit checklist
+
 ## References
 
 - [Auth Guide](https://electric-sql.com/docs/guides/auth)

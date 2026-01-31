@@ -248,6 +248,12 @@ origin.searchParams.set('table', table!)
 origin.searchParams.set('table', 'todos') // Hardcoded
 ```
 
+## Related Skills
+
+- `npx @electric-sql/playbook show electric-proxy` - Complete proxy implementation
+- `npx @electric-sql/playbook show electric-auth` - Authentication patterns in depth
+- `npx @electric-sql/playbook show electric-go-live` - Production deployment checklist
+
 ## Need Help?
 
 - [Auth Guide](https://electric-sql.com/docs/guides/auth)

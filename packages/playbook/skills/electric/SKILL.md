@@ -54,6 +54,19 @@ npx @electric-sql/playbook list
 npx @electric-sql/playbook show <skill-name>
 ```
 
+### Electric Skills Quick Reference
+
+| Skill                           | When to use                                           |
+| ------------------------------- | ----------------------------------------------------- |
+| `tanstack-start-quickstart`     | Setting up TanStack Start + Electric from scratch     |
+| `electric-quickstart`           | General getting started guide                         |
+| `electric-proxy`                | Implementing proxy routes for shapes                  |
+| `electric-tanstack-integration` | Deep TanStack DB patterns (collections, live queries) |
+| `electric-auth`                 | Authentication & authorization patterns               |
+| `electric-security-check`       | Security audit before production                      |
+| `deploying-electric`            | Deployment options (cloud, self-hosted)               |
+| `electric-go-live`              | Production readiness checklist                        |
+
 ## Security Essentials
 
 1. **Never expose secrets to browser** - `SOURCE_SECRET` stays server-side
