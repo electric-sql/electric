@@ -6,6 +6,7 @@ on:
       - 'packages/typescript-client/**'
       - 'packages/react-hooks/**'
       - 'packages/y-electric/**'
+      - 'packages/playbook/**'
 
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
@@ -37,6 +38,6 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Build Packages
-        run: pnpm --filter @electric-sql/client --filter @electric-sql/react --filter @electric-sql/y-electric run build
+        run: pnpm --filter @electric-sql/client --filter @electric-sql/react --filter @electric-sql/y-electric --filter @electric-sql/playbook run build
       - name: Publish Previews
-        run: pnpx pkg-pr-new publish --pnpm --compact './packages/typescript-client' './packages/react-hooks' './packages/y-electric'
+        run: pnpx pkg-pr-new publish --pnpm --compact './packages/typescript-client' './packages/react-hooks' './packages/y-electric' './packages/playbook'
