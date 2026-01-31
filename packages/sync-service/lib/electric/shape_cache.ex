@@ -256,7 +256,7 @@ defmodule Electric.ShapeCache do
           |> Enum.map(&maybe_create_shape(&1, otel_ctx, state))
           |> Enum.map(&elem(&1, 0))
 
-        shape = %{shape | shape_dependencies_handles: shape_handles}
+        shape = Shape.with_dependency_handles(shape, shape_handles)
 
         {:ok, shape_handle} = ShapeStatus.add_shape(stack_id, shape)
 

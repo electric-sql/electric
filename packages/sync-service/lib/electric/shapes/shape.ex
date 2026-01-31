@@ -120,6 +120,14 @@ defmodule Electric.Shapes.Shape do
   def dependency_handles_known?(%__MODULE__{} = shape),
     do: shape.shape_dependencies_handles != []
 
+  @doc """
+  Fill in the dependency handles for a shape.
+  """
+  @spec with_dependency_handles(t(), [handle()]) :: t()
+  def with_dependency_handles(%__MODULE__{} = shape, handles) do
+    %{shape | shape_dependencies_handles: handles}
+  end
+
   def hash(%__MODULE__{} = shape) do
     {_comparable, hash} = comparable_hash(shape)
     hash
@@ -585,7 +593,7 @@ defmodule Electric.Shapes.Shape do
 
     if WhereClause.includes_record?(where, record, used_extra_refs) do
       change
-      |> fill_move_tags(shape, opts[:stack_id], opts[:shape_handle])
+      |> fill_move_tags(shape, opts[:stack_id], opts[:shape_handle], extra_refs: used_extra_refs)
       |> filter_change_columns(selected_columns)
       |> List.wrap()
     else
@@ -602,16 +610,29 @@ defmodule Electric.Shapes.Shape do
     old_record_in_shape = WhereClause.includes_record?(where, old_record, extra_refs_old)
     new_record_in_shape = WhereClause.includes_record?(where, record, extra_refs_new)
 
+    # For each converted change, determine the appropriate extra_refs
     converted_changes =
       case {old_record_in_shape, new_record_in_shape} do
-        {true, true} -> [change]
-        {true, false} -> [Changes.convert_update(change, to: :deleted_record)]
-        {false, true} -> [Changes.convert_update(change, to: :new_record)]
-        {false, false} -> []
+        {true, true} ->
+          # Update stays as update - use new extra_refs for current record
+          [{change, extra_refs_new}]
+
+        {true, false} ->
+          # Converted to delete - use old extra_refs for old record
+          [{Changes.convert_update(change, to: :deleted_record), extra_refs_old}]
+
+        {false, true} ->
+          # Converted to insert - use new extra_refs for new record
+          [{Changes.convert_update(change, to: :new_record), extra_refs_new}]
+
+        {false, false} ->
+          []
       end
 
     converted_changes
-    |> Enum.map(&fill_move_tags(&1, shape, opts[:stack_id], opts[:shape_handle]))
+    |> Enum.map(fn {c, refs} ->
+      fill_move_tags(c, shape, opts[:stack_id], opts[:shape_handle], extra_refs: refs)
+    end)
     |> Enum.map(&filter_change_columns(&1, selected_columns))
     |> Enum.filter(&should_keep_change?/1)
   end
@@ -622,19 +643,25 @@ defmodule Electric.Shapes.Shape do
     Changes.filter_columns(change, selected_columns)
   end
 
-  def fill_move_tags(change, %__MODULE__{tag_structure: []}, _, _), do: change
+  # Default arguments declaration
+  def fill_move_tags(change, shape, stack_id, shape_handle, opts \\ [])
 
-  def fill_move_tags(%Changes.NewRecord{move_tags: [_ | _]} = change, _, _, _), do: change
-  def fill_move_tags(%Changes.UpdatedRecord{move_tags: [_ | _]} = change, _, _, _), do: change
-  def fill_move_tags(%Changes.DeletedRecord{move_tags: [_ | _]} = change, _, _, _), do: change
+  def fill_move_tags(change, %__MODULE__{tag_structure: []}, _, _, _opts), do: change
+
+  def fill_move_tags(%Changes.NewRecord{move_tags: [_ | _]} = change, _, _, _, _opts), do: change
+
+  def fill_move_tags(%Changes.UpdatedRecord{move_tags: [_ | _]} = change, _, _, _, _opts),
+    do: change
+
+  def fill_move_tags(%Changes.DeletedRecord{move_tags: [_ | _]} = change, _, _, _, _opts),
+    do: change
 
   def fill_move_tags(
         %Changes.NewRecord{record: record} = change,
-        %__MODULE__{
-          tag_structure: tag_structure
-        },
+        %__MODULE__{tag_structure: tag_structure},
         stack_id,
-        shape_handle
+        shape_handle,
+        _opts
       ) do
     move_tags = make_tags_from_pattern(tag_structure, record, stack_id, shape_handle)
     %{change | move_tags: move_tags}
@@ -644,7 +671,8 @@ defmodule Electric.Shapes.Shape do
         %Changes.UpdatedRecord{record: record, old_record: old_record} = change,
         %__MODULE__{tag_structure: tag_structure},
         stack_id,
-        shape_handle
+        shape_handle,
+        _opts
       ) do
     move_tags = make_tags_from_pattern(tag_structure, record, stack_id, shape_handle)
 
@@ -657,13 +685,13 @@ defmodule Electric.Shapes.Shape do
 
   def fill_move_tags(
         %Changes.DeletedRecord{old_record: record} = change,
-        %__MODULE__{
-          tag_structure: tag_structure
-        },
+        %__MODULE__{tag_structure: tag_structure},
         stack_id,
-        shape_handle
+        shape_handle,
+        _opts
       ) do
-    %{change | move_tags: make_tags_from_pattern(tag_structure, record, stack_id, shape_handle)}
+    move_tags = make_tags_from_pattern(tag_structure, record, stack_id, shape_handle)
+    %{change | move_tags: move_tags}
   end
 
   defp make_tags_from_pattern(patterns, record, stack_id, shape_handle) do

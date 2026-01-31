@@ -2,6 +2,7 @@ defmodule Electric.Shapes.Consumer do
   use GenServer, restart: :temporary
 
   alias Electric.Shapes.Consumer.ChangeHandling
+  alias Electric.Shapes.Consumer.DnfContext
   alias Electric.Shapes.Consumer.MoveIns
   alias Electric.Shapes.Consumer.InitialSnapshot
   alias Electric.Shapes.Consumer.MoveHandling
@@ -283,27 +284,29 @@ defmodule Electric.Shapes.Consumer do
     feature_flags = Electric.StackConfig.lookup(state.stack_id, :feature_flags, [])
     tagged_subqueries_enabled? = "tagged_subqueries" in feature_flags
 
-    # We need to invalidate the consumer in the following cases:
-    # - tagged subqueries are disabled since we cannot support causally correct event processing of 3+ level dependency trees
-    #   so we just invalidating this middle shape instead
-    # - the where clause has an OR combined with the subquery so we can't tell if the move ins/outs actually affect the shape or not
-    # - the where clause has a NOT combined with the subquery (e.g. NOT IN) since move-in to the subquery
-    #   should cause move-out from the outer shape, which isn't implemented
-    # - the shape has multiple subqueries at the same level since we can't correctly determine
-    #   which dependency caused the move-in/out
-    should_invalidate? =
-      not tagged_subqueries_enabled? or state.or_with_subquery? or state.not_with_subquery? or
-        length(state.shape.shape_dependencies) > 1
+    has_valid_dnf? = DnfContext.has_valid_dnf?(state.dnf_context)
 
-    if should_invalidate? do
+    if not has_valid_dnf? do
+      Logger.error("""
+      Received materializer_changes for shape #{state.shape_handle}
+      without valid DNF decomposition. This indicates a bug. Invalidating shape.
+      DNF Context: #{inspect(state.dnf_context)}
+      """)
+    end
+
+    if not tagged_subqueries_enabled? or not has_valid_dnf? do
       stop_and_clean(state)
     else
-      {state, notification} =
-        state
-        |> MoveHandling.process_move_ins(dep_handle, move_in)
-        |> MoveHandling.process_move_outs(dep_handle, move_out)
+      # Process move-ins (may generate move-out notifications for negated positions)
+      {state, move_in_notification} = MoveHandling.process_move_ins(state, dep_handle, move_in)
 
-      notify_new_changes(state, notification)
+      # Process move-outs (may generate move-in queries for negated positions)
+      {state, move_out_notification} =
+        MoveHandling.process_move_outs(state, dep_handle, move_out)
+
+      # Notify for both move-in generated move-outs and regular move-outs
+      notify_new_changes(state, move_in_notification)
+      notify_new_changes(state, move_out_notification)
 
       {:noreply, state}
     end
