@@ -358,6 +358,59 @@ const mockCollection = createCollection(
 )
 ```
 
+## SSR Configuration (TanStack Start)
+
+TanStack DB uses client-side state that doesn't work with SSR. Configure SPA mode:
+
+See: [TanStack Start SPA Mode Guide](https://tanstack.com/start/latest/docs/framework/react/guide/spa-mode)
+
+### 1. Disable SSR
+
+```typescript
+// src/start.tsx
+import { createStart } from '@tanstack/react-start'
+
+export const startInstance = createStart(() => ({
+  defaultSsr: false, // Disable SSR globally
+}))
+```
+
+Or per-route: `ssr: false` in route options.
+
+### 2. Configure Shell Component
+
+The `<html>` shell is always SSR'd, even with `defaultSsr: false`:
+
+```typescript
+// src/routes/__root.tsx
+export const Route = createRootRoute({
+  shellComponent: RootDocument, // Always SSR'd
+  component: () => <Outlet />,  // Not SSR'd when defaultSsr: false
+})
+
+function RootDocument({ children }: { children: React.ReactNode }) {
+  return (
+    <html lang="en">
+      <head><HeadContent /></head>
+      <body>{children}<Scripts /></body>
+    </html>
+  )
+}
+```
+
+### 3. Add Nitro for Server Routes
+
+```typescript
+// vite.config.ts
+import { nitro } from 'nitro/vite'
+
+export default defineConfig({
+  plugins: [nitro(), tanstackStart(), viteReact()],
+})
+```
+
+**Common issue:** Empty output (`<!--$--><!--/$-->`) means SSR is still enabled or shellComponent is missing.
+
 ## Common Gotchas
 
 1. **Use latest packages** - Check npm for `@electric-sql/*` & `@tanstack/*-db`
@@ -365,3 +418,12 @@ const mockCollection = createCollection(
 3. **Collections are singletons** - Create once, import everywhere
 4. **Live queries recompute on any collection change** - Use `limit()` for large datasets
 5. **Shapes are immutable** - Use factory function for dynamic shapes
+6. **SSR breaks collections** - Must configure all three SSR pieces (see above)
+7. **TypeScript server.handlers error** - Types lag, code works at runtime
+
+## Related Skills
+
+- `npx @electric-sql/playbook show tanstack-start-quickstart` - Complete TanStack Start setup
+- `npx @electric-sql/playbook show electric-proxy` - Proxy implementation patterns
+- `npx @electric-sql/playbook show electric-quickstart` - Getting started
+- `npx @electric-sql/playbook show electric-auth` - Authentication patterns
