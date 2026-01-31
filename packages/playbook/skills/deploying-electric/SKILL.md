@@ -40,14 +40,14 @@ pnpm deploy
 
 Electric Cloud provides:
 
-- `SOURCE_ID` - Your Electric source identifier
-- `SOURCE_SECRET` - Authentication secret (keep server-side!)
+- `ELECTRIC_SOURCE_ID` - Your Electric source identifier
+- `ELECTRIC_SECRET` - Authentication secret (keep server-side!)
 - `ELECTRIC_URL` - Cloud API endpoint
 
 ```env
 # .env (server-side only)
-SOURCE_ID=your-source-id
-SOURCE_SECRET=your-secret
+ELECTRIC_SOURCE_ID=your-source-id
+ELECTRIC_SECRET=your-secret
 ELECTRIC_URL=https://api.electric-sql.cloud
 ```
 
@@ -275,12 +275,12 @@ localhost:5173 {
 
 ### Required Variables
 
-| Variable      | Description                | Where                   |
-| ------------- | -------------------------- | ----------------------- |
-| DATABASE_URL  | Postgres connection string | Electric server         |
-| ELECTRIC_URL  | Electric API endpoint      | App server              |
-| SOURCE_ID     | Cloud source identifier    | App server (Cloud only) |
-| SOURCE_SECRET | Cloud authentication       | App server (Cloud only) |
+| Variable           | Description                | Where                   |
+| ------------------ | -------------------------- | ----------------------- |
+| DATABASE_URL       | Postgres connection string | Electric server         |
+| ELECTRIC_URL       | Electric API endpoint      | App server              |
+| ELECTRIC_SOURCE_ID | Cloud source identifier    | App server (Cloud only) |
+| ELECTRIC_SECRET    | Cloud authentication       | App server (Cloud only) |
 
 ### Optional Variables
 

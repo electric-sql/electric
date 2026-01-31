@@ -27,7 +27,7 @@ npx @electric-sql/agent read-skill electric-security-check
 ```
 
 - [ ] Electric behind authenticated proxy
-- [ ] SOURCE_SECRET only server-side
+- [ ] ELECTRIC_SECRET only server-side
 - [ ] Shapes defined server-side only
 - [ ] User scoping in WHERE clauses
 - [ ] Vary headers for cache isolation

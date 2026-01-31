@@ -28,6 +28,16 @@ A Shape is:
 
 Electric syncs all matching rows, then streams changes in real-time.
 
+## Security: Always Proxy in Production
+
+**Electric is public by default.** Any shape request without authentication exposes data. Always:
+
+1. Put Electric behind your backend API proxy
+2. Authenticate users in your proxy
+3. Define shapes server-side (never let clients control `table` or `where`)
+
+See `electric-proxy` skill for implementation patterns.
+
 ## Basic Usage
 
 ```typescript
@@ -36,7 +46,6 @@ import { ShapeStream, Shape } from '@electric-sql/client'
 // Create a stream
 const stream = new ShapeStream({
   url: '/api/todos', // Proxy URL (never direct Electric URL in production)
-})
 
 // Materialize into a Shape
 const shape = new Shape(stream)
@@ -73,6 +82,20 @@ origin.searchParams.set('table', 'todos')
 // Schema-qualified table
 origin.searchParams.set('table', 'myschema.todos')
 ```
+
+### Partitioned Tables
+
+Electric supports Postgres declaratively partitioned tables:
+
+```typescript
+// Sync entire partitioned table (all partitions)
+origin.searchParams.set('table', 'events')
+
+// Sync specific partition only
+origin.searchParams.set('table', 'events_2024')
+```
+
+**Note**: When syncing individual partitions, writes only apply if they fall within that partition's range.
 
 ### Where Clause
 
@@ -233,6 +256,46 @@ origin.searchParams.set('table', 'documents')
 origin.searchParams.set('table', 'documents')
 origin.searchParams.set('columns', 'id,title,updated_at') // Skip large 'content' column
 ```
+
+## Advanced Sync Modes
+
+### Changes-Only Mode
+
+Skip the initial snapshot, receive only future changes:
+
+```typescript
+// Via HTTP API
+origin.searchParams.set('log', 'changes_only')
+
+// Useful when:
+// - Initial state loaded from another source
+// - Only care about real-time updates
+// - Building notification systems
+```
+
+### Start from Now
+
+Skip all historical data:
+
+```typescript
+origin.searchParams.set('offset', 'now')
+```
+
+Returns immediate `up-to-date` with latest offset for live mode. Useful for dashboards that only need current state.
+
+### Subset Snapshots
+
+In changes-only mode, fetch specific data portions:
+
+```typescript
+// Get high-priority items in changes-only mode
+origin.searchParams.set('log', 'changes_only')
+origin.searchParams.set('subset__where', 'priority = $1')
+origin.searchParams.set('subset__params', JSON.stringify({ '1': 'high' }))
+origin.searchParams.set('subset__limit', '10')
+```
+
+Response includes snapshot metadata for change deduplication.
 
 ## Shape Limitations
 

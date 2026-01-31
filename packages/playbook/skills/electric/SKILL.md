@@ -69,7 +69,7 @@ npx @electric-sql/playbook show <skill-name>
 
 ## Security Essentials
 
-1. **Never expose secrets to browser** - `SOURCE_SECRET` stays server-side
+1. **Never expose secrets to browser** - `ELECTRIC_SECRET` stays server-side
 2. **Electric is public by default** - always put it behind an auth proxy
 3. **Server defines shapes** - clients request from proxy, not Electric directly
 

@@ -21,12 +21,12 @@ Run through this checklist before deploying any Electric application to producti
 
 ## Critical Rules (MUST)
 
-### 1. Never Expose SOURCE_SECRET to Browser
+### 1. Never Expose ELECTRIC_SECRET to Browser
 
 ```typescript
 // ❌ CRITICAL VULNERABILITY
 const stream = new ShapeStream({
-  url: `${ELECTRIC_URL}?secret=${process.env.SOURCE_SECRET}`,
+  url: `${ELECTRIC_URL}?secret=${process.env.ELECTRIC_SECRET}`,
 })
 
 // ✅ CORRECT: Secret injected server-side
@@ -34,10 +34,10 @@ const stream = new ShapeStream({
 const stream = new ShapeStream({ url: '/api/todos' })
 
 // Server proxy
-origin.searchParams.set('secret', process.env.SOURCE_SECRET!)
+origin.searchParams.set('secret', process.env.ELECTRIC_SECRET!)
 ```
 
-**Check**: Search codebase for `SOURCE_SECRET` or `secret` - should only appear in server code.
+**Check**: Search codebase for `ELECTRIC_SECRET` or `secret` - should only appear in server code.
 
 ### 2. Electric HTTP API is Public by Default
 
@@ -117,8 +117,8 @@ export async function GET(request: Request) {
   origin.searchParams.set('table', 'todos')
   origin.searchParams.set('where', `user_id = $1`)
   origin.searchParams.set('params', JSON.stringify([user.id]))
-  origin.searchParams.set('source_id', process.env.SOURCE_ID!)
-  origin.searchParams.set('secret', process.env.SOURCE_SECRET!)
+  origin.searchParams.set('source_id', process.env.ELECTRIC_SOURCE_ID!)
+  origin.searchParams.set('secret', process.env.ELECTRIC_SECRET!)
 
   // 4. Proxy request
   const res = await fetch(origin)
@@ -182,7 +182,7 @@ Skip RLS if: single-tenant, small team, or data isn't sensitive.
 
 ### Environment Variables
 
-- [ ] `SOURCE_SECRET` only in server environment, never bundled
+- [ ] `ELECTRIC_SECRET` only in server environment, never bundled
 - [ ] `ELECTRIC_URL` is internal URL, not public
 - [ ] Different secrets for dev/staging/production
 

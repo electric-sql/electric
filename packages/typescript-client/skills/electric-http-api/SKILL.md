@@ -17,6 +17,8 @@ metadata:
 
 The HTTP API is the low-level interface for syncing shapes from Electric.
 
+**Important**: In production, always proxy Electric through your backend API for authentication and authorization. See `electric-proxy` skill.
+
 ## Endpoints
 
 ### GET /v1/shape
@@ -138,7 +140,11 @@ data: {"headers":{"control":"up-to-date"}}
 : keep-alive
 ```
 
-**Note**: Requires proxy configured for streaming (no buffering).
+**SSE Details**:
+
+- Keep-alive comments (`: keep-alive`) sent every 21 seconds to prevent timeout
+- Requires proxy configured for streaming (no buffering)
+- TypeScript client auto-detects buffered SSE and falls back to long-polling after 3 quick-close attempts
 
 ## Caching
 
@@ -157,7 +163,9 @@ Electric works with CDNs for:
 - **Browser caching**: Avoid re-fetching unchanged data
 - **Request collapsing**: Many clients waiting for same live update share one request
 
-### Nginx Example
+### Proxy Configuration Examples
+
+**Nginx**:
 
 ```nginx
 proxy_cache_path /var/cache/nginx levels=1:2 keys_zone=electric:10m;
@@ -171,6 +179,29 @@ location /v1/shape {
     proxy_buffering off;  # Required for SSE
 }
 ```
+
+**Caddy**:
+
+```caddyfile
+example.com {
+    reverse_proxy /v1/shape/* electric:3000 {
+        flush_interval -1  # Required for SSE (disable buffering)
+    }
+}
+```
+
+**Apache**:
+
+```apache
+<Location /v1/shape>
+    ProxyPass http://electric:3000/v1/shape
+    ProxyPassReverse http://electric:3000/v1/shape
+    SetEnv proxy-sendchunked 1
+    SetEnv proxy-initial-not-pooled 1
+</Location>
+```
+
+**Critical**: All proxies must disable response buffering for SSE to work correctly.
 
 ## Advanced Features
 

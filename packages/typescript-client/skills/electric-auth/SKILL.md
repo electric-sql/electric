@@ -73,8 +73,8 @@ export async function GET(request: Request) {
   origin.searchParams.set('params', JSON.stringify([user.id]))
 
   // 4. Inject server-side credentials
-  origin.searchParams.set('source_id', process.env.SOURCE_ID!)
-  origin.searchParams.set('secret', process.env.SOURCE_SECRET!)
+  origin.searchParams.set('source_id', process.env.ELECTRIC_SOURCE_ID!)
+  origin.searchParams.set('secret', process.env.ELECTRIC_SECRET!)
 
   // 5. Proxy request
   const response = await fetch(origin)
