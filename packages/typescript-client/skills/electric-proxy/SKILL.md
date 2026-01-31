@@ -339,9 +339,35 @@ export async function proxyElectricRequest(originUrl: URL): Promise<Response> {
 }
 ```
 
+## Route Architecture: One Route Per Table
+
+**Critical security pattern:** Each table gets its own API route. The server controls which table the endpoint exposes.
+
+```
+✅ CORRECT: Separate routes per table
+/api/users    → server sets table='users'
+/api/todos    → server sets table='todos'
+/api/projects → server sets table='projects'
+
+❌ WRONG: Generic endpoint with client-controlled table
+/api/shapes?table=users  → client controls which table!
+```
+
+**Why?** A generic `/api/shapes?table=X` endpoint lets clients query ANY table. Each route should hardcode its table server-side.
+
 ## Anti-Patterns
 
 ```typescript
+// ❌ WRONG: Client defines shape via query param
+app.get('/api/shapes', (req) => {
+  const { table } = req.query // User can query ANY table!
+  originUrl.searchParams.set('table', table)
+})
+
+// ✅ CORRECT: Server hardcodes the table
+// /api/todos.ts
+originUrl.searchParams.set('table', 'todos') // Only todos exposed
+
 // ❌ WRONG: Client defines shape
 app.get('/api/shape', (req) => {
   const { table, where } = req.query // User controls shape!

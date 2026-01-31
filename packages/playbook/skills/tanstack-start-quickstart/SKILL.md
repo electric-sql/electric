@@ -244,11 +244,24 @@ export const todoCollection = createCollection(
     schema: todoSchema,
     getKey: (row) => row.id,
     shapeOptions: {
-      url: '/api/todos',
+      // IMPORTANT: Use full URL construction for SSR safety
+      // Relative URLs like '/api/todos' fail during SSR
+      url: new URL(
+        '/api/todos',
+        typeof window !== 'undefined'
+          ? window.location.origin
+          : 'http://localhost:5173'
+      ).toString(),
+      // Parse Postgres timestamps to Date objects
+      parser: {
+        timestamptz: (date: string) => new Date(date),
+      },
     },
   })
 )
 ```
+
+**Why full URLs?** Collections may be imported during SSR where `window` doesn't exist. The `new URL()` pattern ensures a valid absolute URL in all contexts.
 
 ## Step 7: Authentication with better-auth (Optional)
 
@@ -328,6 +341,11 @@ import { useLiveQuery } from '@tanstack/react-db'
 import { todoCollection } from '@/db/collections/todos'
 
 export const Route = createFileRoute('/_authenticated/')({
+  ssr: false,
+  // Preload collections to prevent flash of empty state
+  loader: async () => {
+    await todoCollection.preload()
+  },
   component: Home,
 })
 

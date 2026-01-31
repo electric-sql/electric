@@ -41,10 +41,33 @@ export const todoCollection = createCollection(
     schema: todoSchema,
     getKey: (row) => row.id,
     shapeOptions: {
-      url: '/api/todos', // Proxy URL - never direct Electric URL
+      // Use full URL for SSR safety (relative URLs fail during SSR)
+      url: new URL(
+        '/api/todos', // Each table has its own route
+        typeof window !== 'undefined'
+          ? window.location.origin
+          : 'http://localhost:5173'
+      ).toString(),
     },
   })
 )
+```
+
+### Preloading Collections
+
+Preload in route loaders to prevent flash of empty state:
+
+```typescript
+// src/routes/index.tsx
+export const Route = createFileRoute('/')({
+  ssr: false,
+  loader: async () => {
+    // Preload before component renders
+    await todoCollection.preload()
+    await projectCollection.preload()
+  },
+  component: HomePage,
+})
 ```
 
 ### Collection with Write Handlers
