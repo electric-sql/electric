@@ -80,14 +80,34 @@ export const todoCollection = createCollection(
 
 ### Custom Type Parsing
 
+Postgres types need parsing to JavaScript types:
+
 ```typescript
 shapeOptions: {
   url: '/api/todos',
   parser: {
+    // Timestamps → Date objects
     timestamptz: (date: string) => new Date(date),
+    // JSON → parsed objects
     jsonb: (json: string) => JSON.parse(json),
+    // Numeric → float
     numeric: (num: string) => parseFloat(num),
   }
+}
+```
+
+### SSR-Safe URL Construction
+
+Collections may be imported during SSR. Use window check:
+
+```typescript
+shapeOptions: {
+  url: new URL(
+    '/api/todos',
+    typeof window !== 'undefined'
+      ? window.location.origin
+      : 'http://localhost:5173'  // Fallback for SSR
+  ).toString(),
 }
 ```
 
@@ -278,18 +298,63 @@ The txid handshake prevents UI flicker:
 
 ### Backend: Get Postgres txid
 
-```sql
--- Return txid as integer from your insert/update/delete
-SELECT pg_current_xact_id()::xid::text as txid
-```
+**Critical:** The `::xid` cast strips the epoch, matching Electric's replication stream format.
 
 ```typescript
-// Example with Drizzle
-const result = await db.execute(sql`
-  INSERT INTO todos (id, text) VALUES (${id}, ${text})
-  RETURNING (SELECT pg_current_xact_id()::xid::text) as txid
-`)
-return { txid: parseInt(result.rows[0].txid) }
+// Helper function for Drizzle
+async function generateTxId(tx: Transaction): Promise<number> {
+  // ::xid cast gives raw 32-bit value matching Electric's stream
+  const result = await tx.execute(
+    sql`SELECT pg_current_xact_id()::xid::text as txid`
+  )
+  return parseInt(result.rows[0].txid as string, 10)
+}
+
+// Use inside transaction
+const result = await db.transaction(async (tx) => {
+  const txid = await generateTxId(tx)
+  const [newItem] = await tx.insert(todosTable).values(input).returning()
+  return { item: newItem, txid }
+})
+```
+
+**Important:** Get txid inside the same transaction as the mutation.
+
+## Drizzle-Zod Schema Integration
+
+Generate Zod schemas from Drizzle tables for type safety:
+
+```typescript
+import { pgTable, varchar, boolean, timestamp } from 'drizzle-orm/pg-core'
+import { createSchemaFactory } from 'drizzle-zod'
+import { z } from 'zod'
+
+// Create schema factory
+const { createSelectSchema, createInsertSchema } = createSchemaFactory({
+  zodInstance: z,
+})
+
+// Drizzle table
+export const todosTable = pgTable('todos', {
+  id: integer().primaryKey().generatedAlwaysAsIdentity(),
+  text: varchar({ length: 500 }).notNull(),
+  completed: boolean().notNull().default(false),
+  created_at: timestamp({ withTimezone: true }).notNull().defaultNow(),
+})
+
+// Auto-generated Zod schemas
+export const selectTodoSchema = createSelectSchema(todosTable)
+export const createTodoSchema = createInsertSchema(todosTable).omit({
+  created_at: true, // Server-generated
+})
+
+// Use in collection
+const todoCollection = createCollection(
+  electricCollectionOptions({
+    schema: selectTodoSchema, // Type-safe!
+    // ...
+  })
+)
 ```
 
 ## Framework Integrations
@@ -338,6 +403,38 @@ const { data } = useQuery({
 
 // After: Electric Collection (same component interface)
 const { data } = useLiveQuery((q) => q.from({ todo: todoCollection }))
+```
+
+## Local-Only Collections
+
+For client-side state that doesn't sync (auth, UI state):
+
+```typescript
+import {
+  createCollection,
+  localOnlyCollectionOptions,
+} from '@tanstack/react-db'
+import { z } from 'zod'
+
+const authStateSchema = z.object({
+  id: z.string(),
+  session: z.any().nullable(),
+  user: z.any().nullable(),
+})
+
+export const authStateCollection = createCollection(
+  localOnlyCollectionOptions({
+    id: 'auth-state',
+    getKey: (item) => item.id,
+    schema: authStateSchema,
+  })
+)
+
+// Cache auth to avoid repeated API calls
+if (!authStateCollection.get('auth')) {
+  const result = await authClient.getSession()
+  authStateCollection.insert({ id: 'auth', ...result.data })
+}
 ```
 
 ## Testing
