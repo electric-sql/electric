@@ -1025,10 +1025,8 @@ defmodule Electric.ShapeCacheTest do
 
       {^shape_handle, ^offset} = ShapeCache.get_or_create_shape_handle(@shape, ctx.stack_id)
 
-      # without this sleep, this test becomes unreliable. I think maybe due to
-      # delays in actually writing the data to cubdb/fsyncing the tx. I've
-      # tried explicit `CubDb.file_sync/1` calls but it doesn't work, the only
-      # reliable method is to wait just a little bit...
+      # without this sleep, this test becomes unreliable due to
+      # delays in persisting data to storage.
       Process.sleep(10)
 
       restart_shape_cache(ctx)
