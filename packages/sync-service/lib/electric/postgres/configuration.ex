@@ -382,4 +382,30 @@ defmodule Electric.Postgres.Configuration do
 
   @spec trim_relation_with_replica(relation_with_replica()) :: Electric.oid_relation()
   defp trim_relation_with_replica({oid, relation, _replident}), do: {oid, relation}
+
+  @doc """
+  List all tables accessible to Electric (tables the connected user has SELECT permission on).
+
+  Returns a list of `{schema, table}` tuples for ordinary and partitioned tables,
+  excluding system schemas (pg_catalog, information_schema).
+  """
+  @spec list_accessible_tables!(Postgrex.conn()) :: list(Electric.relation())
+  def list_accessible_tables!(conn) do
+    %Postgrex.Result{rows: rows} =
+      Postgrex.query!(
+        conn,
+        """
+        SELECT n.nspname, c.relname
+        FROM pg_class c
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE c.relkind IN ('r', 'p')
+          AND n.nspname NOT IN ('pg_catalog', 'information_schema')
+          AND has_table_privilege(c.oid, 'SELECT')
+        ORDER BY n.nspname, c.relname
+        """,
+        []
+      )
+
+    Enum.map(rows, fn [schema, table] -> {schema, table} end)
+  end
 end
