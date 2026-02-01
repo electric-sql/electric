@@ -99,6 +99,7 @@ services:
     image: electricsql/electric:latest
     environment:
       DATABASE_URL: postgresql://postgres:password@postgres:5432/electric?sslmode=disable
+      ELECTRIC_INSECURE: true # Dev only - remove in production
     ports:
       - '3000:3000'
     depends_on:
