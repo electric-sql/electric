@@ -1,6 +1,6 @@
 {
   "name": "@electric-sql/playbook",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Electric Playbook - skills for building apps with Electric",
   "type": "module",
   "license": "Apache-2.0",

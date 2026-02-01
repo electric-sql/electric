@@ -40,6 +40,18 @@ Output the full content of a skill:
 npx @electric-sql/playbook show electric
 ```
 
+### Finding Skills by Keyword
+
+When you don't know the exact skill name, grep the installed package:
+
+```bash
+# Search for skills mentioning a keyword
+grep -r "SSR" node_modules/@electric-sql/playbook/skills/
+
+# Find all skill files
+find node_modules -name "SKILL.md" -path "*playbook*"
+```
+
 ### Skills
 
 This package includes the following skills:
@@ -48,6 +60,7 @@ This package includes the following skills:
 | ------------------------------- | --------------------------------------------------------- |
 | `electric`                      | Router skill - Electric ecosystem overview and navigation |
 | `electric-quickstart`           | Getting started with Electric + TanStack DB               |
+| `tanstack-start-quickstart`     | Complete TanStack Start + Electric setup (SSR config)     |
 | `electric-tanstack-integration` | Deep integration patterns for Electric with TanStack DB   |
 | `electric-security-check`       | Security audit checklist for Electric apps                |
 | `electric-go-live`              | Production readiness checklist                            |

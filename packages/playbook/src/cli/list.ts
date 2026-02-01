@@ -97,5 +97,7 @@ export function printSkillList(): void {
   console.log(
     `\nUse "npx @electric-sql/playbook show <name>" to view full content.`
   )
+  console.log(`\nFind skills by keyword:`)
+  console.log(`  grep -r "SSR" node_modules/@electric-sql/playbook/skills/`)
   console.log(``)
 }

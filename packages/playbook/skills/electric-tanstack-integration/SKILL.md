@@ -520,6 +520,17 @@ export default defineConfig({
 
 **Common issue:** Empty output (`<!--$--><!--/$-->`) means SSR is still enabled or shellComponent is missing.
 
+## Common Errors
+
+| Error                                | Cause                              | Solution                                      |
+| ------------------------------------ | ---------------------------------- | --------------------------------------------- |
+| `fetch failed` with no network error | Collection imported during SSR     | Disable SSR or use dynamic import             |
+| Empty HTML (`<!--$--><!--/$-->`)     | SSR enabled without shellComponent | See SSR Configuration section above           |
+| `TypeError: window is undefined`     | Client code running on server      | Wrap in `typeof window !== 'undefined'` check |
+| Shape never syncs, request hangs     | Electric not running or wrong URL  | Check `curl http://localhost:30000/health`    |
+
+**For SSR issues with TanStack Start**, see `tanstack-start-quickstart` skill which covers the 3-part SSR configuration in detail.
+
 ## Common Gotchas
 
 1. **Use latest packages** - Check npm for `@electric-sql/*` & `@tanstack/*-db`
