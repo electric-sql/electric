@@ -33,7 +33,7 @@ Steve Yegge recently wrote about [software survival in the agentic era](https://
 
 The problem is **coordination between bounded agents** who are all operating on partial views of a shared reality. Without a written contract, small divergences compound. Tests pass. Coherence collapses.
 
-## What Configurancy Actually Means
+## What Configurancy Means
 
 Rao's definition: "the way things and people fit together over time so that a world takes shape."
 
@@ -97,9 +97,9 @@ Then Simon Willison [ported it to JavaScript in 4.5 hours](https://simonwillison
 
 **Organizational Process**: At ElectricSQL, we've evolved our product/engineering workflow around this pattern. PRDs (product requirements), RFCs (technical design), and PRs (implementation) are all markdown in our repos. Agents double-check that PRDs and RFCs stay in sync, that PRs conform to both, and that when implementation reveals the spec needs to change, the docs get updated—not just the code. Requirements, design, and code all have explicit contracts, enforced by agents.
 
-The same pattern appears at the function level: [Cheng Huang](https://zfhuang99.github.io/rust/claude%20code/codex/contracts/spec-driven%20development/2025/12/01/rust-with-ai.html) built 130K lines of Rust using code contracts as configurancy—preconditions, postconditions, and invariants that AI generates tests from. One contract caught a subtle Paxos safety violation.
+[Cheng Huang](https://zfhuang99.github.io/rust/claude%20code/codex/contracts/spec-driven%20development/2025/12/01/rust-with-ai.html) built 130K lines of Rust using code contracts as configurancy—preconditions, postconditions, and invariants that AI generates tests from. One contract caught a subtle Paxos safety violation.
 
-## Formal Systems That Actually Evolve
+## Formal Systems That Evolve
 
 In the agentic era, **formal systems are cheap to change**.
 
