@@ -17,13 +17,13 @@ The PR touched **67 files**: protocol spec, both servers (TypeScript + Go), all 
 
 This would have taken days manually...
 
-But when agents handle the propegation, *formal specifications become tractable*.
+But when agents handle the propegation, *formal specifications become tractable and **dynamic***.
 
 We've always known specifications, types, and contracts were valuable. But specs cost too much to write and more to maintain. So we invested sparingly, specs drifted, and eventually we just read the code.
 
 What changed isn't the principle—it's the economics. Agents can propagate spec changes through implementations at machine speed. Conformance suites verify correctness. The spec becomes the source of truth again, because maintenance is now cheap.
 
-I've been calling this **configurancy**—borrowing from [Venkatesh Rao](https://contraptions.venkateshrao.com/p/configurancy). The word matters because it names what we must build, not what we hope will emerge.
+I've been calling this **configurancy**—borrowing from a recent post by [Venkatesh Rao](https://contraptions.venkateshrao.com/p/configurancy).
 
 ## The Bounded Agents Problem
 
