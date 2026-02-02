@@ -12,7 +12,7 @@ defmodule Electric.ConcurrentStreamTest do
       {:ok, %{table: table}}
     end
 
-    test "returns complete stream from CubDB when it's being written to concurrently", %{
+    test "returns complete stream when it's being written to concurrently", %{
       table: table
     } do
       stream =
