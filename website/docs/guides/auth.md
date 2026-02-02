@@ -315,19 +315,30 @@ Electric separates parameters by purpose:
 - `params` — Parameters for the subset WHERE clause
 - `limit`, `offset`, `order_by` — Pagination controls
 
-##### Security: parameters your proxy should control
+##### Security: how Electric combines WHERE clauses
 
-When building an authorization proxy, **never trust client-provided values for security-sensitive parameters**. The proxy should set these server-side:
+Electric always combines the main shape WHERE (URL) with the subset WHERE (POST body) using `AND`:
+
+```sql
+WHERE {main_shape_where} AND ({subset_where})
+```
+
+This means **subset queries can only narrow results, never widen them**. Even if a client sends `where: "1=1"` in the POST body, the main shape WHERE still applies. The subset WHERE is validated for syntax and prohibited from containing subqueries.
+
+##### Parameters your proxy must control
+
+The proxy must set these **shape definition parameters** server-side — they define what data the client can access:
 
 | Parameter | Where | Security Consideration |
 |-----------|-------|------------------------|
 | `table` | URL | **Must be set server-side.** Letting clients specify the table allows access to any table. |
 | `columns` | URL | **Should be set server-side.** Clients could request sensitive columns. |
-| `where` | URL/Body | **Must be set server-side.** This is your authorization filter — the proxy builds it based on user identity. |
-| `params` | URL/Body | **Must be set server-side.** Parameters for the server-built WHERE clause. |
+| `where` | URL | **Must be set server-side.** This is your authorization filter — the main shape WHERE that restricts all queries. |
 | `secret` | URL | **Must be set server-side.** Never expose the API secret to clients. |
 
-**Safe to pass through from client** (Electric protocol parameters):
+##### Parameters safe to pass through from clients
+
+These parameters are safe because they either can't widen data access or are needed for client sync state:
 
 | Parameter | Where | Notes |
 |-----------|-------|-------|
@@ -337,9 +348,14 @@ When building an authorization proxy, **never trust client-provided values for s
 | `live_sse` | URL | SSE mode flag — controls streaming behavior |
 | `replica` | URL | Replica mode — controls update message format |
 | `log` | URL | Log mode — `full` or `changes_only` |
+| `where` | POST body | Subset WHERE — combined with AND, can only narrow results |
+| `params` | POST body | Parameters for subset WHERE |
+| `limit` | POST body | Pagination limit |
+| `offset` | POST body | Pagination offset (different from shape log offset in URL) |
+| `order_by` | POST body | Sorting for pagination |
 
 :::tip Key Principle
-Your proxy is an **authorization layer**. The client specifies _how_ to sync (offset, handle, live mode), but the proxy controls _what_ data the client can access (table, columns, WHERE clause).
+Your proxy is an **authorization layer** that controls the **shape definition** (table, columns, main WHERE). Clients can freely use subset parameters to filter and paginate within that shape — Electric ensures they can only narrow results, never escape the main WHERE clause.
 :::
 
 ##### Implementing POST support in your proxy
@@ -347,10 +363,9 @@ Your proxy is an **authorization layer**. The client specifies _how_ to sync (of
 To support both GET and POST requests:
 
 1. **Accept both methods** on your proxy endpoints
-2. **Detect the request method** to determine response format
-3. **Always build WHERE clauses server-side** — ignore any client-sent body
-4. **For POST**: Send WHERE/params in the JSON body to Electric
-5. **For GET**: Send WHERE/params as URL query parameters (existing behavior)
+2. **Set shape definition server-side** — table, columns, and main WHERE clause
+3. **For POST**: Forward client subset params (they can only narrow results)
+4. **For GET**: Send WHERE as URL query parameters (existing behavior)
 
 ```tsx
 import { ELECTRIC_PROTOCOL_QUERY_PARAMS } from '@electric-sql/client'
@@ -369,41 +384,29 @@ export async function handler(request: Request) {
     }
   })
 
-  // Set security-sensitive parameters server-side
-  originUrl.searchParams.set(`table`, `items`)
-
-  // Add API secret (never from client)
-  originUrl.searchParams.set(`secret`, process.env.ELECTRIC_SECRET)
-
   // Authentication
   const user = await loadUser(request.headers.get(`authorization`))
   if (!user) {
     return new Response(`unauthorized`, { status: 401 })
   }
 
-  // Build WHERE clause server-side based on user identity
-  // (using your preferred query builder - see examples above)
-  const whereClause = `"organization_id" = $1`
-  const whereParams = { '1': user.org_id }
+  // Set shape definition server-side (this is your authorization layer)
+  originUrl.searchParams.set(`table`, `items`)
+  originUrl.searchParams.set(`where`, `"organization_id" = '${user.org_id}'`)
+  originUrl.searchParams.set(`secret`, process.env.ELECTRIC_SECRET)
 
-  // Choose how to send WHERE based on request method
+  // Forward request to Electric
   let response: Response
   if (method === 'POST') {
-    // POST: Send WHERE in JSON body
+    // POST: Forward client body (subset params can only narrow results)
+    const clientBody = await request.text()
     response = await fetch(originUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        where: whereClause,
-        params: whereParams,
-      }),
+      body: clientBody, // Client subset params (where, limit, order_by, etc.)
     })
   } else {
-    // GET: Send WHERE as URL query parameters
-    originUrl.searchParams.set(`where`, whereClause)
-    Object.entries(whereParams).forEach(([key, value]) => {
-      originUrl.searchParams.set(`params[${key}]`, String(value))
-    })
+    // GET: Simple proxy
     response = await fetch(originUrl)
   }
 
