@@ -263,13 +263,15 @@ Benefits:
 
 When WHERE clauses become large (complex ACL subqueries, many parameters, or `WHERE id = ANY($1)` with hundreds of IDs), GET requests can fail with `HTTP 414 Request-URI Too Long` errors. Electric supports POST requests with subset parameters in the JSON body to avoid URL length limits.
 
-:::warning URL Length Limits
+:::warning URL Length Limits and GET Deprecation
 GET requests with subset parameters in the URL can fail with `414 Request-URI Too Long` errors. This is common when:
 - ACL subqueries generate long WHERE clauses
 - Join queries produce large filter lists
 - Parameter arrays contain many values
 
-**Use POST to avoid this limitation.** In Electric 2.0, GET requests for subset snapshots will be deprecated.
+**Use POST to avoid this limitation.**
+
+> **Deprecation Notice:** In Electric 2.0, GET requests for subset snapshots will be deprecated and only POST will be supported. Implement POST support now to ensure forward compatibility.
 :::
 
 ##### POST body format
@@ -452,12 +454,13 @@ const collection = createCollection(
 )
 ```
 
-:::info Backwards Compatibility
-When your proxy supports both GET and POST, you can roll out POST gradually:
-1. Deploy proxy with dual GET/POST support
+:::warning GET Deprecation in Electric 2.0
+GET requests for subset snapshots will be **deprecated in Electric 2.0** — only POST will be supported. Plan your migration now:
+
+1. Deploy proxy with dual GET/POST support (backwards compatible)
 2. Update clients to use `subsetMethod: 'POST'`
 3. Monitor for 414 errors — they should disappear
-4. GET continues to work for clients that haven't updated
+4. Before upgrading to Electric 2.0, ensure all clients use POST
 :::
 
 ### Gatekeeper auth
