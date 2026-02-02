@@ -46,6 +46,8 @@ Think of it like a contract that establishes shared facts:
 - These invariants hold (what you can rely on) — *messages are delivered exactly once*
 - These constraints apply (what you can't do) — *max 100 concurrent streams per client*
 
+But formal contracts are just the bones. True intelligibility also needs flesh—the memory of why we don't do X anymore, the rationale behind trade-offs. What Yegge calls "crystallized cognition"—hard-won knowledge compressed so agents don't have to rediscover it.
+
 High configurancy means the contract is clear enough for any agent—human or AI—to act coherently.
 
 Low configurancy means the contract is implicit, outdated, or contradicted by reality. Agents make changes that seem locally correct but violate unstated assumptions.
