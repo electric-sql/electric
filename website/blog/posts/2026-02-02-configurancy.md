@@ -33,13 +33,13 @@ We live in a world of *multiple bounded agents*—human and AI—trying to co-ev
 
 Steve Yegge recently wrote about [software survival in the agentic era](https://steve-yegge.medium.com/software-survival-3-0-97a2a6255f7b)—agents are becoming primary consumers AND producers of software. They're actors that make choices about the system's evolution. Not tools we wield, but collaborators we coordinate with.
 
-The problem is **coordination between bounded agents** who are all operating on partial views of a shared reality. Without a written contract, small divergences compound. Tests pass. Coherence collapses.
+The problem is **coordination between bounded agents** who are all operating on partial views of a shared reality. Without a written contract, small divergences compound. Tests pass but coherence collapses.
 
 ## What Configurancy Means
 
-Rao's definition: "the way things and people fit together over time so that a world takes shape."
+Rao describes configurancy as "the ongoing, relational process through which agents and worlds co-emerge as intelligible configurations." The key word is *co-emerge*. Agents don't just act on the system; they're shaped by it in return. Software has always been co-evolutionary—the codebase you inherit constrains what you build next. But now AI agents are participants in this process, and it moves faster than any human can track, let alone control.
 
-For software: **the shared intelligibility layer that allows agents with limited context to coherently co-evolve a system.**
+For software, configurancy is **the shared intelligibility layer that allows agents with limited context to coherently co-evolve a system.**
 
 Think of it like a contract that establishes shared facts:
 - These affordances exist (what you can do) — *streams can be paused and resumed*
