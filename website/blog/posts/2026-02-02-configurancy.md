@@ -13,7 +13,7 @@ post: true
 
 Last week we [simplified SSE binary handling](https://github.com/durable-streams/durable-streams/pull/231) in durable-streams. The change: remove a query parameter, have servers auto-detect binary content types, signal via response header.
 
-The PR touched **67 files**: protocol spec, both servers (TypeScript + Go), all 10 client implementations across 10 languages, and conformance tests. One agent propagated the change through the entire stack in a few hours. Every implementation now handles the new behavior correctly—verified by the conformance suite.
+The PR touched **67 files**: protocol spec, both servers (TypeScript + Go), all 10 client implementations across 10 languages, and conformance tests. One agent propagated the change through the entire stack in 20-30 minutes. Every implementation now handles the new behavior correctly—verified by the conformance suite.
 
 This would have taken days manually. **Formal specifications become tractable when agents handle the propagation**.
 
