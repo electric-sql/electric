@@ -465,33 +465,16 @@ This ensures proper isolation of cached shape data based on authentication conte
 
 ### Clearing Client-Side Data on Logout
 
-The `Vary` header handles HTTP cache isolation, but your client application also holds synced shape data in memory. When a user logs out, you need to discard the old shape and create a fresh one on the next login to ensure the previous user's data is cleared.
+The `Vary` header handles HTTP cache isolation, but your client application also holds synced shape data in memory. When a user logs out, do a full page refresh to clear the previous user's data from memory.
 
 ```typescript
-let shape: Shape | null = null
-
-async function handleLogin(user: User) {
-  // Create a new shape for the authenticated user
-  shape = new Shape({
-    url: `/api/shapes/items`,
-    headers: {
-      Authorization: `Bearer ${user.token}`,
-    },
-  })
-}
-
 async function handleLogout() {
-  // Discard the shape entirely - this clears the synced data from memory
-  shape = null
-
-  // If using persistence, also clear the stored data
-  // localStorage.removeItem('my-shape-data')
-
   await clearAuthToken()
+
+  // Full refresh clears all synced shape data from memory
+  window.location.reload()
 }
 ```
-
-Without discarding the shape on logout, the previous user's data remains in memory and could be displayed to a different user.
 
 ## Notes
 
