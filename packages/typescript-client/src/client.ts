@@ -815,9 +815,10 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
       if (e instanceof StaleCacheError) {
         // Received a stale cached response from CDN with an expired handle.
-        // The #staleCacheBuster has been set in #onInitialResponse, so retry
-        // the request which will include a random cache buster to bypass the
-        // misconfigured CDN cache.
+        // Generate a NEW random cache buster for each retry to bypass the
+        // misconfigured CDN cache. This must be done here (not in #onInitialResponse)
+        // to ensure each retry request has a unique cache buster value.
+        this.#staleCacheBuster = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`
         return this.#requestShape()
       }
 
@@ -1110,8 +1111,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
             `For more information visit the troubleshooting guide: https://electric-sql.com/docs/guides/troubleshooting ` +
             `Retrying with a random cache buster to bypass the stale cache (attempt ${this.#staleCacheRetryCount}/${this.#maxStaleCacheRetries}).`
         )
-        // Generate a random cache buster for the retry
-        this.#staleCacheBuster = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`
+        // Throw error to trigger retry with a new cache buster (generated in the retry handler)
         throw new StaleCacheError(
           `Received stale cached response with expired handle "${shapeHandle}". ` +
             `This indicates a proxy/CDN caching misconfiguration. ` +
