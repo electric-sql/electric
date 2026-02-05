@@ -86,14 +86,6 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb do
     handle_for_shape_inner(stack_id, shape, checkout_fun)
   end
 
-  @doc """
-  Find a handle for a shape using the write connection to guarantee consistency.
-  """
-  def handle_for_shape_critical(stack_id, %Shape{} = shape) when is_stack_id(stack_id) do
-    checkout_fun = &checkout_write!(stack_id, :handle_for_shape_critical, &1)
-    handle_for_shape_inner(stack_id, shape, checkout_fun)
-  end
-
   defp handle_for_shape_inner(stack_id, %Shape{} = shape, checkout_fun) do
     {comparable_shape, _shape_hash} = Shape.comparable_hash(shape)
 

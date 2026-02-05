@@ -147,24 +147,6 @@ defmodule Electric.ShapeCache.ShapeStatus do
     end)
   end
 
-  @doc """
-  Where as `fetch_handle_by_shape/2` *may* under high-write load return stale
-  data -- not finding a shape that has been written -- due to SQLite's
-  cross-connection durability when in WAL mode, where a connection reads
-  against a snapshot of the data, this version does the lookup via the write
-  connection, which is guaranteed to see all writes (SQLite connections can
-  always see their own writes).
-
-  This guarantees that will will return consistent restults at the cost of slower
-  lookups as we're contending with access to the single write connection.
-  """
-  @spec fetch_handle_by_shape_critical(stack_id(), Shape.t()) :: {:ok, shape_handle()} | :error
-  def fetch_handle_by_shape_critical(stack_id, %Shape{} = shape) when is_stack_id(stack_id) do
-    OpenTelemetry.with_span("shape_status.fetch_handle_by_shape_critical", [], stack_id, fn ->
-      ShapeDb.handle_for_shape_critical(stack_id, shape)
-    end)
-  end
-
   @spec fetch_shape_by_handle(stack_id(), shape_handle()) :: {:ok, Shape.t()} | :error
   def fetch_shape_by_handle(stack_id, shape_handle)
       when is_stack_id(stack_id) and is_shape_handle(shape_handle) do

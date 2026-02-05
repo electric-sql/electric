@@ -147,15 +147,15 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDbTest do
     assert :error = ShapeDb.handle_for_shape(ctx.stack_id, shape2)
   end
 
-  test "handle_for_shape_critical/2", ctx do
+  test "handle_for_shape after flush returns shape from ETS retention", ctx do
     shape1 = Shape.new!("items", inspector: @stub_inspector)
     handle1 = "handle-1"
     {:ok, _hash1} = ShapeDb.add_shape(ctx.stack_id, shape1, handle1)
-    shape2 = Shape.new!("items", inspector: @stub_inspector, where: "id = 99")
 
-    assert {:ok, ^handle1} = ShapeDb.handle_for_shape_critical(ctx.stack_id, shape1)
+    ShapeDb.WriteBuffer.flush_sync(ctx.stack_id)
 
-    assert :error = ShapeDb.handle_for_shape_critical(ctx.stack_id, shape2)
+    # Shape should still be discoverable via ETS retention after flush
+    assert {:ok, ^handle1} = ShapeDb.handle_for_shape(ctx.stack_id, shape1)
   end
 
   test "shape_for_handle", ctx do
@@ -292,6 +292,10 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDbTest do
     assert MapSet.new(invalid_handles) == MapSet.new(remove_handles)
 
     {handles, _shapes} = Enum.unzip(valid_shapes)
+
+    # Remove flushed ETS entries so reduce_shapes only sees SQLite data.
+    # In production the ETS buffer is empty at startup so this isn't needed.
+    ShapeDb.WriteBuffer.remove_flushed(ctx.stack_id)
 
     assert ShapeDb.reduce_shapes(
              ctx.stack_id,
@@ -440,6 +444,72 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDbTest do
       ShapeDb.WriteBuffer.flush_sync(ctx.stack_id)
 
       assert 0 = ShapeDb.WriteBuffer.pending_count_diff(ctx.stack_id)
+    end
+
+    test "flushed shapes remain discoverable via handle_for_shape and lookup_handle", ctx do
+      shape = Shape.new!("items", inspector: @stub_inspector)
+      handle = "handle-1"
+      {comparable, _hash} = Shape.comparable_hash(shape)
+
+      {:ok, _hash} = ShapeDb.add_shape(ctx.stack_id, shape, handle)
+
+      # Flush to SQLite — entries should be retained in ETS with flushed_at set
+      ShapeDb.WriteBuffer.flush_sync(ctx.stack_id)
+
+      # Should still be found via ETS buffer (retained after flush)
+      assert {:ok, ^handle} = ShapeDb.WriteBuffer.lookup_handle(ctx.stack_id, comparable)
+      assert {:ok, ^shape} = ShapeDb.WriteBuffer.lookup_shape(ctx.stack_id, handle)
+      assert {:ok, ^handle} = ShapeDb.handle_for_shape(ctx.stack_id, shape)
+    end
+
+    test "remove_shape on a flushed entry works correctly", ctx do
+      shape = Shape.new!("items", inspector: @stub_inspector)
+      handle = "handle-1"
+
+      {:ok, _hash} = ShapeDb.add_shape(ctx.stack_id, shape, handle)
+
+      # Flush to SQLite — entries retained in ETS
+      ShapeDb.WriteBuffer.flush_sync(ctx.stack_id)
+
+      # Remove the shape — should delete both {:shape, ...} and {:comparable, ...} immediately
+      :ok = ShapeDb.remove_shape(ctx.stack_id, handle)
+
+      assert :error = ShapeDb.handle_for_shape(ctx.stack_id, shape)
+      assert :error = ShapeDb.shape_for_handle(ctx.stack_id, handle)
+    end
+
+    test "cleanup removes expired flushed entries", ctx do
+      alias Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBufferCleaner
+
+      shape = Shape.new!("items", inspector: @stub_inspector)
+      handle = "handle-1"
+      {comparable, _hash} = Shape.comparable_hash(shape)
+
+      {:ok, _hash} = ShapeDb.add_shape(ctx.stack_id, shape, handle)
+      ShapeDb.WriteBuffer.flush_sync(ctx.stack_id)
+
+      shapes_table = ShapeDb.WriteBuffer.shapes_table_name(ctx.stack_id)
+
+      # Entries should be retained
+      assert {:ok, ^handle} = ShapeDb.WriteBuffer.lookup_handle(ctx.stack_id, comparable)
+
+      # A cutoff in the past should not delete entries flushed just now
+      past_cutoff = System.monotonic_time() - System.convert_time_unit(60_000, :millisecond, :native)
+      assert 0 = WriteBufferCleaner.delete_older_than(shapes_table, past_cutoff)
+      assert {:ok, ^handle} = ShapeDb.WriteBuffer.lookup_handle(ctx.stack_id, comparable)
+      assert {:ok, ^shape} = ShapeDb.WriteBuffer.lookup_shape(ctx.stack_id, handle)
+
+      # A cutoff in the future should delete entries flushed just now
+      future_cutoff = System.monotonic_time() + System.convert_time_unit(1_000, :millisecond, :native)
+      assert 2 = WriteBufferCleaner.delete_older_than(shapes_table, future_cutoff)
+
+      # Flushed entries should now be cleaned up from ETS
+      assert :not_found = ShapeDb.WriteBuffer.lookup_handle(ctx.stack_id, comparable)
+      assert :not_found = ShapeDb.WriteBuffer.lookup_shape(ctx.stack_id, handle)
+
+      # But shape should still be accessible from SQLite
+      assert {:ok, ^handle} = ShapeDb.handle_for_shape(ctx.stack_id, shape)
+      assert {:ok, ^shape} = ShapeDb.shape_for_handle(ctx.stack_id, handle)
     end
   end
 end

@@ -244,9 +244,7 @@ defmodule Electric.ShapeCache do
   end
 
   defp maybe_create_shape(shape, otel_ctx, %{stack_id: stack_id} = state) do
-    # fetch_handle_by_shape_critical is a slower but guaranteed consistent
-    # shape lookup
-    with {:ok, shape_handle} <- ShapeStatus.fetch_handle_by_shape_critical(stack_id, shape),
+    with {:ok, shape_handle} <- ShapeStatus.fetch_handle_by_shape(stack_id, shape),
          {:ok, offset} <- fetch_latest_offset(stack_id, shape_handle) do
       {shape_handle, offset}
     else

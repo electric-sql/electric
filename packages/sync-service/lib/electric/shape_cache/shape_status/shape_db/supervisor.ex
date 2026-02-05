@@ -45,7 +45,9 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Supervisor do
         id: {:pool, :write}
       ),
       # write buffer for batching SQLite writes to avoid timeout cascades
-      {ShapeDb.WriteBuffer, args}
+      {ShapeDb.WriteBuffer, args},
+      # periodic cleanup of flushed entries retained in the write buffer ETS
+      {ShapeDb.WriteBufferCleaner, args}
     ]
 
     Supervisor.init(children, strategy: :one_for_one)

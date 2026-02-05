@@ -37,8 +37,8 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
   ## Shapes table key formats
 
   - `{:pending_count, integer}` - count of shapes pending addition
-  - `{{:shape, handle}, shape, comparable}` - shape data
-  - `{{:comparable, comparable}, handle}` - reverse index for O(1) lookup
+  - `{{:shape, handle}, shape, comparable, flushed_at}` - shape data (flushed_at is nil when pending, monotonic time after flush)
+  - `{{:comparable, comparable}, handle, flushed_at}` - reverse index for O(1) lookup (flushed_at is nil when pending, monotonic time after flush)
   - `{{:tombstone, handle}, timestamp}` - handles marked for deletion
   """
 
@@ -53,8 +53,6 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
   import Electric, only: [is_stack_id: 1]
 
   @poll_interval 50
-  # keep this low-ish so that this process yields the write connection
-  # to handle_for_shape_critical/2 reasonably often.
   @max_drain_per_cycle 100
 
   def operations_table_name(stack_id), do: :"write_buffer_ops:#{stack_id}"
@@ -101,7 +99,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
     shapes_table = shapes_table_name(stack_id)
 
     case :ets.lookup(shapes_table, {:shape, handle}) do
-      [{{:shape, ^handle}, shape, _comparable}] ->
+      [{{:shape, ^handle}, shape, _comparable, _flushed_at}] ->
         if :ets.member(shapes_table, {:tombstone, handle}) do
           :not_found
         else
@@ -118,7 +116,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
     shapes_table = shapes_table_name(stack_id)
 
     case :ets.lookup(shapes_table, {:comparable, comparable_shape}) do
-      [{{:comparable, ^comparable_shape}, handle}] ->
+      [{{:comparable, ^comparable_shape}, handle, _flushed_at}] ->
         if :ets.member(shapes_table, {:tombstone, handle}), do: :not_found, else: {:ok, handle}
 
       [] ->
@@ -135,7 +133,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
   Check if a handle exists in the buffer.
   Returns:
     - `false` if tombstoned (being deleted)
-    - `true` if in shapes table (buffered, not yet in SQLite)
+    - `true` if in shapes table (buffered or recently flushed)
     - `:unknown` if not in buffer (may or may not exist in SQLite)
 
   Note: Checks tombstone last since it's the authoritative "delete in progress"
@@ -169,7 +167,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
     tombstones = tombstoned_handles(stack_id)
 
     shapes_table_name(stack_id)
-    |> :ets.match({{:shape, :"$1"}, :"$2", :_})
+    |> :ets.match({{:shape, :"$1"}, :"$2", :_, :_})
     |> Enum.reject(fn [handle, _] -> MapSet.member?(tombstones, handle) end)
     |> Enum.map(fn [handle, shape] -> {handle, shape} end)
     |> Enum.sort_by(fn {handle, _} -> handle end)
@@ -200,6 +198,16 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
     |> MapSet.new(fn [h] -> h end)
   end
 
+  @doc "Remove all flushed entries from the shapes table"
+  def remove_flushed(stack_id) do
+    shapes_table = shapes_table_name(stack_id)
+
+    :ets.select_delete(shapes_table, [
+      {{{:shape, :_}, :_, :_, :"$1"}, [{:"/=", :"$1", nil}], [true]},
+      {{{:comparable, :_}, :_, :"$1"}, [{:"/=", :"$1", nil}], [true]}
+    ])
+  end
+
   # Write functions
 
   @doc "Add a shape to the buffer"
@@ -209,8 +217,8 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
     ts = op_key()
 
     if :ets.insert_new(shapes_table, [
-         {{:shape, handle}, shape, comparable},
-         {{:comparable, comparable}, handle}
+         {{:shape, handle}, shape, comparable, nil},
+         {{:comparable, comparable}, handle, nil}
        ]) do
       :ets.update_counter(shapes_table, :count_add, 1)
 
@@ -236,7 +244,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
     case :ets.insert_new(shapes_table, {{:tombstone, handle}, ts}) do
       true ->
         case :ets.lookup(shapes_table, {:shape, handle}) do
-          [{{:shape, ^handle}, _shape, comparable}] ->
+          [{{:shape, ^handle}, _shape, comparable, _flushed_at}] ->
             :ets.delete(shapes_table, {:comparable, comparable})
 
           [] ->
@@ -376,8 +384,9 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
             Enum.each(entries, fn {ts, op} ->
               case op do
                 {:add, handle, _shape, comparable, _hash, _relations} ->
-                  :ets.delete(shapes_table, {:shape, handle})
-                  :ets.delete(shapes_table, {:comparable, comparable})
+                  flushed_at = System.monotonic_time()
+                  :ets.update_element(shapes_table, {:shape, handle}, {4, flushed_at})
+                  :ets.update_element(shapes_table, {:comparable, comparable}, {3, flushed_at})
                   :ets.update_counter(shapes_table, :count_add, {2, -1, 0, 0})
                   {:add, handle}
 
