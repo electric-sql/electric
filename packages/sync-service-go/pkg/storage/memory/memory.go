@@ -7,6 +7,7 @@ package memory
 
 import (
 	"errors"
+	"fmt"
 	"sync"
 
 	"github.com/electric-sql/electric/packages/sync-service-go/pkg/storage"
@@ -104,6 +105,24 @@ func (m *MemoryStorage) DeleteShape(shapeID string) error {
 	return nil
 }
 
+// CreateShape creates a new empty shape with the given schema.
+// Returns error if shape already exists.
+func (m *MemoryStorage) CreateShape(shapeID string, schema storage.SchemaInfo) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if _, exists := m.shapes[shapeID]; exists {
+		return fmt.Errorf("shape %s already exists", shapeID)
+	}
+
+	m.shapes[shapeID] = &shapeData{
+		schema:      schema,
+		log:         make([]storage.LogItem, 0),
+		chunkBounds: make(map[string]string),
+	}
+	return nil
+}
+
 // SetSnapshot stores snapshot data for a shape.
 // This creates the shape if it doesn't exist.
 func (m *MemoryStorage) SetSnapshot(shapeID string, schema storage.SchemaInfo, items []storage.LogItem, snapshotXmin int64) error {
@@ -180,7 +199,8 @@ func (m *MemoryStorage) AppendToLog(shapeID string, items []storage.LogItem) err
 
 // GetLogSince returns all log items with offset greater than the given offset.
 // This implements exclusive start (items where item.Offset > offset).
-func (m *MemoryStorage) GetLogSince(shapeID string, offset string) ([]storage.LogItem, error) {
+// If limit > 0, only that many items are returned.
+func (m *MemoryStorage) GetLogSince(shapeID string, offset string, limit int) ([]storage.LogItem, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -196,6 +216,10 @@ func (m *MemoryStorage) GetLogSince(shapeID string, offset string) ([]storage.Lo
 		result = append(result, shape.snapshot...)
 		// Then include all log items
 		result = append(result, shape.log...)
+		// Apply limit if > 0
+		if limit > 0 && len(result) > limit {
+			result = result[:limit]
+		}
 		return result, nil
 	}
 
@@ -206,6 +230,10 @@ func (m *MemoryStorage) GetLogSince(shapeID string, offset string) ([]storage.Lo
 		}
 	}
 
+	// Apply limit if > 0
+	if limit > 0 && len(result) > limit {
+		result = result[:limit]
+	}
 	return result, nil
 }
 

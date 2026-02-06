@@ -4,6 +4,7 @@ package schema
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -880,5 +881,57 @@ func TestSchemaHeader_ExpectedFormat(t *testing.T) {
 	nameMap := result["name"].(map[string]interface{})
 	if _, exists := nameMap["pk_index"]; exists {
 		t.Error("name should not have pk_index")
+	}
+}
+
+func TestTableSchema_Validate(t *testing.T) {
+	tests := []struct {
+		name    string
+		schema  *TableSchema
+		wantErr bool
+		errMsg  string
+	}{
+		{
+			name: "valid schema with PK",
+			schema: NewTableSchema("public", "users", []Column{
+				{Name: "id", Type: "int4", PKIndex: 0},
+				{Name: "name", Type: "text", PKIndex: -1},
+			}),
+			wantErr: false,
+		},
+		{
+			name:    "no columns",
+			schema:  NewTableSchema("public", "empty", []Column{}),
+			wantErr: true,
+			errMsg:  "no columns",
+		},
+		{
+			name: "no primary key",
+			schema: NewTableSchema("public", "nopk", []Column{
+				{Name: "a", Type: "text", PKIndex: -1},
+				{Name: "b", Type: "text", PKIndex: -1},
+			}),
+			wantErr: true,
+			errMsg:  "no primary key",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.schema.Validate()
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("Validate() expected error containing %q, got nil", tt.errMsg)
+					return
+				}
+				if !strings.Contains(err.Error(), tt.errMsg) {
+					t.Errorf("Validate() error = %q, want error containing %q", err.Error(), tt.errMsg)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Validate() unexpected error: %v", err)
+				}
+			}
+		})
 	}
 }

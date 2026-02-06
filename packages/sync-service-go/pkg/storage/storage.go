@@ -64,6 +64,10 @@ type Storage interface {
 	ListShapes() []string
 	DeleteShape(shapeID string) error
 
+	// CreateShape creates a new empty shape with the given schema.
+	// Returns error if shape already exists.
+	CreateShape(shapeID string, schema SchemaInfo) error
+
 	// Snapshot
 	SetSnapshot(shapeID string, schema SchemaInfo, items []LogItem, snapshotXmin int64) error
 	GetSnapshot(shapeID string) ([]LogItem, int64, error)
@@ -71,7 +75,7 @@ type Storage interface {
 
 	// Log operations
 	AppendToLog(shapeID string, items []LogItem) error
-	GetLogSince(shapeID string, offset string) ([]LogItem, error)
+	GetLogSince(shapeID string, offset string, limit int) ([]LogItem, error)
 	GetLogChunk(shapeID string, chunkOffset string) ([]LogItem, string, error)
 
 	// Chunk management
@@ -80,6 +84,13 @@ type Storage interface {
 
 	// Latest offset
 	GetLatestOffset(shapeID string) (string, error)
+
+	// Schema
+	GetSchema(shapeID string) (SchemaInfo, error)
+
+	// PostgreSQL snapshot for transaction filtering
+	SetPgSnapshot(shapeID string, snapshot *PgSnapshot) error
+	GetPgSnapshot(shapeID string) (*PgSnapshot, error)
 }
 
 // GenerateShapeID generates a new shape ID with format: random-hash + timestamp suffix.

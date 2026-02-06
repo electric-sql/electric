@@ -6,6 +6,7 @@ package schema
 
 import (
 	"encoding/json"
+	"fmt"
 	"sort"
 )
 
@@ -109,6 +110,20 @@ func (t *TableSchema) PrimaryKeyColumnNames() []string {
 		names[i] = col.Name
 	}
 	return names
+}
+
+// Validate checks that the schema is valid for use with Electric.
+// Returns an error if:
+// - There are no primary key columns
+// - Column list is empty
+func (t *TableSchema) Validate() error {
+	if len(t.Columns) == 0 {
+		return fmt.Errorf("schema for %s.%s has no columns", t.Schema, t.Name)
+	}
+	if len(t.PrimaryKeyColumns()) == 0 {
+		return fmt.Errorf("schema for %s.%s has no primary key columns", t.Schema, t.Name)
+	}
+	return nil
 }
 
 // schemaEntry represents a column's type information in the x-electric-schema header.

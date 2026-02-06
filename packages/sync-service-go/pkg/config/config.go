@@ -25,6 +25,8 @@ type Config struct {
 	ChunkThreshold int
 
 	// MaxAge is the cache max-age for immutable chunks in seconds (default: 604800 = 1 week).
+	// Note: This applies to immutable/completed chunks. Catch-up responses for active
+	// shapes may use different caching strategies (typically shorter or no caching).
 	MaxAge int
 
 	// StaleAge is the stale-while-revalidate duration in seconds (default: 300 = 5 min).
@@ -38,6 +40,15 @@ type Config struct {
 
 	// Publication is the PostgreSQL publication name (default: "electric_publication").
 	Publication string
+
+	// Secret is the API authentication token (optional, empty means no auth).
+	Secret string
+
+	// DBPoolSize is the PostgreSQL connection pool size (default: 20).
+	DBPoolSize int
+
+	// MaxShapes is the maximum number of simultaneous shapes (0 = unlimited).
+	MaxShapes int
 }
 
 // Default values for configuration.
@@ -50,6 +61,8 @@ const (
 	DefaultStorageDir        = "./electric_data"
 	DefaultReplicationSlot   = "electric_replication"
 	DefaultPublication       = "electric_publication"
+	DefaultDBPoolSize        = 20
+	DefaultMaxShapes         = 0 // 0 = unlimited
 )
 
 // Environment variable names.
@@ -63,6 +76,9 @@ const (
 	EnvStorageDir      = "ELECTRIC_STORAGE_DIR"
 	EnvReplicationSlot = "ELECTRIC_REPLICATION_SLOT"
 	EnvPublication     = "ELECTRIC_PUBLICATION"
+	EnvSecret          = "ELECTRIC_SECRET"
+	EnvDBPoolSize      = "ELECTRIC_DB_POOL_SIZE"
+	EnvMaxShapes       = "ELECTRIC_MAX_SHAPES"
 )
 
 // ValidationError represents a configuration validation error.
@@ -88,6 +104,9 @@ func Load() (*Config, error) {
 		StorageDir:      DefaultStorageDir,
 		ReplicationSlot: DefaultReplicationSlot,
 		Publication:     DefaultPublication,
+		Secret:          os.Getenv(EnvSecret),
+		DBPoolSize:      DefaultDBPoolSize,
+		MaxShapes:       DefaultMaxShapes,
 	}
 
 	// Parse Port
@@ -150,6 +169,24 @@ func Load() (*Config, error) {
 		cfg.Publication = val
 	}
 
+	// Parse DBPoolSize
+	if val := os.Getenv(EnvDBPoolSize); val != "" {
+		poolSize, err := strconv.Atoi(val)
+		if err != nil {
+			return nil, &ValidationError{Field: EnvDBPoolSize, Message: "must be a valid integer"}
+		}
+		cfg.DBPoolSize = poolSize
+	}
+
+	// Parse MaxShapes
+	if val := os.Getenv(EnvMaxShapes); val != "" {
+		maxShapes, err := strconv.Atoi(val)
+		if err != nil {
+			return nil, &ValidationError{Field: EnvMaxShapes, Message: "must be a valid integer"}
+		}
+		cfg.MaxShapes = maxShapes
+	}
+
 	// Validate configuration
 	if err := cfg.Validate(); err != nil {
 		return nil, err
@@ -206,6 +243,16 @@ func (c *Config) Validate() error {
 	// Publication must not be empty
 	if c.Publication == "" {
 		errs = append(errs, &ValidationError{Field: EnvPublication, Message: "must not be empty"})
+	}
+
+	// DBPoolSize must be at least 1
+	if c.DBPoolSize < 1 {
+		errs = append(errs, &ValidationError{Field: EnvDBPoolSize, Message: "must be at least 1"})
+	}
+
+	// MaxShapes must be non-negative (0 = unlimited)
+	if c.MaxShapes < 0 {
+		errs = append(errs, &ValidationError{Field: EnvMaxShapes, Message: "must be non-negative"})
 	}
 
 	if len(errs) > 0 {

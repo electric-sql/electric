@@ -389,60 +389,23 @@ func TestControlMessageToJSON(t *testing.T) {
 	}
 }
 
-func TestBuildKey(t *testing.T) {
+func TestEscapeRelComponent(t *testing.T) {
 	tests := []struct {
 		name     string
-		schema   string
-		table    string
-		pkCols   []string
-		pkValues []string
+		input    string
 		expected string
 	}{
-		{
-			name:     "single pk",
-			schema:   "public",
-			table:    "users",
-			pkCols:   []string{"id"},
-			pkValues: []string{"42"},
-			expected: `"public"."users"/"id"/42`,
-		},
-		{
-			name:     "composite pk",
-			schema:   "public",
-			table:    "orders",
-			pkCols:   []string{"region", "order_id"},
-			pkValues: []string{"EU", "7"},
-			expected: `"public"."orders"/"region"/EU/"order_id"/7`,
-		},
-		{
-			name:     "pk with slash escaping",
-			schema:   "public",
-			table:    "t",
-			pkCols:   []string{"id"},
-			pkValues: []string{"a/b"},
-			expected: `"public"."t"/"id"/a//b`,
-		},
-		{
-			name:     "empty pk value (null)",
-			schema:   "public",
-			table:    "t",
-			pkCols:   []string{"id"},
-			pkValues: []string{""},
-			expected: `"public"."t"/"id"/`,
-		},
-		{
-			name:     "schema with space",
-			schema:   "my schema",
-			table:    "my table",
-			pkCols:   []string{"id"},
-			pkValues: []string{"1"},
-			expected: `"my schema"."my table"/"id"/1`,
-		},
+		{"no escaping needed", "public", "public"},
+		{"dot escaping", "my.schema", "my..schema"},
+		{"slash escaping", "my/schema", "my//schema"},
+		{"both escaping", "my.schema/name", "my..schema//name"},
+		{"multiple dots", "a.b.c", "a..b..c"},
+		{"multiple slashes", "a/b/c", "a//b//c"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := BuildKey(tt.schema, tt.table, tt.pkCols, tt.pkValues)
+			result := escapeRelComponent(tt.input)
 			if result != tt.expected {
 				t.Errorf("expected %q, got %q", tt.expected, result)
 			}
@@ -450,61 +413,192 @@ func TestBuildKey(t *testing.T) {
 	}
 }
 
+func TestEscapePKValue(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{"no escaping needed", "42", "42"},
+		{"slash escaping", "a/b", "a//b"},
+		{"quote escaping", `a"b`, `a""b`},
+		{"both escaping", `a/b"c`, `a//b""c`},
+		{"multiple slashes", "a/b/c", "a//b//c"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := escapePKValue(tt.input)
+			if result != tt.expected {
+				t.Errorf("expected %q, got %q", tt.expected, result)
+			}
+		})
+	}
+}
+
+// Helper to create string pointer
+func strPtr(s string) *string {
+	return &s
+}
+
 func TestBuildKeySimple(t *testing.T) {
 	tests := []struct {
 		name     string
 		schema   string
 		table    string
-		pkValues []string
+		pkValues []*string
 		expected string
 	}{
 		{
-			name:     "single pk",
+			name:     "single pk - quoted value",
 			schema:   "public",
 			table:    "users",
-			pkValues: []string{"42"},
-			expected: `"public"."users"/42`,
+			pkValues: []*string{strPtr("42")},
+			expected: `"public"."users"/"42"`,
 		},
 		{
-			name:     "composite pk",
+			name:     "composite pk - quoted values",
 			schema:   "public",
 			table:    "orders",
-			pkValues: []string{"EU", "7"},
-			expected: `"public"."orders"/EU/7`,
+			pkValues: []*string{strPtr("EU"), strPtr("7")},
+			expected: `"public"."orders"/"EU"/"7"`,
 		},
 		{
 			name:     "pk with slash escaping",
 			schema:   "public",
 			table:    "t",
-			pkValues: []string{"a/b"},
-			expected: `"public"."t"/a//b`,
+			pkValues: []*string{strPtr("a/b")},
+			expected: `"public"."t"/"a//b"`,
 		},
 		{
 			name:     "multiple slashes",
 			schema:   "public",
 			table:    "t",
-			pkValues: []string{"a/b/c"},
-			expected: `"public"."t"/a//b//c`,
+			pkValues: []*string{strPtr("a/b/c")},
+			expected: `"public"."t"/"a//b//c"`,
 		},
 		{
 			name:     "unicode in pk",
 			schema:   "public",
 			table:    "t",
-			pkValues: []string{"cafe"},
-			expected: `"public"."t"/cafe`,
+			pkValues: []*string{strPtr("cafe")},
+			expected: `"public"."t"/"cafe"`,
 		},
 		{
 			name:     "no pk values (empty table)",
 			schema:   "public",
 			table:    "t",
-			pkValues: []string{},
+			pkValues: []*string{},
 			expected: `"public"."t"`,
+		},
+		{
+			name:     "NULL value in pk",
+			schema:   "public",
+			table:    "t",
+			pkValues: []*string{nil},
+			expected: `"public"."t"/_`,
+		},
+		{
+			name:     "empty string in pk",
+			schema:   "public",
+			table:    "t",
+			pkValues: []*string{strPtr("")},
+			expected: `"public"."t"/""`,
+		},
+		{
+			name:     "composite pk with NULL middle value",
+			schema:   "public",
+			table:    "t",
+			pkValues: []*string{strPtr("1"), nil, strPtr("2")},
+			expected: `"public"."t"/"1"/_/"2"`,
+		},
+		{
+			name:     "schema with dot - escaped",
+			schema:   "my.schema",
+			table:    "t",
+			pkValues: []*string{strPtr("1")},
+			expected: `"my..schema"."t"/"1"`,
+		},
+		{
+			name:     "table with slash - escaped",
+			schema:   "public",
+			table:    "my/table",
+			pkValues: []*string{strPtr("1")},
+			expected: `"public"."my//table"/"1"`,
+		},
+		{
+			name:     "value with double quote - escaped",
+			schema:   "public",
+			table:    "t",
+			pkValues: []*string{strPtr(`a"b`)},
+			expected: `"public"."t"/"a""b"`,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := BuildKeySimple(tt.schema, tt.table, tt.pkValues)
+			if result != tt.expected {
+				t.Errorf("expected %q, got %q", tt.expected, result)
+			}
+		})
+	}
+}
+
+func TestBuildKeyFromMap(t *testing.T) {
+	tests := []struct {
+		name     string
+		schema   string
+		table    string
+		pkCols   []string
+		value    map[string]string
+		expected string
+	}{
+		{
+			name:     "single pk from map",
+			schema:   "public",
+			table:    "users",
+			pkCols:   []string{"id"},
+			value:    map[string]string{"id": "42", "name": "test"},
+			expected: `"public"."users"/"42"`,
+		},
+		{
+			name:     "composite pk from map",
+			schema:   "public",
+			table:    "orders",
+			pkCols:   []string{"region", "order_id"},
+			value:    map[string]string{"region": "EU", "order_id": "7", "total": "100"},
+			expected: `"public"."orders"/"EU"/"7"`,
+		},
+		{
+			name:     "missing pk column is NULL",
+			schema:   "public",
+			table:    "t",
+			pkCols:   []string{"id", "missing", "other"},
+			value:    map[string]string{"id": "1", "other": "2"},
+			expected: `"public"."t"/"1"/_/"2"`,
+		},
+		{
+			name:     "empty string value is not NULL",
+			schema:   "public",
+			table:    "t",
+			pkCols:   []string{"id"},
+			value:    map[string]string{"id": ""},
+			expected: `"public"."t"/""`,
+		},
+		{
+			name:     "value with special characters",
+			schema:   "public",
+			table:    "t",
+			pkCols:   []string{"id"},
+			value:    map[string]string{"id": `a/b"c`},
+			expected: `"public"."t"/"a//b""c"`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := BuildKeyFromMap(tt.schema, tt.table, tt.pkCols, tt.value)
 			if result != tt.expected {
 				t.Errorf("expected %q, got %q", tt.expected, result)
 			}

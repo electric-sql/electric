@@ -38,6 +38,10 @@ var (
 	// LastBeforeReal is the last possible offset for the "virtual" part of the log
 	// (i.e., snapshots). This is used internally and not serialized to clients.
 	LastBeforeReal = LogOffset{TxOffset: 0, OpOffset: math.MaxInt64}
+
+	// Last is an offset that is larger than all practical offsets.
+	// Used for range comparisons when you need an upper bound.
+	Last = LogOffset{TxOffset: math.MaxInt64, OpOffset: math.MaxInt64}
 )
 
 // New creates a new LogOffset with the given transaction and operation offsets.

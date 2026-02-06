@@ -902,3 +902,310 @@ func equalStringSlices(a, b []string) bool {
 	}
 	return true
 }
+
+// TestWhereClause_Evaluate tests the Evaluate method
+func TestWhereClause_Evaluate(t *testing.T) {
+	tests := []struct {
+		name    string
+		where   string
+		row     map[string]any
+		want    bool
+		wantErr bool
+	}{
+		// Basic equality
+		{"equal match int64", "id = 1", map[string]any{"id": int64(1)}, true, false},
+		{"equal no match int64", "id = 1", map[string]any{"id": int64(2)}, false, false},
+		{"string equal match", "name = 'foo'", map[string]any{"name": "foo"}, true, false},
+		{"string equal no match", "name = 'foo'", map[string]any{"name": "bar"}, false, false},
+
+		// Not equal
+		{"not equal match", "id <> 1", map[string]any{"id": int64(2)}, true, false},
+		{"not equal no match", "id <> 1", map[string]any{"id": int64(1)}, false, false},
+		{"not equal != match", "id != 1", map[string]any{"id": int64(2)}, true, false},
+
+		// Comparison operators
+		{"less than true", "age < 18", map[string]any{"age": int64(17)}, true, false},
+		{"less than false", "age < 18", map[string]any{"age": int64(18)}, false, false},
+		{"greater than true", "age > 18", map[string]any{"age": int64(19)}, true, false},
+		{"greater than false", "age > 18", map[string]any{"age": int64(18)}, false, false},
+		{"less than or equal true", "age <= 18", map[string]any{"age": int64(18)}, true, false},
+		{"less than or equal false", "age <= 18", map[string]any{"age": int64(19)}, false, false},
+		{"greater than or equal true", "age >= 18", map[string]any{"age": int64(18)}, true, false},
+		{"greater than or equal false", "age >= 18", map[string]any{"age": int64(17)}, false, false},
+
+		// Float comparisons
+		{"float equal", "price = 19.99", map[string]any{"price": 19.99}, true, false},
+		{"float less than", "price < 20.0", map[string]any{"price": 19.99}, true, false},
+		{"float greater than", "price > 19.0", map[string]any{"price": 19.99}, true, false},
+
+		// AND expressions
+		{"AND true", "a = 1 AND b = 2", map[string]any{"a": int64(1), "b": int64(2)}, true, false},
+		{"AND false left", "a = 1 AND b = 2", map[string]any{"a": int64(2), "b": int64(2)}, false, false},
+		{"AND false right", "a = 1 AND b = 2", map[string]any{"a": int64(1), "b": int64(3)}, false, false},
+		{"AND both false", "a = 1 AND b = 2", map[string]any{"a": int64(2), "b": int64(3)}, false, false},
+		{"multiple AND true", "a = 1 AND b = 2 AND c = 3", map[string]any{"a": int64(1), "b": int64(2), "c": int64(3)}, true, false},
+		{"multiple AND false", "a = 1 AND b = 2 AND c = 3", map[string]any{"a": int64(1), "b": int64(2), "c": int64(4)}, false, false},
+
+		// OR expressions
+		{"OR true left", "a = 1 OR b = 2", map[string]any{"a": int64(1), "b": int64(3)}, true, false},
+		{"OR true right", "a = 1 OR b = 2", map[string]any{"a": int64(2), "b": int64(2)}, true, false},
+		{"OR both true", "a = 1 OR b = 2", map[string]any{"a": int64(1), "b": int64(2)}, true, false},
+		{"OR false", "a = 1 OR b = 2", map[string]any{"a": int64(2), "b": int64(3)}, false, false},
+		{"multiple OR true", "a = 1 OR b = 2 OR c = 3", map[string]any{"a": int64(2), "b": int64(3), "c": int64(3)}, true, false},
+
+		// NOT expressions
+		{"NOT true", "NOT active", map[string]any{"active": true}, false, false},
+		{"NOT false", "NOT active", map[string]any{"active": false}, true, false},
+
+		// IS NULL / IS NOT NULL
+		{"IS NULL true", "x IS NULL", map[string]any{"x": nil}, true, false},
+		{"IS NULL false", "x IS NULL", map[string]any{"x": "val"}, false, false},
+		{"IS NULL missing column", "x IS NULL", map[string]any{}, true, false},
+		{"IS NOT NULL true", "x IS NOT NULL", map[string]any{"x": "val"}, true, false},
+		{"IS NOT NULL false", "x IS NOT NULL", map[string]any{"x": nil}, false, false},
+
+		// NULL handling in comparisons (three-valued logic)
+		{"equal NULL returns false", "id = 1", map[string]any{"id": nil}, false, false},
+		{"NULL = NULL returns false", "id = NULL", map[string]any{"id": nil}, false, false},
+		{"AND with NULL operand false", "a = 1 AND b = 2", map[string]any{"a": int64(1), "b": nil}, false, false},
+		{"AND with NULL operand definite false", "a = 1 AND b = 2", map[string]any{"a": int64(2), "b": nil}, false, false},
+		{"OR with NULL operand true", "a = 1 OR b = 2", map[string]any{"a": int64(1), "b": nil}, true, false},
+		{"OR with NULL operand false", "a = 1 OR b = 2", map[string]any{"a": int64(2), "b": nil}, false, false},
+
+		// LIKE patterns
+		{"LIKE suffix match", "name LIKE 'foo%'", map[string]any{"name": "foobar"}, true, false},
+		{"LIKE suffix no match", "name LIKE 'foo%'", map[string]any{"name": "barfoo"}, false, false},
+		{"LIKE prefix match", "name LIKE '%bar'", map[string]any{"name": "foobar"}, true, false},
+		{"LIKE contains match", "name LIKE '%oba%'", map[string]any{"name": "foobar"}, true, false},
+		{"LIKE underscore match", "name LIKE 'fo_bar'", map[string]any{"name": "foobar"}, true, false},
+		{"LIKE underscore no match", "name LIKE 'fo_bar'", map[string]any{"name": "fooobar"}, false, false},
+		{"LIKE exact match", "name LIKE 'foobar'", map[string]any{"name": "foobar"}, true, false},
+		{"LIKE exact no match", "name LIKE 'foobar'", map[string]any{"name": "foobarbaz"}, false, false},
+		{"NOT LIKE match", "name NOT LIKE 'foo%'", map[string]any{"name": "barfoo"}, true, false},
+		{"NOT LIKE no match", "name NOT LIKE 'foo%'", map[string]any{"name": "foobar"}, false, false},
+
+		// ILIKE (case-insensitive)
+		{"ILIKE case insensitive match", "name ILIKE 'FOO%'", map[string]any{"name": "foobar"}, true, false},
+		{"ILIKE case insensitive match 2", "name ILIKE 'foo%'", map[string]any{"name": "FOOBAR"}, true, false},
+		{"NOT ILIKE case insensitive", "name NOT ILIKE 'FOO%'", map[string]any{"name": "barfoo"}, true, false},
+
+		// IN lists
+		{"IN list match first", "status IN ('a', 'b', 'c')", map[string]any{"status": "a"}, true, false},
+		{"IN list match middle", "status IN ('a', 'b', 'c')", map[string]any{"status": "b"}, true, false},
+		{"IN list match last", "status IN ('a', 'b', 'c')", map[string]any{"status": "c"}, true, false},
+		{"IN list no match", "status IN ('a', 'b', 'c')", map[string]any{"status": "d"}, false, false},
+		{"IN list integer match", "id IN (1, 2, 3)", map[string]any{"id": int64(2)}, true, false},
+		{"IN list integer no match", "id IN (1, 2, 3)", map[string]any{"id": int64(4)}, false, false},
+		{"NOT IN list match", "status NOT IN ('a', 'b')", map[string]any{"status": "c"}, true, false},
+		{"NOT IN list no match", "status NOT IN ('a', 'b')", map[string]any{"status": "a"}, false, false},
+
+		// BETWEEN
+		{"BETWEEN match lower", "age BETWEEN 18 AND 65", map[string]any{"age": int64(18)}, true, false},
+		{"BETWEEN match upper", "age BETWEEN 18 AND 65", map[string]any{"age": int64(65)}, true, false},
+		{"BETWEEN match middle", "age BETWEEN 18 AND 65", map[string]any{"age": int64(40)}, true, false},
+		{"BETWEEN no match below", "age BETWEEN 18 AND 65", map[string]any{"age": int64(17)}, false, false},
+		{"BETWEEN no match above", "age BETWEEN 18 AND 65", map[string]any{"age": int64(66)}, false, false},
+		{"NOT BETWEEN match", "age NOT BETWEEN 18 AND 65", map[string]any{"age": int64(17)}, true, false},
+		{"NOT BETWEEN no match", "age NOT BETWEEN 18 AND 65", map[string]any{"age": int64(40)}, false, false},
+
+		// Boolean tests
+		{"IS TRUE with true", "active IS TRUE", map[string]any{"active": true}, true, false},
+		{"IS TRUE with false", "active IS TRUE", map[string]any{"active": false}, false, false},
+		{"IS TRUE with null", "active IS TRUE", map[string]any{"active": nil}, false, false},
+		{"IS FALSE with true", "active IS FALSE", map[string]any{"active": true}, false, false},
+		{"IS FALSE with false", "active IS FALSE", map[string]any{"active": false}, true, false},
+		{"IS FALSE with null", "active IS FALSE", map[string]any{"active": nil}, false, false},
+		{"IS NOT TRUE with true", "active IS NOT TRUE", map[string]any{"active": true}, false, false},
+		{"IS NOT TRUE with false", "active IS NOT TRUE", map[string]any{"active": false}, true, false},
+		{"IS NOT TRUE with null", "active IS NOT TRUE", map[string]any{"active": nil}, true, false},
+		{"IS NOT FALSE with true", "active IS NOT FALSE", map[string]any{"active": true}, true, false},
+		{"IS NOT FALSE with false", "active IS NOT FALSE", map[string]any{"active": false}, false, false},
+		{"IS NOT FALSE with null", "active IS NOT FALSE", map[string]any{"active": nil}, true, false},
+		{"IS UNKNOWN with null", "active IS UNKNOWN", map[string]any{"active": nil}, true, false},
+		{"IS UNKNOWN with value", "active IS UNKNOWN", map[string]any{"active": true}, false, false},
+
+		// Complex expressions
+		{"nested AND OR", "(a = 1 AND b = 2) OR c = 3", map[string]any{"a": int64(1), "b": int64(2), "c": int64(4)}, true, false},
+		{"nested AND OR 2", "(a = 1 AND b = 2) OR c = 3", map[string]any{"a": int64(2), "b": int64(2), "c": int64(3)}, true, false},
+		{"nested AND OR 3", "(a = 1 AND b = 2) OR c = 3", map[string]any{"a": int64(2), "b": int64(3), "c": int64(4)}, false, false},
+		{"mixed conditions", "id IN (1, 2) AND name LIKE 'foo%' AND deleted_at IS NULL", map[string]any{"id": int64(1), "name": "foobar", "deleted_at": nil}, true, false},
+		{"mixed conditions fail", "id IN (1, 2) AND name LIKE 'foo%' AND deleted_at IS NULL", map[string]any{"id": int64(1), "name": "barfoo", "deleted_at": nil}, false, false},
+
+		// Type coercion
+		{"int vs int64", "id = 1", map[string]any{"id": 1}, true, false},
+		{"int32 vs int64", "id = 1", map[string]any{"id": int32(1)}, true, false},
+		{"float32 comparison", "price > 19.0", map[string]any{"price": float32(20.0)}, true, false},
+		{"string numeric comparison", "id = 1", map[string]any{"id": "1"}, true, false},
+
+		// Boolean literals
+		{"boolean true literal", "active = true", map[string]any{"active": true}, true, false},
+		{"boolean false literal", "active = false", map[string]any{"active": false}, true, false},
+		{"boolean mismatch", "active = true", map[string]any{"active": false}, false, false},
+
+		// String comparisons
+		{"string less than", "name < 'b'", map[string]any{"name": "a"}, true, false},
+		{"string greater than", "name > 'a'", map[string]any{"name": "b"}, true, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			wc, err := Parse(tt.where)
+			if err != nil {
+				t.Fatalf("Parse() error = %v", err)
+			}
+
+			got, err := wc.Evaluate(tt.row)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Evaluate() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if got != tt.want {
+				t.Errorf("Evaluate() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestEvaluate_LikePatternEdgeCases tests edge cases in LIKE pattern matching
+func TestEvaluate_LikePatternEdgeCases(t *testing.T) {
+	tests := []struct {
+		name    string
+		where   string
+		row     map[string]any
+		want    bool
+	}{
+		{"LIKE with regex special chars", "name LIKE 'foo.bar'", map[string]any{"name": "foo.bar"}, true},
+		{"LIKE does not interpret regex", "name LIKE 'foo.bar'", map[string]any{"name": "fooxbar"}, false},
+		{"LIKE with brackets", "name LIKE '[test]'", map[string]any{"name": "[test]"}, true},
+		{"LIKE with plus", "name LIKE 'a+b'", map[string]any{"name": "a+b"}, true},
+		{"LIKE with star", "name LIKE 'a*b'", map[string]any{"name": "a*b"}, true},
+		{"LIKE with caret", "name LIKE '^test$'", map[string]any{"name": "^test$"}, true},
+		{"LIKE escaped percent", "name LIKE 'foo\\%bar'", map[string]any{"name": "foo%bar"}, true},
+		{"LIKE escaped underscore", "name LIKE 'foo\\_bar'", map[string]any{"name": "foo_bar"}, true},
+		{"LIKE empty pattern", "name LIKE ''", map[string]any{"name": ""}, true},
+		{"LIKE empty string no match", "name LIKE ''", map[string]any{"name": "foo"}, false},
+		{"LIKE percent only", "name LIKE '%'", map[string]any{"name": "anything"}, true},
+		{"LIKE percent only empty", "name LIKE '%'", map[string]any{"name": ""}, true},
+		{"LIKE underscore only", "name LIKE '_'", map[string]any{"name": "x"}, true},
+		{"LIKE underscore only no match", "name LIKE '_'", map[string]any{"name": "xx"}, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			wc, err := Parse(tt.where)
+			if err != nil {
+				t.Fatalf("Parse() error = %v", err)
+			}
+
+			got, err := wc.Evaluate(tt.row)
+			if err != nil {
+				t.Errorf("Evaluate() error = %v", err)
+				return
+			}
+			if got != tt.want {
+				t.Errorf("Evaluate() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestEvaluate_NullSemantics tests three-valued logic with NULL values
+func TestEvaluate_NullSemantics(t *testing.T) {
+	tests := []struct {
+		name  string
+		where string
+		row   map[string]any
+		want  bool
+	}{
+		// NULL comparisons always return NULL (which becomes false)
+		{"NULL = NULL", "x = y", map[string]any{"x": nil, "y": nil}, false},
+		{"NULL = value", "x = 1", map[string]any{"x": nil}, false},
+		{"value = NULL", "x = y", map[string]any{"x": int64(1), "y": nil}, false},
+
+		// AND with NULL
+		{"false AND NULL = false", "a = 1 AND b = 2", map[string]any{"a": int64(2), "b": nil}, false},
+		{"NULL AND false = false", "a = 1 AND b = 2", map[string]any{"a": nil, "b": int64(3)}, false},
+		{"true AND NULL = NULL (false)", "a = 1 AND b = 2", map[string]any{"a": int64(1), "b": nil}, false},
+		{"NULL AND NULL = NULL (false)", "a = 1 AND b = 2", map[string]any{"a": nil, "b": nil}, false},
+
+		// OR with NULL
+		{"true OR NULL = true", "a = 1 OR b = 2", map[string]any{"a": int64(1), "b": nil}, true},
+		{"NULL OR true = true", "a = 1 OR b = 2", map[string]any{"a": nil, "b": int64(2)}, true},
+		{"false OR NULL = NULL (false)", "a = 1 OR b = 2", map[string]any{"a": int64(2), "b": nil}, false},
+		{"NULL OR NULL = NULL (false)", "a = 1 OR b = 2", map[string]any{"a": nil, "b": nil}, false},
+
+		// NOT with NULL
+		{"NOT NULL = NULL (false)", "NOT a", map[string]any{"a": nil}, false},
+
+		// IN with NULL in list (not currently testable with literal syntax)
+		// These test the value being NULL
+		{"NULL IN list", "x IN (1, 2, 3)", map[string]any{"x": nil}, false},
+		{"NULL NOT IN list", "x NOT IN (1, 2, 3)", map[string]any{"x": nil}, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			wc, err := Parse(tt.where)
+			if err != nil {
+				t.Fatalf("Parse() error = %v", err)
+			}
+
+			got, err := wc.Evaluate(tt.row)
+			if err != nil {
+				t.Errorf("Evaluate() error = %v", err)
+				return
+			}
+			if got != tt.want {
+				t.Errorf("Evaluate() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestEvaluate_TypeCoercion tests type coercion in comparisons
+func TestEvaluate_TypeCoercion(t *testing.T) {
+	tests := []struct {
+		name  string
+		where string
+		row   map[string]any
+		want  bool
+	}{
+		// Integer types
+		{"int to int64", "x = 42", map[string]any{"x": 42}, true},
+		{"int32 to int64", "x = 42", map[string]any{"x": int32(42)}, true},
+		{"int64 to int64", "x = 42", map[string]any{"x": int64(42)}, true},
+
+		// Float types (note: exact equality with float32 can be tricky due to precision)
+		{"float32 greater", "x > 3.0", map[string]any{"x": float32(3.14)}, true},
+		{"float64 equals", "x = 3.14", map[string]any{"x": float64(3.14)}, true},
+
+		// Mixed numeric
+		{"int vs float", "x > 3", map[string]any{"x": 3.5}, true},
+		{"float vs int", "x < 4", map[string]any{"x": 3.5}, true},
+
+		// String to number
+		{"string number equals", "x = 42", map[string]any{"x": "42"}, true},
+		{"string float equals", "x = 3.14", map[string]any{"x": "3.14"}, true},
+
+		// Non-numeric strings fall back to string comparison
+		{"string comparison", "x = 'hello'", map[string]any{"x": "hello"}, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			wc, err := Parse(tt.where)
+			if err != nil {
+				t.Fatalf("Parse() error = %v", err)
+			}
+
+			got, err := wc.Evaluate(tt.row)
+			if err != nil {
+				t.Errorf("Evaluate() error = %v", err)
+				return
+			}
+			if got != tt.want {
+				t.Errorf("Evaluate() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}

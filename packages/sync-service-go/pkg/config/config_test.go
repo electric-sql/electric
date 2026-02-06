@@ -59,6 +59,9 @@ func clearEnvVars(t *testing.T) func() {
 		EnvStorageDir,
 		EnvReplicationSlot,
 		EnvPublication,
+		EnvSecret,
+		EnvDBPoolSize,
+		EnvMaxShapes,
 	}
 
 	envMap := make(map[string]string)
@@ -115,6 +118,18 @@ func TestLoad_Defaults(t *testing.T) {
 	if cfg.Publication != DefaultPublication {
 		t.Errorf("Publication = %q, want %q", cfg.Publication, DefaultPublication)
 	}
+
+	if cfg.Secret != "" {
+		t.Errorf("Secret = %q, want empty string", cfg.Secret)
+	}
+
+	if cfg.DBPoolSize != DefaultDBPoolSize {
+		t.Errorf("DBPoolSize = %d, want %d", cfg.DBPoolSize, DefaultDBPoolSize)
+	}
+
+	if cfg.MaxShapes != DefaultMaxShapes {
+		t.Errorf("MaxShapes = %d, want %d", cfg.MaxShapes, DefaultMaxShapes)
+	}
 }
 
 func TestLoad_CustomValues(t *testing.T) {
@@ -128,6 +143,9 @@ func TestLoad_CustomValues(t *testing.T) {
 		EnvStorageDir:      "/data/electric",
 		EnvReplicationSlot: "my_slot",
 		EnvPublication:     "my_publication",
+		EnvSecret:          "my-secret-token",
+		EnvDBPoolSize:      "50",
+		EnvMaxShapes:       "100",
 	})
 	defer cleanup()
 
@@ -170,6 +188,18 @@ func TestLoad_CustomValues(t *testing.T) {
 
 	if cfg.Publication != "my_publication" {
 		t.Errorf("Publication = %q, want %q", cfg.Publication, "my_publication")
+	}
+
+	if cfg.Secret != "my-secret-token" {
+		t.Errorf("Secret = %q, want %q", cfg.Secret, "my-secret-token")
+	}
+
+	if cfg.DBPoolSize != 50 {
+		t.Errorf("DBPoolSize = %d, want %d", cfg.DBPoolSize, 50)
+	}
+
+	if cfg.MaxShapes != 100 {
+		t.Errorf("MaxShapes = %d, want %d", cfg.MaxShapes, 100)
 	}
 }
 
@@ -374,6 +404,8 @@ func TestValidate_AllFields(t *testing.T) {
 				StorageDir:      "./data",
 				ReplicationSlot: "slot",
 				Publication:     "pub",
+				DBPoolSize:      20,
+				MaxShapes:       0,
 			},
 			wantErr: false,
 		},
@@ -389,6 +421,8 @@ func TestValidate_AllFields(t *testing.T) {
 				StorageDir:      "./data",
 				ReplicationSlot: "slot",
 				Publication:     "pub",
+				DBPoolSize:      20,
+				MaxShapes:       0,
 			},
 			wantErr: true,
 			errMsg:  "DATABASE_URL",
@@ -405,6 +439,8 @@ func TestValidate_AllFields(t *testing.T) {
 				StorageDir:      "./data",
 				ReplicationSlot: "slot",
 				Publication:     "pub",
+				DBPoolSize:      20,
+				MaxShapes:       0,
 			},
 			wantErr: true,
 			errMsg:  "ELECTRIC_PORT",
@@ -421,6 +457,8 @@ func TestValidate_AllFields(t *testing.T) {
 				StorageDir:      "./data",
 				ReplicationSlot: "slot",
 				Publication:     "pub",
+				DBPoolSize:      20,
+				MaxShapes:       0,
 			},
 			wantErr: true,
 			errMsg:  "ELECTRIC_PORT",
@@ -437,6 +475,8 @@ func TestValidate_AllFields(t *testing.T) {
 				StorageDir:      "./data",
 				ReplicationSlot: "slot",
 				Publication:     "pub",
+				DBPoolSize:      20,
+				MaxShapes:       0,
 			},
 			wantErr: true,
 			errMsg:  "ELECTRIC_LONG_POLL_TIMEOUT",
@@ -453,6 +493,8 @@ func TestValidate_AllFields(t *testing.T) {
 				StorageDir:      "./data",
 				ReplicationSlot: "slot",
 				Publication:     "pub",
+				DBPoolSize:      20,
+				MaxShapes:       0,
 			},
 			wantErr: true,
 			errMsg:  "ELECTRIC_LONG_POLL_TIMEOUT",
@@ -469,6 +511,8 @@ func TestValidate_AllFields(t *testing.T) {
 				StorageDir:      "./data",
 				ReplicationSlot: "slot",
 				Publication:     "pub",
+				DBPoolSize:      20,
+				MaxShapes:       0,
 			},
 			wantErr: true,
 			errMsg:  "ELECTRIC_CHUNK_THRESHOLD",
@@ -485,6 +529,8 @@ func TestValidate_AllFields(t *testing.T) {
 				StorageDir:      "./data",
 				ReplicationSlot: "slot",
 				Publication:     "pub",
+				DBPoolSize:      20,
+				MaxShapes:       0,
 			},
 			wantErr: true,
 			errMsg:  "ELECTRIC_MAX_AGE",
@@ -501,6 +547,8 @@ func TestValidate_AllFields(t *testing.T) {
 				StorageDir:      "./data",
 				ReplicationSlot: "slot",
 				Publication:     "pub",
+				DBPoolSize:      20,
+				MaxShapes:       0,
 			},
 			wantErr: true,
 			errMsg:  "ELECTRIC_STALE_AGE",
@@ -517,6 +565,8 @@ func TestValidate_AllFields(t *testing.T) {
 				StorageDir:      "",
 				ReplicationSlot: "slot",
 				Publication:     "pub",
+				DBPoolSize:      20,
+				MaxShapes:       0,
 			},
 			wantErr: true,
 			errMsg:  "ELECTRIC_STORAGE_DIR",
@@ -533,6 +583,8 @@ func TestValidate_AllFields(t *testing.T) {
 				StorageDir:      "./data",
 				ReplicationSlot: "",
 				Publication:     "pub",
+				DBPoolSize:      20,
+				MaxShapes:       0,
 			},
 			wantErr: true,
 			errMsg:  "ELECTRIC_REPLICATION_SLOT",
@@ -549,9 +601,47 @@ func TestValidate_AllFields(t *testing.T) {
 				StorageDir:      "./data",
 				ReplicationSlot: "slot",
 				Publication:     "",
+				DBPoolSize:      20,
+				MaxShapes:       0,
 			},
 			wantErr: true,
 			errMsg:  "ELECTRIC_PUBLICATION",
+		},
+		{
+			name: "zero db pool size",
+			config: Config{
+				DatabaseURL:     "postgres://localhost/test",
+				Port:            3000,
+				LongPollTimeout: 20 * time.Second,
+				ChunkThreshold:  10485760,
+				MaxAge:          604800,
+				StaleAge:        300,
+				StorageDir:      "./data",
+				ReplicationSlot: "slot",
+				Publication:     "pub",
+				DBPoolSize:      0,
+				MaxShapes:       0,
+			},
+			wantErr: true,
+			errMsg:  "ELECTRIC_DB_POOL_SIZE",
+		},
+		{
+			name: "negative max shapes",
+			config: Config{
+				DatabaseURL:     "postgres://localhost/test",
+				Port:            3000,
+				LongPollTimeout: 20 * time.Second,
+				ChunkThreshold:  10485760,
+				MaxAge:          604800,
+				StaleAge:        300,
+				StorageDir:      "./data",
+				ReplicationSlot: "slot",
+				Publication:     "pub",
+				DBPoolSize:      20,
+				MaxShapes:       -1,
+			},
+			wantErr: true,
+			errMsg:  "ELECTRIC_MAX_SHAPES",
 		},
 	}
 
@@ -579,6 +669,8 @@ func TestValidate_MultipleErrors(t *testing.T) {
 		StorageDir:      "",
 		ReplicationSlot: "",
 		Publication:     "",
+		DBPoolSize:      0,
+		MaxShapes:       -1,
 	}
 
 	err := cfg.Validate()
@@ -598,6 +690,8 @@ func TestValidate_MultipleErrors(t *testing.T) {
 		EnvStorageDir,
 		EnvReplicationSlot,
 		EnvPublication,
+		EnvDBPoolSize,
+		EnvMaxShapes,
 	}
 
 	for _, field := range expectedFields {
@@ -737,6 +831,158 @@ func TestLoad_DatabaseURL_Various(t *testing.T) {
 
 			if cfg.DatabaseURL != tt.url {
 				t.Errorf("DatabaseURL = %q, want %q", cfg.DatabaseURL, tt.url)
+			}
+		})
+	}
+}
+
+func TestLoad_Secret(t *testing.T) {
+	tests := []struct {
+		name   string
+		secret string
+		want   string
+	}{
+		{"empty secret", "", ""},
+		{"simple secret", "my-secret", "my-secret"},
+		{"complex secret", "abc123!@#$%^&*()", "abc123!@#$%^&*()"},
+		{"uuid secret", "550e8400-e29b-41d4-a716-446655440000", "550e8400-e29b-41d4-a716-446655440000"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cleanup := clearEnvVars(t)
+			defer cleanup()
+
+			os.Setenv(EnvDatabaseURL, "postgres://localhost/test")
+			if tt.secret != "" {
+				os.Setenv(EnvSecret, tt.secret)
+			}
+
+			cfg, err := Load()
+			if err != nil {
+				t.Fatalf("Load() error = %v", err)
+			}
+
+			if cfg.Secret != tt.want {
+				t.Errorf("Secret = %q, want %q", cfg.Secret, tt.want)
+			}
+		})
+	}
+}
+
+func TestLoad_DBPoolSize(t *testing.T) {
+	tests := []struct {
+		name     string
+		poolSize string
+		want     int
+		wantErr  bool
+	}{
+		{"default", "", DefaultDBPoolSize, false},
+		{"valid pool size", "10", 10, false},
+		{"minimum valid", "1", 1, false},
+		{"large pool", "100", 100, false},
+		{"zero", "0", 0, true},           // Will fail validation
+		{"negative", "-5", 0, true},      // Will fail validation
+		{"non-numeric", "abc", 0, true},  // Will fail parsing
+		{"float", "10.5", 0, true},       // Will fail parsing
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cleanup := clearEnvVars(t)
+			defer cleanup()
+
+			os.Setenv(EnvDatabaseURL, "postgres://localhost/test")
+			if tt.poolSize != "" {
+				os.Setenv(EnvDBPoolSize, tt.poolSize)
+			}
+
+			cfg, err := Load()
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Load() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+
+			if !tt.wantErr && cfg.DBPoolSize != tt.want {
+				t.Errorf("DBPoolSize = %d, want %d", cfg.DBPoolSize, tt.want)
+			}
+		})
+	}
+}
+
+func TestLoad_MaxShapes(t *testing.T) {
+	tests := []struct {
+		name      string
+		maxShapes string
+		want      int
+		wantErr   bool
+	}{
+		{"default (unlimited)", "", DefaultMaxShapes, false},
+		{"zero (unlimited)", "0", 0, false},
+		{"valid limit", "100", 100, false},
+		{"large limit", "10000", 10000, false},
+		{"negative", "-1", 0, true},       // Will fail validation
+		{"non-numeric", "abc", 0, true},   // Will fail parsing
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cleanup := clearEnvVars(t)
+			defer cleanup()
+
+			os.Setenv(EnvDatabaseURL, "postgres://localhost/test")
+			if tt.maxShapes != "" {
+				os.Setenv(EnvMaxShapes, tt.maxShapes)
+			}
+
+			cfg, err := Load()
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Load() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+
+			if !tt.wantErr && cfg.MaxShapes != tt.want {
+				t.Errorf("MaxShapes = %d, want %d", cfg.MaxShapes, tt.want)
+			}
+		})
+	}
+}
+
+func TestValidate_DBPoolSize(t *testing.T) {
+	tests := []struct {
+		name     string
+		poolSize int
+		wantErr  bool
+	}{
+		{"valid pool size", 20, false},
+		{"minimum valid", 1, false},
+		{"zero", 0, true},
+		{"negative", -1, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := Config{
+				DatabaseURL:     "postgres://localhost/test",
+				Port:            3000,
+				LongPollTimeout: 20000,
+				ChunkThreshold:  10485760,
+				MaxAge:          604800,
+				StaleAge:        300,
+				StorageDir:      "./data",
+				ReplicationSlot: "slot",
+				Publication:     "pub",
+				DBPoolSize:      tt.poolSize,
+				MaxShapes:       0,
+			}
+
+			err := cfg.Validate()
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Validate() error = %v, wantErr %v", err, tt.wantErr)
+			}
+
+			if tt.wantErr && err != nil && !strings.Contains(err.Error(), EnvDBPoolSize) {
+				t.Errorf("Validate() error should contain %q, got: %v", EnvDBPoolSize, err)
 			}
 		})
 	}

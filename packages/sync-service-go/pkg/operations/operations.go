@@ -203,48 +203,69 @@ func (c *ControlMessage) ToJSON() ([]byte, error) {
 	return json.Marshal(c)
 }
 
-// BuildKey constructs a key from schema, table, and primary key values.
-// Format: "schema"."table"/"pk_col1"/pk_val1/"pk_col2"/pk_val2
-// Slashes within PK values are escaped as //.
-func BuildKey(schema, table string, pkCols []string, pkValues []string) string {
+// escapeRelComponent escapes special characters in schema/table names for key encoding.
+// Dots are escaped as .. and slashes are escaped as //
+func escapeRelComponent(s string) string {
+	// Escape dots first, then slashes
+	s = strings.ReplaceAll(s, ".", "..")
+	s = strings.ReplaceAll(s, "/", "//")
+	return s
+}
+
+// escapePKValue escapes special characters in PK values.
+// Slashes are escaped as // and double quotes are escaped as ""
+func escapePKValue(s string) string {
+	s = strings.ReplaceAll(s, "/", "//")
+	s = strings.ReplaceAll(s, `"`, `""`)
+	return s
+}
+
+// BuildKeySimple constructs a key using only PK values (without column names).
+// Format: "schema"."table"/"pk_val1"/"pk_val2"
+// This is the format used in the wire protocol.
+//
+// PK value handling:
+//   - nil pointer = NULL, rendered as /_
+//   - pointer to empty string = empty string, rendered as /""
+//   - pointer to value = quoted value, rendered as /"value"
+func BuildKeySimple(schema, table string, pkValues []*string) string {
 	var sb strings.Builder
 
-	// Write schema.table part with quotes
-	sb.WriteString(fmt.Sprintf(`"%s"."%s"`, schema, table))
+	// Write schema.table part with quotes, escaping special characters
+	sb.WriteString(fmt.Sprintf(`"%s"."%s"`, escapeRelComponent(schema), escapeRelComponent(table)))
 
-	// Write each PK column/value pair
-	for i, val := range pkValues {
+	// Write each PK value
+	for _, val := range pkValues {
 		sb.WriteByte('/')
-		if i < len(pkCols) {
-			sb.WriteString(fmt.Sprintf(`"%s"`, pkCols[i]))
-			sb.WriteByte('/')
+		if val == nil {
+			// NULL value
+			sb.WriteByte('_')
+		} else {
+			// Quote the value, escaping special characters
+			sb.WriteString(fmt.Sprintf(`"%s"`, escapePKValue(*val)))
 		}
-		// Escape slashes in value
-		escapedVal := strings.ReplaceAll(val, "/", "//")
-		sb.WriteString(escapedVal)
 	}
 
 	return sb.String()
 }
 
-// BuildKeySimple constructs a key using only PK values (without column names).
+// BuildKeyFromMap constructs a key from a value map using the specified PK columns.
 // Format: "schema"."table"/"pk_val1"/"pk_val2"
-// This is the simpler format used in the wire protocol.
-func BuildKeySimple(schema, table string, pkValues []string) string {
-	var sb strings.Builder
-
-	// Write schema.table part with quotes
-	sb.WriteString(fmt.Sprintf(`"%s"."%s"`, schema, table))
-
-	// Write each PK value
-	for _, val := range pkValues {
-		sb.WriteByte('/')
-		// Escape slashes in value
-		escapedVal := strings.ReplaceAll(val, "/", "//")
-		sb.WriteString(escapedVal)
+//
+// PK value handling:
+//   - Missing key in map = NULL, rendered as /_
+//   - Empty string value = empty string, rendered as /""
+//   - Value present = quoted value, rendered as /"value"
+func BuildKeyFromMap(schema, table string, pkCols []string, value map[string]string) string {
+	pkValues := make([]*string, len(pkCols))
+	for i, col := range pkCols {
+		if val, ok := value[col]; ok {
+			pkValues[i] = &val
+		} else {
+			pkValues[i] = nil // NULL
+		}
 	}
-
-	return sb.String()
+	return BuildKeySimple(schema, table, pkValues)
 }
 
 // extractLSN extracts the LSN (transaction offset) from an offset string.

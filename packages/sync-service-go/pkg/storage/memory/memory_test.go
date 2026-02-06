@@ -278,7 +278,7 @@ func TestGetLogSince(t *testing.T) {
 	require.NoError(t, err)
 
 	t.Run("offset -1 returns snapshot and all log items", func(t *testing.T) {
-		items, err := ms.GetLogSince(shapeID, "-1")
+		items, err := ms.GetLogSince(shapeID, "-1", 0)
 		require.NoError(t, err)
 		assert.Equal(t, 5, len(items)) // 2 snapshot + 3 log
 		assert.Equal(t, "snap1", items[0].Key)
@@ -287,7 +287,7 @@ func TestGetLogSince(t *testing.T) {
 	})
 
 	t.Run("offset 0_0 returns items after first snapshot item", func(t *testing.T) {
-		items, err := ms.GetLogSince(shapeID, "0_0")
+		items, err := ms.GetLogSince(shapeID, "0_0", 0)
 		require.NoError(t, err)
 		// Only log items with offset > "0_0"
 		assert.Equal(t, 3, len(items))
@@ -295,7 +295,7 @@ func TestGetLogSince(t *testing.T) {
 	})
 
 	t.Run("offset 100_0 returns items after that offset", func(t *testing.T) {
-		items, err := ms.GetLogSince(shapeID, "100_0")
+		items, err := ms.GetLogSince(shapeID, "100_0", 0)
 		require.NoError(t, err)
 		assert.Equal(t, 2, len(items))
 		assert.Equal(t, "log2", items[0].Key)
@@ -303,14 +303,29 @@ func TestGetLogSince(t *testing.T) {
 	})
 
 	t.Run("offset at end returns empty", func(t *testing.T) {
-		items, err := ms.GetLogSince(shapeID, "200_0")
+		items, err := ms.GetLogSince(shapeID, "200_0", 0)
 		require.NoError(t, err)
 		assert.Empty(t, items)
 	})
 
 	t.Run("returns error for nonexistent shape", func(t *testing.T) {
-		_, err := ms.GetLogSince("nonexistent", "-1")
+		_, err := ms.GetLogSince("nonexistent", "-1", 0)
 		assert.Equal(t, ErrShapeNotFound, err)
+	})
+
+	t.Run("limit restricts number of items returned", func(t *testing.T) {
+		items, err := ms.GetLogSince(shapeID, "-1", 2)
+		require.NoError(t, err)
+		assert.Equal(t, 2, len(items))
+		assert.Equal(t, "snap1", items[0].Key)
+		assert.Equal(t, "snap2", items[1].Key)
+	})
+
+	t.Run("limit on log items", func(t *testing.T) {
+		items, err := ms.GetLogSince(shapeID, "0_1", 1)
+		require.NoError(t, err)
+		assert.Equal(t, 1, len(items))
+		assert.Equal(t, "log1", items[0].Key)
 	})
 }
 
@@ -577,7 +592,7 @@ func TestConcurrentAccess(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			for j := 0; j < numOps; j++ {
-				_, _ = ms.GetLogSince(shapeID, "-1")
+				_, _ = ms.GetLogSince(shapeID, "-1", 0)
 				_, _ = ms.GetLatestOffset(shapeID)
 				_ = ms.SnapshotExists(shapeID)
 			}
@@ -708,12 +723,12 @@ func TestFullCRUDCycle(t *testing.T) {
 	require.NoError(t, err)
 
 	// 4. Read log stream
-	allItems, err := ms.GetLogSince(shapeID, "-1")
+	allItems, err := ms.GetLogSince(shapeID, "-1", 0)
 	require.NoError(t, err)
 	assert.Equal(t, 5, len(allItems)) // 2 snapshot + 3 log
 
 	// 5. Read only changes since snapshot
-	changes, err := ms.GetLogSince(shapeID, "0_1")
+	changes, err := ms.GetLogSince(shapeID, "0_1", 0)
 	require.NoError(t, err)
 	assert.Equal(t, 3, len(changes))
 

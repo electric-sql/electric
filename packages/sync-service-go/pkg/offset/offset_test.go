@@ -635,6 +635,24 @@ func TestLogOffsetBoundaryValues(t *testing.T) {
 	})
 }
 
+func TestLogOffsetLast(t *testing.T) {
+	// Last should be greater than any practical offset
+	practical := LogOffset{TxOffset: 1000000, OpOffset: 999}
+	if Last.Compare(practical) != 1 {
+		t.Error("Last should be greater than practical offsets")
+	}
+
+	// Last should be greater than LastBeforeReal
+	if Last.Compare(LastBeforeReal) != 1 {
+		t.Error("Last should be greater than LastBeforeReal")
+	}
+
+	// Last should equal itself
+	if Last.Compare(Last) != 0 {
+		t.Error("Last should equal itself")
+	}
+}
+
 // TestLogOffsetJSONEncoding tests that the string representation is suitable for JSON
 // Ported from: "LogOffset implements `Json.Encoder` protocol"
 func TestLogOffsetJSONEncoding(t *testing.T) {
