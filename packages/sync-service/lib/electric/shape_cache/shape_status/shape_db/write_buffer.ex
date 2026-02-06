@@ -52,7 +52,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
 
   import Electric, only: [is_stack_id: 1]
 
-  @poll_interval 50
+  @poll_interval 100
   # keep this low-ish so that this process yields the write connection
   # to handle_for_shape_critical/2 reasonably often.
   @max_drain_per_cycle 100
