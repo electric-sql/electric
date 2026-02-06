@@ -1,0 +1,19 @@
+# Compiled binary
+electric
+*.exe
+
+# Test binaries
+*.test
+
+# Coverage files
+coverage.out
+coverage.html
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
