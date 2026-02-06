@@ -53,7 +53,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
   import Electric, only: [is_stack_id: 1]
 
   @poll_interval 50
-  @max_drain_per_cycle 100
+  @max_drain_per_cycle 1000
 
   def operations_table_name(stack_id), do: :"write_buffer_ops:#{stack_id}"
   def shapes_table_name(stack_id), do: :"write_buffer_shapes:#{stack_id}"

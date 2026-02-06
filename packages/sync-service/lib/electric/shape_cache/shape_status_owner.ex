@@ -21,7 +21,7 @@ defmodule Electric.ShapeCache.ShapeStatusOwner do
   end
 
   def initialize(stack_id) do
-    GenServer.call(name(stack_id), :initialize)
+    GenServer.call(name(stack_id), :initialize, :infinity)
   end
 
   def start_link(opts) do
