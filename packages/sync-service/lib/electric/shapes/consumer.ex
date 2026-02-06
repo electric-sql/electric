@@ -132,7 +132,10 @@ defmodule Electric.Shapes.Consumer do
       :ignore -> :ok
     end
 
-    writer = ShapeCache.Storage.init_writer!(storage, shape)
+    {time, writer} =
+      :timer.tc(fn -> ShapeCache.Storage.init_writer!(storage, shape) end, :millisecond)
+
+    IO.inspect(init_writer: time)
 
     state = State.initialize(state, storage, writer)
 

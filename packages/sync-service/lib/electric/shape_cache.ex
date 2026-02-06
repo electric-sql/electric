@@ -66,11 +66,20 @@ defmodule Electric.ShapeCache do
       {handle, offset}
     else
       :error ->
-        GenServer.call(
-          name(stack_id),
-          {:create_or_wait_shape_handle, shape, opts[:otel_ctx]},
-          @call_timeout
-        )
+        {time, result} =
+          :timer.tc(
+            fn ->
+              GenServer.call(
+                name(stack_id),
+                {:create_or_wait_shape_handle, shape, opts[:otel_ctx]},
+                @call_timeout
+              )
+            end,
+            :millisecond
+          )
+
+        IO.inspect(call_create: time)
+        result
     end
   end
 
@@ -244,11 +253,13 @@ defmodule Electric.ShapeCache do
   end
 
   defp maybe_create_shape(shape, otel_ctx, %{stack_id: stack_id} = state) do
-    with {:ok, shape_handle} <- ShapeStatus.fetch_handle_by_shape(stack_id, shape),
+    with {time, {:ok, shape_handle}} <-
+           :timer.tc(fn -> ShapeStatus.fetch_handle_by_shape(stack_id, shape) end, :millisecond),
+         IO.inspect(fetch_handle_by_shape: time),
          {:ok, offset} <- fetch_latest_offset(stack_id, shape_handle) do
       {shape_handle, offset}
     else
-      :error ->
+      {_, :error} ->
         shape_handles =
           shape.shape_dependencies
           |> Enum.map(&maybe_create_shape(&1, otel_ctx, state))
@@ -256,11 +267,20 @@ defmodule Electric.ShapeCache do
 
         shape = %{shape | shape_dependencies_handles: shape_handles}
 
-        {:ok, shape_handle} = ShapeStatus.add_shape(stack_id, shape)
+        {time, {:ok, shape_handle}} =
+          :timer.tc(fn -> ShapeStatus.add_shape(stack_id, shape) end, :millisecond)
+
+        IO.inspect(add_shape: time)
 
         Logger.info("Creating new shape for #{inspect(shape)} with handle #{shape_handle}")
 
-        {:ok, _pid} = start_shape(shape_handle, shape, state, otel_ctx, :create)
+        {time, {:ok, _pid}} =
+          :timer.tc(
+            fn -> start_shape(shape_handle, shape, state, otel_ctx, :create) end,
+            :millisecond
+          )
+
+        IO.inspect(start_shape: time)
 
         # In this branch of `if`, we're guaranteed to have a newly started shape, so we can be sure about it's
         # "latest offset" because it'll be in the snapshotting stage

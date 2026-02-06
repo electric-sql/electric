@@ -525,7 +525,10 @@ defmodule Electric.ShapeCache.PureFileStorage do
   def init_writer!(shape_opts, shape_definition) do
     table = :ets.new(:in_memory_storage, [:ordered_set, :protected])
 
-    {initial_acc, suffix} = initialise_filesystem!(shape_opts, shape_definition)
+    {time, {initial_acc, suffix}} =
+      :timer.tc(fn -> initialise_filesystem!(shape_opts, shape_definition) end, :millisecond)
+
+    IO.inspect(initialise_filesystem: time)
 
     register_with_stack(
       shape_opts,
