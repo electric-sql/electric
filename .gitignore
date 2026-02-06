@@ -27,3 +27,4 @@ sst-*.log
 **/coverage
 response.tmp
 .claude
+!website/.claude/
