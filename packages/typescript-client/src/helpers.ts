@@ -28,7 +28,7 @@ import {
 export function isChangeMessage<T extends Row<unknown> = Row>(
   message: Message<T>
 ): message is ChangeMessage<T> {
-  return `key` in message
+  return message != null && typeof message === `object` && `key` in message
 }
 
 /**

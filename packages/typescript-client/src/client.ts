@@ -841,10 +841,17 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
         // must refetch control message might be in a list or not depending
         // on whether it came from an SSE request or long poll - handle both
-        // cases for safety here but worth revisiting 409 handling
-        await this.#publish(
-          (Array.isArray(e.json) ? e.json : [e.json]) as Message<T>[]
-        )
+        // cases for safety here but worth revisiting 409 handling.
+        // When a proxy sits between the client and server, the 409 response
+        // body may not be JSON, so e.json can be undefined. In that case,
+        // construct a proper must-refetch control message.
+        const mustRefetchMessage = { headers: { control: `must-refetch` } }
+        const messages = Array.isArray(e.json)
+          ? e.json
+          : e.json != null
+            ? [e.json]
+            : [mustRefetchMessage]
+        await this.#publish(messages as Message<T>[])
         return this.#requestShape()
       } else {
         // errors that have reached this point are not actionable without

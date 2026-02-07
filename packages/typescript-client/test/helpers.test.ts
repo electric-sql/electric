@@ -41,4 +41,11 @@ describe(`helpers`, () => {
     expect(isUpToDateMessage(mustRefetchMsg)).toBe(false)
     expect(isUpToDateMessage(changeMsg)).toBe(false)
   })
+
+  it(`should handle null and undefined messages without throwing`, () => {
+    expect(isChangeMessage(null as unknown as Message)).toBe(false)
+    expect(isChangeMessage(undefined as unknown as Message)).toBe(false)
+    expect(isControlMessage(null as unknown as Message)).toBe(true)
+    expect(isControlMessage(undefined as unknown as Message)).toBe(true)
+  })
 })
