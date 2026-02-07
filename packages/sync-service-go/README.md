@@ -18,6 +18,77 @@ Electric syncs subsets of your PostgreSQL data into local apps and services. Thi
 - Go 1.21+
 - PostgreSQL 14+ with logical replication enabled
 
+### Start PostgreSQL with Docker
+
+Start a PostgreSQL instance with logical replication enabled:
+
+```bash
+# Start PostgreSQL with logical replication
+docker run -d \
+  --name electric-postgres \
+  -e POSTGRES_USER=postgres \
+  -e POSTGRES_PASSWORD=password \
+  -e POSTGRES_DB=electric \
+  -p 5432:5432 \
+  postgres:16 \
+  -c wal_level=logical \
+  -c max_replication_slots=10 \
+  -c max_wal_senders=10
+
+# Wait for PostgreSQL to be ready
+docker exec electric-postgres pg_isready -U postgres
+
+# Create a test table
+docker exec -i electric-postgres psql -U postgres -d electric <<EOF
+CREATE TABLE users (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name TEXT NOT NULL,
+  email TEXT,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+INSERT INTO users (name, email) VALUES
+  ('Alice', 'alice@example.com'),
+  ('Bob', 'bob@example.com');
+EOF
+```
+
+Or use Docker Compose (`docker-compose.yml`):
+
+```yaml
+version: '3.8'
+services:
+  postgres:
+    image: postgres:16
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: electric
+    command:
+      - postgres
+      - -c
+      - wal_level=logical
+      - -c
+      - max_replication_slots=10
+      - -c
+      - max_wal_senders=10
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+```
+
+```bash
+# Start with Docker Compose
+docker compose up -d
+
+# Check logs
+docker compose logs -f postgres
+```
+
 ### Build
 
 ```bash
@@ -28,15 +99,38 @@ go build -o electric ./cmd/electric
 ### Run
 
 ```bash
-# Minimal configuration
-export DATABASE_URL="postgresql://user:password@localhost:5432/mydb"
+# Using the Docker PostgreSQL from above
+export DATABASE_URL="postgresql://postgres:password@localhost:5432/electric"
 ./electric
 
 # With all options
-export DATABASE_URL="postgresql://user:password@localhost:5432/mydb"
+export DATABASE_URL="postgresql://postgres:password@localhost:5432/electric"
 export ELECTRIC_PORT=3000
 export ELECTRIC_SECRET=my-api-secret
 ./electric
+```
+
+### Verify It Works
+
+```bash
+# In another terminal, sync the users table
+curl "http://localhost:3000/v1/shape?table=users"
+
+# Expected response:
+# [
+#   {"offset":"0_0","key":"\"public\".\"users\"/\"...\"","value":{"id":"...","name":"Alice",...},"headers":{"operation":"insert"}},
+#   {"offset":"0_1","key":"\"public\".\"users\"/\"...\"","value":{"id":"...","name":"Bob",...},"headers":{"operation":"insert"}},
+#   {"headers":{"control":"up-to-date"}}
+# ]
+
+# Subscribe to live updates (long-polling)
+curl "http://localhost:3000/v1/shape?table=users&offset=0_1&live=true"
+
+# In another terminal, insert a row
+docker exec -i electric-postgres psql -U postgres -d electric \
+  -c "INSERT INTO users (name, email) VALUES ('Charlie', 'charlie@example.com');"
+
+# The curl request should return with the new row
 ```
 
 ### Test
