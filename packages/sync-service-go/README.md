@@ -96,6 +96,14 @@ cd packages/sync-service-go
 go build -o electric ./cmd/electric
 ```
 
+**macOS users**: If you encounter a `strchrnul` error, use:
+
+```bash
+CGO_CFLAGS="-Wno-nullability-completeness" go build -o electric ./cmd/electric
+```
+
+This is a known issue with the `pg_query_go` library on macOS.
+
 ### Run
 
 ```bash
