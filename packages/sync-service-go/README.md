@@ -96,13 +96,20 @@ cd packages/sync-service-go
 go build -o electric ./cmd/electric
 ```
 
-**macOS users**: If you encounter a `strchrnul` error, use:
+**macOS users**: If you encounter a `strchrnul` error, this is a known issue with `pg_query_go` on newer macOS versions. Try one of these fixes:
 
 ```bash
-CGO_CFLAGS="-Wno-nullability-completeness" go build -o electric ./cmd/electric
+# Option 1: Use an older macOS SDK (if available)
+export SDKROOT=$(xcrun --sdk macosx11.3 --show-sdk-path 2>/dev/null || xcrun --sdk macosx --show-sdk-path)
+go build -o electric ./cmd/electric
+
+# Option 2: Build in a Docker container (recommended for CI)
+docker run --rm -v $(pwd):/app -w /app golang:1.21 go build -o electric ./cmd/electric
+
+# Option 3: Use the pre-built binary from releases (when available)
 ```
 
-This is a known issue with the `pg_query_go` library on macOS.
+See [pg_query_go#100](https://github.com/pganalyze/pg_query_go/issues/100) for updates on this issue.
 
 ### Run
 

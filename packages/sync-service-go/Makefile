@@ -6,7 +6,7 @@ GOFLAGS := -v
 # Fix for macOS strchrnul issue with pg_query_go
 UNAME_S := $(shell uname -s)
 ifeq ($(UNAME_S),Darwin)
-export CGO_CFLAGS=-Wno-nullability-completeness -Wno-unknown-warning-option
+export CGO_CFLAGS=-Wno-nullability-completeness
 endif
 
 all: fmt vet lint test build
@@ -16,6 +16,10 @@ build:
 
 build-binary:
 	$(GO) build $(GOFLAGS) -o electric ./cmd/electric
+
+# Build using Docker (works on all platforms, recommended for macOS)
+build-docker:
+	docker run --rm -v $(PWD):/app -w /app golang:1.21 go build -o electric ./cmd/electric
 
 test:
 	$(GO) test $(GOFLAGS) -race -cover ./...
