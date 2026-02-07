@@ -6,7 +6,7 @@ GOFLAGS := -v
 # Fix for macOS strchrnul issue with pg_query_go
 UNAME_S := $(shell uname -s)
 ifeq ($(UNAME_S),Darwin)
-	export CGO_CFLAGS := -Wno-nullability-completeness
+export CGO_CFLAGS=-Wno-nullability-completeness -Wno-unknown-warning-option
 endif
 
 all: fmt vet lint test build
