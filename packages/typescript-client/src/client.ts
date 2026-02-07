@@ -51,6 +51,7 @@ import {
   REPLICA_PARAM,
   FORCE_DISCONNECT_AND_REFRESH,
   PAUSE_STREAM,
+  SYSTEM_WAKE,
   EXPERIMENTAL_LIVE_SSE_QUERY_PARAM,
   LIVE_SSE_QUERY_PARAM,
   ELECTRIC_PROTOCOL_QUERY_PARAMS,
@@ -598,6 +599,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
   #sseBackoffBaseDelay = 100 // Base delay for exponential backoff (ms)
   #sseBackoffMaxDelay = 5000 // Maximum delay cap (ms)
   #unsubscribeFromVisibilityChanges?: () => void
+  #unsubscribeFromWakeDetection?: () => void
   #staleCacheBuster?: string // Cache buster set when stale CDN response detected, used on retry requests to bypass cache
   #staleCacheRetryCount = 0
   #maxStaleCacheRetries = 3
@@ -666,6 +668,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
     this.#fetchClient = createFetchWithConsumedMessages(this.#sseFetchClient)
 
     this.#subscribeToVisibilityChanges()
+    this.#subscribeToWakeDetection()
   }
 
   get shapeHandle() {
@@ -785,11 +788,13 @@ export class ShapeStream<T extends Row<unknown> = Row>
         resumingFromPause,
       })
     } catch (e) {
-      // Handle abort error triggered by refresh
+      // Handle abort error triggered by refresh or system wake
       if (
         (e instanceof FetchError || e instanceof FetchBackoffAbortError) &&
         requestAbortController.signal.aborted &&
-        requestAbortController.signal.reason === FORCE_DISCONNECT_AND_REFRESH
+        (requestAbortController.signal.reason ===
+          FORCE_DISCONNECT_AND_REFRESH ||
+          requestAbortController.signal.reason === SYSTEM_WAKE)
       ) {
         // Start a new request
         return this.#requestShape()
@@ -1432,6 +1437,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
   unsubscribeAll(): void {
     this.#subscribers.clear()
     this.#unsubscribeFromVisibilityChanges?.()
+    this.#unsubscribeFromWakeDetection?.()
   }
 
   /** Unix time at which we last synced. Undefined when `isLoading` is true. */
@@ -1563,6 +1569,55 @@ export class ShapeStream<T extends Row<unknown> = Row>
       this.#unsubscribeFromVisibilityChanges = () => {
         document.removeEventListener(`visibilitychange`, visibilityHandler)
       }
+    }
+  }
+
+  /**
+   * Detects system wake from sleep using timer gap detection.
+   * When the system sleeps, setInterval timers are paused. On wake,
+   * the elapsed wall-clock time since the last tick will be much larger
+   * than the interval period, indicating the system was asleep.
+   *
+   * This is particularly important for non-browser environments (Bun, Node.js)
+   * where `document.visibilitychange` is not available, and in-flight HTTP
+   * long-poll requests may hang until the OS TCP timeout (~75s on macOS).
+   */
+  #subscribeToWakeDetection() {
+    // Skip in browser environments where visibilitychange already handles this
+    if (
+      typeof document === `object` &&
+      typeof document.hidden === `boolean` &&
+      typeof document.addEventListener === `function`
+    ) {
+      return
+    }
+
+    const INTERVAL_MS = 10_000 // Check every 10 seconds
+    const THRESHOLD_MS = 15_000 // If 15+ extra seconds pass, system likely slept
+
+    let lastTickTime = Date.now()
+
+    const timer = setInterval(() => {
+      const now = Date.now()
+      const elapsed = now - lastTickTime
+      lastTickTime = now
+
+      if (elapsed > INTERVAL_MS + THRESHOLD_MS) {
+        // System likely woke from sleep — abort the current (probably stale)
+        // request and restart the fetch loop with a fresh connection
+        if (this.#state === `active` && this.#requestAbortController) {
+          this.#requestAbortController.abort(SYSTEM_WAKE)
+        }
+      }
+    }, INTERVAL_MS)
+
+    // Ensure the timer doesn't prevent the process from exiting
+    if (typeof timer === `object` && `unref` in timer) {
+      timer.unref()
+    }
+
+    this.#unsubscribeFromWakeDetection = () => {
+      clearInterval(timer)
     }
   }
 
