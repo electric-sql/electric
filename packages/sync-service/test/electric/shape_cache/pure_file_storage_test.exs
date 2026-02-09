@@ -29,7 +29,7 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
       )
   }
 
-  setup ctx do
+  defp start_storage(ctx) do
     base_opts =
       PureFileStorage.shared_opts(
         stack_id: ctx.stack_id,
@@ -45,6 +45,8 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
   end
 
   describe "reads without writer -" do
+    setup [:start_storage]
+
     test "snapshot only reads from disk", %{opts: opts} do
       writer = PureFileStorage.init_writer!(opts, @shape)
       PureFileStorage.set_pg_snapshot(%{xmin: 100}, opts)
@@ -121,8 +123,8 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
         )
 
       File.rename!(
-        Path.join(base_opts.base_path, @shape_handle),
-        Path.join(base_opts.base_path, @shape_handle <> "-deleted")
+        PureFileStorage.shape_data_dir(base_opts.base_path, @shape_handle),
+        PureFileStorage.shape_data_dir(base_opts.base_path, @shape_handle <> "-deleted")
       )
 
       assert Enum.to_list(stream) == []
@@ -137,8 +139,8 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
       PureFileStorage.terminate(writer)
 
       File.rename!(
-        Path.join(base_opts.base_path, @shape_handle),
-        Path.join(base_opts.base_path, @shape_handle <> "-deleted")
+        PureFileStorage.shape_data_dir(base_opts.base_path, @shape_handle),
+        PureFileStorage.shape_data_dir(base_opts.base_path, @shape_handle <> "-deleted")
       )
 
       stream =
@@ -175,6 +177,8 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
   end
 
   describe "read-through cache -" do
+    setup [:start_storage]
+
     test "is always populated", %{
       opts: opts,
       stack_id: stack_id
@@ -306,6 +310,8 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
   end
 
   describe "key index writes" do
+    setup [:start_storage]
+
     test "are correct", %{opts: opts} do
       writer = PureFileStorage.init_writer!(opts, @shape)
       PureFileStorage.set_pg_snapshot(%{xmin: 100}, opts)
@@ -389,7 +395,7 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
   end
 
   describe "chunk reads" do
-    setup :with_started_writer
+    setup [:start_storage, :with_started_writer]
 
     @tag chunk_size: 100
     test "correctly finds a chunk to read from", %{writer: writer, opts: opts} do
@@ -447,8 +453,8 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
       stream = PureFileStorage.get_log_stream(LogOffset.new(9, 0), LogOffset.last(), opts)
 
       File.rename!(
-        Path.join(base_opts.base_path, @shape_handle),
-        Path.join(base_opts.base_path, @shape_handle <> "-deleted")
+        PureFileStorage.shape_data_dir(base_opts.base_path, @shape_handle),
+        PureFileStorage.shape_data_dir(base_opts.base_path, @shape_handle <> "-deleted")
       )
 
       assert Enum.to_list(stream) == []
@@ -542,8 +548,8 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
       PureFileStorage.terminate(writer)
 
       File.rename!(
-        Path.join(base_opts.base_path, @shape_handle),
-        Path.join(base_opts.base_path, @shape_handle <> "-deleted")
+        PureFileStorage.shape_data_dir(base_opts.base_path, @shape_handle),
+        PureFileStorage.shape_data_dir(base_opts.base_path, @shape_handle <> "-deleted")
       )
 
       assert [] =
@@ -575,7 +581,7 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
   describe "crash recovery" do
     # These tests make use of known log file structures to test that the storage recovers correctly
     # If underlying file structure changes, these tests will need to be updated.
-    setup :with_started_writer
+    setup [:start_storage, :with_started_writer]
 
     setup %{writer: writer, opts: opts} = ctx do
       if Map.get(ctx, :init_log, true) do
@@ -762,7 +768,7 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
   end
 
   describe "chunk writes - " do
-    setup :with_started_writer
+    setup [:start_storage, :with_started_writer]
 
     @tag chunk_size: 11
     test "chunk size is counted by JSON size and not full entry size", %{
@@ -783,55 +789,59 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
     end
   end
 
-  @tag chunk_size: 30
-  test "correctly continues a chunk after a reboot", %{opts: opts} do
-    %{writer: writer} = with_started_writer(%{opts: opts})
+  describe "resumption" do
+    setup [:start_storage]
 
-    writer =
-      PureFileStorage.append_to_log!(
-        [{LogOffset.new(10, 0), "test_key", :insert, ~S|{"test":1}|}],
-        writer
-      )
+    @tag chunk_size: 30
+    test "correctly continues a chunk after a reboot", %{opts: opts} do
+      %{writer: writer} = with_started_writer(%{opts: opts})
 
-    PureFileStorage.terminate(writer)
+      writer =
+        PureFileStorage.append_to_log!(
+          [{LogOffset.new(10, 0), "test_key", :insert, ~S|{"test":1}|}],
+          writer
+        )
 
-    assert PureFileStorage.get_chunk_end_log_offset(LogOffset.new(10, 0), opts) == nil
+      PureFileStorage.terminate(writer)
 
-    writer = PureFileStorage.init_writer!(opts, @shape)
+      assert PureFileStorage.get_chunk_end_log_offset(LogOffset.new(10, 0), opts) == nil
 
-    writer =
-      PureFileStorage.append_to_log!(
-        [
-          {LogOffset.new(11, 0), "test_key", :insert, ~S|{"test":2}|},
-          {LogOffset.new(12, 0), "test_key", :insert, ~S|{"test":3}|},
-          {LogOffset.new(13, 0), "test_key", :insert, ~S|{"test":4}|}
-        ],
-        writer
-      )
+      writer = PureFileStorage.init_writer!(opts, @shape)
 
-    PureFileStorage.terminate(writer)
+      writer =
+        PureFileStorage.append_to_log!(
+          [
+            {LogOffset.new(11, 0), "test_key", :insert, ~S|{"test":2}|},
+            {LogOffset.new(12, 0), "test_key", :insert, ~S|{"test":3}|},
+            {LogOffset.new(13, 0), "test_key", :insert, ~S|{"test":4}|}
+          ],
+          writer
+        )
 
-    assert PureFileStorage.get_chunk_end_log_offset(LogOffset.new(10, 0), opts) ==
-             LogOffset.new(11, 0)
+      PureFileStorage.terminate(writer)
 
-    assert PureFileStorage.get_log_stream(LogOffset.new(9, 0), LogOffset.new(13, 0), opts)
-           |> Enum.to_list() == [~S|{"test":1}|, ~S|{"test":2}|, ~S|{"test":3}|, ~S|{"test":4}|]
-  end
+      assert PureFileStorage.get_chunk_end_log_offset(LogOffset.new(10, 0), opts) ==
+               LogOffset.new(11, 0)
 
-  test "get_chunk_end_log_offset/2 returns nil when no chunk file is found", %{
-    base_opts: base_opts,
-    opts: opts
-  } do
-    chunk_index_path =
-      Path.join([base_opts.base_path, @shape_handle, "log", "log.latest.0.chunk.bin"])
+      assert PureFileStorage.get_log_stream(LogOffset.new(9, 0), LogOffset.new(13, 0), opts)
+             |> Enum.to_list() == [~S|{"test":1}|, ~S|{"test":2}|, ~S|{"test":3}|, ~S|{"test":4}|]
+    end
 
-    refute File.exists?(chunk_index_path)
+    test "get_chunk_end_log_offset/2 returns nil when no chunk file is found", %{
+      base_opts: base_opts,
+      opts: opts
+    } do
+      chunk_index_path =
+        Path.join([base_opts.base_path, @shape_handle, "log", "log.latest.0.chunk.bin"])
 
-    assert nil == PureFileStorage.get_chunk_end_log_offset(LogOffset.new(1, 0), opts)
+      refute File.exists?(chunk_index_path)
+
+      assert nil == PureFileStorage.get_chunk_end_log_offset(LogOffset.new(1, 0), opts)
+    end
   end
 
   describe "flush timer" do
-    setup :with_started_writer
+    setup [:start_storage, :with_started_writer]
     @describetag flush_period: 100
 
     test "flush message arrives after flush period", %{writer: writer} do
@@ -938,6 +948,8 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
   end
 
   describe "schedule_compaction/1" do
+    setup [:start_storage]
+
     test "sends a message to the calling process within the predefined time period", ctx do
       compaction_config = Map.put(ctx.base_opts.compaction_config, :period, 5)
       PureFileStorage.schedule_compaction(compaction_config)
@@ -945,34 +957,38 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
     end
   end
 
-  test "correctly continues writing after hibernation", %{opts: opts} do
-    %{writer: writer} = with_started_writer(%{opts: opts})
+  describe "hibernation" do
+    setup [:start_storage]
 
-    writer =
-      PureFileStorage.append_to_log!(
-        [{LogOffset.new(10, 0), "test_key", :insert, ~S|{"test":1}|}],
-        writer
-      )
+    test "correctly continues writing after hibernation", %{opts: opts} do
+      %{writer: writer} = with_started_writer(%{opts: opts})
 
-    writer = PureFileStorage.hibernate(writer)
+      writer =
+        PureFileStorage.append_to_log!(
+          [{LogOffset.new(10, 0), "test_key", :insert, ~S|{"test":1}|}],
+          writer
+        )
 
-    assert PureFileStorage.get_log_stream(LogOffset.new(9, 0), LogOffset.new(13, 0), opts)
-           |> Enum.to_list() == [~S|{"test":1}|]
+      writer = PureFileStorage.hibernate(writer)
 
-    writer =
-      PureFileStorage.append_to_log!(
-        [{LogOffset.new(11, 0), "test_key", :insert, ~S|{"test":2}|}],
-        writer
-      )
+      assert PureFileStorage.get_log_stream(LogOffset.new(9, 0), LogOffset.new(13, 0), opts)
+             |> Enum.to_list() == [~S|{"test":1}|]
 
-    PureFileStorage.terminate(writer)
+      writer =
+        PureFileStorage.append_to_log!(
+          [{LogOffset.new(11, 0), "test_key", :insert, ~S|{"test":2}|}],
+          writer
+        )
 
-    assert PureFileStorage.get_log_stream(LogOffset.new(9, 0), LogOffset.new(12, 0), opts)
-           |> Enum.to_list() == [~S|{"test":1}|, ~S|{"test":2}|]
+      PureFileStorage.terminate(writer)
+
+      assert PureFileStorage.get_log_stream(LogOffset.new(9, 0), LogOffset.new(12, 0), opts)
+             |> Enum.to_list() == [~S|{"test":1}|, ~S|{"test":2}|]
+    end
   end
 
   describe "ETS read/write race condition" do
-    setup :with_started_writer
+    setup [:start_storage, :with_started_writer]
     @describetag flush_period: 50
 
     test "reader falls back to disk when ETS is empty due to concurrent flush", %{
@@ -1101,6 +1117,63 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
              "Reader should fall back to disk when ETS returns partial data"
 
       PureFileStorage.terminate(writer)
+    end
+  end
+
+  describe "remove_unnested_storage/1" do
+    test "removes un-nested storage directories but leaves the nested ones", ctx do
+      base_opts =
+        PureFileStorage.shared_opts(
+          stack_id: ctx.stack_id,
+          storage_dir: ctx.tmp_dir,
+          chunk_bytes_threshold: ctx[:chunk_size] || 10 * 1024 * 1024,
+          flush_period: 1000
+        )
+
+      nested_dirs = [
+        PureFileStorage.shape_data_dir(base_opts.base_path, "128584483-1770721672609826"),
+        PureFileStorage.shape_data_dir(base_opts.base_path, "35237783-1770721660697706")
+      ]
+
+      unnested_dirs = [
+        Path.join(base_opts.base_path, "128584483-1770721672609826"),
+        Path.join(base_opts.base_path, "35237783-1770721660697706")
+      ]
+
+      for dir <- nested_dirs ++ unnested_dirs do
+        File.mkdir_p!(dir)
+      end
+
+      storage_base = {PureFileStorage, base_opts}
+      start_link_supervised!(Storage.stack_child_spec(storage_base))
+      assert validate_dir_cleanup(nested_dirs, unnested_dirs)
+    end
+
+    defp validate_dir_cleanup(nested_dirs, unnested_dirs, n \\ 50)
+
+    defp validate_dir_cleanup(nested_dirs, unnested_dirs, 0) do
+      validate_dir_required_state?(nested_dirs, unnested_dirs)
+    end
+
+    defp validate_dir_cleanup(nested_dirs, unnested_dirs, n) do
+      if validate_dir_required_state?(nested_dirs, unnested_dirs) do
+        true
+      else
+        Process.sleep(10)
+        validate_dir_cleanup(nested_dirs, unnested_dirs, n - 1)
+      end
+    end
+
+    defp validate_dir_required_state?(nested_dirs, unnested_dirs) do
+      Enum.concat(
+        Enum.map(nested_dirs, fn path ->
+          File.dir?(path)
+        end),
+        Enum.map(unnested_dirs, fn path ->
+          not File.dir?(path)
+        end)
+      )
+      |> Enum.all?()
     end
   end
 

@@ -148,14 +148,17 @@ defmodule Electric.ShapeCache.PureFileStorage do
     shape_data_dir(shape_opts, [])
   end
 
-  defp shape_data_dir(%__MODULE__{stack_id: stack_id, shape_handle: shape_handle}, suffix) do
+  def shape_data_dir(%__MODULE__{stack_id: stack_id, shape_handle: shape_handle}, suffix) do
     {__MODULE__, stack_opts} = Storage.for_stack(stack_id)
     shape_data_dir(stack_opts.base_path, shape_handle, suffix)
   end
 
-  defp shape_data_dir(base_path, shape_handle, suffix \\ [])
-       when is_binary(base_path) and is_binary(shape_handle) do
-    Path.join([base_path, shape_handle | suffix])
+  @doc false
+  def shape_data_dir(base_path, shape_handle, suffix \\ [])
+      when is_binary(base_path) and is_binary(shape_handle) do
+    # nest storage to limit number of files per directory
+    <<p1::binary-2, p2::binary-2, _::binary>> = shape_handle
+    Path.join([base_path, p1, p2, shape_handle | suffix])
   end
 
   defp shape_log_dir(opts), do: shape_data_dir(opts, [@log_dir])
@@ -186,25 +189,20 @@ defmodule Electric.ShapeCache.PureFileStorage do
              write_concurrency: :auto
            ])
          end},
-        {Task.Supervisor, name: stack_task_supervisor(opts.stack_id)}
+        {Task.Supervisor, name: stack_task_supervisor(opts.stack_id)},
+        # TODO: remove once we're sure that no install has un-nested storage
+        # directories
+        {Task, fn -> remove_unnested_storage(opts.base_path) end}
       ],
       strategy: :one_for_one
     )
   end
 
   def get_all_stored_shape_handles(%{base_path: base_path}) do
-    case ls(base_path) do
-      {:ok, shape_handles} ->
-        shape_handles
-        |> Enum.reject(&String.starts_with?(&1, "."))
-        |> then(&{:ok, MapSet.new(&1)})
-
-      {:error, :enoent} ->
-        {:ok, MapSet.new()}
-
-      {:error, reason} ->
-        {:error, reason}
-    end
+    {:ok,
+     Path.wildcard("#{base_path}/*/*/*")
+     |> Stream.map(&Path.basename/1)
+     |> Enum.into(MapSet.new())}
   end
 
   def get_stored_shapes(stack_opts, shape_handles) do
@@ -775,7 +773,6 @@ defmodule Electric.ShapeCache.PureFileStorage do
   end
 
   defp create_directories!(%__MODULE__{} = opts) do
-    mkdir_p!(shape_data_dir(opts))
     mkdir_p!(shape_log_dir(opts))
     mkdir_p!(shape_metadata_dir(opts))
   end
@@ -1392,10 +1389,6 @@ defmodule Electric.ShapeCache.PureFileStorage do
     File.rm_rf!(path)
   end
 
-  defp ls(path) do
-    FileInfo.ls(path)
-  end
-
   defp rename!(path1, path2) do
     case FileInfo.rename(path1, path2) do
       :ok ->
@@ -1456,5 +1449,22 @@ defmodule Electric.ShapeCache.PureFileStorage do
 
   defp shape_gone?(%__MODULE__{} = opts) do
     !FileInfo.exists?(shape_data_dir(opts))
+  end
+
+  defp remove_unnested_storage(base_dir) do
+    "#{base_dir}/*"
+    |> Path.wildcard()
+    |> Enum.filter(fn path ->
+      name = Path.basename(path)
+      Regex.match?(~r/\d{6,}-\d{8,}/, name)
+    end)
+    |> tap(fn dirs ->
+      Logger.info("Removing #{length(dirs)} old storage directories")
+    end)
+    |> Enum.each(fn path ->
+      # remove with a delay - don't want this task to interfere with critical processes
+      File.rm_rf(path)
+      Process.sleep(20)
+    end)
   end
 end
