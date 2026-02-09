@@ -11,7 +11,7 @@ outline: [2, 3]
 post: true
 ---
 
-At Electric, we build system software, critical infrastructure tools like sync engines, embedded databases, messaging systems—software where correctness matters. Yet over the past few months, we've shifted to nearly 100% AI-written code.
+At Electric, we build system software, critical infrastructure tools like sync engines, embedded databases, messaging systems—software where correctness matters. Over the past few months, we've shifted to nearly 100% AI-written code.
 
 Every team has critical systems like this. Maybe it's your payments flow, your auth layer, your data pipeline.
 
@@ -23,7 +23,7 @@ The PR touched **67 files**: protocol spec, both servers (TypeScript + Go), all 
 
 It felt like a type-driven refactor at system scale: change the contract, propagate fixes until the suite is green.
 
-Here's the thesis: **AI makes code cheap; therefore the scarce asset is the system's self-knowledge.** When agents propagate changes at machine speed, implementation becomes the cheap part—specification quality becomes what matters. We've always known specs and contracts were valuable—but they cost too much to maintain. So we invested sparingly, specs drifted, and we just read the code.
+Here's the thesis: **AI makes code cheap; therefore the scarce asset is the system's self-knowledge.** When agents propagate changes at machine speed, implementation becomes the cheap part—specification quality becomes what matters. Specs and contracts were always valuable—but too expensive to maintain. So we invested sparingly, specs drifted, and we read the code.
 
 That calculus has flipped. Explicit contracts—specs, invariants, conformance suites—become the cheapest way to keep a fast-moving system coherent. The spec becomes the source of truth again.
 
@@ -33,19 +33,19 @@ I've been calling this **configurancy**—borrowing from [Venkatesh Rao](https:/
 
 **Everyone has limited context windows**. Humans hold 4-7 concepts in working memory. AI agents have literal context limits. Neither can hold a full system.
 
-We live in a world of *multiple bounded agents*—human and AI—trying to co-evolve a shared system. The human can't see everything. The agent can't see everything. They can't even see the same things.
+We live in a world of *multiple bounded agents*—human and AI—trying to co-evolve a shared system. Neither can see everything—and they can't even see the same things.
 
-Steve Yegge recently wrote about [software survival in the agentic era](https://steve-yegge.medium.com/software-survival-3-0-97a2a6255f7b)—agents are becoming primary consumers AND producers of software. They're actors that make choices about the system's evolution. Not tools we wield, but collaborators we coordinate with.
+Steve Yegge recently wrote about [software survival in the agentic era](https://steve-yegge.medium.com/software-survival-3-0-97a2a6255f7b)—agents are becoming primary consumers AND producers of software. They make choices about the system's evolution—collaborators, not tools.
 
 The problem is **coordination between bounded agents** who are all operating on partial views of a shared reality. Without a written contract, small divergences compound. Tests pass but coherence collapses.
 
 ## What Configurancy Means
 
-Rao describes configurancy as "the ongoing, relational process through which agents and worlds *co-emerge* as intelligible configurations." Agents don't just act on the system; it shapes them in return. Software has always been co-evolutionary—the codebase you inherit constrains what you build next. But now AI agents are participants in this process, and it moves faster than any human can track.
+Rao describes configurancy as "the ongoing, relational process through which agents and worlds *co-emerge* as intelligible configurations." Agents don't just act on the system; it shapes them in return. Software has always been co-evolutionary—the codebase you inherit constrains what you build next. Now AI agents participate, and the process moves faster than any human can track.
 
 For software, configurancy is **the explicit contract that lets bounded agents coherently co-evolve a system.**
 
-Concretely: configurancy is the smallest set of explicit behavioral commitments (and rationales) that allow a bounded agent to safely modify the system without rediscovering invariants. This is falsifiable—if agents routinely break invariants, your configurancy surface is missing something.
+Concretely: configurancy is the smallest set of explicit behavioral commitments (and rationales) that allow a bounded agent to safely modify the system without rediscovering invariants. This is testable: if agents keep breaking invariants, your configurancy layer is incomplete.
 
 It's a contract that establishes shared facts:
 - These affordances exist (what you can do) — *three read modes: catch-up replay, long-poll, and SSE streaming*
@@ -56,7 +56,7 @@ Formal contracts are bones. Intelligibility needs flesh—the memory of why we d
 
 High configurancy means the contract is clear enough for any agent—human or AI—to act coherently.
 
-Low configurancy means the contract is implicit, outdated, or contradicted by reality. Agents make changes that seem locally correct but violate unstated assumptions.
+Low configurancy means the contract is implicit, outdated, or contradicted by reality. Agents make changes that look correct locally but violate unstated assumptions.
 
 This is distinct from code quality. You can have pristine implementation and collapsed configurancy. The code works; no one knows what it promises.
 
@@ -66,9 +66,9 @@ We've been building configurancy infrastructure for decades. **Types** make ille
 
 But there's always been a gap between two approaches to verification:
 
-**Formal verification** is anticipatory—prove properties statically, guarantee absence of bugs. Powerful but expensive, and it doesn't scale to most real systems.
+**Formal verification** proves properties statically, guaranteeing absence of bugs. Powerful but expensive, and it rarely scales.
 
-**Fuzz testing** is empirical—throw inputs at the system, observe what breaks. Cheap but blind. Traditional fuzzing struggles with bugs that require specific conceptual understanding.
+**Fuzz testing** throws inputs at the system and observes what breaks. Cheap but blind—traditional fuzzing struggles with bugs requiring conceptual understanding.
 
 Agents bridge this gap. They can reason about *why* invariants matter—understanding code semantically—while also generating and running tests empirically. Anthropic's red team recently demonstrated this: [Claude found zero-day vulnerabilities](https://red.anthropic.com/2026/zero-days/) in well-tested codebases by reasoning about *why* vulnerabilities exist, not just blindly testing inputs. It's not "fuzz testing with more compute"—it's fuzz testing with understanding.
 
@@ -78,9 +78,9 @@ The same pattern applies to specification enforcement. Agents can:
 - Propagate changes through implementations (the 67-file PR)
 - Iterate until the suite passes
 
-The problem was always economics. Specifications were expensive to write and slow to maintain. Agents change this. Write a precise change to the spec, agents propagate it through implementations, conformance suites verify correctness. The result isn't formal proof—it's sound but incomplete, catching real violations without guaranteeing their absence. But it's far more rigorous than what was economically viable before.
+The problem was economics. Specifications were expensive to write and slow to maintain. Agents change this. Write a precise change to the spec, agents propagate it through implementations, conformance suites verify correctness. The result isn't formal proof—it's sound but incomplete, catching real violations without guaranteeing their absence. But it's far more rigorous than what was economically viable before.
 
-When AI agents modify thousands of lines per day across dozens of PRs, implicit configurancy collapses. The unwritten rules that coordinated a small team don't survive. We need to make configurancy explicit—not as documentation that drifts, but as a living artifact that agents can read, update, and enforce.
+When AI agents modify thousands of lines per day across dozens of PRs, implicit configurancy collapses. The unwritten rules that coordinated a small team don't survive. We need configurancy that doesn't drift—a living artifact agents can read, update, and enforce.
 
 ## Examples
 
@@ -117,7 +117,7 @@ Drift between layers is a first-class failure mode. If your conformance suite pa
 
 ## Suite Design Is the New Frontier
 
-A conformance suite can be a convincing liar. For distributed systems, the problem isn't "did we implement the rules?" but "did we cover the space of interleavings and failure modes?" Jepsen exists because "tests passed" means nothing.
+Conformance suites can lie convincingly. For distributed systems, the problem isn't "did we implement the rules?" but "did we cover the space of interleavings and failure modes?" Jepsen exists because "tests passed" means nothing.
 
 Different problems need different suites:
 
@@ -188,7 +188,7 @@ Bug fixes and refactors should be invisible at the configurancy layer—if your 
 
 ## Where This Breaks Down
 
-**Upfront cost**: Building conformance suites takes time. Not worth it for throwaway prototypes.
+**Upfront cost**: Conformance suites take time—not worth it for throwaway prototypes.
 
 **Not everything is specifiable**: Emergent behavior—neural networks, chaotic simulations—resists clean specification.
 
@@ -238,22 +238,7 @@ Building this required explicitly modeling constraints ("no file without parent 
 
 It's one concrete starting point. The broader principle: make the implicit explicit. If an invariant matters, encode it. If a constraint applies, make it visible. These aren't artifacts for humans to read after the fact—they're coordination surfaces for all agents.
 
-The velocity problem is real. An AI agent can generate six months of technical debt in an afternoon. Systems with collapsed configurancy become unsteerable—tests pass, but every modification is a gamble.
+The velocity problem is real: an AI agent can generate six months of technical debt in an afternoon. Without configurancy, systems become unsteerable—tests pass, but every change is a gamble.
 
 Configurancy is the antidote. Without it, the implicit understanding holding your system together collapses before you notice.
 
----
-
-Sources and related reading:
-- [Venkatesh Rao's "Configurancy"](https://contraptions.venkateshrao.com/p/configurancy) — the philosophical foundation: how agents and worlds co-emerge into intelligibility
-- [Steve Yegge's "Software Survival 3.0"](https://steve-yegge.medium.com/software-survival-3-0-97a2a6255f7b) — what makes software survive when AI writes everything
-- [Cheng Huang's "Learnings from 100K Lines of Rust with AI"](https://zfhuang99.github.io/rust/claude%20code/codex/contracts/spec-driven%20development/2025/12/01/rust-with-ai.html) — code contracts + property-based tests as configurancy enforcement
-- [Simon Willison on JustHTML](https://simonwillison.net/2025/Dec/14/justhtml/) — conformance suites as the coordination primitive for agentic development
-- [Simon Willison porting JustHTML to JavaScript](https://simonwillison.net/2025/Dec/15/porting-justhtml/) — same configurancy, different agent, different language, 4.5 hours
-- [Durable Streams](https://github.com/durable-streams/durable-streams) — protocol spec + conformance suites in practice
-- [ElectricSQL Oracle testing](https://github.com/electric-sql/electric/pull/2862) — using Postgres as external oracle for property-based testing
-- [Anthropic Red Team: LLM-Discovered 0-Days](https://red.anthropic.com/2026/zero-days/) — agents bridging formal reasoning and empirical testing to find vulnerabilities
-
-I'd love to hear from others thinking about this. How do you maintain coordination as agents multiply? What does the configurancy layer look like for your systems?
-
-The answer isn't more documentation. Static documentation is just configuration—a snapshot. We need configurancy: the living structure that evolves with the system and makes coordination possible.
