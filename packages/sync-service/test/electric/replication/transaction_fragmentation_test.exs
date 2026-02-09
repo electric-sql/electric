@@ -52,6 +52,7 @@ defmodule Electric.Replication.TransactionFragmentationTest do
         @max_batch_size * random_int_in.(2..5)
       ] do
     @num_changes num_changes
+    @tag additional_fields: "val text"
     test "transaction with #{@num_changes} rows (max_batch_size=#{@max_batch_size}) is fully received",
          %{client: client, db_conn: db_conn} do
       # This test verifies the fix for the bug where transactions with exactly
@@ -68,26 +69,73 @@ defmodule Electric.Replication.TransactionFragmentationTest do
       # - By holding 1st fragment's last change until the next fragment,
       #   we make sure that no two fragments have the same last_log_offset
 
-      stream = Client.stream(client, "items", live: true)
+      ## Pre-seed the DB with enough rows to be able to generate UPDATEs and DELETEs freely
 
-      with_consumer stream do
-        assert_up_to_date(consumer)
+      Postgrex.query!(
+        db_conn,
+        "INSERT INTO serial_ids (id, val) SELECT generate_series, 'value-' || generate_series FROM generate_series(1, $1)",
+        [@num_changes]
+      )
 
-        Postgrex.transaction(db_conn, fn conn ->
-          for i <- 1..@num_changes do
-            Postgrex.query!(
-              conn,
-              "INSERT INTO items (id, value) VALUES (gen_random_uuid(), $1)",
-              ["value-#{i}"]
-            )
-          end
-        end)
-
-        # Verify that all rows have been received by the client
-        for i <- 1..@num_changes do
-          assert_insert(consumer, %{"value" => "value-#{i}"})
-        end
+      # Skip the first inserts before moving to the actual generation of a txn with random ops
+      match_fn = fn %Electric.Client.Message.ChangeMessage{
+                      headers: %{operation: :insert, relation: ["public", "serial_ids"]}
+                    } ->
+        true
       end
+
+      resume =
+        with_consumer Client.stream(client, "serial_ids", live: false) do
+          await_count(consumer, @num_changes, match: match_fn)
+          assert_up_to_date(consumer)
+          assert_resume(consumer)
+        end
+
+      ## Generate @num_changes random ops and assert that they are all received by the client
+
+      ops = Stream.repeatedly(fn -> Enum.random([:insert, :update, :delete]) end)
+      indexed_ops = Enum.zip(1..@num_changes, ops)
+      assert @num_changes == length(indexed_ops)
+
+      # Create a single transaction with @num_changes ops
+      Postgrex.transaction(db_conn, fn conn ->
+        Stream.map(indexed_ops, fn
+          {i, :insert} ->
+            id = @num_changes + i
+            {"INSERT INTO serial_ids (id, val) VALUES ($1, $2)", [id, "value-#{id}"]}
+
+          {i, :update} ->
+            {"UPDATE serial_ids SET val = $1 WHERE id = $2", ["value-#{i}-upd", i]}
+
+          {i, :delete} ->
+            {"DELETE FROM serial_ids WHERE id = $1", [i]}
+        end)
+        |> Enum.each(fn {sql, args} -> Postgrex.query!(conn, sql, args) end)
+      end)
+
+      stream = Client.stream(client, "serial_ids", live: false, resume: resume)
+
+      {received_ins, received_upds, received_dels} =
+        with_consumer stream do
+          # Verify that all ops have been received by the client
+          Enum.reduce(indexed_ops, {0, 0, 0}, fn
+            {i, :insert}, {ins, ups, dels} ->
+              assert_insert(consumer, %{"val" => "value-#{@num_changes + i}"})
+              {ins + 1, ups, dels}
+
+            {i, :update}, {ins, ups, dels} ->
+              assert_update(consumer, %{"val" => "value-#{i}-upd"})
+              {ins, ups + 1, dels}
+
+            {i, :delete}, {ins, ups, dels} ->
+              assert_delete(consumer, %{"id" => i})
+              {ins, ups, dels + 1}
+          end)
+        end
+
+      assert received_ins == Enum.count(indexed_ops, fn {_, op} -> op == :insert end)
+      assert received_upds == Enum.count(indexed_ops, fn {_, op} -> op == :update end)
+      assert received_dels == Enum.count(indexed_ops, fn {_, op} -> op == :delete end)
     end
   end
 end
