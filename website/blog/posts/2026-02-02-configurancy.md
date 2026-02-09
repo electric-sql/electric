@@ -11,11 +11,11 @@ outline: [2, 3]
 post: true
 ---
 
-At Electric, we build sync engines, embedded databases, messaging systems—software where correctness matters. Over the past few months, we've shifted to nearly 100% AI-written code.
+At Electric, we build system software, critical infrastructure tools like sync engines, embedded databases, messaging systems—software where correctness matters. Yet over the past few months, we've shifted to nearly 100% AI-written code.
 
 Every team has critical systems like this. Maybe it's your payments flow, your auth layer, your data pipeline.
 
-How do you let agents write these systems without everything falling apart?
+How do you let agents work in these critical systems without everything falling apart?
 
 Last week we [simplified SSE binary handling](https://github.com/durable-streams/durable-streams/pull/231) in durable-streams. The change: remove a query parameter, have servers auto-detect binary content types, signal via response header.
 
@@ -48,9 +48,9 @@ For software, configurancy is **the explicit contract that lets bounded agents c
 Concretely: configurancy is the smallest set of explicit behavioral commitments (and rationales) that allow a bounded agent to safely modify the system without rediscovering invariants. This is falsifiable—if agents routinely break invariants, your configurancy surface is missing something.
 
 It's a contract that establishes shared facts:
-- These affordances exist (what you can do) — *streams can be paused and resumed*
-- These invariants hold (what you can assume) — *messages are delivered exactly once*
-- These constraints apply (what you cannot do) — *max 100 concurrent streams per client*
+- These affordances exist (what you can do) — *three read modes: catch-up replay, long-poll, and SSE streaming*
+- These invariants hold (what you can assume) — *bytes at a given offset never change; new data is only appended*
+- These constraints apply (what you cannot do) — *appends must match the stream's configured content-type or return 409 Conflict*
 
 Formal contracts are bones. Intelligibility needs flesh—the memory of why we don't do X anymore, the rationale behind trade-offs. What Yegge calls "crystallized cognition"—hard-won knowledge compressed so agents don't have to rediscover it.
 
@@ -60,15 +60,25 @@ Low configurancy means the contract is implicit, outdated, or contradicted by re
 
 This is distinct from code quality. You can have pristine implementation and collapsed configurancy. The code works; no one knows what it promises.
 
-## The System-Level Typechecker
+## Bridging Formal and Empirical
 
-We've been building configurancy infrastructure for decades—we just didn't call it that. **Types** make illegal states unrepresentable. **Interfaces** stabilize relations between components. **Invariants** let bounded agents coordinate. **Specifications** like HTML5 or HTTP define what implementations must do, not how. **Conformance suites** enforce all of the above.
+We've been building configurancy infrastructure for decades. **Types** make illegal states unrepresentable. **Interfaces** stabilize relations between components. **Specifications** like HTML5 or HTTP define what implementations must do, not how. **Conformance suites** enforce all of the above.
 
-Here's the reframe: **specification enforcement is the system-level typechecker**. Types prevent illegal states in a module. Specification enforcement prevents illegal behaviors across a system. "Make illegal states unrepresentable" scales up to "make illegal behaviors unimplementable."
+But there's always been a gap between two approaches to verification:
 
-The problem was always economics. Specifications were expensive to write and slow to maintain. Changing an interface rippled through the codebase manually. So we invested sparingly, specs drifted, and technical debt accumulated.
+**Formal verification** is anticipatory—prove properties statically, guarantee absence of bugs. Powerful but expensive, and it doesn't scale to most real systems.
 
-Agents change this. Write a precise change to the spec, and agents propagate it through implementations. Conformance suites verify correctness. The 67-file change I opened with? That's the pattern—surgical spec change, automated propagation, verified result. It's the same shape as proof assistants: change a lemma, the compiler fails, you repair downstream proofs. Agents make downstream repair cheap enough to treat large systems as if they had stronger behavioral typing.
+**Fuzz testing** is empirical—throw inputs at the system, observe what breaks. Cheap but blind. Traditional fuzzing struggles with bugs that require specific conceptual understanding.
+
+Agents bridge this gap. They can reason about *why* invariants matter—understanding code semantically—while also generating and running tests empirically. Anthropic's red team recently demonstrated this: [Claude found zero-day vulnerabilities](https://red.anthropic.com/2026/zero-days/) in well-tested codebases by reasoning about *why* vulnerabilities exist, not just blindly testing inputs. It's not "fuzz testing with more compute"—it's fuzz testing with understanding.
+
+The same pattern applies to specification enforcement. Agents can:
+- Understand the spec semantically (why this invariant matters)
+- Generate targeted tests (not random—informed by the spec)
+- Propagate changes through implementations (the 67-file PR)
+- Iterate until the suite passes
+
+The problem was always economics. Specifications were expensive to write and slow to maintain. Agents change this. Write a precise change to the spec, agents propagate it through implementations, conformance suites verify correctness. The result isn't formal proof—it's sound but incomplete, catching real violations without guaranteeing their absence. But it's far more rigorous than what was economically viable before.
 
 When AI agents modify thousands of lines per day across dozens of PRs, implicit configurancy collapses. The unwritten rules that coordinated a small team don't survive. We need to make configurancy explicit—not as documentation that drifts, but as a living artifact that agents can read, update, and enforce.
 
@@ -98,11 +108,11 @@ A conformance suite can be a convincing liar. For distributed systems, the probl
 
 Different problems need different suites:
 
-- **Deterministic scenario suites**: Good for crisp invariants with known inputs/outputs
-- **Fuzz / property-based testing**: Good for combinatorial spaces too large to enumerate
-- **History-based checkers**: Good for weak consistency models where "correct" depends on observed order
-- **Model checking / state exploration**: Good for concurrency interleavings
-- **Differential testing**: Good when multiple implementations exist (like our Postgres oracle)
+- **Deterministic scenario suites**: Good for crisp invariants with known inputs/outputs. JustHTML uses html5lib-tests—9,200 tests defining exactly what tree each HTML fragment produces.
+- **Fuzz / property-based testing**: Good for combinatorial spaces too large to enumerate. Our SQL expression tests generate hundreds of random expressions and compare against Postgres.
+- **History-based checkers**: Good for weak consistency models where "correct" depends on observed order. Jepsen's linearizability checker verifies that observed histories could have come from a sequential execution.
+- **Model checking / state exploration**: Good for concurrency interleavings. TLA+ can exhaustively explore state spaces that would take billions of test runs to cover.
+- **Differential testing**: Good when multiple implementations exist. Our 10 durable-streams clients in 10 languages all run against the same conformance suite—disagreement reveals bugs.
 
 The html5lib-tests suite works because HTML parsing is deterministic—same input, same tree. Distributed consensus is harder. Your suite must sample failure modes that only appear under specific timing, network partitions, or crash sequences.
 
@@ -151,23 +161,49 @@ This is what agents need to know. Not the diff. The delta in what they should ex
 
 **Cultural change**: Teams must treat spec updates as first-class changes, or you're back to documentation drift.
 
+**Wrong abstraction layer**: Sometimes the spec can't exist yet. Early-stage products where "correct" emerges from user feedback. Performance tuning where "fast enough" requires measuring real workloads. Novel domains where the behavior you want only becomes clear through experimentation. In these cases, observe and iterate—don't specify harder.
+
 This pays off for stable protocols and clear-contract libraries. For experiments and rapidly evolving products, it's overhead—*for now*. But if agents continue making spec maintenance cheaper, the calculus shifts. Starting with a lightweight spec might become the default, not the exception.
 
-## The Toolkit
+## Getting Started
 
-We've been building [tools to make configurancy explicit](https://github.com/electric-sql/configurancy-review-toolkit):
+We've been experimenting with [a skill that teaches agents to build rigorous test infrastructure](https://gist.github.com/KyleAMathews/72e0cb6f5f6bd36cac1332ea91893b44) for complex systems. It covers formal foundations (mapping math to types), external oracles, property-based testing, equivalence checking across implementations, fault injection, and history-based verification—wrapped in DSLs that make the methodology accessible.
 
-1. **configurancy-analyzer**: Reviews changes for impact on shared intelligibility. Tracks affordances, invariants, constraints. Produces configurancy deltas.
+Here's a webhook subscription test from durable-streams that validates the consumer state machine:
 
-2. **configurancy-modeler**: Generates and maintains the configurancy model—a predictive model any agent can use to answer "what happens if?"
+```typescript
+test(`full cycle: IDLE → WAKING → LIVE → IDLE`, () =>
+  webhook(getBaseUrl())
+    .subscription(`/agents/*`, `wake-full-${ts()}`)
+    .stream(`/agents/wake-full-${ts()}`)
+    .append({ event: `created` })
+    .expectWake()
+    .claimWake()
+    .ackAll()
+    .done()
+    .run())
+```
 
-3. **configurancy-review**: A review workflow that treats configurancy as a first-class concern. Implementation issues block. Configurancy issues also block.
+The test encodes the protocol's state machine. You can't call `.claimWake()` without `.expectWake()`. Invalid sequences don't compile.
 
-Make the implicit explicit. If an invariant matters, write it down with its enforcement mechanism. If an affordance exists, document it. If a constraint applies, make it visible. These artifacts aren't for humans to read after the fact—they're coordination surfaces for all agents (human and otherwise).
+Same pattern for filesystem operations:
+
+```typescript
+await scenario("read-after-write")
+  .createFile("/test.txt", "hello")
+  .expectContent("/test.txt", "hello")
+  .writeFile("/test.txt", "world")
+  .expectContent("/test.txt", "world")
+  .run(fs)
+```
+
+Building this required explicitly modeling constraints ("no file without parent directory") and which operations were sync vs async—exposing a copy-paste bug that would have caused subtle issues. The test infrastructure becomes the configurancy layer.
+
+It's one concrete starting point. The broader principle: make the implicit explicit. If an invariant matters, encode it. If a constraint applies, make it visible. These aren't artifacts for humans to read after the fact—they're coordination surfaces for all agents.
 
 The velocity problem is real. An AI agent can generate six months of technical debt in an afternoon. Systems with collapsed configurancy become unsteerable—tests pass, but every modification is a gamble.
 
-Configurancy is the antidote. Make the coordination primitives explicit, enforce them with types and tests, let agents propagate changes. Without this, the implicit understanding holding your system together collapses before you notice.
+Configurancy is the antidote. Without it, the implicit understanding holding your system together collapses before you notice.
 
 ---
 
@@ -179,6 +215,7 @@ Sources and related reading:
 - [Simon Willison porting JustHTML to JavaScript](https://simonwillison.net/2025/Dec/15/porting-justhtml/) — same configurancy, different agent, different language, 4.5 hours
 - [Durable Streams](https://github.com/durable-streams/durable-streams) — protocol spec + conformance suites in practice
 - [ElectricSQL Oracle testing](https://github.com/electric-sql/electric/pull/2862) — using Postgres as external oracle for property-based testing
+- [Anthropic Red Team: LLM-Discovered 0-Days](https://red.anthropic.com/2026/zero-days/) — agents bridging formal reasoning and empirical testing to find vulnerabilities
 
 I'd love to hear from others thinking about this. How do you maintain coordination as agents multiply? What does the configurancy layer look like for your systems?
 
