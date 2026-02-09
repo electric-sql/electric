@@ -738,6 +738,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
         }
         this.#connected = false
         this.#tickPromiseRejecter?.()
+        this.#unsubscribeFromWakeDetection?.()
         return
       }
 
@@ -748,12 +749,14 @@ export class ShapeStream<T extends Row<unknown> = Row>
       }
       this.#connected = false
       this.#tickPromiseRejecter?.()
+      this.#unsubscribeFromWakeDetection?.()
       throw err
     }
 
     // Normal completion, clean up
     this.#connected = false
     this.#tickPromiseRejecter?.()
+    this.#unsubscribeFromWakeDetection?.()
   }
 
   async #requestShape(): Promise<void> {

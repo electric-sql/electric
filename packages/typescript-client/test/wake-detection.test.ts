@@ -13,6 +13,7 @@ describe(`Wake detection`, () => {
 
   afterEach(() => {
     aborter.abort()
+    vi.useRealTimers()
     vi.restoreAllMocks()
   })
 
@@ -115,6 +116,5 @@ describe(`Wake detection`, () => {
 
     unsub()
     aborter.abort()
-    vi.useRealTimers()
   })
 })
