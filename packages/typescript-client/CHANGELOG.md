@@ -1,5 +1,11 @@
 # @electric-sql/client
 
+## 1.5.2
+
+### Patch Changes
+
+- 091a232: Fix ShapeStream hanging after system sleep in non-browser environments (Bun, Node.js). Stale in-flight HTTP requests are now automatically aborted and reconnected on wake, preventing hangs until TCP timeout.
+
 ## 1.5.1
 
 ### Patch Changes
