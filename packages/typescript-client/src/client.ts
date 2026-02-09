@@ -788,15 +788,16 @@ export class ShapeStream<T extends Row<unknown> = Row>
         resumingFromPause,
       })
     } catch (e) {
-      // Handle abort error triggered by refresh or system wake
+      const abortReason = requestAbortController.signal.reason
+      const isRestartAbort =
+        requestAbortController.signal.aborted &&
+        (abortReason === FORCE_DISCONNECT_AND_REFRESH ||
+          abortReason === SYSTEM_WAKE)
+
       if (
         (e instanceof FetchError || e instanceof FetchBackoffAbortError) &&
-        requestAbortController.signal.aborted &&
-        (requestAbortController.signal.reason ===
-          FORCE_DISCONNECT_AND_REFRESH ||
-          requestAbortController.signal.reason === SYSTEM_WAKE)
+        isRestartAbort
       ) {
-        // Start a new request
         return this.#requestShape()
       }
 
@@ -1549,12 +1550,16 @@ export class ShapeStream<T extends Row<unknown> = Row>
     })
   }
 
-  #subscribeToVisibilityChanges() {
-    if (
+  #hasBrowserVisibilityAPI(): boolean {
+    return (
       typeof document === `object` &&
       typeof document.hidden === `boolean` &&
       typeof document.addEventListener === `function`
-    ) {
+    )
+  }
+
+  #subscribeToVisibilityChanges() {
+    if (this.#hasBrowserVisibilityAPI()) {
       const visibilityHandler = () => {
         if (document.hidden) {
           this.#pause()
@@ -1578,22 +1583,17 @@ export class ShapeStream<T extends Row<unknown> = Row>
    * the elapsed wall-clock time since the last tick will be much larger
    * than the interval period, indicating the system was asleep.
    *
-   * This is particularly important for non-browser environments (Bun, Node.js)
-   * where `document.visibilitychange` is not available, and in-flight HTTP
-   * long-poll requests may hang until the OS TCP timeout (~75s on macOS).
+   * Only active in non-browser environments (Bun, Node.js) where
+   * `document.visibilitychange` is not available. In browsers,
+   * `#subscribeToVisibilityChanges` handles this instead. Without wake
+   * detection, in-flight HTTP requests (long-poll or SSE) may hang until
+   * the OS TCP timeout.
    */
   #subscribeToWakeDetection() {
-    // Skip in browser environments where visibilitychange already handles this
-    if (
-      typeof document === `object` &&
-      typeof document.hidden === `boolean` &&
-      typeof document.addEventListener === `function`
-    ) {
-      return
-    }
+    if (this.#hasBrowserVisibilityAPI()) return
 
-    const INTERVAL_MS = 10_000 // Check every 10 seconds
-    const THRESHOLD_MS = 15_000 // If 15+ extra seconds pass, system likely slept
+    const INTERVAL_MS = 10_000
+    const WAKE_THRESHOLD_MS = 15_000
 
     let lastTickTime = Date.now()
 
@@ -1602,11 +1602,13 @@ export class ShapeStream<T extends Row<unknown> = Row>
       const elapsed = now - lastTickTime
       lastTickTime = now
 
-      if (elapsed > INTERVAL_MS + THRESHOLD_MS) {
-        // System likely woke from sleep — abort the current (probably stale)
-        // request and restart the fetch loop with a fresh connection
+      if (elapsed > INTERVAL_MS + WAKE_THRESHOLD_MS) {
         if (this.#state === `active` && this.#requestAbortController) {
+          this.#isRefreshing = true
           this.#requestAbortController.abort(SYSTEM_WAKE)
+          queueMicrotask(() => {
+            this.#isRefreshing = false
+          })
         }
       }
     }, INTERVAL_MS)
