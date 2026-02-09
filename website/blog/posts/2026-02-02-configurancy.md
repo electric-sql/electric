@@ -23,7 +23,7 @@ The PR touched **67 files**: protocol spec, both servers (TypeScript + Go), all 
 
 It felt like a type-driven refactor at system scale: change the contract, propagate fixes until the suite is green.
 
-Here's the thesis: **when agents propagate changes at machine speed, implementation becomes cheap—so specification quality becomes what matters.** We've always known specs and contracts were valuable—but they cost too much to maintain. So we invested sparingly, specs drifted, and we just read the code.
+Here's the thesis: **AI makes code cheap; therefore the scarce asset is the system's self-knowledge.** When agents propagate changes at machine speed, implementation becomes the cheap part—specification quality becomes what matters. We've always known specs and contracts were valuable—but they cost too much to maintain. So we invested sparingly, specs drifted, and we just read the code.
 
 That calculus has flipped. Explicit contracts—specs, invariants, conformance suites—become the cheapest way to keep a fast-moving system coherent. The spec becomes the source of truth again.
 
@@ -102,6 +102,19 @@ At ElectricSQL, we use "Oracle testing." When [fixing PG expression execution](h
 
 This connects to **Reinforcement Learning with Verifiable Rewards (RLVR)**—AI learns faster when it can verify its own outputs. Configurancy is the same idea applied to systems: find an existing source of truth, generate tests against it, let agents iterate until they pass.
 
+## The Spec Hierarchy
+
+"Spec" is doing a lot of work. It hides a sharp edge: if your spec is prose, it drifts. If it's tests, it can encode accidental behavior. If it's an oracle, you inherit quirks and version-specific behavior.
+
+Make the hierarchy explicit:
+
+1. **External oracle** — ground truth that exists outside your system (Postgres, html5lib-tests, the HTTP RFC)
+2. **Reference model** — an executable spec that encodes the oracle's behavior in testable form
+3. **Conformance suite** — the operationalized contract that implementations must pass
+4. **Prose rationale** — why the contract exists, what trade-offs it encodes, what we tried and abandoned
+
+Drift between layers is a first-class failure mode. If your conformance suite passes but doesn't match the oracle, you have a bug in your spec—and agents will propagate it at machine speed. Treat layer drift as a CI failure, not an afterthought.
+
 ## Suite Design Is the New Frontier
 
 A conformance suite can be a convincing liar. For distributed systems, the problem isn't "did we implement the rules?" but "did we cover the space of interleavings and failure modes?" Jepsen exists because "tests passed" means nothing.
@@ -117,6 +130,16 @@ Different problems need different suites:
 The html5lib-tests suite works because HTML parsing is deterministic—same input, same tree. Distributed consensus is harder. Your suite must sample failure modes that only appear under specific timing, network partitions, or crash sequences.
 
 Suite design becomes the engineering frontier. The configurancy layer tells you *what* to verify; the suite determines *whether you actually verified it*.
+
+## Beyond CI: Runtime Truth Maintenance
+
+Conformance suites run in CI. But many invariants only surface under load, weird networks, or partial failure. A mature configurancy layer extends into production:
+
+- **SLOs linked to invariants**: If "exactly-once delivery" is an invariant, there should be an error budget tracking delivery failures
+- **Telemetry assertions**: "Offsets never go backwards" isn't just a test—it's a metric invariant that fires alerts
+- **Canary conformance**: Run conformance tests against prod-like conditions, not just clean CI environments
+
+Configurancy shouldn't end at merge. Runtime is where your spec meets reality.
 
 ## Keeping Spec and Code in Sync
 
@@ -134,20 +157,34 @@ Why 30 days? Your implicit context—why you chose that name, what edge case pro
 
 The most dangerous bugs come from assumptions that "everyone knows"—but 30 days from now, nobody knows.
 
-**Configurancy Delta**: Instead of "what lines changed," track "how did the shared understanding change?"
+**Make it concrete**: Turn the 30-day test into a CI job. Maintain a set of questions about your system's behavior:
 
+- "If two clients reconnect with the same last-seen offset, what happens?"
+- "What does a 409 response mean in this protocol?"
+- "Can bytes at offset N ever change after acknowledgment?"
+
+Run an agent against your spec and suite with these questions. If it can't answer without reading implementation code, your configurancy layer is thin. This is unit testing for mental models.
+
+**Configurancy Delta**: Instead of "what lines changed," track "how did the shared understanding change?" Make it structured so agents and tooling can enforce it:
+
+```yaml
+config_delta:
+  affordances:
+    - add: "Streams can be paused and resumed"
+  invariants:
+    - strengthen: "Delivery: at-least-once → exactly-once"
+  constraints:
+    - add: "Max 100 concurrent streams per client"
+  rationale:
+    - "Prevent unbounded fan-out during reconnect storms"
+  enforcement:
+    - "conformance: test_delivery_exactly_once"
+    - "runtime: assert_offset_monotonic"
 ```
-Affordances:
-  + [NEW] Users can now pause streams
 
-Invariants:
-  ↑ [STRENGTHENED] Delivery: at-least-once → exactly-once
+Now your PR isn't just code—it's a proposed change to the project's constitution. Tooling can refuse merges that change invariants without updating the suite, auto-generate migration notes, or prompt agents with "here's the behavioral change; propagate across implementations."
 
-Constraints:
-  + [NEW] Max 100 concurrent streams
-```
-
-This is what agents need to know. Not the diff. The delta in what they should expect. Bug fixes and refactors should be invisible at the configurancy layer—if your "bug fix" requires updating the shared model, it's a behavior change.
+Bug fixes and refactors should be invisible at the configurancy layer—if your "bug fix" requires updating the shared model, it's a behavior change.
 
 ## Where This Breaks Down
 
