@@ -10,6 +10,7 @@ export default defineConfig({
       `test/parser.test.ts`,
       `test/snapshot-tracker.test.ts`,
       `test/expired-shapes-cache.test.ts`,
+      `test/wake-detection.test.ts`,
     ],
     testTimeout: 30000,
     environment: `jsdom`,
