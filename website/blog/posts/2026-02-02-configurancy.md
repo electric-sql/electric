@@ -11,6 +11,12 @@ outline: [2, 3]
 post: true
 ---
 
+At Electric, we build sync engines, embedded databases, messaging systems—software where correctness matters. Over the past few months, we've shifted to nearly 100% AI-written code.
+
+Every team has critical systems like this. Maybe it's your payments flow, your auth layer, your data pipeline.
+
+How do you let agents write these systems without everything falling apart?
+
 Last week we [simplified SSE binary handling](https://github.com/durable-streams/durable-streams/pull/231) in durable-streams. The change: remove a query parameter, have servers auto-detect binary content types, signal via response header.
 
 The PR touched **67 files**: protocol spec, both servers (TypeScript + Go), all 10 client implementations across 10 languages, and conformance tests. One agent propagated the change through the entire stack in *20-30 minutes*. Every implementation now handles the new behavior correctly—verified by the conformance suite.
@@ -58,7 +64,7 @@ This is distinct from code quality. You can have pristine implementation and col
 
 We've been building configurancy infrastructure for decades—we just didn't call it that. **Types** make illegal states unrepresentable. **Interfaces** stabilize relations between components. **Invariants** let bounded agents coordinate. **Specifications** like HTML5 or HTTP define what implementations must do, not how. **Conformance suites** enforce all of the above.
 
-Here's the reframe: **conformance suites are the system-level typechecker**. Types prevent illegal states in a module. Conformance suites prevent illegal behaviors across a polyglot ecosystem. "Make illegal states unrepresentable" scales up to "make illegal behaviors unimplementable."
+Here's the reframe: **specification enforcement is the system-level typechecker**. Types prevent illegal states in a module. Specification enforcement prevents illegal behaviors across a system. "Make illegal states unrepresentable" scales up to "make illegal behaviors unimplementable."
 
 The problem was always economics. Specifications were expensive to write and slow to maintain. Changing an interface rippled through the codebase manually. So we invested sparingly, specs drifted, and technical debt accumulated.
 
@@ -66,7 +72,7 @@ Agents change this. Write a precise change to the spec, and agents propagate it 
 
 When AI agents modify thousands of lines per day across dozens of PRs, implicit configurancy collapses. The unwritten rules that coordinated a small team don't survive. We need to make configurancy explicit—not as documentation that drifts, but as a living artifact that agents can read, update, and enforce.
 
-## Examples That Work
+## Examples
 
 A markdown file listing invariants is worthless without enforcement. The best examples make the configurancy *executable*:
 
