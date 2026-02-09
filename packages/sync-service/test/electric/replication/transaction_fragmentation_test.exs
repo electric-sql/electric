@@ -16,6 +16,11 @@ defmodule Electric.Replication.TransactionFragmentationTest do
 
   alias Electric.Client
 
+  alias Electric.Replication.LogOffset
+  alias Electric.ShapeCache
+  alias Electric.ShapeCache.Storage
+  alias Electric.Shapes.Shape
+
   # max_batch_size must be at least 2, at least 3 for this test
   @max_batch_size :rand.uniform(50) + 2
 
@@ -54,7 +59,7 @@ defmodule Electric.Replication.TransactionFragmentationTest do
     @num_changes num_changes
     @tag additional_fields: "val text"
     test "transaction with #{@num_changes} rows (max_batch_size=#{@max_batch_size}) is fully received",
-         %{client: client, db_conn: db_conn} do
+         %{client: client, db_conn: db_conn} = ctx do
       # This test verifies the fix for the bug where transactions with exactly
       # max_batch_size changes had their commit fragment dropped.
       #
@@ -136,6 +141,27 @@ defmodule Electric.Replication.TransactionFragmentationTest do
       assert received_ins == Enum.count(indexed_ops, fn {_, op} -> op == :insert end)
       assert received_upds == Enum.count(indexed_ops, fn {_, op} -> op == :update end)
       assert received_dels == Enum.count(indexed_ops, fn {_, op} -> op == :delete end)
+
+      ## Verify that only the last changes has the last=true header
+
+      assert [{shape_handle, %Shape{root_table: {"public", "serial_ids"}}}] =
+               ShapeCache.list_shapes(ctx.stack_id)
+
+      shape_storage = Storage.for_shape(shape_handle, Storage.shared_opts(ctx.storage))
+
+      stored_changes =
+        Storage.get_log_stream(LogOffset.last_before_real_offsets(), shape_storage)
+        |> Enum.map(&Jason.decode!/1)
+
+      assert @num_changes == length(stored_changes)
+
+      [last_change | rest_changes] = Enum.reverse(stored_changes)
+
+      assert %{"headers" => %{"last" => true}} = last_change
+
+      refute Enum.any?(rest_changes, fn %{"headers" => headers} ->
+               Map.has_key?(headers, "last")
+             end)
     end
   end
 end
