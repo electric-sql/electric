@@ -1,7 +1,7 @@
 ---
 title: 'Configurancy: Keeping Systems Intelligible When Agents Write All the Code'
 description: >-
-  Formal specifications become tractable when agents handle the propagation. Configurancy is the shared intelligibility layer that lets multiple bounded agents—human and AI—coherently co-evolve a system.
+  AI makes code cheap; the scarce asset is the system's self-knowledge. Configurancy is the layer that lets bounded agents coherently co-evolve a system.
 excerpt: >-
   What changed isn't the principle—it's the economics. Agents can propagate spec changes through implementations at machine speed. Conformance suites verify correctness. The spec becomes the source of truth again.
 authors: [kyle]
@@ -17,7 +17,7 @@ Every team has critical systems like this. Maybe it's your payments flow, your a
 
 How do you let agents work in these critical systems without everything falling apart?
 
-Last week we [simplified SSE binary handling](https://github.com/durable-streams/durable-streams/pull/231) in durable-streams. The change: remove a query parameter, have servers auto-detect binary content types, signal via response header.
+Recently we [simplified SSE binary handling](https://github.com/durable-streams/durable-streams/pull/231) in durable-streams. The change: remove a query parameter, have servers auto-detect binary content types, signal via response header.
 
 The PR touched **67 files**: protocol spec, both servers (TypeScript + Go), all 10 client implementations across 10 languages, and conformance tests. One agent propagated the change through the entire stack in *20-30 minutes*. Every implementation now handles the new behavior correctly—verified by the conformance suite.
 
@@ -88,7 +88,7 @@ A markdown file listing invariants is worthless without enforcement. The best ex
 
 **JustHTML**: Emil Stenström built a complete HTML5 parser using AI agents by hooking in the [html5lib-tests conformance suite](https://github.com/html5lib/html5lib-tests)—9,200 tests used by browser vendors—from the start. The suite *is* the configurancy. As Emil put it: ["The agent did the typing; I did the thinking."](https://simonwillison.net/2025/Dec/14/justhtml/) Then Simon Willison [ported it to JavaScript in 4.5 hours](https://simonwillison.net/2025/Dec/15/porting-justhtml/) by pointing a different agent at the same conformance suite—same shared understanding, completely different implementations.
 
-**Durable Streams**: We've been building [durable-streams](https://github.com/durable-streams/durable-streams) the same way—a [protocol specification](https://github.com/durable-streams/spec) with server and client conformance suites. Any implementation that passes the suite implements the protocol correctly.
+**Durable Streams**: We've been building [durable-streams](https://github.com/durable-streams/durable-streams) the same way—a [protocol specification](https://github.com/durable-streams/durable-streams/blob/main/PROTOCOL.md) with server and client conformance suites. Any implementation that passes the suite implements the protocol correctly.
 
 **Code Contracts**: [Cheng Huang](https://zfhuang99.github.io/rust/claude%20code/codex/contracts/spec-driven%20development/2025/12/01/rust-with-ai.html) built 130K lines of Rust using preconditions, postconditions, and invariants that AI generates tests from. One contract caught a subtle Paxos safety violation.
 
