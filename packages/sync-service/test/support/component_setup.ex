@@ -438,13 +438,17 @@ defmodule Support.ComponentSetup do
          storage: storage,
          storage_dir: ctx.tmp_dir,
          connection_opts: connection_opts,
-         replication_opts: [
-           connection_opts: replication_connection_opts,
-           slot_name: "electric_test_slot_#{:erlang.phash2(stack_id)}",
-           publication_name: publication_name,
-           try_creating_publication?: true,
-           slot_temporary?: true
-         ],
+         replication_opts:
+           Keyword.merge(
+             [
+               connection_opts: replication_connection_opts,
+               slot_name: "electric_test_slot_#{:erlang.phash2(stack_id)}",
+               publication_name: publication_name,
+               try_creating_publication?: true,
+               slot_temporary?: true
+             ],
+             List.wrap(ctx[:replication_opts_overrides])
+           ),
          pool_opts: [
            backoff_type: :stop,
            max_restarts: 0,

@@ -126,6 +126,7 @@ defmodule Electric.Application do
         slot_name: slot_name,
         slot_temporary?: get_env(opts, :replication_slot_temporary?),
         max_txn_size: get_env(opts, :max_txn_size),
+        max_batch_size: get_env(opts, :max_batch_size),
         replication_idle_timeout: replication_idle_timeout
       ],
       pool_opts:

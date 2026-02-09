@@ -34,9 +34,7 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverter do
             tx_size: 0,
             max_tx_size: nil,
             max_batch_size: nil,
-            last_log_offset: nil,
-            txn_fragment: nil,
-            current_xid: nil
+            txn_fragment: nil
 
   @type t() :: %__MODULE__{
           relations: %{optional(LR.relation_id()) => LR.Relation.t()},
@@ -45,9 +43,7 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverter do
           tx_size: non_neg_integer(),
           max_tx_size: non_neg_integer() | nil,
           max_batch_size: non_neg_integer(),
-          last_log_offset: LogOffset.t() | nil,
-          txn_fragment: TransactionFragment.t() | nil,
-          current_xid: Electric.Replication.Changes.xid() | nil
+          txn_fragment: TransactionFragment.t() | nil
         }
 
   def new(opts \\ []) do
@@ -83,8 +79,6 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverter do
        | tx_op_index: 0,
          tx_size: 0,
          tx_change_count: 0,
-         last_log_offset: nil,
-         current_xid: msg.xid,
          txn_fragment: %TransactionFragment{
            xid: msg.xid,
            lsn: msg.final_lsn,
@@ -227,22 +221,16 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverter do
       txn_change_count: state.tx_change_count
     }
 
-    last_log_offset = state.last_log_offset || LogOffset.new(Lsn.to_integer(fragment.lsn), 0)
+    returned_txn_fragment =
+      %{fragment | commit: commit}
+      |> finalize_txn_fragment()
 
-    {:ok,
-     %{
-       fragment
-       | commit: commit,
-         last_log_offset: last_log_offset,
-         changes: Enum.reverse(fragment.changes)
-     },
+    {:ok, returned_txn_fragment,
      %{
        state
        | tx_op_index: nil,
          tx_size: 0,
          tx_change_count: 0,
-         last_log_offset: nil,
-         current_xid: nil,
          txn_fragment: nil
      }}
   end
@@ -276,8 +264,6 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverter do
       state
       | tx_size: state.tx_size + bytes,
         tx_change_count: state.tx_change_count + 1,
-        last_log_offset: current_offset(state),
-
         # We're adding 2 to the op index because it's possible we're splitting some of the operations before storage.
         # This gives us headroom for splitting any operation into 2.
         tx_op_index: state.tx_op_index + 2
@@ -312,13 +298,47 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverter do
          } = state
        )
        when change_count >= max_batch_size do
-    {:ok,
-     %{
-       fragment
-       | last_log_offset: state.last_log_offset,
-         changes: Enum.reverse(fragment.changes)
-     }, %{state | txn_fragment: %TransactionFragment{xid: state.current_xid, lsn: fragment.lsn}}}
+    # Keep the most recent change in the state so that, if the next message is Commit, the last
+    # txn fragment has at least one change.
+    #
+    # Before this safeguard got introduced, it was possible to observe a scenario where a txn
+    # fragment was returned due to reaching the max_batch_size but the next message was Commit
+    # and, as a result, a txn fragment with an empty list of changes and the same
+    # last_log_offset as the preceding fragment would be returned. This last fragment would then get
+    # skipped by ShapeLogCollector (due to the already seen offset) and the shape consumer
+    # process would never see the Commit change for the transaction.
+
+    [last_change | fragment_changes] = fragment.changes
+
+    returned_txn_fragment =
+      %{fragment | changes: fragment_changes, change_count: fragment.change_count - 1}
+      |> finalize_txn_fragment()
+
+    state =
+      %{
+        state
+        | txn_fragment: %TransactionFragment{
+            xid: fragment.xid,
+            lsn: fragment.lsn
+          }
+      }
+      |> add_change(last_change)
+      |> add_affected_relation(last_change.relation)
+
+    {:ok, returned_txn_fragment, state}
   end
 
   defp maybe_flush(state), do: {:buffering, state}
+
+  # Empty transaction
+  defp finalize_txn_fragment(%TransactionFragment{changes: []} = fragment) do
+    %{fragment | last_log_offset: LogOffset.new(Lsn.to_integer(fragment.lsn), 0)}
+  end
+
+  # Changes are accumulated in reverse order, so hd(changes) is the most recent one.
+  # We use its log_offset to populate the fragment's last_log_offset.
+  defp finalize_txn_fragment(%TransactionFragment{changes: changes} = fragment) do
+    [%{log_offset: last_log_offset} | _] = changes
+    %{fragment | last_log_offset: last_log_offset, changes: Enum.reverse(changes)}
+  end
 end
