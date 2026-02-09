@@ -1,4 +1,10 @@
 import { Offset, Schema } from './types'
+import {
+  OFFSET_QUERY_PARAM,
+  SHAPE_HANDLE_QUERY_PARAM,
+  LIVE_CACHE_BUSTER_QUERY_PARAM,
+  CACHE_BUSTER_QUERY_PARAM,
+} from './constants'
 
 export type ShapeStreamStateKind =
   | `initial`
@@ -142,6 +148,11 @@ export abstract class ShapeStreamState {
     }
   }
 
+  // --- URL param application ---
+
+  /** Adds state-specific query parameters to the fetch URL. */
+  applyUrlParams(_url: URL): void {}
+
   // --- Default response/message handlers (Paused/Error never receive these) ---
 
   handleResponseMetadata(
@@ -210,6 +221,15 @@ abstract class ActiveState extends ShapeStreamState {
   /** Expose shared fields to subclasses for spreading into new instances. */
   protected get currentFields(): SharedStateFields {
     return this.#shared
+  }
+
+  // --- URL param application ---
+
+  applyUrlParams(url: URL): void {
+    url.searchParams.set(OFFSET_QUERY_PARAM, this.#shared.offset)
+    if (this.#shared.handle) {
+      url.searchParams.set(SHAPE_HANDLE_QUERY_PARAM, this.#shared.handle)
+    }
   }
 
   // --- Helpers for subclass handleResponseMetadata implementations ---
@@ -408,6 +428,11 @@ export class StaleRetryState extends FetchingState {
   get staleCacheRetryCount() {
     return this.#staleCacheRetryCount
   }
+
+  applyUrlParams(url: URL): void {
+    super.applyUrlParams(url)
+    url.searchParams.set(CACHE_BUSTER_QUERY_PARAM, this.#staleCacheBuster)
+  }
 }
 
 export class LiveState extends ActiveState {
@@ -438,6 +463,11 @@ export class LiveState extends ActiveState {
 
   get sseFallbackToLongPolling(): boolean {
     return this.#sseFallbackToLongPolling
+  }
+
+  applyUrlParams(url: URL): void {
+    super.applyUrlParams(url)
+    url.searchParams.set(LIVE_CACHE_BUSTER_QUERY_PARAM, this.liveCacheBuster)
   }
 
   private get sseState() {
@@ -623,6 +653,10 @@ export class PausedState extends ShapeStreamState {
     return this.previousState.replayCursor
   }
 
+  applyUrlParams(url: URL): void {
+    this.previousState.applyUrlParams(url)
+  }
+
   resume(): ShapeStreamState {
     return this.previousState
   }
@@ -657,6 +691,10 @@ export class ErrorState extends ShapeStreamState {
 
   get isUpToDate(): boolean {
     return this.previousState.isUpToDate
+  }
+
+  applyUrlParams(url: URL): void {
+    this.previousState.applyUrlParams(url)
   }
 
   retry(): ShapeStreamState {

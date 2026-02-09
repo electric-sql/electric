@@ -999,8 +999,8 @@ export class ShapeStream<T extends Row<unknown> = Row>
       }
     }
 
-    // Add Electric's internal parameters
-    fetchUrl.searchParams.set(OFFSET_QUERY_PARAM, this.#syncState.offset)
+    // Add state-specific parameters (offset, handle, cache busters, etc.)
+    this.#syncState.applyUrlParams(fetchUrl)
     fetchUrl.searchParams.set(LOG_MODE_QUERY_PARAM, this.#mode)
 
     // Snapshot requests (with subsetParams) should never use live polling
@@ -1013,18 +1013,6 @@ export class ShapeStream<T extends Row<unknown> = Row>
       if (!this.#isRefreshing && !resumingFromPause) {
         fetchUrl.searchParams.set(LIVE_QUERY_PARAM, `true`)
       }
-      fetchUrl.searchParams.set(
-        LIVE_CACHE_BUSTER_QUERY_PARAM,
-        this.#syncState.liveCacheBuster
-      )
-    }
-
-    if (this.#syncState.handle) {
-      // This should probably be a header for better cache breaking?
-      fetchUrl.searchParams.set(
-        SHAPE_HANDLE_QUERY_PARAM,
-        this.#syncState.handle
-      )
     }
 
     // Add cache buster for shapes known to be expired to prevent 409s
@@ -1032,15 +1020,6 @@ export class ShapeStream<T extends Row<unknown> = Row>
     const expiredHandle = expiredShapesCache.getExpiredHandle(shapeKey)
     if (expiredHandle) {
       fetchUrl.searchParams.set(EXPIRED_HANDLE_QUERY_PARAM, expiredHandle)
-    }
-
-    // Add random cache buster if we received a stale response from CDN
-    // This forces a fresh request bypassing the misconfigured CDN cache
-    if (this.#syncState.staleCacheBuster) {
-      fetchUrl.searchParams.set(
-        CACHE_BUSTER_QUERY_PARAM,
-        this.#syncState.staleCacheBuster
-      )
     }
 
     // sort query params in-place for stable URLs and improved cache hits
