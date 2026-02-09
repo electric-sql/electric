@@ -1595,8 +1595,8 @@ export class ShapeStream<T extends Row<unknown> = Row>
   #subscribeToWakeDetection() {
     if (this.#hasBrowserVisibilityAPI()) return
 
-    const INTERVAL_MS = 10_000
-    const WAKE_THRESHOLD_MS = 15_000
+    const INTERVAL_MS = 2_000
+    const WAKE_THRESHOLD_MS = 4_000
 
     let lastTickTime = Date.now()
 

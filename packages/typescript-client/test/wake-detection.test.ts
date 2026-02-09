@@ -98,16 +98,16 @@ describe(`Wake detection`, () => {
     expect(fetchCallCount).toBeGreaterThanOrEqual(1)
     const initialFetchCount = fetchCallCount
 
-    // Advance one normal interval (10s) — should NOT trigger wake detection
-    await vi.advanceTimersByTimeAsync(10_001)
+    // Advance one normal interval (2s) — should NOT trigger wake detection
+    await vi.advanceTimersByTimeAsync(2_001)
     expect(fetchSignals[fetchSignals.length - 1]?.aborted).toBe(false)
 
-    // Simulate system sleep by jumping Date.now() forward 30s
+    // Simulate system sleep by jumping Date.now() forward 10s
     const currentTime = Date.now()
-    vi.setSystemTime(currentTime + 30_000)
+    vi.setSystemTime(currentTime + 10_000)
 
     // Trigger the next interval tick and allow async restart
-    await vi.advanceTimersByTimeAsync(10_001)
+    await vi.advanceTimersByTimeAsync(2_001)
     await vi.advanceTimersByTimeAsync(100)
 
     expect(fetchSignals[0]?.aborted).toBe(true)
