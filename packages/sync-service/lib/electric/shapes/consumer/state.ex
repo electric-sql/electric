@@ -131,19 +131,33 @@ defmodule Electric.Shapes.Consumer.State do
 
   @spec new(Electric.stack_id(), Shape.handle(), Shape.t()) :: uninitialized_t()
   def new(stack_id, shape_handle, shape) do
+    stack_id
+    |> new(shape_handle)
+    |> initialize_shape(shape)
+  end
+
+  @spec new(Electric.stack_id(), Shape.handle()) :: uninitialized_t()
+  def new(stack_id, shape_handle) do
     %__MODULE__{
       stack_id: stack_id,
       shape_handle: shape_handle,
-      shape: shape,
       hibernate_after:
         Electric.StackConfig.lookup(
           stack_id,
           :shape_hibernate_after,
           Electric.Config.default(:shape_hibernate_after)
         ),
-      buffering?: true,
-      or_with_subquery?: has_or_with_subquery?(shape),
-      not_with_subquery?: has_not_with_subquery?(shape)
+      buffering?: true
+    }
+  end
+
+  @spec initialize_shape(uninitialized_t(), Shape.t()) :: uninitialized_t()
+  def initialize_shape(%__MODULE__{} = state, shape) do
+    %{
+      state
+      | shape: shape,
+        or_with_subquery?: has_or_with_subquery?(shape),
+        not_with_subquery?: has_not_with_subquery?(shape)
     }
   end
 

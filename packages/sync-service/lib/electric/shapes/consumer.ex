@@ -109,9 +109,7 @@ defmodule Electric.Shapes.Consumer do
     Logger.metadata(metadata)
     Electric.Telemetry.Sentry.set_tags_context(metadata)
 
-    {:ok, shape} = ShapeCache.ShapeStatus.fetch_shape_by_handle(stack_id, shape_handle)
-
-    {:ok, State.new(stack_id, shape_handle, shape),
+    {:ok, State.new(stack_id, shape_handle),
      {:continue, {:init_consumer, config.action, otel_ctx}}}
   end
 
@@ -119,9 +117,12 @@ defmodule Electric.Shapes.Consumer do
   def handle_continue({:init_consumer, action, otel_ctx}, state) do
     %{
       stack_id: stack_id,
-      shape: shape,
       shape_handle: shape_handle
     } = state
+
+    {:ok, shape} = ShapeCache.ShapeStatus.fetch_shape_by_handle(stack_id, shape_handle)
+
+    state = State.initialize_shape(state, shape)
 
     stack_storage = ShapeCache.Storage.for_stack(stack_id)
     storage = ShapeCache.Storage.for_shape(shape_handle, stack_storage)
