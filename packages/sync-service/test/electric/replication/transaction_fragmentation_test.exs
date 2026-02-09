@@ -16,7 +16,8 @@ defmodule Electric.Replication.TransactionFragmentationTest do
 
   alias Electric.Client
 
-  @max_batch_size 10
+  # max_batch_size must be at least 2, at least 3 for this test
+  @max_batch_size :rand.uniform(50) + 2
 
   @moduletag :tmp_dir
   @moduletag replication_opts_overrides: [max_batch_size: @max_batch_size]
@@ -25,15 +26,30 @@ defmodule Electric.Replication.TransactionFragmentationTest do
   setup :with_complete_stack
   setup :with_electric_client
 
+  random_int_in = fn lo..hi//_ ->
+    lo + :rand.uniform(hi - lo + 1) - 1
+  end
+
+  # returns random value within 80-99% of the argument
+  slightly_less = fn n ->
+    lo = trunc(n * 0.8)
+    hi = n - 1
+    random_int_in.(lo..hi)
+  end
+
+  # returns random value within 101-120% of the argument
+  slightly_more = fn n ->
+    lo = n + 1
+    hi = round(n * 1.2)
+    random_int_in.(lo..hi)
+  end
+
   for num_changes <- [
-        # exactly max_batch_size
         @max_batch_size,
-        # slightly less
-        @max_batch_size - 1,
-        # slightly more
-        @max_batch_size + 1,
+        slightly_less.(@max_batch_size),
+        slightly_more.(@max_batch_size),
         # multiple of
-        @max_batch_size * 2
+        @max_batch_size * random_int_in.(2..5)
       ] do
     @num_changes num_changes
     test "transaction with #{@num_changes} rows (max_batch_size=#{@max_batch_size}) is fully received",
