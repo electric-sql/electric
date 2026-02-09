@@ -117,7 +117,7 @@ Drift between layers is a first-class failure mode. If your conformance suite pa
 
 ## Suite Design Is the New Frontier
 
-Conformance suites can lie convincingly. For distributed systems, the problem isn't "did we implement the rules?" but "did we cover the space of interleavings and failure modes?" Jepsen exists because "tests passed" means nothing.
+A conformance suite can be a convincing liar. For distributed systems, the problem isn't "did we implement the rules?" but "did we cover the space of interleavings and failure modes?" Jepsen exists because "tests passed" means nothing.
 
 Different problems need different suites:
 
