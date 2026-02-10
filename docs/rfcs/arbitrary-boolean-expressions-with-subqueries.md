@@ -7,7 +7,7 @@ contributors:
   - ilia
   - kev
 created: 2026-01-27
-last_updated: 2026-01-27
+last_updated: 2026-02-10
 prd: N/A
 prd_version: N/A
 ---
@@ -369,6 +369,40 @@ This handles all race conditions:
 | Value enters in txn T, exits in txn T+1 while query running | Same — `moved_out_tags` records hash from T+1's move-out; T's query results filtered |
 | Same hash at different positions (`x IN sq1 OR x IN sq2`) | Position-aware filtering only checks the triggering position |
 | Partial exit from multi-value query ([A, B] queried, A exits) | Per-row filtering: row with A skipped, row with B kept |
+| `find_position_for_sublink` re-derivation picks wrong position (same subquery in both IN and NOT IN) | Pre-existing TODO, low practical risk — requires identical subquery text in both positive and negated form. Fix: thread already-known position through instead of re-deriving. |
+
+##### Dual tag format: snapshot files vs wire/API
+
+Snapshot file tags (used for `moved_out_tags` filtering) use a **different format** from the
+wire/API tags sent to clients:
+
+- **Wire format** (in JSON headers, sent to clients): slash-delimited strings per disjunct —
+  e.g. `"hash1/hash2/"`, `"//hash3"`. One string per disjunct, positions within a disjunct
+  separated by `/`. Unchanged from the design above. Clients use these for their own
+  tag-based inclusion tracking.
+- **Snapshot file format** (internal, used for filtering): flat list of per-position hashes —
+  one hash per DNF position, no delimiters. `Enum.at(tags, position)` directly yields the
+  hash for that position. These tags never leave the server.
+
+**Why the flat format is sufficient**: since `moved_out_tags` is now position-aware (tracking
+`{position, tags_to_skip}` instead of just `tags_to_skip`), filtering only needs to check
+the hash at a single position index. No string splitting or multi-position comparison is
+needed. The flat list is effectively a position-indexed array.
+
+**Worked example** — shape `WHERE x IN sq1 OR x IN sq2`, tag_structure `[[x], [x]]`:
+
+| Format | Positions | Row with x=a |
+|--------|-----------|--------------|
+| Wire (per-disjunct, slash-delimited) | disjunct 0: `[x]`, disjunct 1: `[x]` | `["hash(a)/", "/hash(a)"]` |
+| Snapshot (per-position, flat) | position 0: sq1, position 1: sq2 | `["hash(a)", "hash(a)"]` |
+
+When value `a` exits sq1, `moved_out_tags` records `{position: 0, tags: {"hash(a)"}}`.
+At filter time, `Enum.at(tags, 0)` = `"hash(a)"` → match → row skipped for sq1.
+But a different move-in query for sq2 would check `Enum.at(tags, 1)` — position 0's
+move-out doesn't affect position 1's filtering.
+
+Storage version is bumped (1 → 2 in `pure_file_storage.ex`) to invalidate old-format
+snapshots on upgrade. This is a server-internal change only — clients are unaffected.
 
 ### Consistency Model for Shapes with Subqueries
 
@@ -542,6 +576,7 @@ Questions resolved during RFC development:
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
 | 1.0 | 2026-01-27 | rob | Initial version |
+| 1.1 | 2026-02-10 | rob | Add dual tag format (snapshot vs wire), `find_position_for_sublink` limitation |
 
 ---
 

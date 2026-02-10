@@ -1202,21 +1202,204 @@ Before enabling `dnf_subqueries` feature flag in production:
 
 ### Remaining Work
 
-1. **Phase 11: Position-aware `moved_out_tags` filtering**
-   - Main's `moved_out_tags` tracks bare hash values. For multi-disjunct shapes where the
-     same column appears at different positions (e.g. `x IN sq1 OR x IN sq2`), the same
-     hash appears at both positions, causing incorrect filtering.
-   - Fix: track `{position, hash}` tuples instead of bare hashes. Filter at the
-     **triggering position** — the position that caused the move-in query.
-   - Code changes:
-     - `MoveIns.move_out_happened`: accept `{position, hash}` tuples
-     - `MoveIns.add_waiting`: track triggering position alongside query name
-     - `do_legacy_move_out` (move_handling.ex): pass position info to `move_out_happened`
-     - Consumer or storage: filter rows at write time using position-aware lookup
-   - Edge cases handled:
-     - Same hash at different positions: only triggering position checked
-     - Partial exit from multi-value query: per-row filtering (A skipped, B kept)
-     - Within-txn and cross-txn races: both handled by `moved_out_tags`
+1. **Phase 11: Position-aware `moved_out_tags` filtering** ← next
+
+   #### Problem
+
+   `moved_out_tags` compares bare hashes against full slash-delimited tag strings — never
+   matches for multi-disjunct shapes.
+
+   Consider `WHERE x IN sq1 OR x IN sq2` with tag_structure `[[x], [x]]` (two disjuncts,
+   both on column `x`). When value `a` exits sq1, the move-out control message records
+   `hash(a)` as a bare string. But the tags stored in the snapshot file are slash-delimited
+   per-disjunct: `["hash(a)/", "/hash(a)"]`. The filtering check in
+   `all_parents_moved_out?/2` does:
+
+   ```elixir
+   # pure_file_storage.ex — current filtering
+   defp all_parents_moved_out?(tags, tags_to_skip) do
+     tags != [] and Enum.all?(tags, &MapSet.member?(tags_to_skip, &1))
+   end
+   ```
+
+   `tags_to_skip` contains `"hash(a)"` (bare), but `tags` contains `"hash(a)/"` and
+   `"/hash(a)"` (slash-delimited) — no match is ever found.
+
+   Even if we fixed the string format, position-unaware filtering would be wrong: value `a`
+   exits sq1 (position 0) but is still valid for sq2 (position 1). A bare-hash match would
+   incorrectly skip the row for both positions.
+
+   #### Solution — two changes
+
+   **Change 1: Snapshot file tags become per-position flat hashes.**
+
+   Currently `make_tags/3` in `querying.ex` generates SQL that produces one slash-delimited
+   string per disjunct:
+
+   ```elixir
+   # Current: make_tags returns SQL for slash-delimited strings per disjunct
+   # tag_structure: [[x, y], [nil, z]]  →  SQL producing ["hash(x)/hash(y)", "/hash(z)"]
+   Enum.map(pattern, fn ... end) |> Enum.join(" || '/' || ")
+   ```
+
+   Add a second function `make_snapshot_tags/3` that produces one hash per DNF position
+   (flat, no slashes):
+
+   ```elixir
+   # New: make_snapshot_tags returns SQL for one hash per position
+   # tag_structure: [[x, y], [nil, z]]
+   # positions:       0  1       1  2    (flattened across disjuncts)
+   #
+   # → SQL producing ["hash(x)", "hash(y)", "hash(z)"]
+   #   (nils are included as empty strings so indices stay aligned)
+   defp make_snapshot_tags(%Shape{tag_structure: tag_structure}, stack_id, shape_handle) do
+     escaped_prefix = escape_sql_string(to_string(stack_id) <> to_string(shape_handle))
+
+     tag_structure
+     |> List.flatten()
+     |> Enum.map(fn
+       nil -> "''"
+       column_name when is_binary(column_name) ->
+         col = pg_cast_column_to_text(column_name)
+         ~s[md5('#{escaped_prefix}' || #{pg_namespace_value_sql(col)})]
+       {:hash_together, columns} ->
+         # ... same as make_tags ...
+     end)
+   end
+   ```
+
+   `query_move_in/5` uses `make_snapshot_tags` instead of `make_tags`:
+
+   ```elixir
+   # querying.ex — query_move_in uses flat tags for snapshot storage
+   tag_select = make_snapshot_tags(shape, stack_id, shape_handle) |> Enum.join(", ")
+   ~s|SELECT #{key_select}, ARRAY[#{tag_select}]::text[], #{json_like_select} FROM ...|
+   ```
+
+   API tags (in JSON headers from `stream_initial_data`) remain slash-delimited — unchanged.
+
+   **Change 2: `moved_out_tags` becomes position-aware.**
+
+   Currently `move_out_happened/2` unions bare hashes into a flat `MapSet`:
+
+   ```elixir
+   # Current: move_ins.ex
+   @type t() :: %__MODULE__{
+     moved_out_tags: %{move_in_name() => MapSet.t(String.t())}
+   }
+
+   def move_out_happened(state, new_tags) do
+     moved_out_tags =
+       Map.new(state.moved_out_tags, fn {name, tags} ->
+         {name, MapSet.union(tags, new_tags)}
+       end)
+     %{state | moved_out_tags: moved_out_tags}
+   end
+   ```
+
+   Change to accept `{position, tags}` and store per-position:
+
+   ```elixir
+   # New: move_ins.ex — position-aware moved_out_tags
+   @type t() :: %__MODULE__{
+     moved_out_tags: %{move_in_name() => {non_neg_integer(), MapSet.t(String.t())}}
+   }
+
+   def move_out_happened(state, position, new_tags) do
+     moved_out_tags =
+       Map.new(state.moved_out_tags, fn {name, {pos, tags}} ->
+         if pos == position do
+           {name, {pos, MapSet.union(tags, new_tags)}}
+         else
+           {name, {pos, tags}}
+         end
+       end)
+     %{state | moved_out_tags: moved_out_tags}
+   end
+   ```
+
+   The caller in `do_legacy_move_out` derives position from `dep_handle`:
+
+   ```elixir
+   # move_handling.ex — pass position to move_out_happened
+   positions = DnfContext.get_positions_for_dependency(state.dnf_context, dep_handle)
+   position = List.first(positions)  # see Known Limitation below
+
+   move_handling_state =
+     MoveIns.move_out_happened(
+       state.move_handling_state,
+       position,
+       MapSet.new(message.headers.patterns |> Enum.map(& &1[:value]))
+     )
+   ```
+
+   Filtering in storage becomes position-aware — check only the hash at the triggering
+   position index:
+
+   ```elixir
+   # pure_file_storage.ex — new filtering
+   defp should_skip_for_moved_out?(tags, {position, tags_to_skip}) do
+     case Enum.at(tags, position) do
+       nil -> false
+       "" -> false
+       hash -> MapSet.member?(tags_to_skip, hash)
+     end
+   end
+   ```
+
+   This is why the flat format is sufficient: since `moved_out_tags` now knows which
+   position triggered the move-out, we only need to check the hash at that position index.
+   We never need to parse or split strings — `Enum.at(tags, position)` directly yields the
+   hash. The flat list is effectively a position-indexed array.
+
+   #### Worked example
+
+   Shape: `WHERE x IN sq1 OR x IN sq2`
+   Tag structure: `[[x], [x]]` → positions: 0 (sq1), 1 (sq2)
+
+   1. Value `a` enters sq1 → move-in query fires, snapshot rows stored with flat tags
+      `["hash(a)", ""]` (position 0 has hash, position 1 empty for this disjunct)
+   2. While query is in flight, value `a` exits sq1 → `move_out_happened(state, 0, MapSet.new(["hash(a)"]))`
+      records `{0, MapSet["hash(a)"]}` for the in-flight query
+   3. Query completes → filtering checks `Enum.at(["hash(a)", ""], 0)` = `"hash(a)"` →
+      in `tags_to_skip` → row skipped ✓
+   4. Meanwhile, value `a` is still valid for sq2 (position 1). If sq2 also has an in-flight
+      query with tags `["", "hash(a)"]`, filtering checks `Enum.at(["", "hash(a)"], 0)` = `""` →
+      not in `tags_to_skip` → row kept ✓
+
+   #### Files changed
+
+   - `querying.ex` — add `make_snapshot_tags/3`, use it in `query_move_in/5`
+   - `move_ins.ex` — change `moved_out_tags` type, update `move_out_happened/3` to accept position
+   - `move_handling.ex` — derive position from `dnf_context`, pass to `move_out_happened`
+   - `storage.ex` — update `moved_out_tags` type in behaviour callback specs
+   - `pure_file_storage.ex` — replace `all_parents_moved_out?` with `should_skip_for_moved_out?`,
+     bump `@version` 1 → 2
+   - `in_memory_storage.ex` — same filtering change for in-memory store
+   - `crashing_file_storage.ex` — delegate to file storage (no logic change)
+   - `test_storage.ex` — update test helpers for new type
+   - `storage_implementations_test.exs` — test position-aware filtering
+
+   #### Storage version bump
+
+   `@version` in `pure_file_storage.ex` from 1 → 2 to force clean slate. Old-format
+   snapshots (slash-delimited tags) are invalidated on startup — shapes re-snapshot with
+   the new flat format.
+
+   #### Edge cases handled
+
+   - Same hash at different positions: only triggering position checked (see worked example)
+   - Partial exit from multi-value query: per-row filtering (A skipped, B kept)
+   - Within-txn and cross-txn races: both handled by `moved_out_tags`
+
+   #### Known limitation
+
+   `do_move_out_for_positions` / `do_move_out_for_positions_with_check` discard
+   `_positions` and re-derive via `find_position_for_sublink`, which could pick the wrong
+   position if the same `dep_handle` maps to both a positive and negated position (same
+   subquery with both IN and NOT IN). Pre-existing TODO, low practical risk (requires
+   identical subquery text in both positive and negated form). Fix would be straightforward:
+   thread the already-known position through instead of re-deriving.
 
 2. **Protocol Version Validation** (Optional)
    - Add protocol version check to reject complex shapes for v1 clients
