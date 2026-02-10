@@ -1233,10 +1233,28 @@ defmodule Electric.ShapeCache.PureFileStorage do
 
   defp get_suffix(_, {latest_name, _, _}), do: latest_name
 
-  def append_to_log!(txn_lines, writer_state(writer_acc: acc) = state) do
-    txn_lines
+  def append_to_log!(txn_lines, state) do
+    write_log_items(txn_lines, state, with: &WriteLoop.append_to_log!/3)
+  end
+
+  @doc """
+  Append log items from a transaction fragment.
+
+  Unlike `append_to_log!/2`, this does NOT advance `last_seen_txn_offset` or
+  call `register_complete_txn`. Transaction completion should be signaled
+  separately via `signal_txn_commit!/2`.
+
+  This ensures that on crash/recovery, `fetch_latest_offset` returns the
+  last committed transaction offset, not a mid-transaction offset.
+  """
+  def append_fragment_to_log!(txn_fragment_lines, state) do
+    write_log_items(txn_fragment_lines, state, with: &WriteLoop.append_fragment_to_log!/3)
+  end
+
+  defp write_log_items(log_items, writer_state(writer_acc: acc) = state, with: write_loop_fn) do
+    log_items
     |> normalize_log_stream()
-    |> WriteLoop.append_to_log!(acc, state)
+    |> write_loop_fn.(acc, state)
     |> case do
       {acc, cancel_flush_timer: true} ->
         timer_ref = writer_state(state, :write_timer)
@@ -1247,6 +1265,20 @@ defmodule Electric.ShapeCache.PureFileStorage do
         writer_state(state, writer_acc: acc)
         |> schedule_flush(times_flushed)
     end
+  end
+
+  @doc """
+  Signal that a transaction has committed.
+
+  Updates `last_seen_txn_offset` and persists metadata to mark the transaction
+  as complete. Should be called after all fragments have been written via
+  `append_fragment_to_log!/2`.
+  """
+  # xid is not actually used here since it's not possible for transaction writes to interleave.
+  # It's part of the function signature for testing.
+  def signal_txn_commit!(_xid, writer_state(writer_acc: acc) = state) do
+    acc = WriteLoop.signal_txn_commit(acc, state)
+    writer_state(state, writer_acc: acc)
   end
 
   def update_chunk_boundaries_cache(opts, boundaries) do

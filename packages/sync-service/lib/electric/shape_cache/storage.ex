@@ -144,6 +144,29 @@ defmodule Electric.ShapeCache.Storage do
   @callback append_to_log!(Enumerable.t(log_item()), writer_state()) ::
               writer_state() | no_return()
 
+  @doc """
+  Append log items from a transaction fragment.
+
+  Called potentially multiple times per transaction for shapes that stream
+  fragments directly to storage without waiting for the complete transaction.
+  Unlike `append_to_log!/2`, this does not assume transaction completion.
+
+  Transaction commits should be signaled separately via `signal_txn_commit!/2`
+  to allow storage to calculate chunk boundaries at transaction boundaries.
+  """
+  @callback append_fragment_to_log!(Enumerable.t(log_item()), writer_state()) ::
+              writer_state() | no_return()
+
+  @doc """
+  Signal that a transaction has committed.
+
+  Used by storage to calculate chunk boundaries at transaction boundaries.
+  Called after all fragments for a transaction have been written via
+  `append_fragment_to_log!/2`.
+  """
+  @callback signal_txn_commit!(xid :: pos_integer(), writer_state()) ::
+              writer_state() | no_return()
+
   @doc "Get stream of the log for a shape since a given offset"
   @callback get_log_stream(offset :: LogOffset.t(), max_offset :: LogOffset.t(), shape_opts()) ::
               log()
@@ -336,6 +359,16 @@ defmodule Electric.ShapeCache.Storage do
   @impl __MODULE__
   def append_to_log!(log_items, {mod, shape_opts}) do
     {mod, mod.append_to_log!(log_items, shape_opts)}
+  end
+
+  @impl __MODULE__
+  def append_fragment_to_log!(log_items, {mod, shape_opts}) do
+    {mod, mod.append_fragment_to_log!(log_items, shape_opts)}
+  end
+
+  @impl __MODULE__
+  def signal_txn_commit!(xid, {mod, shape_opts}) do
+    {mod, mod.signal_txn_commit!(xid, shape_opts)}
   end
 
   @impl __MODULE__
