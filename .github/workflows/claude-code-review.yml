@@ -1,0 +1,117 @@
+name: Claude Code Review
+
+on:
+  pull_request:
+    types: [labeled, synchronize]
+    paths:
+      - 'packages/**'
+      - '.github/**'
+      - '*.exs'
+      - '*.ex'
+      - '*.ts'
+      - '*.tsx'
+      - '*.js'
+      - '*.jsx'
+
+jobs:
+  claude-review:
+    # Run when 'claude' label is added, OR on new commits if label already exists
+    if: |
+      (github.event.action == 'labeled' && github.event.label.name == 'claude') ||
+      (github.event.action == 'synchronize' && contains(github.event.pull_request.labels.*.name, 'claude'))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+      id-token: write
+      actions: read
+    env:
+      REVIEW_MARKER: '## Claude Code Review'
+      GH_TOKEN: ${{ github.token }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify gh CLI
+        run: |
+          gh --version
+          gh auth status
+
+      - name: Gather PR context
+        id: context
+        run: |
+          set -euo pipefail
+          PR_NUMBER=${{ github.event.pull_request.number }}
+          REPO=${{ github.repository }}
+          CONTEXT_DIR="${GITHUB_WORKSPACE}/.review-context"
+          mkdir -p "$CONTEXT_DIR"
+
+          echo "Gathering PR context for PR #${PR_NUMBER}..."
+
+          # Fetch previous review comments (from Claude)
+          PREVIOUS_REVIEWS=$(gh api "repos/${REPO}/issues/${PR_NUMBER}/comments" \
+            --jq "[.[] | select(.body | startswith(\"$REVIEW_MARKER\"))] | if length > 0 then .[0].body else \"\" end" 2>/dev/null || echo "")
+
+          # Fetch all conversation comments
+          CONVERSATION=$(gh api "repos/${REPO}/issues/${PR_NUMBER}/comments" \
+            --jq '[.[] | {author: .user.login, body: .body, created: .created_at}]' 2>/dev/null || echo "[]")
+
+          # Fetch review comments (inline code comments)
+          REVIEW_COMMENTS=$(gh api "repos/${REPO}/pulls/${PR_NUMBER}/comments" \
+            --jq '[.[] | {author: .user.login, body: .body, path: .path, line: .line, created: .created_at}]' 2>/dev/null || echo "[]")
+
+          # Fetch linked issues
+          LINKED_ISSUES=$(gh api graphql -f query='
+            query($owner: String!, $repo: String!, $pr: Int!) {
+              repository(owner: $owner, name: $repo) {
+                pullRequest(number: $pr) {
+                  closingIssuesReferences(first: 10) {
+                    nodes { number title body }
+                  }
+                }
+              }
+            }' -f owner="${REPO%/*}" -f repo="${REPO#*/}" -F pr="$PR_NUMBER" \
+            --jq '.data.repository.pullRequest.closingIssuesReferences.nodes' 2>/dev/null || echo "[]")
+
+          # Save to files for the next step (avoids shell escaping issues)
+          echo "$PREVIOUS_REVIEWS" > "${CONTEXT_DIR}/previous_reviews.txt"
+          echo "$CONVERSATION" > "${CONTEXT_DIR}/conversation.json"
+          echo "$REVIEW_COMMENTS" > "${CONTEXT_DIR}/review_comments.json"
+          echo "$LINKED_ISSUES" > "${CONTEXT_DIR}/linked_issues.json"
+
+          # Set outputs
+          echo "has_previous_review=$([[ -n "$PREVIOUS_REVIEWS" ]] && echo 'true' || echo 'false')" >> $GITHUB_OUTPUT
+          echo "has_linked_issues=$([[ "$LINKED_ISSUES" != "[]" && -n "$LINKED_ISSUES" ]] && echo 'true' || echo 'false')" >> $GITHUB_OUTPUT
+          echo "is_incremental=$([[ "${{ github.event.action }}" == "synchronize" ]] && echo 'true' || echo 'false')" >> $GITHUB_OUTPUT
+
+      - name: Run Claude Code Review
+        id: claude-review
+        timeout-minutes: 15
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            You are reviewing PR #${{ github.event.pull_request.number }} in ${{ github.repository }}.
+
+            ## Review Context
+            - **Is incremental review**: ${{ steps.context.outputs.is_incremental }}
+            - **Has previous Claude review**: ${{ steps.context.outputs.has_previous_review }}
+            - **Has linked issues**: ${{ steps.context.outputs.has_linked_issues }}
+            - **Review marker**: ${{ env.REVIEW_MARKER }}
+
+            ## Your Task
+            Read the file `.claude/commands/pr-review.md` which contains comprehensive instructions for conducting this code review. Follow those instructions exactly.
+
+            The context files have been saved to:
+            - .review-context/previous_reviews.txt - Your previous review (if any)
+            - .review-context/conversation.json - All PR conversation comments
+            - .review-context/review_comments.json - Inline code review comments
+            - .review-context/linked_issues.json - Linked issues
+
+            Start by reading `.claude/commands/pr-review.md`, then follow its phases to conduct the review.
+
+          claude_args: '--allowedTools "Bash(gh issue view:*),Bash(gh search:*),Bash(gh issue list:*),Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr list:*),Bash(gh api:*),Bash(cat:*),Read,Glob,Grep"'

@@ -25,4 +25,4 @@ wal
 **/junit
 **/coverage
 response.tmp
-.claude
+.claude/settings.local.json
