@@ -270,7 +270,7 @@ However, the proxy might not keep the response headers in which case the client 
 
 ##### Solution &mdash; forward all response headers from Electric
 
-Verify the proxy configuration and make sure it forwards all response headers from Electric, including the `electric-...` headers and the `access-control-expose-headers` header. Do not selectively strip or replace headers &mdash; just pass them all through (only removing `content-encoding` and `content-length` which can cause decoding issues when the proxy decompresses the body).
+Verify the proxy configuration and make sure it forwards all response headers from Electric, including the `electric-...` headers and the `access-control-expose-headers` header (which tells the browser to make the Electric headers visible to JavaScript). Do not selectively strip or replace headers &mdash; just pass them all through (only removing `content-encoding` and `content-length` if the proxy decompresses the response body, as the original values become invalid after decompression).
 
 ### 414 Request-URI Too Long &mdash; why are my subset snapshot requests failing?
 

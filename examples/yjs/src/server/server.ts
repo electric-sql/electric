@@ -81,7 +81,7 @@ app.put(`/api/update`, async (c: Context) => {
   }
 })
 
-// Shape proxy endpoint to forward requests to Electric and handle required headers
+// Shape proxy endpoint to forward requests to Electric
 app.get(`/shape-proxy/v1/shape`, async (c: Context) => {
   const url = new URL(c.req.url)
   const electricUrl = process.env.ELECTRIC_URL || `http://localhost:3000`
@@ -117,21 +117,21 @@ app.get(`/shape-proxy/v1/shape`, async (c: Context) => {
       headers,
     })
 
-    let resp = await fetch(newRequest)
+    const resp = await fetch(newRequest)
 
-    // Handle content-encoding issues
-    if (resp.headers.get(`content-encoding`)) {
-      const respHeaders = new Headers(resp.headers)
+    // Create a new Response with mutable headers so that
+    // Hono's CORS middleware can merge its headers in
+    const respHeaders = new Headers(resp.headers)
+    if (respHeaders.get(`content-encoding`)) {
       respHeaders.delete(`content-encoding`)
       respHeaders.delete(`content-length`)
-      resp = new Response(resp.body, {
-        status: resp.status,
-        statusText: resp.statusText,
-        headers: respHeaders,
-      })
     }
 
-    return resp
+    return new Response(resp.body, {
+      status: resp.status,
+      statusText: resp.statusText,
+      headers: respHeaders,
+    })
   } catch (error) {
     console.error(`Error proxying to Electric:`, error)
     return c.json({ error: `Failed to proxy request to Electric` }, 500)

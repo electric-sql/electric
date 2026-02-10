@@ -74,7 +74,8 @@ const server = http.createServer(async (req, res) => {
       try {
         const response = await fetch(originUrl)
 
-        // Copy headers, excluding problematic ones
+        // Forward all headers from Electric, removing content-encoding
+        // and content-length which become invalid after fetch() decompresses the body
         const headers = {}
         response.headers.forEach((value, key) => {
           if (
