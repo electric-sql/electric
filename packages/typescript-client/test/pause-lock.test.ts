@@ -110,12 +110,18 @@ describe(`PauseLock`, () => {
     expect(onReleased).toHaveBeenCalledOnce()
   })
 
-  it(`double acquire is idempotent`, () => {
+  it(`double acquire is idempotent and warns`, () => {
     const { lock, onAcquired } = createLock()
+    const warnSpy = vi.spyOn(console, `warn`).mockImplementation(() => {})
     lock.acquire(`visibility`)
     lock.acquire(`visibility`)
     expect(onAcquired).toHaveBeenCalledOnce()
     expect(lock.isPaused).toBe(true)
+    expect(warnSpy).toHaveBeenCalledOnce()
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining(`"visibility" already held`)
+    )
+    warnSpy.mockRestore()
   })
 
   it(`releasing unheld reason is a no-op`, () => {
@@ -125,24 +131,35 @@ describe(`PauseLock`, () => {
     expect(onReleased).not.toHaveBeenCalled()
   })
 
-  it(`releaseAll clears all holders without firing onReleased`, () => {
+  it(`releaseAllMatching clears matching holders without firing onReleased`, () => {
+    const { lock, onReleased } = createLock()
+    lock.acquire(`snapshot-1`)
+    lock.acquire(`snapshot-2`)
+    lock.releaseAllMatching(`snapshot`)
+    expect(lock.isPaused).toBe(false)
+    expect(lock.isHeldBy(`snapshot-1`)).toBe(false)
+    expect(lock.isHeldBy(`snapshot-2`)).toBe(false)
+    expect(onReleased).not.toHaveBeenCalled()
+  })
+
+  it(`releaseAllMatching preserves non-matching holders`, () => {
     const { lock, onReleased } = createLock()
     lock.acquire(`visibility`)
     lock.acquire(`snapshot-1`)
-    lock.releaseAll()
-    expect(lock.isPaused).toBe(false)
-    expect(lock.isHeldBy(`visibility`)).toBe(false)
+    lock.releaseAllMatching(`snapshot`)
+    expect(lock.isPaused).toBe(true) // visibility still held
+    expect(lock.isHeldBy(`visibility`)).toBe(true)
     expect(lock.isHeldBy(`snapshot-1`)).toBe(false)
     expect(onReleased).not.toHaveBeenCalled()
   })
 
-  it(`can re-acquire after releaseAll`, () => {
+  it(`can re-acquire after releaseAllMatching`, () => {
     const { lock, onAcquired } = createLock()
-    lock.acquire(`visibility`)
-    lock.releaseAll()
+    lock.acquire(`snapshot-1`)
+    lock.releaseAllMatching(`snapshot`)
     onAcquired.mockClear()
 
-    lock.acquire(`snapshot-1`)
+    lock.acquire(`snapshot-2`)
     expect(lock.isPaused).toBe(true)
     expect(onAcquired).toHaveBeenCalledOnce()
   })

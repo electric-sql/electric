@@ -49,6 +49,9 @@ export class PauseLock {
    */
   acquire(reason: string): void {
     if (this.#holders.has(reason)) {
+      console.warn(
+        `[Electric] PauseLock: "${reason}" already held — ignoring duplicate acquire`
+      )
       return
     }
     const wasUnlocked = this.#holders.size === 0
@@ -89,11 +92,18 @@ export class PauseLock {
   }
 
   /**
-   * Release all held reasons and reset the lock.
-   * Does NOT fire `onReleased` — this is for cleanup/reset paths
-   * where the stream state is being managed separately.
+   * Release all reasons matching a prefix. Does NOT fire `onReleased` —
+   * this is for cleanup/reset paths where the stream state is being
+   * managed separately.
+   *
+   * This preserves reasons with different prefixes (e.g., 'visibility'
+   * is preserved when clearing 'snapshot-*' reasons).
    */
-  releaseAll(): void {
-    this.#holders.clear()
+  releaseAllMatching(prefix: string): void {
+    for (const reason of this.#holders) {
+      if (reason.startsWith(prefix)) {
+        this.#holders.delete(reason)
+      }
+    }
   }
 }

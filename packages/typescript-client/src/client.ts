@@ -1580,6 +1580,11 @@ export class ShapeStream<T extends Row<unknown> = Row>
         if (!this.#pauseLock.isPaused && this.#requestAbortController) {
           this.#refreshCount++
           this.#requestAbortController.abort(SYSTEM_WAKE)
+          // Wake handler is synchronous (setInterval callback) so we can't
+          // use try/finally + await like forceDisconnectAndRefresh. Instead,
+          // decrement via queueMicrotask — safe because the abort triggers
+          // #requestShape to re-run, which reads #isRefreshing synchronously
+          // before the microtask fires.
           queueMicrotask(() => {
             this.#refreshCount--
           })
@@ -1605,9 +1610,11 @@ export class ShapeStream<T extends Row<unknown> = Row>
     this.#syncState = this.#syncState.markMustRefetch(handle)
     this.#isMidStream = true
     this.#connected = false
-    // Release all snapshot locks without triggering onReleased — the
-    // stream state is being reset separately (markMustRefetch above).
-    this.#pauseLock.releaseAll()
+    // Release snapshot locks without triggering onReleased — the stream
+    // state is being reset separately (markMustRefetch above).
+    // Only clears 'snapshot-*' reasons, preserving 'visibility' so the
+    // stream stays paused if the tab is hidden during a reset.
+    this.#pauseLock.releaseAllMatching(`snapshot`)
   }
 
   /**
