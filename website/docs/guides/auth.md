@@ -463,6 +463,19 @@ The `Vary` header tells browsers and CDNs to include the specified headers when 
 
 This ensures proper isolation of cached shape data based on authentication context.
 
+### Clearing Client-Side Data on Logout
+
+The `Vary` header handles HTTP cache isolation, but your client application also holds synced shape data in memory. When a user logs out, do a full page refresh to clear the previous user's data from memory.
+
+```typescript
+async function handleLogout() {
+  await clearAuthToken()
+
+  // Full refresh clears all synced shape data from memory
+  window.location.reload()
+}
+```
+
 ## Notes
 
 ### External services
