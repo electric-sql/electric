@@ -43,6 +43,8 @@ The problem is **coordination between bounded agents** who are all operating on 
 
 Rao describes configurancy as "the ongoing, relational process through which agents and worlds *co-emerge* as intelligible configurations." Agents don't just act on the system; it shapes them in return. Software has always been co-evolutionary—the codebase you inherit constrains what you build next. Now AI agents participate, and the process moves faster than any human can track.
 
+Think of a band playing together. The song isn't the sheet music—it's what emerges when musicians keep playing together, listening, adjusting. A new player can read the charts, but they don't *have* the song until they've played with the group. The sheet music helps; it's not the thing. Configurancy is the playing-together-and-staying-in-sync part—the process through which shared understanding emerges from repeated interaction. Specs, tests, and conformance suites are the charts. They support the process, but the process itself is what produces intelligibility. When AI agents join the band and everyone's playing at 10x tempo, you need better charts—because the old way of staying in sync (a small team just *knowing* from being in the room together) doesn't survive the tempo change.
+
 For software, configurancy is **the explicit contract that lets bounded agents coherently co-evolve a system.**
 
 Concretely: configurancy is the smallest set of explicit behavioral commitments (and rationales) that allow a bounded agent to safely modify the system without rediscovering invariants. This is testable: if agents keep breaking invariants, your configurancy layer is incomplete.
