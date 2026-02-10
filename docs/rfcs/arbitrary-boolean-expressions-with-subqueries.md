@@ -255,7 +255,7 @@ Move-in queries run ahead of the replication stream. We reuse the existing snaps
 4. **Touch tracking** — Track keys modified in stream to skip stale query results
 5. **Correct ordering** — Query results spliced into shape log at correct position
 
-This ensures causal consistency — query results appear at the right point in the stream without duplicates or shadowing concurrent changes. See `Electric.Shapes.Consumer.MoveIns` for implementation details.
+This ensures query results appear at the right point in the stream without shadowing concurrent changes. See `Electric.Shapes.Consumer.MoveIns` for implementation details.
 
 ### Move-out Handling
 
@@ -269,6 +269,135 @@ When value 'a' moves out of subquery at position 0:
    - If no tag evaluates to true, delete the row
 
 No server query needed — clients have all information to determine if row should be removed.
+
+### Race Condition Handling
+
+#### Replication stream ordering and dependency layers
+
+The replication stream delivers one transaction at a time as a sequence of operations
+(`begin op op op end begin op op end ...`). The `ShapeLogCollector` publishes each
+transaction to consumers via `ConsumerRegistry.publish`, which is a synchronous
+broadcast — it sends the event to every consumer in the layer and waits for all of them
+to return before moving on.
+
+Crucially, `DependencyLayers` organises shapes into layers based on their dependency
+relationships. Inner (subquery) shapes are in earlier layers; outer shapes are in later
+layers. The `ShapeLogCollector` publishes to layers in order (line 550 of
+`shape_log_collector.ex`):
+
+```elixir
+for layer <- DependencyLayers.get_for_handles(state.dependency_layers, affected_shapes) do
+  # Each publish is synchronous, so layers will be processed in order
+  ConsumerRegistry.publish(layer_events, state.registry_state)
+end
+```
+
+This means that for any transaction T:
+1. The inner shape's `handle_event` runs first and returns
+2. If T caused move-ins/outs, the inner shape sends `materializer_changes` to the outer
+   consumer (a regular `send`, so it lands in the outer consumer's mailbox)
+3. Only then does the outer shape's `handle_event` run (as a `handle_call`)
+
+Since GenServer processes messages in mailbox order, and the `materializer_changes`
+message was sent *before* the `handle_event` call message, the outer consumer always
+processes `materializer_changes` before `handle_event` for the same transaction.
+
+#### Why the touch_tracker race is benign
+
+The `touch_tracker` prevents move-in query results from overwriting fresher data in the
+stream. It records `{key → xid}` during `handle_event` and skips query result rows where
+the touch xid is *not* visible in the query's snapshot (meaning the stream has newer data).
+
+At first glance, there appears to be a race: `materializer_changes` starts an async
+move-in query, and `query_complete` could fire before the touch_tracker is populated by a
+later `handle_event`. But this race is benign because of how transaction ordering works:
+
+1. **Previous transactions are already processed.** The replication stream delivers
+   transactions in commit order, one at a time. By the time a move-in query starts, every
+   previously delivered transaction has been fully processed via `handle_event`, so their
+   touch_tracker entries are present. Since those transactions committed before the query
+   started, they are always visible in the query's snapshot — the touch_tracker says
+   "visible → don't skip", which is correct.
+
+2. **The triggering transaction is always in the query's snapshot.** The move-in query
+   starts *after* the triggering transaction committed (the subquery consumer had to
+   process it first). So the query snapshot includes the triggering transaction's changes.
+   Any touch_tracker entries from the triggering transaction would say "visible → don't
+   skip" — the same result as having no entry at all.
+
+3. **Future transactions may or may not be in the query's snapshot.** If a future
+   transaction T_next commits and is processed via `handle_event` while the query is in
+   flight, two cases arise:
+   - **`handle_event` runs before `query_complete`:** Touch_tracker has T_next's entries.
+     If T_next's xid is not visible in the query snapshot, stale rows are correctly
+     skipped.
+   - **`query_complete` runs before `handle_event`:** Touch_tracker is missing T_next's
+     entries. But if T_next committed after the query's snapshot, the query doesn't have
+     T_next's changes either — the query results reflect the pre-T_next state, which is
+     correct for the consumer's current stream position. If T_next committed before the
+     snapshot, the query has T_next's version (same as what the stream will deliver), so
+     including it produces at worst a same-version duplicate.
+
+4. **Subquery-only transactions don't need touch_tracker entries.** When a transaction
+   only modifies the subquery table, the outer consumer receives `materializer_changes`
+   but no `handle_event` (no changes to the outer table). This is correct — there are no
+   stream changes to deduplicate against, so the touch_tracker is correctly empty.
+
+In all cases, the worst outcome of the race is a harmless same-version duplicate in the
+log, never stale data overwriting fresher data. No buffering or message reordering is
+needed.
+
+#### moved_out_tags: filtering stale move-in results
+
+Async move-in queries can return stale data because the world changes while the query
+runs. Main handles this with `moved_out_tags`: when a move-out arrives while a move-in
+query is in flight, the hash is recorded. When the query results are written, rows
+matching the hash are skipped, preventing stale rows from entering the log.
+
+For multi-disjunct shapes, `moved_out_tags` must be **position-aware**. Main tracks
+bare hashes, but for `x IN sq1 OR x IN sq2`, both positions produce the same `hash(a)`
+for value `a`. If `a` exits sq1, position-unaware filtering would incorrectly skip rows
+for sq2 (same hash, different position). Instead, track `{position, hash}` tuples and
+filter only at the **triggering position** — the position that caused the move-in query.
+
+This handles all race conditions:
+
+| Scenario | How it's handled |
+|----------|-----------------|
+| Value enters and exits subquery in same `materializer_changes` batch | `cancel_net_zero_events` in materializer — events cancel out |
+| Value enters in one batch, exits in a later batch (same txn) | `moved_out_tags` records hash during `process_move_outs`; stale rows filtered at `query_complete` |
+| Value enters in txn T, exits in txn T+1 while query running | Same — `moved_out_tags` records hash from T+1's move-out; T's query results filtered |
+| Same hash at different positions (`x IN sq1 OR x IN sq2`) | Position-aware filtering only checks the triggering position |
+| Partial exit from multi-value query ([A, B] queried, A exits) | Per-row filtering: row with A skipped, row with B kept |
+
+### Consistency Model for Shapes with Subqueries
+
+Shapes without subqueries provide transactional atomicity: changes from a single Postgres
+transaction are delivered together, bounded by up-to-date markers. The client sees a
+consistent snapshot after each up-to-date.
+
+**Shapes with subqueries relax this to eventual consistency.** Move-in queries are async
+Postgres round-trips that complete after the triggering transaction has been processed.
+Because the up-to-date decision (`determine_up_to_date` in `api.ex`) is based purely on
+log offsets and has no visibility into pending move-in queries, the client can receive an
+up-to-date marker before move-in results have been written to the log.
+
+Concretely, if a single Postgres transaction both modifies the subquery table (causing
+move-ins) and modifies the outer table, the client may see:
+
+1. Direct changes to the outer table (from `handle_event`)
+2. Up-to-date marker
+3. Move-in rows arriving later (from `query_complete`)
+4. Another up-to-date marker
+
+This is a pre-existing property of Electric's subquery support (not introduced by this
+RFC) and applies equally to single-subquery and multi-subquery shapes.
+
+The key guarantee we **do** maintain: the client will never see rows it shouldn't. The
+`moved_out_tags` mechanism ensures that rows which moved out of the shape while a move-in
+query was in flight are filtered from the results. The touch_tracker ensures that stale
+versions of rows don't overwrite fresher data already in the stream. The system converges
+to the correct state — it just may take more than one up-to-date cycle to get there.
 
 ### Replication Stream Updates
 
