@@ -63,13 +63,16 @@ export class PauseLock {
 
   /**
    * Release the lock for a given reason. Releasing a reason that isn't
-   * held is a no-op.
+   * held logs a warning (likely indicates an acquire/release mismatch).
    *
    * Fires `onReleased` when the last reason is released (transition from
    * locked to unlocked).
    */
   release(reason: string): void {
     if (!this.#holders.delete(reason)) {
+      console.warn(
+        `[Electric] PauseLock: "${reason}" not held — ignoring release (possible acquire/release mismatch)`
+      )
       return
     }
     if (this.#holders.size === 0) {

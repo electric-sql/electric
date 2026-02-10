@@ -124,11 +124,17 @@ describe(`PauseLock`, () => {
     warnSpy.mockRestore()
   })
 
-  it(`releasing unheld reason is a no-op`, () => {
+  it(`releasing unheld reason is a no-op and warns`, () => {
     const { lock, onReleased } = createLock()
+    const warnSpy = vi.spyOn(console, `warn`).mockImplementation(() => {})
     lock.release(`nonexistent`)
     expect(lock.isPaused).toBe(false)
     expect(onReleased).not.toHaveBeenCalled()
+    expect(warnSpy).toHaveBeenCalledOnce()
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining(`"nonexistent" not held`)
+    )
+    warnSpy.mockRestore()
   })
 
   it(`releaseAllMatching clears matching holders without firing onReleased`, () => {

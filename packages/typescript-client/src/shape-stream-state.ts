@@ -275,31 +275,16 @@ abstract class ActiveState extends ShapeStreamState {
   protected parseResponseFields(
     input: ResponseMetadataInput
   ): SharedStateFields {
-    let handle = this.#shared.handle
     const responseHandle = input.responseHandle
-    if (responseHandle && responseHandle !== input.expiredHandle) {
-      handle = responseHandle
-    }
-
-    let offset = this.#shared.offset
-    if (input.responseOffset) {
-      offset = input.responseOffset
-    }
-
-    let liveCacheBuster = this.#shared.liveCacheBuster
-    if (input.responseCursor) {
-      liveCacheBuster = input.responseCursor
-    }
-
-    let schema = this.#shared.schema
-    if (schema === undefined && input.responseSchema !== undefined) {
-      schema = input.responseSchema
-    }
-
-    let lastSyncedAt = this.#shared.lastSyncedAt
-    if (input.status === 204) {
-      lastSyncedAt = input.now
-    }
+    const handle =
+      responseHandle && responseHandle !== input.expiredHandle
+        ? responseHandle
+        : this.#shared.handle
+    const offset = input.responseOffset ?? this.#shared.offset
+    const liveCacheBuster = input.responseCursor ?? this.#shared.liveCacheBuster
+    const schema = this.#shared.schema ?? input.responseSchema
+    const lastSyncedAt =
+      input.status === 204 ? input.now : this.#shared.lastSyncedAt
 
     return { handle, offset, schema, liveCacheBuster, lastSyncedAt }
   }
@@ -325,19 +310,13 @@ abstract class ActiveState extends ShapeStreamState {
     ) {
       // No local handle, or local handle is itself the expired one — enter stale retry
       const retryCount = this.staleCacheRetryCount + 1
-      const staleRetryState = new StaleRetryState({
-        handle: this.#shared.handle,
-        offset: this.#shared.offset,
-        schema: this.#shared.schema,
-        liveCacheBuster: this.#shared.liveCacheBuster,
-        lastSyncedAt: this.#shared.lastSyncedAt,
-        staleCacheBuster: input.createCacheBuster(),
-        staleCacheRetryCount: retryCount,
-      })
-
       return {
         action: `stale-retry`,
-        state: staleRetryState,
+        state: new StaleRetryState({
+          ...this.currentFields,
+          staleCacheBuster: input.createCacheBuster(),
+          staleCacheRetryCount: retryCount,
+        }),
         exceededMaxRetries: retryCount > input.maxStaleCacheRetries,
       }
     }
@@ -349,11 +328,7 @@ abstract class ActiveState extends ShapeStreamState {
   // --- handleMessageBatch: template method with onUpToDate override point ---
 
   handleMessageBatch(input: MessageBatchInput): MessageBatchTransition {
-    if (!input.hasMessages) {
-      return { state: this, suppressBatch: false, becameUpToDate: false }
-    }
-
-    if (!input.hasUpToDateMessage) {
+    if (!input.hasMessages || !input.hasUpToDateMessage) {
       return { state: this, suppressBatch: false, becameUpToDate: false }
     }
 
@@ -459,15 +434,10 @@ export class StaleRetryState extends FetchingState {
       staleCacheRetryCount: number
     }
   ) {
-    super({
-      handle: fields.handle,
-      offset: fields.offset,
-      schema: fields.schema,
-      liveCacheBuster: fields.liveCacheBuster,
-      lastSyncedAt: fields.lastSyncedAt,
-    })
-    this.#staleCacheBuster = fields.staleCacheBuster
-    this.#staleCacheRetryCount = fields.staleCacheRetryCount
+    const { staleCacheBuster, staleCacheRetryCount, ...shared } = fields
+    super(shared)
+    this.#staleCacheBuster = staleCacheBuster
+    this.#staleCacheRetryCount = staleCacheRetryCount
   }
 
   get staleCacheBuster() {
@@ -623,14 +593,9 @@ export class ReplayingState extends ActiveState {
   readonly #replayCursor: string
 
   constructor(fields: SharedStateFields & { replayCursor: string }) {
-    super({
-      handle: fields.handle,
-      offset: fields.offset,
-      schema: fields.schema,
-      liveCacheBuster: fields.liveCacheBuster,
-      lastSyncedAt: fields.lastSyncedAt,
-    })
-    this.#replayCursor = fields.replayCursor
+    const { replayCursor, ...shared } = fields
+    super(shared)
+    this.#replayCursor = replayCursor
   }
 
   get replayCursor() {
@@ -665,20 +630,13 @@ export class ReplayingState extends ActiveState {
     shared: SharedStateFields,
     input: MessageBatchInput
   ): MessageBatchTransition {
-    // If the cursor did not move since the previous session, this is still
-    // replayed cache data. Suppress once and exit replay mode.
-    if (!input.isSse && this.#replayCursor === input.currentCursor) {
-      return {
-        state: new LiveState(shared),
-        suppressBatch: true,
-        becameUpToDate: true,
-      }
-    }
-
-    // Cursor moved — real data, transition to live normally
+    // Suppress replayed cache data when cursor has not moved since
+    // the previous session (non-SSE only).
+    const suppressBatch =
+      !input.isSse && this.#replayCursor === input.currentCursor
     return {
       state: new LiveState(shared),
-      suppressBatch: false,
+      suppressBatch,
       becameUpToDate: true,
     }
   }
@@ -739,6 +697,10 @@ export class PausedState extends ShapeStreamState {
 
   applyUrlParams(url: URL, context: UrlParamsContext): void {
     this.previousState.applyUrlParams(url, context)
+  }
+
+  pause(): PausedState {
+    return this
   }
 
   resume(): ShapeStreamState {
