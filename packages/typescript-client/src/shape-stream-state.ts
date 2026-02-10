@@ -20,11 +20,11 @@ export type ShapeStreamStateKind =
  * Shared fields carried by all active (non-paused, non-error) states.
  */
 export interface SharedStateFields {
-  handle?: string
-  offset: Offset
-  schema?: Schema
-  liveCacheBuster: string
-  lastSyncedAt?: number
+  readonly handle?: string
+  readonly offset: Offset
+  readonly schema?: Schema
+  readonly liveCacheBuster: string
+  readonly lastSyncedAt?: number
 }
 
 type ResponseBaseInput = {
