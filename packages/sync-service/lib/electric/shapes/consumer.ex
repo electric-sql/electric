@@ -168,16 +168,13 @@ defmodule Electric.Shapes.Consumer do
     stop_and_clean(state)
   end
 
-  def handle_continue(:consume_buffer, %State{buffer: buffer} = state) do
-    Logger.debug(fn -> "Consumer catching up on #{length(buffer)} transactions" end)
-    state = %{state | buffer: [], buffering?: false}
+  def handle_continue(:consume_buffer, state) do
+    state = process_buffered_txn_fragments(state)
 
-    case handle_txns(Enum.reverse(buffer), state) do
-      %State{terminating?: true} = state ->
-        {:noreply, state, {:continue, :stop_and_clean}}
-
-      state ->
-        {:noreply, state, state.hibernate_after}
+    if state.terminating? do
+      {:noreply, state, {:continue, :stop_and_clean}}
+    else
+      {:noreply, state, state.hibernate_after}
     end
   end
 
@@ -456,18 +453,22 @@ defmodule Electric.Shapes.Consumer do
   end
 
   defp handle_event(%TransactionFragment{} = txn_fragment, state) do
-    {txns, transaction_builder} =
-      TransactionBuilder.build(txn_fragment, state.transaction_builder)
-
-    state = %{state | transaction_builder: transaction_builder}
-    handle_txns(txns, state)
+    Logger.debug(fn -> "Txn fragment received in Shapes.Consumer: #{inspect(txn_fragment)}" end)
+    handle_txn_fragment(txn_fragment, state)
   end
 
-  defp handle_txns(txns, %State{} = state), do: Enum.reduce_while(txns, state, &handle_txn/2)
-
-  # Keep buffering for initial snapshot
-  defp handle_txn(txn, %State{buffering?: true} = state),
-    do: {:cont, State.add_to_buffer(state, txn)}
+  # A consumer process starts with buffering?=true before it has PG snapshot info (xmin, xmax, xip_list).
+  # In this phase we have to buffer incoming txn fragments because we can't yet decide what to
+  # do with the transaction: skip it or write it to the shape log.
+  #
+  # When snapshot info arrives, `process_buffered_txn_fragments/1` will be called to process
+  # buffered fragments in order.
+  defp handle_txn_fragment(
+         %TransactionFragment{} = txn_fragment,
+         %State{buffering?: true} = state
+       ) do
+    State.add_to_buffer(state, txn_fragment)
+  end
 
   defp handle_txn(txn, state) when needs_initial_filtering(state) do
     case InitialSnapshot.filter(state.initial_snapshot_state, state.storage, txn) do
@@ -479,10 +480,23 @@ defmodule Electric.Shapes.Consumer do
     end
   end
 
-  # Remove the move-in buffering check - just process immediately
-  defp handle_txn(txn, state), do: handle_txn_in_span(txn, state)
 
-  defp handle_txn_in_span(txn, %State{} = state) do
+  def process_buffered_txn_fragments(%State{buffer: buffer} = state) do
+    Logger.debug(fn -> "Consumer catching up on #{length(buffer)} transaction fragments" end)
+    {txn_fragments, state} = State.pop_buffered(state)
+
+    Enum.reduce_while(txn_fragments, state, fn txn_fragment, state ->
+      state = handle_txn_fragment(txn_fragment, state)
+
+      if state.terminating? do
+        {:halt, state}
+      else
+        {:cont, state}
+      end
+    end)
+  end
+
+  defp handle_txn(txn, %State{} = state) do
     ot_attrs =
       [xid: txn.xid, total_num_changes: txn.num_changes] ++ State.telemetry_attrs(state)
 

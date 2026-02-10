@@ -265,9 +265,14 @@ defmodule Electric.Shapes.Consumer.State do
     end
   end
 
-  @spec add_to_buffer(t(), Transaction.t()) :: t()
+  @spec add_to_buffer(t(), TransactionFragment.t()) :: t()
   def add_to_buffer(%__MODULE__{buffer: buffer} = state, txn) do
     %{state | buffer: [txn | buffer]}
+  end
+
+  @spec pop_buffered(t()) :: {[TransactionFragment.t()], t()}
+  def pop_buffered(%__MODULE__{buffer: buffer} = state) do
+    {Enum.reverse(buffer), %{state | buffer: [], buffering?: false}}
   end
 
   @spec add_waiter(t(), GenServer.from()) :: t()
