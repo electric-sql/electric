@@ -209,7 +209,7 @@ defmodule Electric.Shapes.ConsumerTest do
       assert :ok = ShapeLogCollector.handle_event(txn, ctx.stack_id)
       assert_receive {^ref, :new_changes, ^last_log_offset}, @receive_timeout
       assert_receive {Support.TestStorage, :append_to_log!, @shape_handle1, _}
-      refute_receive {Support.TestStorage, :append_to_log!, @shape_handle2, _}
+      refute_storage_calls_for_txn_fragment(@shape_handle2)
 
       txn2 =
         transaction(xid, next_lsn, [
@@ -223,7 +223,7 @@ defmodule Electric.Shapes.ConsumerTest do
       assert :ok = ShapeLogCollector.handle_event(txn2, ctx.stack_id)
       assert_receive {^ref, :new_changes, ^next_log_offset}, @receive_timeout
       assert_receive {Support.TestStorage, :append_to_log!, @shape_handle1, _}
-      refute_receive {Support.TestStorage, :append_to_log!, @shape_handle2, _}
+      refute_storage_calls_for_txn_fragment(@shape_handle2)
     end
 
     test "correctly writes only relevant changes to multiple shape logs", ctx do
@@ -303,7 +303,7 @@ defmodule Electric.Shapes.ConsumerTest do
       assert :ok = ShapeLogCollector.handle_event(txn, ctx.stack_id)
 
       assert_receive {Support.TestStorage, :append_to_log!, @shape_handle2, _}
-      refute_receive {Support.TestStorage, :append_to_log!, @shape_handle1, _}
+      refute_storage_calls_for_txn_fragment(@shape_handle1)
 
       refute_receive {^ref1, :new_changes, _}
       assert_receive {^ref2, :new_changes, _}
@@ -331,26 +331,6 @@ defmodule Electric.Shapes.ConsumerTest do
       assert_shape_cleanup(@shape_handle1)
 
       refute_receive {Electric.ShapeCache.ShapeCleaner, :cleanup, @shape_handle2}
-    end
-
-    defp assert_consumer_shutdown(stack_id, shape_handle, fun, timeout \\ 5000) do
-      monitors =
-        for name <- [
-              Shapes.Consumer.name(stack_id, shape_handle),
-              Shapes.Consumer.Snapshotter.name(stack_id, shape_handle)
-            ],
-            pid = GenServer.whereis(name) do
-          ref = Process.monitor(pid)
-          {ref, pid}
-        end
-
-      fun.()
-
-      for {ref, pid} <- monitors do
-        assert_receive {:DOWN, ^ref, :process, ^pid, reason}
-                       when reason in [:shutdown, {:shutdown, :cleanup}],
-                       timeout
-      end
     end
 
     @tag shapes: %{
@@ -384,7 +364,7 @@ defmodule Electric.Shapes.ConsumerTest do
         assert :ok = ShapeLogCollector.handle_event(txn, ctx.stack_id)
       end)
 
-      refute_receive {Support.TestStorage, :append_to_log!, @shape_handle1, _}
+      refute_storage_calls_for_txn_fragment(@shape_handle1)
 
       assert_shape_cleanup(@shape_handle1)
 
@@ -600,19 +580,27 @@ defmodule Electric.Shapes.ConsumerTest do
         snapshot_fun.([])
       end)
 
+      :ok
+    end
+
+    setup(ctx) do
       Electric.StackConfig.put(
         ctx.stack_id,
         :shape_hibernate_after,
         Map.get(ctx, :hibernate_after, 10_000)
       )
 
+      :ok
+    end
+
+    setup ctx do
       %{consumer_supervisor: consumer_supervisor, shape_cache: shape_cache} =
         Support.ComponentSetup.with_shape_cache(ctx)
 
-      [
+      %{
         consumer_supervisor: consumer_supervisor,
         shape_cache: shape_cache
-      ]
+      }
     end
 
     test "duplicate transactions storage is idempotent", ctx do
@@ -1107,6 +1095,12 @@ defmodule Electric.Shapes.ConsumerTest do
     end
   end
 
+  defp refute_storage_calls_for_txn_fragment(shape_handle) do
+    refute_receive {Support.TestStorage, :append_to_log!, ^shape_handle, _}
+    refute_receive {Support.TestStorage, :append_fragment_to_log!, ^shape_handle, _}
+    refute_receive {Support.TestStorage, :signal_txn_commit!, ^shape_handle, _}
+  end
+
   defp transaction(xid, lsn, changes) do
     [%{log_offset: last_log_offset} | _] = Enum.reverse(changes)
 
@@ -1119,5 +1113,25 @@ defmodule Electric.Shapes.ConsumerTest do
       changes: changes,
       affected_relations: MapSet.new(changes, & &1.relation)
     }
+  end
+
+  defp assert_consumer_shutdown(stack_id, shape_handle, fun, timeout \\ 5000) do
+    monitors =
+      for name <- [
+            Shapes.Consumer.name(stack_id, shape_handle),
+            Shapes.Consumer.Snapshotter.name(stack_id, shape_handle)
+          ],
+          pid = GenServer.whereis(name) do
+        ref = Process.monitor(pid)
+        {ref, pid}
+      end
+
+    fun.()
+
+    for {ref, pid} <- monitors do
+      assert_receive {:DOWN, ^ref, :process, ^pid, reason}
+                     when reason in [:shutdown, {:shutdown, :cleanup}],
+                     timeout
+    end
   end
 end
