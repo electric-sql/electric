@@ -12,6 +12,7 @@ export default defineConfig({
       `test/expired-shapes-cache.test.ts`,
       `test/wake-detection.test.ts`,
       `test/shape-stream-state.test.ts`,
+      `test/pause-lock.test.ts`,
     ],
     testTimeout: 30000,
     environment: `jsdom`,
