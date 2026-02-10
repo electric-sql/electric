@@ -422,15 +422,15 @@ describe(`shape stream state machine`, () => {
     expect(transition.fellBackToLongPolling).toBe(false)
   })
 
-  // 26. StaleRetryState canEnterReplayMode → true
-  it(`StaleRetryState canEnterReplayMode returns true`, () => {
+  // 26. StaleRetryState canEnterReplayMode → false (entering replay mode would lose retry count)
+  it(`StaleRetryState canEnterReplayMode returns false`, () => {
     const stale = new StaleRetryState({
       ...makeShared(),
       staleCacheBuster: `cb-1`,
       staleCacheRetryCount: 1,
     })
 
-    expect(stale.canEnterReplayMode()).toBe(true)
+    expect(stale.canEnterReplayMode()).toBe(false)
   })
 
   // 27. enterReplayMode creates ReplayingState with cursor
@@ -635,12 +635,12 @@ describe(`shape stream state machine`, () => {
 })
 
 describe(`schema undefined + ignored stale response`, () => {
-  it(`ignored stale response should preserve or set schema from response`, () => {
+  it(`ignored stale response should return state unchanged (schema remains undefined)`, () => {
     // Scenario: client resumes from persisted handle/offset but has no schema yet.
     // First response is stale (responseHandle matches expiredHandle).
     // checkStaleResponse sees we have a local handle → returns 'ignored'.
-    // After the ignored transition, client.ts does `this.#syncState.schema!`
-    // which is undefined → crash.
+    // The state machine correctly returns 'ignored' without updating any fields.
+    // client.ts is responsible for skipping body parsing when it sees 'ignored'.
     const state = new SyncingState(
       makeShared({ handle: `my-handle`, schema: undefined })
     )
@@ -654,9 +654,7 @@ describe(`schema undefined + ignored stale response`, () => {
     )
 
     expect(transition.action).toBe(`ignored`)
-    // BUG: schema is still undefined after the ignored transition,
-    // but client.ts assumes it's defined (schema!) and will crash
-    // when trying to parse the response body.
-    expect(transition.state.schema).toBeDefined()
+    expect(transition.state).toBe(state)
+    expect(transition.state.schema).toBeUndefined()
   })
 })
