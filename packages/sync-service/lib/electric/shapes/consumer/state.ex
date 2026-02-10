@@ -37,7 +37,11 @@ defmodule Electric.Shapes.Consumer.State do
     # it sees a commit (write_unit=txn) or it will write each received txn fragment to storage
     # immediately (write_unit=txn_fragment).
     # When true, stream fragments directly to storage without buffering
-    write_unit: @write_unit_txn
+    write_unit: @write_unit_txn,
+    # Tracks in-progress transaction, initialized when a txn fragment with has_begin?=true is seen.
+    # It is used to check whether the entire txn is visible in the snapshot and to mark it
+    # as flushed in order to handle its remaining fragments appropriately.
+    pending_txn: nil
   ]
 
   @type pg_snapshot() :: SnapshotQuery.pg_snapshot()
