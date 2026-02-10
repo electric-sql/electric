@@ -3,6 +3,7 @@ import {
   OFFSET_QUERY_PARAM,
   SHAPE_HANDLE_QUERY_PARAM,
   LIVE_CACHE_BUSTER_QUERY_PARAM,
+  LIVE_QUERY_PARAM,
   CACHE_BUSTER_QUERY_PARAM,
 } from './constants'
 
@@ -78,6 +79,11 @@ export interface SseCloseTransition {
   wasShortConnection: boolean
 }
 
+export interface UrlParamsContext {
+  isSnapshotRequest: boolean
+  canLongPoll: boolean
+}
+
 // ---------------------------------------------------------------------------
 // Abstract base — shared by ALL states (including Paused/Error)
 // ---------------------------------------------------------------------------
@@ -151,7 +157,7 @@ export abstract class ShapeStreamState {
   // --- URL param application ---
 
   /** Adds state-specific query parameters to the fetch URL. */
-  applyUrlParams(_url: URL): void {}
+  applyUrlParams(_url: URL, _context: UrlParamsContext): void {}
 
   // --- Default response/message handlers (Paused/Error never receive these) ---
 
@@ -225,7 +231,7 @@ abstract class ActiveState extends ShapeStreamState {
 
   // --- URL param application ---
 
-  applyUrlParams(url: URL): void {
+  applyUrlParams(url: URL, _context: UrlParamsContext): void {
     url.searchParams.set(OFFSET_QUERY_PARAM, this.#shared.offset)
     if (this.#shared.handle) {
       url.searchParams.set(SHAPE_HANDLE_QUERY_PARAM, this.#shared.handle)
@@ -429,8 +435,8 @@ export class StaleRetryState extends FetchingState {
     return this.#staleCacheRetryCount
   }
 
-  applyUrlParams(url: URL): void {
-    super.applyUrlParams(url)
+  applyUrlParams(url: URL, context: UrlParamsContext): void {
+    super.applyUrlParams(url, context)
     url.searchParams.set(CACHE_BUSTER_QUERY_PARAM, this.#staleCacheBuster)
   }
 }
@@ -465,9 +471,15 @@ export class LiveState extends ActiveState {
     return this.#sseFallbackToLongPolling
   }
 
-  applyUrlParams(url: URL): void {
-    super.applyUrlParams(url)
-    url.searchParams.set(LIVE_CACHE_BUSTER_QUERY_PARAM, this.liveCacheBuster)
+  applyUrlParams(url: URL, context: UrlParamsContext): void {
+    super.applyUrlParams(url, context)
+    // Snapshot requests (with subsetParams) should never use live polling
+    if (!context.isSnapshotRequest) {
+      url.searchParams.set(LIVE_CACHE_BUSTER_QUERY_PARAM, this.liveCacheBuster)
+      if (context.canLongPoll) {
+        url.searchParams.set(LIVE_QUERY_PARAM, `true`)
+      }
+    }
   }
 
   private get sseState() {
@@ -653,8 +665,8 @@ export class PausedState extends ShapeStreamState {
     return this.previousState.replayCursor
   }
 
-  applyUrlParams(url: URL): void {
-    this.previousState.applyUrlParams(url)
+  applyUrlParams(url: URL, context: UrlParamsContext): void {
+    this.previousState.applyUrlParams(url, context)
   }
 
   resume(): ShapeStreamState {
@@ -693,8 +705,8 @@ export class ErrorState extends ShapeStreamState {
     return this.previousState.isUpToDate
   }
 
-  applyUrlParams(url: URL): void {
-    this.previousState.applyUrlParams(url)
+  applyUrlParams(url: URL, context: UrlParamsContext): void {
+    this.previousState.applyUrlParams(url, context)
   }
 
   retry(): ShapeStreamState {

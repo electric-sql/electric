@@ -999,21 +999,14 @@ export class ShapeStream<T extends Row<unknown> = Row>
       }
     }
 
-    // Add state-specific parameters (offset, handle, cache busters, etc.)
-    this.#syncState.applyUrlParams(fetchUrl)
+    // Add state-specific parameters (offset, handle, live cache busters, etc.)
+    this.#syncState.applyUrlParams(fetchUrl, {
+      isSnapshotRequest: subsetParams !== undefined,
+      // Don't long-poll when resuming from pause or refreshing — avoids
+      // a 20s hold during which `isConnected` would be false
+      canLongPoll: !this.#isRefreshing && !resumingFromPause,
+    })
     fetchUrl.searchParams.set(LOG_MODE_QUERY_PARAM, this.#mode)
-
-    // Snapshot requests (with subsetParams) should never use live polling
-    const isSnapshotRequest = subsetParams !== undefined
-
-    if (this.#syncState.isUpToDate && !isSnapshotRequest) {
-      // If we are resuming from a paused state, we don't want to perform a live request
-      // because it could be a long poll that holds for 20sec
-      // and during all that time `isConnected` will be false
-      if (!this.#isRefreshing && !resumingFromPause) {
-        fetchUrl.searchParams.set(LIVE_QUERY_PARAM, `true`)
-      }
-    }
 
     // Add cache buster for shapes known to be expired to prevent 409s
     const shapeKey = canonicalShapeKey(fetchUrl)

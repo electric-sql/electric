@@ -8,10 +8,18 @@ import {
   ReplayingState,
   ResponseMetadataInput,
   MessageBatchInput,
+  UrlParamsContext,
   StaleRetryState,
   SyncingState,
   SharedStateFields,
 } from '../src/shape-stream-state'
+import {
+  OFFSET_QUERY_PARAM,
+  SHAPE_HANDLE_QUERY_PARAM,
+  LIVE_CACHE_BUSTER_QUERY_PARAM,
+  LIVE_QUERY_PARAM,
+  CACHE_BUSTER_QUERY_PARAM,
+} from '../src/constants'
 
 function makeShared(overrides?: Partial<SharedStateFields>): SharedStateFields {
   return {
@@ -496,5 +504,97 @@ describe(`shape stream state machine`, () => {
     const syncing = new SyncingState(makeShared())
     const errored2 = syncing.toErrorState(new Error(`oops`))
     expect(errored2.isUpToDate).toBe(false)
+  })
+
+  // --- applyUrlParams tests ---
+
+  function applyAndGetParams(
+    state: InstanceType<
+      | typeof InitialState
+      | typeof SyncingState
+      | typeof LiveState
+      | typeof StaleRetryState
+      | typeof ReplayingState
+      | typeof PausedState
+      | typeof ErrorState
+    >,
+    context?: Partial<UrlParamsContext>
+  ): URLSearchParams {
+    const url = new URL(`http://localhost:3000/v1/shape`)
+    state.applyUrlParams(url, {
+      isSnapshotRequest: false,
+      canLongPoll: true,
+      ...context,
+    })
+    return url.searchParams
+  }
+
+  it(`ActiveState sets offset and handle`, () => {
+    const state = new SyncingState(makeShared({ handle: `h1`, offset: `5_3` }))
+    const params = applyAndGetParams(state)
+    expect(params.get(OFFSET_QUERY_PARAM)).toBe(`5_3`)
+    expect(params.get(SHAPE_HANDLE_QUERY_PARAM)).toBe(`h1`)
+  })
+
+  it(`ActiveState omits handle when undefined`, () => {
+    const state = new SyncingState(makeShared({ handle: undefined }))
+    const params = applyAndGetParams(state)
+    expect(params.has(SHAPE_HANDLE_QUERY_PARAM)).toBe(false)
+  })
+
+  it(`StaleRetryState adds stale cache buster`, () => {
+    const state = new StaleRetryState({
+      ...makeShared(),
+      staleCacheBuster: `buster-123`,
+      staleCacheRetryCount: 1,
+    })
+    const params = applyAndGetParams(state)
+    expect(params.get(CACHE_BUSTER_QUERY_PARAM)).toBe(`buster-123`)
+  })
+
+  it(`LiveState adds live cache buster and live param`, () => {
+    const state = new LiveState(makeShared({ liveCacheBuster: `cur-42` }))
+    const params = applyAndGetParams(state)
+    expect(params.get(LIVE_CACHE_BUSTER_QUERY_PARAM)).toBe(`cur-42`)
+    expect(params.get(LIVE_QUERY_PARAM)).toBe(`true`)
+  })
+
+  it(`LiveState omits live params for snapshot requests`, () => {
+    const state = new LiveState(makeShared({ liveCacheBuster: `cur-42` }))
+    const params = applyAndGetParams(state, { isSnapshotRequest: true })
+    expect(params.has(LIVE_CACHE_BUSTER_QUERY_PARAM)).toBe(false)
+    expect(params.has(LIVE_QUERY_PARAM)).toBe(false)
+    // base params still present
+    expect(params.get(OFFSET_QUERY_PARAM)).toBe(`0_0`)
+  })
+
+  it(`LiveState omits live query param when canLongPoll is false`, () => {
+    const state = new LiveState(makeShared({ liveCacheBuster: `cur-42` }))
+    const params = applyAndGetParams(state, { canLongPoll: false })
+    expect(params.get(LIVE_CACHE_BUSTER_QUERY_PARAM)).toBe(`cur-42`)
+    expect(params.has(LIVE_QUERY_PARAM)).toBe(false)
+  })
+
+  it(`non-LiveState does not add live params`, () => {
+    const state = new SyncingState(makeShared({ liveCacheBuster: `cur-42` }))
+    const params = applyAndGetParams(state)
+    expect(params.has(LIVE_CACHE_BUSTER_QUERY_PARAM)).toBe(false)
+    expect(params.has(LIVE_QUERY_PARAM)).toBe(false)
+  })
+
+  it(`PausedState delegates applyUrlParams to previous state`, () => {
+    const live = new LiveState(makeShared({ liveCacheBuster: `cur-42` }))
+    const paused = live.pause()
+    const params = applyAndGetParams(paused)
+    expect(params.get(LIVE_CACHE_BUSTER_QUERY_PARAM)).toBe(`cur-42`)
+    expect(params.get(LIVE_QUERY_PARAM)).toBe(`true`)
+  })
+
+  it(`ErrorState delegates applyUrlParams to previous state`, () => {
+    const live = new LiveState(makeShared({ liveCacheBuster: `cur-42` }))
+    const errored = live.toErrorState(new Error(`oops`))
+    const params = applyAndGetParams(errored)
+    expect(params.get(LIVE_CACHE_BUSTER_QUERY_PARAM)).toBe(`cur-42`)
+    expect(params.get(LIVE_QUERY_PARAM)).toBe(`true`)
   })
 })
