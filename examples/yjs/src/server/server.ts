@@ -30,13 +30,6 @@ app.use(
     origin: `*`,
     allowHeaders: [`Content-Type`, `Authorization`],
     allowMethods: [`GET`, `POST`, `PUT`, `DELETE`, `OPTIONS`],
-    exposeHeaders: [
-      `Content-Length`,
-      `electric-offset`,
-      `electric-handle`,
-      `electric-schema`,
-      `electric-cursor`,
-    ],
     credentials: true,
     maxAge: 600,
   })
@@ -138,33 +131,7 @@ app.get(`/shape-proxy/v1/shape`, async (c: Context) => {
       })
     }
 
-    // Create a response with all headers from the Electric response
-    const responseHeaders = new Headers()
-
-    // Copy all headers from the original response
-    // Using forEach which is available in the Headers implementation
-    resp.headers.forEach((value, key) => {
-      responseHeaders.set(key, value)
-    })
-
-    // Ensure the Electric headers are explicitly included
-    const electricHeaders = [
-      `electric-offset`,
-      `electric-handle`,
-      `electric-schema`,
-      `electric-total-count`,
-    ]
-    for (const header of electricHeaders) {
-      const value = resp.headers.get(header)
-      if (value) {
-        responseHeaders.set(header, value)
-      }
-    }
-
-    return new Response(resp.body, {
-      status: resp.status,
-      headers: responseHeaders,
-    })
+    return resp
   } catch (error) {
     console.error(`Error proxying to Electric:`, error)
     return c.json({ error: `Failed to proxy request to Electric` }, 500)

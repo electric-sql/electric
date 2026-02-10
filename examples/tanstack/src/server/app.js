@@ -75,14 +75,11 @@ const server = http.createServer(async (req, res) => {
         const response = await fetch(originUrl)
 
         // Copy headers, excluding problematic ones
-        const headers = { ...CORS_HEADERS }
+        const headers = {}
         response.headers.forEach((value, key) => {
           if (
             key.toLowerCase() !== `content-encoding` &&
-            key.toLowerCase() !== `content-length` &&
-            key.toLowerCase() !== `access-control-allow-origin` &&
-            key.toLowerCase() !== `access-control-allow-methods` &&
-            key.toLowerCase() !== `access-control-allow-headers`
+            key.toLowerCase() !== `content-length`
           ) {
             headers[key] = value
           }
