@@ -1,3 +1,31 @@
+/*
+ * Shape stream state machine.
+ *
+ * Class hierarchy:
+ *
+ *   ShapeStreamState (abstract base)
+ *   ├── ActiveState (abstract — shared field storage & helpers)
+ *   │   ├── FetchingState (abstract — shared Initial/Syncing/StaleRetry behavior)
+ *   │   │   ├── InitialState
+ *   │   │   ├── SyncingState
+ *   │   │   └── StaleRetryState
+ *   │   ├── LiveState
+ *   │   └── ReplayingState
+ *   ├── PausedState   (delegates to previousState)
+ *   └── ErrorState    (delegates to previousState)
+ *
+ * State transitions:
+ *
+ *   Initial ─response─► Syncing ─up-to-date─► Live
+ *                            │                  │
+ *                            └──stale──► StaleRetry
+ *                                           │
+ *                            Syncing ◄──response──┘
+ *
+ *   Any state ─pause─► Paused ─resume─► (previous state)
+ *   Any state ─error─► Error  ─retry──► (previous state)
+ *   Any state ─markMustRefetch─► Initial (offset reset)
+ */
 import { Offset, Schema } from './types'
 import {
   OFFSET_QUERY_PARAM,
