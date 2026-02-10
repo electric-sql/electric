@@ -1,10 +1,54 @@
 defmodule Support.TestUtils do
   alias Electric.LogItems
   alias Electric.Replication.Changes
+  alias Electric.Replication.Changes.TransactionFragment
   alias Electric.Replication.LogOffset
   alias Electric.Shapes.Shape
 
   require ExUnit.Assertions
+
+  @doc """
+  Build a transaction fragment that contains an entire transaction.
+  """
+  def complete_txn_fragment(xid, lsn, changes) do
+    txn_fragment(xid, lsn, changes, has_begin?: true, has_commit?: true)
+  end
+
+  @doc """
+  Build a list of transaction fragments from the given list of maps.
+  """
+  @spec txn_fragments(pos_integer, pos_integer | Electric.Postgres.Lsn.t(), [
+          %{changes: list(), has_begin?: boolean, has_commit?: boolean}
+        ]) :: [TransactionFragment.t()]
+  def txn_fragments(xid, lsn, fragment_maps) do
+    Enum.map(fragment_maps, fn fragment_map ->
+      {changes, opts_map} = Map.pop(fragment_map, :changes)
+      txn_fragment(xid, lsn, changes, Enum.to_list(opts_map))
+    end)
+  end
+
+  @doc """
+  Build a transaction fragment that may or may not have begin and commit parts.
+  """
+  def txn_fragment(xid, lsn, changes, opts) do
+    [%{log_offset: last_log_offset} | _] = Enum.reverse(changes)
+
+    lsn =
+      case lsn do
+        %Electric.Postgres.Lsn{} -> lsn
+        num when is_integer(num) -> Electric.Postgres.Lsn.from_integer(num)
+      end
+
+    %TransactionFragment{
+      xid: xid,
+      lsn: lsn,
+      last_log_offset: last_log_offset,
+      has_begin?: Keyword.get(opts, :has_begin?, false),
+      commit: if(Keyword.get(opts, :has_commit?, false), do: %Changes.Commit{}),
+      changes: changes,
+      affected_relations: MapSet.new(changes, & &1.relation)
+    }
+  end
 
   @doc """
   Preprocess a list of `Changes.data_change()` structs in the same way they
@@ -150,7 +194,7 @@ defmodule Support.TestUtils do
       :start_streaming_snapshot_from_db,
       [mode: :shared],
       fn consumer, shape_handle, shape, %{stack_id: stack_id, storage: storage} = ctx ->
-        send(test_pid, {:snapshot, shape_handle})
+        send(test_pid, {:snapshot, shape_handle, self()})
 
         # make it easier to do the right thing here by providing a wrapper
         make_snapshot_fun = fn stream ->

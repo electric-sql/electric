@@ -1216,7 +1216,7 @@ defmodule Electric.ShapeCacheTest do
     handles
     |> List.wrap()
     |> Enum.map(fn handle ->
-      assert_receive {:snapshot, ^handle}
+      assert_receive {:snapshot, ^handle, _snapshotter_pid}
       handle
     end)
   end
