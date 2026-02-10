@@ -259,10 +259,10 @@ defmodule Electric.Shapes.Consumer do
   end
 
   @impl GenServer
-  def handle_info({ShapeCache.Storage, :flushed, offset}, state) do
-    {state, offset} = State.align_offset_to_txn_boundary(state, offset)
+  def handle_info({ShapeCache.Storage, :flushed, offset_in}, state) do
+    {state, offset_txn} = State.align_offset_to_txn_boundary(state, offset_in)
 
-    ShapeLogCollector.notify_flushed(state.stack_id, state.shape_handle, offset)
+    ShapeLogCollector.notify_flushed(state.stack_id, state.shape_handle, offset_txn)
     {:noreply, state, state.hibernate_after}
   end
 
