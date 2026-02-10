@@ -633,3 +633,30 @@ describe(`shape stream state machine`, () => {
     expect(updated.isUpToDate).toBe(true)
   })
 })
+
+describe(`schema undefined + ignored stale response`, () => {
+  it(`ignored stale response should preserve or set schema from response`, () => {
+    // Scenario: client resumes from persisted handle/offset but has no schema yet.
+    // First response is stale (responseHandle matches expiredHandle).
+    // checkStaleResponse sees we have a local handle → returns 'ignored'.
+    // After the ignored transition, client.ts does `this.#syncState.schema!`
+    // which is undefined → crash.
+    const state = new SyncingState(
+      makeShared({ handle: `my-handle`, schema: undefined })
+    )
+
+    const transition = state.handleResponseMetadata(
+      makeResponseInput({
+        responseHandle: `stale-handle`,
+        expiredHandle: `stale-handle`,
+        responseSchema: { id: { type: `text` } },
+      })
+    )
+
+    expect(transition.action).toBe(`ignored`)
+    // BUG: schema is still undefined after the ignored transition,
+    // but client.ts assumes it's defined (schema!) and will crash
+    // when trying to parse the response body.
+    expect(transition.state.schema).toBeDefined()
+  })
+})

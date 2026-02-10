@@ -578,4 +578,87 @@ describe(`ExpiredShapesCache`, () => {
     expect(caughtError!.message).toContain(`stale cached responses`)
     expect(caughtError!.message).toContain(`3 retry attempts`)
   })
+
+  it(`client should gracefully handle stale ignored response with undefined schema`, async () => {
+    // Scenario:
+    // 1. Client resumes from persisted handle/offset (schema is undefined)
+    // 2. The expired shapes cache has 'stale-handle' marked as expired
+    // 3. First fetch returns a stale response with data messages
+    // 4. checkStaleResponse: client has local handle → returns 'ignored'
+    // 5. #onInitialResponse returns early — schema never set from response
+    // 6. #requestShapeLongPoll does `this.#syncState.schema!` → undefined
+    // 7. MessageParser.parse() crashes: Cannot read properties of undefined
+    //    when trying to look up column types in the schema
+
+    const expectedShapeUrl = `${shapeUrl}?table=test`
+    expiredShapesCache.markExpired(expectedShapeUrl, `stale-handle`)
+
+    let fetchCount = 0
+    const errors: Error[] = []
+
+    fetchMock.mockImplementation(
+      (_input: RequestInfo | URL, _init?: RequestInit) => {
+        fetchCount++
+
+        if (fetchCount >= 5) {
+          aborter.abort()
+        }
+
+        // Return a stale response with actual data messages.
+        // The body contains an insert message with a `value` object —
+        // the parser will try to look up column types in the schema,
+        // which is undefined after the ignored stale transition.
+        const body = JSON.stringify([
+          {
+            key: `test-1`,
+            value: { id: `1`, name: `test` },
+            headers: { operation: `insert` },
+            offset: `0_0`,
+          },
+        ])
+
+        return Promise.resolve(
+          new Response(body, {
+            status: 200,
+            headers: {
+              'electric-handle': `stale-handle`,
+              'electric-offset': `0_0`,
+              'electric-schema': JSON.stringify({
+                id: { type: `text` },
+                name: { type: `text` },
+              }),
+              'electric-cursor': `123`,
+            },
+          })
+        )
+      }
+    )
+
+    const stream = new ShapeStream({
+      url: shapeUrl,
+      params: { table: `test` },
+      handle: `my-persisted-handle`,
+      offset: `0_0`,
+      signal: aborter.signal,
+      fetchClient: fetchMock,
+      subscribe: false,
+      onError: (error) => {
+        errors.push(error)
+        // Don't retry — let the error surface
+        return
+      },
+    })
+
+    stream.subscribe(() => {})
+
+    // Wait for the fetch cycle to complete
+    await new Promise((resolve) => setTimeout(resolve, 200))
+
+    // BUG: The client crashes trying to use undefined schema to parse
+    // the response body after the stale response was ignored.
+    // It should either set schema from headers even for ignored responses,
+    // or skip parsing the body entirely for ignored responses.
+    expect(errors).toHaveLength(0)
+    expect(fetchCount).toBeGreaterThan(1) // should keep fetching, not crash
+  })
 })
