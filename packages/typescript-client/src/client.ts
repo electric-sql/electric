@@ -1045,7 +1045,13 @@ export class ShapeStream<T extends Row<unknown> = Row>
     }
   }
 
-  async #onInitialResponse(response: Response) {
+  /**
+   * Processes response metadata (headers, status) and updates sync state.
+   * Returns `true` if the response body should be processed by the caller,
+   * or `false` if the response was ignored (stale) and the body should be skipped.
+   * Throws on stale-retry (to trigger a retry with cache buster).
+   */
+  async #onInitialResponse(response: Response): Promise<boolean> {
     const { headers, status } = response
     const shapeHandle = headers.get(SHAPE_HANDLE_HEADER)
     const shapeKey = this.#currentFetchUrl
@@ -1102,8 +1108,9 @@ export class ShapeStream<T extends Row<unknown> = Row>
     }
 
     if (transition.action === `ignored`) {
-      // We already have a valid handle, so ignore metadata from this stale response
-      // to prevent a mismatch between our current handle and the stale offset.
+      // We already have a valid handle, so ignore the entire stale response
+      // (both metadata and body) to prevent a mismatch between our current
+      // handle and the stale data.
       console.warn(
         `[Electric] Received stale cached response with expired shape handle. ` +
           `This should not happen and indicates a proxy/CDN caching misconfiguration. ` +
@@ -1111,8 +1118,10 @@ export class ShapeStream<T extends Row<unknown> = Row>
           `Check that your proxy includes all query parameters (especially 'handle' and 'offset') in its cache key. ` +
           `Ignoring the stale response and continuing with handle "${this.#syncState.handle}".`
       )
-      return
+      return false
     }
+
+    return true
   }
 
   async #onMessages(batch: Array<Message<T>>, isSseMessage = false) {
@@ -1222,7 +1231,8 @@ export class ShapeStream<T extends Row<unknown> = Row>
     })
 
     this.#connected = true
-    await this.#onInitialResponse(response)
+    const shouldProcessBody = await this.#onInitialResponse(response)
+    if (!shouldProcessBody) return
 
     const schema = this.#syncState.schema! // we know that it is not undefined because it is set by `this.#onInitialResponse`
     const res = await response.text()
@@ -1249,6 +1259,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
       Accept: `text/event-stream`,
     }
 
+    let ignoredStaleResponse = false
     try {
       let buffer: Array<Message<T>> = []
       await fetchEventSource(fetchUrl.toString(), {
@@ -1256,7 +1267,11 @@ export class ShapeStream<T extends Row<unknown> = Row>
         fetch,
         onopen: async (response: Response) => {
           this.#connected = true
-          await this.#onInitialResponse(response)
+          const shouldProcessBody = await this.#onInitialResponse(response)
+          if (!shouldProcessBody) {
+            ignoredStaleResponse = true
+            throw new Error(`stale response ignored`)
+          }
         },
         onmessage: (event: EventSourceMessage) => {
           if (event.data) {
@@ -1283,6 +1298,10 @@ export class ShapeStream<T extends Row<unknown> = Row>
         signal: requestAbortController.signal,
       })
     } catch (error) {
+      if (ignoredStaleResponse) {
+        // Stale response was ignored in onopen — let the fetch loop retry
+        return
+      }
       if (requestAbortController.signal.aborted) {
         // During an SSE request, the fetch might have succeeded
         // and we are parsing the incoming stream.
