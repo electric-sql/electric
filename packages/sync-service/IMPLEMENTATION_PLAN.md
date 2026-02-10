@@ -1200,9 +1200,25 @@ Before enabling `dnf_subqueries` feature flag in production:
     - Removed unused `Parser` and `Walker` imports from state.ex
     - Removed obsolete tests for removed state fields
 
-### Remaining Work (Lower Priority)
+### Remaining Work
 
-1. **Protocol Version Validation** (Optional)
+1. **Phase 11: Position-aware `moved_out_tags` filtering**
+   - Main's `moved_out_tags` tracks bare hash values. For multi-disjunct shapes where the
+     same column appears at different positions (e.g. `x IN sq1 OR x IN sq2`), the same
+     hash appears at both positions, causing incorrect filtering.
+   - Fix: track `{position, hash}` tuples instead of bare hashes. Filter at the
+     **triggering position** — the position that caused the move-in query.
+   - Code changes:
+     - `MoveIns.move_out_happened`: accept `{position, hash}` tuples
+     - `MoveIns.add_waiting`: track triggering position alongside query name
+     - `do_legacy_move_out` (move_handling.ex): pass position info to `move_out_happened`
+     - Consumer or storage: filter rows at write time using position-aware lookup
+   - Edge cases handled:
+     - Same hash at different positions: only triggering position checked
+     - Partial exit from multi-value query: per-row filtering (A skipped, B kept)
+     - Within-txn and cross-txn races: both handled by `moved_out_tags`
+
+2. **Protocol Version Validation** (Optional)
    - Add protocol version check to reject complex shapes for v1 clients
    - This is optional since v1 clients can still work by ignoring unknown fields
 
