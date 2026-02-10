@@ -1,5 +1,11 @@
 # @core/sync-service
 
+## 1.4.3
+
+### Patch Changes
+
+- f9b25d6: Fix the issue where transactions that had exactly max_batch_size changes weren't written to the shape log.
+
 ## 1.4.2
 
 ### Patch Changes
