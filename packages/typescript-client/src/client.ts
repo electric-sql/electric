@@ -1380,7 +1380,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
     this.#unsubscribeFromWakeDetection?.()
   }
 
-  /** Unix time at which we last synced. Undefined when `isLoading` is true. */
+  /** Unix time at which we last synced. Undefined until first successful up-to-date. */
   lastSyncedAt(): number | undefined {
     return this.#syncState.lastSyncedAt
   }
