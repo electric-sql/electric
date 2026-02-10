@@ -3,6 +3,7 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
 
   import Support.ComponentSetup
   import Support.TestUtils
+  import Electric.ShapeCache.PureFileStorage.SharedRecords
 
   alias Electric.Replication.Changes
   alias Electric.Replication.LogOffset
@@ -28,6 +29,58 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
         refs: %{["id"] => :text}
       )
   }
+
+  @xid 100
+  @lsn 100
+
+  @fragments txn_fragments(@xid, @lsn, [
+               %{
+                 changes: [
+                   %Changes.NewRecord{
+                     relation: {"public", "test_table"},
+                     record: %{"id" => "5"},
+                     log_offset: LogOffset.new(@lsn, 0)
+                   },
+                   %Changes.UpdatedRecord{
+                     relation: {"public", "test_table"},
+                     old_record: %{"id" => "1"},
+                     record: %{"id" => "1", "foo" => "bar"},
+                     log_offset: LogOffset.new(@lsn, 2),
+                     changed_columns: MapSet.new(["foo"])
+                   }
+                 ]
+               },
+               %{
+                 changes: [
+                   %Changes.UpdatedRecord{
+                     relation: {"public", "test_table"},
+                     old_record: %{"id" => "3"},
+                     record: %{"id" => "3", "another" => "update"},
+                     log_offset: LogOffset.new(@lsn, 4),
+                     changed_columns: MapSet.new(["another"])
+                   }
+                 ]
+               },
+               %{
+                 changes: [
+                   %Changes.NewRecord{
+                     relation: {"public", "test_table"},
+                     record: %{"id" => "6"},
+                     log_offset: LogOffset.new(@lsn, 6)
+                   }
+                 ]
+               },
+               %{
+                 changes: [
+                   %Changes.DeletedRecord{
+                     relation: {"public", "test_table"},
+                     old_record: %{"id" => "2"},
+                     log_offset: LogOffset.new(@lsn, 8),
+                     last?: true
+                   }
+                 ]
+               }
+             ])
 
   defp start_storage(ctx) do
     base_opts =
@@ -1177,6 +1230,168 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
     end
   end
 
+  describe "append_fragment_to_log!()" do
+    @describetag flush_period: 10
+
+    setup [:start_storage, :with_started_writer]
+
+    test "writes items to the log without assuming they add up to a complete transaction",
+         %{opts: opts, writer: writer} do
+      # Verify the initial state of storage
+      assert {:ok, LogOffset.new(0, 0)} == PureFileStorage.fetch_latest_offset(opts)
+
+      last_before_real_offset = LogOffset.last_before_real_offsets()
+
+      assert %{
+               last_persisted_offset: ^last_before_real_offset,
+               last_seen_txn_offset: ^last_before_real_offset,
+               last_persisted_txn_offset: ^last_before_real_offset
+             } = storage_internal_state(opts)
+
+      # Write a couple of txn fragments to the shape log.
+      # For every fragment we verify that storage doesn't consider to have stored a complete transaction
+      Enum.each(@fragments, fn fragment ->
+        log_items = changes_to_log_items(fragment.changes, xid: @xid)
+        writer = PureFileStorage.append_fragment_to_log!(log_items, writer)
+        assert_receive {Storage, {PureFileStorage, :perform_scheduled_flush, [0]}}
+
+        # Since storage code isn't executed inside a Consumer process here, we have to call the function ourselves
+        # to update the internal state of storage.
+        PureFileStorage.perform_scheduled_flush(writer, 0)
+
+        # Last persisted offset advances as each new txn fragment gets written.
+        # Transaction offsets remain virtual since we've only written a txn fragment and not a full txn.
+        offset = fragment.last_log_offset
+
+        assert %{
+                 last_persisted_offset: ^offset,
+                 last_seen_txn_offset: ^last_before_real_offset,
+                 last_persisted_txn_offset: ^last_before_real_offset
+               } = storage_internal_state(opts)
+
+        assert {:ok, LogOffset.new(0, 0)} == PureFileStorage.fetch_latest_offset(opts)
+
+        assert [] == get_log_items_from_storage(LogOffset.first(), LogOffset.last(), opts)
+      end)
+    end
+  end
+
+  describe "signal_txn_commit!()" do
+    @describetag flush_period: 10
+
+    setup [:start_storage, :with_started_writer]
+
+    test "signals the commit boundary to the storage allowing it to advance the txn offset",
+         %{opts: opts, writer: writer} do
+      # Verify the initial state of storage
+      assert {:ok, LogOffset.new(0, 0)} == PureFileStorage.fetch_latest_offset(opts)
+
+      last_before_real_offset = LogOffset.last_before_real_offsets()
+
+      assert %{
+               last_persisted_offset: ^last_before_real_offset,
+               last_seen_txn_offset: ^last_before_real_offset,
+               last_persisted_txn_offset: ^last_before_real_offset
+             } = storage_internal_state(opts)
+
+      # Write a couple of txn fragments to the shape log.
+      {writer, last_offset} =
+        Enum.reduce(@fragments, {writer, nil}, fn fragment, {writer, _} ->
+          log_items = changes_to_log_items(fragment.changes, xid: @xid)
+          writer = PureFileStorage.append_fragment_to_log!(log_items, writer)
+          {writer, fragment.last_log_offset}
+        end)
+
+      # Last persisted offset advances as each new txn fragment gets written.
+      # Transaction offsets remain virtual since we've only written a txn fragment and not a full txn.
+      assert_receive {Storage, {PureFileStorage, :perform_scheduled_flush, [0]}}
+      writer = PureFileStorage.perform_scheduled_flush(writer, 0)
+
+      assert %{
+               last_persisted_offset: ^last_offset,
+               last_seen_txn_offset: ^last_before_real_offset,
+               last_persisted_txn_offset: ^last_before_real_offset
+             } = storage_internal_state(opts)
+
+      assert [] == get_log_items_from_storage(LogOffset.first(), LogOffset.last(), opts)
+
+      # Signal the end of the transaction
+      PureFileStorage.signal_txn_commit!(@xid, writer)
+
+      assert %{
+               last_persisted_offset: ^last_offset,
+               last_seen_txn_offset: ^last_offset,
+               last_persisted_txn_offset: ^last_offset
+             } = storage_internal_state(opts)
+
+      assert [i1, i2, i3, i4, i5] =
+               get_log_items_from_storage(LogOffset.first(), LogOffset.last(), opts)
+
+      lsn = to_string(@lsn)
+
+      assert %{
+               "headers" => %{
+                 "lsn" => lsn,
+                 "op_position" => 0,
+                 "operation" => "insert",
+                 "relation" => ["public", "test_table"],
+                 "txids" => [@xid]
+               },
+               "key" => ~s'"public"."test_table"/"5"',
+               "value" => %{"id" => "5"}
+             } == i1
+
+      assert %{
+               "headers" => %{
+                 "lsn" => lsn,
+                 "op_position" => 2,
+                 "operation" => "update",
+                 "relation" => ["public", "test_table"],
+                 "txids" => [@xid]
+               },
+               "key" => ~s'"public"."test_table"/"1"',
+               "value" => %{"foo" => "bar", "id" => "1"}
+             } == i2
+
+      assert %{
+               "headers" => %{
+                 "lsn" => lsn,
+                 "op_position" => 4,
+                 "operation" => "update",
+                 "relation" => ["public", "test_table"],
+                 "txids" => [@xid]
+               },
+               "key" => ~s'"public"."test_table"/"3"',
+               "value" => %{"another" => "update", "id" => "3"}
+             } == i3
+
+      assert %{
+               "headers" => %{
+                 "lsn" => lsn,
+                 "op_position" => 6,
+                 "operation" => "insert",
+                 "relation" => ["public", "test_table"],
+                 "txids" => [@xid]
+               },
+               "key" => ~s'"public"."test_table"/"6"',
+               "value" => %{"id" => "6"}
+             } == i4
+
+      assert %{
+               "headers" => %{
+                 "lsn" => lsn,
+                 "op_position" => 8,
+                 "operation" => "delete",
+                 "relation" => ["public", "test_table"],
+                 "txids" => [@xid],
+                 "last" => true
+               },
+               "key" => ~s'"public"."test_table"/"2"',
+               "value" => %{"id" => "2"}
+             } == i5
+    end
+  end
+
   defp with_started_writer(%{opts: opts}) do
     writer = PureFileStorage.init_writer!(opts, @shape)
     PureFileStorage.set_pg_snapshot(%{xmin: 100}, opts)
@@ -1184,5 +1399,22 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
     PureFileStorage.make_new_snapshot!([], opts)
 
     %{writer: writer}
+  end
+
+  defp get_log_items_from_storage(min_offset, max_offset, storage_impl) do
+    PureFileStorage.get_log_stream(min_offset, max_offset, storage_impl)
+    |> Enum.map(&Jason.decode!/1)
+  end
+
+  defp storage_internal_state(opts) do
+    [metadata] = :ets.lookup(opts.stack_ets, @shape_handle)
+
+    %{
+      last_persisted_txn_offset: storage_meta(metadata, :last_persisted_txn_offset),
+      last_persisted_offset: storage_meta(metadata, :last_persisted_offset),
+      last_seen_txn_offset: storage_meta(metadata, :last_seen_txn_offset),
+      last_snapshot_chunk: storage_meta(metadata, :last_snapshot_chunk),
+      cached_chunk_boundaries: storage_meta(metadata, :cached_chunk_boundaries)
+    }
   end
 end
