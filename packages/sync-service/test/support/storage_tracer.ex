@@ -54,11 +54,13 @@ defmodule Support.StorageTracer do
   Get the list of all traced calls already sitting in the current process' mailbox.
   """
   def collect_traced_calls do
+    timeout = Keyword.fetch!(ExUnit.configuration(), :assert_receive_timeout)
+
     receive do
       {:trace, _test_pid, :call, {Storage, _f, _a} = mfa} ->
         [mfa | collect_traced_calls()]
     after
-      0 -> []
+      timeout -> []
     end
   end
 end
