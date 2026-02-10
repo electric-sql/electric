@@ -597,4 +597,39 @@ describe(`shape stream state machine`, () => {
     expect(params.get(LIVE_CACHE_BUSTER_QUERY_PARAM)).toBe(`cur-42`)
     expect(params.get(LIVE_QUERY_PARAM)).toBe(`true`)
   })
+
+  // --- withHandle tests ---
+
+  it(`withHandle preserves state kind and fields, only changes handle`, () => {
+    const shared = makeShared({
+      handle: `old`,
+      offset: `5_3`,
+      liveCacheBuster: `cur-1`,
+    })
+    const live = new LiveState(shared, {
+      consecutiveShortSseConnections: 2,
+      sseFallbackToLongPolling: true,
+    })
+    const updated = live.withHandle(`new-handle`)
+
+    expect(updated).toBeInstanceOf(LiveState)
+    expect(updated.kind).toBe(`live`)
+    expect(updated.handle).toBe(`new-handle`)
+    expect(updated.offset).toBe(`5_3`)
+    expect(updated.liveCacheBuster).toBe(`cur-1`)
+    expect(updated.isUpToDate).toBe(true)
+    expect(updated.consecutiveShortSseConnections).toBe(2)
+    expect(updated.sseFallbackToLongPolling).toBe(true)
+  })
+
+  it(`withHandle on PausedState updates inner state handle`, () => {
+    const live = new LiveState(makeShared({ handle: `old`, offset: `5_3` }))
+    const paused = live.pause()
+    const updated = paused.withHandle(`new-handle`)
+
+    expect(updated).toBeInstanceOf(PausedState)
+    expect(updated.handle).toBe(`new-handle`)
+    expect(updated.offset).toBe(`5_3`)
+    expect(updated.isUpToDate).toBe(true)
+  })
 })

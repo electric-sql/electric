@@ -1700,11 +1700,11 @@ export class ShapeStream<T extends Row<unknown> = Row>
           expiredShapesCache.markExpired(shapeKey, usedHandle)
         }
 
-        // For snapshot 409s, we need to update the handle via markMustRefetch
-        // since we no longer have direct setters
+        // For snapshot 409s, only update the handle — don't reset offset/schema/etc.
+        // The main stream is paused and should not be disturbed.
         const nextHandle =
           e.headers[SHAPE_HANDLE_HEADER] || `${usedHandle ?? `handle`}-next`
-        this.#syncState = this.#syncState.markMustRefetch(nextHandle)
+        this.#syncState = this.#syncState.withHandle(nextHandle)
 
         return this.fetchSnapshot(opts)
       }

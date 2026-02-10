@@ -173,6 +173,9 @@ export abstract class ShapeStreamState {
 
   // --- Universal transitions ---
 
+  /** Returns a new state identical to this one but with the handle changed. */
+  abstract withHandle(handle: string): ShapeStreamState
+
   pause(): PausedState {
     return new PausedState(this)
   }
@@ -396,6 +399,10 @@ export class InitialState extends FetchingState {
   constructor(shared: SharedStateFields) {
     super(shared)
   }
+
+  withHandle(handle: string): InitialState {
+    return new InitialState({ ...this.currentFields, handle })
+  }
 }
 
 export class SyncingState extends FetchingState {
@@ -403,6 +410,10 @@ export class SyncingState extends FetchingState {
 
   constructor(shared: SharedStateFields) {
     super(shared)
+  }
+
+  withHandle(handle: string): SyncingState {
+    return new SyncingState({ ...this.currentFields, handle })
   }
 }
 
@@ -433,6 +444,15 @@ export class StaleRetryState extends FetchingState {
   }
   get staleCacheRetryCount() {
     return this.#staleCacheRetryCount
+  }
+
+  withHandle(handle: string): StaleRetryState {
+    return new StaleRetryState({
+      ...this.currentFields,
+      handle,
+      staleCacheBuster: this.#staleCacheBuster,
+      staleCacheRetryCount: this.#staleCacheRetryCount,
+    })
   }
 
   applyUrlParams(url: URL, context: UrlParamsContext): void {
@@ -469,6 +489,10 @@ export class LiveState extends ActiveState {
 
   get sseFallbackToLongPolling(): boolean {
     return this.#sseFallbackToLongPolling
+  }
+
+  withHandle(handle: string): LiveState {
+    return new LiveState({ ...this.currentFields, handle }, this.sseState)
   }
 
   applyUrlParams(url: URL, context: UrlParamsContext): void {
@@ -577,6 +601,14 @@ export class ReplayingState extends ActiveState {
     return this.#replayCursor
   }
 
+  withHandle(handle: string): ReplayingState {
+    return new ReplayingState({
+      ...this.currentFields,
+      handle,
+      replayCursor: this.#replayCursor,
+    })
+  }
+
   handleResponseMetadata(
     input: ResponseMetadataInput
   ): ResponseMetadataTransition {
@@ -665,6 +697,10 @@ export class PausedState extends ShapeStreamState {
     return this.previousState.replayCursor
   }
 
+  withHandle(handle: string): PausedState {
+    return new PausedState(this.previousState.withHandle(handle))
+  }
+
   applyUrlParams(url: URL, context: UrlParamsContext): void {
     this.previousState.applyUrlParams(url, context)
   }
@@ -703,6 +739,10 @@ export class ErrorState extends ShapeStreamState {
 
   get isUpToDate(): boolean {
     return this.previousState.isUpToDate
+  }
+
+  withHandle(handle: string): ErrorState {
+    return new ErrorState(this.previousState.withHandle(handle), this.error)
   }
 
   applyUrlParams(url: URL, context: UrlParamsContext): void {
