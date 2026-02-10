@@ -474,6 +474,11 @@ export class StaleRetryState extends FetchingState {
     return this.#staleCacheRetryCount
   }
 
+  // StaleRetryState must not enter replay mode — it would lose the retry count
+  canEnterReplayMode(): boolean {
+    return false
+  }
+
   withHandle(handle: string): StaleRetryState {
     return new StaleRetryState({
       ...this.currentFields,
