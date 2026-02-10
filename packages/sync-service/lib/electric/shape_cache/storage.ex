@@ -227,6 +227,16 @@ defmodule Electric.ShapeCache.Storage do
     Electric.StackConfig.lookup!(stack_id, Electric.ShapeCache.Storage)
   end
 
+  def opts_for_stack(stack_id) do
+    {_module, opts} = Electric.StackConfig.lookup!(stack_id, Electric.ShapeCache.Storage)
+    opts
+  end
+
+  def opt_for_stack(stack_id, opt_name) do
+    opts = opts_for_stack(stack_id)
+    Map.fetch!(opts, opt_name)
+  end
+
   @spec child_spec(shape_storage()) :: Supervisor.child_spec()
   def child_spec({module, shape_opts}) do
     %{
