@@ -3,7 +3,6 @@ defmodule Electric.Shapes.Consumer.State do
   alias Electric.Shapes.Consumer.MoveIns
   alias Electric.Shapes.Consumer.InitialSnapshot
   alias Electric.Shapes.Shape
-  alias Electric.Replication.Changes.Transaction
   alias Electric.Replication.Eval.Parser
   alias Electric.Replication.Eval.Walker
   alias Electric.Replication.TransactionBuilder
@@ -12,6 +11,9 @@ defmodule Electric.Shapes.Consumer.State do
   alias Electric.ShapeCache.Storage
 
   require LogOffset
+
+  @write_unit_txn :txn
+  @write_unit_txn_fragment :txn_fragment
 
   defstruct [
     :stack_id,
@@ -30,7 +32,12 @@ defmodule Electric.Shapes.Consumer.State do
     terminating?: false,
     buffering?: false,
     or_with_subquery?: false,
-    not_with_subquery?: false
+    not_with_subquery?: false,
+    # Based on the write unit value, consumer will either buffer txn fragments in memory until
+    # it sees a commit (write_unit=txn) or it will write each received txn fragment to storage
+    # immediately (write_unit=txn_fragment).
+    # When true, stream fragments directly to storage without buffering
+    write_unit: @write_unit_txn
   ]
 
   @type pg_snapshot() :: SnapshotQuery.pg_snapshot()
@@ -157,7 +164,10 @@ defmodule Electric.Shapes.Consumer.State do
       state
       | shape: shape,
         or_with_subquery?: has_or_with_subquery?(shape),
-        not_with_subquery?: has_not_with_subquery?(shape)
+        not_with_subquery?: has_not_with_subquery?(shape),
+        # Enable direct fragment-to-storage streaming for shapes without subquery dependencies
+        write_unit:
+          if(shape.shape_dependencies == [], do: @write_unit_txn_fragment, else: @write_unit_txn)
     }
   end
 
@@ -340,4 +350,7 @@ defmodule Electric.Shapes.Consumer.State do
       stack_id: stack_id
     ]
   end
+
+  def write_unit_txn, do: @write_unit_txn
+  def write_unit_txn_fragment, do: @write_unit_txn_fragment
 end
