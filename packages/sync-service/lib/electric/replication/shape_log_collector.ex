@@ -38,6 +38,7 @@ defmodule Electric.Replication.ShapeLogCollector do
   require Electric.Postgres.Lsn
   require Electric.Replication.LogOffset
   require Logger
+  require TransactionFragment
 
   @schema NimbleOptions.new!(
             stack_id: [type: :string, required: true],

@@ -30,6 +30,7 @@ defmodule Electric.Shapes.Consumer do
   alias Electric.Utils
 
   require Logger
+  require TransactionFragment
 
   @default_snapshot_timeout 45_000
   @stop_and_clean_timeout 30_000
@@ -470,16 +471,28 @@ defmodule Electric.Shapes.Consumer do
     State.add_to_buffer(state, txn_fragment)
   end
 
-  defp handle_txn(txn, state) when needs_initial_filtering(state) do
-    case InitialSnapshot.filter(state.initial_snapshot_state, state.storage, txn) do
+  # Short-circuit clauses for the most common case of a single-fragment transaction
+  defp handle_txn_fragment(%TransactionFragment{} = txn_fragment, state)
+       when TransactionFragment.complete_transaction?(txn_fragment) and
+              needs_initial_filtering(state) do
+    case InitialSnapshot.filter(state.initial_snapshot_state, state.storage, txn_fragment.xid) do
       {:consider_flushed, initial_snapshot_state} ->
-        {:cont, consider_flushed(%{state | initial_snapshot_state: initial_snapshot_state}, txn)}
+        # This transaction is already included in the snapshot, flush it immediately and skip
+        # writing it to the shape log.
+        state = %{state | initial_snapshot_state: initial_snapshot_state}
+        consider_flushed(state, txn_fragment.last_log_offset)
 
-      {:continue, new_initial_snapshot_state} ->
-        handle_txn_in_span(txn, %{state | initial_snapshot_state: new_initial_snapshot_state})
+      {:continue, initial_snapshot_state} ->
+        # The transaction is not part of the initial snapshot.
+        state = %{state | initial_snapshot_state: initial_snapshot_state}
+        build_and_handle_txn(txn_fragment, state)
     end
   end
 
+  defp handle_txn_fragment(%TransactionFragment{} = txn_fragment, state)
+       when TransactionFragment.complete_transaction?(txn_fragment) do
+    build_and_handle_txn(txn_fragment, state)
+  end
 
   def process_buffered_txn_fragments(%State{buffer: buffer} = state) do
     Logger.debug(fn -> "Consumer catching up on #{length(buffer)} transaction fragments" end)
@@ -496,6 +509,11 @@ defmodule Electric.Shapes.Consumer do
     end)
   end
 
+  defp build_and_handle_txn(%TransactionFragment{} = txn_fragment, %State{} = state) do
+    {[txn], _} = TransactionBuilder.build(txn_fragment, TransactionBuilder.new())
+    handle_txn(txn, state)
+  end
+
   defp handle_txn(txn, %State{} = state) do
     ot_attrs =
       [xid: txn.xid, total_num_changes: txn.num_changes] ++ State.telemetry_attrs(state)
@@ -504,29 +522,14 @@ defmodule Electric.Shapes.Consumer do
       "shape_write.consumer.handle_txn",
       ot_attrs,
       state.stack_id,
-      fn ->
-        do_handle_txn(txn, state)
-      end
+      fn -> do_handle_txn(txn, state) end
     )
   end
 
-  defp do_handle_txn(%Transaction{} = txn, state)
-       when LogOffset.is_log_offset_lte(txn.last_log_offset, state.latest_offset) do
-    Logger.debug(fn -> "Skipping already processed txn #{txn.xid}" end)
-
-    {:cont, consider_flushed(state, txn)}
-  end
-
   defp do_handle_txn(%Transaction{xid: xid, changes: changes} = txn, state) do
-    %{
-      shape: shape,
-      shape_handle: shape_handle,
-      writer: writer
-    } = state
+    %{shape: shape, shape_handle: shape_handle, writer: writer} = state
 
     state = State.remove_completed_move_ins(state, txn)
-
-    Logger.debug(fn -> "Txn received in Shapes.Consumer: #{inspect(txn)}" end)
 
     extra_refs_full =
       Materializer.get_all_as_refs(shape, state.stack_id)
@@ -554,16 +557,14 @@ defmodule Electric.Shapes.Consumer do
           "Truncate operation encountered while processing txn #{txn.xid} for #{shape_handle}"
         )
 
-        state = mark_for_removal(state)
-
-        {:halt, state}
+        mark_for_removal(state)
 
       {_, state, 0, _} ->
         Logger.debug(fn ->
           "No relevant changes found for #{inspect(shape)} in txn #{txn.xid}"
         end)
 
-        {:cont, consider_flushed(state, txn)}
+        consider_flushed(state, txn.last_log_offset)
 
       {changes, state, num_changes, last_log_offset} ->
         timestamp = System.monotonic_time()
@@ -593,14 +594,13 @@ defmodule Electric.Shapes.Consumer do
           Map.new(State.telemetry_attrs(state))
         )
 
-        {:cont,
-         %{
-           state
-           | writer: writer,
-             latest_offset: last_log_offset,
-             txn_offset_mapping:
-               state.txn_offset_mapping ++ [{last_log_offset, txn.last_log_offset}]
-         }}
+        %{
+          state
+          | writer: writer,
+            latest_offset: last_log_offset,
+            txn_offset_mapping:
+              state.txn_offset_mapping ++ [{last_log_offset, txn.last_log_offset}]
+        }
     end
   end
 
@@ -694,14 +694,15 @@ defmodule Electric.Shapes.Consumer do
     Kernel.max(0, DateTime.diff(now, commit_timestamp, :millisecond))
   end
 
-  defp consider_flushed(%State{} = state, %Transaction{last_log_offset: new_boundary}) do
+  defp consider_flushed(%State{} = state, log_offset) do
     if state.txn_offset_mapping == [] do
       # No relevant txns have been observed and unflushed, we can notify immediately
-      ShapeLogCollector.notify_flushed(state.stack_id, state.shape_handle, new_boundary)
+      ShapeLogCollector.notify_flushed(state.stack_id, state.shape_handle, log_offset)
       state
     else
       # We're looking to "relabel" the next flush to include this txn, so we're looking for the
       # boundary that has a highest boundary less than this offset
+      new_boundary = log_offset
 
       {head, tail} =
         Enum.split_while(

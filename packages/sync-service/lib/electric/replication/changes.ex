@@ -81,8 +81,9 @@ defmodule Electric.Replication.Changes do
               affected_relations: MapSet.new(),
               change_count: 0
 
-    def complete_transaction?(%__MODULE__{has_begin?: true, commit: %Changes.Commit{}}), do: true
-    def complete_transaction?(%__MODULE__{}), do: false
+    defguard complete_transaction?(txn_fragment)
+             when is_struct(txn_fragment, __MODULE__) and txn_fragment.has_begin? and
+                    is_struct(txn_fragment.commit, Changes.Commit)
   end
 
   defmodule Transaction do
