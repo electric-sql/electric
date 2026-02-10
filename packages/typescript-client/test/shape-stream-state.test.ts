@@ -645,6 +645,8 @@ describe(`shape stream state machine`, () => {
     expect(transition.state).toBeInstanceOf(LiveState)
     expect(transition.state.isUpToDate).toBe(true)
     expect(transition.state.lastSyncedAt).toBeDefined()
+    // 204 gives no indication SSE will work — skip SSE detection cycle
+    expect(transition.state.sseFallbackToLongPolling).toBe(true)
   })
 
   it(`repeated 204 responses should transition to LiveState after first 204`, () => {

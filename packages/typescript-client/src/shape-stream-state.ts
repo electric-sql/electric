@@ -380,6 +380,19 @@ abstract class FetchingState extends ActiveState {
     if (staleResult) return staleResult
 
     const shared = this.parseResponseFields(input)
+
+    // NOTE: 204s are deprecated, the Electric server should not send these
+    // in latest versions but this is here for backwards compatibility.
+    // A 204 means "no content, you're caught up" — transition to live.
+    // Skip SSE detection: a 204 gives no indication SSE will work, and
+    // the 3-attempt fallback cycle adds unnecessary latency.
+    if (input.status === 204) {
+      return {
+        action: `accepted`,
+        state: new LiveState(shared, { sseFallbackToLongPolling: true }),
+      }
+    }
+
     return { action: `accepted`, state: new SyncingState(shared) }
   }
 
