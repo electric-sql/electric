@@ -76,7 +76,6 @@ import { SnapshotTracker } from './snapshot-tracker'
 import {
   createInitialState,
   ErrorState,
-  PausedState,
   ShapeStreamState,
 } from './shape-stream-state'
 import { PauseLock } from './pause-lock'
@@ -583,6 +582,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
   #requestAbortController?: AbortController
   #refreshCount = 0
   #snapshotCounter = 0
+  #resumingFromPause = false
 
   get #isRefreshing(): boolean {
     return this.#refreshCount > 0
@@ -621,13 +621,8 @@ export class ShapeStream<T extends Row<unknown> = Row>
       },
       onReleased: () => {
         if (!this.#started) return
-        // Don't resume if the user's signal is already aborted
-        // This can happen if the signal was aborted while we were paused
-        // (e.g., TanStack DB collection was GC'd)
         if (this.options.signal?.aborted) return
-        // Don't transition syncState here — let #requestShape handle
-        // the PausedState→previous transition so it can detect
-        // resumingFromPause and avoid live long-polling.
+        this.#resumingFromPause = true
         this.#start().catch(() => {
           // Errors from #start are handled internally via onError.
           // This catch prevents unhandled promise rejection in Node/Bun.
@@ -775,10 +770,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
   }
 
   async #requestShape(): Promise<void> {
-    if (this.#pauseLock.isPaused) {
-      this.#syncState = this.#syncState.pause()
-      return
-    }
+    if (this.#pauseLock.isPaused) return
 
     if (
       !this.options.subscribe &&
@@ -787,10 +779,8 @@ export class ShapeStream<T extends Row<unknown> = Row>
       return
     }
 
-    const resumingFromPause = this.#syncState instanceof PausedState
-    if (resumingFromPause) {
-      this.#syncState = (this.#syncState as PausedState).resume()
-    }
+    const resumingFromPause = this.#resumingFromPause
+    this.#resumingFromPause = false
 
     const { url, signal } = this.options
     const { fetchUrl, requestHeaders } = await this.#constructUrl(
@@ -802,10 +792,8 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
     // Re-check after async setup — the lock may have been acquired
     // during URL construction or abort controller creation (e.g., by
-    // requestSnapshot calling pauseLock.acquire before the controller
-    // existed, making its abort a no-op).
+    // requestSnapshot), when the abort controller didn't exist yet.
     if (this.#pauseLock.isPaused) {
-      this.#syncState = this.#syncState.pause()
       if (abortListener && signal) {
         signal.removeEventListener(`abort`, abortListener)
       }
@@ -835,16 +823,6 @@ export class ShapeStream<T extends Row<unknown> = Row>
       }
 
       if (e instanceof FetchBackoffAbortError) {
-        // The fetch was aborted. If the PauseLock is held (e.g., due to
-        // a visibility change or snapshot request during the async fetch),
-        // transition the sync state machine to PausedState.
-        if (
-          requestAbortController.signal.aborted &&
-          requestAbortController.signal.reason === PAUSE_STREAM &&
-          this.#pauseLock.isPaused
-        ) {
-          this.#syncState = this.#syncState.pause()
-        }
         return // interrupted
       }
 
@@ -1395,7 +1373,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
   }
 
   isPaused(): boolean {
-    return this.#syncState instanceof PausedState
+    return this.#pauseLock.isPaused
   }
 
   /** Await the next tick of the request loop */
