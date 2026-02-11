@@ -606,7 +606,7 @@ defmodule Electric.Client do
   def poll(%Client{} = client, %ShapeDefinition{} = shape, %ShapeState{} = state, opts) do
     client
     |> for_shape(shape)
-    |> do_poll(state, opts)
+    |> Poll.request(state, opts)
   end
 
   def poll(%Client{} = client, table_name, %ShapeState{} = state, opts)
@@ -620,10 +620,6 @@ defmodule Electric.Client do
       shape_definition = shape!(queryable)
       poll(client, shape_definition, state, opts)
     end
-  end
-
-  defp do_poll(%Client{} = client, %ShapeState{} = state, opts) do
-    Poll.request(client, state, opts)
   end
 
   @doc false
