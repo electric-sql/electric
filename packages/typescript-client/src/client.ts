@@ -628,7 +628,6 @@ export class ShapeStream<T extends Row<unknown> = Row>
           // This catch prevents unhandled promise rejection in Node/Bun.
         })
       },
-      warnHeldAfterMs: 30_000,
     })
 
     // Build transformer chain: columnMapper.decode -> transformer
@@ -1604,6 +1603,17 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
     this.#pauseLock.acquire(snapshotReason)
 
+    // Warn if the snapshot holds the pause lock for too long — this likely
+    // indicates a hung fetch or leaked lock. Visibility pauses are
+    // intentionally long-lived so the warning lives here, not in PauseLock.
+    const snapshotWarnTimer = setTimeout(() => {
+      console.warn(
+        `[Electric] Snapshot "${snapshotReason}" has held the pause lock for 30s — ` +
+          `possible hung request or leaked lock. ` +
+          `Current holders: ${[...new Set([snapshotReason])].join(`, `)}`
+      )
+    }, 30_000)
+
     try {
       const { metadata, data } = await this.fetchSnapshot(opts)
 
@@ -1623,6 +1633,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
         data,
       }
     } finally {
+      clearTimeout(snapshotWarnTimer)
       this.#pauseLock.release(snapshotReason)
     }
   }

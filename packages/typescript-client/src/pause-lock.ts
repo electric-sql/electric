@@ -33,17 +33,10 @@ export class PauseLock {
   #holders = new Set<string>()
   #onAcquired: () => void
   #onReleased: () => void
-  #warnHeldAfterMs?: number
-  #warnTimeoutId?: ReturnType<typeof setTimeout>
 
-  constructor(callbacks: {
-    onAcquired: () => void
-    onReleased: () => void
-    warnHeldAfterMs?: number
-  }) {
+  constructor(callbacks: { onAcquired: () => void; onReleased: () => void }) {
     this.#onAcquired = callbacks.onAcquired
     this.#onReleased = callbacks.onReleased
-    this.#warnHeldAfterMs = callbacks.warnHeldAfterMs
   }
 
   /**
@@ -65,7 +58,6 @@ export class PauseLock {
     this.#holders.add(reason)
     if (wasUnlocked) {
       this.#onAcquired()
-      this.#startHeldWarningTimer()
     }
   }
 
@@ -84,7 +76,6 @@ export class PauseLock {
       return
     }
     if (this.#holders.size === 0) {
-      this.#clearHeldWarningTimer()
       this.#onReleased()
     }
   }
@@ -116,26 +107,6 @@ export class PauseLock {
       if (reason.startsWith(prefix)) {
         this.#holders.delete(reason)
       }
-    }
-    if (this.#holders.size === 0) {
-      this.#clearHeldWarningTimer()
-    }
-  }
-
-  #startHeldWarningTimer(): void {
-    if (this.#warnHeldAfterMs === undefined) return
-    this.#warnTimeoutId = setTimeout(() => {
-      console.warn(
-        `[Electric] PauseLock held for ${this.#warnHeldAfterMs}ms — possible deadlock or leaked lock. ` +
-          `Holders: ${[...this.#holders].join(`, `)}`
-      )
-    }, this.#warnHeldAfterMs)
-  }
-
-  #clearHeldWarningTimer(): void {
-    if (this.#warnTimeoutId !== undefined) {
-      clearTimeout(this.#warnTimeoutId)
-      this.#warnTimeoutId = undefined
     }
   }
 }
