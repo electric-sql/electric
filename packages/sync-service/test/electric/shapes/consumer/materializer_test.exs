@@ -9,6 +9,7 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
   alias Electric.Replication.Changes
   alias Electric.ShapeCache.Storage
   alias Electric.Shapes.ConsumerRegistry
+  alias Electric.Replication.LogOffset
   alias Electric.Shapes.Consumer.Materializer
 
   @moduletag :tmp_dir
@@ -65,7 +66,7 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
 
     respond_to_call(
       :subscribe_materializer,
-      {:ok, Electric.Replication.LogOffset.last_before_real_offsets()}
+      {:ok, LogOffset.last_before_real_offsets()}
     )
 
     assert Materializer.wait_until_ready(ctx) == :ok
@@ -86,7 +87,7 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
 
     respond_to_call(
       :subscribe_materializer,
-      {:ok, Electric.Replication.LogOffset.last_before_real_offsets()}
+      {:ok, LogOffset.last_before_real_offsets()}
     )
 
     assert Materializer.wait_until_ready(ctx) == :ok
@@ -774,7 +775,7 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
 
     respond_to_call(
       :subscribe_materializer,
-      {:ok, Electric.Replication.LogOffset.last_before_real_offsets()}
+      {:ok, LogOffset.last_before_real_offsets()}
     )
 
     assert Materializer.wait_until_ready(ctx) == :ok
@@ -798,7 +799,7 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
 
     changes
     |> Enum.map(&Map.put(&1, :relation, relation))
-    |> Enum.map(&Map.put(&1, :log_offset, Electric.Replication.LogOffset.first()))
+    |> Enum.map(&Map.put(&1, :log_offset, LogOffset.first()))
     |> Enum.map(&Changes.fill_key(&1, pk_cols))
   end
 
@@ -818,8 +819,6 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
       writer = Storage.init_writer!(storage, @shape)
       Storage.mark_snapshot_as_started(storage)
 
-      # Write a record to storage at LogOffset.first()
-      alias Electric.Replication.LogOffset
       first_offset = LogOffset.first()
 
       writer =
