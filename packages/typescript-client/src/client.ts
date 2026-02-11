@@ -76,6 +76,7 @@ import { SnapshotTracker } from './snapshot-tracker'
 import {
   createInitialState,
   ErrorState,
+  PausedState,
   ShapeStreamState,
 } from './shape-stream-state'
 import { PauseLock } from './pause-lock'
@@ -574,7 +575,6 @@ export class ShapeStream<T extends Row<unknown> = Row>
   >()
 
   #started = false
-  #isMidStream = true
   #syncState: ShapeStreamState
   #connected: boolean = false
   #mode: LogMode
@@ -582,7 +582,6 @@ export class ShapeStream<T extends Row<unknown> = Row>
   #requestAbortController?: AbortController
   #refreshCount = 0
   #snapshotCounter = 0
-  #resumingFromPause = false
 
   get #isRefreshing(): boolean {
     return this.#refreshCount > 0
@@ -593,8 +592,6 @@ export class ShapeStream<T extends Row<unknown> = Row>
   #messageChain = Promise.resolve<void[]>([]) // promise chain for incoming messages
   #snapshotTracker = new SnapshotTracker()
   #pauseLock: PauseLock
-  #midStreamPromise?: Promise<void>
-  #midStreamPromiseResolver?: () => void
   #currentFetchUrl?: URL // Current fetch URL for computing shape key
   #lastSseConnectionStartTime?: number
   #minSseConnectionDuration = 1000 // Minimum expected SSE connection duration (1 second)
@@ -615,6 +612,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
     this.#pauseLock = new PauseLock({
       onAcquired: () => {
+        this.#syncState = this.#syncState.pause()
         if (this.#started) {
           this.#requestAbortController?.abort(PAUSE_STREAM)
         }
@@ -622,7 +620,9 @@ export class ShapeStream<T extends Row<unknown> = Row>
       onReleased: () => {
         if (!this.#started) return
         if (this.options.signal?.aborted) return
-        this.#resumingFromPause = true
+        // Don't transition syncState here — let #requestShape handle
+        // the PausedState→previous transition so it can detect
+        // resumingFromPause and avoid live long-polling.
         this.#start().catch(() => {
           // Errors from #start are handled internally via onError.
           // This catch prevents unhandled promise rejection in Node/Bun.
@@ -717,12 +717,16 @@ export class ShapeStream<T extends Row<unknown> = Row>
         this.#syncState = this.#syncState.toErrorState(err)
       }
 
+      // Check if onError handler wants to retry
       if (this.#onError) {
         const retryOpts = await this.#onError(err as Error)
         // Guard against null (typeof null === "object" in JavaScript)
         const isRetryable = !(err instanceof MissingHeadersError)
         if (retryOpts && typeof retryOpts === `object` && isRetryable) {
+          // Update params/headers but don't reset offset
+          // We want to continue from where we left off, not refetch everything
           if (retryOpts.params) {
+            // Merge new params with existing params to preserve other parameters
             this.options.params = {
               ...(this.options.params ?? {}),
               ...retryOpts.params,
@@ -730,22 +734,26 @@ export class ShapeStream<T extends Row<unknown> = Row>
           }
 
           if (retryOpts.headers) {
+            // Merge new headers with existing headers to preserve other headers
             this.options.headers = {
               ...(this.options.headers ?? {}),
               ...retryOpts.headers,
             }
           }
 
+          // Clear the error since we're retrying
           this.#error = null
           if (this.#syncState instanceof ErrorState) {
             this.#syncState = this.#syncState.retry()
           }
 
+          // Restart from current offset
           this.#started = false
           await this.#start()
           return
         }
-        // onError returned void -- unrecoverable
+        // onError returned void, meaning it doesn't want to retry
+        // This is an unrecoverable error, notify subscribers
         if (err instanceof Error) {
           this.#sendErrorToSubscribers(err)
         }
@@ -753,7 +761,8 @@ export class ShapeStream<T extends Row<unknown> = Row>
         return
       }
 
-      // No onError handler -- unrecoverable
+      // No onError handler provided, this is an unrecoverable error
+      // Notify subscribers and throw
       if (err instanceof Error) {
         this.#sendErrorToSubscribers(err)
       }
@@ -780,8 +789,11 @@ export class ShapeStream<T extends Row<unknown> = Row>
       return
     }
 
-    const resumingFromPause = this.#resumingFromPause
-    this.#resumingFromPause = false
+    let resumingFromPause = false
+    if (this.#syncState instanceof PausedState) {
+      resumingFromPause = true
+      this.#syncState = this.#syncState.resume()
+    }
 
     const { url, signal } = this.options
     const { fetchUrl, requestHeaders } = await this.#constructUrl(
@@ -789,7 +801,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
       resumingFromPause
     )
     const abortListener = await this.#createAbortListener(signal)
-    const requestAbortController = this.#requestAbortController!
+    const requestAbortController = this.#requestAbortController! // we know that it is not undefined because it is set by `this.#createAbortListener`
 
     // Re-check after async setup — the lock may have been acquired
     // during URL construction or abort controller creation (e.g., by
@@ -828,6 +840,10 @@ export class ShapeStream<T extends Row<unknown> = Row>
       }
 
       if (e instanceof StaleCacheError) {
+        // Received a stale cached response from CDN with an expired handle.
+        // The #staleCacheBuster has been set in #onInitialResponse, so retry
+        // the request which will include a random cache buster to bypass the
+        // misconfigured CDN cache.
         return this.#requestShape()
       }
 
@@ -1001,6 +1017,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
       }
     }
 
+    // Add state-specific parameters (offset, handle, live cache busters, etc.)
     this.#syncState.applyUrlParams(fetchUrl, {
       isSnapshotRequest: subsetParams !== undefined,
       // Don't long-poll when resuming from pause or refreshing — avoids
@@ -1078,6 +1095,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
     this.#syncState = transition.state
 
     if (transition.action === `stale-retry`) {
+      // Cancel the response body to release the connection before retrying.
       await response.body?.cancel()
       if (transition.exceededMaxRetries) {
         throw new FetchError(
@@ -1133,8 +1151,6 @@ export class ShapeStream<T extends Row<unknown> = Row>
       ? getOffset(lastMessage)
       : undefined
 
-    this.#isMidStream = true
-
     const transition = this.#syncState.handleMessageBatch({
       hasMessages: true,
       hasUpToDateMessage,
@@ -1146,9 +1162,6 @@ export class ShapeStream<T extends Row<unknown> = Row>
     this.#syncState = transition.state
 
     if (hasUpToDateMessage) {
-      this.#isMidStream = false
-      this.#midStreamPromiseResolver?.()
-
       if (transition.suppressBatch) {
         return
       }
@@ -1162,11 +1175,12 @@ export class ShapeStream<T extends Row<unknown> = Row>
       }
     }
 
+    // Filter messages using snapshot tracker
     const messagesToProcess = batch.filter((message) => {
       if (isChangeMessage(message)) {
         return !this.#snapshotTracker.shouldRejectMessage(message)
       }
-      return true
+      return true // Always process control messages
     })
 
     await this.#publish(messagesToProcess)
@@ -1185,12 +1199,17 @@ export class ShapeStream<T extends Row<unknown> = Row>
     headers: Record<string, string>
     resumingFromPause?: boolean
   }): Promise<void> {
+    // Store current fetch URL for shape key computation
     this.#currentFetchUrl = opts.fetchUrl
 
+    // Check if we should enter replay mode (replaying cached responses)
+    // This happens when we're starting fresh (offset=-1 or before first up-to-date)
+    // and there's a recent up-to-date in localStorage (< 60s)
     if (!this.#syncState.isUpToDate && this.#syncState.canEnterReplayMode()) {
       const shapeKey = canonicalShapeKey(opts.fetchUrl)
       const lastSeenCursor = upToDateTracker.shouldEnterReplayMode(shapeKey)
       if (lastSeenCursor) {
+        // Enter replay mode and store the last seen cursor
         this.#syncState = this.#syncState.enterReplayMode(lastSeenCursor)
       }
     }
@@ -1226,7 +1245,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
     const shouldProcessBody = await this.#onInitialResponse(response)
     if (!shouldProcessBody) return
 
-    const schema = this.#syncState.schema!
+    const schema = this.#syncState.schema! // we know that it is not undefined because it is set by `this.#onInitialResponse`
     const res = await response.text()
     const messages = res || `[]`
     const batch = this.#messageParser.parse<Array<Message<T>>>(messages, schema)
@@ -1242,8 +1261,10 @@ export class ShapeStream<T extends Row<unknown> = Row>
     const { fetchUrl, requestAbortController, headers } = opts
     const fetch = this.#sseFetchClient
 
+    // Track when the SSE connection starts
     this.#lastSseConnectionStartTime = Date.now()
 
+    // Add Accept header for SSE requests
     const sseHeaders = {
       ...headers,
       Accept: `text/event-stream`,
@@ -1265,7 +1286,8 @@ export class ShapeStream<T extends Row<unknown> = Row>
         },
         onmessage: (event: EventSourceMessage) => {
           if (event.data) {
-            const schema = this.#syncState.schema!
+            // event.data is a single JSON object
+            const schema = this.#syncState.schema! // we know that it is not undefined because it is set in onopen when we call this.#onInitialResponse
             const message = this.#messageParser.parse<Message<T>>(
               event.data,
               schema
@@ -1273,12 +1295,15 @@ export class ShapeStream<T extends Row<unknown> = Row>
             buffer.push(message)
 
             if (isUpToDateMessage(message)) {
+              // Flush the buffer on up-to-date message.
+              // Ensures that we only process complete batches of operations.
               this.#onMessages(buffer, true)
               buffer = []
             }
           }
         },
         onerror: (error: Error) => {
+          // rethrow to close the SSE connection
           throw error
         },
         signal: requestAbortController.signal,
@@ -1296,6 +1321,9 @@ export class ShapeStream<T extends Row<unknown> = Row>
       }
       throw error
     } finally {
+      // Check if the SSE connection closed too quickly
+      // This can happen when responses are cached or when the proxy/server
+      // is misconfigured for SSE and closes the connection immediately
       const connectionDuration = Date.now() - this.#lastSseConnectionStartTime!
       const wasAborted = requestAbortController.signal.aborted
 
@@ -1397,29 +1425,6 @@ export class ShapeStream<T extends Row<unknown> = Row>
       this.#tickPromiseRejecter = undefined
     })
     return this.#tickPromise
-  }
-
-  /** Await until we're not in the middle of a stream (i.e., until we see an up-to-date message) */
-  async #waitForStreamEnd() {
-    if (this.#pauseLock.isPaused) {
-      throw new Error(
-        `Cannot wait for stream end while PauseLock is held — this would deadlock because the stream is paused`
-      )
-    }
-    if (!this.#isMidStream) {
-      return
-    }
-    if (this.#midStreamPromise) {
-      return this.#midStreamPromise
-    }
-    this.#midStreamPromise = new Promise((resolve) => {
-      this.#midStreamPromiseResolver = resolve
-    })
-    this.#midStreamPromise.finally(() => {
-      this.#midStreamPromise = undefined
-      this.#midStreamPromiseResolver = undefined
-    })
-    return this.#midStreamPromise
   }
 
   /**
@@ -1557,8 +1562,10 @@ export class ShapeStream<T extends Row<unknown> = Row>
    */
   #reset(handle?: string) {
     this.#syncState = this.#syncState.markMustRefetch(handle)
-    this.#isMidStream = true
     this.#connected = false
+    // releaseAllMatching intentionally doesn't fire onReleased — it's called
+    // from within the running stream loop (#requestShape's 409 handler), so
+    // the stream is already active and doesn't need a resume signal.
     this.#pauseLock.releaseAllMatching(`snapshot`)
   }
 
