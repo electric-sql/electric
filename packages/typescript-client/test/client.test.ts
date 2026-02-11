@@ -1610,6 +1610,32 @@ describe.for(fetchAndSse)(
       unsubscribe()
     })
 
+    it(`requestSnapshot completes without waiting for initial sync`, async ({
+      issuesTableUrl,
+      insertIssues,
+      aborter,
+    }) => {
+      await insertIssues({ title: `alpha` }, { title: `beta` })
+
+      const shapeStream = new ShapeStream({
+        url: `${BASE_URL}/v1/shape`,
+        params: { table: issuesTableUrl },
+        log: `changes_only`,
+        liveSse,
+        signal: aborter.signal,
+      })
+
+      // Call requestSnapshot immediately — do NOT wait for initial sync.
+      // This must complete quickly; a deadlock or stream-dependent await
+      // would cause this 5s timeout to fire.
+      const { data } = await shapeStream.requestSnapshot({
+        orderBy: `title ASC`,
+        limit: 100,
+      })
+      const titles = data.map((m) => m.value.title)
+      expect(titles).toEqual([`alpha`, `beta`])
+    }, 5_000)
+
     it(`requestSnapshot should populate stream and match returned data`, async ({
       issuesTableUrl,
       insertIssues,

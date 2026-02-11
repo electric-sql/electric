@@ -79,6 +79,7 @@ import {
   PausedState,
   ShapeStreamState,
 } from './shape-stream-state'
+import { PauseLock } from './pause-lock'
 
 const RESERVED_PARAMS: Set<ReservedParamKeys> = new Set([
   LIVE_CACHE_BUSTER_QUERY_PARAM,
@@ -574,22 +575,23 @@ export class ShapeStream<T extends Row<unknown> = Row>
   >()
 
   #started = false
-  #pauseRequested = false
-  #isMidStream = true
   #syncState: ShapeStreamState
   #connected: boolean = false
   #mode: LogMode
   #onError?: ShapeStreamErrorHandler
   #requestAbortController?: AbortController
-  #isRefreshing = false
+  #refreshCount = 0
+  #snapshotCounter = 0
+
+  get #isRefreshing(): boolean {
+    return this.#refreshCount > 0
+  }
   #tickPromise?: Promise<void>
   #tickPromiseResolver?: () => void
   #tickPromiseRejecter?: (reason?: unknown) => void
   #messageChain = Promise.resolve<void[]>([]) // promise chain for incoming messages
   #snapshotTracker = new SnapshotTracker()
-  #activeSnapshotRequests = 0 // counter for concurrent snapshot requests
-  #midStreamPromise?: Promise<void>
-  #midStreamPromiseResolver?: () => void
+  #pauseLock: PauseLock
   #currentFetchUrl?: URL // Current fetch URL for computing shape key
   #lastSseConnectionStartTime?: number
   #minSseConnectionDuration = 1000 // Minimum expected SSE connection duration (1 second)
@@ -606,6 +608,26 @@ export class ShapeStream<T extends Row<unknown> = Row>
     this.#syncState = createInitialState({
       offset: this.options.offset ?? `-1`,
       handle: this.options.handle,
+    })
+
+    this.#pauseLock = new PauseLock({
+      onAcquired: () => {
+        this.#syncState = this.#syncState.pause()
+        if (this.#started) {
+          this.#requestAbortController?.abort(PAUSE_STREAM)
+        }
+      },
+      onReleased: () => {
+        if (!this.#started) return
+        if (this.options.signal?.aborted) return
+        // Don't transition syncState here — let #requestShape handle
+        // the PausedState→previous transition so it can detect
+        // resumingFromPause and avoid live long-polling.
+        this.#start().catch(() => {
+          // Errors from #start are handled internally via onError.
+          // This catch prevents unhandled promise rejection in Node/Bun.
+        })
+      },
     })
 
     // Build transformer chain: columnMapper.decode -> transformer
@@ -734,9 +756,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
         if (err instanceof Error) {
           this.#sendErrorToSubscribers(err)
         }
-        this.#connected = false
-        this.#tickPromiseRejecter?.()
-        this.#unsubscribeFromWakeDetection?.()
+        this.#teardown()
         return
       }
 
@@ -745,24 +765,21 @@ export class ShapeStream<T extends Row<unknown> = Row>
       if (err instanceof Error) {
         this.#sendErrorToSubscribers(err)
       }
-      this.#connected = false
-      this.#tickPromiseRejecter?.()
-      this.#unsubscribeFromWakeDetection?.()
+      this.#teardown()
       throw err
     }
 
-    // Normal completion, clean up
+    this.#teardown()
+  }
+
+  #teardown() {
     this.#connected = false
     this.#tickPromiseRejecter?.()
     this.#unsubscribeFromWakeDetection?.()
   }
 
   async #requestShape(): Promise<void> {
-    if (this.#pauseRequested) {
-      this.#syncState = this.#syncState.pause()
-      this.#pauseRequested = false
-      return
-    }
+    if (this.#pauseLock.isPaused) return
 
     if (
       !this.options.subscribe &&
@@ -784,6 +801,17 @@ export class ShapeStream<T extends Row<unknown> = Row>
     )
     const abortListener = await this.#createAbortListener(signal)
     const requestAbortController = this.#requestAbortController! // we know that it is not undefined because it is set by `this.#createAbortListener`
+
+    // Re-check after async setup — the lock may have been acquired
+    // during URL construction or abort controller creation (e.g., by
+    // requestSnapshot), when the abort controller didn't exist yet.
+    if (this.#pauseLock.isPaused) {
+      if (abortListener && signal) {
+        signal.removeEventListener(`abort`, abortListener)
+      }
+      this.#requestAbortController = undefined
+      return
+    }
 
     try {
       await this.#fetchShape({
@@ -807,17 +835,6 @@ export class ShapeStream<T extends Row<unknown> = Row>
       }
 
       if (e instanceof FetchBackoffAbortError) {
-        // Check current state - it may have changed due to concurrent pause/resume calls
-        // from the visibility change handler during the async fetch operation.
-        // TypeScript's flow analysis doesn't account for concurrent state changes.
-        if (
-          requestAbortController.signal.aborted &&
-          requestAbortController.signal.reason === PAUSE_STREAM &&
-          this.#pauseRequested
-        ) {
-          this.#syncState = this.#syncState.pause()
-          this.#pauseRequested = false
-        }
         return // interrupted
       }
 
@@ -1125,59 +1142,52 @@ export class ShapeStream<T extends Row<unknown> = Row>
   }
 
   async #onMessages(batch: Array<Message<T>>, isSseMessage = false) {
-    if (batch.length > 0) {
-      const lastMessage = batch[batch.length - 1]
-      const hasUpToDateMessage = isUpToDateMessage(lastMessage)
-      const upToDateOffset = hasUpToDateMessage
-        ? getOffset(lastMessage)
-        : undefined
+    if (batch.length === 0) return
 
-      // Track mid-stream directly — not part of sync state
-      this.#isMidStream = true
+    const lastMessage = batch[batch.length - 1]
+    const hasUpToDateMessage = isUpToDateMessage(lastMessage)
+    const upToDateOffset = hasUpToDateMessage
+      ? getOffset(lastMessage)
+      : undefined
 
-      const transition = this.#syncState.handleMessageBatch({
-        hasMessages: true,
-        hasUpToDateMessage,
-        isSse: isSseMessage,
-        upToDateOffset,
-        now: Date.now(),
-        currentCursor: this.#syncState.liveCacheBuster,
-      })
-      this.#syncState = transition.state
+    const transition = this.#syncState.handleMessageBatch({
+      hasMessages: true,
+      hasUpToDateMessage,
+      isSse: isSseMessage,
+      upToDateOffset,
+      now: Date.now(),
+      currentCursor: this.#syncState.liveCacheBuster,
+    })
+    this.#syncState = transition.state
 
-      if (hasUpToDateMessage) {
-        this.#isMidStream = false
-        // Resolve the promise waiting for mid-stream to end
-        this.#midStreamPromiseResolver?.()
-
-        if (transition.suppressBatch) {
-          return
-        }
-
-        if (this.#currentFetchUrl) {
-          const shapeKey = canonicalShapeKey(this.#currentFetchUrl)
-          upToDateTracker.recordUpToDate(
-            shapeKey,
-            this.#syncState.liveCacheBuster
-          )
-        }
+    if (hasUpToDateMessage) {
+      if (transition.suppressBatch) {
+        return
       }
 
-      // Filter messages using snapshot tracker
-      const messagesToProcess = batch.filter((message) => {
-        if (isChangeMessage(message)) {
-          return !this.#snapshotTracker.shouldRejectMessage(message)
-        }
-        return true // Always process control messages
-      })
-
-      await this.#publish(messagesToProcess)
+      if (this.#currentFetchUrl) {
+        const shapeKey = canonicalShapeKey(this.#currentFetchUrl)
+        upToDateTracker.recordUpToDate(
+          shapeKey,
+          this.#syncState.liveCacheBuster
+        )
+      }
     }
+
+    // Filter messages using snapshot tracker
+    const messagesToProcess = batch.filter((message) => {
+      if (isChangeMessage(message)) {
+        return !this.#snapshotTracker.shouldRejectMessage(message)
+      }
+      return true // Always process control messages
+    })
+
+    await this.#publish(messagesToProcess)
   }
 
   /**
    * Fetches the shape from the server using either long polling or SSE.
-   * Upon receiving a successfull response, the #onInitialResponse method is called.
+   * Upon receiving a successful response, the #onInitialResponse method is called.
    * Afterwards, the #onMessages method is called for all the incoming updates.
    * @param opts - The options for the request.
    * @returns A promise that resolves when the request is complete (i.e. the long poll receives a response or the SSE connection is closed).
@@ -1303,13 +1313,9 @@ export class ShapeStream<T extends Row<unknown> = Row>
         return
       }
       if (requestAbortController.signal.aborted) {
-        // During an SSE request, the fetch might have succeeded
-        // and we are parsing the incoming stream.
-        // If the abort happens while we're parsing the stream,
-        // then it won't be caught by our `createFetchWithBackoff` wrapper
-        // and instead we will get a raw AbortError here
-        // which we need to turn into a `FetchBackoffAbortError`
-        // such that #start handles it correctly.`
+        // An abort during SSE stream parsing produces a raw AbortError
+        // instead of going through createFetchWithBackoff -- wrap it so
+        // #start handles it correctly.
         throw new FetchBackoffAbortError()
       }
       throw error
@@ -1337,8 +1343,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
             `Note: Do NOT disable caching entirely - Electric uses cache headers to enable request collapsing for efficiency.`
         )
       } else if (transition.wasShortConnection) {
-        // Add exponential backoff with full jitter to prevent tight infinite loop
-        // Formula: random(0, min(cap, base * 2^attempt))
+        // Exponential backoff with full jitter: random(0, min(cap, base * 2^attempt))
         const maxDelay = Math.min(
           this.#sseBackoffMaxDelay,
           this.#sseBackoffBaseDelay *
@@ -1347,35 +1352,6 @@ export class ShapeStream<T extends Row<unknown> = Row>
         const delayMs = Math.floor(Math.random() * maxDelay)
         await new Promise((resolve) => setTimeout(resolve, delayMs))
       }
-    }
-  }
-
-  #pause() {
-    if (
-      this.#started &&
-      !this.#pauseRequested &&
-      !(this.#syncState instanceof PausedState)
-    ) {
-      this.#pauseRequested = true
-      this.#requestAbortController?.abort(PAUSE_STREAM)
-    }
-  }
-
-  #resume() {
-    const isPaused = this.#syncState instanceof PausedState
-    if (this.#started && (isPaused || this.#pauseRequested)) {
-      // Don't resume if the user's signal is already aborted
-      // This can happen if the signal was aborted while we were paused
-      // (e.g., TanStack DB collection was GC'd)
-      if (this.options.signal?.aborted) {
-        return
-      }
-
-      this.#pauseRequested = false
-      // Don't transition syncState here — let #requestShape handle
-      // the PausedState→previous transition so it can detect
-      // resumingFromPause and avoid live long-polling.
-      this.#start()
     }
   }
 
@@ -1415,7 +1391,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
     return this.#connected
   }
 
-  /** True during initial fetch. False afterwise.  */
+  /** True during initial fetch. False afterwards.  */
   isLoading(): boolean {
     return !this.#syncState.isUpToDate
   }
@@ -1425,11 +1401,16 @@ export class ShapeStream<T extends Row<unknown> = Row>
   }
 
   isPaused(): boolean {
-    return this.#syncState instanceof PausedState
+    return this.#pauseLock.isPaused
   }
 
   /** Await the next tick of the request loop */
   async #nextTick() {
+    if (this.#pauseLock.isPaused) {
+      throw new Error(
+        `Cannot wait for next tick while PauseLock is held — this would deadlock because the request loop is paused`
+      )
+    }
     if (this.#tickPromise) {
       return this.#tickPromise
     }
@@ -1445,24 +1426,6 @@ export class ShapeStream<T extends Row<unknown> = Row>
     return this.#tickPromise
   }
 
-  /** Await until we're not in the middle of a stream (i.e., until we see an up-to-date message) */
-  async #waitForStreamEnd() {
-    if (!this.#isMidStream) {
-      return
-    }
-    if (this.#midStreamPromise) {
-      return this.#midStreamPromise
-    }
-    this.#midStreamPromise = new Promise((resolve) => {
-      this.#midStreamPromiseResolver = resolve
-    })
-    this.#midStreamPromise.finally(() => {
-      this.#midStreamPromise = undefined
-      this.#midStreamPromiseResolver = undefined
-    })
-    return this.#midStreamPromise
-  }
-
   /**
    * Refreshes the shape stream.
    * This preemptively aborts any ongoing long poll and reconnects without
@@ -1470,17 +1433,20 @@ export class ShapeStream<T extends Row<unknown> = Row>
    * latest LSN from Postgres at that point in time.
    */
   async forceDisconnectAndRefresh(): Promise<void> {
-    this.#isRefreshing = true
-    if (
-      this.#syncState.isUpToDate &&
-      !this.#requestAbortController?.signal.aborted
-    ) {
-      // If we are "up to date", any current request will be a "live" request
-      // and needs to be aborted
-      this.#requestAbortController?.abort(FORCE_DISCONNECT_AND_REFRESH)
+    this.#refreshCount++
+    try {
+      if (
+        this.#syncState.isUpToDate &&
+        !this.#requestAbortController?.signal.aborted
+      ) {
+        // If we are "up to date", any current request will be a "live" request
+        // and needs to be aborted
+        this.#requestAbortController?.abort(FORCE_DISCONNECT_AND_REFRESH)
+      }
+      await this.#nextTick()
+    } finally {
+      this.#refreshCount--
     }
-    await this.#nextTick()
-    this.#isRefreshing = false
   }
 
   async #publish(messages: Message<T>[]): Promise<void[]> {
@@ -1523,9 +1489,9 @@ export class ShapeStream<T extends Row<unknown> = Row>
     if (this.#hasBrowserVisibilityAPI()) {
       const visibilityHandler = () => {
         if (document.hidden) {
-          this.#pause()
+          this.#pauseLock.acquire(`visibility`)
         } else {
-          this.#resume()
+          this.#pauseLock.release(`visibility`)
         }
       }
 
@@ -1564,15 +1530,16 @@ export class ShapeStream<T extends Row<unknown> = Row>
       lastTickTime = now
 
       if (elapsed > INTERVAL_MS + WAKE_THRESHOLD_MS) {
-        if (
-          !this.#pauseRequested &&
-          !(this.#syncState instanceof PausedState) &&
-          this.#requestAbortController
-        ) {
-          this.#isRefreshing = true
+        if (!this.#pauseLock.isPaused && this.#requestAbortController) {
+          this.#refreshCount++
           this.#requestAbortController.abort(SYSTEM_WAKE)
+          // Wake handler is synchronous (setInterval callback) so we can't
+          // use try/finally + await like forceDisconnectAndRefresh. Instead,
+          // decrement via queueMicrotask — safe because the abort triggers
+          // #requestShape to re-run, which reads #isRefreshing synchronously
+          // before the microtask fires.
           queueMicrotask(() => {
-            this.#isRefreshing = false
+            this.#refreshCount--
           })
         }
       }
@@ -1594,9 +1561,11 @@ export class ShapeStream<T extends Row<unknown> = Row>
    */
   #reset(handle?: string) {
     this.#syncState = this.#syncState.markMustRefetch(handle)
-    this.#isMidStream = true
     this.#connected = false
-    this.#activeSnapshotRequests = 0
+    // releaseAllMatching intentionally doesn't fire onReleased — it's called
+    // from within the running stream loop (#requestShape's 409 handler), so
+    // the stream is already active and doesn't need a resume signal.
+    this.#pauseLock.releaseAllMatching(`snapshot`)
   }
 
   /**
@@ -1622,22 +1591,30 @@ export class ShapeStream<T extends Row<unknown> = Row>
         `Snapshot requests are not supported in ${this.#mode} mode, as the consumer is guaranteed to observe all data`
       )
     }
-    // We shouldn't be getting a snapshot on a shape that's not started
-    if (!this.#started) await this.#start()
+    // Start the stream if not started — fire-and-forget like subscribe() does.
+    // We must NOT await #start() because it runs the full request loop. The
+    // PauseLock acquire below will abort the in-flight request, and the
+    // re-check guard in #requestShape handles the race.
+    if (!this.#started) {
+      this.#start().catch(() => {})
+    }
 
-    // Wait until we're not mid-stream before pausing
-    // This ensures we don't pause in the middle of a transaction
-    await this.#waitForStreamEnd()
+    const snapshotReason = `snapshot-${++this.#snapshotCounter}`
 
-    // Pause the stream if this is the first snapshot request
-    this.#activeSnapshotRequests++
+    this.#pauseLock.acquire(snapshotReason)
+
+    // Warn if the snapshot holds the pause lock for too long — this likely
+    // indicates a hung fetch or leaked lock. Visibility pauses are
+    // intentionally long-lived so the warning lives here, not in PauseLock.
+    const snapshotWarnTimer = setTimeout(() => {
+      console.warn(
+        `[Electric] Snapshot "${snapshotReason}" has held the pause lock for 30s — ` +
+          `possible hung request or leaked lock. ` +
+          `Current holders: ${[...new Set([snapshotReason])].join(`, `)}`
+      )
+    }, 30_000)
 
     try {
-      if (this.#activeSnapshotRequests === 1) {
-        // Currently this cannot throw, but in case it can later it's in this try block to not have a stuck counter
-        this.#pause()
-      }
-
       const { metadata, data } = await this.fetchSnapshot(opts)
 
       const dataWithEndBoundary = (data as Array<Message<T>>).concat([
@@ -1656,11 +1633,8 @@ export class ShapeStream<T extends Row<unknown> = Row>
         data,
       }
     } finally {
-      // Resume the stream if this was the last snapshot request
-      this.#activeSnapshotRequests--
-      if (this.#activeSnapshotRequests === 0) {
-        this.#resume()
-      }
+      clearTimeout(snapshotWarnTimer)
+      this.#pauseLock.release(snapshotReason)
     }
   }
 
@@ -1712,7 +1686,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
       // Handle 409 "must-refetch" - shape handle changed/expired.
       // The fetch wrapper throws FetchError for non-OK responses, so we catch here.
       // Unlike #requestShape, we don't call #reset() here as that would
-      // clear #activeSnapshotRequests and break requestSnapshot's pause/resume logic.
+      // clear the pause lock and break requestSnapshot's pause/resume logic.
       if (e instanceof FetchError && e.status === 409) {
         if (usedHandle) {
           const shapeKey = canonicalShapeKey(fetchUrl)
