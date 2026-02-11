@@ -580,6 +580,80 @@ describe(`ExpiredShapesCache`, () => {
     expect(caughtError!.message).toContain(`3 retry attempts`)
   })
 
+  it(`client should retry with cache buster when local handle matches expired handle`, async () => {
+    // BUG: When the client's own persisted handle IS the expired handle,
+    // checkStaleResponse sees handle !== undefined → returns 'ignored'.
+    // But 'ignored' means "we have a valid handle, skip this stale response".
+    // The client's handle is NOT valid — it's the expired one!
+    // The client loops forever: fetch → ignored → retry → fetch → ignored...
+    // never using a cache buster to escape the stale CDN cache.
+    //
+    // Expected: The client should detect that localHandle === expiredHandle
+    // and use stale-retry (with cache buster) instead of ignored.
+
+    const expiredHandle = `expired-H1`
+    const freshHandle = `fresh-H2`
+    const expectedShapeUrl = `${shapeUrl}?table=test`
+    expiredShapesCache.markExpired(expectedShapeUrl, expiredHandle)
+
+    let fetchCount = 0
+    const capturedUrls: string[] = []
+
+    fetchMock.mockImplementation(
+      (input: RequestInfo | URL, _init?: RequestInit) => {
+        fetchCount++
+        const url = input.toString()
+        capturedUrls.push(url)
+
+        const hasCacheBuster = new URL(url).searchParams.has(
+          CACHE_BUSTER_QUERY_PARAM
+        )
+
+        // Once the client sends a cache buster, the CDN is bypassed
+        // and the backend returns a fresh handle
+        const handle = hasCacheBuster ? freshHandle : expiredHandle
+
+        // Abort after recovery to prevent infinite live polling loop
+        if (fetchCount >= 5) {
+          aborter.abort()
+        }
+
+        return Promise.resolve(
+          new Response(JSON.stringify([]), {
+            status: 200,
+            headers: {
+              'electric-handle': handle,
+              'electric-offset': `0_0`,
+              'electric-schema': `{}`,
+              'electric-cursor': `cursor-1`,
+              'electric-up-to-date': ``,
+            },
+          })
+        )
+      }
+    )
+
+    const stream = new ShapeStream({
+      url: shapeUrl,
+      params: { table: `test` },
+      handle: expiredHandle, // client's own handle IS the expired one
+      offset: `0_0`,
+      signal: aborter.signal,
+      fetchClient: fetchMock,
+      subscribe: false,
+    })
+
+    stream.subscribe(() => {})
+
+    await new Promise((resolve) => setTimeout(resolve, 200))
+
+    // The client should have used a cache buster to escape the stale CDN
+    const usedCacheBuster = capturedUrls.some((url) =>
+      new URL(url).searchParams.has(CACHE_BUSTER_QUERY_PARAM)
+    )
+    expect(usedCacheBuster).toBe(true)
+  })
+
   it(`client should gracefully handle stale ignored response with undefined schema`, async () => {
     // Scenario:
     // 1. Client resumes from persisted handle/offset (schema is undefined)
