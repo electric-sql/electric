@@ -1421,11 +1421,11 @@ defmodule Electric.ClientTest do
       final_stream = drain_stream(stream)
 
       # The tag index should be empty since no messages had tags
-      assert final_stream.tag_to_keys == %{},
-             "tag_to_keys should be empty when no tags present, got: #{inspect(final_stream.tag_to_keys)}"
+      assert final_stream.poll_state.tag_to_keys == %{},
+             "tag_to_keys should be empty when no tags present, got: #{inspect(final_stream.poll_state.tag_to_keys)}"
 
-      assert final_stream.key_data == %{},
-             "key_data should be empty when no tags present, got: #{inspect(final_stream.key_data)}"
+      assert final_stream.poll_state.key_data == %{},
+             "key_data should be empty when no tags present, got: #{inspect(final_stream.poll_state.key_data)}"
     end
 
     test "receives move-out and generates synthetic deletes", ctx do

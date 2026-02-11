@@ -140,7 +140,9 @@ defmodule Electric.Client do
   """
 
   alias Electric.Client.Fetch
+  alias Electric.Client.Poll
   alias Electric.Client.ShapeDefinition
+  alias Electric.Client.ShapeState
   alias Electric.Client.Message
 
   alias __MODULE__
@@ -544,6 +546,80 @@ defmodule Electric.Client do
     client
     |> for_shape(shape)
     |> stream(opts)
+  end
+
+  @type poll_option :: {:replica, replica()}
+  @type poll_options :: [poll_option()]
+
+  @doc """
+  Make a single long-polling request to fetch shape changes.
+
+  Unlike `stream/3` which returns an `Enumerable` that continuously fetches,
+  `poll/4` makes a single request and returns explicit results. This is useful
+  when you want:
+
+  - Explicit control over request timing (rate limiting, batching)
+  - Request-response semantics (not a continuous stream)
+  - Integration with existing event loops or supervision trees
+  - Simpler error handling without stream complexity
+
+  ## Arguments
+
+    * `client` - The Electric client
+    * `shape` - The shape definition (table name, `ShapeDefinition`, or Ecto query)
+    * `state` - The current polling state (use `ShapeState.new()` for initial request)
+    * `opts` - Options:
+      * `:replica` - `:default` or `:full` (default: `:default`)
+
+  ## Returns
+
+    * `{:ok, messages, new_state}` - Success, messages received. Use `new_state` for next poll.
+    * `{:must_refetch, messages, new_state}` - Shape was reset (409). Local state should be cleared.
+    * `{:error, error}` - Error occurred
+
+  ## Example
+
+      # Create initial state
+      state = Electric.Client.ShapeState.new()
+
+      # First poll gets initial snapshot (non-live request)
+      {:ok, messages, state} = Electric.Client.poll(client, "items", state, replica: :full)
+
+      # Process messages...
+      Enum.each(messages, &process_message/1)
+
+      # Subsequent polls are live (long-poll until changes)
+      {:ok, messages, state} = Electric.Client.poll(client, "items", state, replica: :full)
+
+  ## Behavior
+
+  - First request (when `state.up_to_date? == false`): Makes a non-live request to get initial snapshot
+  - Subsequent requests (when `state.up_to_date? == true`): Makes a live request that long-polls until changes
+  - Handles synthetic deletes from move-out events automatically
+  """
+  @spec poll(t(), shape(), ShapeState.t(), poll_options()) ::
+          {:ok, [message()], ShapeState.t()}
+          | {:must_refetch, [message()], ShapeState.t()}
+          | {:error, Error.t()}
+  def poll(client, shape, state, opts \\ [])
+
+  def poll(%Client{} = client, %ShapeDefinition{} = shape, %ShapeState{} = state, opts) do
+    client
+    |> for_shape(shape)
+    |> Poll.request(state, opts)
+  end
+
+  def poll(%Client{} = client, table_name, %ShapeState{} = state, opts)
+      when is_binary(table_name) do
+    poll(client, ShapeDefinition.new!(table_name), state, opts)
+  end
+
+  if Code.ensure_loaded?(Ecto) do
+    def poll(%Client{} = client, queryable, %ShapeState{} = state, opts)
+        when is_ecto_shape(queryable) do
+      shape_definition = shape!(queryable)
+      poll(client, shape_definition, state, opts)
+    end
   end
 
   @doc false
