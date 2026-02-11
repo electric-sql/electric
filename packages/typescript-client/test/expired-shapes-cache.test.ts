@@ -581,15 +581,9 @@ describe(`ExpiredShapesCache`, () => {
   })
 
   it(`client should retry with cache buster when local handle matches expired handle`, async () => {
-    // BUG: When the client's own persisted handle IS the expired handle,
-    // checkStaleResponse sees handle !== undefined → returns 'ignored'.
-    // But 'ignored' means "we have a valid handle, skip this stale response".
-    // The client's handle is NOT valid — it's the expired one!
-    // The client loops forever: fetch → ignored → retry → fetch → ignored...
-    // never using a cache buster to escape the stale CDN cache.
-    //
-    // Expected: The client should detect that localHandle === expiredHandle
-    // and use stale-retry (with cache buster) instead of ignored.
+    // When the client's own persisted handle IS the expired handle,
+    // the client should detect that localHandle === expiredHandle and
+    // use stale-retry (with cache buster) to bypass the stale CDN cache.
 
     const expiredHandle = `expired-H1`
     const freshHandle = `fresh-H2`
