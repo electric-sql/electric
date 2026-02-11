@@ -628,6 +628,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
           // This catch prevents unhandled promise rejection in Node/Bun.
         })
       },
+      warnHeldAfterMs: 30_000,
     })
 
     // Build transformer chain: columnMapper.decode -> transformer
@@ -1378,6 +1379,11 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
   /** Await the next tick of the request loop */
   async #nextTick() {
+    if (this.#pauseLock.isPaused) {
+      throw new Error(
+        `Cannot wait for next tick while PauseLock is held — this would deadlock because the request loop is paused`
+      )
+    }
     if (this.#tickPromise) {
       return this.#tickPromise
     }
@@ -1395,6 +1401,11 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
   /** Await until we're not in the middle of a stream (i.e., until we see an up-to-date message) */
   async #waitForStreamEnd() {
+    if (this.#pauseLock.isPaused) {
+      throw new Error(
+        `Cannot wait for stream end while PauseLock is held — this would deadlock because the stream is paused`
+      )
+    }
     if (!this.#isMidStream) {
       return
     }
@@ -1574,8 +1585,13 @@ export class ShapeStream<T extends Row<unknown> = Row>
         `Snapshot requests are not supported in ${this.#mode} mode, as the consumer is guaranteed to observe all data`
       )
     }
-    // We shouldn't be getting a snapshot on a shape that's not started
-    if (!this.#started) await this.#start()
+    // Start the stream if not started — fire-and-forget like subscribe() does.
+    // We must NOT await #start() because it runs the full request loop. The
+    // PauseLock acquire below will abort the in-flight request, and the
+    // re-check guard in #requestShape handles the race.
+    if (!this.#started) {
+      this.#start().catch(() => {})
+    }
 
     const snapshotReason = `snapshot-${++this.#snapshotCounter}`
 
