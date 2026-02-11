@@ -319,8 +319,11 @@ abstract class ActiveState extends ShapeStreamState {
     }
 
     // Stale response detected
-    if (this.#shared.handle === undefined) {
-      // No local handle — enter stale retry
+    if (
+      this.#shared.handle === undefined ||
+      this.#shared.handle === expiredHandle
+    ) {
+      // No local handle, or local handle is itself the expired one — enter stale retry
       const retryCount = this.staleCacheRetryCount + 1
       const staleRetryState = new StaleRetryState({
         handle: this.#shared.handle,
@@ -339,7 +342,7 @@ abstract class ActiveState extends ShapeStreamState {
       }
     }
 
-    // We have a valid local handle — ignore this stale response
+    // We have a different valid local handle — ignore this stale response
     return { action: `ignored`, state: this }
   }
 
