@@ -586,10 +586,8 @@ describe(`ExpiredShapesCache`, () => {
     // 2. The expired shapes cache has 'stale-handle' marked as expired
     // 3. First fetch returns a stale response with data messages
     // 4. checkStaleResponse: client has local handle → returns 'ignored'
-    // 5. #onInitialResponse returns early — schema never set from response
-    // 6. #requestShapeLongPoll does `this.#syncState.schema!` → undefined
-    // 7. MessageParser.parse() crashes: Cannot read properties of undefined
-    //    when trying to look up column types in the schema
+    // 5. #onInitialResponse returns false — body parsing is skipped
+    // 6. Client retries and eventually gets a valid response
 
     const expectedShapeUrl = `${shapeUrl}?table=test`
     expiredShapesCache.markExpired(expectedShapeUrl, `stale-handle`)
@@ -655,10 +653,8 @@ describe(`ExpiredShapesCache`, () => {
     // Wait for the fetch cycle to complete
     await new Promise((resolve) => setTimeout(resolve, 200))
 
-    // BUG: The client crashes trying to use undefined schema to parse
-    // the response body after the stale response was ignored.
-    // It should either set schema from headers even for ignored responses,
-    // or skip parsing the body entirely for ignored responses.
+    // The client should skip body parsing for ignored stale responses
+    // and continue fetching without errors.
     expect(errors).toHaveLength(0)
     expect(fetchCount).toBeGreaterThan(1) // should keep fetching, not crash
   })
