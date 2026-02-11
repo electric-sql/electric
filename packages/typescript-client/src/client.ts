@@ -73,6 +73,12 @@ import {
 import { expiredShapesCache } from './expired-shapes-cache'
 import { upToDateTracker } from './up-to-date-tracker'
 import { SnapshotTracker } from './snapshot-tracker'
+import {
+  createInitialState,
+  ErrorState,
+  PausedState,
+  ShapeStreamState,
+} from './shape-stream-state'
 
 const RESERVED_PARAMS: Set<ReservedParamKeys> = new Set([
   LIVE_CACHE_BUSTER_QUERY_PARAM,
@@ -568,16 +574,11 @@ export class ShapeStream<T extends Row<unknown> = Row>
   >()
 
   #started = false
-  #state = `active` as `active` | `pause-requested` | `paused`
-  #lastOffset: Offset
-  #liveCacheBuster: string // Seconds since our Electric Epoch 😎
-  #lastSyncedAt?: number // unix time
-  #isUpToDate: boolean = false
-  #isMidStream: boolean = true
+  #pauseRequested = false
+  #isMidStream = true
+  #syncState: ShapeStreamState
   #connected: boolean = false
-  #shapeHandle?: string
   #mode: LogMode
-  #schema?: Schema
   #onError?: ShapeStreamErrorHandler
   #requestAbortController?: AbortController
   #isRefreshing = false
@@ -589,32 +590,23 @@ export class ShapeStream<T extends Row<unknown> = Row>
   #activeSnapshotRequests = 0 // counter for concurrent snapshot requests
   #midStreamPromise?: Promise<void>
   #midStreamPromiseResolver?: () => void
-  #lastSeenCursor?: string // Last seen cursor from previous session (used to detect cached responses)
   #currentFetchUrl?: URL // Current fetch URL for computing shape key
   #lastSseConnectionStartTime?: number
   #minSseConnectionDuration = 1000 // Minimum expected SSE connection duration (1 second)
-  #consecutiveShortSseConnections = 0
   #maxShortSseConnections = 3 // Fall back to long polling after this many short connections
-  #sseFallbackToLongPolling = false
   #sseBackoffBaseDelay = 100 // Base delay for exponential backoff (ms)
   #sseBackoffMaxDelay = 5000 // Maximum delay cap (ms)
   #unsubscribeFromVisibilityChanges?: () => void
   #unsubscribeFromWakeDetection?: () => void
-  #staleCacheBuster?: string // Cache buster set when stale CDN response detected, used on retry requests to bypass cache
-  #staleCacheRetryCount = 0
   #maxStaleCacheRetries = 3
-
-  // Derived state: we're in replay mode if we have a last seen cursor
-  get #replayMode(): boolean {
-    return this.#lastSeenCursor !== undefined
-  }
 
   constructor(options: ShapeStreamOptions<GetExtensions<T>>) {
     this.options = { subscribe: true, ...options }
     validateOptions(this.options)
-    this.#lastOffset = this.options.offset ?? `-1`
-    this.#liveCacheBuster = ``
-    this.#shapeHandle = this.options.handle
+    this.#syncState = createInitialState({
+      offset: this.options.offset ?? `-1`,
+      handle: this.options.handle,
+    })
 
     // Build transformer chain: columnMapper.decode -> transformer
     // columnMapper transforms column names, transformer transforms values
@@ -672,7 +664,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
   }
 
   get shapeHandle() {
-    return this.#shapeHandle
+    return this.#syncState.handle
   }
 
   get error() {
@@ -680,11 +672,11 @@ export class ShapeStream<T extends Row<unknown> = Row>
   }
 
   get isUpToDate() {
-    return this.#isUpToDate
+    return this.#syncState.isUpToDate
   }
 
   get lastOffset() {
-    return this.#lastOffset
+    return this.#syncState.offset
   }
 
   get mode() {
@@ -698,6 +690,9 @@ export class ShapeStream<T extends Row<unknown> = Row>
       await this.#requestShape()
     } catch (err) {
       this.#error = err
+      if (err instanceof Error) {
+        this.#syncState = this.#syncState.toErrorState(err)
+      }
 
       // Check if onError handler wants to retry
       if (this.#onError) {
@@ -725,6 +720,9 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
           // Clear the error since we're retrying
           this.#error = null
+          if (this.#syncState instanceof ErrorState) {
+            this.#syncState = this.#syncState.retry()
+          }
 
           // Restart from current offset
           this.#started = false
@@ -760,20 +758,24 @@ export class ShapeStream<T extends Row<unknown> = Row>
   }
 
   async #requestShape(): Promise<void> {
-    if (this.#state === `pause-requested`) {
-      this.#state = `paused`
+    if (this.#pauseRequested) {
+      this.#syncState = this.#syncState.pause()
+      this.#pauseRequested = false
       return
     }
 
     if (
       !this.options.subscribe &&
-      (this.options.signal?.aborted || this.#isUpToDate)
+      (this.options.signal?.aborted || this.#syncState.isUpToDate)
     ) {
       return
     }
 
-    const resumingFromPause = this.#state === `paused`
-    this.#state = `active`
+    let resumingFromPause = false
+    if (this.#syncState instanceof PausedState) {
+      resumingFromPause = true
+      this.#syncState = this.#syncState.resume()
+    }
 
     const { url, signal } = this.options
     const { fetchUrl, requestHeaders } = await this.#constructUrl(
@@ -808,16 +810,13 @@ export class ShapeStream<T extends Row<unknown> = Row>
         // Check current state - it may have changed due to concurrent pause/resume calls
         // from the visibility change handler during the async fetch operation.
         // TypeScript's flow analysis doesn't account for concurrent state changes.
-        const currentState = this.#state as
-          | `active`
-          | `pause-requested`
-          | `paused`
         if (
           requestAbortController.signal.aborted &&
           requestAbortController.signal.reason === PAUSE_STREAM &&
-          currentState === `pause-requested`
+          this.#pauseRequested
         ) {
-          this.#state = `paused`
+          this.#syncState = this.#syncState.pause()
+          this.#pauseRequested = false
         }
         return // interrupted
       }
@@ -839,13 +838,13 @@ export class ShapeStream<T extends Row<unknown> = Row>
         // consistent cache buster
 
         // Store the current shape URL as expired to avoid future 409s
-        if (this.#shapeHandle) {
+        if (this.#syncState.handle) {
           const shapeKey = canonicalShapeKey(fetchUrl)
-          expiredShapesCache.markExpired(shapeKey, this.#shapeHandle)
+          expiredShapesCache.markExpired(shapeKey, this.#syncState.handle)
         }
 
         const newShapeHandle =
-          e.headers[SHAPE_HANDLE_HEADER] || `${this.#shapeHandle!}-next`
+          e.headers[SHAPE_HANDLE_HEADER] || `${this.#syncState.handle!}-next`
         this.#reset(newShapeHandle)
 
         // must refetch control message might be in a list or not depending
@@ -1000,45 +999,20 @@ export class ShapeStream<T extends Row<unknown> = Row>
       }
     }
 
-    // Add Electric's internal parameters
-    fetchUrl.searchParams.set(OFFSET_QUERY_PARAM, this.#lastOffset)
+    // Add state-specific parameters (offset, handle, live cache busters, etc.)
+    this.#syncState.applyUrlParams(fetchUrl, {
+      isSnapshotRequest: subsetParams !== undefined,
+      // Don't long-poll when resuming from pause or refreshing — avoids
+      // a 20s hold during which `isConnected` would be false
+      canLongPoll: !this.#isRefreshing && !resumingFromPause,
+    })
     fetchUrl.searchParams.set(LOG_MODE_QUERY_PARAM, this.#mode)
-
-    // Snapshot requests (with subsetParams) should never use live polling
-    const isSnapshotRequest = subsetParams !== undefined
-
-    if (this.#isUpToDate && !isSnapshotRequest) {
-      // If we are resuming from a paused state, we don't want to perform a live request
-      // because it could be a long poll that holds for 20sec
-      // and during all that time `isConnected` will be false
-      if (!this.#isRefreshing && !resumingFromPause) {
-        fetchUrl.searchParams.set(LIVE_QUERY_PARAM, `true`)
-      }
-      fetchUrl.searchParams.set(
-        LIVE_CACHE_BUSTER_QUERY_PARAM,
-        this.#liveCacheBuster
-      )
-    }
-
-    if (this.#shapeHandle) {
-      // This should probably be a header for better cache breaking?
-      fetchUrl.searchParams.set(SHAPE_HANDLE_QUERY_PARAM, this.#shapeHandle!)
-    }
 
     // Add cache buster for shapes known to be expired to prevent 409s
     const shapeKey = canonicalShapeKey(fetchUrl)
     const expiredHandle = expiredShapesCache.getExpiredHandle(shapeKey)
     if (expiredHandle) {
       fetchUrl.searchParams.set(EXPIRED_HANDLE_QUERY_PARAM, expiredHandle)
-    }
-
-    // Add random cache buster if we received a stale response from CDN
-    // This forces a fresh request bypassing the misconfigured CDN cache
-    if (this.#staleCacheBuster) {
-      fetchUrl.searchParams.set(
-        CACHE_BUSTER_QUERY_PARAM,
-        this.#staleCacheBuster
-      )
     }
 
     // sort query params in-place for stable URLs and improved cache hits
@@ -1071,147 +1045,121 @@ export class ShapeStream<T extends Row<unknown> = Row>
     }
   }
 
-  async #onInitialResponse(response: Response) {
+  /**
+   * Processes response metadata (headers, status) and updates sync state.
+   * Returns `true` if the response body should be processed by the caller,
+   * or `false` if the response was ignored (stale) and the body should be skipped.
+   * Throws on stale-retry (to trigger a retry with cache buster).
+   */
+  async #onInitialResponse(response: Response): Promise<boolean> {
     const { headers, status } = response
     const shapeHandle = headers.get(SHAPE_HANDLE_HEADER)
-    if (shapeHandle) {
-      // Don't accept a handle we know is expired - this can happen if a
-      // proxy serves a stale cached response despite the expired_handle
-      // cache buster parameter
-      const shapeKey = this.#currentFetchUrl
-        ? canonicalShapeKey(this.#currentFetchUrl)
-        : null
-      const expiredHandle = shapeKey
-        ? expiredShapesCache.getExpiredHandle(shapeKey)
-        : null
-      if (shapeHandle !== expiredHandle) {
-        this.#shapeHandle = shapeHandle
-        // Clear cache buster after successful response with valid handle
-        if (this.#staleCacheBuster) {
-          this.#staleCacheBuster = undefined
-          this.#staleCacheRetryCount = 0
-        }
-      } else if (this.#shapeHandle === undefined) {
-        // We received a stale response from cache and don't have a handle yet.
-        // Instead of accepting the stale handle, throw an error to trigger a retry
-        // with a random cache buster to bypass the CDN cache.
-        this.#staleCacheRetryCount++
-        // Cancel the response body to release the connection before retrying
-        await response.body?.cancel()
-        if (this.#staleCacheRetryCount > this.#maxStaleCacheRetries) {
-          throw new FetchError(
-            502,
-            undefined,
-            undefined,
-            {},
-            this.#currentFetchUrl?.toString() ?? ``,
-            `CDN continues serving stale cached responses after ${this.#maxStaleCacheRetries} retry attempts. ` +
-              `This indicates a severe proxy/CDN misconfiguration. ` +
-              `Check that your proxy includes all query parameters (especially 'handle' and 'offset') in its cache key. ` +
-              `For more information visit the troubleshooting guide: https://electric-sql.com/docs/guides/troubleshooting`
-          )
-        }
-        console.warn(
-          `[Electric] Received stale cached response with expired shape handle. ` +
-            `This should not happen and indicates a proxy/CDN caching misconfiguration. ` +
-            `The response contained handle "${shapeHandle}" which was previously marked as expired. ` +
+    const shapeKey = this.#currentFetchUrl
+      ? canonicalShapeKey(this.#currentFetchUrl)
+      : null
+    const expiredHandle = shapeKey
+      ? expiredShapesCache.getExpiredHandle(shapeKey)
+      : null
+
+    const transition = this.#syncState.handleResponseMetadata({
+      status,
+      responseHandle: shapeHandle,
+      responseOffset: headers.get(CHUNK_LAST_OFFSET_HEADER) as Offset | null,
+      responseCursor: headers.get(LIVE_CACHE_BUSTER_HEADER),
+      responseSchema: getSchemaFromHeaders(headers),
+      expiredHandle,
+      now: Date.now(),
+      maxStaleCacheRetries: this.#maxStaleCacheRetries,
+      createCacheBuster: () =>
+        `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+    })
+
+    this.#syncState = transition.state
+
+    if (transition.action === `stale-retry`) {
+      // Cancel the response body to release the connection before retrying.
+      await response.body?.cancel()
+      if (transition.exceededMaxRetries) {
+        throw new FetchError(
+          502,
+          undefined,
+          undefined,
+          {},
+          this.#currentFetchUrl?.toString() ?? ``,
+          `CDN continues serving stale cached responses after ${this.#maxStaleCacheRetries} retry attempts. ` +
+            `This indicates a severe proxy/CDN misconfiguration. ` +
             `Check that your proxy includes all query parameters (especially 'handle' and 'offset') in its cache key. ` +
-            `For more information visit the troubleshooting guide: https://electric-sql.com/docs/guides/troubleshooting ` +
-            `Retrying with a random cache buster to bypass the stale cache (attempt ${this.#staleCacheRetryCount}/${this.#maxStaleCacheRetries}).`
+            `For more information visit the troubleshooting guide: https://electric-sql.com/docs/guides/troubleshooting`
         )
-        // Generate a random cache buster for the retry
-        this.#staleCacheBuster = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`
-        throw new StaleCacheError(
-          `Received stale cached response with expired handle "${shapeHandle}". ` +
-            `This indicates a proxy/CDN caching misconfiguration. ` +
-            `Check that your proxy includes all query parameters (especially 'handle' and 'offset') in its cache key.`
-        )
-      } else {
-        // We already have a valid handle, so ignore the stale response entirely
-        // to prevent a mismatch between our current handle and the stale offset.
-        console.warn(
-          `[Electric] Received stale cached response with expired shape handle. ` +
-            `This should not happen and indicates a proxy/CDN caching misconfiguration. ` +
-            `The response contained handle "${shapeHandle}" which was previously marked as expired. ` +
-            `Check that your proxy includes all query parameters (especially 'handle' and 'offset') in its cache key. ` +
-            `Ignoring the stale response and continuing with handle "${this.#shapeHandle}".`
-        )
-        return
       }
+      console.warn(
+        `[Electric] Received stale cached response with expired shape handle. ` +
+          `This should not happen and indicates a proxy/CDN caching misconfiguration. ` +
+          `The response contained handle "${shapeHandle}" which was previously marked as expired. ` +
+          `Check that your proxy includes all query parameters (especially 'handle' and 'offset') in its cache key. ` +
+          `For more information visit the troubleshooting guide: https://electric-sql.com/docs/guides/troubleshooting ` +
+          `Retrying with a random cache buster to bypass the stale cache (attempt ${this.#syncState.staleCacheRetryCount}/${this.#maxStaleCacheRetries}).`
+      )
+      throw new StaleCacheError(
+        `Received stale cached response with expired handle "${shapeHandle}". ` +
+          `This indicates a proxy/CDN caching misconfiguration. ` +
+          `Check that your proxy includes all query parameters (especially 'handle' and 'offset') in its cache key.`
+      )
     }
 
-    const lastOffset = headers.get(CHUNK_LAST_OFFSET_HEADER)
-    if (lastOffset) {
-      this.#lastOffset = lastOffset as Offset
+    if (transition.action === `ignored`) {
+      // We already have a valid handle, so ignore the entire stale response
+      // (both metadata and body) to prevent a mismatch between our current
+      // handle and the stale data.
+      console.warn(
+        `[Electric] Received stale cached response with expired shape handle. ` +
+          `This should not happen and indicates a proxy/CDN caching misconfiguration. ` +
+          `The response contained handle "${shapeHandle}" which was previously marked as expired. ` +
+          `Check that your proxy includes all query parameters (especially 'handle' and 'offset') in its cache key. ` +
+          `Ignoring the stale response and continuing with handle "${this.#syncState.handle}".`
+      )
+      return false
     }
 
-    const liveCacheBuster = headers.get(LIVE_CACHE_BUSTER_HEADER)
-    if (liveCacheBuster) {
-      this.#liveCacheBuster = liveCacheBuster
-    }
-
-    this.#schema = this.#schema ?? getSchemaFromHeaders(headers)
-
-    // NOTE: 204s are deprecated, the Electric server should not
-    // send these in latest versions but this is here for backwards
-    // compatibility
-    if (status === 204) {
-      // There's no content so we are live and up to date
-      this.#lastSyncedAt = Date.now()
-    }
+    return true
   }
 
   async #onMessages(batch: Array<Message<T>>, isSseMessage = false) {
-    // Update isUpToDate
     if (batch.length > 0) {
-      // Set isMidStream to true when we receive any data
+      const lastMessage = batch[batch.length - 1]
+      const hasUpToDateMessage = isUpToDateMessage(lastMessage)
+      const upToDateOffset = hasUpToDateMessage
+        ? getOffset(lastMessage)
+        : undefined
+
+      // Track mid-stream directly — not part of sync state
       this.#isMidStream = true
 
-      const lastMessage = batch[batch.length - 1]
-      if (isUpToDateMessage(lastMessage)) {
-        if (isSseMessage) {
-          // Only use the offset from the up-to-date message if this was an SSE message.
-          // If we would use this offset from a regular fetch, then it will be wrong
-          // and we will get an "offset is out of bounds for this shape" error
-          const offset = getOffset(lastMessage)
-          if (offset) {
-            this.#lastOffset = offset
-          }
-        }
-        this.#lastSyncedAt = Date.now()
-        this.#isUpToDate = true
-        // Set isMidStream to false when we see an up-to-date message
+      const transition = this.#syncState.handleMessageBatch({
+        hasMessages: true,
+        hasUpToDateMessage,
+        isSse: isSseMessage,
+        upToDateOffset,
+        now: Date.now(),
+        currentCursor: this.#syncState.liveCacheBuster,
+      })
+      this.#syncState = transition.state
+
+      if (hasUpToDateMessage) {
         this.#isMidStream = false
         // Resolve the promise waiting for mid-stream to end
         this.#midStreamPromiseResolver?.()
 
-        // Check if we should suppress this up-to-date notification
-        // to prevent multiple renders from cached responses
-        if (this.#replayMode && !isSseMessage) {
-          // We're in replay mode (replaying cached responses during initial sync).
-          // Check if the cursor has changed - cursors are time-based and always
-          // increment, so a new cursor means fresh data from the server.
-          const currentCursor = this.#liveCacheBuster
-
-          if (currentCursor === this.#lastSeenCursor) {
-            // Same cursor as previous session - suppress this up-to-date notification.
-            // Exit replay mode after first suppression to ensure we don't get stuck
-            // if CDN keeps returning the same cursor indefinitely.
-            this.#lastSeenCursor = undefined
-            return
-          }
+        if (transition.suppressBatch) {
+          return
         }
-
-        // We're either:
-        // 1. Not in replay mode (normal operation), or
-        // 2. This is a live/SSE message (always fresh), or
-        // 3. Cursor has changed (exited replay mode with fresh data)
-        // In all cases, notify subscribers and record the up-to-date.
-        this.#lastSeenCursor = undefined // Exit replay mode
 
         if (this.#currentFetchUrl) {
           const shapeKey = canonicalShapeKey(this.#currentFetchUrl)
-          upToDateTracker.recordUpToDate(shapeKey, this.#liveCacheBuster)
+          upToDateTracker.recordUpToDate(
+            shapeKey,
+            this.#syncState.liveCacheBuster
+          )
         }
       }
 
@@ -1246,22 +1194,22 @@ export class ShapeStream<T extends Row<unknown> = Row>
     // Check if we should enter replay mode (replaying cached responses)
     // This happens when we're starting fresh (offset=-1 or before first up-to-date)
     // and there's a recent up-to-date in localStorage (< 60s)
-    if (!this.#isUpToDate && !this.#replayMode) {
+    if (!this.#syncState.isUpToDate && this.#syncState.canEnterReplayMode()) {
       const shapeKey = canonicalShapeKey(opts.fetchUrl)
       const lastSeenCursor = upToDateTracker.shouldEnterReplayMode(shapeKey)
       if (lastSeenCursor) {
         // Enter replay mode and store the last seen cursor
-        this.#lastSeenCursor = lastSeenCursor
+        this.#syncState = this.#syncState.enterReplayMode(lastSeenCursor)
       }
     }
 
     const useSse = this.options.liveSse ?? this.options.experimentalLiveSse
     if (
-      this.#isUpToDate &&
-      useSse &&
-      !this.#isRefreshing &&
-      !opts.resumingFromPause &&
-      !this.#sseFallbackToLongPolling
+      this.#syncState.shouldUseSse({
+        liveSseEnabled: !!useSse,
+        isRefreshing: this.#isRefreshing,
+        resumingFromPause: !!opts.resumingFromPause,
+      })
     ) {
       opts.fetchUrl.searchParams.set(EXPERIMENTAL_LIVE_SSE_QUERY_PARAM, `true`)
       opts.fetchUrl.searchParams.set(LIVE_SSE_QUERY_PARAM, `true`)
@@ -1283,9 +1231,10 @@ export class ShapeStream<T extends Row<unknown> = Row>
     })
 
     this.#connected = true
-    await this.#onInitialResponse(response)
+    const shouldProcessBody = await this.#onInitialResponse(response)
+    if (!shouldProcessBody) return
 
-    const schema = this.#schema! // we know that it is not undefined because it is set by `this.#onInitialResponse`
+    const schema = this.#syncState.schema! // we know that it is not undefined because it is set by `this.#onInitialResponse`
     const res = await response.text()
     const messages = res || `[]`
     const batch = this.#messageParser.parse<Array<Message<T>>>(messages, schema)
@@ -1310,6 +1259,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
       Accept: `text/event-stream`,
     }
 
+    let ignoredStaleResponse = false
     try {
       let buffer: Array<Message<T>> = []
       await fetchEventSource(fetchUrl.toString(), {
@@ -1317,12 +1267,16 @@ export class ShapeStream<T extends Row<unknown> = Row>
         fetch,
         onopen: async (response: Response) => {
           this.#connected = true
-          await this.#onInitialResponse(response)
+          const shouldProcessBody = await this.#onInitialResponse(response)
+          if (!shouldProcessBody) {
+            ignoredStaleResponse = true
+            throw new Error(`stale response ignored`)
+          }
         },
         onmessage: (event: EventSourceMessage) => {
           if (event.data) {
             // event.data is a single JSON object
-            const schema = this.#schema! // we know that it is not undefined because it is set in onopen when we call this.#onInitialResponse
+            const schema = this.#syncState.schema! // we know that it is not undefined because it is set in onopen when we call this.#onInitialResponse
             const message = this.#messageParser.parse<Message<T>>(
               event.data,
               schema
@@ -1344,6 +1298,10 @@ export class ShapeStream<T extends Row<unknown> = Row>
         signal: requestAbortController.signal,
       })
     } catch (error) {
+      if (ignoredStaleResponse) {
+        // Stale response was ignored in onopen — let the fetch loop retry
+        return
+      }
       if (requestAbortController.signal.aborted) {
         // During an SSE request, the fetch might have succeeded
         // and we are parsing the incoming stream.
@@ -1362,52 +1320,50 @@ export class ShapeStream<T extends Row<unknown> = Row>
       const connectionDuration = Date.now() - this.#lastSseConnectionStartTime!
       const wasAborted = requestAbortController.signal.aborted
 
-      if (connectionDuration < this.#minSseConnectionDuration && !wasAborted) {
-        // Connection was too short - likely a cached response or misconfiguration
-        this.#consecutiveShortSseConnections++
+      const transition = this.#syncState.handleSseConnectionClosed({
+        connectionDuration,
+        wasAborted,
+        minConnectionDuration: this.#minSseConnectionDuration,
+        maxShortConnections: this.#maxShortSseConnections,
+      })
+      this.#syncState = transition.state
 
-        if (
-          this.#consecutiveShortSseConnections >= this.#maxShortSseConnections
-        ) {
-          // Too many short connections - fall back to long polling
-          this.#sseFallbackToLongPolling = true
-          console.warn(
-            `[Electric] SSE connections are closing immediately (possibly due to proxy buffering or misconfiguration). ` +
-              `Falling back to long polling. ` +
-              `Your proxy must support streaming SSE responses (not buffer the complete response). ` +
-              `Configuration: Nginx add 'X-Accel-Buffering: no', Caddy add 'flush_interval -1' to reverse_proxy. ` +
-              `Note: Do NOT disable caching entirely - Electric uses cache headers to enable request collapsing for efficiency.`
-          )
-        } else {
-          // Add exponential backoff with full jitter to prevent tight infinite loop
-          // Formula: random(0, min(cap, base * 2^attempt))
-          const maxDelay = Math.min(
-            this.#sseBackoffMaxDelay,
-            this.#sseBackoffBaseDelay *
-              Math.pow(2, this.#consecutiveShortSseConnections)
-          )
-          const delayMs = Math.floor(Math.random() * maxDelay)
-          await new Promise((resolve) => setTimeout(resolve, delayMs))
-        }
-      } else if (connectionDuration >= this.#minSseConnectionDuration) {
-        // Connection was healthy - reset counter
-        this.#consecutiveShortSseConnections = 0
+      if (transition.fellBackToLongPolling) {
+        console.warn(
+          `[Electric] SSE connections are closing immediately (possibly due to proxy buffering or misconfiguration). ` +
+            `Falling back to long polling. ` +
+            `Your proxy must support streaming SSE responses (not buffer the complete response). ` +
+            `Configuration: Nginx add 'X-Accel-Buffering: no', Caddy add 'flush_interval -1' to reverse_proxy. ` +
+            `Note: Do NOT disable caching entirely - Electric uses cache headers to enable request collapsing for efficiency.`
+        )
+      } else if (transition.wasShortConnection) {
+        // Add exponential backoff with full jitter to prevent tight infinite loop
+        // Formula: random(0, min(cap, base * 2^attempt))
+        const maxDelay = Math.min(
+          this.#sseBackoffMaxDelay,
+          this.#sseBackoffBaseDelay *
+            Math.pow(2, this.#syncState.consecutiveShortSseConnections)
+        )
+        const delayMs = Math.floor(Math.random() * maxDelay)
+        await new Promise((resolve) => setTimeout(resolve, delayMs))
       }
     }
   }
 
   #pause() {
-    if (this.#started && this.#state === `active`) {
-      this.#state = `pause-requested`
+    if (
+      this.#started &&
+      !this.#pauseRequested &&
+      !(this.#syncState instanceof PausedState)
+    ) {
+      this.#pauseRequested = true
       this.#requestAbortController?.abort(PAUSE_STREAM)
     }
   }
 
   #resume() {
-    if (
-      this.#started &&
-      (this.#state === `paused` || this.#state === `pause-requested`)
-    ) {
+    const isPaused = this.#syncState instanceof PausedState
+    if (this.#started && (isPaused || this.#pauseRequested)) {
       // Don't resume if the user's signal is already aborted
       // This can happen if the signal was aborted while we were paused
       // (e.g., TanStack DB collection was GC'd)
@@ -1415,11 +1371,10 @@ export class ShapeStream<T extends Row<unknown> = Row>
         return
       }
 
-      // If we're resuming from pause-requested state, we need to set state back to active
-      // to prevent the pause from completing
-      if (this.#state === `pause-requested`) {
-        this.#state = `active`
-      }
+      this.#pauseRequested = false
+      // Don't transition syncState here — let #requestShape handle
+      // the PausedState→previous transition so it can detect
+      // resumingFromPause and avoid live long-polling.
       this.#start()
     }
   }
@@ -1444,15 +1399,15 @@ export class ShapeStream<T extends Row<unknown> = Row>
     this.#unsubscribeFromWakeDetection?.()
   }
 
-  /** Unix time at which we last synced. Undefined when `isLoading` is true. */
+  /** Unix time at which we last synced. Undefined until first successful up-to-date. */
   lastSyncedAt(): number | undefined {
-    return this.#lastSyncedAt
+    return this.#syncState.lastSyncedAt
   }
 
   /** Time elapsed since last sync (in ms). Infinity if we did not yet sync. */
   lastSynced(): number {
-    if (this.#lastSyncedAt === undefined) return Infinity
-    return Date.now() - this.#lastSyncedAt
+    if (this.#syncState.lastSyncedAt === undefined) return Infinity
+    return Date.now() - this.#syncState.lastSyncedAt
   }
 
   /** Indicates if we are connected to the Electric sync service. */
@@ -1462,7 +1417,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
   /** True during initial fetch. False afterwise.  */
   isLoading(): boolean {
-    return !this.#isUpToDate
+    return !this.#syncState.isUpToDate
   }
 
   hasStarted(): boolean {
@@ -1470,7 +1425,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
   }
 
   isPaused(): boolean {
-    return this.#state === `paused`
+    return this.#syncState instanceof PausedState
   }
 
   /** Await the next tick of the request loop */
@@ -1516,7 +1471,10 @@ export class ShapeStream<T extends Row<unknown> = Row>
    */
   async forceDisconnectAndRefresh(): Promise<void> {
     this.#isRefreshing = true
-    if (this.#isUpToDate && !this.#requestAbortController?.signal.aborted) {
+    if (
+      this.#syncState.isUpToDate &&
+      !this.#requestAbortController?.signal.aborted
+    ) {
       // If we are "up to date", any current request will be a "live" request
       // and needs to be aborted
       this.#requestAbortController?.abort(FORCE_DISCONNECT_AND_REFRESH)
@@ -1606,7 +1564,11 @@ export class ShapeStream<T extends Row<unknown> = Row>
       lastTickTime = now
 
       if (elapsed > INTERVAL_MS + WAKE_THRESHOLD_MS) {
-        if (this.#state === `active` && this.#requestAbortController) {
+        if (
+          !this.#pauseRequested &&
+          !(this.#syncState instanceof PausedState) &&
+          this.#requestAbortController
+        ) {
           this.#isRefreshing = true
           this.#requestAbortController.abort(SYSTEM_WAKE)
           queueMicrotask(() => {
@@ -1631,20 +1593,10 @@ export class ShapeStream<T extends Row<unknown> = Row>
    * shape handle
    */
   #reset(handle?: string) {
-    this.#lastOffset = `-1`
-    this.#liveCacheBuster = ``
-    this.#shapeHandle = handle
-    this.#isUpToDate = false
+    this.#syncState = this.#syncState.markMustRefetch(handle)
     this.#isMidStream = true
     this.#connected = false
-    this.#schema = undefined
     this.#activeSnapshotRequests = 0
-    // Reset SSE fallback state to try SSE again after reset
-    this.#consecutiveShortSseConnections = 0
-    this.#sseFallbackToLongPolling = false
-    // Reset stale cache retry state
-    this.#staleCacheBuster = undefined
-    this.#staleCacheRetryCount = 0
   }
 
   /**
@@ -1751,7 +1703,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
     }
 
     // Capture handle before fetch to avoid race conditions if it changes during the request
-    const usedHandle = this.#shapeHandle
+    const usedHandle = this.#syncState.handle
 
     let response: Response
     try {
@@ -1767,8 +1719,11 @@ export class ShapeStream<T extends Row<unknown> = Row>
           expiredShapesCache.markExpired(shapeKey, usedHandle)
         }
 
-        this.#shapeHandle =
+        // For snapshot 409s, only update the handle — don't reset offset/schema/etc.
+        // The main stream is paused and should not be disturbed.
+        const nextHandle =
           e.headers[SHAPE_HANDLE_HEADER] || `${usedHandle ?? `handle`}-next`
+        this.#syncState = this.#syncState.withHandle(nextHandle)
 
         return this.fetchSnapshot(opts)
       }
@@ -1781,7 +1736,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
     }
 
     const schema: Schema =
-      this.#schema ??
+      this.#syncState.schema ??
       getSchemaFromHeaders(response.headers, {
         required: true,
         url: fetchUrl.toString(),
