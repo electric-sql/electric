@@ -40,8 +40,6 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb do
       when is_stack_id(stack_id) and is_shape_handle(shape_handle) do
     {comparable_shape, shape_hash} = Shape.comparable_hash(shape)
     relations = Shape.list_relations(shape)
-    # shape_binary = :erlang.term_to_binary(shape)
-    # comparable_binary = :erlang.term_to_binary(comparable_shape)
 
     with :ok <-
            WriteBuffer.add_shape(

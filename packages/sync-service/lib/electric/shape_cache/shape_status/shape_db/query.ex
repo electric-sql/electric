@@ -113,7 +113,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Query do
            modify(conn, insert_shape, [
              {:blob, shape_handle},
              {:blob, term_to_binary(shape)},
-             {:blob, term_to_binary(comparable_shape)},
+             {:blob, comparable_to_binary(comparable_shape)},
              shape_hash
            ]),
          {:ok, 1} <- modify(conn, increment_counter, [1]),
@@ -135,7 +135,8 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Query do
   end
 
   def handle_for_shape(%Conn{conn: conn, stmts: %{handle_lookup: stmt}}, comparable_shape) do
-    with {:ok, [handle]} <- fetch_one(conn, stmt, [{:blob, term_to_binary(comparable_shape)}]) do
+    with {:ok, [handle]} <-
+           fetch_one(conn, stmt, [{:blob, comparable_to_binary(comparable_shape)}]) do
       {:ok, handle}
     end
   end
@@ -280,5 +281,11 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Query do
     end
   end
 
-  def term_to_binary(term), do: :erlang.term_to_binary(term, [:deterministic])
+  defp term_to_binary(term), do: :erlang.term_to_binary(term, [:deterministic])
+
+  defp comparable_to_binary(comparable_shape) do
+    comparable_shape
+    |> term_to_binary()
+    |> then(&:crypto.hash(:sha256, &1))
+  end
 end

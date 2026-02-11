@@ -322,7 +322,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
   def handle_info(:poll, %{manual_flush_only: false} = state) do
     flush_until_empty(state)
 
-    {:noreply, schedule_poll(state)}
+    {:noreply, schedule_poll(state), :hibernate}
   end
 
   @impl GenServer
