@@ -11,7 +11,7 @@ defmodule Electric.Client.Poll do
       state = ShapeState.new()
 
       # Make a polling request
-      case Client.poll(client, shape, state) do
+      case Poll.request(client, state) do
         {:ok, messages, new_state} ->
           # Process messages, use new_state for next poll
           ...
@@ -64,12 +64,12 @@ defmodule Electric.Client.Poll do
   ## Examples
 
       state = ShapeState.new()
-      {:ok, messages, state} = Client.poll(client, shape, state, replica: :full)
+      {:ok, messages, state} = Poll.request(client, state, replica: :full)
 
       # Process messages...
 
       # Poll again for more changes
-      {:ok, messages, state} = Client.poll(client, shape, state, replica: :full)
+      {:ok, messages, state} = Poll.request(client, state, replica: :full)
   """
   @spec request(Client.t(), ShapeState.t(), keyword()) :: poll_result()
   def request(%Client{} = client, %ShapeState{} = state, opts \\ []) do
