@@ -800,6 +800,19 @@ export class ShapeStream<T extends Row<unknown> = Row>
     const abortListener = await this.#createAbortListener(signal)
     const requestAbortController = this.#requestAbortController!
 
+    // Re-check after async setup — the lock may have been acquired
+    // during URL construction or abort controller creation (e.g., by
+    // requestSnapshot calling pauseLock.acquire before the controller
+    // existed, making its abort a no-op).
+    if (this.#pauseLock.isPaused) {
+      this.#syncState = this.#syncState.pause()
+      if (abortListener && signal) {
+        signal.removeEventListener(`abort`, abortListener)
+      }
+      this.#requestAbortController = undefined
+      return
+    }
+
     try {
       await this.#fetchShape({
         fetchUrl,
