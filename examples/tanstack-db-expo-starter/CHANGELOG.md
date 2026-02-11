@@ -1,5 +1,15 @@
 # expo-db-electric-starter
 
+## 1.0.4
+
+### Patch Changes
+
+- Updated dependencies [9698b03]
+- Updated dependencies [b0cbe75]
+- Updated dependencies [b0cbe75]
+- Updated dependencies [b0cbe75]
+  - @electric-sql/client@1.5.3
+
 ## 1.0.3
 
 ### Patch Changes
