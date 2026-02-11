@@ -422,15 +422,15 @@ describe(`shape stream state machine`, () => {
     expect(transition.fellBackToLongPolling).toBe(false)
   })
 
-  // 26. StaleRetryState canEnterReplayMode → true
-  it(`StaleRetryState canEnterReplayMode returns true`, () => {
+  // 26. StaleRetryState canEnterReplayMode → false (entering replay mode would lose retry count)
+  it(`StaleRetryState canEnterReplayMode returns false`, () => {
     const stale = new StaleRetryState({
       ...makeShared(),
       staleCacheBuster: `cb-1`,
       staleCacheRetryCount: 1,
     })
 
-    expect(stale.canEnterReplayMode()).toBe(true)
+    expect(stale.canEnterReplayMode()).toBe(false)
   })
 
   // 27. enterReplayMode creates ReplayingState with cursor
@@ -631,5 +631,30 @@ describe(`shape stream state machine`, () => {
     expect(updated.handle).toBe(`new-handle`)
     expect(updated.offset).toBe(`5_3`)
     expect(updated.isUpToDate).toBe(true)
+  })
+})
+
+describe(`schema undefined + ignored stale response`, () => {
+  it(`ignored stale response should return state unchanged (schema remains undefined)`, () => {
+    // Scenario: client resumes from persisted handle/offset but has no schema yet.
+    // First response is stale (responseHandle matches expiredHandle).
+    // checkStaleResponse sees we have a local handle → returns 'ignored'.
+    // The state machine correctly returns 'ignored' without updating any fields.
+    // client.ts is responsible for skipping body parsing when it sees 'ignored'.
+    const state = new SyncingState(
+      makeShared({ handle: `my-handle`, schema: undefined })
+    )
+
+    const transition = state.handleResponseMetadata(
+      makeResponseInput({
+        responseHandle: `stale-handle`,
+        expiredHandle: `stale-handle`,
+        responseSchema: { id: { type: `text` } },
+      })
+    )
+
+    expect(transition.action).toBe(`ignored`)
+    expect(transition.state).toBe(state)
+    expect(transition.state.schema).toBeUndefined()
   })
 })
