@@ -329,4 +329,91 @@ defmodule Electric.Shapes.Consumer.ChangeHandlingTest do
       assert delete.old_record["id"] == "200"
     end
   end
+
+  describe "process_changes/3 with sublink value changes during move-in" do
+    setup [:with_stack_id_from_test]
+
+    setup %{stack_id: stack_id} do
+      shape =
+        Shape.new!("users", where: "parent_id IN (SELECT id FROM users)", inspector: @inspector)
+
+      state = State.new(stack_id, "test-handle", shape)
+      %{state: state, shape: shape}
+    end
+
+    test "processes UpdatedRecord with changed sublink value even when new value is in a pending move-in",
+         %{state: state} do
+      # parent_id changes from 2 to 3, and there's a pending move-in for parent_id=3.
+      # The change must still be processed so removed_move_tags are emitted for the
+      # old sublink value — the move-in query only returns INSERTs with the new tag.
+      move_handling_state =
+        MoveIns.new()
+        |> MoveIns.add_waiting(
+          "move-in-for-parent-3",
+          {["$sublink", "0"], MapSet.new([3])}
+        )
+
+      state = %{state | move_handling_state: move_handling_state}
+
+      change = %UpdatedRecord{
+        relation: {"public", "users"},
+        old_record: %{"id" => "10", "parent_id" => "2", "value" => "hello"},
+        record: %{"id" => "10", "parent_id" => "3", "value" => "hello"},
+        log_offset: LogOffset.new(12345, 0),
+        key: "\"public\".\"users\"/\"10\"",
+        changed_columns: MapSet.new(["parent_id"])
+      }
+
+      ctx = %{
+        xid: 962,
+        extra_refs:
+          {%{["$sublink", "0"] => MapSet.new([2])}, %{["$sublink", "0"] => MapSet.new([2, 3])}}
+      }
+
+      {filtered_changes, _state, count, _offset} =
+        ChangeHandling.process_changes([change], state, ctx)
+
+      assert count == 1
+      assert [%UpdatedRecord{} = processed] = filtered_changes
+      assert processed.record["parent_id"] == "3"
+      assert processed.old_record["parent_id"] == "2"
+      assert processed.move_tags != []
+      assert processed.removed_move_tags != []
+    end
+
+    test "skips UpdatedRecord when sublink value is unchanged and in a pending move-in",
+         %{state: state} do
+      # Only a non-sublink field changes — the move-in will return the row with
+      # identical tags, so the WAL change can safely be skipped.
+      move_handling_state =
+        MoveIns.new()
+        |> MoveIns.add_waiting(
+          "move-in-for-parent-2",
+          {["$sublink", "0"], MapSet.new([2])}
+        )
+
+      state = %{state | move_handling_state: move_handling_state}
+
+      change = %UpdatedRecord{
+        relation: {"public", "users"},
+        old_record: %{"id" => "10", "parent_id" => "2", "value" => "old"},
+        record: %{"id" => "10", "parent_id" => "2", "value" => "new"},
+        log_offset: LogOffset.new(12345, 0),
+        key: "\"public\".\"users\"/\"10\"",
+        changed_columns: MapSet.new(["value"])
+      }
+
+      ctx = %{
+        xid: 962,
+        extra_refs:
+          {%{["$sublink", "0"] => MapSet.new([])}, %{["$sublink", "0"] => MapSet.new([2])}}
+      }
+
+      {filtered_changes, _state, count, _offset} =
+        ChangeHandling.process_changes([change], state, ctx)
+
+      assert filtered_changes == []
+      assert count == 0
+    end
+  end
 end
