@@ -1579,11 +1579,6 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
     const snapshotReason = `snapshot-${++this.#snapshotCounter}`
 
-    // Wait for stream end BEFORE acquiring the lock. Acquiring first would
-    // deadlock: the lock pauses the stream, but #waitForStreamEnd needs the
-    // stream to deliver an up-to-date message to resolve.
-    await this.#waitForStreamEnd()
-
     this.#pauseLock.acquire(snapshotReason)
 
     try {
