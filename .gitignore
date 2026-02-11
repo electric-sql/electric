@@ -26,4 +26,4 @@ sst-*.log
 **/junit
 **/coverage
 response.tmp
-.claude
+.claude/settings.local.json
