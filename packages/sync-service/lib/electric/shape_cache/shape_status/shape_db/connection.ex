@@ -9,7 +9,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
 
   @behaviour NimblePool
 
-  @schema_version 3
+  @schema_version 4
 
   @migration_sqls [
     """
@@ -134,10 +134,10 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
     # for our current deployment mode synchronous = OFF would be enough (hand
     # data to kernel, don't fsync) but for oss deploys we should keep it at a
     # higher durability setting
-    "PRAGMA synchronous=NORMAL",
+    "PRAGMA synchronous=OFF",
     # Reduce page cache since hot-path lookups now use ETS cache.
     # -512 means 512KB (negative values are in KiB, default is often 2MB)
-    "PRAGMA cache_size=-512"
+    "PRAGMA cache_size=-4096"
   ]
 
   def open(pool_state) do
@@ -157,7 +157,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
     end
   end
 
-  def checkout!(stack_id, label, function, timeout \\ 5000) do
+  def checkout!(stack_id, label, function, timeout \\ 10_000) do
     NimblePool.checkout!(
       pool_name(stack_id, :read),
       {:checkout, label},
@@ -166,7 +166,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
     )
   end
 
-  def checkout_write!(stack_id, label, function, timeout \\ 5000) do
+  def checkout_write!(stack_id, label, function, timeout \\ 10_000) do
     NimblePool.checkout!(
       pool_name(stack_id, :write),
       {:checkout, label},

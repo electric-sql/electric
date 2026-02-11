@@ -10,6 +10,7 @@ defmodule Electric.ShapeCleanerTest do
   alias Electric.ShapeCache.Storage
   alias Electric.ShapeCache.ShapeCleaner
   alias Electric.Replication.LogOffset
+  alias Electric.ShapeCache.PureFileStorage
 
   @stub_inspector Support.StubInspector.new(
                     tables: [{1, {"public", "items"}}],
@@ -139,7 +140,7 @@ defmodule Electric.ShapeCleanerTest do
         )
 
         assert Storage.snapshot_started?(storage)
-        assert File.exists?(Path.join(storage_opts.base_path, shape_handle))
+        assert File.exists?(PureFileStorage.shape_data_dir(storage_opts.base_path, shape_handle))
 
         assert Enum.count(Storage.get_log_stream(LogOffset.last_before_real_offsets(), storage)) ==
                  1
