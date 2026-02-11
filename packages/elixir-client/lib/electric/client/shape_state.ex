@@ -80,6 +80,25 @@ defmodule Electric.Client.ShapeState do
   end
 
   @doc """
+  Reset polling state for a new shape handle, preserving schema and value mapper.
+
+  Used when a 409 (must-refetch) response is received — the shape handle changes
+  but the schema remains the same.
+  """
+  @spec reset(t(), Client.shape_handle()) :: t()
+  def reset(%__MODULE__{} = state, shape_handle) do
+    %{
+      state
+      | offset: Offset.before_all(),
+        shape_handle: shape_handle,
+        up_to_date?: false,
+        next_cursor: nil,
+        tag_to_keys: %{},
+        key_data: %{}
+    }
+  end
+
+  @doc """
   Convert polling state to a ResumeMessage for use with the streaming API.
   """
   @spec to_resume(t()) :: ResumeMessage.t()

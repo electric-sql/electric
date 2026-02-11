@@ -131,7 +131,7 @@ defmodule Electric.Client.Poll do
   defp handle_must_refetch(resp, client, state) do
     handle = shape_handle(resp) || "#{state.shape_handle}-next"
 
-    new_state = reset_state(state, handle)
+    new_state = ShapeState.reset(state, handle)
     new_state = handle_schema(resp, client, new_state)
 
     %{value_mapper_fun: value_mapper_fun} = new_state
@@ -142,18 +142,6 @@ defmodule Electric.Client.Poll do
       |> Enum.flat_map(&Message.parse(&1, handle, value_mapper_fun, resp.request_timestamp))
 
     {:must_refetch, messages, new_state}
-  end
-
-  defp reset_state(state, shape_handle) do
-    %{
-      state
-      | offset: Client.Offset.before_all(),
-        shape_handle: shape_handle,
-        up_to_date?: false,
-        next_cursor: nil,
-        tag_to_keys: %{},
-        key_data: %{}
-    }
   end
 
   defp process_messages(messages, state) do
