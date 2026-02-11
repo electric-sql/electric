@@ -1,5 +1,11 @@
 # @core/elixir-client
 
+## 0.9.0
+
+### Minor Changes
+
+- 57ccb2c: Add `Client.poll/4` for explicit request-response polling of shape changes. Unlike `stream/3` which returns a continuous `Enumerable`, `poll/4` makes a single request and returns `{:ok, messages, new_state}`, giving callers explicit control over request timing. Also extracts `ShapeState` and `TagTracker` modules from the stream internals for shared use between both APIs.
+
 ## 0.8.3
 
 ### Patch Changes

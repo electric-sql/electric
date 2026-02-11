@@ -1,5 +1,14 @@
 # @electric-sql/client
 
+## 1.5.3
+
+### Patch Changes
+
+- 9698b03: Add PauseLock to coordinate pause/resume across visibility changes and snapshot requests, preventing race conditions where one subsystem's resume could override another's pause.
+- b0cbe75: Fix crash when receiving a stale cached response on a resumed session with no schema yet. When the client resumes from a persisted handle/offset, the schema starts undefined. If the first response is stale (expired handle from a misconfigured CDN), the response is ignored and body parsing is skipped — but the code then accesses `schema!`, which is still undefined, causing a parse error. Now the client skips body parsing entirely for ignored stale responses.
+- b0cbe75: Refactor ShapeStream's implicit sync state into an explicit state machine using the OOP state pattern. Each state (Initial, Syncing, Live, Replaying, StaleRetry, Paused, Error) is a separate class carrying only its relevant fields, with transitions producing new immutable state objects. This replaces the previous flat context bag where all fields existed simultaneously regardless of the current state.
+- b0cbe75: Fix infinite loop when the client resumes with a persisted handle that matches an expired handle. The stale cache detection assumed that having a local handle meant it was different from the expired one, so it returned "ignored" instead of retrying with a cache buster. When `localHandle === expiredHandle`, the client would loop forever: fetch stale response, ignore it, retry without cache buster, get the same stale response. Now the client correctly enters stale-retry with a cache buster when its own handle is the expired one.
+
 ## 1.5.2
 
 ### Patch Changes
