@@ -633,7 +633,7 @@ describe(`shape stream state machine`, () => {
     expect(updated.isUpToDate).toBe(true)
   })
 
-  // --- 204 "No Content" bug reproduction ---
+  // --- 204 "No Content" handling ---
 
   it(`204 response should transition to LiveState (up-to-date)`, () => {
     const state = new SyncingState(makeShared())
@@ -651,8 +651,7 @@ describe(`shape stream state machine`, () => {
 
   it(`repeated 204 responses should transition to LiveState after first 204`, () => {
     // Simulates a deprecated server that only sends 204 "No Content".
-    // The client should become up-to-date after the first 204, but due
-    // to the bug it stays in SyncingState indefinitely.
+    // The client should become up-to-date after the first 204.
     let state = createInitialState({ offset: `-1` }) as InstanceType<
       typeof InitialState | typeof SyncingState | typeof LiveState
     >

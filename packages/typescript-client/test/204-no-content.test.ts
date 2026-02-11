@@ -60,8 +60,6 @@ describe(`204 No Content backward compatibility`, () => {
     await new Promise((resolve) => setTimeout(resolve, 100))
     unsub()
 
-    // BUG: The client should be up-to-date after the first 204, but it
-    // never transitions to live and keeps spinning in catch-up mode.
     expect(stream.isUpToDate).toBe(true)
     expect(stream.isLoading()).toBe(false)
     expect(fetchCount).toBeLessThan(maxFetches) // should go live, not exhaust all fetches
