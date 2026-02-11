@@ -217,12 +217,76 @@ const bootstrapTodoListAction = createOptimisticAction<string>({
 
 ## Testing
 
+### Unit testing (mocked)
+
 ```ts
 shapeOptions: {
   url: '/api/todos',
   fetchClient: vi.fn(), // mock fetch
   onError: (error) => // ... handle fetch errors
 }
+```
+
+### Running integration tests locally
+
+Integration tests in `packages/typescript-client` (and other TS packages) run against
+a real Electric server. Three services are required: **PostgreSQL**, **Electric**, and **Nginx**.
+
+**Step 1 — Start Docker Desktop** (if not already running):
+
+```sh
+open -a Docker   # macOS
+```
+
+**Step 2 — Build the Electric image from the current branch:**
+
+The `electricsql/electric:canary` image tracks `main` and may lack features from
+feature branches. Build locally when working on branches that change the sync service:
+
+```sh
+cd /path/to/electric-3
+docker build -t electric-local \
+  -f packages/sync-service/Dockerfile \
+  --build-context electric-telemetry=packages/electric-telemetry \
+  packages/sync-service
+```
+
+If your branch only changes TS client code and doesn't need new server features,
+you can skip the build and use the canary image instead:
+
+```sh
+export ELECTRIC_IMAGE=electricsql/electric:canary
+```
+
+**Step 3 — Start services:**
+
+```sh
+cd packages/sync-service/dev
+ELECTRIC_IMAGE=electric-local \
+  docker compose -f docker-compose.yml -f docker-compose-electric.yml \
+  up --wait postgres electric nginx
+```
+
+Services will be available at:
+
+- PostgreSQL: `localhost:54321` (postgres/password)
+- Electric API: `http://localhost:3000`
+- Nginx proxy: `http://localhost:3002`
+
+**Step 4 — Run tests:**
+
+```sh
+cd packages/typescript-client
+pnpm test              # watch mode
+pnpm test --run        # single run
+pnpm test -t "pattern" # filter by test name
+```
+
+**Teardown:**
+
+```sh
+cd packages/sync-service/dev
+docker compose -f docker-compose.yml -f docker-compose-electric.yml down
 ```
 
 ## ⚠️ Critical Gotchas

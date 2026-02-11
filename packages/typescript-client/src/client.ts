@@ -1579,14 +1579,14 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
     const snapshotReason = `snapshot-${++this.#snapshotCounter}`
 
-    // Acquire BEFORE waiting for stream end -- this aborts any in-flight
-    // long-poll, preventing up to 20s of blocking.
+    // Wait for stream end BEFORE acquiring the lock. Acquiring first would
+    // deadlock: the lock pauses the stream, but #waitForStreamEnd needs the
+    // stream to deliver an up-to-date message to resolve.
+    await this.#waitForStreamEnd()
+
     this.#pauseLock.acquire(snapshotReason)
 
     try {
-      // Wait until not mid-stream so we don't fetch during a transaction batch.
-      await this.#waitForStreamEnd()
-
       const { metadata, data } = await this.fetchSnapshot(opts)
 
       const dataWithEndBoundary = (data as Array<Message<T>>).concat([
