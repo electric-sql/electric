@@ -867,9 +867,12 @@ export class ShapeStream<T extends Row<unknown> = Row>
         // must refetch control message might be in a list or not depending
         // on whether it came from an SSE request or long poll - handle both
         // cases for safety here but worth revisiting 409 handling
-        await this.#publish(
-          (Array.isArray(e.json) ? e.json : [e.json]) as Message<T>[]
-        )
+        const messages409 = Array.isArray(e.json)
+          ? e.json
+          : e.json != null
+            ? [e.json]
+            : []
+        await this.#publish(messages409 as Message<T>[])
         return this.#requestShape()
       } else {
         // errors that have reached this point are not actionable without
@@ -1142,7 +1145,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
   }
 
   async #onMessages(batch: Array<Message<T>>, isSseMessage = false) {
-    if (batch.length === 0) return
+    if (!Array.isArray(batch) || batch.length === 0) return
 
     const lastMessage = batch[batch.length - 1]
     const hasUpToDateMessage = isUpToDateMessage(lastMessage)
@@ -1248,6 +1251,15 @@ export class ShapeStream<T extends Row<unknown> = Row>
     const res = await response.text()
     const messages = res || `[]`
     const batch = this.#messageParser.parse<Array<Message<T>>>(messages, schema)
+
+    if (!Array.isArray(batch)) {
+      console.warn(
+        `[Electric] Received non-array response body from shape endpoint. ` +
+          `This may indicate a proxy or CDN is returning an unexpected response. ` +
+          `Expected a JSON array, got: ${typeof batch}`
+      )
+      return
+    }
 
     await this.#onMessages(batch)
   }

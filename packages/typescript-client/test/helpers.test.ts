@@ -41,4 +41,15 @@ describe(`helpers`, () => {
     expect(isUpToDateMessage(mustRefetchMsg)).toBe(false)
     expect(isUpToDateMessage(changeMsg)).toBe(false)
   })
+
+  it(`should handle null and undefined messages without throwing`, () => {
+    // These can occur when a proxy returns a non-array JSON response
+    // that gets indexed as batch[batch.length - 1] → undefined
+    expect(isChangeMessage(undefined as unknown as Message)).toBe(false)
+    expect(isChangeMessage(null as unknown as Message)).toBe(false)
+    expect(isControlMessage(undefined as unknown as Message)).toBe(false)
+    expect(isControlMessage(null as unknown as Message)).toBe(false)
+    expect(isUpToDateMessage(undefined as unknown as Message)).toBe(false)
+    expect(isUpToDateMessage(null as unknown as Message)).toBe(false)
+  })
 })

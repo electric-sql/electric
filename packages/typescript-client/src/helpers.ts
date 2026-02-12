@@ -28,7 +28,7 @@ import {
 export function isChangeMessage<T extends Row<unknown> = Row>(
   message: Message<T>
 ): message is ChangeMessage<T> {
-  return `key` in message
+  return message != null && `key` in message
 }
 
 /**
@@ -51,7 +51,7 @@ export function isChangeMessage<T extends Row<unknown> = Row>(
 export function isControlMessage<T extends Row<unknown> = Row>(
   message: Message<T>
 ): message is ControlMessage {
-  return !isChangeMessage(message)
+  return message != null && !isChangeMessage(message)
 }
 
 export function isUpToDateMessage<T extends Row<unknown> = Row>(
