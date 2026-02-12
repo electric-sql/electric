@@ -61,7 +61,37 @@
   Timestamp: [-0-9]+ [.:0-9]+ [-+0-9]+ UTC
   Value: [-+.0-9]+
   """
+[invoke start_psql]
 
+[shell psql]
+  !create table items (val text);
+  ??CREATE
+
+[shell client]
+  [invoke curl_shape "http://localhost:3000/v1/shape?table=items&offset=-1"]
+
+  ??HTTP/1.1 200 OK
+  ?electric-handle: ([\d-]+)
+  [global handle=$1]
+  ?electric-offset: ([\w\d_]+)
+  [global offset=$1]
+
+[shell psql]
+  !insert into items values ('3');
+  ??INSERT
+
+[shell client]
+  [invoke curl_shape "http://localhost:3000/v1/shape?table=items&handle=$handle&offset=$offset&live"]
+
+  ??HTTP/1.1 200 OK
+  ??"value":{"val":"3"}
+
+[shell otel_collector]
+  """?
+  Metric #[0-9]+
+  Descriptor:
+       -> Name: electric\.storage\.transaction_stored\.bytes
+  """
 ###
 
 [cleanup]

@@ -9,6 +9,7 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
   alias Electric.Replication.Changes
   alias Electric.ShapeCache.Storage
   alias Electric.Shapes.ConsumerRegistry
+  alias Electric.Replication.LogOffset
   alias Electric.Shapes.Consumer.Materializer
 
   @moduletag :tmp_dir
@@ -65,7 +66,7 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
 
     respond_to_call(
       :subscribe_materializer,
-      {:ok, Electric.Replication.LogOffset.last_before_real_offsets()}
+      {:ok, LogOffset.last_before_real_offsets()}
     )
 
     assert Materializer.wait_until_ready(ctx) == :ok
@@ -86,7 +87,7 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
 
     respond_to_call(
       :subscribe_materializer,
-      {:ok, Electric.Replication.LogOffset.last_before_real_offsets()}
+      {:ok, LogOffset.last_before_real_offsets()}
     )
 
     assert Materializer.wait_until_ready(ctx) == :ok
@@ -774,7 +775,7 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
 
     respond_to_call(
       :subscribe_materializer,
-      {:ok, Electric.Replication.LogOffset.last_before_real_offsets()}
+      {:ok, LogOffset.last_before_real_offsets()}
     )
 
     assert Materializer.wait_until_ready(ctx) == :ok
@@ -798,18 +799,12 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
 
     changes
     |> Enum.map(&Map.put(&1, :relation, relation))
-    |> Enum.map(&Map.put(&1, :log_offset, Electric.Replication.LogOffset.first()))
+    |> Enum.map(&Map.put(&1, :log_offset, LogOffset.first()))
     |> Enum.map(&Changes.fill_key(&1, pk_cols))
   end
 
   describe "startup offset coordination" do
     test "no duplicate when offset coordination prevents overlap", ctx do
-      # This test verifies the fix: offset coordination prevents the duplicate.
-      # We use a mocked Consumer that returns an offset, and the Materializer
-      # should only read storage up to that offset, preventing duplicates.
-
-      Process.flag(:trap_exit, true)
-
       shape_handle = "offset-test-#{System.unique_integer()}"
 
       # Setup storage with a record at offset first()
@@ -818,8 +813,6 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
       writer = Storage.init_writer!(storage, @shape)
       Storage.mark_snapshot_as_started(storage)
 
-      # Write a record to storage at LogOffset.first()
-      alias Electric.Replication.LogOffset
       first_offset = LogOffset.first()
 
       writer =
@@ -833,46 +826,9 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
 
       Storage.hibernate(writer)
 
-      # Mock Consumer that returns offset AND sends duplicate
-      test_pid = self()
+      ConsumerRegistry.register_consumer(self(), shape_handle, ctx.stack_id)
 
-      consumer =
-        spawn(fn ->
-          receive do
-            {:"$gen_call", {from, ref}, :await_snapshot_start} ->
-              send(from, {ref, :started})
-          end
-
-          receive do
-            {:"$gen_call", {from, ref}, {:subscribe_materializer, mat_pid}} ->
-              # Return offset BEFORE the record - Materializer will read nothing from storage
-              send(from, {ref, {:ok, LogOffset.before_all()}})
-
-              # Simulate the race: send the same record via new_changes
-              # This should NOT crash because Materializer didn't read it from storage
-              GenServer.call(
-                mat_pid,
-                {:new_changes,
-                 [
-                   %Changes.NewRecord{
-                     relation: {"public", "test_table"},
-                     key: ~s|"public"."test_table"/"1"|,
-                     record: %{"id" => "1", "value" => "10"},
-                     move_tags: []
-                   }
-                 ]}
-              )
-
-              send(test_pid, :consumer_done)
-          end
-
-          Process.sleep(:infinity)
-        end)
-
-      ConsumerRegistry.register_consumer(consumer, shape_handle, ctx.stack_id)
-
-      # Start Materializer - should NOT crash
-      result =
+      {:ok, _pid} =
         Materializer.start_link(%{
           stack_id: ctx.stack_id,
           shape_handle: shape_handle,
@@ -881,22 +837,27 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
           materialized_type: {:array, :int8}
         })
 
-      case result do
-        {:ok, pid} ->
-          # Wait for Consumer mock to finish
-          assert_receive :consumer_done, 5000
-          # Materializer should be alive
-          assert Process.alive?(pid)
-          # And should have the value
-          assert Materializer.get_link_values(%{
-                   stack_id: ctx.stack_id,
-                   shape_handle: shape_handle
-                 }) ==
-                   MapSet.new([10])
+      respond_to_call(:await_snapshot_start, :started)
 
-        {:error, reason} ->
-          flunk("Materializer failed to start: #{inspect(reason)}")
-      end
+      # Return offset BEFORE the record so the Materializer reads nothing from storage
+      respond_to_call(:subscribe_materializer, {:ok, LogOffset.before_all()})
+
+      mat_ctx = %{stack_id: ctx.stack_id, shape_handle: shape_handle}
+
+      assert Materializer.wait_until_ready(mat_ctx) == :ok
+
+      # Send the same record via new_changes — should NOT crash because
+      # offset coordination ensured the Materializer didn't read it from storage
+      Materializer.new_changes(mat_ctx, [
+        %Changes.NewRecord{
+          relation: {"public", "test_table"},
+          key: ~s|"public"."test_table"/"1"|,
+          record: %{"id" => "1", "value" => "10"},
+          move_tags: []
+        }
+      ])
+
+      assert Materializer.get_link_values(mat_ctx) == MapSet.new([10])
     end
   end
 

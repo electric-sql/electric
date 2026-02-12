@@ -30,7 +30,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Supervisor do
           # > derived from database connection, such as a prepared statement, is
           # > used in two or more threads at the same time.
           worker: {ShapeDb.Connection, Keyword.put(args, :mode, :read)},
-          pool_size: System.schedulers_online(),
+          pool_size: 2 * System.schedulers_online(),
           name: ShapeDb.Connection.pool_name(stack_id, :read)
         },
         id: {:pool, :read}

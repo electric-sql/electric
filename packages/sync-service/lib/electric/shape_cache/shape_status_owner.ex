@@ -21,7 +21,12 @@ defmodule Electric.ShapeCache.ShapeStatusOwner do
   end
 
   def initialize(stack_id) do
-    GenServer.call(name(stack_id), :initialize)
+    # Use an infinite timeout because on laggy storage with an incorrectly
+    # shut-down database this call can take  a long time, none of which is
+    # really within our control. So rather than be sensitive to this timing at
+    # a critical point, just let SQLite do its thing, which normally is quite
+    # quick.
+    GenServer.call(name(stack_id), :initialize, :infinity)
   end
 
   def start_link(opts) do

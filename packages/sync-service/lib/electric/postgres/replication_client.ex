@@ -103,17 +103,12 @@ defmodule Electric.Postgres.ReplicationClient do
                    # we can handle, above which we would exit as we run the risk of running
                    # out of memmory.
                    # TODO: stream out transactions and collect on disk to avoid this
-                   max_txn_size: [type: {:or, [:non_neg_integer, nil]}, default: nil]
+                   max_txn_size: [type: {:or, [:non_neg_integer, nil]}, default: nil],
+                   # Maximum number of changes to buffer before flushing a transaction fragment.
+                   # Smaller values result in more message passing overhead but lower memory usage.
+                   # The minimum allowed value is 2.
+                   max_batch_size: [type: :non_neg_integer, default: 100]
                  )
-
-    # Making the batch size small results in more message passing which
-    # can have a performance impact. The larger the batch size the more memory
-    # is used to hold the operations in memory before sending them off to be processed.
-    # For local testing batch sizes of 3 and above overcome the performance hit of message
-    # passing, but as we're not currently worried about the memory consumption of the
-    # replication client and don't want to risk any performance degradation in production
-    # it has been set arbitrarily high to 100. We can tune this figure later if needed.
-    @max_change_batch_size 100
 
     @spec new(Access.t()) :: t()
     def new(opts) do
@@ -122,6 +117,10 @@ defmodule Electric.Postgres.ReplicationClient do
       opts = settings ++ opts
 
       {max_txn_size, opts} = Keyword.pop!(opts, :max_txn_size)
+      {max_batch_size, opts} = Keyword.pop!(opts, :max_batch_size)
+
+      # Assert the implicit requirement
+      true = max_batch_size >= 2
 
       struct!(
         __MODULE__,
@@ -130,7 +129,7 @@ defmodule Electric.Postgres.ReplicationClient do
             message_converter:
               MessageConverter.new(
                 max_tx_size: max_txn_size,
-                max_batch_size: @max_change_batch_size
+                max_batch_size: max_batch_size
               )
           ]
       )

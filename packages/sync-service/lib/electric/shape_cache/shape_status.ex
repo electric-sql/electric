@@ -27,7 +27,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
   @type shape_handle() :: Electric.shape_handle()
 
   # MUST be updated when Shape.comparable/1 changes.
-  @version 7
+  @version 8
 
   # Position of last_read_time in the shape_meta_table tuple:
   # {handle, hash, snapshot_started, last_read_time}

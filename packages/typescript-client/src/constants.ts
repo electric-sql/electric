@@ -20,6 +20,7 @@ export const EXPERIMENTAL_LIVE_SSE_QUERY_PARAM = `experimental_live_sse`
 export const LIVE_SSE_QUERY_PARAM = `live_sse`
 export const FORCE_DISCONNECT_AND_REFRESH = `force-disconnect-and-refresh`
 export const PAUSE_STREAM = `pause-stream`
+export const SYSTEM_WAKE = `system-wake`
 export const LOG_MODE_QUERY_PARAM = `log`
 export const SUBSET_PARAM_WHERE = `subset__where`
 export const SUBSET_PARAM_LIMIT = `subset__limit`

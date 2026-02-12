@@ -27,4 +27,5 @@ sst-*.log
 **/coverage
 response.tmp
 .claude
-!website/.claude/
+!website/.claude/commands
+!website/.claude/skills

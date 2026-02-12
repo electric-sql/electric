@@ -239,6 +239,8 @@ config :electric,
     env!("ELECTRIC_TEMPORARY_REPLICATION_SLOT_USE_RANDOM_NAME", :boolean, nil),
   # The ELECTRIC_EXPERIMENTAL_MAX_TXN_SIZE is undocumented and will be removed in future versions.
   max_txn_size: env!("ELECTRIC_EXPERIMENTAL_MAX_TXN_SIZE", :integer, nil),
+  # The ELECTRIC_EXPERIMENTAL_MAX_BATCH_SIZE is undocumented and used for testing only.
+  max_batch_size: env!("ELECTRIC_EXPERIMENTAL_MAX_BATCH_SIZE", :integer, nil),
   service_port: env!("ELECTRIC_PORT", :integer, nil),
   shape_hibernate_after: shape_hibernate_after,
   shape_enable_suspend?: shape_enable_suspend?,

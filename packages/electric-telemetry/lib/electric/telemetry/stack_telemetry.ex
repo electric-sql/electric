@@ -34,13 +34,16 @@ defmodule ElectricTelemetry.StackTelemetry do
     Logger.metadata(stack_id: stack_id)
 
     children =
-      [
-        ElectricTelemetry.Poller.child_spec(opts,
-          callback_module: __MODULE__,
-          init_delay: :timer.seconds(3)
-        )
-        | exporter_child_specs(opts)
-      ]
+      Enum.concat([
+        [
+          ElectricTelemetry.Poller.child_spec(opts,
+            callback_module: __MODULE__,
+            init_delay: :timer.seconds(3)
+          )
+        ],
+        disk_usage_child_specs(opts),
+        exporter_child_specs(opts)
+      ])
       |> Enum.reject(&is_nil/1)
 
     Supervisor.init(children, strategy: :one_for_one)
@@ -66,6 +69,14 @@ defmodule ElectricTelemetry.StackTelemetry do
       ),
       Reporters.Statsd.child_spec(opts, metrics: Reporters.Statsd.stack_metrics(opts.stack_id))
     ]
+  end
+
+  defp disk_usage_child_specs(%{stack_id: stack_id} = opts) do
+    if storage_dir = Map.get(opts, :storage_dir) do
+      [{ElectricTelemetry.DiskUsage, stack_id: stack_id, storage_dir: storage_dir}]
+    else
+      []
+    end
   end
 
   @impl ElectricTelemetry.Poller
@@ -98,8 +109,8 @@ defmodule ElectricTelemetry.StackTelemetry do
       ),
       last_value("electric.connection.consumers_ready.total"),
       last_value("electric.connection.consumers_ready.failed_to_recover"),
-      last_value("electric.admission_control.acquire.current"),
-      sum("electric.admission_control.reject.count")
+      last_value("electric.admission_control.acquire.current", tags: [:kind]),
+      sum("electric.admission_control.reject.count", tags: [:kind])
       | additional_metrics(telemetry_opts)
     ]
     |> ElectricTelemetry.keep_for_stack(telemetry_opts.stack_id)

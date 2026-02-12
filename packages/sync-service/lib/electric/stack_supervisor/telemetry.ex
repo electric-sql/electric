@@ -23,11 +23,12 @@ defmodule Electric.StackSupervisor.Telemetry do
       telemetry_opts =
         config.telemetry_opts
         |> Keyword.put(:stack_id, config.stack_id)
-        # Use user-provided periodic measurements or default ones otherwise
+        |> Keyword.put(:storage_dir, config.storage_dir)
+        # Always enable default periodic measurements in addition to the user-provided ones
         |> Keyword.update(
           :periodic_measurements,
           default_periodic_measurements(config),
-          & &1
+          &(default_periodic_measurements(config) ++ &1)
         )
         # Add metrics for the default periodic measurements regardless of whether the
         # measurements themselves are occuring.
@@ -150,6 +151,22 @@ defmodule Electric.StackSupervisor.Telemetry do
             stack_id: stack_id,
             slot_name: slot_name
           )
+      end
+    end
+
+    def report_disk_usage(stack_id, _telemetry_opts) do
+      case ElectricTelemetry.DiskUsage.current(stack_id) do
+        {:ok, usage_bytes, measurement_duration} ->
+          Electric.Telemetry.OpenTelemetry.execute(
+            [:electric, :storage],
+            %{used: usage_bytes, measurement_duration_ms: measurement_duration},
+            %{
+              stack_id: stack_id
+            }
+          )
+
+        :pending ->
+          :ok
       end
     end
   else
