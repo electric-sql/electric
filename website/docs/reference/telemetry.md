@@ -47,6 +47,26 @@ Attributes `service_name` and `instance_id` can be overridden with `ELECTRIC_SER
 
 Electric will also load additional resource attributes from `OTEL_RESOURCE_ATTRIBUTES`. Learn more about resource attributes in the [OpenTelemetry documentation](https://opentelemetry.io/docs/languages/js/resources/).
 
+## Sentry
+
+Electric includes built-in support for [Sentry](https://sentry.io) error tracking. When enabled, errors are automatically captured and reported to your Sentry project, including source code context in stack traces.
+
+To enable Sentry, set the `SENTRY_DSN` environment variable to your Sentry project's DSN:
+
+| VARIABLE   | Type     | Description                            |
+| ---------- | -------- | -------------------------------------- |
+| SENTRY_DSN | `string` | DSN for your Sentry project (optional) |
+
+When configured, Electric will:
+
+- Capture all error-level log messages and report them to Sentry
+- Include source code context in stack traces for easier debugging
+- Tag errors with stack context for multi-tenant debugging
+
+:::info
+Sentry support requires Electric to be built with telemetry enabled. The official Docker images (`electricsql/electric`) include telemetry by default.
+:::
+
 ## Example
 
 You can find an example of a docker compose that runs Electric with an OpenTelemetry Collector agent that sends telemetry data to Honeycomb under `packages/sync-service/dev`.

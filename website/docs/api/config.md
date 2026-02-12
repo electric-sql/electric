@@ -478,6 +478,19 @@ Enable sending telemetry data to a StatsD reporting endpoint.
 
 </EnvVarConfig>
 
+### SENTRY_DSN
+
+<EnvVarConfig
+    name="SENTRY_DSN"
+    optional="true"
+    example="https://key@o0.ingest.sentry.io/0">
+
+Set a [Sentry](https://sentry.io) DSN to enable error tracking via the Sentry Elixir SDK. When configured, Electric will automatically capture errors and report them to your Sentry project.
+
+This requires Electric to be built with telemetry enabled (which is the case for the official Docker images).
+
+</EnvVarConfig>
+
 ## Logging
 
 ### ELECTRIC_LOG_LEVEL
