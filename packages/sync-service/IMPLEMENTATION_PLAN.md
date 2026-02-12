@@ -53,7 +53,7 @@ Re-decomposition should be avoided: `Decomposer.decompose/1` should be called on
 | File | Current Role | Changes Needed |
 |------|--------------|----------------|
 | `lib/electric/shapes/consumer/dnf_context.ex` | **(new)** | Holds DNF decomposition state, built from Shape |
-| `lib/electric/shapes/shape/subquery_moves.ex` | Tag structure generation, move-out messages | Extend for DNF positions, accept DnfContext |
+| `lib/electric/shapes/shape/subquery_moves.ex` | Tag structure generation, move-out messages, move-in WHERE clause + exclusion clauses | Extend for DNF positions, DNF-aware exclusion clauses, accept DnfContext |
 | `lib/electric/shapes/consumer/state.ex` | Detects `or_with_subquery?`/`not_with_subquery?` to invalidate | Remove invalidation flags, hold DnfContext |
 | `lib/electric/shapes/consumer.ex` | Triggers invalidation on OR/NOT with subqueries | Handle multiple positions |
 | `lib/electric/shapes/consumer/move_handling.ex` | Single-subquery move-in/out processing | Per-position broadcasts, use DnfContext |
@@ -251,9 +251,116 @@ def do_process_changes([change | rest], %State{shape: shape, dnf_context: dnf_co
 end
 ```
 
-### Phase 5: Move-in/Move-out Message Format
+### Phase 5: Move-in/Move-out Message Format + DNF-Aware Exclusion Clauses
 
 **Modify** `lib/electric/shapes/shape/subquery_moves.ex`
+
+> **IMPORTANT — exclusion clause logic lives here.** `move_in_where_clause/4` already
+> generates the WHERE clause for move-in queries, including exclusion clauses that prevent
+> duplicate inserts when a row is already in the shape via another disjunct. The existing
+> index-based exclusion (`build_exclusion_clauses`) is **wrong for AND+OR combinations** —
+> it excludes ALL other subquery dependencies by index, but should only exclude dependencies
+> in disjuncts that do NOT contain the triggering dependency. For example, in
+> `(x IN sq1 AND y IN sq2) OR z IN sq3`, when sq1 triggers, the old code excludes both sq2
+> and sq3, but sq2 should NOT be excluded since it's in the same disjunct as sq1.
+>
+> Replace `build_exclusion_clauses` with `build_dnf_exclusion_clauses` that uses the
+> decomposition to partition disjuncts into containing/not-containing the trigger position,
+> and only generates `AND NOT (...)` for disjuncts not containing it.
+
+#### 5a: DNF-aware exclusion clauses in `move_in_where_clause`
+
+```elixir
+def move_in_where_clause(shape, shape_handle, move_ins, opts) do
+  # ... existing code to find index, target_section, handle remove_not ...
+
+  # Build exclusion clauses for other subqueries to avoid duplicate inserts
+  # when a row is already in the shape via another disjunct
+  exclusion_clauses =
+    case shape.where && Decomposer.decompose(shape.where.eval) do
+      {:ok, %{disjuncts: disjuncts} = decomposition} when length(disjuncts) > 1 ->
+        build_dnf_exclusion_clauses(decomposition, shape_dependencies, comparison_expressions, index)
+      _ ->
+        ""
+    end
+
+  # ... rest of function, appending exclusion_clauses to the query ...
+end
+
+# Build exclusion clauses using DNF decomposition.
+# Only excludes subqueries in disjuncts that do NOT contain the triggering dependency.
+# For example, in `(x IN sq1 AND y IN sq2) OR z IN sq3`:
+#   - When sq1 triggers, sq2 is in the same disjunct so NOT excluded; sq3 IS excluded
+defp build_dnf_exclusion_clauses(decomposition, shape_dependencies, comparison_expressions, trigger_dep_index) do
+  trigger_position = find_dnf_position_for_dep_index(decomposition, trigger_dep_index)
+
+  if is_nil(trigger_position) do
+    ""
+  else
+    # Partition disjuncts into those containing vs not containing the trigger
+    {_containing, not_containing} =
+      Enum.split_with(decomposition.disjuncts, fn conjunction ->
+        Enum.any?(conjunction, fn {pos, _polarity} -> pos == trigger_position end)
+      end)
+
+    # Generate exclusion for each disjunct NOT containing the trigger
+    clauses =
+      Enum.flat_map(not_containing, fn conjunction ->
+        case generate_disjunct_exclusion(conjunction, decomposition, shape_dependencies, comparison_expressions) do
+          nil -> []
+          clause -> [clause]
+        end
+      end)
+
+    Enum.join(clauses)
+  end
+end
+
+# Generate an exclusion clause for a single disjunct (conjunction of literals).
+# Returns nil if the disjunct contains any non-subquery positions (weaker exclusion
+# is safe since the client deduplicates via tags).
+# Otherwise returns " AND NOT (cond1 AND cond2 AND ...)"
+defp generate_disjunct_exclusion(conjunction, decomposition, shape_dependencies, comparison_expressions) do
+  all_subquery? = Enum.all?(conjunction, fn {pos, _polarity} ->
+    case Map.get(decomposition.subexpressions, pos) do
+      %{is_subquery: true} -> true
+      _ -> false
+    end
+  end)
+
+  if not all_subquery? do
+    nil
+  else
+    conditions = Enum.flat_map(conjunction, fn {pos, polarity} ->
+      info = Map.get(decomposition.subexpressions, pos)
+      case extract_sublink_index_from_ast(info.ast) do
+        nil -> []
+        dep_index ->
+          subquery_shape = Enum.at(shape_dependencies, dep_index)
+          subquery_section = rebuild_subquery_section(subquery_shape)
+          column_sql = get_column_sql(comparison_expressions, dep_index)
+          if column_sql do
+            condition = "#{column_sql} #{subquery_section}"
+            case polarity do
+              :positive -> [condition]
+              :negated -> ["NOT #{condition}"]
+            end
+          else
+            []
+          end
+      end
+    end)
+
+    if conditions == [], do: nil, else: " AND NOT (#{Enum.join(conditions, " AND ")})"
+  end
+end
+```
+
+> **TODO (DnfContext pass-through):** The above calls `Decomposer.decompose(shape.where.eval)`
+> directly. Once DnfContext is threaded through to `move_in_where_clause` (Phase 9), replace
+> with `dnf_context.decomposition` to avoid re-decomposition. See Risk #5.
+
+#### 5b: Move-in/move-out control messages with position information
 
 ```elixir
 @doc """
@@ -375,40 +482,60 @@ The `DnfContext` holds all position-to-dependency mappings, negated position tra
 > which MUST also be implemented — without it, `moved_out_tags` compares bare hashes against
 > slash-delimited tag strings and never matches, silently allowing stale rows through.
 
-Uses `state.dnf_context` for position lookups and negation checks:
+Uses `state.dnf_context` for position lookups and negation checks. Delegates WHERE clause
+generation (including DNF-aware exclusion clauses) to `SubqueryMoves.move_in_where_clause/4`
+— see Phase 5a. This module handles the **orchestration** (which positions to activate/deactivate,
+when to query vs broadcast), not the SQL generation.
 
 ```elixir
 def process_move_ins(%State{dnf_context: dnf_context} = state, dep_handle, new_values) do
   # Find which positions this dependency affects via DnfContext
   positions = DnfContext.get_positions_for_dependency(dnf_context, dep_handle)
 
-  Enum.reduce(positions, state, fn position, acc_state ->
-    is_negated = DnfContext.position_negated?(dnf_context, position)
+  # Separate negated from positive positions
+  negated_positions = Enum.filter(positions, &DnfContext.position_negated?(dnf_context, &1))
+  positive_positions = positions -- negated_positions
 
-    if is_negated do
-      # Move-in to subquery = deactivation of NOT IN condition
-      broadcast_deactivation(acc_state, position, new_values)
+  state =
+    if negated_positions != [] do
+      # Move-in to subquery = deactivation of NOT IN condition → move-out
+      broadcast_deactivation(state, negated_positions, new_values)
     else
-      # Move-in to subquery = activation of IN condition
-      broadcast_activation_and_query(acc_state, position, new_values, dep_handle)
+      state
     end
-  end)
+
+  if positive_positions != [] do
+    # Move-in to subquery = activation of IN condition → query for new rows
+    # SubqueryMoves.move_in_where_clause handles DNF-aware exclusion (Phase 5a)
+    formed_where_clause = SubqueryMoves.move_in_where_clause(shape, dep_handle, values)
+    do_move_in_with_where(state, dep_handle, new_values, formed_where_clause)
+  else
+    state
+  end
 end
 
 def process_move_outs(%State{dnf_context: dnf_context} = state, dep_handle, removed_values) do
   positions = DnfContext.get_positions_for_dependency(dnf_context, dep_handle)
 
-  Enum.reduce(positions, state, fn position, acc_state ->
-    is_negated = DnfContext.position_negated?(dnf_context, position)
+  negated_positions = Enum.filter(positions, &DnfContext.position_negated?(dnf_context, &1))
+  positive_positions = positions -- negated_positions
 
-    if is_negated do
-      # Move-out from subquery = activation of NOT IN condition
-      broadcast_activation_and_query(acc_state, position, removed_values, dep_handle)
+  state =
+    if positive_positions != [] do
+      # Move-out from subquery = deactivation of IN condition → broadcast move-out
+      broadcast_deactivation(state, positive_positions, removed_values)
     else
-      # Move-out from subquery = deactivation of IN condition
-      broadcast_deactivation(acc_state, position, removed_values)
+      state
     end
-  end)
+
+  if negated_positions != [] do
+    # Move-out from subquery = activation of NOT IN condition → query for new rows
+    # Pass remove_not: true to strip NOT from the WHERE clause
+    formed_where_clause = SubqueryMoves.move_in_where_clause(shape, dep_handle, values, remove_not: true)
+    do_move_in_with_where(state, dep_handle, removed_values, formed_where_clause)
+  else
+    state
+  end
 end
 ```
 
@@ -1008,9 +1135,9 @@ Phase 11: Elixir Client (depends on Phases 5, 6 for wire format definition)
 ## Critical Files for Implementation
 
 - `lib/electric/shapes/consumer/dnf_context.ex` - **(new)** DNF state container, built from Shape
-- `lib/electric/shapes/shape/subquery_moves.ex` - Core tag and move message generation
+- `lib/electric/shapes/shape/subquery_moves.ex` - Core tag and move message generation, **move-in WHERE clause + DNF-aware exclusion clauses**
 - `lib/electric/shapes/shape.ex` - `fill_move_tags`, `tag_structure` — **no new struct fields**
-- `lib/electric/shapes/consumer/move_handling.ex` - Move-in/out processing, uses DnfContext
+- `lib/electric/shapes/consumer/move_handling.ex` - Move-in/out orchestration (position routing, negation inversion), delegates SQL generation to `subquery_moves.ex`
 - `lib/electric/shapes/where_clause.ex` - Record filtering and `active_conditions`
 - `lib/electric/log_items.ex` - Message format with `active_conditions`
 - `lib/electric/shapes/querying.ex` - SQL generation for snapshots, accepts DnfContext
@@ -1027,51 +1154,21 @@ This section addresses gaps identified during plan review.
 
 Per RFC lines 230-246, move-in queries must exclude rows already sent via other disjuncts.
 
-**Implementation in Phase 9:**
+**Implementation in Phase 5** (in `subquery_moves.ex`, not `move_handling.ex`):
 
-```elixir
-defp build_move_in_query(shape, dnf_context, position, moved_values, dep_handle) do
-  # Get the column for this position
-  column = get_column_for_position(dnf_context, position)
+The exclusion clause SQL is generated inside `move_in_where_clause/4` in `subquery_moves.ex`,
+which is the function that builds the complete WHERE clause for move-in queries. See Phase 5a
+for the full implementation of `build_dnf_exclusion_clauses` and `generate_disjunct_exclusion`.
 
-  # Build the exclusion clause from other disjuncts
-  other_disjuncts = dnf_context.decomposition.disjuncts
-    |> Enum.with_index()
-    |> Enum.reject(fn {_disjunct, idx} ->
-      # Reject disjuncts that include our position
-      disjunct_includes_position?(dnf_context, idx, position)
-    end)
-    |> Enum.map(fn {disjunct, _idx} ->
-      build_disjunct_sql(dnf_context, disjunct)
-    end)
+Key points:
+- Uses `Decomposer.decompose` to find the trigger's DNF position
+- Partitions disjuncts into containing/not-containing the trigger position
+- Only generates `AND NOT (...)` for disjuncts NOT containing the trigger
+- Skips exclusion for disjuncts containing non-subquery positions (safe — client deduplicates via tags)
+- Each excluded disjunct becomes `AND NOT (cond1 AND cond2 AND ...)` respecting polarity
 
-  exclusion_clause = case other_disjuncts do
-    [] -> ""
-    clauses -> " AND NOT (#{Enum.join(clauses, " OR ")})"
-  end
-
-  # The full query
-  """
-  SELECT #{columns},
-         ARRAY[#{active_conditions_sql}]::boolean[] as active_conditions,
-         #{tags_sql} as tags
-  FROM #{table}
-  WHERE #{column} = ANY($1)
-    #{exclusion_clause}
-  """
-end
-
-defp build_disjunct_sql(dnf_context, disjunct) do
-  # Convert a disjunct (conjunction of literals) to SQL
-  conditions = Enum.map(disjunct, fn {pos, polarity} ->
-    subexpr = Map.fetch!(dnf_context.decomposition.subexpressions, pos)
-    sql = subexpression_to_sql(subexpr)
-    if polarity == :negated, do: "NOT (#{sql})", else: sql
-  end)
-
-  "(#{Enum.join(conditions, " AND ")})"
-end
-```
+`move_handling.ex` calls `SubqueryMoves.move_in_where_clause` and passes the result to
+the query executor — it does NOT generate exclusion SQL itself.
 
 ### B. Negation Tracking Flow
 
