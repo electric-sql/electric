@@ -60,8 +60,7 @@ defmodule Electric.StackSupervisor.Telemetry do
       [
         {__MODULE__, :count_shapes, [stack_id]},
         {__MODULE__, :report_write_buffer_size, [stack_id]},
-        {__MODULE__, :report_retained_wal_size, [stack_id, config.replication_opts[:slot_name]]},
-        {__MODULE__, :report_disk_usage, [stack_id]}
+        {__MODULE__, :report_retained_wal_size, [stack_id, config.replication_opts[:slot_name]]}
       ]
     end
 
