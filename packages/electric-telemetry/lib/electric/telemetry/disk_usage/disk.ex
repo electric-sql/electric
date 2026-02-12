@@ -36,8 +36,6 @@ defmodule ElectricTelemetry.DiskUsage.Disk do
   defdelegate stat(path), to: :prim_file, as: :read_file_info
 
   defp ls(path) do
-    with {:ok, list} <- :prim_file.list_dir(path) do
-      {:ok, Enum.map(list, &to_string/1)}
-    end
+    :prim_file.list_dir(path)
   end
 end
