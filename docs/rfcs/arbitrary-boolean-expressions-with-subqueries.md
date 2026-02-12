@@ -207,7 +207,7 @@ Compute both tags and `active_conditions` in SQL:
 
 ```sql
 SELECT
-  -- Condition results for active_conditions
+  -- Condition results for active_conditions (effective values)
   (x IN (SELECT id FROM subquery1)) as cond_0,
   (status = 'active') as cond_1,
   (y IN (SELECT id FROM subquery2)) as cond_2,
@@ -222,6 +222,8 @@ FROM tasks
 WHERE (x IN (SELECT ...) AND status = 'active')
    OR (y IN (SELECT ...))
 ```
+
+For negated positions, the SQL wraps the condition in `NOT` to produce the effective value. For example, `WHERE x NOT IN (SELECT ...)` decomposes into a single position with `negated: true` and an un-negated AST of `x IN (SELECT ...)`. The snapshot query generates `(NOT (x IN (SELECT ...))) as cond_0` so the result matches what the client expects.
 
 PostgreSQL's optimizer deduplicates identical subexpressions between SELECT and WHERE.
 
@@ -437,17 +439,18 @@ to the correct state — it just may take more than one up-to-date cycle to get 
 
 When the outer shape receives an insert/update/delete from the replication stream:
 
-1. **Compute `active_conditions`** — For each position in the DNF, determine if the condition is satisfied:
+1. **Compute `active_conditions`** — For each position in the DNF, compute the **effective** condition value:
    - **Subquery positions**: Check `MapSet.member?(materialized_values, row_value)` using the dependency shape's materializer
    - **Field positions**: Evaluate the simple comparison against the row's data
+   - **Negated positions**: The decomposer stores the un-negated AST with `negated: true`. Apply `NOT` to the raw evaluation result so `active_conditions` stores the effective value. This way clients can use the values directly without needing polarity information.
 
-   This replaces the current `includes_record?` call — we compute per-position results rather than a single boolean.
+   This replaces the current `includes_record?` call — we compute per-position effective results rather than a single boolean.
 
-2. **Derive inclusion** — Evaluate the DNF using `active_conditions`:
+2. **Derive inclusion** — Evaluate the DNF using `active_conditions` (which already stores effective values with negation applied):
    ```
-   included = OR over disjuncts, where each disjunct = AND over its non-null positions
+   included = OR over disjuncts, where each disjunct = AND over its positions
    ```
-   If not included, skip the row (don't emit to shape log).
+   Since `active_conditions` contains effective values, always check for `true` regardless of the position's polarity in the DNF. If not included, skip the row (don't emit to shape log).
 
 3. **Compute tags** — For each disjunct, extract column values at participating positions and hash them (same as current `fill_move_tags`, extended for multiple disjuncts).
 
