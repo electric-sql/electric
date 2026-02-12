@@ -38,7 +38,6 @@ defmodule Electric.ShapeCache.PureFileStorage do
   alias Electric.ShapeCache.PureFileStorage.Snapshot
   alias Electric.ShapeCache.PureFileStorage.WriteLoop
   alias Electric.ShapeCache.Storage
-  alias Electric.Shapes.Shape
 
   import LogOffset
   import Electric.ShapeCache.PureFileStorage.SharedRecords
@@ -93,9 +92,6 @@ defmodule Electric.ShapeCache.PureFileStorage do
   ]
 
   @clean_cache_keys storage_meta_keys() -- @read_path_keys
-
-  # Directory for storing metadata
-  @metadata_storage_dir ".meta"
 
   def shared_opts(opts) do
     stack_id = Keyword.fetch!(opts, :stack_id)
@@ -203,37 +199,6 @@ defmodule Electric.ShapeCache.PureFileStorage do
      Path.wildcard("#{base_path}/*/*/*")
      |> Stream.map(&Path.basename/1)
      |> Enum.into(MapSet.new())}
-  end
-
-  def get_stored_shapes(stack_opts, shape_handles) do
-    Task.Supervisor.async_stream(
-      stack_task_supervisor(stack_opts.stack_id),
-      shape_handles,
-      fn handle ->
-        shape_opts = for_shape(handle, stack_opts)
-
-        case read_shape_definition(shape_opts) do
-          {:ok, shape} ->
-            {handle, {:ok, shape}}
-
-          _ ->
-            Logger.warning(
-              "Failed to read shape definition for shape #{handle}, removing it from disk"
-            )
-
-            cleanup!(shape_opts)
-            {handle, {:error, :failed_to_recover_shape}}
-        end
-      end,
-      timeout: :infinity,
-      ordered: false
-    )
-    |> Enum.map(fn {:ok, res} -> res end)
-    |> Map.new()
-  end
-
-  def metadata_backup_dir(%{base_path: base_path}) do
-    Path.join([base_path, @metadata_storage_dir, "backups"])
   end
 
   def drop_all_ets_entries(stack_id) do
@@ -523,7 +488,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
   def init_writer!(shape_opts, shape_definition) do
     table = :ets.new(:in_memory_storage, [:ordered_set, :protected])
 
-    {initial_acc, suffix} = initialise_filesystem!(shape_opts, shape_definition)
+    {initial_acc, suffix} = initialise_filesystem!(shape_opts)
 
     register_with_stack(
       shape_opts,
@@ -569,7 +534,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
     writer_state(state, writer_acc: WriteLoop.flush_and_close_all(acc, state))
   end
 
-  defp initialise_filesystem!(%__MODULE__{} = opts, shape_definition) do
+  def initialise_filesystem!(%__MODULE__{} = opts) do
     on_disk_version = read_metadata!(opts, :version)
     new? = is_nil(on_disk_version)
 
@@ -585,7 +550,6 @@ defmodule Electric.ShapeCache.PureFileStorage do
 
     if initialize? do
       create_directories!(opts)
-      write_shape_definition!(opts, shape_definition)
     end
 
     suffix =
@@ -745,24 +709,6 @@ defmodule Electric.ShapeCache.PureFileStorage do
     updates = for {key, value} <- key_values, do: {storage_meta_key_pos(key), value}
 
     :ets.update_element(stack_ets, handle, updates)
-  end
-
-  defp write_shape_definition!(%__MODULE__{} = opts, shape_definition) do
-    write!(
-      shape_metadata_path(opts, "shape_definition.json"),
-      Jason.encode!(shape_definition),
-      [:raw]
-    )
-  end
-
-  defp read_shape_definition(%__MODULE__{} = opts) do
-    path = shape_metadata_path(opts, "shape_definition.json")
-
-    with {:ok, contents} <- File.open(path, [:read, :raw, :read_ahead], &IO.binread(&1, :eof)),
-         {:ok, decoded} <- Jason.decode(if(is_binary(contents), do: contents, else: "")),
-         {:ok, rebuilt} <- Shape.from_json_safe(decoded) do
-      {:ok, rebuilt}
-    end
   end
 
   defp last_snapshot_chunk(%__MODULE__{} = opts),
