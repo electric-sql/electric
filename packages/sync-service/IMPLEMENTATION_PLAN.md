@@ -333,7 +333,7 @@ defp generate_disjunct_exclusion(conjunction, decomposition, shape_dependencies,
   else
     conditions = Enum.flat_map(conjunction, fn {pos, polarity} ->
       info = Map.get(decomposition.subexpressions, pos)
-      case extract_sublink_index_from_ast(info.ast) do
+      case extract_sublink_index(info.ast) do  # See Phase 7 and Risk #9 — always use AST extraction, never column-name matching
         nil -> []
         dep_index ->
           subquery_shape = Enum.at(shape_dependencies, dep_index)
@@ -437,7 +437,7 @@ defp build_active_conditions_select(dnf_context) do
     %DnfContext{decomposition: %{subexpressions: subexpressions}} ->
       conditions = Enum.map(0..(map_size(subexpressions) - 1), fn pos ->
         subexpr = Map.fetch!(subexpressions, pos)
-        sql = sql_for_subexpression(subexpr)
+        sql = sql_for_subexpression(subexpr, comparison_expressions, shape_dependencies)
         # For negated positions, wrap in NOT to produce the effective condition
         # value. The decomposer stores the un-negated AST with negated=true,
         # so we must apply the negation here to match the Elixir-side semantics
@@ -448,7 +448,58 @@ defp build_active_conditions_select(dnf_context) do
       ", ARRAY[#{Enum.join(conditions, ", ")}]::boolean[] as active_conditions"
   end
 end
+```
 
+> **IMPORTANT — sublink index resolution:** For subquery subexpressions, the sublink
+> index (which dependency shape this subquery corresponds to) MUST be extracted directly
+> from the AST node, NOT resolved by column-name matching. Column-name matching is
+> ambiguous when multiple subqueries reference the same column (e.g.,
+> `parent_id IN (SELECT ... WHERE category='a') OR parent_id IN (SELECT ... WHERE category='b')`).
+> Both subexpressions have `column == "parent_id"`, so column matching always resolves
+> to the first dependency, producing identical active_conditions for what should be
+> distinct subqueries.
+>
+> Use `extract_sublink_index/1` to pattern-match on the AST's `sublink_membership_check`
+> function node and extract the canonical `$sublink` index from its argument:
+
+```elixir
+# Resolve sublink index from AST — NOT from column name matching.
+# Each sublink_membership_check AST node carries a $sublink reference
+# that uniquely identifies its dependency, even when multiple subqueries
+# use the same column.
+defp extract_sublink_index(%Func{name: "sublink_membership_check", args: [_, sublink_ref]}) do
+  case sublink_ref.path do
+    ["$sublink", idx_str] -> String.to_integer(idx_str)
+    _ -> nil
+  end
+end
+
+defp extract_sublink_index(_), do: nil
+
+# For subquery subexpressions, generate SQL like:
+#   ("parent_id" IN (SELECT id FROM parent WHERE category = 'a'))
+defp generate_subquery_condition_sql(subexpr, comparison_expressions, shape_dependencies) do
+  # Extract the sublink index directly from the AST — never match by column name
+  sublink_index = extract_sublink_index(subexpr.ast)
+
+  dep_shape = if sublink_index, do: Enum.at(shape_dependencies, sublink_index)
+
+  if dep_shape do
+    subquery_section = rebuild_subquery_section(dep_shape)
+    column_sql = get_column_sql_for_subexpr(subexpr, comparison_expressions, sublink_index)
+
+    if subexpr.negated do
+      ~s[(NOT #{column_sql} #{subquery_section})]
+    else
+      ~s[(#{column_sql} #{subquery_section})]
+    end
+  else
+    raise "Could not resolve dependency shape for sublink index #{inspect(sublink_index)}"
+  end
+end
+```
+
+```elixir
 defp build_headers_part({schema, table}, additional_headers, tags, active_conditions_sql) do
   # Include active_conditions in headers JSON
   # ...
@@ -960,6 +1011,16 @@ describe "complex boolean expressions" do
     # WHERE (project_id IN sq1 AND status = 'active') OR assigned_to IN sq2
   end
 
+  test "OR of two subqueries on same column" do
+    # WHERE parent_id IN (SELECT id FROM parent WHERE category = 'a')
+    #    OR parent_id IN (SELECT id FROM parent WHERE category = 'b')
+    # Both subqueries reference parent_id — sublink index resolution must
+    # use AST extraction (not column-name matching) to distinguish them.
+    # Row with parent_id=1 (category='a'): active_conditions = [true, false]
+    # Row with parent_id=2 (category='b'): active_conditions = [false, true]
+    # Tags must also be distinct per disjunct (different slash positions).
+  end
+
   test "De Morgan: NOT (A AND B)" do
     # WHERE NOT (project_id IN sq1 AND status = 'active')
     # Equivalent to: project_id NOT IN sq1 OR status != 'active'
@@ -1105,6 +1166,9 @@ Phase 11: Elixir Client (depends on Phases 5, 6 for wire format definition)
 7. **ast_to_sql completeness**: Any AST-to-SQL converter for snapshot queries must have a fallback clause for unsupported operators. Missing operators should raise a descriptive error at shape creation time, not crash at query time.
 
 8. **Snapshot tag format vs wire tag format (Phase 12)**: Changing the wire tag format to slash-delimited strings (Phase 2) silently breaks the pre-existing `moved_out_tags` filtering in the storage layer, because it compares bare hashes against slash-delimited strings. This is an **integration-level correctness bug** that won't surface in unit tests — it requires a multi-disjunct shape with a move-out racing a move-in query. Phase 12 must be implemented immediately after Phase 9 (Move Handling) to fix this. See Phase 12 in the Implementation Steps for details.
+
+9. **Sublink index resolution by column name is ambiguous (Phase 7)**: When generating SQL for `active_conditions` in snapshot queries, the sublink index (which dependency shape a subquery corresponds to) MUST be extracted from the AST node's `sublink_membership_check` function, NOT resolved by matching column names against `comparison_expressions`. Column-name matching fails when multiple subqueries reference the same column (e.g., `parent_id IN (SELECT ... WHERE category='a') OR parent_id IN (SELECT ... WHERE category='b')`) — both subexpressions have `column == "parent_id"`, so column matching always resolves to the first dependency, producing identical `active_conditions` for what should be distinct subqueries. Use `extract_sublink_index/1` (see Phase 7) which pattern-matches on the AST to get the canonical `$sublink` index. This also applies to Phase 5a's `extract_sublink_index_from_ast` for exclusion clauses — use the same approach consistently.
+   - Test: "OR of two subqueries on same column" (see Test Strategy §7)
 
 ### Protocol Compatibility
 
