@@ -484,8 +484,7 @@ defmodule Electric.Shapes.Consumer do
 
   defp handle_txn_in_span(txn, %State{} = state) do
     ot_attrs =
-      [xid: txn.xid, total_num_changes: txn.num_changes] ++
-        shape_attrs(state.shape_handle, state.shape)
+      [xid: txn.xid, total_num_changes: txn.num_changes] ++ State.telemetry_attrs(state)
 
     OpenTelemetry.with_child_span(
       "shape_write.consumer.handle_txn",
@@ -577,7 +576,7 @@ defmodule Electric.Shapes.Consumer do
             operations: num_changes,
             replication_lag: lag
           },
-          Map.new(shape_attrs(state.shape_handle, state.shape))
+          Map.new(State.telemetry_attrs(state))
         )
 
         {:cont,
@@ -666,14 +665,6 @@ defmodule Electric.Shapes.Consumer do
       line_tuple = {offset, key, operation, json_line}
       {line_tuple, total_size + byte_size(json_line)}
     end)
-  end
-
-  defp shape_attrs(shape_handle, shape) do
-    [
-      "shape.handle": shape_handle,
-      "shape.root_table": shape.root_table,
-      "shape.where": shape.where
-    ]
   end
 
   defp calculate_replication_lag(%Transaction{commit_timestamp: nil}) do

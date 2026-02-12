@@ -331,4 +331,13 @@ defmodule Electric.Shapes.Consumer.State do
       ) do
     %{state | move_handling_state: MoveIns.remove_completed(move_handling_state, xid)}
   end
+
+  def telemetry_attrs(%__MODULE__{stack_id: stack_id, shape_handle: shape_handle, shape: shape}) do
+    [
+      "shape.handle": shape_handle,
+      "shape.root_table": shape.root_table,
+      "shape.where": if(not is_nil(shape.where), do: shape.where.query, else: nil),
+      stack_id: stack_id
+    ]
+  end
 end
