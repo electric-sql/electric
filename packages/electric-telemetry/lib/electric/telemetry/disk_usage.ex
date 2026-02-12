@@ -6,7 +6,8 @@ defmodule ElectricTelemetry.DiskUsage do
   @default_update_period 60_000
 
   def start_link(args) do
-    GenServer.start_link(__MODULE__, args)
+    {:ok, stack_id} = Keyword.fetch(args, :stack_id)
+    GenServer.start_link(__MODULE__, args, name: name(stack_id))
   end
 
   def update(pid) do
@@ -14,7 +15,7 @@ defmodule ElectricTelemetry.DiskUsage do
   end
 
   def current(stack_id) do
-    table = ets_table(stack_id)
+    table = name(stack_id)
 
     case :ets.lookup(table, :usage_bytes) do
       [] -> :pending
@@ -32,7 +33,7 @@ defmodule ElectricTelemetry.DiskUsage do
     update_period = Keyword.get(args, :update_period, @default_update_period)
 
     table =
-      :ets.new(ets_table(stack_id), [
+      :ets.new(name(stack_id), [
         :named_table,
         :set,
         :protected
@@ -105,7 +106,7 @@ defmodule ElectricTelemetry.DiskUsage do
     state
   end
 
-  defp ets_table(stack_id) do
+  defp name(stack_id) do
     :"ElectricTelemetry.DiskUsage:#{stack_id}"
   end
 
