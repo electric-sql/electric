@@ -82,7 +82,7 @@ defmodule Electric.Postgres.SnapshotQuery do
     [
       "shape.handle": shape_handle,
       "shape.root_table": shape.root_table,
-      "shape.where": shape.where
+      "shape.where": if(not is_nil(shape.where), do: shape.where.query, else: nil)
     ]
   end
 
