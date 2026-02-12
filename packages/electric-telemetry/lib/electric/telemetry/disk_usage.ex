@@ -35,8 +35,7 @@ defmodule ElectricTelemetry.DiskUsage do
       :ets.new(ets_table(stack_id), [
         :named_table,
         :set,
-        :protected,
-        read_concurrency: true
+        :protected
       ])
 
     {usage_bytes, updated_at, immediate_update?} = load_cached_usage(storage_dir)
