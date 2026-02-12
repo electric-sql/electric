@@ -110,12 +110,14 @@ defmodule ElectricTelemetry.DiskUsage do
     :"ElectricTelemetry.DiskUsage:#{stack_id}"
   end
 
+  @cache_version "1"
+
   defp load_cached_usage(storage_dir) do
     cache_file = usage_cache_file(storage_dir)
 
     with true <- File.exists?(cache_file),
          {:ok, data} <- File.read(cache_file),
-         [usage_bytes, updated_at] <- String.split(data, "|"),
+         [@cache_version, usage_bytes, updated_at] <- String.split(data, "|"),
          {usage_bytes, ""} <- Integer.parse(usage_bytes),
          {:ok, updated_at, 0} = DateTime.from_iso8601(updated_at) do
       {usage_bytes, updated_at, false}
@@ -130,6 +132,8 @@ defmodule ElectricTelemetry.DiskUsage do
 
     data =
       IO.iodata_to_binary([
+        @cache_version,
+        "|",
         to_string(state.usage_bytes),
         "|",
         DateTime.to_iso8601(state.updated_at)
