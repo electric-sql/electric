@@ -1,5 +1,13 @@
 # @core/sync-service
 
+## 1.4.4
+
+### Patch Changes
+
+- 34a240b: fix: metrics from consumer seem to not be emitted because of a struct
+- bbfd752: Fixed a bug where rows with subquery-based WHERE clauses could retain stale move tags when the sublink column value changed during a pending move-in, causing the row to not be properly removed on subsequent move-outs.
+- dfcfa40: Add disk usage telemetry to stacks.
+
 ## 1.4.3
 
 ### Patch Changes

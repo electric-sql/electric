@@ -1,5 +1,12 @@
 # @core/electric-telemetry
 
+## 0.1.4
+
+### Patch Changes
+
+- 34a240b: fix: metrics from consumer seem to not be emitted because of a struct
+- dfcfa40: Add disk usage telemetry to stacks.
+
 ## 0.1.3
 
 ### Patch Changes
