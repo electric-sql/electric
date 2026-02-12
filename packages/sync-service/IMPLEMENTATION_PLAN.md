@@ -62,6 +62,7 @@ Re-decomposition should be avoided: `Decomposer.decompose/1` should be called on
 | `lib/electric/shapes/where_clause.ex` | `includes_record?` boolean check | Per-position evaluation |
 | `lib/electric/shapes/querying.ex` | SQL for initial data, tags | Add `active_conditions` columns, accept DnfContext |
 | `lib/electric/log_items.ex` | Formats messages with tags | Add `active_conditions` to headers |
+| `lib/electric/replication/eval/sql_generator.ex` | **(new)** | Converts AST back to SQL — used by querying.ex and subquery_moves.ex |
 | `lib/electric/replication/eval/parser.ex` | Parses WHERE, handles SubLinks | No changes needed |
 | `lib/electric/replication/eval/walker.ex` | AST traversal | No changes needed |
 | `packages/elixir-client/.../tag_tracker.ex` | Client-side tag tracking, DNF eval, synthetic deletes | Slash-delimited normalization, `removed_tags` parsing, position-based indexing |
@@ -129,6 +130,339 @@ end
 - `distribute_and_over_or/1` - DNF conversion
 - `collect_atomics/1` - Extract atomic conditions
 - `assign_positions/1` - Map conditions to positions
+
+### Phase 1a: SQL Generator (New Module)
+
+**Create** `lib/electric/replication/eval/sql_generator.ex`
+
+A general-purpose module that converts the parsed AST (from `Parser`) back into SQL strings.
+Lives alongside `parser.ex`, `walker.ex`, `runner.ex`, and `decomposer.ex` in the `eval`
+directory. Used by `querying.ex` (for `active_conditions` SELECT columns) and
+`subquery_moves.ex` (for exclusion clauses) — both call `SqlGenerator.to_sql/1` instead of
+inlining their own AST-to-SQL conversion.
+
+```elixir
+defmodule Electric.Replication.Eval.SqlGenerator do
+  @moduledoc """
+  Converts a parsed WHERE clause AST back into a SQL string.
+
+  This is the inverse of `Parser` — where `Parser` turns SQL text into an AST,
+  `SqlGenerator` turns that AST back into SQL text. Used whenever the server
+  needs to embed a condition in a generated query (snapshot active_conditions,
+  move-in exclusion clauses, etc.).
+
+  Raises `ArgumentError` for AST nodes that cannot be converted to SQL, so
+  unsupported operators are caught at shape creation time rather than at
+  query time.
+  """
+
+  alias Electric.Replication.Eval.Parser.{Const, Ref, Func, Array}
+
+  @doc """
+  Convert an AST node to a SQL string.
+
+  Handles: comparison operators (=, <>, <, >, <=, >=), pattern matching
+  (LIKE, ILIKE), nullability (IS NULL, IS NOT NULL), membership (IN),
+  logical operators (AND, OR, NOT), column references, and constants
+  (strings, integers, floats, booleans, NULL).
+
+  Raises `ArgumentError` for unrecognised AST nodes.
+  """
+  @spec to_sql(Parser.tree_part()) :: String.t()
+
+  # Comparison operators — names are stored with surrounding quotes
+  def to_sql(%Func{name: "\"=\"", args: [left, right]}),
+    do: "(#{to_sql(left)} = #{to_sql(right)})"
+
+  def to_sql(%Func{name: "\"<>\"", args: [left, right]}),
+    do: "(#{to_sql(left)} <> #{to_sql(right)})"
+
+  def to_sql(%Func{name: "\"<\"", args: [left, right]}),
+    do: "(#{to_sql(left)} < #{to_sql(right)})"
+
+  def to_sql(%Func{name: "\">\"", args: [left, right]}),
+    do: "(#{to_sql(left)} > #{to_sql(right)})"
+
+  def to_sql(%Func{name: "\"<=\"", args: [left, right]}),
+    do: "(#{to_sql(left)} <= #{to_sql(right)})"
+
+  def to_sql(%Func{name: "\">=\"", args: [left, right]}),
+    do: "(#{to_sql(left)} >= #{to_sql(right)})"
+
+  # Pattern matching
+  def to_sql(%Func{name: "\"~~\"", args: [left, right]}),
+    do: "(#{to_sql(left)} LIKE #{to_sql(right)})"
+
+  def to_sql(%Func{name: "\"~~*\"", args: [left, right]}),
+    do: "(#{to_sql(left)} ILIKE #{to_sql(right)})"
+
+  # Nullability
+  def to_sql(%Func{name: "is null", args: [arg]}),
+    do: "(#{to_sql(arg)} IS NULL)"
+
+  def to_sql(%Func{name: "is not null", args: [arg]}),
+    do: "(#{to_sql(arg)} IS NOT NULL)"
+
+  # Membership (IN with literal array)
+  def to_sql(%Func{name: "in", args: [left, %Array{elements: elements}]}) do
+    values = Enum.map_join(elements, ", ", &to_sql/1)
+    "(#{to_sql(left)} IN (#{values}))"
+  end
+
+  # Logical operators
+  def to_sql(%Func{name: "not", args: [inner]}),
+    do: "(NOT #{to_sql(inner)})"
+
+  def to_sql(%Func{name: "and", args: args}) do
+    conditions = Enum.map_join(args, " AND ", &to_sql/1)
+    "(#{conditions})"
+  end
+
+  def to_sql(%Func{name: "or", args: args}) do
+    conditions = Enum.map_join(args, " OR ", &to_sql/1)
+    "(#{conditions})"
+  end
+
+  # Column references
+  def to_sql(%Ref{path: path}) do
+    ~s|"#{Enum.join(path, "\".\"")}"|
+  end
+
+  # Constants
+  def to_sql(%Const{value: nil}), do: "NULL"
+  def to_sql(%Const{value: true}), do: "true"
+  def to_sql(%Const{value: false}), do: "false"
+
+  def to_sql(%Const{value: value}) when is_binary(value) do
+    escaped = String.replace(value, "'", "''")
+    "'#{escaped}'"
+  end
+
+  def to_sql(%Const{value: value}) when is_integer(value) or is_float(value),
+    do: "#{value}"
+
+  # Catch-all — fail loudly so unsupported operators are caught at shape
+  # creation time, not at query time.
+  def to_sql(other) do
+    raise ArgumentError,
+      "SqlGenerator.to_sql/1: unsupported AST node: #{inspect(other)}. " <>
+      "This WHERE clause contains an operator or expression type that " <>
+      "cannot be converted back to SQL for active_conditions generation."
+  end
+end
+```
+
+**Tests**: `test/electric/replication/eval/sql_generator_test.exs`
+
+Comprehensive unit tests that round-trip through the parser and back:
+
+```elixir
+defmodule Electric.Replication.Eval.SqlGeneratorTest do
+  use ExUnit.Case, async: true
+
+  alias Electric.Replication.Eval.SqlGenerator
+  alias Electric.Replication.Eval.Parser
+  alias Electric.Replication.Eval.Parser.{Const, Ref, Func, Array}
+
+  # Helper: parse a WHERE clause and convert back to SQL
+  defp round_trip(sql_fragment) do
+    # Parse using the existing parser infrastructure, then convert back
+    {:ok, ast} = parse_expression(sql_fragment)
+    SqlGenerator.to_sql(ast)
+  end
+
+  describe "comparison operators" do
+    test "equals" do
+      ast = %Func{name: "\"=\"", args: [%Ref{path: ["status"]}, %Const{value: "active"}]}
+      assert SqlGenerator.to_sql(ast) == ~s|(\"status\" = 'active')|
+    end
+
+    test "not equals (<>)" do
+      ast = %Func{name: "\"<>\"", args: [%Ref{path: ["status"]}, %Const{value: "deleted"}]}
+      assert SqlGenerator.to_sql(ast) == ~s|(\"status\" <> 'deleted')|
+    end
+
+    test "less than" do
+      ast = %Func{name: "\"<\"", args: [%Ref{path: ["age"]}, %Const{value: 18}]}
+      assert SqlGenerator.to_sql(ast) == ~s|(\"age\" < 18)|
+    end
+
+    test "greater than" do
+      ast = %Func{name: "\">\"", args: [%Ref{path: ["score"]}, %Const{value: 100}]}
+      assert SqlGenerator.to_sql(ast) == ~s|(\"score\" > 100)|
+    end
+
+    test "less than or equal" do
+      ast = %Func{name: "\"<=\"", args: [%Ref{path: ["priority"]}, %Const{value: 5}]}
+      assert SqlGenerator.to_sql(ast) == ~s|(\"priority\" <= 5)|
+    end
+
+    test "greater than or equal" do
+      ast = %Func{name: "\">=\"", args: [%Ref{path: ["price"]}, %Const{value: 9.99}]}
+      assert SqlGenerator.to_sql(ast) == ~s|(\"price\" >= 9.99)|
+    end
+  end
+
+  describe "pattern matching" do
+    test "LIKE" do
+      ast = %Func{name: "\"~~\"", args: [%Ref{path: ["name"]}, %Const{value: "%test%"}]}
+      assert SqlGenerator.to_sql(ast) == ~s|(\"name\" LIKE '%test%')|
+    end
+
+    test "ILIKE" do
+      ast = %Func{name: "\"~~*\"", args: [%Ref{path: ["name"]}, %Const{value: "%test%"}]}
+      assert SqlGenerator.to_sql(ast) == ~s|(\"name\" ILIKE '%test%')|
+    end
+  end
+
+  describe "nullability" do
+    test "IS NULL" do
+      ast = %Func{name: "is null", args: [%Ref{path: ["deleted_at"]}]}
+      assert SqlGenerator.to_sql(ast) == ~s|(\"deleted_at\" IS NULL)|
+    end
+
+    test "IS NOT NULL" do
+      ast = %Func{name: "is not null", args: [%Ref{path: ["email"]}]}
+      assert SqlGenerator.to_sql(ast) == ~s|(\"email\" IS NOT NULL)|
+    end
+  end
+
+  describe "membership (IN)" do
+    test "IN with literal values" do
+      ast = %Func{name: "in", args: [
+        %Ref{path: ["status"]},
+        %Array{elements: [%Const{value: "a"}, %Const{value: "b"}, %Const{value: "c"}]}
+      ]}
+      assert SqlGenerator.to_sql(ast) == ~s|(\"status\" IN ('a', 'b', 'c'))|
+    end
+
+    test "IN with integer values" do
+      ast = %Func{name: "in", args: [
+        %Ref{path: ["id"]},
+        %Array{elements: [%Const{value: 1}, %Const{value: 2}, %Const{value: 3}]}
+      ]}
+      assert SqlGenerator.to_sql(ast) == ~s|(\"id\" IN (1, 2, 3))|
+    end
+  end
+
+  describe "logical operators" do
+    test "NOT" do
+      inner = %Func{name: "\"=\"", args: [%Ref{path: ["active"]}, %Const{value: true}]}
+      ast = %Func{name: "not", args: [inner]}
+      assert SqlGenerator.to_sql(ast) == ~s|(NOT (\"active\" = true))|
+    end
+
+    test "AND" do
+      left = %Func{name: "\"=\"", args: [%Ref{path: ["a"]}, %Const{value: 1}]}
+      right = %Func{name: "\"=\"", args: [%Ref{path: ["b"]}, %Const{value: 2}]}
+      ast = %Func{name: "and", args: [left, right]}
+      assert SqlGenerator.to_sql(ast) == ~s|((\"a\" = 1) AND (\"b\" = 2))|
+    end
+
+    test "OR" do
+      left = %Func{name: "\"=\"", args: [%Ref{path: ["x"]}, %Const{value: 1}]}
+      right = %Func{name: "\"=\"", args: [%Ref{path: ["y"]}, %Const{value: 2}]}
+      ast = %Func{name: "or", args: [left, right]}
+      assert SqlGenerator.to_sql(ast) == ~s|((\"x\" = 1) OR (\"y\" = 2))|
+    end
+
+    test "nested AND within OR" do
+      a = %Func{name: "\"=\"", args: [%Ref{path: ["x"]}, %Const{value: 1}]}
+      b = %Func{name: "\"=\"", args: [%Ref{path: ["y"]}, %Const{value: 2}]}
+      c = %Func{name: "\"=\"", args: [%Ref{path: ["z"]}, %Const{value: 3}]}
+      and_node = %Func{name: "and", args: [a, b]}
+      ast = %Func{name: "or", args: [and_node, c]}
+      assert SqlGenerator.to_sql(ast) == ~s|(((\"x\" = 1) AND (\"y\" = 2)) OR (\"z\" = 3))|
+    end
+
+    test "NOT with AND (De Morgan)" do
+      a = %Func{name: "\"=\"", args: [%Ref{path: ["x"]}, %Const{value: 1}]}
+      b = %Func{name: "\"=\"", args: [%Ref{path: ["y"]}, %Const{value: 2}]}
+      and_node = %Func{name: "and", args: [a, b]}
+      ast = %Func{name: "not", args: [and_node]}
+      assert SqlGenerator.to_sql(ast) == ~s|(NOT ((\"x\" = 1) AND (\"y\" = 2)))|
+    end
+  end
+
+  describe "column references" do
+    test "simple column" do
+      assert SqlGenerator.to_sql(%Ref{path: ["name"]}) == ~s|\"name\"|
+    end
+
+    test "schema-qualified column" do
+      assert SqlGenerator.to_sql(%Ref{path: ["public", "users", "name"]}) == ~s|\"public\".\"users\".\"name\"|
+    end
+  end
+
+  describe "constants" do
+    test "NULL" do
+      assert SqlGenerator.to_sql(%Const{value: nil}) == "NULL"
+    end
+
+    test "true" do
+      assert SqlGenerator.to_sql(%Const{value: true}) == "true"
+    end
+
+    test "false" do
+      assert SqlGenerator.to_sql(%Const{value: false}) == "false"
+    end
+
+    test "string" do
+      assert SqlGenerator.to_sql(%Const{value: "hello"}) == "'hello'"
+    end
+
+    test "string with single quotes escaped" do
+      assert SqlGenerator.to_sql(%Const{value: "it's"}) == "'it''s'"
+    end
+
+    test "integer" do
+      assert SqlGenerator.to_sql(%Const{value: 42}) == "42"
+    end
+
+    test "float" do
+      assert SqlGenerator.to_sql(%Const{value: 3.14}) == "3.14"
+    end
+  end
+
+  describe "error handling" do
+    test "raises ArgumentError for unsupported AST node" do
+      assert_raise ArgumentError, ~r/unsupported AST node/, fn ->
+        SqlGenerator.to_sql(%{unexpected: :node})
+      end
+    end
+
+    test "raises ArgumentError for unknown Func name" do
+      ast = %Func{name: "some_unknown_function", args: [%Const{value: 1}]}
+      assert_raise ArgumentError, ~r/unsupported AST node/, fn ->
+        SqlGenerator.to_sql(ast)
+      end
+    end
+  end
+
+  describe "complex expressions" do
+    test "WHERE (status = 'active' AND priority > 3) OR deleted_at IS NULL" do
+      status_check = %Func{name: "\"=\"", args: [%Ref{path: ["status"]}, %Const{value: "active"}]}
+      priority_check = %Func{name: "\">\"", args: [%Ref{path: ["priority"]}, %Const{value: 3}]}
+      and_node = %Func{name: "and", args: [status_check, priority_check]}
+      null_check = %Func{name: "is null", args: [%Ref{path: ["deleted_at"]}]}
+      ast = %Func{name: "or", args: [and_node, null_check]}
+
+      assert SqlGenerator.to_sql(ast) ==
+        ~s|(((\"status\" = 'active') AND (\"priority\" > 3)) OR (\"deleted_at\" IS NULL))|
+    end
+
+    test "NOT (name LIKE '%test%' OR score <= 0)" do
+      like_check = %Func{name: "\"~~\"", args: [%Ref{path: ["name"]}, %Const{value: "%test%"}]}
+      score_check = %Func{name: "\"<=\"", args: [%Ref{path: ["score"]}, %Const{value: 0}]}
+      or_node = %Func{name: "or", args: [like_check, score_check]}
+      ast = %Func{name: "not", args: [or_node]}
+
+      assert SqlGenerator.to_sql(ast) ==
+        ~s|(NOT ((\"name\" LIKE '%test%') OR (\"score\" <= 0)))|
+    end
+  end
+end
+```
 
 ### Phase 2: DnfContext and Shape Tag Structure
 
@@ -437,7 +771,16 @@ defp build_active_conditions_select(dnf_context) do
     %DnfContext{decomposition: %{subexpressions: subexpressions}} ->
       conditions = Enum.map(0..(map_size(subexpressions) - 1), fn pos ->
         subexpr = Map.fetch!(subexpressions, pos)
-        sql = sql_for_subexpression(subexpr, comparison_expressions, shape_dependencies)
+        sql = case subexpr do
+          %{is_subquery: true} ->
+            generate_subquery_condition_sql(subexpr, comparison_expressions, shape_dependencies)
+          %{is_subquery: false} ->
+            # Non-subquery conditions (field comparisons like status = 'active')
+            # MUST be converted to real SQL — returning "true" is WRONG for OR
+            # shapes where a row can be in the result via a different disjunct.
+            # Use SqlGenerator.to_sql/1 (Phase 1a) to convert the AST back to SQL.
+            SqlGenerator.to_sql(subexpr.ast)
+        end
         # For negated positions, wrap in NOT to produce the effective condition
         # value. The decomposer stores the un-negated AST with negated=true,
         # so we must apply the negation here to match the Elixir-side semantics
@@ -1090,6 +1433,8 @@ end
 ```
 Phase 1: DNF Decomposer
     |
+    +---> Phase 1a: SQL Generator (no dependencies beyond Parser AST types)
+    |
     v
 Phase 1.5: DnfContext (depends on Phase 1)
     |
@@ -1107,7 +1452,7 @@ Phase 2: Shape tag_structure + fill_move_tags (depends on Phase 1, NO new Shape 
     +---> Phase 5: Move Messages (depends on Phase 2)
               |
               v
-          Phase 7: Querying (depends on Phases 5, 6, uses DnfContext for decomposition)
+          Phase 7: Querying (depends on Phases 1a, 5, 6, uses DnfContext + SqlGenerator)
 
 Phase 8: Consumer State — holds DnfContext (can be parallel with Phases 3-7)
     |
@@ -1125,18 +1470,19 @@ Phase 11: Elixir Client (depends on Phases 5, 6 for wire format definition)
 
 **Recommended Implementation Order**:
 1. Phase 1 (Decomposer) - foundational, no dependencies
-2. Phase 1.5 (DnfContext) - wraps decomposer output, provides query API for consumers
-3. Phase 2 (Shape tag_structure + fill_move_tags) - uses decomposer, **no new Shape struct fields**
-4. Phase 8 (Consumer State) - holds DnfContext, built at init
-5. Phase 3 (Active Conditions) - uses DnfContext
-6. Phase 5 (Move Messages) - independent of Phase 3/4
-7. Phase 6 (Log Items) - uses new message format
-8. Phase 4 (Change Handling) - uses DnfContext for active conditions, replaces includes_record?
-9. Phase 7 (Querying) - uses DnfContext for decomposition, avoids re-decomposing
-10. Phase 9 (Move Handling) - uses DnfContext for position lookups
-11. **Phase 12 (Position-aware moved_out_tags) - MUST follow Phase 9 immediately; fixes tag format mismatch in storage filtering**
-12. Phase 10 (Remove Invalidation) - final cleanup
-13. Phase 11 (Elixir Client) - must handle new wire format; used by integration tests
+2. Phase 1a (SQL Generator) - standalone module, depends only on Parser AST types; **must be done before Phase 7**
+3. Phase 1.5 (DnfContext) - wraps decomposer output, provides query API for consumers
+4. Phase 2 (Shape tag_structure + fill_move_tags) - uses decomposer, **no new Shape struct fields**
+5. Phase 8 (Consumer State) - holds DnfContext, built at init
+6. Phase 3 (Active Conditions) - uses DnfContext
+7. Phase 5 (Move Messages) - independent of Phase 3/4
+8. Phase 6 (Log Items) - uses new message format
+9. Phase 4 (Change Handling) - uses DnfContext for active conditions, replaces includes_record?
+10. Phase 7 (Querying) - uses DnfContext for decomposition, **SqlGenerator.to_sql/1 for non-subquery conditions**, avoids re-decomposing
+11. Phase 9 (Move Handling) - uses DnfContext for position lookups
+12. **Phase 12 (Position-aware moved_out_tags) - MUST follow Phase 9 immediately; fixes tag format mismatch in storage filtering**
+13. Phase 10 (Remove Invalidation) - final cleanup
+14. Phase 11 (Elixir Client) - must handle new wire format; used by integration tests
 
 ---
 
@@ -1163,7 +1509,7 @@ Phase 11: Elixir Client (depends on Phases 5, 6 for wire format definition)
 
 6. **Single-pass active_conditions**: Per the RFC, `compute_active_conditions` should *replace* the `includes_record?` call — not run alongside it. Avoid double evaluation in the replication stream path.
 
-7. **ast_to_sql completeness**: Any AST-to-SQL converter for snapshot queries must have a fallback clause for unsupported operators. Missing operators should raise a descriptive error at shape creation time, not crash at query time.
+7. **Non-subquery conditions require real SQL generation (Phase 1a)**: For OR shapes, a row can be in the snapshot result via one disjunct while another disjunct's non-subquery condition is false. The `active_conditions` SELECT column for that position must evaluate to `false`, not `true`. Returning a hardcoded `"true"` for non-subquery conditions is **wrong** — it makes the client think both disjuncts are satisfied when only one is. `SqlGenerator.to_sql/1` (Phase 1a) converts the AST back to SQL for these positions. It raises `ArgumentError` for unsupported AST nodes so missing operators are caught at shape creation time, not at query time.
 
 8. **Snapshot tag format vs wire tag format (Phase 12)**: Changing the wire tag format to slash-delimited strings (Phase 2) silently breaks the pre-existing `moved_out_tags` filtering in the storage layer, because it compares bare hashes against slash-delimited strings. This is an **integration-level correctness bug** that won't surface in unit tests — it requires a multi-disjunct shape with a move-out racing a move-in query. Phase 12 must be implemented immediately after Phase 9 (Move Handling) to fix this. See Phase 12 in the Implementation Steps for details.
 
@@ -1198,13 +1544,14 @@ Phase 11: Elixir Client (depends on Phases 5, 6 for wire format definition)
 
 ## Critical Files for Implementation
 
+- `lib/electric/replication/eval/sql_generator.ex` - **(new)** Converts AST back to SQL — used by `querying.ex` for non-subquery `active_conditions` and by `subquery_moves.ex` for exclusion clauses
 - `lib/electric/shapes/consumer/dnf_context.ex` - **(new)** DNF state container, built from Shape
 - `lib/electric/shapes/shape/subquery_moves.ex` - Core tag and move message generation, **move-in WHERE clause + DNF-aware exclusion clauses**
 - `lib/electric/shapes/shape.ex` - `fill_move_tags`, `tag_structure` — **no new struct fields**
 - `lib/electric/shapes/consumer/move_handling.ex` - Move-in/out orchestration (position routing, negation inversion), delegates SQL generation to `subquery_moves.ex`
 - `lib/electric/shapes/where_clause.ex` - Record filtering and `active_conditions`
 - `lib/electric/log_items.ex` - Message format with `active_conditions`
-- `lib/electric/shapes/querying.ex` - SQL generation for snapshots, accepts DnfContext
+- `lib/electric/shapes/querying.ex` - SQL generation for snapshots, accepts DnfContext, delegates non-subquery AST-to-SQL to `SqlGenerator`
 - `packages/elixir-client/lib/electric/client/tag_tracker.ex` - Client-side tag tracking, DNF evaluation, synthetic deletes
 - `packages/elixir-client/lib/electric/client/message/headers.ex` - Client message header parsing
 
@@ -1538,6 +1885,8 @@ end
 ```
 Phase 1: DNF Decomposer
     |
+    +---> Phase 1a: SQL Generator (no dependencies beyond Parser AST types)
+    |
     v
 Phase 1.5: DnfContext (depends on Phase 1)
     |
@@ -1555,7 +1904,7 @@ Phase 2: Shape tag_structure + fill_move_tags (depends on Phase 1, NO new Shape 
     +---> Phase 5: Move Messages (depends on Phase 2)
               |
               v
-          Phase 7: Querying (depends on Phases 5, 6, uses DnfContext for decomposition)
+          Phase 7: Querying (depends on Phases 1a, 5, 6, uses DnfContext + SqlGenerator)
 
 Phase 8: Consumer State — holds DnfContext (can be parallel with Phases 3-7)
     |
