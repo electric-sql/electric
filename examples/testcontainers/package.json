@@ -1,0 +1,22 @@
+{
+  "name": "electric-testcontainers-example",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "verify": "tsx electric-testcontainers.ts"
+  },
+  "dependencies": {
+    "@electric-sql/client": "workspace:*",
+    "pg": "^8.13.0",
+    "testcontainers": "^10.16.0",
+    "@testcontainers/postgresql": "^10.16.0"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.11.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.5.0",
+    "vitest": "^2.1.0"
+  }
+}
