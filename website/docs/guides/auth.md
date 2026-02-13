@@ -259,6 +259,213 @@ Benefits:
 - **Refactoring safety**: Renaming columns updates all references automatically
 - **IDE support**: Auto-completion for column names and types
 
+#### Using POST for subset queries
+
+When WHERE clauses become large (complex ACL subqueries, many parameters, or `WHERE id = ANY($1)` with hundreds of IDs), GET requests can fail with `HTTP 414 Request-URI Too Long` errors. Electric supports POST requests with subset parameters in the JSON body to avoid URL length limits.
+
+:::warning URL Length Limits and GET Deprecation
+GET requests with subset parameters in the URL can fail with `414 Request-URI Too Long` errors. This is common when:
+- ACL subqueries generate long WHERE clauses
+- Join queries produce large filter lists
+- Parameter arrays contain many values
+
+**Use POST to avoid this limitation.**
+
+> **Deprecation Notice:** In Electric 2.0, GET requests for subset snapshots will be deprecated and only POST will be supported. Implement POST support now to ensure forward compatibility.
+:::
+
+##### POST body format
+
+The POST body accepts these subset parameters as JSON:
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `where` | string | WHERE clause to filter the subset |
+| `params` | object | Parameters as `{"1": "value1", "2": "value2"}` for `$1`, `$2` placeholders |
+| `limit` | integer | Maximum rows to return (requires `order_by`) |
+| `offset` | integer | Rows to skip for pagination (requires `order_by`) |
+| `order_by` | string | ORDER BY clause (required when using limit/offset) |
+
+Example POST body:
+
+```json
+{
+  "where": "\"organization_id\" = $1 AND (\"owner_user_id\" = $2 OR ...)",
+  "params": {"1": "org_123", "2": "user_456"},
+  "order_by": "created_at DESC",
+  "limit": 100
+}
+```
+
+##### URL vs POST body parameters
+
+Electric separates parameters by purpose:
+
+**URL query parameters** (shape definition — always in URL):
+- `table` — Root table name (required)
+- `offset` — Shape log position (required, e.g., `-1` for initial sync)
+- `handle` — Shape handle for continuation requests
+- `columns` — Column selection
+- `where` — Main shape WHERE clause (for non-subset queries)
+- `replica`, `log`, `live`, `live_sse` — Protocol options
+- `secret` / `api_secret` — API authentication
+
+**POST body parameters** (subset snapshot parameters):
+- `where` — Subset WHERE clause (applied _in addition to_ main shape WHERE)
+- `params` — Parameters for the subset WHERE clause
+- `limit`, `offset`, `order_by` — Pagination controls
+
+##### Security: how Electric combines WHERE clauses
+
+Electric always combines the main shape WHERE (URL) with the subset WHERE (POST body) using `AND`:
+
+```sql
+WHERE {main_shape_where} AND ({subset_where})
+```
+
+This means **subset queries can only narrow results, never widen them**. Even if a client sends `where: "1=1"` in the POST body, the main shape WHERE still applies. The subset WHERE is validated for syntax and prohibited from containing subqueries.
+
+##### Parameters your proxy must control
+
+The proxy must set these **shape definition parameters** server-side — they define what data the client can access:
+
+| Parameter | Where | Security Consideration |
+|-----------|-------|------------------------|
+| `table` | URL | **Must be set server-side.** Letting clients specify the table allows access to any table. |
+| `columns` | URL | **Should be set server-side.** Clients could request sensitive columns. |
+| `where` | URL | **Must be set server-side.** This is your authorization filter — the main shape WHERE that restricts all queries. |
+| `secret` | URL | **Must be set server-side.** Never expose the API secret to clients. |
+
+##### Parameters safe to pass through from clients
+
+These parameters are safe because they either can't widen data access or are needed for client sync state:
+
+| Parameter | Where | Notes |
+|-----------|-------|-------|
+| `offset` | URL | Shape log position — clients need to track their sync position |
+| `handle` | URL | Shape handle — clients need this to continue syncing |
+| `live` | URL | Live mode flag — controls long-polling behavior |
+| `live_sse` | URL | SSE mode flag — controls streaming behavior |
+| `replica` | URL | Replica mode — controls update message format |
+| `log` | URL | Log mode — `full` or `changes_only` |
+| `where` | POST body | Subset WHERE — combined with AND, can only narrow results |
+| `params` | POST body | Parameters for subset WHERE |
+| `limit` | POST body | Pagination limit |
+| `offset` | POST body | Pagination offset (different from shape log offset in URL) |
+| `order_by` | POST body | Sorting for pagination |
+
+:::tip Key Principle
+Your proxy is an **authorization layer** that controls the **shape definition** (table, columns, main WHERE). Clients can freely use subset parameters to filter and paginate within that shape — Electric ensures they can only narrow results, never escape the main WHERE clause.
+:::
+
+##### Implementing POST support in your proxy
+
+To support both GET and POST requests:
+
+1. **Accept both methods** on your proxy endpoints
+2. **Set shape definition server-side** — table, columns, and main WHERE clause
+3. **For POST**: Forward client subset params (they can only narrow results)
+4. **For GET**: Send WHERE as URL query parameters (existing behavior)
+
+```tsx
+import { ELECTRIC_PROTOCOL_QUERY_PARAMS } from '@electric-sql/client'
+
+export async function handler(request: Request) {
+  const url = new URL(request.url)
+  const method = request.method
+
+  // Construct the upstream Electric URL
+  const originUrl = new URL(`http://localhost:3000/v1/shape`)
+
+  // Pass through Electric protocol parameters (offset, handle, live, etc.)
+  url.searchParams.forEach((value, key) => {
+    if (ELECTRIC_PROTOCOL_QUERY_PARAMS.includes(key)) {
+      originUrl.searchParams.set(key, value)
+    }
+  })
+
+  // Authentication
+  const user = await loadUser(request.headers.get(`authorization`))
+  if (!user) {
+    return new Response(`unauthorized`, { status: 401 })
+  }
+
+  // Set shape definition server-side (this is your authorization layer)
+  originUrl.searchParams.set(`table`, `items`)
+  originUrl.searchParams.set(`where`, `"organization_id" = '${user.org_id}'`)
+  originUrl.searchParams.set(`secret`, process.env.ELECTRIC_SECRET)
+
+  // Forward request to Electric
+  let response: Response
+  if (method === 'POST') {
+    // POST: Forward client body (subset params can only narrow results)
+    const clientBody = await request.text()
+    response = await fetch(originUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: clientBody, // Client subset params (where, limit, order_by, etc.)
+    })
+  } else {
+    // GET: Simple proxy
+    response = await fetch(originUrl)
+  }
+
+  // Forward response to client (remove problematic headers)
+  const headers = new Headers(response.headers)
+  headers.delete(`content-encoding`)
+  headers.delete(`content-length`)
+
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  })
+}
+```
+
+##### Client configuration for POST
+
+When using the TypeScript client with a proxy, configure `subsetMethod: 'POST'` in your shape options:
+
+```tsx
+import { ShapeStream } from '@electric-sql/client'
+
+const stream = new ShapeStream({
+  url: '/api/shapes/items',  // Your proxy endpoint
+  headers: {
+    Authorization: `Bearer ${token}`,
+  },
+  subsetMethod: 'POST',  // Send subset requests as POST
+})
+```
+
+Or with TanStack DB collections:
+
+```tsx
+const collection = createCollection(
+  electricCollectionOptions({
+    schema: itemsSchema,
+    shapeOptions: {
+      url: '/api/shapes/items',
+      headers: {
+        Authorization: async () => `Bearer ${await getToken()}`,
+      },
+      subsetMethod: 'POST',  // Use POST for subset queries
+    },
+    getKey: (item) => item.id,
+  }),
+)
+```
+
+:::warning GET Deprecation in Electric 2.0
+GET requests for subset snapshots will be **deprecated in Electric 2.0** — only POST will be supported. Plan your migration now:
+
+1. Deploy proxy with dual GET/POST support (backwards compatible)
+2. Update clients to use `subsetMethod: 'POST'`
+3. Monitor for 414 errors — they should disappear
+4. Before upgrading to Electric 2.0, ensure all clients use POST
+:::
+
 ### Gatekeeper auth
 
 > [!Warning] GitHub example
