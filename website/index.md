@@ -1,31 +1,17 @@
 ---
 layout: home
 title: "Electric"
-titleTemplate: ":title | Sync with your stack"
+titleTemplate: ":title | Data platform for multi-agent"
 hero:
-  name: 'Sync'
-  text: '<br />with your stack'
+  name: 'The data platform'
+  text: '<br />for multi-agent'
   tagline: >-
-    Build fast, modern, collaborative apps
-    <span class="no-wrap">without changing your stack</span>
+    Electric provides the data primitives and&nbsp;infra to build collaborative,
+    <span class="no-wrap">multi-agent systems</span>
   actions:
     - theme: brand
-      text: Sign-up to Cloud
+      text: Start building now »
       link: https://dashboard.electric-sql.cloud/
-    - theme: brand
-      text: Cloud
-      link: https://dashboard.electric-sql.cloud/
-    - theme: alt
-      text: Quickstart
-      link: /docs/quickstart
-    - theme: alt
-      text: '​'
-      target: '_blank'
-      link: https://github.com/electric-sql/electric
-    - theme: alt
-      text: GitHub
-      target: '_blank'
-      link: https://github.com/electric-sql/electric
   image:
     src: /img/home/zap-with-halo.svg
 ---

@@ -23,9 +23,11 @@ const actions = [
 <template>
   <br />
   <Section :actions="actions">
-    <template #title>Unlock&nbsp;collaboration, unlock&nbsp;adoption</template>
+    <template #title>Build collaborative,<br class="hidden-md inline-sm" /> <span class="no-wrap">multi-agent systems</span></template>
     <template #tagline>
-      Sync is the magic behind fast apps and the key to collaborative&nbsp;AI
+      With a reactive data platform designed for
+      <span class="no-wrap-xs">
+        multi-user, multi-agent collaboration</span>
     </template>
     <div class="solutions-grid">
       <LandscapeBlogPostListing
