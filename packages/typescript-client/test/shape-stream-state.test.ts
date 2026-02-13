@@ -1094,12 +1094,19 @@ describe(`algebraic properties`, () => {
 })
 
 describe(`fuzz testing`, () => {
+  const IS_COVERAGE = process.env.npm_lifecycle_event === `coverage`
   const SINGLE_SEED = process.env.FUZZ_SEED
     ? parseInt(process.env.FUZZ_SEED)
     : undefined
   const SEEDS =
-    SINGLE_SEED !== undefined ? 1 : process.env.FUZZ_DEEP ? 1000 : 100
-  const STEPS = process.env.FUZZ_DEEP ? 50 : 30
+    SINGLE_SEED !== undefined
+      ? 1
+      : process.env.FUZZ_DEEP
+        ? 1000
+        : IS_COVERAGE
+          ? 20
+          : 100
+  const STEPS = process.env.FUZZ_DEEP ? 50 : IS_COVERAGE ? 15 : 30
 
   it(`survives ${SEEDS} random ${STEPS}-step sequences`, () => {
     const seedsToRun =
