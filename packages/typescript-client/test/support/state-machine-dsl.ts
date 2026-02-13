@@ -77,7 +77,7 @@ export type EventSpec =
   | { type: `retry` }
   | { type: `markMustRefetch`; handle?: string }
   | { type: `withHandle`; handle: string }
-  | { type: `enterReplayMode`; cursor: string }
+  | { type: `enterReplayMode`; cursor: string | null }
 
 // ─── Event result types ───
 
@@ -112,10 +112,9 @@ export function assertStateInvariants(state: ShapeStreamState): void {
   expect(state).toBeInstanceOf(expectedClass)
 
   // I1: isUpToDate === true only when LiveState is in the delegation chain
+  // PausedState delegates isUpToDate; ErrorState always returns false
   if (state.isUpToDate) {
     if (state instanceof PausedState) {
-      expect(state.previousState.isUpToDate).toBe(true)
-    } else if (state instanceof ErrorState) {
       expect(state.previousState.isUpToDate).toBe(true)
     } else {
       expect(state).toBeInstanceOf(LiveState)
@@ -155,7 +154,15 @@ export function assertStateInvariants(state: ShapeStreamState): void {
     expect(state.replayCursor).toBe(state.previousState.replayCursor)
   }
 
-  // ErrorState invariants: always has error + delegates all field getters
+  // I12: No same-type nesting of delegating states
+  if (state instanceof PausedState) {
+    expect(state.previousState).not.toBeInstanceOf(PausedState)
+  }
+  if (state instanceof ErrorState) {
+    expect(state.previousState).not.toBeInstanceOf(ErrorState)
+  }
+
+  // ErrorState invariants: always has error + delegates field getters (except isUpToDate)
   if (state instanceof ErrorState) {
     expect(state.error).toBeDefined()
     expect(state.error).toBeInstanceOf(Error)
@@ -164,7 +171,7 @@ export function assertStateInvariants(state: ShapeStreamState): void {
     expect(state.schema).toBe(state.previousState.schema)
     expect(state.liveCacheBuster).toBe(state.previousState.liveCacheBuster)
     expect(state.lastSyncedAt).toBe(state.previousState.lastSyncedAt)
-    expect(state.isUpToDate).toBe(state.previousState.isUpToDate)
+    expect(state.isUpToDate).toBe(false)
   }
 }
 
@@ -178,10 +185,11 @@ export function assertReachableInvariants(
     expect(nextState.lastSyncedAt).toBeDefined()
   }
 
-  // I3: pause()->resume() preserves handle and offset
-  if (event.type === `resume`) {
+  // I3: pause()->resume() preserves handle, offset, and reference identity
+  if (event.type === `resume` && prevState instanceof PausedState) {
     expect(nextState.handle).toBe(prevState.handle)
     expect(nextState.offset).toBe(prevState.offset)
+    expect(nextState).toBe(prevState.previousState)
   }
 
   // I4: error()->retry() restores previousState by reference
@@ -262,9 +270,7 @@ export function applyEvent(
       nextState = state.withHandle(event.handle)
       break
     case `enterReplayMode`:
-      nextState = state.canEnterReplayMode()
-        ? state.enterReplayMode(event.cursor)
-        : state
+      nextState = state.enterReplayMode(event.cursor)
       break
   }
 
@@ -358,7 +364,7 @@ export function pickRandomEvent(rng: () => number, now: number): EventSpec {
     case `enterReplayMode`:
       return {
         type: `enterReplayMode`,
-        cursor: `cursor-${randInt(5)}`,
+        cursor: rng() > 0.3 ? `cursor-${randInt(5)}` : null,
       }
   }
 }
@@ -401,7 +407,9 @@ export class ScenarioBuilder<K extends ShapeStreamStateKind = `initial`> {
     return this.#step({ type: `sseClose`, input })
   }
 
-  enterReplayMode(cursor: string): ScenarioBuilder<ShapeStreamStateKind> {
+  enterReplayMode(
+    cursor: string | null
+  ): ScenarioBuilder<ShapeStreamStateKind> {
     return this.#step({ type: `enterReplayMode`, cursor })
   }
 

@@ -158,7 +158,7 @@ export const TRANSITION_TABLE: Record<
     },
     enterReplayMode: {
       sameReference: true,
-      description: `Live cannot enter replay (base class no-op)`,
+      description: `Live enterReplayMode returns this (base class no-op)`,
     },
   },
   replaying: {
@@ -202,7 +202,7 @@ export const TRANSITION_TABLE: Record<
     },
     enterReplayMode: {
       sameReference: true,
-      description: `Replaying cannot enter replay (base class no-op)`,
+      description: `Replaying enterReplayMode returns this (base class no-op)`,
     },
   },
   'stale-retry': {
@@ -246,7 +246,7 @@ export const TRANSITION_TABLE: Record<
     },
     enterReplayMode: {
       sameReference: true,
-      description: `StaleRetry cannot enter replay (canEnterReplayMode is false)`,
+      description: `StaleRetry enterReplayMode returns this (would lose retry count)`,
     },
   },
   paused: {
@@ -290,7 +290,7 @@ export const TRANSITION_TABLE: Record<
     },
     enterReplayMode: {
       sameReference: true,
-      description: `Paused cannot enter replay (base class no-op)`,
+      description: `Paused enterReplayMode returns this (base class no-op)`,
     },
   },
   error: {
@@ -334,7 +334,7 @@ export const TRANSITION_TABLE: Record<
     },
     enterReplayMode: {
       sameReference: true,
-      description: `Error cannot enter replay (base class no-op)`,
+      description: `Error enterReplayMode returns this (base class no-op)`,
     },
   },
 }

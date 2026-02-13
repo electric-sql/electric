@@ -153,9 +153,9 @@ describe(`shape stream state machine`, () => {
 
   // 10. LiveState.handleSseConnectionClosed — healthy connection resets counter
   it(`LiveState resets counter on healthy SSE connection`, () => {
-    const live = new LiveState(makeShared(), {
-      consecutiveShortSseConnections: 2,
-    })
+    const live = new LiveState(
+      makeShared({ consecutiveShortSseConnections: 2 })
+    )
 
     const transition = live.handleSseConnectionClosed({
       connectionDuration: 5000,
@@ -172,9 +172,9 @@ describe(`shape stream state machine`, () => {
 
   // 11. LiveState.handleSseConnectionClosed — short connection increments counter
   it(`LiveState increments counter on short SSE connection`, () => {
-    const live = new LiveState(makeShared(), {
-      consecutiveShortSseConnections: 1,
-    })
+    const live = new LiveState(
+      makeShared({ consecutiveShortSseConnections: 1 })
+    )
 
     const transition = live.handleSseConnectionClosed({
       connectionDuration: 100,
@@ -191,9 +191,9 @@ describe(`shape stream state machine`, () => {
 
   // 12. LiveState.handleSseConnectionClosed — falls back to long polling after max short connections
   it(`LiveState falls back to long polling after max short connections`, () => {
-    const live = new LiveState(makeShared(), {
-      consecutiveShortSseConnections: 2,
-    })
+    const live = new LiveState(
+      makeShared({ consecutiveShortSseConnections: 2 })
+    )
 
     const transition = live.handleSseConnectionClosed({
       connectionDuration: 100,
@@ -206,6 +206,51 @@ describe(`shape stream state machine`, () => {
     expect(transition.state.consecutiveShortSseConnections).toBe(3)
     expect(transition.state.sseFallbackToLongPolling).toBe(true)
     expect(transition.fellBackToLongPolling).toBe(true)
+  })
+
+  // SSE fallback survives state cycles
+  it(`SSE fallback survives Live → StaleRetry → Syncing → Live cycle`, () => {
+    const { state } = scenario()
+      .response({ responseHandle: `h1`, responseCursor: `cur-1` })
+      .expectKind(`syncing`)
+      .messages({ hasUpToDateMessage: true })
+      .expectKind(`live`)
+      .sseClose({
+        connectionDuration: 100,
+        wasAborted: false,
+        minConnectionDuration: 1000,
+        maxShortConnections: 1,
+      })
+      .expectKind(`live`)
+      .done()
+
+    // After SSE fallback, sseFallbackToLongPolling should be true
+    expect(state.sseFallbackToLongPolling).toBe(true)
+
+    // Now simulate Live → StaleRetry → Syncing → Live cycle
+    const staleTransition = state.handleResponseMetadata(
+      makeResponseInput({
+        responseHandle: `h1`,
+        expiredHandle: `h1`,
+      })
+    )
+    expect(staleTransition.action).toBe(`stale-retry`)
+
+    const staleRetry = staleTransition.state
+    expect(staleRetry.sseFallbackToLongPolling).toBe(true)
+
+    const syncTransition = staleRetry.handleResponseMetadata(
+      makeResponseInput({ responseHandle: `fresh-h` })
+    )
+    expect(syncTransition.state.kind).toBe(`syncing`)
+    expect(syncTransition.state.sseFallbackToLongPolling).toBe(true)
+
+    const liveTransition = syncTransition.state.handleMessageBatch(
+      makeMessageBatchInput({ hasUpToDateMessage: true })
+    )
+    expect(liveTransition.state.kind).toBe(`live`)
+    expect(liveTransition.state.sseFallbackToLongPolling).toBe(true)
+    expect(liveTransition.state.consecutiveShortSseConnections).toBe(1)
   })
 
   // 13. ReplayingState suppresses up-to-date when cursor unchanged
@@ -254,22 +299,24 @@ describe(`shape stream state machine`, () => {
     expect(transition.state).toBeInstanceOf(LiveState)
   })
 
-  // 16. InitialState/SyncingState canEnterReplayMode → true
-  it(`InitialState and SyncingState canEnterReplayMode returns true`, () => {
+  // 16. InitialState/SyncingState enterReplayMode with cursor → ReplayingState
+  it(`InitialState and SyncingState enterReplayMode returns ReplayingState`, () => {
     const { state: initial } = scenario().done()
-    expect(initial.canEnterReplayMode()).toBe(true)
+    const replaying = initial.enterReplayMode(`cursor-1`)
+    expect(replaying).toBeInstanceOf(ReplayingState)
 
     const { state: syncing } = scenario()
       .response({ responseHandle: `h1` })
       .expectKind(`syncing`)
       .done()
-    expect(syncing.canEnterReplayMode()).toBe(true)
+    const replaying2 = syncing.enterReplayMode(`cursor-2`)
+    expect(replaying2).toBeInstanceOf(ReplayingState)
   })
 
-  // 17. LiveState canEnterReplayMode → false
-  it(`LiveState canEnterReplayMode returns false`, () => {
+  // 17. LiveState enterReplayMode returns this (no-op)
+  it(`LiveState enterReplayMode returns this`, () => {
     const { state } = scenario().messages().expectKind(`live`).done()
-    expect(state.canEnterReplayMode()).toBe(false)
+    expect(state.enterReplayMode(`cursor-1`)).toBe(state)
   })
 
   // 18. PausedState.resume returns previous state
@@ -417,8 +464,8 @@ describe(`shape stream state machine`, () => {
     expect(transition.fellBackToLongPolling).toBe(false)
   })
 
-  // 26. StaleRetryState canEnterReplayMode → false (entering replay mode would lose retry count)
-  it(`StaleRetryState canEnterReplayMode returns false`, () => {
+  // 26. StaleRetryState enterReplayMode returns this (no-op — would lose retry count)
+  it(`StaleRetryState enterReplayMode returns this`, () => {
     const { state } = scenario()
       .response({
         responseHandle: `stale-h`,
@@ -428,7 +475,7 @@ describe(`shape stream state machine`, () => {
       .expectKind(`stale-retry`)
       .done()
 
-    expect(state.canEnterReplayMode()).toBe(false)
+    expect(state.enterReplayMode(`cursor-1`)).toBe(state)
   })
 
   // 27. enterReplayMode creates ReplayingState with cursor
@@ -468,9 +515,7 @@ describe(`shape stream state machine`, () => {
 
   // 30. LiveState.shouldUseSse returns false when fallen back to long polling
   it(`LiveState.shouldUseSse returns false when fallen back to long polling`, () => {
-    const live = new LiveState(makeShared(), {
-      sseFallbackToLongPolling: true,
-    })
+    const live = new LiveState(makeShared({ sseFallbackToLongPolling: true }))
 
     expect(
       live.shouldUseSse({
@@ -522,14 +567,14 @@ describe(`shape stream state machine`, () => {
     expect(state.staleCacheRetryCount).toBe(1)
   })
 
-  // 32. ErrorState.isUpToDate delegates to previous
-  it(`ErrorState.isUpToDate delegates to previous state`, () => {
+  // 32. ErrorState.isUpToDate always returns false
+  it(`ErrorState.isUpToDate always returns false`, () => {
     scenario()
       .messages()
       .expectKind(`live`)
       .error(new Error(`oops`))
       .expectKind(`error`)
-      .expectUpToDate(true)
+      .expectUpToDate(false)
       .done()
 
     scenario()
@@ -666,15 +711,15 @@ describe(`shape stream state machine`, () => {
   // --- withHandle tests ---
 
   it(`withHandle preserves state kind and fields, only changes handle`, () => {
-    const shared = makeShared({
-      handle: `old`,
-      offset: `5_3`,
-      liveCacheBuster: `cur-1`,
-    })
-    const live = new LiveState(shared, {
-      consecutiveShortSseConnections: 2,
-      sseFallbackToLongPolling: true,
-    })
+    const live = new LiveState(
+      makeShared({
+        handle: `old`,
+        offset: `5_3`,
+        liveCacheBuster: `cur-1`,
+        consecutiveShortSseConnections: 2,
+        sseFallbackToLongPolling: true,
+      })
+    )
     const updated = live.withHandle(`new-handle`)
 
     expect(updated).toBeInstanceOf(LiveState)
@@ -950,6 +995,14 @@ describe(`algebraic properties`, () => {
       assertStateInvariants(resumed)
       expect(resumed.handle).toBe(state.handle)
       expect(resumed.offset).toBe(state.offset)
+
+      if (state instanceof PausedState) {
+        // PausedState.pause() is idempotent, so resume returns previousState
+        expect(resumed).toBe(state.previousState)
+      } else {
+        // Non-paused: reference identity holds
+        expect(resumed).toBe(state)
+      }
     }
   )
 
@@ -963,7 +1016,12 @@ describe(`algebraic properties`, () => {
 
       const retried = errored.retry()
       assertStateInvariants(retried)
-      expect(retried).toBe(state)
+      if (state instanceof ErrorState) {
+        // Same-type nesting guard unwraps: Error(Error(X)).retry() → X
+        expect(retried).toBe(state.previousState)
+      } else {
+        expect(retried).toBe(state)
+      }
     }
   )
 
@@ -995,6 +1053,38 @@ describe(`algebraic properties`, () => {
       expect(paused.pause()).toBe(paused)
     }
   )
+
+  it.each(allStates)(
+    `enterReplayMode(null) is a no-op ($kind)`,
+    ({ state }) => {
+      expect(state.enterReplayMode(null)).toBe(state)
+    }
+  )
+
+  it(`same-type nesting is prevented`, () => {
+    const syncing = new SyncingState(makeShared())
+
+    // PausedState unwraps Paused(Paused(X)) → Paused(X)
+    const paused = syncing.pause()
+    const doublePaused = new PausedState(paused)
+    expect(doublePaused.previousState).not.toBeInstanceOf(PausedState)
+    expect(doublePaused.previousState).toBe(syncing)
+
+    // ErrorState unwraps Error(Error(X)) → Error(X) with newer error
+    const err1 = syncing.toErrorState(new Error(`first`))
+    const err2 = err1.toErrorState(new Error(`second`))
+    expect(err2.previousState).not.toBeInstanceOf(ErrorState)
+    expect(err2.previousState).toBe(syncing)
+    expect(err2.error.message).toBe(`second`)
+
+    // Cross-type nesting is preserved: Paused(Error(X)) is valid
+    const pausedError = err1.pause()
+    expect(pausedError.previousState).toBeInstanceOf(ErrorState)
+
+    // Cross-type nesting is preserved: Error(Paused(X)) is valid
+    const errorPaused = paused.toErrorState(new Error(`oops`))
+    expect(errorPaused.previousState).toBeInstanceOf(PausedState)
+  })
 })
 
 describe(`fuzz testing`, () => {

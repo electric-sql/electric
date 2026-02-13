@@ -34,7 +34,7 @@ Ten events that can act on any state:
 | `retry`           | (none)                | Client retries from error               |
 | `markMustRefetch` | handle?: string       | Server says data is stale; reset        |
 | `withHandle`      | handle: string        | Update handle, preserve everything else |
-| `enterReplayMode` | cursor: string        | Enter replay from cache                 |
+| `enterReplayMode` | cursor: string\|null  | Enter replay from cache (null → no-op)  |
 
 ## Transition Table
 
@@ -60,7 +60,7 @@ Any ──markMustRefetch─► Initial (offset = -1)
 
 - `resume` on a non-Paused state returns `this` (no-op)
 - `retry` on a non-Error state returns `this` (no-op)
-- `enterReplayMode` returns `this` when `canEnterReplayMode()` is false
+- `enterReplayMode(null)` returns `this` for all states; `enterReplayMode(cursor)` returns `this` for states that don't support replay
 - `pause` on PausedState returns `this` (idempotent)
 - `response`/`messages`/`sseClose` on Paused or Error return `this` (ignored)
 
@@ -76,10 +76,11 @@ Properties that must hold after every state transition. Checked automatically by
 
 **Enforcement**: `KIND_TO_CLASS` map + `toBeInstanceOf` check in `assertStateInvariants`.
 
-### I1: isUpToDate iff LiveState in delegation chain
+### I1: isUpToDate iff LiveState in delegation chain (PausedState only)
 
 `state.isUpToDate === true` only when LiveState is the state itself, or is reachable
-via `previousState` delegation (i.e., PausedState or ErrorState wrapping LiveState).
+via PausedState's `previousState` delegation. ErrorState always returns `false` for
+`isUpToDate` regardless of its previous state.
 
 **Enforcement**: Runtime check in `assertStateInvariants`.
 
@@ -91,16 +92,23 @@ Exception: no-op transitions return `this` (reference-equal).
 **Enforcement**: The truth table tests `sameReference` expectations. All state fields
 are `readonly`.
 
-### I3: Pause/resume preserves identity
+### I3: Pause/resume round-trip
 
-`state.pause().resume() === state` (reference equality). Handle and offset are
-preserved through the round-trip.
+For non-PausedState input: `state.pause().resume() === state` (reference equality).
+
+For PausedState input: `paused.pause()` is idempotent (returns `this` by I8), so
+`paused.pause().resume()` returns `paused.previousState`, not `paused`. Handle and
+offset are still preserved through the round-trip for all states.
 
 **Enforcement**: Algebraic property test across all 7 states + `assertReachableInvariants`.
 
 ### I4: Error/retry preserves identity
 
 `state.toErrorState(err).retry() === state` (reference equality).
+
+Special case: when `state` is already an ErrorState, the constructor unwraps same-type
+nesting (I12), so `errorState.toErrorState(newErr).retry()` returns
+`errorState.previousState` (the inner state), not `errorState` itself.
 
 **Enforcement**: Algebraic property test across all 7 states.
 
@@ -141,9 +149,10 @@ Idempotence checked in algebraic property tests.
 
 ### I9: ErrorState delegation
 
-ErrorState delegates ALL field getters to `previousState` (same list as I8 minus
-`pause()` idempotence). Additionally:
+ErrorState delegates most field getters to `previousState` (same list as I8 minus
+`pause()` idempotence, and minus `isUpToDate`). Additionally:
 
+- `isUpToDate` always returns `false` (overrides base class, does NOT delegate)
 - `error` is always defined and instanceof Error
 - `applyUrlParams` delegates to `previousState`
 
@@ -171,21 +180,35 @@ For any state, `state.markMustRefetch(handle)` produces an InitialState with:
 
 **Enforcement**: Algebraic property test across all 7 states.
 
+### I12: No same-type nesting of delegating states
+
+`PausedState.previousState` is never a `PausedState`. `ErrorState.previousState` is
+never an `ErrorState`. The constructors unwrap same-type nesting automatically:
+
+- `Paused(Paused(X))` → `Paused(X)`
+- `Error(Error(X))` → `Error(X)` (newer error replaces older)
+
+Cross-type nesting (`Paused(Error(X))`, `Error(Paused(X))`) is preserved — it's
+semantically meaningful. Alternating types can still produce chains longer than 2
+(e.g. `Paused(Error(Paused(X)))`); the guard prevents only same-type stacking.
+
+**Enforcement**: Runtime check in `assertStateInvariants` + dedicated algebraic test.
+
 ## Constraints
 
 Things that must NOT happen.
 
-### C1: StaleRetryState cannot enter replay mode
+### C1: StaleRetryState enterReplayMode returns this
 
-`StaleRetryState.canEnterReplayMode()` returns false. Entering replay would lose
-the stale cache retry count.
+`StaleRetryState.enterReplayMode()` always returns `this`. Entering replay would
+lose the stale cache retry count.
 
 **Enforcement**: Explicit test + truth table entry (sameReference no-op).
 
-### C2: LiveState cannot enter replay mode
+### C2: LiveState enterReplayMode returns this
 
-`LiveState.canEnterReplayMode()` returns false. Already up-to-date; replay is
-meaningless.
+`LiveState.enterReplayMode()` returns `this` (base class default). Already
+up-to-date; replay is meaningless.
 
 **Enforcement**: Truth table entry (sameReference no-op).
 
@@ -220,6 +243,15 @@ responses cannot overwrite it.
 **Enforcement**: Dedicated tests (`SSE up-to-date message updates offset`,
 `non-SSE up-to-date message preserves existing offset`).
 
+### C8: SSE fallback state survives state cycles
+
+`sseFallbackToLongPolling` and `consecutiveShortSseConnections` are carried in
+`SharedStateFields`, not private to LiveState. This ensures SSE fallback decisions
+survive `Live → StaleRetry → Syncing → Live` cycles — the client doesn't waste
+connections rediscovering a misconfigured proxy.
+
+**Enforcement**: Dedicated test (`SSE fallback survives Live → StaleRetry → Syncing → Live cycle`).
+
 ### C7: Stale response with valid local handle is ignored
 
 When a stale response arrives but the state already has a different valid handle,
@@ -245,6 +277,7 @@ the response is ignored (action: `ignored`, state unchanged).
 | I9        | -        | yes                   | -                         | -                 | -                   | -              |
 | I10       | -        | -                     | -                         | yes               | -                   | -              |
 | I11       | -        | -                     | -                         | yes               | -                   | -              |
+| I12       | -        | yes                   | -                         | yes               | -                   | yes            |
 
 | Constraint | Types | Truth Table | Dedicated Test |
 | ---------- | ----- | ----------- | -------------- |
@@ -255,6 +288,7 @@ the response is ignored (action: `ignored`, state unchanged).
 | C5         | -     | -           | yes            |
 | C6         | -     | -           | yes            |
 | C7         | -     | yes         | yes            |
+| C8         | -     | -           | yes            |
 
 ### Code -> Doc: Is each test derived from the spec?
 

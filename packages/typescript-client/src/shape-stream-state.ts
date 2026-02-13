@@ -53,6 +53,8 @@ export interface SharedStateFields {
   readonly schema?: Schema
   readonly liveCacheBuster: string
   readonly lastSyncedAt?: number
+  readonly sseFallbackToLongPolling?: boolean
+  readonly consecutiveShortSseConnections?: number
 }
 
 type ResponseBaseInput = {
@@ -122,7 +124,7 @@ export interface UrlParamsContext {
  * Each concrete state carries only its relevant fields — there is no shared
  * flat context bag. Transitions create new immutable state objects.
  *
- * `isUpToDate` is derived from state kind (only LiveState returns true).
+ * `isUpToDate` returns true for LiveState and PausedState wrapping LiveState.
  */
 export abstract class ShapeStreamState {
   abstract readonly kind: ShapeStreamStateKind
@@ -158,11 +160,7 @@ export abstract class ShapeStreamState {
 
   // --- Default no-op methods ---
 
-  canEnterReplayMode(): boolean {
-    return false
-  }
-
-  enterReplayMode(_cursor: string): ShapeStreamState {
+  enterReplayMode(_cursor: string | null): ShapeStreamState {
     return this
   }
 
@@ -254,6 +252,12 @@ abstract class ActiveState extends ShapeStreamState {
   get lastSyncedAt() {
     return this.#shared.lastSyncedAt
   }
+  get sseFallbackToLongPolling() {
+    return this.#shared.sseFallbackToLongPolling ?? false
+  }
+  get consecutiveShortSseConnections() {
+    return this.#shared.consecutiveShortSseConnections ?? 0
+  }
 
   /** Expose shared fields to subclasses for spreading into new instances. */
   protected get currentFields(): SharedStateFields {
@@ -286,7 +290,16 @@ abstract class ActiveState extends ShapeStreamState {
     const lastSyncedAt =
       input.status === 204 ? input.now : this.#shared.lastSyncedAt
 
-    return { handle, offset, schema, liveCacheBuster, lastSyncedAt }
+    return {
+      handle,
+      offset,
+      schema,
+      liveCacheBuster,
+      lastSyncedAt,
+      sseFallbackToLongPolling: this.#shared.sseFallbackToLongPolling,
+      consecutiveShortSseConnections:
+        this.#shared.consecutiveShortSseConnections,
+    }
   }
 
   /**
@@ -344,6 +357,9 @@ abstract class ActiveState extends ShapeStreamState {
       schema: this.#shared.schema,
       liveCacheBuster: this.#shared.liveCacheBuster,
       lastSyncedAt: input.now,
+      sseFallbackToLongPolling: this.#shared.sseFallbackToLongPolling,
+      consecutiveShortSseConnections:
+        this.#shared.consecutiveShortSseConnections,
     }
 
     return this.onUpToDate(shared, input)
@@ -369,8 +385,7 @@ abstract class ActiveState extends ShapeStreamState {
 /**
  * Captures shared behavior of InitialState, SyncingState, StaleRetryState:
  * - handleResponseMetadata: stale check → parse fields → new SyncingState
- * - canEnterReplayMode → true
- * - enterReplayMode → new ReplayingState
+ * - enterReplayMode(cursor) → new ReplayingState (null → this)
  */
 abstract class FetchingState extends ActiveState {
   handleResponseMetadata(
@@ -383,11 +398,8 @@ abstract class FetchingState extends ActiveState {
     return { action: `accepted`, state: new SyncingState(shared) }
   }
 
-  canEnterReplayMode(): boolean {
-    return true
-  }
-
-  enterReplayMode(cursor: string): ReplayingState {
+  enterReplayMode(cursor: string | null): ShapeStreamState {
+    if (cursor === null) return this
     return new ReplayingState({
       ...this.currentFields,
       replayCursor: cursor,
@@ -448,8 +460,8 @@ export class StaleRetryState extends FetchingState {
   }
 
   // StaleRetryState must not enter replay mode — it would lose the retry count
-  canEnterReplayMode(): boolean {
-    return false
+  enterReplayMode(_cursor: string | null): ShapeStreamState {
+    return this
   }
 
   withHandle(handle: string): StaleRetryState {
@@ -469,36 +481,17 @@ export class StaleRetryState extends FetchingState {
 
 export class LiveState extends ActiveState {
   readonly kind = `live` as const
-  readonly #consecutiveShortSseConnections: number
-  readonly #sseFallbackToLongPolling: boolean
 
-  constructor(
-    shared: SharedStateFields,
-    sseState?: {
-      consecutiveShortSseConnections?: number
-      sseFallbackToLongPolling?: boolean
-    }
-  ) {
+  constructor(shared: SharedStateFields) {
     super(shared)
-    this.#consecutiveShortSseConnections =
-      sseState?.consecutiveShortSseConnections ?? 0
-    this.#sseFallbackToLongPolling = sseState?.sseFallbackToLongPolling ?? false
   }
 
   get isUpToDate(): boolean {
     return true
   }
 
-  get consecutiveShortSseConnections(): number {
-    return this.#consecutiveShortSseConnections
-  }
-
-  get sseFallbackToLongPolling(): boolean {
-    return this.#sseFallbackToLongPolling
-  }
-
   withHandle(handle: string): LiveState {
-    return new LiveState({ ...this.currentFields, handle }, this.sseState)
+    return new LiveState({ ...this.currentFields, handle })
   }
 
   applyUrlParams(url: URL, context: UrlParamsContext): void {
@@ -512,13 +505,6 @@ export class LiveState extends ActiveState {
     }
   }
 
-  private get sseState() {
-    return {
-      consecutiveShortSseConnections: this.#consecutiveShortSseConnections,
-      sseFallbackToLongPolling: this.#sseFallbackToLongPolling,
-    }
-  }
-
   handleResponseMetadata(
     input: ResponseMetadataInput
   ): ResponseMetadataTransition {
@@ -528,7 +514,7 @@ export class LiveState extends ActiveState {
     const shared = this.parseResponseFields(input)
     return {
       action: `accepted`,
-      state: new LiveState(shared, this.sseState),
+      state: new LiveState(shared),
     }
   }
 
@@ -537,7 +523,7 @@ export class LiveState extends ActiveState {
     _input: MessageBatchInput
   ): MessageBatchTransition {
     return {
-      state: new LiveState(shared, this.sseState),
+      state: new LiveState(shared),
       suppressBatch: false,
       becameUpToDate: true,
     }
@@ -552,13 +538,13 @@ export class LiveState extends ActiveState {
       opts.liveSseEnabled &&
       !opts.isRefreshing &&
       !opts.resumingFromPause &&
-      !this.#sseFallbackToLongPolling
+      !this.sseFallbackToLongPolling
     )
   }
 
   handleSseConnectionClosed(input: SseCloseInput): SseCloseTransition {
-    let nextConsecutiveShort = this.#consecutiveShortSseConnections
-    let nextFallback = this.#sseFallbackToLongPolling
+    let nextConsecutiveShort = this.consecutiveShortSseConnections
+    let nextFallback = this.sseFallbackToLongPolling
     let fellBackToLongPolling = false
     let wasShortConnection = false
 
@@ -578,7 +564,8 @@ export class LiveState extends ActiveState {
     }
 
     return {
-      state: new LiveState(this.currentFields, {
+      state: new LiveState({
+        ...this.currentFields,
         consecutiveShortSseConnections: nextConsecutiveShort,
         sseFallbackToLongPolling: nextFallback,
       }),
@@ -652,7 +639,10 @@ export class PausedState extends ShapeStreamState {
 
   constructor(previousState: ShapeStreamState) {
     super()
-    this.previousState = previousState
+    this.previousState =
+      previousState instanceof PausedState
+        ? previousState.previousState
+        : previousState
   }
 
   get handle() {
@@ -715,7 +705,10 @@ export class ErrorState extends ShapeStreamState {
 
   constructor(previousState: ShapeStreamState, error: Error) {
     super()
-    this.previousState = previousState
+    this.previousState =
+      previousState instanceof ErrorState
+        ? previousState.previousState
+        : previousState
     this.error = error
   }
 
@@ -733,10 +726,6 @@ export class ErrorState extends ShapeStreamState {
   }
   get lastSyncedAt() {
     return this.previousState.lastSyncedAt
-  }
-
-  get isUpToDate(): boolean {
-    return this.previousState.isUpToDate
   }
 
   withHandle(handle: string): ErrorState {
