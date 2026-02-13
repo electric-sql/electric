@@ -41,7 +41,7 @@ systems.
 
 ## Scalable data infrastructure
 
-Electric Cloud provides turnkey hosting of [Durable&nbsp;Streams](/products/durable-streams) and [Postgres&nbsp;Sync](/products/postgres-sync).
+Electric Cloud is a reactive data platform designed for running multi-user, multi-agent systems that provides turnkey hosting of [Durable&nbsp;Streams](/products/durable-streams) and [Postgres&nbsp;Sync](/products/postgres-sync).
 
 ### <img src="/img/icons/durable-streams.svg" class="data-source-icon"> Durable&nbsp;Streams
 
