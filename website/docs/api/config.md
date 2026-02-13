@@ -319,20 +319,9 @@ Maximum number of concurrent HTTP requests Electric will serve, as a JSON object
 - `initial` &mdash; limit for initial sync requests (requests with `offset=-1`). Default: **300**.
 - `existing` &mdash; limit for ongoing requests (live long-polls and catch-up requests). Default: **1000**.
 
-When the limit is exceeded, Electric responds with `503` and a `Retry-After` header. See the [troubleshooting guide](/docs/guides/troubleshooting#_503-concurrent-request-limit-exceeded) for details.
+When the limit is exceeded, Electric responds with `503` and a `Retry-After` header. See the [troubleshooting guide](/docs/guides/troubleshooting#_503-mdash-concurrent-request-limit-exceeded) for details.
 
-Each `live=true` long-poll request holds a permit for up to 20 seconds, so the effective limit is determined by the number of concurrent shape subscriptions across all connected clients. For example, 200 clients with 10 shapes each = 2,000 concurrent connections. Putting a [CDN with request collapsing](/docs/api/http#extracting-request-information) in front of Electric is the recommended way to handle high connection counts.
-
-</EnvVarConfig>
-
-### ELECTRIC_LONG_POLL_TIMEOUT
-
-<EnvVarConfig
-    name="ELECTRIC_LONG_POLL_TIMEOUT"
-    defaultValue="20000"
-    example="30000">
-
-How long (in milliseconds) a `live=true` request will wait for new changes before returning an up-to-date response with no data. Lower values reduce the time each request holds a concurrent request permit but increase polling frequency.
+Each `live=true` long-poll request holds a permit for up to 20 seconds, so the effective limit is determined by the number of concurrent shape subscriptions across all connected clients. Putting a [CDN with request collapsing](/docs/api/http#collapsing-live-requests) in front of Electric is the recommended way to handle high connection counts.
 
 </EnvVarConfig>
 

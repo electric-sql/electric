@@ -178,7 +178,7 @@ When too many clients are connected simultaneously, Electric responds with a `50
 ```json
 {
   "code": "concurrent_request_limit_exceeded",
-  "message": "Concurrent request limit for existing requests exceeded (limit: 1000). ..."
+  "message": "Concurrent existing request limit exceeded (limit: 1000), please retry"
 }
 ```
 
@@ -188,9 +188,9 @@ Note that this is an **application-level limit**, not a system resource issue. Y
 
 ##### Solution &mdash; use a CDN and/or increase the limit
 
-**Put a CDN in front of Electric** (recommended). Electric's caching headers are designed for CDN [request collapsing](/docs/api/http#extracting-request-information). When multiple clients poll the same shape at the same offset, the CDN collapses them into a single request to Electric and fans out the response. This dramatically reduces concurrent connections. See the [deployment guide](/docs/guides/deployment) for CDN setup.
+**Put a CDN in front of Electric** (recommended). Electric's caching headers are designed for CDN [request collapsing](/docs/api/http#collapsing-live-requests). When multiple clients poll the same shape at the same offset, the CDN collapses them into a single request to Electric and fans out the response. This dramatically reduces concurrent connections. See the [deployment guide](/docs/guides/deployment) for CDN setup.
 
-**Increase the concurrent request limit** as a stopgap. Set [`ELECTRIC_MAX_CONCURRENT_REQUESTS`](/docs/api/config#max-concurrent-requests) to raise the limits:
+**Increase the concurrent request limit** as a stopgap. Set [`ELECTRIC_MAX_CONCURRENT_REQUESTS`](/docs/api/config#electric-max-concurrent-requests) to raise the limits:
 
 ```shell
 ELECTRIC_MAX_CONCURRENT_REQUESTS='{"initial": 500, "existing": 3000}'
