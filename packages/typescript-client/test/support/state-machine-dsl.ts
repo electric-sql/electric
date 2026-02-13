@@ -4,7 +4,10 @@ import {
   ShapeStreamStateKind,
   createInitialState,
   InitialState,
+  SyncingState,
   LiveState,
+  ReplayingState,
+  StaleRetryState,
   PausedState,
   ErrorState,
   SharedStateFields,
@@ -474,4 +477,60 @@ export function scenario(opts?: {
     handle: opts?.handle,
   })
   return new ScenarioBuilder<`initial`>(initial)
+}
+
+// ─── rawEvents (Tier 2) ───
+
+export function rawEvents(
+  startState: ShapeStreamState,
+  events: EventSpec[]
+): EventResult[] {
+  const results: EventResult[] = []
+  let current = startState
+
+  for (const event of events) {
+    const result = applyEvent(current, event)
+    assertStateInvariants(result.state)
+    results.push(result)
+    current = result.state
+  }
+
+  return results
+}
+
+// ─── makeAllStates: one representative of each kind ───
+
+export function makeAllStates(): Array<{
+  kind: ShapeStreamStateKind
+  state: ShapeStreamState
+}> {
+  const shared = makeShared({ lastSyncedAt: 1000 })
+  return [
+    { kind: `initial`, state: createInitialState({ offset: `-1` }) },
+    { kind: `syncing`, state: new SyncingState(shared) },
+    {
+      kind: `live`,
+      state: new LiveState(shared),
+    },
+    {
+      kind: `replaying`,
+      state: new ReplayingState({ ...shared, replayCursor: `cursor-1` }),
+    },
+    {
+      kind: `stale-retry`,
+      state: new StaleRetryState({
+        ...shared,
+        staleCacheBuster: `cb-1`,
+        staleCacheRetryCount: 1,
+      }),
+    },
+    {
+      kind: `paused`,
+      state: new PausedState(new SyncingState(shared)),
+    },
+    {
+      kind: `error`,
+      state: new ErrorState(new SyncingState(shared), new Error(`test-error`)),
+    },
+  ]
 }

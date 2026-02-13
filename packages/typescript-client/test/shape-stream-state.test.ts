@@ -13,7 +13,17 @@ import {
   SyncingState,
   SharedStateFields,
 } from '../src/shape-stream-state'
-import { scenario } from './support/state-machine-dsl'
+import {
+  scenario,
+  makeAllStates,
+  applyEvent,
+  assertStateInvariants,
+} from './support/state-machine-dsl'
+import type { EventSpec } from './support/state-machine-dsl'
+import {
+  TRANSITION_TABLE,
+  type EventType,
+} from './support/state-transition-table'
 import {
   OFFSET_QUERY_PARAM,
   SHAPE_HANDLE_QUERY_PARAM,
@@ -711,4 +721,67 @@ describe(`scenario builder`, () => {
       .expectHandle(`new-h`)
       .done()
   })
+})
+
+describe(`tier-2: transition truth table`, () => {
+  const allStates = makeAllStates()
+
+  const eventFactories: Record<EventType, () => EventSpec> = {
+    response: () => ({ type: `response`, input: {} }),
+    messages: () => ({ type: `messages`, input: {} }),
+    sseClose: () => ({
+      type: `sseClose`,
+      input: {
+        connectionDuration: 5000,
+        wasAborted: false,
+        minConnectionDuration: 1000,
+        maxShortConnections: 3,
+      },
+    }),
+    pause: () => ({ type: `pause` }),
+    resume: () => ({ type: `resume` }),
+    error: () => ({ type: `error`, error: new Error(`test`) }),
+    retry: () => ({ type: `retry` }),
+    markMustRefetch: () => ({ type: `markMustRefetch` }),
+    withHandle: () => ({ type: `withHandle`, handle: `new-h` }),
+    enterReplayMode: () => ({ type: `enterReplayMode`, cursor: `c1` }),
+  }
+
+  for (const { kind, state } of allStates) {
+    const tableForKind = TRANSITION_TABLE[kind]
+    if (!tableForKind) continue
+
+    describe(`${kind}`, () => {
+      for (const [eventType, expected] of Object.entries(tableForKind)) {
+        it(`${kind} + ${eventType}: ${expected.description}`, () => {
+          const event = eventFactories[eventType as EventType]()
+          const result = applyEvent(state, event)
+          assertStateInvariants(result.state)
+
+          if (expected.sameReference) {
+            expect(result.state).toBe(state)
+          }
+          if (expected.resultKind) {
+            expect(result.state.kind).toBe(expected.resultKind)
+          }
+          if (
+            expected.action &&
+            result.transition &&
+            `action` in result.transition
+          ) {
+            expect(result.transition.action).toBe(expected.action)
+          }
+          if (
+            expected.becameUpToDate !== undefined &&
+            result.transition &&
+            `becameUpToDate` in result.transition
+          ) {
+            expect(result.transition.becameUpToDate).toBe(
+              expected.becameUpToDate
+            )
+          }
+        })
+      }
+    })
+  }
 })
