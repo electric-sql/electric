@@ -23,11 +23,13 @@ const actions = [
 <template>
   <br />
   <Section :actions="actions">
-    <template #title>Build collaborative,<br class="hidden-md inline-sm" /> <span class="no-wrap">multi-agent systems</span></template>
+    <template #title
+      >Build collaborative,<br class="hidden-md inline-sm" />
+      <span class="no-wrap">multi-agent systems</span></template
+    >
     <template #tagline>
       With a reactive data platform designed for
-      <span class="no-wrap-xs">
-        multi-user, multi-agent collaboration</span>
+      <span class="no-wrap-xs"> multi-user, multi-agent collaboration</span>
     </template>
     <div class="solutions-grid">
       <LandscapeBlogPostListing
