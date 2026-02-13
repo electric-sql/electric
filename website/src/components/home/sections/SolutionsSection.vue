@@ -24,7 +24,7 @@ const actions = [
   <br />
   <Section :actions="actions">
     <template #title
-      >Build collaborative,<br class="hidden-md inline-sm" />
+      >Build collaborative, <br class="hidden-md inline-sm" />
       <span class="no-wrap">multi-agent systems</span></template
     >
     <template #tagline>
