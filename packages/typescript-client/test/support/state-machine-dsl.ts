@@ -279,7 +279,7 @@ const EVENT_TYPES: EventSpec[`type`][] = [
   `enterReplayMode`,
 ]
 
-export function pickRandomEvent(rng: () => number): EventSpec {
+export function pickRandomEvent(rng: () => number, now: number): EventSpec {
   const randInt = (max: number): number => Math.floor(rng() * max)
   const type = EVENT_TYPES[randInt(EVENT_TYPES.length)]
 
@@ -293,6 +293,7 @@ export function pickRandomEvent(rng: () => number): EventSpec {
           responseCursor: `cursor-${randInt(5)}`,
           status: rng() > 0.9 ? 204 : 200,
           expiredHandle: rng() > 0.8 ? `h-${randInt(5)}` : undefined,
+          now,
         },
       }
     case `messages`:
@@ -304,6 +305,7 @@ export function pickRandomEvent(rng: () => number): EventSpec {
           isSse: rng() > 0.5,
           upToDateOffset: rng() > 0.5 ? `${randInt(100)}_0` : undefined,
           currentCursor: `cursor-${randInt(5)}`,
+          now,
         },
       }
     case `sseClose`:

@@ -19,6 +19,7 @@ import {
   makeMessageBatchInput,
   applyEvent,
   assertStateInvariants,
+  assertReachableInvariants,
   mulberry32,
   pickRandomEvent,
   replayEvents,
@@ -1016,10 +1017,12 @@ describe(`fuzz testing`, () => {
       const trace: EventSpec[] = []
       try {
         for (let step = 0; step < STEPS; step++) {
-          const event = pickRandomEvent(rng)
+          const now = seed * 1_000_000 + step
+          const event = pickRandomEvent(rng, now)
           trace.push(event)
           const result = applyEvent(state, event)
           assertStateInvariants(result.state)
+          assertReachableInvariants(event, result.prevState, result.state)
           state = result.state
         }
       } catch (e) {

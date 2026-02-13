@@ -149,7 +149,7 @@ export class MockFetchHarness {
   }
 
   get pendingCount() {
-    return this.#responses.length - this.#consumedCount
+    return Math.max(0, this.#responses.length - this.#consumedCount)
   }
 }
 
