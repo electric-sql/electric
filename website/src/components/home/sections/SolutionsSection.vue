@@ -9,13 +9,13 @@ const posts = data
 
 const actions = [
   {
-    href: '/sync',
-    text: 'Why sync',
+    href: '/cloud',
+    text: 'Data platform',
     theme: 'brand',
   },
   {
-    href: '/sync#solutions',
-    text: 'Solutions',
+    href: '/sync',
+    text: 'Why sync?',
   },
 ]
 </script>
