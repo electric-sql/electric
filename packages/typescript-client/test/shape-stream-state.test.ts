@@ -13,6 +13,7 @@ import {
   SyncingState,
   SharedStateFields,
 } from '../src/shape-stream-state'
+import { scenario } from './support/state-machine-dsl'
 import {
   OFFSET_QUERY_PARAM,
   SHAPE_HANDLE_QUERY_PARAM,
@@ -656,5 +657,58 @@ describe(`schema undefined + ignored stale response`, () => {
     expect(transition.action).toBe(`ignored`)
     expect(transition.state).toBe(state)
     expect(transition.state.schema).toBeUndefined()
+  })
+})
+
+describe(`scenario builder`, () => {
+  it(`happy-path-live: Initial → Syncing → Live`, () => {
+    scenario()
+      .response({ responseHandle: `h1` })
+      .expectKind(`syncing`)
+      .messages({ hasUpToDateMessage: true })
+      .expectKind(`live`)
+      .expectUpToDate(true)
+      .done()
+  })
+
+  it(`pause-resume: preserves handle and offset`, () => {
+    scenario()
+      .response({ responseHandle: `h1`, responseOffset: `5_3` })
+      .expectKind(`syncing`)
+      .expectHandle(`h1`)
+      .pause()
+      .expectKind(`paused`)
+      .expectHandle(`h1`)
+      .expectOffset(`5_3`)
+      .resume()
+      .expectKind(`syncing`)
+      .expectHandle(`h1`)
+      .expectOffset(`5_3`)
+      .done()
+  })
+
+  it(`error-retry: restores previous state`, () => {
+    const { state } = scenario()
+      .response({ responseHandle: `h1` })
+      .expectKind(`syncing`)
+      .error(new Error(`boom`))
+      .expectKind(`error`)
+      .retry()
+      .expectKind(`syncing`)
+      .done()
+
+    expect(state.handle).toBe(`h1`)
+  })
+
+  it(`markMustRefetch: resets to Initial with offset -1`, () => {
+    scenario()
+      .response({ responseHandle: `h1` })
+      .messages({ hasUpToDateMessage: true })
+      .expectKind(`live`)
+      .markMustRefetch(`new-h`)
+      .expectKind(`initial`)
+      .expectOffset(`-1`)
+      .expectHandle(`new-h`)
+      .done()
   })
 })
