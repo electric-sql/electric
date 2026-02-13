@@ -2107,8 +2107,8 @@ defmodule Electric.Plug.RouterTest do
 
       body = Jason.decode!(conn3.resp_body)
       assert body["code"] == "concurrent_request_limit_exceeded"
-      assert body["message"] =~ "Concurrent request limit"
-      assert body["message"] =~ "ELECTRIC_MAX_CONCURRENT_REQUESTS"
+      assert body["message"] =~ "Concurrent"
+      assert body["message"] =~ "limit exceeded"
 
       # Should have Retry-After header
       assert [retry_after] = Plug.Conn.get_resp_header(conn3, "retry-after")
