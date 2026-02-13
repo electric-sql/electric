@@ -865,8 +865,9 @@ export class ShapeStream<T extends Row<unknown> = Row>
         this.#reset(newShapeHandle)
 
         // must refetch control message might be in a list or not depending
-        // on whether it came from an SSE request or long poll - handle both
-        // cases for safety here but worth revisiting 409 handling
+        // on whether it came from an SSE request or long poll. The body may
+        // also be null/undefined if a proxy returned an unexpected response.
+        // Handle all cases defensively here.
         const messages409 = Array.isArray(e.json)
           ? e.json
           : e.json != null
@@ -1145,7 +1146,14 @@ export class ShapeStream<T extends Row<unknown> = Row>
   }
 
   async #onMessages(batch: Array<Message<T>>, isSseMessage = false) {
-    if (!Array.isArray(batch) || batch.length === 0) return
+    if (!Array.isArray(batch)) {
+      console.warn(
+        `[Electric] #onMessages called with non-array argument (${typeof batch}). ` +
+          `This is a client bug — please report it.`
+      )
+      return
+    }
+    if (batch.length === 0) return
 
     const lastMessage = batch[batch.length - 1]
     const hasUpToDateMessage = isUpToDateMessage(lastMessage)
@@ -1253,12 +1261,16 @@ export class ShapeStream<T extends Row<unknown> = Row>
     const batch = this.#messageParser.parse<Array<Message<T>>>(messages, schema)
 
     if (!Array.isArray(batch)) {
-      console.warn(
-        `[Electric] Received non-array response body from shape endpoint. ` +
+      const preview = JSON.stringify(batch)?.slice(0, 200)
+      throw new FetchError(
+        response.status,
+        `Received non-array response body from shape endpoint. ` +
           `This may indicate a proxy or CDN is returning an unexpected response. ` +
-          `Expected a JSON array, got: ${typeof batch}`
+          `Expected a JSON array, got ${typeof batch}: ${preview}`,
+        undefined,
+        Object.fromEntries(response.headers.entries()),
+        fetchUrl.toString()
       )
-      return
     }
 
     await this.#onMessages(batch)

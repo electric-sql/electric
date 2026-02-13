@@ -43,8 +43,9 @@ describe(`helpers`, () => {
   })
 
   it(`should handle null and undefined messages without throwing`, () => {
-    // These can occur when a proxy returns a non-array JSON response
-    // that gets indexed as batch[batch.length - 1] → undefined
+    // Null/undefined messages should not occur in normal operation, but
+    // these guards protect against unexpected runtime values from
+    // proxy/CDN interference or future code changes.
     expect(isChangeMessage(undefined as unknown as Message)).toBe(false)
     expect(isChangeMessage(null as unknown as Message)).toBe(false)
     expect(isControlMessage(undefined as unknown as Message)).toBe(false)
