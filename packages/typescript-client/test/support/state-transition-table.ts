@@ -27,7 +27,7 @@ export interface ExpectedBehavior {
 
 export const TRANSITION_TABLE: Record<
   ShapeStreamStateKind,
-  Partial<Record<EventType, ExpectedBehavior>>
+  Record<EventType, ExpectedBehavior>
 > = {
   initial: {
     response: {
@@ -59,6 +59,14 @@ export const TRANSITION_TABLE: Record<
     withHandle: {
       resultKind: `initial`,
       description: `Initial with new handle stays Initial`,
+    },
+    resume: {
+      sameReference: true,
+      description: `Initial is not paused — resume is a no-op`,
+    },
+    retry: {
+      sameReference: true,
+      description: `Initial is not in error — retry is a no-op`,
     },
     enterReplayMode: {
       resultKind: `replaying`,
@@ -96,6 +104,14 @@ export const TRANSITION_TABLE: Record<
       resultKind: `syncing`,
       description: `Syncing with new handle stays Syncing`,
     },
+    resume: {
+      sameReference: true,
+      description: `Syncing is not paused — resume is a no-op`,
+    },
+    retry: {
+      sameReference: true,
+      description: `Syncing is not in error — retry is a no-op`,
+    },
     enterReplayMode: {
       resultKind: `replaying`,
       description: `Syncing can enter replay → Replaying`,
@@ -131,6 +147,14 @@ export const TRANSITION_TABLE: Record<
     withHandle: {
       resultKind: `live`,
       description: `Live with new handle stays Live`,
+    },
+    resume: {
+      sameReference: true,
+      description: `Live is not paused — resume is a no-op`,
+    },
+    retry: {
+      sameReference: true,
+      description: `Live is not in error — retry is a no-op`,
     },
     enterReplayMode: {
       sameReference: true,
@@ -168,6 +192,14 @@ export const TRANSITION_TABLE: Record<
       resultKind: `replaying`,
       description: `Replaying with new handle stays Replaying`,
     },
+    resume: {
+      sameReference: true,
+      description: `Replaying is not paused — resume is a no-op`,
+    },
+    retry: {
+      sameReference: true,
+      description: `Replaying is not in error — retry is a no-op`,
+    },
     enterReplayMode: {
       sameReference: true,
       description: `Replaying cannot enter replay (base class no-op)`,
@@ -203,6 +235,14 @@ export const TRANSITION_TABLE: Record<
     withHandle: {
       resultKind: `stale-retry`,
       description: `StaleRetry with new handle stays StaleRetry`,
+    },
+    resume: {
+      sameReference: true,
+      description: `StaleRetry is not paused — resume is a no-op`,
+    },
+    retry: {
+      sameReference: true,
+      description: `StaleRetry is not in error — retry is a no-op`,
     },
     enterReplayMode: {
       sameReference: true,
@@ -240,6 +280,14 @@ export const TRANSITION_TABLE: Record<
       resultKind: `paused`,
       description: `Paused with new handle stays Paused (delegates)`,
     },
+    resume: {
+      resultKind: `syncing`,
+      description: `Paused resumes → returns to previous state (Syncing)`,
+    },
+    retry: {
+      sameReference: true,
+      description: `Paused is not in error — retry is a no-op`,
+    },
     enterReplayMode: {
       sameReference: true,
       description: `Paused cannot enter replay (base class no-op)`,
@@ -275,6 +323,14 @@ export const TRANSITION_TABLE: Record<
     withHandle: {
       resultKind: `error`,
       description: `Error with new handle stays Error (delegates)`,
+    },
+    resume: {
+      sameReference: true,
+      description: `Error is not paused — resume is a no-op`,
+    },
+    retry: {
+      resultKind: `syncing`,
+      description: `Error retries → returns to previous state (Syncing)`,
     },
     enterReplayMode: {
       sameReference: true,

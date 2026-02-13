@@ -168,11 +168,9 @@ export function mockVisibilityApi(): {
   global.document = doc as unknown as Document
 
   const invokeHandlers = () => {
-    const visibilityHandlers = doc.addEventListener.mock.calls.map(
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      ([_, handler]: any) => handler
-    )
-    visibilityHandlers.forEach((handler: () => void) => handler())
+    for (const [, handler] of doc.addEventListener.mock.calls) {
+      handler()
+    }
   }
 
   return {

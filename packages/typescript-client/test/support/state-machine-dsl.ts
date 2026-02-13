@@ -20,7 +20,7 @@ import {
 } from '../../src/shape-stream-state'
 import type { Offset } from '../../src/types'
 
-// ─── Factory helpers (mirror those in shape-stream-state.test.ts) ───
+// ─── Factory helpers ───
 
 export function makeShared(
   overrides?: Partial<SharedStateFields>
@@ -93,7 +93,24 @@ export interface EventResult {
 
 // ─── Invariant Checkers ───
 
+const KIND_TO_CLASS: Record<
+  ShapeStreamStateKind,
+  new (...args: never[]) => ShapeStreamState
+> = {
+  initial: InitialState,
+  syncing: SyncingState,
+  'stale-retry': StaleRetryState,
+  live: LiveState,
+  replaying: ReplayingState,
+  paused: PausedState,
+  error: ErrorState,
+}
+
 export function assertStateInvariants(state: ShapeStreamState): void {
+  // I0: kind property and instanceof must agree
+  const expectedClass = KIND_TO_CLASS[state.kind]
+  expect(state).toBeInstanceOf(expectedClass)
+
   // I1: isUpToDate === true only when LiveState is in the delegation chain
   if (state.isUpToDate) {
     if (state instanceof PausedState) {
@@ -105,21 +122,10 @@ export function assertStateInvariants(state: ShapeStreamState): void {
     }
   }
 
-  // I2: PausedState.pause() is idempotent
-  if (state instanceof PausedState) {
-    expect(state.pause()).toBe(state)
-  }
-
   // I6: StaleRetryState always has staleCacheBuster and count > 0
   if (state.kind === `stale-retry`) {
     expect(state.staleCacheBuster).toBeDefined()
     expect(state.staleCacheRetryCount).toBeGreaterThan(0)
-  }
-
-  // I7: ErrorState always has error
-  if (state instanceof ErrorState) {
-    expect(state.error).toBeDefined()
-    expect(state.error).toBeInstanceOf(Error)
   }
 
   // I8: ReplayingState always has replayCursor
@@ -127,8 +133,9 @@ export function assertStateInvariants(state: ShapeStreamState): void {
     expect(state.replayCursor).toBeDefined()
   }
 
-  // Delegation invariants: PausedState delegates all field getters
+  // PausedState invariants: pause() is idempotent + delegates all field getters
   if (state instanceof PausedState) {
+    expect(state.pause()).toBe(state)
     expect(state.handle).toBe(state.previousState.handle)
     expect(state.offset).toBe(state.previousState.offset)
     expect(state.liveCacheBuster).toBe(state.previousState.liveCacheBuster)
@@ -136,8 +143,10 @@ export function assertStateInvariants(state: ShapeStreamState): void {
     expect(state.isUpToDate).toBe(state.previousState.isUpToDate)
   }
 
-  // Delegation invariants: ErrorState delegates all field getters
+  // ErrorState invariants: always has error + delegates all field getters
   if (state instanceof ErrorState) {
+    expect(state.error).toBeDefined()
+    expect(state.error).toBeInstanceOf(Error)
     expect(state.handle).toBe(state.previousState.handle)
     expect(state.offset).toBe(state.previousState.offset)
     expect(state.liveCacheBuster).toBe(state.previousState.liveCacheBuster)
@@ -271,18 +280,19 @@ const EVENT_TYPES: EventSpec[`type`][] = [
 ]
 
 export function pickRandomEvent(rng: () => number): EventSpec {
-  const type = EVENT_TYPES[Math.floor(rng() * EVENT_TYPES.length)]
+  const randInt = (max: number): number => Math.floor(rng() * max)
+  const type = EVENT_TYPES[randInt(EVENT_TYPES.length)]
 
   switch (type) {
     case `response`:
       return {
         type: `response`,
         input: {
-          responseHandle: `h-${Math.floor(rng() * 5)}`,
-          responseOffset: `${Math.floor(rng() * 100)}_${Math.floor(rng() * 10)}`,
-          responseCursor: `cursor-${Math.floor(rng() * 5)}`,
+          responseHandle: `h-${randInt(5)}`,
+          responseOffset: `${randInt(100)}_${randInt(10)}`,
+          responseCursor: `cursor-${randInt(5)}`,
           status: rng() > 0.9 ? 204 : 200,
-          expiredHandle: rng() > 0.8 ? `h-${Math.floor(rng() * 5)}` : undefined,
+          expiredHandle: rng() > 0.8 ? `h-${randInt(5)}` : undefined,
         },
       }
     case `messages`:
@@ -292,16 +302,15 @@ export function pickRandomEvent(rng: () => number): EventSpec {
           hasMessages: rng() > 0.2,
           hasUpToDateMessage: rng() > 0.4,
           isSse: rng() > 0.5,
-          upToDateOffset:
-            rng() > 0.5 ? `${Math.floor(rng() * 100)}_0` : undefined,
-          currentCursor: `cursor-${Math.floor(rng() * 5)}`,
+          upToDateOffset: rng() > 0.5 ? `${randInt(100)}_0` : undefined,
+          currentCursor: `cursor-${randInt(5)}`,
         },
       }
     case `sseClose`:
       return {
         type: `sseClose`,
         input: {
-          connectionDuration: Math.floor(rng() * 10000),
+          connectionDuration: randInt(10000),
           wasAborted: rng() > 0.7,
           minConnectionDuration: 1000,
           maxShortConnections: 3,
@@ -314,42 +323,32 @@ export function pickRandomEvent(rng: () => number): EventSpec {
     case `error`:
       return {
         type: `error`,
-        error: new Error(`fuzz-error-${Math.floor(rng() * 100)}`),
+        error: new Error(`fuzz-error-${randInt(100)}`),
       }
     case `retry`:
       return { type: `retry` }
     case `markMustRefetch`:
       return {
         type: `markMustRefetch`,
-        handle: rng() > 0.5 ? `h-${Math.floor(rng() * 5)}` : undefined,
+        handle: rng() > 0.5 ? `h-${randInt(5)}` : undefined,
       }
     case `withHandle`:
-      return { type: `withHandle`, handle: `h-${Math.floor(rng() * 5)}` }
+      return { type: `withHandle`, handle: `h-${randInt(5)}` }
     case `enterReplayMode`:
       return {
         type: `enterReplayMode`,
-        cursor: `cursor-${Math.floor(rng() * 5)}`,
+        cursor: `cursor-${randInt(5)}`,
       }
   }
 }
 
 // ─── ScenarioBuilder (Tier 1) ───
 
-export interface TraceEntry {
-  event: EventSpec
-  prevState: ShapeStreamState
-  state: ShapeStreamState
-  transition?:
-    | ResponseMetadataTransition
-    | MessageBatchTransition
-    | SseCloseTransition
-}
-
 export class ScenarioBuilder<K extends ShapeStreamStateKind = `initial`> {
   readonly #state: ShapeStreamState
-  readonly #trace: TraceEntry[]
+  readonly #trace: EventResult[]
 
-  constructor(state: ShapeStreamState, trace: TraceEntry[] = []) {
+  constructor(state: ShapeStreamState, trace: EventResult[] = []) {
     this.#state = state
     this.#trace = trace
   }
@@ -360,13 +359,7 @@ export class ScenarioBuilder<K extends ShapeStreamStateKind = `initial`> {
     const result = applyEvent(this.#state, event)
     assertStateInvariants(result.state)
     assertReachableInvariants(event, result.prevState, result.state)
-    const entry: TraceEntry = {
-      event,
-      prevState: result.prevState,
-      state: result.state,
-      transition: result.transition,
-    }
-    return new ScenarioBuilder(result.state, [...this.#trace, entry])
+    return new ScenarioBuilder(result.state, [...this.#trace, result])
   }
 
   // ─── Event handlers (return unknown kind — determined at runtime) ───
@@ -450,8 +443,16 @@ export class ScenarioBuilder<K extends ShapeStreamStateKind = `initial`> {
     action: `accepted` | `ignored` | `stale-retry`
   ): ScenarioBuilder<K> {
     const lastEntry = this.#trace[this.#trace.length - 1]
-    expect(lastEntry).toBeDefined()
-    expect((lastEntry.transition as ResponseMetadataTransition)?.action).toBe(
+    if (!lastEntry) {
+      throw new Error(`expectAction called with no prior events in trace`)
+    }
+    if (lastEntry.event.type !== `response`) {
+      throw new Error(
+        `expectAction called after '${lastEntry.event.type}' event, ` +
+          `but it only applies to 'response' events`
+      )
+    }
+    expect((lastEntry.transition as ResponseMetadataTransition).action).toBe(
       action
     )
     return this
@@ -459,7 +460,7 @@ export class ScenarioBuilder<K extends ShapeStreamStateKind = `initial`> {
 
   // ─── Terminal ───
 
-  done(): { state: ShapeStreamState; trace: TraceEntry[] } {
+  done(): { state: ShapeStreamState; trace: EventResult[] } {
     return { state: this.#state, trace: [...this.#trace] }
   }
 
@@ -510,10 +511,7 @@ export function makeAllStates(): Array<{
   return [
     { kind: `initial`, state: createInitialState({ offset: `-1` }) },
     { kind: `syncing`, state: new SyncingState(shared) },
-    {
-      kind: `live`,
-      state: new LiveState(shared),
-    },
+    { kind: `live`, state: new LiveState(shared) },
     {
       kind: `replaying`,
       state: new ReplayingState({ ...shared, replayCursor: `cursor-1` }),
