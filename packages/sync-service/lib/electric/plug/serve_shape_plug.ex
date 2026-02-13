@@ -180,9 +180,7 @@ defmodule Electric.Plug.ServeShapePlug do
             %{
               code: "concurrent_request_limit_exceeded",
               message:
-                "Concurrent request limit for #{kind} requests exceeded (limit: #{max_concurrent}). " <>
-                  "Consider increasing ELECTRIC_MAX_CONCURRENT_REQUESTS or putting a CDN in front of Electric. " <>
-                  "See https://electric-sql.com/docs/guides/troubleshooting"
+                "Concurrent #{kind} request limit exceeded (limit: #{max_concurrent}), please retry"
             },
             status: 503,
             known_error: true,
