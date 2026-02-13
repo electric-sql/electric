@@ -865,11 +865,15 @@ export class ShapeStream<T extends Row<unknown> = Row>
         this.#reset(newShapeHandle)
 
         // must refetch control message might be in a list or not depending
-        // on whether it came from an SSE request or long poll - handle both
-        // cases for safety here but worth revisiting 409 handling
-        await this.#publish(
-          (Array.isArray(e.json) ? e.json : [e.json]) as Message<T>[]
-        )
+        // on whether it came from an SSE request or long poll. The body may
+        // also be null/undefined if a proxy returned an unexpected response.
+        // Handle all cases defensively here.
+        const messages409 = Array.isArray(e.json)
+          ? e.json
+          : e.json != null
+            ? [e.json]
+            : []
+        await this.#publish(messages409 as Message<T>[])
         return this.#requestShape()
       } else {
         // errors that have reached this point are not actionable without
@@ -1142,6 +1146,13 @@ export class ShapeStream<T extends Row<unknown> = Row>
   }
 
   async #onMessages(batch: Array<Message<T>>, isSseMessage = false) {
+    if (!Array.isArray(batch)) {
+      console.warn(
+        `[Electric] #onMessages called with non-array argument (${typeof batch}). ` +
+          `This is a client bug — please report it.`
+      )
+      return
+    }
     if (batch.length === 0) return
 
     const lastMessage = batch[batch.length - 1]
@@ -1248,6 +1259,19 @@ export class ShapeStream<T extends Row<unknown> = Row>
     const res = await response.text()
     const messages = res || `[]`
     const batch = this.#messageParser.parse<Array<Message<T>>>(messages, schema)
+
+    if (!Array.isArray(batch)) {
+      const preview = JSON.stringify(batch)?.slice(0, 200)
+      throw new FetchError(
+        response.status,
+        `Received non-array response body from shape endpoint. ` +
+          `This may indicate a proxy or CDN is returning an unexpected response. ` +
+          `Expected a JSON array, got ${typeof batch}: ${preview}`,
+        undefined,
+        Object.fromEntries(response.headers.entries()),
+        fetchUrl.toString()
+      )
+    }
 
     await this.#onMessages(batch)
   }

@@ -41,4 +41,16 @@ describe(`helpers`, () => {
     expect(isUpToDateMessage(mustRefetchMsg)).toBe(false)
     expect(isUpToDateMessage(changeMsg)).toBe(false)
   })
+
+  it(`should handle null and undefined messages without throwing`, () => {
+    // Null/undefined messages should not occur in normal operation, but
+    // these guards protect against unexpected runtime values from
+    // proxy/CDN interference or future code changes.
+    expect(isChangeMessage(undefined as unknown as Message)).toBe(false)
+    expect(isChangeMessage(null as unknown as Message)).toBe(false)
+    expect(isControlMessage(undefined as unknown as Message)).toBe(false)
+    expect(isControlMessage(null as unknown as Message)).toBe(false)
+    expect(isUpToDateMessage(undefined as unknown as Message)).toBe(false)
+    expect(isUpToDateMessage(null as unknown as Message)).toBe(false)
+  })
 })
