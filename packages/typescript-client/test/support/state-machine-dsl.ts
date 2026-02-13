@@ -234,7 +234,9 @@ export function applyEvent(
       nextState = state.withHandle(event.handle)
       break
     case `enterReplayMode`:
-      nextState = state.enterReplayMode(event.cursor)
+      nextState = state.canEnterReplayMode()
+        ? state.enterReplayMode(event.cursor)
+        : state
       break
   }
 

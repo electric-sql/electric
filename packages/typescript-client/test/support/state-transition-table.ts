@@ -205,8 +205,8 @@ export const TRANSITION_TABLE: Record<
       description: `StaleRetry with new handle stays StaleRetry`,
     },
     enterReplayMode: {
-      resultKind: `replaying`,
-      description: `StaleRetry enters replay → Replaying (loses retry count)`,
+      sameReference: true,
+      description: `StaleRetry cannot enter replay (canEnterReplayMode is false)`,
     },
   },
   paused: {

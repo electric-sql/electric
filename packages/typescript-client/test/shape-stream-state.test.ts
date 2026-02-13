@@ -912,43 +912,44 @@ describe(`mutation testing`, () => {
         buildScenario().done()
       })
 
-      const { trace } = buildScenario().done()
-      const events = trace.map((t) => t.event)
+      it(`survives event duplication`, () => {
+        const { trace } = buildScenario().done()
+        const events = trace.map((t) => t.event)
+        for (let i = 0; i < events.length; i++) {
+          const mutated = duplicateEvent(events, i)
+          const results = rawEvents(
+            createInitialState({ offset: `-1` }),
+            mutated
+          )
+          results.forEach((r) => assertStateInvariants(r.state))
+        }
+      })
 
-      if (events.length >= 2) {
-        it(`survives event duplication`, () => {
-          for (let i = 0; i < events.length; i++) {
-            const mutated = duplicateEvent(events, i)
-            const results = rawEvents(
-              createInitialState({ offset: `-1` }),
-              mutated
-            )
-            results.forEach((r) => assertStateInvariants(r.state))
-          }
-        })
+      it(`survives event reordering`, () => {
+        const { trace } = buildScenario().done()
+        const events = trace.map((t) => t.event)
+        for (let i = 0; i < events.length - 1; i++) {
+          const mutated = reorderEvents(events, i, i + 1)
+          const results = rawEvents(
+            createInitialState({ offset: `-1` }),
+            mutated
+          )
+          results.forEach((r) => assertStateInvariants(r.state))
+        }
+      })
 
-        it(`survives event reordering`, () => {
-          for (let i = 0; i < events.length - 1; i++) {
-            const mutated = reorderEvents(events, i, i + 1)
-            const results = rawEvents(
-              createInitialState({ offset: `-1` }),
-              mutated
-            )
-            results.forEach((r) => assertStateInvariants(r.state))
-          }
-        })
-
-        it(`survives event dropping`, () => {
-          for (let i = 0; i < events.length; i++) {
-            const mutated = dropEvent(events, i)
-            const results = rawEvents(
-              createInitialState({ offset: `-1` }),
-              mutated
-            )
-            results.forEach((r) => assertStateInvariants(r.state))
-          }
-        })
-      }
+      it(`survives event dropping`, () => {
+        const { trace } = buildScenario().done()
+        const events = trace.map((t) => t.event)
+        for (let i = 0; i < events.length; i++) {
+          const mutated = dropEvent(events, i)
+          const results = rawEvents(
+            createInitialState({ offset: `-1` }),
+            mutated
+          )
+          results.forEach((r) => assertStateInvariants(r.state))
+        }
+      })
     })
   }
 })
