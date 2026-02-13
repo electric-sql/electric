@@ -8,7 +8,7 @@ outline: deep
 
 <style scoped>
   .cloud-header p {
-    max-width: 360px
+    max-width: 380px
   }
   .data-source-icon {
     width: 2rem;
@@ -24,10 +24,9 @@ outline: deep
 
 # Electric Cloud
 
-Scalable data infrastructure platform for fast, modern apps and
+Scalable data infrastructure platform for building fast, modern apps and
 <span class="no-wrap">
-  multi-agent</span>
-systems.
+  multi-agent systems</span>.
 
 <div class="cloud-cta">
   <VPButton
