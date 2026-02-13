@@ -534,3 +534,101 @@ export function makeAllStates(): Array<{
     },
   ]
 }
+
+// ─── Counterexample shrinking ───
+
+export function replayEvents(events: EventSpec[]): ShapeStreamState {
+  let state: ShapeStreamState = createInitialState({ offset: `-1` })
+  for (const event of events) {
+    const result = applyEvent(state, event)
+    assertStateInvariants(result.state)
+    assertReachableInvariants(event, result.prevState, result.state)
+    state = result.state
+  }
+  return state
+}
+
+export function shrinkFailingSequence(
+  events: EventSpec[],
+  stillFails: (events: EventSpec[]) => boolean
+): EventSpec[] {
+  let current = [...events]
+  for (let i = current.length - 1; i >= 0; i--) {
+    const without = [...current.slice(0, i), ...current.slice(i + 1)]
+    if (stillFails(without)) {
+      current = without
+    }
+  }
+  return current
+}
+
+// ─── Event mutation helpers ───
+
+export function duplicateEvent(trace: EventSpec[], index: number): EventSpec[] {
+  return [...trace.slice(0, index), trace[index], ...trace.slice(index)]
+}
+
+export function reorderEvents(
+  trace: EventSpec[],
+  i: number,
+  j: number
+): EventSpec[] {
+  const result = [...trace]
+  ;[result[i], result[j]] = [result[j], result[i]]
+  return result
+}
+
+export function dropEvent(trace: EventSpec[], index: number): EventSpec[] {
+  return [...trace.slice(0, index), ...trace.slice(index + 1)]
+}
+
+// ─── Standard scenarios catalog ───
+
+export const standardScenarios = {
+  'happy-path-live': () =>
+    scenario()
+      .response({ responseHandle: `h1` })
+      .expectKind(`syncing`)
+      .messages({ hasUpToDateMessage: true })
+      .expectKind(`live`),
+
+  'stale-retry': () =>
+    scenario()
+      .response({
+        responseHandle: `stale-h`,
+        expiredHandle: `stale-h`,
+      })
+      .expectAction(`stale-retry`),
+
+  'pause-resume': () =>
+    scenario()
+      .response({ responseHandle: `h1` })
+      .expectKind(`syncing`)
+      .pause()
+      .expectKind(`paused`)
+      .resume()
+      .expectKind(`syncing`),
+
+  'error-retry': () =>
+    scenario()
+      .response({ responseHandle: `h1` })
+      .expectKind(`syncing`)
+      .error(new Error(`boom`))
+      .expectKind(`error`)
+      .retry()
+      .expectKind(`syncing`),
+
+  'full-lifecycle': () =>
+    scenario()
+      .response({ responseHandle: `h1` })
+      .messages({ hasUpToDateMessage: true })
+      .expectKind(`live`)
+      .error(new Error(`disconnect`))
+      .expectKind(`error`)
+      .retry()
+      .expectKind(`live`)
+      .pause()
+      .expectKind(`paused`)
+      .resume()
+      .expectKind(`live`),
+} as const

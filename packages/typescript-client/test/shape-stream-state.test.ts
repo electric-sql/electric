@@ -12,12 +12,22 @@ import {
   StaleRetryState,
   SyncingState,
   SharedStateFields,
+  ShapeStreamState,
 } from '../src/shape-stream-state'
 import {
   scenario,
   makeAllStates,
   applyEvent,
   assertStateInvariants,
+  mulberry32,
+  pickRandomEvent,
+  replayEvents,
+  shrinkFailingSequence,
+  standardScenarios,
+  duplicateEvent,
+  reorderEvents,
+  dropEvent,
+  rawEvents,
 } from './support/state-machine-dsl'
 import type { EventSpec } from './support/state-machine-dsl'
 import {
@@ -779,6 +789,163 @@ describe(`tier-2: transition truth table`, () => {
             expect(result.transition.becameUpToDate).toBe(
               expected.becameUpToDate
             )
+          }
+        })
+      }
+    })
+  }
+})
+
+describe(`algebraic properties`, () => {
+  const allStates = makeAllStates()
+
+  it.each(allStates)(
+    `pause/resume round-trip preserves handle and offset ($kind)`,
+    ({ state }) => {
+      const paused = state.pause()
+      assertStateInvariants(paused)
+      expect(paused.kind).toBe(`paused`)
+      expect(paused.handle).toBe(state.handle)
+      expect(paused.offset).toBe(state.offset)
+
+      const resumed = (paused as PausedState).resume()
+      assertStateInvariants(resumed)
+      expect(resumed.handle).toBe(state.handle)
+      expect(resumed.offset).toBe(state.offset)
+    }
+  )
+
+  it.each(allStates)(
+    `error/retry round-trip restores previousState by reference ($kind)`,
+    ({ state }) => {
+      const errored = state.toErrorState(new Error(`test`))
+      assertStateInvariants(errored)
+      expect(errored.kind).toBe(`error`)
+      expect(errored.error.message).toBe(`test`)
+
+      const retried = errored.retry()
+      assertStateInvariants(retried)
+      expect(retried).toBe(state)
+    }
+  )
+
+  it.each(allStates)(
+    `withHandle updates handle, preserves offset ($kind)`,
+    ({ state }) => {
+      const updated = state.withHandle(`new-handle`)
+      assertStateInvariants(updated)
+      expect(updated.handle).toBe(`new-handle`)
+      expect(updated.offset).toBe(state.offset)
+    }
+  )
+
+  it.each(allStates)(
+    `markMustRefetch always produces InitialState with offset -1 ($kind)`,
+    ({ state }) => {
+      const fresh = state.markMustRefetch(`fresh-h`)
+      assertStateInvariants(fresh)
+      expect(fresh).toBeInstanceOf(InitialState)
+      expect(fresh.offset).toBe(`-1`)
+      expect(fresh.handle).toBe(`fresh-h`)
+    }
+  )
+
+  it.each(allStates)(
+    `PausedState.pause() is idempotent ($kind)`,
+    ({ state }) => {
+      const paused = state.pause()
+      expect(paused.pause()).toBe(paused)
+    }
+  )
+})
+
+describe(`fuzz testing`, () => {
+  const SINGLE_SEED = process.env.FUZZ_SEED
+    ? parseInt(process.env.FUZZ_SEED)
+    : undefined
+  const SEEDS =
+    SINGLE_SEED !== undefined ? 1 : process.env.FUZZ_DEEP ? 1000 : 100
+  const STEPS = process.env.FUZZ_DEEP ? 50 : 30
+
+  it(`survives ${SEEDS} random ${STEPS}-step sequences`, () => {
+    const seedsToRun =
+      SINGLE_SEED !== undefined
+        ? [SINGLE_SEED]
+        : Array.from({ length: SEEDS }, (_, i) => i)
+
+    for (const seed of seedsToRun) {
+      let state: ShapeStreamState = createInitialState({ offset: `-1` })
+      const rng = mulberry32(seed)
+      const trace: EventSpec[] = []
+      try {
+        for (let step = 0; step < STEPS; step++) {
+          const event = pickRandomEvent(rng)
+          trace.push(event)
+          const result = applyEvent(state, event)
+          assertStateInvariants(result.state)
+          state = result.state
+        }
+      } catch (e) {
+        const shrunk = shrinkFailingSequence(trace, (t) => {
+          try {
+            replayEvents(t)
+            return false
+          } catch {
+            return true
+          }
+        })
+        throw new Error(
+          `Fuzz failed: seed=${seed} steps=${trace.length} shrunk=${shrunk.length}\n` +
+            `Rerun: FUZZ_SEED=${seed} pnpm vitest run shape-stream-state\n` +
+            `Shrunk trace: ${JSON.stringify(shrunk.map((e) => e.type))}\n` +
+            `Original error: ${e instanceof Error ? e.message : e}`
+        )
+      }
+    }
+  })
+})
+
+describe(`mutation testing`, () => {
+  for (const [name, buildScenario] of Object.entries(standardScenarios)) {
+    describe(`mutating ${name}`, () => {
+      it(`standard scenario runs cleanly`, () => {
+        buildScenario().done()
+      })
+
+      const { trace } = buildScenario().done()
+      const events = trace.map((t) => t.event)
+
+      if (events.length >= 2) {
+        it(`survives event duplication`, () => {
+          for (let i = 0; i < events.length; i++) {
+            const mutated = duplicateEvent(events, i)
+            const results = rawEvents(
+              createInitialState({ offset: `-1` }),
+              mutated
+            )
+            results.forEach((r) => assertStateInvariants(r.state))
+          }
+        })
+
+        it(`survives event reordering`, () => {
+          for (let i = 0; i < events.length - 1; i++) {
+            const mutated = reorderEvents(events, i, i + 1)
+            const results = rawEvents(
+              createInitialState({ offset: `-1` }),
+              mutated
+            )
+            results.forEach((r) => assertStateInvariants(r.state))
+          }
+        })
+
+        it(`survives event dropping`, () => {
+          for (let i = 0; i < events.length; i++) {
+            const mutated = dropEvent(events, i)
+            const results = rawEvents(
+              createInitialState({ offset: `-1` }),
+              mutated
+            )
+            results.forEach((r) => assertStateInvariants(r.state))
           }
         })
       }
