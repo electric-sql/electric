@@ -138,9 +138,21 @@ export function assertStateInvariants(state: ShapeStreamState): void {
     expect(state.pause()).toBe(state)
     expect(state.handle).toBe(state.previousState.handle)
     expect(state.offset).toBe(state.previousState.offset)
+    expect(state.schema).toBe(state.previousState.schema)
     expect(state.liveCacheBuster).toBe(state.previousState.liveCacheBuster)
     expect(state.lastSyncedAt).toBe(state.previousState.lastSyncedAt)
     expect(state.isUpToDate).toBe(state.previousState.isUpToDate)
+    expect(state.staleCacheBuster).toBe(state.previousState.staleCacheBuster)
+    expect(state.staleCacheRetryCount).toBe(
+      state.previousState.staleCacheRetryCount
+    )
+    expect(state.sseFallbackToLongPolling).toBe(
+      state.previousState.sseFallbackToLongPolling
+    )
+    expect(state.consecutiveShortSseConnections).toBe(
+      state.previousState.consecutiveShortSseConnections
+    )
+    expect(state.replayCursor).toBe(state.previousState.replayCursor)
   }
 
   // ErrorState invariants: always has error + delegates all field getters
@@ -149,6 +161,7 @@ export function assertStateInvariants(state: ShapeStreamState): void {
     expect(state.error).toBeInstanceOf(Error)
     expect(state.handle).toBe(state.previousState.handle)
     expect(state.offset).toBe(state.previousState.offset)
+    expect(state.schema).toBe(state.previousState.schema)
     expect(state.liveCacheBuster).toBe(state.previousState.liveCacheBuster)
     expect(state.lastSyncedAt).toBe(state.previousState.lastSyncedAt)
     expect(state.isUpToDate).toBe(state.previousState.isUpToDate)
@@ -176,7 +189,13 @@ export function assertReachableInvariants(
     expect(nextState).toBe(prevState.previousState)
   }
 
-  // I9: markMustRefetch always produces InitialState with offset '-1'
+  // I11: withHandle preserves kind and offset
+  if (event.type === `withHandle`) {
+    expect(nextState.kind).toBe(prevState.kind)
+    expect(nextState.offset).toBe(prevState.offset)
+  }
+
+  // I10: markMustRefetch always produces InitialState with offset '-1'
   if (event.type === `markMustRefetch`) {
     expect(nextState).toBeInstanceOf(InitialState)
     expect(nextState.offset).toBe(`-1`)
