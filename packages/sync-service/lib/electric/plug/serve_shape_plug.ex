@@ -177,7 +177,13 @@ defmodule Electric.Plug.ServeShapePlug do
         response =
           Api.Response.error(
             get_in(config, [:api]),
-            %{code: "overloaded", message: "Server is currently overloaded, please retry"},
+            %{
+              code: "concurrent_request_limit_exceeded",
+              message:
+                "Concurrent request limit for #{kind} requests exceeded (limit: #{max_concurrent}). " <>
+                  "Consider increasing ELECTRIC_MAX_CONCURRENT_REQUESTS or putting a CDN in front of Electric. " <>
+                  "See https://electric-sql.com/docs/guides/troubleshooting"
+            },
             status: 503,
             known_error: true,
             retry_after: retry_after

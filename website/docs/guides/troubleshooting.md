@@ -171,6 +171,35 @@ The problem will resolve itself as client/proxy caches empty. You can force this
 
 ## Production
 
+### 503 &mdash; concurrent request limit exceeded
+
+When too many clients are connected simultaneously, Electric responds with a `503` status and a JSON body:
+
+```json
+{
+  "code": "concurrent_request_limit_exceeded",
+  "message": "Concurrent request limit for existing requests exceeded (limit: 1000). ..."
+}
+```
+
+This happens when the number of in-flight requests exceeds the configured limit. Each `live=true` long-poll request holds a permit for up to 20 seconds (the long-poll timeout), so concurrent connections add up quickly. For example, 200 clients each subscribed to 10 shapes means 2,000 simultaneous long-poll connections &mdash; well above the default limit of 1,000.
+
+Note that this is an **application-level limit**, not a system resource issue. Your server's CPU and memory may look healthy while requests are being rejected.
+
+##### Solution &mdash; use a CDN and/or increase the limit
+
+**Put a CDN in front of Electric** (recommended). Electric's caching headers are designed for CDN [request collapsing](/docs/api/http#extracting-request-information). When multiple clients poll the same shape at the same offset, the CDN collapses them into a single request to Electric and fans out the response. This dramatically reduces concurrent connections. See the [deployment guide](/docs/guides/deployment) for CDN setup.
+
+**Increase the concurrent request limit** as a stopgap. Set [`ELECTRIC_MAX_CONCURRENT_REQUESTS`](/docs/api/config#max-concurrent-requests) to raise the limits:
+
+```shell
+ELECTRIC_MAX_CONCURRENT_REQUESTS='{"initial": 500, "existing": 3000}'
+```
+
+Live long-poll connections are lightweight Erlang processes, so most hardware can handle higher limits. The default of 1,000 is conservative.
+
+**Reduce the number of concurrent shape subscriptions** by lazy-loading shapes only when needed (e.g. per screen) rather than subscribing to all shapes on app boot.
+
 ### WAL growth &mdash; why is my Postgres database storage filling up?
 
 Electric creates a durable replication slot in Postgres to prevent data loss during downtime.
