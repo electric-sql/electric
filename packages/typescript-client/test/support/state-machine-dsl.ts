@@ -112,9 +112,11 @@ export function assertStateInvariants(state: ShapeStreamState): void {
   expect(state).toBeInstanceOf(expectedClass)
 
   // I1: isUpToDate === true only when LiveState is in the delegation chain
-  // PausedState delegates isUpToDate; ErrorState always returns false
+  // PausedState and ErrorState delegate isUpToDate to previousState
   if (state.isUpToDate) {
     if (state instanceof PausedState) {
+      expect(state.previousState.isUpToDate).toBe(true)
+    } else if (state instanceof ErrorState) {
       expect(state.previousState.isUpToDate).toBe(true)
     } else {
       expect(state).toBeInstanceOf(LiveState)
@@ -162,7 +164,7 @@ export function assertStateInvariants(state: ShapeStreamState): void {
     expect(state.previousState).not.toBeInstanceOf(ErrorState)
   }
 
-  // ErrorState invariants: always has error + delegates field getters (except isUpToDate)
+  // ErrorState invariants: always has error + delegates all field getters
   if (state instanceof ErrorState) {
     expect(state.error).toBeDefined()
     expect(state.error).toBeInstanceOf(Error)
@@ -171,7 +173,7 @@ export function assertStateInvariants(state: ShapeStreamState): void {
     expect(state.schema).toBe(state.previousState.schema)
     expect(state.liveCacheBuster).toBe(state.previousState.liveCacheBuster)
     expect(state.lastSyncedAt).toBe(state.previousState.lastSyncedAt)
-    expect(state.isUpToDate).toBe(false)
+    expect(state.isUpToDate).toBe(state.previousState.isUpToDate)
   }
 }
 
@@ -270,7 +272,11 @@ export function applyEvent(
       nextState = state.withHandle(event.handle)
       break
     case `enterReplayMode`:
-      nextState = state.enterReplayMode(event.cursor)
+      if (event.cursor === null) {
+        nextState = state
+      } else {
+        nextState = state.enterReplayMode(event.cursor)
+      }
       break
   }
 

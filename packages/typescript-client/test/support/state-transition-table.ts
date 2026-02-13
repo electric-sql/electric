@@ -245,8 +245,8 @@ export const TRANSITION_TABLE: Record<
       description: `StaleRetry is not in error — retry is a no-op`,
     },
     enterReplayMode: {
-      sameReference: true,
-      description: `StaleRetry enterReplayMode returns this (would lose retry count)`,
+      resultKind: `replaying`,
+      description: `StaleRetry enterReplayMode creates Replaying (caller should check canEnterReplayMode first)`,
     },
   },
   paused: {

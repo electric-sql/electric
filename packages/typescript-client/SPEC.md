@@ -34,7 +34,7 @@ Ten events that can act on any state:
 | `retry`           | (none)                | Client retries from error               |
 | `markMustRefetch` | handle?: string       | Server says data is stale; reset        |
 | `withHandle`      | handle: string        | Update handle, preserve everything else |
-| `enterReplayMode` | cursor: string\|null  | Enter replay from cache (null → no-op)  |
+| `enterReplayMode` | cursor: string        | Enter replay from cache                 |
 
 ## Transition Table
 
@@ -60,7 +60,7 @@ Any ──markMustRefetch─► Initial (offset = -1)
 
 - `resume` on a non-Paused state returns `this` (no-op)
 - `retry` on a non-Error state returns `this` (no-op)
-- `enterReplayMode(null)` returns `this` for all states; `enterReplayMode(cursor)` returns `this` for states that don't support replay
+- `enterReplayMode(cursor)` returns `this` for states that don't support replay (base class default); callers should check `canEnterReplayMode()` first
 - `pause` on PausedState returns `this` (idempotent)
 - `response`/`messages`/`sseClose` on Paused or Error return `this` (ignored)
 
@@ -76,11 +76,10 @@ Properties that must hold after every state transition. Checked automatically by
 
 **Enforcement**: `KIND_TO_CLASS` map + `toBeInstanceOf` check in `assertStateInvariants`.
 
-### I1: isUpToDate iff LiveState in delegation chain (PausedState only)
+### I1: isUpToDate iff LiveState in delegation chain
 
 `state.isUpToDate === true` only when LiveState is the state itself, or is reachable
-via PausedState's `previousState` delegation. ErrorState always returns `false` for
-`isUpToDate` regardless of its previous state.
+via the `previousState` delegation chain of PausedState or ErrorState.
 
 **Enforcement**: Runtime check in `assertStateInvariants`.
 
@@ -149,10 +148,10 @@ Idempotence checked in algebraic property tests.
 
 ### I9: ErrorState delegation
 
-ErrorState delegates most field getters to `previousState` (same list as I8 minus
-`pause()` idempotence, and minus `isUpToDate`). Additionally:
+ErrorState delegates ALL field getters to `previousState` (same list as I8 minus
+`pause()` idempotence). Additionally:
 
-- `isUpToDate` always returns `false` (overrides base class, does NOT delegate)
+- `isUpToDate` delegates to `previousState`
 - `error` is always defined and instanceof Error
 - `applyUrlParams` delegates to `previousState`
 
@@ -198,12 +197,13 @@ semantically meaningful. Alternating types can still produce chains longer than 
 
 Things that must NOT happen.
 
-### C1: StaleRetryState enterReplayMode returns this
+### C1: StaleRetryState must not enter replay mode
 
-`StaleRetryState.enterReplayMode()` always returns `this`. Entering replay would
-lose the stale cache retry count.
+`StaleRetryState.canEnterReplayMode()` returns `false`. Entering replay would
+lose the stale cache retry count. The caller (`client.ts`) checks this before
+calling `enterReplayMode()`.
 
-**Enforcement**: Explicit test + truth table entry (sameReference no-op).
+**Enforcement**: Explicit test (`canEnterReplayMode returns false`).
 
 ### C2: LiveState enterReplayMode returns this
 
@@ -281,7 +281,7 @@ the response is ignored (action: `ignored`, state unchanged).
 
 | Constraint | Types | Truth Table | Dedicated Test |
 | ---------- | ----- | ----------- | -------------- |
-| C1         | -     | yes         | yes            |
+| C1         | -     | -           | yes            |
 | C2         | -     | yes         | yes            |
 | C3         | -     | yes         | -              |
 | C4         | -     | -           | yes            |

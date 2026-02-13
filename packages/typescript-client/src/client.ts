@@ -1201,9 +1201,17 @@ export class ShapeStream<T extends Row<unknown> = Row>
     // Store current fetch URL for shape key computation
     this.#currentFetchUrl = opts.fetchUrl
 
-    const shapeKey = canonicalShapeKey(opts.fetchUrl)
-    const lastSeenCursor = upToDateTracker.shouldEnterReplayMode(shapeKey)
-    this.#syncState = this.#syncState.enterReplayMode(lastSeenCursor)
+    // Check if we should enter replay mode (replaying cached responses)
+    // This happens when we're starting fresh (offset=-1 or before first up-to-date)
+    // and there's a recent up-to-date in localStorage (< 60s)
+    if (!this.#syncState.isUpToDate && this.#syncState.canEnterReplayMode()) {
+      const shapeKey = canonicalShapeKey(opts.fetchUrl)
+      const lastSeenCursor = upToDateTracker.shouldEnterReplayMode(shapeKey)
+      if (lastSeenCursor) {
+        // Enter replay mode and store the last seen cursor
+        this.#syncState = this.#syncState.enterReplayMode(lastSeenCursor)
+      }
+    }
 
     const useSse = this.options.liveSse ?? this.options.experimentalLiveSse
     if (

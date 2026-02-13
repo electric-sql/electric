@@ -160,7 +160,11 @@ export abstract class ShapeStreamState {
 
   // --- Default no-op methods ---
 
-  enterReplayMode(_cursor: string | null): ShapeStreamState {
+  canEnterReplayMode(): boolean {
+    return false
+  }
+
+  enterReplayMode(_cursor: string): ShapeStreamState {
     return this
   }
 
@@ -398,8 +402,11 @@ abstract class FetchingState extends ActiveState {
     return { action: `accepted`, state: new SyncingState(shared) }
   }
 
-  enterReplayMode(cursor: string | null): ShapeStreamState {
-    if (cursor === null) return this
+  canEnterReplayMode(): boolean {
+    return true
+  }
+
+  enterReplayMode(cursor: string): ReplayingState {
     return new ReplayingState({
       ...this.currentFields,
       replayCursor: cursor,
@@ -460,8 +467,8 @@ export class StaleRetryState extends FetchingState {
   }
 
   // StaleRetryState must not enter replay mode — it would lose the retry count
-  enterReplayMode(_cursor: string | null): ShapeStreamState {
-    return this
+  canEnterReplayMode(): boolean {
+    return false
   }
 
   withHandle(handle: string): StaleRetryState {
@@ -726,6 +733,10 @@ export class ErrorState extends ShapeStreamState {
   }
   get lastSyncedAt() {
     return this.previousState.lastSyncedAt
+  }
+
+  get isUpToDate(): boolean {
+    return this.previousState.isUpToDate
   }
 
   withHandle(handle: string): ErrorState {

@@ -464,8 +464,8 @@ describe(`shape stream state machine`, () => {
     expect(transition.fellBackToLongPolling).toBe(false)
   })
 
-  // 26. StaleRetryState enterReplayMode returns this (no-op — would lose retry count)
-  it(`StaleRetryState enterReplayMode returns this`, () => {
+  // 26. StaleRetryState canEnterReplayMode → false (entering replay mode would lose retry count)
+  it(`StaleRetryState canEnterReplayMode returns false`, () => {
     const { state } = scenario()
       .response({
         responseHandle: `stale-h`,
@@ -475,7 +475,7 @@ describe(`shape stream state machine`, () => {
       .expectKind(`stale-retry`)
       .done()
 
-    expect(state.enterReplayMode(`cursor-1`)).toBe(state)
+    expect(state.canEnterReplayMode()).toBe(false)
   })
 
   // 27. enterReplayMode creates ReplayingState with cursor
@@ -567,14 +567,14 @@ describe(`shape stream state machine`, () => {
     expect(state.staleCacheRetryCount).toBe(1)
   })
 
-  // 32. ErrorState.isUpToDate always returns false
-  it(`ErrorState.isUpToDate always returns false`, () => {
+  // 32. ErrorState.isUpToDate delegates to previousState
+  it(`ErrorState.isUpToDate delegates to previousState`, () => {
     scenario()
       .messages()
       .expectKind(`live`)
       .error(new Error(`oops`))
       .expectKind(`error`)
-      .expectUpToDate(false)
+      .expectUpToDate(true)
       .done()
 
     scenario()
@@ -1055,9 +1055,15 @@ describe(`algebraic properties`, () => {
   )
 
   it.each(allStates)(
-    `enterReplayMode(null) is a no-op ($kind)`,
+    `enterReplayMode is a no-op for base-class states ($kind)`,
     ({ state }) => {
-      expect(state.enterReplayMode(null)).toBe(state)
+      if (
+        !(state instanceof InitialState) &&
+        !(state instanceof SyncingState) &&
+        !(state instanceof StaleRetryState)
+      ) {
+        expect(state.enterReplayMode(`test-cursor`)).toBe(state)
+      }
     }
   )
 
