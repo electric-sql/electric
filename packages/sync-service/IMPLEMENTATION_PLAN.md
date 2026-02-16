@@ -46,6 +46,66 @@ This keeps the `Shape` struct lean while giving the consumer everything it needs
 
 Re-decomposition should be avoided: `Decomposer.decompose/1` should be called once in `DnfContext.from_shape/1` and the result cached on the struct. Other call sites (subquery_moves, querying, etc.) should receive the decomposition from the `DnfContext` rather than re-running the decomposer.
 
+### Data Formats: condition_hashes, tags, and wire format
+
+There are three distinct representations of per-row hashed values, each optimised for its consumer. All three are computed independently from the underlying column values — none is derived from another in code.
+
+#### 1. condition_hashes
+
+One hash per DNF position, stored as a map with integer keys for O(1) positional access:
+
+```elixir
+%{0 => "hash_x", 1 => "hash_status", 2 => "hash_y"}
+```
+
+- **Where**: binary move-in snapshot files (on disk stored sequentially, decoded into a map in memory), `moved_out_tags` filtering
+- **Purpose**: position-aware filtering — "is the hash at position P in the moved-out set?"
+- **No nils**: every DNF position has exactly one condition with column(s) that produce a hash for every row (NULL column values get the existing `"NULL"` sentinel, non-null get `"v:" <> value`)
+
+#### 2. tags (internal 2D array)
+
+One inner list per disjunct, with `nil` at non-participating positions:
+
+```elixir
+[["hash_x", "hash_status", nil], [nil, nil, "hash_y"]]
+```
+
+- **Where**: `move_tags` on change structs, `fill_move_tags`, consumer processing
+- **Purpose**: per-disjunct tag tracking for client-side inclusion evaluation
+
+#### 3. wire/API tags (slash-delimited per disjunct)
+
+One string per disjunct, positions separated by `/`:
+
+```json
+{"tags": ["hash_x/hash_status/", "//hash_y"]}
+```
+
+- **Where**: JSON headers sent to clients over HTTP, embedded in snapshot/move-in JSON by Postgres
+- **Purpose**: compact JSON representation for the wire
+
+#### How each format is computed
+
+- **Postgres SQL queries** (snapshot + move-in) generate both condition_hashes (as a separate `text[]` column) and wire-format tags (baked into the JSON headers string) directly from the underlying column values. The MD5 expressions are shared — Postgres deduplicates identical subexpressions.
+- **Binary snapshot write** stores condition_hashes from the separate column. The JSON column (with wire tags already embedded) is stored alongside.
+- **Binary snapshot read** decodes sequential condition_hashes into `%{position => hash}` map for filtering.
+- **`fill_move_tags`** in shape.ex computes the 2D tag array directly from the record for replication-stream changes.
+- **`log_items.ex`** converts 2D tags to slash-delimited wire format when building log entry headers.
+
+#### Binary move-in snapshot file format
+
+```
+<<key_size::32, json_size::64, op_type::8, hash_count::16,
+  [hash_size::16, hash::binary(hash_size)]...,
+  key::binary(key_size), json::binary(json_size)>>
+```
+
+On disk, condition_hashes are sequential (position 0 first, then 1, etc.). On read, decode into `%{0 => hash0, 1 => hash1, ...}` for O(1) position lookup. The JSON already contains wire-format tags in its headers — no Elixir-side tag derivation needed at splice time.
+
+#### Important: no `Enum.at` for positional access
+
+Elixir lists are linked lists — `Enum.at/2` is O(n). Anywhere we need index-based access (condition_hashes, active_conditions, moved_out_tags lookup), use maps with integer keys: `%{0 => val, 1 => val, ...}`.
+
 ## Current State Analysis
 
 ### Key Files and Their Roles
@@ -60,7 +120,7 @@ Re-decomposition should be avoided: `Decomposer.decompose/1` should be called on
 | `lib/electric/shapes/consumer/change_handling.ex` | Filters changes, computes tags | Compute `active_conditions` via DnfContext |
 | `lib/electric/shapes/shape.ex` | `fill_move_tags`, `convert_change` | Multi-disjunct tags — **no new struct fields** |
 | `lib/electric/shapes/where_clause.ex` | `includes_record?` boolean check | Per-position evaluation |
-| `lib/electric/shapes/querying.ex` | SQL for initial data, tags | Add `active_conditions` columns, accept DnfContext |
+| `lib/electric/shapes/querying.ex` | SQL for initial data, tags | Add `active_conditions` columns, add `condition_hashes` SELECT for move-in queries, accept DnfContext |
 | `lib/electric/log_items.ex` | Formats messages with tags | Add `active_conditions` to headers |
 | `lib/electric/replication/eval/sql_generator.ex` | **(new)** | Converts AST back to SQL — used by querying.ex and subquery_moves.ex |
 | `lib/electric/replication/eval/parser.ex` | Parses WHERE, handles SubLinks | No changes needed |
@@ -757,12 +817,14 @@ end
 
 **Modify** `lib/electric/shapes/querying.ex`
 
-> **IMPORTANT — dual tag format:** `querying.ex` generates tags for two different consumers:
-> (1) wire/API tags sent to clients (slash-delimited per-disjunct via `make_tags`), and
-> (2) snapshot file tags used internally for `moved_out_tags` filtering (flat per-position
-> via `make_snapshot_tags` — see Phase 12). `query_move_in/5` must use `make_snapshot_tags`,
-> not `make_tags`, otherwise `moved_out_tags` filtering silently breaks for multi-disjunct
-> shapes because bare hashes never match slash-delimited strings.
+> **IMPORTANT — condition_hashes vs wire tags:** `querying.ex` generates two different
+> hash-based outputs: (1) wire/API tags sent to clients (slash-delimited per-disjunct via
+> `make_tags`, embedded in JSON headers), and (2) condition_hashes used internally for
+> `moved_out_tags` filtering (one hash per DNF position via `make_condition_hashes_select` —
+> see Phase 12). `query_move_in` SELECTs both: condition_hashes as a separate `text[]`
+> column, and wire tags baked into the JSON. The binary snapshot file stores
+> condition_hashes; the JSON (with wire tags) is stored alongside for serving. Postgres
+> deduplicates the MD5 calls across both columns.
 
 ```elixir
 defp build_active_conditions_select(dnf_context) do
@@ -1015,84 +1077,109 @@ describe "tag_tracker with DNF wire format" do
 end
 ```
 
-### Phase 12: Position-aware `moved_out_tags` (Snapshot Tag Format + Filtering)
+### Phase 12: Position-aware `moved_out_tags` (condition_hashes + Filtering)
 
 **CRITICAL — correctness requirement, not optional.** Without this phase, move-out filtering
 is silently broken for all multi-disjunct shapes. The existing `moved_out_tags` mechanism
 (which prevents stale move-in query results from entering the log) compares bare hashes
-against the tags stored in snapshot files. When Phase 2 changes tags to slash-delimited
-per-disjunct strings, the comparison **never matches** — bare `"hash(a)"` vs slash-delimited
-`"hash(a)/"` — so stale rows silently leak through. Additionally, position-unaware filtering
-is semantically wrong: a move-out at position 0 should not affect position 1 even if both
-positions contain the same hash.
+against values stored in snapshot files. When Phase 2 changes wire tags to slash-delimited
+per-disjunct strings (embedded in JSON), the old approach of storing wire tags in the binary
+file and filtering against them no longer works. The solution: store **condition_hashes**
+(one hash per DNF position) separately from the JSON. Additionally, filtering must be
+position-aware: a move-out at position 0 should not affect position 1 even if both
+positions contain the same hash (e.g., `x IN sq1 OR x IN sq2` where both reference the same column).
 
 This phase has two parts:
 
-#### Part 1: Snapshot file tags become per-position flat hashes
+#### Part 1: Move-in snapshot files store condition_hashes (not tags)
 
 **Modify** `lib/electric/shapes/querying.ex`
 
 The wire/API tags (sent to clients in JSON headers) remain slash-delimited per-disjunct —
-unchanged. But snapshot file tags (used internally for `moved_out_tags` filtering) use a
-**different, flat format**: one hash per DNF position, no delimiters.
+baked into the JSON by Postgres, unchanged. The binary move-in snapshot file stores
+**condition_hashes** separately: one hash per DNF position, used exclusively for
+`moved_out_tags` filtering.
 
-Add `make_snapshot_tags/3` alongside the existing `make_tags/3`:
+Add `make_condition_hashes_select/3` alongside the existing `make_tags/3`:
 
 ```elixir
-# make_tags:          [[x, y], [nil, z]] → ["md5(x) || '/' || md5(y)", "'' || '/' || md5(z)"]
-# make_snapshot_tags: [[x, y], [nil, z]] → ["md5(x)", "md5(y)", "''", "md5(z)"]
-defp make_snapshot_tags(%Shape{tag_structure: tag_structure}, stack_id, shape_handle) do
+# make_tags:                  [[x, y], [nil, z]] → ["md5(x) || '/' || md5(y)", "'' || '/' || md5(z)"]
+# make_condition_hashes_select: positions [x, y, z] → ["md5(x)", "md5(y)", "md5(z)"]
+#
+# One hash per DNF position. No nils — every position has a condition with column(s)
+# that produce a hash for every row (NULL column values use the existing sentinel).
+defp make_condition_hashes_select(dnf_context, stack_id, shape_handle) do
   escaped_prefix = escape_sql_string(to_string(stack_id) <> to_string(shape_handle))
 
-  tag_structure
-  |> List.flatten()
-  |> Enum.map(fn
-    nil -> "''"
-    column_name when is_binary(column_name) ->
-      col = pg_cast_column_to_text(column_name)
-      namespaced = pg_namespace_value_sql(col)
-      ~s[md5('#{escaped_prefix}' || #{namespaced})]
-    {:hash_together, columns} ->
-      column_parts =
-        Enum.map(columns, fn col_name ->
-          col = pg_cast_column_to_text(col_name)
-          ~s['#{col_name}:' || #{pg_namespace_value_sql(col)}]
-        end)
-      ~s[md5('#{escaped_prefix}' || #{Enum.join(column_parts, " || ")})]
+  dnf_context.decomposition.subexpressions
+  |> Enum.sort_by(fn {pos, _} -> pos end)
+  |> Enum.map(fn {_pos, subexpr} ->
+    case subexpr do
+      %{column: column_name} when is_binary(column_name) ->
+        col = pg_cast_column_to_text(column_name)
+        namespaced = pg_namespace_value_sql(col)
+        ~s[md5('#{escaped_prefix}' || #{namespaced})]
+
+      %{columns: columns} ->
+        column_parts =
+          Enum.map(columns, fn col_name ->
+            col = pg_cast_column_to_text(col_name)
+            ~s['#{col_name}:' || #{pg_namespace_value_sql(col)}]
+          end)
+        ~s[md5('#{escaped_prefix}' || #{Enum.join(column_parts, " || ")})]
+    end
   end)
 end
 ```
 
-`query_move_in/5` must use `make_snapshot_tags` (not `make_tags`):
+`query_move_in/5` SELECTs both condition_hashes (separate column for binary file)
+and wire-format tags (embedded in JSON headers). Postgres deduplicates the MD5 calls:
 
 ```elixir
-tag_select = make_snapshot_tags(shape, stack_id, shape_handle) |> Enum.join(", ")
+def query_move_in(conn, stack_id, shape_handle, shape, dnf_context, {where, params}) do
+  table = Utils.relation_to_sql(shape.root_table)
+
+  {json_like_select, _} =
+    json_like_select(shape, %{"is_move_in" => true}, stack_id, shape_handle)
+
+  key_select = key_select(shape)
+  condition_hashes_select =
+    make_condition_hashes_select(dnf_context, stack_id, shape_handle) |> Enum.join(", ")
+
+  query =
+    Postgrex.prepare!(
+      conn,
+      table,
+      ~s|SELECT #{key_select}, ARRAY[#{condition_hashes_select}]::text[], #{json_like_select} FROM #{table} WHERE #{where}|
+    )
+
+  Postgrex.stream(conn, query, params)
+  |> Stream.flat_map(& &1.rows)
+end
 ```
 
 #### Part 2: `moved_out_tags` becomes position-aware
 
 **Modify** `lib/electric/shapes/consumer/move_ins.ex`
 
-Change the type from `%{name => MapSet}` to `%{name => {position, MapSet}}`:
+Change the type from `%{name => MapSet}` to `%{name => %{position => MapSet}}`:
 
 ```elixir
 @type t() :: %__MODULE__{
-  moved_out_tags: %{move_in_name() => {non_neg_integer(), MapSet.t(String.t())}}
+  moved_out_tags: %{move_in_name() => %{non_neg_integer() => MapSet.t(String.t())}}
 }
 
-def add_waiting(state, name, moved_values, position) do
+def add_waiting(state, name, moved_values) do
   # ... existing logic ...
-  moved_out_tags: Map.put(state.moved_out_tags, name, {position, MapSet.new()})
+  # Initialize with empty map — positions are added by move_out_happened
+  moved_out_tags: Map.put(state.moved_out_tags, name, %{})
 end
 
-def move_out_happened(state, position, new_tags) do
+def move_out_happened(state, position, new_hashes) do
   moved_out_tags =
-    Map.new(state.moved_out_tags, fn {name, {pos, tags}} ->
-      if pos == position do
-        {name, {pos, MapSet.union(tags, new_tags)}}
-      else
-        {name, {pos, tags}}
-      end
+    Map.new(state.moved_out_tags, fn {name, per_pos_tags} ->
+      updated = Map.update(per_pos_tags, position, new_hashes, &MapSet.union(&1, new_hashes))
+      {name, updated}
     end)
   %{state | moved_out_tags: moved_out_tags}
 end
@@ -1100,67 +1187,86 @@ end
 
 **Modify** `lib/electric/shapes/consumer/move_handling.ex`
 
-Pass position through to `add_waiting` and `move_out_happened`:
+Pass position through to `move_out_happened`. Extract position from control message patterns:
 
 ```elixir
-# Move-in: derive position from DnfContext
-position = List.first(positions, 0)
-MoveIns.add_waiting(state.move_handling_state, name, moved_values, position)
+# Move-out: extract {position, hashes} from control message patterns
+patterns_by_pos =
+  message.headers.patterns
+  |> Enum.group_by(& &1[:pos], & &1[:value])
 
-# Move-out: extract position from control message patterns
-position = List.first(message.headers.patterns, %{})[:pos] || 0
-MoveIns.move_out_happened(state.move_handling_state, position, new_tags)
+Enum.each(patterns_by_pos, fn {position, hashes} ->
+  MoveIns.move_out_happened(state.move_handling_state, position, MapSet.new(hashes))
+end)
 
-# Default when no moved_out_tags entry exists
-state.move_handling_state.moved_out_tags[name] || {0, MapSet.new()}
+# At query_complete, pass the per-position map to storage filtering:
+state.move_handling_state.moved_out_tags[name] || %{}
 ```
 
 **Modify** `lib/electric/shape_cache/storage.ex` — update type spec:
 
 ```elixir
-tags_to_skip :: {non_neg_integer(), MapSet.t(String.t())}
+condition_hashes_to_skip :: %{non_neg_integer() => MapSet.t(String.t())}
 ```
 
 **Modify** `lib/electric/shape_cache/pure_file_storage.ex` and `in_memory_storage.ex`
 
-Replace `all_parents_moved_out?/2` with position-aware filtering:
+Replace `all_parents_moved_out?/2` with position-aware filtering.
+
+On read, decode the sequential binary condition_hashes into a map for O(1) lookup:
 
 ```elixir
-defp should_skip_for_moved_out?(tags, {position, tags_to_skip}) do
-  case Enum.at(tags, position) do
-    nil -> false
-    "" -> false
-    hash -> MapSet.member?(tags_to_skip, hash)
+defp read_condition_hashes(file, hash_count) do
+  for i <- 0..(hash_count - 1)//1, into: %{} do
+    <<hash_size::16>> = IO.binread(file, 2)
+    <<hash::binary-size(hash_size)>> = IO.binread(file, hash_size)
+    {i, hash}
   end
+end
+```
+
+Position-aware filtering — ANY match means skip (the move-in query's exclusion
+clause already filtered out rows present via other disjuncts, so any match at a
+tracked position means this row was returned for a now-invalid reason):
+
+```elixir
+defp should_skip_for_moved_out?(_condition_hashes, condition_hashes_to_skip)
+     when map_size(condition_hashes_to_skip) == 0,
+     do: false
+
+defp should_skip_for_moved_out?(condition_hashes, condition_hashes_to_skip) do
+  Enum.any?(condition_hashes_to_skip, fn {position, skip_set} ->
+    case condition_hashes do
+      %{^position => hash} -> MapSet.member?(skip_set, hash)
+      _ -> false
+    end
+  end)
 end
 ```
 
 Bump `@version` from 1 → 2 in `pure_file_storage.ex` to invalidate old-format snapshots.
 
+Rename `tags` variables in binary read/write functions to `condition_hashes` for clarity.
+
 #### Why this is easy to miss
 
 This phase fixes the **interaction** between new multi-disjunct tag formats (Phase 2) and
 pre-existing race-condition filtering in the storage layer. Each piece works correctly in
-isolation — the bug only manifests when slash-delimited tags are compared against bare
-hashes at filtering time. No test will catch this unless it specifically exercises the
+isolation — the bug only manifests when wire-format tags (slash-delimited strings in JSON)
+are compared against bare hashes at filtering time. The solution is to store
+condition_hashes (per-position hashes) separately from the JSON, so filtering never touches
+the wire format. No test will catch this unless it specifically exercises the
 move-out-while-move-in-in-flight race condition with a multi-disjunct shape.
 
 #### Files changed
 
-- `querying.ex` — add `make_snapshot_tags/3`, use in `query_move_in/5`
-- `move_ins.ex` — change `moved_out_tags` type, update `add_waiting/4` and `move_out_happened/3`
-- `move_handling.ex` — derive position from DnfContext/patterns, pass through
-- `storage.ex` — update `tags_to_skip` type in behaviour spec
-- `pure_file_storage.ex` — replace `all_parents_moved_out?` with `should_skip_for_moved_out?`, bump `@version`
+- `querying.ex` — add `make_condition_hashes_select/3`, SELECT condition_hashes as separate column alongside JSON with embedded wire tags in `query_move_in/5`
+- `move_ins.ex` — change `moved_out_tags` type to `%{name => %{position => MapSet}}`, update `add_waiting/2` and `move_out_happened/3`
+- `move_handling.ex` — extract position from control message patterns, pass to `move_out_happened`
+- `storage.ex` — update `condition_hashes_to_skip` type in behaviour spec
+- `pure_file_storage.ex` — rename binary tag read/write to `condition_hashes`, decode into map on read, replace `all_parents_moved_out?` with `should_skip_for_moved_out?`, bump `@version`
 - `in_memory_storage.ex` — same filtering change
 - `storage_implementations_test.exs` — test position-aware filtering
-
-#### Known limitation
-
-`List.first(positions, 0)` picks only the first position when a `dep_handle` maps to
-multiple positions. Wrong for shapes like `WHERE x IN sq AND x NOT IN sq` (same subquery
-in both positive and negated form). Low practical risk. Fix: thread the already-known
-position through instead of re-deriving.
 
 ---
 
@@ -1511,7 +1617,7 @@ Phase 11: Elixir Client (depends on Phases 5, 6 for wire format definition)
 
 7. **Non-subquery conditions require real SQL generation (Phase 1a)**: For OR shapes, a row can be in the snapshot result via one disjunct while another disjunct's non-subquery condition is false. The `active_conditions` SELECT column for that position must evaluate to `false`, not `true`. Returning a hardcoded `"true"` for non-subquery conditions is **wrong** — it makes the client think both disjuncts are satisfied when only one is. `SqlGenerator.to_sql/1` (Phase 1a) converts the AST back to SQL for these positions. It raises `ArgumentError` for unsupported AST nodes so missing operators are caught at shape creation time, not at query time.
 
-8. **Snapshot tag format vs wire tag format (Phase 12)**: Changing the wire tag format to slash-delimited strings (Phase 2) silently breaks the pre-existing `moved_out_tags` filtering in the storage layer, because it compares bare hashes against slash-delimited strings. This is an **integration-level correctness bug** that won't surface in unit tests — it requires a multi-disjunct shape with a move-out racing a move-in query. Phase 12 must be implemented immediately after Phase 9 (Move Handling) to fix this. See Phase 12 in the Implementation Steps for details.
+8. **condition_hashes vs wire tags (Phase 12)**: The binary move-in snapshot files must store condition_hashes (per-position hashes) separately from the JSON that contains wire-format tags. If filtering uses the wire-format tags instead, bare hashes are compared against slash-delimited strings and never match — a silent correctness bug. The solution: `query_move_in` SELECTs condition_hashes as a separate `text[]` column; the binary file stores these for filtering while the JSON (with wire tags baked in) is stored alongside for serving. `moved_out_tags` uses `%{move_in_name => %{position => MapSet}}` with position-aware filtering. Phase 12 must be implemented immediately after Phase 9. See Phase 12 in the Implementation Steps for details.
 
 9. **Sublink index resolution by column name is ambiguous (Phase 7)**: When generating SQL for `active_conditions` in snapshot queries, the sublink index (which dependency shape a subquery corresponds to) MUST be extracted from the AST node's `sublink_membership_check` function, NOT resolved by matching column names against `comparison_expressions`. Column-name matching fails when multiple subqueries reference the same column (e.g., `parent_id IN (SELECT ... WHERE category='a') OR parent_id IN (SELECT ... WHERE category='b')`) — both subexpressions have `column == "parent_id"`, so column matching always resolves to the first dependency, producing identical `active_conditions` for what should be distinct subqueries. Use `extract_sublink_index/1` (see Phase 7) which pattern-matches on the AST to get the canonical `$sublink` index. This also applies to Phase 5a's `extract_sublink_index_from_ast` for exclusion clauses — use the same approach consistently.
    - Test: "OR of two subqueries on same column" (see Test Strategy §7)
@@ -1551,7 +1657,7 @@ Phase 11: Elixir Client (depends on Phases 5, 6 for wire format definition)
 - `lib/electric/shapes/consumer/move_handling.ex` - Move-in/out orchestration (position routing, negation inversion), delegates SQL generation to `subquery_moves.ex`
 - `lib/electric/shapes/where_clause.ex` - Record filtering and `active_conditions`
 - `lib/electric/log_items.ex` - Message format with `active_conditions`
-- `lib/electric/shapes/querying.ex` - SQL generation for snapshots, accepts DnfContext, delegates non-subquery AST-to-SQL to `SqlGenerator`
+- `lib/electric/shapes/querying.ex` - SQL generation for snapshots and move-in queries. Move-in queries SELECT condition_hashes (separate column) + wire tags (in JSON). Accepts DnfContext, delegates non-subquery AST-to-SQL to `SqlGenerator`
 - `packages/elixir-client/lib/electric/client/tag_tracker.ex` - Client-side tag tracking, DNF evaluation, synthetic deletes
 - `packages/elixir-client/lib/electric/client/message/headers.ex` - Client message header parsing
 
