@@ -686,11 +686,11 @@ defmodule Electric.Shapes.Consumer do
   defp maybe_complete_pending_txn(%State{} = state, txn_fragment) do
     %{pending_txn: txn, writer: writer} = state
 
-    # Signal commit to storage to allow it to advance its internal txn offset
-    writer = ShapeCache.Storage.signal_txn_commit!(txn.xid, writer)
-
     # Only notify if we actually wrote changes
     if txn.num_changes > 0 do
+      # Signal commit to storage to allow it to advance its internal txn offset
+      writer = ShapeCache.Storage.signal_txn_commit!(txn.xid, writer)
+
       :ok = notify_new_changes(state, [], txn_fragment.last_log_offset)
 
       lag = calculate_replication_lag(txn_fragment.commit.commit_timestamp)
@@ -725,12 +725,11 @@ defmodule Electric.Shapes.Consumer do
             state.txn_offset_mapping ++ [{state.latest_offset, txn_fragment.last_log_offset}]
       }
     else
-      # No changes were written - notify flush boundary like consider_flushed does
       Logger.debug(fn ->
         "No relevant changes written in transaction xid=#{txn.xid}"
       end)
 
-      state = %{state | writer: writer, pending_txn: nil}
+      state = %{state | pending_txn: nil}
       consider_flushed(state, txn_fragment.last_log_offset)
     end
   end
