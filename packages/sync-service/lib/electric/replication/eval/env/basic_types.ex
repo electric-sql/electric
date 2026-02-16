@@ -26,6 +26,7 @@ defmodule Electric.Replication.Eval.Env.BasicTypes do
   | unknown                 | unknown  |            |
   | bytea                   | user     |            |
   | uuid                    | user     |            |
+  | jsonb                   | user     |            |
   | anyarray                | pseudo   |            |
   | anycompatible           | pseudo   |            |
   | anycompatiblearray      | pseudo   |            |

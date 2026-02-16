@@ -151,6 +151,178 @@ defmodule Electric.Replication.Eval.Env.KnownFunctions do
   defpostgres("anyenum = anyenum -> bool", delegate: &Kernel.==/2)
   defpostgres("anyenum <> anyenum -> bool", delegate: &Kernel.!=/2)
 
+  ## JSONB functions
+
+  # Parse text to jsonb
+  defpostgres "jsonb(text) -> jsonb" do
+    def parse_jsonb(text) when is_binary(text), do: Jason.decode!(text)
+  end
+
+  # Output jsonb as text
+  defpostgres "jsonbout(jsonb) -> text" do
+    def jsonb_out(nil), do: nil
+    def jsonb_out(value), do: Jason.encode!(value)
+  end
+
+  # Get object field or array element as jsonb
+  defpostgres "jsonb -> text -> jsonb" do
+    def jsonb_get_by_key(json, key) when is_map(json) and is_binary(key) do
+      Map.get(json, key)
+    end
+
+    def jsonb_get_by_key(_, _), do: nil
+  end
+
+  defpostgres "jsonb -> int4 -> jsonb" do
+    def jsonb_get_by_index(json, index) when is_list(json) and is_integer(index) do
+      # PostgreSQL uses 0-based indexing for JSON arrays
+      # Negative indices count from the end (e.g., -1 is last element)
+      Enum.at(json, index)
+    end
+
+    def jsonb_get_by_index(_, _), do: nil
+  end
+
+  # Get object field or array element as text
+  defpostgres "jsonb ->> text -> text" do
+    def jsonb_get_text_by_key(json, key) when is_map(json) and is_binary(key) do
+      case Map.get(json, key) do
+        nil -> nil
+        value -> jsonb_value_to_text(value)
+      end
+    end
+
+    def jsonb_get_text_by_key(_, _), do: nil
+
+    defp jsonb_value_to_text(value) when is_binary(value), do: value
+    defp jsonb_value_to_text(value) when is_integer(value), do: Integer.to_string(value)
+    defp jsonb_value_to_text(value) when is_float(value), do: Float.to_string(value)
+    defp jsonb_value_to_text(true), do: "true"
+    defp jsonb_value_to_text(false), do: "false"
+    defp jsonb_value_to_text(nil), do: nil
+    # For nested objects/arrays, return JSON string
+    defp jsonb_value_to_text(value), do: Jason.encode!(value)
+  end
+
+  defpostgres "jsonb ->> int4 -> text" do
+    def jsonb_get_text_by_index(json, index) when is_list(json) and is_integer(index) do
+      # Negative indices count from the end (e.g., -1 is last element)
+      json |> Enum.at(index) |> jsonb_value_to_text()
+    end
+
+    def jsonb_get_text_by_index(_, _), do: nil
+  end
+
+  # JSONB equality
+  defpostgres("jsonb = jsonb -> bool", delegate: &Kernel.==/2)
+  defpostgres("jsonb <> jsonb -> bool", delegate: &Kernel.!=/2)
+
+  # JSONB containment operators
+  # @> checks if left contains right, <@ checks if left is contained by right
+  defpostgres "jsonb @> jsonb -> bool" do
+    # Top-level: Arrays may contain primitive values (special-case in Postgres)
+    # e.g., '["foo", "bar"]'::jsonb @> '"bar"'::jsonb returns true
+    # This only applies at the top level, not in recursive array element checks
+    def jsonb_contains?(left, right)
+        when is_list(left) and not is_list(right) and not is_map(right) do
+      Enum.member?(left, right)
+    end
+
+    def jsonb_contains?(left, right), do: do_jsonb_contains?(left, right)
+
+    # Objects: all key-value pairs in right must exist in left
+    defp do_jsonb_contains?(left, right) when is_map(left) and is_map(right) do
+      Enum.all?(right, fn {key, right_value} ->
+        case Map.fetch(left, key) do
+          {:ok, left_value} -> do_jsonb_contains?(left_value, right_value)
+          :error -> false
+        end
+      end)
+    end
+
+    # Arrays: all elements in right must exist somewhere in left
+    defp do_jsonb_contains?(left, right) when is_list(left) and is_list(right) do
+      Enum.all?(right, fn right_elem ->
+        Enum.any?(left, fn left_elem -> do_jsonb_contains?(left_elem, right_elem) end)
+      end)
+    end
+
+    # Scalars: must be equal
+    defp do_jsonb_contains?(left, right), do: left == right
+  end
+
+  # <@ is the inverse of @>: x <@ y is equivalent to y @> x
+  defpostgres "jsonb <@ jsonb -> bool" do
+    # Top-level: Arrays may contain primitive values (special-case in Postgres)
+    # For <@, we check if right (container) is an array containing left (primitive)
+    def jsonb_contained_by?(left, right)
+        when is_list(right) and not is_list(left) and not is_map(left) do
+      Enum.member?(right, left)
+    end
+
+    def jsonb_contained_by?(left, right), do: do_jsonb_contained_by?(right, left)
+
+    defp do_jsonb_contained_by?(left, right) when is_map(left) and is_map(right) do
+      Enum.all?(right, fn {key, right_value} ->
+        case Map.fetch(left, key) do
+          {:ok, left_value} -> do_jsonb_contained_by?(left_value, right_value)
+          :error -> false
+        end
+      end)
+    end
+
+    defp do_jsonb_contained_by?(left, right) when is_list(left) and is_list(right) do
+      Enum.all?(right, fn right_elem ->
+        Enum.any?(left, fn left_elem -> do_jsonb_contained_by?(left_elem, right_elem) end)
+      end)
+    end
+
+    defp do_jsonb_contained_by?(left, right), do: left == right
+  end
+
+  # JSONB key existence operators
+  # ? checks if key exists in object or string exists in array
+  defpostgres "jsonb ? text -> bool" do
+    def jsonb_key_exists?(json, key) when is_map(json) and is_binary(key) do
+      Map.has_key?(json, key)
+    end
+
+    # For arrays, check if the string exists as a top-level element
+    def jsonb_key_exists?(json, key) when is_list(json) and is_binary(key) do
+      Enum.member?(json, key)
+    end
+
+    def jsonb_key_exists?(_, _), do: false
+  end
+
+  # ?| checks if any of the keys exist
+  defpostgres "jsonb ?| text[] -> bool" do
+    def jsonb_any_key_exists?(json, keys) when is_map(json) and is_list(keys) do
+      Enum.any?(keys, &Map.has_key?(json, &1))
+    end
+
+    def jsonb_any_key_exists?(json, keys) when is_list(json) and is_list(keys) do
+      key_set = MapSet.new(keys)
+      Enum.any?(json, &(&1 in key_set))
+    end
+
+    def jsonb_any_key_exists?(_, _), do: false
+  end
+
+  # ?& checks if all of the keys exist
+  defpostgres "jsonb ?& text[] -> bool" do
+    def jsonb_all_keys_exist?(json, keys) when is_map(json) and is_list(keys) do
+      Enum.all?(keys, &Map.has_key?(json, &1))
+    end
+
+    def jsonb_all_keys_exist?(json, keys) when is_list(json) and is_list(keys) do
+      key_set = MapSet.new(keys)
+      Enum.all?(key_set, &Enum.member?(json, &1))
+    end
+
+    def jsonb_all_keys_exist?(_, _), do: false
+  end
+
   ## Array functions
   defpostgres("anyarray = anyarray -> bool", delegate: &Kernel.==/2)
   defpostgres("anyarray <> anyarray -> bool", delegate: &Kernel.!=/2)

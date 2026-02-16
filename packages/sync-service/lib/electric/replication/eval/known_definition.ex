@@ -184,19 +184,28 @@ defmodule Electric.Replication.Eval.KnownDefinition do
     |> Enum.unzip()
   end
 
-  # e.g.: + int4 -> int4
-  defp unary_op_regex,
-    do:
-      ~r/^(?<operator>[+\-*\/<>=~!@#%^&|`?]+) (?<type>[[:alnum:]*_]+) -> (?<return_type>[[:alnum:]*_]+)$/
+  # Type pattern supports both simple types (int4) and array types (text[])
+  # Note: [[:alnum:]*_]+ matches alphanumeric, *, and _ (for type categories like *numeric_type*)
+  # The (?:\[\])? makes the [] suffix optional for array types
+  @type_pattern "[[:alnum:]*_]+(?:\\[\\])?"
 
-  # e.g.: int4 + int4 -> int4
-  defp binary_op_regex,
-    do:
-      ~r/^(?<type1>[[:alnum:]*_]+) (?<operator>[+\-*\/<>=~!@#%^&|`?]+) (?<type2>[[:alnum:]*_]+) -> (?<return_type>[[:alnum:]*_]+)$/
+  # e.g.: + int4 -> int4
+  @unary_op_regex Regex.compile!(
+                    "^(?<operator>[+\\-*\\/<>=~!@#%^&|`?]+) (?<type>#{@type_pattern}) -> (?<return_type>#{@type_pattern})$"
+                  )
+  defp unary_op_regex, do: @unary_op_regex
+
+  # e.g.: int4 + int4 -> int4, jsonb ?| text[] -> bool
+  @binary_op_regex Regex.compile!(
+                     "^(?<type1>#{@type_pattern}) (?<operator>[+\\-*\\/<>=~!@#%^&|`?]+) (?<type2>#{@type_pattern}) -> (?<return_type>#{@type_pattern})$"
+                   )
+  defp binary_op_regex, do: @binary_op_regex
 
   # e.g.: ceil(float4) -> int4
-  defp func_regex,
-    do: ~r/^(?<name>[[:alnum:]*_]+)\((?<args>[^\)]*)\) -> (?<return_type>[[:alnum:]*_]+)/
+  @func_regex Regex.compile!(
+                "^(?<name>[[:alnum:]*_]+)\\((?<args>[^\\)]*)\\) -> (?<return_type>#{@type_pattern})"
+              )
+  defp func_regex, do: @func_regex
 
   defp parse_definition(operator_or_func, caller) do
     cond do
@@ -225,8 +234,8 @@ defmodule Electric.Replication.Eval.KnownDefinition do
       kind: :operator,
       name: ~s|"#{operator}"|,
       arity: 1,
-      args: [String.to_atom(type)],
-      returns: String.to_atom(return)
+      args: [parse_type_string(type)],
+      returns: parse_type_string(return)
     }
   end
 
@@ -238,10 +247,26 @@ defmodule Electric.Replication.Eval.KnownDefinition do
       kind: :operator,
       name: ~s|"#{operator}"|,
       arity: 2,
-      args: [String.to_atom(type1), String.to_atom(type2)],
-      returns: String.to_atom(return)
+      args: [parse_type_string(type1), parse_type_string(type2)],
+      returns: parse_type_string(return)
     }
   end
+
+  # Convert type string to type representation
+  # "text" -> :text, "text[]" -> {:array, :text}
+  defp parse_type_string(type_str) do
+    if String.ends_with?(type_str, "[]") do
+      base_type = type_str |> String.slice(0..-3//1) |> String.to_atom()
+      {:array, base_type}
+    else
+      String.to_atom(type_str)
+    end
+  end
+
+  # Convert type representation to string (inverse of parse_type_string)
+  # :text -> "text", {:array, :text} -> "text[]"
+  defp type_to_string({:array, base_type}), do: "#{base_type}[]"
+  defp type_to_string(type) when is_atom(type), do: to_string(type)
 
   defp parse_function(function) do
     %{"name" => name, "args" => args, "return_type" => return} =
@@ -252,7 +277,7 @@ defmodule Electric.Replication.Eval.KnownDefinition do
       args
       |> String.split(",", trim: true)
       |> Enum.map(fn arg ->
-        String.to_atom(String.trim(arg))
+        arg |> String.trim() |> parse_type_string()
       end)
 
     %{
@@ -260,7 +285,7 @@ defmodule Electric.Replication.Eval.KnownDefinition do
       name: name,
       arity: length(arg_types),
       args: arg_types,
-      returns: String.to_atom(return)
+      returns: parse_type_string(return)
     }
   end
 
@@ -357,7 +382,7 @@ defmodule Electric.Replication.Eval.KnownDefinition do
 
   defp validate_at_most_one_category(%{defined_at: line, args: args} = map) do
     args
-    |> Enum.map(&to_string/1)
+    |> Enum.map(&type_to_string/1)
     |> Enum.filter(&Regex.match?(~r/\*[[:alnum:]_]+\*/, &1))
     |> Enum.uniq()
     |> case do
