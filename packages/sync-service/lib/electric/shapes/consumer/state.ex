@@ -254,7 +254,10 @@ defmodule Electric.Shapes.Consumer.State do
     }
   end
 
-  defp validate_storage_capabilities(%__MODULE__{write_unit: @write_unit_txn_fragment} = state, storage) do
+  defp validate_storage_capabilities(
+         %__MODULE__{write_unit: @write_unit_txn_fragment} = state,
+         storage
+       ) do
     if Storage.supports_txn_fragment_streaming?(storage) do
       state
     else
