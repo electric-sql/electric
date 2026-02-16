@@ -187,6 +187,24 @@ end
 - `collect_atomics/1` - Extract atomic conditions
 - `assign_positions/1` - Map conditions to positions
 
+#### Position Stability Algorithm
+
+Position assignment must be deterministic to ensure the same WHERE clause always produces the same position assignments across shape restarts:
+
+```elixir
+def assign_positions(atomics) do
+  # Sort atomics by their AST string representation for determinism
+  atomics
+  |> Enum.sort_by(fn atomic ->
+    # Use a canonical string representation
+    :erlang.term_to_binary(atomic.ast)
+  end)
+  |> Enum.with_index()
+  |> Enum.map(fn {atomic, idx} -> {idx, atomic} end)
+  |> Map.new()
+end
+```
+
 ### Phase 1a: SQL Generator (New Module)
 
 **Create** `lib/electric/replication/eval/sql_generator.ex`
@@ -565,6 +583,60 @@ dnf_context = DnfContext.from_shape(shape)
 
 All DNF decomposition state (position maps, negated positions, etc.) lives on `dnf_context`, not on the Shape struct.
 
+#### Dependency Handle to Position Mapping
+
+Built inside `DnfContext.from_shape/1` — not on the Shape struct:
+
+```elixir
+# Inside DnfContext.from_shape/1
+defp build_position_to_dependency_map(decomposition, dep_handles) do
+  decomposition.subexpressions
+  |> Enum.filter(fn {_pos, subexpr} -> subexpr.is_subquery end)
+  |> Enum.map(fn {pos, subexpr} ->
+    dep_handle = find_matching_dependency_handle(subexpr, dep_handles)
+    {pos, dep_handle}
+  end)
+  |> Map.new()
+end
+
+# DnfContext also builds the reverse map
+defp build_dependency_to_positions_map(pos_to_dep) do
+  Enum.group_by(pos_to_dep, fn {_pos, handle} -> handle end, fn {pos, _} -> pos end)
+end
+
+# Used by move_handling.ex via DnfContext.get_positions_for_dependency/2
+```
+
+**Note:** Same subquery can appear at multiple positions (e.g., `x IN sq AND y IN sq`).
+
+### Phase 2.5: Protocol Validation
+
+```elixir
+# In lib/electric/shapes/api.ex or shape validation
+# DnfContext is built early enough to use here, or pass the decomposition directly.
+defp validate_protocol_compatibility(dnf_context, protocol_version) do
+  has_complex_subqueries? = dnf_context != nil and
+    DnfContext.has_valid_dnf?(dnf_context) and
+    (length(dnf_context.decomposition.disjuncts) > 1 or
+     MapSet.size(dnf_context.negated_positions) > 0)
+
+  cond do
+    protocol_version == 1 and has_complex_subqueries? ->
+      {:error, :protocol_version_too_low,
+        "WHERE clauses with OR or NOT combined with subqueries require protocol version 2. " <>
+        "Please upgrade your client."}
+
+    true ->
+      :ok
+  end
+end
+```
+
+**Protocol version detection:**
+- Client sends `Electric-Protocol-Version: 2` header
+- Server checks before shape creation
+- Returns 400 with descriptive error for v1 clients with complex shapes
+
 ### Phase 3: Active Conditions Computation
 
 **Modify** `lib/electric/shapes/where_clause.ex`
@@ -638,6 +710,62 @@ def do_process_changes([change | rest], %State{shape: shape, dnf_context: dnf_co
   else
     do_process_changes(rest, state, ctx, acc, count)
   end
+end
+```
+
+#### `changes_only` Mode
+
+The `changes_only` mode uses the same tag/active_conditions computation as full sync — no separate path needed:
+
+```elixir
+# In change_handling.ex - changes_only mode includes same data as full sync
+def process_change_for_changes_only(change, shape, ctx) do
+  # Compute tags and active_conditions identically to snapshot mode
+  active_conditions = compute_active_conditions(change, shape, ctx.extra_refs)
+  tags = Shape.compute_tags(shape, change.record, ctx.stack_id, ctx.shape_handle)
+
+  # Include in change headers
+  %{change |
+    active_conditions: active_conditions,
+    move_tags: tags
+  }
+end
+```
+
+**Client behavior in `changes_only` mode:**
+- Clients build state incrementally
+- Move-in/move-out broadcasts for unknown rows are **ignored** (row not in local state)
+- Tags and `active_conditions` on insert/update/delete are processed normally
+
+#### Struct Changes Required
+
+**Modify `lib/electric/replication/changes.ex`:**
+
+```elixir
+defmodule Electric.Replication.Changes.NewRecord do
+  defstruct [
+    # ... existing fields ...
+    :move_tags,           # [[hash | nil]] - nested array per disjunct
+    :active_conditions,   # [boolean] - one per position
+    :removed_tags         # [[hash | nil]] - for updates only
+  ]
+end
+
+defmodule Electric.Replication.Changes.UpdatedRecord do
+  defstruct [
+    # ... existing fields ...
+    :move_tags,
+    :active_conditions,
+    :removed_tags  # Tags from old record that no longer apply
+  ]
+end
+
+defmodule Electric.Replication.Changes.DeletedRecord do
+  defstruct [
+    # ... existing fields ...
+    :move_tags,  # Tags at time of deletion (for client cleanup)
+    :active_conditions
+  ]
 end
 ```
 
@@ -808,6 +936,25 @@ def from_change(%Changes.NewRecord{} = change, txids, _, _replica) do
   [{change.log_offset, %{key: change.key, value: change.record, headers: headers}}]
 end
 ```
+
+#### Message Format Migration
+
+**Current format** (single-subquery, flat):
+```json
+{"tags": ["hash1/hash2"], "event": "move-out", "patterns": [{"pos": 0, "value": "hash"}]}
+```
+
+**New format** (multi-disjunct, nested):
+```json
+{"tags": [["hash1", "hash2", null]], "active_conditions": [true, true, false]}
+{"control": "move-out", "position": 0, "values": ["hash1", "hash2"]}
+```
+
+**Migration strategy:**
+1. Feature flag `dnf_subqueries` controls new format
+2. Single-subquery shapes with flag disabled continue using flat format
+3. When flag enabled, all shapes use nested format
+4. Clients must be updated before enabling flag in production
 
 ### Phase 7: Querying Updates for Initial Snapshot
 
@@ -989,6 +1136,20 @@ def process_move_outs(%State{dnf_context: dnf_context} = state, dep_handle, remo
     state
   end
 end
+```
+
+#### Negation Handling in Move Processing
+
+Move handling inverts behavior for negated positions:
+- Move-in to subquery + negated position = **deactivation** (NOT IN now false)
+- Move-out from subquery + negated position = **activation** (NOT IN now true)
+
+**Same value at multiple positions** (e.g., `x IN sq OR x NOT IN sq`):
+```elixir
+# Positions: 0 (positive), 1 (negated)
+# Row with x='a' where 'a' is in subquery:
+tags: [[hash(a), nil], [nil, hash(a)]]  # Same hash, different positions
+active_conditions: [true, false]  # Opposite values
 ```
 
 ### Phase 10: Remove Shape Invalidation
@@ -1656,219 +1817,6 @@ Phase 11: Elixir Client (depends on Phases 5, 6 for wire format definition)
 - `lib/electric/shapes/querying.ex` - SQL generation for snapshots and move-in queries. Move-in queries SELECT condition_hashes (separate column) + wire tags (in JSON). Accepts DnfContext, delegates non-subquery AST-to-SQL to `SqlGenerator`
 - `packages/elixir-client/lib/electric/client/tag_tracker.ex` - Client-side tag tracking, DNF evaluation, synthetic deletes
 - `packages/elixir-client/lib/electric/client/message/headers.ex` - Client message header parsing
-
----
-
-## Review Addendum: Addressing Identified Gaps
-
-This section addresses gaps identified during plan review.
-
-### A. Move-in Query Exclusion Logic (NOT other_disjuncts)
-
-Per RFC lines 230-246, move-in queries must exclude rows already sent via other disjuncts.
-
-**Implementation in Phase 5** (in `subquery_moves.ex`, not `move_handling.ex`):
-
-The exclusion clause SQL is generated inside `move_in_where_clause/4` in `subquery_moves.ex`,
-which is the function that builds the complete WHERE clause for move-in queries. See Phase 5a
-for the full implementation of `build_dnf_exclusion_clauses` and `generate_disjunct_exclusion`.
-
-Key points:
-- Uses `Decomposer.decompose` to find the trigger's DNF position
-- Partitions disjuncts into containing/not-containing the trigger position
-- Only generates `AND NOT (...)` for disjuncts NOT containing the trigger
-- Skips exclusion for disjuncts containing non-subquery positions (safe — client deduplicates via tags)
-- Each excluded disjunct becomes `AND NOT (cond1 AND cond2 AND ...)` respecting polarity
-
-`move_handling.ex` calls `SubqueryMoves.move_in_where_clause` and passes the result to
-the query executor — it does NOT generate exclusion SQL itself.
-
-### B. Negation Tracking Flow
-
-Negation flows through the system as follows:
-
-1. **Decomposer** extracts atomic conditions and tracks which are negated:
-   ```elixir
-   # For "x NOT IN (SELECT ...)"
-   %{subexpressions: %{
-     0 => %{ast: sublink_ast, is_subquery: true, column: "x", negated: true}
-   }}
-   ```
-
-2. **DnfContext** aggregates negated positions (in `DnfContext.from_shape/1`):
-   ```elixir
-   defp extract_negated_positions(decomposition) do
-     decomposition.subexpressions
-     |> Enum.filter(fn {_pos, subexpr} -> subexpr.negated end)
-     |> Enum.map(fn {pos, _} -> pos end)
-     |> MapSet.new()
-   end
-   ```
-
-3. **Move handling** inverts behavior for negated positions:
-   - Move-in to subquery + negated position = **deactivation** (NOT IN now false)
-   - Move-out from subquery + negated position = **activation** (NOT IN now true)
-
-4. **Same value at multiple positions** (e.g., `x IN sq OR x NOT IN sq`):
-   ```elixir
-   # Positions: 0 (positive), 1 (negated)
-   # Row with x='a' where 'a' is in subquery:
-   tags: [[hash(a), nil], [nil, hash(a)]]  # Same hash, different positions
-   active_conditions: [true, false]  # Opposite values
-   ```
-
-### C. `changes_only` Mode Handling
-
-Add to Phase 6 and Phase 4:
-
-```elixir
-# In change_handling.ex - changes_only mode includes same data as full sync
-def process_change_for_changes_only(change, shape, ctx) do
-  # Compute tags and active_conditions identically to snapshot mode
-  active_conditions = compute_active_conditions(change, shape, ctx.extra_refs)
-  tags = Shape.compute_tags(shape, change.record, ctx.stack_id, ctx.shape_handle)
-
-  # Include in change headers
-  %{change |
-    active_conditions: active_conditions,
-    move_tags: tags
-  }
-end
-```
-
-**Client behavior in `changes_only` mode:**
-- Clients build state incrementally
-- Move-in/move-out broadcasts for unknown rows are **ignored** (row not in local state)
-- Tags and `active_conditions` on insert/update/delete are processed normally
-
-### D. Protocol Version Check
-
-Add new **Phase 2.5: Protocol Validation**:
-
-```elixir
-# In lib/electric/shapes/api.ex or shape validation
-# DnfContext is built early enough to use here, or pass the decomposition directly.
-defp validate_protocol_compatibility(dnf_context, protocol_version) do
-  has_complex_subqueries? = dnf_context != nil and
-    DnfContext.has_valid_dnf?(dnf_context) and
-    (length(dnf_context.decomposition.disjuncts) > 1 or
-     MapSet.size(dnf_context.negated_positions) > 0)
-
-  cond do
-    protocol_version == 1 and has_complex_subqueries? ->
-      {:error, :protocol_version_too_low,
-        "WHERE clauses with OR or NOT combined with subqueries require protocol version 2. " <>
-        "Please upgrade your client."}
-
-    true ->
-      :ok
-  end
-end
-```
-
-**Protocol version detection:**
-- Client sends `Electric-Protocol-Version: 2` header
-- Server checks before shape creation
-- Returns 400 with descriptive error for v1 clients with complex shapes
-
-### E. Message Format Migration
-
-**Current format** (single-subquery, flat):
-```json
-{"tags": ["hash1/hash2"], "event": "move-out", "patterns": [{"pos": 0, "value": "hash"}]}
-```
-
-**New format** (multi-disjunct, nested):
-```json
-{"tags": [["hash1", "hash2", null]], "active_conditions": [true, true, false]}
-{"control": "move-out", "position": 0, "values": ["hash1", "hash2"]}
-```
-
-**Migration strategy:**
-1. Feature flag `dnf_subqueries` controls new format
-2. Single-subquery shapes with flag disabled continue using flat format
-3. When flag enabled, all shapes use nested format
-4. Clients must be updated before enabling flag in production
-
-### F. Struct Changes Required
-
-**Modify `lib/electric/replication/changes.ex`:**
-
-```elixir
-defmodule Electric.Replication.Changes.NewRecord do
-  defstruct [
-    # ... existing fields ...
-    :move_tags,           # [[hash | nil]] - nested array per disjunct
-    :active_conditions,   # [boolean] - one per position
-    :removed_tags         # [[hash | nil]] - for updates only
-  ]
-end
-
-defmodule Electric.Replication.Changes.UpdatedRecord do
-  defstruct [
-    # ... existing fields ...
-    :move_tags,
-    :active_conditions,
-    :removed_tags  # Tags from old record that no longer apply
-  ]
-end
-
-defmodule Electric.Replication.Changes.DeletedRecord do
-  defstruct [
-    # ... existing fields ...
-    :move_tags,  # Tags at time of deletion (for client cleanup)
-    :active_conditions
-  ]
-end
-```
-
-### G. Dependency Handle to Position Mapping
-
-**Built inside `DnfContext.from_shape/1`** — not on the Shape struct:
-
-```elixir
-# Inside DnfContext.from_shape/1
-defp build_position_to_dependency_map(decomposition, dep_handles) do
-  decomposition.subexpressions
-  |> Enum.filter(fn {_pos, subexpr} -> subexpr.is_subquery end)
-  |> Enum.map(fn {pos, subexpr} ->
-    dep_handle = find_matching_dependency_handle(subexpr, dep_handles)
-    {pos, dep_handle}
-  end)
-  |> Map.new()
-end
-
-# DnfContext also builds the reverse map
-defp build_dependency_to_positions_map(pos_to_dep) do
-  Enum.group_by(pos_to_dep, fn {_pos, handle} -> handle end, fn {pos, _} -> pos end)
-end
-
-# Used by move_handling.ex via DnfContext.get_positions_for_dependency/2
-```
-
-**Note:** Same subquery can appear at multiple positions (e.g., `x IN sq AND y IN sq`).
-
-### H. Position Stability Algorithm
-
-**Deterministic position assignment:**
-
-```elixir
-def assign_positions(atomics) do
-  # Sort atomics by their AST string representation for determinism
-  atomics
-  |> Enum.sort_by(fn atomic ->
-    # Use a canonical string representation
-    :erlang.term_to_binary(atomic.ast)
-  end)
-  |> Enum.with_index()
-  |> Enum.map(fn {atomic, idx} -> {idx, atomic} end)
-  |> Map.new()
-end
-```
-
-This ensures the same WHERE clause always produces the same position assignments across shape restarts.
-
----
 
 ## Additional Test Coverage
 
