@@ -1142,14 +1142,23 @@ extraction is done here at SQL generation time rather than at decomposition time
 **Final** — `extract_columns_from_ast` and `make_condition_hashes_select`:
 ```elixir
 # Extract column name(s) referenced by a subexpression's AST.
-# Returns a list of column names (single-element for simple `x IN (SELECT ...)`).
+# Uses Walker.reduce! to collect all Ref nodes with single-element paths
+# (column references). Refs with multi-element paths like ["$sublink", "0"]
+# are automatically excluded. Works for both simple `x IN (SELECT ...)` and
+# row-based `(x, y) IN (SELECT ...)` forms.
 defp extract_columns_from_ast(ast) do
-  # Walk the AST to find column references. For ScalarArrayOpExpr the left
-  # operand is the column ref; for RowCompareExpr it's a list of column refs.
-  case ast do
-    %{left: %{name: column_name}} -> [column_name]
-    %{left: %{args: args}} -> Enum.map(args, & &1.name)
-  end
+  Walker.reduce!(
+    ast,
+    fn
+      %Eval.Parser.Ref{path: [column_name]}, acc, _ctx ->
+        {:ok, [column_name | acc]}
+
+      _, acc, _ ->
+        {:ok, acc}
+    end,
+    []
+  )
+  |> Enum.reverse()
 end
 
 # make_tags:                    [[x, y], [nil, z]] -> ["md5(x)/md5(y)", "/md5(z)"]
