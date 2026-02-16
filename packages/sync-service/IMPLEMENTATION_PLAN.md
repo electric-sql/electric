@@ -965,11 +965,10 @@ defp generate_subquery_condition_sql(subexpr, comparison_expressions, shape_depe
     subquery_section = rebuild_subquery_section(dep_shape)
     column_sql = get_column_sql_for_subexpr(subexpr, comparison_expressions, sublink_index)
 
-    if subexpr.negated do
-      ~s[(NOT #{column_sql} #{subquery_section})]
-    else
-      ~s[(#{column_sql} #{subquery_section})]
-    end
+    # Return the un-negated condition — negation is applied by
+    # build_active_conditions_select's outer wrapper so that all
+    # positions (subquery and non-subquery) are negated uniformly.
+    ~s[(#{column_sql} #{subquery_section})]
   else
     raise "Could not resolve dependency shape for sublink index #{inspect(sublink_index)}"
   end
