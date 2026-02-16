@@ -43,7 +43,19 @@ export type NormalizedPgSnapshot = {
 }
 
 interface Header {
-  [key: Exclude<string, `operation` | `control` | `event`>]: Value
+  [
+    key: Exclude<
+      string,
+      | `operation`
+      | `control`
+      | `event`
+      | `txids`
+      | `lsn`
+      | `op_position`
+      | `tags`
+      | `removed_tags`
+    >
+  ]: Value
 }
 
 export type Operation = `insert` | `update` | `delete`
@@ -135,6 +147,8 @@ export type ChangeMessage<T extends Row<unknown> = Row> = {
   headers: Header & {
     operation: Operation
     txids?: number[]
+    lsn?: `${bigint}`
+    op_position?: number
     /** Tags will always be present for changes if the shape has a subquery in its where clause, and are omitted otherwise.*/
     tags?: MoveTag[]
     removed_tags?: MoveTag[]
