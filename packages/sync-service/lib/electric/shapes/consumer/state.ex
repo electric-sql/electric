@@ -10,6 +10,7 @@ defmodule Electric.Shapes.Consumer.State do
   alias Electric.Replication.LogOffset
   alias Electric.ShapeCache.Storage
 
+  require Logger
   require LogOffset
 
   @write_unit_txn :txn
@@ -236,6 +237,8 @@ defmodule Electric.Shapes.Consumer.State do
   """
   @spec initialize(uninitialized_t(), Storage.shape_storage(), Storage.writer_state()) :: t()
   def initialize(%__MODULE__{} = state, storage, writer) do
+    %__MODULE__{} = state = validate_storage_capabilities(state, storage)
+
     {:ok, latest_offset} = Storage.fetch_latest_offset(storage)
     {:ok, pg_snapshot} = Storage.fetch_pg_snapshot(storage)
 
@@ -250,6 +253,24 @@ defmodule Electric.Shapes.Consumer.State do
         buffering?: InitialSnapshot.needs_buffering?(initial_snapshot_state)
     }
   end
+
+  defp validate_storage_capabilities(%__MODULE__{write_unit: @write_unit_txn_fragment} = state, storage) do
+    if Storage.supports_txn_fragment_streaming?(storage) do
+      state
+    else
+      {mod, _opts} = storage
+
+      Logger.warning(
+        "Storage backend #{inspect(mod)} does not support txn fragment streaming. " <>
+          "Falling back to full-transaction buffering for shape #{state.shape_handle}. " <>
+          "Use PureFileStorage for optimal performance with fragment streaming."
+      )
+
+      %{state | write_unit: @write_unit_txn}
+    end
+  end
+
+  defp validate_storage_capabilities(state, _storage), do: state
 
   @doc """
   For the given offset, find the appropriate transaction boundary and
