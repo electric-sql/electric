@@ -328,212 +328,33 @@ end
 
 **Tests**: `test/electric/replication/eval/sql_generator_test.exs`
 
-Comprehensive unit tests that round-trip through the parser and back:
+Comprehensive unit tests covering all operator types (=, <>, <, >, <=, >=, LIKE, ILIKE,
+IS NULL, IS NOT NULL, IN), logical connectives (AND, OR, NOT), column references
+(simple and schema-qualified), constant types (nil, bool, string, integer, float with
+single-quote escaping), error handling for unsupported AST nodes, and complex nested
+expressions. All tests construct AST structs directly and assert `SqlGenerator.to_sql/1`
+output. Representative examples:
 
 ```elixir
-defmodule Electric.Replication.Eval.SqlGeneratorTest do
-  use ExUnit.Case, async: true
+# Comparison: construct AST, assert SQL
+test "equals" do
+  ast = %Func{name: "\"=\"", args: [%Ref{path: ["status"]}, %Const{value: "active"}]}
+  assert SqlGenerator.to_sql(ast) == ~s|("status" = 'active')|
+end
 
-  alias Electric.Replication.Eval.SqlGenerator
-  alias Electric.Replication.Eval.Parser
-  alias Electric.Replication.Eval.Parser.{Const, Ref, Func, Array}
+# Nested logical: AND within OR
+test "nested AND within OR" do
+  a = %Func{name: "\"=\"", args: [%Ref{path: ["x"]}, %Const{value: 1}]}
+  b = %Func{name: "\"=\"", args: [%Ref{path: ["y"]}, %Const{value: 2}]}
+  c = %Func{name: "\"=\"", args: [%Ref{path: ["z"]}, %Const{value: 3}]}
+  ast = %Func{name: "or", args: [%Func{name: "and", args: [a, b]}, c]}
+  assert SqlGenerator.to_sql(ast) == ~s|((("x" = 1) AND ("y" = 2)) OR ("z" = 3))|
+end
 
-  # Helper: parse a WHERE clause and convert back to SQL
-  defp round_trip(sql_fragment) do
-    # Parse using the existing parser infrastructure, then convert back
-    {:ok, ast} = parse_expression(sql_fragment)
-    SqlGenerator.to_sql(ast)
-  end
-
-  describe "comparison operators" do
-    test "equals" do
-      ast = %Func{name: "\"=\"", args: [%Ref{path: ["status"]}, %Const{value: "active"}]}
-      assert SqlGenerator.to_sql(ast) == ~s|(\"status\" = 'active')|
-    end
-
-    test "not equals (<>)" do
-      ast = %Func{name: "\"<>\"", args: [%Ref{path: ["status"]}, %Const{value: "deleted"}]}
-      assert SqlGenerator.to_sql(ast) == ~s|(\"status\" <> 'deleted')|
-    end
-
-    test "less than" do
-      ast = %Func{name: "\"<\"", args: [%Ref{path: ["age"]}, %Const{value: 18}]}
-      assert SqlGenerator.to_sql(ast) == ~s|(\"age\" < 18)|
-    end
-
-    test "greater than" do
-      ast = %Func{name: "\">\"", args: [%Ref{path: ["score"]}, %Const{value: 100}]}
-      assert SqlGenerator.to_sql(ast) == ~s|(\"score\" > 100)|
-    end
-
-    test "less than or equal" do
-      ast = %Func{name: "\"<=\"", args: [%Ref{path: ["priority"]}, %Const{value: 5}]}
-      assert SqlGenerator.to_sql(ast) == ~s|(\"priority\" <= 5)|
-    end
-
-    test "greater than or equal" do
-      ast = %Func{name: "\">=\"", args: [%Ref{path: ["price"]}, %Const{value: 9.99}]}
-      assert SqlGenerator.to_sql(ast) == ~s|(\"price\" >= 9.99)|
-    end
-  end
-
-  describe "pattern matching" do
-    test "LIKE" do
-      ast = %Func{name: "\"~~\"", args: [%Ref{path: ["name"]}, %Const{value: "%test%"}]}
-      assert SqlGenerator.to_sql(ast) == ~s|(\"name\" LIKE '%test%')|
-    end
-
-    test "ILIKE" do
-      ast = %Func{name: "\"~~*\"", args: [%Ref{path: ["name"]}, %Const{value: "%test%"}]}
-      assert SqlGenerator.to_sql(ast) == ~s|(\"name\" ILIKE '%test%')|
-    end
-  end
-
-  describe "nullability" do
-    test "IS NULL" do
-      ast = %Func{name: "is null", args: [%Ref{path: ["deleted_at"]}]}
-      assert SqlGenerator.to_sql(ast) == ~s|(\"deleted_at\" IS NULL)|
-    end
-
-    test "IS NOT NULL" do
-      ast = %Func{name: "is not null", args: [%Ref{path: ["email"]}]}
-      assert SqlGenerator.to_sql(ast) == ~s|(\"email\" IS NOT NULL)|
-    end
-  end
-
-  describe "membership (IN)" do
-    test "IN with literal values" do
-      ast = %Func{name: "in", args: [
-        %Ref{path: ["status"]},
-        %Array{elements: [%Const{value: "a"}, %Const{value: "b"}, %Const{value: "c"}]}
-      ]}
-      assert SqlGenerator.to_sql(ast) == ~s|(\"status\" IN ('a', 'b', 'c'))|
-    end
-
-    test "IN with integer values" do
-      ast = %Func{name: "in", args: [
-        %Ref{path: ["id"]},
-        %Array{elements: [%Const{value: 1}, %Const{value: 2}, %Const{value: 3}]}
-      ]}
-      assert SqlGenerator.to_sql(ast) == ~s|(\"id\" IN (1, 2, 3))|
-    end
-  end
-
-  describe "logical operators" do
-    test "NOT" do
-      inner = %Func{name: "\"=\"", args: [%Ref{path: ["active"]}, %Const{value: true}]}
-      ast = %Func{name: "not", args: [inner]}
-      assert SqlGenerator.to_sql(ast) == ~s|(NOT (\"active\" = true))|
-    end
-
-    test "AND" do
-      left = %Func{name: "\"=\"", args: [%Ref{path: ["a"]}, %Const{value: 1}]}
-      right = %Func{name: "\"=\"", args: [%Ref{path: ["b"]}, %Const{value: 2}]}
-      ast = %Func{name: "and", args: [left, right]}
-      assert SqlGenerator.to_sql(ast) == ~s|((\"a\" = 1) AND (\"b\" = 2))|
-    end
-
-    test "OR" do
-      left = %Func{name: "\"=\"", args: [%Ref{path: ["x"]}, %Const{value: 1}]}
-      right = %Func{name: "\"=\"", args: [%Ref{path: ["y"]}, %Const{value: 2}]}
-      ast = %Func{name: "or", args: [left, right]}
-      assert SqlGenerator.to_sql(ast) == ~s|((\"x\" = 1) OR (\"y\" = 2))|
-    end
-
-    test "nested AND within OR" do
-      a = %Func{name: "\"=\"", args: [%Ref{path: ["x"]}, %Const{value: 1}]}
-      b = %Func{name: "\"=\"", args: [%Ref{path: ["y"]}, %Const{value: 2}]}
-      c = %Func{name: "\"=\"", args: [%Ref{path: ["z"]}, %Const{value: 3}]}
-      and_node = %Func{name: "and", args: [a, b]}
-      ast = %Func{name: "or", args: [and_node, c]}
-      assert SqlGenerator.to_sql(ast) == ~s|(((\"x\" = 1) AND (\"y\" = 2)) OR (\"z\" = 3))|
-    end
-
-    test "NOT with AND (De Morgan)" do
-      a = %Func{name: "\"=\"", args: [%Ref{path: ["x"]}, %Const{value: 1}]}
-      b = %Func{name: "\"=\"", args: [%Ref{path: ["y"]}, %Const{value: 2}]}
-      and_node = %Func{name: "and", args: [a, b]}
-      ast = %Func{name: "not", args: [and_node]}
-      assert SqlGenerator.to_sql(ast) == ~s|(NOT ((\"x\" = 1) AND (\"y\" = 2)))|
-    end
-  end
-
-  describe "column references" do
-    test "simple column" do
-      assert SqlGenerator.to_sql(%Ref{path: ["name"]}) == ~s|\"name\"|
-    end
-
-    test "schema-qualified column" do
-      assert SqlGenerator.to_sql(%Ref{path: ["public", "users", "name"]}) == ~s|\"public\".\"users\".\"name\"|
-    end
-  end
-
-  describe "constants" do
-    test "NULL" do
-      assert SqlGenerator.to_sql(%Const{value: nil}) == "NULL"
-    end
-
-    test "true" do
-      assert SqlGenerator.to_sql(%Const{value: true}) == "true"
-    end
-
-    test "false" do
-      assert SqlGenerator.to_sql(%Const{value: false}) == "false"
-    end
-
-    test "string" do
-      assert SqlGenerator.to_sql(%Const{value: "hello"}) == "'hello'"
-    end
-
-    test "string with single quotes escaped" do
-      assert SqlGenerator.to_sql(%Const{value: "it's"}) == "'it''s'"
-    end
-
-    test "integer" do
-      assert SqlGenerator.to_sql(%Const{value: 42}) == "42"
-    end
-
-    test "float" do
-      assert SqlGenerator.to_sql(%Const{value: 3.14}) == "3.14"
-    end
-  end
-
-  describe "error handling" do
-    test "raises ArgumentError for unsupported AST node" do
-      assert_raise ArgumentError, ~r/unsupported AST node/, fn ->
-        SqlGenerator.to_sql(%{unexpected: :node})
-      end
-    end
-
-    test "raises ArgumentError for unknown Func name" do
-      ast = %Func{name: "some_unknown_function", args: [%Const{value: 1}]}
-      assert_raise ArgumentError, ~r/unsupported AST node/, fn ->
-        SqlGenerator.to_sql(ast)
-      end
-    end
-  end
-
-  describe "complex expressions" do
-    test "WHERE (status = 'active' AND priority > 3) OR deleted_at IS NULL" do
-      status_check = %Func{name: "\"=\"", args: [%Ref{path: ["status"]}, %Const{value: "active"}]}
-      priority_check = %Func{name: "\">\"", args: [%Ref{path: ["priority"]}, %Const{value: 3}]}
-      and_node = %Func{name: "and", args: [status_check, priority_check]}
-      null_check = %Func{name: "is null", args: [%Ref{path: ["deleted_at"]}]}
-      ast = %Func{name: "or", args: [and_node, null_check]}
-
-      assert SqlGenerator.to_sql(ast) ==
-        ~s|(((\"status\" = 'active') AND (\"priority\" > 3)) OR (\"deleted_at\" IS NULL))|
-    end
-
-    test "NOT (name LIKE '%test%' OR score <= 0)" do
-      like_check = %Func{name: "\"~~\"", args: [%Ref{path: ["name"]}, %Const{value: "%test%"}]}
-      score_check = %Func{name: "\"<=\"", args: [%Ref{path: ["score"]}, %Const{value: 0}]}
-      or_node = %Func{name: "or", args: [like_check, score_check]}
-      ast = %Func{name: "not", args: [or_node]}
-
-      assert SqlGenerator.to_sql(ast) ==
-        ~s|(NOT ((\"name\" LIKE '%test%') OR (\"score\" <= 0)))|
-    end
+# Error handling: unsupported nodes raise ArgumentError
+test "raises ArgumentError for unsupported AST node" do
+  assert_raise ArgumentError, ~r/unsupported AST node/, fn ->
+    SqlGenerator.to_sql(%{unexpected: :node})
   end
 end
 ```
