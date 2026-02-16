@@ -49,7 +49,7 @@ defmodule Electric.Shapes.Consumer.DnfContext do
 end
 ```
 
-This keeps the `Shape` struct lean while giving the consumer everything it needs to process DNF-aware move-in/move-out operations. The `DnfContext` is computed once and stored in `Consumer.State`, passed to `move_handling`, `change_handling`, `subquery_moves`, and `querying` as needed. Functions that currently reach into `shape.dnf_decomposition` or `shape.position_to_dependency_map` should instead accept the `DnfContext` (or `nil` for non-DNF shapes).
+This keeps the `Shape` struct lean while giving the consumer everything it needs to process DNF-aware move-in/move-out operations. The `DnfContext` is computed once and stored in `Consumer.State`, passed to `move_handling`, `change_handling`, `subquery_moves`, and `querying` as needed. Functions that currently reach into `shape.dnf_decomposition` or `shape.position_to_dependency_map` should instead accept the `DnfContext`. Note: shapes without dependencies already take a separate fast path in `change_handling` (the `when not Shape.has_dependencies(shape)` guard), so the DNF code path is only reached for shapes that have a `DnfContext`.
 
 ### Single Decomposition, Two Lifecycle Points
 
