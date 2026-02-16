@@ -626,7 +626,6 @@ defmodule Electric.Shapes.Consumer do
         txn =
           PendingTxn.update_with_changes(
             txn,
-            last_log_offset,
             System.monotonic_time() - timestamp,
             num_changes,
             total_size
@@ -689,7 +688,7 @@ defmodule Electric.Shapes.Consumer do
 
     # Only notify if we actually wrote changes
     if txn.num_changes > 0 do
-      :ok = notify_clients_of_new_changes(state, txn.last_log_offset)
+      :ok = notify_clients_of_new_changes(state, txn_fragment.last_log_offset)
 
       lag = calculate_replication_lag(txn_fragment.commit.commit_timestamp)
 
@@ -720,7 +719,7 @@ defmodule Electric.Shapes.Consumer do
         | writer: writer,
           pending_txn: nil,
           txn_offset_mapping:
-            state.txn_offset_mapping ++ [{state.latest_offset, txn.last_log_offset}]
+            state.txn_offset_mapping ++ [{state.latest_offset, txn_fragment.last_log_offset}]
       }
     else
       # No changes were written - notify flush boundary like consider_flushed does

@@ -14,11 +14,8 @@ defmodule Electric.Shapes.Consumer.PendingTxn do
   transaction after seeing a Commit.
   """
 
-  alias Electric.Replication.LogOffset
-
   defstruct [
     :xid,
-    :last_log_offset,
     consider_flushed?: false,
     storage_duration: 0,
     num_changes: 0,
@@ -27,7 +24,6 @@ defmodule Electric.Shapes.Consumer.PendingTxn do
 
   @type t :: %__MODULE__{
           xid: pos_integer(),
-          last_log_offset: LogOffset.t() | nil,
           consider_flushed?: boolean(),
           num_changes: non_neg_integer(),
           total_bytes: non_neg_integer()
@@ -44,18 +40,11 @@ defmodule Electric.Shapes.Consumer.PendingTxn do
   @doc """
   Update the pending transaction with changes that were written to storage.
   """
-  @spec update_with_changes(
-          t(),
-          LogOffset.t(),
-          non_neg_integer(),
-          non_neg_integer(),
-          non_neg_integer()
-        ) :: t()
-  def update_with_changes(%__MODULE__{} = pending_txn, log_offset, storage_duration, count, bytes) do
+  @spec update_with_changes(t(), non_neg_integer(), non_neg_integer(), non_neg_integer()) :: t()
+  def update_with_changes(%__MODULE__{} = pending_txn, storage_duration, count, bytes) do
     %{
       pending_txn
-      | last_log_offset: log_offset,
-        storage_duration: pending_txn.storage_duration + storage_duration,
+      | storage_duration: pending_txn.storage_duration + storage_duration,
         num_changes: pending_txn.num_changes + count,
         total_bytes: pending_txn.total_bytes + bytes
     }
