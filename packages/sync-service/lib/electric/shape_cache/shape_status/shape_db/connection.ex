@@ -3,6 +3,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
 
   alias Exqlite.Sqlite3
   alias Electric.ShapeCache.ShapeStatus.ShapeDb.Query
+  alias Electric.ShapeCache.ShapeStatus.ShapeDb.PoolRegistry
   alias Electric.Telemetry.OpenTelemetry
 
   require Logger
@@ -59,7 +60,6 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
     """
     INSERT INTO shape_count (id, count) VALUES (1, 0)
     """,
-    "PRAGMA journal_mode=WAL",
     "PRAGMA user_version=#{@schema_version}"
   ]
 
@@ -67,11 +67,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
 
   defstruct [:conn, :stmts]
 
-  def pool_name(stack_id, role) when role in [:read, :write] do
-    Electric.ProcessRegistry.name(stack_id, __MODULE__, role)
-  end
-
-  def migrate(conn) when is_raw_connection(conn) do
+  def migrate(conn, opts) when is_raw_connection(conn) do
     # because we embed the storage version into the db path
     # we can only ever get 0 for un-migrated or the current storage
     # version.
@@ -80,14 +76,36 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
       {:ok, 0} ->
         Logger.info("Migrating shape db to version #{@schema_version}")
 
-        with :ok <- execute_all(conn, @migration_sqls) do
+        with :ok <- execute_all(conn, migration_sqls(opts)) do
           {:ok, @schema_version}
         end
 
       {:ok, @schema_version} ->
-        Logger.info("Found existing valid shape db")
         {:ok, @schema_version}
     end
+  end
+
+  defp migration_sqls(opts) do
+    # Recommended journal_mode for SQLite over an NFS share is 'rollback mode', enabled
+    # using `PRAGMA journal_mode = DELETE`
+    # https://sqlite.org/useovernet.html
+    # https://sqlite.org/pragma.html#pragma_journal_mode
+    #
+    # > Use SQLite in rollback mode. This means you can have multiple
+    # > simultaneous readers or one writer, but not simultaneous readers and
+    # > writers.
+    #
+    # Between this behaviour and our use of a single connection for both reads
+    # and writes, there is no need for better locking to prevent db corruption
+    # via simultaneous access.
+    journal_mode =
+      if Keyword.get(opts, :exclusive_mode, false) do
+        "DELETE"
+      else
+        "WAL"
+      end
+
+    @migration_sqls ++ ["PRAGMA journal_mode=#{journal_mode}"]
   end
 
   def optimize(conn) when is_raw_connection(conn) do
@@ -97,8 +115,23 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
   @impl NimblePool
   def init_worker(pool_state) do
     with {:ok, conn} <- open(pool_state),
+         :ok <- maybe_apply_migrations(conn, pool_state),
          stmts <- Query.prepare!(conn, pool_state) do
       {:ok, %__MODULE__{conn: conn, stmts: stmts}, pool_state}
+    end
+  end
+
+  defp maybe_apply_migrations(conn, pool_state) do
+    # In exclusive_mode we need to migrate within the single pool connection
+    # because we _might_ be using an in-memory db. With an in-memory db, every
+    # connection has its own db... For pooled connections, we migrate once
+    # externally
+    if Keyword.get(pool_state, :exclusive_mode, false) do
+      with {:ok, _version} <- migrate(conn, pool_state) do
+        :ok
+      end
+    else
+      :ok
     end
   end
 
@@ -130,26 +163,26 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
     {:ok, client_state, pool_state}
   end
 
-  @pragmas [
-    # for our current deployment mode synchronous = OFF would be enough (hand
-    # data to kernel, don't fsync) but for oss deploys we should keep it at a
-    # higher durability setting
-    "PRAGMA synchronous=OFF",
-    # Reduce page cache since hot-path lookups now use ETS cache.
-    # -512 means 512KB (negative values are in KiB, default is often 2MB)
-    "PRAGMA cache_size=-4096"
-  ]
-
   def open(pool_state) do
     with {:ok, db_path} <- db_path(pool_state),
          {:ok, conn} <- Sqlite3.open(db_path, open_opts(pool_state)) do
-      configure_db(conn)
+      configure_db(conn, pool_state)
     end
   end
 
   defp open_opts(pool_state) do
     case Keyword.get(pool_state, :mode, :readwrite) do
       :read ->
+        # nomutex is safe because we're enforcing use by a single "thread" via the pool
+        #
+        # see: https://sqlite.org/threadsafe.html
+        #
+        # > The SQLITE_OPEN_NOMUTEX flag causes the database connection to be in the multi-thread mode
+        #
+        # > Multi-thread. In this mode, SQLite can be safely used by multiple
+        # > threads provided that no single database connection nor any object
+        # > derived from database connection, such as a prepared statement, is
+        # > used in two or more threads at the same time.
         [mode: [:readonly, :nomutex]]
 
       _ ->
@@ -157,9 +190,13 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
     end
   end
 
+  def close(conn) when is_raw_connection(conn) do
+    Sqlite3.close(conn)
+  end
+
   def checkout!(stack_id, label, function, timeout \\ 10_000) do
     NimblePool.checkout!(
-      pool_name(stack_id, :read),
+      PoolRegistry.pool_name(stack_id, :read),
       {:checkout, label},
       fn _from, conn -> {function.(conn), conn} end,
       timeout
@@ -168,7 +205,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
 
   def checkout_write!(stack_id, label, function, timeout \\ 10_000) do
     NimblePool.checkout!(
-      pool_name(stack_id, :write),
+      PoolRegistry.pool_name(stack_id, :write),
       {:checkout, label},
       fn _from, conn ->
         {
@@ -252,10 +289,40 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
     end
   end
 
-  defp configure_db(conn) do
-    with :ok <- execute_all(conn, @pragmas) do
+  defp configure_db(conn, pool_state) do
+    with :ok <- execute_all(conn, pragmas(pool_state)) do
       {:ok, conn}
     end
+  end
+
+  @pragma_defaults [
+    # for our current deployment mode synchronous = OFF is enough (hand
+    # data to kernel, don't fsync) but for oss deploys we should keep it at a
+    # higher durability setting
+    synchronous: "OFF",
+    # Default to a beefy page cache size because we want decent read performance
+    # Multiplied by 1024, because SQLite works in KiB but we configure in bytes.
+    cache_size: 4096 * 1024
+  ]
+
+  def default!(pragma) do
+    Keyword.fetch!(@pragma_defaults, pragma)
+  end
+
+  def defaults do
+    @pragma_defaults
+  end
+
+  defp pragmas(pool_state) do
+    [
+      "PRAGMA synchronous=#{pragma_value(pool_state, :synchronous)}",
+      # Divide by 1024 because we configure in bytes but SQLite works in KiB
+      "PRAGMA cache_size=-#{div(pragma_value(pool_state, :cache_size), 1024)}"
+    ]
+  end
+
+  defp pragma_value(opts, pragma) do
+    Keyword.get(opts, pragma, default!(pragma))
   end
 
   def execute(conn, sql) when is_raw_connection(conn) and is_binary(sql) do
@@ -349,10 +416,31 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
     version =
       "v#{Electric.ShapeCache.ShapeStatus.version()}_#{@schema_version}@otp-#{otp_version}"
 
-    with {:ok, storage_dir} <- Keyword.fetch(pool_state, :storage_dir),
-         path = Path.join(storage_dir, "meta/shape-db/#{version}.sqlite"),
-         :ok <- File.mkdir_p(Path.dirname(path)) do
-      {:ok, path}
+    with {:ok, storage_dir} <- Keyword.fetch(pool_state, :storage_dir) do
+      case storage_dir do
+        ":memory:" ->
+          if Keyword.get(pool_state, :exclusive_mode, false) do
+            Logger.info("ShapeDb using in-memory database")
+            {:ok, ":memory:"}
+          else
+            Logger.error(
+              "Enable exclusive_mode (ELECTRIC_SHAPE_DB_EXCLUSIVE_MODE=true) to use an in-memory database"
+            )
+
+            {:error, "Cannot use :memory: database without exclusive_mode"}
+          end
+
+        storage_dir ->
+          path = Path.join(storage_dir, "meta/shape-db/#{version}.sqlite")
+
+          with :ok <- File.mkdir_p(Path.dirname(path)) do
+            if Keyword.get(pool_state, :mode) == :write do
+              Logger.info("Shape database file: #{inspect(path)}")
+            end
+
+            {:ok, path}
+          end
+      end
     end
   end
 

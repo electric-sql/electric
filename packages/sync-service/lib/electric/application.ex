@@ -146,7 +146,16 @@ defmodule Electric.Application do
         conn_max_requests: get_env(opts, :conn_max_requests),
         process_spawn_opts: get_env(opts, :process_spawn_opts)
       ],
-      manual_table_publishing?: get_env(opts, :manual_table_publishing?)
+      manual_table_publishing?: get_env(opts, :manual_table_publishing?),
+      shape_db_opts: [
+        exclusive_mode: get_env(opts, :shape_db_exclusive_mode),
+        storage_dir:
+          get_env_lazy(opts, :shape_db_storage_dir, fn ->
+            get_env(opts, :storage_dir)
+          end),
+        synchronous: get_env(opts, :shape_db_synchronous),
+        cache_size: get_env(opts, :shape_db_cache_size)
+      ]
     )
   end
 

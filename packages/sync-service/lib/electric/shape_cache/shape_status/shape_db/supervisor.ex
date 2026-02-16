@@ -3,50 +3,61 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Supervisor do
 
   alias Electric.ShapeCache.ShapeStatus.ShapeDb
 
+  require Logger
+
   def name(stack_ref) do
     Electric.ProcessRegistry.name(stack_ref, __MODULE__)
   end
 
-  def start_link(args) do
-    Supervisor.start_link(__MODULE__, args, name: name(args))
+  def start_link(opts) do
+    Supervisor.start_link(__MODULE__, opts, name: name(opts))
   end
 
-  def init(args) do
-    stack_id = Keyword.fetch!(args, :stack_id)
+  def init(opts) do
+    shape_db_opts = Keyword.fetch!(opts, :shape_db_opts)
+    stack_id = Keyword.fetch!(opts, :stack_id)
+    opts = Keyword.put(shape_db_opts, :stack_id, stack_id)
+    exclusive_mode = Keyword.get(opts, :exclusive_mode, false)
 
-    children = [
-      {ShapeDb.Migrator, args},
-      Supervisor.child_spec(
-        {
-          NimblePool,
-          # nomutex is safe because we're enforcing use by a single "thread" via the pool
-          #
-          # see: https://sqlite.org/threadsafe.html
-          #
-          # > The SQLITE_OPEN_NOMUTEX flag causes the database connection to be in the multi-thread mode
-          #
-          # > Multi-thread. In this mode, SQLite can be safely used by multiple
-          # > threads provided that no single database connection nor any object
-          # > derived from database connection, such as a prepared statement, is
-          # > used in two or more threads at the same time.
-          worker: {ShapeDb.Connection, Keyword.put(args, :mode, :read)},
-          pool_size: 2 * System.schedulers_online(),
-          name: ShapeDb.Connection.pool_name(stack_id, :read)
-        },
-        id: {:pool, :read}
-      ),
-      # a separate single-worker pool for writes as they have to be serialised
-      # to avoid busy errors
-      Supervisor.child_spec(
-        {NimblePool,
-         worker: {ShapeDb.Connection, Keyword.put(args, :mode, :write)},
-         pool_size: 1,
-         name: ShapeDb.Connection.pool_name(stack_id, :write)},
-        id: {:pool, :write}
-      ),
-      # write buffer for batching SQLite writes to avoid timeout cascades
-      {ShapeDb.WriteBuffer, args}
-    ]
+    read_pool_spec =
+      if exclusive_mode do
+        Logger.info("Starting ShapeDb in exclusive mode")
+        []
+      else
+        [
+          Supervisor.child_spec(
+            {
+              NimblePool,
+              worker: {ShapeDb.Connection, Keyword.put(opts, :mode, :read)},
+              pool_size: 2 * System.schedulers_online(),
+              name: ShapeDb.PoolRegistry.pool_name(stack_id, :read, exclusive_mode)
+            },
+            id: {:pool, :read}
+          )
+        ]
+      end
+
+    children =
+      Enum.concat([
+        [
+          {ShapeDb.PoolRegistry, stack_id: stack_id},
+          {ShapeDb.Migrator, opts}
+        ],
+        read_pool_spec,
+        [
+          # a separate single-worker pool for writes as they have to be serialised
+          # to avoid busy errors
+          Supervisor.child_spec(
+            {NimblePool,
+             worker: {ShapeDb.Connection, Keyword.put(opts, :mode, :write)},
+             pool_size: 1,
+             name: ShapeDb.PoolRegistry.pool_name(stack_id, :write, exclusive_mode)},
+            id: {:pool, :write}
+          ),
+          # write buffer for batching SQLite writes to avoid timeout cascades
+          {ShapeDb.WriteBuffer, opts}
+        ]
+      ])
 
     Supervisor.init(children, strategy: :one_for_one)
   end

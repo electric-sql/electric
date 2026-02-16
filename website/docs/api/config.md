@@ -307,6 +307,53 @@ The amount of time a consumer process remains active without receiving transacti
 
 </EnvVarConfig>
 
+### ELECTRIC_SHAPE_DB_EXCLUSIVE_MODE
+
+<EnvVarConfig
+    name="ELECTRIC_SHAPE_DB_EXCLUSIVE_MODE"
+    defaultValue="false"
+    example="true">
+
+Run the SQLite database holding active shape data over a single read-write connection, rather than a single writer and multiple reader connections. This avoids corruption issues when holding shape data on an NFS share (such as [AWS EFS](https://aws.amazon.com/efs/)). Set this to `true` and `ELECTRIC_SHAPE_DB_STORAGE_DIR=:memory:` to use an in-memory database.
+
+</EnvVarConfig>
+
+### ELECTRIC_SHAPE_DB_STORAGE_DIR
+
+<EnvVarConfig
+    name="ELECTRIC_SHAPE_DB_STORAGE_DIR"
+    defaultValue="$ELECTRIC_STORAGE_DIR"
+    example="/var/db/electric">
+
+The base path for the shapes SQLite database. Set this to a local, non-networked drive, for consistency and performance reasons when hosting shape data on a network volume, such as [AWS EFS](https://aws.amazon.com/efs/). This is an alternative to `ELECTRIC_SHAPE_DB_EXCLUSIVE_MODE` when a single read-write connection does not provide enough performance. Note that if the `ELECTRIC_SHAPE_DB_STORAGE_DIR` is ephemeral, e.g. instance specific, then on a re-deployment the shape log data in `$ELECTRIC_STORAGE_DIR` (hosted on EFS) will be ignored by the system, which will start empty.
+
+Enable `ELECTRIC_SHAPE_DB_EXCLUSIVE_MODE` and set `ELECTRIC_SHAPE_DB_EXCLUSIVE_MODE=:memory:` to use an ephemeral in-memory shape database.
+
+</EnvVarConfig>
+
+### ELECTRIC_SHAPE_DB_SYNCHRONOUS
+
+<EnvVarConfig
+    name="ELECTRIC_SHAPE_DB_SYNCHRONOUS"
+    defaultValue="OFF"
+    example="NORMAL">
+
+The value of the [`synchronous` PRAGMA](https://sqlite.org/pragma.html#pragma_synchronous) set on every connection to the shape db.
+
+
+</EnvVarConfig>
+
+### ELECTRIC_SHAPE_DB_CACHE_SIZE
+
+<EnvVarConfig
+    name="ELECTRIC_SHAPE_DB_CACHE_SIZE"
+    defaultValue="4096KiB"
+    example="8MiB">
+
+The value of the [`cache_size` PRAGMA](https://sqlite.org/pragma.html#pragma_cache_size) set on every connection to the shape db. Higher values will result in more memory usage but improved performance. Accepts values in bytes, or with a suffix such as "1024KB", "500KiB", "5MB", "8MiB", etc.
+
+</EnvVarConfig>
+
 ## Feature Flags
 
 Feature flags enable experimental or advanced features that are not yet enabled by default in production.

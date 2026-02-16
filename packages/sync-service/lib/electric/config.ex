@@ -39,6 +39,7 @@ defmodule Electric.Config do
   @build_env Mix.env()
 
   @known_feature_flags ~w[allow_subqueries tagged_subqueries]
+  @default_storage_dir "./persistent"
 
   @defaults [
     ## Database
@@ -70,7 +71,7 @@ defmodule Electric.Config do
     # This value should be tuned for the hardware it's running on.
     max_concurrent_requests: %{initial: 300, existing: 1000},
     ## Storage
-    storage_dir: "./persistent",
+    storage_dir: @default_storage_dir,
     storage: &Electric.Config.Defaults.storage/0,
     persistent_kv: &Electric.Config.Defaults.persistent_kv/0,
     cleanup_interval_ms: 10_000,
@@ -105,7 +106,13 @@ defmodule Electric.Config do
     feature_flags: if(Mix.env() == :test, do: @known_feature_flags, else: []),
     publication_refresh_period: 60_000,
     schema_reconciler_period: 60_000,
-    snapshot_timeout_to_first_data: :timer.seconds(30)
+    snapshot_timeout_to_first_data: :timer.seconds(30),
+    shape_db_exclusive_mode: false,
+    shape_db_storage_dir: @default_storage_dir,
+    # TODO: fix defaults to synchronous=NORMAL and shape_db_cache_size=2048
+    shape_db_synchronous:
+      Electric.ShapeCache.ShapeStatus.ShapeDb.Connection.default!(:synchronous),
+    shape_db_cache_size: Electric.ShapeCache.ShapeStatus.ShapeDb.Connection.default!(:cache_size)
   ]
 
   @installation_id_key "electric_installation_id"
@@ -449,6 +456,68 @@ defmodule Electric.Config do
 
   def parse_human_readable_time!(str) do
     case parse_human_readable_time(str) do
+      {:ok, result} -> result
+      {:error, message} -> raise Dotenvy.Error, message: message
+    end
+  end
+
+  @doc """
+  Parse human-readable memory/storage size string into bytes.
+
+  ## Examples
+
+    iex> parse_human_readable_size("1GiB")
+    {:ok, #{1024 * 1024 * 1024}}
+
+    iex> parse_human_readable_size("2.23GB")
+    {:ok, 2_230_000_000}
+
+    iex> parse_human_readable_size("256MiB")
+    {:ok, #{256 * 1024 * 1024}}
+
+    iex> parse_human_readable_size("377MB")
+    {:ok, 377_000_000}
+
+    iex> parse_human_readable_size("430KiB")
+    {:ok, #{430 * 1024}}
+
+    iex> parse_human_readable_size("142888KB")
+    {:ok, 142_888_000}
+
+    iex> parse_human_readable_size("123456789")
+    {:ok, 123_456_789}
+
+    iex> parse_human_readable_size("")
+    {:error, ~S'invalid size unit: "". Must be one of ["KB", "KiB", "MB", "MiB", "GB", "GiB"]'}
+
+    iex> parse_human_readable_size("foo")
+    {:error, ~S'invalid size unit: "foo". Must be one of ["KB", "KiB", "MB", "MiB", "GB", "GiB"]'}
+  """
+  @spec parse_human_readable_size(binary) :: {:ok, pos_integer} | {:error, binary}
+
+  @size_units ~w[KB KiB MB MiB GB GiB]
+
+  def parse_human_readable_size(str) do
+    with {num, suffix} <- Float.parse(str),
+         true <- num > 0,
+         suffix = String.trim(suffix),
+         true <- suffix == "" or suffix in @size_units do
+      {:ok, trunc(num * size_multiplier(suffix))}
+    else
+      _ -> {:error, "invalid size unit: #{inspect(str)}. Must be one of #{inspect(@size_units)}"}
+    end
+  end
+
+  defp size_multiplier(""), do: 1
+  defp size_multiplier("KB"), do: 1_000
+  defp size_multiplier("KiB"), do: 1024
+  defp size_multiplier("MB"), do: 1_000_000
+  defp size_multiplier("MiB"), do: 1024 * 1024
+  defp size_multiplier("GB"), do: 1_000_000_000
+  defp size_multiplier("GiB"), do: 1024 * 1024 * 1024
+
+  def parse_human_readable_size!(str) do
+    case parse_human_readable_size(str) do
       {:ok, result} -> result
       {:error, message} -> raise Dotenvy.Error, message: message
     end

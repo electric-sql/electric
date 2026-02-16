@@ -277,7 +277,12 @@ config :electric,
       "ELECTRIC_REPLICATION_IDLE_TIMEOUT",
       &Electric.Config.parse_human_readable_time!/1,
       nil
-    )
+    ),
+  shape_db_exclusive_mode: env!("ELECTRIC_SHAPE_DB_EXCLUSIVE_MODE", :boolean, false),
+  shape_db_storage_dir: env!("ELECTRIC_SHAPE_DB_STORAGE_DIR", :string, nil),
+  shape_db_synchronous: env!("ELECTRIC_SHAPE_DB_SYNCHRONOUS", :string, nil),
+  shape_db_cache_size:
+    env!("ELECTRIC_SHAPE_DB_CACHE_SIZE", &Electric.Config.parse_human_readable_size!/1, nil)
 
 if Electric.telemetry_enabled?() do
   # Disable the default telemetry_poller process since we start our own in

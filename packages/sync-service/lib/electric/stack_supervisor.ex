@@ -150,6 +150,17 @@ defmodule Electric.StackSupervisor do
                      "Specify whether tables are to be added to the Postgres publication automatically or by hand",
                    default: false
                  ],
+                 shape_db_opts: [
+                   type: :keyword_list,
+                   required: true,
+                   doc: "Configuration of the shape db sub-system",
+                   keys: [
+                     storage_dir: [type: :string, required: true],
+                     exclusive_mode: [type: :boolean],
+                     synchronous: [type: :string],
+                     cache_size: [type: :integer]
+                   ]
+                 ],
                  telemetry_opts: [type: :keyword_list, default: []],
                  telemetry_span_attrs: [
                    # Validates the OpenTelemetry.attributes_map() type
@@ -383,7 +394,7 @@ defmodule Electric.StackSupervisor do
         {Electric.MonitoredCoreSupervisor,
          stack_id: stack_id,
          connection_manager_opts: connection_manager_opts,
-         storage_dir: config.storage_dir}
+         shape_db_opts: config.shape_db_opts}
       ]
       |> Enum.reject(&is_nil/1)
 
