@@ -205,6 +205,7 @@ defmodule Electric.Replication.Eval.Decomposer do
 
   @type decomposition :: %{
     disjuncts: dnf(),
+    disjuncts_positions: [[position()]],  # polarity-stripped version for evaluate_dnf
     subexpressions: %{position() => subexpression()},
     position_count: non_neg_integer()
   }
@@ -615,16 +616,14 @@ defmodule Electric.Shapes.WhereClause do
   Evaluate DNF to determine if record is included.
 
   `active_conditions` stores effective values (negation already applied),
-  so we always check for `true` regardless of polarity. The `disjuncts`
-  input carries polarity on each literal (`{position, :positive | :negated}`)
-  because the same `decomposition.disjuncts` structure is reused here and
-  in move_handling (where polarity matters). This function destructures
-  the tuple but only uses the position.
+  so we only need position indices — polarity is irrelevant here.
+  Callers strip polarity before calling this function (see
+  `decomposition.disjuncts_positions`).
   """
-  @spec evaluate_dnf([boolean()], Decomposer.dnf()) :: boolean()
-  def evaluate_dnf(active_conditions, disjuncts) do
-    Enum.any?(disjuncts, fn conjunction ->
-      Enum.all?(conjunction, fn {pos, _polarity} ->
+  @spec evaluate_dnf([boolean()], [[Decomposer.position()]]) :: boolean()
+  def evaluate_dnf(active_conditions, disjuncts_positions) do
+    Enum.any?(disjuncts_positions, fn conjunction_positions ->
+      Enum.all?(conjunction_positions, fn pos ->
         Enum.at(active_conditions, pos, false) == true
       end)
     end)
@@ -860,7 +859,7 @@ def do_process_changes([change | rest], %State{shape: shape, dnf_context: dnf_co
   # Evaluate DNF to check inclusion
   included = WhereClause.evaluate_dnf(
     active_conditions,
-    dnf_context.decomposition.disjuncts
+    dnf_context.decomposition.disjuncts_positions
   )
 
   if included do
@@ -1430,14 +1429,14 @@ end
 describe "evaluate_dnf/2" do
   test "OR - any disjunct true means included" do
     # active_conditions: [true, false]
-    # disjuncts: [[{0, :positive}], [{1, :positive}]]
+    # disjuncts_positions: [[0], [1]]
     # Expected: true (first disjunct satisfied)
   end
 
-  test "AND - all literals in conjunction must be true" do
+  test "AND - all positions in conjunction must be true" do
     # active_conditions: [true, false]
-    # disjuncts: [[{0, :positive}, {1, :positive}]]
-    # Expected: false (second literal fails)
+    # disjuncts_positions: [[0, 1]]
+    # Expected: false (second position fails)
   end
 end
 ```
