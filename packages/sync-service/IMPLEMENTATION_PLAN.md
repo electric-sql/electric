@@ -1156,7 +1156,17 @@ active_conditions: [true, false]  # Opposite values
 
 **Modify** `lib/electric/shapes/consumer.ex`
 
-Use `DnfContext.has_valid_dnf?/1` instead of the removed `or_with_subquery?`/`not_with_subquery?` flags to decide whether to handle move-in/move-out or invalidate:
+This phase removes the entire `should_invalidate?` block, which currently guards on four conditions:
+
+1. `not tagged_subqueries_enabled?` — retained as the feature flag check
+2. `state.or_with_subquery?` — removed; DNF decomposition handles OR correctly
+3. `state.not_with_subquery?` — removed; negation is handled via polarity in the DNF
+4. `length(state.shape.shape_dependencies) > 1` — **also removed**; this was the guard
+   preventing *any* multi-subquery shape from working, even pure AND. With position-based
+   tagging and `DnfContext`, we can correctly attribute move-ins/move-outs to the specific
+   dependency that caused them via `dep_handle`, so this blanket restriction is no longer needed.
+
+Use `DnfContext.has_valid_dnf?/1` instead of the removed flags to decide whether to handle move-in/move-out or invalidate:
 
 ```elixir
 def handle_info({:materializer_changes, dep_handle, %{move_in: move_in, move_out: move_out}}, state) do
