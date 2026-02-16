@@ -601,9 +601,9 @@ defmodule Electric.Shapes.WhereClause do
   """
   @spec compute_active_conditions(Decomposer.decomposition(), map(), map(), map()) :: [boolean()]
   def compute_active_conditions(decomposition, record, used_refs, extra_refs) do
-    %{subexpressions: subexpressions} = decomposition
+    %{subexpressions: subexpressions, position_count: position_count} = decomposition
 
-    Enum.map(0..(map_size(subexpressions) - 1), fn position ->
+    Enum.map(0..(position_count - 1), fn position ->
       subexpr = Map.fetch!(subexpressions, position)
       value = evaluate_subexpression(subexpr, record, used_refs, extra_refs)
       # Apply negation so active_conditions stores the effective value.
@@ -939,8 +939,8 @@ end
 defp build_active_conditions_select(dnf_context) do
   case dnf_context do
     nil -> ""
-    %DnfContext{decomposition: %{subexpressions: subexpressions}} ->
-      conditions = Enum.map(0..(map_size(subexpressions) - 1), fn pos ->
+    %DnfContext{decomposition: %{subexpressions: subexpressions, position_count: position_count}} ->
+      conditions = Enum.map(0..(position_count - 1), fn pos ->
         subexpr = Map.fetch!(subexpressions, pos)
         sql = case subexpr do
           %{is_subquery: true} ->
