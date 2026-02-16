@@ -555,6 +555,20 @@ end
 
 This is one of two lifecycle points where `Decomposer.decompose/1` is called (see "Single Decomposition, Two Lifecycle Points" above). The result is used only to build the tag_structure; the full decomposition is re-derived at consumer startup in `DnfContext.from_shape/1`.
 
+`build_tag_structure_from_dnf` extracts column name(s) from **every** subexpression's AST — both subquery and non-subquery positions — using the same `Walker.reduce!` approach as `extract_columns_from_ast` (Phase 12). For a subquery position like `x IN (SELECT ...)`, the entry is `"x"` (or `{:hash_together, ["x", "y"]}` for row comparisons). For a non-subquery position like `status = 'active'`, the entry is `"status"` — the column(s) referenced by the comparison. In both cases, `fill_move_tags` hashes the actual column value from the row at that position.
+
+Worked example for `WHERE (x IN sq1 AND status = 'active') OR y IN sq2`:
+- Position 0: `x IN sq1` (subquery) → column `"x"`
+- Position 1: `status = 'active'` (non-subquery) → column `"status"`
+- Position 2: `y IN sq2` (subquery) → column `"y"`
+- Disjunct 0 uses positions {0, 1}, disjunct 1 uses position {2}
+- `tag_structure`: `[["x", "status", nil], [nil, nil, "y"]]`
+
+For a row with `x='a', status='active', y='b'`, `fill_move_tags` produces:
+`[["hash(a)", "hash(active)", nil], [nil, nil, "hash(b)"]]`
+
+This means the non-subquery hash is deterministic for rows matching the condition (all rows with `status = 'active'` produce the same hash at position 1). This is correct — the hash identifies the row's contribution at that position, and the value must match between Postgres-generated hashes (`make_condition_hashes_select`) and Elixir-generated hashes (`fill_move_tags`), which it does because both hash the raw column value using the same `namespace_value` + MD5 formula.
+
 2. Update `fill_move_tags/4` to produce the **internal 2D array** format (not slash-delimited strings). The existing `make_tags_from_pattern` currently calls `Enum.join("/")` to produce slash-delimited strings; this changes to return lists directly:
 
 **Directional** — shows data shape, hashing details use existing helpers:
