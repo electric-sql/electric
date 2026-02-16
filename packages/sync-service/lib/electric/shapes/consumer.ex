@@ -621,7 +621,10 @@ defmodule Electric.Shapes.Consumer do
         {lines, total_size} = prepare_log_entries(converted_changes, xid, shape)
         writer = ShapeCache.Storage.append_fragment_to_log!(lines, writer)
 
-        :ok = notify_materializer_of_new_changes(state, converted_changes)
+        # The Materializer must see all txn changes for correct tracking of move-ins and
+        # move-outs for the outer shape. The commit=false flag ensure it doesn't yet notify
+        # outer consumers about those changes.
+        :ok = notify_materializer_of_new_changes(state, converted_changes, commit: false)
 
         txn =
           PendingTxn.update_with_changes(
@@ -688,7 +691,7 @@ defmodule Electric.Shapes.Consumer do
 
     # Only notify if we actually wrote changes
     if txn.num_changes > 0 do
-      :ok = notify_clients_of_new_changes(state, txn_fragment.last_log_offset)
+      :ok = notify_new_changes(state, [], txn_fragment.last_log_offset)
 
       lag = calculate_replication_lag(txn_fragment.commit.commit_timestamp)
 
@@ -883,16 +886,20 @@ defmodule Electric.Shapes.Consumer do
 
   @spec notify_materializer_of_new_changes(
           state :: map(),
-          changes_or_bounds :: list(Changes.change()) | {LogOffset.t(), LogOffset.t()}
+          changes_or_bounds :: list(Changes.change()) | {LogOffset.t(), LogOffset.t()},
+          opts :: keyword()
         ) :: :ok
+  defp notify_materializer_of_new_changes(state, changes_or_bounds, opts \\ [])
+
   defp notify_materializer_of_new_changes(
          %{materializer_subscribed?: true} = state,
-         changes_or_bounds
+         changes_or_bounds,
+         opts
        ) do
-    Materializer.new_changes(Map.take(state, [:stack_id, :shape_handle]), changes_or_bounds)
+    Materializer.new_changes(Map.take(state, [:stack_id, :shape_handle]), changes_or_bounds, opts)
   end
 
-  defp notify_materializer_of_new_changes(_state, _changes_or_bounds), do: :ok
+  defp notify_materializer_of_new_changes(_state, _changes_or_bounds, _opts), do: :ok
 
   # termination and cleanup is now done in stages.
   # 1. register that we want the shape data to be cleaned up.
