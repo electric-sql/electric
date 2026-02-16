@@ -230,7 +230,7 @@ When value 'a' moves into subquery at position 0:
 
 1. **Broadcast activation** — Send `["move-in", {"position": 0, "values": ["hash(a)"]}]`
 
-2. **Query for new rows** — Rows not already in shape:
+2. **Query for new rows** — The WHERE clause is **reconstructed from the triggering disjunct's conditions only**, not derived from the original WHERE by string replacement. For `WHERE (x IN sq1 AND status = 'active') OR y IN sq2` with sq1 triggering at position 0:
    ```sql
    SELECT
      (true) as cond_0,  -- we know x='a' matches
@@ -242,7 +242,7 @@ When value 'a' moves into subquery at position 0:
      AND NOT (y IN (SELECT ...))  -- exclude rows already sent via disjunct 2
    ```
 
-The `NOT (other_disjuncts)` clause excludes rows already in the shape for another reason.
+   The base WHERE (`x = 'a' AND status = 'active'`) comes from the triggering disjunct (positions 0 and 1), with the triggering subquery replaced by `= 'a'`. The `AND NOT (other_disjuncts)` exclusion clause prevents fetching rows already in the shape via another disjunct. This approach avoids over-fetching rows that match via non-triggering disjuncts and makes the exclusion clauses meaningful — using the full original WHERE would redundantly include all disjuncts via OR.
 
 ### Snapshot Positioning
 

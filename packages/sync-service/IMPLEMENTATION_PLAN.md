@@ -682,28 +682,57 @@ end
 > decomposition to partition disjuncts into containing/not-containing the trigger position,
 > and only generates `AND NOT (...)` for disjuncts not containing it.
 
-#### 7a: DNF-aware exclusion clauses in `move_in_where_clause`
+#### 7a: DNF-aware WHERE clause in `move_in_where_clause`
 
-The function accepts `dnf_context` (from `Consumer.State`) to avoid re-decomposition:
+The function accepts `dnf_context` (from `Consumer.State`) to avoid re-decomposition.
+
+**Key design decision: triggering disjunct only.** For multi-disjunct shapes, the move-in
+WHERE clause is **reconstructed from the triggering disjunct's conditions**, not derived from
+the original `shape.where.query` by string replacement. The existing string-replacement
+approach works for single-disjunct shapes but is wrong for multi-disjunct: using the full
+original WHERE (which contains all disjuncts joined by OR) would over-fetch rows already
+present via other disjuncts and make the exclusion clauses redundant.
+
+For `WHERE (x IN sq1 AND status = 'active') OR y IN sq2`, when sq1 triggers with value `'a'`:
+- **Base WHERE** = triggering disjunct's conditions: `x = 'a' AND status = 'active'`
+  - The triggering subquery position uses `= ANY($1)` (or `= 'a'` for single values)
+  - Non-subquery positions use `SqlGenerator.to_sql(subexpr.ast)` to produce the SQL
+  - Other subquery positions in the same disjunct keep their original subquery SQL
+- **Exclusion clauses** = `AND NOT (...)` for each disjunct NOT containing the trigger position
+
+For single-disjunct shapes (including all existing single-subquery shapes), the existing
+string-replacement approach remains correct — the triggering disjunct IS the full WHERE.
 
 **Directional** — `move_in_where_clause` shows the dispatch structure:
 ```elixir
 def move_in_where_clause(shape, shape_handle, move_ins, dnf_context, opts) do
-  # ... existing code to find index, target_section, handle remove_not ...
+  dep_index = find_dep_index(shape, shape_handle)
+  decomposition = dnf_context.decomposition
 
-  # Build exclusion clauses for other subqueries to avoid duplicate inserts
-  # when a row is already in the shape via another disjunct.
-  # Uses the cached decomposition from DnfContext.
+  # For single-disjunct shapes, use existing string-replacement approach.
+  # For multi-disjunct, reconstruct WHERE from the triggering disjunct.
+  base_where =
+    if decomposition.position_count <= 1 or length(decomposition.disjuncts) == 1 do
+      # Single disjunct: existing approach — replace subquery in shape.where.query
+      build_single_disjunct_where(shape, dep_index, move_ins, opts)
+    else
+      # Multi-disjunct: reconstruct from triggering disjunct's conditions
+      trigger_positions = find_dnf_positions_for_dep_index(decomposition, dep_index)
+      triggering_disjunct = find_disjunct_containing(decomposition.disjuncts, trigger_positions)
+      build_disjunct_where(triggering_disjunct, decomposition, shape, dep_index, move_ins, opts)
+    end
+
+  # Build exclusion clauses for disjuncts NOT containing the trigger
   exclusion_clauses =
-    case dnf_context do
-      %DnfContext{decomposition: %{disjuncts: disjuncts} = decomposition}
-          when length(disjuncts) > 1 ->
-        build_dnf_exclusion_clauses(decomposition, shape_dependencies, comparison_expressions, index)
+    case decomposition do
+      %{disjuncts: disjuncts} when length(disjuncts) > 1 ->
+        build_dnf_exclusion_clauses(decomposition, shape.shape_dependencies,
+          shape.subquery_comparison_expressions, dep_index)
       _ ->
         ""
     end
 
-  # ... rest of function, appending exclusion_clauses to the query ...
+  {base_where <> exclusion_clauses, params}
 end
 
 # **Final** — find_dnf_positions_for_dep_index, build_dnf_exclusion_clauses,
