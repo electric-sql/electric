@@ -579,27 +579,13 @@ end
 
 #### `changes_only` Mode
 
-The `changes_only` mode uses the same tag/active_conditions computation as full sync — no separate path needed:
-
-```elixir
-# In change_handling.ex - changes_only mode includes same data as full sync
-def process_change_for_changes_only(change, shape, ctx) do
-  # Compute tags and active_conditions identically to snapshot mode
-  active_conditions = compute_active_conditions(change, shape, ctx.extra_refs)
-  tags = Shape.compute_tags(shape, change.record, ctx.stack_id, ctx.shape_handle)
-
-  # Include in change headers
-  %{change |
-    active_conditions: active_conditions,
-    move_tags: tags
-  }
-end
-```
+The `changes_only` mode uses the same tag/active_conditions computation as full sync — no separate path needed. The existing `do_process_changes/5` pipeline in `change_handling.ex` is already agnostic to `log_mode`, and the new DNF fields (`move_tags`, `active_conditions`) are computed by `Shape.convert_change` uniformly for all shapes.
 
 **Client behavior in `changes_only` mode:**
-- Clients build state incrementally
+- Clients build state incrementally from WAL changes only (no initial snapshot)
 - Move-in/move-out broadcasts for unknown rows are **ignored** (row not in local state)
 - Tags and `active_conditions` on insert/update/delete are processed normally
+- Since there is no snapshot, the client never needs to apply `moved_out` logic to snapshot rows — its DNF evaluator only handles tags/active_conditions on inserts, updates, and deletes
 
 #### Struct Changes Required
 
