@@ -139,6 +139,9 @@ defmodule Support.TestStorage do
   end
 
   @impl Electric.ShapeCache.Storage
+  def supports_txn_fragment_streaming?, do: false
+
+  @impl Electric.ShapeCache.Storage
   def append_fragment_to_log!(_, _) do
     raise "Intentionally not implemented. Use Support.StorageTracer instead"
   end

@@ -1245,6 +1245,8 @@ defmodule Electric.ShapeCache.PureFileStorage do
   This ensures that on crash/recovery, `fetch_latest_offset` returns the
   last committed transaction offset, not a mid-transaction offset.
   """
+  def supports_txn_fragment_streaming?, do: true
+
   def append_fragment_to_log!(txn_fragment_lines, state) do
     write_log_items(txn_fragment_lines, state, with: &WriteLoop.append_fragment_to_log!/3)
   end

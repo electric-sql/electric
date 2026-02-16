@@ -204,6 +204,15 @@ defmodule Electric.ShapeCache.Storage do
   @callback cleanup_all!(shape_opts()) :: any()
 
   @doc """
+  Whether this storage backend supports streaming transaction fragments
+  directly to storage via `append_fragment_to_log!/2` and `signal_txn_commit!/2`.
+
+  Storage backends that return `false` will only receive complete transactions
+  via `append_to_log!/2`.
+  """
+  @callback supports_txn_fragment_streaming?() :: boolean()
+
+  @doc """
   Compact operations in the log keeping the last N complete chunks intact
   """
   @callback compact(shape_opts(), keep_complete_chunks :: pos_integer()) :: :ok
@@ -369,6 +378,22 @@ defmodule Electric.ShapeCache.Storage do
   @impl __MODULE__
   def append_to_log!(log_items, {mod, shape_opts}) do
     {mod, mod.append_to_log!(log_items, shape_opts)}
+  end
+
+  @impl __MODULE__
+  def supports_txn_fragment_streaming? do
+    raise "supports_txn_fragment_streaming?/0 should be called on a specific storage module, " <>
+            "or use supports_txn_fragment_streaming?/1 with a storage tuple"
+  end
+
+  @doc """
+  Check if a storage backend supports txn fragment streaming.
+
+  Takes a storage tuple `{module, opts}` and delegates to the module's
+  `supports_txn_fragment_streaming?/0` callback.
+  """
+  def supports_txn_fragment_streaming?({mod, _opts}) do
+    mod.supports_txn_fragment_streaming?()
   end
 
   @impl __MODULE__
