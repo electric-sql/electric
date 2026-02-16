@@ -72,10 +72,10 @@ The current implementation can't track which conditions caused a row's inclusion
 Convert WHERE clauses to Disjunctive Normal Form (DNF), where each disjunct is a conjunction of atomic conditions. Each position in the DNF corresponds to a condition that can be independently activated/deactivated.
 
 For a row:
-- **Tags**: One flat array per disjunct, containing hashed values at positions that participate
+- **Tags**: One slash-delimited string per disjunct, with hashed values at positions that participate and empty segments for non-participating positions
 - **`active_conditions`**: Flat boolean array indicating which positions are currently satisfied
 
-Client evaluates: for each tag, AND the `active_conditions` at non-null positions, then OR all tag results.
+Client evaluates: for each tag, AND the `active_conditions` at non-empty positions, then OR all tag results.
 
 ### DNF Decomposition
 
@@ -111,8 +111,8 @@ Each row can have multiple tags (one per disjunct it could satisfy):
 Row with x='a', status='active', y='b':
 
 tags: [
-  [hash(a), hash(active), _],   # could match disjunct 1
-  [_, _, hash(b)]                # could match disjunct 2
+  "hash(a)/hash(active)/",   # could match disjunct 1
+  "//hash(b)"                # could match disjunct 2
 ]
 
 active_conditions: [true, true, false]
@@ -121,9 +121,9 @@ active_conditions: [true, true, false]
 # Position 2 (y IN subquery2): 'b' is NOT in subquery2 → false
 ```
 
-Client evaluation:
-- Tag 1: `active_conditions[0] AND active_conditions[1]` = true AND true = **true**
-- Tag 2: `active_conditions[2]` = **false**
+Client evaluation (split each tag on `/`, non-empty segments indicate participating positions):
+- Tag 1 `"hash(a)/hash(active)/"`: positions 0,1 → `active_conditions[0] AND active_conditions[1]` = true AND true = **true**
+- Tag 2 `"//hash(b)"`: position 2 → `active_conditions[2]` = **false**
 - Result: true OR false = **included**
 
 ### Negation Handling
@@ -140,7 +140,7 @@ Positions:
 - Position 1: x NOT IN subquery (negated)
 
 Row with x='a' where 'a' is in the subquery:
-tags: [[hash(a), _], [_, hash(a)]]
+tags: ["hash(a)/", "/hash(a)"]
 active_conditions: [true, false]
 # Position 0: 'a' is in subquery → true
 # Position 1: 'a' is in subquery, so NOT IN is false → false
@@ -176,10 +176,7 @@ Extend existing insert/update/delete messages with `active_conditions`:
   "value": {"id": 123, "title": "..."},
   "headers": {
     "operation": "insert",
-    "tags": [
-      ["abc123", "def456", null],
-      [null, null, "ghi789"]
-    ],
+    "tags": ["abc123/def456/", "//ghi789"],
     "active_conditions": [true, true, false]
   }
 }
@@ -486,9 +483,9 @@ When the outer shape receives an insert/update/delete from the replication strea
      "value": {...},
      "headers": {
        "operation": "update",
-       "tags": [["hash1", "hash2", null], [null, null, "hash3"]],
+       "tags": ["hash1/hash2/", "//hash3"],
        "active_conditions": [true, true, false],
-       "removed_tags": [["hash1", "hash4", null]]
+       "removed_tags": ["hash1/hash4/"]
      }
    }
    ```
@@ -502,7 +499,7 @@ For updates, if the row's tag-relevant columns changed, include `removed_tags` f
 Clients must:
 1. Store tags and `active_conditions` for each row
 2. Index rows by `(position, hash_value)` for efficient move-in/move-out handling
-3. Evaluate inclusion: OR over tags, where each tag is AND over non-null `active_conditions`
+3. Evaluate inclusion: OR over tags, where each tag (split on `/`) is AND over `active_conditions` at non-empty positions
 4. Delete rows when no tag evaluates to true after an `active_conditions` update
 
 Tag structure is self-describing — clients learn the DNF shape from the first row's tags.
@@ -542,7 +539,7 @@ Questions resolved during RFC development:
 | Question | Resolution |
 |----------|------------|
 | **Maximum disjuncts/positions** | No limit. Document trade-offs (storage, client indexing) and let users discover natural limits. |
-| **Tag storage format** | JSON arrays of hash strings, same as current implementation. |
+| **Tag storage format** | Slash-delimited strings (one per disjunct), with empty segments for non-participating positions. Matches current `Enum.join("/")` implementation. |
 | **Subquery result caching** | Use current approach: subqueries are their own shapes with materializers, multiple outer shapes can reference the same inner shape. |
 
 ## Definition of Success
