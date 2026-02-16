@@ -52,7 +52,9 @@ defmodule Electric.StackSupervisor.Telemetry do
         ),
         Telemetry.Metrics.last_value("electric.postgres.replication.slot_confirmed_flush_lsn_lag",
           unit: :byte
-        )
+        ),
+        Telemetry.Metrics.last_value("electric.shape_db.sqlite.total_memory", unit: :byte),
+        Telemetry.Metrics.last_value("electric.shape_db.sqlite.disk_size", unit: :byte)
       ]
     end
 
@@ -61,7 +63,8 @@ defmodule Electric.StackSupervisor.Telemetry do
         {__MODULE__, :count_shapes, [stack_id]},
         {__MODULE__, :report_write_buffer_size, [stack_id]},
         {__MODULE__, :report_retained_wal_size, [stack_id, config.replication_opts[:slot_name]]},
-        {__MODULE__, :report_disk_usage, [stack_id]}
+        {__MODULE__, :report_disk_usage, [stack_id]},
+        {__MODULE__, :report_shape_db_stats, [stack_id]}
       ]
     end
 
@@ -165,6 +168,20 @@ defmodule Electric.StackSupervisor.Telemetry do
           )
 
         :pending ->
+          :ok
+      end
+    end
+
+    def report_shape_db_stats(stack_id, _telemetry_opts) do
+      case Electric.ShapeCache.ShapeStatus.ShapeDb.statistics(stack_id) do
+        {:ok, stats} ->
+          Electric.Telemetry.OpenTelemetry.execute(
+            [:electric, :shape_db, :sqlite],
+            stats,
+            %{stack_id: stack_id}
+          )
+
+        _ ->
           :ok
       end
     end

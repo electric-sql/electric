@@ -510,4 +510,10 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDbTest do
                end)
     end
   end
+
+  describe "statistics" do
+    test "export memory and disk usage", ctx do
+      assert {:ok, %{total_memory: _, disk_size: _}} = ShapeDb.statistics(ctx.stack_id)
+    end
+  end
 end
