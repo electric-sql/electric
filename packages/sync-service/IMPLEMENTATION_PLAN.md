@@ -225,9 +225,10 @@ defmodule Electric.Replication.Eval.SqlGenerator do
   needs to embed a condition in a generated query (snapshot active_conditions,
   move-in exclusion clauses, etc.).
 
-  Raises `ArgumentError` for AST nodes that cannot be converted to SQL, so
-  unsupported operators are caught at shape creation time rather than at
-  query time.
+  Must handle every AST node type that `Parser` can produce. Raises
+  `ArgumentError` for unrecognised nodes so gaps are caught at shape
+  creation time, but the property-based round-trip test (see Tests below)
+  enforces that no parseable expression triggers this error.
   """
 
   alias Electric.Replication.Eval.Parser.{Const, Ref, Func, Array}
@@ -358,6 +359,48 @@ test "raises ArgumentError for unsupported AST node" do
   end
 end
 ```
+
+**Coverage invariant**: `SqlGenerator` must handle every AST node that `Parser` can produce.
+The hardcoded operator list above must stay in sync with `known_functions.ex` and the
+parser's built-in node types (boolean tests, casts, etc.). To enforce this, add a
+property-based round-trip test using `stream_data`:
+
+```elixir
+describe "round-trip: SQL → Parser → SqlGenerator → SQL" do
+  # Normalize by stripping outer parens and collapsing whitespace,
+  # so `((x = 1))` and `(x = 1)` compare equal.
+  defp normalize_sql(sql) do
+    sql
+    |> String.trim()
+    |> String.replace(~r/\s+/, " ")
+    |> strip_outer_parens()
+  end
+
+  defp strip_outer_parens("(" <> _ = s) do
+    if String.ends_with?(s, ")") do
+      inner = s |> String.slice(1..-2//1) |> String.trim()
+      # Only strip if the parens are balanced (not part of nested expr)
+      if balanced?(inner), do: strip_outer_parens(inner), else: s
+    else
+      s
+    end
+  end
+  defp strip_outer_parens(s), do: s
+
+  property "any parseable WHERE clause round-trips through SqlGenerator" do
+    check all sql <- where_clause_generator() do
+      {:ok, ast} = Parser.parse_and_validate_expression(sql)
+      regenerated = SqlGenerator.to_sql(ast)
+      assert normalize_sql(sql) == normalize_sql(regenerated)
+    end
+  end
+end
+```
+
+The `where_clause_generator/0` should produce arbitrary combinations of supported
+operators, column refs, constants, and logical connectives — ensuring that any expression
+the parser accepts can be regenerated. If `SqlGenerator.to_sql/1` raises `ArgumentError`
+for a parseable expression, the test fails, catching coverage gaps immediately.
 
 ### Phase 2: DnfContext and Shape Tag Structure
 
