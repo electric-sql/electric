@@ -537,6 +537,10 @@ defmodule Electric.Shapes.WhereClause do
   @spec evaluate_dnf([boolean()], [[{integer(), :positive | :negated}]]) :: boolean()
   def evaluate_dnf(active_conditions, disjuncts) do
     Enum.any?(disjuncts, fn conjunction ->
+      # Polarity is intentionally ignored here: active_conditions stores
+      # effective values (negation applied at computation time), so every
+      # position is simply checked for true. Polarity is used elsewhere
+      # (Decomposer for building DNF, move_handling for tag filtering).
       Enum.all?(conjunction, fn {pos, _polarity} ->
         Enum.at(active_conditions, pos, false) == true
       end)
