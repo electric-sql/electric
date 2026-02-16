@@ -174,12 +174,24 @@ This function is used in both `querying.ex` (for `active_conditions` SELECT colu
 
 ---
 
+## Code Block Convention
+
+Code blocks in this plan are marked as either **final** or **directional**:
+
+- **Final** — intended as the real implementation (or very close to it). Type specs, function signatures, and logic should be followed as written.
+- **Directional** — shows the shape of the solution but leaves details to the implementer. Function bodies may be sketched, error handling omitted, or variables left unresolved.
+
+When unmarked, assume directional.
+
+---
+
 ## Implementation Steps
 
 ### Phase 1: DNF Decomposer (New Module)
 
 **Create** `lib/electric/replication/eval/decomposer.ex`
 
+**Final** — types and module structure:
 ```elixir
 defmodule Electric.Replication.Eval.Decomposer do
   @moduledoc """
@@ -238,6 +250,7 @@ end
 
 Position assignment must be deterministic to ensure the same WHERE clause always produces the same position assignments across shape restarts:
 
+**Directional** — sorting strategy, not exact implementation:
 ```elixir
 def assign_positions(atomics) do
   # Sort atomics by their AST string representation for determinism
@@ -262,6 +275,7 @@ directory. Used by `querying.ex` (for `active_conditions` SELECT columns) and
 `subquery_moves.ex` (for exclusion clauses) — both call `SqlGenerator.to_sql/1` instead of
 inlining their own AST-to-SQL conversion.
 
+**Final** — complete implementation covering all operator types:
 ```elixir
 defmodule Electric.Replication.Eval.SqlGenerator do
   @moduledoc """
@@ -459,6 +473,7 @@ for a parseable expression, the test fails, catching coverage gaps immediately.
 
 Built inside `DnfContext.from_shape/1` using `shape.shape_dependencies_handles`:
 
+**Directional** — mapping logic, exact field access may differ:
 ```elixir
 # Inside DnfContext.from_shape/1
 defp build_position_to_dependency_map(decomposition, dep_handles) do
@@ -486,6 +501,7 @@ end
 
 #### Protocol Validation
 
+**Directional** — validation logic, location TBD:
 ```elixir
 # In lib/electric/shapes/api.ex or shape validation
 defp validate_protocol_compatibility(dnf_context, protocol_version) do
@@ -517,6 +533,7 @@ end
 
 1. Update `fill_tag_structure/1` to produce multi-disjunct tag structures using the decomposer. The `tag_structure` field already exists on Shape and is the right place for this — it's the pattern used to hash column values into tags. For DNF shapes it becomes a list of lists (one per disjunct) where each inner list has an entry per DNF position (`nil` for positions not in that disjunct, column name(s) for participating positions):
 
+**Directional** — shows structure, error propagation details may vary:
 ```elixir
 defp fill_tag_structure(shape) do
   case shape.where do
@@ -540,6 +557,7 @@ This is one of two lifecycle points where `Decomposer.decompose/1` is called (se
 
 2. Update `fill_move_tags/4` to produce the **internal 2D array** format (not slash-delimited strings). The existing `make_tags_from_pattern` currently calls `Enum.join("/")` to produce slash-delimited strings; this changes to return lists directly:
 
+**Directional** — shows data shape, hashing details use existing helpers:
 ```elixir
 def fill_move_tags(%Changes.NewRecord{record: record} = change, shape, stack_id, shape_handle) do
   tags = Enum.map(shape.tag_structure, fn disjunct_pattern ->
@@ -561,6 +579,7 @@ The conversion from internal 2D arrays to slash-delimited wire format happens in
 
 Remove invalidation flags and add `dnf_context`:
 
+**Directional** — shows field changes:
 ```elixir
 defstruct [
   # ... existing fields ...
@@ -590,6 +609,7 @@ The `DnfContext` holds all position-to-dependency mappings, negated position tra
 
 `compute_active_conditions` is called via `DnfContext.compute_active_conditions/4` which delegates here. The decomposition is passed in from the DnfContext, not read from the Shape.
 
+**Final** — `compute_active_conditions` and `evaluate_dnf`:
 ```elixir
 defmodule Electric.Shapes.WhereClause do
   @doc """
@@ -652,6 +672,7 @@ end
 
 The function accepts `dnf_context` (from `Consumer.State`) to avoid re-decomposition:
 
+**Directional** — `move_in_where_clause` shows the dispatch structure:
 ```elixir
 def move_in_where_clause(shape, shape_handle, move_ins, dnf_context, opts) do
   # ... existing code to find index, target_section, handle remove_not ...
@@ -670,6 +691,9 @@ def move_in_where_clause(shape, shape_handle, move_ins, dnf_context, opts) do
 
   # ... rest of function, appending exclusion_clauses to the query ...
 end
+
+# **Final** — find_dnf_positions_for_dep_index, build_dnf_exclusion_clauses,
+# and generate_disjunct_exclusion:
 
 # Find all DNF positions that correspond to a given dependency index.
 # A single dependency can appear at multiple positions (e.g., the same subquery
@@ -756,6 +780,7 @@ end
 
 #### 7b: Move-in/move-out control messages with position information
 
+**Directional** — message shape, exact header structure may evolve:
 ```elixir
 @doc """
 Generate move-in control message with position information.
@@ -798,6 +823,7 @@ end
 
 Two changes: add `active_conditions` to headers, and convert internal 2D tag arrays to slash-delimited wire format.
 
+**Directional** — `from_change` shows new fields; **Final** — `tags_to_wire`:
 ```elixir
 def from_change(%Changes.NewRecord{} = change, txids, _, _replica) do
   headers = %{
@@ -851,6 +877,7 @@ Clients must be updated to handle the new format before shapes with OR/NOT subqu
 
 Uses `state.dnf_context` (from `Consumer.State`) to compute active conditions and evaluate DNF inclusion. Per the RFC ("Replication Stream Updates"), `compute_active_conditions` replaces the separate `includes_record?` call — a single pass, not double evaluation.
 
+**Directional** — shows the new clause replacing the existing dependency path:
 ```elixir
 def do_process_changes([change | rest], %State{shape: shape, dnf_context: dnf_context} = state, ctx, acc, count) do
   # Compute active_conditions for this change via DnfContext
@@ -894,6 +921,7 @@ Clients maintain a map of tracked row keys. A move-in/move-out broadcast for a k
 
 **Modify `lib/electric/replication/changes.ex`:**
 
+**Directional** — shows new fields to add to each struct:
 ```elixir
 defmodule Electric.Replication.Changes.NewRecord do
   defstruct [
@@ -934,6 +962,7 @@ end
 > both: condition_hashes as a separate `text[]` column, and wire tags baked into the JSON.
 > Postgres deduplicates the MD5 calls across both columns.
 
+**Final** — `build_active_conditions_select` and `generate_subquery_condition_sql`:
 ```elixir
 defp build_active_conditions_select(dnf_context) do
   case dnf_context do
@@ -1009,6 +1038,7 @@ generation (including DNF-aware exclusion clauses) to `SubqueryMoves.move_in_whe
 (Phase 7a). This module handles the **orchestration** (which positions to activate/deactivate,
 when to query vs broadcast), not the SQL generation.
 
+**Directional** — orchestration flow, helper functions elided:
 ```elixir
 def process_move_ins(%State{dnf_context: dnf_context} = state, dep_handle, new_values) do
   # Find which positions this dependency affects via DnfContext
@@ -1077,6 +1107,14 @@ active_conditions: [true, false]  # Opposite values
 
 ### Phase 12: Position-aware `moved_out_tags` (condition_hashes + Filtering)
 
+> **TL;DR:** Move-in snapshot files currently store wire-format tags (slash-delimited strings).
+> Phase 4 changes wire tags to a multi-disjunct format that breaks the existing filtering
+> comparison. Fix: store one hash per DNF position (`condition_hashes`) separately from the
+> JSON, make filtering position-aware, and bump the storage version. Two parts: (1) add
+> `make_condition_hashes_select` to `querying.ex` and SELECT it alongside JSON in
+> `query_move_in`, (2) change `moved_out_tags` in `move_ins.ex` from `%{name => MapSet}` to
+> `%{name => %{position => MapSet}}` and update storage filtering to match.
+
 **CRITICAL — correctness requirement, not optional.** Without this phase, move-out filtering
 is silently broken for all multi-disjunct shapes.
 
@@ -1101,6 +1139,7 @@ Uses `extract_columns_from_ast/1` to get the column name(s) from each subexpress
 AST — the subexpression type itself only stores `{ast, is_subquery, negated}`, so column
 extraction is done here at SQL generation time rather than at decomposition time.
 
+**Final** — `extract_columns_from_ast` and `make_condition_hashes_select`:
 ```elixir
 # Extract column name(s) referenced by a subexpression's AST.
 # Returns a list of column names (single-element for simple `x IN (SELECT ...)`).
@@ -1140,6 +1179,7 @@ end
 `query_move_in/6` SELECTs both condition_hashes (separate column for binary file)
 and wire-format tags (embedded in JSON headers). Postgres deduplicates the MD5 calls:
 
+**Directional** — shows SELECT structure, exact column order may differ:
 ```elixir
 def query_move_in(conn, stack_id, shape_handle, shape, dnf_context, {where, params}) do
   table = Utils.relation_to_sql(shape.root_table)
@@ -1169,6 +1209,7 @@ end
 
 Change the type from `%{name => MapSet}` to `%{name => %{position => MapSet}}`:
 
+**Directional** — type change and update logic:
 ```elixir
 @type t() :: %__MODULE__{
   moved_out_tags: %{move_in_name() => %{non_neg_integer() => MapSet.t(String.t())}}
@@ -1194,6 +1235,7 @@ end
 
 Pass position through to `move_out_happened`. Extract position from control message patterns:
 
+**Directional** — extraction approach, exact message format depends on Phase 7b:
 ```elixir
 # Move-out: extract {position, hashes} from control message patterns
 patterns_by_pos =
@@ -1220,6 +1262,7 @@ Replace `all_parents_moved_out?/2` with position-aware filtering.
 
 On read, decode the sequential binary condition_hashes into a map for O(1) lookup:
 
+**Directional** — binary format handling:
 ```elixir
 defp read_condition_hashes(file, hash_count) do
   for i <- 0..(hash_count - 1)//1, into: %{} do
@@ -1234,6 +1277,7 @@ Position-aware filtering — ANY match means skip (the move-in query's exclusion
 clause already filtered out rows present via other disjuncts, so any match at a
 tracked position means this row was returned for a now-invalid reason):
 
+**Final** — `should_skip_for_moved_out?`:
 ```elixir
 defp should_skip_for_moved_out?(_condition_hashes, condition_hashes_to_skip)
      when map_size(condition_hashes_to_skip) == 0,
@@ -1287,6 +1331,7 @@ This phase removes the entire `should_invalidate?` block, which currently guards
    tagging and `DnfContext`, we can correctly attribute move-ins/move-outs to the specific
    dependency that caused them via `dep_handle`, so this blanket restriction is no longer needed.
 
+**Directional** — shows the simplified handler after invalidation removal:
 ```elixir
 def handle_info({:materializer_changes, dep_handle, %{move_in: move_in, move_out: move_out}}, state) do
   feature_flags = Electric.StackConfig.lookup(state.stack_id, :feature_flags, [])
