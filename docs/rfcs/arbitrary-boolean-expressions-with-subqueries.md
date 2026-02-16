@@ -538,7 +538,7 @@ Questions resolved during RFC development:
 
 | Question | Resolution |
 |----------|------------|
-| **Maximum disjuncts/positions** | No limit. Document trade-offs (storage, client indexing) and let users discover natural limits. |
+| **Maximum disjuncts/positions** | Hard limit of 100 disjuncts. DNF expansion is exponential, so an unconstrained WHERE clause can easily produce thousands of disjuncts that would overwhelm per-row tag arrays and client-side evaluation. The limit is enforced at shape creation time (400 error with a descriptive message). |
 | **Tag storage format** | Slash-delimited strings (one per disjunct), with empty segments for non-participating positions. Matches current `Enum.join("/")` implementation. |
 | **Subquery result caching** | Use current approach: subqueries are their own shapes with materializers, multiple outer shapes can reference the same inner shape. |
 
