@@ -303,7 +303,7 @@ defmodule Electric.Shapes.Consumer do
         |> MoveHandling.process_move_ins(dep_handle, move_in)
         |> MoveHandling.process_move_outs(dep_handle, move_out)
 
-      notify_new_changes(state, notification)
+      :ok = notify_new_changes(state, notification)
 
       {:noreply, state}
     end
@@ -328,7 +328,7 @@ defmodule Electric.Shapes.Consumer do
     end)
 
     {state, notification} = MoveHandling.query_complete(state, name, key_set, snapshot)
-    state = notify_new_changes(state, notification)
+    :ok = notify_new_changes(state, notification)
 
     # Garbage collect touches after query completes (no buffer consumption needed)
     state = State.gc_touch_tracker(state)
@@ -567,8 +567,9 @@ defmodule Electric.Shapes.Consumer do
       true ->
         # If we've ended up in this branch, we know for sure that the current fragment is only
         # one of two or more for the current transaction.
-        {state, persisted_changes} = write_txn_fragment_to_storage(state, txn_fragment)
-        maybe_complete_pending_txn(state, txn_fragment, persisted_changes)
+        state
+        |> write_txn_fragment_to_storage(txn_fragment)
+        |> maybe_complete_pending_txn(txn_fragment)
     end
   end
 
@@ -584,7 +585,7 @@ defmodule Electric.Shapes.Consumer do
   #   - it doesn't account for move-ins or move-outs or converting update operations into insert/delete
   #   - the fragment is written directly to storage if it has changes matching this shape
   #   - if the fragment has a commit message, the ShapeLogCollector is informed about the new flush boundary
-  defp write_txn_fragment_to_storage(state, %TransactionFragment{changes: []}), do: {state, []}
+  defp write_txn_fragment_to_storage(state, %TransactionFragment{changes: []}), do: state
 
   defp write_txn_fragment_to_storage(
          state,
@@ -620,6 +621,8 @@ defmodule Electric.Shapes.Consumer do
         {lines, total_size} = prepare_log_entries(converted_changes, xid, shape)
         writer = ShapeCache.Storage.append_fragment_to_log!(lines, writer)
 
+        :ok = notify_materializer_of_new_changes(state, converted_changes)
+
         txn =
           PendingTxn.update_with_changes(
             txn,
@@ -629,8 +632,7 @@ defmodule Electric.Shapes.Consumer do
             total_size
           )
 
-        {%{state | writer: writer, latest_offset: last_log_offset, pending_txn: txn},
-         converted_changes}
+        %{state | writer: writer, latest_offset: last_log_offset, pending_txn: txn}
     end
   end
 
@@ -671,15 +673,15 @@ defmodule Electric.Shapes.Consumer do
     [%{head | last?: true} | tail]
   end
 
-  defp maybe_complete_pending_txn(%State{} = state, %TransactionFragment{commit: nil}, _changes),
+  defp maybe_complete_pending_txn(%State{} = state, %TransactionFragment{commit: nil}),
     do: state
 
-  defp maybe_complete_pending_txn(%State{terminating?: true} = state, _fragment, _changes) do
+  defp maybe_complete_pending_txn(%State{terminating?: true} = state, _fragment) do
     # If we're terminating (e.g., due to truncate), don't complete the transaction
     state
   end
 
-  defp maybe_complete_pending_txn(%State{} = state, txn_fragment, persisted_changes) do
+  defp maybe_complete_pending_txn(%State{} = state, txn_fragment) do
     %{pending_txn: txn, writer: writer} = state
 
     # Signal commit to storage to allow it to advance its internal txn offset
@@ -687,7 +689,7 @@ defmodule Electric.Shapes.Consumer do
 
     # Only notify if we actually wrote changes
     if txn.num_changes > 0 do
-      notify_new_changes(state, persisted_changes, txn.last_log_offset)
+      :ok = notify_clients_of_new_changes(state, txn.last_log_offset)
 
       lag = calculate_replication_lag(txn_fragment.commit.commit_timestamp)
 
@@ -807,7 +809,7 @@ defmodule Electric.Shapes.Consumer do
           actual_num_changes: num_changes
         })
 
-        notify_new_changes(state, changes, last_log_offset)
+        :ok = notify_new_changes(state, changes, last_log_offset)
 
         lag = calculate_replication_lag(txn.commit_timestamp)
         OpenTelemetry.add_span_attributes(replication_lag: lag)
@@ -845,7 +847,7 @@ defmodule Electric.Shapes.Consumer do
     mark_for_removal(state)
   end
 
-  defp notify_new_changes(state, nil), do: state
+  defp notify_new_changes(_state, nil), do: :ok
 
   defp notify_new_changes(state, {changes, upper_bound}) do
     notify_new_changes(state, changes, upper_bound)
@@ -855,12 +857,17 @@ defmodule Electric.Shapes.Consumer do
           state :: map(),
           changes_or_bounds :: list(Changes.change()) | {LogOffset.t(), LogOffset.t()},
           latest_log_offset :: LogOffset.t()
-        ) :: map()
+        ) :: :ok
   defp notify_new_changes(state, changes_or_bounds, latest_log_offset) do
-    if state.materializer_subscribed? do
-      Materializer.new_changes(Map.take(state, [:stack_id, :shape_handle]), changes_or_bounds)
-    end
+    :ok = notify_materializer_of_new_changes(state, changes_or_bounds)
+    :ok = notify_clients_of_new_changes(state, latest_log_offset)
+  end
 
+  @spec notify_clients_of_new_changes(
+          state :: map(),
+          latest_log_offset :: LogOffset.t()
+        ) :: :ok
+  defp notify_clients_of_new_changes(state, latest_log_offset) do
     Registry.dispatch(
       Electric.StackSupervisor.registry_name(state.stack_id),
       state.shape_handle,
@@ -873,9 +880,20 @@ defmodule Electric.Shapes.Consumer do
             do: send(pid, {ref, :new_changes, latest_log_offset})
       end
     )
-
-    state
   end
+
+  @spec notify_materializer_of_new_changes(
+          state :: map(),
+          changes_or_bounds :: list(Changes.change()) | {LogOffset.t(), LogOffset.t()}
+        ) :: :ok
+  defp notify_materializer_of_new_changes(
+         %{materializer_subscribed?: true} = state,
+         changes_or_bounds
+       ) do
+    Materializer.new_changes(Map.take(state, [:stack_id, :shape_handle]), changes_or_bounds)
+  end
+
+  defp notify_materializer_of_new_changes(_state, _changes_or_bounds), do: :ok
 
   # termination and cleanup is now done in stages.
   # 1. register that we want the shape data to be cleaned up.
