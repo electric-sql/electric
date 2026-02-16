@@ -672,20 +672,33 @@ def move_in_where_clause(shape, shape_handle, move_ins, dnf_context, opts) do
   # ... rest of function, appending exclusion_clauses to the query ...
 end
 
+# Find all DNF positions that correspond to a given dependency index.
+# A single dependency can appear at multiple positions (e.g., the same subquery
+# referenced in different parts of the WHERE clause).
+defp find_dnf_positions_for_dep_index(decomposition, dep_index) do
+  Enum.flat_map(decomposition.subexpressions, fn {pos, subexpr} ->
+    if subexpr.is_subquery and extract_sublink_index(subexpr.ast) == dep_index do
+      [pos]
+    else
+      []
+    end
+  end)
+end
+
 # Build exclusion clauses using DNF decomposition.
 # Only excludes subqueries in disjuncts that do NOT contain the triggering dependency.
 # For example, in `(x IN sq1 AND y IN sq2) OR z IN sq3`:
 #   - When sq1 triggers, sq2 is in the same disjunct so NOT excluded; sq3 IS excluded
 defp build_dnf_exclusion_clauses(decomposition, shape_dependencies, comparison_expressions, trigger_dep_index) do
-  trigger_position = find_dnf_position_for_dep_index(decomposition, trigger_dep_index)
+  trigger_positions = find_dnf_positions_for_dep_index(decomposition, trigger_dep_index)
 
-  if is_nil(trigger_position) do
+  if trigger_positions == [] do
     ""
   else
-    # Partition disjuncts into those containing vs not containing the trigger
+    # Partition disjuncts into those containing vs not containing any trigger position
     {_containing, not_containing} =
       Enum.split_with(decomposition.disjuncts, fn conjunction ->
-        Enum.any?(conjunction, fn {pos, _polarity} -> pos == trigger_position end)
+        Enum.any?(conjunction, fn {pos, _polarity} -> pos in trigger_positions end)
       end)
 
     # Generate exclusion for each disjunct NOT containing the trigger
