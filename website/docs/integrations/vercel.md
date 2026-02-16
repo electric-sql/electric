@@ -64,7 +64,7 @@ const result = await streamText({
 
 - [Durable&nbsp;Streams documentation](/products/durable-streams)
 - [Vercel AI SDK documentation](https://sdk.vercel.ai)
-- [Durable&nbsp;Streams GitHub](https://github.com/electric-sql/durable-streams)
+- [Durable&nbsp;Streams GitHub](https://github.com/durable-streams/durable-streams)
 
 ## Deploying Electric on Vercel
 
