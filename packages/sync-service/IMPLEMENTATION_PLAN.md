@@ -1982,48 +1982,6 @@ end
 
 ---
 
-## Revised Order of Operations
-
-```
-Phase 1: DNF Decomposer
-    |
-    +---> Phase 1a: SQL Generator (no dependencies beyond Parser AST types)
-    |
-    v
-Phase 1.5: DnfContext (depends on Phase 1)
-    |
-    v
-Phase 2: Shape tag_structure + fill_move_tags (depends on Phase 1, NO new Shape fields)
-    |
-    +---> Phase 2.5: Protocol Validation (depends on Phase 2)
-    |
-    +---> Phase 3: Active Conditions (depends on Phase 1.5)
-    |         |
-    |         +---> Phase 4: Change Handling (depends on Phase 3, uses DnfContext)
-    |         |
-    |         +---> Phase 6: Log Items (depends on Phase 3 for active_conditions)
-    |
-    +---> Phase 5: Move Messages (depends on Phase 2)
-              |
-              v
-          Phase 7: Querying (depends on Phases 1a, 5, 6, uses DnfContext + SqlGenerator)
-
-Phase 8: Consumer State — holds DnfContext (can be parallel with Phases 3-7)
-    |
-    v
-Phase 9: Move Handling (depends on Phases 5, 8, uses DnfContext)
-    |
-    +---> Phase 10: Remove Invalidation (depends on Phase 9)
-    |
-    +---> Phase 12: Position-aware moved_out_tags (depends on Phases 2, 7, 9)
-          ^^^ REQUIRED for correctness — without this, moved_out_tags filtering
-              is silently broken for multi-disjunct shapes
-
-Phase 11: Elixir Client (depends on Phases 5, 6 for wire format definition)
-```
-
----
-
 ## Migration Checklist
 
 Before enabling `dnf_subqueries` feature flag in production:
