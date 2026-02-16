@@ -102,10 +102,6 @@ One string per disjunct, positions separated by `/`:
 
 On disk, condition_hashes are sequential (position 0 first, then 1, etc.). On read, decode into `%{0 => hash0, 1 => hash1, ...}` for O(1) position lookup. The JSON already contains wire-format tags in its headers — no Elixir-side tag derivation needed at splice time.
 
-#### Important: no `Enum.at` for positional access
-
-Elixir lists are linked lists — `Enum.at/2` is O(n). Anywhere we need index-based access (condition_hashes, active_conditions, moved_out_tags lookup), use maps with integer keys: `%{0 => val, 1 => val, ...}`.
-
 ## Current State Analysis
 
 ### Key Files and Their Roles
