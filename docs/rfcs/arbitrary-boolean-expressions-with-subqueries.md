@@ -7,7 +7,7 @@ contributors:
   - ilia
   - kev
 created: 2026-01-27
-last_updated: 2026-02-10
+last_updated: 2026-02-16
 prd: N/A
 prd_version: N/A
 ---
@@ -429,6 +429,31 @@ move-ins) and modifies the outer table, the client may see:
 This is a pre-existing property of Electric's subquery support (not introduced by this
 RFC) and applies equally to single-subquery and multi-subquery shapes.
 
+**Shapes with subqueries also break causal consistency.** Consider:
+
+```sql
+INSERT INTO projects (id, is_visible) VALUES ('p1', true), ('p2', false);
+INSERT INTO issues (id, project_id, text) VALUES ('i1', 'p1', ''), ('i2', 'p2', '');
+```
+
+With shape `SELECT * FROM issues WHERE project_id IN (SELECT id FROM projects WHERE is_visible = true)`, and changes:
+
+```sql
+UPDATE projects SET is_visible = true WHERE id = 'p2';
+UPDATE issues SET text = 'new text' WHERE id = 'i2';
+UPDATE issues SET text = 'new text' WHERE id = 'i1';
+```
+
+The client may briefly see issue `i1` with `text = 'new text'` but not see issue `i2` at
+all, despite `i2` having been made eligible for the shape (via `p2.is_visible = true`)
+*before* its text was updated. The move-in query for `i2` is async, so the direct update
+to `i1` can arrive first.
+
+**Future work:** We plan to restore both causal and transactional consistency by delaying
+the up-to-date marker until all pending move-in queries have completed and any
+transactions spanning the replication stream have been fully merged. This is out of scope
+for this RFC.
+
 The key guarantee we **do** maintain: the client will never see rows it shouldn't. The
 `moved_out_tags` mechanism ensures that rows which moved out of the shape while a move-in
 query was in flight are filtered from the results. The touch_tracker ensures that stale
@@ -580,6 +605,7 @@ Questions resolved during RFC development:
 |---------|------|--------|---------|
 | 1.0 | 2026-01-27 | rob | Initial version |
 | 1.1 | 2026-02-10 | rob | Add dual tag format (snapshot vs wire), `find_position_for_sublink` limitation |
+| 1.2 | 2026-02-16 | rob | Document causal consistency breakage and future work |
 
 ---
 
