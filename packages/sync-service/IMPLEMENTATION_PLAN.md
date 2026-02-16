@@ -25,7 +25,14 @@ defmodule Electric.Shapes.Consumer.DnfContext do
     negated_positions: MapSet.new()    # positions where condition is negated (NOT IN)
   ]
 
-  @doc "Build from a Shape and its dependency mappings. Returns nil if not needed."
+  @doc """
+  Build from a Shape and its dependency mappings. Returns nil if not needed.
+
+  Uses `shape.shape_dependencies_handles` to build the position-to-dependency
+  mapping. Calls `Decomposer.decompose/1` once; the result is cached on the struct
+  and should be used by all downstream consumers (querying, move_handling,
+  subquery_moves, etc.) rather than re-decomposing.
+  """
   def from_shape(shape)
 
   @doc "Which DNF positions does this dependency handle affect?"
@@ -44,7 +51,16 @@ end
 
 This keeps the `Shape` struct lean while giving the consumer everything it needs to process DNF-aware move-in/move-out operations. The `DnfContext` is computed once and stored in `Consumer.State`, passed to `move_handling`, `change_handling`, `subquery_moves`, and `querying` as needed. Functions that currently reach into `shape.dnf_decomposition` or `shape.position_to_dependency_map` should instead accept the `DnfContext` (or `nil` for non-DNF shapes).
 
-Re-decomposition should be avoided: `Decomposer.decompose/1` should be called once in `DnfContext.from_shape/1` and the result cached on the struct. Other call sites (subquery_moves, querying, etc.) should receive the decomposition from the `DnfContext` rather than re-running the decomposer.
+### Single Decomposition, Two Lifecycle Points
+
+`Decomposer.decompose/1` is called at two distinct lifecycle points:
+
+1. **Shape creation** (`Shape.new/5` and `Shape.from_json_safe/1`): `fill_tag_structure` calls the decomposer to build the multi-disjunct `tag_structure` that is persisted on the Shape.
+2. **Consumer startup** (`DnfContext.from_shape/1`): decomposes again to build position-to-dependency maps, negated position tracking, and the cached decomposition used throughout the consumer's lifetime.
+
+Since decomposition is deterministic (same AST always produces the same result), both calls produce identical output. This two-call pattern is acceptable because the calls happen at different lifecycle stages — shape creation may happen in a different process or even a different server restart from consumer startup.
+
+**Within the consumer's lifetime**, always use `DnfContext`'s cached decomposition. Never re-decompose in `querying.ex`, `subquery_moves.ex`, `move_handling.ex`, etc. — accept the decomposition from DnfContext instead.
 
 ### Data Formats: condition_hashes, tags, and wire format
 
@@ -70,7 +86,7 @@ One inner list per disjunct, with `nil` at non-participating positions:
 [["hash_x", "hash_status", nil], [nil, nil, "hash_y"]]
 ```
 
-- **Where**: `move_tags` on change structs, `fill_move_tags`, consumer processing
+- **Where**: `move_tags` on change structs, `fill_move_tags` output, consumer processing
 - **Purpose**: per-disjunct tag tracking for client-side inclusion evaluation
 
 #### 3. wire/API tags (slash-delimited per disjunct)
@@ -89,8 +105,8 @@ One string per disjunct, positions separated by `/`:
 - **Postgres SQL queries** (snapshot + move-in) generate both condition_hashes (as a separate `text[]` column) and wire-format tags (baked into the JSON headers string) directly from the underlying column values. The MD5 expressions are shared — Postgres deduplicates identical subexpressions.
 - **Binary snapshot write** stores condition_hashes from the separate column. The JSON column (with wire tags already embedded) is stored alongside.
 - **Binary snapshot read** decodes sequential condition_hashes into `%{position => hash}` map for filtering.
-- **`fill_move_tags`** in shape.ex computes the 2D tag array directly from the record for replication-stream changes.
-- **`log_items.ex`** converts 2D tags to slash-delimited wire format when building log entry headers.
+- **`fill_move_tags`** in `shape.ex` computes the **internal 2D array** directly from the record for replication-stream changes.
+- **`log_items.ex`** converts the internal 2D array to slash-delimited wire format when building log entry headers (via `Enum.map(tags, &Enum.join(&1, "/"))`).
 
 #### Binary move-in snapshot file format
 
@@ -102,6 +118,31 @@ One string per disjunct, positions separated by `/`:
 
 On disk, condition_hashes are sequential (position 0 first, then 1, etc.). On read, decode into `%{0 => hash0, 1 => hash1, ...}` for O(1) position lookup. The JSON already contains wire-format tags in its headers — no Elixir-side tag derivation needed at splice time.
 
+### Sublink Index Resolution
+
+When multiple subqueries reference the same column (e.g., `parent_id IN (SELECT ... WHERE category='a') OR parent_id IN (SELECT ... WHERE category='b')`), the sublink index (which dependency shape each subquery corresponds to) MUST be extracted directly from the AST node, NOT resolved by column-name matching.
+
+Column-name matching is ambiguous: both subexpressions have `column == "parent_id"`, so column matching always resolves to the first dependency, producing identical `active_conditions` for what should be distinct subqueries.
+
+Use `extract_sublink_index/1` to pattern-match on the AST's `sublink_membership_check` function node and extract the canonical `$sublink` index from its argument:
+
+```elixir
+# Resolve sublink index from AST — NOT from column name matching.
+# Each sublink_membership_check AST node carries a $sublink reference
+# that uniquely identifies its dependency, even when multiple subqueries
+# use the same column.
+defp extract_sublink_index(%Func{name: "sublink_membership_check", args: [_, sublink_ref]}) do
+  case sublink_ref.path do
+    ["$sublink", idx_str] -> String.to_integer(idx_str)
+    _ -> nil
+  end
+end
+
+defp extract_sublink_index(_), do: nil
+```
+
+This function is used in both `querying.ex` (for `active_conditions` SELECT columns) and `subquery_moves.ex` (for exclusion clauses). It should be defined once in a shared location (e.g., a helper in `SubqueryMoves` or a utility module) and referenced by both.
+
 ## Current State Analysis
 
 ### Key Files and Their Roles
@@ -109,6 +150,7 @@ On disk, condition_hashes are sequential (position 0 first, then 1, etc.). On re
 | File | Current Role | Changes Needed |
 |------|--------------|----------------|
 | `lib/electric/shapes/consumer/dnf_context.ex` | **(new)** | Holds DNF decomposition state, built from Shape |
+| `lib/electric/replication/eval/sql_generator.ex` | **(new)** | Converts AST back to SQL — used by querying.ex and subquery_moves.ex |
 | `lib/electric/shapes/shape/subquery_moves.ex` | Tag structure generation, move-out messages, move-in WHERE clause + exclusion clauses | Extend for DNF positions, DNF-aware exclusion clauses, accept DnfContext |
 | `lib/electric/shapes/consumer/state.ex` | Detects `or_with_subquery?`/`not_with_subquery?` to invalidate | Remove invalidation flags, hold DnfContext |
 | `lib/electric/shapes/consumer.ex` | Triggers invalidation on OR/NOT with subqueries | Handle multiple positions |
@@ -117,8 +159,7 @@ On disk, condition_hashes are sequential (position 0 first, then 1, etc.). On re
 | `lib/electric/shapes/shape.ex` | `fill_move_tags`, `convert_change` | Multi-disjunct tags — **no new struct fields** |
 | `lib/electric/shapes/where_clause.ex` | `includes_record?` boolean check | Per-position evaluation |
 | `lib/electric/shapes/querying.ex` | SQL for initial data, tags | Add `active_conditions` columns, add `condition_hashes` SELECT for move-in queries, accept DnfContext |
-| `lib/electric/log_items.ex` | Formats messages with tags | Add `active_conditions` to headers |
-| `lib/electric/replication/eval/sql_generator.ex` | **(new)** | Converts AST back to SQL — used by querying.ex and subquery_moves.ex |
+| `lib/electric/log_items.ex` | Formats messages with tags | Add `active_conditions` to headers, convert 2D tags to wire format |
 | `lib/electric/replication/eval/parser.ex` | Parses WHERE, handles SubLinks | No changes needed |
 | `lib/electric/replication/eval/walker.ex` | AST traversal | No changes needed |
 | `packages/elixir-client/.../tag_tracker.ex` | Client-side tag tracking, DNF eval, synthetic deletes | Slash-delimited normalization, `removed_tags` parsing, position-based indexing |
@@ -126,8 +167,8 @@ On disk, condition_hashes are sequential (position 0 first, then 1, etc.). On re
 
 ### Current Limitations Being Addressed
 
-1. **Lines 291-293 in `consumer.ex`**: Shape invalidation on OR/NOT with subqueries
-2. **Lines 145-146 in `consumer/state.ex`**: `or_with_subquery?` and `not_with_subquery?` flags
+1. **Lines 291-297 in `consumer.ex`**: Shape invalidation on OR/NOT with subqueries or multiple dependencies
+2. **Lines 32-33 in `consumer/state.ex`**: `or_with_subquery?` and `not_with_subquery?` flags
 3. **Single tag structure**: `tag_structure` is `[[column_name]]` - single disjunct
 4. **No `active_conditions`**: Client cannot determine which conditions are satisfied
 
@@ -168,6 +209,8 @@ defmodule Electric.Replication.Eval.Decomposer do
     position_count: non_neg_integer()
   }
 
+  @max_disjuncts 100
+
   @spec decompose(Parser.tree_part()) :: {:ok, decomposition()} | {:error, term()}
   def decompose(ast) do
     # Implementation:
@@ -175,7 +218,8 @@ defmodule Electric.Replication.Eval.Decomposer do
     # 2. Apply De Morgan's laws to push NOT inward
     # 3. Distribute AND over OR to get DNF
     # 4. Assign positions to each unique atomic condition
-    # 5. Return disjuncts as position references
+    # 5. Check complexity guard
+    # 6. Return disjuncts as position references
   end
 end
 ```
@@ -186,6 +230,8 @@ end
 - `distribute_and_over_or/1` - DNF conversion
 - `collect_atomics/1` - Extract atomic conditions
 - `assign_positions/1` - Map conditions to positions
+
+**Error handling**: If decomposition fails (e.g., unsupported AST structure) or the complexity guard triggers (`length(disjuncts) > @max_disjuncts`), return `{:error, reason}`. Callers during shape creation (`Shape.new/5`) propagate the error as a 400 response to the client with a descriptive message like `"WHERE clause too complex for DNF decomposition (N disjuncts exceeds limit of 100)"`. The shape is never created — there is no silent fallback to invalidation.
 
 #### Position Stability Algorithm
 
@@ -205,7 +251,7 @@ def assign_positions(atomics) do
 end
 ```
 
-### Phase 1a: SQL Generator (New Module)
+### Phase 2: SQL Generator (New Module)
 
 **Create** `lib/electric/replication/eval/sql_generator.ex`
 
@@ -366,7 +412,7 @@ parser's built-in node types (boolean tests, casts, etc.). To enforce this, add 
 property-based round-trip test using `stream_data`:
 
 ```elixir
-describe "round-trip: SQL → Parser → SqlGenerator → SQL" do
+describe "round-trip: SQL -> Parser -> SqlGenerator -> SQL" do
   # Normalize by stripping outer parens and collapsing whitespace,
   # so `((x = 1))` and `(x = 1)` compare equal.
   defp normalize_sql(sql) do
@@ -402,54 +448,15 @@ operators, column refs, constants, and logical connectives — ensuring that any
 the parser accepts can be regenerated. If `SqlGenerator.to_sql/1` raises `ArgumentError`
 for a parseable expression, the test fails, catching coverage gaps immediately.
 
-### Phase 2: DnfContext and Shape Tag Structure
+### Phase 3: DnfContext (New Module)
 
 **Create** `lib/electric/shapes/consumer/dnf_context.ex` (see "Key Architectural Constraint" above)
 
-**Modify** `lib/electric/shapes/shape.ex` — **no new struct fields**
-
-1. Update `fill_tag_structure/1` to produce multi-disjunct tag structures using the decomposer. The tag_structure field already exists on Shape and is the right place for this — it's the pattern used to hash column values into tags. For DNF shapes it becomes a list of lists (one per disjunct) instead of a single list:
-```elixir
-defp fill_tag_structure(shape) do
-  case shape.where do
-    nil -> shape
-    where ->
-      {:ok, decomposition} = Decomposer.decompose(where.eval)
-
-      # Build tag_structure as list of lists (one per disjunct)
-      tag_structure = build_tag_structure_from_dnf(decomposition)
-
-      %{shape | tag_structure: tag_structure}
-  end
-end
-```
-
-2. Update `fill_move_tags/4` for multi-disjunct tags:
-```elixir
-def fill_move_tags(%Changes.NewRecord{record: record} = change, shape, stack_id, shape_handle) do
-  tags = Enum.map(shape.tag_structure, fn disjunct_pattern ->
-    Enum.map(disjunct_pattern, fn
-      nil -> nil  # Position not in this disjunct
-      column_spec -> hash_column_value(column_spec, record, stack_id, shape_handle)
-    end)
-  end)
-
-  %{change | move_tags: tags}
-end
-```
-
-**Build DnfContext in Consumer.State init:**
-```elixir
-# In consumer/state.ex or consumer.ex init
-dnf_context = DnfContext.from_shape(shape)
-%State{state | dnf_context: dnf_context}
-```
-
-All DNF decomposition state (position maps, negated positions, etc.) lives on `dnf_context`, not on the Shape struct.
+`DnfContext.from_shape/1` calls `Decomposer.decompose/1` once and caches the result. All downstream consumers use this cached decomposition.
 
 #### Dependency Handle to Position Mapping
 
-Built inside `DnfContext.from_shape/1` — not on the Shape struct:
+Built inside `DnfContext.from_shape/1` using `shape.shape_dependencies_handles`:
 
 ```elixir
 # Inside DnfContext.from_shape/1
@@ -457,7 +464,10 @@ defp build_position_to_dependency_map(decomposition, dep_handles) do
   decomposition.subexpressions
   |> Enum.filter(fn {_pos, subexpr} -> subexpr.is_subquery end)
   |> Enum.map(fn {pos, subexpr} ->
-    dep_handle = find_matching_dependency_handle(subexpr, dep_handles)
+    # Use extract_sublink_index/1 (see "Sublink Index Resolution" above)
+    # to get the dependency index from the AST, NOT by column-name matching.
+    dep_index = extract_sublink_index(subexpr.ast)
+    dep_handle = Enum.at(dep_handles, dep_index)
     {pos, dep_handle}
   end)
   |> Map.new()
@@ -473,11 +483,10 @@ end
 
 **Note:** Same subquery can appear at multiple positions (e.g., `x IN sq AND y IN sq`).
 
-### Phase 2.5: Protocol Validation
+#### Protocol Validation
 
 ```elixir
 # In lib/electric/shapes/api.ex or shape validation
-# DnfContext is built early enough to use here, or pass the decomposition directly.
 defp validate_protocol_compatibility(dnf_context, protocol_version) do
   has_complex_subqueries? = dnf_context != nil and
     DnfContext.has_valid_dnf?(dnf_context) and
@@ -501,7 +510,80 @@ end
 - Server checks before shape creation
 - Returns 400 with descriptive error for v1 clients with complex shapes
 
-### Phase 3: Active Conditions Computation
+### Phase 4: Shape Tag Structure and fill_move_tags
+
+**Modify** `lib/electric/shapes/shape.ex` — **no new struct fields**
+
+1. Update `fill_tag_structure/1` to produce multi-disjunct tag structures using the decomposer. The `tag_structure` field already exists on Shape and is the right place for this — it's the pattern used to hash column values into tags. For DNF shapes it becomes a list of lists (one per disjunct) where each inner list has an entry per DNF position (`nil` for positions not in that disjunct, column name(s) for participating positions):
+
+```elixir
+defp fill_tag_structure(shape) do
+  case shape.where do
+    nil -> shape
+    where ->
+      case Decomposer.decompose(where.eval) do
+        {:ok, decomposition} ->
+          # Build tag_structure as list of lists (one per disjunct)
+          tag_structure = build_tag_structure_from_dnf(decomposition)
+          %{shape | tag_structure: tag_structure}
+
+        {:error, reason} ->
+          # Propagate error — shape creation fails with 400
+          raise "DNF decomposition failed: #{inspect(reason)}"
+      end
+  end
+end
+```
+
+This is one of two lifecycle points where `Decomposer.decompose/1` is called (see "Single Decomposition, Two Lifecycle Points" above). The result is used only to build the tag_structure; the full decomposition is re-derived at consumer startup in `DnfContext.from_shape/1`.
+
+2. Update `fill_move_tags/4` to produce the **internal 2D array** format (not slash-delimited strings). The existing `make_tags_from_pattern` currently calls `Enum.join("/")` to produce slash-delimited strings; this changes to return lists directly:
+
+```elixir
+def fill_move_tags(%Changes.NewRecord{record: record} = change, shape, stack_id, shape_handle) do
+  tags = Enum.map(shape.tag_structure, fn disjunct_pattern ->
+    Enum.map(disjunct_pattern, fn
+      nil -> nil  # Position not in this disjunct
+      column_spec -> hash_column_value(column_spec, record, stack_id, shape_handle)
+    end)
+  end)
+
+  %{change | move_tags: tags}
+end
+```
+
+The conversion from internal 2D arrays to slash-delimited wire format happens in `log_items.ex` (Phase 8), not here.
+
+### Phase 5: Consumer State Updates
+
+**Modify** `lib/electric/shapes/consumer/state.ex`
+
+Remove invalidation flags and add `dnf_context`:
+
+```elixir
+defstruct [
+  # ... existing fields ...
+  # REMOVE: or_with_subquery?: false,
+  # REMOVE: not_with_subquery?: false,
+  # ADD:
+  dnf_context: nil,  # %DnfContext{} - built from shape at init time
+]
+```
+
+Also remove `has_or_with_subquery?/1`, `has_not_with_subquery?/1`, and `subtree_has_sublink?/1` helper functions.
+
+Build DnfContext during initialization:
+
+```elixir
+@spec initialize_shape(uninitialized_t(), Shape.t()) :: uninitialized_t()
+def initialize_shape(%__MODULE__{} = state, shape) do
+  %{state | shape: shape, dnf_context: DnfContext.from_shape(shape)}
+end
+```
+
+The `DnfContext` holds all position-to-dependency mappings, negated position tracking, and the decomposition itself. No per-position state is added to `Shape` or `Consumer.State` directly — it all lives on the `DnfContext`.
+
+### Phase 6: Active Conditions Computation
 
 **Modify** `lib/electric/shapes/where_clause.ex`
 
@@ -531,16 +613,17 @@ defmodule Electric.Shapes.WhereClause do
 
   @doc """
   Evaluate DNF to determine if record is included.
-  active_conditions stores effective values (negation already applied),
-  so we always check for true regardless of polarity.
+
+  `active_conditions` stores effective values (negation already applied),
+  so we always check for `true` regardless of polarity. The `disjuncts`
+  input carries polarity on each literal (`{position, :positive | :negated}`)
+  because the same `decomposition.disjuncts` structure is reused here and
+  in move_handling (where polarity matters). This function destructures
+  the tuple but only uses the position.
   """
-  @spec evaluate_dnf([boolean()], [[{integer(), :positive | :negated}]]) :: boolean()
+  @spec evaluate_dnf([boolean()], Decomposer.dnf()) :: boolean()
   def evaluate_dnf(active_conditions, disjuncts) do
     Enum.any?(disjuncts, fn conjunction ->
-      # Polarity is intentionally ignored here: active_conditions stores
-      # effective values (negation applied at computation time), so every
-      # position is simply checked for true. Polarity is used elsewhere
-      # (Decomposer for building DNF, move_handling for tag filtering).
       Enum.all?(conjunction, fn {pos, _polarity} ->
         Enum.at(active_conditions, pos, false) == true
       end)
@@ -549,81 +632,7 @@ defmodule Electric.Shapes.WhereClause do
 end
 ```
 
-### Phase 4: Change Handling Updates
-
-**Modify** `lib/electric/shapes/consumer/change_handling.ex`
-
-Uses `state.dnf_context` (from `Consumer.State`) to compute active conditions and evaluate DNF inclusion. Per the RFC ("Replication Stream Updates"), `compute_active_conditions` should replace the separate `includes_record?` call — a single pass, not double evaluation.
-
-```elixir
-def do_process_changes([change | rest], %State{shape: shape, dnf_context: dnf_context} = state, ctx, acc, count) do
-  # Compute active_conditions for this change via DnfContext
-  active_conditions = DnfContext.compute_active_conditions(dnf_context, change.record, used_refs, ctx.extra_refs)
-
-  # Evaluate DNF to check inclusion
-  included = WhereClause.evaluate_dnf(
-    active_conditions,
-    dnf_context.decomposition.disjuncts
-  )
-
-  if included do
-    change_with_conditions = %{change | active_conditions: active_conditions}
-
-    case Shape.convert_change(shape, change_with_conditions, opts) do
-      [] -> do_process_changes(rest, state, ctx, acc, count)
-      [converted] ->
-        state = State.track_change(state, ctx.xid, converted)
-        do_process_changes(rest, state, ctx, [converted | acc], count + 1)
-    end
-  else
-    do_process_changes(rest, state, ctx, acc, count)
-  end
-end
-```
-
-#### `changes_only` Mode
-
-The `changes_only` mode uses the same tag/active_conditions computation as full sync — no separate path needed. The existing `do_process_changes/5` pipeline in `change_handling.ex` is already agnostic to `log_mode`, and the new DNF fields (`move_tags`, `active_conditions`) are computed by `Shape.convert_change` uniformly for all shapes.
-
-**Client behavior in `changes_only` mode:**
-- Clients build state incrementally from WAL changes only (no initial snapshot)
-- Move-in/move-out broadcasts for unknown rows are **ignored** (row not in local state)
-- Tags and `active_conditions` on insert/update/delete are processed normally
-- Since there is no snapshot, the client never needs to apply `moved_out` logic to snapshot rows — its DNF evaluator only handles tags/active_conditions on inserts, updates, and deletes
-
-#### Struct Changes Required
-
-**Modify `lib/electric/replication/changes.ex`:**
-
-```elixir
-defmodule Electric.Replication.Changes.NewRecord do
-  defstruct [
-    # ... existing fields ...
-    :move_tags,           # [[hash | nil]] - nested array per disjunct
-    :active_conditions,   # [boolean] - one per position
-    :removed_tags         # [[hash | nil]] - for updates only
-  ]
-end
-
-defmodule Electric.Replication.Changes.UpdatedRecord do
-  defstruct [
-    # ... existing fields ...
-    :move_tags,
-    :active_conditions,
-    :removed_tags  # Tags from old record that no longer apply
-  ]
-end
-
-defmodule Electric.Replication.Changes.DeletedRecord do
-  defstruct [
-    # ... existing fields ...
-    :move_tags,  # Tags at time of deletion (for client cleanup)
-    :active_conditions
-  ]
-end
-```
-
-### Phase 5: Move-in/Move-out Message Format + DNF-Aware Exclusion Clauses
+### Phase 7: Move-in/Move-out Message Format + DNF-Aware Exclusion Clauses
 
 **Modify** `lib/electric/shapes/shape/subquery_moves.ex`
 
@@ -640,17 +649,21 @@ end
 > decomposition to partition disjuncts into containing/not-containing the trigger position,
 > and only generates `AND NOT (...)` for disjuncts not containing it.
 
-#### 5a: DNF-aware exclusion clauses in `move_in_where_clause`
+#### 7a: DNF-aware exclusion clauses in `move_in_where_clause`
+
+The function accepts `dnf_context` (from `Consumer.State`) to avoid re-decomposition:
 
 ```elixir
-def move_in_where_clause(shape, shape_handle, move_ins, opts) do
+def move_in_where_clause(shape, shape_handle, move_ins, dnf_context, opts) do
   # ... existing code to find index, target_section, handle remove_not ...
 
   # Build exclusion clauses for other subqueries to avoid duplicate inserts
-  # when a row is already in the shape via another disjunct
+  # when a row is already in the shape via another disjunct.
+  # Uses the cached decomposition from DnfContext.
   exclusion_clauses =
-    case shape.where && Decomposer.decompose(shape.where.eval) do
-      {:ok, %{disjuncts: disjuncts} = decomposition} when length(disjuncts) > 1 ->
+    case dnf_context do
+      %DnfContext{decomposition: %{disjuncts: disjuncts} = decomposition}
+          when length(disjuncts) > 1 ->
         build_dnf_exclusion_clauses(decomposition, shape_dependencies, comparison_expressions, index)
       _ ->
         ""
@@ -705,7 +718,8 @@ defp generate_disjunct_exclusion(conjunction, decomposition, shape_dependencies,
   else
     conditions = Enum.flat_map(conjunction, fn {pos, polarity} ->
       info = Map.get(decomposition.subexpressions, pos)
-      case extract_sublink_index(info.ast) do  # See Phase 7 and Risk #9 — always use AST extraction, never column-name matching
+      # Use extract_sublink_index/1 — see "Sublink Index Resolution" above
+      case extract_sublink_index(info.ast) do
         nil -> []
         dep_index ->
           subquery_shape = Enum.at(shape_dependencies, dep_index)
@@ -728,11 +742,7 @@ defp generate_disjunct_exclusion(conjunction, decomposition, shape_dependencies,
 end
 ```
 
-> **TODO (DnfContext pass-through):** The above calls `Decomposer.decompose(shape.where.eval)`
-> directly. Once DnfContext is threaded through to `move_in_where_clause` (Phase 9), replace
-> with `dnf_context.decomposition` to avoid re-decomposition. See Risk #5.
-
-#### 5b: Move-in/move-out control messages with position information
+#### 7b: Move-in/move-out control messages with position information
 
 ```elixir
 @doc """
@@ -770,9 +780,11 @@ def make_move_out_control_message(shape, stack_id, shape_handle, position, value
 end
 ```
 
-### Phase 6: Log Items Format
+### Phase 8: Log Items Format
 
 **Modify** `lib/electric/log_items.ex`
+
+Two changes: add `active_conditions` to headers, and convert internal 2D tag arrays to slash-delimited wire format.
 
 ```elixir
 def from_change(%Changes.NewRecord{} = change, txids, _, _replica) do
@@ -784,10 +796,22 @@ def from_change(%Changes.NewRecord{} = change, txids, _, _replica) do
     op_position: change.log_offset.op_offset
   }
   |> put_if_true(:last, change.last?)
-  |> put_if_true(:tags, change.move_tags != [], change.move_tags)
+  |> put_if_true(:tags, change.move_tags != [], tags_to_wire(change.move_tags))
   |> put_if_true(:active_conditions, change.active_conditions != nil, change.active_conditions)
 
   [{change.log_offset, %{key: change.key, value: change.record, headers: headers}}]
+end
+
+# Convert internal 2D tag array to slash-delimited wire format.
+# [["hash_x", "hash_status", nil], [nil, nil, "hash_y"]]
+# → ["hash_x/hash_status/", "//hash_y"]
+defp tags_to_wire(tags) do
+  Enum.map(tags, fn disjunct ->
+    Enum.map_join(disjunct, "/", fn
+      nil -> ""
+      hash -> hash
+    end)
+  end)
 end
 ```
 
@@ -795,33 +819,108 @@ end
 
 **Current format** (single-subquery, flat):
 ```json
-{"tags": ["hash1/hash2"], "event": "move-out", "patterns": [{"pos": 0, "value": "hash"}]}
+{"tags": ["hash1/hash2"]}
 ```
 
-**New format** (multi-disjunct, nested):
+**New format** (multi-disjunct):
 ```json
-{"tags": [["hash1", "hash2", null]], "active_conditions": [true, true, false]}
+{"tags": ["hash1/hash2/", "//hash3"], "active_conditions": [true, true, false]}
 {"control": "move-out", "position": 0, "values": ["hash1", "hash2"]}
 ```
 
 **Migration strategy:**
-1. Feature flag `dnf_subqueries` controls new format
-2. Single-subquery shapes with flag disabled continue using flat format
-3. When flag enabled, all shapes use nested format
-4. Clients must be updated before enabling flag in production
+The existing `tagged_subqueries` feature flag already gates all subquery move-in/move-out support. The new multi-disjunct format is an extension of the same mechanism — single-subquery shapes produce tags with one entry (unchanged semantics), while multi-disjunct shapes produce multiple entries. No second feature flag is needed. The `tagged_subqueries` flag continues to be the single gate for all subquery tag support.
 
-### Phase 7: Querying Updates for Initial Snapshot
+Clients must be updated to handle the new format before shapes with OR/NOT subqueries are used (enforced by protocol version validation in Phase 3).
+
+### Phase 9: Change Handling Updates
+
+**Modify** `lib/electric/shapes/consumer/change_handling.ex`
+
+Uses `state.dnf_context` (from `Consumer.State`) to compute active conditions and evaluate DNF inclusion. Per the RFC ("Replication Stream Updates"), `compute_active_conditions` replaces the separate `includes_record?` call — a single pass, not double evaluation.
+
+```elixir
+def do_process_changes([change | rest], %State{shape: shape, dnf_context: dnf_context} = state, ctx, acc, count) do
+  # Compute active_conditions for this change via DnfContext
+  active_conditions = DnfContext.compute_active_conditions(dnf_context, change.record, used_refs, ctx.extra_refs)
+
+  # Evaluate DNF to check inclusion
+  included = WhereClause.evaluate_dnf(
+    active_conditions,
+    dnf_context.decomposition.disjuncts
+  )
+
+  if included do
+    change_with_conditions = %{change | active_conditions: active_conditions}
+
+    case Shape.convert_change(shape, change_with_conditions, opts) do
+      [] -> do_process_changes(rest, state, ctx, acc, count)
+      [converted] ->
+        state = State.track_change(state, ctx.xid, converted)
+        do_process_changes(rest, state, ctx, [converted | acc], count + 1)
+    end
+  else
+    do_process_changes(rest, state, ctx, acc, count)
+  end
+end
+```
+
+#### `changes_only` Mode
+
+The `changes_only` mode uses the same tag/active_conditions computation as full sync — no separate path needed. The existing `do_process_changes/5` pipeline in `change_handling.ex` is already agnostic to `log_mode`, and the new DNF fields (`move_tags`, `active_conditions`) are computed by `Shape.convert_change` uniformly for all shapes.
+
+**Client behavior in `changes_only` mode:**
+- Clients build state incrementally from WAL changes only (no initial snapshot)
+- Move-in/move-out broadcasts for unknown rows are **ignored** (row not in local state)
+- Tags and `active_conditions` on insert/update/delete are processed normally
+- Since there is no snapshot, the client never needs to apply `moved_out` logic to snapshot rows — its DNF evaluator only handles tags/active_conditions on inserts, updates, and deletes
+
+**How clients distinguish "unknown row" from "known row with all conditions false":**
+Clients maintain a map of tracked row keys. A move-in/move-out broadcast for a key not in this map is simply ignored. A broadcast for a key that IS in the map triggers active_conditions re-evaluation and possible synthetic delete. This is the same pattern as existing single-subquery `changes_only` handling.
+
+#### Struct Changes Required
+
+**Modify `lib/electric/replication/changes.ex`:**
+
+```elixir
+defmodule Electric.Replication.Changes.NewRecord do
+  defstruct [
+    # ... existing fields ...
+    :move_tags,           # [[hash | nil]] - 2D array, one inner list per disjunct
+    :active_conditions,   # [boolean] - one per position
+    :removed_tags         # [[hash | nil]] - for updates only
+  ]
+end
+
+defmodule Electric.Replication.Changes.UpdatedRecord do
+  defstruct [
+    # ... existing fields ...
+    :move_tags,
+    :active_conditions,
+    :removed_tags  # Tags from old record that no longer apply
+  ]
+end
+
+defmodule Electric.Replication.Changes.DeletedRecord do
+  defstruct [
+    # ... existing fields ...
+    :move_tags,  # Tags at time of deletion (for client cleanup)
+    :active_conditions
+  ]
+end
+```
+
+### Phase 10: Querying Updates for Initial Snapshot
 
 **Modify** `lib/electric/shapes/querying.ex`
 
 > **IMPORTANT — condition_hashes vs wire tags:** `querying.ex` generates two different
-> hash-based outputs: (1) wire/API tags sent to clients (slash-delimited per-disjunct via
-> `make_tags`, embedded in JSON headers), and (2) condition_hashes used internally for
-> `moved_out_tags` filtering (one hash per DNF position via `make_condition_hashes_select` —
-> see Phase 12). `query_move_in` SELECTs both: condition_hashes as a separate `text[]`
-> column, and wire tags baked into the JSON. The binary snapshot file stores
-> condition_hashes; the JSON (with wire tags) is stored alongside for serving. Postgres
-> deduplicates the MD5 calls across both columns.
+> hash-based outputs (see "Data Formats" above): (1) wire/API tags sent to clients
+> (slash-delimited per-disjunct via `make_tags`, embedded in JSON headers), and
+> (2) condition_hashes used internally for `moved_out_tags` filtering (one hash per DNF
+> position via `make_condition_hashes_select` — see Phase 12). `query_move_in` SELECTs
+> both: condition_hashes as a separate `text[]` column, and wire tags baked into the JSON.
+> Postgres deduplicates the MD5 calls across both columns.
 
 ```elixir
 defp build_active_conditions_select(dnf_context) do
@@ -837,7 +936,6 @@ defp build_active_conditions_select(dnf_context) do
             # Non-subquery conditions (field comparisons like status = 'active')
             # MUST be converted to real SQL — returning "true" is WRONG for OR
             # shapes where a row can be in the result via a different disjunct.
-            # Use SqlGenerator.to_sql/1 (Phase 1a) to convert the AST back to SQL.
             SqlGenerator.to_sql(subexpr.ast)
         end
         # For negated positions, wrap in NOT to produce the effective condition
@@ -852,36 +950,13 @@ defp build_active_conditions_select(dnf_context) do
 end
 ```
 
-> **IMPORTANT — sublink index resolution:** For subquery subexpressions, the sublink
-> index (which dependency shape this subquery corresponds to) MUST be extracted directly
-> from the AST node, NOT resolved by column-name matching. Column-name matching is
-> ambiguous when multiple subqueries reference the same column (e.g.,
-> `parent_id IN (SELECT ... WHERE category='a') OR parent_id IN (SELECT ... WHERE category='b')`).
-> Both subexpressions have `column == "parent_id"`, so column matching always resolves
-> to the first dependency, producing identical active_conditions for what should be
-> distinct subqueries.
->
-> Use `extract_sublink_index/1` to pattern-match on the AST's `sublink_membership_check`
-> function node and extract the canonical `$sublink` index from its argument:
+For subquery subexpressions, use `extract_sublink_index/1` (see "Sublink Index Resolution" above) to resolve the dependency index from the AST:
 
 ```elixir
-# Resolve sublink index from AST — NOT from column name matching.
-# Each sublink_membership_check AST node carries a $sublink reference
-# that uniquely identifies its dependency, even when multiple subqueries
-# use the same column.
-defp extract_sublink_index(%Func{name: "sublink_membership_check", args: [_, sublink_ref]}) do
-  case sublink_ref.path do
-    ["$sublink", idx_str] -> String.to_integer(idx_str)
-    _ -> nil
-  end
-end
-
-defp extract_sublink_index(_), do: nil
-
 # For subquery subexpressions, generate SQL like:
 #   ("parent_id" IN (SELECT id FROM parent WHERE category = 'a'))
 defp generate_subquery_condition_sql(subexpr, comparison_expressions, shape_dependencies) do
-  # Extract the sublink index directly from the AST — never match by column name
+  # Use extract_sublink_index/1 — see "Sublink Index Resolution" above
   sublink_index = extract_sublink_index(subexpr.ast)
 
   dep_shape = if sublink_index, do: Enum.at(shape_dependencies, sublink_index)
@@ -908,36 +983,19 @@ defp build_headers_part({schema, table}, additional_headers, tags, active_condit
 end
 ```
 
-### Phase 8: Consumer State Updates
-
-**Modify** `lib/electric/shapes/consumer/state.ex`
-
-Remove invalidation flags and add `dnf_context`:
-
-```elixir
-defstruct [
-  # ... existing fields ...
-  # REMOVE: or_with_subquery?: false,
-  # REMOVE: not_with_subquery?: false,
-  # ADD:
-  dnf_context: nil,  # %DnfContext{} - built from shape at init time
-]
-```
-
-The `DnfContext` holds all position-to-dependency mappings, negated position tracking, and the decomposition itself. No per-position state is added to `Shape` or `Consumer.State` directly — it all lives on the `DnfContext`.
-
-### Phase 9: Move Handling for Multiple Positions
+### Phase 11: Move Handling for Multiple Positions
 
 **Modify** `lib/electric/shapes/consumer/move_handling.ex`
 
 > **IMPORTANT:** This phase changes how move-in/move-out events are processed, but does NOT
 > update the `moved_out_tags` filtering that prevents stale query results. That is Phase 12,
-> which MUST also be implemented — without it, `moved_out_tags` compares bare hashes against
-> slash-delimited tag strings and never matches, silently allowing stale rows through.
+> which MUST be implemented immediately after — without it, `moved_out_tags` compares bare
+> hashes against slash-delimited tag strings and never matches, silently allowing stale
+> rows through.
 
 Uses `state.dnf_context` for position lookups and negation checks. Delegates WHERE clause
-generation (including DNF-aware exclusion clauses) to `SubqueryMoves.move_in_where_clause/4`
-— see Phase 5a. This module handles the **orchestration** (which positions to activate/deactivate,
+generation (including DNF-aware exclusion clauses) to `SubqueryMoves.move_in_where_clause/5`
+(Phase 7a). This module handles the **orchestration** (which positions to activate/deactivate,
 when to query vs broadcast), not the SQL generation.
 
 ```elixir
@@ -951,16 +1009,16 @@ def process_move_ins(%State{dnf_context: dnf_context} = state, dep_handle, new_v
 
   state =
     if negated_positions != [] do
-      # Move-in to subquery = deactivation of NOT IN condition → move-out
+      # Move-in to subquery = deactivation of NOT IN condition -> move-out
       broadcast_deactivation(state, negated_positions, new_values)
     else
       state
     end
 
   if positive_positions != [] do
-    # Move-in to subquery = activation of IN condition → query for new rows
-    # SubqueryMoves.move_in_where_clause handles DNF-aware exclusion (Phase 5a)
-    formed_where_clause = SubqueryMoves.move_in_where_clause(shape, dep_handle, values)
+    # Move-in to subquery = activation of IN condition -> query for new rows
+    # SubqueryMoves.move_in_where_clause handles DNF-aware exclusion (Phase 7a)
+    formed_where_clause = SubqueryMoves.move_in_where_clause(shape, dep_handle, values, dnf_context)
     do_move_in_with_where(state, dep_handle, new_values, formed_where_clause)
   else
     state
@@ -975,16 +1033,16 @@ def process_move_outs(%State{dnf_context: dnf_context} = state, dep_handle, remo
 
   state =
     if positive_positions != [] do
-      # Move-out from subquery = deactivation of IN condition → broadcast move-out
+      # Move-out from subquery = deactivation of IN condition -> broadcast move-out
       broadcast_deactivation(state, positive_positions, removed_values)
     else
       state
     end
 
   if negated_positions != [] do
-    # Move-out from subquery = activation of NOT IN condition → query for new rows
+    # Move-out from subquery = activation of NOT IN condition -> query for new rows
     # Pass remove_not: true to strip NOT from the WHERE clause
-    formed_where_clause = SubqueryMoves.move_in_where_clause(shape, dep_handle, values, remove_not: true)
+    formed_where_clause = SubqueryMoves.move_in_where_clause(shape, dep_handle, values, dnf_context, remove_not: true)
     do_move_in_with_where(state, dep_handle, removed_values, formed_where_clause)
   else
     state
@@ -1006,109 +1064,20 @@ tags: [[hash(a), nil], [nil, hash(a)]]  # Same hash, different positions
 active_conditions: [true, false]  # Opposite values
 ```
 
-### Phase 10: Remove Shape Invalidation
-
-**Modify** `lib/electric/shapes/consumer.ex`
-
-This phase removes the entire `should_invalidate?` block, which currently guards on four conditions:
-
-1. `not tagged_subqueries_enabled?` — retained as the feature flag check
-2. `state.or_with_subquery?` — removed; DNF decomposition handles OR correctly
-3. `state.not_with_subquery?` — removed; negation is handled via polarity in the DNF
-4. `length(state.shape.shape_dependencies) > 1` — **also removed**; this was the guard
-   preventing *any* multi-subquery shape from working, even pure AND. With position-based
-   tagging and `DnfContext`, we can correctly attribute move-ins/move-outs to the specific
-   dependency that caused them via `dep_handle`, so this blanket restriction is no longer needed.
-
-Use `DnfContext.has_valid_dnf?/1` instead of the removed flags to decide whether to handle move-in/move-out or invalidate:
-
-```elixir
-def handle_info({:materializer_changes, dep_handle, %{move_in: move_in, move_out: move_out}}, state) do
-  feature_flags = Electric.StackConfig.lookup(state.stack_id, :feature_flags, [])
-  tagged_subqueries_enabled? = "tagged_subqueries" in feature_flags
-
-  # REMOVE the invalidation logic for OR/NOT - DnfContext handles it
-  if not tagged_subqueries_enabled? do
-    stop_and_clean(state)
-  else
-    {state, notification} =
-      state
-      |> MoveHandling.process_move_ins(dep_handle, move_in)
-      |> MoveHandling.process_move_outs(dep_handle, move_out)
-
-    notify_new_changes(state, notification)
-    {:noreply, state}
-  end
-end
-```
-
-### Phase 11: Elixir Client Updates
-
-The Elixir client (`packages/elixir-client`) is our example client implementation and is used
-in the integration tests. It must handle the new wire format (slash-delimited tags,
-`active_conditions`, position-based move-in/move-out) correctly.
-
-**Modify** `packages/elixir-client/lib/electric/client/tag_tracker.ex`
-
-1. **Slash-delimited tag normalization**: Tags arrive as slash-delimited strings
-   (e.g., `"hash1/hash2/"`, `"//hash3"`). Normalize to 2D arrays internally:
-   `["hash1/", "/hash2"]` → `[["hash1", nil], [nil, "hash2"]]`
-
-2. **`removed_tags` normalization**: `removed_tags` arrive in the **same slash-delimited
-   format** as `tags`. They must be normalized through the same split pipeline before
-   comparison against internal position hashes. Without this, `filter_removed_tags` compares
-   bare hashes against raw slash-delimited strings — never matches.
-
-3. **DNF-based visibility evaluation**: `row_visible?/2` evaluates OR over disjuncts, where
-   each disjunct is AND over non-null `active_conditions` positions.
-
-4. **Position-based `tag_to_keys` index**: Index by `{position, hash_value}` tuples for
-   efficient move-in/move-out lookups.
-
-5. **Move-out synthetic deletes**: `generate_synthetic_deletes/4` deactivates positions
-   matching `{pos, value}` patterns and generates deletes only when no disjunct evaluates
-   to true.
-
-6. **Move-in activation**: `handle_move_in/4` activates positions for matching keys.
-
-```elixir
-# Key normalization — removed_tags must use the same pipeline as tags
-removed_tags_set =
-  removed_tags
-  |> normalize_tags()
-  |> Enum.flat_map(fn disjunct -> Enum.reject(disjunct, &is_nil/1) end)
-  |> MapSet.new()
-```
-
-**Modify** `packages/elixir-client/lib/electric/client/message/headers.ex`
-
-- Add `active_conditions` field to `Headers` struct
-- Parse `active_conditions` from incoming messages in `from_message/2`
-
-**Tests**: `packages/elixir-client/test/electric/client/tag_tracker_test.exs`
-
-```elixir
-describe "tag_tracker with DNF wire format" do
-  test "normalizes slash-delimited tags to 2D structure"
-  test "removed_tags in slash-delimited format are correctly filtered"
-  test "row_visible? evaluates DNF correctly"
-  test "generate_synthetic_deletes only deletes when all disjuncts unsatisfied"
-  test "handle_move_in activates correct positions"
-  test "position-based tag_to_keys index for multi-disjunct shapes"
-end
-```
-
 ### Phase 12: Position-aware `moved_out_tags` (condition_hashes + Filtering)
 
 **CRITICAL — correctness requirement, not optional.** Without this phase, move-out filtering
-is silently broken for all multi-disjunct shapes. The existing `moved_out_tags` mechanism
-(which prevents stale move-in query results from entering the log) compares bare hashes
-against values stored in snapshot files. When Phase 2 changes wire tags to slash-delimited
-per-disjunct strings (embedded in JSON), the old approach of storing wire tags in the binary
-file and filtering against them no longer works. The solution: store **condition_hashes**
-(one hash per DNF position) separately from the JSON. Additionally, filtering must be
-position-aware: a move-out at position 0 should not affect position 1 even if both
-positions contain the same hash (e.g., `x IN sq1 OR x IN sq2` where both reference the same column).
+is silently broken for all multi-disjunct shapes.
+
+The existing `moved_out_tags` mechanism (which prevents stale move-in query results from
+entering the log) compares bare hashes against values stored in snapshot files. When Phase 4
+changes wire tags to slash-delimited per-disjunct strings (embedded in JSON), the old
+approach of storing wire tags in the binary file and filtering against them no longer works.
+
+The solution uses the **condition_hashes** format (see "Data Formats" above): store one hash
+per DNF position separately from the JSON. Additionally, filtering must be position-aware:
+a move-out at position 0 should not affect position 1 even if both positions contain the
+same hash (e.g., `x IN sq1 OR x IN sq2` where both reference the same column).
 
 This phase has two parts:
 
@@ -1116,16 +1085,11 @@ This phase has two parts:
 
 **Modify** `lib/electric/shapes/querying.ex`
 
-The wire/API tags (sent to clients in JSON headers) remain slash-delimited per-disjunct —
-baked into the JSON by Postgres, unchanged. The binary move-in snapshot file stores
-**condition_hashes** separately: one hash per DNF position, used exclusively for
-`moved_out_tags` filtering.
-
 Add `make_condition_hashes_select/3` alongside the existing `make_tags/3`:
 
 ```elixir
-# make_tags:                  [[x, y], [nil, z]] → ["md5(x) || '/' || md5(y)", "'' || '/' || md5(z)"]
-# make_condition_hashes_select: positions [x, y, z] → ["md5(x)", "md5(y)", "md5(z)"]
+# make_tags:                    [[x, y], [nil, z]] -> ["md5(x)/md5(y)", "/md5(z)"]
+# make_condition_hashes_select: positions [x, y, z] -> ["md5(x)", "md5(y)", "md5(z)"]
 #
 # One hash per DNF position. No nils — every position has a condition with column(s)
 # that produce a hash for every row (NULL column values use the existing sentinel).
@@ -1153,7 +1117,7 @@ defp make_condition_hashes_select(dnf_context, stack_id, shape_handle) do
 end
 ```
 
-`query_move_in/5` SELECTs both condition_hashes (separate column for binary file)
+`query_move_in/6` SELECTs both condition_hashes (separate column for binary file)
 and wire-format tags (embedded in JSON headers). Postgres deduplicates the MD5 calls:
 
 ```elixir
@@ -1265,13 +1229,13 @@ defp should_skip_for_moved_out?(condition_hashes, condition_hashes_to_skip) do
 end
 ```
 
-Bump `@version` from 1 → 2 in `pure_file_storage.ex` to invalidate old-format snapshots.
+Bump `@version` from 1 -> 2 in `pure_file_storage.ex` to invalidate old-format snapshots. This means in-flight shapes will restart with fresh snapshots on deployment — a brief interruption, not data loss.
 
 Rename `tags` variables in binary read/write functions to `condition_hashes` for clarity.
 
 #### Why this is easy to miss
 
-This phase fixes the **interaction** between new multi-disjunct tag formats (Phase 2) and
+This phase fixes the **interaction** between new multi-disjunct tag formats (Phase 4) and
 pre-existing race-condition filtering in the storage layer. Each piece works correctly in
 isolation — the bug only manifests when wire-format tags (slash-delimited strings in JSON)
 are compared against bare hashes at filtering time. The solution is to store
@@ -1281,13 +1245,103 @@ move-out-while-move-in-in-flight race condition with a multi-disjunct shape.
 
 #### Files changed
 
-- `querying.ex` — add `make_condition_hashes_select/3`, SELECT condition_hashes as separate column alongside JSON with embedded wire tags in `query_move_in/5`
+- `querying.ex` — add `make_condition_hashes_select/3`, SELECT condition_hashes as separate column alongside JSON with embedded wire tags in `query_move_in/6`
 - `move_ins.ex` — change `moved_out_tags` type to `%{name => %{position => MapSet}}`, update `add_waiting/2` and `move_out_happened/3`
 - `move_handling.ex` — extract position from control message patterns, pass to `move_out_happened`
 - `storage.ex` — update `condition_hashes_to_skip` type in behaviour spec
 - `pure_file_storage.ex` — rename binary tag read/write to `condition_hashes`, decode into map on read, replace `all_parents_moved_out?` with `should_skip_for_moved_out?`, bump `@version`
 - `in_memory_storage.ex` — same filtering change
 - `storage_implementations_test.exs` — test position-aware filtering
+
+### Phase 13: Remove Shape Invalidation
+
+**Modify** `lib/electric/shapes/consumer.ex`
+
+This phase removes the entire `should_invalidate?` block, which currently guards on four conditions:
+
+1. `not tagged_subqueries_enabled?` — retained as the feature flag check
+2. `state.or_with_subquery?` — removed; DNF decomposition handles OR correctly
+3. `state.not_with_subquery?` — removed; negation is handled via polarity in the DNF
+4. `length(state.shape.shape_dependencies) > 1` — **also removed**; this was the guard
+   preventing *any* multi-subquery shape from working, even pure AND. With position-based
+   tagging and `DnfContext`, we can correctly attribute move-ins/move-outs to the specific
+   dependency that caused them via `dep_handle`, so this blanket restriction is no longer needed.
+
+```elixir
+def handle_info({:materializer_changes, dep_handle, %{move_in: move_in, move_out: move_out}}, state) do
+  feature_flags = Electric.StackConfig.lookup(state.stack_id, :feature_flags, [])
+  tagged_subqueries_enabled? = "tagged_subqueries" in feature_flags
+
+  if not tagged_subqueries_enabled? do
+    stop_and_clean(state)
+  else
+    {state, notification} =
+      state
+      |> MoveHandling.process_move_ins(dep_handle, move_in)
+      |> MoveHandling.process_move_outs(dep_handle, move_out)
+
+    notify_new_changes(state, notification)
+
+    {:noreply, state}
+  end
+end
+```
+
+### Phase 14: Elixir Client Updates
+
+The Elixir client (`packages/elixir-client`) is our example client implementation and is used
+in the integration tests. It must handle the new wire format (slash-delimited tags,
+`active_conditions`, position-based move-in/move-out) correctly.
+
+**Modify** `packages/elixir-client/lib/electric/client/tag_tracker.ex`
+
+1. **Slash-delimited tag normalization**: Tags arrive as slash-delimited strings
+   (e.g., `"hash1/hash2/"`, `"//hash3"`). Normalize to 2D arrays internally:
+   `["hash1/hash2/", "//hash3"]` -> `[["hash1", "hash2", ""], ["", "", "hash3"]]` -> replace `""` with `nil`
+
+2. **`removed_tags` normalization**: `removed_tags` arrive in the **same slash-delimited
+   format** as `tags`. They must be normalized through the same split pipeline before
+   comparison against internal position hashes. Without this, `filter_removed_tags` compares
+   bare hashes against raw slash-delimited strings — never matches.
+
+3. **DNF-based visibility evaluation**: `row_visible?/2` evaluates OR over disjuncts, where
+   each disjunct is AND over non-null `active_conditions` positions.
+
+4. **Position-based `tag_to_keys` index**: Index by `{position, hash_value}` tuples for
+   efficient move-in/move-out lookups.
+
+5. **Move-out synthetic deletes**: `generate_synthetic_deletes/4` deactivates positions
+   matching `{pos, value}` patterns and generates deletes only when no disjunct evaluates
+   to true.
+
+6. **Move-in activation**: `handle_move_in/4` activates positions for matching keys.
+
+```elixir
+# Key normalization — removed_tags must use the same pipeline as tags
+removed_tags_set =
+  removed_tags
+  |> normalize_tags()
+  |> Enum.flat_map(fn disjunct -> Enum.reject(disjunct, &is_nil/1) end)
+  |> MapSet.new()
+```
+
+**Modify** `packages/elixir-client/lib/electric/client/message/headers.ex`
+
+- Add `active_conditions` field to `Headers` struct
+- Parse `active_conditions` from incoming messages in `from_message/2`
+
+**Tests**: `packages/elixir-client/test/electric/client/tag_tracker_test.exs`
+
+```elixir
+describe "tag_tracker with DNF wire format" do
+  test "normalizes slash-delimited tags to 2D structure"
+  test "removed_tags in slash-delimited format are correctly filtered"
+  test "row_visible? evaluates DNF correctly"
+  test "generate_synthetic_deletes only deletes when all disjuncts unsatisfied"
+  test "handle_move_in activates correct positions"
+  test "position-based tag_to_keys index for multi-disjunct shapes"
+end
+```
 
 ---
 
@@ -1332,6 +1386,11 @@ describe "decompose/1" do
   test "nested NOT - double negation" do
     # WHERE NOT NOT (x IN subquery)
     # Expected: [[{0, :positive}]]
+  end
+
+  test "complexity guard rejects excessive disjuncts" do
+    # Build expression that would exceed @max_disjuncts
+    # Expected: {:error, :too_complex}
   end
 end
 ```
@@ -1393,7 +1452,7 @@ describe "OR with subqueries" do
   end
 
   test "tags have correct structure for multiple disjuncts", ctx do
-    # Verify tags: [[hash(project_id), null], [null, hash(assigned_to)]]
+    # Verify tags: ["hash(project_id)/", "/hash(assigned_to)"]
   end
 
   test "active_conditions array included in response", ctx do
@@ -1560,56 +1619,55 @@ end
 ```
 Phase 1: DNF Decomposer
     |
-    +---> Phase 1a: SQL Generator (no dependencies beyond Parser AST types)
+    +---> Phase 2: SQL Generator (no dependencies beyond Parser AST types)
     |
     v
-Phase 1.5: DnfContext (depends on Phase 1)
+Phase 3: DnfContext (depends on Phase 1)
     |
     v
-Phase 2: Shape tag_structure + fill_move_tags (depends on Phase 1, NO new Shape fields)
+Phase 4: Shape tag_structure + fill_move_tags (depends on Phase 1, NO new Shape fields)
     |
-    +---> Phase 2.5: Protocol Validation (depends on Phase 2)
-    |
-    +---> Phase 3: Active Conditions (depends on Phase 1.5)
+    +---> Phase 5: Consumer State — holds DnfContext (depends on Phase 3)
     |         |
-    |         +---> Phase 4: Change Handling (depends on Phase 3, uses DnfContext)
+    |         +---> Phase 6: Active Conditions (depends on Phases 3, 5)
+    |         |         |
+    |         |         +---> Phase 9: Change Handling (depends on Phase 6, uses DnfContext)
     |         |
-    |         +---> Phase 6: Log Items (depends on Phase 3 for active_conditions)
+    |         +---> Phase 11: Move Handling (depends on Phases 5, 7, uses DnfContext)
+    |                   |
+    |                   +---> Phase 12: Position-aware moved_out_tags
+    |                   |     ^^^ REQUIRED for correctness — without this, moved_out_tags
+    |                   |         filtering is silently broken for multi-disjunct shapes
+    |                   |
+    |                   +---> Phase 13: Remove Invalidation (depends on Phase 11)
     |
-    +---> Phase 5: Move Messages (depends on Phase 2)
-              |
-              v
-          Phase 7: Querying (depends on Phases 1a, 5, 6, uses DnfContext + SqlGenerator)
+    +---> Phase 7: Move Messages + Exclusion Clauses (depends on Phase 3)
+    |
+    +---> Phase 8: Log Items (depends on Phase 4 for tag format)
+    |
+    +---> Phase 10: Querying (depends on Phases 2, 3, 7)
 
-Phase 8: Consumer State — holds DnfContext (can be parallel with Phases 3-7)
-    |
-    v
-Phase 9: Move Handling (depends on Phases 5, 8, uses DnfContext)
-    |
-    +---> Phase 10: Remove Invalidation (depends on Phase 9)
-    |
-    +---> Phase 12: Position-aware moved_out_tags (depends on Phases 2, 7, 9)
-          ^^^ REQUIRED for correctness — without this, moved_out_tags filtering
-              is silently broken for multi-disjunct shapes
-
-Phase 11: Elixir Client (depends on Phases 5, 6 for wire format definition)
+Phase 14: Elixir Client (depends on Phases 7, 8 for wire format definition)
 ```
 
-**Recommended Implementation Order**:
-1. Phase 1 (Decomposer) - foundational, no dependencies
-2. Phase 1a (SQL Generator) - standalone module, depends only on Parser AST types; **must be done before Phase 7**
-3. Phase 1.5 (DnfContext) - wraps decomposer output, provides query API for consumers
-4. Phase 2 (Shape tag_structure + fill_move_tags) - uses decomposer, **no new Shape struct fields**
-5. Phase 8 (Consumer State) - holds DnfContext, built at init
-6. Phase 3 (Active Conditions) - uses DnfContext
-7. Phase 5 (Move Messages) - independent of Phase 3/4
-8. Phase 6 (Log Items) - uses new message format
-9. Phase 4 (Change Handling) - uses DnfContext for active conditions, replaces includes_record?
-10. Phase 7 (Querying) - uses DnfContext for decomposition, **SqlGenerator.to_sql/1 for non-subquery conditions**, avoids re-decomposing
-11. Phase 9 (Move Handling) - uses DnfContext for position lookups
-12. **Phase 12 (Position-aware moved_out_tags) - MUST follow Phase 9 immediately; fixes tag format mismatch in storage filtering**
-13. Phase 10 (Remove Invalidation) - final cleanup
-14. Phase 11 (Elixir Client) - must handle new wire format; used by integration tests
+**Implementation order** (phases are numbered to match):
+
+| Step | Phase | Name | Key dependency |
+|------|-------|------|----------------|
+| 1 | Phase 1 | DNF Decomposer | foundational, no dependencies |
+| 2 | Phase 2 | SQL Generator | standalone, depends only on Parser AST types |
+| 3 | Phase 3 | DnfContext | wraps decomposer output |
+| 4 | Phase 4 | Shape tag_structure + fill_move_tags | uses decomposer, **no new Shape struct fields** |
+| 5 | Phase 5 | Consumer State | holds DnfContext, built at init |
+| 6 | Phase 6 | Active Conditions | uses DnfContext |
+| 7 | Phase 7 | Move Messages + Exclusion Clauses | uses DnfContext for exclusion |
+| 8 | Phase 8 | Log Items | 2D-to-wire tag conversion |
+| 9 | Phase 9 | Change Handling | uses DnfContext, replaces `includes_record?` |
+| 10 | Phase 10 | Querying | uses DnfContext + SqlGenerator |
+| 11 | Phase 11 | Move Handling | uses DnfContext for position routing |
+| 12 | Phase 12 | Position-aware moved_out_tags | **MUST follow Phase 11 immediately** |
+| 13 | Phase 13 | Remove Invalidation | final cleanup |
+| 14 | Phase 14 | Elixir Client | must handle new wire format; used by integration tests |
 
 ---
 
@@ -1618,7 +1676,7 @@ Phase 11: Elixir Client (depends on Phases 5, 6 for wire format definition)
 ### Technical Risks
 
 1. **DNF Explosion**: Complex WHERE clauses can produce exponentially many disjuncts
-   - Mitigation: Add a complexity guard — reject shapes where `length(disjuncts) > 100` with a descriptive error at shape creation time
+   - Mitigation: Complexity guard in `Decomposer.decompose/1` — reject shapes where `length(disjuncts) > 100` with a descriptive error at shape creation time (400 response)
    - Document reasonable limits (~10 subqueries)
 
 2. **Position Stability**: If positions change between shape restarts, clients will have stale `active_conditions`
@@ -1632,21 +1690,23 @@ Phase 11: Elixir Client (depends on Phases 5, 6 for wire format definition)
    - Mitigation: Follow PostgreSQL semantics exactly
    - Test: Include NULL value tests
 
-5. **Avoid re-decomposition**: `Decomposer.decompose/1` must be called once in `DnfContext.from_shape/1` and the result passed through. Do not re-decompose at other call sites (subquery_moves, querying, etc.) — accept the decomposition from DnfContext instead.
+5. **Avoid re-decomposition within consumer lifetime**: `Decomposer.decompose/1` is called at two lifecycle points (shape creation + consumer startup — see "Single Decomposition, Two Lifecycle Points" above). Within the consumer's lifetime, always use `DnfContext`'s cached decomposition. Do not re-decompose in `querying.ex`, `subquery_moves.ex`, `move_handling.ex`, etc. — accept the decomposition from DnfContext instead.
 
 6. **Single-pass active_conditions**: Per the RFC, `compute_active_conditions` should *replace* the `includes_record?` call — not run alongside it. Avoid double evaluation in the replication stream path.
 
-7. **Non-subquery conditions require real SQL generation (Phase 1a)**: For OR shapes, a row can be in the snapshot result via one disjunct while another disjunct's non-subquery condition is false. The `active_conditions` SELECT column for that position must evaluate to `false`, not `true`. Returning a hardcoded `"true"` for non-subquery conditions is **wrong** — it makes the client think both disjuncts are satisfied when only one is. `SqlGenerator.to_sql/1` (Phase 1a) converts the AST back to SQL for these positions. It raises `ArgumentError` for unsupported AST nodes so missing operators are caught at shape creation time, not at query time.
+7. **Non-subquery conditions require real SQL generation (Phase 2)**: For OR shapes, a row can be in the snapshot result via one disjunct while another disjunct's non-subquery condition is false. The `active_conditions` SELECT column for that position must evaluate to `false`, not `true`. Returning a hardcoded `"true"` for non-subquery conditions is **wrong** — it makes the client think both disjuncts are satisfied when only one is. `SqlGenerator.to_sql/1` (Phase 2) converts the AST back to SQL for these positions. It raises `ArgumentError` for unsupported AST nodes so missing operators are caught at shape creation time, not at query time.
 
-8. **condition_hashes vs wire tags (Phase 12)**: The binary move-in snapshot files must store condition_hashes (per-position hashes) separately from the JSON that contains wire-format tags. If filtering uses the wire-format tags instead, bare hashes are compared against slash-delimited strings and never match — a silent correctness bug. The solution: `query_move_in` SELECTs condition_hashes as a separate `text[]` column; the binary file stores these for filtering while the JSON (with wire tags baked in) is stored alongside for serving. `moved_out_tags` uses `%{move_in_name => %{position => MapSet}}` with position-aware filtering. Phase 12 must be implemented immediately after Phase 9. See Phase 12 in the Implementation Steps for details.
+8. **condition_hashes vs wire tags (Phase 12)**: The binary move-in snapshot files must store condition_hashes (per-position hashes) separately from the JSON that contains wire-format tags. If filtering uses the wire-format tags instead, bare hashes are compared against slash-delimited strings and never match — a silent correctness bug. See Phase 12 for the full solution.
 
-9. **Sublink index resolution by column name is ambiguous (Phase 7)**: When generating SQL for `active_conditions` in snapshot queries, the sublink index (which dependency shape a subquery corresponds to) MUST be extracted from the AST node's `sublink_membership_check` function, NOT resolved by matching column names against `comparison_expressions`. Column-name matching fails when multiple subqueries reference the same column (e.g., `parent_id IN (SELECT ... WHERE category='a') OR parent_id IN (SELECT ... WHERE category='b')`) — both subexpressions have `column == "parent_id"`, so column matching always resolves to the first dependency, producing identical `active_conditions` for what should be distinct subqueries. Use `extract_sublink_index/1` (see Phase 7) which pattern-matches on the AST to get the canonical `$sublink` index. This also applies to Phase 5a's `extract_sublink_index_from_ast` for exclusion clauses — use the same approach consistently.
-   - Test: "OR of two subqueries on same column" (see Test Strategy §7)
+9. **Sublink index resolution by column name is ambiguous**: When generating SQL for subquery conditions, the sublink index MUST be extracted from the AST node's `sublink_membership_check` function, NOT resolved by matching column names. See "Sublink Index Resolution" above for the authoritative explanation and `extract_sublink_index/1` implementation. This applies to both `querying.ex` (Phase 10) and `subquery_moves.ex` (Phase 7).
+   - Test: "OR of two subqueries on same column" (see Test Strategy, Complex Expressions)
+
+10. **Decomposition failure at shape creation**: If `Decomposer.decompose/1` returns `{:error, reason}`, shape creation must fail with a 400 response and descriptive error message. There is no silent fallback to invalidation — users should know their WHERE clause is unsupported.
 
 ### Protocol Compatibility
 
 1. **V1 Clients**: Must reject complex WHERE clauses for v1 protocol
-   - Implementation: Add protocol version check in shape validation
+   - Implementation: Protocol version check in shape validation (Phase 3)
    - Return 400 error with descriptive message
 
 2. **Message Format**: New `active_conditions` field is additive
@@ -1671,13 +1731,14 @@ Phase 11: Elixir Client (depends on Phases 5, 6 for wire format definition)
 
 ## Critical Files for Implementation
 
+- `lib/electric/replication/eval/decomposer.ex` - **(new)** DNF decomposition of WHERE clause ASTs
 - `lib/electric/replication/eval/sql_generator.ex` - **(new)** Converts AST back to SQL — used by `querying.ex` for non-subquery `active_conditions` and by `subquery_moves.ex` for exclusion clauses
-- `lib/electric/shapes/consumer/dnf_context.ex` - **(new)** DNF state container, built from Shape
+- `lib/electric/shapes/consumer/dnf_context.ex` - **(new)** DNF state container, built from Shape at consumer startup
 - `lib/electric/shapes/shape/subquery_moves.ex` - Core tag and move message generation, **move-in WHERE clause + DNF-aware exclusion clauses**
-- `lib/electric/shapes/shape.ex` - `fill_move_tags`, `tag_structure` — **no new struct fields**
+- `lib/electric/shapes/shape.ex` - `fill_move_tags` (2D array output), `tag_structure` — **no new struct fields**
 - `lib/electric/shapes/consumer/move_handling.ex` - Move-in/out orchestration (position routing, negation inversion), delegates SQL generation to `subquery_moves.ex`
 - `lib/electric/shapes/where_clause.ex` - Record filtering and `active_conditions`
-- `lib/electric/log_items.ex` - Message format with `active_conditions`
+- `lib/electric/log_items.ex` - Message format with `active_conditions`, 2D-to-wire tag conversion
 - `lib/electric/shapes/querying.ex` - SQL generation for snapshots and move-in queries. Move-in queries SELECT condition_hashes (separate column) + wire tags (in JSON). Accepts DnfContext, delegates non-subquery AST-to-SQL to `SqlGenerator`
 - `packages/elixir-client/lib/electric/client/tag_tracker.ex` - Client-side tag tracking, DNF evaluation, synthetic deletes
 - `packages/elixir-client/lib/electric/client/message/headers.ex` - Client message header parsing
@@ -1738,6 +1799,7 @@ describe "changes_only mode with DNF" do
 
   test "move-in broadcasts for unknown rows are handled gracefully" do
     # changes_only client receives move-in for row not in local state
+    # Client checks tracked keys map — key not present, broadcast ignored
     # Should ignore without error
   end
 end
@@ -1796,7 +1858,7 @@ end
 
 ## Migration Checklist
 
-Before enabling `dnf_subqueries` feature flag in production:
+Before enabling complex subquery shapes in production:
 
 1. [ ] All clients updated to handle nested tag format
 2. [ ] All clients updated to handle `active_conditions` field
@@ -1808,11 +1870,3 @@ Before enabling `dnf_subqueries` feature flag in production:
    - [ ] Multi-disjunct tag storage size
    - [ ] Move-in exclusion query performance
 7. [ ] Shape handle invalidation strategy decided (if needed)
-
----
-
-### Remaining Work
-
-1. **Protocol Version Validation** (Optional)
-   - Add protocol version check to reject complex shapes for v1 clients
-   - This is optional since v1 clients can still work by ignoring unknown fields
