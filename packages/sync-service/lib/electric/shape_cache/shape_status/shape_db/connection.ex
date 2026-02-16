@@ -112,6 +112,13 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
     execute_all(conn, ["PRAGMA optimize=0x10002"])
   end
 
+  def enable_extension(conn, extension) when is_raw_connection(conn) do
+    with :ok <- Sqlite3.enable_load_extension(conn, true),
+         {:ok, _} <- fetch_all(conn, "select load_extension(?)", [ExSqlean.path_for(extension)]) do
+      :ok
+    end
+  end
+
   @impl NimblePool
   def init_worker(pool_state) do
     with {:ok, conn} <- open(pool_state),

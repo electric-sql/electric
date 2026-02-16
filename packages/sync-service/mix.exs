@@ -93,6 +93,7 @@ defmodule Electric.MixProject do
         {:dotenvy, "~> 1.1"},
         {:ecto, "~> 3.12"},
         {:exqlite, "~> 0.33"},
+        {:ex_sqlean, "~> 0.8.7"},
         {:jason, "~> 1.4"},
         {:nimble_options, "~> 1.1"},
         {:nimble_pool, "~> 1.1"},

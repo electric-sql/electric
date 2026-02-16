@@ -55,7 +55,8 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Supervisor do
             id: {:pool, :write}
           ),
           # write buffer for batching SQLite writes to avoid timeout cascades
-          {ShapeDb.WriteBuffer, opts}
+          {ShapeDb.WriteBuffer, opts},
+          {ShapeDb.Statistics, opts}
         ]
       ])
 
