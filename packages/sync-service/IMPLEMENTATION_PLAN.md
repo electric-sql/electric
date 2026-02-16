@@ -1096,9 +1096,23 @@ This phase has two parts:
 
 **Modify** `lib/electric/shapes/querying.ex`
 
-Add `make_condition_hashes_select/3` alongside the existing `make_tags/3`:
+Add `make_condition_hashes_select/3` alongside the existing `make_tags/3`.
+Uses `extract_columns_from_ast/1` to get the column name(s) from each subexpression's
+AST — the subexpression type itself only stores `{ast, is_subquery, negated}`, so column
+extraction is done here at SQL generation time rather than at decomposition time.
 
 ```elixir
+# Extract column name(s) referenced by a subexpression's AST.
+# Returns a list of column names (single-element for simple `x IN (SELECT ...)`).
+defp extract_columns_from_ast(ast) do
+  # Walk the AST to find column references. For ScalarArrayOpExpr the left
+  # operand is the column ref; for RowCompareExpr it's a list of column refs.
+  case ast do
+    %{left: %{name: column_name}} -> [column_name]
+    %{left: %{args: args}} -> Enum.map(args, & &1.name)
+  end
+end
+
 # make_tags:                    [[x, y], [nil, z]] -> ["md5(x)/md5(y)", "/md5(z)"]
 # make_condition_hashes_select: positions [x, y, z] -> ["md5(x)", "md5(y)", "md5(z)"]
 #
@@ -1110,20 +1124,15 @@ defp make_condition_hashes_select(dnf_context, stack_id, shape_handle) do
   dnf_context.decomposition.subexpressions
   |> Enum.sort_by(fn {pos, _} -> pos end)
   |> Enum.map(fn {_pos, subexpr} ->
-    case subexpr do
-      %{column: column_name} when is_binary(column_name) ->
-        col = pg_cast_column_to_text(column_name)
-        namespaced = pg_namespace_value_sql(col)
-        ~s[md5('#{escaped_prefix}' || #{namespaced})]
+    columns = extract_columns_from_ast(subexpr.ast)
 
-      %{columns: columns} ->
-        column_parts =
-          Enum.map(columns, fn col_name ->
-            col = pg_cast_column_to_text(col_name)
-            ~s['#{col_name}:' || #{pg_namespace_value_sql(col)}]
-          end)
-        ~s[md5('#{escaped_prefix}' || #{Enum.join(column_parts, " || ")})]
-    end
+    column_parts =
+      Enum.map(columns, fn col_name ->
+        col = pg_cast_column_to_text(col_name)
+        ~s['#{col_name}:' || #{pg_namespace_value_sql(col)}]
+      end)
+
+    ~s[md5('#{escaped_prefix}' || #{Enum.join(column_parts, " || ")})]
   end)
 end
 ```
@@ -1256,7 +1265,7 @@ move-out-while-move-in-in-flight race condition with a multi-disjunct shape.
 
 #### Files changed
 
-- `querying.ex` — add `make_condition_hashes_select/3`, SELECT condition_hashes as separate column alongside JSON with embedded wire tags in `query_move_in/6`
+- `querying.ex` — add `extract_columns_from_ast/1` and `make_condition_hashes_select/3`, SELECT condition_hashes as separate column alongside JSON with embedded wire tags in `query_move_in/6`
 - `move_ins.ex` — change `moved_out_tags` type to `%{name => %{position => MapSet}}`, update `add_waiting/2` and `move_out_happened/3`
 - `move_handling.ex` — extract position from control message patterns, pass to `move_out_happened`
 - `storage.ex` — update `condition_hashes_to_skip` type in behaviour spec
