@@ -13,8 +13,10 @@ defmodule Electric.Shapes.Querying do
   def query_move_in(conn, stack_id, shape_handle, shape, {where, params}) do
     table = Utils.relation_to_sql(shape.root_table)
 
+    dnf_context = DnfContext.from_shape(shape)
+
     {json_like_select, _} =
-      json_like_select(shape, %{"is_move_in" => true}, stack_id, shape_handle)
+      json_like_select(shape, %{"is_move_in" => true}, stack_id, shape_handle, dnf_context)
 
     key_select = key_select(shape)
 
@@ -126,7 +128,8 @@ defmodule Electric.Shapes.Querying do
       where =
         if not is_nil(shape.where), do: " WHERE " <> shape.where.query, else: ""
 
-      {json_like_select, params} = json_like_select(shape, [], stack_id, shape_handle)
+      dnf_context = DnfContext.from_shape(shape)
+      {json_like_select, params} = json_like_select(shape, [], stack_id, shape_handle, dnf_context)
 
       query =
         Postgrex.prepare!(conn, table, ~s|SELECT #{json_like_select} FROM #{table} #{where}|)
@@ -243,14 +246,17 @@ defmodule Electric.Shapes.Querying do
         headers
       end
 
-    # Inject active_conditions into the JSON if present
+    # Inject active_conditions into the JSON if present.
+    # `headers` is content wrapped by the template below as '#{headers}',
+    # so it must NOT end with a trailing ' — the template provides it.
     headers =
       if active_conditions_sql do
         # Insert before the closing }
-        # headers looks like: '..."relation":["public","items"]}'
-        # We want: '..."relation":["public","items"],"active_conditions":' || array_sql || '}'
+        # headers looks like: ...,"is_move_in":true}
+        # We want:            ...,"is_move_in":true,"active_conditions":' || array_sql || '}
+        # (the outer template adds the closing ' to form the SQL literal '}'.)
         {prefix, "}"} = String.split_at(headers, -1)
-        prefix <> ~s[,"active_conditions":' || #{active_conditions_sql} || '}']
+        prefix <> ~s(,"active_conditions":' || #{active_conditions_sql} || '})
       else
         headers
       end
