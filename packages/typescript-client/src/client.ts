@@ -1261,6 +1261,28 @@ export class ShapeStream<T extends Row<unknown> = Row>
     const batch = this.#messageParser.parse<Array<Message<T>>>(messages, schema)
 
     if (!Array.isArray(batch)) {
+      // Check if this is a subset-format response served for a regular log
+      // request. This can happen when a proxy or CDN caches a subset snapshot
+      // response and serves it for a subsequent non-subset request.
+      // The subset format is: {"metadata": {...}, "data": [...]}
+      if (
+        batch &&
+        typeof batch === `object` &&
+        `data` in batch &&
+        Array.isArray((batch as { data: unknown }).data)
+      ) {
+        console.warn(
+          `[Electric] Received a subset-format response for a regular log request to ${fetchUrl}. ` +
+            `This likely indicates a proxy or CDN caching misconfiguration — ` +
+            `a cached subset snapshot response is being served for a non-subset request. ` +
+            `Check that your proxy includes all query parameters (including 'subset__*' params) in its cache key. ` +
+            `Extracting data from the response and continuing.`
+        )
+        const subsetData = (batch as { data: Array<Message<T>> }).data
+        await this.#onMessages(subsetData)
+        return
+      }
+
       const preview = JSON.stringify(batch)?.slice(0, 200)
       throw new FetchError(
         response.status,

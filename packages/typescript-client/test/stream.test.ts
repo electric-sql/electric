@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ShapeStream, isChangeMessage, Message, Row } from '../src'
 import { snakeCamelMapper } from '../src/column-mapper'
 import { resolveInMacrotask } from './support/test-helpers'
@@ -406,5 +406,182 @@ describe(`ShapeStream`, () => {
     // Verify original db column names are not present
     expect(changeMessage!.value).not.toHaveProperty(`user_id`)
     expect(changeMessage!.value).not.toHaveProperty(`created_at`)
+  })
+
+  it(`should handle subset-format response served for a regular log request`, async () => {
+    const receivedMessages: Message<Row>[] = []
+    const warnSpy = vi.spyOn(console, `warn`).mockImplementation(() => {})
+
+    // Simulate a proxy/CDN serving a cached subset response for a regular request.
+    // The subset format wraps data in {"metadata": {...}, "data": [...]}
+    const subsetResponse = {
+      metadata: {
+        xmin: `6225279`,
+        xmax: `6225279`,
+        xip_list: [],
+        database_lsn: `1234602526216`,
+        snapshot_mark: 1900274818,
+      },
+      data: [
+        {
+          key: `"public"."items"/"1"`,
+          value: { id: `1`, name: `test` },
+          headers: { operation: `insert`, relation: [`public`, `items`] },
+        },
+      ],
+    }
+
+    let fetchCount = 0
+    const fetchWrapper = (): Promise<Response> => {
+      fetchCount++
+      if (fetchCount === 1) {
+        // First request returns subset-format response (CDN cache issue)
+        return resolveInMacrotask(
+          new Response(JSON.stringify(subsetResponse), {
+            status: 200,
+            headers: {
+              'content-type': `application/json`,
+              'electric-handle': `test-handle`,
+              'electric-offset': `0_0`,
+              'electric-cursor': `1`,
+              'electric-up-to-date': `true`,
+              'electric-schema': JSON.stringify({
+                id: { type: `text` },
+                name: { type: `text` },
+              }),
+            },
+          })
+        )
+      }
+      // Second request returns normal array response
+      return resolveInMacrotask(
+        new Response(JSON.stringify([{ headers: { control: `up-to-date` } }]), {
+          status: 200,
+          headers: {
+            'content-type': `application/json`,
+            'electric-handle': `test-handle`,
+            'electric-offset': `0_1`,
+            'electric-cursor': `2`,
+            'electric-up-to-date': `true`,
+            'electric-schema': JSON.stringify({
+              id: { type: `text` },
+              name: { type: `text` },
+            }),
+          },
+        })
+      )
+    }
+
+    const stream = new ShapeStream({
+      url: shapeUrl,
+      params: { table: `items` },
+      signal: aborter.signal,
+      fetchClient: fetchWrapper,
+    })
+
+    const unsub = stream.subscribe((messages) => {
+      receivedMessages.push(...messages)
+    })
+
+    // Wait for messages to be processed
+    await new Promise((resolve) => setTimeout(resolve, 200))
+
+    unsub()
+    aborter.abort()
+
+    // The subset data should have been extracted and processed
+    const changeMessage = receivedMessages.find(isChangeMessage)
+    expect(changeMessage).toBeDefined()
+    expect(changeMessage!.key).toBe(`"public"."items"/"1"`)
+    expect((changeMessage!.value as Record<string, unknown>).id).toBe(`1`)
+
+    // A warning should have been logged
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining(`subset-format response`)
+    )
+
+    warnSpy.mockRestore()
+  })
+
+  it(`should handle empty subset-format response gracefully`, async () => {
+    const receivedMessages: Message<Row>[] = []
+    const warnSpy = vi.spyOn(console, `warn`).mockImplementation(() => {})
+
+    // Subset response with empty data array
+    const emptySubsetResponse = {
+      metadata: {
+        xmin: `6225279`,
+        xmax: `6225279`,
+        xip_list: [],
+        database_lsn: `1234602526216`,
+        snapshot_mark: 1900274818,
+      },
+      data: [],
+    }
+
+    let fetchCount = 0
+    const fetchWrapper = (): Promise<Response> => {
+      fetchCount++
+      if (fetchCount === 1) {
+        return resolveInMacrotask(
+          new Response(JSON.stringify(emptySubsetResponse), {
+            status: 200,
+            headers: {
+              'content-type': `application/json`,
+              'electric-handle': `test-handle`,
+              'electric-offset': `0_0`,
+              'electric-cursor': `1`,
+              'electric-up-to-date': `true`,
+              'electric-schema': JSON.stringify({
+                id: { type: `text` },
+              }),
+            },
+          })
+        )
+      }
+      // Second request returns normal response
+      return resolveInMacrotask(
+        new Response(JSON.stringify([{ headers: { control: `up-to-date` } }]), {
+          status: 200,
+          headers: {
+            'content-type': `application/json`,
+            'electric-handle': `test-handle`,
+            'electric-offset': `0_1`,
+            'electric-cursor': `2`,
+            'electric-up-to-date': `true`,
+            'electric-schema': JSON.stringify({
+              id: { type: `text` },
+            }),
+          },
+        })
+      )
+    }
+
+    const stream = new ShapeStream({
+      url: shapeUrl,
+      params: { table: `items` },
+      signal: aborter.signal,
+      fetchClient: fetchWrapper,
+    })
+
+    const unsub = stream.subscribe((messages) => {
+      receivedMessages.push(...messages)
+    })
+
+    // Wait for processing
+    await new Promise((resolve) => setTimeout(resolve, 200))
+
+    unsub()
+    aborter.abort()
+
+    // Should not have crashed — stream should have continued to the second request
+    expect(fetchCount).toBeGreaterThanOrEqual(2)
+
+    // A warning should have been logged for the subset response
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining(`subset-format response`)
+    )
+
+    warnSpy.mockRestore()
   })
 })
