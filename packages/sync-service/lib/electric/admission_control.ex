@@ -26,7 +26,7 @@ defmodule Electric.AdmissionControl do
 
   The max_concurrent limit can be configured in your config files:
 
-      config :electric, :max_concurrent_requests, %{initial: 300, existing: 1000}
+      config :electric, :max_concurrent_requests, %{initial: 300, existing: 10_000}
 
   """
 

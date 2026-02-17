@@ -178,11 +178,11 @@ When too many clients are connected simultaneously, Electric responds with a `50
 ```json
 {
   "code": "concurrent_request_limit_exceeded",
-  "message": "Concurrent existing request limit exceeded (limit: 1000), please retry"
+  "message": "Concurrent existing request limit exceeded (limit: 10000), please retry"
 }
 ```
 
-This happens when the number of in-flight requests exceeds the configured limit. Each `live=true` long-poll request holds a permit for up to 20 seconds (the long-poll timeout), so concurrent connections add up quickly. For example, 200 clients each subscribed to 10 shapes means 2,000 simultaneous long-poll connections &mdash; well above the default limit of 1,000.
+This happens when the number of in-flight requests exceeds the configured limit. Each `live=true` long-poll request holds the connection open for up to 20 seconds (the long-poll timeout), so concurrent connections add up quickly.
 
 Note that this is an **application-level limit**, not a system resource issue. Your server's CPU and memory may look healthy while requests are being rejected.
 
@@ -193,10 +193,10 @@ Note that this is an **application-level limit**, not a system resource issue. Y
 **Increase the concurrent request limit** as a stopgap. Set [`ELECTRIC_MAX_CONCURRENT_REQUESTS`](/docs/api/config#electric-max-concurrent-requests) to raise the limits:
 
 ```shell
-ELECTRIC_MAX_CONCURRENT_REQUESTS='{"initial": 500, "existing": 3000}'
+ELECTRIC_MAX_CONCURRENT_REQUESTS='{"initial": 500, "existing": 30000}'
 ```
 
-Live long-poll connections are lightweight Erlang processes, so most hardware can handle higher limits. The default of 1,000 is conservative.
+Live long-poll connections are lightweight Erlang processes, so most hardware can handle higher limits.
 
 **Reduce the number of concurrent shape subscriptions** by lazy-loading shapes only when needed (e.g. per screen) rather than subscribing to all shapes on app boot.
 
