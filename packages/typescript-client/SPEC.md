@@ -243,14 +243,16 @@ responses cannot overwrite it.
 **Enforcement**: Dedicated tests (`SSE up-to-date message updates offset`,
 `non-SSE up-to-date message preserves existing offset`).
 
-### C8: SSE fallback state survives state cycles
+### C8: SSE state is private to LiveState
 
-`sseFallbackToLongPolling` and `consecutiveShortSseConnections` are carried in
-`SharedStateFields`, not private to LiveState. This ensures SSE fallback decisions
-survive `Live → StaleRetry → Syncing → Live` cycles — the client doesn't waste
-connections rediscovering a misconfigured proxy.
+`sseFallbackToLongPolling` and `consecutiveShortSseConnections` are private fields
+on `LiveState`, not carried in `SharedStateFields`. LiveState preserves SSE state
+through its own self-transitions (`handleResponseMetadata`, `onUpToDate`,
+`handleSseConnectionClosed`, `withHandle`) via a private `sseState` accessor.
+Other states don't carry SSE state — when transitioning from a non-Live state
+back to Live, SSE state resets to defaults.
 
-**Enforcement**: Dedicated test (`SSE fallback survives Live → StaleRetry → Syncing → Live cycle`).
+**Enforcement**: Dedicated test (`SSE state is preserved through LiveState self-transitions`).
 
 ### C7: Stale response with valid local handle is ignored
 

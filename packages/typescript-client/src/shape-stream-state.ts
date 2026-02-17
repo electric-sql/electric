@@ -53,8 +53,6 @@ export interface SharedStateFields {
   readonly schema?: Schema
   readonly liveCacheBuster: string
   readonly lastSyncedAt?: number
-  readonly sseFallbackToLongPolling?: boolean
-  readonly consecutiveShortSseConnections?: number
 }
 
 type ResponseBaseInput = {
@@ -256,12 +254,6 @@ abstract class ActiveState extends ShapeStreamState {
   get lastSyncedAt() {
     return this.#shared.lastSyncedAt
   }
-  get sseFallbackToLongPolling() {
-    return this.#shared.sseFallbackToLongPolling ?? false
-  }
-  get consecutiveShortSseConnections() {
-    return this.#shared.consecutiveShortSseConnections ?? 0
-  }
 
   /** Expose shared fields to subclasses for spreading into new instances. */
   protected get currentFields(): SharedStateFields {
@@ -294,16 +286,7 @@ abstract class ActiveState extends ShapeStreamState {
     const lastSyncedAt =
       input.status === 204 ? input.now : this.#shared.lastSyncedAt
 
-    return {
-      handle,
-      offset,
-      schema,
-      liveCacheBuster,
-      lastSyncedAt,
-      sseFallbackToLongPolling: this.#shared.sseFallbackToLongPolling,
-      consecutiveShortSseConnections:
-        this.#shared.consecutiveShortSseConnections,
-    }
+    return { handle, offset, schema, liveCacheBuster, lastSyncedAt }
   }
 
   /**
@@ -361,9 +344,6 @@ abstract class ActiveState extends ShapeStreamState {
       schema: this.#shared.schema,
       liveCacheBuster: this.#shared.liveCacheBuster,
       lastSyncedAt: input.now,
-      sseFallbackToLongPolling: this.#shared.sseFallbackToLongPolling,
-      consecutiveShortSseConnections:
-        this.#shared.consecutiveShortSseConnections,
     }
 
     return this.onUpToDate(shared, input)
@@ -488,17 +468,36 @@ export class StaleRetryState extends FetchingState {
 
 export class LiveState extends ActiveState {
   readonly kind = `live` as const
+  readonly #consecutiveShortSseConnections: number
+  readonly #sseFallbackToLongPolling: boolean
 
-  constructor(shared: SharedStateFields) {
+  constructor(
+    shared: SharedStateFields,
+    sseState?: {
+      consecutiveShortSseConnections?: number
+      sseFallbackToLongPolling?: boolean
+    }
+  ) {
     super(shared)
+    this.#consecutiveShortSseConnections =
+      sseState?.consecutiveShortSseConnections ?? 0
+    this.#sseFallbackToLongPolling = sseState?.sseFallbackToLongPolling ?? false
   }
 
   get isUpToDate(): boolean {
     return true
   }
 
+  get consecutiveShortSseConnections(): number {
+    return this.#consecutiveShortSseConnections
+  }
+
+  get sseFallbackToLongPolling(): boolean {
+    return this.#sseFallbackToLongPolling
+  }
+
   withHandle(handle: string): LiveState {
-    return new LiveState({ ...this.currentFields, handle })
+    return new LiveState({ ...this.currentFields, handle }, this.sseState)
   }
 
   applyUrlParams(url: URL, context: UrlParamsContext): void {
@@ -512,6 +511,13 @@ export class LiveState extends ActiveState {
     }
   }
 
+  private get sseState() {
+    return {
+      consecutiveShortSseConnections: this.#consecutiveShortSseConnections,
+      sseFallbackToLongPolling: this.#sseFallbackToLongPolling,
+    }
+  }
+
   handleResponseMetadata(
     input: ResponseMetadataInput
   ): ResponseMetadataTransition {
@@ -521,7 +527,7 @@ export class LiveState extends ActiveState {
     const shared = this.parseResponseFields(input)
     return {
       action: `accepted`,
-      state: new LiveState(shared),
+      state: new LiveState(shared, this.sseState),
     }
   }
 
@@ -530,7 +536,7 @@ export class LiveState extends ActiveState {
     _input: MessageBatchInput
   ): MessageBatchTransition {
     return {
-      state: new LiveState(shared),
+      state: new LiveState(shared, this.sseState),
       suppressBatch: false,
       becameUpToDate: true,
     }
@@ -545,13 +551,13 @@ export class LiveState extends ActiveState {
       opts.liveSseEnabled &&
       !opts.isRefreshing &&
       !opts.resumingFromPause &&
-      !this.sseFallbackToLongPolling
+      !this.#sseFallbackToLongPolling
     )
   }
 
   handleSseConnectionClosed(input: SseCloseInput): SseCloseTransition {
-    let nextConsecutiveShort = this.consecutiveShortSseConnections
-    let nextFallback = this.sseFallbackToLongPolling
+    let nextConsecutiveShort = this.#consecutiveShortSseConnections
+    let nextFallback = this.#sseFallbackToLongPolling
     let fellBackToLongPolling = false
     let wasShortConnection = false
 
@@ -571,8 +577,7 @@ export class LiveState extends ActiveState {
     }
 
     return {
-      state: new LiveState({
-        ...this.currentFields,
+      state: new LiveState(this.currentFields, {
         consecutiveShortSseConnections: nextConsecutiveShort,
         sseFallbackToLongPolling: nextFallback,
       }),

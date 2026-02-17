@@ -172,9 +172,9 @@ describe(`shape stream state machine`, () => {
 
   // 11. LiveState.handleSseConnectionClosed — short connection increments counter
   it(`LiveState increments counter on short SSE connection`, () => {
-    const live = new LiveState(
-      makeShared({ consecutiveShortSseConnections: 1 })
-    )
+    const live = new LiveState(makeShared(), {
+      consecutiveShortSseConnections: 1,
+    })
 
     const transition = live.handleSseConnectionClosed({
       connectionDuration: 100,
@@ -191,9 +191,9 @@ describe(`shape stream state machine`, () => {
 
   // 12. LiveState.handleSseConnectionClosed — falls back to long polling after max short connections
   it(`LiveState falls back to long polling after max short connections`, () => {
-    const live = new LiveState(
-      makeShared({ consecutiveShortSseConnections: 2 })
-    )
+    const live = new LiveState(makeShared(), {
+      consecutiveShortSseConnections: 2,
+    })
 
     const transition = live.handleSseConnectionClosed({
       connectionDuration: 100,
@@ -208,49 +208,28 @@ describe(`shape stream state machine`, () => {
     expect(transition.fellBackToLongPolling).toBe(true)
   })
 
-  // SSE fallback survives state cycles
-  it(`SSE fallback survives Live → StaleRetry → Syncing → Live cycle`, () => {
-    const { state } = scenario()
-      .response({ responseHandle: `h1`, responseCursor: `cur-1` })
-      .expectKind(`syncing`)
-      .messages({ hasUpToDateMessage: true })
-      .expectKind(`live`)
-      .sseClose({
-        connectionDuration: 100,
-        wasAborted: false,
-        minConnectionDuration: 1000,
-        maxShortConnections: 1,
-      })
-      .expectKind(`live`)
-      .done()
+  // SSE state is preserved when LiveState transitions to itself
+  it(`SSE state is preserved through LiveState self-transitions`, () => {
+    const live = new LiveState(makeShared(), {
+      consecutiveShortSseConnections: 2,
+      sseFallbackToLongPolling: true,
+    })
 
-    // After SSE fallback, sseFallbackToLongPolling should be true
-    expect(state.sseFallbackToLongPolling).toBe(true)
-
-    // Now simulate Live → StaleRetry → Syncing → Live cycle
-    const staleTransition = state.handleResponseMetadata(
-      makeResponseInput({
-        responseHandle: `h1`,
-        expiredHandle: `h1`,
-      })
+    // handleResponseMetadata creates new LiveState preserving SSE state
+    const responseTransition = live.handleResponseMetadata(
+      makeResponseInput({ responseHandle: `h2` })
     )
-    expect(staleTransition.action).toBe(`stale-retry`)
+    expect(responseTransition.state.kind).toBe(`live`)
+    expect(responseTransition.state.sseFallbackToLongPolling).toBe(true)
+    expect(responseTransition.state.consecutiveShortSseConnections).toBe(2)
 
-    const staleRetry = staleTransition.state
-    expect(staleRetry.sseFallbackToLongPolling).toBe(true)
-
-    const syncTransition = staleRetry.handleResponseMetadata(
-      makeResponseInput({ responseHandle: `fresh-h` })
-    )
-    expect(syncTransition.state.kind).toBe(`syncing`)
-    expect(syncTransition.state.sseFallbackToLongPolling).toBe(true)
-
-    const liveTransition = syncTransition.state.handleMessageBatch(
+    // onUpToDate from LiveState preserves SSE state
+    const msgTransition = live.handleMessageBatch(
       makeMessageBatchInput({ hasUpToDateMessage: true })
     )
-    expect(liveTransition.state.kind).toBe(`live`)
-    expect(liveTransition.state.sseFallbackToLongPolling).toBe(true)
-    expect(liveTransition.state.consecutiveShortSseConnections).toBe(1)
+    expect(msgTransition.state.kind).toBe(`live`)
+    expect(msgTransition.state.sseFallbackToLongPolling).toBe(true)
+    expect(msgTransition.state.consecutiveShortSseConnections).toBe(2)
   })
 
   // 13. ReplayingState suppresses up-to-date when cursor unchanged
@@ -515,7 +494,9 @@ describe(`shape stream state machine`, () => {
 
   // 30. LiveState.shouldUseSse returns false when fallen back to long polling
   it(`LiveState.shouldUseSse returns false when fallen back to long polling`, () => {
-    const live = new LiveState(makeShared({ sseFallbackToLongPolling: true }))
+    const live = new LiveState(makeShared(), {
+      sseFallbackToLongPolling: true,
+    })
 
     expect(
       live.shouldUseSse({
@@ -716,9 +697,11 @@ describe(`shape stream state machine`, () => {
         handle: `old`,
         offset: `5_3`,
         liveCacheBuster: `cur-1`,
+      }),
+      {
         consecutiveShortSseConnections: 2,
         sseFallbackToLongPolling: true,
-      })
+      }
     )
     const updated = live.withHandle(`new-handle`)
 
