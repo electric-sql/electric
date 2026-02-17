@@ -2,6 +2,7 @@ defmodule Electric.Shapes.Consumer.StateTest do
   use ExUnit.Case, async: true
 
   alias Electric.Shapes.Consumer.State
+  alias Electric.Shapes.Consumer.DnfContext
   alias Electric.Shapes.Shape
   alias Electric.Replication.LogOffset
 
@@ -105,70 +106,83 @@ defmodule Electric.Shapes.Consumer.StateTest do
     end
   end
 
-  describe "or_with_subquery? field in new/3" do
+  # DnfContext replaces or_with_subquery? and not_with_subquery? fields.
+  # Shapes with subqueries and OR/NOT now get a DnfContext built from the
+  # DNF decomposition rather than simple boolean flags.
+  describe "dnf_context field in new/3 — OR with subquery cases" do
     setup [:with_stack_id_from_test]
 
-    for {where, expected} <- [
-          # No WHERE clause
+    for {where, has_multiple_disjuncts} <- [
+          # No WHERE clause -> no dnf_context
           {nil, false},
 
-          # WHERE clause without subquery
+          # WHERE clause without subquery -> no dnf_context (no deps)
           {"id = 1", false},
           {"id = 1 AND flag = true", false},
           {"id = 1 OR flag = true", false},
 
-          # Subquery without OR
+          # Subquery without OR -> single disjunct
           {"id IN (SELECT id FROM parent)", false},
           {"id = 1 AND parent_id IN (SELECT id FROM parent)", false},
           {"parent_id IN (SELECT id FROM parent) AND id = 1", false},
           {"parent_id IN (SELECT id FROM parent) AND flag = true AND id = 1", false},
 
-          # OR directly with subquery
+          # OR directly with subquery -> multiple disjuncts
           {"parent_id IN (SELECT id FROM parent) OR flag = true", true},
           {"flag = true OR parent_id IN (SELECT id FROM parent)", true},
           {"(parent_id IN (SELECT id FROM parent)) OR (flag = true)", true},
 
           # OR that is ANDed with subquery (OR not directly containing subquery)
-          {"(id = 1 OR flag = true) AND parent_id IN (SELECT id FROM parent)", false},
-          {"parent_id IN (SELECT id FROM parent) AND (id = 1 OR flag = true)", false},
+          # DNF distributes: (A OR B) AND C -> (A AND C) OR (B AND C) -> 2 disjuncts
+          {"(id = 1 OR flag = true) AND parent_id IN (SELECT id FROM parent)", true},
+          {"parent_id IN (SELECT id FROM parent) AND (id = 1 OR flag = true)", true},
 
           # Nested cases - OR with subquery in one branch
           {"id = 1 OR parent_id IN (SELECT id FROM parent)", true},
           {"id = 1 OR (flag = true AND parent_id IN (SELECT id FROM parent))", true},
           {"(id = 1 AND parent_id IN (SELECT id FROM parent)) OR flag = true", true},
 
-          # Subquery has OR inside
+          # Subquery has OR inside -> single disjunct (OR is inside the subquery, not outer)
           {"id IN (SELECT id FROM parent WHERE flag = true OR id = 2)", false},
 
-          # Subquery has OR with nested subquery
+          # Subquery has OR with nested subquery -> single disjunct
           {"id IN (SELECT id FROM parent WHERE id = 2 OR id IN (SELECT id FROM grandparent))",
            false},
 
-          # NOT should not change result
-          {"NOT (parent_id IN (SELECT id FROM parent) OR flag = true)", true},
+          # NOT with OR -> distributes via De Morgan's
+          {"NOT (parent_id IN (SELECT id FROM parent) OR flag = true)", false},
           {"parent_id NOT IN (SELECT id FROM parent) OR flag = true", true},
           {"parent_id NOT IN (SELECT id FROM parent)", false},
           {"NOT(parent_id IN (SELECT id FROM parent))", false}
         ] do
-      @tag where: where, expected: expected
-      test "#{inspect(where)} -> or_with_subquery?=#{expected}", %{
+      @tag where: where, has_multiple_disjuncts: has_multiple_disjuncts
+      test "#{inspect(where)} -> multiple_disjuncts=#{has_multiple_disjuncts}", %{
         stack_id: stack_id,
         where: where,
-        expected: expected
+        has_multiple_disjuncts: has_multiple_disjuncts
       } do
         shape = Shape.new!("items", where: where, inspector: @inspector)
 
         state = State.new(stack_id, "test-handle", shape)
 
-        assert state.or_with_subquery? == expected
+        if has_multiple_disjuncts do
+          assert %DnfContext{} = state.dnf_context
+          assert length(state.dnf_context.decomposition.disjuncts) > 1
+        else
+          # Either no dnf_context (no deps) or single disjunct
+          case state.dnf_context do
+            nil -> :ok
+            %DnfContext{} -> assert length(state.dnf_context.decomposition.disjuncts) == 1
+          end
+        end
       end
     end
   end
 
-  describe "not_with_subquery? field in new/3" do
+  describe "dnf_context field in new/3 — NOT with subquery cases" do
     setup [:with_stack_id_from_test]
 
-    for {where, expected} <- [
+    for {where, has_negated_positions} <- [
           # No WHERE clause
           {nil, false},
 
@@ -221,24 +235,33 @@ defmodule Electric.Shapes.Consumer.StateTest do
           {"parent_id IN (SELECT id FROM parent) AND id NOT IN (SELECT id FROM grandparent)",
            true},
 
-          # Double NOT (cancels out, but still has NOT wrapping subquery in AST)
-          {"NOT(NOT(parent_id IN (SELECT id FROM parent)))", true},
+          # Double NOT (cancels out)
+          {"NOT(NOT(parent_id IN (SELECT id FROM parent)))", false},
 
           # NOT on non-subquery part, subquery without NOT
           {"NOT(flag = true) AND parent_id IN (SELECT id FROM parent)", false},
           {"parent_id IN (SELECT id FROM parent) AND NOT(flag = true)", false}
         ] do
-      @tag where: where, expected: expected
-      test "#{inspect(where)} -> not_with_subquery?=#{expected}", %{
+      @tag where: where, has_negated_positions: has_negated_positions
+      test "#{inspect(where)} -> has_negated_positions=#{has_negated_positions}", %{
         stack_id: stack_id,
         where: where,
-        expected: expected
+        has_negated_positions: has_negated_positions
       } do
         shape = Shape.new!("items", where: where, inspector: @inspector)
 
         state = State.new(stack_id, "test-handle", shape)
 
-        assert state.not_with_subquery? == expected
+        if has_negated_positions do
+          assert %DnfContext{} = state.dnf_context
+          assert MapSet.size(state.dnf_context.negated_positions) > 0
+        else
+          # Either no dnf_context or no negated positions
+          case state.dnf_context do
+            nil -> :ok
+            %DnfContext{} -> assert MapSet.size(state.dnf_context.negated_positions) == 0
+          end
+        end
       end
     end
   end
