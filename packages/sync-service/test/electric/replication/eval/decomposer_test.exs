@@ -328,6 +328,21 @@ defmodule Electric.Replication.Eval.DecomposerTest do
 
       assert a_eq_1_count == 3
     end
+
+    test "should return error when disjunct count exceeds limit" do
+      # Build a WHERE clause with >100 disjuncts: a = 1 OR a = 2 OR ... OR a = 101
+      clause = Enum.map_join(1..101, " OR ", &"a = #{&1}")
+
+      result =
+        clause
+        |> prepare()
+        |> Decomposer.decompose()
+
+      assert {:error, message} = result
+      assert message =~ "too complex"
+      assert message =~ "101 disjuncts"
+      assert message =~ "limit of 100"
+    end
   end
 
   # Helper to prepare a WHERE clause string into a Parser AST
