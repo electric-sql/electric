@@ -2,4 +2,4 @@
 '@core/electric-telemetry': patch
 ---
 
-Add transaction stored count and operations in core metrics we export.
+Add transaction stored count in core metrics we export.
