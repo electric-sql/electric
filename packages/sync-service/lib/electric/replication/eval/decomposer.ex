@@ -106,11 +106,20 @@ defmodule Electric.Replication.Eval.Decomposer do
           position_count: non_neg_integer()
         }
 
-  @spec decompose(query :: Parser.tree_part()) :: {:ok, decomposition()}
+  @max_disjuncts 100
+
+  @spec decompose(query :: Parser.tree_part()) :: {:ok, decomposition()} | {:error, term()}
   def decompose(query) do
     internal_dnf = to_dnf(query, false)
-    {expanded, ref_subexpressions} = expand(internal_dnf)
-    {:ok, to_decomposition(expanded, ref_subexpressions)}
+
+    if length(internal_dnf) > @max_disjuncts do
+      {:error,
+       "WHERE clause too complex for DNF decomposition " <>
+         "(#{length(internal_dnf)} disjuncts exceeds limit of #{@max_disjuncts})"}
+    else
+      {expanded, ref_subexpressions} = expand(internal_dnf)
+      {:ok, to_decomposition(expanded, ref_subexpressions)}
+    end
   end
 
   # Convert AST to internal DNF representation
