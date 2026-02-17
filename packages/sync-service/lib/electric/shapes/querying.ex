@@ -3,6 +3,8 @@ defmodule Electric.Shapes.Querying do
   alias Electric.Utils
   alias Electric.Shapes.Shape
   alias Electric.Shapes.Shape.SubqueryMoves
+  alias Electric.Shapes.Consumer.DnfContext
+  alias Electric.Replication.Eval.SqlGenerator
   alias Electric.Telemetry.OpenTelemetry
 
   @value_prefix SubqueryMoves.value_prefix()
@@ -176,6 +178,8 @@ defmodule Electric.Shapes.Querying do
     end)
   end
 
+  defp json_like_select(shape, additional_headers, stack_id, shape_handle, dnf_context \\ nil)
+
   defp json_like_select(
          %Shape{
            root_table: root_table,
@@ -183,12 +187,17 @@ defmodule Electric.Shapes.Querying do
          } = shape,
          additional_headers,
          stack_id,
-         shape_handle
+         shape_handle,
+         dnf_context
        ) do
     tags = make_tags(shape, stack_id, shape_handle)
     key_part = build_key_part(shape)
     value_part = build_value_part(columns)
-    headers_part = build_headers_part(root_table, additional_headers, tags)
+
+    active_conditions_sql =
+      build_active_conditions_sql(dnf_context, shape)
+
+    headers_part = build_headers_part(root_table, additional_headers, tags, active_conditions_sql)
 
     # We're building a JSON string that looks like this:
     #
@@ -208,10 +217,10 @@ defmodule Electric.Shapes.Querying do
     {query, []}
   end
 
-  defp build_headers_part(rel, headers, tags) when is_list(headers),
-    do: build_headers_part(rel, Map.new(headers), tags)
+  defp build_headers_part(rel, headers, tags, active_conditions_sql) when is_list(headers),
+    do: build_headers_part(rel, Map.new(headers), tags, active_conditions_sql)
 
-  defp build_headers_part({relation, table}, additional_headers, tags) do
+  defp build_headers_part({relation, table}, additional_headers, tags, active_conditions_sql) do
     headers = %{operation: "insert", relation: [relation, table]}
 
     headers =
@@ -226,6 +235,18 @@ defmodule Electric.Shapes.Querying do
 
         tags = Enum.join(tags, ~s[ || '","' || ])
         ~s/{"tags":["' || #{tags} || '"],/ <> json
+      else
+        headers
+      end
+
+    # Inject active_conditions into the JSON if present
+    headers =
+      if active_conditions_sql do
+        # Insert before the closing }
+        # headers looks like: '..."relation":["public","items"]}'
+        # We want: '..."relation":["public","items"],"active_conditions":' || array_sql || '}'
+        {prefix, "}"} = String.split_at(headers, -1)
+        prefix <> ~s[,"active_conditions":' || #{active_conditions_sql} || '}']
       else
         headers
       end
@@ -288,5 +309,75 @@ defmodule Electric.Shapes.Querying do
   # the same input values, or Elixir-side and SQL-side tag computation will diverge.
   defp pg_namespace_value_sql(col_sql) do
     ~s[CASE WHEN #{col_sql} IS NULL THEN '#{@null_sentinel}' ELSE '#{@value_prefix}' || #{col_sql} END]
+  end
+
+  # Build a SQL expression that produces a JSON array of booleans for active_conditions.
+  # Returns nil if no dnf_context or no positions.
+  defp build_active_conditions_sql(nil, _shape), do: nil
+
+  defp build_active_conditions_sql(
+         %DnfContext{
+           decomposition: %{subexpressions: subexpressions, position_count: position_count}
+         },
+         shape
+       )
+       when position_count > 0 do
+    conditions =
+      Enum.map(0..(position_count - 1)//1, fn pos ->
+        subexpr = Map.fetch!(subexpressions, pos)
+
+        sql =
+          if subexpr.is_subquery do
+            generate_subquery_condition_sql(
+              subexpr,
+              shape.subquery_comparison_expressions,
+              shape.shape_dependencies
+            )
+          else
+            SqlGenerator.to_sql(subexpr.ast)
+          end
+
+        # For negated positions, wrap in NOT
+        if subexpr.negated, do: "(NOT #{sql})", else: sql
+      end)
+
+    # Produce JSON array like [true,false,true]
+    # Use array_to_json to convert boolean[] to JSON text
+    conditions_sql = Enum.join(conditions, ", ")
+    "array_to_json(ARRAY[#{conditions_sql}]::boolean[])::text"
+  end
+
+  defp build_active_conditions_sql(_, _shape), do: nil
+
+  # Generate SQL for a subquery condition, e.g.:
+  #   ("parent_id" IN (SELECT id FROM parent WHERE category = 'a'))
+  defp generate_subquery_condition_sql(subexpr, comparison_expressions, shape_dependencies) do
+    sublink_index = SubqueryMoves.extract_sublink_index(subexpr.ast)
+    dep_shape = if sublink_index, do: Enum.at(shape_dependencies, sublink_index)
+
+    if dep_shape do
+      subquery_section = rebuild_subquery_section(dep_shape)
+      column_sql = get_column_sql_for_subexpr(comparison_expressions, sublink_index)
+      ~s[(#{column_sql} #{subquery_section})]
+    else
+      raise "Could not resolve dependency shape for sublink index #{inspect(sublink_index)}"
+    end
+  end
+
+  defp rebuild_subquery_section(dep_shape) do
+    base =
+      ~s|IN (SELECT #{Enum.join(dep_shape.explicitly_selected_columns, ", ")} FROM #{Utils.relation_to_sql(dep_shape.root_table)}|
+
+    where = if dep_shape.where, do: " WHERE #{dep_shape.where.query}", else: ""
+    base <> where <> ")"
+  end
+
+  defp get_column_sql_for_subexpr(comparison_expressions, dep_index) do
+    key = ["$sublink", "#{dep_index}"]
+
+    case Map.get(comparison_expressions, key) do
+      nil -> raise "No comparison expression found for sublink index #{dep_index}"
+      %Electric.Replication.Eval.Expr{eval: ast} -> SqlGenerator.to_sql(ast)
+    end
   end
 end
