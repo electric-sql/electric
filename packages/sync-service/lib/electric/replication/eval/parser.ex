@@ -1240,7 +1240,15 @@ defmodule Electric.Replication.Eval.Parser do
         {:ok, %Const{type: :int8, value: value, location: loc}}
 
       {:fval, value} ->
-        {:ok, %Const{type: :numeric, value: String.to_float(value), location: loc}}
+        # PgQuery/libpg_query stores integers larger than int32 max as {:fval, "string"}.
+        # We need to detect pure integer strings and parse them as int8.
+        case Integer.parse(value) do
+          {int_value, ""} when is_pg_int8(int_value) ->
+            {:ok, %Const{type: :int8, value: int_value, location: loc}}
+
+          _ ->
+            {:ok, %Const{type: :numeric, value: String.to_float(value), location: loc}}
+        end
 
       {:boolval, value} ->
         {:ok, %Const{type: :bool, value: value, location: loc}}
