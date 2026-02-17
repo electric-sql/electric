@@ -242,5 +242,5 @@ defmodule Electric.Postgres.Inspector.DirectInspector do
   end
 
   @impl Electric.Postgres.Inspector
-  def clean(_, _), do: :ok
+  def purge_relation_info(_, _), do: :ok
 end

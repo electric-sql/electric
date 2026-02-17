@@ -73,9 +73,9 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
   end
 
   @impl Inspector
-  @spec clean(Electric.relation_id(), opts :: term()) :: :ok
-  def clean(relation_id, opts) when is_relation_id(relation_id) do
-    GenServer.call(opts[:server], {:clean, relation_id}, :infinity)
+  @spec purge_relation_info(Electric.relation_id(), opts :: term()) :: :ok
+  def purge_relation_info(relation_id, opts) when is_relation_id(relation_id) do
+    GenServer.call(opts[:server], {:purge_relation_info, relation_id}, :infinity)
   end
 
   @impl Inspector
@@ -159,7 +159,7 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
     {:reply, response, state}
   end
 
-  def handle_call({:clean, oid}, _from, state) do
+  def handle_call({:purge_relation_info, oid}, _from, state) do
     {:reply, :ok, delete_relation_info(state, oid)}
   end
 
