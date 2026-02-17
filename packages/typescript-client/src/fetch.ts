@@ -226,6 +226,17 @@ export function createFetchWithChunkBuffer(
 
   const prefetchClient = async (...args: Parameters<typeof fetchClient>) => {
     const url = args[0].toString()
+    const method = getRequestMethod(args[0], args[1])
+
+    // Prefetch is only valid for GET requests. The prefetch queue matches
+    // requests by URL alone and ignores HTTP method/body, so a POST request
+    // with the same URL would incorrectly consume the prefetched stream
+    // response instead of making its own request.
+    if (method !== `GET`) {
+      prefetchQueue?.abort()
+      prefetchQueue = undefined
+      return fetchClient(...args)
+    }
 
     // try to consume from the prefetch queue first, and if request is
     // not present abort the prefetch queue as it must no longer be valid
@@ -494,3 +505,18 @@ function chainAborter(
 }
 
 function noop() {}
+
+function getRequestMethod(
+  input: Parameters<typeof fetch>[0],
+  init?: Parameters<typeof fetch>[1]
+): string {
+  if (init?.method) {
+    return init.method.toUpperCase()
+  }
+
+  if (typeof Request !== `undefined` && input instanceof Request) {
+    return input.method.toUpperCase()
+  }
+
+  return `GET`
+}
