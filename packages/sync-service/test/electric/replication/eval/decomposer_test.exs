@@ -252,21 +252,90 @@ defmodule Electric.Replication.Eval.DecomposerTest do
       assert_expanded_dnf({:ok, decomposition},
         expected_disjuncts: [
           # ab × de
-          [~s|"a" = 1|, ~s|"b" = 2|, ~s|"d" = 4|, ~s|"e" = 5|,
-           nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil],
+          [
+            ~s|"a" = 1|,
+            ~s|"b" = 2|,
+            ~s|"d" = 4|,
+            ~s|"e" = 5|,
+            nil,
+            nil,
+            nil,
+            nil,
+            nil,
+            nil,
+            nil,
+            nil,
+            nil,
+            nil,
+            nil,
+            nil
+          ],
           # ab × fg
-          [nil, nil, nil, nil, ~s|"a" = 1|, ~s|"b" = 2|, ~s|"f" = 6|, ~s|"g" = 7|,
-           nil, nil, nil, nil, nil, nil, nil, nil],
+          [
+            nil,
+            nil,
+            nil,
+            nil,
+            ~s|"a" = 1|,
+            ~s|"b" = 2|,
+            ~s|"f" = 6|,
+            ~s|"g" = 7|,
+            nil,
+            nil,
+            nil,
+            nil,
+            nil,
+            nil,
+            nil,
+            nil
+          ],
           # cd × de
-          [nil, nil, nil, nil, nil, nil, nil, nil,
-           ~s|"c" = 3|, ~s|"d" = 4|, ~s|"d" = 4|, ~s|"e" = 5|, nil, nil, nil, nil],
+          [
+            nil,
+            nil,
+            nil,
+            nil,
+            nil,
+            nil,
+            nil,
+            nil,
+            ~s|"c" = 3|,
+            ~s|"d" = 4|,
+            ~s|"d" = 4|,
+            ~s|"e" = 5|,
+            nil,
+            nil,
+            nil,
+            nil
+          ],
           # cd × fg
-          [nil, nil, nil, nil, nil, nil, nil, nil,
-           nil, nil, nil, nil, ~s|"c" = 3|, ~s|"d" = 4|, ~s|"f" = 6|, ~s|"g" = 7|]
+          [
+            nil,
+            nil,
+            nil,
+            nil,
+            nil,
+            nil,
+            nil,
+            nil,
+            nil,
+            nil,
+            nil,
+            nil,
+            ~s|"c" = 3|,
+            ~s|"d" = 4|,
+            ~s|"f" = 6|,
+            ~s|"g" = 7|
+          ]
         ],
         expected_subexpressions: [
-          ~s|"a" = 1|, ~s|"b" = 2|, ~s|"c" = 3|, ~s|"d" = 4|,
-          ~s|"e" = 5|, ~s|"f" = 6|, ~s|"g" = 7|
+          ~s|"a" = 1|,
+          ~s|"b" = 2|,
+          ~s|"c" = 3|,
+          ~s|"d" = 4|,
+          ~s|"e" = 5|,
+          ~s|"f" = 6|,
+          ~s|"g" = 7|
         ]
       )
 
