@@ -149,10 +149,15 @@ defmodule Electric.Shapes.Querying do
   end
 
   # Converts a tag structure to something PG select can fill, but returns a list of separate strings for each tag
-  # - it's up to the caller to interpolate them into the query correctly
+  # - it's up to the caller to interpolate them into the query correctly.
+  # For DNF shapes, each disjunct pattern may contain nil entries for positions not in that disjunct.
+  # These become empty strings in the slash-delimited wire format.
   defp make_tags(%Shape{tag_structure: tag_structure}, stack_id, shape_handle) do
     Enum.map(tag_structure, fn pattern ->
       Enum.map(pattern, fn
+        nil ->
+          "''"
+
         column_name when is_binary(column_name) ->
           col = pg_cast_column_to_text(column_name)
           namespaced = pg_namespace_value_sql(col)

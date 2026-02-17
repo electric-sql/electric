@@ -160,7 +160,7 @@ defmodule Electric.Shapes.Consumer.DnfContext do
 
   defp build_negated_positions(decomposition) do
     decomposition.subexpressions
-    |> Enum.filter(fn {_pos, subexpr} -> subexpr.negated end)
+    |> Enum.filter(fn {_pos, subexpr} -> subexpr.negated and subexpr.is_subquery end)
     |> Enum.map(fn {pos, _} -> pos end)
     |> MapSet.new()
   end
