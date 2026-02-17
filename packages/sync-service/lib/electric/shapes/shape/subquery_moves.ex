@@ -1,6 +1,7 @@
 defmodule Electric.Shapes.Shape.SubqueryMoves do
   @moduledoc false
   alias Electric.Replication.Eval
+  alias Electric.Replication.Eval.SqlGenerator
   alias Electric.Replication.Eval.Walker
   alias Electric.Shapes.Shape
 
@@ -73,15 +74,11 @@ defmodule Electric.Shapes.Shape.SubqueryMoves do
   @doc """
   Generate a tag-removal control message for a shape.
 
-  Patterns are a list of lists, where each inner list represents a pattern (and is functionally a tuple, but
-  JSON can't directly represent tuples). This pattern is filled with actual values that have been removed.
+  Patterns are a list of maps with `pos` (DNF position) and `value` (hashed value).
+  For DNF shapes, the position comes from the tag_structure: the position index in
+  each disjunct pattern that has the subquery column for the given dependency.
   """
-  @spec make_move_out_control_message(Shape.t(), String.t(), String.t(), [
-          {dep_handle :: String.t(), gone_values :: String.t()},
-          ...
-        ]) :: map()
-  # Stub guard to allow only one dependency for now.
-  def make_move_out_control_message(shape, stack_id, shape_handle, [_] = move_outs) do
+  def make_move_out_control_message(shape, stack_id, shape_handle, move_outs) do
     %{
       headers: %{
         event: "move-out",
@@ -91,43 +88,66 @@ defmodule Electric.Shapes.Shape.SubqueryMoves do
     }
   end
 
-  # This is a stub implementation valid only for when there is exactly one dependency.
   defp make_move_out_pattern(
-         %{tag_structure: patterns},
+         %{tag_structure: tag_structure},
          stack_id,
          shape_handle,
          {_dep_handle, gone_values}
        ) do
-    # TODO: This makes the assumption of only one column per pattern.
-    Enum.flat_map(patterns, fn [column_or_expr] ->
-      case column_or_expr do
-        column_name when is_binary(column_name) ->
-          Enum.map(
-            gone_values,
-            &%{pos: 0, value: make_value_hash(stack_id, shape_handle, elem(&1, 1))}
-          )
+    # Find positions with non-nil column entries across all disjuncts.
+    # For a DNF tag structure like [["parent_id", nil], [nil, "parent_id"]],
+    # the subquery column appears at different positions in different disjuncts.
+    # We collect all (position, column_spec) pairs where the column is non-nil.
+    position_columns =
+      tag_structure
+      |> Enum.flat_map(fn disjunct ->
+        disjunct
+        |> Enum.with_index()
+        |> Enum.flat_map(fn
+          {nil, _pos} -> []
+          {col_spec, pos} -> [{pos, col_spec}]
+        end)
+      end)
+      |> Enum.uniq_by(fn {pos, _} -> pos end)
 
-        {:hash_together, columns} ->
-          column_parts =
-            &(Enum.zip_with(&1, columns, fn value, column ->
-                column <> ":" <> namespace_value(value)
-              end)
-              |> Enum.join())
-
-          Enum.map(
-            gone_values,
-            &%{
-              pos: 0,
-              value:
-                make_value_hash_raw(
-                  stack_id,
-                  shape_handle,
-                  column_parts.(Tuple.to_list(elem(&1, 1)))
-                )
-            }
-          )
-      end
+    Enum.flat_map(position_columns, fn {pos, col_spec} ->
+      make_patterns_for_position(pos, col_spec, gone_values, stack_id, shape_handle)
     end)
+  end
+
+  defp make_patterns_for_position(pos, column_name, gone_values, stack_id, shape_handle)
+       when is_binary(column_name) do
+    Enum.map(
+      gone_values,
+      &%{pos: pos, value: make_value_hash(stack_id, shape_handle, elem(&1, 1))}
+    )
+  end
+
+  defp make_patterns_for_position(
+         pos,
+         {:hash_together, columns},
+         gone_values,
+         stack_id,
+         shape_handle
+       ) do
+    column_parts =
+      &(Enum.zip_with(&1, columns, fn value, column ->
+          column <> ":" <> namespace_value(value)
+        end)
+        |> Enum.join())
+
+    Enum.map(
+      gone_values,
+      &%{
+        pos: pos,
+        value:
+          make_value_hash_raw(
+            stack_id,
+            shape_handle,
+            column_parts.(Tuple.to_list(elem(&1, 1)))
+          )
+      }
+    )
   end
 
   def make_value_hash(stack_id, shape_handle, value) do
@@ -151,6 +171,138 @@ defmodule Electric.Shapes.Shape.SubqueryMoves do
   """
   def namespace_value(nil), do: @null_sentinel
   def namespace_value(value), do: @value_prefix <> value
+
+  @doc """
+  Extract the sublink index from a sublink_membership_check AST node.
+  """
+  def extract_sublink_index(%Eval.Parser.Func{
+        name: "sublink_membership_check",
+        args: [_, %Eval.Parser.Ref{path: ["$sublink", idx_str]}]
+      }) do
+    String.to_integer(idx_str)
+  end
+
+  def extract_sublink_index(_), do: nil
+
+  @doc """
+  Find all DNF positions that correspond to a given dependency index.
+
+  A single dependency can appear at multiple positions (e.g., the same subquery
+  referenced in different parts of the WHERE clause).
+  """
+  def find_dnf_positions_for_dep_index(decomposition, dep_index) do
+    Enum.flat_map(decomposition.subexpressions, fn {pos, subexpr} ->
+      if subexpr.is_subquery and extract_sublink_index(subexpr.ast) == dep_index do
+        [pos]
+      else
+        []
+      end
+    end)
+  end
+
+  @doc """
+  Build exclusion clauses using DNF decomposition.
+
+  Only excludes subqueries in disjuncts that do NOT contain the triggering dependency.
+  For example, in `(x IN sq1 AND y IN sq2) OR z IN sq3`:
+    - When sq1 triggers, sq2 is in the same disjunct so NOT excluded; sq3 IS excluded
+  """
+  def build_dnf_exclusion_clauses(
+        decomposition,
+        shape_dependencies,
+        comparison_expressions,
+        trigger_dep_index
+      ) do
+    trigger_positions = find_dnf_positions_for_dep_index(decomposition, trigger_dep_index)
+
+    if trigger_positions == [] do
+      ""
+    else
+      # Partition disjuncts into those containing vs not containing any trigger position
+      {_containing, not_containing} =
+        Enum.split_with(decomposition.disjuncts, fn conjunction ->
+          Enum.any?(conjunction, fn {pos, _polarity} -> pos in trigger_positions end)
+        end)
+
+      # Generate exclusion for each disjunct NOT containing the trigger
+      clauses =
+        Enum.flat_map(not_containing, fn conjunction ->
+          case generate_disjunct_exclusion(
+                 conjunction,
+                 decomposition,
+                 shape_dependencies,
+                 comparison_expressions
+               ) do
+            nil -> []
+            clause -> [clause]
+          end
+        end)
+
+      Enum.join(clauses)
+    end
+  end
+
+  # Generate an exclusion clause for a single disjunct (conjunction of literals).
+  # Returns nil if the disjunct contains any non-subquery positions (weaker exclusion
+  # is safe since the client deduplicates via tags).
+  # Otherwise returns " AND NOT (cond1 AND cond2 AND ...)"
+  defp generate_disjunct_exclusion(
+         conjunction,
+         decomposition,
+         shape_dependencies,
+         comparison_expressions
+       ) do
+    all_subquery? =
+      Enum.all?(conjunction, fn {pos, _polarity} ->
+        case Map.get(decomposition.subexpressions, pos) do
+          %{is_subquery: true} -> true
+          _ -> false
+        end
+      end)
+
+    if not all_subquery? do
+      nil
+    else
+      conditions =
+        Enum.flat_map(conjunction, fn {pos, polarity} ->
+          info = Map.get(decomposition.subexpressions, pos)
+
+          case extract_sublink_index(info.ast) do
+            nil ->
+              []
+
+            dep_index ->
+              subquery_shape = Enum.at(shape_dependencies, dep_index)
+              subquery_section = rebuild_subquery_section(subquery_shape)
+              column_sql = get_column_sql(comparison_expressions, dep_index)
+
+              if column_sql do
+                condition = "#{column_sql} #{subquery_section}"
+
+                case polarity do
+                  :positive -> [condition]
+                  :negated -> ["NOT #{condition}"]
+                end
+              else
+                []
+              end
+          end
+        end)
+
+      if conditions == [], do: nil, else: " AND NOT (#{Enum.join(conditions, " AND ")})"
+    end
+  end
+
+  # Get the SQL for the column expression used in a subquery comparison.
+  # Looks up the comparison expression by sublink index and converts to SQL.
+  defp get_column_sql(comparison_expressions, dep_index) do
+    key = ["$sublink", "#{dep_index}"]
+
+    case Map.get(comparison_expressions, key) do
+      nil -> nil
+      %Eval.Expr{eval: ast} -> SqlGenerator.to_sql(ast)
+    end
+  end
 
   @doc """
   Build a multi-disjunct tag structure from a DNF decomposition.
