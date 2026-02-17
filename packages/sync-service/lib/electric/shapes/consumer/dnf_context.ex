@@ -121,6 +121,25 @@ defmodule Electric.Shapes.Consumer.DnfContext do
   end
 
   @doc """
+  Compute active_conditions and evaluate DNF inclusion in one call.
+
+  Returns `{included?, active_conditions}` where `included?` is true if
+  the record satisfies at least one disjunct, and `active_conditions` is
+  the per-position boolean list for the wire format.
+  """
+  @spec evaluate_record(t(), map(), map(), map()) :: {boolean(), [boolean()]}
+  def evaluate_record(
+        %__MODULE__{decomposition: decomposition} = ctx,
+        record,
+        used_refs,
+        extra_refs
+      ) do
+    active_conditions = compute_active_conditions(ctx, record, used_refs, extra_refs)
+    included = evaluate_dnf(active_conditions, decomposition.disjuncts_positions)
+    {included, active_conditions}
+  end
+
+  @doc """
   Extract the sublink index from a sublink_membership_check AST node.
 
   Used to resolve which dependency shape a subquery corresponds to, even when
