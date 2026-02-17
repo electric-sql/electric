@@ -9,78 +9,112 @@ defmodule Electric.Client.TagTracker do
   ## Data Structures
 
   Two maps are maintained:
-  - `tag_to_keys`: `%{tag_value => MapSet<key>}` - which keys have each tag
-  - `key_data`: `%{key => %{tags: MapSet<tag>, msg: msg}}` - each key's current tags and latest message
+  - `tag_to_keys`: `%{{position, hash} => MapSet<key>}` - which keys have each position-hash pair
+  - `key_data`: `%{key => %{tags: MapSet<{pos, hash}>, active_conditions: [boolean()] | nil,
+    disjunct_positions: [[integer()]] | nil, msg: msg}}` - each key's current state
 
-  This allows:
-  1. Avoiding duplicate entries when a row is updated (we update the msg, not add a new entry)
-  2. Checking if a row still has other tags before generating a synthetic delete
+  Tags arrive as slash-delimited strings per disjunct (e.g., `"hash1/hash2/"`, `"//hash3"`).
+  They are normalized into 2D arrays and indexed by `{position, hash_value}` tuples.
+
+  For shapes with `active_conditions`, visibility is evaluated using DNF (Disjunctive Normal Form):
+  a row is visible if at least one disjunct is satisfied (OR of ANDs over positions).
   """
 
   alias Electric.Client.Message.ChangeMessage
   alias Electric.Client.Message.Headers
 
-  @type tag :: String.t()
+  @type position_hash :: {non_neg_integer(), String.t()}
   @type key :: String.t()
-  @type tag_to_keys :: %{optional(tag()) => MapSet.t(key())}
-  @type key_data :: %{optional(key()) => %{tags: MapSet.t(tag()), msg: ChangeMessage.t()}}
+  @type tag_to_keys :: %{optional(position_hash()) => MapSet.t(key())}
+  @type key_data :: %{
+          optional(key()) => %{
+            tags: MapSet.t(position_hash()),
+            active_conditions: [boolean()] | nil,
+            disjunct_positions: [[non_neg_integer()]] | nil,
+            msg: ChangeMessage.t()
+          }
+        }
 
   @doc """
   Update the tag index when a change message is received.
 
+  Tags are normalized from slash-delimited wire format to position-indexed entries.
   Returns `{updated_tag_to_keys, updated_key_data}`.
   """
   @spec update_tag_index(tag_to_keys(), key_data(), ChangeMessage.t()) ::
           {tag_to_keys(), key_data()}
   def update_tag_index(tag_to_keys, key_data, %ChangeMessage{headers: headers, key: key} = msg) do
-    new_tags = headers.tags || []
-    removed_tags = headers.removed_tags || []
+    raw_new_tags = headers.tags || []
+    raw_removed_tags = headers.removed_tags || []
+
+    active_conditions =
+      case headers.active_conditions do
+        [] -> nil
+        nil -> nil
+        ac -> ac
+      end
+
+    # Normalize tags to 2D arrays
+    normalized_new = normalize_tags(raw_new_tags)
+    normalized_removed = normalize_tags(raw_removed_tags)
+
+    # Extract position-hash entries
+    new_entries = extract_position_entries(normalized_new)
+    removed_entries = extract_position_entries(normalized_removed)
 
     # Get current data for this key
     current_data = Map.get(key_data, key)
-    current_tags = if current_data, do: current_data.tags, else: MapSet.new()
+    current_entries = if current_data, do: current_data.tags, else: MapSet.new()
 
-    # Calculate the new set of tags for this key
-    updated_tags =
-      current_tags
-      |> MapSet.difference(MapSet.new(removed_tags))
-      |> MapSet.union(MapSet.new(new_tags))
+    # Calculate updated entries
+    updated_entries =
+      current_entries
+      |> MapSet.difference(removed_entries)
+      |> MapSet.union(new_entries)
 
-    # For deletes, remove the key entirely
+    # Derive disjunct positions from tags
+    disjunct_positions =
+      case derive_disjunct_positions(normalized_new) do
+        [] -> current_data && current_data.disjunct_positions
+        positions -> positions
+      end
+
     case headers.operation do
       :delete ->
-        # Remove key from all its tags in tag_to_keys
+        # Remove key from all its entries in tag_to_keys
         updated_tag_to_keys =
-          Enum.reduce(updated_tags, tag_to_keys, fn tag, acc ->
-            remove_key_from_tag(acc, tag, key)
+          Enum.reduce(updated_entries, tag_to_keys, fn entry, acc ->
+            remove_key_from_tag(acc, entry, key)
           end)
 
-        # Remove key from key_data
         {updated_tag_to_keys, Map.delete(key_data, key)}
 
       _ ->
-        # If no tags (current or new), don't track this key
-        if MapSet.size(updated_tags) == 0 do
-          # Remove key from all its previous tags in tag_to_keys
+        if MapSet.size(updated_entries) == 0 do
+          # No entries - remove key from tracking
           updated_tag_to_keys =
-            Enum.reduce(current_tags, tag_to_keys, fn tag, acc ->
-              remove_key_from_tag(acc, tag, key)
+            Enum.reduce(current_entries, tag_to_keys, fn entry, acc ->
+              remove_key_from_tag(acc, entry, key)
             end)
 
-          # Remove key from key_data
           {updated_tag_to_keys, Map.delete(key_data, key)}
         else
-          # Update tag_to_keys: remove from old tags, add to new tags
-          tags_to_remove = MapSet.difference(current_tags, updated_tags)
-          tags_to_add = MapSet.difference(updated_tags, current_tags)
+          # Update tag_to_keys: remove old entries, add new entries
+          entries_to_remove = MapSet.difference(current_entries, updated_entries)
+          entries_to_add = MapSet.difference(updated_entries, current_entries)
 
           updated_tag_to_keys =
             tag_to_keys
-            |> remove_key_from_tags(tags_to_remove, key)
-            |> add_key_to_tags(tags_to_add, key)
+            |> remove_key_from_tags(entries_to_remove, key)
+            |> add_key_to_tags(entries_to_add, key)
 
-          # Update key_data with new tags and latest message
-          updated_key_data = Map.put(key_data, key, %{tags: updated_tags, msg: msg})
+          updated_key_data =
+            Map.put(key_data, key, %{
+              tags: updated_entries,
+              active_conditions: active_conditions,
+              disjunct_positions: disjunct_positions,
+              msg: msg
+            })
 
           {updated_tag_to_keys, updated_key_data}
         end
@@ -90,50 +124,74 @@ defmodule Electric.Client.TagTracker do
   @doc """
   Generate synthetic delete messages for keys matching move-out patterns.
 
+  Patterns contain `%{pos: position, value: hash}` maps. For keys with
+  `active_conditions`, positions are deactivated and visibility is re-evaluated
+  using DNF. For keys without `active_conditions`, the old behavior applies:
+  delete when no entries remain.
+
   Returns `{synthetic_deletes, updated_tag_to_keys, updated_key_data}`.
   """
   @spec generate_synthetic_deletes(tag_to_keys(), key_data(), [map()], DateTime.t()) ::
           {[ChangeMessage.t()], tag_to_keys(), key_data()}
   def generate_synthetic_deletes(tag_to_keys, key_data, patterns, request_timestamp) do
-    # Assumption: move-out patterns only include simple tag values; positional matching
-    # for composite tags is not needed with the current server behavior.
+    # First pass: collect all keys that match any pattern and remove those entries
+    {matched_keys_with_entries, updated_tag_to_keys} =
+      Enum.reduce(patterns, {%{}, tag_to_keys}, fn %{pos: pos, value: value},
+                                                   {keys_acc, ttk_acc} ->
+        tag_key = {pos, value}
 
-    # First pass: collect all keys that match any pattern and remove those tags
-    {matched_keys_with_tags, updated_tag_to_keys} =
-      Enum.reduce(patterns, {%{}, tag_to_keys}, fn %{value: tag_value}, {keys_acc, ttk_acc} ->
-        case Map.pop(ttk_acc, tag_value) do
+        case Map.pop(ttk_acc, tag_key) do
           {nil, ttk_acc} ->
             {keys_acc, ttk_acc}
 
           {keys_in_tag, ttk_acc} ->
-            # Track which tags were removed for each key
             updated_keys_acc =
               Enum.reduce(keys_in_tag, keys_acc, fn key, acc ->
-                removed_tags = Map.get(acc, key, MapSet.new())
-                Map.put(acc, key, MapSet.put(removed_tags, tag_value))
+                removed = Map.get(acc, key, MapSet.new())
+                Map.put(acc, key, MapSet.put(removed, tag_key))
               end)
 
             {updated_keys_acc, ttk_acc}
         end
       end)
 
-    # Second pass: for each matched key, update its tags and check if it should be deleted
+    # Second pass: for each matched key, update state and check visibility
     {keys_to_delete, updated_key_data} =
-      Enum.reduce(matched_keys_with_tags, {[], key_data}, fn {key, removed_tags},
-                                                             {deletes, kd_acc} ->
+      Enum.reduce(matched_keys_with_entries, {[], key_data}, fn {key, removed_entries},
+                                                                {deletes, kd_acc} ->
         case Map.get(kd_acc, key) do
           nil ->
             {deletes, kd_acc}
 
-          %{tags: current_tags, msg: msg} ->
-            remaining_tags = MapSet.difference(current_tags, removed_tags)
+          %{tags: current_entries, msg: msg} = data ->
+            remaining_entries = MapSet.difference(current_entries, removed_entries)
 
-            if MapSet.size(remaining_tags) == 0 do
-              # No remaining tags - key should be deleted
+            # Determine if key should be deleted
+            {should_delete, updated_data} =
+              if data.active_conditions != nil and data.disjunct_positions != nil do
+                # DNF mode: deactivate positions and check visibility
+                deactivated_positions =
+                  MapSet.new(removed_entries, fn {pos, _} -> pos end)
+
+                updated_ac =
+                  data.active_conditions
+                  |> Enum.with_index()
+                  |> Enum.map(fn {val, idx} ->
+                    if MapSet.member?(deactivated_positions, idx), do: false, else: val
+                  end)
+
+                visible = row_visible?(updated_ac, data.disjunct_positions)
+
+                {not visible, %{data | tags: remaining_entries, active_conditions: updated_ac}}
+              else
+                # Old mode: delete if no remaining entries
+                {MapSet.size(remaining_entries) == 0, %{data | tags: remaining_entries}}
+              end
+
+            if should_delete do
               {[{key, msg} | deletes], Map.delete(kd_acc, key)}
             else
-              # Still has other tags - update key_data but don't delete
-              {deletes, Map.put(kd_acc, key, %{tags: remaining_tags, msg: msg})}
+              {deletes, Map.put(kd_acc, key, updated_data)}
             end
         end
       end)
@@ -157,7 +215,118 @@ defmodule Electric.Client.TagTracker do
     {synthetic_deletes, updated_tag_to_keys, updated_key_data}
   end
 
-  # Private helpers
+  @doc """
+  Evaluate DNF visibility from active_conditions and disjunct structure.
+
+  A row is visible if at least one disjunct is satisfied.
+  A disjunct is satisfied when all its positions have `active_conditions[pos] == true`.
+  """
+  @spec row_visible?([boolean()], [[non_neg_integer()]]) :: boolean()
+  def row_visible?(active_conditions, disjunct_positions) do
+    Enum.any?(disjunct_positions, fn positions ->
+      Enum.all?(positions, fn pos ->
+        Enum.at(active_conditions, pos, false) == true
+      end)
+    end)
+  end
+
+  @doc """
+  Activate positions for keys matching move-in patterns.
+
+  Sets `active_conditions[pos]` to `true` for keys that have
+  matching `{pos, value}` entries in the tag index.
+
+  Returns `{updated_tag_to_keys, updated_key_data}`.
+  """
+  @spec handle_move_in(tag_to_keys(), key_data(), [map()]) ::
+          {tag_to_keys(), key_data()}
+  def handle_move_in(tag_to_keys, key_data, patterns) do
+    updated_key_data =
+      Enum.reduce(patterns, key_data, fn %{pos: pos, value: value}, kd_acc ->
+        tag_key = {pos, value}
+
+        case Map.get(tag_to_keys, tag_key) do
+          nil ->
+            kd_acc
+
+          keys ->
+            Enum.reduce(keys, kd_acc, fn key, acc ->
+              case Map.get(acc, key) do
+                %{active_conditions: ac} = data when ac != nil ->
+                  updated_ac = List.replace_at(ac, pos, true)
+                  Map.put(acc, key, %{data | active_conditions: updated_ac})
+
+                _ ->
+                  acc
+              end
+            end)
+        end
+      end)
+
+    {tag_to_keys, updated_key_data}
+  end
+
+  @doc """
+  Normalize slash-delimited wire format tags to 2D arrays.
+
+  Each tag string represents a disjunct with "/" separating position hashes.
+  Empty strings are replaced with nil (position not relevant to this disjunct).
+
+  ## Examples
+
+      iex> Electric.Client.TagTracker.normalize_tags(["hash_a/hash_b"])
+      [["hash_a", "hash_b"]]
+
+      iex> Electric.Client.TagTracker.normalize_tags(["hash_a/", "/hash_b"])
+      [["hash_a", nil], [nil, "hash_b"]]
+
+      iex> Electric.Client.TagTracker.normalize_tags(["tag_a"])
+      [["tag_a"]]
+  """
+  @spec normalize_tags([String.t()]) :: [[String.t() | nil]]
+  def normalize_tags([]), do: []
+
+  def normalize_tags(tags) do
+    Enum.map(tags, fn tag ->
+      tag
+      |> String.split("/")
+      |> Enum.map(fn
+        "" -> nil
+        hash -> hash
+      end)
+    end)
+  end
+
+  # --- Private helpers ---
+
+  # Extract {position, hash} entries from normalized 2D tags.
+  defp extract_position_entries(normalized_tags) do
+    normalized_tags
+    |> Enum.flat_map(fn disjunct ->
+      disjunct
+      |> Enum.with_index()
+      |> Enum.flat_map(fn
+        {nil, _pos} -> []
+        {hash, pos} -> [{pos, hash}]
+      end)
+    end)
+    |> MapSet.new()
+  end
+
+  # Derive disjunct positions from normalized tags.
+  # Each disjunct lists the positions that are non-nil.
+  defp derive_disjunct_positions([]), do: []
+
+  defp derive_disjunct_positions(normalized_tags) do
+    Enum.map(normalized_tags, fn disjunct ->
+      disjunct
+      |> Enum.with_index()
+      |> Enum.flat_map(fn
+        {nil, _pos} -> []
+        {_hash, pos} -> [pos]
+      end)
+    end)
+  end
 
   defp remove_key_from_tags(tag_to_keys, tags, key) do
     Enum.reduce(tags, tag_to_keys, fn tag, acc ->
