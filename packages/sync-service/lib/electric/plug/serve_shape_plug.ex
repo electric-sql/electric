@@ -82,7 +82,16 @@ defmodule Electric.Plug.ServeShapePlug do
 
   defp parse_body(conn, _), do: assign(conn, :body_params, %{})
 
-  @subset_keys ~w(where order_by limit offset params where_expr order_by_expr)
+  # Keys that can appear in subset POST bodies. Split into two groups:
+  # - "subset-only" keys that ONLY exist in subset params (order_by, limit, where_expr, order_by_expr)
+  # - "ambiguous" keys that exist in BOTH shape-level params AND subset params (where, params, offset)
+  #
+  # When the POST body uses flat keys (no "subset" wrapper), we only treat them as subset params
+  # if at least one subset-only key is present. This prevents proxies that forward all params in
+  # the body (including shape-level `where`/`params`) from accidentally triggering subset queries.
+  @subset_only_keys ~w(order_by limit where_expr order_by_expr)
+  @ambiguous_subset_keys ~w(where offset params)
+  @all_subset_keys @subset_only_keys ++ @ambiguous_subset_keys
 
   defp validate_request(%Conn{assigns: %{config: config, body_params: body_params}} = conn, _) do
     Logger.debug("Query String: #{conn.query_string}")
@@ -128,9 +137,15 @@ defmodule Electric.Plug.ServeShapePlug do
   end
 
   defp merge_body_params(query_params, body_params) do
-    {subset_params, other_params} = Map.split(body_params, @subset_keys)
+    {subset_params, other_params} = Map.split(body_params, @all_subset_keys)
 
-    if map_size(subset_params) > 0 do
+    # Only treat flat body params as subset params when at least one
+    # subset-only key is present (order_by, limit, where_expr, order_by_expr).
+    # Without this check, a proxy forwarding shape-level `where`/`params` in the
+    # POST body would accidentally trigger subset query responses.
+    has_subset_only_key = Enum.any?(@subset_only_keys, &Map.has_key?(subset_params, &1))
+
+    if has_subset_only_key do
       existing_subset = Map.get(query_params, "subset", %{})
 
       query_params

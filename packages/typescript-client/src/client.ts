@@ -1725,7 +1725,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
           ...result.requestHeaders,
           'Content-Type': `application/json`,
         },
-        body: JSON.stringify(this.#buildSubsetBody(opts)),
+        body: JSON.stringify({ subset: this.#buildSubsetBody(opts) }),
       }
     } else {
       const result = await this.#constructUrl(this.options.url, true, opts)
