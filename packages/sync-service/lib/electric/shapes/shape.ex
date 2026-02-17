@@ -264,14 +264,24 @@ defmodule Electric.Shapes.Shape do
     end
   end
 
-  defp fill_tag_structure(shape) do
-    {tag_structure, comparison_expressions} = SubqueryMoves.move_in_tag_structure(shape)
+  defp fill_tag_structure(%__MODULE__{where: nil} = shape), do: shape
+  defp fill_tag_structure(%__MODULE__{shape_dependencies: []} = shape), do: shape
 
-    %{
-      shape
-      | tag_structure: tag_structure,
-        subquery_comparison_expressions: comparison_expressions
-    }
+  defp fill_tag_structure(shape) do
+    case Electric.Replication.Eval.Decomposer.decompose(shape.where.eval) do
+      {:ok, decomposition} ->
+        {tag_structure, comparison_expressions} =
+          SubqueryMoves.build_tag_structure_from_dnf(decomposition, shape)
+
+        %{
+          shape
+          | tag_structure: tag_structure,
+            subquery_comparison_expressions: comparison_expressions
+        }
+
+      {:error, reason} ->
+        raise "DNF decomposition failed: #{inspect(reason)}"
+    end
   end
 
   defp validate_where_clause(nil, _opts, _refs), do: {:ok, nil, []}
@@ -669,6 +679,9 @@ defmodule Electric.Shapes.Shape do
   defp make_tags_from_pattern(patterns, record, stack_id, shape_handle) do
     Enum.map(patterns, fn pattern ->
       Enum.map(pattern, fn
+        nil ->
+          nil
+
         column_name when is_binary(column_name) ->
           SubqueryMoves.make_value_hash(stack_id, shape_handle, Map.get(record, column_name))
 
@@ -680,7 +693,6 @@ defmodule Electric.Shapes.Shape do
 
           SubqueryMoves.make_value_hash_raw(stack_id, shape_handle, Enum.join(column_parts))
       end)
-      |> Enum.join("/")
     end)
   end
 
