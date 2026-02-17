@@ -39,7 +39,7 @@ GRANT rds_replication TO someuser;
 
 ### Deploy Electric
 
-AWS provides a [wide range of container hosting](https://aws.amazon.com/containers). For example, you can deploy Electric to [AWS Elastic Container Service](https://aws.amazon.com/efs) using [AWS Fargate](https://aws.amazon.com/fargate).
+AWS provides a [wide range of container hosting](https://aws.amazon.com/containers). For example, you can deploy Electric to [AWS Elastic Container Service](https://aws.amazon.com/ecs) using [AWS Fargate](https://aws.amazon.com/fargate).
 
 You should store Shape logs to a persistent disk (not an ephemoral filesystem). For example using [Amazon Elastic File System](https://aws.amazon.com/efs).
 
