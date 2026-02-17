@@ -229,8 +229,9 @@ defmodule Electric.ShapeCache.PureFileStorage do
     end
   end
 
-  def cleanup_all!(%{stack_id: stack_id, base_path: base_path}) do
-    with :ok <- Electric.AsyncDeleter.delete(stack_id, base_path) do
+  def cleanup_all!(%{stack_id: stack_id, base_path: base_path, tmp_dir: tmp_dir}) do
+    with :ok <- Electric.AsyncDeleter.delete(stack_id, base_path),
+         :ok <- Electric.AsyncDeleter.delete(stack_id, tmp_dir) do
       drop_all_ets_entries(stack_id)
     end
   end

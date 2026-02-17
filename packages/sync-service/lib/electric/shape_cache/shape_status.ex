@@ -55,9 +55,22 @@ defmodule Electric.ShapeCache.ShapeStatus do
       "Found #{valid_shape_count} existing valid shapes and #{length(invalid_handles)} shapes in an invalid state"
     )
 
-    :ok = Electric.ShapeCache.ShapeCleaner.remove_shape_storage_async(stack_id, invalid_handles)
+    if valid_shape_count == 0 do
+      # delete any orphaned shape data
+      stack_id
+      |> Electric.ShapeCache.Storage.for_stack()
+      |> Electric.ShapeCache.Storage.cleanup_all!()
 
-    populate_shape_meta_table(stack_id)
+      :ok
+    else
+      with :ok <-
+             Electric.ShapeCache.ShapeCleaner.remove_shape_storage_async(
+               stack_id,
+               invalid_handles
+             ) do
+        populate_shape_meta_table(stack_id)
+      end
+    end
   end
 
   @spec add_shape(stack_id(), Shape.t()) :: {:ok, shape_handle()} | {:error, term()}

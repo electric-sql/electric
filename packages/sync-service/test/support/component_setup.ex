@@ -129,6 +129,10 @@ defmodule Support.ComponentSetup do
     %{registry: registry_name}
   end
 
+  def with_async_deleter(%{async_deleter: "async_deleter"} = ctx) do
+    ctx
+  end
+
   def with_async_deleter(ctx) do
     storage_dir =
       ctx[:storage_dir] || ctx[:tmp_dir] ||
@@ -139,10 +143,11 @@ defmodule Support.ComponentSetup do
 
     start_supervised!(
       {Electric.AsyncDeleter,
-       stack_id: ctx.stack_id, storage_dir: storage_dir, cleanup_interval_ms: 0}
+       stack_id: ctx.stack_id, storage_dir: storage_dir, cleanup_interval_ms: 0},
+      id: "async_deleter"
     )
 
-    %{}
+    %{async_deleter: "async_deleter"}
   end
 
   def with_in_memory_storage(ctx) do
@@ -238,6 +243,7 @@ defmodule Support.ComponentSetup do
 
   def with_shape_status(ctx) do
     %{shape_db: shape_db} = with_shape_db(ctx)
+    %{async_deleter: async_deleter} = with_async_deleter(ctx)
 
     start_supervised!(%{
       id: "shape_status_owner",
@@ -247,7 +253,7 @@ defmodule Support.ComponentSetup do
 
     :ok = Electric.ShapeCache.ShapeStatusOwner.initialize(ctx.stack_id)
 
-    %{shape_status_owner: "shape_status_owner", shape_db: shape_db}
+    %{shape_status_owner: "shape_status_owner", shape_db: shape_db, async_deleter: async_deleter}
   end
 
   def with_shape_db(ctx) do

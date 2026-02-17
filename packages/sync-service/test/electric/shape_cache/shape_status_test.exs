@@ -6,6 +6,7 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
   alias Electric.Shapes.Shape
 
   import Support.ComponentSetup
+  import Support.TestUtils, only: [expect_storage: 2, patch_storage: 1]
 
   @inspector Support.StubInspector.new(
                tables: [{1, {"public", "items"}}, {2, {"public", "other_table"}}],
@@ -28,6 +29,16 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
   test "starts empty", ctx do
     {:ok, state, []} = new_state(ctx)
     assert [] = ShapeStatus.list_shapes(state)
+  end
+
+  test "deletes any orphaned shape data if empty", ctx do
+    expect_storage([force: true],
+      cleanup_all!: fn _ ->
+        :ok
+      end
+    )
+
+    {:ok, _state, []} = new_state(ctx)
   end
 
   test "can add shapes", ctx do
@@ -332,6 +343,17 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
     Electric.StackConfig.put(ctx.stack_id, Electric.ShapeCache.Storage, {Mock.Storage, []})
 
     stored_shapes = Access.get(opts, :stored_shapes, [])
+
+    try do
+      patch_storage(
+        cleanup_all!: fn _ ->
+          :ok
+        end
+      )
+    rescue
+      # ignore any existing mocking on this function
+      ArgumentError -> :ok
+    end
 
     :ok = ShapeStatus.initialize(ctx.stack_id)
 
