@@ -163,17 +163,17 @@ defmodule Electric.Shapes.Shape.SubqueryMovesTest do
     end
   end
 
-  describe "move_in_tag_structure/1" do
+  describe "tag_structure from DNF decomposition" do
     test "returns empty list for shape without where clause" do
       shape = Shape.new!("child", inspector: @inspector)
 
-      assert SubqueryMoves.move_in_tag_structure(shape) == {[], %{}}
+      assert shape.tag_structure == []
     end
 
     test "returns empty list for shape without dependencies" do
       shape = Shape.new!("child", where: "parent_id > 5", inspector: @inspector)
 
-      assert SubqueryMoves.move_in_tag_structure(shape) == {[], %{}}
+      assert shape.tag_structure == []
     end
 
     test "extracts single column reference from sublink" do
@@ -183,11 +183,13 @@ defmodule Electric.Shapes.Shape.SubqueryMovesTest do
           inspector: @inspector
         )
 
-      result = SubqueryMoves.move_in_tag_structure(shape)
+      # DNF produces a single disjunct with one position for the subquery column
+      assert [disjunct] = shape.tag_structure
+      assert "parent_id" in disjunct
 
-      assert {[["parent_id"]],
-              %{["$sublink", "0"] => %Eval.Expr{eval: %Eval.Parser.Ref{path: ["parent_id"]}}}} =
-               result
+      # comparison_expressions should have the sublink entry
+      assert %{["$sublink", "0"] => %Eval.Expr{eval: %Eval.Parser.Ref{path: ["parent_id"]}}} =
+               shape.subquery_comparison_expressions
     end
 
     test "extracts composite key references from row expression" do
@@ -197,16 +199,16 @@ defmodule Electric.Shapes.Shape.SubqueryMovesTest do
           inspector: @composite_inspector
         )
 
-      result = SubqueryMoves.move_in_tag_structure(shape)
+      assert [disjunct] = shape.tag_structure
+      assert {:hash_together, ["col1", "col2"]} in disjunct
 
-      assert {[[{:hash_together, ["col1", "col2"]}]],
-              %{
-                ["$sublink", "0"] => %Eval.Expr{
-                  eval: %Eval.Parser.RowExpr{
-                    elements: [%Eval.Parser.Ref{path: ["col1"]}, %Eval.Parser.Ref{path: ["col2"]}]
-                  }
-                }
-              }} = result
+      assert %{
+               ["$sublink", "0"] => %Eval.Expr{
+                 eval: %Eval.Parser.RowExpr{
+                   elements: [%Eval.Parser.Ref{path: ["col1"]}, %Eval.Parser.Ref{path: ["col2"]}]
+                 }
+               }
+             } = shape.subquery_comparison_expressions
     end
   end
 

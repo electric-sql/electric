@@ -153,56 +153,121 @@ defmodule Electric.Shapes.Shape.SubqueryMoves do
   def namespace_value(value), do: @value_prefix <> value
 
   @doc """
-  Generate a tag structure for a shape.
+  Build a multi-disjunct tag structure from a DNF decomposition.
 
-  A tag structure is a list of lists, where each inner list represents a tag (and is functionally a tuple, but
-  JSON can't directly represent tuples). The structure is used to generate actual tags for each row, that act
-  as a refenence as to why this row is part of the shape.
+  Returns `{tag_structure, comparison_expressions}` where tag_structure is a list
+  of lists (one per disjunct), where each inner list has one entry per DNF position
+  (nil for positions not in that disjunct, column name(s) for participating positions).
 
-  Tag structure then is essentially a list of column names in correct positions that will get filled in
-  with actual values from the row
+  Example for `WHERE (x IN sq1 AND status = 'active') OR y IN sq2`:
+  - Position 0: `x IN sq1` → `"x"`
+  - Position 1: `status = 'active'` → `"status"`
+  - Position 2: `y IN sq2` → `"y"`
+  - tag_structure: `[["x", "status", nil], [nil, nil, "y"]]`
   """
-  @spec move_in_tag_structure(Shape.t()) ::
-          list(list(String.t() | {:hash_together, [String.t(), ...]}))
-  def move_in_tag_structure(%Shape{} = shape)
-      when is_nil(shape.where)
-      when shape.shape_dependencies == [],
-      do: {[], %{}}
+  def build_tag_structure_from_dnf(decomposition, shape) do
+    %{subexpressions: subexpressions, position_count: position_count, disjuncts: disjuncts} =
+      decomposition
 
-  def move_in_tag_structure(shape) do
-    # TODO: For multiple subqueries this should be a DNF form
-    #       and this walking overrides the comparison expressions
-    {:ok, {tag_structure, comparison_expressions}} =
+    # Build column spec for each position from its AST
+    position_columns =
+      Map.new(0..(position_count - 1)//1, fn pos ->
+        subexpr = Map.fetch!(subexpressions, pos)
+        {pos, extract_columns_from_ast(subexpr.ast)}
+      end)
+
+    # Build comparison expressions for subquery positions
+    comparison_expressions = build_comparison_expressions(subexpressions, position_count)
+
+    # Build tag structure: one row per disjunct, one column per position
+    tag_structure =
+      Enum.map(disjuncts, fn conjunction ->
+        active_positions = MapSet.new(conjunction, fn {pos, _polarity} -> pos end)
+
+        Enum.map(0..(position_count - 1)//1, fn pos ->
+          if MapSet.member?(active_positions, pos) do
+            Map.fetch!(position_columns, pos)
+          else
+            nil
+          end
+        end)
+      end)
+
+    # For backward compat with move_in_where_clause, also gather comparison expressions
+    # from the shape's AST walk (used by existing single-disjunct code paths)
+    legacy_comparison_exprs = build_legacy_comparison_expressions(shape)
+
+    {tag_structure, Map.merge(legacy_comparison_exprs, comparison_expressions)}
+  end
+
+  # Extract column name(s) from a subexpression's AST.
+  # For `x IN (SELECT ...)` → "x"
+  # For `(x, y) IN (SELECT ...)` → {:hash_together, ["x", "y"]}
+  # For non-subquery conditions like `status = 'active'` → extract the column ref
+  defp extract_columns_from_ast(ast) do
+    columns =
+      Walker.reduce!(
+        ast,
+        fn
+          %Eval.Parser.Ref{path: [column_name]}, acc, _ctx ->
+            {:ok, [column_name | acc]}
+
+          _, acc, _ ->
+            {:ok, acc}
+        end,
+        []
+      )
+      |> Enum.reverse()
+      |> Enum.uniq()
+
+    case columns do
+      [single] -> single
+      multiple when length(multiple) > 1 -> {:hash_together, multiple}
+      # fallback: should not happen for valid expressions
+      [] -> nil
+    end
+  end
+
+  defp build_comparison_expressions(subexpressions, position_count) do
+    Enum.reduce(0..(position_count - 1)//1, %{}, fn pos, acc ->
+      subexpr = Map.fetch!(subexpressions, pos)
+
+      if subexpr.is_subquery do
+        case subexpr.ast do
+          %Eval.Parser.Func{name: "sublink_membership_check", args: [testexpr, sublink_ref]} ->
+            Map.put(acc, sublink_ref.path, Eval.Expr.wrap_parser_part(testexpr))
+
+          _ ->
+            acc
+        end
+      else
+        acc
+      end
+    end)
+  end
+
+  # Build comparison expressions the legacy way for backward compat
+  defp build_legacy_comparison_expressions(%Shape{where: nil}), do: %{}
+  defp build_legacy_comparison_expressions(%Shape{shape_dependencies: []}), do: %{}
+
+  defp build_legacy_comparison_expressions(shape) do
+    {:ok, {_tags, comparison_expressions}} =
       Walker.reduce(
         shape.where.eval,
         fn
           %Eval.Parser.Func{name: "sublink_membership_check", args: [testexpr, sublink_ref]},
-          {[current_tag | others], comparison_expressions},
+          {tags, comparison_expressions},
           _ ->
-            tags =
-              case testexpr do
-                %Eval.Parser.Ref{path: [column_name]} ->
-                  [[column_name | current_tag] | others]
-
-                %Eval.Parser.RowExpr{elements: elements} ->
-                  elements =
-                    Enum.map(elements, fn %Eval.Parser.Ref{path: [column_name]} ->
-                      column_name
-                    end)
-
-                  [[{:hash_together, elements} | current_tag] | others]
-              end
-
             {:ok, {tags, Map.put(comparison_expressions, sublink_ref.path, testexpr)}}
 
           _, acc, _ ->
             {:ok, acc}
         end,
-        {[[]], %{}}
+        {[], %{}}
       )
 
-    comparison_expressions
-    |> Map.new(fn {path, expr} -> {path, Eval.Expr.wrap_parser_part(expr)} end)
-    |> then(&{tag_structure, &1})
+    Map.new(comparison_expressions, fn {path, expr} ->
+      {path, Eval.Expr.wrap_parser_part(expr)}
+    end)
   end
 end
