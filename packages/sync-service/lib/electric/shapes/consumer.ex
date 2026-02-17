@@ -284,12 +284,7 @@ defmodule Electric.Shapes.Consumer do
     feature_flags = Electric.StackConfig.lookup(state.stack_id, :feature_flags, [])
     tagged_subqueries_enabled? = "tagged_subqueries" in feature_flags
 
-    # Invalidate if tagged subqueries feature flag is disabled.
-    # OR/NOT with subqueries and multiple dependencies are now handled by
-    # DNF decomposition and position-based tagging (via DnfContext).
-    should_invalidate? = not tagged_subqueries_enabled?
-
-    if should_invalidate? do
+    if not tagged_subqueries_enabled? do
       stop_and_clean(state)
     else
       {state, move_in_notification} =
