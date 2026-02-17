@@ -1342,7 +1342,18 @@ export class ShapeStream<T extends Row<unknown> = Row>
         // #start handles it correctly.
         throw new FetchBackoffAbortError()
       }
-      throw error
+      // Re-throw known Electric errors so the caller can handle them
+      // (e.g., 409 shape rotation, stale cache retry, missing headers).
+      // Other errors (body parsing, SSE protocol failures, null body)
+      // are SSE connection failures handled by the fallback mechanism
+      // in the finally block below.
+      if (
+        error instanceof FetchError ||
+        error instanceof StaleCacheError ||
+        error instanceof MissingHeadersError
+      ) {
+        throw error
+      }
     } finally {
       // Check if the SSE connection closed too quickly
       // This can happen when responses are cached or when the proxy/server
