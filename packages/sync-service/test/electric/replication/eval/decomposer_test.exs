@@ -2,7 +2,16 @@ defmodule Electric.Replication.Eval.DecomposerTest do
   use ExUnit.Case, async: true
 
   alias Electric.Replication.Eval.Parser
+  alias Electric.Replication.Eval.SqlGenerator
   alias Electric.Replication.Eval.Decomposer
+
+  @refs %{
+    ["a"] => :int4,
+    ["b"] => :int4,
+    ["c"] => :int4,
+    ["d"] => :int4,
+    ["name"] => :text
+  }
 
   describe "decompose/1" do
     test "should decompose a DNF query with shared subexpressions" do
@@ -15,11 +24,11 @@ defmodule Electric.Replication.Eval.DecomposerTest do
       |> Decomposer.decompose()
       |> assert_expanded_dnf(
         expected_disjuncts: [
-          ["a = 1", "b = 2", nil, nil, nil, nil],
-          [nil, nil, "c = 3", "d = 4", nil, nil],
-          [nil, nil, nil, nil, "a = 1", "c = 3"]
+          [~s|"a" = 1|, ~s|"b" = 2|, nil, nil, nil, nil],
+          [nil, nil, ~s|"c" = 3|, ~s|"d" = 4|, nil, nil],
+          [nil, nil, nil, nil, ~s|"a" = 1|, ~s|"c" = 3|]
         ],
-        expected_subexpressions: ["a = 1", "b = 2", "c = 3", "d = 4"]
+        expected_subexpressions: [~s|"a" = 1|, ~s|"b" = 2|, ~s|"c" = 3|, ~s|"d" = 4|]
       )
     end
 
@@ -28,8 +37,8 @@ defmodule Electric.Replication.Eval.DecomposerTest do
       |> prepare()
       |> Decomposer.decompose()
       |> assert_expanded_dnf(
-        expected_disjuncts: [["a = 1"]],
-        expected_subexpressions: ["a = 1"]
+        expected_disjuncts: [[~s|"a" = 1|]],
+        expected_subexpressions: [~s|"a" = 1|]
       )
     end
 
@@ -38,8 +47,8 @@ defmodule Electric.Replication.Eval.DecomposerTest do
       |> prepare()
       |> Decomposer.decompose()
       |> assert_expanded_dnf(
-        expected_disjuncts: [["a = 1", "b = 2", "c = 3"]],
-        expected_subexpressions: ["a = 1", "b = 2", "c = 3"]
+        expected_disjuncts: [[~s|"a" = 1|, ~s|"b" = 2|, ~s|"c" = 3|]],
+        expected_subexpressions: [~s|"a" = 1|, ~s|"b" = 2|, ~s|"c" = 3|]
       )
     end
 
@@ -52,11 +61,11 @@ defmodule Electric.Replication.Eval.DecomposerTest do
       |> Decomposer.decompose()
       |> assert_expanded_dnf(
         expected_disjuncts: [
-          ["a = 1", nil, nil],
-          [nil, "b = 2", nil],
-          [nil, nil, "c = 3"]
+          [~s|"a" = 1|, nil, nil],
+          [nil, ~s|"b" = 2|, nil],
+          [nil, nil, ~s|"c" = 3|]
         ],
-        expected_subexpressions: ["a = 1", "b = 2", "c = 3"]
+        expected_subexpressions: [~s|"a" = 1|, ~s|"b" = 2|, ~s|"c" = 3|]
       )
     end
 
@@ -69,23 +78,30 @@ defmodule Electric.Replication.Eval.DecomposerTest do
       |> Decomposer.decompose()
       |> assert_expanded_dnf(
         expected_disjuncts: [
-          ["a = 1", "b = 2", nil, nil],
-          [nil, nil, "a = 1", "c = 3"]
+          [~s|"a" = 1|, ~s|"b" = 2|, nil, nil],
+          [nil, nil, ~s|"a" = 1|, ~s|"c" = 3|]
         ],
-        expected_subexpressions: ["a = 1", "b = 2", "c = 3"]
+        expected_subexpressions: [~s|"a" = 1|, ~s|"b" = 2|, ~s|"c" = 3|]
       )
     end
 
     test "should handle subquery expressions as atomic subexpressions" do
       ~S"a = 1 AND (b IN (SELECT id FROM test_table) OR c = 3)"
-      |> prepare()
+      |> prepare_with_sublinks(
+        %{["$sublink", "0"] => {:array, :int4}},
+        %{0 => "SELECT id FROM test_table"}
+      )
       |> Decomposer.decompose()
       |> assert_expanded_dnf(
         expected_disjuncts: [
-          ["a = 1", "b IN (SELECT id FROM test_table)", nil, nil],
-          [nil, nil, "a = 1", "c = 3"]
+          [~s|"a" = 1|, ~s|"b" IN (SELECT $sublink.0)|, nil, nil],
+          [nil, nil, ~s|"a" = 1|, ~s|"c" = 3|]
         ],
-        expected_subexpressions: ["a = 1", "b IN (SELECT id FROM test_table)", "c = 3"]
+        expected_subexpressions: [
+          ~s|"a" = 1|,
+          ~s|"b" IN (SELECT $sublink.0)|,
+          ~s|"c" = 3|
+        ]
       )
     end
 
@@ -97,12 +113,12 @@ defmodule Electric.Replication.Eval.DecomposerTest do
       |> Decomposer.decompose()
       |> assert_expanded_dnf(
         expected_disjuncts: [
-          ["a = 1", "c = 3", nil, nil, nil, nil, nil, nil],
-          [nil, nil, "a = 1", "d = 4", nil, nil, nil, nil],
-          [nil, nil, nil, nil, "b = 2", "c = 3", nil, nil],
-          [nil, nil, nil, nil, nil, nil, "b = 2", "d = 4"]
+          [~s|"a" = 1|, ~s|"c" = 3|, nil, nil, nil, nil, nil, nil],
+          [nil, nil, ~s|"a" = 1|, ~s|"d" = 4|, nil, nil, nil, nil],
+          [nil, nil, nil, nil, ~s|"b" = 2|, ~s|"c" = 3|, nil, nil],
+          [nil, nil, nil, nil, nil, nil, ~s|"b" = 2|, ~s|"d" = 4|]
         ],
-        expected_subexpressions: ["a = 1", "b = 2", "c = 3", "d = 4"]
+        expected_subexpressions: [~s|"a" = 1|, ~s|"b" = 2|, ~s|"c" = 3|, ~s|"d" = 4|]
       )
     end
 
@@ -113,8 +129,8 @@ defmodule Electric.Replication.Eval.DecomposerTest do
       |> prepare()
       |> Decomposer.decompose()
       |> assert_expanded_dnf(
-        expected_disjuncts: [[{:not, "a = 1"}, "b = 2"]],
-        expected_subexpressions: ["a = 1", "b = 2"]
+        expected_disjuncts: [[{:not, ~s|"a" = 1|}, ~s|"b" = 2|]],
+        expected_subexpressions: [~s|"a" = 1|, ~s|"b" = 2|]
       )
     end
 
@@ -125,8 +141,8 @@ defmodule Electric.Replication.Eval.DecomposerTest do
       |> prepare()
       |> Decomposer.decompose()
       |> assert_expanded_dnf(
-        expected_disjuncts: [[{:not, "a = 1"}, {:not, "b = 2"}]],
-        expected_subexpressions: ["a = 1", "b = 2"]
+        expected_disjuncts: [[{:not, ~s|"a" = 1|}, {:not, ~s|"b" = 2|}]],
+        expected_subexpressions: [~s|"a" = 1|, ~s|"b" = 2|]
       )
     end
 
@@ -138,10 +154,10 @@ defmodule Electric.Replication.Eval.DecomposerTest do
       |> Decomposer.decompose()
       |> assert_expanded_dnf(
         expected_disjuncts: [
-          [{:not, "a = 1"}, nil],
-          [nil, {:not, "b = 2"}]
+          [{:not, ~s|"a" = 1|}, nil],
+          [nil, {:not, ~s|"b" = 2|}]
         ],
-        expected_subexpressions: ["a = 1", "b = 2"]
+        expected_subexpressions: [~s|"a" = 1|, ~s|"b" = 2|]
       )
     end
 
@@ -151,8 +167,8 @@ defmodule Electric.Replication.Eval.DecomposerTest do
       |> prepare()
       |> Decomposer.decompose()
       |> assert_expanded_dnf(
-        expected_disjuncts: [["a = 1"]],
-        expected_subexpressions: ["a = 1"]
+        expected_disjuncts: [[~s|"a" = 1|]],
+        expected_subexpressions: [~s|"a" = 1|]
       )
     end
 
@@ -162,10 +178,10 @@ defmodule Electric.Replication.Eval.DecomposerTest do
       |> Decomposer.decompose()
       |> assert_expanded_dnf(
         expected_disjuncts: [
-          ["lower(name) = 'test'", nil],
-          [nil, "upper(name) = 'TEST'"]
+          [~s|lower("name") = 'test'|, nil],
+          [nil, ~s|upper("name") = 'TEST'|]
         ],
-        expected_subexpressions: ["lower(name) = 'test'", "upper(name) = 'TEST'"]
+        expected_subexpressions: [~s|lower("name") = 'test'|, ~s|upper("name") = 'TEST'|]
       )
     end
 
@@ -178,16 +194,16 @@ defmodule Electric.Replication.Eval.DecomposerTest do
 
       assert_expanded_dnf({disjuncts, subexpressions},
         expected_disjuncts: [
-          ["a = 1", "b = 2", nil, nil, nil],
-          [nil, nil, "a = 1", "c = 3", nil],
-          [nil, nil, nil, nil, "a = 1"]
+          [~s|"a" = 1|, ~s|"b" = 2|, nil, nil, nil],
+          [nil, nil, ~s|"a" = 1|, ~s|"c" = 3|, nil],
+          [nil, nil, nil, nil, ~s|"a" = 1|]
         ],
-        expected_subexpressions: ["a = 1", "b = 2", "c = 3"]
+        expected_subexpressions: [~s|"a" = 1|, ~s|"b" = 2|, ~s|"c" = 3|]
       )
 
       # Additionally verify that a = 1 uses the same reference across disjuncts
       subexpressions_deparsed = Map.new(subexpressions, fn {ref, ast} -> {deparse(ast), ref} end)
-      a_eq_1_ref = Map.fetch!(subexpressions_deparsed, "a = 1")
+      a_eq_1_ref = Map.fetch!(subexpressions_deparsed, ~s|"a" = 1|)
 
       # Find all occurrences of the a = 1 reference across disjuncts
       # Handle both plain refs and {:not, ref} tuples
@@ -206,30 +222,27 @@ defmodule Electric.Replication.Eval.DecomposerTest do
     end
   end
 
-  # Helper to prepare a WHERE clause string into an AST
+  # Helper to prepare a WHERE clause string into a Parser AST
   defp prepare(where_clause) do
-    {:ok, ast} = Parser.parse_query(where_clause)
-    ast
+    {:ok, pgquery} = Parser.parse_query(where_clause)
+    {:ok, expr} = Parser.validate_where_ast(pgquery, refs: @refs)
+    expr.eval
+  end
+
+  # Helper for WHERE clauses containing subqueries (IN (SELECT ...))
+  defp prepare_with_sublinks(where_clause, sublink_refs, sublink_queries) do
+    {:ok, pgquery} = Parser.parse_query(where_clause)
+    all_refs = Map.merge(@refs, sublink_refs)
+
+    {:ok, expr} =
+      Parser.validate_where_ast(pgquery, refs: all_refs, sublink_queries: sublink_queries)
+
+    expr.eval
   end
 
   # Helper to deparse an AST node back to SQL string
   defp deparse(ast) do
-    %PgQuery.ParseResult{
-      stmts: [
-        %PgQuery.RawStmt{
-          stmt: %PgQuery.Node{
-            node:
-              {:select_stmt,
-               %PgQuery.SelectStmt{
-                 target_list: [%PgQuery.Node{node: {:res_target, %PgQuery.ResTarget{val: ast}}}]
-               }}
-          }
-        }
-      ]
-    }
-    |> PgQuery.protobuf_to_query!()
-    |> String.replace_prefix("SELECT ", "")
-    |> String.trim()
+    SqlGenerator.to_sql(ast)
   end
 
   # Assertion helper that verifies:

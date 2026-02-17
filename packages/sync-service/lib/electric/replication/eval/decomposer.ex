@@ -7,7 +7,7 @@ defmodule Electric.Replication.Eval.Decomposer do
 
   To avoid duplication, it returns a list of lists, where the outer list is a list of disjuncts (conjunctions),
   and the inner list is a list of comparisons. Each comparison (i.e. the sub-expression of the original where clause)
-  is represented by an Erlang reference, which is then mentioned in the map of references to the protobuf of the
+  is represented by an Erlang reference, which is then mentioned in the map of references to the AST of the
   referenced subexpression.
 
   ## NOT handling
@@ -84,11 +84,14 @@ defmodule Electric.Replication.Eval.Decomposer do
   ```
   """
 
-  @type pgquery_protobuf() :: PgQuery.Node.t()
+  alias Electric.Replication.Eval.Parser
+  alias Electric.Replication.Eval.Parser.Func
+  alias Electric.Replication.Eval.SqlGenerator
+
   @type dnf_term() :: reference() | {:not, reference()} | nil
 
-  @spec decompose(query :: pgquery_protobuf()) ::
-          {[[dnf_term()]], %{reference() => pgquery_protobuf()}}
+  @spec decompose(query :: Parser.tree_part()) ::
+          {[[dnf_term()]], %{reference() => Parser.tree_part()}}
   def decompose(query) do
     # Phase 1: Convert to intermediate DNF (list of disjuncts, each is a list of {ast, negated?})
     internal_dnf = to_dnf(query, false)
@@ -99,39 +102,36 @@ defmodule Electric.Replication.Eval.Decomposer do
 
   # Convert AST to internal DNF representation
   # negated? tracks whether we're inside a NOT context (for De Morgan transformations)
-  defp to_dnf(
-         %PgQuery.Node{node: {:bool_expr, %PgQuery.BoolExpr{boolop: boolop, args: args}}},
-         negated
-       ) do
-    case {boolop, negated} do
-      {:OR_EXPR, false} ->
+  defp to_dnf(%Func{name: name, args: args}, negated) when name in ~w(and or not) do
+    case {name, negated} do
+      {"or", false} ->
         # OR: concatenate disjuncts from all branches
         Enum.flat_map(args, &to_dnf(&1, false))
 
-      {:OR_EXPR, true} ->
+      {"or", true} ->
         # NOT OR => AND (De Morgan's law)
         # NOT (a OR b) = NOT a AND NOT b
         args_dnfs = Enum.map(args, &to_dnf(&1, true))
         cross_product(args_dnfs)
 
-      {:AND_EXPR, false} ->
+      {"and", false} ->
         # AND: cross-product of disjuncts from all branches
         args_dnfs = Enum.map(args, &to_dnf(&1, false))
         cross_product(args_dnfs)
 
-      {:AND_EXPR, true} ->
+      {"and", true} ->
         # NOT AND => OR (De Morgan's law)
         # NOT (a AND b) = NOT a OR NOT b
         Enum.flat_map(args, &to_dnf(&1, true))
 
-      {:NOT_EXPR, _} ->
+      {"not", _} ->
         # NOT: flip the negation state (handles double negation automatically)
         [arg] = args
         to_dnf(arg, not negated)
     end
   end
 
-  defp to_dnf(%PgQuery.Node{} = leaf, negated) do
+  defp to_dnf(leaf, negated) do
     # Leaf expression: single disjunct with single term
     [[{leaf, negated}]]
   end
@@ -209,21 +209,6 @@ defmodule Electric.Replication.Eval.Decomposer do
 
   # Convert AST node back to SQL string for deduplication
   defp deparse(ast) do
-    %PgQuery.ParseResult{
-      stmts: [
-        %PgQuery.RawStmt{
-          stmt: %PgQuery.Node{
-            node:
-              {:select_stmt,
-               %PgQuery.SelectStmt{
-                 target_list: [%PgQuery.Node{node: {:res_target, %PgQuery.ResTarget{val: ast}}}]
-               }}
-          }
-        }
-      ]
-    }
-    |> PgQuery.protobuf_to_query!()
-    |> String.replace_prefix("SELECT ", "")
-    |> String.trim()
+    SqlGenerator.to_sql(ast)
   end
 end
