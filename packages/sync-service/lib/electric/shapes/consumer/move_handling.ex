@@ -74,23 +74,14 @@ defmodule Electric.Shapes.Consumer.MoveHandling do
   end
 
   def query_complete(%State{} = state, name, key_set, snapshot) do
-    # 1. Splice stored snapshot into main log with filtering
-    # Flatten position-aware moved_out_tags to flat MapSet for storage compatibility.
-    # Phase 12 will make the storage layer position-aware.
-    per_pos_tags = state.move_handling_state.moved_out_tags[name] || %{}
-
-    flat_tags_to_skip =
-      Enum.reduce(per_pos_tags, MapSet.new(), fn {_pos, tags}, acc ->
-        MapSet.union(acc, tags)
-      end)
-
+    # 1. Splice stored snapshot into main log with position-aware filtering
     {{lower_bound, upper_bound}, writer} =
       Storage.append_move_in_snapshot_to_log_filtered!(
         name,
         state.writer,
         state.move_handling_state.touch_tracker,
         snapshot,
-        flat_tags_to_skip
+        state.move_handling_state.moved_out_tags[name] || %{}
       )
 
     # 2. Move from "waiting" to "filtering"

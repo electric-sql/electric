@@ -543,7 +543,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
         # This means the touch happened BEFORE the snapshot, so query data is fresher
         snapshot = {100, 200, [150]}
 
-        tags_to_skip = MapSet.new()
+        condition_hashes_to_skip = %{}
 
         {inserted_range, _writer} =
           Storage.append_move_in_snapshot_to_log_filtered!(
@@ -551,7 +551,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
             writer,
             touch_tracker,
             snapshot,
-            tags_to_skip
+            condition_hashes_to_skip
           )
 
         assert {%LogOffset{}, %LogOffset{}} = inserted_range
@@ -586,7 +586,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
         # This means the touch happened AFTER the snapshot, so we have fresher data in stream
         snapshot = {100, 200, [150]}
 
-        tags_to_skip = MapSet.new()
+        condition_hashes_to_skip = %{}
 
         {inserted_range, _writer} =
           Storage.append_move_in_snapshot_to_log_filtered!(
@@ -594,7 +594,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
             writer,
             touch_tracker,
             snapshot,
-            tags_to_skip
+            condition_hashes_to_skip
           )
 
         assert {%LogOffset{}, %LogOffset{}} = inserted_range
@@ -609,23 +609,24 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
         refute Enum.any?(items, &(&1.id == "2"))
       end
 
-      test "filters out rows where all tags are in tags_to_skip", %{
+      test "filters out rows matching condition_hashes at tracked positions", %{
         storage: opts,
         writer: writer
       } do
+        # Condition hashes: per-position hashes (one per DNF position)
         move_in_data = [
           ["key1", [], Jason.encode!(%{id: "1", name: "row1"})],
-          ["key2", ["tag1"], Jason.encode!(%{id: "2", name: "row2"})],
-          ["key3", ["tag1", "tag2"], Jason.encode!(%{id: "3", name: "row3"})],
-          ["key4", ["tag3"], Jason.encode!(%{id: "4", name: "row4"})]
+          ["key2", ["hash1"], Jason.encode!(%{id: "2", name: "row2"})],
+          ["key3", ["hash1", "hash2"], Jason.encode!(%{id: "3", name: "row3"})],
+          ["key4", ["hash3"], Jason.encode!(%{id: "4", name: "row4"})]
         ]
 
         Storage.write_move_in_snapshot!(move_in_data, "test-move-in", opts)
 
         touch_tracker = %{}
         snapshot = {100, 200, []}
-        # Skip rows where ALL tags are in this set
-        tags_to_skip = MapSet.new(["tag1", "tag2"])
+        # Skip rows with hash1 at position 0
+        condition_hashes_to_skip = %{0 => MapSet.new(["hash1"])}
 
         {inserted_range, _writer} =
           Storage.append_move_in_snapshot_to_log_filtered!(
@@ -633,7 +634,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
             writer,
             touch_tracker,
             snapshot,
-            tags_to_skip
+            condition_hashes_to_skip
           )
 
         assert {%LogOffset{}, %LogOffset{}} = inserted_range
@@ -641,10 +642,10 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
         stream = Storage.get_log_stream(LogOffset.first(), LogOffset.last(), opts)
         items = Enum.map(stream, &Jason.decode!(&1, keys: :atoms))
 
-        # key1: no tags -> included
-        # key2: [tag1] -> all in tags_to_skip -> FILTERED OUT
-        # key3: [tag1, tag2] -> all in tags_to_skip -> FILTERED OUT
-        # key4: [tag3] -> not all in tags_to_skip -> included
+        # key1: no hashes -> included
+        # key2: position 0 = hash1 -> matches position 0 skip -> FILTERED OUT
+        # key3: position 0 = hash1 -> matches position 0 skip -> FILTERED OUT
+        # key4: position 0 = hash3 -> no match -> included
         assert length(items) == 2
         assert Enum.any?(items, &(&1.id == "1"))
         assert Enum.any?(items, &(&1.id == "4"))
@@ -652,21 +653,22 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
         refute Enum.any?(items, &(&1.id == "3"))
       end
 
-      test "includes rows with partial tag overlap", %{
+      test "position-aware filtering only matches at the correct position", %{
         storage: opts,
         writer: writer
       } do
+        # Two positions: position 0 and position 1
         move_in_data = [
-          ["key1", ["tag1", "tag_other"], Jason.encode!(%{id: "1", name: "row1"})],
-          ["key2", ["tag2", "tag_other"], Jason.encode!(%{id: "2", name: "row2"})]
+          ["key1", ["hash_a", "hash_b"], Jason.encode!(%{id: "1", name: "row1"})],
+          ["key2", ["hash_c", "hash_b"], Jason.encode!(%{id: "2", name: "row2"})]
         ]
 
         Storage.write_move_in_snapshot!(move_in_data, "test-move-in", opts)
 
         touch_tracker = %{}
         snapshot = {100, 200, []}
-        # Only skip if ALL tags are in this set
-        tags_to_skip = MapSet.new(["tag1", "tag2"])
+        # Skip hash_a at position 0 — should NOT affect position 1 even if it has hash_b
+        condition_hashes_to_skip = %{0 => MapSet.new(["hash_a"])}
 
         {inserted_range, _writer} =
           Storage.append_move_in_snapshot_to_log_filtered!(
@@ -674,7 +676,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
             writer,
             touch_tracker,
             snapshot,
-            tags_to_skip
+            condition_hashes_to_skip
           )
 
         assert {%LogOffset{}, %LogOffset{}} = inserted_range
@@ -682,22 +684,22 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
         stream = Storage.get_log_stream(LogOffset.first(), LogOffset.last(), opts)
         items = Enum.map(stream, &Jason.decode!(&1, keys: :atoms))
 
-        # Both rows have tag_other which is NOT in tags_to_skip
-        # So they are NOT full subsets -> both included
-        assert length(items) == 2
-        assert Enum.any?(items, &(&1.id == "1"))
+        # key1: position 0 = hash_a -> matches -> FILTERED OUT
+        # key2: position 0 = hash_c -> no match -> included
+        assert length(items) == 1
         assert Enum.any?(items, &(&1.id == "2"))
+        refute Enum.any?(items, &(&1.id == "1"))
       end
 
-      test "combines touch_tracker and tag filtering", %{
+      test "combines touch_tracker and condition_hashes filtering", %{
         storage: opts,
         writer: writer
       } do
         move_in_data = [
           ["key1", [], Jason.encode!(%{id: "1", name: "row1"})],
-          ["key2", ["tag1"], Jason.encode!(%{id: "2", name: "row2"})],
-          ["key3", ["tag1"], Jason.encode!(%{id: "3", name: "row3"})],
-          ["key4", ["tag2"], Jason.encode!(%{id: "4", name: "row4"})]
+          ["key2", ["hash1"], Jason.encode!(%{id: "2", name: "row2"})],
+          ["key3", ["hash1"], Jason.encode!(%{id: "3", name: "row3"})],
+          ["key4", ["hash2"], Jason.encode!(%{id: "4", name: "row4"})]
         ]
 
         Storage.write_move_in_snapshot!(move_in_data, "test-move-in", opts)
@@ -705,8 +707,8 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
         # key2 was touched by non-visible txid -> will be filtered by touch_tracker
         touch_tracker = %{"key2" => 150}
         snapshot = {100, 200, [150]}
-        # key3 will be filtered by tags (all tags in skip set)
-        tags_to_skip = MapSet.new(["tag1"])
+        # key3 will be filtered by condition_hashes (hash1 at position 0)
+        condition_hashes_to_skip = %{0 => MapSet.new(["hash1"])}
 
         {inserted_range, _writer} =
           Storage.append_move_in_snapshot_to_log_filtered!(
@@ -714,7 +716,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
             writer,
             touch_tracker,
             snapshot,
-            tags_to_skip
+            condition_hashes_to_skip
           )
 
         assert {%LogOffset{}, %LogOffset{}} = inserted_range
@@ -722,10 +724,10 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
         stream = Storage.get_log_stream(LogOffset.first(), LogOffset.last(), opts)
         items = Enum.map(stream, &Jason.decode!(&1, keys: :atoms))
 
-        # key1: no touch, no tags -> included
-        # key2: touched with non-visible txid (fresher data in stream) -> filtered by touch_tracker
-        # key3: all tags in skip set -> filtered by tags
-        # key4: has tag2 which is not in skip set -> included
+        # key1: no touch, no hashes -> included
+        # key2: touched with non-visible txid -> filtered by touch_tracker
+        # key3: position 0 = hash1 -> filtered by condition_hashes
+        # key4: position 0 = hash2 -> no match -> included
         assert length(items) == 2
         assert Enum.any?(items, &(&1.id == "1"))
         assert Enum.any?(items, &(&1.id == "4"))
@@ -733,20 +735,20 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
         refute Enum.any?(items, &(&1.id == "3"))
       end
 
-      test "handles empty touch_tracker and tags_to_skip", %{
+      test "handles empty touch_tracker and condition_hashes_to_skip", %{
         storage: opts,
         writer: writer
       } do
         move_in_data = [
           ["key1", [], Jason.encode!(%{id: "1", name: "row1"})],
-          ["key2", ["tag1"], Jason.encode!(%{id: "2", name: "row2"})]
+          ["key2", ["hash1"], Jason.encode!(%{id: "2", name: "row2"})]
         ]
 
         Storage.write_move_in_snapshot!(move_in_data, "test-move-in", opts)
 
         touch_tracker = %{}
         snapshot = {100, 200, []}
-        tags_to_skip = MapSet.new()
+        condition_hashes_to_skip = %{}
 
         {inserted_range, _writer} =
           Storage.append_move_in_snapshot_to_log_filtered!(
@@ -754,7 +756,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
             writer,
             touch_tracker,
             snapshot,
-            tags_to_skip
+            condition_hashes_to_skip
           )
 
         assert {%LogOffset{}, %LogOffset{}} = inserted_range
@@ -768,20 +770,20 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
         assert Enum.any?(items, &(&1.id == "2"))
       end
 
-      test "filters all rows when all conditions match", %{
+      test "filters all rows when all condition_hashes match", %{
         storage: opts,
         writer: writer
       } do
         move_in_data = [
-          ["key1", ["skip_tag"], Jason.encode!(%{id: "1", name: "row1"})],
-          ["key2", ["skip_tag"], Jason.encode!(%{id: "2", name: "row2"})]
+          ["key1", ["skip_hash"], Jason.encode!(%{id: "1", name: "row1"})],
+          ["key2", ["skip_hash"], Jason.encode!(%{id: "2", name: "row2"})]
         ]
 
         Storage.write_move_in_snapshot!(move_in_data, "test-move-in", opts)
 
         touch_tracker = %{}
         snapshot = {100, 200, []}
-        tags_to_skip = MapSet.new(["skip_tag"])
+        condition_hashes_to_skip = %{0 => MapSet.new(["skip_hash"])}
 
         {inserted_range, _writer} =
           Storage.append_move_in_snapshot_to_log_filtered!(
@@ -789,7 +791,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
             writer,
             touch_tracker,
             snapshot,
-            tags_to_skip
+            condition_hashes_to_skip
           )
 
         assert {%LogOffset{}, %LogOffset{}} = inserted_range
@@ -801,7 +803,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
         assert items == []
       end
 
-      test "correctly handles empty tag list on rows", %{
+      test "correctly handles empty condition_hashes on rows", %{
         storage: opts,
         writer: writer
       } do
@@ -814,8 +816,8 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
 
         touch_tracker = %{}
         snapshot = {100, 200, []}
-        # Tags to skip set is non-empty
-        tags_to_skip = MapSet.new(["tag1"])
+        # Non-empty skip set but rows have no condition_hashes
+        condition_hashes_to_skip = %{0 => MapSet.new(["hash1"])}
 
         {inserted_range, _writer} =
           Storage.append_move_in_snapshot_to_log_filtered!(
@@ -823,12 +825,12 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
             writer,
             touch_tracker,
             snapshot,
-            tags_to_skip
+            condition_hashes_to_skip
           )
 
         assert {%LogOffset{}, %LogOffset{}} = inserted_range
 
-        # Empty tag lists should NOT be filtered (not a full subset of tags_to_skip)
+        # Empty condition_hashes should NOT be filtered
         stream = Storage.get_log_stream(LogOffset.first(), LogOffset.last(), opts)
         items = Enum.map(stream, &Jason.decode!(&1, keys: :atoms))
 

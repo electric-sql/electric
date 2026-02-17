@@ -17,13 +17,17 @@ defmodule Electric.Shapes.Querying do
       json_like_select(shape, %{"is_move_in" => true}, stack_id, shape_handle)
 
     key_select = key_select(shape)
-    tag_select = make_tags(shape, stack_id, shape_handle) |> Enum.join(", ")
+
+    # Use per-position condition_hashes for binary snapshot storage and filtering.
+    # Wire-format tags (slash-delimited) are still embedded in the JSON headers.
+    condition_hashes_select =
+      make_condition_hashes_select(shape, stack_id, shape_handle) |> Enum.join(", ")
 
     query =
       Postgrex.prepare!(
         conn,
         table,
-        ~s|SELECT #{key_select}, ARRAY[#{tag_select}]::text[], #{json_like_select} FROM #{table} WHERE #{where}|
+        ~s|SELECT #{key_select}, ARRAY[#{condition_hashes_select}]::text[], #{json_like_select} FROM #{table} WHERE #{where}|
       )
 
     Postgrex.stream(conn, query, params)
@@ -379,5 +383,35 @@ defmodule Electric.Shapes.Querying do
       nil -> raise "No comparison expression found for sublink index #{dep_index}"
       %Electric.Replication.Eval.Expr{eval: ast} -> SqlGenerator.to_sql(ast)
     end
+  end
+
+  # Build per-position condition hash SQL for move-in snapshot binary storage.
+  # Produces one MD5 hash per DNF position, using the same hashing formula as
+  # make_tags/make_move_out_pattern so that moved_out_tags filtering matches.
+  defp make_condition_hashes_select(%Shape{tag_structure: tag_structure}, stack_id, shape_handle) do
+    position_count = length(hd(tag_structure))
+
+    Enum.map(0..(position_count - 1)//1, fn pos ->
+      # Find the column spec for this position from any disjunct that has it
+      col_spec = Enum.find_value(tag_structure, fn disjunct -> Enum.at(disjunct, pos) end)
+      make_position_hash_sql(col_spec, stack_id, shape_handle)
+    end)
+  end
+
+  defp make_position_hash_sql(column_name, stack_id, shape_handle)
+       when is_binary(column_name) do
+    col = pg_cast_column_to_text(column_name)
+    namespaced = pg_namespace_value_sql(col)
+    ~s[md5('#{stack_id}#{shape_handle}' || #{namespaced})]
+  end
+
+  defp make_position_hash_sql({:hash_together, columns}, stack_id, shape_handle) do
+    column_parts =
+      Enum.map(columns, fn col_name ->
+        col = pg_cast_column_to_text(col_name)
+        ~s['#{col_name}:' || #{pg_namespace_value_sql(col)}]
+      end)
+
+    ~s[md5('#{stack_id}#{shape_handle}' || #{Enum.join(column_parts, " || ")})]
   end
 end

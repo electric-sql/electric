@@ -315,7 +315,15 @@ defmodule Electric.ShapeCache.InMemoryStorage do
   @impl Electric.ShapeCache.Storage
   def write_move_in_snapshot!(stream, name, %MS{log_table: log_table}) do
     stream
-    |> Stream.map(fn [key, tags, json] -> {{:movein, {name, key}}, {tags, json}} end)
+    |> Stream.map(fn [key, condition_hashes, json] ->
+      # Store condition_hashes as a position-indexed map for filtering
+      hashes_map =
+        condition_hashes
+        |> Enum.with_index()
+        |> Map.new(fn {hash, i} -> {i, hash} end)
+
+      {{:movein, {name, key}}, {hashes_map, json}}
+    end)
     |> Stream.chunk_every(500)
     |> Stream.each(&:ets.insert(log_table, &1))
     |> Stream.run()
@@ -367,16 +375,16 @@ defmodule Electric.ShapeCache.InMemoryStorage do
         %MS{log_table: log_table} = opts,
         touch_tracker,
         snapshot,
-        tags_to_skip
+        condition_hashes_to_skip
       ) do
     initial_offset = current_offset(opts)
     ref = make_ref()
 
     Stream.unfold({initial_offset, {:movein, {name, nil}}}, fn {offset, last_key} ->
       case :ets.next_lookup(log_table, last_key) do
-        {{:movein, {^name, _}} = ets_key, [{{:movein, {^name, key}}, {tags, json}}]} ->
+        {{:movein, {^name, _}} = ets_key, [{{:movein, {^name, key}}, {condition_hashes, json}}]} ->
           # Check if this row should be skipped
-          if (tags != [] and Enum.all?(tags, &MapSet.member?(tags_to_skip, &1))) or
+          if should_skip_for_moved_out?(condition_hashes, condition_hashes_to_skip) or
                Electric.Shapes.Consumer.MoveIns.should_skip_query_row?(
                  touch_tracker,
                  snapshot,
@@ -404,6 +412,19 @@ defmodule Electric.ShapeCache.InMemoryStorage do
     resulting_offset = receive(do: ({^ref, offset} -> offset))
 
     {{initial_offset, resulting_offset}, opts}
+  end
+
+  defp should_skip_for_moved_out?(_condition_hashes, condition_hashes_to_skip)
+       when map_size(condition_hashes_to_skip) == 0,
+       do: false
+
+  defp should_skip_for_moved_out?(condition_hashes, condition_hashes_to_skip) do
+    Enum.any?(condition_hashes_to_skip, fn {position, skip_set} ->
+      case condition_hashes do
+        %{^position => hash} -> MapSet.member?(skip_set, hash)
+        _ -> false
+      end
+    end)
   end
 
   @impl Electric.ShapeCache.Storage
