@@ -220,7 +220,8 @@ defmodule Electric.Replication.Eval.Decomposer do
       key = deparse(ast)
 
       case Map.fetch(ast_to_ref, key) do
-        {:ok, _ref} -> {ast_to_ref, subexpressions}
+        {:ok, _ref} ->
+          {ast_to_ref, subexpressions}
 
         :error ->
           ref = make_ref()
