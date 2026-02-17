@@ -244,12 +244,12 @@ defmodule Electric.Replication.Eval.DecomposerTest do
       # Right OR: 2 disjuncts [de, fg]
       # Cross-product: 2 × 2 = 4 disjuncts, each with 4 terms, expanded to width 16
       # d = 4 appears in left's 2nd disjunct AND right's 1st disjunct — shared ref
-      {disjuncts, subexpressions} =
+      {:ok, decomposition} =
         ~S"((a = 1 AND b = 2) OR (c = 3 AND d = 4)) AND ((d = 4 AND e = 5) OR (f = 6 AND g = 7))"
         |> prepare()
         |> Decomposer.decompose()
 
-      assert_expanded_dnf({disjuncts, subexpressions},
+      assert_expanded_dnf({:ok, decomposition},
         expected_disjuncts: [
           # ab × de
           [~s|"a" = 1|, ~s|"b" = 2|, ~s|"d" = 4|, ~s|"e" = 5|,
@@ -270,29 +270,24 @@ defmodule Electric.Replication.Eval.DecomposerTest do
         ]
       )
 
-      # Verify d = 4 uses the same reference everywhere it appears
-      subexpressions_deparsed = Map.new(subexpressions, fn {ref, ast} -> {deparse(ast), ref} end)
-      d_eq_4_ref = Map.fetch!(subexpressions_deparsed, ~s|"d" = 4|)
-
+      # Verify d = 4 appears at 4 positions (shared across disjuncts)
       d_eq_4_count =
-        disjuncts
-        |> List.flatten()
-        |> Enum.count(fn term -> extract_ref(term) == d_eq_4_ref end)
+        decomposition.subexpressions
+        |> Enum.count(fn {_pos, subexpr} -> deparse(subexpr.ast) == ~s|"d" = 4| end)
 
-      # d = 4 appears in 3 of the 4 disjuncts (ab×de has it once, cd×de twice, cd×fg once)
       assert d_eq_4_count == 4
     end
 
     test "should share refs when same subexpression appears positive and negated" do
       # (a = 1 AND b = 2) OR (NOT a = 1 AND c = 3)
       # a = 1 appears positive in disjunct 1, negated in disjunct 2
-      # The subexpressions map should have only 3 entries (shared ref for a = 1)
-      {disjuncts, subexpressions} =
+      # The subexpressions map should have only 3 unique expressions
+      {:ok, decomposition} =
         ~S"(a = 1 AND b = 2) OR (NOT a = 1 AND c = 3)"
         |> prepare()
         |> Decomposer.decompose()
 
-      assert_expanded_dnf({disjuncts, subexpressions},
+      assert_expanded_dnf({:ok, decomposition},
         expected_disjuncts: [
           [~s|"a" = 1|, ~s|"b" = 2|, nil, nil],
           [nil, nil, {:not, ~s|"a" = 1|}, ~s|"c" = 3|]
@@ -300,27 +295,24 @@ defmodule Electric.Replication.Eval.DecomposerTest do
         expected_subexpressions: [~s|"a" = 1|, ~s|"b" = 2|, ~s|"c" = 3|]
       )
 
-      # Verify the positive and negated occurrences share the same base reference
-      subexpressions_deparsed = Map.new(subexpressions, fn {ref, ast} -> {deparse(ast), ref} end)
-      a_eq_1_ref = Map.fetch!(subexpressions_deparsed, ~s|"a" = 1|)
+      # Verify a = 1 appears at one positive and one negated position
+      a_eq_1_entries =
+        decomposition.subexpressions
+        |> Enum.filter(fn {_pos, subexpr} -> deparse(subexpr.ast) == ~s|"a" = 1| end)
 
-      # Disjunct 1, position 0 should be the plain ref
-      [[pos_ref | _] | _] = disjuncts
-      assert pos_ref == a_eq_1_ref
-
-      # Disjunct 2, position 2 should be {:not, same_ref}
-      [_, [_, _, neg_term | _]] = disjuncts
-      assert neg_term == {:not, a_eq_1_ref}
+      assert length(a_eq_1_entries) == 2
+      polarities = a_eq_1_entries |> Enum.map(fn {_, s} -> s.negated end) |> Enum.sort()
+      assert polarities == [false, true]
     end
 
     test "should deduplicate references for identical subexpressions" do
       # All three disjuncts contain `a = 1` - should use same reference
-      {disjuncts, subexpressions} =
+      {:ok, decomposition} =
         ~S"(a = 1 AND b = 2) OR (a = 1 AND c = 3) OR a = 1"
         |> prepare()
         |> Decomposer.decompose()
 
-      assert_expanded_dnf({disjuncts, subexpressions},
+      assert_expanded_dnf({:ok, decomposition},
         expected_disjuncts: [
           [~s|"a" = 1|, ~s|"b" = 2|, nil, nil, nil],
           [nil, nil, ~s|"a" = 1|, ~s|"c" = 3|, nil],
@@ -329,24 +321,12 @@ defmodule Electric.Replication.Eval.DecomposerTest do
         expected_subexpressions: [~s|"a" = 1|, ~s|"b" = 2|, ~s|"c" = 3|]
       )
 
-      # Additionally verify that a = 1 uses the same reference across disjuncts
-      subexpressions_deparsed = Map.new(subexpressions, fn {ref, ast} -> {deparse(ast), ref} end)
-      a_eq_1_ref = Map.fetch!(subexpressions_deparsed, ~s|"a" = 1|)
+      # a = 1 should appear at 3 positions (one per disjunct)
+      a_eq_1_count =
+        decomposition.subexpressions
+        |> Enum.count(fn {_pos, subexpr} -> deparse(subexpr.ast) == ~s|"a" = 1| end)
 
-      # Find all occurrences of the a = 1 reference across disjuncts
-      # Handle both plain refs and {:not, ref} tuples
-      a_eq_1_positions =
-        disjuncts
-        |> Enum.with_index()
-        |> Enum.flat_map(fn {conjuncts, disjunct_idx} ->
-          conjuncts
-          |> Enum.with_index()
-          |> Enum.filter(fn {term, _pos} -> extract_ref(term) == a_eq_1_ref end)
-          |> Enum.map(fn {_term, pos} -> {disjunct_idx, pos} end)
-        end)
-
-      # a = 1 should appear in all 3 disjuncts
-      assert length(a_eq_1_positions) == 3
+      assert a_eq_1_count == 3
     end
   end
 
@@ -374,68 +354,50 @@ defmodule Electric.Replication.Eval.DecomposerTest do
   end
 
   # Assertion helper that verifies:
-  # 1. All inner lists have the same length (expanded property)
-  # 2. Each disjunct matches the expected structure (including nil positions)
+  # 1. Position count matches expected width
+  # 2. Correct number of disjuncts
   # 3. Subexpressions map contains exactly the expected unique expressions
-  # 4. References are properly reused for identical subexpressions
-  # 5. {:not, ref} terms are handled correctly
-  defp assert_expanded_dnf({disjuncts, subexpressions}, opts) do
+  # 4. Reconstructed expanded format matches expected disjuncts
+  defp assert_expanded_dnf({:ok, decomposition}, opts) do
     expected_disjuncts = Keyword.fetch!(opts, :expected_disjuncts)
     expected_subexpressions = Keyword.fetch!(opts, :expected_subexpressions)
 
-    # Convert subexpressions to deparsed form for comparison
-    subexpressions_deparsed = Map.new(subexpressions, fn {ref, ast} -> {ref, deparse(ast)} end)
+    %{
+      disjuncts: disjuncts,
+      subexpressions: subexpressions,
+      position_count: position_count
+    } = decomposition
 
-    # 1. Verify all disjuncts have the same length
-    lengths = Enum.map(disjuncts, &length/1)
-    assert lengths != [], "Disjuncts list cannot be empty"
-    assert Enum.uniq(lengths) == [hd(lengths)], "All disjuncts must have same length"
-    width = hd(lengths)
-
-    # 2. Verify width matches expected disjuncts width
+    # 1. Verify position count matches expected width
     expected_width = expected_disjuncts |> hd() |> length()
 
-    assert width == expected_width,
-           "Width (#{width}) must equal expected width (#{expected_width})"
+    assert position_count == expected_width,
+           "Position count (#{position_count}) must equal expected width (#{expected_width})"
 
-    # 3. Verify correct number of disjuncts
+    # 2. Verify correct number of disjuncts
     assert length(disjuncts) == length(expected_disjuncts),
            "Expected #{length(expected_disjuncts)} disjuncts, got #{length(disjuncts)}"
 
-    # 4. Verify subexpressions map contains exactly the expected unique expressions
-    assert length(expected_subexpressions) == map_size(subexpressions_deparsed),
-           "Expected #{length(expected_subexpressions)} subexpressions, got #{map_size(subexpressions_deparsed)}"
-
-    actual_subexprs = subexpressions_deparsed |> Map.values() |> MapSet.new()
+    # 3. Verify subexpressions map contains exactly the expected unique expressions
+    actual_subexprs = subexpressions |> Map.values() |> Enum.map(&deparse(&1.ast)) |> MapSet.new()
     expected_subexprs = MapSet.new(expected_subexpressions)
 
     assert actual_subexprs == expected_subexprs,
            "Subexpressions mismatch. Expected: #{inspect(expected_subexprs)}, got: #{inspect(actual_subexprs)}"
 
-    # 5. Verify each disjunct matches the expected structure
-    expected = MapSet.new(expected_disjuncts)
+    # 4. Reconstruct expanded format from sparse disjuncts for comparison
+    actual_expanded =
+      MapSet.new(disjuncts, fn conj ->
+        row = List.duplicate(nil, position_count)
 
-    actual =
-      MapSet.new(disjuncts, fn disjunct ->
-        Enum.map(disjunct, &deparse_term(&1, subexpressions_deparsed))
+        Enum.reduce(conj, row, fn {pos, polarity}, row ->
+          subexpr = Map.fetch!(subexpressions, pos)
+          sql = deparse(subexpr.ast)
+          term = if polarity == :negated, do: {:not, sql}, else: sql
+          List.replace_at(row, pos, term)
+        end)
       end)
 
-    assert actual == expected
+    assert actual_expanded == MapSet.new(expected_disjuncts)
   end
-
-  # Convert a DNF term (ref, {:not, ref}, or nil) to its expected format
-  defp deparse_term(nil, _subexpressions_deparsed), do: nil
-
-  defp deparse_term({:not, ref}, subexpressions_deparsed) do
-    {:not, Map.fetch!(subexpressions_deparsed, ref)}
-  end
-
-  defp deparse_term(ref, subexpressions_deparsed) when is_reference(ref) do
-    Map.fetch!(subexpressions_deparsed, ref)
-  end
-
-  # Extract the base reference from a DNF term
-  defp extract_ref(nil), do: nil
-  defp extract_ref({:not, ref}), do: ref
-  defp extract_ref(ref) when is_reference(ref), do: ref
 end

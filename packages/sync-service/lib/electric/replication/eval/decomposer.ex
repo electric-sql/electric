@@ -88,16 +88,29 @@ defmodule Electric.Replication.Eval.Decomposer do
   alias Electric.Replication.Eval.Parser.Func
   alias Electric.Replication.Eval.SqlGenerator
 
-  @type dnf_term() :: reference() | {:not, reference()} | nil
+  @type position :: non_neg_integer()
+  @type literal :: {position(), :positive | :negated}
+  @type conjunction :: [literal()]
+  @type dnf :: [conjunction()]
 
-  @spec decompose(query :: Parser.tree_part()) ::
-          {[[dnf_term()]], %{reference() => Parser.tree_part()}}
+  @type subexpression :: %{
+          ast: Parser.tree_part(),
+          is_subquery: boolean(),
+          negated: boolean()
+        }
+
+  @type decomposition :: %{
+          disjuncts: dnf(),
+          disjuncts_positions: [[position()]],
+          subexpressions: %{position() => subexpression()},
+          position_count: non_neg_integer()
+        }
+
+  @spec decompose(query :: Parser.tree_part()) :: {:ok, decomposition()}
   def decompose(query) do
-    # Phase 1: Convert to intermediate DNF (list of disjuncts, each is a list of {ast, negated?})
     internal_dnf = to_dnf(query, false)
-
-    # Phase 2: Expand to fixed-width format with references
-    expand(internal_dnf)
+    {expanded, ref_subexpressions} = expand(internal_dnf)
+    {:ok, to_decomposition(expanded, ref_subexpressions)}
   end
 
   # Convert AST to internal DNF representation
@@ -211,4 +224,47 @@ defmodule Electric.Replication.Eval.Decomposer do
   defp deparse(ast) do
     SqlGenerator.to_sql(ast)
   end
+
+  # Convert ref-based expanded format to position-indexed decomposition
+  defp to_decomposition(expanded, ref_subexpressions) do
+    position_count = if expanded == [[]], do: 0, else: length(hd(expanded))
+    subexpressions = build_position_subexpressions(expanded, ref_subexpressions, position_count)
+
+    disjuncts =
+      Enum.map(expanded, fn row ->
+        row
+        |> Enum.with_index()
+        |> Enum.flat_map(fn
+          {nil, _pos} -> []
+          {{:not, _ref}, pos} -> [{pos, :negated}]
+          {_ref, pos} -> [{pos, :positive}]
+        end)
+      end)
+
+    disjuncts_positions = Enum.map(disjuncts, fn conj -> Enum.map(conj, &elem(&1, 0)) end)
+
+    %{
+      disjuncts: disjuncts,
+      disjuncts_positions: disjuncts_positions,
+      subexpressions: subexpressions,
+      position_count: position_count
+    }
+  end
+
+  defp build_position_subexpressions(_expanded, _ref_subexpressions, 0), do: %{}
+
+  defp build_position_subexpressions(expanded, ref_subexpressions, position_count) do
+    Map.new(0..(position_count - 1), fn pos ->
+      term = Enum.find_value(expanded, fn row -> Enum.at(row, pos) end)
+      {ref, negated} = ref_and_polarity(term)
+      ast = Map.fetch!(ref_subexpressions, ref)
+      {pos, %{ast: ast, is_subquery: is_subquery?(ast), negated: negated}}
+    end)
+  end
+
+  defp ref_and_polarity({:not, ref}), do: {ref, true}
+  defp ref_and_polarity(ref) when is_reference(ref), do: {ref, false}
+
+  defp is_subquery?(%Func{name: "sublink_membership_check"}), do: true
+  defp is_subquery?(_), do: false
 end
