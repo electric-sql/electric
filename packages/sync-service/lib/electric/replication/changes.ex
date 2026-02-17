@@ -181,7 +181,15 @@ defmodule Electric.Replication.Changes do
   end
 
   defmodule NewRecord do
-    defstruct [:relation, :record, :log_offset, :key, last?: false, move_tags: []]
+    defstruct [
+      :relation,
+      :record,
+      :log_offset,
+      :key,
+      last?: false,
+      move_tags: [],
+      active_conditions: nil
+    ]
 
     @type t() :: %__MODULE__{
             relation: Changes.relation_name(),
@@ -204,7 +212,8 @@ defmodule Electric.Replication.Changes do
       move_tags: [],
       removed_move_tags: [],
       changed_columns: MapSet.new(),
-      last?: false
+      last?: false,
+      active_conditions: nil
     ]
 
     @type t() :: %__MODULE__{
@@ -253,7 +262,15 @@ defmodule Electric.Replication.Changes do
   end
 
   defmodule DeletedRecord do
-    defstruct [:relation, :old_record, :log_offset, :key, move_tags: [], last?: false]
+    defstruct [
+      :relation,
+      :old_record,
+      :log_offset,
+      :key,
+      move_tags: [],
+      active_conditions: nil,
+      last?: false
+    ]
 
     @type t() :: %__MODULE__{
             relation: Changes.relation_name(),
