@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ShapeStream, isChangeMessage, Message, Row } from '../src'
 import { snakeCamelMapper } from '../src/column-mapper'
 import { resolveInMacrotask } from './support/test-helpers'
@@ -406,5 +406,58 @@ describe(`ShapeStream`, () => {
     // Verify original db column names are not present
     expect(changeMessage!.value).not.toHaveProperty(`user_id`)
     expect(changeMessage!.value).not.toHaveProperty(`created_at`)
+  })
+
+  it(`should detect fast retry loops and apply backoff`, async () => {
+    // Simulate a misconfigured proxy that always returns 409,
+    // causing a tight retry loop
+    let requestCount = 0
+    let caughtError: Error | null = null
+
+    const fetchMock = (
+      _input: RequestInfo | URL,
+      _init?: RequestInit
+    ): Promise<Response> => {
+      requestCount++
+      // Always return 409 to simulate a broken proxy
+      return Promise.resolve(
+        new Response(`[]`, {
+          status: 409,
+          headers: {
+            'content-type': `application/json`,
+            'electric-handle': `handle-${requestCount}`,
+          },
+        })
+      )
+    }
+
+    const stream = new ShapeStream({
+      url: shapeUrl,
+      params: { table: `test` },
+      signal: aborter.signal,
+      fetchClient: fetchMock,
+      subscribe: false,
+      onError: (error) => {
+        caughtError = error
+        // Don't retry - let the error surface
+      },
+    })
+
+    stream.subscribe(() => {})
+
+    // Wait for the fast loop to be detected and error thrown.
+    // With defaults (5 loops, 100ms base backoff, 5s max), this should
+    // complete well within 15s even with jitter.
+    await vi.waitFor(
+      () => {
+        expect(caughtError).not.toBe(null)
+      },
+      { timeout: 15_000 }
+    )
+
+    // The error message should help diagnose the proxy misconfiguration
+    expect(caughtError!.message).toContain(`fast retry loop`)
+    expect(caughtError!.message).toContain(`proxy`)
+    expect(caughtError!.message).toContain(`troubleshooting`)
   })
 })

@@ -601,6 +601,15 @@ export class ShapeStream<T extends Row<unknown> = Row>
   #unsubscribeFromVisibilityChanges?: () => void
   #unsubscribeFromWakeDetection?: () => void
   #maxStaleCacheRetries = 3
+  // Fast-loop detection: track recent non-live request timestamps to detect
+  // tight retry loops caused by proxy/CDN misconfiguration
+  #recentRequestTimestamps: number[] = []
+  #fastLoopWindowMs = 500 // Time window to detect fast loops
+  #fastLoopThreshold = 5 // Number of requests in window to trigger backoff
+  #fastLoopBackoffBaseMs = 100 // Base delay for fast-loop backoff
+  #fastLoopBackoffMaxMs = 5_000 // Maximum backoff delay (5s)
+  #fastLoopConsecutiveCount = 0 // How many consecutive fast loops detected
+  #fastLoopMaxCount = 5 // After this many consecutive fast loops, throw error
 
   constructor(options: ShapeStreamOptions<GetExtensions<T>>) {
     this.options = { subscribe: true, ...options }
@@ -788,6 +797,16 @@ export class ShapeStream<T extends Row<unknown> = Row>
       return
     }
 
+    // Fast-loop detection: only track non-live requests to avoid
+    // flagging normal live polling as a fast loop.
+    if (!this.#syncState.isUpToDate) {
+      await this.#checkFastLoop()
+    } else {
+      // Reset fast-loop tracking when we reach a healthy state
+      this.#fastLoopConsecutiveCount = 0
+      this.#recentRequestTimestamps = []
+    }
+
     let resumingFromPause = false
     if (this.#syncState instanceof PausedState) {
       resumingFromPause = true
@@ -891,6 +910,69 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
     this.#tickPromiseResolver?.()
     return this.#requestShape()
+  }
+
+  /**
+   * Detects tight retry loops (e.g., from proxy/CDN misconfiguration) and
+   * applies exponential backoff. Throws if the loop persists too long.
+   */
+  async #checkFastLoop(): Promise<void> {
+    const now = Date.now()
+
+    // Prune timestamps outside the detection window
+    this.#recentRequestTimestamps = this.#recentRequestTimestamps.filter(
+      (t) => now - t < this.#fastLoopWindowMs
+    )
+    this.#recentRequestTimestamps.push(now)
+
+    if (this.#recentRequestTimestamps.length >= this.#fastLoopThreshold) {
+      this.#fastLoopConsecutiveCount++
+
+      if (this.#fastLoopConsecutiveCount >= this.#fastLoopMaxCount) {
+        throw new FetchError(
+          502,
+          undefined,
+          undefined,
+          {},
+          this.options.url,
+          `Client is stuck in a fast retry loop ` +
+            `(${this.#fastLoopThreshold} requests in ${this.#fastLoopWindowMs}ms, ` +
+            `repeated ${this.#fastLoopMaxCount} times). ` +
+            `This usually indicates a proxy or CDN misconfiguration that is causing ` +
+            `the client to continuously refetch without making progress. ` +
+            `Common causes:\n` +
+            `  - Proxy is not including query parameters (handle, offset) in its cache key\n` +
+            `  - CDN is serving stale 409 responses\n` +
+            `  - Proxy is stripping required Electric headers from responses\n` +
+            `For more information visit the troubleshooting guide: https://electric-sql.com/docs/guides/troubleshooting`
+        )
+      }
+
+      // Exponential backoff with full jitter
+      const maxDelay = Math.min(
+        this.#fastLoopBackoffMaxMs,
+        this.#fastLoopBackoffBaseMs *
+          Math.pow(2, this.#fastLoopConsecutiveCount)
+      )
+      const delayMs = Math.floor(Math.random() * maxDelay)
+
+      if (this.#fastLoopConsecutiveCount === 1) {
+        console.warn(
+          `[Electric] Detected fast retry loop ` +
+            `(${this.#fastLoopThreshold} requests in ${this.#fastLoopWindowMs}ms). ` +
+            `This usually indicates a proxy or CDN misconfiguration. ` +
+            `Check that your proxy includes all query parameters (especially 'handle' and 'offset') in its cache key, ` +
+            `and that required Electric headers are forwarded to the client. ` +
+            `Backing off to prevent excessive requests. ` +
+            `For more information visit the troubleshooting guide: https://electric-sql.com/docs/guides/troubleshooting`
+        )
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, delayMs))
+
+      // Clear timestamps after backoff so we measure fresh
+      this.#recentRequestTimestamps = []
+    }
   }
 
   async #constructUrl(
