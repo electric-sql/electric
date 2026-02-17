@@ -46,7 +46,7 @@ defmodule Electric.Shapes.Consumer.MoveIns do
           touch_tracker: %{String.t() => pos_integer()},
           move_in_buffering_snapshot: nil | pg_snapshot(),
           in_flight_values: in_flight_values(),
-          moved_out_tags: %{move_in_name() => MapSet.t(String.t())},
+          moved_out_tags: %{move_in_name() => %{non_neg_integer() => MapSet.t(String.t())}},
           maximum_resolved_snapshot: nil | pg_snapshot(),
           minimum_unresolved_snapshot: nil | pg_snapshot()
         }
@@ -72,14 +72,30 @@ defmodule Electric.Shapes.Consumer.MoveIns do
       | waiting_move_ins: new_waiting_move_ins,
         move_in_buffering_snapshot: new_buffering_snapshot,
         in_flight_values: make_in_flight_values(new_waiting_move_ins),
-        moved_out_tags: Map.put(state.moved_out_tags, name, MapSet.new())
+        moved_out_tags: Map.put(state.moved_out_tags, name, %{})
     }
   end
 
-  # TODO: this assumes a single subquery for now
-  def move_out_happened(state, new_tags) do
+  @doc """
+  Record that a move-out happened for the given positions and hashes.
+
+  Updates moved_out_tags for all waiting move-ins. Accepts patterns as a list
+  of `%{pos: position, value: hash}` maps (from move-out control messages).
+  """
+  def move_out_happened(state, patterns) do
+    # Group patterns by position
+    patterns_by_pos =
+      Enum.group_by(patterns, & &1[:pos], & &1[:value])
+
     moved_out_tags =
-      Map.new(state.moved_out_tags, fn {name, tags} -> {name, MapSet.union(tags, new_tags)} end)
+      Map.new(state.moved_out_tags, fn {name, per_pos_tags} ->
+        updated =
+          Enum.reduce(patterns_by_pos, per_pos_tags, fn {position, hashes}, acc ->
+            Map.update(acc, position, MapSet.new(hashes), &MapSet.union(&1, MapSet.new(hashes)))
+          end)
+
+        {name, updated}
+      end)
 
     %{state | moved_out_tags: moved_out_tags}
   end
