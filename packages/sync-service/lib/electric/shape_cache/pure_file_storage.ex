@@ -49,7 +49,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
   @behaviour Electric.ShapeCache.Storage
 
   # Struct that can be used to create a writer_state record or a reader
-  @version 1
+  @version 2
   defstruct [
     :buffer_ets,
     :chunk_bytes_threshold,
@@ -877,15 +877,15 @@ defmodule Electric.ShapeCache.PureFileStorage do
     FileInfo.mkdir_p(shape_snapshot_dir(opts))
 
     stream
-    |> Stream.map(fn [key, tags, json] ->
-      tags_binary = Enum.map(tags, &[<<byte_size(&1)::16>>, &1])
+    |> Stream.map(fn [key, condition_hashes, json] ->
+      hashes_binary = Enum.map(condition_hashes, &[<<byte_size(&1)::16>>, &1])
 
       [
         <<byte_size(key)::32>>,
         <<byte_size(json)::64>>,
         <<?i::8>>,
-        <<length(tags)::16>>,
-        tags_binary,
+        <<length(condition_hashes)::16>>,
+        hashes_binary,
         key,
         json
       ]
@@ -907,9 +907,9 @@ defmodule Electric.ShapeCache.PureFileStorage do
            LogOffset.increment(starting_offset)}
         end,
         fn {file, offset} ->
-          with {:meta, <<key_size::32, json_size::64, op_type::8, tag_count::16>>} <-
+          with {:meta, <<key_size::32, json_size::64, op_type::8, hash_count::16>>} <-
                  {:meta, IO.binread(file, 15)},
-               _tags = read_tags(file, tag_count),
+               _condition_hashes = read_condition_hashes(file, hash_count),
                <<key::binary-size(key_size)>> <- IO.binread(file, key_size),
                <<json::binary-size(json_size)>> <- IO.binread(file, json_size) do
             {[{offset, key_size, key, op_type, 0, json_size, json}],
@@ -935,11 +935,12 @@ defmodule Electric.ShapeCache.PureFileStorage do
     {inserted_range, state}
   end
 
-  defp read_tags(file, tag_count) do
-    for _ <- 1..tag_count//1 do
-      <<tag_size::16>> = IO.binread(file, 2)
-      <<tag::binary-size(tag_size)>> = IO.binread(file, tag_size)
-      tag
+  # Read condition_hashes from binary file, returning a position-indexed map.
+  defp read_condition_hashes(file, hash_count) do
+    for i <- 0..(hash_count - 1)//1, into: %{} do
+      <<hash_size::16>> = IO.binread(file, 2)
+      <<hash::binary-size(hash_size)>> = IO.binread(file, hash_size)
+      {i, hash}
     end
   end
 
@@ -948,7 +949,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
         writer_state(opts: opts, writer_acc: acc) = state,
         touch_tracker,
         snapshot,
-        tags_to_skip
+        condition_hashes_to_skip
       ) do
     starting_offset = WriteLoop.last_seen_offset(acc)
 
@@ -960,13 +961,13 @@ defmodule Electric.ShapeCache.PureFileStorage do
            LogOffset.increment(starting_offset)}
         end,
         fn {file, offset} ->
-          with {:meta, <<key_size::32, json_size::64, op_type::8, tag_count::16>>} <-
+          with {:meta, <<key_size::32, json_size::64, op_type::8, hash_count::16>>} <-
                  {:meta, IO.binread(file, 15)},
-               tags = read_tags(file, tag_count),
+               condition_hashes = read_condition_hashes(file, hash_count),
                <<key::binary-size(key_size)>> <- IO.binread(file, key_size),
                <<json::binary-size(json_size)>> <- IO.binread(file, json_size) do
             # Check if this row should be skipped
-            if all_parents_moved_out?(tags, tags_to_skip) or
+            if should_skip_for_moved_out?(condition_hashes, condition_hashes_to_skip) or
                  Electric.Shapes.Consumer.MoveIns.should_skip_query_row?(
                    touch_tracker,
                    snapshot,
@@ -1000,8 +1001,18 @@ defmodule Electric.ShapeCache.PureFileStorage do
     {inserted_range, state}
   end
 
-  defp all_parents_moved_out?(tags, tags_to_skip) do
-    tags != [] and Enum.all?(tags, &MapSet.member?(tags_to_skip, &1))
+  # Position-aware filtering: ANY match at a tracked position means skip.
+  defp should_skip_for_moved_out?(_condition_hashes, condition_hashes_to_skip)
+       when map_size(condition_hashes_to_skip) == 0,
+       do: false
+
+  defp should_skip_for_moved_out?(condition_hashes, condition_hashes_to_skip) do
+    Enum.any?(condition_hashes_to_skip, fn {position, skip_set} ->
+      case condition_hashes do
+        %{^position => hash} -> MapSet.member?(skip_set, hash)
+        _ -> false
+      end
+    end)
   end
 
   def append_control_message!(control_message, writer_state(writer_acc: acc) = state)
