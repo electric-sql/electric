@@ -10,6 +10,9 @@ defmodule Electric.Replication.Eval.DecomposerTest do
     ["b"] => :int4,
     ["c"] => :int4,
     ["d"] => :int4,
+    ["e"] => :int4,
+    ["f"] => :int4,
+    ["g"] => :int4,
     ["name"] => :text
   }
 
@@ -183,6 +186,131 @@ defmodule Electric.Replication.Eval.DecomposerTest do
         ],
         expected_subexpressions: [~s|lower("name") = 'test'|, ~s|upper("name") = 'TEST'|]
       )
+    end
+
+    test "should handle mixed-width disjuncts (multi-term AND with single-term OR)" do
+      # (a = 1 AND b = 2 AND c = 3) OR d = 4
+      # Disjunct 1 has 3 terms, disjunct 2 has 1 term, total width = 4
+      ~S"(a = 1 AND b = 2 AND c = 3) OR d = 4"
+      |> prepare()
+      |> Decomposer.decompose()
+      |> assert_expanded_dnf(
+        expected_disjuncts: [
+          [~s|"a" = 1|, ~s|"b" = 2|, ~s|"c" = 3|, nil],
+          [nil, nil, nil, ~s|"d" = 4|]
+        ],
+        expected_subexpressions: [~s|"a" = 1|, ~s|"b" = 2|, ~s|"c" = 3|, ~s|"d" = 4|]
+      )
+    end
+
+    test "should combine De Morgan with distribution" do
+      # NOT (a = 1 AND b = 2) AND c = 3
+      # De Morgan: NOT(AND(a,b)) => OR(NOT a, NOT b)
+      # Then: AND(OR(NOT a, NOT b), c) distributes to:
+      #   (NOT a AND c) OR (NOT b AND c)
+      ~S"NOT (a = 1 AND b = 2) AND c = 3"
+      |> prepare()
+      |> Decomposer.decompose()
+      |> assert_expanded_dnf(
+        expected_disjuncts: [
+          [{:not, ~s|"a" = 1|}, ~s|"c" = 3|, nil, nil],
+          [nil, nil, {:not, ~s|"b" = 2|}, ~s|"c" = 3|]
+        ],
+        expected_subexpressions: [~s|"a" = 1|, ~s|"b" = 2|, ~s|"c" = 3|]
+      )
+    end
+
+    test "should apply De Morgan recursively over nested AND within OR" do
+      # NOT ((a = 1 AND b = 2) OR c = 3)
+      # De Morgan over OR: AND(NOT(AND(a,b)), NOT c)
+      # Inner De Morgan over AND: NOT(AND(a,b)) => OR(NOT a, NOT b)
+      # Distribution: AND(OR(NOT a, NOT b), NOT c) =>
+      #   (NOT a AND NOT c) OR (NOT b AND NOT c)
+      ~S"NOT ((a = 1 AND b = 2) OR c = 3)"
+      |> prepare()
+      |> Decomposer.decompose()
+      |> assert_expanded_dnf(
+        expected_disjuncts: [
+          [{:not, ~s|"a" = 1|}, {:not, ~s|"c" = 3|}, nil, nil],
+          [nil, nil, {:not, ~s|"b" = 2|}, {:not, ~s|"c" = 3|}]
+        ],
+        expected_subexpressions: [~s|"a" = 1|, ~s|"b" = 2|, ~s|"c" = 3|]
+      )
+    end
+
+    test "should handle double cross-product with deduplication" do
+      # ((a AND b) OR (c AND d)) AND ((d AND e) OR (f AND g))
+      # Left OR:  2 disjuncts [ab, cd]
+      # Right OR: 2 disjuncts [de, fg]
+      # Cross-product: 2 × 2 = 4 disjuncts, each with 4 terms, expanded to width 16
+      # d = 4 appears in left's 2nd disjunct AND right's 1st disjunct — shared ref
+      {disjuncts, subexpressions} =
+        ~S"((a = 1 AND b = 2) OR (c = 3 AND d = 4)) AND ((d = 4 AND e = 5) OR (f = 6 AND g = 7))"
+        |> prepare()
+        |> Decomposer.decompose()
+
+      assert_expanded_dnf({disjuncts, subexpressions},
+        expected_disjuncts: [
+          # ab × de
+          [~s|"a" = 1|, ~s|"b" = 2|, ~s|"d" = 4|, ~s|"e" = 5|,
+           nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil],
+          # ab × fg
+          [nil, nil, nil, nil, ~s|"a" = 1|, ~s|"b" = 2|, ~s|"f" = 6|, ~s|"g" = 7|,
+           nil, nil, nil, nil, nil, nil, nil, nil],
+          # cd × de
+          [nil, nil, nil, nil, nil, nil, nil, nil,
+           ~s|"c" = 3|, ~s|"d" = 4|, ~s|"d" = 4|, ~s|"e" = 5|, nil, nil, nil, nil],
+          # cd × fg
+          [nil, nil, nil, nil, nil, nil, nil, nil,
+           nil, nil, nil, nil, ~s|"c" = 3|, ~s|"d" = 4|, ~s|"f" = 6|, ~s|"g" = 7|]
+        ],
+        expected_subexpressions: [
+          ~s|"a" = 1|, ~s|"b" = 2|, ~s|"c" = 3|, ~s|"d" = 4|,
+          ~s|"e" = 5|, ~s|"f" = 6|, ~s|"g" = 7|
+        ]
+      )
+
+      # Verify d = 4 uses the same reference everywhere it appears
+      subexpressions_deparsed = Map.new(subexpressions, fn {ref, ast} -> {deparse(ast), ref} end)
+      d_eq_4_ref = Map.fetch!(subexpressions_deparsed, ~s|"d" = 4|)
+
+      d_eq_4_count =
+        disjuncts
+        |> List.flatten()
+        |> Enum.count(fn term -> extract_ref(term) == d_eq_4_ref end)
+
+      # d = 4 appears in 3 of the 4 disjuncts (ab×de has it once, cd×de twice, cd×fg once)
+      assert d_eq_4_count == 4
+    end
+
+    test "should share refs when same subexpression appears positive and negated" do
+      # (a = 1 AND b = 2) OR (NOT a = 1 AND c = 3)
+      # a = 1 appears positive in disjunct 1, negated in disjunct 2
+      # The subexpressions map should have only 3 entries (shared ref for a = 1)
+      {disjuncts, subexpressions} =
+        ~S"(a = 1 AND b = 2) OR (NOT a = 1 AND c = 3)"
+        |> prepare()
+        |> Decomposer.decompose()
+
+      assert_expanded_dnf({disjuncts, subexpressions},
+        expected_disjuncts: [
+          [~s|"a" = 1|, ~s|"b" = 2|, nil, nil],
+          [nil, nil, {:not, ~s|"a" = 1|}, ~s|"c" = 3|]
+        ],
+        expected_subexpressions: [~s|"a" = 1|, ~s|"b" = 2|, ~s|"c" = 3|]
+      )
+
+      # Verify the positive and negated occurrences share the same base reference
+      subexpressions_deparsed = Map.new(subexpressions, fn {ref, ast} -> {deparse(ast), ref} end)
+      a_eq_1_ref = Map.fetch!(subexpressions_deparsed, ~s|"a" = 1|)
+
+      # Disjunct 1, position 0 should be the plain ref
+      [[pos_ref | _] | _] = disjuncts
+      assert pos_ref == a_eq_1_ref
+
+      # Disjunct 2, position 2 should be {:not, same_ref}
+      [_, [_, _, neg_term | _]] = disjuncts
+      assert neg_term == {:not, a_eq_1_ref}
     end
 
     test "should deduplicate references for identical subexpressions" do
