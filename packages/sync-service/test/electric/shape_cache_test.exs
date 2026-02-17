@@ -874,6 +874,73 @@ defmodule Electric.ShapeCacheTest do
              ]
     end
 
+    @tag :slow
+    test "enters infinite retry loop when consumer is suspended before snapshot starts", ctx do
+      # Reproduce the scenario from GitHub issue #3844:
+      # 1. Shape exists in ShapeStatus with snapshot_started = false
+      # 2. Consumer is deregistered from ConsumerRegistry (via suspend)
+      # 3. await_snapshot_start retries forever in the :noproc catch clause
+
+      # Patch snapshotter to never complete the snapshot
+      Support.TestUtils.patch_snapshotter(fn _, _, _, _ -> nil end)
+
+      {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape, ctx.stack_id)
+
+      consumer_pid = Electric.Shapes.Consumer.whereis(ctx.stack_id, shape_handle)
+      assert is_pid(consumer_pid) and Process.alive?(consumer_pid)
+
+      # Verify preconditions: snapshot hasn't started, shape exists in ShapeStatus
+      refute ShapeStatus.snapshot_started?(ctx.stack_id, shape_handle)
+      assert ShapeStatus.has_shape_handle?(ctx.stack_id, shape_handle)
+
+      # Stop the consumer with {:shutdown, :suspend} reason.
+      # This triggers handle_writer_termination which deregisters from ConsumerRegistry
+      # but leaves the shape entry in ShapeStatus with snapshot_started = false.
+      ref = Process.monitor(consumer_pid)
+      GenServer.stop(consumer_pid, {:shutdown, :suspend})
+      assert_receive {:DOWN, ^ref, :process, ^consumer_pid, _}, 1_000
+
+      # Verify the orphaned state: shape exists but no consumer process
+      assert ShapeStatus.has_shape_handle?(ctx.stack_id, shape_handle)
+      refute ShapeStatus.snapshot_started?(ctx.stack_id, shape_handle)
+      assert is_nil(Electric.Shapes.Consumer.whereis(ctx.stack_id, shape_handle))
+
+      # Now call await_snapshot_start — this should NOT loop forever,
+      # but currently it does because the :noproc catch retries unconditionally.
+      # We detect the infinite loop by checking that the task doesn't complete
+      # within a reasonable time (the sleep in the retry is 50ms, so 500ms
+      # allows for ~10 iterations which is enough to confirm the loop).
+      task =
+        Task.async(fn ->
+          ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id)
+        end)
+
+      # The task should return an error, not loop forever.
+      # If it loops, Task.yield will return nil after the timeout.
+      result = Task.yield(task, 500)
+
+      if is_nil(result) do
+        # The task is stuck in the infinite retry loop — this IS the bug.
+        # Kill the task to clean up and fail the test with a descriptive message.
+        Task.shutdown(task, :brutal_kill)
+
+        flunk("""
+        await_snapshot_start entered an infinite retry loop (issue #3844).
+
+        State at time of call:
+        - ShapeStatus.has_shape_handle? = true
+        - ShapeStatus.snapshot_started? = false
+        - Consumer.whereis = nil (consumer deregistered via suspend)
+
+        The :noproc catch clause retries unconditionally but the consumer
+        will never come back, causing unbounded recursion with 50ms sleeps.
+        """)
+      else
+        # If the function returned, it handled the case correctly
+        assert {:ok, {:error, _}} = result
+      end
+    end
+
     test "should wait for consumer to come up", ctx do
       Support.TestUtils.patch_snapshotter(fn parent, shape_handle, _, _ ->
         GenServer.cast(parent, {:pg_snapshot_known, shape_handle, @pg_snapshot_xmin_100})
