@@ -7,98 +7,98 @@ defmodule Electric.Replication.Eval.SqlGeneratorTest do
   describe "comparison operators" do
     test "equals" do
       ast = %Func{name: "\"=\"", args: [%Ref{path: ["status"]}, %Const{value: "active"}]}
-      assert SqlGenerator.to_sql(ast) == ~s|("status" = 'active')|
+      assert SqlGenerator.to_sql(ast) == ~s|"status" = 'active'|
     end
 
     test "not equals" do
       ast = %Func{name: "\"<>\"", args: [%Ref{path: ["x"]}, %Const{value: 1}]}
-      assert SqlGenerator.to_sql(ast) == ~s|("x" <> 1)|
+      assert SqlGenerator.to_sql(ast) == ~s|"x" <> 1|
     end
 
     test "less than" do
       ast = %Func{name: "\"<\"", args: [%Ref{path: ["age"]}, %Const{value: 30}]}
-      assert SqlGenerator.to_sql(ast) == ~s|("age" < 30)|
+      assert SqlGenerator.to_sql(ast) == ~s|"age" < 30|
     end
 
     test "greater than" do
       ast = %Func{name: "\">\"", args: [%Ref{path: ["score"]}, %Const{value: 100}]}
-      assert SqlGenerator.to_sql(ast) == ~s|("score" > 100)|
+      assert SqlGenerator.to_sql(ast) == ~s|"score" > 100|
     end
 
     test "less than or equal" do
       ast = %Func{name: "\"<=\"", args: [%Ref{path: ["x"]}, %Const{value: 5}]}
-      assert SqlGenerator.to_sql(ast) == ~s|("x" <= 5)|
+      assert SqlGenerator.to_sql(ast) == ~s|"x" <= 5|
     end
 
     test "greater than or equal" do
       ast = %Func{name: "\">=\"", args: [%Ref{path: ["y"]}, %Const{value: 10}]}
-      assert SqlGenerator.to_sql(ast) == ~s|("y" >= 10)|
+      assert SqlGenerator.to_sql(ast) == ~s|"y" >= 10|
     end
   end
 
   describe "pattern matching" do
     test "LIKE" do
       ast = %Func{name: "\"~~\"", args: [%Ref{path: ["name"]}, %Const{value: "%foo%"}]}
-      assert SqlGenerator.to_sql(ast) == ~s|("name" LIKE '%foo%')|
+      assert SqlGenerator.to_sql(ast) == ~s|"name" LIKE '%foo%'|
     end
 
     test "ILIKE" do
       ast = %Func{name: "\"~~*\"", args: [%Ref{path: ["name"]}, %Const{value: "%bar%"}]}
-      assert SqlGenerator.to_sql(ast) == ~s|("name" ILIKE '%bar%')|
+      assert SqlGenerator.to_sql(ast) == ~s|"name" ILIKE '%bar%'|
     end
 
     test "NOT LIKE" do
       ast = %Func{name: "\"!~~\"", args: [%Ref{path: ["name"]}, %Const{value: "%baz%"}]}
-      assert SqlGenerator.to_sql(ast) == ~s|("name" NOT LIKE '%baz%')|
+      assert SqlGenerator.to_sql(ast) == ~s|"name" NOT LIKE '%baz%'|
     end
 
     test "NOT ILIKE" do
       ast = %Func{name: "\"!~~*\"", args: [%Ref{path: ["name"]}, %Const{value: "%qux%"}]}
-      assert SqlGenerator.to_sql(ast) == ~s|("name" NOT ILIKE '%qux%')|
+      assert SqlGenerator.to_sql(ast) == ~s|"name" NOT ILIKE '%qux%'|
     end
   end
 
   describe "nullability" do
     test "IS NULL" do
       ast = %Func{name: "is null", args: [%Ref{path: ["deleted_at"]}]}
-      assert SqlGenerator.to_sql(ast) == ~s|("deleted_at" IS NULL)|
+      assert SqlGenerator.to_sql(ast) == ~s|"deleted_at" IS NULL|
     end
 
     test "IS NOT NULL" do
       ast = %Func{name: "is not null", args: [%Ref{path: ["email"]}]}
-      assert SqlGenerator.to_sql(ast) == ~s|("email" IS NOT NULL)|
+      assert SqlGenerator.to_sql(ast) == ~s|"email" IS NOT NULL|
     end
   end
 
   describe "boolean tests" do
     test "IS TRUE" do
       ast = %Func{name: "IS_TRUE", args: [%Ref{path: ["active"]}]}
-      assert SqlGenerator.to_sql(ast) == ~s|("active" IS TRUE)|
+      assert SqlGenerator.to_sql(ast) == ~s|"active" IS TRUE|
     end
 
     test "IS NOT TRUE" do
       ast = %Func{name: "IS_NOT_TRUE", args: [%Ref{path: ["active"]}]}
-      assert SqlGenerator.to_sql(ast) == ~s|("active" IS NOT TRUE)|
+      assert SqlGenerator.to_sql(ast) == ~s|"active" IS NOT TRUE|
     end
 
     test "IS FALSE" do
       ast = %Func{name: "IS_FALSE", args: [%Ref{path: ["deleted"]}]}
-      assert SqlGenerator.to_sql(ast) == ~s|("deleted" IS FALSE)|
+      assert SqlGenerator.to_sql(ast) == ~s|"deleted" IS FALSE|
     end
 
     test "IS NOT FALSE" do
       ast = %Func{name: "IS_NOT_FALSE", args: [%Ref{path: ["enabled"]}]}
-      assert SqlGenerator.to_sql(ast) == ~s|("enabled" IS NOT FALSE)|
+      assert SqlGenerator.to_sql(ast) == ~s|"enabled" IS NOT FALSE|
     end
 
     test "IS UNKNOWN" do
       ast = %Func{name: "IS_UNKNOWN", args: [%Ref{path: ["flag"]}]}
-      assert SqlGenerator.to_sql(ast) == ~s|("flag" IS UNKNOWN)|
+      assert SqlGenerator.to_sql(ast) == ~s|"flag" IS UNKNOWN|
     end
 
     test "IS NOT UNKNOWN" do
       ast = %Func{name: "IS_NOT_UNKNOWN", args: [%Ref{path: ["flag"]}]}
-      assert SqlGenerator.to_sql(ast) == ~s|("flag" IS NOT UNKNOWN)|
+      assert SqlGenerator.to_sql(ast) == ~s|"flag" IS NOT UNKNOWN|
     end
   end
 
@@ -112,7 +112,7 @@ defmodule Electric.Replication.Eval.SqlGeneratorTest do
         ]
       }
 
-      assert SqlGenerator.to_sql(ast) == ~s|("status" IN ('a', 'b', 'c'))|
+      assert SqlGenerator.to_sql(ast) == ~s|"status" IN ('a', 'b', 'c')|
     end
 
     test "IN with integer array" do
@@ -124,7 +124,7 @@ defmodule Electric.Replication.Eval.SqlGeneratorTest do
         ]
       }
 
-      assert SqlGenerator.to_sql(ast) == ~s|("id" IN (1, 2, 3))|
+      assert SqlGenerator.to_sql(ast) == ~s|"id" IN (1, 2, 3)|
     end
   end
 
@@ -138,7 +138,7 @@ defmodule Electric.Replication.Eval.SqlGeneratorTest do
         ]
       }
 
-      assert SqlGenerator.to_sql(ast) == ~s|("parent_id" IN (SELECT $sublink.0))|
+      assert SqlGenerator.to_sql(ast) == ~s|"parent_id" IN (SELECT $sublink.0)|
     end
   end
 
@@ -146,21 +146,21 @@ defmodule Electric.Replication.Eval.SqlGeneratorTest do
     test "NOT" do
       inner = %Func{name: "\"=\"", args: [%Ref{path: ["x"]}, %Const{value: 1}]}
       ast = %Func{name: "not", args: [inner]}
-      assert SqlGenerator.to_sql(ast) == ~s|(NOT ("x" = 1))|
+      assert SqlGenerator.to_sql(ast) == ~s|NOT "x" = 1|
     end
 
     test "AND" do
       a = %Func{name: "\"=\"", args: [%Ref{path: ["x"]}, %Const{value: 1}]}
       b = %Func{name: "\"=\"", args: [%Ref{path: ["y"]}, %Const{value: 2}]}
       ast = %Func{name: "and", args: [a, b]}
-      assert SqlGenerator.to_sql(ast) == ~s|(("x" = 1) AND ("y" = 2))|
+      assert SqlGenerator.to_sql(ast) == ~s|"x" = 1 AND "y" = 2|
     end
 
     test "OR" do
       a = %Func{name: "\"=\"", args: [%Ref{path: ["x"]}, %Const{value: 1}]}
       b = %Func{name: "\"=\"", args: [%Ref{path: ["y"]}, %Const{value: 2}]}
       ast = %Func{name: "or", args: [a, b]}
-      assert SqlGenerator.to_sql(ast) == ~s|(("x" = 1) OR ("y" = 2))|
+      assert SqlGenerator.to_sql(ast) == ~s|"x" = 1 OR "y" = 2|
     end
 
     test "nested AND within OR" do
@@ -168,7 +168,7 @@ defmodule Electric.Replication.Eval.SqlGeneratorTest do
       b = %Func{name: "\"=\"", args: [%Ref{path: ["y"]}, %Const{value: 2}]}
       c = %Func{name: "\"=\"", args: [%Ref{path: ["z"]}, %Const{value: 3}]}
       ast = %Func{name: "or", args: [%Func{name: "and", args: [a, b]}, c]}
-      assert SqlGenerator.to_sql(ast) == ~s|((("x" = 1) AND ("y" = 2)) OR ("z" = 3))|
+      assert SqlGenerator.to_sql(ast) == ~s|"x" = 1 AND "y" = 2 OR "z" = 3|
     end
 
     test "nested OR within AND" do
@@ -176,7 +176,7 @@ defmodule Electric.Replication.Eval.SqlGeneratorTest do
       b = %Func{name: "\"=\"", args: [%Ref{path: ["y"]}, %Const{value: 2}]}
       c = %Func{name: "\"=\"", args: [%Ref{path: ["z"]}, %Const{value: 3}]}
       ast = %Func{name: "and", args: [%Func{name: "or", args: [a, b]}, c]}
-      assert SqlGenerator.to_sql(ast) == ~s|((("x" = 1) OR ("y" = 2)) AND ("z" = 3))|
+      assert SqlGenerator.to_sql(ast) == ~s|("x" = 1 OR "y" = 2) AND "z" = 3|
     end
 
     test "deeply nested logical expression" do
@@ -195,7 +195,7 @@ defmodule Electric.Replication.Eval.SqlGeneratorTest do
         }
 
       assert SqlGenerator.to_sql(ast) ==
-               ~s|((("a" = 1) AND ("b" > 2)) OR (("c" < 3) AND (NOT ("d" IS NULL))))|
+               ~s|"a" = 1 AND "b" > 2 OR "c" < 3 AND NOT "d" IS NULL|
     end
   end
 
@@ -205,7 +205,7 @@ defmodule Electric.Replication.Eval.SqlGeneratorTest do
       right = %Const{value: 1}
       comparison = %Func{name: "\"<>\"", args: [left, right]}
       ast = %Func{name: "values_distinct?", args: [left, right, comparison]}
-      assert SqlGenerator.to_sql(ast) == ~s|("x" IS DISTINCT FROM 1)|
+      assert SqlGenerator.to_sql(ast) == ~s|"x" IS DISTINCT FROM 1|
     end
 
     test "IS NOT DISTINCT FROM" do
@@ -213,7 +213,7 @@ defmodule Electric.Replication.Eval.SqlGeneratorTest do
       right = %Const{value: nil}
       comparison = %Func{name: "\"<>\"", args: [left, right]}
       ast = %Func{name: "values_not_distinct?", args: [left, right, comparison]}
-      assert SqlGenerator.to_sql(ast) == ~s|("x" IS NOT DISTINCT FROM NULL)|
+      assert SqlGenerator.to_sql(ast) == ~s|"x" IS NOT DISTINCT FROM NULL|
     end
   end
 
@@ -226,7 +226,7 @@ defmodule Electric.Replication.Eval.SqlGeneratorTest do
       }
 
       ast = %Func{name: "any", args: [inner]}
-      assert SqlGenerator.to_sql(ast) == ~s|("x" = ANY("arr"))|
+      assert SqlGenerator.to_sql(ast) == ~s|"x" = ANY("arr")|
     end
 
     test "ALL with less than" do
@@ -237,100 +237,100 @@ defmodule Electric.Replication.Eval.SqlGeneratorTest do
       }
 
       ast = %Func{name: "all", args: [inner]}
-      assert SqlGenerator.to_sql(ast) == ~s|("x" < ALL("arr"))|
+      assert SqlGenerator.to_sql(ast) == ~s|"x" < ALL("arr")|
     end
   end
 
   describe "arithmetic operators" do
     test "addition" do
       ast = %Func{name: "\"+\"", args: [%Ref{path: ["x"]}, %Const{value: 1}]}
-      assert SqlGenerator.to_sql(ast) == ~s|("x" + 1)|
+      assert SqlGenerator.to_sql(ast) == ~s|"x" + 1|
     end
 
     test "subtraction" do
       ast = %Func{name: "\"-\"", args: [%Ref{path: ["x"]}, %Const{value: 1}]}
-      assert SqlGenerator.to_sql(ast) == ~s|("x" - 1)|
+      assert SqlGenerator.to_sql(ast) == ~s|"x" - 1|
     end
 
     test "multiplication" do
       ast = %Func{name: "\"*\"", args: [%Ref{path: ["x"]}, %Const{value: 2}]}
-      assert SqlGenerator.to_sql(ast) == ~s|("x" * 2)|
+      assert SqlGenerator.to_sql(ast) == ~s|"x" * 2|
     end
 
     test "division" do
       ast = %Func{name: "\"/\"", args: [%Ref{path: ["x"]}, %Const{value: 2}]}
-      assert SqlGenerator.to_sql(ast) == ~s|("x" / 2)|
+      assert SqlGenerator.to_sql(ast) == ~s|"x" / 2|
     end
 
     test "exponentiation" do
       ast = %Func{name: "\"^\"", args: [%Ref{path: ["x"]}, %Const{value: 2}]}
-      assert SqlGenerator.to_sql(ast) == ~s|("x" ^ 2)|
+      assert SqlGenerator.to_sql(ast) == ~s|"x" ^ 2|
     end
 
     test "unary plus" do
       ast = %Func{name: "\"+\"", args: [%Ref{path: ["x"]}]}
-      assert SqlGenerator.to_sql(ast) == ~s|(+ "x")|
+      assert SqlGenerator.to_sql(ast) == ~s|+ "x"|
     end
 
     test "unary minus" do
       ast = %Func{name: "\"-\"", args: [%Ref{path: ["x"]}]}
-      assert SqlGenerator.to_sql(ast) == ~s|(- "x")|
+      assert SqlGenerator.to_sql(ast) == ~s|- "x"|
     end
 
     test "square root" do
       ast = %Func{name: "\"|/\"", args: [%Ref{path: ["x"]}]}
-      assert SqlGenerator.to_sql(ast) == "(|/ \"x\")"
+      assert SqlGenerator.to_sql(ast) == ~s(\|/ "x")
     end
 
     test "absolute value" do
       ast = %Func{name: "\"@\"", args: [%Ref{path: ["x"]}]}
-      assert SqlGenerator.to_sql(ast) == "(@ \"x\")"
+      assert SqlGenerator.to_sql(ast) == ~s|@ "x"|
     end
   end
 
   describe "bitwise operators" do
     test "bitwise AND" do
       ast = %Func{name: "\"&\"", args: [%Ref{path: ["x"]}, %Const{value: 3}]}
-      assert SqlGenerator.to_sql(ast) == ~s|("x" & 3)|
+      assert SqlGenerator.to_sql(ast) == ~s|"x" & 3|
     end
 
     test "bitwise OR" do
       ast = %Func{name: "\"|\"", args: [%Ref{path: ["x"]}, %Const{value: 3}]}
-      assert SqlGenerator.to_sql(ast) == "(\"x\" | 3)"
+      assert SqlGenerator.to_sql(ast) == ~s("x" | 3)
     end
 
     test "bitwise XOR" do
       ast = %Func{name: "\"#\"", args: [%Ref{path: ["x"]}, %Const{value: 3}]}
-      assert SqlGenerator.to_sql(ast) == ~s|("x" # 3)|
+      assert SqlGenerator.to_sql(ast) == ~s|"x" # 3|
     end
 
     test "bitwise NOT" do
       ast = %Func{name: "\"~\"", args: [%Ref{path: ["x"]}]}
-      assert SqlGenerator.to_sql(ast) == ~s|(~ "x")|
+      assert SqlGenerator.to_sql(ast) == ~s|~ "x"|
     end
   end
 
   describe "string concatenation" do
     test "||" do
       ast = %Func{name: "\"||\"", args: [%Ref{path: ["first"]}, %Ref{path: ["last"]}]}
-      assert SqlGenerator.to_sql(ast) == "(\"first\" || \"last\")"
+      assert SqlGenerator.to_sql(ast) == ~s("first" || "last")
     end
   end
 
   describe "array operators" do
     test "contains (@>)" do
       ast = %Func{name: "\"@>\"", args: [%Ref{path: ["tags"]}, %Ref{path: ["required"]}]}
-      assert SqlGenerator.to_sql(ast) == ~s|("tags" @> "required")|
+      assert SqlGenerator.to_sql(ast) == ~s|"tags" @> "required"|
     end
 
     test "contained by (<@)" do
       ast = %Func{name: "\"<@\"", args: [%Ref{path: ["tags"]}, %Ref{path: ["allowed"]}]}
-      assert SqlGenerator.to_sql(ast) == ~s|("tags" <@ "allowed")|
+      assert SqlGenerator.to_sql(ast) == ~s|"tags" <@ "allowed"|
     end
 
     test "overlap (&&)" do
       ast = %Func{name: "\"&&\"", args: [%Ref{path: ["a"]}, %Ref{path: ["b"]}]}
-      assert SqlGenerator.to_sql(ast) == ~s|("a" && "b")|
+      assert SqlGenerator.to_sql(ast) == ~s|"a" && "b"|
     end
   end
 
@@ -354,12 +354,12 @@ defmodule Electric.Replication.Eval.SqlGeneratorTest do
   describe "type casts" do
     test "cast with _to_ naming convention" do
       ast = %Func{name: "int4_to_bool", args: [%Ref{path: ["x"]}]}
-      assert SqlGenerator.to_sql(ast) == ~s|("x")::bool|
+      assert SqlGenerator.to_sql(ast) == ~s|"x"::bool|
     end
 
     test "another cast" do
       ast = %Func{name: "text_to_int4", args: [%Ref{path: ["val"]}]}
-      assert SqlGenerator.to_sql(ast) == ~s|("val")::int4|
+      assert SqlGenerator.to_sql(ast) == ~s|"val"::int4|
     end
   end
 
@@ -439,7 +439,7 @@ defmodule Electric.Replication.Eval.SqlGeneratorTest do
         args: [row, %Ref{path: ["$sublink", "0"]}]
       }
 
-      assert SqlGenerator.to_sql(ast) == ~s|(ROW("a", "b") IN (SELECT $sublink.0))|
+      assert SqlGenerator.to_sql(ast) == ~s|ROW("a", "b") IN (SELECT $sublink.0)|
     end
   end
 
@@ -505,7 +505,7 @@ defmodule Electric.Replication.Eval.SqlGeneratorTest do
         }
 
       assert SqlGenerator.to_sql(ast) ==
-               ~s|((("status" = 'active') OR ("age" >= 18)) AND ("email" IS NOT NULL))|
+               ~s|("status" = 'active' OR "age" >= 18) AND "email" IS NOT NULL|
     end
 
     test "NOT with nested OR" do
@@ -514,13 +514,55 @@ defmodule Electric.Replication.Eval.SqlGeneratorTest do
 
       ast = %Func{name: "not", args: [%Func{name: "or", args: [a, b]}]}
 
-      assert SqlGenerator.to_sql(ast) == ~s|(NOT (("x" = 1) OR ("y" = 2)))|
+      assert SqlGenerator.to_sql(ast) == ~s|NOT ("x" = 1 OR "y" = 2)|
     end
 
     test "comparison with string concatenation" do
       concat = %Func{name: "\"||\"", args: [%Ref{path: ["first"]}, %Ref{path: ["last"]}]}
       ast = %Func{name: "\"=\"", args: [concat, %Const{value: "JohnDoe"}]}
-      assert SqlGenerator.to_sql(ast) == "((\"first\" || \"last\") = 'JohnDoe')"
+      assert SqlGenerator.to_sql(ast) == ~s("first" || "last" = 'JohnDoe')
+    end
+
+    test "precedence: multiplication inside addition" do
+      # (a * b) + c — no parens needed since * binds tighter
+      mul = %Func{name: "\"*\"", args: [%Ref{path: ["a"]}, %Ref{path: ["b"]}]}
+      ast = %Func{name: "\"+\"", args: [mul, %Ref{path: ["c"]}]}
+      assert SqlGenerator.to_sql(ast) == ~s|"a" * "b" + "c"|
+    end
+
+    test "precedence: addition inside multiplication" do
+      # a * (b + c) — parens needed since + binds looser
+      add = %Func{name: "\"+\"", args: [%Ref{path: ["b"]}, %Ref{path: ["c"]}]}
+      ast = %Func{name: "\"*\"", args: [%Ref{path: ["a"]}, add]}
+      assert SqlGenerator.to_sql(ast) == ~s|"a" * ("b" + "c")|
+    end
+
+    test "precedence: left-associative subtraction" do
+      # a - (b - c) — parens needed on right child
+      inner = %Func{name: "\"-\"", args: [%Ref{path: ["b"]}, %Ref{path: ["c"]}]}
+      ast = %Func{name: "\"-\"", args: [%Ref{path: ["a"]}, inner]}
+      assert SqlGenerator.to_sql(ast) == ~s|"a" - ("b" - "c")|
+    end
+
+    test "precedence: left-associative subtraction, left child" do
+      # (a - b) - c — no parens needed (left-associative)
+      inner = %Func{name: "\"-\"", args: [%Ref{path: ["a"]}, %Ref{path: ["b"]}]}
+      ast = %Func{name: "\"-\"", args: [inner, %Ref{path: ["c"]}]}
+      assert SqlGenerator.to_sql(ast) == ~s|"a" - "b" - "c"|
+    end
+
+    test "precedence: right-associative exponentiation" do
+      # a ^ (b ^ c) — no parens needed (right-associative)
+      inner = %Func{name: "\"^\"", args: [%Ref{path: ["b"]}, %Ref{path: ["c"]}]}
+      ast = %Func{name: "\"^\"", args: [%Ref{path: ["a"]}, inner]}
+      assert SqlGenerator.to_sql(ast) == ~s|"a" ^ "b" ^ "c"|
+    end
+
+    test "precedence: right-associative exponentiation, left child" do
+      # (a ^ b) ^ c — parens needed on left child
+      inner = %Func{name: "\"^\"", args: [%Ref{path: ["a"]}, %Ref{path: ["b"]}]}
+      ast = %Func{name: "\"^\"", args: [inner, %Ref{path: ["c"]}]}
+      assert SqlGenerator.to_sql(ast) == ~s|("a" ^ "b") ^ "c"|
     end
   end
 
