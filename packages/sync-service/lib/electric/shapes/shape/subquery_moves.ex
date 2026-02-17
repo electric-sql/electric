@@ -34,33 +34,61 @@ defmodule Electric.Shapes.Shape.SubqueryMoves do
 
       [["1", "2", "3"]]
   """
+  def move_in_where_clause(shape, shape_handle, move_ins, dnf_context \\ nil, opts \\ [])
+
   def move_in_where_clause(
         %Shape{
           where: %{query: query, used_refs: used_refs},
           shape_dependencies: shape_dependencies,
           shape_dependencies_handles: shape_dependencies_handles
-        },
+        } = shape,
         shape_handle,
-        move_ins
+        move_ins,
+        dnf_context,
+        opts
       ) do
     index = Enum.find_index(shape_dependencies_handles, &(&1 == shape_handle))
     target_section = Enum.at(shape_dependencies, index) |> rebuild_subquery_section()
 
-    case used_refs[["$sublink", "#{index}"]] do
-      {:array, {:row, cols}} ->
-        unnest_sections =
-          cols
-          |> Enum.map(&Electric.Replication.Eval.type_to_pg_cast/1)
-          |> Enum.with_index(fn col, index -> "$#{index + 1}::text[]::#{col}[]" end)
-          |> Enum.join(", ")
+    # For negated positions (NOT IN), the original WHERE has "NOT IN (...)"
+    # and we need to replace the whole "NOT IN (...)" to get correct SQL
+    target_section = if opts[:remove_not], do: "NOT " <> target_section, else: target_section
 
-        {String.replace(query, target_section, "IN (SELECT * FROM unnest(#{unnest_sections}))"),
-         Electric.Utils.unzip_any(move_ins) |> Tuple.to_list()}
+    {where, params} =
+      case used_refs[["$sublink", "#{index}"]] do
+        {:array, {:row, cols}} ->
+          unnest_sections =
+            cols
+            |> Enum.map(&Electric.Replication.Eval.type_to_pg_cast/1)
+            |> Enum.with_index(fn col, index -> "$#{index + 1}::text[]::#{col}[]" end)
+            |> Enum.join(", ")
 
-      col ->
-        type = Electric.Replication.Eval.type_to_pg_cast(col)
-        {String.replace(query, target_section, "= ANY ($1::text[]::#{type})"), [move_ins]}
-    end
+          {String.replace(
+             query,
+             target_section,
+             "IN (SELECT * FROM unnest(#{unnest_sections}))"
+           ), Electric.Utils.unzip_any(move_ins) |> Tuple.to_list()}
+
+        col ->
+          type = Electric.Replication.Eval.type_to_pg_cast(col)
+          {String.replace(query, target_section, "= ANY ($1::text[]::#{type})"), [move_ins]}
+      end
+
+    # Append exclusion clauses for multi-disjunct shapes
+    exclusion =
+      if dnf_context && dnf_context.decomposition &&
+           length(dnf_context.decomposition.disjuncts) > 1 do
+        build_dnf_exclusion_clauses(
+          dnf_context.decomposition,
+          shape.shape_dependencies,
+          shape.subquery_comparison_expressions,
+          index
+        )
+      else
+        ""
+      end
+
+    {where <> exclusion, params}
   end
 
   defp rebuild_subquery_section(shape) do

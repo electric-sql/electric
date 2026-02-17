@@ -292,12 +292,15 @@ defmodule Electric.Shapes.Consumer do
     if should_invalidate? do
       stop_and_clean(state)
     else
-      {state, notification} =
-        state
-        |> MoveHandling.process_move_ins(dep_handle, move_in)
-        |> MoveHandling.process_move_outs(dep_handle, move_out)
+      {state, move_in_notification} =
+        MoveHandling.process_move_ins(state, dep_handle, move_in)
 
-      notify_new_changes(state, notification)
+      state = notify_new_changes(state, move_in_notification)
+
+      {state, move_out_notification} =
+        MoveHandling.process_move_outs(state, dep_handle, move_out)
+
+      state = notify_new_changes(state, move_out_notification)
 
       {:noreply, state}
     end

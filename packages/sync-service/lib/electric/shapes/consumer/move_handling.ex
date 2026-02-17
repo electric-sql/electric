@@ -2,6 +2,7 @@ defmodule Electric.Shapes.Consumer.MoveHandling do
   @moduledoc false
   alias Electric.Replication.LogOffset
   alias Electric.ShapeCache.Storage
+  alias Electric.Shapes.Consumer.DnfContext
   alias Electric.Shapes.Consumer.State
   alias Electric.Shapes.PartialModes
   alias Electric.Shapes.Shape
@@ -10,16 +11,135 @@ defmodule Electric.Shapes.Consumer.MoveHandling do
 
   require Logger
 
-  @spec process_move_ins(State.t(), Shape.handle(), list(term())) :: State.t()
-  def process_move_ins(state, _, []), do: state
+  @spec process_move_ins(State.t(), Shape.handle(), list(term())) ::
+          {State.t(), changes :: term()}
+  def process_move_ins(state, _, []), do: {state, nil}
 
   def process_move_ins(%State{} = state, dep_handle, new_values) do
-    # Something moved in in a dependency shape. We need to query the DB for relevant values.
+    case get_negation_split(state.dnf_context, dep_handle) do
+      nil ->
+        # No DNF context or no positions — existing behavior (all positive)
+        {do_start_move_in_query(state, dep_handle, new_values), nil}
+
+      {positive_positions, negated_positions} ->
+        # Negated positions: move-in to subquery = deactivation (NOT IN now false)
+        {state, notification} =
+          if negated_positions != [] do
+            do_broadcast_deactivation(state, dep_handle, new_values)
+          else
+            {state, nil}
+          end
+
+        # Positive positions: move-in = query for new rows
+        state =
+          if positive_positions != [] do
+            do_start_move_in_query(state, dep_handle, new_values)
+          else
+            state
+          end
+
+        {state, notification}
+    end
+  end
+
+  @spec process_move_outs(State.t(), Shape.handle(), list(term())) ::
+          {State.t(), changes :: term()}
+  def process_move_outs(state, _, []), do: {state, nil}
+
+  def process_move_outs(%State{} = state, dep_handle, removed_values) do
+    case get_negation_split(state.dnf_context, dep_handle) do
+      nil ->
+        # No DNF context or no positions — existing behavior (all positive)
+        do_broadcast_deactivation(state, dep_handle, removed_values)
+
+      {positive_positions, negated_positions} ->
+        # Positive positions: move-out = deactivation broadcast
+        {state, notification} =
+          if positive_positions != [] do
+            do_broadcast_deactivation(state, dep_handle, removed_values)
+          else
+            {state, nil}
+          end
+
+        # Negated positions: move-out from subquery = activation (NOT IN now true) → query
+        state =
+          if negated_positions != [] do
+            do_start_move_in_query(state, dep_handle, removed_values, remove_not: true)
+          else
+            state
+          end
+
+        {state, notification}
+    end
+  end
+
+  def query_complete(%State{} = state, name, key_set, snapshot) do
+    # 1. Splice stored snapshot into main log with filtering
+    # Flatten position-aware moved_out_tags to flat MapSet for storage compatibility.
+    # Phase 12 will make the storage layer position-aware.
+    per_pos_tags = state.move_handling_state.moved_out_tags[name] || %{}
+
+    flat_tags_to_skip =
+      Enum.reduce(per_pos_tags, MapSet.new(), fn {_pos, tags}, acc ->
+        MapSet.union(acc, tags)
+      end)
+
+    {{lower_bound, upper_bound}, writer} =
+      Storage.append_move_in_snapshot_to_log_filtered!(
+        name,
+        state.writer,
+        state.move_handling_state.touch_tracker,
+        snapshot,
+        flat_tags_to_skip
+      )
+
+    # 2. Move from "waiting" to "filtering"
+    {visibility_snapshot, move_handling_state} =
+      MoveIns.change_to_filtering(state.move_handling_state, name, MapSet.new(key_set))
+
+    {{_, upper_bound}, writer} =
+      if is_nil(visibility_snapshot) do
+        {{nil, upper_bound}, writer}
+      else
+        append_snapshot_end_control(snapshot, writer)
+      end
+
+    state = %{state | move_handling_state: move_handling_state, writer: writer}
+
+    {state, {{lower_bound, upper_bound}, upper_bound}}
+  end
+
+  # --- Private helpers ---
+
+  # Split DNF positions for a dependency into positive and negated.
+  # Returns nil if no DNF context or no positions for this dependency.
+  defp get_negation_split(nil, _dep_handle), do: nil
+
+  defp get_negation_split(dnf_context, dep_handle) do
+    if DnfContext.has_valid_dnf?(dnf_context) do
+      positions = DnfContext.get_positions_for_dependency(dnf_context, dep_handle)
+
+      if positions == [] do
+        nil
+      else
+        negated = Enum.filter(positions, &DnfContext.position_negated?(dnf_context, &1))
+        positive = positions -- negated
+        {positive, negated}
+      end
+    else
+      nil
+    end
+  end
+
+  # Start an async move-in query for new values.
+  defp do_start_move_in_query(state, dep_handle, values, opts \\ []) do
     formed_where_clause =
-      Shape.SubqueryMoves.move_in_where_clause(
+      SubqueryMoves.move_in_where_clause(
         state.shape,
         dep_handle,
-        Enum.map(new_values, &elem(&1, 1))
+        Enum.map(values, &elem(&1, 1)),
+        state.dnf_context,
+        opts
       )
 
     storage = state.storage
@@ -59,7 +179,7 @@ defmodule Electric.Shapes.Consumer.MoveHandling do
       MoveIns.add_waiting(
         state.move_handling_state,
         name,
-        {["$sublink", Integer.to_string(index)], MapSet.new(Enum.map(new_values, &elem(&1, 0)))}
+        {["$sublink", Integer.to_string(index)], MapSet.new(Enum.map(values, &elem(&1, 0)))}
       )
 
     Logger.debug("Move-in #{name} has been triggered from #{dep_handle}")
@@ -67,59 +187,29 @@ defmodule Electric.Shapes.Consumer.MoveHandling do
     %{state | move_handling_state: move_handling_state}
   end
 
-  @spec process_move_outs(State.t(), Shape.handle(), list(term())) ::
-          {State.t(), changes :: term()}
-  def process_move_outs(state, _, []), do: {state, nil}
-
-  def process_move_outs(state, dep_handle, removed_values) do
+  # Broadcast a deactivation (move-out) control message.
+  defp do_broadcast_deactivation(state, dep_handle, values) do
     message =
       SubqueryMoves.make_move_out_control_message(
         state.shape,
         state.stack_id,
         state.shape_handle,
         [
-          {dep_handle, removed_values}
+          {dep_handle, values}
         ]
       )
 
-    # TODO: This leaks the message abstraction, and I'm OK with it for now because I'll be refactoring this code path for the multi-subqueries shortly
+    # Pass position-aware patterns to move_out_happened
     move_handling_state =
       MoveIns.move_out_happened(
         state.move_handling_state,
-        MapSet.new(message.headers.patterns |> Enum.map(& &1[:value]))
+        message.headers.patterns
       )
 
     {{_, upper_bound}, writer} = Storage.append_control_message!(message, state.writer)
 
     {%{state | move_handling_state: move_handling_state, writer: writer},
      {[message], upper_bound}}
-  end
-
-  def query_complete(%State{} = state, name, key_set, snapshot) do
-    # 1. Splice stored snapshot into main log with filtering
-    {{lower_bound, upper_bound}, writer} =
-      Storage.append_move_in_snapshot_to_log_filtered!(
-        name,
-        state.writer,
-        state.move_handling_state.touch_tracker,
-        snapshot,
-        state.move_handling_state.moved_out_tags[name] || MapSet.new()
-      )
-
-    # 2. Move from "waiting" to "filtering"
-    {visibility_snapshot, move_handling_state} =
-      MoveIns.change_to_filtering(state.move_handling_state, name, MapSet.new(key_set))
-
-    {{_, upper_bound}, writer} =
-      if is_nil(visibility_snapshot) do
-        {{nil, upper_bound}, writer}
-      else
-        append_snapshot_end_control(snapshot, writer)
-      end
-
-    state = %{state | move_handling_state: move_handling_state, writer: writer}
-
-    {state, {{lower_bound, upper_bound}, upper_bound}}
   end
 
   @spec append_snapshot_end_control(MoveIns.pg_snapshot(), Storage.writer_state()) ::
