@@ -46,7 +46,8 @@ defmodule Electric.Integration.OraclePropertyTest do
     ctx =
       with_electric_client(ctx,
         router_opts: [long_poll_timeout: long_poll_timeout],
-        num_clients: shape_count
+        num_clients: shape_count,
+        headers: [{"electric-protocol-version", "2"}]
       )
 
     setup_standard_schema(ctx)

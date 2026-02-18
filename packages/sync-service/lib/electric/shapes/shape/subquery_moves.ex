@@ -106,12 +106,15 @@ defmodule Electric.Shapes.Shape.SubqueryMoves do
   For DNF shapes, the position comes from the tag_structure: the position index in
   each disjunct pattern that has the subquery column for the given dependency.
   """
-  def make_move_out_control_message(shape, stack_id, shape_handle, move_outs) do
+  def make_move_out_control_message(shape, stack_id, shape_handle, move_outs, dnf_context \\ nil) do
     %{
       headers: %{
         event: "move-out",
         patterns:
-          Enum.flat_map(move_outs, &make_move_out_pattern(shape, stack_id, shape_handle, &1))
+          Enum.flat_map(
+            move_outs,
+            &make_move_out_pattern(shape, stack_id, shape_handle, &1, dnf_context)
+          )
       }
     }
   end
@@ -120,7 +123,8 @@ defmodule Electric.Shapes.Shape.SubqueryMoves do
          %{tag_structure: tag_structure},
          stack_id,
          shape_handle,
-         {_dep_handle, gone_values}
+         {dep_handle, gone_values},
+         dnf_context
        ) do
     # Find positions with non-nil column entries across all disjuncts.
     # For a DNF tag structure like [["parent_id", nil], [nil, "parent_id"]],
@@ -137,6 +141,25 @@ defmodule Electric.Shapes.Shape.SubqueryMoves do
         end)
       end)
       |> Enum.uniq_by(fn {pos, _} -> pos end)
+
+    # When we have a DnfContext, only emit patterns for positions that belong
+    # to the specific dependency that changed. Without this filtering, a move-out
+    # from one subquery would incorrectly target positions for literal conditions
+    # or other subqueries in different disjuncts.
+    position_columns =
+      case dnf_context do
+        %{dependency_to_positions_map: dep_to_pos} when dep_to_pos != %{} ->
+          case Map.get(dep_to_pos, dep_handle) do
+            nil ->
+              []
+
+            dep_positions ->
+              Enum.filter(position_columns, fn {pos, _} -> pos in dep_positions end)
+          end
+
+        _ ->
+          position_columns
+      end
 
     Enum.flat_map(position_columns, fn {pos, col_spec} ->
       make_patterns_for_position(pos, col_spec, gone_values, stack_id, shape_handle)

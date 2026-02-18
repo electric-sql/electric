@@ -32,13 +32,19 @@ defmodule Support.IntegrationSetup do
     {:ok, {_ip, port}} = ThousandIsland.listener_info(server_pid)
     base_url = "http://localhost:#{port}"
 
+    headers = Keyword.get(opts, :headers, [])
+
     client_opts =
       if num_clients > 1 do
         finch_name = :"Electric.Client.Finch.Test.#{System.unique_integer([:positive])}"
         {:ok, _} = Finch.start_link(name: finch_name, pools: %{default: [size: num_clients]})
-        [fetch: {Electric.Client.Fetch.HTTP, [request: [finch: finch_name]]}]
+        [fetch: {Electric.Client.Fetch.HTTP, [request: [finch: finch_name], headers: headers]}]
       else
-        []
+        if headers != [] do
+          [fetch: {Electric.Client.Fetch.HTTP, [headers: headers]}]
+        else
+          []
+        end
       end
 
     {:ok, client} = Electric.Client.new([base_url: base_url] ++ client_opts)

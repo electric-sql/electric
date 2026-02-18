@@ -18,8 +18,14 @@ defmodule Electric.Shapes.Consumer.MoveHandling do
   def process_move_ins(%State{} = state, dep_handle, new_values) do
     case get_negation_split(state.dnf_context, dep_handle) do
       nil ->
-        # No DNF context or no positions — existing behavior (all positive)
-        {do_start_move_in_query(state, dep_handle, new_values), nil}
+        if dep_has_no_dnf_positions?(state.dnf_context, dep_handle) do
+          # DNF context exists but this dep has no positions — it's a nested
+          # dependency that will be handled by the dependency chain, skip it.
+          {state, nil}
+        else
+          # No DNF context — existing behavior (all positive)
+          {do_start_move_in_query(state, dep_handle, new_values), nil}
+        end
 
       {positive_positions, negated_positions} ->
         # Negated positions: move-in to subquery = deactivation (NOT IN now false)
@@ -49,8 +55,14 @@ defmodule Electric.Shapes.Consumer.MoveHandling do
   def process_move_outs(%State{} = state, dep_handle, removed_values) do
     case get_negation_split(state.dnf_context, dep_handle) do
       nil ->
-        # No DNF context or no positions — existing behavior (all positive)
-        do_broadcast_deactivation(state, dep_handle, removed_values)
+        if dep_has_no_dnf_positions?(state.dnf_context, dep_handle) do
+          # DNF context exists but this dep has no positions — it's a nested
+          # dependency that will be handled by the dependency chain, skip it.
+          {state, nil}
+        else
+          # No DNF context — existing behavior (all positive)
+          do_broadcast_deactivation(state, dep_handle, removed_values)
+        end
 
       {positive_positions, negated_positions} ->
         # Positive positions: move-out = deactivation broadcast
@@ -74,6 +86,11 @@ defmodule Electric.Shapes.Consumer.MoveHandling do
   end
 
   def query_complete(%State{} = state, name, key_set, snapshot) do
+    # Filter moved_out_tags to only include positions relevant to this move-in's
+    # dependency. Without this, move-out patterns from unrelated dependencies can
+    # incorrectly filter rows (especially when different positions use the same column).
+    condition_hashes_to_skip = filter_moved_out_tags_for_dependency(state, name)
+
     # 1. Splice stored snapshot into main log with position-aware filtering
     {{lower_bound, upper_bound}, writer} =
       Storage.append_move_in_snapshot_to_log_filtered!(
@@ -81,7 +98,7 @@ defmodule Electric.Shapes.Consumer.MoveHandling do
         state.writer,
         state.move_handling_state.touch_tracker,
         snapshot,
-        state.move_handling_state.moved_out_tags[name] || %{}
+        condition_hashes_to_skip
       )
 
     # 2. Move from "waiting" to "filtering"
@@ -101,6 +118,53 @@ defmodule Electric.Shapes.Consumer.MoveHandling do
   end
 
   # --- Private helpers ---
+
+  # Filter moved_out_tags for a move-in to only include positions that belong to
+  # the same dependency that triggered the move-in. This prevents cross-dependency
+  # contamination: e.g., a move-out at position 1 (dep B) should not cause rows
+  # to be skipped from a move-in at position 0 (dep A), even when both positions
+  # reference the same column and thus produce identical hashes.
+  defp filter_moved_out_tags_for_dependency(state, name) do
+    all_tags = state.move_handling_state.moved_out_tags[name] || %{}
+
+    if DnfContext.has_valid_dnf?(state.dnf_context) do
+      case Map.get(state.move_handling_state.waiting_move_ins, name) do
+        {_snapshot, {["$sublink", index_str], _values}} ->
+          dep_index = String.to_integer(index_str)
+
+          dep_positions =
+            SubqueryMoves.find_dnf_positions_for_dep_index(
+              state.dnf_context.decomposition,
+              dep_index
+            )
+
+          case dep_positions do
+            [] ->
+              all_tags
+
+            positions ->
+              dep_positions_set = MapSet.new(positions)
+              Map.filter(all_tags, fn {pos, _} -> MapSet.member?(dep_positions_set, pos) end)
+          end
+
+        _ ->
+          all_tags
+      end
+    else
+      all_tags
+    end
+  end
+
+  # Returns true when we have a valid DNF context but this specific dependency
+  # has no positions in it. This happens for nested subquery dependencies that
+  # are extracted by the parser but are only indirectly relevant (handled by the
+  # dependency chain, not by the consumer directly).
+  defp dep_has_no_dnf_positions?(nil, _dep_handle), do: false
+
+  defp dep_has_no_dnf_positions?(dnf_context, dep_handle) do
+    DnfContext.has_valid_dnf?(dnf_context) and
+      DnfContext.get_positions_for_dependency(dnf_context, dep_handle) == []
+  end
 
   # Split DNF positions for a dependency into positive and negated.
   # Returns nil if no DNF context or no positions for this dependency.
@@ -187,7 +251,8 @@ defmodule Electric.Shapes.Consumer.MoveHandling do
         state.shape_handle,
         [
           {dep_handle, values}
-        ]
+        ],
+        state.dnf_context
       )
 
     # Pass position-aware patterns to move_out_happened
