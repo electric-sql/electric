@@ -1769,6 +1769,33 @@ describe.for(fetchAndSse)(
       expect(titles).toEqual([`three`, `two`])
     })
 
+    it(`requestSnapshot supports parametrised where clause in array form`, async ({
+      issuesTableUrl,
+      insertIssues,
+      aborter,
+    }) => {
+      await insertIssues({ title: `one` }, { title: `two` }, { title: `three` })
+
+      const shapeStream = new ShapeStream({
+        url: `${BASE_URL}/v1/shape`,
+        params: { table: issuesTableUrl },
+        log: `changes_only`,
+        liveSse,
+        signal: aborter.signal,
+      })
+      const _shape = new Shape(shapeStream)
+      await waitForFetch(shapeStream)
+
+      const { data } = await shapeStream.requestSnapshot({
+        where: `title = $1 OR title = $2`,
+        params: [`two`, `three`],
+        orderBy: `title ASC`,
+        limit: 100,
+      })
+      const titles = data.map((m) => m.value.title).sort()
+      expect(titles).toEqual([`three`, `two`])
+    })
+
     it(`requestSnapshot supports orderBy + limit`, async ({
       issuesTableUrl,
       insertIssues,
@@ -2205,6 +2232,16 @@ describe.for(fetchAndSse)(
         })
         const paramTitles = paramData.map((m) => m.value.title).sort()
         expect(paramTitles).toEqual([`A`, `C`])
+
+        // Test with parametrised where clause (array form)
+        const { data: paramArrayData } = await shapeStream.fetchSnapshot({
+          where: `title = $1 OR title = $2`,
+          params: [`A`, `C`],
+          orderBy: `title ASC`,
+          limit: 100,
+        })
+        const paramArrayTitles = paramArrayData.map((m) => m.value.title).sort()
+        expect(paramArrayTitles).toEqual([`A`, `C`])
 
         // Test with orderBy + limit
         const { data: limitedData } = await shapeStream.fetchSnapshot({
