@@ -427,11 +427,8 @@ defmodule Electric.Postgres.ReplicationClientTest do
 
       send(pid, {:flush_boundary_updated, 100})
 
-      # This is to pass the time instead of a sleep - if PG is responsive, it probably has processed the wal acknowledge too
-      Postgrex.query!(conn, "SELECT * FROM items", [])
-
-      new_confirmed_flush_lsn = get_confirmed_flush_lsn(conn, ctx.slot_name)
-      assert Lsn.compare(confirmed_flush_lsn, new_confirmed_flush_lsn) == :lt
+      # Assert that the flush LSN advances within the timeout
+      assert_flush_lsn_advances(conn, ctx.slot_name, confirmed_flush_lsn)
     end
 
     @tag with_empty_publication?: true
@@ -511,6 +508,40 @@ defmodule Electric.Postgres.ReplicationClientTest do
       )
 
     confirmed_flush_lsn
+  end
+
+  # Asserts that confirmed_flush_lsn advances beyond the baseline within the timeout
+  defp assert_flush_lsn_advances(conn, slot_name, baseline_lsn, timeout \\ 2000) do
+    deadline = System.monotonic_time(:millisecond) + timeout
+
+    result =
+      Stream.repeatedly(fn ->
+        Process.sleep(50)
+        get_confirmed_flush_lsn(conn, slot_name)
+      end)
+      |> Enum.reduce_while(baseline_lsn, fn current_lsn, _acc ->
+        cond do
+          Lsn.compare(baseline_lsn, current_lsn) == :lt ->
+            {:halt, {:advanced, current_lsn}}
+
+          System.monotonic_time(:millisecond) > deadline ->
+            {:halt, {:timeout, current_lsn}}
+
+          true ->
+            {:cont, current_lsn}
+        end
+      end)
+
+    case result do
+      {:advanced, _new_lsn} ->
+        :ok
+
+      {:timeout, current_lsn} ->
+        flunk(
+          "Expected confirmed_flush_lsn to advance beyond #{inspect(baseline_lsn)}, " <>
+            "but it remained at #{inspect(current_lsn)} after #{timeout}ms"
+        )
+    end
   end
 
   describe "ReplicationClient against real db (toast)" do
