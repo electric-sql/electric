@@ -294,11 +294,6 @@ defmodule Electric.Shapes.Consumer.Materializer do
     {state, events} = apply_changes(changes, state)
 
     if events != %{} do
-      events =
-        events
-        |> Map.put_new(:move_in, [])
-        |> Map.put_new(:move_out, [])
-
       for pid <- state.subscribers do
         send(pid, {:materializer_changes, state.shape_handle, events})
       end
@@ -306,6 +301,34 @@ defmodule Electric.Shapes.Consumer.Materializer do
 
     state
   end
+
+  # A value's count can cross the 0↔1 boundary multiple times in a single batch
+  # (e.g., toggled twice in one transaction: 0→1 move_in, 1→0 move_out, 0→1 move_in).
+  # Emitting both move_in and move_out for the same value causes the consumer to
+  # fire a move-in query while simultaneously marking the value's tag as moved-out,
+  # which filters out the query results - losing the data entirely.
+  #
+  # We resolve this by sorting events by value, then walking through the list
+  # cancelling adjacent move_in/move_out pairs for the same value.
+  defp cancel_matching_move_events(events) do
+    ins = events |> Map.get(:move_in, []) |> Enum.sort_by(fn {v, _} -> v end)
+    outs = events |> Map.get(:move_out, []) |> Enum.sort_by(fn {v, _} -> v end)
+    cancel_sorted_pairs(ins, outs, %{move_in: [], move_out: []})
+  end
+
+  defp cancel_sorted_pairs([{v, _} | ins], [{v, _} | outs], acc),
+    do: cancel_sorted_pairs(ins, outs, acc)
+
+  defp cancel_sorted_pairs([{v1, _} = i | ins], [{v2, _} | _] = outs, acc) when v1 < v2,
+    do: cancel_sorted_pairs(ins, outs, %{acc | move_in: [i | acc.move_in]})
+
+  defp cancel_sorted_pairs([{v1, _} | _] = ins, [{v2, _} = o | outs], acc) when v2 < v1,
+    do: cancel_sorted_pairs(ins, outs, %{acc | move_out: [o | acc.move_out]})
+
+  defp cancel_sorted_pairs([], [], %{move_in: [], move_out: []}), do: %{}
+
+  defp cancel_sorted_pairs(ins, outs, acc),
+    do: %{acc | move_in: ins ++ acc.move_in, move_out: outs ++ acc.move_out}
 
   defp apply_changes(changes, state) do
     {{index, tag_indices}, {value_counts, events}} =
@@ -384,7 +407,10 @@ defmodule Electric.Shapes.Consumer.Materializer do
         end
       )
 
-    events = Enum.group_by(events, &elem(&1, 0), &elem(&1, 1))
+    events =
+      events
+      |> Enum.group_by(&elem(&1, 0), &elem(&1, 1))
+      |> cancel_matching_move_events()
 
     {%{state | index: index, value_counts: value_counts, tag_indices: tag_indices}, events}
   end

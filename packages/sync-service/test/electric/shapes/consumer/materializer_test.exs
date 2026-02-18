@@ -361,7 +361,8 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
 
       assert Materializer.get_link_values(ctx) == MapSet.new([1, 2])
 
-      assert_receive {:materializer_changes, _, %{move_in: [{2, "2"}, {1, "1"}]}}
+      assert_receive {:materializer_changes, _, %{move_in: move_in}}
+      assert Enum.sort(move_in) == [{1, "1"}, {2, "2"}]
 
       Materializer.new_changes(ctx, [
         %Changes.UpdatedRecord{
@@ -376,6 +377,105 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
       assert Materializer.get_link_values(ctx) == MapSet.new([1, 3])
 
       assert_receive {:materializer_changes, _, %{move_out: [{2, "2"}], move_in: [{3, "3"}]}}
+    end
+  end
+
+  describe "same-batch move event cancellation" do
+    test "insert and delete in same batch emits no events", ctx do
+      ctx = with_materializer(ctx)
+
+      apply_changes(ctx, [
+        insert("1", "10"),
+        delete("1", "10")
+      ])
+
+      refute_received {:materializer_changes, _, _}
+    end
+
+    @tag snapshot_data: [%Changes.NewRecord{record: %{"id" => "1", "value" => "10"}}]
+    test "existing value removed and re-added emits no events", ctx do
+      ctx = with_materializer(ctx)
+
+      apply_changes(ctx, [
+        update("1", "10", "20"),
+        update("1", "20", "10")
+      ])
+
+      refute_received {:materializer_changes, _, _}
+    end
+
+    test "two move_ins and one move_out emits net one move_in", ctx do
+      ctx = with_materializer(ctx)
+
+      apply_changes(ctx, [
+        insert("1", "10"),
+        delete("1", "10"),
+        insert("2", "10")
+      ])
+
+      assert_moved_in(["10"])
+    end
+
+    test "cancellation does not affect unrelated values", ctx do
+      ctx = with_materializer(ctx)
+
+      apply_changes(ctx, [
+        insert("1", "10"),
+        delete("1", "10"),
+        insert("2", "20")
+      ])
+
+      assert_moved_in(["20"])
+    end
+
+    @tag snapshot_data: [%Changes.NewRecord{record: %{"id" => "1", "value" => "10"}}]
+    test "net move_out survives when more outs than ins", ctx do
+      ctx = with_materializer(ctx)
+
+      apply_changes(ctx, [
+        delete("1", "10"),
+        insert("2", "10"),
+        delete("2", "10")
+      ])
+
+      assert_moved_out(["10"])
+    end
+
+    test "net move_in survives when more ins than outs", ctx do
+      ctx = with_materializer(ctx)
+
+      apply_changes(ctx, [
+        insert("1", "10"),
+        update("1", "10", "20"),
+        update("1", "20", "10")
+      ])
+
+      assert_moved_in(["10"])
+    end
+
+    defp insert(id, value),
+      do: %Changes.NewRecord{record: %{"id" => id, "value" => value}}
+
+    defp update(id, old_value, new_value),
+      do: %Changes.UpdatedRecord{
+        record: %{"id" => id, "value" => new_value},
+        old_record: %{"id" => id, "value" => old_value}
+      }
+
+    defp delete(id, value),
+      do: %Changes.DeletedRecord{old_record: %{"id" => id, "value" => value}}
+
+    defp apply_changes(ctx, changes),
+      do: Materializer.new_changes(ctx, prep_changes(changes))
+
+    defp assert_moved_in(values) do
+      assert_receive {:materializer_changes, _, events}
+      assert Enum.sort(events.move_in) == Enum.map(values, &{String.to_integer(&1), &1})
+    end
+
+    defp assert_moved_out(values) do
+      assert_receive {:materializer_changes, _, events}
+      assert Enum.sort(events.move_out) == Enum.map(values, &{String.to_integer(&1), &1})
     end
   end
 
