@@ -114,8 +114,9 @@ defmodule Electric.ShapeCache do
     ShapeCleaner.remove_shape(stack_id, shape_handle)
   end
 
-  @spec await_snapshot_start(shape_handle(), stack_id()) :: :started | {:error, term()}
-  def await_snapshot_start(shape_handle, stack_id)
+  @spec await_snapshot_start(shape_handle(), stack_id(), non_neg_integer()) ::
+          :started | {:error, term()}
+  def await_snapshot_start(shape_handle, stack_id, attempts_remaining \\ 10)
       when is_shape_handle(shape_handle) and is_stack_id(stack_id) do
     ShapeStatus.update_last_read_time_to_now(stack_id, shape_handle)
 
@@ -138,11 +139,27 @@ defmodule Electric.ShapeCache do
             {:error, %RuntimeError{message: "Timed out while waiting for snapshot to start"}}
 
           :exit, {:noproc, _} ->
-            # The fact that we got the shape handle means we know the shape exists, and the process should
-            # exist too. We can get here if registry didn't propagate registration across partitions yet, so
-            # we'll just retry after waiting for a short time to avoid busy waiting.
-            Process.sleep(50)
-            await_snapshot_start(shape_handle, stack_id)
+            if attempts_remaining > 0 do
+              # The fact that we got the shape handle means we know the shape exists, and the process should
+              # exist too. We can get here if registry didn't propagate registration across partitions yet, so
+              # we'll just retry after waiting for a short time to avoid busy waiting.
+              Process.sleep(50)
+
+              await_snapshot_start(shape_handle, stack_id, attempts_remaining - 1)
+            else
+              # If we've been in this situation 10 times already, the consumer process is
+              # likely not appearing and the shape entry in ShapeStatus is stale.
+              # Purge the shape and let the client initiate new shape creation which hopefully
+              # won't hit the same problem with consumer dying before the initial snapshot
+              # creation starts.
+              clean_shape(shape_handle, stack_id)
+
+              Logger.error(
+                "Exhausted retry attempts while waiting for a shape consumer to start initial snapshot creation for #{shape_handle}"
+              )
+
+              {:error, %RuntimeError{message: "Timed out while waiting for snapshot to start"}}
+            end
         end
     end
   rescue
@@ -298,7 +315,7 @@ defmodule Electric.ShapeCache do
       {:error, _reason} = error ->
         Logger.error("Failed to start shape #{shape_handle}: #{inspect(error)}")
         # purge because we know the consumer isn't running
-        ShapeCleaner.remove_shape(stack_id, shape_handle)
+        clean_shape(shape_handle, stack_id)
         :error
     end
   end
@@ -337,7 +354,7 @@ defmodule Electric.ShapeCache do
 
           # If we got an error starting any of the dependent shapes then we
           # remove the outer shape too
-          ShapeCleaner.remove_shape(state.stack_id, shape_handle)
+          clean_shape(shape_handle, state.stack_id)
         end
 
         {:error, "Failed to start consumer for #{shape_handle}"}
