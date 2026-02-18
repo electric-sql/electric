@@ -58,12 +58,13 @@ onMounted(() => {
     getComputedStyle(document.documentElement).getPropertyValue('--vp-nav-height')
   )
 })
+const shouldShowReleasebanner = frontmatter.hideReleaseBanner || !hasSidebar
 </script>
 
 <template>
   <Layout :class="!hasSidebar ? 'nav-relative' : ''">
     <template #layout-top>
-      <template v-if="!hasSidebar">
+      <template v-if="shouldShowReleasebanner">
         <ReleaseBanner />
       </template>
     </template>

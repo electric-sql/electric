@@ -1,0 +1,29 @@
+name: Enterprise
+order: 50
+type: enterprise
+
+price: "Custom"
+priceColor: "ddn"
+
+# Hero card display
+who: "organizations with large workloads and advanced needs"
+featuresTitle: "Bespoke solutions"
+features:
+  - "Higher usage limits"
+  - "Custom infrastructure"
+  - "Project solutions"
+
+# Comparison table metrics
+monthlyActiveUsers: "Unlimited"
+writesPerMinute: "Unlimited"
+operations: "Unlimited"
+shapes: "Unlimited"
+sources: "Unlimited"
+gbProcessed: "Unlimited"
+shapeRetention: "Unlimited"
+
+# CTA
+ctaText: "Contact sales"
+ctaTextSmall: "Contact"
+ctaHref: "/about/contact#sales"
+ctaTheme: "alt"
