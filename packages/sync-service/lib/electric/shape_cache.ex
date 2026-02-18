@@ -158,7 +158,7 @@ defmodule Electric.ShapeCache do
                 "Exhausted retry attempts while waiting for a shape consumer to start initial snapshot creation for #{shape_handle}"
               )
 
-              {:error, %RuntimeError{message: "Timed out while waiting for snapshot to start"}}
+              {:error, Electric.Shapes.Api.Error.must_refetch()}
             end
         end
     end

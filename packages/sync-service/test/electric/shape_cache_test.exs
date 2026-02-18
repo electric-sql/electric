@@ -914,10 +914,13 @@ defmodule Electric.ShapeCacheTest do
       # attempts, we are expecting the task to return here.
       log =
         capture_log(fn ->
-          assert {:ok,
-                  {:error,
-                   %RuntimeError{message: "Timed out while waiting for snapshot to start"}}} =
-                   Task.yield(task, 1000)
+          assert {:ok, error} = Task.yield(task, 1000)
+
+          assert {:error,
+                  %Electric.Shapes.Api.Error{
+                    message: [%{headers: %{control: "must-refetch"}}],
+                    status: 409
+                  }} == error
         end)
 
       assert String.contains?(
