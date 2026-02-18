@@ -874,7 +874,6 @@ defmodule Electric.ShapeCacheTest do
              ]
     end
 
-    @tag :slow
     test "enters infinite retry loop when consumer is suspended before snapshot starts", ctx do
       # Reproduce the scenario from GitHub issue #3844:
       # 1. Shape exists in ShapeStatus with snapshot_started = false
@@ -885,6 +884,8 @@ defmodule Electric.ShapeCacheTest do
       Support.TestUtils.patch_snapshotter(fn _, _, _, _ -> nil end)
 
       {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape, ctx.stack_id)
+      # This message comes from the patched snapshot function; get it out of the way
+      assert_receive {:snapshot, ^shape_handle}
 
       consumer_pid = Electric.Shapes.Consumer.whereis(ctx.stack_id, shape_handle)
       assert is_pid(consumer_pid) and Process.alive?(consumer_pid)
@@ -897,48 +898,49 @@ defmodule Electric.ShapeCacheTest do
       # This triggers handle_writer_termination which deregisters from ConsumerRegistry
       # but leaves the shape entry in ShapeStatus with snapshot_started = false.
       ref = Process.monitor(consumer_pid)
-      GenServer.stop(consumer_pid, {:shutdown, :suspend})
+      GenServer.stop(consumer_pid, :shutdown)
       assert_receive {:DOWN, ^ref, :process, ^consumer_pid, _}, 1_000
 
       # Verify the orphaned state: shape exists but no consumer process
       assert ShapeStatus.has_shape_handle?(ctx.stack_id, shape_handle)
       refute ShapeStatus.snapshot_started?(ctx.stack_id, shape_handle)
-      assert is_nil(Electric.Shapes.Consumer.whereis(ctx.stack_id, shape_handle))
 
       # Now call await_snapshot_start — this should NOT loop forever,
       # but currently it does because the :noproc catch retries unconditionally.
-      # We detect the infinite loop by checking that the task doesn't complete
-      # within a reasonable time (the sleep in the retry is 50ms, so 500ms
-      # allows for ~10 iterations which is enough to confirm the loop).
       task =
         Task.async(fn ->
           ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id)
         end)
 
-      # The task should return an error, not loop forever.
-      # If it loops, Task.yield will return nil after the timeout.
-      result = Task.yield(task, 500)
+      start_tracing_calls(task.pid, {ShapeCache, :await_snapshot_start, :_})
 
-      if is_nil(result) do
-        # The task is stuck in the infinite retry loop — this IS the bug.
-        # Kill the task to clean up and fail the test with a descriptive message.
-        Task.shutdown(task, :brutal_kill)
+      # Let the task run for one second which should result in approx. 20 recursive calls.
+      # We know for a fact the task won't return a result here.
+      refute Task.yield(task, 1000)
 
-        flunk("""
-        await_snapshot_start entered an infinite retry loop (issue #3844).
+      # Collect all messages already in the inbox and assert that they are all traced calls and
+      # there's loopy number of them.
+      # The number of calls should be close to 20 but to avoid flakiness we leave room for
+      # scheduling weirdness and use a conservative bound in the assertion.
+      expected_trace =
+        {:trace, task.pid, :call,
+         {ShapeCache, :await_snapshot_start, [shape_handle, ctx.stack_id]}}
 
-        State at time of call:
-        - ShapeStatus.has_shape_handle? = true
-        - ShapeStatus.snapshot_started? = false
-        - Consumer.whereis = nil (consumer deregistered via suspend)
+      {:messages, traced_calls} = Process.info(self(), :messages)
+      assert Enum.all?(traced_calls, &(&1 == expected_trace))
+      assert length(traced_calls) > 15
 
-        The :noproc catch clause retries unconditionally but the consumer
-        will never come back, causing unbounded recursion with 50ms sleeps.
-        """)
-      else
-        # If the function returned, it handled the case correctly
-        assert {:ok, {:error, _}} = result
-      end
+      flunk("""
+      await_snapshot_start entered an infinite retry loop (issue #3844).
+
+      State at time of call:
+      - ShapeStatus.has_shape_handle? = true
+      - ShapeStatus.snapshot_started? = false
+      - Consumer.whereis = nil (consumer deregistered via suspend)
+
+      The :noproc catch clause retries unconditionally but the consumer
+      will never come back, causing unbounded recursion with 50ms sleeps.
+      """)
     end
 
     test "should wait for consumer to come up", ctx do
@@ -1300,5 +1302,16 @@ defmodule Electric.ShapeCacheTest do
       changes: changes,
       affected_relations: MapSet.new(changes, & &1.relation)
     }
+  end
+
+  defp start_tracing_calls(pid, match_spec) do
+    # Create an isolated trace session
+    session = :trace.session_create(__MODULE__, self(), [])
+
+    # Enable call tracing on the target pid within this session
+    :trace.process(session, pid, true, [:call])
+
+    # Set the trace pattern (scoped to this session)
+    :trace.function(session, match_spec, true, [:local])
   end
 end
