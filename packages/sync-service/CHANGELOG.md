@@ -1,5 +1,11 @@
 # @core/sync-service
 
+## 1.4.5
+
+### Patch Changes
+
+- 03943ad: Fix subquery materializer bug where a value toggling across the 0↔1 boundary multiple times in a single batch could lose data by emitting conflicting move_in/move_out events for the same value.
+
 ## 1.4.4
 
 ### Patch Changes

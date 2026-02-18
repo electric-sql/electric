@@ -1,5 +1,12 @@
 # @core/electric-telemetry
 
+## 0.1.5
+
+### Patch Changes
+
+- e63a054: Add transaction stored count in core metrics we export.
+- b17eac8: Ensure storage dir exists before writing cached disk usage information
+
 ## 0.1.4
 
 ### Patch Changes
