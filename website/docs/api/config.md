@@ -151,6 +151,32 @@ Once Electric reconnects and replication catches up, Postgres will automatically
 
 </EnvVarConfig>
 
+### ELECTRIC_REPLICATION_IDLE_WAL_SIZE_CHECK_PERIOD
+
+<EnvVarConfig
+    name="ELECTRIC_REPLICATION_IDLE_WAL_SIZE_CHECK_PERIOD"
+    defaultValue="1hr"
+    example="180min">
+
+Define the periodicity of checking the amount of WAL retained by Electric's replication slot when the database connections are scaled to zero.
+
+Every time such check is due, Electric opens a one-off database connection (causing the database instance to wake up if it was sleeping) and compares the slot's `restart_lsn` with the current LSN of the database. If the difference exceeds `ELECTRIC_REPLICATION_IDLE_WAL_SIZE_THRESHOLD`, Electric wakes up the connection subsystem and resumes logical replication streaming.
+
+Note that any modifications in the database (INSERTs, UPDATEs, DELETEs, etc) contribute to the WAL size and advance the current LSN forward. However, if the database instance remains mostly idle and scaled to zero, Electric would by default wake it up once an hour only for it to be scaled back down again a few minutes later.
+
+</EnvVarConfig>
+
+### ELECTRIC_REPLICATION_IDLE_WAL_SIZE_THRESHOLD
+
+<EnvVarConfig
+    name="ELECTRIC_REPLICATION_IDLE_WAL_SIZE_THRESHOLD"
+    defaultValue="100MiB"
+    example="1GB">
+
+Define the maximum size of retained WAL that Electric can still consider safe when deciding whether to wake up the connection subsystem from the scaled-down state. Only when the difference between Postgres' current LSN and Electric's replication slot's `restart_lsn` exceeds this threshold will Electric wake up the connection subsystem and resume logical replication streaming.
+
+</EnvVarConfig>
+
 ### ELECTRIC_MANUAL_TABLE_PUBLISHING
 
 <EnvVarConfig
