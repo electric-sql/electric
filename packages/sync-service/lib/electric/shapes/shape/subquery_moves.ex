@@ -34,7 +34,7 @@ defmodule Electric.Shapes.Shape.SubqueryMoves do
 
       [["1", "2", "3"]]
   """
-  def move_in_where_clause(shape, shape_handle, move_ins, dnf_context \\ nil, opts \\ [])
+  def move_in_where_clause(shape, shape_handle, move_ins, dnf_context \\ nil, _opts \\ [])
 
   def move_in_where_clause(
         %Shape{
@@ -45,50 +45,173 @@ defmodule Electric.Shapes.Shape.SubqueryMoves do
         shape_handle,
         move_ins,
         dnf_context,
-        opts
+        _opts
       ) do
     index = Enum.find_index(shape_dependencies_handles, &(&1 == shape_handle))
-    target_section = Enum.at(shape_dependencies, index) |> rebuild_subquery_section()
 
-    # For negated positions (NOT IN), the original WHERE has "NOT IN (...)"
-    # and we need to replace the whole "NOT IN (...)" to get correct SQL
-    target_section = if opts[:remove_not], do: "NOT " <> target_section, else: target_section
+    if dnf_context && dnf_context.decomposition do
+      # DNF-aware path: reconstruct WHERE from the triggering disjunct's conditions.
+      # Find ALL dep indices sharing the same handle (handles degenerate A OR A cases
+      # where the same subquery appears multiple times with different dep indices).
+      all_trigger_indices =
+        shape_dependencies_handles
+        |> Enum.with_index()
+        |> Enum.filter(fn {h, _} -> h == shape_handle end)
+        |> Enum.map(fn {_, i} -> i end)
 
-    {where, params} =
-      case used_refs[["$sublink", "#{index}"]] do
-        {:array, {:row, cols}} ->
-          unnest_sections =
-            cols
-            |> Enum.map(&Electric.Replication.Eval.type_to_pg_cast/1)
-            |> Enum.with_index(fn col, index -> "$#{index + 1}::text[]::#{col}[]" end)
-            |> Enum.join(", ")
+      build_dnf_move_in_where(shape, index, all_trigger_indices, move_ins, dnf_context)
+    else
+      # Legacy path (no DnfContext): string replacement on shape.where.query.
+      # Works for simple single-subquery positive IN shapes.
+      target_section = Enum.at(shape_dependencies, index) |> rebuild_subquery_section()
 
-          {String.replace(
-             query,
-             target_section,
-             "IN (SELECT * FROM unnest(#{unnest_sections}))"
-           ), Electric.Utils.unzip_any(move_ins) |> Tuple.to_list()}
+      {where, params} =
+        case used_refs[["$sublink", "#{index}"]] do
+          {:array, {:row, cols}} ->
+            unnest_sections =
+              cols
+              |> Enum.map(&Electric.Replication.Eval.type_to_pg_cast/1)
+              |> Enum.with_index(fn col, index -> "$#{index + 1}::text[]::#{col}[]" end)
+              |> Enum.join(", ")
 
-        col ->
-          type = Electric.Replication.Eval.type_to_pg_cast(col)
-          {String.replace(query, target_section, "= ANY ($1::text[]::#{type})"), [move_ins]}
+            {String.replace(
+               query,
+               target_section,
+               "IN (SELECT * FROM unnest(#{unnest_sections}))"
+             ), Electric.Utils.unzip_any(move_ins) |> Tuple.to_list()}
+
+          col ->
+            type = Electric.Replication.Eval.type_to_pg_cast(col)
+            {String.replace(query, target_section, "= ANY ($1::text[]::#{type})"), [move_ins]}
+        end
+
+      {where, params}
+    end
+  end
+
+  # Reconstruct the move-in WHERE clause from all disjuncts containing the trigger.
+  #
+  # When the same subquery appears in multiple disjuncts (e.g., because
+  # `IN ('a', 'b', 'c')` was expanded to OR'd equalities), we must include
+  # rows matching ANY of those disjuncts, not just the first.
+  #
+  # For `WHERE (x IN sq1 AND id = 'a') OR (x IN sq1 AND id = 'b') OR y IN sq2`,
+  # when sq1 triggers:
+  #   base_where = "col = ANY($1) AND (("id" = 'a') OR ("id" = 'b'))"
+  #
+  # For NOT IN: the triggering subquery is always a positive match (= ANY),
+  # since we're finding rows that now satisfy the condition. Negation is only
+  # applied to non-triggering positions in the disjunct.
+  #
+  defp build_dnf_move_in_where(shape, trigger_dep_index, all_trigger_indices, move_ins, dnf_context) do
+    decomposition = dnf_context.decomposition
+
+    # Collect trigger positions from ALL dep indices sharing the same handle.
+    # This handles the case where identical subqueries (same handle) appear at
+    # different dep indices (e.g., `A OR A` producing dep_0 and dep_1).
+    trigger_positions =
+      Enum.flat_map(all_trigger_indices, fn idx ->
+        find_dnf_positions_for_dep_index(decomposition, idx)
+      end)
+
+    # Find all disjuncts containing a trigger position
+    containing =
+      Enum.filter(decomposition.disjuncts, fn conjunction ->
+        Enum.any?(conjunction, fn {pos, _} -> pos in trigger_positions end)
+      end)
+
+    # Build the trigger SQL + params (shared across all containing disjuncts)
+    used_refs = shape.where.used_refs
+
+    {trigger_sql, params} =
+      build_trigger_replacement(shape, trigger_dep_index, move_ins, used_refs)
+
+    # For each containing disjunct, build the non-trigger conditions
+    disjunct_non_trigger_clauses =
+      Enum.map(containing, fn conjunction ->
+        non_trigger_conditions =
+          conjunction
+          |> Enum.reject(fn {pos, _} -> pos in trigger_positions end)
+          |> Enum.map(fn {pos, polarity} ->
+            subexpr = Map.fetch!(decomposition.subexpressions, pos)
+            build_non_trigger_condition(subexpr, polarity, shape)
+          end)
+
+        case non_trigger_conditions do
+          [] -> nil
+          conditions -> Enum.join(conditions, " AND ")
+        end
+      end)
+
+    # Combine: trigger AND (disjunct1_conditions OR disjunct2_conditions OR ...)
+    base_where =
+      case Enum.reject(disjunct_non_trigger_clauses, &is_nil/1) do
+        [] ->
+          # No non-trigger conditions in any disjunct — just the trigger
+          trigger_sql
+
+        [single] ->
+          "#{trigger_sql} AND (#{single})"
+
+        multiple ->
+          or_clause = Enum.map_join(multiple, " OR ", &"(#{&1})")
+          "#{trigger_sql} AND (#{or_clause})"
       end
 
-    # Append exclusion clauses for multi-disjunct shapes
+    # Append exclusion clauses for disjuncts that don't contain the trigger
     exclusion =
-      if dnf_context && dnf_context.decomposition &&
-           length(dnf_context.decomposition.disjuncts) > 1 do
+      if length(decomposition.disjuncts) > 1 do
         build_dnf_exclusion_clauses(
-          dnf_context.decomposition,
+          decomposition,
           shape.shape_dependencies,
           shape.subquery_comparison_expressions,
-          index
+          trigger_dep_index
         )
       else
         ""
       end
 
-    {where <> exclusion, params}
+    {base_where <> exclusion, params}
+  end
+
+  # Build the SQL fragment and params for the triggering subquery position.
+  # Always a positive match — no NOT applied.
+  defp build_trigger_replacement(shape, dep_index, move_ins, used_refs) do
+    column_sql = get_column_sql(shape.subquery_comparison_expressions, dep_index)
+
+    case used_refs[["$sublink", "#{dep_index}"]] do
+      {:array, {:row, cols}} ->
+        unnest_sections =
+          cols
+          |> Enum.map(&Electric.Replication.Eval.type_to_pg_cast/1)
+          |> Enum.with_index(fn col, index -> "$#{index + 1}::text[]::#{col}[]" end)
+          |> Enum.join(", ")
+
+        sql = "#{column_sql} IN (SELECT * FROM unnest(#{unnest_sections}))"
+        params = Electric.Utils.unzip_any(move_ins) |> Tuple.to_list()
+        {sql, params}
+
+      col ->
+        type = Electric.Replication.Eval.type_to_pg_cast(col)
+        {"#{column_sql} = ANY ($1::text[]::#{type})", [move_ins]}
+    end
+  end
+
+  # Build a SQL condition for a non-triggering position in the disjunct.
+  defp build_non_trigger_condition(subexpr, polarity, shape) do
+    if subexpr.is_subquery do
+      # Another subquery in the same disjunct: keep original subquery SQL
+      dep_index = extract_sublink_index(subexpr.ast)
+      column_sql = get_column_sql(shape.subquery_comparison_expressions, dep_index)
+      subquery_shape = Enum.at(shape.shape_dependencies, dep_index)
+      subquery_section = rebuild_subquery_section(subquery_shape)
+      condition = "#{column_sql} #{subquery_section}"
+      if polarity == :negated, do: "(NOT (#{condition}))", else: condition
+    else
+      # Non-subquery condition: convert AST back to SQL
+      sql = SqlGenerator.to_sql(subexpr.ast)
+      if polarity == :negated, do: "(NOT #{sql})", else: sql
+    end
   end
 
   defp rebuild_subquery_section(shape) do
@@ -236,22 +359,6 @@ defmodule Electric.Shapes.Shape.SubqueryMoves do
   def extract_sublink_index(_), do: nil
 
   @doc """
-  Find all DNF positions that correspond to a given dependency index.
-
-  A single dependency can appear at multiple positions (e.g., the same subquery
-  referenced in different parts of the WHERE clause).
-  """
-  def find_dnf_positions_for_dep_index(decomposition, dep_index) do
-    Enum.flat_map(decomposition.subexpressions, fn {pos, subexpr} ->
-      if subexpr.is_subquery and extract_sublink_index(subexpr.ast) == dep_index do
-        [pos]
-      else
-        []
-      end
-    end)
-  end
-
-  @doc """
   Build exclusion clauses using DNF decomposition.
 
   Only excludes subqueries in disjuncts that do NOT contain the triggering dependency.
@@ -342,6 +449,22 @@ defmodule Electric.Shapes.Shape.SubqueryMoves do
 
       if conditions == [], do: nil, else: " AND NOT (#{Enum.join(conditions, " AND ")})"
     end
+  end
+
+  @doc """
+  Find all DNF positions that correspond to a given dependency index.
+
+  A single dependency can appear at multiple positions (e.g., the same subquery
+  referenced in different parts of the WHERE clause).
+  """
+  def find_dnf_positions_for_dep_index(decomposition, dep_index) do
+    Enum.flat_map(decomposition.subexpressions, fn {pos, subexpr} ->
+      if subexpr.is_subquery and extract_sublink_index(subexpr.ast) == dep_index do
+        [pos]
+      else
+        []
+      end
+    end)
   end
 
   # Get the SQL for the column expression used in a subquery comparison.

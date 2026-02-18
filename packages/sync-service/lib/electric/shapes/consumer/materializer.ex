@@ -439,8 +439,11 @@ defmodule Electric.Shapes.Consumer.Materializer do
   end
 
   # Parse a slash-delimited wire-format tag string into {position, hash} pairs.
-  # e.g., "hash1/hash2/" → [{0, "hash1"}, {1, "hash2"}]
-  # Empty segments (from nil positions) are skipped.
+  # Convert a tag to position/hash pairs.
+  # Supports both formats:
+  #   - Wire format (string): "hash1/hash2/" → [{0, "hash1"}, {1, "hash2"}]
+  #   - Internal format (list): ["hash1", "hash2", nil] → [{0, "hash1"}, {1, "hash2"}]
+  # Empty segments / nil positions are skipped.
   defp tag_to_position_entries(tag) when is_binary(tag) do
     tag
     |> String.split("/")
@@ -451,8 +454,17 @@ defmodule Electric.Shapes.Consumer.Materializer do
     end)
   end
 
+  defp tag_to_position_entries(tag) when is_list(tag) do
+    tag
+    |> Enum.with_index()
+    |> Enum.flat_map(fn
+      {nil, _pos} -> []
+      {hash, pos} -> [{pos, hash}]
+    end)
+  end
+
   defp add_row_to_tag_indices(tag_indices, key, move_tags) do
-    Enum.reduce(move_tags, tag_indices, fn tag, acc when is_binary(tag) ->
+    Enum.reduce(move_tags, tag_indices, fn tag, acc ->
       entries = tag_to_position_entries(tag)
 
       Enum.reduce(entries, acc, fn {pos, hash}, inner_acc ->
@@ -462,7 +474,7 @@ defmodule Electric.Shapes.Consumer.Materializer do
   end
 
   defp remove_row_from_tag_indices(tag_indices, key, move_tags) do
-    Enum.reduce(move_tags, tag_indices, fn tag, acc when is_binary(tag) ->
+    Enum.reduce(move_tags, tag_indices, fn tag, acc ->
       entries = tag_to_position_entries(tag)
 
       Enum.reduce(entries, acc, fn {pos, hash}, inner_acc ->
