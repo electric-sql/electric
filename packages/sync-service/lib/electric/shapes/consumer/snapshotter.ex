@@ -135,19 +135,30 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
     # Once we have the first message, we set a timeout to wait for the task to send us a message when it sees any data.
     # If the task doesn't send us a message within the timeout, we consider the query "bad" and exit the task.
 
+    otel_ctx = OpenTelemetry.get_current_context()
+
     task =
       Task.Supervisor.async_nolink(supervisor, fn ->
+        OpenTelemetry.set_current_context(otel_ctx)
+
         snapshot_fun =
           Electric.StackConfig.lookup(stack_id, :create_snapshot_fn, &stream_snapshot_from_db/5)
 
         try do
           result =
-            snapshot_fun.(
-              self_pid,
-              consumer,
-              shape_handle,
-              shape,
-              Map.put(ctx, :db_pool, db_pool)
+            OpenTelemetry.with_span(
+              "shape_snapshot.stream_and_store",
+              telemetry_shape_attrs(shape_handle, shape),
+              stack_id,
+              fn ->
+                snapshot_fun.(
+                  self_pid,
+                  consumer,
+                  shape_handle,
+                  shape,
+                  Map.put(ctx, :db_pool, db_pool)
+                )
+              end
             )
 
           {:ok, result}
