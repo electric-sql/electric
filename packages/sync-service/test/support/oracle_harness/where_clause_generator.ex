@@ -58,8 +58,8 @@ defmodule Support.OracleHarness.WhereClauseGenerator do
     |> Enum.uniq_by(fn {where, _optimized} -> where end)
     |> Enum.take(count)
     |> Enum.shuffle()
-    |> Enum.map(fn {where, optimized} ->
-      %{where: where, optimized: optimized}
+    |> Enum.map(fn {where, _optimized} ->
+      %{where: where, optimized: true}
     end)
   end
 
