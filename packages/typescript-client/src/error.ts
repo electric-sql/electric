@@ -111,7 +111,7 @@ export class MissingHeadersError extends Error {
     missingHeaders.forEach((h) => {
       msg += `- ${h}\n`
     })
-    msg += `\nThis is often due to a proxy not setting CORS correctly so that all Electric headers can be read by the client.`
+    msg += `\nIf you are using a proxy, ensure it forwards all response headers from Electric, including the access-control-expose-headers header which allows the browser to read the electric-* headers.`
     msg += `\nFor more information visit the troubleshooting guide: /docs/guides/troubleshooting/missing-headers`
     super(msg)
   }
