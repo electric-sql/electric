@@ -1650,7 +1650,8 @@ export class ShapeStream<T extends Row<unknown> = Row>
     }, 30_000)
 
     try {
-      const { metadata, data } = await this.fetchSnapshot(opts)
+      const { metadata, data, responseOffset, responseHandle } =
+        await this.fetchSnapshot(opts)
 
       const dataWithEndBoundary = (data as Array<Message<T>>).concat([
         { headers: { control: `snapshot-end`, ...metadata } },
@@ -1662,6 +1663,35 @@ export class ShapeStream<T extends Row<unknown> = Row>
         new Set(data.map((message) => message.key))
       )
       this.#onMessages(dataWithEndBoundary, false)
+
+      // Advance the stream state's offset/handle from the snapshot response
+      // so that when the pause lock is released the stream resumes from the
+      // snapshot's position rather than from "now". Without this, changes
+      // committed between the snapshot and the stream's first live request
+      // would be lost.
+      if (responseOffset || responseHandle) {
+        const innerState =
+          this.#syncState instanceof PausedState
+            ? this.#syncState.previousState
+            : this.#syncState
+        const transition = innerState.handleResponseMetadata({
+          status: 200,
+          responseHandle: responseHandle ?? null,
+          responseOffset: responseOffset ?? null,
+          responseCursor: null,
+          expiredHandle: null,
+          now: Date.now(),
+          maxStaleCacheRetries: this.#maxStaleCacheRetries,
+          createCacheBuster: () =>
+            `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+        })
+        if (transition.action === `accepted`) {
+          this.#syncState =
+            this.#syncState instanceof PausedState
+              ? new PausedState(transition.state)
+              : transition.state
+        }
+      }
 
       return {
         metadata,
@@ -1687,6 +1717,8 @@ export class ShapeStream<T extends Row<unknown> = Row>
   async fetchSnapshot(opts: SubsetParams): Promise<{
     metadata: SnapshotMetadata
     data: Array<ChangeMessage<T>>
+    responseOffset?: Offset
+    responseHandle?: string
   }> {
     const method = opts.method ?? this.options.subsetMethod ?? `GET`
     const usePost = method === `POST`
@@ -1757,7 +1789,12 @@ export class ShapeStream<T extends Row<unknown> = Row>
       schema
     )
 
-    return { metadata, data }
+    const responseOffset =
+      (response.headers.get(CHUNK_LAST_OFFSET_HEADER) as Offset) || undefined
+    const responseHandle =
+      response.headers.get(SHAPE_HANDLE_HEADER) || undefined
+
+    return { metadata, data, responseOffset, responseHandle }
   }
 
   #buildSubsetBody(opts: SubsetParams): Record<string, unknown> {

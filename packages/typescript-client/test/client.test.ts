@@ -1636,6 +1636,50 @@ describe.for(fetchAndSse)(
       expect(titles).toEqual([`alpha`, `beta`])
     }, 5_000)
 
+    it(`should not miss updates between cold-start snapshot and stream resume`, async ({
+      issuesTableUrl,
+      insertIssues,
+      updateIssue,
+      aborter,
+    }) => {
+      // Seed a row so the snapshot has something to return
+      const [id] = await insertIssues({ title: `original` })
+
+      const shapeStream = new ShapeStream({
+        url: `${BASE_URL}/v1/shape`,
+        params: { table: issuesTableUrl },
+        log: `changes_only`,
+        liveSse,
+        signal: aborter.signal,
+      })
+      const shape = new Shape(shapeStream)
+
+      // Cold start: call requestSnapshot immediately before the stream
+      // has connected. This is the typical on-demand collection flow.
+      await shapeStream.requestSnapshot({
+        orderBy: `title ASC`,
+        limit: 100,
+      })
+
+      // Verify snapshot data arrived
+      await vi.waitFor(() => {
+        expect(shape.currentRows.length).toBe(1)
+        expect(shape.currentRows[0].title).toBe(`original`)
+      })
+
+      // Now update the row — this change happens after the snapshot was
+      // taken.  Before the fix, the stream would resume from "now"
+      // (a fresh server offset) and could skip this update if it was
+      // committed between the snapshot and the stream's first live
+      // request.
+      await updateIssue({ id, title: `updated-after-snapshot` })
+
+      await vi.waitFor(() => {
+        const row = shape.currentRows.find((r) => r.id === id)
+        expect(row?.title).toBe(`updated-after-snapshot`)
+      })
+    })
+
     it(`requestSnapshot should populate stream and match returned data`, async ({
       issuesTableUrl,
       insertIssues,
