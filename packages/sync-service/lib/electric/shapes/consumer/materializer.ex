@@ -306,23 +306,20 @@ defmodule Electric.Shapes.Consumer.Materializer do
     %{state | pending_events: merge_events(state.pending_events, events)}
   end
 
-  # In practice, it shouldn't be possible for pending_events to be an empty map when
-  # commit?=true. But it's actually the modus operandi for materializer tests which predate the
-  # addition of the commit? flag. So to keep those unchanged, we allow pending_changes=%{}
-  # and commit?=true at the same time.
-  defp maybe_flush_pending_events(%{pending_events: events} = state, commit?)
-       when events == %{} or not commit?, do: state
-
   defp maybe_flush_pending_events(state, true) do
     events =
       cancel_matching_move_events(state.pending_events)
 
-    for pid <- state.subscribers do
-      send(pid, {:materializer_changes, state.shape_handle, events})
+    if events != %{} do
+      for pid <- state.subscribers do
+        send(pid, {:materializer_changes, state.shape_handle, events})
+      end
     end
 
     %{state | pending_events: %{}}
   end
+
+  defp maybe_flush_pending_events(state, _commit?), do: state
 
   defp merge_events(pending, new) when pending == %{}, do: new
   defp merge_events(pending, new) when new == %{}, do: pending

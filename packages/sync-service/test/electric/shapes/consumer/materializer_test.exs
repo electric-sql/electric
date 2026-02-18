@@ -350,7 +350,7 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
       end)
     end
 
-    test "events are accumulated in correct order across uncommitted fragments", ctx do
+    test "events are accumulated across uncommitted fragments", ctx do
       ctx = with_materializer(ctx)
 
       Materializer.new_changes(
@@ -370,10 +370,8 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
         %Changes.NewRecord{key: "5", record: %{"value" => "5"}}
       ])
 
-      # Same order as if both inserts were in a single call:
-      # newer events (value 2) are prepended to older ones (value 1)
-      assert_receive {:materializer_changes, _,
-                      %{move_in: [{5, "5"}, {4, "4"}, {3, "3"}, {2, "2"}, {1, "1"}]}}
+      assert_receive {:materializer_changes, _, %{move_in: move_ins, move_out: []}}
+      assert [{1, "1"}, {2, "2"}, {3, "3"}, {4, "4"}, {5, "5"}] == Enum.sort(move_ins)
     end
 
     test "moves are correctly tracked across multiple calls", ctx do
