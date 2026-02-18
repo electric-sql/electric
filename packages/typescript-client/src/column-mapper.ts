@@ -36,6 +36,15 @@ export function quoteIdentifier(identifier: string): string {
  * For type conversions (e.g., string → Date), use the `parser` option.
  * For value transformations (e.g., encryption), use the `transformer` option.
  *
+ * **Important**: Always call the factory function to get a ColumnMapper:
+ * ```typescript
+ * // ✓ Correct - call the function
+ * columnMapper: snakeCamelMapper()
+ *
+ * // ✗ Wrong - passing the function itself
+ * columnMapper: snakeCamelMapper
+ * ```
+ *
  * @example
  * ```typescript
  * const mapper = snakeCamelMapper()
@@ -55,6 +64,24 @@ export interface ColumnMapper {
    * Applied to column names in WHERE clauses and other query parameters.
    */
   encode: (appColumnName: AppColumnName) => DbColumnName
+}
+
+/**
+ * Validates that a value is a valid ColumnMapper object.
+ * Returns false if the value is a function (common mistake of passing
+ * the factory without calling it) or if it lacks encode/decode methods.
+ *
+ * @param value - The value to validate
+ * @returns true if the value is a valid ColumnMapper, false otherwise
+ * @internal
+ */
+export function isValidColumnMapper(value: unknown): value is ColumnMapper {
+  if (typeof value !== `object` || value === null) {
+    return false
+  }
+
+  const obj = value as Record<string, unknown>
+  return typeof obj.encode === `function` && typeof obj.decode === `function`
 }
 
 /**

@@ -6,7 +6,7 @@ export {
   isControlMessage,
   isVisibleInSnapshot,
 } from './helpers'
-export { FetchError } from './error'
+export { FetchError, InvalidColumnMapperError } from './error'
 export { type BackoffOptions, BackoffDefaults } from './fetch'
 export { ELECTRIC_PROTOCOL_QUERY_PARAMS } from './constants'
 export {
@@ -15,5 +15,6 @@ export {
   snakeCamelMapper,
   snakeToCamel,
   camelToSnake,
+  isValidColumnMapper,
 } from './column-mapper'
 export { compileExpression, compileOrderBy } from './expression-compiler'
