@@ -436,36 +436,57 @@ defmodule Electric.Shapes.Consumer.Materializer do
     end
   end
 
+  # Parse a slash-delimited wire-format tag string into {position, hash} pairs.
+  # e.g., "hash1/hash2/" → [{0, "hash1"}, {1, "hash2"}]
+  # Empty segments (from nil positions) are skipped.
+  defp tag_to_position_entries(tag) when is_binary(tag) do
+    tag
+    |> String.split("/")
+    |> Enum.with_index()
+    |> Enum.flat_map(fn
+      {"", _pos} -> []
+      {hash, pos} -> [{pos, hash}]
+    end)
+  end
+
   defp add_row_to_tag_indices(tag_indices, key, move_tags) do
-    # For now we only support one move tag per row (i.e. no `OR`s in the where clause if there's a subquery)
     Enum.reduce(move_tags, tag_indices, fn tag, acc when is_binary(tag) ->
-      Map.update(acc, tag, MapSet.new([key]), &MapSet.put(&1, key))
+      entries = tag_to_position_entries(tag)
+
+      Enum.reduce(entries, acc, fn {pos, hash}, inner_acc ->
+        Map.update(inner_acc, {pos, hash}, MapSet.new([key]), &MapSet.put(&1, key))
+      end)
     end)
   end
 
   defp remove_row_from_tag_indices(tag_indices, key, move_tags) do
     Enum.reduce(move_tags, tag_indices, fn tag, acc when is_binary(tag) ->
-      case Map.fetch(acc, tag) do
-        {:ok, v} ->
-          new_mapset = MapSet.delete(v, key)
+      entries = tag_to_position_entries(tag)
 
-          if MapSet.size(new_mapset) == 0 do
-            Map.delete(acc, tag)
-          else
-            Map.put(acc, tag, new_mapset)
-          end
+      Enum.reduce(entries, acc, fn {pos, hash}, inner_acc ->
+        tag_key = {pos, hash}
 
-        :error ->
-          acc
-      end
+        case Map.fetch(inner_acc, tag_key) do
+          {:ok, v} ->
+            new_mapset = MapSet.delete(v, key)
+
+            if MapSet.size(new_mapset) == 0 do
+              Map.delete(inner_acc, tag_key)
+            else
+              Map.put(inner_acc, tag_key, new_mapset)
+            end
+
+          :error ->
+            inner_acc
+        end
+      end)
     end)
   end
 
   defp pop_keys_from_tag_indices(tag_indices, patterns) do
-    # This implementation is naive while we support only one tag per row and no composite tags.
-    Enum.reduce(patterns, {MapSet.new(), tag_indices}, fn %{pos: _pos, value: value},
+    Enum.reduce(patterns, {MapSet.new(), tag_indices}, fn %{pos: pos, value: value},
                                                           {keys, acc} ->
-      case Map.pop(acc, value) do
+      case Map.pop(acc, {pos, value}) do
         {nil, acc} -> {keys, acc}
         {v, acc} -> {MapSet.union(keys, v), acc}
       end
