@@ -383,17 +383,15 @@ defmodule Electric.Connection.Manager do
       when is_nil(pool_pids.admin) or is_nil(pool_pids.snapshot) do
     Logger.debug("Starting connection pool for stack #{state.stack_id}")
 
-    # Validate both the pooled connection (for snapshot queries) and the replication
-    # connection (for admin operations like publication management). The admin pool
-    # uses replication credentials because the replication user owns the publication
-    # and has the privileges needed to alter it. Using the pooled connection user for
-    # admin operations fails when it's a different, lower-privilege user (e.g. when
-    # using PgBouncer on Crunchy Bridge where superusers can't connect through the
-    # pooler).
-    with {:ok, pooled_conn_opts, state} <-
-           validate_connection(pooled_connection_opts(state), :pool, state),
-         {:ok, replication_conn_opts, state} <-
-           validate_connection(replication_connection_opts(state), :replication, state) do
+    # The admin pool uses replication credentials because the replication user
+    # owns the publication and has the privileges needed to alter it. The pooled
+    # connection user may be a lower-privilege user (e.g. on Crunchy Bridge where
+    # superusers can't connect through PgBouncer).
+    with {:pool, {:ok, pooled_conn_opts, state}} <-
+           {:pool, validate_connection(pooled_connection_opts(state), :pool, state)},
+         {:replication, {:ok, replication_conn_opts, state}} <-
+           {:replication,
+            validate_connection(replication_connection_opts(state), :replication, state)} do
       pool_sizes = pool_sizes(Keyword.get(state.pool_opts, :pool_size, 2))
 
       state =
@@ -410,10 +408,6 @@ defmodule Electric.Connection.Manager do
               do: [queue_target: 5_000, queue_interval: 10_000],
               else: []
 
-          # The admin pool uses replication connection credentials so that
-          # publication management operations run as the user who owns the
-          # publication. The snapshot pool uses the pooled connection which
-          # may go through a connection pooler like PgBouncer.
           conn_opts =
             if pool_role == :admin,
               do: replication_conn_opts,
@@ -443,11 +437,14 @@ defmodule Electric.Connection.Manager do
     else
       # the ConnectionResolver process was killed, as part of the application
       # shutdown in which case we'll be killed next so just return here
-      {:error, :killed} ->
+      {_source, {:error, :killed}} ->
         {:noreply, state}
 
-      {:error, reason} ->
+      {:pool, {:error, reason}} ->
         shutdown_or_reconnect(reason, :pools, state)
+
+      {:replication, {:error, reason}} ->
+        shutdown_or_reconnect(reason, :admin_pool, state)
     end
   end
 
