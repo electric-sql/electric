@@ -61,6 +61,15 @@ defmodule ElectricTelemetry.DiskUsageTest do
     assert eventually_read_usage(ctx, bytes)
   end
 
+  @tag start_usage: false
+  test "ensures storage_dir exists before writing to it", ctx do
+    ctx =
+      start_usage(%{ctx | tmp_dir: Path.join(ctx.tmp_dir, "dir#{System.monotonic_time()}-#{}")})
+
+    Process.link(ctx.usage)
+    :ok = DiskUsage.update(ctx.usage)
+  end
+
   defp stop_usage(ctx) do
     ref = Process.monitor(ctx.usage)
     Process.unlink(ctx.usage)
