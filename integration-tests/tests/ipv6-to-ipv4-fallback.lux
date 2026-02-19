@@ -23,7 +23,7 @@
   ??[info] Lock acquired
   ??tcp connect (local-ipv4-only.electric-sql.dev:$pg_pooler_host_port): non-existing domain - :nxdomain
   ??[warning] Database connection failed to find valid IPv6 address for local-ipv4-only.electric-sql.dev - falling back to IPv4
-  ?+\[info\] Connection pool \[admin: $pg_host_name:$pg_pooler_host_port\] is ready
+  ?+\[info\] Connection pool \[admin: $pg_host_name:$pg_host_port\] is ready
   ?\[info\] Connection pool \[snapshot: $pg_host_name:$pg_pooler_host_port\] is ready
   ??[info] Starting replication from postgres
 
