@@ -91,7 +91,7 @@ export type SubsetParams = {
   /** Legacy string format WHERE clause */
   where?: string
   /** Positional parameter values for WHERE clause */
-  params?: Record<string, string>
+  params?: Record<string, string | bigint | number>
   /** Maximum number of rows to return */
   limit?: number
   /** Number of rows to skip */

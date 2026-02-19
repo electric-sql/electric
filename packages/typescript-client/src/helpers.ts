@@ -71,6 +71,21 @@ export function getOffset(message: ControlMessage): Offset | undefined {
   return lsn ? (`${lsn}_0` as Offset) : undefined
 }
 
+function bigintReplacer(_key: string, value: unknown): unknown {
+  return typeof value === `bigint` ? value.toString() : value
+}
+
+/**
+ * BigInt-safe version of JSON.stringify.
+ * Converts BigInt values to their string representation (as JSON strings,
+ * e.g. `{ id: 42n }` becomes `{"id":"42"}`) instead of throwing.
+ * Assumes input is a JSON-serializable value — passing `undefined` at the
+ * top level will return `undefined` (matching `JSON.stringify` behavior).
+ */
+export function bigintSafeStringify(value: unknown): string {
+  return JSON.stringify(value, bigintReplacer)
+}
+
 /**
  * Checks if a transaction is visible in a snapshot.
  *

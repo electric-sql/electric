@@ -632,6 +632,57 @@ describe(`shape stream state machine`, () => {
     expect(updated.offset).toBe(`5_3`)
     expect(updated.isUpToDate).toBe(true)
   })
+
+  // --- 204 "No Content" handling ---
+
+  it(`204 response should transition to LiveState (up-to-date)`, () => {
+    const state = new SyncingState(makeShared())
+    const transition = state.handleResponseMetadata(
+      makeResponseInput({ status: 204 })
+    )
+
+    // A 204 means "no content, you're caught up" — should become live
+    expect(transition.state).toBeInstanceOf(LiveState)
+    expect(transition.state.isUpToDate).toBe(true)
+    expect(transition.state.lastSyncedAt).toBeDefined()
+    // 204 gives no indication SSE will work — skip SSE detection cycle
+    expect(transition.state.sseFallbackToLongPolling).toBe(true)
+  })
+
+  it(`repeated 204 responses should transition to LiveState after first 204`, () => {
+    // Simulates a deprecated server that only sends 204 "No Content".
+    // The client should become up-to-date after the first 204.
+    let state = createInitialState({ offset: `-1` }) as InstanceType<
+      typeof InitialState | typeof SyncingState | typeof LiveState
+    >
+
+    // Simulate 5 fetch cycles, each returning 204 with a valid handle
+    for (let i = 0; i < 5; i++) {
+      // 1. handleResponseMetadata for the 204 response
+      const responseTransition = state.handleResponseMetadata(
+        makeResponseInput({
+          status: 204,
+          responseHandle: `h1`,
+          responseOffset: `0_0`,
+          responseCursor: `cursor-1`,
+        })
+      )
+      state = responseTransition.state as typeof state
+
+      // 2. handleMessageBatch with empty batch (204 has no body)
+      const batchTransition = state.handleMessageBatch(
+        makeMessageBatchInput({
+          hasMessages: false,
+          hasUpToDateMessage: false,
+        })
+      )
+      state = batchTransition.state as typeof state
+    }
+
+    // After receiving a 204, the client should be live and up-to-date
+    expect(state.isUpToDate).toBe(true)
+    expect(state.kind).toBe(`live`)
+  })
 })
 
 describe(`schema undefined + ignored stale response`, () => {

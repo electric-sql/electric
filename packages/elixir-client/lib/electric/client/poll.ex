@@ -34,10 +34,14 @@ defmodule Electric.Client.Poll do
   """
 
   alias Electric.Client
+  alias Electric.Client.ExpiredShapesCache
   alias Electric.Client.Fetch
   alias Electric.Client.Message
+  alias Electric.Client.ShapeKey
   alias Electric.Client.ShapeState
   alias Electric.Client.TagTracker
+
+  @max_stale_retries 3
 
   @type poll_result ::
           {:ok, [Client.message()], ShapeState.t()}
@@ -74,15 +78,16 @@ defmodule Electric.Client.Poll do
   @spec request(Client.t(), ShapeState.t(), keyword()) :: poll_result()
   def request(%Client{} = client, %ShapeState{} = state, opts \\ []) do
     replica = Keyword.get(opts, :replica, :default)
+    shape_key = ShapeKey.canonical(client.endpoint, client.params)
 
-    request = build_request(client, state, replica)
+    request = build_request(client, state, replica, shape_key)
 
     case Fetch.request(client, request) do
       %Fetch.Response{status: status} = resp when status in 200..299 ->
-        handle_success(resp, client, state)
+        handle_success(resp, client, state, shape_key)
 
       {:error, %Fetch.Response{status: 409} = resp} ->
-        handle_must_refetch(resp, client, state)
+        handle_must_refetch(resp, client, state, shape_key)
 
       {:error, %Fetch.Response{body: body} = resp} ->
         {:error, %Client.Error{message: unwrap_error(body), resp: resp}}
@@ -92,15 +97,25 @@ defmodule Electric.Client.Poll do
     end
   end
 
-  defp build_request(client, state, replica) do
+  defp build_request(client, state, replica, shape_key) do
     %{
       shape_handle: shape_handle,
       offset: offset,
       up_to_date?: up_to_date?,
-      next_cursor: cursor
+      next_cursor: cursor,
+      stale_cache_buster: cache_buster
     } = state
 
-    Client.request(client,
+    # Build additional params for cache busting
+    cache_busting_params =
+      %{}
+      |> maybe_add_expired_handle(shape_key)
+      |> maybe_add_cache_buster(cache_buster)
+
+    # Merge cache busting params into client params before building request
+    client_with_cache_params = Client.merge_params(client, cache_busting_params)
+
+    Client.request(client_with_cache_params,
       offset: offset,
       shape_handle: shape_handle,
       replica: replica,
@@ -109,13 +124,44 @@ defmodule Electric.Client.Poll do
     )
   end
 
-  defp handle_success(resp, client, state) do
-    shape_handle = shape_handle!(resp)
+  defp maybe_add_expired_handle(params, shape_key) do
+    case ExpiredShapesCache.get_expired_handle(shape_key) do
+      nil -> params
+      expired -> Map.put(params, "expired_handle", expired)
+    end
+  end
+
+  defp maybe_add_cache_buster(params, nil), do: params
+  defp maybe_add_cache_buster(params, buster), do: Map.put(params, "cache-buster", buster)
+
+  defp handle_success(resp, client, state, shape_key) do
+    response_handle = shape_handle!(resp)
+    expired_handle = ExpiredShapesCache.get_expired_handle(shape_key)
+
+    # Check for stale CDN response
+    cond do
+      # Stale: response matches expired AND no valid local handle
+      response_handle == expired_handle and
+          (is_nil(state.shape_handle) or state.shape_handle == expired_handle) ->
+        handle_stale_response(state)
+
+      # Stale but have valid local handle: ignore response
+      response_handle == expired_handle ->
+        {:stale_ignored, ShapeState.clear_stale_retry(state)}
+
+      # Normal: process response
+      true ->
+        process_success_response(resp, client, state, response_handle)
+    end
+  end
+
+  defp process_success_response(resp, client, state, shape_handle) do
     final_offset = last_offset(resp, state.offset)
     next_cursor = resp.next_cursor
 
     state = %{state | shape_handle: shape_handle, next_cursor: next_cursor, offset: final_offset}
     state = handle_schema(resp, client, state)
+    state = ShapeState.clear_stale_retry(state)
 
     %{value_mapper_fun: value_mapper_fun} = state
 
@@ -128,11 +174,29 @@ defmodule Electric.Client.Poll do
     {:ok, messages, new_state}
   end
 
-  defp handle_must_refetch(resp, client, state) do
+  defp handle_stale_response(state) do
+    if state.stale_cache_retry_count >= @max_stale_retries do
+      {:error,
+       %Client.Error{
+         message:
+           "CDN continues serving stale cached responses after #{@max_stale_retries} retry attempts"
+       }}
+    else
+      {:stale_retry, ShapeState.enter_stale_retry(state)}
+    end
+  end
+
+  defp handle_must_refetch(resp, client, state, shape_key) do
+    # Mark the old handle as expired
+    if state.shape_handle do
+      ExpiredShapesCache.mark_expired(shape_key, state.shape_handle)
+    end
+
     handle = shape_handle(resp) || "#{state.shape_handle}-next"
 
     new_state = ShapeState.reset(state, handle)
     new_state = handle_schema(resp, client, new_state)
+    new_state = ShapeState.clear_stale_retry(new_state)
 
     %{value_mapper_fun: value_mapper_fun} = new_state
 

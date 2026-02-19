@@ -15,7 +15,12 @@ import {
   encodeWhereClause,
   quoteIdentifier,
 } from './column-mapper'
-import { getOffset, isUpToDateMessage, isChangeMessage } from './helpers'
+import {
+  getOffset,
+  isUpToDateMessage,
+  isChangeMessage,
+  bigintSafeStringify,
+} from './helpers'
 import {
   FetchError,
   FetchBackoffAbortError,
@@ -1090,7 +1095,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
         // Serialize params as JSON to keep the parameter name constant for proxy configs
         fetchUrl.searchParams.set(
           SUBSET_PARAM_WHERE_PARAMS,
-          JSON.stringify(subsetParams.params)
+          bigintSafeStringify(subsetParams.params)
         )
       if (subsetParams.limit)
         setQueryParam(fetchUrl, SUBSET_PARAM_LIMIT, subsetParams.limit)
@@ -1364,7 +1369,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
     const batch = this.#messageParser.parse<Array<Message<T>>>(messages, schema)
 
     if (!Array.isArray(batch)) {
-      const preview = JSON.stringify(batch)?.slice(0, 200)
+      const preview = bigintSafeStringify(batch)?.slice(0, 200)
       throw new FetchError(
         response.status,
         `Received non-array response body from shape endpoint. ` +
@@ -1445,7 +1450,18 @@ export class ShapeStream<T extends Row<unknown> = Row>
         // #start handles it correctly.
         throw new FetchBackoffAbortError()
       }
-      throw error
+      // Re-throw known Electric errors so the caller can handle them
+      // (e.g., 409 shape rotation, stale cache retry, missing headers).
+      // Other errors (body parsing, SSE protocol failures, null body)
+      // are SSE connection failures handled by the fallback mechanism
+      // in the finally block below.
+      if (
+        error instanceof FetchError ||
+        error instanceof StaleCacheError ||
+        error instanceof MissingHeadersError
+      ) {
+        throw error
+      }
     } finally {
       // Check if the SSE connection closed too quickly
       // This can happen when responses are cached or when the proxy/server
@@ -1742,7 +1758,8 @@ export class ShapeStream<T extends Row<unknown> = Row>
     }, 30_000)
 
     try {
-      const { metadata, data } = await this.fetchSnapshot(opts)
+      const { metadata, data, responseOffset, responseHandle } =
+        await this.fetchSnapshot(opts)
 
       const dataWithEndBoundary = (data as Array<Message<T>>).concat([
         { headers: { control: `snapshot-end`, ...metadata } },
@@ -1754,6 +1771,31 @@ export class ShapeStream<T extends Row<unknown> = Row>
         new Set(data.map((message) => message.key))
       )
       this.#onMessages(dataWithEndBoundary, false)
+
+      // On cold start the stream's offset is still at "now". Advance it
+      // to the snapshot's position so no updates are missed in between.
+      if (responseOffset !== null || responseHandle !== null) {
+        const transition = this.#syncState.handleResponseMetadata({
+          status: 200,
+          responseHandle,
+          responseOffset,
+          responseCursor: null,
+          expiredHandle: null,
+          now: Date.now(),
+          maxStaleCacheRetries: this.#maxStaleCacheRetries,
+          createCacheBuster: () =>
+            `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+        })
+        if (transition.action === `accepted`) {
+          this.#syncState = transition.state
+        } else {
+          console.warn(
+            `[Electric] Snapshot response metadata was not accepted ` +
+              `by state "${this.#syncState.kind}" (action: ${transition.action}). ` +
+              `Stream offset was not advanced from snapshot.`
+          )
+        }
+      }
 
       return {
         metadata,
@@ -1774,11 +1816,13 @@ export class ShapeStream<T extends Row<unknown> = Row>
    * `subsetMethod: 'POST'` on the stream to send parameters in the request body instead.
    *
    * @param opts - The options for the snapshot request.
-   * @returns The metadata and the data for the snapshot.
+   * @returns The metadata, data, and the response's offset/handle for state advancement.
    */
   async fetchSnapshot(opts: SubsetParams): Promise<{
     metadata: SnapshotMetadata
     data: Array<ChangeMessage<T>>
+    responseOffset: Offset | null
+    responseHandle: string | null
   }> {
     const method = opts.method ?? this.options.subsetMethod ?? `GET`
     const usePost = method === `POST`
@@ -1795,7 +1839,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
           ...result.requestHeaders,
           'Content-Type': `application/json`,
         },
-        body: JSON.stringify(this.#buildSubsetBody(opts)),
+        body: bigintSafeStringify(this.#buildSubsetBody(opts)),
       }
     } else {
       const result = await this.#constructUrl(this.options.url, true, opts)
@@ -1849,7 +1893,11 @@ export class ShapeStream<T extends Row<unknown> = Row>
       schema
     )
 
-    return { metadata, data }
+    const responseOffset =
+      (response.headers.get(CHUNK_LAST_OFFSET_HEADER) as Offset) || null
+    const responseHandle = response.headers.get(SHAPE_HANDLE_HEADER)
+
+    return { metadata, data, responseOffset, responseHandle }
   }
 
   #buildSubsetBody(opts: SubsetParams): Record<string, unknown> {

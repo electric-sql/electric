@@ -139,6 +139,7 @@ defmodule ElectricTelemetry.DiskUsage do
         DateTime.to_iso8601(state.updated_at)
       ])
 
+    File.mkdir_p!(Path.dirname(cache_file))
     File.write!(cache_file, data, [:binary, :raw])
 
     state

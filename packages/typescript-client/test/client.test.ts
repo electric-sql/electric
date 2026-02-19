@@ -1,7 +1,10 @@
 import { describe, expect, inject, vi } from 'vitest'
 import { v4 as uuidv4 } from 'uuid'
 import { setTimeout as sleep } from 'node:timers/promises'
-import { testWithIssuesTable as it } from './support/test-context'
+import {
+  testWithIssuesTable as it,
+  testWithBigintTable,
+} from './support/test-context'
 import {
   ShapeStream,
   Shape,
@@ -1636,6 +1639,57 @@ describe.for(fetchAndSse)(
       expect(titles).toEqual([`alpha`, `beta`])
     }, 5_000)
 
+    it(`should not miss updates between cold-start snapshot and stream resume`, async ({
+      issuesTableUrl,
+      insertIssues,
+      updateIssue,
+      aborter,
+    }) => {
+      const [id] = await insertIssues({ title: `original` })
+
+      // Use offset: "now" to match real on-demand behavior. With "now",
+      // the stream connects first (creating the shape on the server and
+      // activating change tracking), then requestSnapshot() fetches subset
+      // data. The offset advancement code must update the stream's position
+      // to the snapshot's offset so no updates are missed in between.
+      const shapeStream = new ShapeStream({
+        url: `${BASE_URL}/v1/shape`,
+        params: { table: issuesTableUrl },
+        log: `changes_only`,
+        offset: `now`,
+        liveSse,
+        signal: aborter.signal,
+      })
+      const shape = new Shape(shapeStream)
+
+      // Wait for stream to be up-to-date (shape created on server)
+      await vi.waitFor(() => {
+        expect(shapeStream.isUpToDate).toBe(true)
+      })
+
+      await shape.requestSnapshot({
+        orderBy: `title ASC`,
+        limit: 100,
+      })
+
+      await vi.waitFor(() => {
+        expect(shape.currentRows.length).toBe(1)
+        expect(shape.currentRows[0].title).toBe(`original`)
+      })
+
+      // Update after snapshot — the stream must pick this up when it
+      // resumes from the snapshot's offset, not skip it.
+      await updateIssue({ id, title: `updated-after-snapshot` })
+
+      await vi.waitFor(
+        () => {
+          const row = shape.currentRows.find((r) => r.id === id)
+          expect(row?.title).toBe(`updated-after-snapshot`)
+        },
+        { timeout: 10000 }
+      )
+    })
+
     it(`requestSnapshot should populate stream and match returned data`, async ({
       issuesTableUrl,
       insertIssues,
@@ -2670,6 +2724,101 @@ describe.for(fetchAndSse)(
     )
   }
 )
+
+describe(`BigInt support in subset loading`, () => {
+  testWithBigintTable(
+    `requestSnapshot should handle BigInt values in params`,
+    async ({ bigintTableUrl, insertBigintRows, aborter }) => {
+      await insertBigintRows(
+        { id: BigInt(`9223372036854775801`), label: `alpha` },
+        { id: BigInt(`9223372036854775802`), label: `beta` },
+        { id: BigInt(`9223372036854775803`), label: `gamma` }
+      )
+
+      const shapeStream = new ShapeStream({
+        url: `${BASE_URL}/v1/shape`,
+        params: { table: bigintTableUrl },
+        log: `changes_only`,
+        signal: aborter.signal,
+      })
+      const _shape = new Shape(shapeStream)
+      await waitForFetch(shapeStream)
+
+      const { data } = await shapeStream.requestSnapshot({
+        where: `id = $1`,
+        params: { '1': BigInt(`9223372036854775802`) },
+        orderBy: `id ASC`,
+        limit: 100,
+      })
+
+      expect(data.length).toBe(1)
+      expect(data[0].value.label).toBe(`beta`)
+      expect(data[0].value.id).toBe(BigInt(`9223372036854775802`))
+    }
+  )
+
+  testWithBigintTable(
+    `requestSnapshot should return properly parsed BigInt values from int8 columns`,
+    async ({ bigintTableUrl, insertBigintRows, aborter }) => {
+      await insertBigintRows(
+        { id: BigInt(`9223372036854775801`), label: `first` },
+        { id: BigInt(`9223372036854775802`), label: `second` }
+      )
+
+      const shapeStream = new ShapeStream({
+        url: `${BASE_URL}/v1/shape`,
+        params: { table: bigintTableUrl },
+        log: `changes_only`,
+        signal: aborter.signal,
+      })
+      const _shape = new Shape(shapeStream)
+      await waitForFetch(shapeStream)
+
+      const { data } = await shapeStream.requestSnapshot({
+        orderBy: `id ASC`,
+        limit: 100,
+      })
+
+      expect(data.length).toBe(2)
+      expect(data[0].value.id).toBe(BigInt(`9223372036854775801`))
+      expect(data[1].value.id).toBe(BigInt(`9223372036854775802`))
+      expect(data[0].value.label).toBe(`first`)
+      expect(data[1].value.label).toBe(`second`)
+    }
+  )
+
+  testWithBigintTable(
+    `fetchSnapshot POST should handle BigInt values in params`,
+    async ({ bigintTableUrl, insertBigintRows, aborter }) => {
+      await insertBigintRows(
+        { id: BigInt(`9223372036854775801`), label: `one` },
+        { id: BigInt(`9223372036854775802`), label: `two` },
+        { id: BigInt(`9223372036854775803`), label: `three` }
+      )
+
+      const shapeStream = new ShapeStream({
+        url: `${BASE_URL}/v1/shape`,
+        params: { table: bigintTableUrl },
+        log: `changes_only`,
+        signal: aborter.signal,
+      })
+      const _shape = new Shape(shapeStream)
+      await waitForFetch(shapeStream)
+
+      const { data } = await shapeStream.fetchSnapshot({
+        where: `id = $1`,
+        params: { '1': BigInt(`9223372036854775802`) },
+        orderBy: `id ASC`,
+        limit: 100,
+        method: `POST`,
+      })
+
+      expect(data.length).toBe(1)
+      expect(data[0].value.label).toBe(`two`)
+      expect(data[0].value.id).toBe(BigInt(`9223372036854775802`))
+    }
+  )
+})
 
 it(
   `should fall back to long polling after 3 consecutive short SSE connections`,

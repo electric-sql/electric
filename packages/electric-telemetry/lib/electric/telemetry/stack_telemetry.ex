@@ -99,10 +99,12 @@ defmodule ElectricTelemetry.StackTelemetry do
       ),
       distribution("electric.postgres.replication.transaction_received.operations"),
       distribution("electric.storage.transaction_stored.replication_lag", unit: :millisecond),
-      last_value("electric.storage.used", unit: {:byte, :kilobyte}),
+      last_value("electric.storage.used.bytes", unit: :byte),
+      distribution("electric.storage.used.measurement_duration", unit: :millisecond),
       counter("electric.postgres.replication.transaction_received.count"),
       sum("electric.postgres.replication.transaction_received.bytes", unit: :byte),
       sum("electric.storage.transaction_stored.bytes", unit: :byte),
+      sum("electric.storage.transaction_stored.count"),
       last_value("electric.shape_monitor.active_reader_count"),
       last_value("electric.connection.consumers_ready.duration",
         unit: {:native, :millisecond}
