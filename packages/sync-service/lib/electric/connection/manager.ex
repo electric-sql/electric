@@ -110,6 +110,10 @@ defmodule Electric.Connection.Manager do
       :max_shapes,
       :persistent_kv,
       purge_all_shapes?: false,
+      # Optional guard callback for the lock breaker. When set, the lock breaker
+      # will only run if this callback returns true. Used by cloud-sync-service to
+      # prevent non-owner instances from terminating backends during rolling deployments.
+      lock_breaker_guard: nil,
       # PIDs of the database connection pools
       pool_pids: %{admin: nil, snapshot: nil},
       validated_connection_opts: %{replication: nil, pool: nil},
@@ -289,7 +293,8 @@ defmodule Electric.Connection.Manager do
         tweaks: Keyword.fetch!(opts, :tweaks),
         persistent_kv: Keyword.fetch!(opts, :persistent_kv),
         manual_table_publishing?: Keyword.get(opts, :manual_table_publishing?, false),
-        max_shapes: Keyword.fetch!(opts, :max_shapes)
+        max_shapes: Keyword.fetch!(opts, :max_shapes),
+        lock_breaker_guard: Keyword.get(opts, :lock_breaker_guard)
       }
       |> initialize_connection_opts(opts)
 
@@ -555,7 +560,11 @@ defmodule Electric.Connection.Manager do
         :check_lock_not_abandoned,
         %State{replication_pg_backend_pid: pg_backend_pid} = state
       ) do
-    if state.current_step == {:start_replication_client, :acquiring_lock} and
+    lock_breaker_allowed =
+      is_nil(state.lock_breaker_guard) or state.lock_breaker_guard.()
+
+    if lock_breaker_allowed and
+         state.current_step == {:start_replication_client, :acquiring_lock} and
          not is_nil(pg_backend_pid) do
       with {:ok, conn_opts, state} <-
              validate_connection(pooled_connection_opts(state), :pool, state),
@@ -569,6 +578,12 @@ defmodule Electric.Connection.Manager do
           # no-op, this is a one-shot attempt at fixing a lock
           Logger.warning("Failed try and break stuck lock connection: #{inspect(reason)}")
           :ok
+      end
+    else
+      if not lock_breaker_allowed do
+        Logger.info(
+          "Lock breaker skipped: guard callback returned false (instance may not have ownership rights)"
+        )
       end
     end
 

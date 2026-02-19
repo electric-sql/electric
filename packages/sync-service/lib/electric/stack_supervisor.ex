@@ -143,6 +143,12 @@ defmodule Electric.StackSupervisor do
                      process_spawn_opts: [type: :map, default: %{}]
                    ]
                  ],
+                 lock_breaker_guard: [
+                   type: {:or, [{:fun, 0}, nil]},
+                   default: nil,
+                   doc:
+                     "Optional guard callback for the lock breaker. When set, the lock breaker will only run if this callback returns true."
+                 ],
                  manual_table_publishing?: [
                    type: :boolean,
                    required: false,
@@ -359,7 +365,8 @@ defmodule Electric.StackSupervisor do
       inspector: inspector,
       max_shapes: config.max_shapes,
       tweaks: config.tweaks,
-      manual_table_publishing?: config.manual_table_publishing?
+      manual_table_publishing?: config.manual_table_publishing?,
+      lock_breaker_guard: config.lock_breaker_guard
     ]
 
     registry_partitions =
