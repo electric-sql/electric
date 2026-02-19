@@ -69,11 +69,10 @@ But capturing alone isn't enough. Naively appending every intervention creates i
 
 The real pattern is **accumulate, then compress**: individual judgments pile up, then periodically get integrated into coherent higher-level artifacts. Common law accumulates case decisions, then synthesizes them into principles and statutes. Science accumulates papers, then compresses them into review articles and textbooks. In practice: capture every intervention as a local artifact (a test case, an AGENTS.md entry, a decision record), then periodically integrate those artifacts into updated specs, refactored test suites, and revised skill definitions. Compression is where you ask whether the governing variables themselves are still right — whether 40 test cases encoding 40 variations of an assumption reveal that the assumption is wrong. Teams that only accumulate end up with drift and contradiction. Teams that only try to compress end up over-engineering upfront. The cycle needs both.
 
-Three levers make the self-liquidation cycle practical:
+Two levers make the self-liquidation cycle practical:
 
-1. **Make human-in-the-loop moments efficient.** A human review that takes 30 seconds because the conformance suite already verified correctness is very different from a 2-hour review where you're reverse-engineering what the agent did and why.
-2. **Capture the signal.** When a human intervenes — catching a bug, clarifying a spec, making a taste call — the system should generate the artifact that encodes that intervention. A review that catches a bug but doesn't update the test suite is wasted signal. A clarification that doesn't update the spec will recur.
-3. **Maintain high configurancy so agents operate autonomously everywhere else.** When the system's knowledge is explicit — specs, invariants, conformance suites, documented rationale — agents don't block on humans for things that could have been encoded upfront.
+1. **Capture the signal.** When a human intervenes — catching a bug, clarifying a spec, making a taste call — the system should generate the artifact that encodes that intervention. A review that catches a bug but doesn't update the test suite is wasted signal. A clarification that doesn't update the spec will recur.
+2. **Maintain high configurancy so agents operate autonomously everywhere else.** When the system's knowledge is explicit — specs, invariants, conformance suites, documented rationale — agents don't block on humans for things that could have been encoded upfront.
 
 **Agent scaffolding is the serial code optimization of the AI era.** It concentrates human time where it has maximum leverage and captures the signal from every intervention as durable knowledge the system can reuse.
 
