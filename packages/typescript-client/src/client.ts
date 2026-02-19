@@ -1664,20 +1664,18 @@ export class ShapeStream<T extends Row<unknown> = Row>
       )
       this.#onMessages(dataWithEndBoundary, false)
 
-      // Advance the stream state's offset/handle from the snapshot response
-      // so that when the pause lock is released the stream resumes from the
-      // snapshot's position rather than from "now". Without this, changes
-      // committed between the snapshot and the stream's first live request
-      // would be lost.
-      if (responseOffset || responseHandle) {
-        const innerState =
-          this.#syncState instanceof PausedState
-            ? this.#syncState.previousState
-            : this.#syncState
+      // Advance the stream offset/handle so the stream resumes from the
+      // snapshot's position rather than from its pre-snapshot state.
+      if (responseOffset !== null || responseHandle !== null) {
+        // PausedState's handleResponseMetadata is a no-op, so unwrap to
+        // the inner state and re-wrap after.
+        const paused =
+          this.#syncState instanceof PausedState ? this.#syncState : null
+        const innerState = paused?.previousState ?? this.#syncState
         const transition = innerState.handleResponseMetadata({
           status: 200,
-          responseHandle: responseHandle ?? null,
-          responseOffset: responseOffset ?? null,
+          responseHandle,
+          responseOffset,
           responseCursor: null,
           expiredHandle: null,
           now: Date.now(),
@@ -1686,10 +1684,15 @@ export class ShapeStream<T extends Row<unknown> = Row>
             `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
         })
         if (transition.action === `accepted`) {
-          this.#syncState =
-            this.#syncState instanceof PausedState
-              ? new PausedState(transition.state)
-              : transition.state
+          this.#syncState = paused
+            ? new PausedState(transition.state)
+            : transition.state
+        } else {
+          console.warn(
+            `[Electric] Snapshot response metadata was not accepted ` +
+              `by state "${innerState.kind}" (action: ${transition.action}). ` +
+              `Stream offset was not advanced from snapshot.`
+          )
         }
       }
 
@@ -1712,13 +1715,13 @@ export class ShapeStream<T extends Row<unknown> = Row>
    * `subsetMethod: 'POST'` on the stream to send parameters in the request body instead.
    *
    * @param opts - The options for the snapshot request.
-   * @returns The metadata and the data for the snapshot.
+   * @returns The metadata, data, and the response's offset/handle for state advancement.
    */
   async fetchSnapshot(opts: SubsetParams): Promise<{
     metadata: SnapshotMetadata
     data: Array<ChangeMessage<T>>
-    responseOffset?: Offset
-    responseHandle?: string
+    responseOffset: Offset | null
+    responseHandle: string | null
   }> {
     const method = opts.method ?? this.options.subsetMethod ?? `GET`
     const usePost = method === `POST`
@@ -1790,9 +1793,8 @@ export class ShapeStream<T extends Row<unknown> = Row>
     )
 
     const responseOffset =
-      (response.headers.get(CHUNK_LAST_OFFSET_HEADER) as Offset) || undefined
-    const responseHandle =
-      response.headers.get(SHAPE_HANDLE_HEADER) || undefined
+      (response.headers.get(CHUNK_LAST_OFFSET_HEADER) as Offset) || null
+    const responseHandle = response.headers.get(SHAPE_HANDLE_HEADER)
 
     return { metadata, data, responseOffset, responseHandle }
   }
