@@ -504,9 +504,13 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDbTest do
     @tag shape_db_opts: [exclusive_mode: true, storage_dir: ":memory:"]
     test "allows for an in-memory database", ctx do
       # file is empty for in-memory
-      assert {:ok, [""]} =
+      assert {:ok, [[""]]} =
                ShapeDb.Connection.checkout!(ctx.stack_id, :read_call, fn %{conn: conn} ->
-                 ShapeDb.Connection.fetch_one(conn, "SELECT file FROM pragma_database_list", [])
+                 ShapeDb.Connection.fetch_all(
+                   conn,
+                   "SELECT file FROM pragma_database_list WHERE name = 'main'",
+                   []
+                 )
                end)
     end
   end
@@ -514,6 +518,55 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDbTest do
   describe "statistics" do
     test "export memory and disk usage", ctx do
       assert {:ok, %{total_memory: _, disk_size: _}} = ShapeDb.statistics(ctx.stack_id)
+    end
+  end
+
+  describe "recovery" do
+    test "resets state when db file is corrupted", ctx do
+      {:ok, path} = ShapeDb.Connection.db_path(storage_dir: ctx.tmp_dir)
+      assert {:ok, 0} = ShapeDb.count_shapes(ctx.stack_id)
+
+      stop_supervised!(ctx.shape_db)
+
+      File.write!(path, "invalid!")
+
+      assert {:ok, _pid} =
+               start_supervised(
+                 {Electric.ShapeCache.ShapeStatus.ShapeDb.Supervisor,
+                  [
+                    stack_id: ctx.stack_id,
+                    shape_db_opts: [
+                      storage_dir: ctx.tmp_dir,
+                      manual_flush_only: true,
+                      read_pool_size: 1
+                    ]
+                  ]},
+                 id: "shape_db"
+               )
+    end
+
+    @tag shape_db_opts: [exclusive_mode: true]
+    test "resets state when db file is corrupted in exclusive mode", ctx do
+      {:ok, path} = ShapeDb.Connection.db_path(storage_dir: ctx.tmp_dir)
+      assert {:ok, 0} = ShapeDb.count_shapes(ctx.stack_id)
+
+      stop_supervised!(ctx.shape_db)
+
+      File.write!(path, "invalid!")
+
+      assert {:ok, _pid} =
+               start_supervised(
+                 {Electric.ShapeCache.ShapeStatus.ShapeDb.Supervisor,
+                  [
+                    stack_id: ctx.stack_id,
+                    shape_db_opts: [
+                      storage_dir: ctx.tmp_dir,
+                      manual_flush_only: true,
+                      read_pool_size: 1
+                    ]
+                  ]},
+                 id: "shape_db"
+               )
     end
   end
 end

@@ -267,7 +267,8 @@ defmodule Support.ComponentSetup do
            Keyword.merge(
              [
                storage_dir: ctx.tmp_dir,
-               manual_flush_only: true
+               manual_flush_only: true,
+               read_pool_size: 1
              ],
              shape_db_opts
            )
