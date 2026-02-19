@@ -125,4 +125,4 @@ The question isn't "how smart is your agent?" or "how many agents can I run?" It
 
 Most teams spend the majority of their human time on friction, not judgment. And most of that friction is recurring — the same interventions, over and over, because nobody encoded the signal from the last one.
 
-Design your system so that every time a human touches agent output, it produces the artifact that makes the next touch unnecessary.
+Crystallizing that friction into durable knowledge isn't a one-time fix — it's an iterative discipline of accumulating judgments and compressing them into specs and suites. But the teams that run that cycle fastest are the ones compounding their way to 10x.
