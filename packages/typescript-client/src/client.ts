@@ -1664,8 +1664,9 @@ export class ShapeStream<T extends Row<unknown> = Row>
       )
       this.#onMessages(dataWithEndBoundary, false)
 
-      // Advance the stream offset/handle so the stream resumes from the
-      // snapshot's position rather than from its pre-snapshot state.
+      // On cold start the stream hasn't connected yet, so its offset is
+      // still at the initial value. Advance it to the snapshot's position
+      // so the stream catches every update after the snapshot with no gaps.
       if (responseOffset !== null || responseHandle !== null) {
         // PausedState's handleResponseMetadata is a no-op, so unwrap to
         // the inner state and re-wrap after.
