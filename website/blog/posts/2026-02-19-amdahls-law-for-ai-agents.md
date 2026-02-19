@@ -3,7 +3,7 @@ title: "Amdahl's Law for AI Agents"
 description: >-
   The maximum speedup from AI agents is bounded by the fraction of the workflow that requires human judgment. The highest-leverage investment isn't making agents faster — it's making every human intervention self-liquidating.
 excerpt: >-
-  Multi-agent systems are delivering real throughput gains — but the teams seeing 5-10x speedup share a pattern. A law from 1967 explains why, and points to where the leverage actually is.
+  Multi-agent systems are delivering real throughput gains — but the teams seeing the biggest speedups share a pattern. A law from 1967 explains why, and points to where the leverage actually is.
 authors: [kyle]
 image: /img/blog/amdahls-law-for-ai-agents/hero.png
 tags: [agentic, AI, development]
@@ -11,9 +11,9 @@ outline: [2, 3]
 post: true
 ---
 
-Multi-agent systems are delivering real results. Geoffrey Huntley's [Ralph Loop](https://ghuntley.com/loop/) runs autonomous coding agents in a while-loop until every PRD item is complete. Steve Yegge's [Gas Town](https://steve-yegge.medium.com/welcome-to-gas-town-4f25ee16dd04) orchestrates 20–30 concurrent agents across seven specialized roles. Cursor ships an 8-agent parallel system. Teams are seeing 3-5x throughput increases, and the best teams are pushing toward 10x.
+Multi-agent systems are delivering real results. Geoffrey Huntley's [Ralph Loop](https://ghuntley.com/loop/) runs autonomous coding agents in a while-loop until every PRD item is complete. Steve Yegge's [Gas Town](https://steve-yegge.medium.com/welcome-to-gas-town-4f25ee16dd04) orchestrates 20–30 concurrent agents across seven specialized roles. Cursor ships an 8-agent parallel system. The throughput gains are real — and the teams getting the most out of them share a pattern.
 
-But the gains aren't automatic. Flask creator Armin Ronacher: "I sometimes kick off parallel agents, but not as much as I used to do. The thing is: it's only so much my mind can review!" The teams getting the most value share a pattern — and a law from 1967 explains exactly where the leverage is.
+But the gains aren't automatic. Flask creator Armin Ronacher [told The Pragmatic Engineer](https://newsletter.pragmaticengineer.com/p/new-trend-programming-by-kicking): "I sometimes kick off parallel agents, but not as much as I used to do. The thing is: it's only so much my mind can review!" The teams getting the most value share a pattern — and a law from 1967 explains exactly where the leverage is.
 
 ## The Original Insight
 
