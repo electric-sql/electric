@@ -1,5 +1,11 @@
 # @core/electric-telemetry
 
+## 0.1.6
+
+### Patch Changes
+
+- 2bf16e0: Fix call-home reporting of disk usage
+
 ## 0.1.5
 
 ### Patch Changes

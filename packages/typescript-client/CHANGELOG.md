@@ -1,5 +1,12 @@
 # @electric-sql/client
 
+## 1.5.7
+
+### Patch Changes
+
+- ca931d9: Fix BigInt values in subset loading parameters causing `JSON.stringify` to throw "Do not know how to serialize a BigInt". Values from parsed int8 columns can now be passed directly as `requestSnapshot`/`fetchSnapshot` params without manual conversion.
+- 858e13d: Fix on-demand mode (`offset: "now"`) to advance the stream's offset/handle after a cold-start `requestSnapshot()`, so the stream resumes from the snapshot's position rather than the stale `"now"` offset. Prevents updates committed between the snapshot and the stream's next live poll from being missed.
+
 ## 1.5.6
 
 ### Patch Changes

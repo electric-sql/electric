@@ -1,5 +1,13 @@
 # @electric-sql/experimental
 
+## 6.0.7
+
+### Patch Changes
+
+- Updated dependencies [ca931d9]
+- Updated dependencies [858e13d]
+  - @electric-sql/client@1.5.7
+
 ## 6.0.6
 
 ### Patch Changes
