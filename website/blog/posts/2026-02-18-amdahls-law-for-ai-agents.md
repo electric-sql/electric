@@ -3,7 +3,7 @@ title: "Amdahl's Law for AI Agents"
 description: >-
   The maximum speedup from AI agents is bounded by the fraction of the workflow that requires human judgment. The highest-leverage investment isn't making agents faster — it's making every human intervention self-liquidating.
 excerpt: >-
-  If one agent makes you 2x more productive, five agents should make you 10x. But practitioners are pushing back. The reason has been understood since 1967.
+  Multi-agent systems are delivering real throughput gains — but the teams seeing 5-10x speedup share a pattern. A law from 1967 explains why, and points to where the leverage actually is.
 authors: [kyle]
 image: /img/blog/amdahls-law-for-ai-agents/hero.png
 tags: [agentic, AI, development]
@@ -11,9 +11,9 @@ outline: [2, 3]
 post: true
 ---
 
-The hot question in AI right now is "how many agents can you run in parallel?" Geoffrey Huntley's [Ralph Loop](https://ghuntley.com/loop/) runs autonomous coding agents in a while-loop until every PRD item is complete. Steve Yegge's [Gas Town](https://steve-yegge.medium.com/welcome-to-gas-town-4f25ee16dd04) orchestrates 20–30 concurrent agents across seven specialized roles, like "Kubernetes mated with Temporal" for agent swarms. Cursor ships an 8-agent parallel system. The pitch is intuitive: if one agent makes you 2x more productive, five agents should make you 10x.
+Multi-agent systems are delivering real results. Geoffrey Huntley's [Ralph Loop](https://ghuntley.com/loop/) runs autonomous coding agents in a while-loop until every PRD item is complete. Steve Yegge's [Gas Town](https://steve-yegge.medium.com/welcome-to-gas-town-4f25ee16dd04) orchestrates 20–30 concurrent agents across seven specialized roles. Cursor ships an 8-agent parallel system. Teams are seeing 3-5x throughput increases, and the best teams are pushing toward 10x.
 
-But practitioners are pushing back. Flask creator Armin Ronacher: "I sometimes kick off parallel agents, but not as much as I used to do. The thing is: it's only so much my mind can review!" Throughput gains are real but sublinear, and there's a hard ceiling. The reason has been understood since 1967.
+But the gains aren't automatic. Flask creator Armin Ronacher: "I sometimes kick off parallel agents, but not as much as I used to do. The thing is: it's only so much my mind can review!" The teams getting the most value share a pattern — and a law from 1967 explains exactly where the leverage is.
 
 ## The Original Insight
 
@@ -23,7 +23,7 @@ His formula: **speedup = 1 / (S + (1-S)/N)**
 
 Where S is the serial fraction and N is the number of parallel processors. The key insight isn't in the formula — it's in the limit. As N approaches infinity, speedup converges to 1/S. If 10% of your work is inherently serial, you will never exceed 10x speedup. Not with 100 cores. Not with a million.
 
-This was heresy in the "just add more processors" era. It's heresy again now, in the "just add more agents" era.
+This wasn't an argument against parallelism — it was an engineering guide for where to focus. The same logic applies to agents.
 
 ## The Agent Version
 
@@ -91,19 +91,19 @@ The model handles the task; the configurancy handles the trust. Together they co
 
 Teams that treat agent deployment as "pick a model and write some prompts" plateau quickly. They haven't touched H. The teams seeing real speedup have invested heavily in the scaffolding layer — often spending more engineering effort on configurancy than on the agent integration itself.
 
-## The Multi-Agent Trap
+## Scaling Past the Bottleneck
 
 As agents get faster, **H *feels* like it's growing.** When an agent takes 2 hours to research a topic and you spend 30 minutes reviewing its output, that 30 minutes is background noise. When the agent takes 30 seconds and you still spend 30 minutes reviewing, suddenly *you* are the bottleneck. The absolute time hasn't changed, but the relative weight has shifted dramatically. You're never waiting anymore — which means you're always the one being waited on.
 
 And then you add more agents, and it gets worse.
 
-Amdahl's Law tells you there's a ceiling. Donald Reinertsen's *[The Principles of Product Development Flow](https://www.amazon.com/Principles-Product-Development-Flow-Generation/dp/1935401009)* tells you something worse: **adding parallel agents can actively degrade performance.**
+Amdahl's Law tells you there's a ceiling. Donald Reinertsen's *[The Principles of Product Development Flow](https://www.amazon.com/Principles-Product-Development-Flow-Generation/dp/1935401009)* tells you where the engineering problem is: **naively adding parallel agents can degrade performance — but the fix is tractable.**
 
 Reinertsen applied queueing theory to product development and showed that capacity utilization increases queue size exponentially. At 50% utilization, the queue is manageable. At 80%, it's 4x larger. At 90%, 9x. At 95%, 19x. The human reviewing agent output is a single server in a queue. Five parallel agents quintuple the arrival rate, driving utilization toward 100% and queue times toward infinity.
 
 Gas Town is the most vivid illustration. Yegge describes "palpable stress" as 20–30 agents run simultaneously at speeds too fast to comprehend. Early users describe their role as "keep your Tamagotchi alive" and note that "your management span of control is directly correlated to your attention span and memory." One user went from 5 PRs in 3 hours to 36 PRs in 4 hours — but at $100/hour in Claude tokens and with intense, unbroken cognitive engagement. The throughput is real, but so is the human queue saturation.
 
-Reinertsen's prescription: manage queue size directly — work-in-progress limits, smaller batch sizes, faster feedback loops — rather than maximizing utilization. The agent equivalent: don't maximize the number of parallel agents. **Eliminate the friction that causes agents to block on humans in the first place** — invest in configurancy that lets agents verify their own work, so that when they do need a human, it's for judgment that actually matters.
+Reinertsen's prescription: manage queue size directly — work-in-progress limits, smaller batch sizes, faster feedback loops — rather than maximizing utilization. The agent equivalent: the way to scale parallel agents is to **eliminate the friction that causes them to block on humans in the first place** — invest in configurancy that lets agents verify their own work, so that when they do need a human, it's for judgment that actually matters.
 
 The Ralph Loop gets this right. It works not because it runs agents in parallel but because it's a self-liquidation engine: a well-defined PRD as the spec, automated test verification as the acceptance criteria, and AGENTS.md files that accumulate discovered patterns across iterations. Each iteration where a human corrects an agent encodes that correction as an artifact the next iteration can consume. The same pattern shows up at every scale. [shadcn](https://x.com/shadcn/status/2023812711151259772) describes running a `/done` skill after every agent session that dumps key decisions, questions, and follow-ups into a markdown file tagged with the session ID and branch name. Every session's human context becomes a durable artifact the next session consumes. The intervention encoded itself.
 
