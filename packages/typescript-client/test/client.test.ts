@@ -2726,9 +2726,7 @@ describe.for(fetchAndSse)(
 )
 
 describe(`BigInt support in subset loading`, () => {
-  const bigintIt = testWithBigintTable
-
-  bigintIt(
+  testWithBigintTable(
     `requestSnapshot should handle BigInt values in params`,
     async ({ bigintTableUrl, insertBigintRows, aborter }) => {
       await insertBigintRows(
@@ -2746,8 +2744,6 @@ describe(`BigInt support in subset loading`, () => {
       const _shape = new Shape(shapeStream)
       await waitForFetch(shapeStream)
 
-      // Using a BigInt value as a parameter - this is the natural use case
-      // when a user has parsed int8 values from a previous shape sync
       const { data } = await shapeStream.requestSnapshot({
         where: `id = $1`,
         params: { '1': BigInt(`9223372036854775802`) },
@@ -2760,7 +2756,7 @@ describe(`BigInt support in subset loading`, () => {
     }
   )
 
-  bigintIt(
+  testWithBigintTable(
     `requestSnapshot should return properly parsed BigInt values from int8 columns`,
     async ({ bigintTableUrl, insertBigintRows, aborter }) => {
       await insertBigintRows(
@@ -2783,7 +2779,6 @@ describe(`BigInt support in subset loading`, () => {
       })
 
       expect(data.length).toBe(2)
-      // Verify int8 values are correctly parsed as BigInt
       expect(data[0].value.id).toBe(BigInt(`9223372036854775801`))
       expect(data[1].value.id).toBe(BigInt(`9223372036854775802`))
       expect(data[0].value.label).toBe(`first`)
@@ -2791,7 +2786,7 @@ describe(`BigInt support in subset loading`, () => {
     }
   )
 
-  bigintIt(
+  testWithBigintTable(
     `fetchSnapshot POST should handle BigInt values in params`,
     async ({ bigintTableUrl, insertBigintRows, aborter }) => {
       await insertBigintRows(

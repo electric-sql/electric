@@ -252,14 +252,13 @@ export const testWithBigintTable = testWithDbClient.extend<{
     try {
       await clearShape(urlAppropriateTable)
     } catch (_) {
-      // ignore
+      // ignore - clearShape has its own logging
+      // we don't want to interrupt cleanup
     }
   },
   insertBigintRows: ({ bigintTableSql, dbClient }, use) =>
     use(async (...rows) => {
-      const placeholders = rows.map(
-        (_, i) => `($${i * 2 + 1}, $${i * 2 + 2})`
-      )
+      const placeholders = rows.map((_, i) => `($${i * 2 + 1}, $${i * 2 + 2})`)
       await dbClient.query(
         `INSERT INTO ${bigintTableSql} (id, label) VALUES ${placeholders}`,
         rows.flatMap((x) => [x.id.toString(), x.label])

@@ -90,7 +90,7 @@ export type SerializedOrderByClause = {
 export type SubsetParams = {
   /** Legacy string format WHERE clause */
   where?: string
-  /** Positional parameter values for WHERE clause. BigInt values are automatically converted to strings. */
+  /** Positional parameter values for WHERE clause */
   params?: Record<string, string | bigint | number>
   /** Maximum number of rows to return */
   limit?: number

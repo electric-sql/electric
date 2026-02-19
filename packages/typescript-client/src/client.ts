@@ -990,7 +990,6 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
       if (subsetParams.params)
         // Serialize params as JSON to keep the parameter name constant for proxy configs
-        // Use bigintSafeStringify because params may contain BigInt values (e.g. from parsed int8 columns)
         fetchUrl.searchParams.set(
           SUBSET_PARAM_WHERE_PARAMS,
           bigintSafeStringify(subsetParams.params)
