@@ -1664,16 +1664,10 @@ export class ShapeStream<T extends Row<unknown> = Row>
       )
       this.#onMessages(dataWithEndBoundary, false)
 
-      // On cold start the stream hasn't connected yet, so its offset is
-      // still at the initial value. Advance it to the snapshot's position
-      // so the stream catches every update after the snapshot with no gaps.
+      // On cold start the stream's offset is still at "now". Advance it
+      // to the snapshot's position so no updates are missed in between.
       if (responseOffset !== null || responseHandle !== null) {
-        // PausedState's handleResponseMetadata is a no-op, so unwrap to
-        // the inner state and re-wrap after.
-        const paused =
-          this.#syncState instanceof PausedState ? this.#syncState : null
-        const innerState = paused?.previousState ?? this.#syncState
-        const transition = innerState.handleResponseMetadata({
+        const transition = this.#syncState.handleResponseMetadata({
           status: 200,
           responseHandle,
           responseOffset,
@@ -1685,13 +1679,11 @@ export class ShapeStream<T extends Row<unknown> = Row>
             `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
         })
         if (transition.action === `accepted`) {
-          this.#syncState = paused
-            ? new PausedState(transition.state)
-            : transition.state
+          this.#syncState = transition.state
         } else {
           console.warn(
             `[Electric] Snapshot response metadata was not accepted ` +
-              `by state "${innerState.kind}" (action: ${transition.action}). ` +
+              `by state "${this.#syncState.kind}" (action: ${transition.action}). ` +
               `Stream offset was not advanced from snapshot.`
           )
         }

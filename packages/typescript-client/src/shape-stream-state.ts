@@ -704,6 +704,16 @@ export class PausedState extends ShapeStreamState {
     return this.previousState.replayCursor
   }
 
+  handleResponseMetadata(
+    input: ResponseMetadataInput
+  ): ResponseMetadataTransition {
+    const transition = this.previousState.handleResponseMetadata(input)
+    if (transition.action === `accepted`) {
+      return { action: `accepted`, state: new PausedState(transition.state) }
+    }
+    return transition
+  }
+
   withHandle(handle: string): PausedState {
     return new PausedState(this.previousState.withHandle(handle))
   }
