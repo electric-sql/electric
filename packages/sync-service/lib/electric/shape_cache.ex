@@ -118,10 +118,12 @@ defmodule Electric.ShapeCache do
           :started | {:error, term()}
   def await_snapshot_start(shape_handle, stack_id, attempts_remaining \\ 10)
       when is_shape_handle(shape_handle) and is_stack_id(stack_id) do
-    ShapeStatus.update_last_read_time_to_now(stack_id, shape_handle)
-
     cond do
       ShapeStatus.snapshot_started?(stack_id, shape_handle) ->
+        # Must only update the last_read_time after confirming that the shape has a snapshot,
+        # so as not to interfere with the invariant that a shape that has just been created
+        # does not have a last_read_time until its consumer process starts.
+        ShapeStatus.update_last_read_time_to_now(stack_id, shape_handle)
         :started
 
       not ShapeStatus.has_shape_handle?(stack_id, shape_handle) ->
@@ -310,6 +312,9 @@ defmodule Electric.ShapeCache do
            action: action
          }) do
       {:ok, consumer_pid} ->
+        # Now that the consumer process for this shape is running, we can finish initializing
+        # the ShapeStatus record by recording a "last_read" timestamp on it.
+        ShapeStatus.update_last_read_time_to_now(stack_id, shape_handle)
         {:ok, consumer_pid}
 
       {:error, _reason} = error ->
