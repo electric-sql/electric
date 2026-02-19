@@ -731,7 +731,7 @@ defmodule Electric.Shapes.Consumer do
           tag: {:dependency_materializer_down, shape_handle}
         )
 
-        Materializer.subscribe(state.stack_id, shape_handle)
+        Materializer.subscribe(pid)
 
         true
       else
