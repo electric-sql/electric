@@ -51,7 +51,7 @@ The catch: the components that models reduce aren't the ones that dominate at sc
 
 ## Self-Liquidating H
 
-The highest-leverage investment isn't making agents faster or smarter. It's changing the character of H.
+The highest-leverage investment isn't making agents faster or smarter. It's changing the character of H. And the tools for doing that aren't new — tests, specs, automation, documented decisions. These are engineering best practices that have been around for decades. What's new is the return on investment. When agents can act autonomously on every encoded decision, the payoff for writing that test or updating that spec is dramatically higher than it used to be.
 
 The goal isn't to minimize human involvement. It's to make it **self-liquidating**: every human intervention should produce the artifact — the test, the spec update, the documented decision — that makes the same type of intervention unnecessary next time. (The term comes from finance: a self-liquidating loan generates the revenue to pay itself off. A self-liquidating intervention generates the artifact that eliminates its own recurrence.)
 
