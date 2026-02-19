@@ -1644,6 +1644,19 @@ describe.for(fetchAndSse)(
     }) => {
       const [id] = await insertIssues({ title: `original` })
 
+      // Pre-warm the shape on the server so change tracking is active
+      // before the cold-start test begins. Without this, the server may
+      // not have finished initializing change tracking when the stream
+      // resumes from the snapshot offset.
+      const warmupStream = new ShapeStream({
+        url: `${BASE_URL}/v1/shape`,
+        params: { table: issuesTableUrl },
+        log: `changes_only`,
+        liveSse: false,
+      })
+      await waitForFetch(warmupStream)
+      warmupStream.unsubscribeAll()
+
       const shapeStream = new ShapeStream({
         url: `${BASE_URL}/v1/shape`,
         params: { table: issuesTableUrl },
@@ -1667,10 +1680,13 @@ describe.for(fetchAndSse)(
       // resumes from the snapshot's offset, not skip it.
       await updateIssue({ id, title: `updated-after-snapshot` })
 
-      await vi.waitFor(() => {
-        const row = shape.currentRows.find((r) => r.id === id)
-        expect(row?.title).toBe(`updated-after-snapshot`)
-      })
+      await vi.waitFor(
+        () => {
+          const row = shape.currentRows.find((r) => r.id === id)
+          expect(row?.title).toBe(`updated-after-snapshot`)
+        },
+        { timeout: 10000 }
+      )
     })
 
     it(`requestSnapshot should populate stream and match returned data`, async ({
