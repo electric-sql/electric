@@ -52,9 +52,7 @@ describe(`helpers`, () => {
 
     it(`should handle nested BigInt values`, () => {
       const obj = { params: { '1': BigInt(42), '2': `hello` } }
-      expect(bigintSafeStringify(obj)).toBe(
-        `{"params":{"1":"42","2":"hello"}}`
-      )
+      expect(bigintSafeStringify(obj)).toBe(`{"params":{"1":"42","2":"hello"}}`)
     })
 
     it(`should behave like JSON.stringify for non-BigInt values`, () => {
@@ -64,7 +62,9 @@ describe(`helpers`, () => {
 
     it(`should not throw for BigInt values where JSON.stringify would`, () => {
       const obj = { id: BigInt(123) }
-      expect(() => JSON.stringify(obj)).toThrow(`Do not know how to serialize a BigInt`)
+      expect(() => JSON.stringify(obj)).toThrow(
+        `Do not know how to serialize a BigInt`
+      )
       expect(() => bigintSafeStringify(obj)).not.toThrow()
     })
   })
