@@ -108,6 +108,16 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
     @migration_sqls ++ ["PRAGMA journal_mode=#{journal_mode}"]
   end
 
+  defp integrity_check(conn) when is_raw_connection(conn) do
+    try do
+      with {:ok, ["ok"]} <- fetch_one(conn, "PRAGMA quick_check", []) do
+        :ok
+      end
+    rescue
+      e -> {:error, Exception.format(:error, e, __STACKTRACE__)}
+    end
+  end
+
   def optimize(conn) when is_raw_connection(conn) do
     execute_all(conn, ["PRAGMA optimize=0x10002"])
   end
@@ -121,24 +131,30 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
 
   @impl NimblePool
   def init_worker(pool_state) do
+    if Keyword.get(pool_state, :exclusive_mode, false) do
+      init_worker_exclusive(pool_state)
+    else
+      init_worker_pooled(pool_state)
+    end
+  end
+
+  defp init_worker_pooled(pool_state) do
     with {:ok, conn} <- open(pool_state),
-         :ok <- maybe_apply_migrations(conn, pool_state),
          stmts <- Query.prepare!(conn, pool_state) do
       {:ok, %__MODULE__{conn: conn, stmts: stmts}, pool_state}
     end
   end
 
-  defp maybe_apply_migrations(conn, pool_state) do
-    # In exclusive_mode we need to migrate within the single pool connection
-    # because we _might_ be using an in-memory db. With an in-memory db, every
-    # connection has its own db... For pooled connections, we migrate once
-    # externally
-    if Keyword.get(pool_state, :exclusive_mode, false) do
-      with {:ok, _version} <- migrate(conn, pool_state) do
-        :ok
-      end
-    else
-      :ok
+  # when opening in exclusive mode we support in-memory databases and so don't
+  # perform any db initialisation in the Migration process, since it starts
+  # before the pool and for an in-memory db *everything* has to be performed
+  # over the same, single, connection since every connection is a separate db
+  # in in-memory mode.
+  defp init_worker_exclusive(pool_state) do
+    with {:ok, conn} <- open(pool_state, integrity_check: true),
+         {:ok, _version} <- migrate(conn, pool_state),
+         stmts <- Query.prepare!(conn, Keyword.put(pool_state, :mode, :readwrite)) do
+      {:ok, %__MODULE__{conn: conn, stmts: stmts}, pool_state}
     end
   end
 
@@ -170,10 +186,55 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
     {:ok, client_state, pool_state}
   end
 
-  def open(pool_state) do
+  @max_recovery_attempts 2
+
+  def open(pool_state, opts \\ []) do
     with {:ok, db_path} <- db_path(pool_state),
-         {:ok, conn} <- Sqlite3.open(db_path, open_opts(pool_state)) do
+         {:ok, conn} <- open_with_recovery(db_path, pool_state, opts, @max_recovery_attempts) do
       configure_db(conn, pool_state)
+    end
+  end
+
+  defp open_with_recovery(db_path, _pool_state, _opts, 0) do
+    Logger.error("Unable to create database at #{db_path}")
+    {:error, "failed to open #{db_path}"}
+  end
+
+  defp open_with_recovery(db_path, pool_state, opts, attempts_remaining) do
+    case Sqlite3.open(db_path, open_opts(pool_state)) do
+      {:ok, conn} ->
+        if Keyword.get(opts, :integrity_check, false) do
+          case integrity_check(conn) do
+            :ok ->
+              {:ok, conn}
+
+            {:error, reason} ->
+              Logger.warning("Database file corrupt #{db_path}: #{inspect(reason)}")
+
+              close(conn)
+
+              with :ok <- delete_corrupt_db(db_path) do
+                open_with_recovery(db_path, pool_state, opts, attempts_remaining - 1)
+              end
+          end
+        else
+          {:ok, conn}
+        end
+
+      {:error, reason} ->
+        Logger.warning("Failed to open db #{db_path}: #{inspect(reason)}")
+
+        with :ok <- delete_corrupt_db(db_path) do
+          open_with_recovery(db_path, pool_state, opts, attempts_remaining - 1)
+        end
+    end
+  end
+
+  defp delete_corrupt_db(db_path) do
+    with dir = Path.dirname(db_path),
+         {:ok, _} <- File.rm_rf(dir),
+         :ok <- File.mkdir_p(dir) do
+      :ok
     end
   end
 
@@ -236,10 +297,10 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
     with :ok <- Sqlite3.bind(stmt, binds) do
       case Sqlite3.step(conn, stmt) do
         {:row, row} ->
-          :done = Sqlite3.step(conn, stmt)
-          :ok = Sqlite3.reset(stmt)
-
-          {:ok, row}
+          with :done <- Sqlite3.step(conn, stmt),
+               :ok <- Sqlite3.reset(stmt) do
+            {:ok, row}
+          end
 
         :done ->
           :ok = Sqlite3.reset(stmt)
@@ -407,7 +468,8 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
     end)
   end
 
-  defp db_path(pool_state) do
+  # used in testing
+  def db_path(pool_state) do
     # Manage compatibility by embedding all versions into the db name rather
     # than embed the values in the db itself and then have to manage schema
     # resets or migrations.

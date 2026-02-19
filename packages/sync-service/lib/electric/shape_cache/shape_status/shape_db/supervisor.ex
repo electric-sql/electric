@@ -29,7 +29,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Supervisor do
             {
               NimblePool,
               worker: {ShapeDb.Connection, Keyword.put(opts, :mode, :read)},
-              pool_size: 2 * System.schedulers_online(),
+              pool_size: Keyword.get(opts, :read_pool_size, 2 * System.schedulers_online()),
               name: ShapeDb.PoolRegistry.pool_name(stack_id, :read, exclusive_mode)
             },
             id: {:pool, :read}

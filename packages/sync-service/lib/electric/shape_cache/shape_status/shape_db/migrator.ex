@@ -33,7 +33,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Migrator do
   end
 
   defp apply_migration(_stack_id, opts, false = _exclusive?) do
-    with {:ok, conn} <- ShapeDb.Connection.open(opts),
+    with {:ok, conn} <- ShapeDb.Connection.open(opts, integrity_check: true),
          {:ok, _version} <- ShapeDb.Connection.migrate(conn, opts),
          :ok = ShapeDb.Connection.optimize(conn) do
       {:ok, conn}
