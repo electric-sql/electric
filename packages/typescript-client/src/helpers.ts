@@ -72,6 +72,24 @@ export function getOffset(message: ControlMessage): Offset | undefined {
 }
 
 /**
+ * JSON.stringify replacer that converts BigInt values to strings.
+ * Standard JSON.stringify throws "Do not know how to serialize a BigInt"
+ * when it encounters a BigInt value. This replacer converts them to strings
+ * which is safe because PostgreSQL parameters are strings over the wire.
+ */
+function bigintReplacer(_key: string, value: unknown): unknown {
+  return typeof value === `bigint` ? value.toString() : value
+}
+
+/**
+ * A BigInt-safe version of JSON.stringify.
+ * Converts BigInt values to their string representation instead of throwing.
+ */
+export function bigintSafeStringify(value: unknown): string {
+  return JSON.stringify(value, bigintReplacer)
+}
+
+/**
  * Checks if a transaction is visible in a snapshot.
  *
  * @param txid - the transaction id to check

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { isChangeMessage, isControlMessage, Message } from '../src'
-import { isUpToDateMessage } from '../src/helpers'
+import { isUpToDateMessage, bigintSafeStringify } from '../src/helpers'
 
 describe(`helpers`, () => {
   const changeMsg = {
@@ -40,6 +40,33 @@ describe(`helpers`, () => {
     expect(isUpToDateMessage(upToDateMsg)).toBe(true)
     expect(isUpToDateMessage(mustRefetchMsg)).toBe(false)
     expect(isUpToDateMessage(changeMsg)).toBe(false)
+  })
+
+  describe(`bigintSafeStringify`, () => {
+    it(`should serialize objects with BigInt values`, () => {
+      const obj = { id: BigInt(`9223372036854775807`), name: `test` }
+      expect(bigintSafeStringify(obj)).toBe(
+        `{"id":"9223372036854775807","name":"test"}`
+      )
+    })
+
+    it(`should handle nested BigInt values`, () => {
+      const obj = { params: { '1': BigInt(42), '2': `hello` } }
+      expect(bigintSafeStringify(obj)).toBe(
+        `{"params":{"1":"42","2":"hello"}}`
+      )
+    })
+
+    it(`should behave like JSON.stringify for non-BigInt values`, () => {
+      const obj = { a: 1, b: `two`, c: true, d: null }
+      expect(bigintSafeStringify(obj)).toBe(JSON.stringify(obj))
+    })
+
+    it(`should not throw for BigInt values where JSON.stringify would`, () => {
+      const obj = { id: BigInt(123) }
+      expect(() => JSON.stringify(obj)).toThrow(`Do not know how to serialize a BigInt`)
+      expect(() => bigintSafeStringify(obj)).not.toThrow()
+    })
   })
 
   it(`should handle null and undefined messages without throwing`, () => {
