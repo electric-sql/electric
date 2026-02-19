@@ -223,6 +223,49 @@ export const testWithMultitypeTable = testWithDbClient.extend<{
   },
 })
 
+export type InsertBigintRowFn = (
+  ...rows: { id: bigint; label: string }[]
+) => Promise<void>
+
+export const testWithBigintTable = testWithDbClient.extend<{
+  bigintTableSql: string
+  bigintTableUrl: string
+  insertBigintRows: InsertBigintRowFn
+}>({
+  bigintTableSql: async ({ dbClient, task }, use) => {
+    const tableName = `"bigint_table_${task.id}_${Math.random().toString(16).replace(`.`, `_`)}"`
+
+    await dbClient.query(`
+      DROP TABLE IF EXISTS ${tableName};
+      CREATE TABLE ${tableName} (
+        id INT8 PRIMARY KEY,
+        label TEXT NOT NULL
+      )`)
+
+    await use(tableName)
+
+    await dbClient.query(`DROP TABLE ${tableName}`)
+  },
+  bigintTableUrl: async ({ bigintTableSql, clearShape, pgSchema }, use) => {
+    const urlAppropriateTable = pgSchema + `.` + bigintTableSql
+    await use(urlAppropriateTable)
+    try {
+      await clearShape(urlAppropriateTable)
+    } catch (_) {
+      // ignore - clearShape has its own logging
+      // we don't want to interrupt cleanup
+    }
+  },
+  insertBigintRows: ({ bigintTableSql, dbClient }, use) =>
+    use(async (...rows) => {
+      const placeholders = rows.map((_, i) => `($${i * 2 + 1}, $${i * 2 + 2})`)
+      await dbClient.query(
+        `INSERT INTO ${bigintTableSql} (id, label) VALUES ${placeholders}`,
+        rows.flatMap((x) => [x.id.toString(), x.label])
+      )
+    }),
+})
+
 export const testWithSpecialColumnsTable = testWithDbClient.extend<{
   tableSql: string
   tableUrl: string

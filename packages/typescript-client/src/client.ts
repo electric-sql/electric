@@ -15,7 +15,12 @@ import {
   encodeWhereClause,
   quoteIdentifier,
 } from './column-mapper'
-import { getOffset, isUpToDateMessage, isChangeMessage } from './helpers'
+import {
+  getOffset,
+  isUpToDateMessage,
+  isChangeMessage,
+  bigintSafeStringify,
+} from './helpers'
 import {
   FetchError,
   FetchBackoffAbortError,
@@ -987,7 +992,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
         // Serialize params as JSON to keep the parameter name constant for proxy configs
         fetchUrl.searchParams.set(
           SUBSET_PARAM_WHERE_PARAMS,
-          JSON.stringify(subsetParams.params)
+          bigintSafeStringify(subsetParams.params)
         )
       if (subsetParams.limit)
         setQueryParam(fetchUrl, SUBSET_PARAM_LIMIT, subsetParams.limit)
@@ -1261,7 +1266,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
     const batch = this.#messageParser.parse<Array<Message<T>>>(messages, schema)
 
     if (!Array.isArray(batch)) {
-      const preview = JSON.stringify(batch)?.slice(0, 200)
+      const preview = bigintSafeStringify(batch)?.slice(0, 200)
       throw new FetchError(
         response.status,
         `Received non-array response body from shape endpoint. ` +
@@ -1731,7 +1736,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
           ...result.requestHeaders,
           'Content-Type': `application/json`,
         },
-        body: JSON.stringify(this.#buildSubsetBody(opts)),
+        body: bigintSafeStringify(this.#buildSubsetBody(opts)),
       }
     } else {
       const result = await this.#constructUrl(this.options.url, true, opts)
