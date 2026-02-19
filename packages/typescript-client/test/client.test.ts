@@ -1636,6 +1636,57 @@ describe.for(fetchAndSse)(
       expect(titles).toEqual([`alpha`, `beta`])
     }, 5_000)
 
+    it(`should not miss updates between cold-start snapshot and stream resume`, async ({
+      issuesTableUrl,
+      insertIssues,
+      updateIssue,
+      aborter,
+    }) => {
+      const [id] = await insertIssues({ title: `original` })
+
+      // Use offset: "now" to match real on-demand behavior. With "now",
+      // the stream connects first (creating the shape on the server and
+      // activating change tracking), then requestSnapshot() fetches subset
+      // data. The offset advancement code must update the stream's position
+      // to the snapshot's offset so no updates are missed in between.
+      const shapeStream = new ShapeStream({
+        url: `${BASE_URL}/v1/shape`,
+        params: { table: issuesTableUrl },
+        log: `changes_only`,
+        offset: `now`,
+        liveSse,
+        signal: aborter.signal,
+      })
+      const shape = new Shape(shapeStream)
+
+      // Wait for stream to be up-to-date (shape created on server)
+      await vi.waitFor(() => {
+        expect(shapeStream.isUpToDate).toBe(true)
+      })
+
+      await shape.requestSnapshot({
+        orderBy: `title ASC`,
+        limit: 100,
+      })
+
+      await vi.waitFor(() => {
+        expect(shape.currentRows.length).toBe(1)
+        expect(shape.currentRows[0].title).toBe(`original`)
+      })
+
+      // Update after snapshot — the stream must pick this up when it
+      // resumes from the snapshot's offset, not skip it.
+      await updateIssue({ id, title: `updated-after-snapshot` })
+
+      await vi.waitFor(
+        () => {
+          const row = shape.currentRows.find((r) => r.id === id)
+          expect(row?.title).toBe(`updated-after-snapshot`)
+        },
+        { timeout: 10000 }
+      )
+    })
+
     it(`requestSnapshot should populate stream and match returned data`, async ({
       issuesTableUrl,
       insertIssues,
