@@ -395,9 +395,9 @@ defmodule Electric.Connection.Manager do
       pool_sizes = pool_sizes(Keyword.get(state.pool_opts, :pool_size, 2))
 
       state =
-        [:snapshot, :admin]
-        |> Enum.filter(fn role -> is_nil(state.pool_pids[role]) end)
-        |> Enum.reduce(state, fn pool_role, state ->
+        [{:snapshot, pooled_conn_opts}, {:admin, replication_conn_opts}]
+        |> Enum.filter(fn {role, _conn_opts} -> is_nil(state.pool_pids[role]) end)
+        |> Enum.reduce(state, fn {pool_role, conn_opts}, state ->
           pool_size = Map.fetch!(pool_sizes, pool_role)
 
           # The snapshot pool connections might run for long periods of time
@@ -407,11 +407,6 @@ defmodule Electric.Connection.Manager do
             if pool_role == :snapshot,
               do: [queue_target: 5_000, queue_interval: 10_000],
               else: []
-
-          conn_opts =
-            if pool_role == :admin,
-              do: replication_conn_opts,
-              else: pooled_conn_opts
 
           {:ok, pool_pid} =
             Electric.Connection.Manager.Pool.start_link(
@@ -441,7 +436,7 @@ defmodule Electric.Connection.Manager do
         {:noreply, state}
 
       {:pool, {:error, reason}} ->
-        shutdown_or_reconnect(reason, :pools, state)
+        shutdown_or_reconnect(reason, :snapshot_pool, state)
 
       {:replication, {:error, reason}} ->
         shutdown_or_reconnect(reason, :admin_pool, state)
