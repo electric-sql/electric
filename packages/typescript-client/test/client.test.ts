@@ -2747,6 +2747,7 @@ describe(`BigInt support in subset loading`, () => {
       const { data } = await shapeStream.requestSnapshot({
         where: `id = $1`,
         params: { '1': BigInt(`9223372036854775802`) },
+        orderBy: `id ASC`,
         limit: 100,
       })
 
@@ -2807,6 +2808,7 @@ describe(`BigInt support in subset loading`, () => {
       const { data } = await shapeStream.fetchSnapshot({
         where: `id = $1`,
         params: { '1': BigInt(`9223372036854775802`) },
+        orderBy: `id ASC`,
         limit: 100,
         method: `POST`,
       })
