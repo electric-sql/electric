@@ -47,11 +47,7 @@ If H = 40% of your total workflow time, no improvement in agent capability can e
 
 The catch: the components that models reduce aren't the ones that dominate at scale. Model improvements shrink clarification and verification. Taste and novel decisions — the components that become dominant once you've automated the mechanical parts — are largely irreducible by better models. These ceilings are real at any given moment.
 
-**The question is how fast H is declining, and whether it's declining because you're encoding friction away or because you haven't taken on ambitious enough work to replace it.**
-
-H doesn't behave like Amdahl's S. It moves. When you encode verification and clarification friction into conformance suites and specs, H drops — and your Amdahl's ceiling lifts. But successful teams don't pocket the savings and do the same work faster. They increase scope. The team that reduced H from 40% to 20% by building a conformance suite doesn't just ship the same features at 5x. They take on a protocol redesign that would have been unthinkable before — and that redesign introduces new taste and strategy decisions that push H back up.
-
-This is Jevons' paradox for cognition: efficiency gains in human-agent collaboration get reinvested as increased ambition, not decreased H. The healthy trajectory isn't H monotonically declining toward zero. It's a **sawtooth** — H drops as you encode friction, jumps as you take on harder problems, drops again as you encode the new friction, jumps again. Each cycle operates at a higher level of capability. The teams that compound aren't the ones with the lowest H. They're the ones running the sawtooth fastest.
+**The question is how fast H is declining — and what you do with the gains.**
 
 ## Self-Liquidating H
 
@@ -116,6 +112,10 @@ Declining recurrence means your system is learning. Flat recurrence means you're
 And there's a compounding effect. The core thesis from [configurancy](/blog/2026/02/02/configurancy): **AI makes code cheap; therefore the scarce asset is the system's self-knowledge.** Specifications, conformance suites, and documented invariants were always valuable but expensive to maintain. Agents flip this calculus. They make maintaining explicit contracts cheap — write a spec change, agents propagate it through implementations, conformance suites verify correctness. The very thing that reduces H has itself become cheaper to produce.
 
 We're entering a flywheel: agents make it cheap to crystallize human judgment as durable artifacts → durable artifacts reduce future human interventions → fewer recurring interventions means agents deliver more value per cycle → which justifies more agent investment. The teams that recognize this early will compound their way to genuine 10x while everyone else argues about which model to use.
+
+But that compounding isn't smooth. H doesn't behave like Amdahl's original serial fraction S — a fixed property of the algorithm. It moves. When you encode verification and clarification friction into conformance suites and specs, H drops — and your Amdahl's ceiling lifts. But successful teams don't pocket the savings and do the same work faster. They increase scope. The team that reduced H from 40% to 20% by building a conformance suite doesn't just ship the same features at 5x. They take on a protocol redesign that would have been unthinkable before — and that redesign introduces new taste and strategy decisions that push H back up.
+
+This is Jevons' paradox for cognition: efficiency gains in human-agent collaboration get reinvested as increased ambition, not decreased H. The healthy trajectory isn't H monotonically declining toward zero. It's a **sawtooth** — H drops as you encode friction, jumps as you take on harder problems, drops again as you encode the new friction, jumps again. Each cycle operates at a higher level of capability. The teams that compound aren't the ones with the lowest H. They're the ones running the sawtooth fastest.
 
 ## The Real Question
 
