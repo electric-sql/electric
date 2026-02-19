@@ -51,7 +51,7 @@ export function isChangeMessage<T extends Row<unknown> = Row>(
 export function isControlMessage<T extends Row<unknown> = Row>(
   message: Message<T>
 ): message is ControlMessage {
-  return message != null && !isChangeMessage(message)
+  return message != null && `headers` in message && `control` in message.headers
 }
 
 export function isUpToDateMessage<T extends Row<unknown> = Row>(
