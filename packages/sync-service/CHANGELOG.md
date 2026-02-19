@@ -1,5 +1,11 @@
 # @core/sync-service
 
+## 1.4.6
+
+### Patch Changes
+
+- cc7cfc2: Add disk usage statistics to metrics collection
+
 ## 1.4.5
 
 ### Patch Changes
