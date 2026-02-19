@@ -25,6 +25,13 @@ defmodule Electric.SnapshotError do
     }
   end
 
+  def slow_snapshot_start do
+    %SnapshotError{
+      type: :slow_snapshot_start,
+      message: "Snapshot query took too long to start reading from the database"
+    }
+  end
+
   def from_error(%DBConnection.ConnectionError{reason: :queue_timeout} = error) do
     %SnapshotError{
       type: :queue_timeout,

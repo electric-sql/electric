@@ -35,6 +35,9 @@ defmodule Electric.ShapeCache do
   # unnecessary noise let's just cover those tail timings with our timeout.
   @call_timeout 30_000
 
+  @max_snapshot_start_attempts 10
+  @snapshot_start_retry_sleep_ms 50
+
   def name(stack_ref) do
     Electric.ProcessRegistry.name(stack_ref, __MODULE__)
   end
@@ -114,13 +117,20 @@ defmodule Electric.ShapeCache do
     ShapeCleaner.remove_shape(stack_id, shape_handle)
   end
 
-  @spec await_snapshot_start(shape_handle(), stack_id()) :: :started | {:error, term()}
-  def await_snapshot_start(shape_handle, stack_id)
+  @spec await_snapshot_start(shape_handle(), stack_id(), non_neg_integer()) ::
+          :started | {:error, term()}
+  def await_snapshot_start(
+        shape_handle,
+        stack_id,
+        attempts_remaining \\ @max_snapshot_start_attempts
+      )
       when is_shape_handle(shape_handle) and is_stack_id(stack_id) do
-    ShapeStatus.update_last_read_time_to_now(stack_id, shape_handle)
-
     cond do
       ShapeStatus.snapshot_started?(stack_id, shape_handle) ->
+        # Must only update the last_read_time after confirming that the shape has a snapshot,
+        # so as not to interfere with the invariant that a shape that has just been created
+        # does not have a last_read_time until its consumer process starts.
+        ShapeStatus.update_last_read_time_to_now(stack_id, shape_handle)
         :started
 
       not ShapeStatus.has_shape_handle?(stack_id, shape_handle) ->
@@ -139,10 +149,63 @@ defmodule Electric.ShapeCache do
 
           :exit, {:noproc, _} ->
             # The fact that we got the shape handle means we know the shape exists, and the process should
-            # exist too. We can get here if registry didn't propagate registration across partitions yet, so
-            # we'll just retry after waiting for a short time to avoid busy waiting.
-            Process.sleep(50)
-            await_snapshot_start(shape_handle, stack_id)
+            # exist too. We can get here if multiple concurrent requests are racing for the same shape handle:
+            #   1. The 1st request adds the handle to ShapeStatus and starts the consumer process.
+            #   2. Subsequent requests might already see the handle in ShapeStatus before the consumer process has started.
+
+            cond do
+              ShapeStatus.shape_has_been_activated?(stack_id, shape_handle) ->
+                # This branch can only be reached when the consumer process for the shape had
+                # already been started but then died without requesting shape cleanup. We've seen
+                # this happen in prod for shapes with subqueries.
+                #
+                # A shape with subqueries is actually a hierarchy of multiple shapes where
+                # non-root consumers have matching materializer processes started for them.
+                # We've seen in prod logs that occasionally a materializer process dies with
+                # reason :shutdown which is a likely cause for the consumer process to stop with
+                # the same reason. Consumer processes aren't restarted automatically, so as a
+                # result, the shape handle remains in the ShapeStatus table but there's no longer
+                # a consumer process for it.
+                #
+                # The root cause for materializer process shutdown before snapshot creation even starts
+                # is yet to be determined.
+                #
+                # For now we just invalidate the shape with subqueries and expect that the client
+                # will re-request it.
+                case fetch_shape_by_handle(shape_handle, stack_id) do
+                  {:ok, shape} ->
+                    ShapeCleaner.remove_shapes(stack_id, [
+                      shape_handle | shape.shape_dependencies_handles
+                    ])
+
+                    Logger.error(
+                      "No consumer process when waiting on initial snapshot creation for #{shape_handle}"
+                    )
+
+                    {:error, :unknown}
+
+                  :error ->
+                    # Shape was already cleaned up by a concurrent process
+                    {:error, :unknown}
+                end
+
+              attempts_remaining > 0 ->
+                # The record in ShapeStatus has just been inserted and the consumer process for it is about to be started.
+                # Just idle for a while waiting for it to come up.
+                Process.sleep(@snapshot_start_retry_sleep_ms)
+                await_snapshot_start(shape_handle, stack_id, attempts_remaining - 1)
+
+              true ->
+                # Nothing else to do here but to bail. The API response to the client will ask
+                # politely to wait a bit before initiating a new request, lest we get DoSed by
+                # clients that all want to fetch this shape.
+
+                Logger.warning(
+                  "Exhausted retry attempts while waiting for a shape consumer to start initial snapshot creation for #{shape_handle}"
+                )
+
+                {:error, Electric.SnapshotError.slow_snapshot_start()}
+            end
         end
     end
   rescue
@@ -293,12 +356,15 @@ defmodule Electric.ShapeCache do
            action: action
          }) do
       {:ok, consumer_pid} ->
+        # Now that the consumer process for this shape is running, we can finish initializing
+        # the ShapeStatus record by recording a "last_read" timestamp on it.
+        ShapeStatus.update_last_read_time_to_now(stack_id, shape_handle)
         {:ok, consumer_pid}
 
       {:error, _reason} = error ->
         Logger.error("Failed to start shape #{shape_handle}: #{inspect(error)}")
         # purge because we know the consumer isn't running
-        ShapeCleaner.remove_shape(stack_id, shape_handle)
+        clean_shape(shape_handle, stack_id)
         :error
     end
   end
@@ -337,7 +403,7 @@ defmodule Electric.ShapeCache do
 
           # If we got an error starting any of the dependent shapes then we
           # remove the outer shape too
-          ShapeCleaner.remove_shape(state.stack_id, shape_handle)
+          clean_shape(shape_handle, state.stack_id)
         end
 
         {:error, "Failed to start consumer for #{shape_handle}"}
