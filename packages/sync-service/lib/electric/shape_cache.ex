@@ -119,7 +119,11 @@ defmodule Electric.ShapeCache do
 
   @spec await_snapshot_start(shape_handle(), stack_id(), non_neg_integer()) ::
           :started | {:error, term()}
-  def await_snapshot_start(shape_handle, stack_id, attempts_remaining \\ @max_snapshot_start_attempts)
+  def await_snapshot_start(
+        shape_handle,
+        stack_id,
+        attempts_remaining \\ @max_snapshot_start_attempts
+      )
       when is_shape_handle(shape_handle) and is_stack_id(stack_id) do
     cond do
       ShapeStatus.snapshot_started?(stack_id, shape_handle) ->
