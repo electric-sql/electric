@@ -89,6 +89,8 @@ const RESERVED_PARAMS: Set<ReservedParamKeys> = new Set([
   CACHE_BUSTER_QUERY_PARAM,
 ])
 
+const TROUBLESHOOTING_URL = `https://electric-sql.com/docs/guides/troubleshooting`
+
 type Replica = `full` | `default`
 export type LogMode = `changes_only` | `full`
 
@@ -604,12 +606,12 @@ export class ShapeStream<T extends Row<unknown> = Row>
   // Fast-loop detection: track recent non-live requests to detect tight retry
   // loops caused by proxy/CDN misconfiguration or stale client-side caches
   #recentRequestEntries: Array<{ timestamp: number; offset: string }> = []
-  #fastLoopWindowMs = 500 // Time window to detect fast loops
-  #fastLoopThreshold = 5 // Number of requests in window to trigger backoff
-  #fastLoopBackoffBaseMs = 100 // Base delay for fast-loop backoff
-  #fastLoopBackoffMaxMs = 5_000 // Maximum backoff delay (5s)
-  #fastLoopConsecutiveCount = 0 // How many consecutive fast loops detected
-  #fastLoopMaxCount = 5 // After this many consecutive fast loops, throw error
+  #fastLoopWindowMs = 500
+  #fastLoopThreshold = 5
+  #fastLoopBackoffBaseMs = 100
+  #fastLoopBackoffMaxMs = 5_000
+  #fastLoopConsecutiveCount = 0
+  #fastLoopMaxCount = 5
 
   constructor(options: ShapeStreamOptions<GetExtensions<T>>) {
     this.options = { subscribe: true, ...options }
@@ -754,6 +756,8 @@ export class ShapeStream<T extends Row<unknown> = Row>
           if (this.#syncState instanceof ErrorState) {
             this.#syncState = this.#syncState.retry()
           }
+          this.#fastLoopConsecutiveCount = 0
+          this.#recentRequestEntries = []
 
           // Restart from current offset
           this.#started = false
@@ -797,12 +801,10 @@ export class ShapeStream<T extends Row<unknown> = Row>
       return
     }
 
-    // Fast-loop detection: only track non-live requests to avoid
-    // flagging normal live polling as a fast loop.
+    // Only check for fast loops on non-live requests; live polling is expected to be rapid
     if (!this.#syncState.isUpToDate) {
       await this.#checkFastLoop()
     } else {
-      // Reset fast-loop tracking when we reach a healthy state
       this.#fastLoopConsecutiveCount = 0
       this.#recentRequestEntries = []
     }
@@ -915,83 +917,83 @@ export class ShapeStream<T extends Row<unknown> = Row>
   /**
    * Detects tight retry loops (e.g., from stale client-side caches or
    * proxy/CDN misconfiguration) and attempts recovery. On first detection,
-   * clears localStorage caches and resets the stream to fetch from scratch.
+   * clears client-side caches (in-memory and localStorage) and resets the
+   * stream to fetch from scratch.
    * If the loop persists, applies exponential backoff and eventually throws.
    */
   async #checkFastLoop(): Promise<void> {
     const now = Date.now()
     const currentOffset = this.#syncState.offset
 
-    // Prune entries outside the detection window
     this.#recentRequestEntries = this.#recentRequestEntries.filter(
       (e) => now - e.timestamp < this.#fastLoopWindowMs
     )
     this.#recentRequestEntries.push({ timestamp: now, offset: currentOffset })
 
-    // Only flag as a fast loop if requests are stuck at the same offset,
-    // meaning the stream isn't making progress. Normal rapid syncing
-    // advances the offset with each response and won't trigger this.
+    // Only flag as a fast loop if requests are stuck at the same offset.
+    // Normal rapid syncing advances the offset with each response.
     const sameOffsetCount = this.#recentRequestEntries.filter(
       (e) => e.offset === currentOffset
     ).length
 
-    if (sameOffsetCount >= this.#fastLoopThreshold) {
-      this.#fastLoopConsecutiveCount++
+    if (sameOffsetCount < this.#fastLoopThreshold) return
 
-      if (this.#fastLoopConsecutiveCount >= this.#fastLoopMaxCount) {
-        throw new FetchError(
-          502,
-          undefined,
-          undefined,
-          {},
-          this.options.url,
-          `Client is stuck in a fast retry loop ` +
-            `(${this.#fastLoopThreshold} requests in ${this.#fastLoopWindowMs}ms at the same offset, ` +
-            `repeated ${this.#fastLoopMaxCount} times). ` +
-            `Client-side caches were cleared automatically on first detection, but the loop persists. ` +
-            `This usually indicates a proxy or CDN misconfiguration. ` +
-            `Common causes:\n` +
-            `  - Proxy is not including query parameters (handle, offset) in its cache key\n` +
-            `  - CDN is serving stale 409 responses\n` +
-            `  - Proxy is stripping required Electric headers from responses\n` +
-            `For more information visit the troubleshooting guide: https://electric-sql.com/docs/guides/troubleshooting`
-        )
-      }
+    this.#fastLoopConsecutiveCount++
 
-      if (this.#fastLoopConsecutiveCount === 1) {
-        console.warn(
-          `[Electric] Detected fast retry loop ` +
-            `(${this.#fastLoopThreshold} requests in ${this.#fastLoopWindowMs}ms at the same offset). ` +
-            `Clearing client-side caches and resetting stream to recover. ` +
-            `If this persists, check that your proxy includes all query parameters ` +
-            `(especially 'handle' and 'offset') in its cache key, ` +
-            `and that required Electric headers are forwarded to the client. ` +
-            `For more information visit the troubleshooting guide: https://electric-sql.com/docs/guides/troubleshooting`
-        )
+    if (this.#fastLoopConsecutiveCount >= this.#fastLoopMaxCount) {
+      throw new FetchError(
+        502,
+        undefined,
+        undefined,
+        {},
+        this.options.url,
+        `Client is stuck in a fast retry loop ` +
+          `(${this.#fastLoopThreshold} requests in ${this.#fastLoopWindowMs}ms at the same offset, ` +
+          `repeated ${this.#fastLoopMaxCount} times). ` +
+          `Client-side caches were cleared automatically on first detection, but the loop persists. ` +
+          `This usually indicates a proxy or CDN misconfiguration. ` +
+          `Common causes:\n` +
+          `  - Proxy is not including query parameters (handle, offset) in its cache key\n` +
+          `  - CDN is serving stale 409 responses\n` +
+          `  - Proxy is stripping required Electric headers from responses\n` +
+          `For more information visit the troubleshooting guide: ${TROUBLESHOOTING_URL}`
+      )
+    }
 
-        // Clear potentially poisoned client-side caches and reset the stream
-        // to fetch from scratch. This resolves stale cache issues without
-        // requiring user intervention.
+    if (this.#fastLoopConsecutiveCount === 1) {
+      console.warn(
+        `[Electric] Detected fast retry loop ` +
+          `(${this.#fastLoopThreshold} requests in ${this.#fastLoopWindowMs}ms at the same offset). ` +
+          `Clearing client-side caches and resetting stream to recover. ` +
+          `If this persists, check that your proxy includes all query parameters ` +
+          `(especially 'handle' and 'offset') in its cache key, ` +
+          `and that required Electric headers are forwarded to the client. ` +
+          `For more information visit the troubleshooting guide: ${TROUBLESHOOTING_URL}`
+      )
+
+      if (this.#currentFetchUrl) {
+        const shapeKey = canonicalShapeKey(this.#currentFetchUrl)
+        expiredShapesCache.delete(shapeKey)
+        upToDateTracker.delete(shapeKey)
+      } else {
         expiredShapesCache.clear()
         upToDateTracker.clear()
-        this.#reset()
-        this.#recentRequestEntries = []
-        return
       }
-
-      // Exponential backoff with full jitter
-      const maxDelay = Math.min(
-        this.#fastLoopBackoffMaxMs,
-        this.#fastLoopBackoffBaseMs *
-          Math.pow(2, this.#fastLoopConsecutiveCount)
-      )
-      const delayMs = Math.floor(Math.random() * maxDelay)
-
-      await new Promise((resolve) => setTimeout(resolve, delayMs))
-
-      // Clear entries after backoff so we measure fresh
+      this.#reset()
       this.#recentRequestEntries = []
+      return
     }
+
+    // Exponential backoff with full jitter
+    const maxDelay = Math.min(
+      this.#fastLoopBackoffMaxMs,
+      this.#fastLoopBackoffBaseMs * Math.pow(2, this.#fastLoopConsecutiveCount)
+    )
+    const delayMs = Math.floor(Math.random() * maxDelay)
+
+    await new Promise((resolve) => setTimeout(resolve, delayMs))
+
+    this.#recentRequestEntries = []
   }
 
   async #constructUrl(
@@ -1211,7 +1213,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
           `CDN continues serving stale cached responses after ${this.#maxStaleCacheRetries} retry attempts. ` +
             `This indicates a severe proxy/CDN misconfiguration. ` +
             `Check that your proxy includes all query parameters (especially 'handle' and 'offset') in its cache key. ` +
-            `For more information visit the troubleshooting guide: https://electric-sql.com/docs/guides/troubleshooting`
+            `For more information visit the troubleshooting guide: ${TROUBLESHOOTING_URL}`
         )
       }
       console.warn(
@@ -1219,7 +1221,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
           `This should not happen and indicates a proxy/CDN caching misconfiguration. ` +
           `The response contained handle "${shapeHandle}" which was previously marked as expired. ` +
           `Check that your proxy includes all query parameters (especially 'handle' and 'offset') in its cache key. ` +
-          `For more information visit the troubleshooting guide: https://electric-sql.com/docs/guides/troubleshooting ` +
+          `For more information visit the troubleshooting guide: ${TROUBLESHOOTING_URL} ` +
           `Retrying with a random cache buster to bypass the stale cache (attempt ${this.#syncState.staleCacheRetryCount}/${this.#maxStaleCacheRetries}).`
       )
       throw new StaleCacheError(
