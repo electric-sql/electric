@@ -937,7 +937,7 @@ defmodule Electric.ShapeCacheTest do
         GenServer.cast(parent, {:snapshot_started, shape_handle})
       end)
 
-      start_consumer_delay = 500
+      start_consumer_delay = 300
 
       test_pid = self()
 

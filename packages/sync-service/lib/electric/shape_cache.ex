@@ -154,7 +154,7 @@ defmodule Electric.ShapeCache do
             #   2. Subsequent requests might already see the handle in ShapeStatus before the consumer process has started.
 
             cond do
-              ShapeStatus.shape_has_finished_initializing?(stack_id, shape_handle) ->
+              ShapeStatus.shape_has_been_activated?(stack_id, shape_handle) ->
                 # This branch can only be reached when the consumer process for the shape had
                 # already been started but then died without requesting shape cleanup. We've seen
                 # this happen in prod for shapes with subqueries.
