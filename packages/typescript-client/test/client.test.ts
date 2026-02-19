@@ -1644,29 +1644,27 @@ describe.for(fetchAndSse)(
     }) => {
       const [id] = await insertIssues({ title: `original` })
 
-      // Pre-warm the shape on the server so change tracking is active
-      // before the cold-start test begins. Without this, the server may
-      // not have finished initializing change tracking when the stream
-      // resumes from the snapshot offset.
-      const warmupStream = new ShapeStream({
-        url: `${BASE_URL}/v1/shape`,
-        params: { table: issuesTableUrl },
-        log: `changes_only`,
-        liveSse: false,
-      })
-      await waitForFetch(warmupStream)
-      warmupStream.unsubscribeAll()
-
+      // Use offset: "now" to match real on-demand behavior. With "now",
+      // the stream connects first (creating the shape on the server and
+      // activating change tracking), then requestSnapshot() fetches subset
+      // data. The offset advancement code must update the stream's position
+      // to the snapshot's offset so no updates are missed in between.
       const shapeStream = new ShapeStream({
         url: `${BASE_URL}/v1/shape`,
         params: { table: issuesTableUrl },
         log: `changes_only`,
+        offset: `now`,
         liveSse,
         signal: aborter.signal,
       })
       const shape = new Shape(shapeStream)
 
-      await shapeStream.requestSnapshot({
+      // Wait for stream to be up-to-date (shape created on server)
+      await vi.waitFor(() => {
+        expect(shapeStream.isUpToDate).toBe(true)
+      })
+
+      await shape.requestSnapshot({
         orderBy: `title ASC`,
         limit: 100,
       })
