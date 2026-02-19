@@ -920,16 +920,7 @@ defmodule Electric.ShapeCacheTest do
       # Let the task run for one second which should result in approx. 20 recursive calls. But
       # since the cutoff point inside the ShapeCache.await_snapshot_start() function is at 10
       # attempts, we are expecting the task to return here.
-      log =
-        capture_log(fn ->
-          assert {:ok, error} = Task.yield(task, 1000)
-
-          assert {:error,
-                  %Electric.Shapes.Api.Error{
-                    message: [%{headers: %{control: "must-refetch"}}],
-                    status: 409
-                  }} == error
-        end)
+      log = capture_log(fn -> assert {:ok, {:error, :unknown}} = Task.yield(task, 1000) end)
 
       assert String.contains?(
                log,

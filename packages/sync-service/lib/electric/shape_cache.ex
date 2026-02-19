@@ -182,7 +182,7 @@ defmodule Electric.ShapeCache do
                       "No consumer process when starting initial snapshot creation for #{shape_handle}"
                     )
 
-                    {:error, Electric.Shapes.Api.Error.must_refetch()}
+                    {:error, :unknown}
 
                   :error ->
                     # Shape was already cleaned up by a concurrent process
