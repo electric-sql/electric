@@ -177,6 +177,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
     :ets.member(shape_meta_table(stack_id), shape_handle)
   end
 
+  @spec shape_has_finished_initializing?(stack_id(), shape_handle()) :: boolean()
   def shape_has_finished_initializing?(stack_id, shape_handle) do
     last_used_timestamp =
       :ets.lookup_element(

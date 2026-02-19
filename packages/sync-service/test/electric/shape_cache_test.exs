@@ -893,7 +893,7 @@ defmodule Electric.ShapeCacheTest do
       assert is_pid(consumer_pid) and Process.alive?(consumer_pid)
 
       subconsumer_pid = Electric.Shapes.Consumer.whereis(ctx.stack_id, subshape_handle)
-      assert is_pid(subconsumer_pid) and Process.alive?(consumer_pid)
+      assert is_pid(subconsumer_pid) and Process.alive?(subconsumer_pid)
 
       # Verify preconditions: snapshot hasn't started, shape exists in ShapeStatus
       refute ShapeStatus.snapshot_started?(ctx.stack_id, shape_handle)

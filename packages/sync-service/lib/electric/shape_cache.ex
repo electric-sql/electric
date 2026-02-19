@@ -35,6 +35,9 @@ defmodule Electric.ShapeCache do
   # unnecessary noise let's just cover those tail timings with our timeout.
   @call_timeout 30_000
 
+  @max_snapshot_start_attempts 10
+  @snapshot_start_retry_sleep_ms 50
+
   def name(stack_ref) do
     Electric.ProcessRegistry.name(stack_ref, __MODULE__)
   end
@@ -116,7 +119,7 @@ defmodule Electric.ShapeCache do
 
   @spec await_snapshot_start(shape_handle(), stack_id(), non_neg_integer()) ::
           :started | {:error, term()}
-  def await_snapshot_start(shape_handle, stack_id, attempts_remaining \\ 10)
+  def await_snapshot_start(shape_handle, stack_id, attempts_remaining \\ @max_snapshot_start_attempts)
       when is_shape_handle(shape_handle) and is_stack_id(stack_id) do
     cond do
       ShapeStatus.snapshot_started?(stack_id, shape_handle) ->
@@ -165,22 +168,27 @@ defmodule Electric.ShapeCache do
                 #
                 # For now we just invalidate the shape with subqueries and expect that the client
                 # will re-request it.
-                {:ok, shape} = fetch_shape_by_handle(shape_handle, stack_id)
+                case fetch_shape_by_handle(shape_handle, stack_id) do
+                  {:ok, shape} ->
+                    ShapeCleaner.remove_shapes(stack_id, [
+                      shape_handle | shape.shape_dependencies_handles
+                    ])
 
-                ShapeCleaner.remove_shapes(stack_id, [
-                  shape_handle | shape.shape_dependencies_handles
-                ])
+                    Logger.error(
+                      "No consumer process when starting initial snapshot creation for #{shape_handle}"
+                    )
 
-                Logger.error(
-                  "No consumer process when starting initial snapshot creation for #{shape_handle}"
-                )
+                    {:error, Electric.Shapes.Api.Error.must_refetch()}
 
-                {:error, Electric.Shapes.Api.Error.must_refetch()}
+                  :error ->
+                    # Shape was already cleaned up by a concurrent process
+                    {:error, :unknown}
+                end
 
               attempts_remaining > 0 ->
                 # The record in ShapeStatus has just been inserted and the consumer process for it is about to be started.
                 # Just idle for a while waiting for it to come up.
-                Process.sleep(50)
+                Process.sleep(@snapshot_start_retry_sleep_ms)
                 await_snapshot_start(shape_handle, stack_id, attempts_remaining - 1)
 
               true ->
