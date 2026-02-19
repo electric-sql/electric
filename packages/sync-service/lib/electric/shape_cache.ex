@@ -179,7 +179,7 @@ defmodule Electric.ShapeCache do
                     ])
 
                     Logger.error(
-                      "No consumer process when starting initial snapshot creation for #{shape_handle}"
+                      "No consumer process when waiting on initial snapshot creation for #{shape_handle}"
                     )
 
                     {:error, :unknown}
