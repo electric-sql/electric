@@ -325,6 +325,11 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
     {:noreply, schedule_poll(state), :hibernate}
   end
 
+  def handle_info(msg, state) do
+    Logger.warning("Received unexpected message #{inspect(msg)}")
+    {:noreply, state}
+  end
+
   @impl GenServer
   def handle_call(:flush_sync, _from, state) do
     {:reply, flush_until_empty(%{state | paused: false}), state}
@@ -431,10 +436,19 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
           :ok = Query.add_shape(conn, handle, shape, comparable, hash, relations)
 
         {_ts, {:remove, handle}} ->
-          :ok = Query.remove_shape(conn, handle)
+          with {:error, reason} <- Query.remove_shape(conn, handle) do
+            # remove_shape only returns an error tuple if the shape doesn't exist
+            # in which case the failure is ok, it's already deleted
+            Logger.warning("Unable do delete shape #{inspect(handle)}: #{inspect(reason)}")
+          end
 
         {_ts, {:snapshot_complete, handle}} ->
-          :ok = Query.mark_snapshot_complete(conn, handle)
+          with :error <- Query.mark_snapshot_complete(conn, handle) do
+            # `Query.mark_snapshot_complete` only returns `:error` if the query
+            # modified 0 rows, i.e. the shape does not exist. Rather than crash
+            # just warn as we can continue in this scenario.
+            Logger.warning("Unable to mark snapshot complete: #{handle} does not exist")
+          end
       end)
 
       :ok
