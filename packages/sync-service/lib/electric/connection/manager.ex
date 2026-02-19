@@ -383,53 +383,63 @@ defmodule Electric.Connection.Manager do
       when is_nil(pool_pids.admin) or is_nil(pool_pids.snapshot) do
     Logger.debug("Starting connection pool for stack #{state.stack_id}")
 
-    case validate_connection(pooled_connection_opts(state), :pool, state) do
-      {:ok, conn_opts, state} ->
-        pool_sizes = pool_sizes(Keyword.get(state.pool_opts, :pool_size, 2))
+    # The admin pool uses replication credentials because the replication user
+    # owns the publication and has the privileges needed to alter it. The pooled
+    # connection user may be a lower-privilege user (e.g. on Crunchy Bridge where
+    # superusers can't connect through PgBouncer).
+    with {:pool, {:ok, pooled_conn_opts, state}} <-
+           {:pool, validate_connection(pooled_connection_opts(state), :pool, state)},
+         {:replication, {:ok, replication_conn_opts, state}} <-
+           {:replication,
+            validate_connection(replication_connection_opts(state), :replication, state)} do
+      pool_sizes = pool_sizes(Keyword.get(state.pool_opts, :pool_size, 2))
 
-        state =
-          [:snapshot, :admin]
-          |> Enum.filter(fn role -> is_nil(state.pool_pids[role]) end)
-          |> Enum.reduce(state, fn pool_role, state ->
-            pool_size = Map.fetch!(pool_sizes, pool_role)
+      state =
+        [{:snapshot, pooled_conn_opts}, {:admin, replication_conn_opts}]
+        |> Enum.filter(fn {role, _conn_opts} -> is_nil(state.pool_pids[role]) end)
+        |> Enum.reduce(state, fn {pool_role, conn_opts}, state ->
+          pool_size = Map.fetch!(pool_sizes, pool_role)
 
-            # The snapshot pool connections might run for long periods of time
-            # depending on the nature of the query, and during bursts it is preferred
-            # to have new queries queued for a longer time than failing them continuously
-            pool_queue_config =
-              if pool_role == :snapshot,
-                do: [queue_target: 5_000, queue_interval: 10_000],
-                else: []
+          # The snapshot pool connections might run for long periods of time
+          # depending on the nature of the query, and during bursts it is preferred
+          # to have new queries queued for a longer time than failing them continuously
+          pool_queue_config =
+            if pool_role == :snapshot,
+              do: [queue_target: 5_000, queue_interval: 10_000],
+              else: []
 
-            {:ok, pool_pid} =
-              Electric.Connection.Manager.Pool.start_link(
-                stack_id: state.stack_id,
-                role: pool_role,
-                connection_manager: self(),
-                pool_opts:
-                  Keyword.merge(
-                    state.pool_opts,
-                    [pool_size: pool_size] ++ pool_queue_config
-                  ),
-                conn_opts: conn_opts
-              )
+          {:ok, pool_pid} =
+            Electric.Connection.Manager.Pool.start_link(
+              stack_id: state.stack_id,
+              role: pool_role,
+              connection_manager: self(),
+              pool_opts:
+                Keyword.merge(
+                  state.pool_opts,
+                  [pool_size: pool_size] ++ pool_queue_config
+                ),
+              conn_opts: conn_opts
+            )
 
-            %{
-              state
-              | pool_pids: Map.put(state.pool_pids, pool_role, {pool_pid, false})
-            }
-          end)
+          %{
+            state
+            | pool_pids: Map.put(state.pool_pids, pool_role, {pool_pid, false})
+          }
+        end)
 
-        state = %{state | current_step: {:start_connection_pool, :connecting}}
-        {:noreply, state}
-
+      state = %{state | current_step: {:start_connection_pool, :connecting}}
+      {:noreply, state}
+    else
       # the ConnectionResolver process was killed, as part of the application
       # shutdown in which case we'll be killed next so just return here
-      {:error, :killed} ->
+      {_source, {:error, :killed}} ->
         {:noreply, state}
 
-      {:error, reason} ->
-        shutdown_or_reconnect(reason, :pools, state)
+      {:pool, {:error, reason}} ->
+        shutdown_or_reconnect(reason, :snapshot_pool, state)
+
+      {:replication, {:error, reason}} ->
+        shutdown_or_reconnect(reason, :admin_pool, state)
     end
   end
 
