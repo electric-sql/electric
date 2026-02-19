@@ -981,6 +981,60 @@ defmodule Electric.ShapeCacheTest do
       assert :started = Task.await(wait_task, start_consumer_delay)
     end
 
+    test "should not loop forever waiting for consumer to come up", ctx do
+      Support.TestUtils.patch_snapshotter(fn parent, shape_handle, _, _ ->
+        GenServer.cast(parent, {:pg_snapshot_known, shape_handle, @pg_snapshot_xmin_100})
+        GenServer.cast(parent, {:snapshot_started, shape_handle})
+      end)
+
+      start_consumer_delay = 1000
+
+      test_pid = self()
+
+      Repatch.patch(
+        Electric.Shapes.DynamicConsumerSupervisor,
+        :start_shape_consumer,
+        [mode: :shared],
+        fn a, b ->
+          send(test_pid, :about_to_start_consumer)
+
+          Process.sleep(start_consumer_delay)
+          Repatch.real(Electric.Shapes.DynamicConsumerSupervisor.start_shape_consumer(a, b))
+        end
+      )
+
+      activate_mocks_for_descendant_procs(Electric.ShapeCache)
+
+      _creation_task =
+        Task.async(fn -> ShapeCache.get_or_create_shape_handle(@shape, ctx.stack_id) end)
+
+      {shape_handle, _} =
+        receive do
+          :about_to_start_consumer -> ShapeCache.get_or_create_shape_handle(@shape, ctx.stack_id)
+        end
+
+      wait_task =
+        Task.async(fn -> ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id) end)
+
+      # should delay in responding
+      refute Task.yield(wait_task, 400)
+
+      log =
+        capture_log(fn ->
+          assert {:error,
+                  %Electric.SnapshotError{
+                    message: "Snapshot query took too long to start reading from the database",
+                    type: :slow_snapshot_start,
+                    original_error: nil
+                  }} == Task.await(wait_task)
+        end)
+
+      assert String.contains?(
+               log,
+               "[warning] Exhausted retry attempts while waiting for a shape consumer to start initial snapshot creation for #{shape_handle}"
+             )
+    end
+
     test "should stop waiting for consumer to come up if shape tables missing", ctx do
       test_pid = self()
 
