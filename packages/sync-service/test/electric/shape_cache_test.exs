@@ -883,13 +883,17 @@ defmodule Electric.ShapeCacheTest do
       # Patch snapshotter to never complete the snapshot
       Support.TestUtils.patch_snapshotter(fn _, _, _, _ -> nil end)
 
-      {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape, ctx.stack_id)
+      {shape_handle, _} =
+        ShapeCache.get_or_create_shape_handle(@shape_with_subquery, ctx.stack_id)
 
-      # This message comes from the patched snapshot function; get it out of the way
-      assert_receive {:snapshot, ^shape_handle}
+      {:ok, shape} = ShapeCache.fetch_shape_by_handle(shape_handle, ctx.stack_id)
+      [subshape_handle] = shape.shape_dependencies_handles
 
       consumer_pid = Electric.Shapes.Consumer.whereis(ctx.stack_id, shape_handle)
       assert is_pid(consumer_pid) and Process.alive?(consumer_pid)
+
+      subconsumer_pid = Electric.Shapes.Consumer.whereis(ctx.stack_id, subshape_handle)
+      assert is_pid(subconsumer_pid) and Process.alive?(consumer_pid)
 
       # Verify preconditions: snapshot hasn't started, shape exists in ShapeStatus
       refute ShapeStatus.snapshot_started?(ctx.stack_id, shape_handle)
@@ -897,7 +901,11 @@ defmodule Electric.ShapeCacheTest do
 
       # Stop the consumer. The stale entry in ShapeStatus remains, though.
       ref = Process.monitor(consumer_pid)
-      GenServer.stop(consumer_pid, :shutdown)
+      # We have to use the reason :kill here because consumer process traps exits. And since
+      # it's stuck waiting on the Materializer process to finish initialization (which in turn
+      # is stuck waiting on the snapshot start), the consumer process won't handle any other
+      # exit reason in a timely manner.
+      Process.exit(consumer_pid, :kill)
       assert_receive {:DOWN, ^ref, :process, ^consumer_pid, _}, 1_000
 
       assert ShapeStatus.has_shape_handle?(ctx.stack_id, shape_handle)
@@ -925,10 +933,11 @@ defmodule Electric.ShapeCacheTest do
 
       assert String.contains?(
                log,
-               "[error] Exhausted retry attempts while waiting for a shape consumer to start initial snapshot creation for #{shape_handle}"
+               "[error] No consumer process when starting initial snapshot creation for #{shape_handle}"
              )
 
       assert_receive {ShapeCache.ShapeCleaner, :cleanup, ^shape_handle}
+      assert_receive {ShapeCache.ShapeCleaner, :cleanup, ^subshape_handle}
     end
 
     test "should wait for consumer to come up", ctx do
