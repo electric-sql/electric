@@ -601,9 +601,9 @@ export class ShapeStream<T extends Row<unknown> = Row>
   #unsubscribeFromVisibilityChanges?: () => void
   #unsubscribeFromWakeDetection?: () => void
   #maxStaleCacheRetries = 3
-  // Fast-loop detection: track recent non-live request timestamps to detect
-  // tight retry loops caused by proxy/CDN misconfiguration
-  #recentRequestTimestamps: number[] = []
+  // Fast-loop detection: track recent non-live requests to detect tight retry
+  // loops caused by proxy/CDN misconfiguration or stale client-side caches
+  #recentRequestEntries: Array<{ timestamp: number; offset: string }> = []
   #fastLoopWindowMs = 500 // Time window to detect fast loops
   #fastLoopThreshold = 5 // Number of requests in window to trigger backoff
   #fastLoopBackoffBaseMs = 100 // Base delay for fast-loop backoff
@@ -804,7 +804,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
     } else {
       // Reset fast-loop tracking when we reach a healthy state
       this.#fastLoopConsecutiveCount = 0
-      this.#recentRequestTimestamps = []
+      this.#recentRequestEntries = []
     }
 
     let resumingFromPause = false
@@ -913,19 +913,29 @@ export class ShapeStream<T extends Row<unknown> = Row>
   }
 
   /**
-   * Detects tight retry loops (e.g., from proxy/CDN misconfiguration) and
-   * applies exponential backoff. Throws if the loop persists too long.
+   * Detects tight retry loops (e.g., from stale client-side caches or
+   * proxy/CDN misconfiguration) and attempts recovery. On first detection,
+   * clears localStorage caches and resets the stream to fetch from scratch.
+   * If the loop persists, applies exponential backoff and eventually throws.
    */
   async #checkFastLoop(): Promise<void> {
     const now = Date.now()
+    const currentOffset = this.#syncState.offset
 
-    // Prune timestamps outside the detection window
-    this.#recentRequestTimestamps = this.#recentRequestTimestamps.filter(
-      (t) => now - t < this.#fastLoopWindowMs
+    // Prune entries outside the detection window
+    this.#recentRequestEntries = this.#recentRequestEntries.filter(
+      (e) => now - e.timestamp < this.#fastLoopWindowMs
     )
-    this.#recentRequestTimestamps.push(now)
+    this.#recentRequestEntries.push({ timestamp: now, offset: currentOffset })
 
-    if (this.#recentRequestTimestamps.length >= this.#fastLoopThreshold) {
+    // Only flag as a fast loop if requests are stuck at the same offset,
+    // meaning the stream isn't making progress. Normal rapid syncing
+    // advances the offset with each response and won't trigger this.
+    const sameOffsetCount = this.#recentRequestEntries.filter(
+      (e) => e.offset === currentOffset
+    ).length
+
+    if (sameOffsetCount >= this.#fastLoopThreshold) {
       this.#fastLoopConsecutiveCount++
 
       if (this.#fastLoopConsecutiveCount >= this.#fastLoopMaxCount) {
@@ -936,16 +946,37 @@ export class ShapeStream<T extends Row<unknown> = Row>
           {},
           this.options.url,
           `Client is stuck in a fast retry loop ` +
-            `(${this.#fastLoopThreshold} requests in ${this.#fastLoopWindowMs}ms, ` +
+            `(${this.#fastLoopThreshold} requests in ${this.#fastLoopWindowMs}ms at the same offset, ` +
             `repeated ${this.#fastLoopMaxCount} times). ` +
-            `This usually indicates a proxy or CDN misconfiguration that is causing ` +
-            `the client to continuously refetch without making progress. ` +
+            `Client-side caches were cleared automatically on first detection, but the loop persists. ` +
+            `This usually indicates a proxy or CDN misconfiguration. ` +
             `Common causes:\n` +
             `  - Proxy is not including query parameters (handle, offset) in its cache key\n` +
             `  - CDN is serving stale 409 responses\n` +
             `  - Proxy is stripping required Electric headers from responses\n` +
             `For more information visit the troubleshooting guide: https://electric-sql.com/docs/guides/troubleshooting`
         )
+      }
+
+      if (this.#fastLoopConsecutiveCount === 1) {
+        console.warn(
+          `[Electric] Detected fast retry loop ` +
+            `(${this.#fastLoopThreshold} requests in ${this.#fastLoopWindowMs}ms at the same offset). ` +
+            `Clearing client-side caches and resetting stream to recover. ` +
+            `If this persists, check that your proxy includes all query parameters ` +
+            `(especially 'handle' and 'offset') in its cache key, ` +
+            `and that required Electric headers are forwarded to the client. ` +
+            `For more information visit the troubleshooting guide: https://electric-sql.com/docs/guides/troubleshooting`
+        )
+
+        // Clear potentially poisoned client-side caches and reset the stream
+        // to fetch from scratch. This resolves stale cache issues without
+        // requiring user intervention.
+        expiredShapesCache.clear()
+        upToDateTracker.clear()
+        this.#reset()
+        this.#recentRequestEntries = []
+        return
       }
 
       // Exponential backoff with full jitter
@@ -956,22 +987,10 @@ export class ShapeStream<T extends Row<unknown> = Row>
       )
       const delayMs = Math.floor(Math.random() * maxDelay)
 
-      if (this.#fastLoopConsecutiveCount === 1) {
-        console.warn(
-          `[Electric] Detected fast retry loop ` +
-            `(${this.#fastLoopThreshold} requests in ${this.#fastLoopWindowMs}ms). ` +
-            `This usually indicates a proxy or CDN misconfiguration. ` +
-            `Check that your proxy includes all query parameters (especially 'handle' and 'offset') in its cache key, ` +
-            `and that required Electric headers are forwarded to the client. ` +
-            `Backing off to prevent excessive requests. ` +
-            `For more information visit the troubleshooting guide: https://electric-sql.com/docs/guides/troubleshooting`
-        )
-      }
-
       await new Promise((resolve) => setTimeout(resolve, delayMs))
 
-      // Clear timestamps after backoff so we measure fresh
-      this.#recentRequestTimestamps = []
+      // Clear entries after backoff so we measure fresh
+      this.#recentRequestEntries = []
     }
   }
 

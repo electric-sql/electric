@@ -408,11 +408,14 @@ describe(`ShapeStream`, () => {
     expect(changeMessage!.value).not.toHaveProperty(`created_at`)
   })
 
-  it(`should detect fast retry loops and apply backoff`, async () => {
+  it(`should detect fast retry loops, clear caches, and eventually throw`, async () => {
     // Simulate a misconfigured proxy that always returns 409,
-    // causing a tight retry loop
+    // causing a tight retry loop. On first detection the client should
+    // clear caches and reset; if that doesn't help, it should eventually
+    // throw with diagnostic information.
     let requestCount = 0
     let caughtError: Error | null = null
+    const warnSpy = vi.spyOn(console, `warn`).mockImplementation(() => {})
 
     const fetchMock = (
       _input: RequestInfo | URL,
@@ -446,8 +449,9 @@ describe(`ShapeStream`, () => {
     stream.subscribe(() => {})
 
     // Wait for the fast loop to be detected and error thrown.
-    // With defaults (5 loops, 100ms base backoff, 5s max), this should
-    // complete well within 15s even with jitter.
+    // The client clears caches on first detection and retries, then
+    // applies exponential backoff on subsequent detections before
+    // eventually throwing.
     await vi.waitFor(
       () => {
         expect(caughtError).not.toBe(null)
@@ -455,9 +459,17 @@ describe(`ShapeStream`, () => {
       { timeout: 15_000 }
     )
 
-    // The error message should help diagnose the proxy misconfiguration
+    // The error message should help diagnose the issue
     expect(caughtError!.message).toContain(`fast retry loop`)
+    expect(caughtError!.message).toContain(`caches were cleared`)
     expect(caughtError!.message).toContain(`proxy`)
     expect(caughtError!.message).toContain(`troubleshooting`)
+
+    // Should have logged a warning on first detection about clearing caches
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining(`Clearing client-side caches`)
+    )
+
+    warnSpy.mockRestore()
   })
 })
