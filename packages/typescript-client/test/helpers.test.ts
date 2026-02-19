@@ -24,6 +24,13 @@ describe(`helpers`, () => {
     },
   } as Message
 
+  const eventMsg = {
+    headers: {
+      event: `move-out`,
+      patterns: [{ pos: 0, value: `test` }],
+    },
+  } as Message
+
   it(`should correctly detect ChangeMessages`, () => {
     expect(isChangeMessage(changeMsg)).toBe(true)
     expect(isControlMessage(changeMsg)).toBe(false)
@@ -40,6 +47,21 @@ describe(`helpers`, () => {
     expect(isUpToDateMessage(upToDateMsg)).toBe(true)
     expect(isUpToDateMessage(mustRefetchMsg)).toBe(false)
     expect(isUpToDateMessage(changeMsg)).toBe(false)
+  })
+
+  it(`should not classify EventMessages as ControlMessages`, () => {
+    expect(isControlMessage(eventMsg)).toBe(false)
+    expect(isChangeMessage(eventMsg)).toBe(false)
+    expect(isUpToDateMessage(eventMsg)).toBe(false)
+  })
+
+  it(`should not classify messages without headers as ControlMessages`, () => {
+    // Messages without headers can arrive from proxy/CDN interference
+    // or unexpected server responses (e.g. 409 during initialization).
+    const noHeadersMsg = {} as unknown as Message
+    expect(isControlMessage(noHeadersMsg)).toBe(false)
+    expect(isChangeMessage(noHeadersMsg)).toBe(false)
+    expect(isUpToDateMessage(noHeadersMsg)).toBe(false)
   })
 
   describe(`bigintSafeStringify`, () => {
