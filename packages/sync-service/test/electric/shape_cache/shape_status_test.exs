@@ -142,13 +142,14 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
       assert {[^shape2], +0.0} = ShapeStatus.least_recently_used(state, _count = 1)
     end
 
-    test "returns shape first created if update_last_read_time_to_now has not been called", %{
-      state: state
-    } do
-      {:ok, shape1} = ShapeStatus.add_shape(state, shape!())
-      {:ok, _shape2} = ShapeStatus.add_shape(state, shape2!())
+    test "does not return shapes which have only just been created and didn't have update_last_read_time_to_now called",
+         %{
+           state: state
+         } do
+      {:ok, _} = ShapeStatus.add_shape(state, shape!())
+      {:ok, _} = ShapeStatus.add_shape(state, shape2!())
 
-      assert {[^shape1], _} = ShapeStatus.least_recently_used(state, _count = 1)
+      assert {[], _} = ShapeStatus.least_recently_used(state, _count = 1)
     end
 
     test "returns empty list if no shapes have been added", %{state: state} do
@@ -158,6 +159,11 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
     test "returns empty list if all shapes have been deleted", %{state: state} do
       {:ok, shape1} = ShapeStatus.add_shape(state, shape!())
       {:ok, shape2} = ShapeStatus.add_shape(state, shape2!())
+
+      now = System.monotonic_time()
+      ShapeStatus.update_last_read_time(state, shape2, now)
+      ShapeStatus.update_last_read_time(state, shape1, now + 10)
+
       ShapeStatus.remove_shape(state, shape1)
       ShapeStatus.remove_shape(state, shape2)
 
@@ -167,6 +173,10 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
     test "returns all shapes when count exceeds total shapes", %{state: state} do
       {:ok, shape1} = ShapeStatus.add_shape(state, shape!())
       {:ok, shape2} = ShapeStatus.add_shape(state, shape2!())
+
+      now = System.monotonic_time()
+      ShapeStatus.update_last_read_time(state, shape2, now)
+      ShapeStatus.update_last_read_time(state, shape1, now + 10)
 
       {handles, _} = ShapeStatus.least_recently_used(state, _count = 100)
       assert length(handles) == 2
