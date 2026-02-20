@@ -1,5 +1,12 @@
 # @core/sync-service
 
+## 1.4.7
+
+### Patch Changes
+
+- 9f57a8b: Fix parameter validation rejecting valid sequential params when there are 10 or more of them, due to map keys being iterated in lexicographic rather than numeric order.
+- 7c2d1fe: Fix an infinite recursive loop that API request processes may get stuck in when the consumer process is slow to start or dies unexpectedly, without cleaning up after itself.
+
 ## 1.4.6
 
 ### Patch Changes
