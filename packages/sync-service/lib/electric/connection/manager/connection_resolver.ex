@@ -110,7 +110,7 @@ defmodule Electric.Connection.Manager.ConnectionResolver do
   end
 
   defp populate_connection_opts(conn_opts) do
-    conn_opts |> populate_ssl_opts() |> populate_tcp_opts()
+    conn_opts |> populate_ssl_opts() |> populate_tcp_opts() |> populate_socket_dir()
   end
 
   defp populate_ssl_opts(connection_opts) do
@@ -120,7 +120,12 @@ defmodule Electric.Connection.Manager.ConnectionResolver do
           false
 
         _ ->
-          ssl_verify_opts(connection_opts[:hostname], connection_opts[:cacertfile])
+          # Unix sockets don't use SSL
+          if connection_opts[:socket_dir] do
+            false
+          else
+            ssl_verify_opts(connection_opts[:hostname], connection_opts[:cacertfile])
+          end
       end
 
     Keyword.put(connection_opts, :ssl, ssl_opts)
@@ -181,6 +186,22 @@ defmodule Electric.Connection.Manager.ConnectionResolver do
       end
 
     Keyword.put(connection_opts, :socket_options, tcp_opts)
+  end
+
+  defp populate_socket_dir(connection_opts) do
+    case connection_opts[:socket_dir] do
+      nil ->
+        connection_opts
+
+      socket_dir ->
+        # When using Unix socket, we need to:
+        # 1. Replace hostname with socket_dir
+        # 2. Remove the port (not used with Unix sockets)
+        connection_opts
+        |> Keyword.delete(:hostname)
+        |> Keyword.delete(:port)
+        |> Keyword.put(:socket_dir, socket_dir)
+    end
   end
 
   defp mutate_based_on_error(%Postgrex.Error{message: "ssl not available"} = error, conn_opts) do

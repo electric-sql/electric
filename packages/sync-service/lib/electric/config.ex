@@ -300,6 +300,29 @@ defmodule Electric.Config do
 
       iex> parse_postgresql_uri("postgresql://electric@localhost/db?replication=off")
       {:error, "unsupported \"replication\" query option. Electric opens both a replication connection and regular connections to Postgres as needed"}
+
+      iex> parse_postgresql_uri("postgresql://user:password@localhost/dbname?host=/cloudsql/project:region:instance") |> deobfuscate()
+      {:ok, [
+        database: "dbname",
+        username: "user",
+        password: "password",
+        socket_dir: "/cloudsql/project:region:instance"
+      ]}
+
+      iex> parse_postgresql_uri("postgresql://postgres@localhost/mydb?host=/var/run/postgresql")
+      {:ok, [
+        database: "mydb",
+        username: "postgres",
+        socket_dir: "/var/run/postgresql"
+      ]}
+
+      iex> parse_postgresql_uri("postgresql://user@localhost/db?host=/tmp&sslmode=disable")
+      {:ok, [
+        database: "db",
+        username: "user",
+        socket_dir: "/tmp",
+        sslmode: :disable
+      ]}
   """
   @spec parse_postgresql_uri(binary) :: {:ok, keyword} | {:error, binary}
   def parse_postgresql_uri(uri_str) do
@@ -310,15 +333,27 @@ defmodule Electric.Config do
          :ok <- validate_url_host(host),
          {:ok, {username, password}} <- parse_url_userinfo(userinfo),
          {:ok, options} <- parse_url_query(query) do
-      conn_params =
-        Enum.reject(
+      # When using Unix sockets (socket_dir present), exclude hostname and port
+      base_params =
+        if Keyword.has_key?(options, :socket_dir) do
+          [
+            database: parse_database(path, username) |> URI.decode(),
+            username: URI.decode(username),
+            password: if(password, do: password |> URI.decode() |> Electric.Utils.wrap_in_fun())
+          ]
+        else
           [
             hostname: host,
             port: port || 5432,
             database: parse_database(path, username) |> URI.decode(),
             username: URI.decode(username),
             password: if(password, do: password |> URI.decode() |> Electric.Utils.wrap_in_fun())
-          ] ++ options,
+          ]
+        end
+
+      conn_params =
+        Enum.reject(
+          base_params ++ options,
           fn {_key, val} -> is_nil(val) end
         )
 
@@ -368,6 +403,13 @@ defmodule Electric.Config do
     case URI.decode_query(query_str) do
       empty when map_size(empty) == 0 ->
         {:ok, []}
+
+      %{"host" => socket_dir, "sslmode" => sslmode}
+      when sslmode in ~w[disable allow prefer require] ->
+        {:ok, socket_dir: socket_dir, sslmode: String.to_existing_atom(sslmode)}
+
+      %{"host" => socket_dir} ->
+        {:ok, socket_dir: socket_dir}
 
       %{"sslmode" => sslmode} when sslmode in ~w[disable allow prefer require] ->
         {:ok, sslmode: String.to_existing_atom(sslmode)}
