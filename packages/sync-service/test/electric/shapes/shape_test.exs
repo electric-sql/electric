@@ -731,6 +731,22 @@ defmodule Electric.Shapes.ShapeTest do
                  params: %{"0" => "10", "4" => "5"}
                )
     end
+
+    @tag with_sql: [
+           "CREATE TABLE IF NOT EXISTS item (id INT PRIMARY KEY, value INT NOT NULL)"
+         ]
+    test "sequential parameters with 10+ keys are accepted", %{inspector: inspector} do
+      params = Map.new(1..20, fn i -> {"#{i}", "#{i * 10}"} end)
+
+      where = Enum.map_join(1..20, " OR ", fn i -> "value = $#{i}" end)
+
+      assert {:ok, _} =
+               Shape.new("item",
+                 inspector: inspector,
+                 where: where,
+                 params: params
+               )
+    end
   end
 
   describe "new!/2" do
