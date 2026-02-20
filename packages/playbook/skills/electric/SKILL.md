@@ -1,0 +1,118 @@
+---
+name: electric
+description: Electric sync engine for Postgres - routes to appropriate skills for building local-first apps
+triggers:
+  - electric
+  - electricsql
+  - local-first
+  - postgres sync
+  - real-time sync
+  - tanstack db
+  - durable streams
+metadata:
+  sources:
+    - AGENTS.md
+    - website/docs/quickstart.md
+---
+
+# Electric Ecosystem
+
+Build local-first apps with real-time Postgres sync. The ecosystem has three main components:
+
+```
+Postgres → Electric → Durable Streams → TanStack DB (client)
+```
+
+| Component           | Purpose                                                            | Package                   |
+| ------------------- | ------------------------------------------------------------------ | ------------------------- |
+| **Electric**        | Postgres sync engine, streams changes as "shapes" over HTTP        | `@electric-sql/client`    |
+| **Durable Streams** | Reliable message streaming with exactly-once delivery              | `@durable-streams/client` |
+| **TanStack DB**     | Client-side collections with live queries and optimistic mutations | `@tanstack/db`            |
+
+## Loading Skills
+
+Each ecosystem has its own playbook package. Load skills as needed:
+
+**TanStack DB** (live queries, mutations, collections, schemas):
+
+```bash
+npx @tanstack/db-playbook list
+npx @tanstack/db-playbook show <skill-name>
+```
+
+**Durable Streams** (streaming, state sync):
+
+```bash
+npx @durable-streams/playbook list
+npx @durable-streams/playbook show <skill-name>
+```
+
+**Electric** (shapes, auth, deployment):
+
+```bash
+npx @electric-sql/playbook list
+npx @electric-sql/playbook show <skill-name>
+```
+
+### Electric Skills Quick Reference
+
+| Skill                           | When to use                                           |
+| ------------------------------- | ----------------------------------------------------- |
+| `tanstack-start-quickstart`     | Setting up TanStack Start + Electric from scratch     |
+| `electric-quickstart`           | General getting started guide                         |
+| `electric-proxy`                | Implementing proxy routes for shapes                  |
+| `electric-tanstack-integration` | Deep TanStack DB patterns (collections, live queries) |
+| `electric-auth`                 | Authentication & authorization patterns               |
+| `electric-security-check`       | Security audit before production                      |
+| `deploying-electric`            | Deployment options (cloud, self-hosted)               |
+| `electric-go-live`              | Production readiness checklist                        |
+
+## Security Essentials
+
+1. **Never expose secrets to browser** - `ELECTRIC_SECRET` stays server-side
+2. **Electric is public by default** - always put it behind an auth proxy
+3. **Server defines shapes** - clients request from proxy, not Electric directly
+
+## Quick Example
+
+**Server proxy** (defines what data users can access):
+
+```typescript
+origin.searchParams.set('table', 'todos')
+origin.searchParams.set('where', `user_id = $1`)
+origin.searchParams.set('params', JSON.stringify([user.id]))
+```
+
+**Client collection** (syncs and enables mutations):
+
+```typescript
+const todoCollection = createCollection(
+  electricCollectionOptions({
+    id: 'todos',
+    schema: todoSchema,
+    shapeOptions: { url: '/api/todos' },
+    onInsert: async ({ transaction }) => {
+      const { txid } = await api.todos.create(transaction.mutations[0].modified)
+      return { txid }
+    },
+  })
+)
+```
+
+**Live query** (reactive, sub-ms updates):
+
+```typescript
+const { data: todos } = useLiveQuery((q) =>
+  q
+    .from({ todo: todoCollection })
+    .where(({ todo }) => eq(todo.completed, false))
+    .orderBy(({ todo }) => todo.created_at, 'desc')
+)
+```
+
+## References
+
+- [Electric Docs](https://electric-sql.com/docs)
+- [TanStack DB](https://tanstack.com/db)
+- [Durable Streams](https://github.com/durable-streams/durable-streams)
+- [GitHub](https://github.com/electric-sql/electric)

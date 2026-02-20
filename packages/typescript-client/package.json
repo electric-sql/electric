@@ -47,7 +47,8 @@
   },
   "files": [
     "dist",
-    "src"
+    "src",
+    "skills"
   ],
   "homepage": "https://electric-sql.com",
   "license": "Apache-2.0",
