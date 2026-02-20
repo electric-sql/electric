@@ -350,6 +350,38 @@ GRANT SELECT ON schema.tablename TO electric_user;
 ALTER TABLE schema.tablename OWNER TO electric_user;
 ```
 
+### Vercel CDN caching &mdash; why are my shapes not updating on Vercel?
+
+Vercel's CDN can cache responses when you proxy requests to an external Electric service using [rewrites](https://vercel.com/docs/edge-network/caching). Vercel's [cache keys are not configurable](https://vercel.com/docs/cdn-cache/purge#cache-keys) and may not differentiate between requests with different query parameters. Since Electric uses query parameters like `offset` and `handle` to track shape log position, this can result in stale or incorrect cached responses being served instead of reaching your Electric backend.
+
+##### Solution &mdash; disable Vercel CDN caching for Electric routes
+
+Add the following to your `vercel.json` to disable CDN caching for Electric API routes:
+
+```json
+{
+  "headers": [
+    {
+      "source": "/api/electric/(.*)",
+      "headers": [
+        {
+          "key": "CDN-Cache-Control",
+          "value": "no-store"
+        },
+        {
+          "key": "Vercel-CDN-Cache-Control",
+          "value": "no-store"
+        }
+      ]
+    }
+  ]
+}
+```
+
+Adjust the `source` pattern to match the route where your Electric proxy is mounted.
+
+The [`Vercel-CDN-Cache-Control`](https://vercel.com/docs/headers/cache-control-headers#cdn-cache-control-header) header specifically controls Vercel's edge cache without affecting browser caching or other CDNs. The `CDN-Cache-Control` header is a [standard](https://httpwg.org/specs/rfc9213.html) that also controls other CDN caches upstream of Vercel. Together, these ensure that shape requests always reach your Electric backend.
+
 ## IPv6 support
 
 If Electric or Postgres are running behind an IPv6 network, you might have to perform additional configurations on your network.
