@@ -1,6 +1,7 @@
 defmodule Electric.Shapes.Api.Params do
   use Ecto.Schema
 
+  alias Electric.Replication.Eval.Decomposer
   alias Electric.Replication.LogOffset
   alias Electric.Shapes.Api
   alias Electric.Shapes.Shape
@@ -157,6 +158,7 @@ defmodule Electric.Shapes.Api.Params do
     field(@tmp_compaction_flag, :boolean, default: false)
     field(:live_sse, :boolean, default: false)
     field(:log, Ecto.Enum, values: [:changes_only, :full], default: :full)
+    field(:electric_protocol_version, :integer, default: 1)
 
     embeds_one(:subset, SubsetParams)
   end
@@ -327,7 +329,9 @@ defmodule Electric.Shapes.Api.Params do
            log_mode: fetch_field!(changeset, :log)
          ) do
       {:ok, shape} ->
-        put_change(changeset, :shape_definition, shape)
+        changeset
+        |> put_change(:shape_definition, shape)
+        |> validate_protocol_version(shape)
 
       {:error, :connection_not_available} ->
         add_error(
@@ -363,5 +367,38 @@ defmodule Electric.Shapes.Api.Params do
         ),
       required: false
     )
+  end
+
+  defp validate_protocol_version(changeset, shape) do
+    protocol_version = get_field(changeset, :electric_protocol_version)
+
+    if protocol_version < 2 and requires_protocol_v2?(shape) do
+      add_error(
+        changeset,
+        :where,
+        "WHERE clauses with OR or NOT combined with subqueries require protocol version 2. " <>
+          "Please upgrade your client or set the Electric-Protocol-Version: 2 header."
+      )
+    else
+      changeset
+    end
+  end
+
+  defp requires_protocol_v2?(%Shape{where: nil}), do: false
+  defp requires_protocol_v2?(%Shape{shape_dependencies: []}), do: false
+
+  defp requires_protocol_v2?(%Shape{where: where}) do
+    case Decomposer.decompose(where.eval) do
+      {:ok, decomposition} ->
+        has_multiple_disjuncts = length(decomposition.disjuncts) > 1
+
+        has_negated =
+          Enum.any?(decomposition.subexpressions, fn {_pos, sub} -> sub.negated end)
+
+        has_multiple_disjuncts or has_negated
+
+      _ ->
+        false
+    end
   end
 end

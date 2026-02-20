@@ -284,27 +284,18 @@ defmodule Electric.Shapes.Consumer do
     feature_flags = Electric.StackConfig.lookup(state.stack_id, :feature_flags, [])
     tagged_subqueries_enabled? = "tagged_subqueries" in feature_flags
 
-    # We need to invalidate the consumer in the following cases:
-    # - tagged subqueries are disabled since we cannot support causally correct event processing of 3+ level dependency trees
-    #   so we just invalidating this middle shape instead
-    # - the where clause has an OR combined with the subquery so we can't tell if the move ins/outs actually affect the shape or not
-    # - the where clause has a NOT combined with the subquery (e.g. NOT IN) since move-in to the subquery
-    #   should cause move-out from the outer shape, which isn't implemented
-    # - the shape has multiple subqueries at the same level since we can't correctly determine
-    #   which dependency caused the move-in/out
-    should_invalidate? =
-      not tagged_subqueries_enabled? or state.or_with_subquery? or state.not_with_subquery? or
-        length(state.shape.shape_dependencies) > 1
-
-    if should_invalidate? do
+    if not tagged_subqueries_enabled? do
       stop_and_clean(state)
     else
-      {state, notification} =
-        state
-        |> MoveHandling.process_move_ins(dep_handle, move_in)
-        |> MoveHandling.process_move_outs(dep_handle, move_out)
+      {state, move_in_notification} =
+        MoveHandling.process_move_ins(state, dep_handle, move_in)
 
-      notify_new_changes(state, notification)
+      state = notify_new_changes(state, move_in_notification)
+
+      {state, move_out_notification} =
+        MoveHandling.process_move_outs(state, dep_handle, move_out)
+
+      state = notify_new_changes(state, move_out_notification)
 
       {:noreply, state}
     end

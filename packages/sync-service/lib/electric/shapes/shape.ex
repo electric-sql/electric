@@ -264,14 +264,24 @@ defmodule Electric.Shapes.Shape do
     end
   end
 
-  defp fill_tag_structure(shape) do
-    {tag_structure, comparison_expressions} = SubqueryMoves.move_in_tag_structure(shape)
+  defp fill_tag_structure(%__MODULE__{where: nil} = shape), do: shape
+  defp fill_tag_structure(%__MODULE__{shape_dependencies: []} = shape), do: shape
 
-    %{
-      shape
-      | tag_structure: tag_structure,
-        subquery_comparison_expressions: comparison_expressions
-    }
+  defp fill_tag_structure(shape) do
+    case Electric.Replication.Eval.Decomposer.decompose(shape.where.eval) do
+      {:ok, decomposition} ->
+        {tag_structure, comparison_expressions} =
+          SubqueryMoves.build_tag_structure_from_dnf(decomposition, shape)
+
+        %{
+          shape
+          | tag_structure: tag_structure,
+            subquery_comparison_expressions: comparison_expressions
+        }
+
+      {:error, reason} ->
+        raise "DNF decomposition failed: #{inspect(reason)}"
+    end
   end
 
   defp validate_where_clause(nil, _opts, _refs), do: {:ok, nil, []}
@@ -583,8 +593,23 @@ defmodule Electric.Shapes.Shape do
     used_extra_refs =
       if is_struct(change, Changes.NewRecord), do: elem(extra_refs, 1), else: elem(extra_refs, 0)
 
-    if WhereClause.includes_record?(where, record, used_extra_refs) do
+    dnf_context = opts[:dnf_context]
+
+    {included, active_conditions} =
+      if dnf_context do
+        Electric.Shapes.Consumer.DnfContext.evaluate_record(
+          dnf_context,
+          record,
+          where.used_refs,
+          used_extra_refs
+        )
+      else
+        {WhereClause.includes_record?(where, record, used_extra_refs), nil}
+      end
+
+    if included do
       change
+      |> maybe_set_active_conditions(active_conditions)
       |> fill_move_tags(shape, opts[:stack_id], opts[:shape_handle])
       |> filter_change_columns(selected_columns)
       |> List.wrap()
@@ -599,8 +624,32 @@ defmodule Electric.Shapes.Shape do
         opts
       ) do
     {extra_refs_old, extra_refs_new} = opts[:extra_refs] || {%{}, %{}}
-    old_record_in_shape = WhereClause.includes_record?(where, old_record, extra_refs_old)
-    new_record_in_shape = WhereClause.includes_record?(where, record, extra_refs_new)
+    dnf_context = opts[:dnf_context]
+
+    {old_record_in_shape, new_record_in_shape, active_conditions} =
+      if dnf_context do
+        {old_in, _old_conds} =
+          Electric.Shapes.Consumer.DnfContext.evaluate_record(
+            dnf_context,
+            old_record,
+            where.used_refs,
+            extra_refs_old
+          )
+
+        {new_in, new_conds} =
+          Electric.Shapes.Consumer.DnfContext.evaluate_record(
+            dnf_context,
+            record,
+            where.used_refs,
+            extra_refs_new
+          )
+
+        {old_in, new_in, new_conds}
+      else
+        old_in = WhereClause.includes_record?(where, old_record, extra_refs_old)
+        new_in = WhereClause.includes_record?(where, record, extra_refs_new)
+        {old_in, new_in, nil}
+      end
 
     converted_changes =
       case {old_record_in_shape, new_record_in_shape} do
@@ -611,10 +660,16 @@ defmodule Electric.Shapes.Shape do
       end
 
     converted_changes
+    |> Enum.map(&maybe_set_active_conditions(&1, active_conditions))
     |> Enum.map(&fill_move_tags(&1, shape, opts[:stack_id], opts[:shape_handle]))
     |> Enum.map(&filter_change_columns(&1, selected_columns))
     |> Enum.filter(&should_keep_change?/1)
   end
+
+  defp maybe_set_active_conditions(change, nil), do: change
+
+  defp maybe_set_active_conditions(change, active_conditions),
+    do: %{change | active_conditions: active_conditions}
 
   defp filter_change_columns(change, nil), do: change
 
@@ -669,6 +724,9 @@ defmodule Electric.Shapes.Shape do
   defp make_tags_from_pattern(patterns, record, stack_id, shape_handle) do
     Enum.map(patterns, fn pattern ->
       Enum.map(pattern, fn
+        nil ->
+          nil
+
         column_name when is_binary(column_name) ->
           SubqueryMoves.make_value_hash(stack_id, shape_handle, Map.get(record, column_name))
 
@@ -680,7 +738,6 @@ defmodule Electric.Shapes.Shape do
 
           SubqueryMoves.make_value_hash_raw(stack_id, shape_handle, Enum.join(column_parts))
       end)
-      |> Enum.join("/")
     end)
   end
 

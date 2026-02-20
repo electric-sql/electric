@@ -259,4 +259,112 @@ defmodule Support.PgExpressionGenerator do
     ]
     |> one_of()
   end
+
+  @doc """
+  Generates arbitrary WHERE clause expressions by nesting datatype expressions
+  (including column references) with AND, OR, NOT, and boolean predicates at
+  multiple depth levels.
+
+  Returns `{sql, refs}` tuples where `refs` is the map of column references
+  needed to parse the expression.
+
+  This exercises the full combinatorial space — numeric, string, bool, and array
+  expressions mixed together with column refs and logical connectives — so that
+  any parseable WHERE clause can be verified for round-trip fidelity.
+  """
+  def where_clause_generator do
+    # Column-ref-aware leaf expressions that mix literals with column references
+    refs = %{
+      ["int_col"] => :int4,
+      ["float_col"] => :float8,
+      ["text_col"] => :text,
+      ["bool_col"] => :bool,
+      ["int_arr"] => {:array, :int4},
+      ["text_arr"] => {:array, :text}
+    }
+
+    int_ref = constant(~s|"int_col"|)
+    float_ref = constant(~s|"float_col"|)
+    text_ref = constant(~s|"text_col"|)
+    bool_ref = constant(~s|"bool_col"|)
+    int_arr_ref = constant(~s|"int_arr"|)
+    text_arr_ref = constant(~s|"text_arr"|)
+
+    # Mix column refs with literals for each type
+    int_or_ref = one_of([int_gen(), int_ref])
+    numeric_or_ref = one_of([numeric_gen(), int_ref, float_ref])
+    str_or_ref = one_of([str_gen(), text_ref])
+    bool_or_ref = one_of([bool_gen(), bool_ref])
+
+    numeric_with_refs =
+      one_of([
+        expression_gen(nullable_type_gen(numeric_or_ref), [
+          {:combine_op, numeric_op_gen()},
+          {:unary_op, numeric_unary_op_gen()},
+          {:comparison_op, comparison_op_gen()},
+          {:range_op, range_comparison_op_gen()},
+          {:membership_op, membership_op_gen()}
+        ]),
+        expression_gen(nullable_type_gen(int_or_ref), [
+          {:combine_op, int_op_gen()},
+          {:unary_op, int_unary_op_gen()},
+          {:comparison_op, comparison_op_gen()},
+          {:range_op, range_comparison_op_gen()},
+          {:membership_op, membership_op_gen()}
+        ])
+      ])
+
+    string_with_refs =
+      expression_gen(nullable_type_gen(str_or_ref), [
+        {:combine_op, string_op_gen()},
+        {:function_op, string_function_op_gen()},
+        {:comparison_op, string_comparison_op_gen()},
+        {:comparison_op, comparison_op_gen()},
+        {:range_op, range_comparison_op_gen()},
+        {:membership_op, membership_op_gen()}
+      ])
+
+    bool_with_refs =
+      expression_gen(nullable_type_gen(bool_or_ref), [
+        {:comparison_op, bool_comparison_op_gen()},
+        {:unary_op, bool_unary_op_gen()},
+        {:predicate_op, predicate_op_gen()}
+      ])
+
+    array_with_refs =
+      one_of([
+        expression_gen(one_of([int_arr_ref, array_gen(int_gen(), dimension: 1)]), [
+          {:comparison_op, array_comparison_op_gen()},
+          {:function_op, array_function_op_gen()},
+          {:membership_op, membership_op_gen()}
+        ]),
+        expression_gen(one_of([text_arr_ref, array_gen(str_gen(), dimension: 1)]), [
+          {:comparison_op, array_comparison_op_gen()},
+          {:function_op, array_function_op_gen()},
+          {:membership_op, membership_op_gen()}
+        ])
+      ])
+
+    leaf =
+      one_of([
+        numeric_with_refs,
+        string_with_refs,
+        bool_with_refs,
+        array_with_refs
+      ])
+
+    sql_gen =
+      nested_expression_gen(
+        leaf,
+        [
+          {:combine_op, bool_comparison_op_gen()},
+          {:unary_op, bool_unary_op_gen()},
+          {:predicate_op, predicate_op_gen()}
+        ],
+        max_nesting: 3
+      )
+
+    # Return {sql, refs} tuples
+    map(sql_gen, &{&1, refs})
+  end
 end
