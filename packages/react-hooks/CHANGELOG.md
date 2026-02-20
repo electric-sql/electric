@@ -367,6 +367,7 @@
   Electric's TypeScript client is currently tightly coupled to PostgreSQL-specific options in its `ShapeStreamOptions` interface. As Electric plans to support multiple data sources in the future, we need to separate protocol-level options from source-specific options.
 
   ## Changes
+
   1. Created a new `PostgresParams` type to define PostgreSQL-specific parameters:
      - `table`: The root table for the shape
      - `where`: Where clauses for the shape

@@ -89,6 +89,7 @@
   **Root cause:** When a 409 response arrives, the client marks the old handle as expired and fetches with a new handle. If a proxy ignores the `expired_handle` cache buster parameter and returns a stale cached response containing the old handle, the client would accept it and enter an infinite 409 loop.
 
   **The fix:**
+
   - In `#onInitialResponse`: Don't accept a shape handle from the response if it matches the expired handle in the expired shapes cache
   - In `getNextChunkUrl` (prefetch): Don't prefetch the next chunk if the response handle equals the `expired_handle` from the request URL
   - Added console warnings when this situation is detected to help developers debug proxy misconfigurations
@@ -112,6 +113,7 @@
   **Root cause:** When a page is hidden, the stream pauses and aborts in-flight prefetch requests. The aborted promises remained in the PrefetchQueue's internal Map. When the page became visible and the stream resumed, `consume()` returned the stale aborted promise, causing an AbortError to propagate to ShapeStream and stop syncing.
 
   **The fix:**
+
   - `PrefetchQueue.consume()` now checks if the request's abort signal is already aborted before returning it
   - `PrefetchQueue.abort()` now clears the internal map after aborting controllers
   - The fetch wrapper clears `prefetchQueue` after calling `abort()` to ensure fresh requests
@@ -158,6 +160,7 @@
 - b377010: Fix race condition where collections get stuck and stop reconnecting after rapid tab switching, particularly in Firefox.
 
   **Root cause:** Two race conditions in the pause/resume state machine:
+
   1. `#resume()` only checked for `paused` state, but `#pause()` sets an intermediate `pause-requested` state. When visibility changes rapidly, `#resume()` is called before the abort completes, leaving the stream stuck.
   2. Stale abort completions could overwrite the `active` state after `#resume()` has already started a new request.
 
@@ -335,6 +338,7 @@
   ```
 
   ## Common Use Cases
+
   - Authentication tokens that need to be refreshed
   - User-specific parameters that may change
   - Dynamic filtering based on current state
@@ -387,6 +391,7 @@
   ```
 
   ## Common Use Cases
+
   - Authentication tokens that need to be refreshed
   - User-specific parameters that may change
   - Dynamic filtering based on current state
@@ -420,6 +425,7 @@
   Electric's TypeScript client is currently tightly coupled to PostgreSQL-specific options in its `ShapeStreamOptions` interface. As Electric plans to support multiple data sources in the future, we need to separate protocol-level options from source-specific options.
 
   ## Changes
+
   1. Created a new `PostgresParams` type to define PostgreSQL-specific parameters:
      - `table`: The root table for the shape
      - `where`: Where clauses for the shape
@@ -471,6 +477,7 @@
 ### Patch Changes
 
 - 5a7866f: refactor: improve error handling with new error classes & stream control
+
   - Add `onError` handler to ShapeStream for centralized error handling
   - Add new error classes:
     - MissingShapeUrlError
