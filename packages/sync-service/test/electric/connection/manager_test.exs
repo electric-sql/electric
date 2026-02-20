@@ -53,7 +53,8 @@ defmodule Electric.Connection.ConnectionManagerTest do
       tweaks: [],
       max_shapes: nil,
       persistent_kv: ctx.persistent_kv,
-      stack_events_registry: stack_events_registry
+      stack_events_registry: stack_events_registry,
+      lock_breaker_guard: ctx[:lock_breaker_guard]
     ]
 
     core_sup =
@@ -414,6 +415,98 @@ defmodule Electric.Connection.ConnectionManagerTest do
     end
   end
 
+  describe "lock_breaker_guard" do
+    test "skips lock breaker when guard returns false", ctx do
+      test_pid = self()
+
+      # Hold the advisory lock so the manager stays in acquiring_lock state
+      start_supervised!({
+        Task,
+        fn ->
+          DBConnection.run(ctx.db_conn, fn conn ->
+            Postgrex.query!(
+              conn,
+              "SELECT pg_advisory_lock(hashtext('#{ctx.slot_name}'))",
+              []
+            )
+
+            send(test_pid, :lock_held)
+            Process.sleep(:infinity)
+          end)
+        end
+      })
+
+      assert_receive :lock_held
+
+      start_connection_manager(Map.put(ctx, :lock_breaker_guard, fn -> false end))
+
+      # Wait for lock acquisition to start
+      assert_receive {:stack_status, _, :waiting_for_connection_lock}, 5000
+
+      manager_pid = GenServer.whereis(Connection.Manager.name(ctx.stack_id))
+
+      # Wait for pg_info_obtained to be processed (sets replication_pg_backend_pid)
+      %{replication_lock_timer: tref} = wait_for_pg_backend_pid(manager_pid)
+      assert not is_nil(tref)
+
+      :erlang.cancel_timer(tref)
+
+      log =
+        ExUnit.CaptureLog.capture_log(fn ->
+          send(manager_pid, {:timeout, tref, {:check_status, :replication_lock}})
+          :pong = Connection.Manager.ping(manager_pid)
+        end)
+
+      assert log =~ "Lock breaker skipped"
+    end
+
+    test "allows lock breaker when no guard is set", ctx do
+      test_pid = self()
+
+      # Hold the advisory lock so the manager stays in acquiring_lock state
+      start_supervised!({
+        Task,
+        fn ->
+          DBConnection.run(ctx.db_conn, fn conn ->
+            Postgrex.query!(
+              conn,
+              "SELECT pg_advisory_lock(hashtext('#{ctx.slot_name}'))",
+              []
+            )
+
+            send(test_pid, :lock_held)
+            Process.sleep(:infinity)
+          end)
+        end
+      })
+
+      assert_receive :lock_held
+
+      start_connection_manager(ctx)
+
+      # Wait for lock acquisition to start
+      assert_receive {:stack_status, _, :waiting_for_connection_lock}, 5000
+
+      manager_pid = GenServer.whereis(Connection.Manager.name(ctx.stack_id))
+
+      # Wait for pg_info_obtained to be processed (sets replication_pg_backend_pid)
+      %{replication_lock_timer: tref} = wait_for_pg_backend_pid(manager_pid)
+
+      assert not is_nil(tref)
+
+      :erlang.cancel_timer(tref)
+
+      log =
+        ExUnit.CaptureLog.capture_log(fn ->
+          send(manager_pid, {:timeout, tref, {:check_status, :replication_lock}})
+          :pong = Connection.Manager.ping(manager_pid)
+        end)
+
+      # Without a guard, the lock breaker should attempt to run (no "skipped" message)
+      refute log =~ "Lock breaker skipped"
+    end
+  end
+
   defp wait_until_active(stack_id) do
     assert_receive {:stack_status, _, :waiting_for_connection_lock}
     assert_receive {:stack_status, _, :connection_lock_acquired}
@@ -427,5 +520,16 @@ defmodule Electric.Connection.ConnectionManagerTest do
     |> Electric.Postgres.ReplicationClient.name()
     |> GenServer.whereis()
     |> Process.monitor()
+  end
+
+  defp wait_for_pg_backend_pid(manager_pid, attempts \\ 100) do
+    state = :sys.get_state(manager_pid)
+
+    if is_nil(state.replication_pg_backend_pid) and attempts > 0 do
+      Process.sleep(10)
+      wait_for_pg_backend_pid(manager_pid, attempts - 1)
+    else
+      state
+    end
   end
 end
