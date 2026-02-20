@@ -352,7 +352,7 @@ ALTER TABLE schema.tablename OWNER TO electric_user;
 
 ### Vercel CDN caching &mdash; why are my shapes not updating on Vercel?
 
-Vercel's CDN [ignores query strings for static files](https://vercel.com/docs/cdn-cache/purge#cache-keys) when generating cache keys, and this behaviour is not configurable. This means that different shape requests (which use query parameters like `offset`, `handle`, etc.) can receive stale cached responses instead of hitting your Electric backend.
+Vercel's CDN can cache responses when you proxy requests to an external Electric service using [rewrites](https://vercel.com/docs/edge-network/caching). Vercel's [cache keys are not configurable](https://vercel.com/docs/cdn-cache/purge#cache-keys) and may not differentiate between requests with different query parameters. Since Electric uses query parameters like `offset` and `handle` to track shape log position, this can result in stale or incorrect cached responses being served instead of reaching your Electric backend.
 
 ##### Solution &mdash; disable Vercel CDN caching for Electric routes
 
