@@ -69,14 +69,17 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Query do
     ]
 
   def prepare!(conn, opts) do
-    case Keyword.get(opts, :mode, :readwrite) do
-      :readwrite ->
+    case {Keyword.get(opts, :mode, :readwrite), Keyword.get(opts, :exclusive_mode, false)} do
+      {_, true} ->
         struct(__MODULE__, prepare_stmts!(conn, @read_queries ++ @write_queries))
 
-      :read ->
+      {:readwrite, false} ->
+        struct(__MODULE__, prepare_stmts!(conn, @read_queries ++ @write_queries))
+
+      {:read, false} ->
         struct(__MODULE__, prepare_stmts!(conn, @read_queries))
 
-      :write ->
+      {:write, false} ->
         struct(__MODULE__, prepare_stmts!(conn, @write_queries))
     end
   end

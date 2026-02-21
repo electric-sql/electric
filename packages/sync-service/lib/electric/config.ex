@@ -39,6 +39,7 @@ defmodule Electric.Config do
   @build_env Mix.env()
 
   @known_feature_flags ~w[allow_subqueries tagged_subqueries]
+  @default_storage_dir "./persistent"
 
   @defaults [
     ## Database
@@ -70,7 +71,7 @@ defmodule Electric.Config do
     # This value should be tuned for the hardware it's running on.
     max_concurrent_requests: %{initial: 300, existing: 1000},
     ## Storage
-    storage_dir: "./persistent",
+    storage_dir: @default_storage_dir,
     storage: &Electric.Config.Defaults.storage/0,
     persistent_kv: &Electric.Config.Defaults.persistent_kv/0,
     cleanup_interval_ms: 10_000,
@@ -105,7 +106,14 @@ defmodule Electric.Config do
     feature_flags: if(Mix.env() == :test, do: @known_feature_flags, else: []),
     publication_refresh_period: 60_000,
     schema_reconciler_period: 60_000,
-    snapshot_timeout_to_first_data: :timer.seconds(30)
+    snapshot_timeout_to_first_data: :timer.seconds(30),
+    shape_db_exclusive_mode: false,
+    shape_db_storage_dir: @default_storage_dir,
+    # TODO: fix defaults to synchronous=NORMAL and shape_db_cache_size_kb=2048
+    shape_db_synchronous:
+      Electric.ShapeCache.ShapeStatus.ShapeDb.Connection.default!(:synchronous),
+    shape_db_cache_size_kb:
+      Electric.ShapeCache.ShapeStatus.ShapeDb.Connection.default!(:cache_size_kb)
   ]
 
   @installation_id_key "electric_installation_id"

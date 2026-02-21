@@ -251,9 +251,21 @@ defmodule Support.ComponentSetup do
   end
 
   def with_shape_db(ctx) do
+    shape_db_opts = Map.get(ctx, :shape_db_opts, [])
+
     start_supervised!(
       {Electric.ShapeCache.ShapeStatus.ShapeDb.Supervisor,
-       stack_id: ctx.stack_id, storage_dir: ctx.tmp_dir, manual_flush_only: true},
+       [
+         stack_id: ctx.stack_id,
+         shape_db_opts:
+           Keyword.merge(
+             [
+               storage_dir: ctx.tmp_dir,
+               manual_flush_only: true
+             ],
+             shape_db_opts
+           )
+       ]},
       id: "shape_db"
     )
 
@@ -460,7 +472,10 @@ defmodule Support.ComponentSetup do
          ],
          manual_table_publishing?: Map.get(ctx, :manual_table_publishing?, false),
          telemetry_opts: [instance_id: "test_instance", version: Electric.version()],
-         feature_flags: Electric.Config.get_env(:feature_flags)},
+         feature_flags: Electric.Config.get_env(:feature_flags),
+         shape_db_opts: [
+           storage_dir: ctx.tmp_dir
+         ]},
         restart: :temporary,
         significant: false
       )

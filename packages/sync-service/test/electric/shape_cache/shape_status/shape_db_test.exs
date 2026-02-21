@@ -442,4 +442,72 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDbTest do
       assert 0 = ShapeDb.WriteBuffer.pending_count_diff(ctx.stack_id)
     end
   end
+
+  describe "exclusive mode" do
+    @describetag shape_db_opts: [exclusive_mode: true]
+
+    @tag shape_db_opts: [exclusive_mode: false]
+    test "when disabled read and write connections are different", ctx do
+      assert {:ok, read_conn} =
+               ShapeDb.Connection.checkout!(ctx.stack_id, :read_call, fn %{conn: conn} ->
+                 {:ok, conn}
+               end)
+
+      assert {:ok, write_conn} =
+               ShapeDb.Connection.checkout_write!(ctx.stack_id, :write_call, fn %{conn: conn} ->
+                 {:ok, conn}
+               end)
+
+      refute read_conn == write_conn
+
+      assert {:ok, [path]} =
+               ShapeDb.Connection.checkout!(ctx.stack_id, :read_call, fn %{conn: conn} ->
+                 ShapeDb.Connection.fetch_one(conn, "SELECT file FROM pragma_database_list", [])
+               end)
+
+      assert path =~ ~r/meta\/shape-db/
+    end
+
+    test "returns the same connection for both read and write calls", ctx do
+      assert {:ok, read_conn} =
+               ShapeDb.Connection.checkout!(ctx.stack_id, :read_call, fn %{conn: conn} ->
+                 {:ok, conn}
+               end)
+
+      assert {:ok, write_conn} =
+               ShapeDb.Connection.checkout_write!(ctx.stack_id, :write_call, fn %{conn: conn} ->
+                 {:ok, conn}
+               end)
+
+      assert read_conn == write_conn
+    end
+
+    @tag shape_db_opts: [exclusive_mode: false]
+    test "when disabled sets journal_mode=WAL", ctx do
+      assert {:ok, ["wal"]} =
+               ShapeDb.Connection.checkout!(ctx.stack_id, :read_call, fn %{conn: conn} ->
+                 ShapeDb.Connection.fetch_one(conn, "PRAGMA journal_mode", [])
+               end)
+    end
+
+    test "sets journal_mode=DELETE", ctx do
+      assert {:ok, ["delete"]} =
+               ShapeDb.Connection.checkout!(ctx.stack_id, :read_call, fn %{conn: conn} ->
+                 ShapeDb.Connection.fetch_one(conn, "PRAGMA journal_mode", [])
+               end)
+    end
+
+    test "includes read-mode queries", ctx do
+      assert {:ok, 0} = ShapeDb.count_shapes(ctx.stack_id)
+    end
+
+    @tag shape_db_opts: [exclusive_mode: true, storage_dir: ":memory:"]
+    test "allows for an in-memory database", ctx do
+      # file is empty for in-memory
+      assert {:ok, [""]} =
+               ShapeDb.Connection.checkout!(ctx.stack_id, :read_call, fn %{conn: conn} ->
+                 ShapeDb.Connection.fetch_one(conn, "SELECT file FROM pragma_database_list", [])
+               end)
+    end
+  end
 end
