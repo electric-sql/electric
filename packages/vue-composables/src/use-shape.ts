@@ -22,7 +22,6 @@ export async function preloadShape<T extends Row<unknown> = Row>(
   return shape
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function sortObjectKeys(obj: any): any {
   if (typeof obj !== `object` || obj === null) return obj
 
@@ -30,15 +29,13 @@ function sortObjectKeys(obj: any): any {
     return obj.map(sortObjectKeys)
   }
 
-  return (
-    Object.keys(obj)
-      .sort()
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .reduce<Record<string, any>>((sorted, key) => {
-        sorted[key] = sortObjectKeys(obj[key])
-        return sorted
-      }, {})
-  )
+  return Object.keys(obj)
+    .sort()
+
+    .reduce<Record<string, any>>((sorted, key) => {
+      sorted[key] = sortObjectKeys(obj[key])
+      return sorted
+    }, {})
 }
 
 export function sortedOptionsHash<T>(options: ShapeStreamOptions<T>): string {
@@ -88,8 +85,9 @@ export function getShape<T extends Row<unknown>>(
   return newShape
 }
 
-export interface UseShapeOptions<T extends Row<unknown> = Row>
-  extends ShapeStreamOptions<GetExtensions<T>> {}
+export interface UseShapeOptions<
+  T extends Row<unknown> = Row,
+> extends ShapeStreamOptions<GetExtensions<T>> {}
 
 export interface UseShapeResult<T extends Row<unknown> = Row> {
   /**
