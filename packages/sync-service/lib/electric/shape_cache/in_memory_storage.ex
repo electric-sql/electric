@@ -313,6 +313,19 @@ defmodule Electric.ShapeCache.InMemoryStorage do
   end
 
   @impl Electric.ShapeCache.Storage
+  def supports_txn_fragment_streaming?, do: false
+
+  @impl Electric.ShapeCache.Storage
+  def append_fragment_to_log!(_log_items, %MS{} = _opts) do
+    raise "Not implemented; InMemoryStorage does not support txn fragment streaming. Use PureFileStorage instead."
+  end
+
+  @impl Electric.ShapeCache.Storage
+  def signal_txn_commit!(_xid, %MS{} = _opts) do
+    raise "Not implemented; InMemoryStorage does not support txn fragment streaming. Use PureFileStorage instead."
+  end
+
+  @impl Electric.ShapeCache.Storage
   def write_move_in_snapshot!(stream, name, %MS{log_table: log_table}) do
     stream
     |> Stream.map(fn [key, tags, json] -> {{:movein, {name, key}}, {tags, json}} end)

@@ -82,7 +82,7 @@ defmodule Electric.Shapes.EventRouter do
     router = maybe_start_transaction(router, txn_fragment)
     {shape_changes, router} = route_changes_to_shapes(router, changes)
     {shape_changes, router} = maybe_end_transaction(shape_changes, router, commit)
-    result = build_shape_framents(shape_changes, txn_fragment)
+    result = build_shape_fragments(shape_changes, txn_fragment)
     {result, router}
   end
 
@@ -229,7 +229,7 @@ defmodule Electric.Shapes.EventRouter do
     Map.update(shape_events, shape_id, attrs, update_fn)
   end
 
-  defp build_shape_framents(shape_events, %TransactionFragment{
+  defp build_shape_fragments(shape_events, %TransactionFragment{
          xid: xid,
          lsn: lsn,
          last_log_offset: last_log_offset

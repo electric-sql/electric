@@ -350,6 +350,30 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
       end)
     end
 
+    test "events are accumulated across uncommitted fragments", ctx do
+      ctx = with_materializer(ctx)
+
+      Materializer.new_changes(
+        ctx,
+        [
+          %Changes.NewRecord{key: "1", record: %{"value" => "1"}},
+          %Changes.NewRecord{key: "2", record: %{"value" => "2"}},
+          %Changes.NewRecord{key: "3", record: %{"value" => "3"}}
+        ],
+        commit: false
+      )
+
+      refute_received {:materializer_changes, _, _}
+
+      Materializer.new_changes(ctx, [
+        %Changes.NewRecord{key: "4", record: %{"value" => "4"}},
+        %Changes.NewRecord{key: "5", record: %{"value" => "5"}}
+      ])
+
+      assert_receive {:materializer_changes, _, %{move_in: move_ins, move_out: []}}
+      assert [{1, "1"}, {2, "2"}, {3, "3"}, {4, "4"}, {5, "5"}] == Enum.sort(move_ins)
+    end
+
     test "moves are correctly tracked across multiple calls", ctx do
       ctx = with_materializer(ctx)
 

@@ -46,9 +46,11 @@ defmodule Electric.Shapes.Consumer.Materializer do
 
   def whereis(stack_id, shape_handle), do: GenServer.whereis(name(stack_id, shape_handle))
 
-  @spec new_changes(map(), list(Changes.change()) | {LogOffset.t(), LogOffset.t()}) :: :ok
-  def new_changes(state, changes) do
-    GenServer.call(name(state), {:new_changes, changes}, :infinity)
+  @spec new_changes(map(), list(Changes.change()) | {LogOffset.t(), LogOffset.t()}, keyword()) ::
+          :ok
+  def new_changes(state, changes, opts \\ []) do
+    commit? = Keyword.get(opts, :commit, true)
+    GenServer.call(name(state), {:new_changes, changes, commit?}, :infinity)
   end
 
   def wait_until_ready(state) do
@@ -98,6 +100,7 @@ defmodule Electric.Shapes.Consumer.Materializer do
         index: %{},
         tag_indices: %{},
         value_counts: %{},
+        pending_events: %{},
         offset: LogOffset.before_all(),
         subscribed_offset: nil,
         ref: nil,
@@ -176,18 +179,26 @@ defmodule Electric.Shapes.Consumer.Materializer do
     {:reply, :ok, state}
   end
 
-  def handle_call({:new_changes, {range_start, range_end}}, _from, state) do
+  def handle_call({:new_changes, {range_start, range_end}, commit?}, _from, state) do
     stack_storage = Storage.for_stack(state.stack_id)
     storage = Storage.for_shape(state.shape_handle, stack_storage)
 
-    Storage.get_log_stream(range_start, range_end, storage)
-    |> decode_json_stream()
-    |> apply_changes_and_notify(state)
-    |> then(fn state -> {:reply, :ok, state} end)
+    state =
+      Storage.get_log_stream(range_start, range_end, storage)
+      |> decode_json_stream()
+      |> apply_and_accumulate_events(state)
+      |> maybe_flush_pending_events(commit?)
+
+    {:reply, :ok, state}
   end
 
-  def handle_call({:new_changes, changes}, _from, state) when is_list(changes) do
-    {:reply, :ok, apply_changes_and_notify(changes, state)}
+  def handle_call({:new_changes, changes, commit?}, _from, state) when is_list(changes) do
+    state =
+      changes
+      |> apply_and_accumulate_events(state)
+      |> maybe_flush_pending_events(commit?)
+
+    {:reply, :ok, state}
   end
 
   def handle_call(:subscribe, {pid, _ref} = _from, state) do
@@ -292,8 +303,14 @@ defmodule Electric.Shapes.Consumer.Materializer do
     Eval.Env.const_to_pg_string(Eval.Env.new(), value, type)
   end
 
-  defp apply_changes_and_notify(changes, state) do
+  defp apply_and_accumulate_events(changes, state) do
     {state, events} = apply_changes(changes, state)
+    %{state | pending_events: merge_events(state.pending_events, events)}
+  end
+
+  defp maybe_flush_pending_events(state, true) do
+    events =
+      cancel_matching_move_events(state.pending_events)
 
     if events != %{} do
       for pid <- state.subscribers do
@@ -301,7 +318,19 @@ defmodule Electric.Shapes.Consumer.Materializer do
       end
     end
 
-    state
+    %{state | pending_events: %{}}
+  end
+
+  defp maybe_flush_pending_events(state, _commit?), do: state
+
+  defp merge_events(pending, new) when pending == %{}, do: new
+  defp merge_events(pending, new) when new == %{}, do: pending
+
+  defp merge_events(pending, new) do
+    %{
+      move_in: Map.get(new, :move_in, []) ++ Map.get(pending, :move_in, []),
+      move_out: Map.get(new, :move_out, []) ++ Map.get(pending, :move_out, [])
+    }
   end
 
   # A value's count can cross the 0↔1 boundary multiple times in a single batch
@@ -409,10 +438,7 @@ defmodule Electric.Shapes.Consumer.Materializer do
         end
       )
 
-    events =
-      events
-      |> Enum.group_by(&elem(&1, 0), &elem(&1, 1))
-      |> cancel_matching_move_events()
+    events = Enum.group_by(events, &elem(&1, 0), &elem(&1, 1))
 
     {%{state | index: index, value_counts: value_counts, tag_indices: tag_indices}, events}
   end

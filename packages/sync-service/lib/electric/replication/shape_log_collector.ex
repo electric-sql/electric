@@ -38,6 +38,7 @@ defmodule Electric.Replication.ShapeLogCollector do
   require Electric.Postgres.Lsn
   require Electric.Replication.LogOffset
   require Logger
+  require TransactionFragment
 
   @schema NimbleOptions.new!(
             stack_id: [type: :string, required: true],
@@ -563,10 +564,12 @@ defmodule Electric.Replication.ShapeLogCollector do
     LsnTracker.set_last_processed_lsn(state.lsn_tracker_ref, lsn)
 
     flush_tracker =
-      if is_struct(event, TransactionFragment) do
-        FlushTracker.handle_txn_fragment(state.flush_tracker, event, affected_shapes)
-      else
-        state.flush_tracker
+      case event do
+        %TransactionFragment{commit: commit} when not is_nil(commit) ->
+          FlushTracker.handle_txn_fragment(state.flush_tracker, event, affected_shapes)
+
+        _ ->
+          state.flush_tracker
       end
 
     %{state | flush_tracker: flush_tracker}

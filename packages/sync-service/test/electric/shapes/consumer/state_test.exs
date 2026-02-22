@@ -105,6 +105,35 @@ defmodule Electric.Shapes.Consumer.StateTest do
     end
   end
 
+  describe "initialize/3" do
+    setup [:with_stack_id_from_test, :with_in_memory_storage]
+
+    test "downgrades write_unit to :txn when storage does not support fragment streaming", %{
+      stack_id: stack_id,
+      storage: storage
+    } do
+      import ExUnit.CaptureLog
+
+      # Shape without dependencies gets write_unit=:txn_fragment
+      shape = %Shape{root_table: {"public", "items"}, root_table_id: 1}
+      state = State.new(stack_id, "test-handle", shape)
+      assert state.write_unit == :txn_fragment
+
+      shape_storage = Electric.ShapeCache.Storage.for_shape("test-handle", storage)
+      Electric.ShapeCache.Storage.start_link(shape_storage)
+      writer = Electric.ShapeCache.Storage.init_writer!(shape_storage, shape)
+
+      log =
+        capture_log(fn ->
+          initialized = State.initialize(state, shape_storage, writer)
+          assert initialized.write_unit == :txn
+        end)
+
+      assert log =~ "does not support txn fragment streaming"
+      assert log =~ "Falling back to full-transaction buffering"
+    end
+  end
+
   describe "or_with_subquery? field in new/3" do
     setup [:with_stack_id_from_test]
 
