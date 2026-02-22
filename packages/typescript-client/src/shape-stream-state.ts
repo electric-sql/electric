@@ -122,7 +122,7 @@ export interface UrlParamsContext {
  * Each concrete state carries only its relevant fields — there is no shared
  * flat context bag. Transitions create new immutable state objects.
  *
- * `isUpToDate` is derived from state kind (only LiveState returns true).
+ * `isUpToDate` returns true for LiveState and PausedState wrapping LiveState.
  */
 export abstract class ShapeStreamState {
   abstract readonly kind: ShapeStreamStateKind
@@ -369,8 +369,7 @@ abstract class ActiveState extends ShapeStreamState {
 /**
  * Captures shared behavior of InitialState, SyncingState, StaleRetryState:
  * - handleResponseMetadata: stale check → parse fields → new SyncingState
- * - canEnterReplayMode → true
- * - enterReplayMode → new ReplayingState
+ * - enterReplayMode(cursor) → new ReplayingState (null → this)
  */
 abstract class FetchingState extends ActiveState {
   handleResponseMetadata(
@@ -665,7 +664,10 @@ export class PausedState extends ShapeStreamState {
 
   constructor(previousState: ShapeStreamState) {
     super()
-    this.previousState = previousState
+    this.previousState =
+      previousState instanceof PausedState
+        ? previousState.previousState
+        : previousState
   }
 
   get handle() {
@@ -738,7 +740,10 @@ export class ErrorState extends ShapeStreamState {
 
   constructor(previousState: ShapeStreamState, error: Error) {
     super()
-    this.previousState = previousState
+    this.previousState =
+      previousState instanceof ErrorState
+        ? previousState.previousState
+        : previousState
     this.error = error
   }
 
