@@ -13,5 +13,25 @@ import Example from './Example.vue'
 </template>
 
 <style>
+.App {
+  text-align: center;
+}
 
+.App-logo {
+  height: min(160px, 30vmin);
+  pointer-events: none;
+  margin-top: min(30px, 5vmin);
+  margin-bottom: min(30px, 5vmin);
+}
+
+.App-header {
+  background-color: #1c1e20;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: top;
+  justify-content: top;
+  font-size: calc(10px + 2vmin);
+  color: white;
+}
 </style>
