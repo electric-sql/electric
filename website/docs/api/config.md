@@ -307,6 +307,24 @@ The amount of time a consumer process remains active without receiving transacti
 
 </EnvVarConfig>
 
+### ELECTRIC_MAX_CONCURRENT_REQUESTS
+
+<EnvVarConfig
+    name="ELECTRIC_MAX_CONCURRENT_REQUESTS"
+    defaultValue='{"initial": 300, "existing": 10000}'
+    example='{"initial": 500, "existing": 30000}'>
+
+Maximum number of concurrent HTTP requests Electric will serve, as a JSON object with two keys:
+
+- `initial` &mdash; limit for initial sync requests (requests with `offset=-1`). Default: **300**.
+- `existing` &mdash; limit for ongoing requests (live long-polls and catch-up requests). Default: **10000**.
+
+When the limit is exceeded, Electric responds with `503` and a `Retry-After` header. See the [troubleshooting guide](/docs/guides/troubleshooting#_503-mdash-concurrent-request-limit-exceeded) for details.
+
+Each `live=true` long-poll request holds the connection open for up to 20 seconds, so the effective limit is determined by the number of concurrent shape subscriptions across all connected clients. Putting a [CDN with request collapsing](/docs/api/http#collapsing-live-requests) in front of Electric is the recommended way to handle high connection counts.
+
+</EnvVarConfig>
+
 ## Feature Flags
 
 Feature flags enable experimental or advanced features that are not yet enabled by default in production.

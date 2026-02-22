@@ -177,7 +177,11 @@ defmodule Electric.Plug.ServeShapePlug do
         response =
           Api.Response.error(
             get_in(config, [:api]),
-            %{code: "overloaded", message: "Server is currently overloaded, please retry"},
+            %{
+              code: "concurrent_request_limit_exceeded",
+              message:
+                "Concurrent #{kind} request limit exceeded (limit: #{max_concurrent}), please retry"
+            },
             status: 503,
             known_error: true,
             retry_after: retry_after
