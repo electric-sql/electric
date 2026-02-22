@@ -707,6 +707,7 @@ defmodule Electric.Shapes.ApiTest do
       assert response.shape_definition == @test_shape
       assert response.offset == next_next_offset
       refute response.up_to_date
+      refute response.no_changes
     end
 
     test "returns immediate up-to-date message when offset is 'now'", ctx do
@@ -744,6 +745,7 @@ defmodule Electric.Shapes.ApiTest do
       # Should have the latest offset from the shape
       assert response.offset == @test_offset
       assert response.handle == @test_shape_handle
+      assert response.no_changes
     end
 
     test "handles live updates", ctx do
@@ -1307,6 +1309,7 @@ defmodule Electric.Shapes.ApiTest do
 
       assert [%{headers: %{control: "up-to-date"}}] = response_body(response)
       assert response.up_to_date
+      assert response.no_changes
     end
 
     @tag long_poll_timeout: 100

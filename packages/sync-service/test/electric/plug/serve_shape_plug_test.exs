@@ -451,6 +451,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
              ]
 
       assert get_resp_header(conn, "electric-up-to-date") == []
+      assert get_resp_header(conn, "electric-has-data") == ["true"]
     end
 
     test "returns 304 Not Modified when If-None-Match matches ETag",
@@ -576,6 +577,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
       assert get_resp_header(conn, "electric-offset") == [next_offset_str]
       assert get_resp_header(conn, "electric-up-to-date") == [""]
+      assert get_resp_header(conn, "electric-has-data") == ["true"]
       assert get_resp_header(conn, "electric-schema") == []
 
       expected_cursor =
@@ -671,6 +673,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
       assert [^expected_etag_part <> _rest] = get_resp_header(conn, "etag")
 
       assert get_resp_header(conn, "electric-up-to-date") == [""]
+      assert get_resp_header(conn, "electric-has-data") == ["false"]
     end
 
     test "sends 409 with a redirect to existing shape when requested shape handle does not exist",
