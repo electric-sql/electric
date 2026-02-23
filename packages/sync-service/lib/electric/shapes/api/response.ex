@@ -133,9 +133,19 @@ defmodule Electric.Shapes.Api.Response do
   def send(%Plug.Conn{} = conn, %__MODULE__{chunked: false} = response) do
     validate_response_finalized!(response)
 
-    conn
-    |> put_resp_headers(response)
-    |> Plug.Conn.send_resp(response.status, Enum.into(response.body, []))
+    conn = put_resp_headers(conn, response)
+    body = Enum.into(response.body, [])
+
+    if accepts_gzip?(conn) do
+      compressed = :zlib.gzip(body)
+
+      conn
+      |> Plug.Conn.put_resp_header("content-encoding", "gzip")
+      |> Plug.Conn.put_resp_header("vary", "Accept-Encoding")
+      |> Plug.Conn.send_resp(response.status, compressed)
+    else
+      Plug.Conn.send_resp(conn, response.status, body)
+    end
   end
 
   def send(%Plug.Conn{} = conn, %__MODULE__{} = response) do
@@ -405,11 +415,29 @@ defmodule Electric.Shapes.Api.Response do
     validate_response_finalized!(response)
 
     stack_id = Api.stack_id(response)
-    conn = Plug.Conn.send_chunked(conn, status)
+    use_gzip = accepts_gzip?(conn) and not is_sse_response?(conn)
 
-    {conn, bytes_sent} =
+    conn =
+      if use_gzip do
+        conn
+        |> Plug.Conn.put_resp_header("content-encoding", "gzip")
+        |> Plug.Conn.put_resp_header("vary", "Accept-Encoding")
+        |> Plug.Conn.send_chunked(status)
+      else
+        Plug.Conn.send_chunked(conn, status)
+      end
+
+    z =
+      if use_gzip do
+        z = :zlib.open()
+        # windowBits 31 = 15 + 16 enables gzip encoding
+        :zlib.deflateInit(z, :default, :deflated, 31, 8, :default)
+        z
+      end
+
+    {conn, bytes_sent, z} =
       response.body
-      |> Enum.reduce_while({conn, 0}, fn chunk, {conn, bytes_sent} ->
+      |> Enum.reduce_while({conn, 0, z}, fn chunk, {conn, bytes_sent, z} ->
         chunk_size = IO.iodata_length(chunk)
 
         OpenTelemetry.with_span(
@@ -417,24 +445,52 @@ defmodule Electric.Shapes.Api.Response do
           [chunk_size: chunk_size],
           stack_id,
           fn ->
-            case Plug.Conn.chunk(conn, chunk) do
+            data =
+              if z do
+                :zlib.deflate(z, IO.iodata_to_binary(chunk), :sync)
+              else
+                chunk
+              end
+
+            case Plug.Conn.chunk(conn, data) do
               {:ok, conn} ->
-                {:cont, {conn, bytes_sent + chunk_size}}
+                {:cont, {conn, bytes_sent + chunk_size, z}}
 
               {:error, reason} when reason in ["closed", :closed] ->
+                if z, do: close_zlib(z)
                 error_str = "Connection closed unexpectedly while streaming response"
                 conn = Plug.Conn.assign(conn, :error_str, error_str)
-                {:halt, {conn, bytes_sent}}
+                {:halt, {conn, bytes_sent, nil}}
 
               {:error, reason} ->
+                if z, do: close_zlib(z)
                 error_str = "Error while streaming response: #{inspect(reason)}"
                 Logger.error(error_str)
                 conn = Plug.Conn.assign(conn, :error_str, error_str)
-                {:halt, {conn, bytes_sent}}
+                {:halt, {conn, bytes_sent, nil}}
             end
           end
         )
       end)
+
+    # Finalize gzip stream
+    conn =
+      if z do
+        try do
+          final_data = :zlib.deflate(z, <<>>, :finish)
+          :zlib.deflateEnd(z)
+          :zlib.close(z)
+
+          case Plug.Conn.chunk(conn, final_data) do
+            {:ok, conn} -> conn
+            {:error, _} -> conn
+          end
+        rescue
+          _ -> conn
+        end
+      else
+        conn
+      end
 
     Plug.Conn.assign(conn, :streaming_bytes_sent, bytes_sent)
   end
@@ -462,4 +518,26 @@ defmodule Electric.Shapes.Api.Response do
   end
 
   def electric_headers, do: @electric_headers
+
+  defp accepts_gzip?(%Plug.Conn{} = conn) do
+    case Plug.Conn.get_req_header(conn, "accept-encoding") do
+      [accept_encoding | _] -> String.contains?(accept_encoding, "gzip")
+      _ -> false
+    end
+  end
+
+  defp is_sse_response?(%Plug.Conn{} = conn) do
+    case Plug.Conn.get_resp_header(conn, "content-type") do
+      ["text/event-stream" | _] -> true
+      _ -> false
+    end
+  end
+
+  defp close_zlib(z) do
+    try do
+      :zlib.close(z)
+    rescue
+      _ -> :ok
+    end
+  end
 end
