@@ -3017,7 +3017,7 @@ defmodule Electric.Plug.RouterTest do
            "INSERT INTO project_members (project_id, user_id) VALUES (1, 100), (3, 100)",
            "INSERT INTO projects (id, workspace_id, name) VALUES (1, 1, 'project 1'), (2, 1, 'project 2')"
          ]
-    test "supports two subqueries at the same level but returns 409 on move-in", %{
+    test "supports two subqueries at the same level with move-in", %{
       opts: opts,
       db_conn: db_conn
     } do
@@ -3085,8 +3085,16 @@ defmodule Electric.Plug.RouterTest do
         []
       )
 
-      # Should get a 409 because multiple same-level subqueries cannot currently correctly handle move-ins
-      assert %{status: 409} = Task.await(task)
+      # Move-in now works correctly with multiple same-level subqueries
+      assert %{status: 200} = conn = Task.await(task)
+
+      assert [
+               %{
+                 "headers" => %{"is_move_in" => true, "operation" => "insert"},
+                 "value" => %{"id" => "2", "workspace_id" => "1", "name" => "project 2"}
+               },
+               %{"headers" => %{"control" => "snapshot-end"}} | _
+             ] = Jason.decode!(conn.resp_body)
     end
   end
 
