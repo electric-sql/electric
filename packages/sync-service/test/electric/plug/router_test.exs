@@ -2798,9 +2798,14 @@ defmodule Electric.Plug.RouterTest do
         :crypto.hash(:md5, ctx.stack_id <> req.handle <> "v:20")
         |> Base.encode16(case: :lower)
 
+      # Tags are now slash-delimited with one hash per DNF position.
+      # Both positions (subquery on value and non-subquery on other_value)
+      # hash "v:20" for child 3, so the tag is "hash/hash".
+      full_tag = tag <> "/" <> tag
+
       assert {_, 200,
               [
-                %{"headers" => %{"tags" => [^tag]}, "value" => %{"id" => "3"}},
+                %{"headers" => %{"tags" => [^full_tag]}, "value" => %{"id" => "3"}},
                 %{"headers" => %{"control" => "snapshot-end"}},
                 up_to_date_ctl()
               ]} =
@@ -2825,11 +2830,18 @@ defmodule Electric.Plug.RouterTest do
       # Should contain the data record and the snapshot-end control message
       assert length(response) == 2
 
-      tag = :crypto.hash(:md5, ctx.stack_id <> req.handle <> "v:1") |> Base.encode16(case: :lower)
+      # Tags are now slash-delimited: position 0 hashes parentId, position 1 hashes Value
+      tag0 =
+        :crypto.hash(:md5, ctx.stack_id <> req.handle <> "v:1") |> Base.encode16(case: :lower)
+
+      tag1 =
+        :crypto.hash(:md5, ctx.stack_id <> req.handle <> "v:10") |> Base.encode16(case: :lower)
+
+      full_tag = tag0 <> "/" <> tag1
 
       assert %{
                "value" => %{"id" => "1", "parentId" => "1", "Value" => "10"},
-               "headers" => %{"tags" => [^tag]}
+               "headers" => %{"tags" => [^full_tag]}
              } =
                Enum.find(response, &Map.has_key?(&1, "key"))
 
