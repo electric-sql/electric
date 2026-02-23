@@ -15,8 +15,9 @@ defmodule Support.OracleHarness.StandardSchema do
                           └── level_4 (id, level_3_id, value)
   """
 
+  import StreamData
+
   alias Support.OracleHarness
-  alias Support.OracleHarness.WhereClauseGenerator
 
   # Standard IDs for seeded data
   @level_1_ids Enum.map(1..5, &"l1-#{&1}")
@@ -191,174 +192,142 @@ defmodule Support.OracleHarness.StandardSchema do
   end
 
   # ----------------------------------------------------------------------------
-  # Shape Generation
-  # ----------------------------------------------------------------------------
-
-  @doc """
-  Generates a list of diverse shape specs using StreamData-based generator.
-
-  This exercises the full range of SQL patterns supported by the parser including:
-  - OR/AND combinations with subqueries
-  - NOT patterns (NOT IN, NOT LIKE, NOT BETWEEN)
-  - Comparison operators (<, >, <=, >=, <>)
-  - BETWEEN/NOT BETWEEN
-  - LIKE/NOT LIKE with various patterns
-  - Nested subqueries (1-3 levels)
-  - Tag-based subqueries
-  - Mixed compositions
-
-  Uses the provided seed for deterministic generation.
-  """
-  def generate_diverse_shapes(count, seed) do
-    WhereClauseGenerator.generate_where_clauses(count, seed)
-    |> Enum.with_index(1)
-    |> Enum.map(fn {where_spec, idx} ->
-      %{
-        name: "shape_#{idx}",
-        table: "level_4",
-        where: where_spec.where,
-        columns: ["id", "level_3_id", "value"],
-        pk: ["id"],
-        optimized: where_spec.optimized
-      }
-    end)
-  end
-
-  # ----------------------------------------------------------------------------
   # Mutation Generation
   # ----------------------------------------------------------------------------
 
   @doc """
-  Generates a list of mutations to apply.
-  """
-  def generate_mutations(count, seed \\ nil) do
-    :rand.seed(:exsss, seed || :erlang.monotonic_time())
+  Returns a StreamData generator that produces a list of mutation maps.
 
-    Enum.map(1..count, fn idx ->
-      generate_one_mutation(idx)
+  Designed to be consumed directly by `check all` for deterministic seeding.
+  """
+  def mutations_gen(count) do
+    list_of(mutation_gen(), length: count)
+  end
+
+  defp mutation_gen do
+    one_of([
+      toggle_level_1_active_gen(),
+      toggle_level_2_active_gen(),
+      toggle_level_3_active_gen(),
+      move_level_2_parent_gen(),
+      move_level_3_parent_gen(),
+      move_level_4_parent_gen(),
+      add_or_remove_tag_gen(),
+      update_level_4_value_gen()
+    ])
+  end
+
+  defp toggle_level_1_active_gen do
+    member_of(@level_1_ids)
+    |> map(fn id ->
+      %{name: "toggle_l1_#{id}", sql: "UPDATE level_1 SET active = NOT active WHERE id = '#{id}'"}
     end)
   end
 
-  defp generate_one_mutation(idx) do
-    case rem(idx, 8) do
-      0 -> toggle_level_1_active()
-      1 -> toggle_level_2_active()
-      2 -> toggle_level_3_active()
-      3 -> move_level_2_parent()
-      4 -> move_level_3_parent()
-      5 -> move_level_4_parent()
-      6 -> add_or_remove_tag()
-      7 -> update_level_4_value()
-    end
+  defp toggle_level_2_active_gen do
+    member_of(@level_2_ids)
+    |> map(fn id ->
+      %{name: "toggle_l2_#{id}", sql: "UPDATE level_2 SET active = NOT active WHERE id = '#{id}'"}
+    end)
   end
 
-  defp toggle_level_1_active do
-    id = Enum.random(@level_1_ids)
-    %{name: "toggle_l1_#{id}", sql: "UPDATE level_1 SET active = NOT active WHERE id = '#{id}'"}
+  defp toggle_level_3_active_gen do
+    member_of(@level_3_ids)
+    |> map(fn id ->
+      %{name: "toggle_l3_#{id}", sql: "UPDATE level_3 SET active = NOT active WHERE id = '#{id}'"}
+    end)
   end
 
-  defp toggle_level_2_active do
-    id = Enum.random(@level_2_ids)
-    %{name: "toggle_l2_#{id}", sql: "UPDATE level_2 SET active = NOT active WHERE id = '#{id}'"}
+  defp move_level_2_parent_gen do
+    bind({member_of(@level_2_ids), member_of(@level_1_ids)}, fn {id, new_parent} ->
+      constant(%{
+        name: "move_l2_#{id}_to_#{new_parent}",
+        sql: "UPDATE level_2 SET level_1_id = '#{new_parent}' WHERE id = '#{id}'"
+      })
+    end)
   end
 
-  defp toggle_level_3_active do
-    id = Enum.random(@level_3_ids)
-    %{name: "toggle_l3_#{id}", sql: "UPDATE level_3 SET active = NOT active WHERE id = '#{id}'"}
+  defp move_level_3_parent_gen do
+    bind({member_of(@level_3_ids), member_of(@level_2_ids)}, fn {id, new_parent} ->
+      constant(%{
+        name: "move_l3_#{id}_to_#{new_parent}",
+        sql: "UPDATE level_3 SET level_2_id = '#{new_parent}' WHERE id = '#{id}'"
+      })
+    end)
   end
 
-  defp move_level_2_parent do
-    id = Enum.random(@level_2_ids)
-    new_parent = Enum.random(@level_1_ids)
-
-    %{
-      name: "move_l2_#{id}_to_#{new_parent}",
-      sql: "UPDATE level_2 SET level_1_id = '#{new_parent}' WHERE id = '#{id}'"
-    }
+  defp move_level_4_parent_gen do
+    bind({member_of(@level_4_ids), member_of(@level_3_ids)}, fn {id, new_parent} ->
+      constant(%{
+        name: "move_l4_#{id}_to_#{new_parent}",
+        sql: "UPDATE level_4 SET level_3_id = '#{new_parent}' WHERE id = '#{id}'"
+      })
+    end)
   end
 
-  defp move_level_3_parent do
-    id = Enum.random(@level_3_ids)
-    new_parent = Enum.random(@level_2_ids)
+  defp add_or_remove_tag_gen do
+    bind(
+      {member_of(1..3), member_of(@tags), member_of([true, false])},
+      fn {level, tag, add?} ->
+        case level do
+          1 ->
+            bind(member_of(@level_1_ids), fn id ->
+              if add? do
+                constant(%{
+                  name: "add_tag_l1_#{id}_#{tag}",
+                  sql:
+                    "INSERT INTO level_1_tags (level_1_id, tag) VALUES ('#{id}', '#{tag}') ON CONFLICT DO NOTHING"
+                })
+              else
+                constant(%{
+                  name: "remove_tag_l1_#{id}_#{tag}",
+                  sql: "DELETE FROM level_1_tags WHERE level_1_id = '#{id}' AND tag = '#{tag}'"
+                })
+              end
+            end)
 
-    %{
-      name: "move_l3_#{id}_to_#{new_parent}",
-      sql: "UPDATE level_3 SET level_2_id = '#{new_parent}' WHERE id = '#{id}'"
-    }
-  end
+          2 ->
+            bind(member_of(@level_2_ids), fn id ->
+              if add? do
+                constant(%{
+                  name: "add_tag_l2_#{id}_#{tag}",
+                  sql:
+                    "INSERT INTO level_2_tags (level_2_id, tag) VALUES ('#{id}', '#{tag}') ON CONFLICT DO NOTHING"
+                })
+              else
+                constant(%{
+                  name: "remove_tag_l2_#{id}_#{tag}",
+                  sql: "DELETE FROM level_2_tags WHERE level_2_id = '#{id}' AND tag = '#{tag}'"
+                })
+              end
+            end)
 
-  defp move_level_4_parent do
-    id = Enum.random(@level_4_ids)
-    new_parent = Enum.random(@level_3_ids)
-
-    %{
-      name: "move_l4_#{id}_to_#{new_parent}",
-      sql: "UPDATE level_4 SET level_3_id = '#{new_parent}' WHERE id = '#{id}'"
-    }
-  end
-
-  defp add_or_remove_tag do
-    level = :rand.uniform(3)
-    tag = Enum.random(@tags)
-
-    case level do
-      1 ->
-        id = Enum.random(@level_1_ids)
-
-        if :rand.uniform(2) == 1 do
-          %{
-            name: "add_tag_l1_#{id}_#{tag}",
-            sql:
-              "INSERT INTO level_1_tags (level_1_id, tag) VALUES ('#{id}', '#{tag}') ON CONFLICT DO NOTHING"
-          }
-        else
-          %{
-            name: "remove_tag_l1_#{id}_#{tag}",
-            sql: "DELETE FROM level_1_tags WHERE level_1_id = '#{id}' AND tag = '#{tag}'"
-          }
+          3 ->
+            bind(member_of(@level_3_ids), fn id ->
+              if add? do
+                constant(%{
+                  name: "add_tag_l3_#{id}_#{tag}",
+                  sql:
+                    "INSERT INTO level_3_tags (level_3_id, tag) VALUES ('#{id}', '#{tag}') ON CONFLICT DO NOTHING"
+                })
+              else
+                constant(%{
+                  name: "remove_tag_l3_#{id}_#{tag}",
+                  sql: "DELETE FROM level_3_tags WHERE level_3_id = '#{id}' AND tag = '#{tag}'"
+                })
+              end
+            end)
         end
-
-      2 ->
-        id = Enum.random(@level_2_ids)
-
-        if :rand.uniform(2) == 1 do
-          %{
-            name: "add_tag_l2_#{id}_#{tag}",
-            sql:
-              "INSERT INTO level_2_tags (level_2_id, tag) VALUES ('#{id}', '#{tag}') ON CONFLICT DO NOTHING"
-          }
-        else
-          %{
-            name: "remove_tag_l2_#{id}_#{tag}",
-            sql: "DELETE FROM level_2_tags WHERE level_2_id = '#{id}' AND tag = '#{tag}'"
-          }
-        end
-
-      3 ->
-        id = Enum.random(@level_3_ids)
-
-        if :rand.uniform(2) == 1 do
-          %{
-            name: "add_tag_l3_#{id}_#{tag}",
-            sql:
-              "INSERT INTO level_3_tags (level_3_id, tag) VALUES ('#{id}', '#{tag}') ON CONFLICT DO NOTHING"
-          }
-        else
-          %{
-            name: "remove_tag_l3_#{id}_#{tag}",
-            sql: "DELETE FROM level_3_tags WHERE level_3_id = '#{id}' AND tag = '#{tag}'"
-          }
-        end
-    end
+      end
+    )
   end
 
-  defp update_level_4_value do
-    id = Enum.random(@level_4_ids)
-    new_value = "v#{:rand.uniform(1000)}"
-
-    %{
-      name: "update_l4_#{id}",
-      sql: "UPDATE level_4 SET value = '#{new_value}' WHERE id = '#{id}'"
-    }
+  defp update_level_4_value_gen do
+    bind({member_of(@level_4_ids), integer(1..1000)}, fn {id, val} ->
+      constant(%{
+        name: "update_l4_#{id}",
+        sql: "UPDATE level_4 SET value = 'v#{val}' WHERE id = '#{id}'"
+      })
+    end)
   end
 end

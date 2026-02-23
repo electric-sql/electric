@@ -21,7 +21,8 @@ defmodule Electric.Integration.OraclePropertyTest do
   import Support.DbSetup
   import Support.IntegrationSetup
   import Support.OracleHarness
-  import Support.OracleHarness.StandardSchema
+  alias Support.OracleHarness.StandardSchema
+  alias Support.OracleHarness.WhereClauseGenerator
 
   @moduletag :oracle
   @moduletag timeout: :infinity
@@ -50,7 +51,7 @@ defmodule Electric.Integration.OraclePropertyTest do
         headers: [{"electric-protocol-version", "2"}]
       )
 
-    setup_standard_schema(ctx)
+    StandardSchema.setup_standard_schema(ctx)
     ctx
   end
 
@@ -60,14 +61,10 @@ defmodule Electric.Integration.OraclePropertyTest do
     txn_count = env_int("TXN_COUNT") || @default_txn_count
     mutations_per_txn = env_int("MUTATIONS_PER_TXN") || @default_mutations_per_txn
 
-    check all iteration_seed <- StreamData.integer(0..10_000),
+    check all shapes <- WhereClauseGenerator.shapes_gen(shape_count),
+              mutations <- StandardSchema.mutations_gen(txn_count * mutations_per_txn),
               max_runs: max_runs do
-      IO.puts("[oracle] iteration_seed=#{iteration_seed}")
-
-      shapes = generate_diverse_shapes(shape_count, iteration_seed)
-      mutations = generate_mutations(txn_count * mutations_per_txn, iteration_seed + 1)
       transactions = Enum.chunk_every(mutations, mutations_per_txn)
-
       test_against_oracle(ctx, shapes, transactions)
     end
   end

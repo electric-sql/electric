@@ -44,22 +44,26 @@ defmodule Support.OracleHarness.WhereClauseGenerator do
   end
 
   @doc """
-  Generates a list of shape specs using StreamData.
+  Returns a StreamData generator that produces a list of shape spec maps.
 
-  Uses the provided seed for deterministic generation.
-  Returns list of maps with :where and :optimized keys.
+  Each shape has :name, :table, :where, :columns, :pk, and :optimized keys.
+  Designed to be consumed directly by `check all` for deterministic seeding.
   """
-  def generate_where_clauses(count, seed) do
-    # Seed the process dictionary so StreamData's Enum.take uses deterministic randomness
-    :rand.seed(:exsss, seed)
-
-    where_clause_gen()
-    |> Enum.take(count * 3)
-    |> Enum.uniq_by(fn {where, _optimized} -> where end)
-    |> Enum.take(count)
-    |> Enum.shuffle()
-    |> Enum.map(fn {where, optimized} ->
-      %{where: where, optimized: optimized}
+  def shapes_gen(count) do
+    list_of(where_clause_gen(), length: count)
+    |> map(fn clauses ->
+      clauses
+      |> Enum.with_index(1)
+      |> Enum.map(fn {{where, _optimized}, idx} ->
+        %{
+          name: "shape_#{idx}",
+          table: "level_4",
+          where: where,
+          columns: ["id", "level_3_id", "value"],
+          pk: ["id"],
+          optimized: false
+        }
+      end)
     end)
   end
 
