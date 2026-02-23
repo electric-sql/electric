@@ -167,6 +167,42 @@ export async function GET(request: Request) {
 }
 ```
 
+#### Handling response compression
+
+When your proxy uses `fetch()` to request data from Electric, the response body is automatically decompressed (gzip/deflate/br), but the `content-encoding` and `content-length` headers are **not** removed. If you forward these headers to the browser, the browser will try to decompress an already-decompressed body, causing decode errors. This is a [known limitation of the Fetch spec](https://github.com/whatwg/fetch/issues/1729).
+
+The examples above handle this by deleting the problematic headers:
+
+```ts
+headers.delete(`content-encoding`)
+headers.delete(`content-length`)
+```
+
+This approach works on **all platforms** (Node.js, edge runtimes, Deno, Bun, Cloudflare Workers) since every runtime's `fetch()` behaves this way. It is the recommended default.
+
+##### Preserving compressed responses with undici (Node.js)
+
+If your proxy runs on **Node.js** and you want to forward Electric's compressed response bytes to the client without decompressing and recompressing them, you can use [`undici.request()`](https://undici.nodejs.org/#/?id=undicirequesturl-options-promise) instead of `fetch()`. Unlike `fetch()`, `undici.request()` does **not** auto-decompress response bodies, so the `content-encoding` and `content-length` headers remain accurate.
+
+```ts
+import { request } from 'undici'
+
+const { statusCode, headers: rawHeaders, body } = await request(originUrl)
+
+return new Response(body, {
+  status: statusCode,
+  headers: rawHeaders,
+})
+```
+
+This avoids the decompress-then-recompress overhead and preserves the original compressed payload end-to-end. However, note the following:
+
+- **`undici` must be installed explicitly** (`npm install undici`). Node.js uses undici internally for `fetch()` but does not expose it as an importable module.
+- **Node.js serverless only.** `undici.request()` relies on `node:net` and `node:tls`, so it works on standard Node.js, AWS Lambda, Vercel Serverless Functions (Node.js runtime), and Netlify Functions. It does **not** work on edge/V8 isolate runtimes like Cloudflare Workers, Vercel Edge Functions, Deno Deploy, or Netlify Edge Functions.
+- **Bun alternative.** If your proxy runs on Bun, its `fetch()` supports a [`decompress: false` option](https://bun.sh/docs/api/fetch) that achieves the same result without an extra dependency.
+
+For most use cases, the header-stripping approach is simpler and portable. Use `undici.request()` when you need to optimize bandwidth between your proxy and client by avoiding double compression.
+
 #### Type-safe where clause generation
 
 The example above uses simple string-based WHERE clauses, which works well for straightforward cases. If you'd like type-safe WHERE clause generation with compile-time validation, you can use query builder libraries like Drizzle or Kysely. This is particularly useful for complex queries or when you want to catch column reference errors at compile-time rather than runtime.

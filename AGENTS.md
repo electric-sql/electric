@@ -60,6 +60,9 @@ const serve = async ({ request }: { request: Request }) => {
   origin.searchParams.set('source_id', process.env.SOURCE_ID!)
   origin.searchParams.set('secret', process.env.SOURCE_SECRET!)
 
+  // Option 1: fetch() — works everywhere but auto-decompresses the body.
+  // Must delete content-encoding/content-length to avoid browser decode errors.
+  // See https://github.com/whatwg/fetch/issues/1729
   const res = await fetch(origin)
   const headers = new Headers(res.headers)
   headers.delete('content-encoding')
@@ -69,6 +72,13 @@ const serve = async ({ request }: { request: Request }) => {
     statusText: res.statusText,
     headers,
   })
+
+  // Option 2 (Node.js only): undici.request() — skips auto-decompression,
+  // preserving compressed bytes end-to-end. Requires `npm install undici`.
+  // Does NOT work on edge runtimes (Cloudflare Workers, Vercel Edge, etc.).
+  // import { request } from 'undici'
+  // const { statusCode, headers: rawHeaders, body } = await request(origin)
+  // return new Response(body, { status: statusCode, headers: rawHeaders })
 }
 
 export const ServerRoute = createServerFileRoute('/api/todos').methods({
