@@ -295,6 +295,7 @@ describe(`ExpiredShapesCache`, () => {
                 'electric-offset': `0_0`,
                 'electric-schema': `{}`,
                 'electric-cursor': `cursor-1`,
+                age: `120`,
               },
             }
           )
@@ -413,6 +414,7 @@ describe(`ExpiredShapesCache`, () => {
               'electric-offset': `0_0`,
               'electric-schema': `{"id":"int4"}`,
               'electric-cursor': `cursor-1`,
+              age: `60`,
             },
           })
         )
@@ -490,6 +492,7 @@ describe(`ExpiredShapesCache`, () => {
             'electric-offset': `0_inf`, // Different offset from stale response
             'electric-schema': `{"id":"int4"}`,
             'electric-cursor': `cursor-1`,
+            age: `30`,
           },
         })
       )
@@ -541,6 +544,7 @@ describe(`ExpiredShapesCache`, () => {
             'electric-offset': `0_0`,
             'electric-schema': `{"id":"int4"}`,
             'electric-cursor': `cursor-1`,
+            age: `200`,
           },
         })
       )
@@ -612,16 +616,19 @@ describe(`ExpiredShapesCache`, () => {
           aborter.abort()
         }
 
+        const headers: Record<string, string> = {
+          'electric-handle': handle,
+          'electric-offset': `0_0`,
+          'electric-schema': `{}`,
+          'electric-cursor': `cursor-1`,
+          'electric-up-to-date': ``,
+        }
+        if (!hasCacheBuster) headers[`age`] = `90`
+
         return Promise.resolve(
           new Response(JSON.stringify([]), {
             status: 200,
-            headers: {
-              'electric-handle': handle,
-              'electric-offset': `0_0`,
-              'electric-schema': `{}`,
-              'electric-cursor': `cursor-1`,
-              'electric-up-to-date': ``,
-            },
+            headers,
           })
         )
       }
@@ -695,6 +702,7 @@ describe(`ExpiredShapesCache`, () => {
                 name: { type: `text` },
               }),
               'electric-cursor': `123`,
+              age: `45`,
             },
           })
         )
@@ -725,5 +733,164 @@ describe(`ExpiredShapesCache`, () => {
     // and continue fetching without errors.
     expect(errors).toHaveLength(0)
     expect(fetchCount).toBeGreaterThan(1) // should keep fetching, not crash
+  })
+
+  it(`removeExpired should remove a single entry and preserve others`, () => {
+    const url1 = `https://example.com/v1/shape?table=t1`
+    const url2 = `https://example.com/v1/shape?table=t2`
+
+    cache.markExpired(url1, `handle-1`)
+    cache.markExpired(url2, `handle-2`)
+
+    cache.removeExpired(url1)
+
+    expect(cache.getExpiredHandle(url1)).toBe(null)
+    expect(cache.getExpiredHandle(url2)).toBe(`handle-2`)
+
+    // Verify persistence
+    const stored = JSON.parse(
+      localStorage.getItem(`electric_expired_shapes`) || `{}`
+    )
+    expect(stored[url1]).toBeUndefined()
+    expect(stored[url2]).toBeDefined()
+  })
+
+  it(`removeExpired should be a no-op for non-existent entries`, () => {
+    const url = `https://example.com/v1/shape?table=t1`
+    cache.markExpired(url, `handle-1`)
+
+    cache.removeExpired(`https://example.com/v1/shape?table=nonexistent`)
+
+    expect(cache.getExpiredHandle(url)).toBe(`handle-1`)
+  })
+
+  it(`should accept fresh origin response when handle matches expired handle`, async () => {
+    // Scenario: expiredShapesCache has handle H1 marked expired.
+    // Server responds with H1 (shape definition unchanged) and NO age header
+    // (fresh from origin). Client should accept H1 instead of treating it as stale.
+
+    const expectedShapeUrl = `${shapeUrl}?table=test`
+    const handle = `reused-handle-H1`
+
+    expiredShapesCache.markExpired(expectedShapeUrl, handle)
+
+    let requestCount = 0
+
+    fetchMock.mockImplementation((_input: RequestInfo | URL) => {
+      requestCount++
+      if (requestCount >= 3) aborter.abort()
+
+      return Promise.resolve(
+        new Response(JSON.stringify([{ headers: { control: `up-to-date` } }]), {
+          status: 200,
+          headers: {
+            'electric-handle': handle,
+            'electric-offset': `0_0`,
+            'electric-schema': `{}`,
+            'electric-cursor': `cursor-1`,
+            'electric-up-to-date': ``,
+            // No `age` header → fresh from origin
+          },
+        })
+      )
+    })
+
+    const stream = new ShapeStream({
+      url: shapeUrl,
+      params: { table: `test` },
+      signal: aborter.signal,
+      fetchClient: fetchMock,
+      subscribe: false,
+    })
+
+    stream.subscribe(() => {})
+
+    await new Promise((resolve) => setTimeout(resolve, 100))
+
+    // Should accept the handle on the first response (no stale retry needed)
+    expect(stream.shapeHandle).toBe(handle)
+    // Expired entry should be cleared
+    expect(expiredShapesCache.getExpiredHandle(expectedShapeUrl)).toBe(null)
+    // Should NOT have needed a cache-busted retry
+    const urls = fetchMock.mock.calls.map((c) => c[0].toString())
+    const hasCacheBuster = urls.some((u) =>
+      new URL(u).searchParams.has(CACHE_BUSTER_QUERY_PARAM)
+    )
+    expect(hasCacheBuster).toBe(false)
+  })
+
+  it(`should still detect stale CDN response when age header is present`, async () => {
+    // Scenario: expiredShapesCache has handle H1 marked expired.
+    // CDN responds with H1 AND age: 142 → stale cached response.
+    // Client should treat this as stale and retry with cache buster.
+
+    const expectedShapeUrl = `${shapeUrl}?table=test`
+    const staleHandle = `stale-handle-H1`
+    const freshHandle = `fresh-handle-H2`
+
+    expiredShapesCache.markExpired(expectedShapeUrl, staleHandle)
+
+    let requestCount = 0
+
+    fetchMock.mockImplementation((input: RequestInfo | URL) => {
+      requestCount++
+      if (requestCount >= 5) aborter.abort()
+
+      const url = new URL(input.toString())
+      const hasCacheBuster = url.searchParams.has(CACHE_BUSTER_QUERY_PARAM)
+
+      if (!hasCacheBuster) {
+        // CDN returns stale response with age header
+        return Promise.resolve(
+          new Response(JSON.stringify([{ value: { id: 1 } }]), {
+            status: 200,
+            headers: {
+              'electric-handle': staleHandle,
+              'electric-offset': `0_0`,
+              'electric-schema': `{}`,
+              'electric-cursor': `cursor-1`,
+              age: `142`,
+            },
+          })
+        )
+      } else {
+        // Cache-busted request hits origin → fresh handle
+        return Promise.resolve(
+          new Response(
+            JSON.stringify([{ headers: { control: `up-to-date` } }]),
+            {
+              status: 200,
+              headers: {
+                'electric-handle': freshHandle,
+                'electric-offset': `0_0`,
+                'electric-schema': `{}`,
+                'electric-cursor': `cursor-1`,
+                'electric-up-to-date': ``,
+              },
+            }
+          )
+        )
+      }
+    })
+
+    const stream = new ShapeStream({
+      url: shapeUrl,
+      params: { table: `test` },
+      signal: aborter.signal,
+      fetchClient: fetchMock,
+      subscribe: false,
+    })
+
+    stream.subscribe(() => {})
+
+    await new Promise((resolve) => setTimeout(resolve, 200))
+
+    // Should have used cache buster to escape the stale CDN
+    const urls = fetchMock.mock.calls.map((c) => c[0].toString())
+    const usedCacheBuster = urls.some((u) =>
+      new URL(u).searchParams.has(CACHE_BUSTER_QUERY_PARAM)
+    )
+    expect(usedCacheBuster).toBe(true)
+    expect(stream.shapeHandle).toBe(freshHandle)
   })
 })

@@ -1083,9 +1083,19 @@ export class ShapeStream<T extends Row<unknown> = Row>
     const shapeKey = this.#currentFetchUrl
       ? canonicalShapeKey(this.#currentFetchUrl)
       : null
-    const expiredHandle = shapeKey
+    let expiredHandle = shapeKey
       ? expiredShapesCache.getExpiredHandle(shapeKey)
       : null
+
+    // Fresh origin response with same handle means the handle is still valid,
+    // not a stale CDN hit. CDNs set `age` > 0 on cached responses.
+    if (expiredHandle && shapeHandle === expiredHandle) {
+      const age = parseInt(headers.get(`age`) ?? ``, 10)
+      if (!age) {
+        expiredShapesCache.removeExpired(shapeKey!)
+        expiredHandle = null
+      }
+    }
 
     const transition = this.#syncState.handleResponseMetadata({
       status,

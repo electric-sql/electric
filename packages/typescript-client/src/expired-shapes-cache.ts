@@ -62,6 +62,11 @@ export class ExpiredShapesCache {
     this.load()
   }
 
+  removeExpired(shapeUrl: string): void {
+    delete this.data[shapeUrl]
+    this.save()
+  }
+
   clear(): void {
     this.data = {}
     this.save()
