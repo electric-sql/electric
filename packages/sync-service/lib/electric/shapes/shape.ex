@@ -723,9 +723,9 @@ defmodule Electric.Shapes.Shape do
 
   defp make_tags_from_pattern(patterns, record, stack_id, shape_handle) do
     Enum.map(patterns, fn pattern ->
-      Enum.map(pattern, fn
+      Enum.map_join(pattern, "/", fn
         nil ->
-          nil
+          ""
 
         column_name when is_binary(column_name) ->
           SubqueryMoves.make_value_hash(stack_id, shape_handle, Map.get(record, column_name))

@@ -438,27 +438,15 @@ defmodule Electric.Shapes.Consumer.Materializer do
     end
   end
 
-  # Parse a slash-delimited wire-format tag string into {position, hash} pairs.
-  # Convert a tag to position/hash pairs.
-  # Supports both formats:
-  #   - Wire format (string): "hash1/hash2/" → [{0, "hash1"}, {1, "hash2"}]
-  #   - Internal format (list): ["hash1", "hash2", nil] → [{0, "hash1"}, {1, "hash2"}]
-  # Empty segments / nil positions are skipped.
+  # Parse a slash-delimited tag string into {position, hash} pairs.
+  # e.g., "hash1/hash2/" → [{0, "hash1"}, {1, "hash2"}]
+  # Empty segments (non-participating positions) are skipped.
   defp tag_to_position_entries(tag) when is_binary(tag) do
     tag
     |> String.split("/")
     |> Enum.with_index()
     |> Enum.flat_map(fn
       {"", _pos} -> []
-      {hash, pos} -> [{pos, hash}]
-    end)
-  end
-
-  defp tag_to_position_entries(tag) when is_list(tag) do
-    tag
-    |> Enum.with_index()
-    |> Enum.flat_map(fn
-      {nil, _pos} -> []
       {hash, pos} -> [{pos, hash}]
     end)
   end

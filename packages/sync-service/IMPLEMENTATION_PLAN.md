@@ -62,9 +62,9 @@ Since decomposition is deterministic (same AST always produces the same result),
 
 **Within the consumer's lifetime**, always use `DnfContext`'s cached decomposition. Never re-decompose in `querying.ex`, `subquery_moves.ex`, `move_handling.ex`, etc. — accept the decomposition from DnfContext instead.
 
-### Data Formats: condition_hashes, tags, and wire format
+### Data Formats: condition_hashes and tags
 
-There are three distinct representations of per-row hashed values, each optimised for its consumer. All three are computed independently from the underlying column values — none is derived from another in code.
+There are two distinct representations of per-row hashed values, each optimised for its consumer. Both are computed independently from the underlying column values — neither is derived from the other in code.
 
 #### 1. condition_hashes
 
@@ -78,18 +78,7 @@ One hash per DNF position, stored as a map with integer keys for O(1) positional
 - **Purpose**: position-aware filtering — "is the hash at position P in the moved-out set?"
 - **No nils**: every DNF position has exactly one condition with column(s) that produce a hash for every row (NULL column values get the existing `"NULL"` sentinel, non-null get `"v:" <> value`)
 
-#### 2. tags (internal 2D array)
-
-One inner list per disjunct, with `nil` at non-participating positions:
-
-```elixir
-[["hash_x", "hash_status", nil], [nil, nil, "hash_y"]]
-```
-
-- **Where**: `move_tags` on change structs, `fill_move_tags` output, consumer processing
-- **Purpose**: per-disjunct tag tracking for client-side inclusion evaluation
-
-#### 3. wire/API tags (slash-delimited per disjunct)
+#### 2. tags (slash-delimited per disjunct)
 
 One string per disjunct, positions separated by `/`:
 
@@ -97,16 +86,18 @@ One string per disjunct, positions separated by `/`:
 {"tags": ["hash_x/hash_status/", "//hash_y"]}
 ```
 
-- **Where**: JSON headers sent to clients over HTTP, embedded in snapshot/move-in JSON by Postgres
-- **Purpose**: compact JSON representation for the wire
+- **Where**: `move_tags` on change structs, `fill_move_tags` output, JSON headers sent to clients over HTTP, embedded in snapshot/move-in JSON by Postgres
+- **Purpose**: per-disjunct tag tracking — used everywhere from change structs through consumer processing to the wire. A single canonical format avoids unnecessary conversions.
+
+Empty segments represent non-participating positions (e.g. `//hash_y` means positions 0 and 1 are absent, position 2 has `hash_y`). This is unambiguous because hash values are always non-empty (MD5 hex or `"v:"`/`"NULL"` prefixed).
 
 #### How each format is computed
 
-- **Postgres SQL queries** (snapshot + move-in) generate both condition_hashes (as a separate `text[]` column) and wire-format tags (baked into the JSON headers string) directly from the underlying column values. The MD5 expressions are shared — Postgres deduplicates identical subexpressions.
-- **Binary snapshot write** stores condition_hashes from the separate column. The JSON column (with wire tags already embedded) is stored alongside.
+- **Postgres SQL queries** (snapshot + move-in) generate both condition_hashes (as a separate `text[]` column) and tags (baked into the JSON headers string) directly from the underlying column values. The MD5 expressions are shared — Postgres deduplicates identical subexpressions.
+- **Binary snapshot write** stores condition_hashes from the separate column. The JSON column (with tags already embedded) is stored alongside.
 - **Binary snapshot read** decodes sequential condition_hashes into `%{position => hash}` map for filtering.
-- **`fill_move_tags`** in `shape.ex` computes the **internal 2D array** directly from the record for replication-stream changes.
-- **`log_items.ex`** converts the internal 2D array to slash-delimited wire format when building log entry headers (via `Enum.map(tags, &Enum.join(&1, "/"))`).
+- **`fill_move_tags`** in `shape.ex` computes slash-delimited tag strings directly from the record for replication-stream changes. No intermediate list format — `make_tags_from_pattern` produces the wire format immediately.
+- **`log_items.ex`** passes tags through to headers as-is (no conversion needed).
 
 #### Binary move-in snapshot file format
 
@@ -159,7 +150,7 @@ This function is used in both `querying.ex` (for `active_conditions` SELECT colu
 | `lib/electric/shapes/shape.ex` | `fill_move_tags`, `convert_change` | Multi-disjunct tags — **no new struct fields** |
 | `lib/electric/shapes/where_clause.ex` | `includes_record?` boolean check | Per-position evaluation |
 | `lib/electric/shapes/querying.ex` | SQL for initial data, tags | Add `active_conditions` columns, add `condition_hashes` SELECT for move-in queries, accept DnfContext |
-| `lib/electric/log_items.ex` | Formats messages with tags | Add `active_conditions` to headers, convert 2D tags to wire format |
+| `lib/electric/log_items.ex` | Formats messages with tags | Add `active_conditions` to headers, remove `tags_to_wire` (tags already in wire format) |
 | `lib/electric/replication/eval/parser.ex` | Parses WHERE, handles SubLinks | No changes needed |
 | `lib/electric/replication/eval/walker.ex` | AST traversal | No changes needed |
 | `packages/elixir-client/.../tag_tracker.ex` | Client-side tag tracking, DNF eval, synthetic deletes | Slash-delimited normalization, `removed_tags` parsing, position-based indexing |
@@ -565,18 +556,18 @@ Worked example for `WHERE (x IN sq1 AND status = 'active') OR y IN sq2`:
 - `tag_structure`: `[["x", "status", nil], [nil, nil, "y"]]`
 
 For a row with `x='a', status='active', y='b'`, `fill_move_tags` produces:
-`[["hash(a)", "hash(active)", nil], [nil, nil, "hash(b)"]]`
+`["hash(a)/hash(active)/", "//hash(b)"]`
 
 This means the non-subquery hash is deterministic for rows matching the condition (all rows with `status = 'active'` produce the same hash at position 1). This is correct — the hash identifies the row's contribution at that position, and the value must match between Postgres-generated hashes (`make_condition_hashes_select`) and Elixir-generated hashes (`fill_move_tags`), which it does because both hash the raw column value using the same `namespace_value` + MD5 formula.
 
-2. Update `fill_move_tags/4` to produce the **internal 2D array** format (not slash-delimited strings). The existing `make_tags_from_pattern` currently calls `Enum.join("/")` to produce slash-delimited strings; this changes to return lists directly:
+2. Update `fill_move_tags/4` to produce slash-delimited tag strings directly. `make_tags_from_pattern` maps each disjunct pattern to a single slash-delimited string:
 
 **Directional** — shows data shape, hashing details use existing helpers:
 ```elixir
 def fill_move_tags(%Changes.NewRecord{record: record} = change, shape, stack_id, shape_handle) do
   tags = Enum.map(shape.tag_structure, fn disjunct_pattern ->
-    Enum.map(disjunct_pattern, fn
-      nil -> nil  # Position not in this disjunct
+    Enum.map_join(disjunct_pattern, "/", fn
+      nil -> ""  # Non-participating position → empty segment
       column_spec -> hash_column_value(column_spec, record, stack_id, shape_handle)
     end)
   end)
@@ -585,7 +576,7 @@ def fill_move_tags(%Changes.NewRecord{record: record} = change, shape, stack_id,
 end
 ```
 
-The conversion from internal 2D arrays to slash-delimited wire format happens in `log_items.ex` (Phase 8), not here.
+Tags are slash-delimited strings from the start — no intermediate list format, no conversion needed in `log_items.ex`.
 
 ### Phase 5: Consumer State Updates
 
@@ -864,9 +855,9 @@ end
 
 **Modify** `lib/electric/log_items.ex`
 
-Two changes: add `active_conditions` to headers, and convert internal 2D tag arrays to slash-delimited wire format.
+Add `active_conditions` to headers. Tags are already slash-delimited strings from `fill_move_tags` (Phase 4), so no conversion is needed — pass them through directly.
 
-**Directional** — `from_change` shows new fields; **Final** — `tags_to_wire`:
+**Directional** — `from_change` shows new fields:
 ```elixir
 def from_change(%Changes.NewRecord{} = change, txids, _, _replica) do
   headers = %{
@@ -877,24 +868,14 @@ def from_change(%Changes.NewRecord{} = change, txids, _, _replica) do
     op_position: change.log_offset.op_offset
   }
   |> put_if_true(:last, change.last?)
-  |> put_if_true(:tags, change.move_tags != [], tags_to_wire(change.move_tags))
+  |> put_if_true(:tags, change.move_tags != [], change.move_tags)
   |> put_if_true(:active_conditions, change.active_conditions != nil, change.active_conditions)
 
   [{change.log_offset, %{key: change.key, value: change.record, headers: headers}}]
 end
-
-# Convert internal 2D tag array to slash-delimited wire format.
-# [["hash_x", "hash_status", nil], [nil, nil, "hash_y"]]
-# → ["hash_x/hash_status/", "//hash_y"]
-defp tags_to_wire(tags) do
-  Enum.map(tags, fn disjunct ->
-    Enum.map_join(disjunct, "/", fn
-      nil -> ""
-      hash -> hash
-    end)
-  end)
-end
 ```
+
+The existing `tags_to_wire` helper can be removed — `move_tags` are already in wire format.
 
 #### Message Format Migration
 
@@ -969,9 +950,9 @@ Clients maintain a map of tracked row keys. A move-in/move-out broadcast for a k
 defmodule Electric.Replication.Changes.NewRecord do
   defstruct [
     # ... existing fields ...
-    :move_tags,           # [[hash | nil]] - 2D array, one inner list per disjunct
+    :move_tags,           # [String.t()] - slash-delimited strings, one per disjunct
     :active_conditions,   # [boolean] - one per position
-    :removed_tags         # [[hash | nil]] - for updates only
+    :removed_tags         # [String.t()] - slash-delimited strings, for updates only
   ]
 end
 
@@ -1144,7 +1125,7 @@ Move handling inverts behavior for negated positions:
 ```elixir
 # Positions: 0 (positive), 1 (negated)
 # Row with x='a' where 'a' is in subquery:
-tags: [[hash(a), nil], [nil, hash(a)]]  # Same hash, different positions
+tags: ["hash(a)/", "/hash(a)"]  # Same hash, different positions
 active_conditions: [true, false]  # Opposite values
 ```
 
@@ -1412,13 +1393,13 @@ in the integration tests. It must handle the new wire format (slash-delimited ta
 
 **Modify** `packages/elixir-client/lib/electric/client/tag_tracker.ex`
 
-1. **Slash-delimited tag normalization**: Tags arrive as slash-delimited strings
-   (e.g., `"hash1/hash2/"`, `"//hash3"`). Normalize to 2D arrays internally:
-   `["hash1/hash2/", "//hash3"]` -> `[["hash1", "hash2", ""], ["", "", "hash3"]]` -> replace `""` with `nil`
+1. **Slash-delimited tag parsing**: Tags arrive as slash-delimited strings
+   (e.g., `"hash1/hash2/"`, `"//hash3"`). Split on `/` to extract per-position hashes.
+   Empty segments represent non-participating positions.
 
-2. **`removed_tags` normalization**: `removed_tags` arrive in the **same slash-delimited
-   format** as `tags`. They must be normalized through the same split pipeline before
-   comparison against internal position hashes. Without this, `filter_removed_tags` compares
+2. **`removed_tags` parsing**: `removed_tags` arrive in the **same slash-delimited
+   format** as `tags`. They must be parsed through the same split pipeline before
+   comparison against position hashes. Without this, `filter_removed_tags` compares
    bare hashes against raw slash-delimited strings — never matches.
 
 3. **DNF-based visibility evaluation**: `row_visible?/2` evaluates OR over disjuncts, where
@@ -1434,11 +1415,12 @@ in the integration tests. It must handle the new wire format (slash-delimited ta
 6. **Move-in activation**: `handle_move_in/4` activates positions for matching keys.
 
 ```elixir
-# Key normalization — removed_tags must use the same pipeline as tags
+# Key parsing — removed_tags must use the same split pipeline as tags
 removed_tags_set =
   removed_tags
-  |> normalize_tags()
-  |> Enum.flat_map(fn disjunct -> Enum.reject(disjunct, &is_nil/1) end)
+  |> Enum.flat_map(fn tag ->
+    tag |> String.split("/") |> Enum.reject(&(&1 == ""))
+  end)
   |> MapSet.new()
 ```
 
@@ -1451,7 +1433,7 @@ removed_tags_set =
 
 ```elixir
 describe "tag_tracker with DNF wire format" do
-  test "normalizes slash-delimited tags to 2D structure"
+  test "parses slash-delimited tags to position/hash pairs"
   test "removed_tags in slash-delimited format are correctly filtered"
   test "row_visible? evaluates DNF correctly"
   test "generate_synthetic_deletes only deletes when all disjuncts unsatisfied"
@@ -1760,7 +1742,7 @@ Phase 4: Shape tag_structure + fill_move_tags (depends on Phase 1, NO new Shape 
     |
     +---> Phase 7: Move Messages + Exclusion Clauses (depends on Phase 3)
     |
-    +---> Phase 8: Log Items (depends on Phase 4 for tag format)
+    +---> Phase 8: Log Items (depends on Phase 4 for active_conditions)
     |
     +---> Phase 10: Querying (depends on Phases 2, 3, 7)
 
@@ -1778,7 +1760,7 @@ Phase 14: Elixir Client (depends on Phases 7, 8 for wire format definition)
 | 5 | Phase 5 | Consumer State | holds DnfContext, built at init |
 | 6 | Phase 6 | Active Conditions | uses DnfContext |
 | 7 | Phase 7 | Move Messages + Exclusion Clauses | uses DnfContext for exclusion |
-| 8 | Phase 8 | Log Items | 2D-to-wire tag conversion |
+| 8 | Phase 8 | Log Items | `active_conditions` headers, remove `tags_to_wire` |
 | 9 | Phase 9 | Change Handling | uses DnfContext, replaces `includes_record?` |
 | 10 | Phase 10 | Querying | uses DnfContext + SqlGenerator |
 | 11 | Phase 11 | Move Handling | uses DnfContext for position routing |
@@ -1852,10 +1834,10 @@ Phase 14: Elixir Client (depends on Phases 7, 8 for wire format definition)
 - `lib/electric/replication/eval/sql_generator.ex` - **(new)** Converts AST back to SQL — used by `querying.ex` for non-subquery `active_conditions` and by `subquery_moves.ex` for exclusion clauses
 - `lib/electric/shapes/consumer/dnf_context.ex` - **(new)** DNF state container, built from Shape at consumer startup
 - `lib/electric/shapes/shape/subquery_moves.ex` - Core tag and move message generation, **move-in WHERE clause + DNF-aware exclusion clauses**
-- `lib/electric/shapes/shape.ex` - `fill_move_tags` (2D array output), `tag_structure` — **no new struct fields**
+- `lib/electric/shapes/shape.ex` - `fill_move_tags` (slash-delimited string output), `tag_structure` — **no new struct fields**
 - `lib/electric/shapes/consumer/move_handling.ex` - Move-in/out orchestration (position routing, negation inversion), delegates SQL generation to `subquery_moves.ex`
 - `lib/electric/shapes/where_clause.ex` - Record filtering and `active_conditions`
-- `lib/electric/log_items.ex` - Message format with `active_conditions`, 2D-to-wire tag conversion
+- `lib/electric/log_items.ex` - Message format with `active_conditions` (tags passed through as-is, `tags_to_wire` removed)
 - `lib/electric/shapes/querying.ex` - SQL generation for snapshots and move-in queries. Move-in queries SELECT condition_hashes (separate column) + wire tags (in JSON). Accepts DnfContext, delegates non-subquery AST-to-SQL to `SqlGenerator`
 - `packages/elixir-client/lib/electric/client/tag_tracker.ex` - Client-side tag tracking, DNF evaluation, synthetic deletes
 - `packages/elixir-client/lib/electric/client/message/headers.ex` - Client message header parsing

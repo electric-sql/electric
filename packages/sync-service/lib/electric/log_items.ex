@@ -48,7 +48,7 @@ defmodule Electric.LogItems do
              op_position: change.log_offset.op_offset
            }
            |> put_if_true(:last, change.last?)
-           |> put_if_true(:tags, change.move_tags != [], tags_to_wire(change.move_tags))
+           |> put_if_true(:tags, change.move_tags != [], change.move_tags)
            |> put_if_true(
              :active_conditions,
              change.active_conditions != nil,
@@ -73,7 +73,7 @@ defmodule Electric.LogItems do
              op_position: change.log_offset.op_offset
            }
            |> put_if_true(:last, change.last?)
-           |> put_if_true(:tags, change.move_tags != [], tags_to_wire(change.move_tags))
+           |> put_if_true(:tags, change.move_tags != [], change.move_tags)
            |> put_if_true(
              :active_conditions,
              change.active_conditions != nil,
@@ -98,11 +98,11 @@ defmodule Electric.LogItems do
              op_position: change.log_offset.op_offset
            }
            |> put_if_true(:last, change.last?)
-           |> put_if_true(:tags, change.move_tags != [], tags_to_wire(change.move_tags))
+           |> put_if_true(:tags, change.move_tags != [], change.move_tags)
            |> put_if_true(
              :removed_tags,
              change.move_tags != [],
-             tags_to_wire(change.removed_move_tags)
+             change.removed_move_tags
            )
            |> put_if_true(
              :active_conditions,
@@ -134,7 +134,7 @@ defmodule Electric.LogItems do
            |> put_if_true(
              :tags,
              change.move_tags != [],
-             tags_to_wire(change.move_tags ++ change.removed_move_tags)
+             change.move_tags ++ change.removed_move_tags
            )
        }},
       {new_offset,
@@ -151,7 +151,7 @@ defmodule Electric.LogItems do
              op_position: new_offset.op_offset
            }
            |> put_if_true(:last, change.last?)
-           |> put_if_true(:tags, change.move_tags != [], tags_to_wire(change.move_tags))
+           |> put_if_true(:tags, change.move_tags != [], change.move_tags)
            |> put_if_true(
              :active_conditions,
              change.active_conditions != nil,
@@ -166,23 +166,6 @@ defmodule Electric.LogItems do
       do: LogOffset.increment(offset)
 
   def expected_offset_after_split(%{log_offset: offset}), do: offset
-
-  # Convert internal 2D tag array to slash-delimited wire format.
-  # [["hash_x", "hash_status", nil], [nil, nil, "hash_y"]]
-  # → ["hash_x/hash_status/", "//hash_y"]
-  defp tags_to_wire(tags) do
-    Enum.map(tags, fn
-      disjunct when is_list(disjunct) ->
-        Enum.map_join(disjunct, "/", fn
-          nil -> ""
-          hash -> hash
-        end)
-
-      # Backward compat: if move_tags still contains bare strings, pass through
-      tag when is_binary(tag) ->
-        tag
-    end)
-  end
 
   defp take_pks_or_all(record, _pks, :full), do: record
   defp take_pks_or_all(record, [], :default), do: record
