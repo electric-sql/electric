@@ -55,65 +55,121 @@ end
 If the shape catches up during this window, the request succeeds. Otherwise,
 the 400 is returned at `api.ex:793-799`.
 
-### Primary Hypothesis: Writer Crash with Unflushed Buffer
+### IMPORTANT: User reports this happens repeatedly WITHOUT server restarts
 
-The most likely root cause is a **gap between ETS metadata and disk persistence**
-after a writer process crash.
+Per Marius (Feb 23): "this is happening over and over again, unrelated to server
+restarts." This rules out a one-time writer crash as the primary explanation and
+points to a systemic issue that recurs during normal operation.
 
-**The two-layer offset tracking system:**
+### Hypothesis 1: Repeated Shape Invalidation + Cleanup Race (Most Likely)
 
+The requests include `expired_handle`, confirming the shape HAS been rotated before.
+If something keeps invalidating the `offer_items` shape, the cleanup race window
+(documented as issue #3760 at `api.ex:737-751`) would repeatedly expose the
+out-of-bounds condition.
+
+**Triggers for shape invalidation:**
+1. **TRUNCATE on `offer_items`** (`consumer.ex:535-545`) — ANY truncate in a
+   transaction causes the shape to be rotated. If the app periodically truncates
+   this table (ETL, bulk refresh, etc.), shapes are repeatedly invalidated.
+2. **Schema/DDL changes** (`consumer.ex:440-456`) — column alterations, index changes.
+3. **Relation changes** via `SchemaReconciler` detecting drift between PG and local schema.
+4. **Subquery invalidation** (`consumer.ex:276-310`) — if the shape uses subqueries.
+
+**The race window during async cleanup (`shape_cleaner.ex`):**
+
+```
+T1: Consumer terminates (e.g., truncate detected)
+    → terminate callback runs: flushes buffer, preserves @read_path_keys in stack ETS
+    → remove_shape_async() spawns background cleanup task
+
+T2: Cleanup task starts running:
+    1. ShapeStatus.remove_shape()  -- removes handle from shape registry
+    2. Consumer.stop()             -- ensures consumer is stopped
+    3. Storage.cleanup!()          -- :ets.delete(stack_ets, shape_handle)
+                                      moves data files to trash via AsyncDeleter
+    4. ShapeLogCollector.remove_shape()
+
+T3: Between T1 and T2.1: A client request arrives
+    → validate_shape_handle(H) → PASSES (ShapeStatus still has it)
+    → fetch_latest_offset(H) → reads from stack ETS → returns correct offset
+    → NOT out of bounds (offset is correct from terminate flush)
+
+T4: Between T2.1 and T2.3: A client request arrives
+    → validate_shape_handle(H) → FAILS (ShapeStatus removed it)
+    → resolve_shape_handle returns nil → 409 (correct behavior)
+
+T5: Between T2.2 and T2.3: An edge case
+    → If populate_read_through_cache! fires after ETS delete but before
+      ShapeStatus remove (shouldn't happen given ordering above)
+    → last_seen_txn_offset = nil (not on disk) → low offset → out of bounds
+```
+
+**For `changes_only` shapes, the impact is worse:** After invalidation and
+recreation, the new shape has NO historical data. The new shape's offset starts
+at `last_before_real_offsets()` ({0, :infinity}). A client from the old
+incarnation with a real offset like `6868065325280_0` would be massively out
+of bounds — and the 10-second grace period can't help because the data doesn't
+exist in the new shape at all.
+
+**Why this causes "over and over":** If something is repeatedly invalidating
+the shape (periodic truncation, frequent schema reconciliation, etc.), each
+cycle creates a new race window. TanstackDb silently handles 409s (refetching
+with new handle), but 400 "out of bounds" errors surface as failures.
+
+### Hypothesis 2: Chunk Boundary Race During Large Transactions
+
+During `append_to_log!` in the write loop, chunk boundaries are written to the
+ETS metadata cache **mid-transaction** when `bytes_in_chunk >= chunk_bytes_threshold`
+(default: 10 MB). But `last_seen_txn_offset` is only updated **after** the
+entire reduce loop completes, in `register_complete_txn` (`write_loop.ex:362-376`).
+
+```
+Timeline during a single append_to_log! call:
+1. Processing line N: bytes_in_chunk exceeds 10MB threshold
+2. maybe_write_closing_chunk_boundary fires:
+   a. Chunk boundary written to ETS cache (max offset = line N's offset Z)
+   b. update_chunk_boundaries_cache updates stack ETS  ← VISIBLE TO READERS
+   c. flush_buffer runs → updates last_seen_txn_offset = Y (PREVIOUS txn's offset)
+3. Processing continues for lines N+1 through end of transaction
+4. After reduce loop: register_complete_txn → last_seen_txn_offset = final offset
+
+Between steps 2b and 4, a concurrent reader sees:
+  - get_chunk_end_log_offset() → Z (from chunk boundary, mid-current-txn)
+  - fetch_latest_offset() → Y (from previous txn, Y < Z)
+  - Response offset = Z
+  - Next request with offset Z: fetch_latest_offset() → still Y → OUT OF BOUNDS
+```
+
+**Conditions required:** Transaction must produce >10 MB of data for the shape.
+This could explain "over and over" if the `offer_items` table regularly receives
+large bulk operations. Resolves once the transaction finishes processing.
+
+### Hypothesis 3: Writer Crash with Unflushed Buffer
+
+**Note:** Marius says the error is unrelated to server restarts. This hypothesis
+would only apply if individual consumer/writer processes crash (without a full
+server restart) and are restarted by the supervision tree.
+
+The two-layer offset tracking system:
 1. **`last_seen_txn_offset`** — stored in ETS only (NOT persisted to disk).
    Updated synchronously during `append_to_log!` via `register_complete_txn`.
    This is what `fetch_latest_offset` reads first.
-
 2. **`last_persisted_txn_offset`** — persisted to disk AND cached in ETS.
    Updated only when the write buffer is flushed (every 64KB or 1s boundary).
 
 **Key finding:** `last_seen_txn_offset` is NOT in `@stored_keys`
 (`pure_file_storage.ex:65-74`), meaning `write_metadata!` is a no-op for it.
-It only exists in the ETS cache.
+It only exists in the ETS cache. If the consumer crashes uncleanly (`:kill`, OOM),
+`terminate` doesn't run, and the ETS metadata may reflect a stale offset.
 
-**The vulnerability window:**
+However, during clean termination (`:shutdown`), `terminate` runs
+`flush_and_close_all` → `flush_buffer` which updates the ETS metadata with
+correct values. And `clean_shape_ets_entry` preserves `@read_path_keys`
+(including `last_seen_txn_offset`). So clean terminations should not cause
+offset regression.
 
-```
-T1: Consumer processes transaction, calls append_to_log!()
-    → Writer stores data in ETS buffer
-    → Writer updates last_seen_txn_offset = X in ETS (via register_complete_txn)
-    → Writer updates last_persisted_txn_offset = Y on disk (Y < X, buffer not flushed yet)
-    → Consumer sends {ref, :new_changes, X} to API listeners
-    → Client receives response with offset X
-
-T2: Buffer flush scheduled but hasn't run yet
-    → ETS has last_seen_txn_offset = X
-    → Disk has last_persisted_txn_offset = Y (Y < X)
-
-T3: Writer/consumer process crashes (OOM, timeout, :kill, etc.)
-    → Buffer data lost (not flushed to disk)
-    → Writer's ETS table deleted
-    → clean_shape_ets_entry NOT called (unclean termination)
-
-T4: New transaction arrives for this shape
-    → ConsumerRegistry detects no running consumer
-    → Calls ShapeCache.start_consumer_for_handle()
-    → New writer calls init_writer!() → register_with_stack()
-    → register_with_stack reads stable_offset = Y from disk
-    → Uses :ets.insert() to OVERWRITE stack_ets with last_seen_txn_offset = Y
-
-T5: Client makes next request with offset = X
-    → fetch_latest_offset() reads from ETS: last_seen_txn_offset = Y
-    → Y < X → "out of bounds for this shape"
-    → 10-second grace period expires (shape can't catch up to X because
-      the log entries between Y and X were in the unflushed buffer and are now lost)
-    → Returns 400 error
-```
-
-**Why the grace period doesn't help:** The log entries between Y and X were in the
-writer's ETS buffer which was lost during the crash. The shape would need to
-re-process those WAL entries, but the new consumer starts from the current WAL
-position, not from Y. The entries between Y and X may already be past the
-replication slot's retention.
-
-### Secondary Hypothesis: CDN/Proxy Serving Stale Response
+### Hypothesis 4: CDN/Proxy Serving Stale Response
 
 The requests go through `api3.autarc.energy/v1/electric-shape-proxy/`. If a CDN
 or caching proxy served a stale response (e.g., from before a shape rotation),
@@ -123,11 +179,7 @@ Non-live responses have `cache-control: public, max-age=60, stale-while-revalida
 If the shape was rotated and the CDN served a cached response with the old offset
 but the new handle, the client's offset would be out of bounds for the new shape.
 
-This is less likely because:
-- The cache key includes the handle, so different shape incarnations are different cache entries
-- The `expired_handle` parameter acts as an additional cache buster
-
-### Why `log=changes_only` May Be Relevant
+### Why `log=changes_only` Is Likely Key
 
 For `changes_only` shapes:
 - The initial snapshot is empty (`querying.ex:106-108`)
@@ -136,8 +188,24 @@ For `changes_only` shapes:
 - The new shape's `last_offset` starts at `LogOffset.last_before_real_offsets()` ({0, :infinity})
 - A client holding offset `6868065325280_0` from the old shape would be massively out of bounds
 
-This makes `changes_only` shapes more vulnerable to this bug than `full` shapes,
-because full shapes at least have a snapshot that covers historical data.
+This makes `changes_only` shapes **especially vulnerable**: after any shape
+rotation, the new incarnation cannot possibly catch up to the client's old
+offset, because the historical data simply doesn't exist.
+
+## Questions to Ask the User (Marius)
+
+1. **Are there TRUNCATE operations on `offer_items`?** (ETL, cron, bulk refresh)
+   → Check for server logs: `"Truncate operation encountered while processing txn"`
+2. **Are there DDL/schema changes on `offer_items`?** (migrations, ALTER TABLE)
+   → Check for server logs: `"Schema for the table...changed - terminating shape"`
+3. **Does the shape use WHERE clauses with subqueries?**
+4. **Is Electric running multiple instances behind a load balancer?**
+   (Different instances could have different offsets for the same shape)
+5. **What is the typical transaction size for `offer_items`?**
+   (Large bulk inserts >10MB would trigger the chunk boundary race)
+6. **Can you share the server logs around the time of the error?**
+   Looking for "Truncate operation", "Schema...changed", "terminating shape",
+   "Notifying...clients about new changes" messages
 
 ## Impact
 
@@ -150,31 +218,45 @@ When the 400 error occurs:
 
 ## Potential Fixes
 
-### Fix 1: Persist `last_seen_txn_offset` to Disk (Recommended)
-
-Add `:last_seen_txn_offset` to `@stored_keys` in `pure_file_storage.ex`, and write
-it to disk in `update_global_persistence_information`. This eliminates the gap
-between ETS and disk, making writer crashes safe.
-
-**Trade-off:** Small additional disk I/O per transaction (one extra metadata file write).
-
-### Fix 2: Force Flush on Consumer Terminate
-
-In the consumer's terminate callback, ensure the writer buffer is always flushed
-before the process exits. This is already done for clean termination via
-`close_all_files(state)`, but may not execute during `:kill` signals.
-
-**Trade-off:** Doesn't help with `:kill` or OOM crashes where terminate doesn't run.
-
-### Fix 3: Return 409 Instead of 400 for Persistent Out-of-Bounds
+### Fix 1: Return 409 Instead of 400 for Persistent Out-of-Bounds (Recommended)
 
 When the out-of-bounds grace period expires and the shape can't catch up, return
 a 409 with the current handle instead of 400. This tells the client to refetch
 from scratch, which is the correct recovery behavior.
 
-**Trade-off:** The client loses its position and must re-sync from the beginning.
-This is the same as what happens during shape rotation, so existing client logic
+**Rationale:** The 400 response is a dead end — the client doesn't know how to
+recover. A 409 triggers the existing "must refetch" logic in TanstackDb and
+other clients. This is the same as shape rotation, so existing client logic
 handles it.
+
+**Location:** `api.ex:793-799` — change from `Response.invalid_request` to
+`Response.error` with status 409.
+
+**Trade-off:** The client loses its position and must re-sync from the beginning.
+
+### Fix 2: Prevent chunk_end_offset from exceeding last_seen_txn_offset
+
+In `determine_log_chunk_offset` (`api.ex:422-432`), cap `chunk_end_offset` to
+never exceed `request.last_offset`:
+
+```elixir
+chunk_end_offset =
+  case Shapes.get_chunk_end_log_offset(api.stack_id, handle, offset) do
+    nil -> last_offset
+    end_offset -> LogOffset.min(end_offset, last_offset)
+  end
+```
+
+This prevents the response offset from being set to a mid-transaction chunk
+boundary that's ahead of `last_seen_txn_offset`.
+
+### Fix 3: Persist `last_seen_txn_offset` to Disk
+
+Add `:last_seen_txn_offset` to `@stored_keys` in `pure_file_storage.ex`, and write
+it to disk in `update_global_persistence_information`. This eliminates the gap
+between ETS and disk for crash scenarios.
+
+**Trade-off:** Additional disk I/O per transaction.
 
 ### Fix 4: Detect Offset Regression and Invalidate Shape
 
