@@ -436,10 +436,17 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
           :ok = Query.add_shape(conn, handle, shape, comparable, hash, relations)
 
         {_ts, {:remove, handle}} ->
-          with {:error, reason} <- Query.remove_shape(conn, handle) do
-            # remove_shape only returns an error tuple if the shape doesn't exist
-            # in which case the failure is ok, it's already deleted
-            Logger.warning("Unable do delete shape #{inspect(handle)}: #{inspect(reason)}")
+          case Query.remove_shape(conn, handle) do
+            {:error, {:enoshape, ^handle}} ->
+              # tried to delete a shape that doesn't exist, in which case the
+              # failure is ok, it's already deleted
+              Logger.warning("Attempt to delete non-existent shape #{inspect(handle)}")
+
+            :ok ->
+              :ok
+
+            error ->
+              raise "Failed to remove shape: #{inspect(error)}"
           end
 
         {_ts, {:snapshot_complete, handle}} ->

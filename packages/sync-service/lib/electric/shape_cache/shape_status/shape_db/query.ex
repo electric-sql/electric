@@ -116,7 +116,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Query do
              {:blob, comparable_to_binary(comparable_shape)},
              shape_hash
            ]),
-         {:ok, 1} <- modify(conn, increment_counter, [1]),
+         :ok <- increment_counter(conn, increment_counter, 1),
          :ok <-
            Enum.reduce_while(relations, :ok, fn {oid, _name}, :ok ->
              case modify(conn, insert_relation, [{:blob, shape_handle}, oid]) do
@@ -172,15 +172,6 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Query do
     end
   end
 
-  def mark_snapshot_started(
-        %Conn{conn: conn, stmts: %{mark_snapshot_started: stmt}},
-        shape_handle
-      ) do
-    with {:ok, n} <- modify(conn, stmt, [{:blob, shape_handle}]) do
-      if n == 1, do: :ok, else: :error
-    end
-  end
-
   def mark_snapshot_complete(
         %Conn{conn: conn, stmts: %{mark_snapshot_complete: stmt}},
         shape_handle
@@ -199,13 +190,21 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Query do
 
     case modify(conn, delete_shape, [{:blob, shape_handle}]) do
       {:ok, 0} ->
-        {:error, "No shape matching #{inspect(shape_handle)}"}
+        {:error, {:enoshape, shape_handle}}
 
       {:ok, 1} ->
-        with {:ok, 1} <- modify(conn, increment_counter, [-1]),
-             {:ok, n} when n > 0 <- modify(conn, delete_relation, [{:blob, shape_handle}]) do
+        with :ok <- increment_counter(conn, increment_counter, -1),
+             {:ok, _} <- modify(conn, delete_relation, [{:blob, shape_handle}]) do
           :ok
         end
+    end
+  end
+
+  defp increment_counter(conn, stmt, incr) do
+    case modify(conn, stmt, [incr]) do
+      {:ok, 1} -> :ok
+      {:ok, _} -> {:error, "Failed to increment shape count by #{incr}"}
+      error -> error
     end
   end
 

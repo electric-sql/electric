@@ -59,7 +59,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb do
     if handle_exists?(stack_id, shape_handle) do
       WriteBuffer.remove_shape(stack_id, shape_handle)
     else
-      {:error, "No shape matching #{inspect(shape_handle)}"}
+      {:error, {:enoshape, shape_handle}}
     end
   end
 

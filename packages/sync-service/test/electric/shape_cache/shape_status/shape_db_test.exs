@@ -130,7 +130,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDbTest do
     {:ok, _hash1} = ShapeDb.add_shape(ctx.stack_id, shape1, handle1)
     assert {:ok, 1} = ShapeDb.count_shapes(ctx.stack_id)
 
-    assert {:error, "No shape matching \"no-such-handle\""} =
+    assert {:error, {:enoshape, "no-such-handle"}} =
              ShapeDb.remove_shape(ctx.stack_id, "no-such-handle")
 
     assert {:ok, 1} = ShapeDb.count_shapes(ctx.stack_id)
