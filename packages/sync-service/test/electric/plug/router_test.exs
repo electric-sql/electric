@@ -2331,7 +2331,7 @@ defmodule Electric.Plug.RouterTest do
            "INSERT INTO parent (id, excluded) VALUES (1, false), (2, true)",
            "INSERT INTO child (id, parent_id, value) VALUES (1, 1, 10), (2, 2, 20)"
          ]
-    test "NOT IN subquery should return 409 on move-in to subquery", %{
+    test "NOT IN subquery should handle move-out correctly", %{
       opts: opts,
       db_conn: db_conn
     } do
@@ -2340,7 +2340,8 @@ defmodule Electric.Plug.RouterTest do
       # parent 2 is excluded, so child 2 is NOT in the shape
       req =
         make_shape_req("child",
-          where: "parent_id NOT IN (SELECT id FROM parent WHERE excluded = true)"
+          where: "parent_id NOT IN (SELECT id FROM parent WHERE excluded = true)",
+          electric_protocol_version: "2"
         )
 
       assert {req, 200, [data, snapshot_end]} = shape_req(req, opts)
@@ -2357,11 +2358,14 @@ defmodule Electric.Plug.RouterTest do
 
       # Now set parent 1 to excluded = true
       # This causes parent 1 to move INTO the subquery result
-      # Which should cause child 1 to move OUT of the outer shape
-      # Since NOT IN subquery move-out isn't implemented, we expect a 409
+      # Which should cause child 1 to move OUT of the outer shape (NOT IN is negated)
       Postgrex.query!(db_conn, "UPDATE parent SET excluded = true WHERE id = 1", [])
 
-      assert {_req, 409, _response} = Task.await(task)
+      assert {_req, 200,
+              [
+                %{"headers" => %{"event" => "move-out", "patterns" => [%{"pos" => 0}]}},
+                %{"headers" => %{"control" => "up-to-date"}}
+              ]} = Task.await(task)
     end
 
     @tag with_sql: [
@@ -2492,14 +2496,15 @@ defmodule Electric.Plug.RouterTest do
            "INSERT INTO parent (id, include_parent) VALUES (1, true)",
            "INSERT INTO child (id, parent_id, include_child) VALUES (1, 1, true)"
          ]
-    test "subquery combined with OR should return a 409 on move-out", %{
+    test "subquery combined with OR emits move-out for affected position", %{
       opts: opts,
       db_conn: db_conn
     } do
       orig_req =
         make_shape_req("child",
           where:
-            "parent_id in (SELECT id FROM parent WHERE include_parent = true) OR include_child = true"
+            "parent_id in (SELECT id FROM parent WHERE include_parent = true) OR include_child = true",
+          electric_protocol_version: "2"
         )
 
       assert {req, 200, response} = shape_req(orig_req, opts)
@@ -2511,11 +2516,16 @@ defmodule Electric.Plug.RouterTest do
 
       task = live_shape_req(req, opts)
 
-      # Setting include_parent to false may cause a move out, but it doesn't in this case because include_child is still true
+      # Setting include_parent to false causes position 0 (subquery) to no longer match,
+      # but include_child is still true so the row stays visible via the other disjunct.
+      # The server emits a move-out for the affected position.
       Postgrex.query!(db_conn, "UPDATE parent SET include_parent = false WHERE id = 1", [])
 
-      # Rather than working out whether this is a move out or not we return a 409
-      assert {_req, 409, _response} = Task.await(task)
+      assert {_req, 200,
+              [
+                %{"headers" => %{"event" => "move-out", "patterns" => [%{"pos" => 0}]}},
+                %{"headers" => %{"control" => "up-to-date"}}
+              ]} = Task.await(task)
     end
 
     @tag with_sql: [
@@ -2524,14 +2534,15 @@ defmodule Electric.Plug.RouterTest do
            "INSERT INTO parent (id, include_parent) VALUES (1, false)",
            "INSERT INTO child (id, parent_id, include_child) VALUES (1, 1, true)"
          ]
-    test "subquery combined with OR should return a 409 on move-in", %{
+    test "subquery combined with OR emits move-in for newly matching position", %{
       opts: opts,
       db_conn: db_conn
     } do
       orig_req =
         make_shape_req("child",
           where:
-            "parent_id in (SELECT id FROM parent WHERE include_parent = true) OR include_child = true"
+            "parent_id in (SELECT id FROM parent WHERE include_parent = true) OR include_child = true",
+          electric_protocol_version: "2"
         )
 
       assert {req, 200, response} = shape_req(orig_req, opts)
@@ -2543,11 +2554,23 @@ defmodule Electric.Plug.RouterTest do
 
       task = live_shape_req(req, opts)
 
-      # Setting include_parent to true may cause a move in, but it doesn't in this case because include_child is already true
+      # Setting include_parent to true causes the subquery position to also match.
+      # The row already matches via include_child, so the server emits a move-in
+      # with both conditions now active.
       Postgrex.query!(db_conn, "UPDATE parent SET include_parent = true WHERE id = 1", [])
 
-      # Rather than working out whether this is a move in or not we return a 409
-      assert {_req, 409, _response} = Task.await(task)
+      assert {_req, 200,
+              [
+                %{
+                  "headers" => %{
+                    "is_move_in" => true,
+                    "operation" => "insert",
+                    "active_conditions" => [true, true]
+                  },
+                  "value" => %{"id" => "1", "include_child" => "true", "parent_id" => "1"}
+                },
+                %{"headers" => %{"control" => "snapshot-end"}} | _
+              ]} = Task.await(task)
     end
 
     @tag with_sql: [
