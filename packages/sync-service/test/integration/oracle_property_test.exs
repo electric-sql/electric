@@ -70,4 +70,11 @@ defmodule Electric.Integration.OraclePropertyTest do
       test_against_oracle(ctx, shapes, transactions)
     end
   end
+
+  @tag :oracle_replay
+  test "replay: 20 shapes, 40x40 mutations from oracle-test-output-1", ctx do
+    alias Support.OracleHarness.ReplayData1
+
+    test_against_oracle(ctx, ReplayData1.shapes(), ReplayData1.transactions())
+  end
 end
