@@ -1087,11 +1087,15 @@ export class ShapeStream<T extends Row<unknown> = Row>
       ? expiredShapesCache.getExpiredHandle(shapeKey)
       : null
 
-    // Fresh origin response with same handle means the handle is still valid,
-    // not a stale CDN hit. CDNs set `age` > 0 on cached responses.
+    // When the server reuses the same handle for an unchanged shape definition,
+    // a fresh origin response proves the handle is still valid. Without this
+    // check, the client would endlessly retry with cache busters.
+    // CDNs include an `age` header on cached responses; missing `age` or
+    // age=0 signals a fresh origin response, while age > 0 means stale CDN hit.
     if (expiredHandle && shapeHandle === expiredHandle) {
       const age = parseInt(headers.get(`age`) ?? ``, 10)
       if (!age) {
+        // NaN (no header) and 0 are both falsy → fresh
         expiredShapesCache.removeExpired(shapeKey!)
         expiredHandle = null
       }

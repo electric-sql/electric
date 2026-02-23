@@ -36,6 +36,11 @@ export class ExpiredShapesCache {
     this.save()
   }
 
+  removeExpired(shapeUrl: string): void {
+    delete this.data[shapeUrl]
+    this.save()
+  }
+
   private save(): void {
     if (typeof localStorage === `undefined`) return
     try {
@@ -60,11 +65,6 @@ export class ExpiredShapesCache {
 
   constructor() {
     this.load()
-  }
-
-  removeExpired(shapeUrl: string): void {
-    delete this.data[shapeUrl]
-    this.save()
   }
 
   clear(): void {

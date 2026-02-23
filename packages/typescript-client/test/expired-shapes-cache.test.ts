@@ -819,6 +819,57 @@ describe(`ExpiredShapesCache`, () => {
     expect(hasCacheBuster).toBe(false)
   })
 
+  it(`should accept response with age: 0 as fresh (just-revalidated CDN)`, async () => {
+    // age: 0 means the CDN just cached/revalidated the response — effectively
+    // fresh. The !age check treats 0 the same as missing, which is correct.
+
+    const expectedShapeUrl = `${shapeUrl}?table=test`
+    const handle = `reused-handle-age-zero`
+
+    expiredShapesCache.markExpired(expectedShapeUrl, handle)
+
+    let requestCount = 0
+
+    fetchMock.mockImplementation((_input: RequestInfo | URL) => {
+      requestCount++
+      if (requestCount >= 3) aborter.abort()
+
+      return Promise.resolve(
+        new Response(JSON.stringify([{ headers: { control: `up-to-date` } }]), {
+          status: 200,
+          headers: {
+            'electric-handle': handle,
+            'electric-offset': `0_0`,
+            'electric-schema': `{}`,
+            'electric-cursor': `cursor-1`,
+            'electric-up-to-date': ``,
+            age: `0`,
+          },
+        })
+      )
+    })
+
+    const stream = new ShapeStream({
+      url: shapeUrl,
+      params: { table: `test` },
+      signal: aborter.signal,
+      fetchClient: fetchMock,
+      subscribe: false,
+    })
+
+    stream.subscribe(() => {})
+
+    await new Promise((resolve) => setTimeout(resolve, 100))
+
+    expect(stream.shapeHandle).toBe(handle)
+    expect(expiredShapesCache.getExpiredHandle(expectedShapeUrl)).toBe(null)
+    const urls = fetchMock.mock.calls.map((c) => c[0].toString())
+    const hasCacheBuster2 = urls.some((u) =>
+      new URL(u).searchParams.has(CACHE_BUSTER_QUERY_PARAM)
+    )
+    expect(hasCacheBuster2).toBe(false)
+  })
+
   it(`should still detect stale CDN response when age header is present`, async () => {
     // Scenario: expiredShapesCache has handle H1 marked expired.
     // CDN responds with H1 AND age: 142 → stale cached response.
