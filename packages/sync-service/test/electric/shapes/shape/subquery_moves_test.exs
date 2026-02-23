@@ -2,6 +2,7 @@ defmodule Electric.Shapes.Shape.SubqueryMovesTest do
   use ExUnit.Case, async: true
 
   alias Electric.Replication.Eval
+  alias Electric.Shapes.Consumer.DnfContext
   alias Electric.Shapes.Shape
   alias Electric.Shapes.Shape.SubqueryMoves
 
@@ -35,16 +36,18 @@ defmodule Electric.Shapes.Shape.SubqueryMovesTest do
         )
         |> fill_handles()
 
+      dnf_context = DnfContext.from_shape(shape)
       move_ins = ["1", "2", "3"]
 
       {query, params} =
         SubqueryMoves.move_in_where_clause(
           shape,
           Enum.at(shape.shape_dependencies_handles, 0),
-          move_ins
+          move_ins,
+          dnf_context
         )
 
-      assert query == "parent_id = ANY ($1::text[]::int8[])"
+      assert query == ~s|"parent_id" = ANY ($1::text[]::int8[])|
       assert params == [["1", "2", "3"]]
     end
 
@@ -56,6 +59,7 @@ defmodule Electric.Shapes.Shape.SubqueryMovesTest do
         )
         |> fill_handles()
 
+      dnf_context = DnfContext.from_shape(shape)
       # Move-ins for composite keys come as tuples
       move_ins = [{"1", "a"}, {"2", "b"}]
 
@@ -63,11 +67,12 @@ defmodule Electric.Shapes.Shape.SubqueryMovesTest do
         SubqueryMoves.move_in_where_clause(
           shape,
           Enum.at(shape.shape_dependencies_handles, 0),
-          move_ins
+          move_ins,
+          dnf_context
         )
 
       assert query ==
-               "(col1, col2) IN (SELECT * FROM unnest($1::text[]::int4[], $2::text[]::text[]))"
+               ~s|ROW("col1", "col2") IN (SELECT * FROM unnest($1::text[]::int4[], $2::text[]::text[]))|
 
       assert params == [["1", "2"], ["a", "b"]]
     end
@@ -80,16 +85,18 @@ defmodule Electric.Shapes.Shape.SubqueryMovesTest do
         )
         |> fill_handles()
 
+      dnf_context = DnfContext.from_shape(shape)
       move_ins = ["1"]
 
       {query, params} =
         SubqueryMoves.move_in_where_clause(
           shape,
           Enum.at(shape.shape_dependencies_handles, 0),
-          move_ins
+          move_ins,
+          dnf_context
         )
 
-      assert query == "parent_id = ANY ($1::text[]::int8[])"
+      assert query == ~s|"parent_id" = ANY ($1::text[]::int8[])|
       assert params == [["1"]]
     end
   end

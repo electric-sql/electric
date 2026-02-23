@@ -76,7 +76,7 @@ defmodule Electric.Shapes.Consumer.MoveHandling do
         # Negated positions: move-out from subquery = activation (NOT IN now true) → query
         state =
           if negated_positions != [] do
-            do_start_move_in_query(state, dep_handle, removed_values, remove_not: true)
+            do_start_move_in_query(state, dep_handle, removed_values)
           else
             state
           end
@@ -187,14 +187,13 @@ defmodule Electric.Shapes.Consumer.MoveHandling do
   end
 
   # Start an async move-in query for new values.
-  defp do_start_move_in_query(state, dep_handle, values, opts \\ []) do
+  defp do_start_move_in_query(state, dep_handle, values) do
     formed_where_clause =
       SubqueryMoves.move_in_where_clause(
         state.shape,
         dep_handle,
         Enum.map(values, &elem(&1, 1)),
-        state.dnf_context,
-        opts
+        state.dnf_context
       )
 
     storage = state.storage

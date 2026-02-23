@@ -34,59 +34,26 @@ defmodule Electric.Shapes.Shape.SubqueryMoves do
 
       [["1", "2", "3"]]
   """
-  def move_in_where_clause(shape, shape_handle, move_ins, dnf_context \\ nil, _opts \\ [])
-
   def move_in_where_clause(
         %Shape{
-          where: %{query: query, used_refs: used_refs},
-          shape_dependencies: shape_dependencies,
           shape_dependencies_handles: shape_dependencies_handles
         } = shape,
         shape_handle,
         move_ins,
-        dnf_context,
-        _opts
+        dnf_context
       ) do
     index = Enum.find_index(shape_dependencies_handles, &(&1 == shape_handle))
 
-    if dnf_context && dnf_context.decomposition do
-      # DNF-aware path: reconstruct WHERE from the triggering disjunct's conditions.
-      # Find ALL dep indices sharing the same handle (handles degenerate A OR A cases
-      # where the same subquery appears multiple times with different dep indices).
-      all_trigger_indices =
-        shape_dependencies_handles
-        |> Enum.with_index()
-        |> Enum.filter(fn {h, _} -> h == shape_handle end)
-        |> Enum.map(fn {_, i} -> i end)
+    # DNF-aware path: reconstruct WHERE from the triggering disjunct's conditions.
+    # Find ALL dep indices sharing the same handle (handles degenerate A OR A cases
+    # where the same subquery appears multiple times with different dep indices).
+    all_trigger_indices =
+      shape_dependencies_handles
+      |> Enum.with_index()
+      |> Enum.filter(fn {h, _} -> h == shape_handle end)
+      |> Enum.map(fn {_, i} -> i end)
 
-      build_dnf_move_in_where(shape, index, all_trigger_indices, move_ins, dnf_context)
-    else
-      # Legacy path (no DnfContext): string replacement on shape.where.query.
-      # Works for simple single-subquery positive IN shapes.
-      target_section = Enum.at(shape_dependencies, index) |> rebuild_subquery_section()
-
-      {where, params} =
-        case used_refs[["$sublink", "#{index}"]] do
-          {:array, {:row, cols}} ->
-            unnest_sections =
-              cols
-              |> Enum.map(&Electric.Replication.Eval.type_to_pg_cast/1)
-              |> Enum.with_index(fn col, index -> "$#{index + 1}::text[]::#{col}[]" end)
-              |> Enum.join(", ")
-
-            {String.replace(
-               query,
-               target_section,
-               "IN (SELECT * FROM unnest(#{unnest_sections}))"
-             ), Electric.Utils.unzip_any(move_ins) |> Tuple.to_list()}
-
-          col ->
-            type = Electric.Replication.Eval.type_to_pg_cast(col)
-            {String.replace(query, target_section, "= ANY ($1::text[]::#{type})"), [move_ins]}
-        end
-
-      {where, params}
-    end
+    build_dnf_move_in_where(shape, index, all_trigger_indices, move_ins, dnf_context)
   end
 
   # Reconstruct the move-in WHERE clause from all disjuncts containing the trigger.

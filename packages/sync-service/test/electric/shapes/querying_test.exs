@@ -1,6 +1,7 @@
 defmodule Electric.Shapes.QueryingTest do
   use Support.TransactionCase, async: true
 
+  alias Electric.Shapes.Consumer.DnfContext
   alias Electric.Shapes.Shape.SubqueryMoves
   alias Electric.Postgres.Inspector.DirectInspector
   alias Electric.Shapes.Shape
@@ -445,13 +446,15 @@ defmodule Electric.Shapes.QueryingTest do
         )
         |> fill_handles()
 
+      dnf_context = DnfContext.from_shape(shape)
       move_in_values = ["1", "2"]
 
       assert {where, params} =
                SubqueryMoves.move_in_where_clause(
                  shape,
                  hd(shape.shape_dependencies_handles),
-                 move_in_values
+                 move_in_values,
+                 dnf_context
                )
 
       tag1 =
@@ -493,13 +496,15 @@ defmodule Electric.Shapes.QueryingTest do
         )
         |> fill_handles()
 
+      dnf_context = DnfContext.from_shape(shape)
       move_in_values = [{"1", "1"}, {"2", "2"}]
 
       assert {where, params} =
                SubqueryMoves.move_in_where_clause(
                  shape,
                  hd(shape.shape_dependencies_handles),
-                 move_in_values
+                 move_in_values,
+                 dnf_context
                )
 
       tag1 =
