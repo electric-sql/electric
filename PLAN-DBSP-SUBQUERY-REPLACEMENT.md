@@ -1,11 +1,15 @@
-# Plan: Replace Subquery Processing with DBSP (v2)
+# Plan: Replace Subquery Processing with DBSP (v3)
 
-> **v2**: Revised after review. The central addition is an honest treatment of
-> the "data availability gap" — DBSP tells you *which* rows belong in the
-> shape, but you still need the row *bodies*. This plan now presents three
-> architectural options for resolving that gap, with tradeoffs, and
-> incorporates corrections on NULL semantics, arrangement-backed indexes,
-> shared state, and pragmatic scoping.
+> **v3**: Revised after second review. v2 established the data availability gap
+> and three architecture options (A: row store, B: membership + hydration,
+> C: client-driven). v3 addresses three make-or-break gaps identified in
+> review: (1) arrangement bootstrap and WAL catch-up — how shared table state
+> gets a consistent starting point; (2) pending hydration buffering — the
+> update-before-insert race during async hydration; (3) transaction boundary
+> contract — when shared arrangements update relative to shape evaluation.
+> Also adds Option B.0 (smallest first step reusing existing materializers),
+> intersection/difference operators, move-out bandwidth analysis, and
+> corrected shadow-mode oracle strategy.
 
 ---
 
@@ -14,7 +18,7 @@
 1. [Why DBSP — What It Actually Fixes](#1-why-dbsp--what-it-actually-fixes)
 2. [Current Architecture (What We're Replacing)](#2-current-architecture-what-were-replacing)
 3. [The Data Availability Gap](#3-the-data-availability-gap)
-4. [Three Architecture Options](#4-three-architecture-options)
+4. [Architecture Options](#4-architecture-options)
 5. [DBSP Theory — Minimal Subset We Need](#5-dbsp-theory--minimal-subset-we-need)
 6. [Correctness Details: NULL Semantics and NOT IN](#6-correctness-details-null-semantics-and-not-in)
 7. [Performance: Arrangements, Not Naive Maps](#7-performance-arrangements-not-naive-maps)
@@ -128,7 +132,8 @@ Key details relevant to DBSP:
 - **Filter** (`filter.ex`) maps changes to affected shapes using ETS-backed
   indexes (EqualityIndex, InclusionIndex) for O(1) matching by table.
 - **DependencyLayers** ensures shapes are processed in topological order
-  (parents before dependents).
+  (dependencies before dependents — inner/subquery shapes evaluate before
+  the outer shapes that reference them).
 - **ConsumerRegistry** dispatches synchronously within each layer.
 - Currently each consumer is registered for its `root_table` only. Subquery
   tables are handled indirectly via dependency shapes + materializers.
@@ -193,9 +198,9 @@ the need for outer row data — it just changes where you look for it.
 
 ---
 
-## 4. Three Architecture Options
+## 4. Architecture Options
 
-All three use DBSP-style incremental computation for determining
+All options use DBSP-style incremental computation for determining
 *membership* (which PKs belong in the shape). They differ in how they
 resolve the data availability gap — where row bodies come from.
 
@@ -212,8 +217,13 @@ Shape: SELECT * FROM tasks WHERE project_id IN (SELECT id FROM projects WHERE ac
 ```
 
 Split the query into:
-- `tasks_candidate = σ(outer-only predicates)(tasks)` — all tasks (or tasks
-  filtered by non-subquery predicates only)
+- `tasks_candidate = σ(outer-only predicates)(tasks)` — tasks filtered by
+  predicates that don't involve subqueries. **Note**: outer-only predicates
+  are shape-specific (shape A might filter `WHERE priority > 3 AND ...`
+  while shape B filters `WHERE category = 'ops' AND ...`). Per-table
+  amortization requires either storing the whole table (no outer filter)
+  or maintaining a shared superset. The pragmatic first step: store the
+  whole table's PKs + join columns, apply outer-only filters per shape.
 - `result = tasks_candidate ⋉ active_projects` — semi-join with subquery
 
 Maintain `tasks_candidate` locally. When `active_projects` changes, the
@@ -341,6 +351,15 @@ When a subquery change occurs:
 - Subquery shapes remain "eventually consistent" for move-ins (though
   the window is smaller)
 - Needs the outer PK arrangement (lightweight, but new state)
+- **Move-out bandwidth**: A single inner-key removal (e.g., one project
+  becomes inactive) can trigger deletion of *all* outer rows joined to
+  that key — potentially 200k+ deletes in a single delta. This is
+  semantically correct but may spike client bandwidth. Mitigation options:
+  (a) batch deletes into chunked control messages, (b) send a "shape
+  reset" signal above a threshold, (c) accept the spike as inherent to
+  the query semantics. This is not unique to DBSP — the current pipeline
+  has the same issue — but DBSP makes it synchronous and visible rather
+  than spread across async moves.
 
 **When to choose**: When you want the biggest simplification bang for the
 buck. This is likely the **pragmatic first step** — it removes most of the
@@ -413,23 +432,83 @@ loading:
 boundary), and when the client is the right place to determine what data is
 needed. This complements Options A/B rather than replacing them.
 
-### 4.4 Comparison Matrix
+### 4.4 Option B.0: Incremental First Step (Reuse Existing Materializers)
 
-| Dimension | Option A (Row Store) | Option B (Membership + Hydration) | Option C (Client-Driven) |
-|---|---|---|---|
-| **Move-in latency** | ~μs (in-memory) | ~1-10ms (PG query) | ~50-200ms (client roundtrip) |
-| **Postgres load** | WAL only | Simple PK lookups | Subset queries |
-| **Electric memory** | High (candidate rows) | Medium (PK arrangements) | Low |
-| **Engineering effort** | High | Medium | Low (mostly exists) |
-| **Consistency model** | Transactional | Eventually consistent (small window) | Eventually consistent |
-| **Client protocol** | Simple (insert/delete) | Simple (insert/delete) | Existing (subset) |
-| **Security** | Server-enforced | Server-enforced | Needs validation |
-| **NOT IN / OR / multi-subquery** | Full support | Full support | N/A (no server subqueries) |
-| **Shared state** | Natural (per-table) | Natural (per-table) | N/A |
+**Concept**: The smallest possible step toward DBSP. Keep the existing
+Materializer infrastructure for inner (subquery) result sets. Add only:
+(a) outer PK arrangements, (b) DBSP membership evaluation, (c) PK
+hydration, (d) pending hydration buffering. Don't build a generic DAG
+compiler — hard-code the three patterns that currently break (NOT IN,
+OR + subquery, multiple subqueries).
 
-### 4.5 Recommended Path
+**How it differs from Option B**:
+- Option B builds a full expression DAG compiler (Phase 2) and replaces
+  the Materializer entirely
+- Option B.0 reuses the Materializer as the source of inner set deltas
+  and feeds them into hand-wired DBSP operators
 
-**Start with Option B. Evolve toward Option A for hot tables.**
+**What changes**:
+1. New: `Electric.DBSP.OuterArrangement` — per-table PK arrangement
+   indexed by join columns, bootstrapped from a snapshot, maintained
+   from WAL. Lightweight (PKs + join keys only).
+2. New: `Electric.DBSP.MembershipEval` — takes Materializer change
+   notifications + outer arrangement, computes membership delta
+   (move-in PKs, move-out PKs). Replaces `MoveHandling` logic.
+3. New: `Electric.DBSP.Hydration` — fetches row bodies for move-in
+   PKs from Postgres (`SELECT * FROM t WHERE pk = ANY($1)`).
+4. New: Pending hydration buffer (§9 Phase 3e) to handle the
+   update-before-insert race.
+5. Modified: `consumer.ex` — on materializer notification, call
+   `MembershipEval` instead of `MoveHandling`.
+
+**What stays the same**:
+- Materializer GenServer (inner set tracking)
+- `Parser.extract_subqueries`
+- Shape dependency creation
+- DependencyLayers ordering
+- ShapeLogCollector / EventRouter / Filter dispatch
+
+**Pros**:
+- Smallest blast radius — most of the existing pipeline is untouched
+- Immediately fixes NOT IN, OR, multi-subquery (the three patterns
+  that currently cause invalidation)
+- Validates the DBSP membership approach before committing to full
+  compiler/DAG infrastructure
+- Can ship behind feature flag with low risk
+
+**Cons**:
+- Doesn't eliminate DNF/tag complexity from the client protocol
+  (though it makes it unnecessary — tags can be omitted for
+  DBSP-evaluated shapes)
+- Technical debt: two partially overlapping systems
+- Doesn't generalize to new patterns without hand-wiring
+
+**When to choose**: As the literal first step. Ship B.0, validate,
+then build toward full Option B if the membership approach proves sound.
+
+### 4.5 Comparison Matrix
+
+| Dimension | Option A (Row Store) | Option B (Membership + Hydration) | Option B.0 (Incremental) | Option C (Client-Driven) |
+|---|---|---|---|---|
+| **Move-in latency** | ~μs (in-memory) | ~1-10ms (PG query) | ~1-10ms (PG query) | ~50-200ms (client roundtrip) |
+| **Postgres load** | WAL only | Simple PK lookups | Simple PK lookups | Subset queries |
+| **Electric memory** | High (candidate rows) | Medium (PK arrangements) | Medium (PK arrangements) | Low |
+| **Engineering effort** | High | Medium | **Low** | Low (mostly exists) |
+| **Consistency model** | Transactional | Eventually consistent (small window) | Eventually consistent (small window) | Eventually consistent |
+| **Client protocol** | Simple (insert/delete) | Simple (insert/delete) | Compatible with existing | Existing (subset) |
+| **NOT IN / OR / multi-subquery** | Full support | Full support | **Full support** | N/A (no server subqueries) |
+| **Shared state** | Natural (per-table) | Natural (per-table) | Natural (per-table) | N/A |
+| **Blast radius** | Large | Medium | **Small** | Small |
+
+### 4.6 Recommended Path
+
+**Start with Option B.0. Graduate to Option B. Evolve toward Option A
+for hot tables.**
+
+Option B.0 is the pragmatic first step: it immediately fixes the three
+broken patterns (NOT IN, OR + subquery, multiple subqueries) with the
+smallest possible change. It validates the DBSP membership approach
+using the existing Materializer as a delta source.
 
 Option B gives us 80% of the benefit (eliminates DNF, tags,
 active_conditions, exclusion clauses, most race conditions) with 30% of
@@ -472,6 +551,20 @@ For our shape SQL subset, the operators we need are:
 | `NOT EXISTS (...)` | Incremental anti-join | Same as NOT IN (simpler NULL story) |
 | `cond1 AND col IN (...)` | Filter composed with semi-join | Semi-join state |
 | `cond1 OR col IN (...)` | Union + incremental distinct | Both branches' state + distinct state |
+| `cond1 AND NOT cond2` | Difference (a - b) + distinct | Both branches' state + distinct state |
+| Set intersection | Intersection (a ∩ b) | Both branches' state |
+
+**Why intersection and difference?** Without them, compiling arbitrary
+boolean ASTs requires converting to DNF first — the exact exponential
+blowup we're trying to avoid. With all four set operations (union,
+intersection, difference, distinct), the compiler can translate AND/OR/NOT
+nodes directly:
+- `A AND B` → intersection(A, B)
+- `A OR B` → distinct(union(A, B))
+- `NOT A` (within a conjunction) → difference(outer, A)
+
+This keeps the operator set small (7 operators total) while avoiding DNF
+entirely.
 
 That's it. We don't need general-purpose projection, Cartesian product,
 aggregation, or recursion to solve the subquery problem.
@@ -711,15 +804,203 @@ across all shapes that reference that table.
 - **Current Materializer analogy**: The existing Materializer already shares
   dependency shapes across parents. This generalizes that pattern.
 
-### 8.4 Bootstrap
+### 8.4 Arrangement Bootstrap and WAL Catch-up
 
-When a table's arrangement is first needed:
-1. Run a one-time snapshot query for the relevant columns + PKs
+This is a make-or-break correctness concern. If the arrangement starts
+with the wrong data, or misses WAL events between snapshot and
+subscription, every membership decision downstream is wrong.
+
+#### 8.4.1 The Problem
+
+When a shape first references table T (e.g., the `tasks` outer table),
+the arrangement for T doesn't exist yet. We need to:
+1. Snapshot the relevant columns + PKs
 2. Build the initial arrangement
-3. Subscribe to WAL for that table
+3. Subscribe to WAL for table T
 4. Maintain incrementally from WAL deltas
 
-This is per-table, not per-shape, so the cost is amortized.
+The gap between steps 1 and 3 is dangerous: changes to T that happen
+after the snapshot but before WAL subscription would be lost, making the
+arrangement permanently inconsistent.
+
+#### 8.4.2 Solution: Treat Arrangements as Internal "Table Shapes"
+
+Electric already solves exactly this problem for regular shapes:
+`SnapshotQuery.execute_for_shape` acquires a REPEATABLE READ snapshot,
+records `pg_current_snapshot()` / LSN, then the consumer subscribes to
+WAL from that LSN forward with gap-free delivery.
+
+The pragmatic approach: **bootstrap arrangements using the same
+snapshot + WAL catch-up pipeline that regular shapes use.** An
+arrangement is effectively an internal, unpublished shape that:
+- Has no HTTP consumer (no shape stream)
+- Exists to serve other shapes' DBSP operators
+- Stores only the columns needed for join keys + PKs (not full rows,
+  for Option B)
+- Is reference-counted: created when first needed, garbage collected
+  when no shapes reference it
+
+```
+Arrangement lifecycle:
+  1. Shape S is created with "tasks.project_id IN (SELECT ...)"
+  2. MembershipEngine requests arrangement for tasks(project_id, pk)
+  3. ArrangementManager checks: does this arrangement exist?
+     - Yes: return reference, increment refcount
+     - No: bootstrap it:
+       a. Run snapshot: SELECT id, project_id FROM tasks
+          (inside REPEATABLE READ, capture pg_current_snapshot() + LSN)
+       b. Build initial arrangement from snapshot rows
+       c. Subscribe to WAL for table tasks from the captured LSN
+       d. Apply any WAL events that arrived between snapshot and now
+       e. Mark arrangement as ready
+  4. Shape S can now use the arrangement
+  5. When Shape S is destroyed, decrement refcount
+  6. When refcount reaches 0, arrangement is eligible for GC
+```
+
+#### 8.4.3 What Happens When a New Shape References a New Table Mid-Stream
+
+If shapes A and B already exist and reference `tasks`, and shape C is
+created with a subquery on `categories` (a table no existing shape
+references):
+
+1. Shape C's creation triggers arrangement bootstrap for `categories`
+2. During bootstrap, shapes A and B continue processing WAL normally
+3. Shape C buffers incoming WAL events for `categories` until the
+   arrangement is ready (or delays processing — the consumer already
+   handles this with `handle_continue` patterns)
+4. Once the arrangement is ready, Shape C replays any buffered events
+   and begins normal operation
+
+This is the same pattern used when a new regular shape is created — the
+consumer doesn't start processing until the initial snapshot is complete.
+
+#### 8.4.4 WAL Catch-up Correctness
+
+The key invariant: **the arrangement's state at any point must equal the
+result of applying all WAL events from genesis to that point, as if
+the arrangement had existed since the beginning of time.**
+
+This is guaranteed by:
+1. REPEATABLE READ snapshot gives a consistent point-in-time view
+2. LSN capture at snapshot time gives the exact WAL position
+3. WAL subscription from that LSN delivers all subsequent changes
+4. No gap, no duplicates (Electric's existing ReplicationClient
+   guarantees this for regular shapes)
+
+The only new requirement: the WAL subscription for arrangement tables
+must be established before or at the same time as the snapshot. In
+practice, Electric already subscribes to WAL for all tables in the
+publication — the arrangement just needs to register as a consumer
+of events for its table, starting from the snapshot LSN.
+
+#### 8.4.5 Arrangement Columns
+
+For Option B (membership + hydration), arrangements store:
+- Primary key column(s) of the table
+- Join column(s) referenced by subquery expressions
+- Any columns referenced in outer-only WHERE predicates (so the
+  arrangement can filter without a Postgres round-trip)
+
+For Option A (candidate row store), arrangements store full rows.
+
+The column set is determined at arrangement creation time from the
+union of all shapes that reference the table. If a new shape needs
+an additional column, the arrangement must be rebuilt (or a new
+arrangement created for the expanded column set).
+
+### 8.5 Transaction Boundary Contract for Shared Arrangements
+
+#### 8.5.1 The Problem
+
+When a WAL transaction touches both `projects` (inner table) and
+`tasks` (outer table), and multiple shapes reference the shared
+arrangements for both tables, we need a clear contract for the order
+of operations:
+
+1. When does the `projects` arrangement update?
+2. When does the `tasks` arrangement update?
+3. When do shapes evaluate their DBSP operators?
+4. What state do the operators see?
+
+If the `projects` arrangement updates mid-evaluation of a shape's
+semi-join, the operator might see an inconsistent snapshot (half-old,
+half-new inner set).
+
+#### 8.5.2 Three Viable Coordination Models
+
+**Model 1: Global Step Coordinator**
+
+A coordinator processes each WAL transaction as a single atomic step:
+1. Compute deltas for all affected tables
+2. Feed all deltas to all affected arrangements simultaneously
+3. Run all affected shapes' DBSP operators with the consistent deltas
+4. Collect all membership changes
+5. Emit to shape logs
+
+```
+WAL txn → Coordinator
+  → delta(projects), delta(tasks)
+  → arrangements.apply_all(deltas)
+  → for each shape: engine.step(deltas) → membership Δ
+  → emit to shape logs
+```
+
+Pros: Strong consistency, simple mental model.
+Cons: Sequential processing bottleneck, couples all shapes.
+
+**Model 2: Table-Managers-Step-First**
+
+Table arrangement managers process their deltas first (in parallel),
+then shapes evaluate against the updated arrangements:
+
+1. All table managers apply their deltas (parallel)
+2. Barrier: wait for all managers to finish
+3. All shapes evaluate their operators (parallel, reading from
+   updated arrangements)
+
+```
+WAL txn
+  → parallel: projects_mgr.apply(Δ), tasks_mgr.apply(Δ)
+  → barrier
+  → parallel: shape_A.step(), shape_B.step(), shape_C.step()
+```
+
+Pros: Parallelism in both phases. Arrangements are consistent.
+Cons: Requires a two-phase protocol with a barrier. But note: the
+existing DependencyLayers already implements exactly this pattern —
+inner shapes evaluate before outer shapes. This model generalizes it.
+
+**Model 3: No Sharing Initially**
+
+Each shape maintains its own copy of the arrangements it needs.
+No coordination required — each shape processes the WAL transaction
+independently, updating its own arrangements and evaluating its
+own operators atomically.
+
+Pros: Simplest correctness story. No coordination protocol.
+Cons: Redundant state (N copies of the same arrangement for N shapes).
+Memory cost is manageable for Option B (PK arrangements are small).
+
+#### 8.5.3 Recommendation
+
+**Start with Model 3 (no sharing) for Option B.0.** PK arrangements
+are lightweight (just PKs + join keys), so the memory cost of
+per-shape copies is acceptable for the initial implementation. This
+eliminates the coordination problem entirely and lets us ship faster.
+
+**Graduate to Model 2 (table-managers-step-first) when implementing
+full Option B.** This naturally extends the existing DependencyLayers
+pattern: table arrangement managers are processed in layer 0 (they
+have no dependencies), then shapes are processed in subsequent layers.
+The barrier between layers is already built into the ConsumerRegistry
+dispatch logic.
+
+Model 1 (global coordinator) is only needed if we require strict
+transactional semantics where a single WAL transaction's effects on
+multiple shapes must be atomically visible. This is a stronger
+guarantee than Electric currently provides and is unlikely to be
+needed in the near term.
 
 ---
 
@@ -758,7 +1039,9 @@ raw Z-sets. Every stateful operator works through arrangements.
 - `IncrementalAntiJoin` — for NOT IN / NOT EXISTS (with NULL handling)
 - `IncrementalDistinct` — for OR combinations and set operations
 - `IncrementalFilter` — lifted filter (stateless, for completeness)
-- `IncrementalUnion` — for OR: `distinct(branch_a + branch_b)`
+- `IncrementalUnion` — for OR: `distinct(union(a, b))`
+- `IncrementalIntersection` — for AND: `intersection(a, b)`
+- `IncrementalDifference` — for NOT within conjunctions: `difference(a, b)`
 
 Each operator:
 - Takes delta Z-sets as input
@@ -774,6 +1057,8 @@ Each operator:
 - `lib/electric/dbsp/operators/distinct.ex`
 - `lib/electric/dbsp/operators/filter.ex`
 - `lib/electric/dbsp/operators/union.ex`
+- `lib/electric/dbsp/operators/intersection.ex`
+- `lib/electric/dbsp/operators/difference.ex`
 - `test/electric/dbsp/operators/*_test.exs`
 
 ### Phase 2: Expression DAG Compiler
@@ -889,16 +1174,102 @@ def list_relations(%__MODULE__{} = shape) do
 end
 ```
 
-**Scope**: ~1000-1500 lines + tests.
+#### 3e. Pending Hydration Buffering (Correctness)
+
+This addresses a subtle race condition that "validate against current
+membership" alone does not solve.
+
+**The problem (update-before-insert race)**:
+
+```
+Time 0: DBSP computes move-in for {pk_3, pk_7}
+         Hydration query starts: SELECT * FROM tasks WHERE id IN (3, 7)
+Time 1: WAL delivers UPDATE to tasks row pk_3 (e.g., name changes)
+         DBSP evaluates: pk_3 is still in membership → emit UpdatedRecord
+         But pk_3 has never been delivered to the client!
+         → Client receives UPDATE for a row it doesn't have → broken
+Time 2: Hydration completes, delivers pk_3 and pk_7
+         → Client now has pk_3 but with stale data (pre-update)
+         → pk_3's update from Time 1 was already emitted → lost
+```
+
+The root cause: between the membership decision (Time 0) and hydration
+completion (Time 2), WAL events arrive for PKs that are *logically* in
+the shape but have not yet been *delivered* to the client.
+
+**Solution: Three-set tracking**
+
+The membership engine tracks three sets per shape:
+
+```
+should_be_in     = set of PKs that DBSP says belong in the shape
+delivered        = set of PKs that have been sent to the client
+                   (via initial snapshot or completed hydration)
+pending_hydration = set of PKs awaiting hydration
+                    (= should_be_in - delivered, approximately)
+```
+
+**Invariant**: `pending_hydration ⊆ should_be_in` and
+`pending_hydration ∩ delivered = ∅`.
+
+**Buffering rules for WAL events during pending hydration**:
+
+| Event | PK in `delivered` | PK in `pending_hydration` | PK in neither |
+|---|---|---|---|
+| UPDATE to root table row | Emit UpdatedRecord normally | **Buffer the update** | Ignore (not in shape) |
+| DELETE from root table row | Emit DeletedRecord, remove from `delivered` | Remove from `pending_hydration`, cancel hydration for this PK | Ignore |
+| DBSP says PK moves out | Emit DeletedRecord, remove from `delivered` | Remove from `pending_hydration` (no client action needed — never delivered) | N/A |
+| DBSP says PK moves in | Should not happen (already in should_be_in) | Should not happen (already pending) | Add to `pending_hydration`, start hydration |
+
+**On hydration complete for a batch of PKs**:
+
+```
+for each hydrated row (pk, row_body):
+  if pk ∈ pending_hydration:
+    1. Emit NewRecord(row_body)
+    2. Move pk from pending_hydration to delivered
+    3. Replay any buffered updates for pk (in WAL order)
+    4. Drop the buffer for pk
+  else:
+    # pk was removed from pending_hydration (move-out or delete
+    # arrived while hydration was in flight) → discard
+```
+
+**Buffer size concern**: The buffer holds at most one update per
+pending PK (subsequent updates supersede). In the worst case, the
+buffer size equals `|pending_hydration|` — the number of PKs
+awaiting hydration. This is bounded by the move-in batch size
+(configurable) and the hydration query latency.
+
+**Implementation**:
+
+```elixir
+defmodule Electric.DBSP.PendingBuffer do
+  defstruct [
+    pending_hydration: MapSet.new(),  # PKs awaiting hydration
+    buffered_updates: %{},           # pk → latest WAL change
+    delivered: MapSet.new()           # PKs sent to client
+  ]
+
+  def on_move_in(buffer, pks)
+  def on_move_out(buffer, pks)
+  def on_wal_change(buffer, pk, change)
+  def on_hydration_complete(buffer, hydrated_rows)
+end
+```
+
+**Scope**: ~1000-1500 lines + tests (including pending buffer).
 
 **Files**:
 - `lib/electric/dbsp/membership_engine.ex`
 - `lib/electric/dbsp/hydration.ex`
+- `lib/electric/dbsp/pending_buffer.ex`
 - Modify `lib/electric/shapes/consumer.ex`
 - Modify `lib/electric/shapes/consumer/state.ex`
 - Modify `lib/electric/shapes/shape.ex`
 - `test/electric/dbsp/membership_engine_test.exs`
 - `test/electric/dbsp/hydration_test.exs`
+- `test/electric/dbsp/pending_buffer_test.exs`
 
 ### Phase 4: Remove Old Pipeline
 
@@ -964,13 +1335,24 @@ end
 
 - **Property-based testing**: Generate random Z-sets and operations, verify
   `incremental_result == full_recomputation`.
-- **Shadow mode**: Run both pipelines on same WAL stream during integration
-  tests, assert identical sets of PKs in the shape at each transaction.
+- **Shadow mode oracle — use Postgres as ground truth**: The old pipeline
+  is *not* a valid oracle — it's broken for OR, NOT IN, and
+  multi-subquery patterns (that's why we're replacing it). Instead, the
+  shadow mode oracle should be a **full Postgres query**: after each WAL
+  transaction, execute the shape's complete SQL query against Postgres
+  and compare the result set with the DBSP membership set. This is
+  expensive (one query per transaction) but provides a ground-truth
+  reference that doesn't depend on either pipeline being correct.
+  Use this in integration tests, not production.
 - **Existing test suite**: All tests in `test/integration/subquery_*_test.exs`
   and `test/electric/shapes/consumer_test.exs` must pass with DBSP enabled.
 - **NULL-specific tests**: The test cases from §6.4.
 - **Multi-subquery tests**: New tests for patterns that currently cause
   invalidation.
+- **Pending buffer tests**: Specifically test the update-before-insert
+  race from §9 Phase 3e, including: (a) UPDATE during hydration, (b) DELETE
+  during hydration, (c) move-out during hydration, (d) re-move-in during
+  hydration.
 
 ---
 
@@ -985,6 +1367,10 @@ end
 | NOT IN semantics? | Rewrite to NOT EXISTS + inner_has_nulls flag. |
 | Join performance? | Arrangements with indexed probing. |
 | Shared state? | Per-table shared arrangements, reference counted. |
+| Arrangement bootstrap? | Treat as internal "table shapes" using existing snapshot + WAL catch-up pipeline (§8.4). |
+| Update-before-insert race? | Three-set tracking (should_be_in / delivered / pending_hydration) with buffering rules (§9 Phase 3e). |
+| Transaction boundary contract? | Start with Model 3 (no sharing, per-shape copies), graduate to Model 2 (table-managers-step-first) (§8.5). |
+| Smallest first step? | Option B.0: reuse existing Materializers, add only outer PK arrangements + membership eval + hydration + pending buffer (§4.5). |
 
 ### 11.2 Still Open
 
@@ -1041,10 +1427,13 @@ These determine whether DBSP is feasible and how far to go:
 | `lib/electric/dbsp/operators/distinct.ex` | 1 | Incremental distinct (H function) |
 | `lib/electric/dbsp/operators/filter.ex` | 1 | Lifted filter (stateless) |
 | `lib/electric/dbsp/operators/union.ex` | 1 | Union for OR combinations |
+| `lib/electric/dbsp/operators/intersection.ex` | 1 | Intersection for AND combinations |
+| `lib/electric/dbsp/operators/difference.ex` | 1 | Difference for NOT within conjunctions |
 | `lib/electric/dbsp/query_plan.ex` | 2 | Structured query plan representation |
 | `lib/electric/dbsp/compiler.ex` | 2 | Query plan → operator DAG translation |
 | `lib/electric/dbsp/membership_engine.ex` | 3 | Wraps DAG, tracks membership set |
 | `lib/electric/dbsp/hydration.ex` | 3 | PK-based row body fetching + validation |
+| `lib/electric/dbsp/pending_buffer.ex` | 3 | Three-set tracking for hydration race |
 | `test/electric/dbsp/**/*_test.exs` | 0-3 | Tests for all DBSP modules |
 
 ### Modified Files
@@ -1083,14 +1472,26 @@ full candidate row store.
 - Replaces the race-prone async move-in pipeline with deterministic
   membership computation
 
-**The recommended path**: Start with Option B (DBSP membership + PK
-hydration). This gives us the biggest simplification win with moderate
-engineering effort. Evolve toward Option A (candidate row store) for
-hot tables where hydration latency matters. Let Option C (TanStack DB
-query-driven sync) handle UI-level data needs orthogonally.
+**The recommended path**: Start with Option B.0 (reuse existing
+Materializers, add outer PK arrangements + membership eval + hydration +
+pending buffer) as the smallest viable step. Graduate to full Option B
+(expression DAG compiler, shared arrangements). Evolve toward Option A
+(candidate row store) for hot tables where hydration latency matters.
+Let Option C (TanStack DB query-driven sync) handle UI-level data needs
+orthogonally.
 
 **What the plan explicitly does NOT claim**: That DBSP eliminates all
-Postgres queries. In Option B, move-in still requires a simple PK lookup.
-What it eliminates is the *complex orchestration around those queries*
-(snapshot positioning, touch_tracker, moved_out_tags, exclusion clauses).
-That orchestration is the source of most of the current pain.
+Postgres queries. In Options B.0 and B, move-in still requires a simple
+PK lookup. What it eliminates is the *complex orchestration around those
+queries* (snapshot positioning, touch_tracker, moved_out_tags, exclusion
+clauses, DNF expansion, client-side tags/active_conditions). That
+orchestration is the source of most of the current pain.
+
+**What v3 adds to the correctness story**:
+- Arrangement bootstrap uses the existing snapshot + WAL catch-up pipeline
+  (same correctness guarantees as regular shapes)
+- Pending hydration buffering with three-set tracking prevents the
+  update-before-insert race
+- Transaction boundary contract starts simple (per-shape copies, no
+  sharing) and graduates to table-managers-step-first (extending
+  DependencyLayers)
