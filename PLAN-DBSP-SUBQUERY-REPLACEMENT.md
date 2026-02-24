@@ -1,39 +1,80 @@
-# Plan: Replace Subquery Processing with DBSP
+# Plan: Replace Subquery Processing with DBSP (v2)
 
-## Executive Summary
-
-Electric currently handles subqueries in shape WHERE clauses through a
-multi-process materialization pipeline. A "parent" shape with a subquery like
-`WHERE parent_id IN (SELECT id FROM items WHERE val > 5)` spawns a
-"dependency" shape for the inner query, a `Materializer` that tracks the
-dependency's live result set, and a `MoveHandling` system that queries
-Postgres for rows that "move in" or "move out" when the dependency changes.
-
-This works but has significant limitations:
-
-1. Only one subquery per shape (multiple subqueries cause invalidation)
-2. `NOT IN` causes invalidation (move-in to subquery = move-out from outer)
-3. `OR` combined with subqueries causes invalidation
-4. No support for correlated subqueries
-5. The entire pipeline is ad-hoc; each new SQL feature requires custom code
-6. Move-in queries hit Postgres, adding latency and load
-7. Nested subqueries (3+ levels) are unsupported
-
-DBSP (Database Stream Processing) provides a principled replacement. By
-modeling the full query as a DBSP circuit operating on Z-set streams, we get
-a general-purpose incremental view maintenance algorithm that handles
-arbitrary compositions of relational operators — including all the cases
-above — through a single, uniform mechanism.
-
-This plan describes how to incrementally migrate from the current
-approach to DBSP, leveraging the existing `d2ts` (differential dataflow in
-TypeScript) library that TanStack DB already uses for live queries.
+> **v2**: Revised after review. The central addition is an honest treatment of
+> the "data availability gap" — DBSP tells you *which* rows belong in the
+> shape, but you still need the row *bodies*. This plan now presents three
+> architectural options for resolving that gap, with tradeoffs, and
+> incorporates corrections on NULL semantics, arrangement-backed indexes,
+> shared state, and pragmatic scoping.
 
 ---
 
-## 1. Current Architecture (What We're Replacing)
+## Table of Contents
 
-### 1.1 Shape Dependency Lifecycle
+1. [Why DBSP — What It Actually Fixes](#1-why-dbsp--what-it-actually-fixes)
+2. [Current Architecture (What We're Replacing)](#2-current-architecture-what-were-replacing)
+3. [The Data Availability Gap](#3-the-data-availability-gap)
+4. [Three Architecture Options](#4-three-architecture-options)
+5. [DBSP Theory — Minimal Subset We Need](#5-dbsp-theory--minimal-subset-we-need)
+6. [Correctness Details: NULL Semantics and NOT IN](#6-correctness-details-null-semantics-and-not-in)
+7. [Performance: Arrangements, Not Naive Maps](#7-performance-arrangements-not-naive-maps)
+8. [Shared State Across Shapes](#8-shared-state-across-shapes)
+9. [Implementation Plan (Pragmatic Path)](#9-implementation-plan-pragmatic-path)
+10. [Migration Strategy](#10-migration-strategy)
+11. [Open Questions and Decision Hinges](#11-open-questions-and-decision-hinges)
+12. [File Inventory](#12-file-inventory)
+
+---
+
+## 1. Why DBSP — What It Actually Fixes
+
+The DNF/tag + async move-in-query plan is getting painful. DBSP is being
+considered as a replacement. Before diving into how, it's worth being precise
+about *which* problems DBSP solves and which it doesn't.
+
+### 1.1 Problems DBSP Genuinely Solves
+
+**Eliminates DNF expansion entirely.** The current plan leans on DNF to make
+client logic simple, but DNF is inherently exponential. We added a
+`max_disjuncts` guard for a reason. DBSP compiles the boolean expression as
+a circuit that mirrors the AST. Complexity stays proportional to the
+expression tree size, not the DNF size.
+
+**Removes the root cause of the hardest orchestration.** The current
+pipeline invents a mini-consistency model to handle async move-in queries:
+REPEATABLE READ snapshots, `pg_current_snapshot`, `touch_tracker` races,
+`moved_out_tags` filtering (now position-aware), exclusion clauses to avoid
+duplicate inserts, "eventual consistency / up-to-date markers may precede
+move-ins", client-side synthetic deletes. All of that exists because the
+system doesn't know the answer at the time of the WAL transaction — it has
+to ask Postgres later. A DBSP-style engine computes the membership delta
+synchronously, so most of that complexity vanishes.
+
+**Eliminates protocol v2 / client tag+active_conditions complexity.** The
+old plan required new wire format tags (multi-disjunct), `active_conditions`,
+position-indexed client state, synthetic deletes, and protocol negotiation.
+DBSP lets us go back to the simpler client contract: **clients receive
+inserts/updates/deletes that already reflect shape membership.** That's a
+huge product and engineering win — fewer clients to update, fewer subtle
+bugs.
+
+**Handles OR/NOT/multiple subqueries uniformly.** Instead of special-casing
+each combination with custom code, all compositions are just composed
+operators in the circuit.
+
+### 1.2 What DBSP Does NOT Automatically Solve
+
+**The data availability gap.** DBSP computes *which rows should be in the
+result*. It does not conjure row bodies out of thin air. When a subquery
+result changes, DBSP can determine that certain outer rows are now eligible,
+but if the sync service doesn't have those row bodies, it can't emit them.
+This is the central architectural question. See [§3](#3-the-data-availability-gap).
+
+---
+
+## 2. Current Architecture (What We're Replacing)
+
+### 2.1 Shape Dependency Lifecycle
 
 When a shape is created with a subquery in its WHERE clause
 (`packages/sync-service/lib/electric/shapes/shape.ex`):
@@ -56,12 +97,13 @@ When a shape is created with a subquery in its WHERE clause
 
 5. **Move handling**: When the materializer detects changes (move-in/move-out),
    the parent consumer's `MoveHandling` module:
-   - For move-ins: fires an async Postgres query via `PartialModes.query_move_in_async`
-     to fetch rows that now match, splicing results into the log
+   - For move-ins: fires an async Postgres query via
+     `PartialModes.query_move_in_async` to fetch rows that now match,
+     splicing results into the log
    - For move-outs: emits control messages with tag patterns so clients can
      remove rows that no longer belong
 
-### 1.2 Change Processing Pipeline
+### 2.2 Change Processing Pipeline
 
 For each WAL transaction (`consumer.ex:do_handle_txn`):
 
@@ -74,702 +116,981 @@ For each WAL transaction (`consumer.ex:do_handle_txn`):
    - For shapes with dependencies: additional checks against pending move-ins
      to avoid duplicate rows
 4. `Shape.convert_change` evaluates the WHERE clause against the row, using
-   `extra_refs` (the materialized subquery results) for sublink membership checks.
+   `extra_refs` (the materialized subquery results) for sublink membership
+   checks.
 
-### 1.3 Limitations of Current Approach
+### 2.3 WAL Dispatch Architecture
 
-| Limitation | Root Cause |
-|---|---|
-| Single subquery only | `MoveHandling` assumes one dependency; multiple cause invalidation (`consumer.ex:297`) |
-| No `NOT IN` | Move-in to subquery should trigger move-out from parent — not implemented |
-| No `OR` with subquery | Can't determine which disjunct caused the match |
-| No correlated subqueries | Subqueries are independent shapes with no reference to outer row |
-| Move-in latency | Each move-in fires a Postgres roundtrip |
-| 3+ level nesting | `tagged_subqueries` feature flag gates it; invalidation is the fallback |
+Changes flow: PostgreSQL WAL → ReplicationClient → ShapeLogCollector →
+EventRouter/Filter → ConsumerRegistry → Consumer processes.
 
----
+Key details relevant to DBSP:
+- **Filter** (`filter.ex`) maps changes to affected shapes using ETS-backed
+  indexes (EqualityIndex, InclusionIndex) for O(1) matching by table.
+- **DependencyLayers** ensures shapes are processed in topological order
+  (parents before dependents).
+- **ConsumerRegistry** dispatches synchronously within each layer.
+- Currently each consumer is registered for its `root_table` only. Subquery
+  tables are handled indirectly via dependency shapes + materializers.
 
-## 2. DBSP Theory: What We Need
+### 2.4 Limitations of Current Approach
 
-### 2.1 Core Concepts
-
-DBSP models computations as circuits over streams of values from abelian
-groups (values with +, -, and 0). The key insight: database tables can be
-represented as **Z-sets** — maps from rows to integer weights (1 = present,
--1 = deleted, 0 = absent). Changes (deltas) to a table are also Z-sets.
-
-Four operators form the entire basis:
-
-| Operator | Notation | Meaning |
+| Limitation | Root Cause | Impact |
 |---|---|---|
-| **Lift** | `↑f` | Apply scalar function `f` to each stream element independently |
-| **Delay** | `z⁻¹` | Output the previous stream element (with 0 at t=0) |
-| **Differentiation** | `D` | `D(s)[t] = s[t] - s[t-1]` — compute the change stream |
-| **Integration** | `I` | `I(s)[t] = Σ_{i≤t} s[i]` — accumulate changes into state |
+| Single subquery only | `MoveHandling` assumes one dependency; multiple cause invalidation (`consumer.ex:297`) | Shape gets cleaned and rebuilt from scratch |
+| No `NOT IN` | Move-in to subquery should trigger move-out from parent — not implemented | `should_invalidate?` = true |
+| No `OR` with subquery | Can't determine which disjunct caused the match | `should_invalidate?` = true |
+| No correlated subqueries | Subqueries are independent shapes with no reference to outer row | Not supported at all |
+| Move-in latency | Each move-in fires a Postgres roundtrip (~1-10ms) | Eventual consistency for subquery shapes |
+| 3+ level nesting | `tagged_subqueries` feature flag gates it | Invalidation is the fallback |
+| Move-in race conditions | Async queries create snapshot positioning, touch_tracker, moved_out_tags complexity | Hard-to-debug correctness issues |
 
-### 2.2 The Incrementalization Algorithm (Algorithm 4.6)
+---
 
-Given any query Q:
+## 3. The Data Availability Gap
 
-1. Translate Q into a DBSP circuit using Z-set operators
-2. Eliminate redundant `distinct` operators
-3. Lift the circuit to operate on streams: `↑Q`
-4. Wrap in I and D: `Q^Δ = D ∘ ↑Q ∘ I`
-5. Apply the **chain rule** recursively: `(Q1 ∘ Q2)^Δ = Q1^Δ ∘ Q2^Δ`
+This is the single most important section. It was missing from v1 of this
+plan.
 
-Key efficiency results:
-- **Linear operators** (filter, project, union): `Q^Δ = Q` — just apply to deltas directly
-- **Bilinear operators** (join): `(a ⊲⊳ b)^Δ = Δa ⊲⊳ Δb + a ⊲⊳ Δb + Δa ⊲⊳ b` — incremental join
-- **distinct**: Efficiently incrementalizable via the H function (Proposition 4.7)
+### 3.1 The Problem
 
-### 2.3 Why This Solves Our Problems
+Consider:
 
-| Current Limitation | DBSP Solution |
+```sql
+SELECT * FROM tasks
+WHERE project_id IN (SELECT id FROM projects WHERE active = true)
+```
+
+At shape creation time, Electric snapshots only the matching tasks (those
+whose `project_id` points to an active project). Later, a project flips
+`active = false → true`. The WAL delta contains a change to `projects`. No
+`tasks` rows changed, so the WAL gives us no task row bodies. But
+correctness requires delivering all tasks for that now-active project.
+
+**DBSP can compute the delta of the query result only if the circuit has
+state for the outer relation it needs to join against.** If the circuit's
+"integrated" state for `tasks` does not contain those rows, the output delta
+cannot include them — because there's nothing to join with.
+
+### 3.2 Why This Is Fundamental
+
+The claim "no Postgres roundtrips" is only true if the sync service already
+maintains the relevant portion of the outer table in its own state store.
+
+In today's system, the Materializer tracks the *inner* (subquery) result
+set, and Postgres is the "oracle" for the *outer* rows. DBSP doesn't change
+the need for outer row data — it just changes where you look for it.
+
+### 3.3 The Real Tradeoff: DBSP Shifts Cost from Postgres to Electric
+
+| | DNF/tag plan (current) | DBSP plan |
+|---|---|---|
+| **Postgres role** | Index + storage of excluded outer rows | Only WAL source |
+| **Electric stores** | Dependency subquery result sets (materializers) + shape output rows | Candidate outer rows + subquery sets + indexes/arrangements |
+| **Complexity** | Orchestration + client protocol | Incremental query engine + state store |
+| **Postgres load** | Move-in queries per subquery change | None (if Option A) or PK lookups (if Option B) |
+| **Electric memory** | Lower | Higher |
+
+---
+
+## 4. Three Architecture Options
+
+All three use DBSP-style incremental computation for determining
+*membership* (which PKs belong in the shape). They differ in how they
+resolve the data availability gap — where row bodies come from.
+
+### 4.1 Option A: Server-Side Candidate Row Store (True No-Query DBSP)
+
+**Concept**: Electric maintains a local store (memory + optional disk) of
+"candidate" outer rows — rows that *could* become shape members if subquery
+conditions change. Updated continuously from WAL.
+
+**How it works**:
+
+```
+Shape: SELECT * FROM tasks WHERE project_id IN (SELECT id FROM projects WHERE active)
+```
+
+Split the query into:
+- `tasks_candidate = σ(outer-only predicates)(tasks)` — all tasks (or tasks
+  filtered by non-subquery predicates only)
+- `result = tasks_candidate ⋉ active_projects` — semi-join with subquery
+
+Maintain `tasks_candidate` locally. When `active_projects` changes, the
+incremental semi-join probes the candidate store to find newly-eligible or
+newly-excluded rows.
+
+**Architecture**:
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                Electric Sync Service                     │
+│                                                          │
+│  WAL ──► Per-Table Row Store + Arrangements              │
+│              │ (candidate rows indexed by join keys)      │
+│              │                                            │
+│              ▼                                            │
+│  WAL ──► DBSP Membership Engine                          │
+│              │ (incremental semi/anti-join)                │
+│              │                                            │
+│              ▼                                            │
+│  Membership Δ + Row Store lookup ──► Shape Log            │
+└──────────────────────────┬──────────────────────────────┘
+                           │ HTTP Shape Stream
+                           ▼
+                    TanStack DB (Client)
+```
+
+**What must be stored**:
+- For each table referenced by any shape's subquery join: candidate rows
+  indexed by the join column(s).
+- Bootstrap: one-time snapshot query per table (not per shape) at first
+  use, then maintained incrementally from WAL.
+- Indexed as "arrangements" keyed by join columns for O(delta) probing.
+
+**Pros**:
+- Actually achieves "no Postgres roundtrips for move-ins"
+- Emits plain inserts/deletes (no tags/active_conditions needed)
+- Restores transactional/causal properties for subquery shapes (no more
+  "subqueries are eventual")
+- Synchronous computation at WAL transaction boundary
+
+**Cons**:
+- Building/operating a partial replica + indexes inside the sync service
+- Memory cost: O(|candidate rows|) per referenced table, shared across shapes
+- Still needs one bootstrap snapshot query per table
+- Significant engineering effort: row store, arrangement indexes, WAL-driven
+  maintenance, garbage collection of unused table state
+
+**When to choose**: When you need strong consistency guarantees for subquery
+shapes, when move-in latency is a product-critical issue, or when Postgres
+connection pool pressure from move-in queries is a scaling bottleneck.
+
+### 4.2 Option B: DBSP Membership + PK Hydration (Simplified Queries)
+
+**Concept**: DBSP computes exactly which primary keys became visible or
+invisible. Electric still fetches row bodies from Postgres, but the query is
+trivially simple: `SELECT * FROM tasks WHERE id = ANY($1)`.
+
+**How it works**:
+
+The membership engine maintains:
+- The inner (subquery) result set — same as current Materializer
+- A "membership set" of outer PKs currently in the shape
+
+When a subquery change occurs:
+1. DBSP membership engine computes: `{pk_3, pk_7, pk_12}` moved in
+2. Hydration query: `SELECT * FROM tasks WHERE id = ANY('{3,7,12}')`
+3. On hydration complete: validate each PK is still in membership set
+   (handles races), emit inserts for confirmed rows
+4. Move-outs: computed directly from membership delta, no query needed
+
+**Architecture**:
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                Electric Sync Service                     │
+│                                                          │
+│  WAL ──► DBSP Membership Engine                          │
+│              │ (tracks inner sets + outer PK membership)  │
+│              │                                            │
+│              ├── move-outs: emit deletes directly         │
+│              │                                            │
+│              └── move-ins: hydrate PKs from Postgres      │
+│                     │                                     │
+│                     ▼                                     │
+│              Validate against current membership          │
+│                     │                                     │
+│                     ▼                                     │
+│              Shape Log                                    │
+└──────────────────────────┬──────────────────────────────┘
+                           │ HTTP Shape Stream
+                           ▼
+                    TanStack DB (Client)
+```
+
+**What the membership engine needs**:
+- The inner (subquery) result set: e.g., `{project_id: 1, project_id: 5}`
+  — same data as current Materializer's `value_counts`
+- An arrangement of outer PKs indexed by join column: e.g.,
+  `{project_id: 1 → [task_3, task_7], project_id: 5 → [task_12]}`
+  — this is new, but lightweight (just PKs, not full rows)
+
+**Key simplification over current pipeline**:
+- No DNF tags, no active_conditions, no exclusion clauses
+- No snapshot positioning / touch_tracker races
+- Hydration query is trivial (`WHERE pk = ANY($1)`) — no complex WHERE
+  clause reconstruction
+- On hydration complete, validate against DBSP membership state — if a PK
+  left the set while the query was in flight, discard it. This single check
+  replaces the entire moved_out_tags filtering system.
+- Move-outs are synchronous (DBSP emits delete deltas directly)
+
+**Pros**:
+- Most of the conceptual simplification of DBSP without a server-side
+  row store
+- Hydration queries are simple, batched, and easy to reason about
+- Move-outs require no queries at all (vs current control message system)
+- Client protocol stays simple: inserts/deletes that reflect membership
+- Significantly less engineering than Option A
+
+**Cons**:
+- Still hits Postgres for move-in row bodies (but simpler queries)
+- Still async (hydration query returns later), though with much simpler
+  race handling
+- Subquery shapes remain "eventually consistent" for move-ins (though
+  the window is smaller)
+- Needs the outer PK arrangement (lightweight, but new state)
+
+**When to choose**: When you want the biggest simplification bang for the
+buck. This is likely the **pragmatic first step** — it removes most of the
+current pipeline's complexity while staying within the current architectural
+envelope (Electric queries Postgres when it needs row bodies).
+
+### 4.3 Option C: Client-Driven via TanStack DB Query-Driven Sync
+
+**Concept**: Lean on TanStack DB's `requestSnapshot`/`fetchSnapshot`
+mechanism. The server defines coarse shapes (possibly without subqueries);
+the client's live queries drive subset loading as needed.
+
+**How it works**:
+
+TanStack DB's query-driven sync allows live queries to trigger subset
+loading:
+- Client query realizes it needs rows it hasn't loaded yet
+- Calls `requestSnapshot` / `fetchSnapshot` to get more rows
+- Joins can trigger batched ID fetches
+- Electric's existing subset API (`query_subset` in `partial_modes.ex`)
+  handles the server side
+
+**Architecture**:
+
+```
+┌────────────────────────────────────────┐
+│         Electric Sync Service           │
+│                                         │
+│  Shapes = coarse table boundaries       │
+│  (simple WHERE, no subqueries)          │
+│                                         │
+│  Subset API handles on-demand fetches   │
+└──────────────────┬─────────────────────┘
+                   │ HTTP Shape Stream + Subset Requests
+                   ▼
+┌────────────────────────────────────────┐
+│         TanStack DB (Client)            │
+│                                         │
+│  Electric Collections (coarse shapes)   │
+│       │                                 │
+│       ▼                                 │
+│  d2ts live queries                      │
+│  (joins, filters, subquery-equivalent   │
+│   logic expressed as client queries)    │
+│       │                                 │
+│       ▼                                 │
+│  Query-driven sync: requestSnapshot     │
+│  for missing data as queries demand it  │
+└────────────────────────────────────────┘
+```
+
+**Pros**:
+- No incremental query engine on the server at all
+- Leverages existing infrastructure (subset API, d2ts)
+- Client has full data for its queries (d2ts works because data is local)
+- Simplest server-side story
+
+**Cons**:
+- Shifts semantics: no longer "server pushes all rows that belong to a
+  shape" but "client pulls subsets as queries demand"
+- Security implications: if subqueries enforce authorization boundaries,
+  the client can't be trusted to decide what to fetch. The server must
+  still validate subset requests.
+- Latency: client doesn't have data until it asks for it
+- Not a replacement for server-enforced subquery shapes — it's a different
+  product model
+- Doesn't help with the server-side shape correctness problem at all
+
+**When to choose**: When the subquery logic is a UI concern (not a security
+boundary), and when the client is the right place to determine what data is
+needed. This complements Options A/B rather than replacing them.
+
+### 4.4 Comparison Matrix
+
+| Dimension | Option A (Row Store) | Option B (Membership + Hydration) | Option C (Client-Driven) |
+|---|---|---|---|
+| **Move-in latency** | ~μs (in-memory) | ~1-10ms (PG query) | ~50-200ms (client roundtrip) |
+| **Postgres load** | WAL only | Simple PK lookups | Subset queries |
+| **Electric memory** | High (candidate rows) | Medium (PK arrangements) | Low |
+| **Engineering effort** | High | Medium | Low (mostly exists) |
+| **Consistency model** | Transactional | Eventually consistent (small window) | Eventually consistent |
+| **Client protocol** | Simple (insert/delete) | Simple (insert/delete) | Existing (subset) |
+| **Security** | Server-enforced | Server-enforced | Needs validation |
+| **NOT IN / OR / multi-subquery** | Full support | Full support | N/A (no server subqueries) |
+| **Shared state** | Natural (per-table) | Natural (per-table) | N/A |
+
+### 4.5 Recommended Path
+
+**Start with Option B. Evolve toward Option A for hot tables.**
+
+Option B gives us 80% of the benefit (eliminates DNF, tags,
+active_conditions, exclusion clauses, most race conditions) with 30% of
+the effort. It's "DBSP for membership, Postgres for row bodies" — which
+is an honest framing of what we actually need.
+
+Option A is the long-term ideal for tables with high move-in traffic, but
+it requires building a row store and arrangement infrastructure that is a
+significant project in its own right. We can add it table-by-table later
+when profiling shows hydration queries are a bottleneck.
+
+Option C is complementary — it's how TanStack DB already works for UI-level
+data needs. It doesn't solve the server-side subquery problem but it's a
+good fit for "the client needs more data than the shape provides."
+
+---
+
+## 5. DBSP Theory — Minimal Subset We Need
+
+### 5.1 Scoping: Don't Build a Generic Circuit DSL
+
+The review correctly identifies that starting with "generic ZSet, operators,
+circuit, then compiler" risks accidentally building a half-DB engine. The
+pragmatic path is:
+
+**Build arrangement-backed incremental operators directly (semi-join,
+anti-join, filter, union) wired in a simple expression DAG. Only generalize
+into a circuit DSL later if it's clearly paying off.**
+
+### 5.2 What We Actually Need
+
+For our shape SQL subset, the operators we need are:
+
+| SQL Pattern | Incremental Operator | State Required |
+|---|---|---|
+| `WHERE pred(col)` | Lifted filter (stateless, linear) | None |
+| `col IN (SELECT ...)` | Incremental semi-join | Inner set + outer PK arrangement |
+| `col NOT IN (SELECT ...)` | Incremental anti-join (with NULL handling) | Inner set + outer PK arrangement + `inner_has_null` flag |
+| `EXISTS (SELECT ... WHERE ...)` | Incremental semi-join | Same as IN |
+| `NOT EXISTS (...)` | Incremental anti-join | Same as NOT IN (simpler NULL story) |
+| `cond1 AND col IN (...)` | Filter composed with semi-join | Semi-join state |
+| `cond1 OR col IN (...)` | Union + incremental distinct | Both branches' state + distinct state |
+
+That's it. We don't need general-purpose projection, Cartesian product,
+aggregation, or recursion to solve the subquery problem.
+
+### 5.3 Core Theory We Use
+
+**Z-sets**: Maps from rows (or PKs) to integer weights. Group operations
+(+, -, 0) defined pointwise.
+
+**Incremental semi-join** (from Theorem 3.4, bilinear):
+```
+Δ(a ⋉ b) = (Δa ⋉ Δb) + (prev_a ⋉ Δb) + (Δa ⋉ prev_b)
+```
+Where `prev_a` and `prev_b` are the accumulated state (integration) of
+each input.
+
+**Incremental anti-join**: derived from semi-join:
+```
+anti_join(a, b) = distinct(a - semi_join(a, b))
+```
+Incrementalized via the distinct H function (Proposition 4.7) composed with
+the incremental semi-join and subtraction.
+
+**Incremental distinct** (Proposition 4.7):
+```
+H(integrated, delta)[x] =
+  +1  if integrated[x] ≤ 0 and (integrated + delta)[x] > 0
+  -1  if integrated[x] > 0 and (integrated + delta)[x] ≤ 0
+   0  otherwise
+```
+
+**Chain rule**: `(Q1 ∘ Q2)^Δ = Q1^Δ ∘ Q2^Δ` — incrementalize each
+sub-operator independently.
+
+**Linearity**: Filter and projection are linear, so their incremental
+versions equal themselves: `σ^Δ = σ`. Just apply the filter to the delta.
+
+---
+
+## 6. Correctness Details: NULL Semantics and NOT IN
+
+### 6.1 The Problem
+
+The v1 plan said:
+> NOT IN → anti-join: `distinct(outer - semi_join(outer, inner))`
+
+That corresponds to `NOT EXISTS` semantics, not SQL `NOT IN` semantics
+with NULLs.
+
+In SQL:
+- `x NOT IN (1, NULL)` is `UNKNOWN` → filtered out (effectively `false`)
+- `NOT EXISTS (subquery WHERE subquery.y = x)` would be `true` if there's
+  no matching row
+
+### 6.2 Correct Translation
+
+```
+x NOT IN (subquery)
+≈
+x IS NOT NULL
+AND NOT EXISTS (subquery WHERE subquery.y = x)
+AND NOT EXISTS (subquery WHERE subquery.y IS NULL)
+```
+
+In incremental form:
+1. Maintain a boolean `inner_has_null` flag, updated from the inner Z-set:
+   `inner_has_null = ∃ row ∈ inner : row[col] IS NULL`
+2. If `inner_has_null` is true: entire NOT IN evaluates to false for all
+   outer rows (unless outer value is also NULL, which is also false)
+3. If `inner_has_null` transitions true→false or false→true: **all** outer
+   rows may change membership. This is an expensive case but correct.
+
+### 6.3 Recommended Approach
+
+**Rewrite IN/NOT IN at the query plan level:**
+
+- `x IN (subquery)` → `EXISTS (subquery WHERE subquery.y = x)`
+  (safe in WHERE context, avoids NULL complexity on the IN side)
+- `x NOT IN (subquery)` → `x IS NOT NULL AND NOT EXISTS (subquery WHERE
+  subquery.y = x) AND ¬inner_has_nulls`
+
+The `inner_has_nulls` state is a single boolean maintained alongside the
+inner Z-set. When it transitions, we emit a "full recompute" signal for the
+anti-join portion — this is rare in practice (NULLs appearing/disappearing
+in the subquery result) and acceptable.
+
+### 6.4 Test Cases
+
+These must be explicitly tested:
+
+| Scenario | Expected |
 |---|---|
-| Single subquery | Chain rule composes arbitrarily — multiple subqueries are just composed operators |
-| `NOT IN` | Anti-join is expressible as `distinct(a - (a ⊲⊳ b))` — incrementalizes naturally |
-| `OR` with subquery | Union + distinct: `distinct(Q_left + Q_right)` |
-| Correlated subqueries | Flatmap/dependent join — expressible in DBSP via nested relations |
-| Move-in latency | No Postgres roundtrip — incremental result computed from deltas |
-| Nested subqueries | Chain rule handles arbitrary depth |
+| `NOT IN (1, 2)` where outer=3 | IN shape |
+| `NOT IN (1, 2)` where outer=1 | NOT in shape |
+| `NOT IN (1, NULL)` where outer=3 | NOT in shape (SQL semantics) |
+| `NOT IN (1, NULL)` where outer=NULL | NOT in shape |
+| Inner goes from `(1, 2)` to `(1, NULL)` | All non-matching outer rows leave shape |
+| Inner goes from `(1, NULL)` to `(1, 2)` | Non-matching outer rows enter shape |
 
 ---
 
-## 3. Architecture: Where DBSP Runs
+## 7. Performance: Arrangements, Not Naive Maps
 
-### 3.1 Key Design Decision: Server-Side DBSP
+### 7.1 The Problem
 
-DBSP processing will run **server-side in the Electric sync service** (Elixir),
-not client-side. Rationale:
+If `ZSet.join(...)` is implemented as "iterate all pairs matching key
+extractors", it will not survive realistic loads. The v1 plan's data
+structure was `%{row => weight}` — a flat map with no indexing.
 
-- The sync service already receives the full WAL change stream
-- The sync service already maintains per-shape state (Consumer, Storage)
-- DBSP needs access to the full base tables (via integration operators) —
-  the client only has partial data
-- Client-side d2ts handles live queries *within* synced data; DBSP handles
-  the *determination of what to sync*
+### 7.2 Arrangements
 
-### 3.2 Relationship to d2ts and TanStack DB
-
-The architecture creates a clean separation:
-
-```
-┌─────────────────────────────────────┐
-│          Electric Sync Service      │
-│                                     │
-│  WAL Stream ──► DBSP Circuit        │
-│                  │                  │
-│                  ▼                  │
-│  Per-shape incremental output       │
-│  (Z-set deltas = change stream)     │
-│                  │                  │
-│                  ▼                  │
-│  Shape Log (storage)                │
-└──────────────┬──────────────────────┘
-               │ HTTP Shape Stream
-               ▼
-┌─────────────────────────────────────┐
-│          TanStack DB (Client)       │
-│                                     │
-│  Electric Collection                │
-│       │                             │
-│       ▼                             │
-│  d2ts live queries                  │
-│  (client-side joins, filters, etc.) │
-└─────────────────────────────────────┘
-```
-
-- **Electric DBSP**: determines *which rows belong to a shape* incrementally,
-  handling subqueries, joins, and complex WHERE clauses. Produces a change
-  stream for each shape.
-- **d2ts**: provides *client-side reactivity* over the synced data —
-  re-filtering, joining collections, aggregating for UI display.
-
-### 3.3 Subset Requests as the Bridge
-
-The existing `requestSnapshot`/`fetchSnapshot` mechanism
-(`packages/typescript-client/src/client.ts`) allows clients to fetch subsets
-of data on-demand. With DBSP:
-
-- The client doesn't need to know about subqueries at all
-- The server computes the correct shape contents incrementally
-- If a client needs additional data beyond the shape (e.g., for a UI join),
-  it uses `requestSnapshot` with the existing subset API — this remains
-  unchanged
-
----
-
-## 4. Implementation Plan
-
-### Phase 0: Foundation — Z-set Library for Elixir
-
-**Goal**: Build the core data structures and operators needed for DBSP circuits.
-
-#### 4.0.1 Z-set Data Structure
-
-Create `Electric.DBSP.ZSet` — a map from terms to integer weights with group
-operations:
+An **arrangement** is a Z-set indexed by a key function. It's the
+performance heart of differential dataflow / DBSP.
 
 ```elixir
-defmodule Electric.DBSP.ZSet do
-  @type t(k) :: %{optional(k) => integer()}
+defmodule Electric.DBSP.Arrangement do
+  @type t(k, v) :: %{
+    # Primary index: key → %{value => weight}
+    index: %{optional(k) => %{optional(v) => integer()}},
+    # Total count per key (for existence checks)
+    counts: %{optional(k) => integer()}
+  }
 
-  def new(), do: %{}
-  def singleton(key, weight \\ 1), do: %{key => weight}
+  @doc "Add a delta to the arrangement"
+  def apply_delta(arrangement, delta, key_fn)
 
-  # Group operations
-  def add(a, b)        # pointwise addition
-  def negate(a)        # pointwise negation
-  def subtract(a, b)   # add(a, negate(b))
+  @doc "Probe: given a key, return all values with positive weight"
+  def probe(arrangement, key) :: %{optional(v) => integer()}
 
-  # Relational operations on Z-sets
-  def filter(zset, pred)
-  def project(zset, proj_fn)
-  def join(a, b, key_a, key_b, combine)
-  def distinct(zset)   # all positive weights → 1, rest → 0
-  def union(a, b)      # distinct(add(a, b))
-  def difference(a, b) # distinct(subtract(a, b))
+  @doc "Does this key exist with positive total weight?"
+  def exists?(arrangement, key) :: boolean()
 end
 ```
 
-Represent rows as maps (matching Electric's existing `record` format).
-Weights are integers (typically +1 for insert, -1 for delete).
-
-#### 4.0.2 Stream Operators
-
-Create `Electric.DBSP.Stream` — stateful operators that process one delta at
-a time:
+### 7.3 Incremental Semi-Join with Arrangements
 
 ```elixir
-defmodule Electric.DBSP.Operators do
-  # Lift: apply a Z-set function to a delta (stateless)
-  def lift(f), do: f
+defmodule Electric.DBSP.SemiJoin do
+  defstruct [
+    :outer_arrangement,  # Arrangement indexed by join key
+    :inner_arrangement,  # Arrangement indexed by join key
+    :key_fn_outer,       # outer row → join key
+    :key_fn_inner        # inner row → join key
+  ]
 
-  # Integration: accumulate deltas into running state
-  defmodule Integrate do
-    defstruct state: %{}
-    def step(%Integrate{state: s} = op, delta) do
-      new_state = ZSet.add(s, delta)
-      {delta, %{op | state: new_state}}  # returns (output, new_op_state)
-    end
-    def current(%Integrate{state: s}), do: s
-  end
+  def step(state, delta_outer, delta_inner) do
+    # 1. Δouter ⋉ (prev_inner + Δinner): probe inner arrangement for new outer rows
+    from_new_outer = probe_semi_join(delta_outer, state.inner_arrangement, delta_inner, ...)
 
-  # Differentiation: compute change from previous
-  defmodule Differentiate do
-    defstruct prev: %{}
-    def step(%Differentiate{prev: p} = op, input) do
-      delta = ZSet.subtract(input, p)
-      {delta, %{op | prev: input}}
-    end
-  end
+    # 2. prev_outer ⋉ Δinner: probe outer arrangement for new inner keys
+    from_new_inner = probe_semi_join_reverse(state.outer_arrangement, delta_inner, ...)
 
-  # Delay: output previous input
-  defmodule Delay do
-    defstruct prev: %{}
-    def step(%Delay{prev: p} = op, input) do
-      {p, %{op | prev: input}}
-    end
-  end
+    # 3. Update arrangements
+    outer_arr = Arrangement.apply_delta(state.outer_arrangement, delta_outer, state.key_fn_outer)
+    inner_arr = Arrangement.apply_delta(state.inner_arrangement, delta_inner, state.key_fn_inner)
 
-  # Incremental distinct (Proposition 4.7)
-  defmodule IncrementalDistinct do
-    defstruct integrated: %{}
-    def step(%IncrementalDistinct{integrated: i} = op, delta) do
-      new_integrated = ZSet.add(i, delta)
-      output = h_function(i, delta)
-      {output, %{op | integrated: new_integrated}}
-    end
-  end
-
-  # Incremental join (Theorem 3.4)
-  defmodule IncrementalJoin do
-    defstruct left_state: %{}, right_state: %{}
-    def step(op, delta_left, delta_right) do
-      # Δa ⊲⊳ Δb + prev_a ⊲⊳ Δb + Δa ⊲⊳ prev_b
-      result = ZSet.add(
-        ZSet.add(
-          ZSet.join(delta_left, delta_right, ...),
-          ZSet.join(op.left_state, delta_right, ...)
-        ),
-        ZSet.join(delta_left, op.right_state, ...)
-      )
-      new_op = %{op |
-        left_state: ZSet.add(op.left_state, delta_left),
-        right_state: ZSet.add(op.right_state, delta_right)
-      }
-      {result, new_op}
-    end
+    result = ZSet.add(from_new_outer, from_new_inner)
+    {result, %{state | outer_arrangement: outer_arr, inner_arrangement: inner_arr}}
   end
 end
 ```
 
-#### 4.0.3 Circuit Builder
+The key insight: **delta rows probe the other side's index.** This is
+O(|delta| × average_matches_per_key), not O(|delta| × |other_side|).
 
-Create `Electric.DBSP.Circuit` — a DSL for composing operators into circuits:
+### 7.4 What Gets Arranged
 
-```elixir
-defmodule Electric.DBSP.Circuit do
-  defstruct nodes: %{}, edges: [], state: %{}
+For Option B (membership + hydration), the outer arrangement stores only
+**primary keys grouped by join column**, not full rows:
 
-  def new() :: t()
-  def add_node(circuit, id, operator) :: t()
-  def add_edge(circuit, from, to) :: t()
-  def step(circuit, inputs) :: {outputs, updated_circuit}
-end
 ```
-
-**Files to create:**
-- `lib/electric/dbsp/z_set.ex`
-- `lib/electric/dbsp/operators.ex`
-- `lib/electric/dbsp/circuit.ex`
-- `test/electric/dbsp/z_set_test.exs`
-- `test/electric/dbsp/operators_test.exs`
-- `test/electric/dbsp/circuit_test.exs`
-
-**Estimated scope**: ~800-1200 lines of Elixir + tests.
-
----
-
-### Phase 1: SQL-to-DBSP Compiler
-
-**Goal**: Translate shape WHERE clauses (with subqueries) into DBSP circuits.
-
-#### 4.1.1 Query Plan Extraction
-
-Extend the existing `Parser.extract_subqueries/1` to produce a structured
-query plan rather than a flat list of subquery strings. The plan should
-capture:
-
-```elixir
-%QueryPlan{
-  # Root filter on the main table
-  root_filter: %Filter{predicate: ...},
-  # Subquery references with their operators (IN, NOT IN, EXISTS, etc.)
-  subquery_ops: [
-    %SubqueryOp{
-      type: :in,          # or :not_in, :exists, :not_exists, :scalar_compare
-      outer_refs: [...],  # columns from outer table used in comparison
-      inner_query: %{
-        table: {"public", "items"},
-        filter: ...,
-        projection: [...],
-        # Nested subqueries would recurse here
-      }
-    }
-  ],
-  # How subquery results combine with the root filter
-  combination: :and  # or :or, :not, etc.
+outer_arrangement.index = %{
+  project_id_1 => %{task_pk_3 => 1, task_pk_7 => 1},
+  project_id_2 => %{task_pk_12 => 1}
 }
 ```
 
-#### 4.1.2 Plan-to-Circuit Translation
+This is lightweight — just PKs and join keys, not full row data. Full row
+bodies are fetched from Postgres during hydration.
 
-Implement Algorithm 4.6 from the DBSP paper:
+For Option A (candidate row store), the arrangement stores full rows:
 
-```elixir
-defmodule Electric.DBSP.Compiler do
-  @doc """
-  Given a query plan, produce a DBSP circuit that:
-  - Takes delta streams for each referenced table as input
-  - Produces a delta stream of matching rows as output
-  """
-  def compile(%QueryPlan{} = plan) :: Circuit.t()
-
-  # Translation rules (Table 1 from paper):
-  # - Filter σ_P → lifted filter (linear, so Δ-version = itself)
-  # - Projection π → lifted projection (linear)
-  # - IN subquery → semi-join ⊲⊳ (bilinear → incremental join formula)
-  # - NOT IN → anti-join: distinct(a - a⊲⊳b)
-  # - EXISTS → semi-join with existence check
-  # - OR → union + distinct
-  # - AND → composed filters or intersection
-end
+```
+outer_arrangement.index = %{
+  project_id_1 => %{%{id: 3, name: "Task 3", ...} => 1, ...},
+  ...
+}
 ```
 
-The key translations for subquery patterns:
+---
 
-| SQL Pattern | DBSP Circuit |
-|---|---|
-| `col IN (SELECT ...)` | `semi_join(outer, inner, col)` → bilinear, incrementalizes via Theorem 3.4 |
-| `col NOT IN (SELECT ...)` | `distinct(outer - semi_join(outer, inner, col))` |
-| `EXISTS (SELECT ... WHERE outer.id = inner.fk)` | `semi_join(outer, inner, id=fk)` |
-| `NOT EXISTS (...)` | `distinct(outer - semi_join(outer, inner, ...))` |
-| `col = (SELECT scalar ...)` | `join(outer, inner, col=result)` with aggregation |
-| `cond1 OR col IN (...)` | `distinct(filter(outer, cond1) + semi_join(outer, inner, col))` |
-| `cond1 AND col IN (...)` | `filter(semi_join(outer, inner, col), cond1)` |
+## 8. Shared State Across Shapes
 
-**Files to create/modify:**
-- `lib/electric/dbsp/compiler.ex`
+### 8.1 The Problem
+
+The v1 plan proposed one circuit per shape with its own integrated state.
+If 100 shapes reference `projects WHERE active = true`, that's 100 copies
+of the same inner set. And if 50 shapes filter on `tasks`, that's 50
+copies of the tasks arrangement.
+
+### 8.2 Per-Table Shared Arrangements
+
+The natural solution: maintain arrangements **per table, per stack**, shared
+across all shapes that reference that table.
+
+```
+┌─────────────────────────────────────────────┐
+│  Shared Table State (per stack)              │
+│                                              │
+│  tasks:                                      │
+│    arrangement(project_id) → {PKs}           │
+│    arrangement(category_id) → {PKs}          │
+│                                              │
+│  projects:                                   │
+│    arrangement(id) → {rows or PKs}           │
+│    filter(active=true) → filtered set        │
+└──────────────────────┬──────────────────────┘
+                       │ shared, read by all shapes
+                       ▼
+┌──────────┐  ┌──────────┐  ┌──────────┐
+│ Shape A  │  │ Shape B  │  │ Shape C  │
+│ semi-join│  │ semi-join│  │ anti-join│
+│ (tasks ⋉ │  │ (tasks ⋉ │  │ (tasks ▷ │
+│  projs)  │  │  cats)   │  │  blocks) │
+└──────────┘  └──────────┘  └──────────┘
+```
+
+### 8.3 Implementation Approach
+
+- **Table state manager**: A GenServer per table (per stack) that receives
+  WAL deltas and maintains arrangements.
+- **Shape operators** read from shared arrangements but maintain their own
+  incremental operator state (e.g., which PKs are currently in the
+  semi-join result).
+- **Reference counting**: When no shapes reference a table's arrangement,
+  it can be garbage collected.
+- **Current Materializer analogy**: The existing Materializer already shares
+  dependency shapes across parents. This generalizes that pattern.
+
+### 8.4 Bootstrap
+
+When a table's arrangement is first needed:
+1. Run a one-time snapshot query for the relevant columns + PKs
+2. Build the initial arrangement
+3. Subscribe to WAL for that table
+4. Maintain incrementally from WAL deltas
+
+This is per-table, not per-shape, so the cost is amortized.
+
+---
+
+## 9. Implementation Plan (Pragmatic Path)
+
+Based on the review's recommendation: **don't build a generic circuit DSL
+first.** Build arrangement-backed incremental operators directly, wire them
+in a simple expression DAG, and only generalize later.
+
+### Phase 0: Arrangements and Z-set Primitives
+
+**Goal**: Build the core data structures.
+
+**Deliverables**:
+- `Electric.DBSP.ZSet` — weighted set with group operations (+, -, 0)
+- `Electric.DBSP.Arrangement` — indexed Z-set with probe/apply_delta
+- Property-based tests: verify group laws, arrangement consistency
+
+**Scope**: ~400-600 lines + tests.
+
+**Key design decision**: Arrangements are the primary data structure, not
+raw Z-sets. Every stateful operator works through arrangements.
+
+**Files**:
+- `lib/electric/dbsp/z_set.ex`
+- `lib/electric/dbsp/arrangement.ex`
+- `test/electric/dbsp/z_set_test.exs`
+- `test/electric/dbsp/arrangement_test.exs`
+
+### Phase 1: Incremental Operators
+
+**Goal**: Implement the specific operators we need, backed by arrangements.
+
+**Deliverables**:
+- `IncrementalSemiJoin` — for IN / EXISTS
+- `IncrementalAntiJoin` — for NOT IN / NOT EXISTS (with NULL handling)
+- `IncrementalDistinct` — for OR combinations and set operations
+- `IncrementalFilter` — lifted filter (stateless, for completeness)
+- `IncrementalUnion` — for OR: `distinct(branch_a + branch_b)`
+
+Each operator:
+- Takes delta Z-sets as input
+- Maintains its own integrated state via arrangements
+- Produces a delta Z-set as output
+- Has a `bootstrap/2` function to initialize state from a snapshot
+
+**Scope**: ~600-800 lines + tests.
+
+**Files**:
+- `lib/electric/dbsp/operators/semi_join.ex`
+- `lib/electric/dbsp/operators/anti_join.ex`
+- `lib/electric/dbsp/operators/distinct.ex`
+- `lib/electric/dbsp/operators/filter.ex`
+- `lib/electric/dbsp/operators/union.ex`
+- `test/electric/dbsp/operators/*_test.exs`
+
+### Phase 2: Expression DAG Compiler
+
+**Goal**: Translate shape WHERE clauses with subqueries into a DAG of
+the operators from Phase 1.
+
+**Deliverables**:
+- `Electric.DBSP.QueryPlan` — structured representation of the query
+- `Electric.DBSP.Compiler` — compiles a query plan into an operator DAG
+- Integration with `Parser.extract_subqueries/1`
+
+**Translations**:
+
+```
+WHERE col IN (SELECT x FROM t WHERE p)
+→ SemiJoin(outer_arrangement(col), inner_arrangement(x, filter=p))
+
+WHERE col NOT IN (SELECT x FROM t WHERE p)
+→ AntiJoin(outer_arrangement(col), inner_arrangement(x, filter=p),
+           null_tracking=true)
+
+WHERE p1(col) AND col2 IN (SELECT ...)
+→ Filter(p1) ∘ SemiJoin(...)
+
+WHERE p1(col) OR col2 IN (SELECT ...)
+→ Distinct(Union(Filter(p1, outer), SemiJoin(outer, inner)))
+
+WHERE col IN (SELECT ...) AND col2 NOT IN (SELECT ...)
+→ AntiJoin(SemiJoin(outer, inner1), inner2)
+```
+
+The NOT IN translation includes the NULL-aware rewrite from §6.
+
+**Scope**: ~400-600 lines + tests.
+
+**Files**:
 - `lib/electric/dbsp/query_plan.ex`
-- Modify `lib/electric/replication/eval/parser.ex` to produce structured plans
+- `lib/electric/dbsp/compiler.ex`
 - `test/electric/dbsp/compiler_test.exs`
 
-**Estimated scope**: ~600-1000 lines + tests.
+### Phase 3: Consumer Integration (Option B — Membership + Hydration)
 
----
+**Goal**: Replace the Materializer + MoveHandling pipeline with the DBSP
+membership engine, using PK hydration for move-in row bodies.
 
-### Phase 2: Integrate DBSP into the Consumer Pipeline
+**Deliverables**:
 
-**Goal**: Replace the Materializer + MoveHandling pipeline with DBSP circuit
-evaluation.
+#### 3a. Membership Engine
 
-#### 4.2.1 DBSP-Aware Consumer State
-
-Add a compiled DBSP circuit to the Consumer state, replacing the separate
-materializer/move-handling machinery:
+A new module that wraps the compiled operator DAG:
 
 ```elixir
-defmodule Electric.Shapes.Consumer.State do
-  # New field:
-  field :dbsp_circuit, Electric.DBSP.Circuit.t()
+defmodule Electric.DBSP.MembershipEngine do
+  @doc "Process a WAL delta for one table, return membership changes"
+  def step(engine, table, delta) :: {move_ins :: [pk], move_outs :: [pk], updated_engine}
 
-  # Replaces:
-  # - shape_dependencies / shape_dependencies_handles
-  # - move_handling_state
-  # - or_with_subquery? / not_with_subquery?
-  # - subquery_comparison_expressions
+  @doc "Bootstrap from initial snapshot"
+  def bootstrap(engine, snapshot_rows) :: updated_engine
 end
 ```
 
-#### 4.2.2 Transaction Processing with DBSP
+The engine maintains:
+- Shared arrangements for referenced tables (via §8 shared state)
+- Per-shape operator DAG state
+- Current membership set (PKs in the shape)
 
-Replace the current `ChangeHandling.process_changes/3` flow:
+#### 3b. Hydration Module
 
-```
-Current:
-  WAL txn
-    → filter changes by root table
-    → evaluate WHERE clause with extra_refs from materializers
-    → handle move-ins via Postgres queries
-    → handle move-outs via control messages
+Replaces `MoveHandling.process_move_ins`:
 
-New (DBSP):
-  WAL txn
-    → extract deltas per table (root + all subquery tables)
-    → feed deltas into DBSP circuit
-    → circuit produces output delta (Z-set of row changes)
-    → convert output delta to shape log entries
-```
+```elixir
+defmodule Electric.DBSP.Hydration do
+  @doc "Fetch row bodies for moved-in PKs"
+  def hydrate(pks, table, conn) :: [row]
+  # Executes: SELECT * FROM table WHERE pk_col = ANY($1)
 
-The critical advantage: **no Postgres roundtrips for move-ins**. The DBSP
-circuit maintains integrated state for all referenced tables, so when a
-subquery's result set changes, the incremental join formula directly computes
-which outer rows are affected.
-
-#### 4.2.3 Multi-Table WAL Routing
-
-Currently, each Consumer only receives changes for its `root_table` (via
-the `ShapeLogCollector` dispatcher). With DBSP, a shape's circuit may
-reference multiple tables.
-
-Options:
-1. **Expand the dispatcher**: Register each shape for all tables in its
-   circuit. The dispatcher already supports multi-table routing.
-2. **Shared table streams**: Create a broadcast mechanism where table
-   deltas are shared across consumers that reference the same table.
-
-Option 1 is simpler and sufficient initially. The dispatcher
-(`Electric.Shapes.Dispatcher`) routes by relation; we just need shapes to
-register for their subquery tables too.
-
-**Approach**: Modify `Shape.list_relations/1` to return all tables
-referenced by the shape (including subquery tables). The dispatcher already
-uses this to determine routing.
-
-#### 4.2.4 State Management: Integration Operators
-
-DBSP's integration operators (`I`) accumulate the full state of each
-intermediate relation. For a shape like:
-
-```sql
-WHERE parent_id IN (SELECT id FROM parents WHERE active = true)
+  @doc "Validate hydrated rows against current membership"
+  def validate(rows, membership_engine) :: [confirmed_row]
+  # Drop any rows whose PK left the membership set during the query
+end
 ```
 
-The circuit needs to maintain:
-- The accumulated `parents` table (filtered by `active = true`)
-- The accumulated join result
+#### 3c. Consumer Wiring
 
-This replaces the Materializer's `value_counts` and `index` maps with
-the circuit's own integrated state. The memory footprint is similar (both
-must track the full result sets), but the DBSP version is general-purpose.
+Modify `consumer.ex` to use the membership engine:
 
-**Persistence consideration**: Circuit state must survive Consumer restarts.
-Options:
-- **Cold start**: On restart, replay from the shape's snapshot. The circuit
-  reprocesses all accumulated deltas (same as current behavior for
-  materializers, which rebuild from the log).
-- **State checkpointing**: Periodically serialize circuit state. This is an
-  optimization for later; cold start is correct and sufficient.
+```
+WAL txn arrives:
+  1. For each change, determine affected table
+  2. Feed delta to MembershipEngine.step()
+  3. Move-outs: emit DeletedRecord entries directly to shape log
+  4. Move-ins: start Hydration.hydrate() (async, batched)
+  5. On hydration complete: Hydration.validate() → emit NewRecord entries
+  6. For root table changes that are already in the shape:
+     emit UpdatedRecord as before
+```
 
-#### 4.2.5 Initial Snapshot with DBSP
+#### 3d. Multi-Table WAL Routing
 
-The initial snapshot query (`Querying.stream_initial_data`) currently uses
-the WHERE clause with subqueries expanded inline. With DBSP, the initial
-snapshot serves a dual purpose:
+Modify `Shape.list_relations/1` to return all tables referenced by the
+shape (root + subquery tables). The existing Filter/EventRouter already
+routes by relation — shapes just need to register for more tables.
 
-1. Provide the initial data to the client (unchanged)
-2. Bootstrap the DBSP circuit's integration state
+```elixir
+# In shape.ex
+def list_relations(%__MODULE__{} = shape) do
+  root = [{shape.root_table_id, shape.root_table}]
+  subquery_tables = Enum.map(shape.shape_dependencies, fn dep ->
+    {dep.root_table_id, dep.root_table}
+  end)
+  Enum.uniq(root ++ subquery_tables)
+end
+```
 
-The snapshot query can remain as-is (Postgres evaluates the full query
-including subqueries). After the snapshot, the circuit's integration state
-is initialized to match the snapshot result, and subsequent WAL deltas are
-processed incrementally.
+**Scope**: ~1000-1500 lines + tests.
 
-**Files to create/modify:**
+**Files**:
+- `lib/electric/dbsp/membership_engine.ex`
+- `lib/electric/dbsp/hydration.ex`
 - Modify `lib/electric/shapes/consumer.ex`
 - Modify `lib/electric/shapes/consumer/state.ex`
-- Replace `lib/electric/shapes/consumer/move_handling.ex` (eventually remove)
-- Replace `lib/electric/shapes/consumer/change_handling.ex`
-- Modify `lib/electric/shapes/shape.ex` (`list_relations/1`)
-- Modify `lib/electric/replication/shape_log_collector.ex` (multi-table)
-- `test/electric/shapes/consumer_dbsp_test.exs`
+- Modify `lib/electric/shapes/shape.ex`
+- `test/electric/dbsp/membership_engine_test.exs`
+- `test/electric/dbsp/hydration_test.exs`
 
-**Estimated scope**: ~1000-1500 lines of changes + tests.
+### Phase 4: Remove Old Pipeline
 
----
+Once Phase 3 is proven (feature-flagged, integration-tested):
 
-### Phase 3: Remove Move-In/Move-Out Machinery
-
-**Goal**: Once DBSP handles all subquery cases, remove the old pipeline.
-
-#### 4.3.1 Remove Components
-
-- `lib/electric/shapes/consumer/materializer.ex` — No longer needed; DBSP
-  circuit tracks subquery state internally
-- `lib/electric/shapes/consumer/move_handling.ex` — Replaced by circuit output
-- `lib/electric/shapes/consumer/move_ins.ex` — Replaced by circuit state
-- `lib/electric/shapes/shape/subquery_moves.ex` — Tag structure generation
-  moves into DBSP output formatting
-
-#### 4.3.2 Simplify Consumer
-
+- Remove `consumer/materializer.ex`
+- Remove `consumer/move_handling.ex`
+- Remove `consumer/move_ins.ex`
+- Simplify `shape/subquery_moves.ex` (move tag logic may be retained for
+  backward compatibility during transition, then removed)
 - Remove `materializer_subscribed?`, `or_with_subquery?`,
-  `not_with_subquery?` flags
-- Remove `move_handling_state` from Consumer.State
-- Remove `shape_dependencies_handles` (shapes still track dependencies for
-  cleanup, but don't need handle-based materializer subscriptions)
-- Remove the `should_invalidate?` check — DBSP handles all cases
+  `not_with_subquery?`, `move_handling_state` from Consumer.State
+- Remove the `should_invalidate?` check — DBSP handles all cases uniformly
 
-#### 4.3.3 Simplify Move Tags
+### Phase 5 (Future): Candidate Row Store for Hot Tables (Option A)
 
-Move tags (the hash-based tracking of *why* a row is in a shape) currently
-exist to support client-side move-out. With DBSP:
+When profiling shows hydration queries are a bottleneck for specific tables:
 
-- The circuit directly produces delete deltas when rows leave the shape
-- These become `DeletedRecord` entries in the shape log
-- Move tags can be simplified or removed entirely
-
-However, move tags also serve a purpose for the *client* to reconcile
-optimistic state. This needs careful analysis — if the client's Electric
-collection uses tags for anything beyond move-in/move-out tracking, we may
-need to preserve them in a simplified form.
-
-**Estimated scope**: ~500 lines removed, ~200 lines modified.
+- Add a per-table row store (in-memory, WAL-maintained)
+- Arrangements already exist from Phase 1 — extend them to store full rows
+- Replace hydration queries with local row store lookups for those tables
+- This is a per-table optimization, not a system-wide rewrite
 
 ---
 
-### Phase 4: Advanced Features Enabled by DBSP
+## 10. Migration Strategy
 
-Once the foundation is in place, DBSP unlocks capabilities that were
-impractical with the old approach:
-
-#### 4.4.1 Multiple Subqueries
-
-```sql
-WHERE parent_id IN (SELECT ...) AND category_id IN (SELECT ...)
-```
-
-The circuit simply has two join operators composed with a filter. No
-special-casing needed.
-
-#### 4.4.2 NOT IN / NOT EXISTS
-
-```sql
-WHERE id NOT IN (SELECT blocked_id FROM blocks WHERE ...)
-```
-
-Anti-join: `distinct(outer - semi_join(outer, inner, ...))`. The incremental
-version correctly produces +1 weights when a row *leaves* the block list
-(meaning the outer row should now appear).
-
-#### 4.4.3 OR with Subqueries
-
-```sql
-WHERE is_featured = true OR category_id IN (SELECT ...)
-```
-
-`distinct(filter(outer, is_featured) + semi_join(outer, inner, category_id))`.
-Distinct ensures no duplicates when a row matches both conditions.
-
-#### 4.4.4 Correlated Subqueries (Future)
-
-```sql
-WHERE price > (SELECT avg(price) FROM items WHERE items.category = outer.category)
-```
-
-Requires dependent join / flatmap — expressible in DBSP but more complex.
-Likely a follow-up phase.
-
-#### 4.4.5 Recursive Queries (Future)
-
-DBSP's theory supports recursive fixpoints (§5-6 of the paper). This could
-eventually support recursive CTE shapes, graph reachability queries, etc.
-
----
-
-## 5. Migration Strategy
-
-### 5.1 Feature Flag Gating
-
-Introduce a feature flag `dbsp_subquery_processing` (alongside the existing
-`allow_subqueries` and `tagged_subqueries` flags):
+### 10.1 Feature Flag Gating
 
 ```elixir
 # In consumer.ex
-if "dbsp_subquery_processing" in feature_flags do
-  # Use DBSP circuit for change processing
-  DBSP.Consumer.process_transaction(circuit, txn)
+if "dbsp_membership" in feature_flags do
+  # DBSP membership engine for subquery processing
+  MembershipEngine.step(state.membership_engine, ...)
 else
-  # Use existing materializer + move handling
+  # Existing materializer + move handling
   ChangeHandling.process_changes(changes, state, ctx)
 end
 ```
 
-### 5.2 Incremental Rollout
+### 10.2 Incremental Rollout
 
-1. **Phase 0**: Ship Z-set library and operators with comprehensive tests.
-   No user-visible changes.
+1. **Phases 0-1**: Ship Z-sets, arrangements, operators with comprehensive
+   tests. No user-visible changes. Property-based tests verify incremental
+   results match full recomputation.
 
-2. **Phase 1**: Ship compiler behind feature flag. Run both old and new
-   pipelines in shadow mode, comparing outputs.
+2. **Phase 2**: Ship compiler behind feature flag. Run shadow mode in
+   integration tests: both pipelines process the same transactions, assert
+   identical membership decisions.
 
-3. **Phase 2**: Enable DBSP for shapes with subqueries that currently cause
-   invalidation (NOT IN, OR, multiple subqueries). These shapes currently
-   *don't work* incrementally, so DBSP is a pure improvement.
+3. **Phase 3 — first enable for broken cases**: Enable DBSP for shapes with
+   subquery patterns that currently cause invalidation (NOT IN, OR, multiple
+   subqueries). These shapes currently *don't work incrementally at all*,
+   so DBSP is a pure improvement with no regression risk.
 
-4. **Phase 3**: Enable DBSP for all shapes with subqueries. Compare
-   performance and correctness with existing pipeline.
+4. **Phase 3 — generalize**: Enable DBSP for all shapes with subqueries.
+   Compare performance and correctness with existing pipeline via shadow
+   mode and integration tests.
 
-5. **Phase 4**: Remove old pipeline once DBSP is proven.
+5. **Phase 4**: Remove old pipeline once DBSP is proven in production.
 
-### 5.3 Correctness Validation
+### 10.3 Correctness Validation
 
 - **Property-based testing**: Generate random Z-sets and operations, verify
-  incremental results match full recomputation.
-- **Shadow mode**: Run both pipelines in parallel during integration tests,
-  assert identical output.
-- **Existing test suite**: The current tests in
-  `test/integration/subquery_*_test.exs` and `test/electric/shapes/consumer_test.exs`
-  must pass with DBSP enabled.
+  `incremental_result == full_recomputation`.
+- **Shadow mode**: Run both pipelines on same WAL stream during integration
+  tests, assert identical sets of PKs in the shape at each transaction.
+- **Existing test suite**: All tests in `test/integration/subquery_*_test.exs`
+  and `test/electric/shapes/consumer_test.exs` must pass with DBSP enabled.
+- **NULL-specific tests**: The test cases from §6.4.
+- **Multi-subquery tests**: New tests for patterns that currently cause
+  invalidation.
 
 ---
 
-## 6. Performance Considerations
+## 11. Open Questions and Decision Hinges
 
-### 6.1 Memory
+### 11.1 Resolved by This Plan
 
-DBSP integration operators maintain the full accumulated state of each
-intermediate relation. For a shape with one subquery, this is:
-- The full filtered subquery result set (same as current Materializer)
-- The full join result (new — but bounded by the shape's output size)
+| Question | Answer |
+|---|---|
+| Where do row bodies come from? | Option B: Postgres PK hydration. Option A (future): local row store. |
+| Generic circuit DSL? | No. Arrangement-backed operators in an expression DAG. |
+| NOT IN semantics? | Rewrite to NOT EXISTS + inner_has_nulls flag. |
+| Join performance? | Arrangements with indexed probing. |
+| Shared state? | Per-table shared arrangements, reference counted. |
 
-Total memory is O(|shape_output| + |subquery_results|), similar to current.
+### 11.2 Still Open
 
-### 6.2 CPU per Transaction
+1. **Arrangement persistence**: Should arrangements survive Electric
+   restarts, or cold-start from snapshot? Start with cold-start (correct,
+   simpler). Add persistence later if restart latency is a problem.
 
-For each WAL transaction:
-- **Linear operators** (filter, project): O(|delta|) — same as current
-- **Incremental join**: O(|delta| × max(|left_state|, |right_state|)) —
-  same asymptotic cost as current move-in queries, but without network
-  roundtrip to Postgres
-- **Incremental distinct**: O(|delta|)
+2. **Arrangement memory limits**: For very large tables, the arrangement
+   may not fit in memory. Options: (a) spill to disk, (b) evict
+   arrangements for dormant shapes, (c) fall back to Postgres queries
+   for tables above a size threshold.
 
-The key performance win: **no Postgres roundtrips for move-ins**. Currently,
-each subquery change triggers `PartialModes.query_move_in_async` which opens
-a DB connection, runs a query, and streams results back. With DBSP, the
-circuit computes the answer locally in memory.
+3. **Transaction ordering within hydration**: When a hydration query
+   returns, changes may have occurred since the query started. The
+   validate-against-membership check handles correctness, but we need to
+   decide whether to also replay any WAL deltas that arrived during
+   hydration. (The simple answer: don't. Validate is sufficient.
+   Subsequent deltas will be processed normally.)
 
-### 6.3 Latency
+4. **Client protocol backward compatibility**: Moving from move-out control
+   messages to direct delete entries changes the wire format. Do we need a
+   protocol version negotiation, or can we make the change transparently?
+   (Likely transparent — deletes are already part of the protocol.)
 
-Current pipeline: subquery change → materializer notification → async
-Postgres query → result splice → client notification. This involves at
-least one Postgres roundtrip (~1-10ms typically).
+5. **Move tag elimination timeline**: Move tags exist for client-side
+   reconciliation. With DBSP emitting correct inserts/deletes, tags may be
+   unnecessary. But if existing clients depend on them, we need a
+   deprecation path.
 
-DBSP pipeline: WAL delta → circuit step → output delta → client
-notification. Pure in-memory computation (~microseconds for typical deltas).
+### 11.3 The Two Decision Hinges
 
----
+These determine whether DBSP is feasible and how far to go:
 
-## 7. Open Questions
+1. **Are we willing to maintain per-table arrangements (PK-indexed) inside
+   Electric?** If yes → Option B is viable. If no → we're stuck with async
+   Postgres queries and DBSP only helps with the compiler/expression side.
 
-1. **Circuit state serialization**: For Consumer restart, should we serialize
-   circuit state or replay from snapshot? Replay is simpler but slower for
-   large shapes. Start with replay; add serialization if restart performance
-   is a problem.
-
-2. **Shared integration state**: If multiple shapes reference the same
-   subquery table, should their circuits share integration state? This is an
-   optimization — start with independent circuits per shape.
-
-3. **Move tag compatibility**: Clients currently use move tags to reconcile
-   move-in/move-out events. With DBSP producing direct insert/delete deltas,
-   we need to verify the client protocol handles this correctly. The
-   `changes_only` mode with `requestSnapshot` may need adjustment.
-
-4. **Memory pressure**: For shapes with large subquery result sets, the
-   circuit's integration state could be significant. Consider spill-to-disk
-   for integration operators, similar to how the existing Materializer could
-   theoretically be backed by storage.
-
-5. **Transaction ordering**: DBSP assumes a total order on transactions
-   (which Postgres provides via LSN). Verify that the existing WAL streaming
-   guarantees are sufficient for DBSP's causal correctness requirements.
-
-6. **Partial recomputation on schema change**: If a referenced table's
-   schema changes, the circuit must be invalidated and rebuilt. This matches
-   current behavior (shape invalidation on relation change).
+2. **Are we willing to maintain per-table full row stores inside Electric?**
+   If yes → Option A is viable for hot tables. If no → Option B is the
+   ceiling, and hydration queries remain.
 
 ---
 
-## 8. File Inventory
+## 12. File Inventory
 
 ### New Files
-| File | Purpose |
-|---|---|
-| `lib/electric/dbsp/z_set.ex` | Z-set data structure with group operations |
-| `lib/electric/dbsp/operators.ex` | Stream operators (I, D, z⁻¹, incremental join/distinct) |
-| `lib/electric/dbsp/circuit.ex` | Circuit builder and evaluator |
-| `lib/electric/dbsp/compiler.ex` | SQL query plan → DBSP circuit translation |
-| `lib/electric/dbsp/query_plan.ex` | Structured query plan representation |
-| `test/electric/dbsp/*_test.exs` | Tests for all DBSP modules |
+
+| File | Phase | Purpose |
+|---|---|---|
+| `lib/electric/dbsp/z_set.ex` | 0 | Weighted set with group operations |
+| `lib/electric/dbsp/arrangement.ex` | 0 | Indexed Z-set with probe/apply_delta |
+| `lib/electric/dbsp/operators/semi_join.ex` | 1 | Incremental semi-join (IN/EXISTS) |
+| `lib/electric/dbsp/operators/anti_join.ex` | 1 | Incremental anti-join (NOT IN/NOT EXISTS) |
+| `lib/electric/dbsp/operators/distinct.ex` | 1 | Incremental distinct (H function) |
+| `lib/electric/dbsp/operators/filter.ex` | 1 | Lifted filter (stateless) |
+| `lib/electric/dbsp/operators/union.ex` | 1 | Union for OR combinations |
+| `lib/electric/dbsp/query_plan.ex` | 2 | Structured query plan representation |
+| `lib/electric/dbsp/compiler.ex` | 2 | Query plan → operator DAG translation |
+| `lib/electric/dbsp/membership_engine.ex` | 3 | Wraps DAG, tracks membership set |
+| `lib/electric/dbsp/hydration.ex` | 3 | PK-based row body fetching + validation |
+| `test/electric/dbsp/**/*_test.exs` | 0-3 | Tests for all DBSP modules |
 
 ### Modified Files
-| File | Change |
-|---|---|
-| `lib/electric/shapes/consumer.ex` | Add DBSP circuit to state; new change processing path |
-| `lib/electric/shapes/consumer/state.ex` | Add `dbsp_circuit` field |
-| `lib/electric/shapes/consumer/change_handling.ex` | DBSP-based change processing |
-| `lib/electric/shapes/shape.ex` | Expand `list_relations/1` for multi-table routing |
-| `lib/electric/replication/eval/parser.ex` | Produce structured query plans |
-| `lib/electric/shapes/dispatcher.ex` | Route WAL changes to shapes by all referenced tables |
+
+| File | Phase | Change |
+|---|---|---|
+| `lib/electric/shapes/consumer.ex` | 3 | Add membership engine; new change processing path |
+| `lib/electric/shapes/consumer/state.ex` | 3 | Add `membership_engine` field |
+| `lib/electric/shapes/shape.ex` | 3 | Expand `list_relations/1` for multi-table routing |
+| `lib/electric/replication/eval/parser.ex` | 2 | Produce structured query plans |
 
 ### Eventually Removed Files
-| File | When |
-|---|---|
-| `lib/electric/shapes/consumer/materializer.ex` | Phase 3 |
-| `lib/electric/shapes/consumer/move_handling.ex` | Phase 3 |
-| `lib/electric/shapes/consumer/move_ins.ex` | Phase 3 |
-| `lib/electric/shapes/shape/subquery_moves.ex` | Phase 3 (partially — tag logic may be retained) |
+
+| File | Phase | Notes |
+|---|---|---|
+| `lib/electric/shapes/consumer/materializer.ex` | 4 | Replaced by shared arrangements |
+| `lib/electric/shapes/consumer/move_handling.ex` | 4 | Replaced by membership engine |
+| `lib/electric/shapes/consumer/move_ins.ex` | 4 | Replaced by membership engine state |
+| `lib/electric/shapes/shape/subquery_moves.ex` | 4 | Tag logic may be retained during transition |
 
 ---
 
-## 9. Summary
+## 13. Summary
 
-Replacing subquery processing with DBSP transforms Electric's incremental
-view maintenance from a collection of ad-hoc mechanisms into a principled,
-composable system grounded in mathematical theory. The migration is
-incremental (feature-flagged, shadow-tested) and the end state is strictly
-more capable: supporting multiple subqueries, NOT IN, OR combinations,
-and eventually correlated subqueries and recursive queries — all without
-Postgres roundtrips for incremental updates.
+**The honest framing**: DBSP isn't "replace subquery processing with a
+circuit." It's "replace Postgres-as-index with Electric-as-index" — and
+that requires at minimum per-table PK arrangements, and at maximum a
+full candidate row store.
+
+**What DBSP buys us** (regardless of option chosen):
+- Eliminates DNF expansion entirely
+- Eliminates client protocol complexity (tags, active_conditions, synthetic
+  deletes)
+- Handles OR, NOT IN, multiple subqueries, and nested subqueries uniformly
+  through composed operators
+- Replaces the race-prone async move-in pipeline with deterministic
+  membership computation
+
+**The recommended path**: Start with Option B (DBSP membership + PK
+hydration). This gives us the biggest simplification win with moderate
+engineering effort. Evolve toward Option A (candidate row store) for
+hot tables where hydration latency matters. Let Option C (TanStack DB
+query-driven sync) handle UI-level data needs orthogonally.
+
+**What the plan explicitly does NOT claim**: That DBSP eliminates all
+Postgres queries. In Option B, move-in still requires a simple PK lookup.
+What it eliminates is the *complex orchestration around those queries*
+(snapshot positioning, touch_tracker, moved_out_tags, exclusion clauses).
+That orchestration is the source of most of the current pain.
