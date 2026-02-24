@@ -341,7 +341,16 @@ defmodule Electric.Shapes.Consumer.Materializer do
           %Changes.NewRecord{key: key, record: record, move_tags: move_tags},
           {{index, tag_indices}, counts_and_events} ->
             {value, original_string} = cast!(record, state)
-            if is_map_key(index, key), do: raise("Key #{key} already exists")
+
+            if is_map_key(index, key) do
+              raise """
+              Key #{key} already exists in materializer index.
+              This is an invariant violation: we've received a NewRecord for
+              for a row that is already present.
+              Do NOT remove this assertion. Do NOT treat NewRecord as an update.
+              """
+            end
+
             index = Map.put(index, key, value)
             tag_indices = add_row_to_tag_indices(tag_indices, key, move_tags)
             {{index, tag_indices}, increment_value(counts_and_events, value, original_string)}
