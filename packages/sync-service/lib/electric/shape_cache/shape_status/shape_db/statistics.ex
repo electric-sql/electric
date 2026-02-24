@@ -17,6 +17,8 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Statistics do
 
   alias Electric.ShapeCache.ShapeStatus.ShapeDb
 
+  require Logger
+
   @measurement_period 60_000
 
   def name(stack_ref) do
