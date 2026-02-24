@@ -5,6 +5,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
   alias Electric.ShapeCache.ShapeStatus.ShapeDb.Sqlite3
   alias Electric.ShapeCache.ShapeStatus.ShapeDb.Query
   alias Electric.ShapeCache.ShapeStatus.ShapeDb.PoolRegistry
+  alias Electric.ShapeCache.ShapeStatus.ShapeDb.Statistics
   alias Electric.Telemetry.OpenTelemetry
 
   require Logger
@@ -75,7 +76,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
             when is_reference(stmt) or
                    (is_tuple(stmt) and tuple_size(stmt) == 2 and elem(stmt, 0) == :esqlite3_stmt)
 
-  defstruct [:conn, :stmts]
+  defstruct [:conn, :mode, :stmts]
 
   def migrate(conn, opts) when is_raw_connection(conn) do
     # because we embed the storage version into the db path
@@ -154,7 +155,14 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
 
   @impl NimblePool
   def init_worker(pool_state) do
-    if Keyword.get(pool_state, :exclusive_mode, false) do
+    with {:ok, conn} <- init_worker_for_pool(pool_state) do
+      :ok = Statistics.worker_start(Keyword.get(pool_state, :stack_id))
+      {:ok, conn, pool_state}
+    end
+  end
+
+  defp init_worker_for_pool(pool_state) do
+    if(Keyword.get(pool_state, :exclusive_mode, false)) do
       init_worker_exclusive(pool_state)
     else
       init_worker_pooled(pool_state)
@@ -162,9 +170,10 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
   end
 
   defp init_worker_pooled(pool_state) do
-    with {:ok, conn} <- open(pool_state),
-         stmts <- Query.prepare!(conn, pool_state) do
-      {:ok, %__MODULE__{conn: conn, stmts: stmts}, pool_state}
+    with mode = Keyword.get(pool_state, :mode, :readwrite),
+         {:ok, conn} <- open(pool_state),
+         stmts <- Query.prepare!(conn, mode) do
+      {:ok, %__MODULE__{conn: conn, mode: mode, stmts: stmts}}
     end
   end
 
@@ -174,10 +183,11 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
   # over the same, single, connection since every connection is a separate db
   # in in-memory mode.
   defp init_worker_exclusive(pool_state) do
-    with {:ok, conn} <- open(pool_state, integrity_check: true),
+    with mode = :readwrite,
+         {:ok, conn} <- open(pool_state, integrity_check: true),
          {:ok, _version} <- migrate(conn, pool_state),
-         stmts <- Query.prepare!(conn, Keyword.put(pool_state, :mode, :readwrite)) do
-      {:ok, %__MODULE__{conn: conn, stmts: stmts}, pool_state}
+         stmts <- Query.prepare!(conn, mode) do
+      {:ok, %__MODULE__{conn: conn, mode: mode, stmts: stmts}}
     end
   end
 
@@ -207,6 +217,23 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
   @impl NimblePool
   def handle_checkin(client_state, _from, _worker_state, pool_state) do
     {:ok, client_state, pool_state}
+  end
+
+  @impl NimblePool
+  def handle_ping(%__MODULE__{} = state, pool_state) do
+    Logger.debug(fn -> ["Closing idle SQLite ", to_string(state.mode), " connection"] end)
+
+    # the idle timeout is only enabled in non-exclusive mode, so we're free
+    # to close all the connections, including write.
+
+    :ok = close(state)
+    :ok = Statistics.worker_stop(Keyword.get(pool_state, :stack_id))
+
+    {:remove, :idle}
+  end
+
+  def shrink_memory(conn) when is_raw_connection(conn) do
+    execute(conn, "PRAGMA shrink_memory")
   end
 
   @max_recovery_attempts 2
@@ -279,6 +306,26 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
       _ ->
         []
     end
+  end
+
+  def close(%__MODULE__{conn: conn, stmts: stmts}) do
+    # Need to release all the prepared statements on the connection or the
+    # close doesn't actually release the resources.
+    stmts
+    |> Query.active_stmts()
+    |> Enum.each(fn {name, stmt} ->
+      case Sqlite3.release(conn, stmt) do
+        :ok ->
+          :ok
+
+        {:error, reason} ->
+          Logger.warning(
+            "Failed to release prepared statement #{inspect(name)}: #{inspect(reason)}"
+          )
+      end
+    end)
+
+    close(conn)
   end
 
   def close(conn) when is_raw_connection(conn) do

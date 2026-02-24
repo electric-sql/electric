@@ -54,7 +54,8 @@ defmodule Electric.StackSupervisor.Telemetry do
           unit: :byte
         ),
         Telemetry.Metrics.last_value("electric.shape_db.sqlite.total_memory", unit: :byte),
-        Telemetry.Metrics.last_value("electric.shape_db.sqlite.disk_size", unit: :byte)
+        Telemetry.Metrics.last_value("electric.shape_db.sqlite.disk_size", unit: :byte),
+        Telemetry.Metrics.last_value("electric.shape_db.sqlite.connections")
       ]
     end
 

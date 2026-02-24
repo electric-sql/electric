@@ -171,6 +171,9 @@ defmodule Electric.StackSupervisor do
                      exclusive_mode: [type: :boolean],
                      synchronous: [type: :string],
                      cache_size: [type: :integer],
+                     connection_idle_timeout: [type: :integer],
+                     read_pool_size: [type: :integer],
+                     statistics_collection_period: [type: :integer],
                      enable_stats?: [type: :boolean],
                      enable_memory_stats?: [type: :boolean]
                    ]

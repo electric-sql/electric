@@ -52,7 +52,9 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Query do
                    Keyword.take(@read_queries, [:handle_lookup])
                  )
 
-  defstruct Enum.uniq(Keyword.keys(@read_queries) ++ Keyword.keys(@write_queries))
+  @stmt_names Enum.uniq(Keyword.keys(@read_queries) ++ Keyword.keys(@write_queries))
+
+  defstruct @stmt_names
 
   alias Electric.ShapeCache.ShapeStatus.ShapeDb.Connection, as: Conn
 
@@ -69,8 +71,18 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Query do
       stream_query: 3
     ]
 
-  def prepare!(conn, opts) do
-    case Keyword.get(opts, :mode, :readwrite) do
+  def active_stmts(nil) do
+    []
+  end
+
+  def active_stmts(%__MODULE__{} = query) do
+    @stmt_names
+    |> Enum.map(&{&1, Map.fetch!(query, &1)})
+    |> Enum.reject(&is_nil(elem(&1, 1)))
+  end
+
+  def prepare!(conn, mode) do
+    case mode do
       :readwrite ->
         struct(__MODULE__, prepare_stmts!(conn, @read_queries ++ @write_queries))
 
