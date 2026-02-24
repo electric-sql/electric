@@ -2,4 +2,4 @@
 '@electric-sql/client': patch
 ---
 
-Increase default backoff parameters to reduce retry storms when a proxy fails. `initialDelay` changes from 100ms to 200ms and `multiplier` from 1.3 to 1.8, reaching the 60s max delay in ~10 retries instead of ~25.
+Increase default retry backoff parameters to reduce retry storms when a proxy fails, aligning with industry-standard values (gRPC, AWS). `initialDelay` 100ms → 1s, `multiplier` 1.3 → 2, `maxDelay` 60s → 32s. Reaches cap in 5 retries instead of ~25.
