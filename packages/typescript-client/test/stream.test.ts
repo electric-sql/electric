@@ -17,7 +17,7 @@ describe(`ShapeStream`, () => {
     const eventTarget = new EventTarget()
     const requestArgs: Array<RequestInit | undefined> = []
     const fetchWrapper = (
-      ..._args: Parameters<typeof fetch>
+      ...args: Parameters<typeof fetch>
     ): Promise<Response> => {
       requestArgs.push(args[1])
       eventTarget.dispatchEvent(new Event(`fetch`))
@@ -55,7 +55,7 @@ describe(`ShapeStream`, () => {
     const eventTarget = new EventTarget()
     const requestedUrls: Array<string> = []
     const fetchWrapper = (
-      ..._args: Parameters<typeof fetch>
+      ...args: Parameters<typeof fetch>
     ): Promise<Response> => {
       requestedUrls.push(args[0].toString())
       eventTarget.dispatchEvent(new Event(`fetch`))
@@ -127,7 +127,7 @@ describe(`ShapeStream`, () => {
     const eventTarget = new EventTarget()
     const requestedUrls: Array<string> = []
     const fetchWrapper = (
-      ..._args: Parameters<typeof fetch>
+      ...args: Parameters<typeof fetch>
     ): Promise<Response> => {
       requestedUrls.push(args[0].toString())
       eventTarget.dispatchEvent(new Event(`fetch`))
@@ -166,7 +166,7 @@ describe(`ShapeStream`, () => {
     const eventTarget = new EventTarget()
     const requestedUrls: Array<string> = []
     const fetchWrapper = (
-      ..._args: Parameters<typeof fetch>
+      ...args: Parameters<typeof fetch>
     ): Promise<Response> => {
       requestedUrls.push(args[0].toString())
       eventTarget.dispatchEvent(new Event(`fetch`))
@@ -202,7 +202,7 @@ describe(`ShapeStream`, () => {
     const eventTarget = new EventTarget()
     const requestedUrls: Array<string> = []
     const fetchWrapper = (
-      ..._args: Parameters<typeof fetch>
+      ...args: Parameters<typeof fetch>
     ): Promise<Response> => {
       requestedUrls.push(args[0].toString())
       eventTarget.dispatchEvent(new Event(`fetch`))
@@ -237,7 +237,7 @@ describe(`ShapeStream`, () => {
     const eventTarget = new EventTarget()
     const requestedUrls: Array<string> = []
     const fetchWrapper = (
-      ..._args: Parameters<typeof fetch>
+      ...args: Parameters<typeof fetch>
     ): Promise<Response> => {
       requestedUrls.push(args[0].toString())
       eventTarget.dispatchEvent(new Event(`fetch`))
@@ -271,7 +271,7 @@ describe(`ShapeStream`, () => {
     const eventTarget = new EventTarget()
     const requestedUrls: Array<string> = []
     const fetchWrapper = (
-      ..._args: Parameters<typeof fetch>
+      ...args: Parameters<typeof fetch>
     ): Promise<Response> => {
       requestedUrls.push(args[0].toString())
       eventTarget.dispatchEvent(new Event(`fetch`))
@@ -304,7 +304,7 @@ describe(`ShapeStream`, () => {
     const eventTarget = new EventTarget()
     const requestedUrls: Array<string> = []
     const fetchWrapper = (
-      ..._args: Parameters<typeof fetch>
+      ...args: Parameters<typeof fetch>
     ): Promise<Response> => {
       requestedUrls.push(args[0].toString())
       eventTarget.dispatchEvent(new Event(`fetch`))
