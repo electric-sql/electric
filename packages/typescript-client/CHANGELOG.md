@@ -1,5 +1,13 @@
 # @electric-sql/client
 
+## 1.5.8
+
+### Patch Changes
+
+- 8600d25: Add fast-loop detection with automatic cache recovery to ShapeStream. When the client detects rapid requests stuck at the same offset (indicating stale client-side caches or proxy/CDN misconfiguration), it clears the affected shape's cached state and resets the stream to fetch from scratch. If the loop persists, exponential backoff is applied before eventually throwing a diagnostic error.
+- 1e1123b: Fixed `isControlMessage` type guard crashing on messages without a `control` header (e.g. `EventMessage`s or malformed responses). The function previously used a negation check (`!isChangeMessage()`) which misclassified any non-change message as a `ControlMessage`, causing `TypeError: Cannot read property 'control' of undefined` in `Shape.process_fn`. Now uses a positive check for `'control' in message.headers`, consistent with how `isChangeMessage` checks for `'key' in message`.
+- e172d4b: Increase default retry backoff parameters to reduce retry storms when a proxy fails, aligning with industry-standard values (gRPC, AWS). `initialDelay` 100ms → 1s, `multiplier` 1.3 → 2, `maxDelay` 60s → 32s. Reaches cap in 5 retries instead of ~25.
+
 ## 1.5.7
 
 ### Patch Changes

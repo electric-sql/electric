@@ -1,5 +1,20 @@
 # @core/sync-service
 
+## 1.4.7
+
+### Patch Changes
+
+- ae593c6: Add lock_breaker_guard to optionally disable the lock breaker behaviour
+- c293009: Clean up orphaned shape data when encountering an empty shape db
+- 02cd199: Add exclusive mode with a single read-write sqlite connection to support AWS EFS
+- 9f57a8b: Fix parameter validation rejecting valid sequential params when there are 10 or more of them, due to map keys being iterated in lexicographic rather than numeric order.
+- be42de5: Fix storage race condition when deleting shape during a live poll request
+- e1028b5: Recover shape db startup when opening a corrupt database file
+- 24b0426: Include memory and disk usage statistics from the shape db sqlite instance
+- 27fc808: Handle invalid write operations without blocking the write buffer
+- 7c2d1fe: Fix an infinite recursive loop that API request processes may get stuck in when the consumer process is slow to start or dies unexpectedly, without cleaning up after itself.
+- 8f2f7bd: Handle server clockskew that presents as a -ve replication lag in statistics
+
 ## 1.4.6
 
 ### Patch Changes

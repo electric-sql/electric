@@ -1,5 +1,11 @@
 # @electric-sql/docs
 
+## 0.0.5
+
+### Patch Changes
+
+- 02cd199: Add exclusive mode with a single read-write sqlite connection to support AWS EFS
+
 ## 0.0.4
 
 ### Patch Changes

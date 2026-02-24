@@ -1,6 +1,6 @@
 {
   "name": "expo-db-electric-starter",
-  "version": "1.0.8",
+  "version": "1.0.9",
   "main": "index.ts",
   "scripts": {
     "start": "docker compose up -d && expo start",
@@ -13,7 +13,7 @@
     "api": "tsx api/index.ts"
   },
   "dependencies": {
-    "@electric-sql/client": "1.5.7",
+    "@electric-sql/client": "1.5.8",
     "@expo/metro-runtime": "~5.0.4",
     "@tanstack/electric-db-collection": "^0.0.15",
     "@tanstack/react-db": "^0.0.27",
