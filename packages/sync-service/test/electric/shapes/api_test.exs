@@ -709,6 +709,58 @@ defmodule Electric.Shapes.ApiTest do
       refute response.up_to_date
     end
 
+    test "caps chunk end offset to last_offset", ctx do
+      patch_shape_cache(
+        resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id ->
+          {@test_shape_handle, @test_offset}
+        end,
+        has_shape?: fn @test_shape_handle, _opts -> true end,
+        await_snapshot_start: fn @test_shape_handle, _ -> :started end
+      )
+
+      ahead_of_last_offset = LogOffset.increment(@test_offset)
+
+      patch_storage(for_shape: fn @test_shape_handle, _opts -> @test_opts end)
+
+      expect_storage(
+        get_chunk_end_log_offset: fn @start_offset_50, _ ->
+          ahead_of_last_offset
+        end,
+        get_log_stream: fn @start_offset_50, @test_offset, @test_opts ->
+          [Jason.encode!(%{key: "log1", value: "foo", headers: %{}, offset: @test_offset})]
+        end
+      )
+
+      assert {:ok, request} =
+               Api.validate(
+                 ctx.api,
+                 %{
+                   table: "public.users",
+                   offset: "#{@start_offset_50}",
+                   handle: @test_shape_handle
+                 }
+               )
+
+      assert response = Api.serve_shape_response(request)
+      assert response.status == 200
+      assert response.offset == @test_offset
+
+      assert response_body(response) == [
+               %{
+                 "key" => "log1",
+                 "value" => "foo",
+                 "headers" => %{},
+                 "offset" => "#{@test_offset}"
+               },
+               %{
+                 headers: %{
+                   control: "up-to-date",
+                   global_last_seen_lsn: to_string(@test_offset.tx_offset)
+                 }
+               }
+             ]
+    end
+
     test "returns immediate up-to-date message when offset is 'now'", ctx do
       patch_shape_cache(
         fetch_handle_by_shape: fn @test_shape, _opts -> {:ok, @test_shape_handle} end,

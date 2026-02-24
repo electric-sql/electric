@@ -159,14 +159,13 @@ defmodule Electric.ShapeCache.PureFileStorage.WriteLoop do
 
   defp maybe_write_opening_chunk_boundary(
          writer_acc(write_position: pos) = acc,
-         writer_state(opts: opts) = state,
+         writer_state() = state,
          offset
        ) do
     writer_acc(acc, chunk_started?: true)
     |> ensure_chunk_file_open(state)
     |> write_to_chunk_file(ChunkIndex.make_half_entry(offset, pos, 0))
     |> add_opening_chunk_boundary_to_cache(offset, pos)
-    |> update_chunk_boundaries_cache(opts)
   end
 
   defp maybe_write_closing_chunk_boundary(
@@ -178,13 +177,12 @@ defmodule Electric.ShapeCache.PureFileStorage.WriteLoop do
 
   defp maybe_write_closing_chunk_boundary(
          writer_acc(last_seen_offset: offset, write_position: position) = acc,
-         writer_state(opts: opts) = state
+         writer_state() = state
        ) do
     writer_acc(acc, chunk_started?: false, bytes_in_chunk: 0)
     |> ensure_chunk_file_open(state)
     |> write_to_chunk_file(ChunkIndex.make_half_entry(offset, position, 0))
     |> add_closing_chunk_boundary_to_cache(offset, position)
-    |> update_chunk_boundaries_cache(opts)
     |> flush_buffer(state)
   end
 
@@ -365,7 +363,7 @@ defmodule Electric.ShapeCache.PureFileStorage.WriteLoop do
            last_persisted_offset: last_persisted,
            last_persisted_txn_offset: prev_persisted_txn
          ) = acc,
-         state
+         writer_state(opts: opts) = state
        ) do
     if last_seen == last_persisted do
       writer_acc(acc, last_persisted_txn_offset: last_seen, last_seen_txn_offset: last_seen)
@@ -373,5 +371,6 @@ defmodule Electric.ShapeCache.PureFileStorage.WriteLoop do
       writer_acc(acc, last_seen_txn_offset: last_seen)
     end
     |> update_persistance_metadata(state, prev_persisted_txn)
+    |> update_chunk_boundaries_cache(opts)
   end
 end

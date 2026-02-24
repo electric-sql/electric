@@ -789,6 +789,68 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
     end
   end
 
+  describe "chunk boundary visibility" do
+    setup [:start_storage, :with_started_writer]
+
+    @tag chunk_size: 1
+    test "does not expose boundaries before transaction completes", %{writer: writer, opts: opts} do
+      first_offset = LogOffset.new(10, 0)
+      second_offset = LogOffset.new(11, 0)
+      test_pid = self()
+      read_offset = LogOffset.new(9, 0)
+
+      observer_pid =
+        spawn_link(fn ->
+          receive do
+            :inspect_mid_txn ->
+              send(
+                test_pid,
+                {:mid_txn_state, PureFileStorage.fetch_latest_offset(opts),
+                 PureFileStorage.get_chunk_end_log_offset(read_offset, opts)}
+              )
+
+              send(test_pid, :continue_txn)
+          after
+            5_000 ->
+              send(test_pid, :observer_timeout)
+          end
+        end)
+
+      txn_lines =
+        Stream.resource(
+          fn -> :first end,
+          fn
+            :first ->
+              {[{first_offset, "test_key", :insert, ~S|{"test": 1}|}], :wait_for_continue}
+
+            :wait_for_continue ->
+              send(observer_pid, :inspect_mid_txn)
+
+              receive do
+                :continue_txn ->
+                  {[{second_offset, "test_key", :insert, ~S|{"test": 2}|}], :done}
+              after
+                5_000 ->
+                  flunk("timed out waiting to continue transaction")
+              end
+
+            :done ->
+              {:halt, :done}
+          end,
+          fn _ -> :ok end
+        )
+
+      writer = PureFileStorage.append_to_log!(txn_lines, writer)
+
+      assert_receive {:mid_txn_state, {:ok, latest_offset}, nil}, 1_000
+      assert LogOffset.compare(latest_offset, first_offset) == :lt
+
+      assert PureFileStorage.fetch_latest_offset(opts) == {:ok, second_offset}
+      assert PureFileStorage.get_chunk_end_log_offset(read_offset, opts) == first_offset
+      PureFileStorage.terminate(writer)
+    end
+  end
+
   describe "resumption" do
     setup [:start_storage]
 

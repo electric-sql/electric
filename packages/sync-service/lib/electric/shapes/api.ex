@@ -424,7 +424,11 @@ defmodule Electric.Shapes.Api do
       request
 
     chunk_end_offset =
-      Shapes.get_chunk_end_log_offset(api.stack_id, handle, offset) || last_offset
+      Shapes.get_chunk_end_log_offset(api.stack_id, handle, offset)
+      |> case do
+        nil -> last_offset
+        chunk_end -> LogOffset.min(chunk_end, last_offset)
+      end
 
     Request.update_response(
       %{request | chunk_end_offset: chunk_end_offset},
