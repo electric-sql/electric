@@ -39,21 +39,37 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Statistics do
     Logger.metadata(stack_id: stack_id)
     Electric.Telemetry.Sentry.set_tags_context(stack_id: stack_id)
 
-    {:ok, %{stack_id: stack_id, page_size: 0, stats: %{}}, {:continue, :initialize_stats}}
+    {:ok, %{stack_id: stack_id, page_size: 0, memstat_available?: false, stats: %{}},
+     {:continue, :initialize_stats}}
   end
 
   @impl GenServer
   def handle_continue(:initialize_stats, state) do
     %{stack_id: stack_id} = state
 
-    {:ok, [page_size]} =
+    {:ok, {page_size, memstat_available?}} =
       ShapeDb.Connection.checkout_write!(stack_id, :read_stats, fn %{conn: conn} ->
-        with :ok <- ShapeDb.Connection.enable_extension(conn, "memstat") do
-          ShapeDb.Connection.fetch_one(conn, "PRAGMA page_size", [])
-        end
+        memstat_available? =
+          case ShapeDb.Connection.enable_extension(conn, "memstat") do
+            :ok ->
+              true
+
+            {:error, reason} ->
+              Logger.warning(
+                "Failed to load memstat SQLite extension: #{inspect(reason)}. " <>
+                  "Memory statistics will not be available."
+              )
+
+              false
+          end
+
+        {:ok, [page_size]} = ShapeDb.Connection.fetch_one(conn, "PRAGMA page_size", [])
+        {:ok, {page_size, memstat_available?}}
       end)
 
-    {:noreply, read_stats(%{state | page_size: page_size}), :hibernate}
+    {:noreply,
+     read_stats(%{state | page_size: page_size, memstat_available?: memstat_available?}),
+     :hibernate}
   end
 
   @impl GenServer
@@ -66,18 +82,10 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Statistics do
     {:reply, {:ok, state.stats}, state}
   end
 
-  defp read_stats(%{stack_id: stack_id} = state) do
+  defp read_stats(%{stack_id: stack_id, memstat_available?: memstat_available?} = state) do
     {:ok, stats} =
       ShapeDb.Connection.checkout_write!(stack_id, :read_stats, fn %{conn: conn} ->
-        ShapeDb.Connection.fetch_all(
-          conn,
-          """
-          SELECT '__dbstat__', sum(pgsize), sum(unused) FROM dbstat WHERE aggregate = TRUE
-          UNION ALL
-          SELECT name, hiwtr, value FROM sqlite_memstat
-          """,
-          []
-        )
+        ShapeDb.Connection.fetch_all(conn, stats_query(memstat_available?), [])
       end)
 
     Process.send_after(self(), :read_stats, @measurement_period)
@@ -85,17 +93,27 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Statistics do
     %{state | stats: analyze_stats(stats, state.page_size)}
   end
 
+  defp stats_query(true) do
+    """
+    SELECT '__dbstat__', sum(pgsize), sum(unused) FROM dbstat WHERE aggregate = TRUE
+    UNION ALL
+    SELECT name, hiwtr, value FROM sqlite_memstat
+    """
+  end
+
+  defp stats_query(false) do
+    "SELECT '__dbstat__', sum(pgsize), sum(unused) FROM dbstat WHERE aggregate = TRUE"
+  end
+
   defp analyze_stats(stats, page_size) do
     stats
     |> Enum.reduce(%{}, &add_stat(&1, &2, page_size))
     |> then(fn stats ->
-      %{
-        memory_used: memory_used,
-        pagecache_used: pagecache_used,
-        pagecache_overflow: pagecache_overflow,
-        disk_size: disk_size,
-        data_size: data_size
-      } = stats
+      memory_used = Map.get(stats, :memory_used, 0)
+      pagecache_used = Map.get(stats, :pagecache_used, 0)
+      pagecache_overflow = Map.get(stats, :pagecache_overflow, 0)
+      disk_size = Map.get(stats, :disk_size, 0)
+      data_size = Map.get(stats, :data_size, 0)
 
       # 1. MEMORY_USED (primary metric): This is the main memory counter but
       #    excludes pre-configured page cache memory.
