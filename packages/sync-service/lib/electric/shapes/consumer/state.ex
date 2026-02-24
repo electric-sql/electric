@@ -28,7 +28,8 @@ defmodule Electric.Shapes.Consumer.State do
     materializer_subscribed?: false,
     terminating?: false,
     buffering?: false,
-    dnf_context: nil
+    dnf_context: nil,
+    seen_deps: MapSet.new()
   ]
 
   @type pg_snapshot() :: SnapshotQuery.pg_snapshot()
@@ -277,4 +278,13 @@ defmodule Electric.Shapes.Consumer.State do
       stack_id: stack_id
     ]
   end
+
+  def mark_dep_seen(state, dep_handle),
+    do: %{state | seen_deps: MapSet.put(state.seen_deps, dep_handle)}
+
+  def dep_seen?(state, dep_handle),
+    do: MapSet.member?(state.seen_deps, dep_handle)
+
+  def reset_seen_deps(state),
+    do: %{state | seen_deps: MapSet.new()}
 end

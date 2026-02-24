@@ -287,6 +287,8 @@ defmodule Electric.Shapes.Consumer do
     if not tagged_subqueries_enabled? do
       stop_and_clean(state)
     else
+      state = State.mark_dep_seen(state, dep_handle)
+
       {state, move_in_notification} =
         MoveHandling.process_move_ins(state, dep_handle, move_in)
 
@@ -501,6 +503,7 @@ defmodule Electric.Shapes.Consumer do
       writer: writer
     } = state
 
+    state = State.reset_seen_deps(state)
     state = State.remove_completed_move_ins(state, txn)
 
     Logger.debug(fn -> "Txn received in Shapes.Consumer: #{inspect(txn)}" end)

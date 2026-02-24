@@ -7,7 +7,9 @@ defmodule Electric.Shapes.Consumer.MoveHandling do
   alias Electric.Shapes.PartialModes
   alias Electric.Shapes.Shape
   alias Electric.Shapes.Shape.SubqueryMoves
+  alias Electric.Shapes.Consumer.Materializer
   alias Electric.Shapes.Consumer.MoveIns
+  alias Electric.Replication.Eval
 
   require Logger
 
@@ -188,12 +190,15 @@ defmodule Electric.Shapes.Consumer.MoveHandling do
 
   # Start an async move-in query for new values.
   defp do_start_move_in_query(state, dep_handle, values) do
+    exclusion_context = build_exclusion_context(state, dep_handle)
+
     formed_where_clause =
       SubqueryMoves.move_in_where_clause(
         state.shape,
         dep_handle,
         Enum.map(values, &elem(&1, 1)),
-        state.dnf_context
+        state.dnf_context,
+        exclusion_context
       )
 
     storage = state.storage
@@ -239,6 +244,44 @@ defmodule Electric.Shapes.Consumer.MoveHandling do
     Logger.debug("Move-in #{name} has been triggered from #{dep_handle}")
 
     %{state | move_handling_state: move_handling_state}
+  end
+
+  defp build_exclusion_context(%State{dnf_context: nil}, _), do: nil
+
+  defp build_exclusion_context(%State{} = state, trigger_dep_handle) do
+    used_refs = state.shape.where.used_refs
+
+    dep_values =
+      state.shape.shape_dependencies_handles
+      |> Enum.with_index()
+      |> Enum.reject(fn {handle, _} -> handle == trigger_dep_handle end)
+      |> Map.new(fn {handle, index} ->
+        opts = %{shape_handle: handle, stack_id: state.stack_id}
+
+        parsed_values =
+          if State.dep_seen?(state, handle),
+            do: Materializer.get_link_values(opts),
+            else: Materializer.get_prev_link_values(opts)
+
+        ref_type = used_refs[["$sublink", Integer.to_string(index)]]
+        strings = values_to_strings(parsed_values, ref_type)
+        {index, strings}
+      end)
+
+    %{dep_values: dep_values}
+  end
+
+  defp values_to_strings(parsed_values, {:array, {:row, types}}) do
+    Enum.map(parsed_values, fn tuple ->
+      tuple
+      |> Tuple.to_list()
+      |> Enum.zip_with(types, &Eval.Env.const_to_pg_string(Eval.Env.new(), &1, &2))
+      |> List.to_tuple()
+    end)
+  end
+
+  defp values_to_strings(parsed_values, {:array, type}) do
+    Enum.map(parsed_values, &Eval.Env.const_to_pg_string(Eval.Env.new(), &1, type))
   end
 
   # Broadcast a deactivation (move-out) control message.

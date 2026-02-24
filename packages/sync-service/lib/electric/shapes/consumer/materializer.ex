@@ -62,6 +62,10 @@ defmodule Electric.Shapes.Consumer.Materializer do
       raise ~s|Materializer for stack "#{opts.stack_id}" and handle "#{opts.shape_handle}" is not available|
   end
 
+  def get_prev_link_values(opts) do
+    GenServer.call(name(opts), :get_prev_link_values)
+  end
+
   def get_all_as_refs(shape, stack_id) when are_deps_filled(shape) do
     shape.shape_dependencies_handles
     |> Enum.with_index()
@@ -98,6 +102,7 @@ defmodule Electric.Shapes.Consumer.Materializer do
         index: %{},
         tag_indices: %{},
         value_counts: %{},
+        prev_value_counts: %{},
         offset: LogOffset.before_all(),
         subscribed_offset: nil,
         ref: nil,
@@ -170,6 +175,10 @@ defmodule Electric.Shapes.Consumer.Materializer do
     values = MapSet.new(Map.keys(value_counts))
 
     {:reply, values, state}
+  end
+
+  def handle_call(:get_prev_link_values, _from, %{prev_value_counts: pvc} = state) do
+    {:reply, MapSet.new(Map.keys(pvc)), state}
   end
 
   def handle_call(:wait_until_ready, _from, state) do
@@ -293,6 +302,7 @@ defmodule Electric.Shapes.Consumer.Materializer do
   end
 
   defp apply_changes_and_notify(changes, state) do
+    state = %{state | prev_value_counts: state.value_counts}
     {state, events} = apply_changes(changes, state)
 
     if events != %{} do

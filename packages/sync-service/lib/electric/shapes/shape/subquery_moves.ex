@@ -35,12 +35,21 @@ defmodule Electric.Shapes.Shape.SubqueryMoves do
       [["1", "2", "3"]]
   """
   def move_in_where_clause(
+        shape,
+        shape_handle,
+        move_ins,
+        dnf_context,
+        exclusion_context \\ nil
+      )
+
+  def move_in_where_clause(
         %Shape{
           shape_dependencies_handles: shape_dependencies_handles
         } = shape,
         shape_handle,
         move_ins,
-        dnf_context
+        dnf_context,
+        exclusion_context
       ) do
     index = Enum.find_index(shape_dependencies_handles, &(&1 == shape_handle))
 
@@ -53,7 +62,14 @@ defmodule Electric.Shapes.Shape.SubqueryMoves do
       |> Enum.filter(fn {h, _} -> h == shape_handle end)
       |> Enum.map(fn {_, i} -> i end)
 
-    build_dnf_move_in_where(shape, index, all_trigger_indices, move_ins, dnf_context)
+    build_dnf_move_in_where(
+      shape,
+      index,
+      all_trigger_indices,
+      move_ins,
+      dnf_context,
+      exclusion_context
+    )
   end
 
   # Reconstruct the move-in WHERE clause from all disjuncts containing the trigger.
@@ -70,7 +86,14 @@ defmodule Electric.Shapes.Shape.SubqueryMoves do
   # since we're finding rows that now satisfy the condition. Negation is only
   # applied to non-triggering positions in the disjunct.
   #
-  defp build_dnf_move_in_where(shape, trigger_dep_index, all_trigger_indices, move_ins, dnf_context) do
+  defp build_dnf_move_in_where(
+         shape,
+         trigger_dep_index,
+         all_trigger_indices,
+         move_ins,
+         dnf_context,
+         exclusion_context
+       ) do
     decomposition = dnf_context.decomposition
 
     # Collect trigger positions from ALL dep indices sharing the same handle.
@@ -125,20 +148,35 @@ defmodule Electric.Shapes.Shape.SubqueryMoves do
           "#{trigger_sql} AND (#{or_clause})"
       end
 
-    # Append exclusion clauses for disjuncts that don't contain the trigger
-    exclusion =
-      if length(decomposition.disjuncts) > 1 do
-        build_dnf_exclusion_clauses(
+    # Append exclusion clauses for disjuncts that don't contain the trigger.
+    # When exclusion_context is provided, use materialized values (parameter-based)
+    # instead of live subqueries to avoid the concurrent-change exclusion bug.
+    {exclusion_sql, exclusion_params} =
+      if length(decomposition.disjuncts) > 1 and exclusion_context != nil do
+        build_materialized_exclusion_clauses(
           decomposition,
-          shape.shape_dependencies,
-          shape.subquery_comparison_expressions,
-          trigger_dep_index
+          shape,
+          trigger_dep_index,
+          exclusion_context,
+          length(params) + 1
         )
       else
-        ""
+        exclusion =
+          if length(decomposition.disjuncts) > 1 do
+            build_dnf_exclusion_clauses(
+              decomposition,
+              shape.shape_dependencies,
+              shape.subquery_comparison_expressions,
+              trigger_dep_index
+            )
+          else
+            ""
+          end
+
+        {exclusion, []}
       end
 
-    {base_where <> exclusion, params}
+    {base_where <> exclusion_sql, params ++ exclusion_params}
   end
 
   # Build the SQL fragment and params for the triggering subquery position.
@@ -324,6 +362,164 @@ defmodule Electric.Shapes.Shape.SubqueryMoves do
   end
 
   def extract_sublink_index(_), do: nil
+
+  @doc """
+  Build exclusion clauses using materialized values instead of live subqueries.
+
+  Same structure as `build_dnf_exclusion_clauses` — partitions disjuncts into
+  containing/not-containing the trigger. But instead of live subqueries, generates
+  `column = ANY($N::text[]::type[])` using pre-fetched values from the exclusion context.
+  """
+  def build_materialized_exclusion_clauses(
+        decomposition,
+        shape,
+        trigger_dep_index,
+        exclusion_context,
+        start_param_index
+      ) do
+    trigger_positions = find_dnf_positions_for_dep_index(decomposition, trigger_dep_index)
+
+    if trigger_positions == [] do
+      {"", []}
+    else
+      {_containing, not_containing} =
+        Enum.split_with(decomposition.disjuncts, fn conjunction ->
+          Enum.any?(conjunction, fn {pos, _polarity} -> pos in trigger_positions end)
+        end)
+
+      {clauses, params, _next_idx} =
+        Enum.reduce(not_containing, {[], [], start_param_index}, fn conjunction,
+                                                                     {clauses_acc, params_acc,
+                                                                      param_idx} ->
+          case generate_materialized_disjunct_exclusion(
+                 conjunction,
+                 decomposition,
+                 shape,
+                 exclusion_context,
+                 param_idx
+               ) do
+            nil ->
+              {clauses_acc, params_acc, param_idx}
+
+            {clause, new_params, next_idx} ->
+              {[clause | clauses_acc], params_acc ++ new_params, next_idx}
+          end
+        end)
+
+      {Enum.join(Enum.reverse(clauses)), params}
+    end
+  end
+
+  defp generate_materialized_disjunct_exclusion(
+         conjunction,
+         decomposition,
+         shape,
+         exclusion_context,
+         param_idx
+       ) do
+    all_subquery? =
+      Enum.all?(conjunction, fn {pos, _polarity} ->
+        case Map.get(decomposition.subexpressions, pos) do
+          %{is_subquery: true} -> true
+          _ -> false
+        end
+      end)
+
+    if not all_subquery? do
+      nil
+    else
+      used_refs = shape.where.used_refs
+
+      {conditions, params, next_idx} =
+        Enum.reduce(conjunction, {[], [], param_idx}, fn {pos, polarity},
+                                                         {conds_acc, params_acc, idx} ->
+          info = Map.get(decomposition.subexpressions, pos)
+
+          case extract_sublink_index(info.ast) do
+            nil ->
+              {conds_acc, params_acc, idx}
+
+            dep_index ->
+              column_sql = get_column_sql(shape.subquery_comparison_expressions, dep_index)
+
+              if column_sql do
+                values = Map.get(exclusion_context.dep_values, dep_index, [])
+
+                case used_refs[["$sublink", "#{dep_index}"]] do
+                  {:array, {:row, cols}} ->
+                    {sql, new_params, new_idx} =
+                      build_materialized_row_condition(
+                        column_sql,
+                        values,
+                        cols,
+                        polarity,
+                        idx
+                      )
+
+                    {[sql | conds_acc], params_acc ++ new_params, new_idx}
+
+                  ref_type ->
+                    type =
+                      case ref_type do
+                        {:array, t} -> t
+                        t -> t
+                      end
+
+                    pg_type = Eval.type_to_pg_cast(type)
+                    param_ref = "$#{idx}::text[]::#{pg_type}[]"
+
+                    condition = "#{column_sql} = ANY (#{param_ref})"
+
+                    condition =
+                      case polarity do
+                        :positive -> condition
+                        :negated -> "NOT #{condition}"
+                      end
+
+                    {[condition | conds_acc], params_acc ++ [values], idx + 1}
+                end
+              else
+                {conds_acc, params_acc, idx}
+              end
+          end
+        end)
+
+      if conditions == [] do
+        nil
+      else
+        clause = " AND NOT (#{Enum.join(Enum.reverse(conditions), " AND ")})"
+        {clause, params, next_idx}
+      end
+    end
+  end
+
+  defp build_materialized_row_condition(column_sql, values, col_types, polarity, param_idx) do
+    unnest_sections =
+      col_types
+      |> Enum.with_index(fn col_type, i ->
+        pg_type = Eval.type_to_pg_cast(col_type)
+        "$#{param_idx + i}::text[]::#{pg_type}[]"
+      end)
+      |> Enum.join(", ")
+
+    condition = "#{column_sql} IN (SELECT * FROM unnest(#{unnest_sections}))"
+
+    condition =
+      case polarity do
+        :positive -> condition
+        :negated -> "NOT (#{condition})"
+      end
+
+    params =
+      if values == [] do
+        Enum.map(col_types, fn _ -> [] end)
+      else
+        Electric.Utils.unzip_any(values) |> Tuple.to_list()
+      end
+
+    next_idx = param_idx + length(col_types)
+    {condition, params, next_idx}
+  end
 
   @doc """
   Build exclusion clauses using DNF decomposition.
