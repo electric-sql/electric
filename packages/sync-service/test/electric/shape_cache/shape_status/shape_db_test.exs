@@ -633,4 +633,51 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDbTest do
       end
     end
   end
+
+  describe "pool scaling" do
+    @tag shape_db_opts: [connection_idle_timeout: 10, statistics_collection_period: 10]
+    test "scales to 0 if nothing is active", ctx do
+      ShapeDb.Connection.checkout!(ctx.stack_id, :test, fn _conn ->
+        Process.sleep(1)
+        {:ok, %{connections: n}} = ShapeDb.statistics(ctx.stack_id)
+        assert n == 1
+      end)
+
+      assert :ok = assert_zero_memory(ctx)
+    end
+
+    @tag shape_db_opts: [
+           exclusive_mode: true,
+           connection_idle_timeout: 10,
+           statistics_collection_period: 10
+         ]
+    test "does not scale the pool in exclusive mode", ctx do
+      ShapeDb.Connection.checkout!(ctx.stack_id, :test, fn _conn ->
+        Process.sleep(1)
+        {:ok, %{connections: n}} = ShapeDb.statistics(ctx.stack_id)
+        assert n == 1
+      end)
+
+      :error = assert_zero_memory(ctx)
+    end
+
+    defp assert_zero_memory(ctx, repeats \\ 10)
+
+    defp assert_zero_memory(_ctx, 0) do
+      :error
+    end
+
+    defp assert_zero_memory(ctx, repeats) do
+      {:ok, stats} = ShapeDb.statistics(ctx.stack_id)
+
+      case stats do
+        %{connections: 0, total_memory: 0} ->
+          :ok
+
+        _ ->
+          Process.sleep(10)
+          assert_zero_memory(ctx, repeats - 1)
+      end
+    end
+  end
 end
