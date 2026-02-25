@@ -156,12 +156,12 @@ defmodule Electric.Client.TagTracker do
       end)
 
     # Second pass: for each matched key, update state and check visibility
-    {keys_to_delete, updated_key_data} =
-      Enum.reduce(matched_keys_with_entries, {[], key_data}, fn {key, removed_entries},
-                                                                {deletes, kd_acc} ->
+    {keys_to_delete, updated_key_data, orphaned_entries} =
+      Enum.reduce(matched_keys_with_entries, {[], key_data, []}, fn {key, removed_entries},
+                                                                    {deletes, kd_acc, orphans} ->
         case Map.get(kd_acc, key) do
           nil ->
-            {deletes, kd_acc}
+            {deletes, kd_acc, orphans}
 
           %{tags: current_entries, msg: msg} = data ->
             remaining_entries = MapSet.difference(current_entries, removed_entries)
@@ -189,11 +189,21 @@ defmodule Electric.Client.TagTracker do
               end
 
             if should_delete do
-              {[{key, msg} | deletes], Map.delete(kd_acc, key)}
+              {[{key, msg} | deletes], Map.delete(kd_acc, key),
+               [{key, remaining_entries} | orphans]}
             else
-              {deletes, Map.put(kd_acc, key, updated_data)}
+              {deletes, Map.put(kd_acc, key, updated_data), orphans}
             end
         end
+      end)
+
+    # Third pass: clean up remaining entries from tag_to_keys for deleted keys.
+    # The first pass only removed matched entries via Map.pop; remaining entries
+    # for deleted keys would otherwise persist as stale references, causing
+    # phantom synthetic deletes when matching future deactivation patterns.
+    updated_tag_to_keys =
+      Enum.reduce(orphaned_entries, updated_tag_to_keys, fn {key, remaining}, ttk ->
+        remove_key_from_tags(ttk, remaining, key)
       end)
 
     # Generate synthetic delete messages

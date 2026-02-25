@@ -344,6 +344,62 @@ defmodule Electric.Client.TagTrackerTest do
       assert kd["key1"].disjunct_positions == [[0, 1]]
     end
 
+    test "orphaned tag_to_keys entries after delete do not cause phantom deletes" do
+      # Shape: (A AND C) OR (B AND C) → disjuncts [[0,1], [2,3]]
+      # Row "r" has all 4 positions active with hash "X"
+      msg =
+        make_change_msg("r", :insert,
+          tags: ["X/X//", "//X/X"],
+          active_conditions: [true, true, true, true]
+        )
+
+      {ttk, kd} = TagTracker.update_tag_index(%{}, %{}, msg)
+
+      # Deactivate positions 1 and 3 (dep C moves out with hash "X")
+      # Both disjuncts lose their C position → row invisible → deleted from key_data
+      patterns = [%{pos: 1, value: "X"}, %{pos: 3, value: "X"}]
+
+      {deletes, ttk, kd} =
+        TagTracker.generate_synthetic_deletes(ttk, kd, patterns, DateTime.utc_now())
+
+      assert length(deletes) == 1
+      assert hd(deletes).key == "r"
+      refute Map.has_key?(kd, "r")
+
+      # Bug: {0, "X"} and {2, "X"} are still in tag_to_keys as orphans
+      # pointing to the deleted key "r"
+
+      # Re-insert row "r" with NEW hash "Y" at all positions (move-in)
+      msg =
+        make_change_msg("r", :insert,
+          tags: ["Y/Y//", "//Y/Y"],
+          active_conditions: [true, true, true, true]
+        )
+
+      {ttk, kd} = TagTracker.update_tag_index(ttk, kd, msg)
+
+      # Deactivate position 0 with STALE hash "X" — should have NO effect
+      # since the row's current hash at pos 0 is "Y", not "X"
+      patterns = [%{pos: 0, value: "X"}]
+
+      {deletes, ttk, kd} =
+        TagTracker.generate_synthetic_deletes(ttk, kd, patterns, DateTime.utc_now())
+
+      assert deletes == []
+      # Without fix: active_conditions would be corrupted to [false, true, true, true]
+      assert kd["r"].active_conditions == [true, true, true, true]
+
+      # Now a legitimate deactivation at position 2 with current hash "Y"
+      patterns = [%{pos: 2, value: "Y"}]
+
+      {deletes, _ttk, _kd} =
+        TagTracker.generate_synthetic_deletes(ttk, kd, patterns, DateTime.utc_now())
+
+      # Disjunct 0 ([0,1]) is still fully active → row should remain visible
+      # Without fix: the corrupted pos 0 causes both disjuncts to fail → phantom delete
+      assert deletes == []
+    end
+
     test "disjunct structure derived correctly from slash-delimited tags" do
       msg =
         make_change_msg("key1", :insert,
