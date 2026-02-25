@@ -359,7 +359,7 @@ services:
     command: ['postgres', '-c', 'config_file=/etc/postgresql/postgresql.conf']
 
   backend:
-    image: electricsql/electric:canary
+    image: electricsql/electric:latest
     environment:
       DATABASE_URL: postgresql://postgres:password@postgres:5432/electric?sslmode=disable
       ELECTRIC_INSECURE: true
