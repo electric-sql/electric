@@ -37,11 +37,11 @@ change in the same transaction, neither has — they each defer to the other.
 
 ---
 
-## Solution: Materialized-State Exclusion with Seen/Unseen Tracking
+## Solution: Materialized-State Exclusion with LSN-Keyed Snapshots
 
 Replace live subquery exclusion with **parameter-based exclusion** (`= ANY($values)`)
 using the materialized state known to the consumer. The correct materialized state to use
-depends on whether the consumer has already processed that dependency's changes.
+is determined by querying the materializer for a specific LSN.
 
 ### Why the Consumer Can't Just Use Current Materialized State
 
@@ -51,49 +51,74 @@ handles `materializer_changes` from dependency A, dependency B's materializer ha
 return post-transaction values — but the consumer hasn't started B's move-in yet. Using
 post-transaction state for exclusion reproduces the original bug.
 
-### Seen vs Unseen Dependencies
+### LSN-Keyed Value Counts in the Materializer
 
-The consumer tracks which dependencies' `materializer_changes` it has processed
-(a `seen_deps` set). When building an exclusion clause for dependency D in another
-disjunct:
+Each materializer maintains a map of `lsn → value_counts` with **at most 2 entries**,
+evicting the oldest when a third arrives. Each entry stores the value_counts as they were
+after processing changes at that LSN.
 
-- **D is seen** (consumer already processed D's `materializer_changes`): use D's
-  **current** materialized state. D's move-in has been started — any matching rows will
-  be claimed.
+```
+# After initial snapshot (lsn_0):
+%{lsn_0 => %{gb_1: 1}}
 
-- **D is unseen** (consumer hasn't processed D's `materializer_changes` yet): use D's
-  **pre-transaction** materialized state. This excludes rows already in the shape from
-  previous transactions, without falsely excluding rows matching D's newly-added values
-  (which no move-in has claimed yet).
+# After a later transaction (lsn_5) that adds gb_2:
+%{lsn_0 => %{gb_1: 1}, lsn_5 => %{gb_1: 1, gb_2: 1}}
+```
 
-To support pre-transaction queries, the materializer retains its previous state
-(`prev_value_counts`), saved before applying each transaction's changes.
+The materializer exposes a single API: `get_link_values(lsn)`:
+
+- **Exact match:** if `lsn` matches one of the stored entries, return that entry's
+  value_counts.
+- **LSN 0 (sentinel):** return the value_counts for the **minimum** stored LSN.
+
+Move event messages (`{:materializer_changes, dep_handle, events}`) are extended to
+include the LSN of the transaction that produced the changes:
+`{:materializer_changes, dep_handle, events, lsn}`.
+
+### LSN-per-Dep Tracking in the Consumer
+
+The consumer maintains a map of `dep_handle → lsn` (replacing the boolean `seen_deps`
+set). This is updated when the consumer receives a `materializer_changes` message from
+that dep.
+
+When building the exclusion context for dependency D:
+
+- **D has a recorded LSN** (consumer has processed D's `materializer_changes` at some
+  point): call `D.get_link_values(recorded_lsn)`. This returns the value_counts as of
+  the last transaction where D changed and the consumer processed it.
+
+- **D has no recorded LSN** (consumer has never received `materializer_changes` from D):
+  call `D.get_link_values(0)`. The materializer returns the minimum LSN entry — the
+  post-snapshot value_counts.
 
 ### Why This Handles All Cases
 
-| Dependency state | Seen? | Which materialized state? | Correct? |
-|------------------|-------|---------------------------|----------|
-| Changed in this txn | Yes | Current (post-txn) | Move-in started, rows will be claimed |
-| Changed in this txn | No | Pre-txn | New values not yet claimed, old values already in shape |
-| Stable (no change) | N/A | Pre-txn = current (identical) | Either works |
+| Dependency state | Consumer has LSN? | `get_link_values` arg | Returns | Correct? |
+|---|---|---|---|---|
+| Changed in this txn, already processed | Yes (current txn LSN) | current txn LSN | Post-change values | Move-in started, rows claimed |
+| Changed in this txn, not yet processed | Yes (older LSN) | older LSN | Pre-change values | New values not yet claimed |
+| Changed in prior txn | Yes (prior txn LSN) | prior txn LSN | Values after that txn | Stable state, correct |
+| Never changed after snapshot | No | 0 (sentinel) | Post-snapshot values | Stable state, correct |
 
 ### Worked Example
 
 Same scenario. Processing order: subqueryX first, then subqueryY.
 
-**Step 1: Process subqueryX's `materializer_changes` (x1 added)**
+**Step 1: Process subqueryX's `materializer_changes` (x1 added, lsn=100)**
 
-- Mark subqueryX as **seen**
-- SubqueryY is **unseen** → exclusion uses pre-txn Y (does not contain `y1`)
-- Move-in query: `WHERE x = 'x1' AND NOT (y = ANY($prev_Y))`
-- `t1`: `y1` not in pre-txn Y → **t1 returned**
+- Record `subqueryX → lsn 100`
+- SubqueryY has recorded LSN from a prior txn (or 0 if never seen)
+- `subqueryY.get_link_values(prior_lsn)` → pre-txn Y (does not contain `y1`)
+- Move-in query: `WHERE x = 'x1' AND NOT (y = ANY($Y_values))`
+- `t1`: `y1` not in Y values → **t1 returned**
 
-**Step 2: Process subqueryY's `materializer_changes` (y1 added)**
+**Step 2: Process subqueryY's `materializer_changes` (y1 added, lsn=100)**
 
-- Mark subqueryY as **seen**
-- SubqueryX is **seen** → exclusion uses current X (contains `x1`)
-- Move-in query: `WHERE y = 'y1' AND NOT (x = ANY($current_X))`
-- `t1`: `x1` in current X → **t1 excluded** (no duplicate)
+- Record `subqueryY → lsn 100`
+- SubqueryX has recorded `lsn 100`
+- `subqueryX.get_link_values(100)` → post-change X (contains `x1`)
+- Move-in query: `WHERE y = 'y1' AND NOT (x = ANY($X_values))`
+- `t1`: `x1` in X values → **t1 excluded** (no duplicate)
 
 **Result:** `t1` returned exactly once. Order doesn't matter — whichever dependency is
 processed first claims the row.
@@ -113,11 +138,12 @@ activation in the **control path** (position state updates).
 
 ### Cross-Transaction Scenario
 
-SubqueryX adds `x1` in T1, subqueryY adds `y1` in T2:
+SubqueryX adds `x1` in T1 (lsn=100), subqueryY adds `y1` in T2 (lsn=200):
 
-- T1: subqueryY unseen, pre-txn Y has no `y1` → `t1` returned by subqueryX move-in
-- T2: subqueryX unseen, pre-txn X has `x1` (stable from T1) → `t1` excluded by
-  subqueryY move-in
+- T1: subqueryY's recorded LSN is 0 or from a prior txn → returns stable Y values
+  (no `y1`) → `t1` returned by subqueryX move-in
+- T2: subqueryX's recorded LSN is 100 → `subqueryX.get_link_values(100)` returns values
+  containing `x1` → `t1` excluded by subqueryY move-in
 
-Pre-txn state for stable deps equals current state, so cross-transaction works
-identically.
+Stable deps return current values regardless of which LSN is requested (they only have
+one entry in their map), so cross-transaction works identically.
