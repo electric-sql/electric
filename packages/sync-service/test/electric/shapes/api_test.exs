@@ -987,6 +987,78 @@ defmodule Electric.Shapes.ApiTest do
              ]
     end
 
+    @tag long_poll_timeout: 1000
+    test "non-live request recovers from out of bounds offset via subscription", ctx do
+      test_pid = self()
+      next_offset = LogOffset.increment(@test_offset)
+      next_next_offset = LogOffset.increment(next_offset)
+
+      # resolve_shape_handle always returns @test_offset (behind next_offset),
+      # so notify_changes_since_request_start won't self-send :new_changes.
+      # Recovery must come from the Registry subscription added by ensure_subscribed.
+      patch_shape_cache(
+        has_shape?: fn @test_shape_handle, _opts -> true end,
+        await_snapshot_start: fn @test_shape_handle, _ -> :started end,
+        resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id ->
+          {@test_shape_handle, @test_offset}
+        end
+      )
+
+      patch_storage(
+        for_shape: fn @test_shape_handle, _opts -> @test_opts end,
+        get_chunk_end_log_offset: fn ^next_offset, _ -> nil end
+      )
+
+      expect_storage(
+        get_log_stream: fn ^next_offset, ^next_next_offset, @test_opts ->
+          [Jason.encode!("test result")]
+        end
+      )
+
+      task =
+        Task.async(fn ->
+          assert {:ok, request} =
+                   Api.validate(
+                     ctx.api,
+                     %{
+                       table: "public.users",
+                       offset: "#{next_offset}",
+                       handle: @test_shape_handle
+                       # live is false by default
+                     }
+                   )
+
+          send(test_pid, :serving_req)
+
+          response = Api.serve_shape_response(request)
+
+          {response, response_body(response)}
+        end)
+
+      assert_receive :serving_req, @receive_timeout
+
+      # Simulate new changes arriving via Registry.
+      # Without ensure_subscribed, this dispatch would find no registered
+      # process and the request would hang until out_of_bounds_timeout.
+      Registry.dispatch(ctx.registry, @test_shape_handle, fn [{pid, ref}] ->
+        send(pid, {ref, :new_changes, next_next_offset})
+      end)
+
+      assert {response, response_body} = Task.await(task)
+
+      assert response.status == 200
+
+      assert response_body == [
+               "test result",
+               %{
+                 headers: %{
+                   control: "up-to-date",
+                   global_last_seen_lsn: to_string(next_offset.tx_offset)
+                 }
+               }
+             ]
+    end
+
     test "returns correct global_last_seen_lsn on non-live responses during data race", ctx do
       next_offset = LogOffset.increment(@start_offset_50)
       next_offset_lsn = next_offset.tx_offset
