@@ -22,7 +22,10 @@ defmodule Electric.Integration.OracleViewTest do
 
   setup [:with_unique_db]
   setup :with_complete_stack
-  setup :with_electric_client
+
+  setup ctx do
+    with_electric_client(ctx, headers: [{"electric-protocol-version", "2"}])
+  end
 
   setup ctx do
     setup_standard_schema(ctx)
