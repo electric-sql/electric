@@ -923,7 +923,6 @@ defmodule Electric.Shapes.ApiTest do
     for live <- [true, false] do
       @live live
       test "live=#{@live} request recovers from out of bounds offset via subscription", ctx do
-        test_pid = self()
         next_offset = LogOffset.increment(@test_offset)
         next_next_offset = LogOffset.increment(next_offset)
 
@@ -949,8 +948,16 @@ defmodule Electric.Shapes.ApiTest do
           end
         )
 
+        # Use :trace to wait until the task process has entered hold_until_change, which runs
+        # after ensure_subscribed, by which point it is safe to send it the new_changes
+        # notification.
+        trace_session = :trace.session_create(:oob_test, self(), [])
+        :trace.function(trace_session, {Api, :hold_until_change, 1}, true, [:local])
+
         task =
           Task.async(fn ->
+            :trace.process(trace_session, self(), true, [:call])
+
             assert {:ok, request} =
                      Api.validate(
                        ctx.api,
@@ -962,14 +969,12 @@ defmodule Electric.Shapes.ApiTest do
                        }
                      )
 
-            send(test_pid, :serving_req)
-
             response = Api.serve_shape_response(request)
 
             {response, response_body(response)}
           end)
 
-        assert_receive :serving_req, @receive_timeout
+        assert_receive {:trace, _, :call, {Api, :hold_until_change, _}}
 
         # Simulate new changes arriving via Registry.
         # Without ensure_subscribed, this dispatch would find no registered
