@@ -27,11 +27,11 @@ defmodule Electric.Client.TagTrackerTest do
     }
   end
 
-  describe "update_tag_index/3" do
+  describe "update_tag_index/4" do
     test "tracks new tags for inserts" do
       msg = make_change_msg("key1", :insert, tags: ["tag_a", "tag_b"])
 
-      {tag_to_keys, key_data} = TagTracker.update_tag_index(%{}, %{}, msg)
+      {tag_to_keys, key_data, _dp} = TagTracker.update_tag_index(%{}, %{}, nil, msg)
 
       assert tag_to_keys == %{
                {0, "tag_a"} => MapSet.new(["key1"]),
@@ -45,11 +45,11 @@ defmodule Electric.Client.TagTrackerTest do
     test "updates tags for updates" do
       # Initial insert with tag_a
       msg1 = make_change_msg("key1", :insert, tags: ["tag_a"])
-      {tag_to_keys, key_data} = TagTracker.update_tag_index(%{}, %{}, msg1)
+      {tag_to_keys, key_data, dp} = TagTracker.update_tag_index(%{}, %{}, nil, msg1)
 
       # Update adds tag_b
       msg2 = make_change_msg("key1", :update, tags: ["tag_b"])
-      {tag_to_keys, key_data} = TagTracker.update_tag_index(tag_to_keys, key_data, msg2)
+      {tag_to_keys, key_data, _dp} = TagTracker.update_tag_index(tag_to_keys, key_data, dp, msg2)
 
       assert tag_to_keys == %{
                {0, "tag_a"} => MapSet.new(["key1"]),
@@ -62,11 +62,11 @@ defmodule Electric.Client.TagTrackerTest do
     test "removes tags when removed_tags specified" do
       # Initial insert with tag_a and tag_b
       msg1 = make_change_msg("key1", :insert, tags: ["tag_a", "tag_b"])
-      {tag_to_keys, key_data} = TagTracker.update_tag_index(%{}, %{}, msg1)
+      {tag_to_keys, key_data, dp} = TagTracker.update_tag_index(%{}, %{}, nil, msg1)
 
       # Update removes tag_a
       msg2 = make_change_msg("key1", :update, removed_tags: ["tag_a"])
-      {tag_to_keys, key_data} = TagTracker.update_tag_index(tag_to_keys, key_data, msg2)
+      {tag_to_keys, key_data, _dp} = TagTracker.update_tag_index(tag_to_keys, key_data, dp, msg2)
 
       assert tag_to_keys == %{
                {0, "tag_b"} => MapSet.new(["key1"])
@@ -77,10 +77,10 @@ defmodule Electric.Client.TagTrackerTest do
 
     test "removes key from tracking on delete" do
       msg1 = make_change_msg("key1", :insert, tags: ["tag_a"])
-      {tag_to_keys, key_data} = TagTracker.update_tag_index(%{}, %{}, msg1)
+      {tag_to_keys, key_data, dp} = TagTracker.update_tag_index(%{}, %{}, nil, msg1)
 
       msg2 = make_change_msg("key1", :delete, tags: [])
-      {tag_to_keys, key_data} = TagTracker.update_tag_index(tag_to_keys, key_data, msg2)
+      {tag_to_keys, key_data, _dp} = TagTracker.update_tag_index(tag_to_keys, key_data, dp, msg2)
 
       assert tag_to_keys == %{}
       assert key_data == %{}
@@ -88,7 +88,7 @@ defmodule Electric.Client.TagTrackerTest do
 
     test "handles messages without tags" do
       msg = make_change_msg("key1", :insert, tags: [])
-      {tag_to_keys, key_data} = TagTracker.update_tag_index(%{}, %{}, msg)
+      {tag_to_keys, key_data, _dp} = TagTracker.update_tag_index(%{}, %{}, nil, msg)
 
       assert tag_to_keys == %{}
       assert key_data == %{}
@@ -98,8 +98,8 @@ defmodule Electric.Client.TagTrackerTest do
       msg1 = make_change_msg("key1", :insert, tags: ["shared_tag"])
       msg2 = make_change_msg("key2", :insert, tags: ["shared_tag"])
 
-      {tag_to_keys, key_data} = TagTracker.update_tag_index(%{}, %{}, msg1)
-      {tag_to_keys, key_data} = TagTracker.update_tag_index(tag_to_keys, key_data, msg2)
+      {tag_to_keys, key_data, dp} = TagTracker.update_tag_index(%{}, %{}, nil, msg1)
+      {tag_to_keys, key_data, _dp} = TagTracker.update_tag_index(tag_to_keys, key_data, dp, msg2)
 
       assert tag_to_keys == %{
                {0, "shared_tag"} => MapSet.new(["key1", "key2"])
@@ -110,21 +110,21 @@ defmodule Electric.Client.TagTrackerTest do
     end
   end
 
-  describe "generate_synthetic_deletes/4" do
+  describe "generate_synthetic_deletes/5" do
     test "generates deletes for keys matching pattern" do
       # Set up: two keys with tag_a
       msg1 = make_change_msg("key1", :insert, tags: ["tag_a"], value: %{"id" => "1"})
       msg2 = make_change_msg("key2", :insert, tags: ["tag_a"], value: %{"id" => "2"})
 
-      {tag_to_keys, key_data} = TagTracker.update_tag_index(%{}, %{}, msg1)
-      {tag_to_keys, key_data} = TagTracker.update_tag_index(tag_to_keys, key_data, msg2)
+      {tag_to_keys, key_data, dp} = TagTracker.update_tag_index(%{}, %{}, nil, msg1)
+      {tag_to_keys, key_data, dp} = TagTracker.update_tag_index(tag_to_keys, key_data, dp, msg2)
 
       # Move-out for tag_a
       patterns = [%{pos: 0, value: "tag_a"}]
       timestamp = DateTime.utc_now()
 
       {deletes, new_tag_to_keys, new_key_data} =
-        TagTracker.generate_synthetic_deletes(tag_to_keys, key_data, patterns, timestamp)
+        TagTracker.generate_synthetic_deletes(tag_to_keys, key_data, dp, patterns, timestamp)
 
       assert length(deletes) == 2
 
@@ -143,14 +143,14 @@ defmodule Electric.Client.TagTrackerTest do
     test "does not delete keys with remaining tags" do
       # Set up: key1 has tag_a and tag_b
       msg = make_change_msg("key1", :insert, tags: ["tag_a", "tag_b"], value: %{"id" => "1"})
-      {tag_to_keys, key_data} = TagTracker.update_tag_index(%{}, %{}, msg)
+      {tag_to_keys, key_data, dp} = TagTracker.update_tag_index(%{}, %{}, nil, msg)
 
       # Move-out only for tag_a
       patterns = [%{pos: 0, value: "tag_a"}]
       timestamp = DateTime.utc_now()
 
       {deletes, new_tag_to_keys, new_key_data} =
-        TagTracker.generate_synthetic_deletes(tag_to_keys, key_data, patterns, timestamp)
+        TagTracker.generate_synthetic_deletes(tag_to_keys, key_data, dp, patterns, timestamp)
 
       # No synthetic deletes - key1 still has tag_b
       assert deletes == []
@@ -165,13 +165,13 @@ defmodule Electric.Client.TagTrackerTest do
 
     test "handles non-existent tag pattern" do
       msg = make_change_msg("key1", :insert, tags: ["tag_a"])
-      {tag_to_keys, key_data} = TagTracker.update_tag_index(%{}, %{}, msg)
+      {tag_to_keys, key_data, dp} = TagTracker.update_tag_index(%{}, %{}, nil, msg)
 
       patterns = [%{pos: 0, value: "nonexistent_tag"}]
       timestamp = DateTime.utc_now()
 
       {deletes, new_tag_to_keys, new_key_data} =
-        TagTracker.generate_synthetic_deletes(tag_to_keys, key_data, patterns, timestamp)
+        TagTracker.generate_synthetic_deletes(tag_to_keys, key_data, dp, patterns, timestamp)
 
       assert deletes == []
       assert new_tag_to_keys == tag_to_keys
@@ -182,14 +182,14 @@ defmodule Electric.Client.TagTrackerTest do
       msg1 = make_change_msg("key1", :insert, tags: ["tag_a"])
       msg2 = make_change_msg("key2", :insert, tags: ["tag_b"])
 
-      {tag_to_keys, key_data} = TagTracker.update_tag_index(%{}, %{}, msg1)
-      {tag_to_keys, key_data} = TagTracker.update_tag_index(tag_to_keys, key_data, msg2)
+      {tag_to_keys, key_data, dp} = TagTracker.update_tag_index(%{}, %{}, nil, msg1)
+      {tag_to_keys, key_data, dp} = TagTracker.update_tag_index(tag_to_keys, key_data, dp, msg2)
 
       patterns = [%{pos: 0, value: "tag_a"}, %{pos: 0, value: "tag_b"}]
       timestamp = DateTime.utc_now()
 
       {deletes, new_tag_to_keys, new_key_data} =
-        TagTracker.generate_synthetic_deletes(tag_to_keys, key_data, patterns, timestamp)
+        TagTracker.generate_synthetic_deletes(tag_to_keys, key_data, dp, patterns, timestamp)
 
       assert length(deletes) == 2
       assert new_tag_to_keys == %{}
@@ -225,7 +225,7 @@ defmodule Electric.Client.TagTrackerTest do
           active_conditions: [true, true]
         )
 
-      {ttk, kd} = TagTracker.update_tag_index(%{}, %{}, msg1)
+      {ttk, kd, dp} = TagTracker.update_tag_index(%{}, %{}, nil, msg1)
 
       assert ttk == %{
                {0, "hash_a"} => MapSet.new(["key1"]),
@@ -240,7 +240,7 @@ defmodule Electric.Client.TagTrackerTest do
           active_conditions: [true, true]
         )
 
-      {ttk, _kd} = TagTracker.update_tag_index(ttk, kd, msg2)
+      {ttk, _kd, _dp} = TagTracker.update_tag_index(ttk, kd, dp, msg2)
 
       assert ttk == %{
                {0, "hash_c"} => MapSet.new(["key1"]),
@@ -274,14 +274,14 @@ defmodule Electric.Client.TagTrackerTest do
           active_conditions: [true, true]
         )
 
-      {ttk, kd} = TagTracker.update_tag_index(%{}, %{}, msg)
+      {ttk, kd, dp} = TagTracker.update_tag_index(%{}, %{}, nil, msg)
 
       # Move-out at position 0 - disjunct 1 still satisfied
       patterns = [%{pos: 0, value: "hash_a"}]
       timestamp = DateTime.utc_now()
 
       {deletes, ttk, kd} =
-        TagTracker.generate_synthetic_deletes(ttk, kd, patterns, timestamp)
+        TagTracker.generate_synthetic_deletes(ttk, kd, dp, patterns, timestamp)
 
       # Still visible via disjunct 1
       assert deletes == []
@@ -291,7 +291,7 @@ defmodule Electric.Client.TagTrackerTest do
       patterns = [%{pos: 1, value: "hash_b"}]
 
       {deletes, _ttk, _kd} =
-        TagTracker.generate_synthetic_deletes(ttk, kd, patterns, timestamp)
+        TagTracker.generate_synthetic_deletes(ttk, kd, dp, patterns, timestamp)
 
       assert length(deletes) == 1
       assert hd(deletes).key == "key1"
@@ -304,7 +304,7 @@ defmodule Electric.Client.TagTrackerTest do
           active_conditions: [true, false]
         )
 
-      {ttk, kd} = TagTracker.update_tag_index(%{}, %{}, msg)
+      {ttk, kd, _dp} = TagTracker.update_tag_index(%{}, %{}, nil, msg)
 
       # Position 1 is inactive
       refute Enum.at(kd["key1"].active_conditions, 1)
@@ -323,7 +323,7 @@ defmodule Electric.Client.TagTrackerTest do
           active_conditions: [true, true]
         )
 
-      {ttk, _kd} = TagTracker.update_tag_index(%{}, %{}, msg)
+      {ttk, _kd, _dp} = TagTracker.update_tag_index(%{}, %{}, nil, msg)
 
       assert Map.has_key?(ttk, {0, "hash_a"})
       assert Map.has_key?(ttk, {1, "hash_b"})
@@ -331,17 +331,17 @@ defmodule Electric.Client.TagTrackerTest do
       assert Map.has_key?(ttk, {1, "hash_d"})
     end
 
-    test "active_conditions stored from headers" do
+    test "active_conditions stored from headers and disjunct_positions derived once" do
       msg =
         make_change_msg("key1", :insert,
           tags: ["hash_a/hash_b"],
           active_conditions: [true, false]
         )
 
-      {_ttk, kd} = TagTracker.update_tag_index(%{}, %{}, msg)
+      {_ttk, kd, dp} = TagTracker.update_tag_index(%{}, %{}, nil, msg)
 
       assert kd["key1"].active_conditions == [true, false]
-      assert kd["key1"].disjunct_positions == [[0, 1]]
+      assert dp == [[0, 1]]
     end
 
     test "orphaned tag_to_keys entries after delete do not cause phantom deletes" do
@@ -353,14 +353,14 @@ defmodule Electric.Client.TagTrackerTest do
           active_conditions: [true, true, true, true]
         )
 
-      {ttk, kd} = TagTracker.update_tag_index(%{}, %{}, msg)
+      {ttk, kd, dp} = TagTracker.update_tag_index(%{}, %{}, nil, msg)
 
       # Deactivate positions 1 and 3 (dep C moves out with hash "X")
       # Both disjuncts lose their C position → row invisible → deleted from key_data
       patterns = [%{pos: 1, value: "X"}, %{pos: 3, value: "X"}]
 
       {deletes, ttk, kd} =
-        TagTracker.generate_synthetic_deletes(ttk, kd, patterns, DateTime.utc_now())
+        TagTracker.generate_synthetic_deletes(ttk, kd, dp, patterns, DateTime.utc_now())
 
       assert length(deletes) == 1
       assert hd(deletes).key == "r"
@@ -376,14 +376,14 @@ defmodule Electric.Client.TagTrackerTest do
           active_conditions: [true, true, true, true]
         )
 
-      {ttk, kd} = TagTracker.update_tag_index(ttk, kd, msg)
+      {ttk, kd, dp} = TagTracker.update_tag_index(ttk, kd, dp, msg)
 
       # Deactivate position 0 with STALE hash "X" — should have NO effect
       # since the row's current hash at pos 0 is "Y", not "X"
       patterns = [%{pos: 0, value: "X"}]
 
       {deletes, ttk, kd} =
-        TagTracker.generate_synthetic_deletes(ttk, kd, patterns, DateTime.utc_now())
+        TagTracker.generate_synthetic_deletes(ttk, kd, dp, patterns, DateTime.utc_now())
 
       assert deletes == []
       # Without fix: active_conditions would be corrupted to [false, true, true, true]
@@ -393,7 +393,7 @@ defmodule Electric.Client.TagTrackerTest do
       patterns = [%{pos: 2, value: "Y"}]
 
       {deletes, _ttk, _kd} =
-        TagTracker.generate_synthetic_deletes(ttk, kd, patterns, DateTime.utc_now())
+        TagTracker.generate_synthetic_deletes(ttk, kd, dp, patterns, DateTime.utc_now())
 
       # Disjunct 0 ([0,1]) is still fully active → row should remain visible
       # Without fix: the corrupted pos 0 causes both disjuncts to fail → phantom delete
@@ -407,10 +407,33 @@ defmodule Electric.Client.TagTrackerTest do
           active_conditions: [true, true]
         )
 
-      {_ttk, kd} = TagTracker.update_tag_index(%{}, %{}, msg)
+      {_ttk, _kd, dp} = TagTracker.update_tag_index(%{}, %{}, nil, msg)
 
       # Disjunct 0 uses position 0, disjunct 1 uses position 1
-      assert kd["key1"].disjunct_positions == [[0], [1]]
+      assert dp == [[0], [1]]
+    end
+
+    test "disjunct_positions derived once and reused across keys" do
+      msg1 =
+        make_change_msg("key1", :insert,
+          tags: ["hash_a/", "/hash_b"],
+          active_conditions: [true, true]
+        )
+
+      {ttk, kd, dp} = TagTracker.update_tag_index(%{}, %{}, nil, msg1)
+      assert dp == [[0], [1]]
+
+      # Second key with different hashes but same structure
+      msg2 =
+        make_change_msg("key2", :insert,
+          tags: ["hash_c/", "/hash_d"],
+          active_conditions: [true, false]
+        )
+
+      {_ttk, _kd, dp2} = TagTracker.update_tag_index(ttk, kd, dp, msg2)
+
+      # disjunct_positions unchanged — derived once, reused
+      assert dp2 == dp
     end
   end
 end

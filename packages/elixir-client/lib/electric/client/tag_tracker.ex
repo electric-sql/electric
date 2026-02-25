@@ -8,10 +8,10 @@ defmodule Electric.Client.TagTracker do
 
   ## Data Structures
 
-  Two maps are maintained:
+  Three structures are maintained:
   - `tag_to_keys`: `%{{position, hash} => MapSet<key>}` - which keys have each position-hash pair
-  - `key_data`: `%{key => %{tags: MapSet<{pos, hash}>, active_conditions: [boolean()] | nil,
-    disjunct_positions: [[integer()]] | nil, msg: msg}}` - each key's current state
+  - `key_data`: `%{key => %{tags: MapSet<{pos, hash}>, active_conditions: [boolean()] | nil, msg: msg}}` - each key's current state
+  - `disjunct_positions`: `[[integer()]] | nil` - shared across all keys, derived once from the first tagged message
 
   Tags arrive as slash-delimited strings per disjunct (e.g., `"hash1/hash2/"`, `"//hash3"`).
   They are normalized into 2D arrays and indexed by `{position, hash_value}` tuples.
@@ -30,20 +30,23 @@ defmodule Electric.Client.TagTracker do
           optional(key()) => %{
             tags: MapSet.t(position_hash()),
             active_conditions: [boolean()] | nil,
-            disjunct_positions: [[non_neg_integer()]] | nil,
             msg: ChangeMessage.t()
           }
         }
+  @type disjunct_positions :: [[non_neg_integer()]] | nil
 
   @doc """
   Update the tag index when a change message is received.
 
   Tags are normalized from slash-delimited wire format to position-indexed entries.
-  Returns `{updated_tag_to_keys, updated_key_data}`.
+  `disjunct_positions` is derived once from the first tagged message and reused for all
+  subsequent messages, since it is determined by the shape's WHERE clause structure.
+
+  Returns `{updated_tag_to_keys, updated_key_data, disjunct_positions}`.
   """
-  @spec update_tag_index(tag_to_keys(), key_data(), ChangeMessage.t()) ::
-          {tag_to_keys(), key_data()}
-  def update_tag_index(tag_to_keys, key_data, %ChangeMessage{headers: headers, key: key} = msg) do
+  @spec update_tag_index(tag_to_keys(), key_data(), disjunct_positions(), ChangeMessage.t()) ::
+          {tag_to_keys(), key_data(), disjunct_positions()}
+  def update_tag_index(tag_to_keys, key_data, disjunct_positions, %ChangeMessage{headers: headers, key: key} = msg) do
     raw_new_tags = headers.tags || []
     raw_removed_tags = headers.removed_tags || []
 
@@ -72,11 +75,17 @@ defmodule Electric.Client.TagTracker do
       |> MapSet.difference(removed_entries)
       |> MapSet.union(new_entries)
 
-    # Derive disjunct positions from tags
+    # Derive disjunct positions once from the first tagged message
     disjunct_positions =
-      case derive_disjunct_positions(normalized_new) do
-        [] -> current_data && current_data.disjunct_positions
-        positions -> positions
+      case disjunct_positions do
+        nil ->
+          case derive_disjunct_positions(normalized_new) do
+            [] -> nil
+            positions -> positions
+          end
+
+        already_set ->
+          already_set
       end
 
     case headers.operation do
@@ -87,7 +96,7 @@ defmodule Electric.Client.TagTracker do
             remove_key_from_tag(acc, entry, key)
           end)
 
-        {updated_tag_to_keys, Map.delete(key_data, key)}
+        {updated_tag_to_keys, Map.delete(key_data, key), disjunct_positions}
 
       _ ->
         if MapSet.size(updated_entries) == 0 do
@@ -97,7 +106,7 @@ defmodule Electric.Client.TagTracker do
               remove_key_from_tag(acc, entry, key)
             end)
 
-          {updated_tag_to_keys, Map.delete(key_data, key)}
+          {updated_tag_to_keys, Map.delete(key_data, key), disjunct_positions}
         else
           # Update tag_to_keys: remove old entries, add new entries
           entries_to_remove = MapSet.difference(current_entries, updated_entries)
@@ -112,11 +121,10 @@ defmodule Electric.Client.TagTracker do
             Map.put(key_data, key, %{
               tags: updated_entries,
               active_conditions: active_conditions,
-              disjunct_positions: disjunct_positions,
               msg: msg
             })
 
-          {updated_tag_to_keys, updated_key_data}
+          {updated_tag_to_keys, updated_key_data, disjunct_positions}
         end
     end
   end
@@ -126,14 +134,14 @@ defmodule Electric.Client.TagTracker do
 
   Patterns contain `%{pos: position, value: hash}` maps. For keys with
   `active_conditions`, positions are deactivated and visibility is re-evaluated
-  using DNF. For keys without `active_conditions`, the old behavior applies:
-  delete when no entries remain.
+  using DNF with the shared `disjunct_positions`. For keys without
+  `active_conditions`, the old behavior applies: delete when no entries remain.
 
   Returns `{synthetic_deletes, updated_tag_to_keys, updated_key_data}`.
   """
-  @spec generate_synthetic_deletes(tag_to_keys(), key_data(), [map()], DateTime.t()) ::
+  @spec generate_synthetic_deletes(tag_to_keys(), key_data(), disjunct_positions(), [map()], DateTime.t()) ::
           {[ChangeMessage.t()], tag_to_keys(), key_data()}
-  def generate_synthetic_deletes(tag_to_keys, key_data, patterns, request_timestamp) do
+  def generate_synthetic_deletes(tag_to_keys, key_data, disjunct_positions, patterns, request_timestamp) do
     # First pass: collect all keys that match any pattern and remove those entries
     {matched_keys_with_entries, updated_tag_to_keys} =
       Enum.reduce(patterns, {%{}, tag_to_keys}, fn %{pos: pos, value: value},
@@ -168,7 +176,7 @@ defmodule Electric.Client.TagTracker do
 
             # Determine if key should be deleted
             {should_delete, updated_data} =
-              if data.active_conditions != nil and data.disjunct_positions != nil do
+              if data.active_conditions != nil and disjunct_positions != nil do
                 # DNF mode: deactivate positions and check visibility
                 deactivated_positions =
                   MapSet.new(removed_entries, fn {pos, _} -> pos end)
@@ -180,7 +188,7 @@ defmodule Electric.Client.TagTracker do
                     if MapSet.member?(deactivated_positions, idx), do: false, else: val
                   end)
 
-                visible = row_visible?(updated_ac, data.disjunct_positions)
+                visible = row_visible?(updated_ac, disjunct_positions)
 
                 {not visible, %{data | tags: remaining_entries, active_conditions: updated_ac}}
               else

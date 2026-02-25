@@ -190,14 +190,15 @@ defmodule Electric.Client.Message do
 
     @enforce_keys [:shape_handle, :offset, :schema]
 
-    defstruct [:shape_handle, :offset, :schema, tag_to_keys: %{}, key_data: %{}]
+    defstruct [:shape_handle, :offset, :schema, tag_to_keys: %{}, key_data: %{}, disjunct_positions: nil]
 
     @type t :: %__MODULE__{
             shape_handle: Client.shape_handle(),
             offset: Offset.t(),
             schema: Client.schema(),
             tag_to_keys: %{optional(term()) => MapSet.t(String.t())},
-            key_data: %{optional(String.t()) => map()}
+            key_data: %{optional(String.t()) => map()},
+            disjunct_positions: [[non_neg_integer()]] | nil
           }
   end
 
