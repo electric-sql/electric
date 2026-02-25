@@ -258,10 +258,8 @@ defmodule Electric.Shapes.Consumer.MoveHandling do
       |> Map.new(fn {handle, index} ->
         opts = %{shape_handle: handle, stack_id: state.stack_id}
 
-        parsed_values =
-          if State.dep_seen?(state, handle),
-            do: Materializer.get_link_values(opts),
-            else: Materializer.get_prev_link_values(opts)
+        dep_lsn = State.get_dep_lsn(state, handle) || 0
+        parsed_values = Materializer.get_link_values(opts, dep_lsn)
 
         ref_type = used_refs[["$sublink", Integer.to_string(index)]]
         strings = values_to_strings(parsed_values, ref_type)

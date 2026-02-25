@@ -46,9 +46,9 @@ defmodule Electric.Shapes.Consumer.Materializer do
 
   def whereis(stack_id, shape_handle), do: GenServer.whereis(name(stack_id, shape_handle))
 
-  @spec new_changes(map(), list(Changes.change()) | {LogOffset.t(), LogOffset.t()}) :: :ok
-  def new_changes(state, changes) do
-    GenServer.call(name(state), {:new_changes, changes}, :infinity)
+  @spec new_changes(map(), list(Changes.change()) | {LogOffset.t(), LogOffset.t()}, non_neg_integer()) :: :ok
+  def new_changes(state, changes, tx_offset \\ 0) do
+    GenServer.call(name(state), {:new_changes, changes, tx_offset}, :infinity)
   end
 
   def wait_until_ready(state) do
@@ -62,8 +62,11 @@ defmodule Electric.Shapes.Consumer.Materializer do
       raise ~s|Materializer for stack "#{opts.stack_id}" and handle "#{opts.shape_handle}" is not available|
   end
 
-  def get_prev_link_values(opts) do
-    GenServer.call(name(opts), :get_prev_link_values)
+  def get_link_values(opts, tx_offset) do
+    GenServer.call(name(opts), {:get_link_values, tx_offset})
+  catch
+    :exit, _reason ->
+      raise ~s|Materializer for stack "#{opts.stack_id}" and handle "#{opts.shape_handle}" is not available|
   end
 
   def get_all_as_refs(shape, stack_id) when are_deps_filled(shape) do
@@ -102,7 +105,7 @@ defmodule Electric.Shapes.Consumer.Materializer do
         index: %{},
         tag_indices: %{},
         value_counts: %{},
-        prev_value_counts: %{},
+        snapshots: [],
         offset: LogOffset.before_all(),
         subscribed_offset: nil,
         ref: nil,
@@ -151,6 +154,8 @@ defmodule Electric.Shapes.Consumer.Materializer do
       |> decode_json_stream()
       |> apply_changes(state)
 
+    state = store_snapshot(state, state.subscribed_offset.tx_offset)
+
     {:noreply, %{state | offset: offset}}
   end
 
@@ -177,26 +182,27 @@ defmodule Electric.Shapes.Consumer.Materializer do
     {:reply, values, state}
   end
 
-  def handle_call(:get_prev_link_values, _from, %{prev_value_counts: pvc} = state) do
-    {:reply, MapSet.new(Map.keys(pvc)), state}
+  def handle_call({:get_link_values, tx_offset}, _from, state) do
+    values = snapshot_values_for(state.snapshots, tx_offset)
+    {:reply, values, state}
   end
 
   def handle_call(:wait_until_ready, _from, state) do
     {:reply, :ok, state}
   end
 
-  def handle_call({:new_changes, {range_start, range_end}}, _from, state) do
+  def handle_call({:new_changes, {range_start, range_end}, tx_offset}, _from, state) do
     stack_storage = Storage.for_stack(state.stack_id)
     storage = Storage.for_shape(state.shape_handle, stack_storage)
 
     Storage.get_log_stream(range_start, range_end, storage)
     |> decode_json_stream()
-    |> apply_changes_and_notify(state)
+    |> apply_changes_and_notify(state, tx_offset)
     |> then(fn state -> {:reply, :ok, state} end)
   end
 
-  def handle_call({:new_changes, changes}, _from, state) when is_list(changes) do
-    {:reply, :ok, apply_changes_and_notify(changes, state)}
+  def handle_call({:new_changes, changes, tx_offset}, _from, state) when is_list(changes) do
+    {:reply, :ok, apply_changes_and_notify(changes, state, tx_offset)}
   end
 
   def handle_call(:subscribe, {pid, _ref} = _from, state) do
@@ -301,17 +307,39 @@ defmodule Electric.Shapes.Consumer.Materializer do
     Eval.Env.const_to_pg_string(Eval.Env.new(), value, type)
   end
 
-  defp apply_changes_and_notify(changes, state) do
-    state = %{state | prev_value_counts: state.value_counts}
+  defp apply_changes_and_notify(changes, state, tx_offset) do
     {state, events} = apply_changes(changes, state)
+    state = store_snapshot(state, tx_offset)
 
     if events != %{} do
       for pid <- state.subscribers do
-        send(pid, {:materializer_changes, state.shape_handle, events})
+        send(pid, {:materializer_changes, state.shape_handle, events, tx_offset})
       end
     end
 
     state
+  end
+
+  defp store_snapshot(state, tx_offset) do
+    entry = {tx_offset, state.value_counts}
+    snapshots = state.snapshots ++ [entry]
+    snapshots = if length(snapshots) > 2, do: tl(snapshots), else: snapshots
+    %{state | snapshots: snapshots}
+  end
+
+  defp snapshot_values_for([], _tx_offset), do: MapSet.new()
+
+  defp snapshot_values_for(_snapshots, 0), do: MapSet.new()
+
+  defp snapshot_values_for(snapshots, tx_offset) do
+    case Enum.find(snapshots, fn {offset, _} -> offset == tx_offset end) do
+      {_, value_counts} ->
+        MapSet.new(Map.keys(value_counts))
+
+      nil ->
+        {_, value_counts} = List.first(snapshots)
+        MapSet.new(Map.keys(value_counts))
+    end
   end
 
   # A value's count can cross the 0↔1 boundary multiple times in a single batch

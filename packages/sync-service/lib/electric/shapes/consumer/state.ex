@@ -29,7 +29,7 @@ defmodule Electric.Shapes.Consumer.State do
     terminating?: false,
     buffering?: false,
     dnf_context: nil,
-    seen_deps: MapSet.new()
+    dep_lsns: %{}
   ]
 
   @type pg_snapshot() :: SnapshotQuery.pg_snapshot()
@@ -279,12 +279,12 @@ defmodule Electric.Shapes.Consumer.State do
     ]
   end
 
-  def mark_dep_seen(state, dep_handle),
-    do: %{state | seen_deps: MapSet.put(state.seen_deps, dep_handle)}
+  def record_dep_lsn(state, dep_handle, tx_offset),
+    do: %{state | dep_lsns: Map.put(state.dep_lsns, dep_handle, tx_offset)}
 
-  def dep_seen?(state, dep_handle),
-    do: MapSet.member?(state.seen_deps, dep_handle)
+  def get_dep_lsn(state, dep_handle),
+    do: Map.get(state.dep_lsns, dep_handle)
 
-  def reset_seen_deps(state),
-    do: %{state | seen_deps: MapSet.new()}
+  def reset_dep_lsns(state),
+    do: %{state | dep_lsns: %{}}
 end

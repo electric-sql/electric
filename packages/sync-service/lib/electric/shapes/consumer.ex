@@ -274,7 +274,7 @@ defmodule Electric.Shapes.Consumer do
   end
 
   def handle_info(
-        {:materializer_changes, dep_handle, %{move_in: move_in, move_out: move_out}},
+        {:materializer_changes, dep_handle, %{move_in: move_in, move_out: move_out}, tx_offset},
         state
       ) do
     Logger.debug(fn ->
@@ -287,7 +287,8 @@ defmodule Electric.Shapes.Consumer do
     if not tagged_subqueries_enabled? do
       stop_and_clean(state)
     else
-      state = State.mark_dep_seen(state, dep_handle)
+      state = State.reset_dep_lsns(state)
+      state = State.record_dep_lsn(state, dep_handle, tx_offset)
 
       {state, move_in_notification} =
         MoveHandling.process_move_ins(state, dep_handle, move_in)
@@ -503,7 +504,7 @@ defmodule Electric.Shapes.Consumer do
       writer: writer
     } = state
 
-    state = State.reset_seen_deps(state)
+    state = State.reset_dep_lsns(state)
     state = State.remove_completed_move_ins(state, txn)
 
     Logger.debug(fn -> "Txn received in Shapes.Consumer: #{inspect(txn)}" end)
@@ -597,7 +598,7 @@ defmodule Electric.Shapes.Consumer do
         ) :: map()
   defp notify_new_changes(state, changes_or_bounds, latest_log_offset) do
     if state.materializer_subscribed? do
-      Materializer.new_changes(Map.take(state, [:stack_id, :shape_handle]), changes_or_bounds)
+      Materializer.new_changes(Map.take(state, [:stack_id, :shape_handle]), changes_or_bounds, latest_log_offset.tx_offset)
     end
 
     Registry.dispatch(
