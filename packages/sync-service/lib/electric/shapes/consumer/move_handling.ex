@@ -246,7 +246,10 @@ defmodule Electric.Shapes.Consumer.MoveHandling do
     %{state | move_handling_state: move_handling_state}
   end
 
-  defp build_exclusion_context(%State{dnf_context: nil}, _), do: nil
+  defp build_exclusion_context(%State{dnf_context: nil}, _) do
+    raise "build_exclusion_context called with nil dnf_context — " <>
+            "DNF context must be present for shapes with dependencies"
+  end
 
   defp build_exclusion_context(%State{} = state, trigger_dep_handle) do
     used_refs = state.shape.where.used_refs

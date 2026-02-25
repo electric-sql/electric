@@ -417,24 +417,14 @@ defmodule Electric.Shapes.Shape.SubqueryMoves do
          exclusion_context,
          param_idx
        ) do
-    all_subquery? =
-      Enum.all?(conjunction, fn {pos, _polarity} ->
-        case Map.get(decomposition.subexpressions, pos) do
-          %{is_subquery: true} -> true
-          _ -> false
-        end
-      end)
+    used_refs = shape.where.used_refs
 
-    if not all_subquery? do
-      nil
-    else
-      used_refs = shape.where.used_refs
+    {conditions, params, next_idx} =
+      Enum.reduce(conjunction, {[], [], param_idx}, fn {pos, polarity},
+                                                       {conds_acc, params_acc, idx} ->
+        info = Map.get(decomposition.subexpressions, pos)
 
-      {conditions, params, next_idx} =
-        Enum.reduce(conjunction, {[], [], param_idx}, fn {pos, polarity},
-                                                         {conds_acc, params_acc, idx} ->
-          info = Map.get(decomposition.subexpressions, pos)
-
+        if info.is_subquery do
           case extract_sublink_index(info.ast) do
             nil ->
               {conds_acc, params_acc, idx}
@@ -482,14 +472,24 @@ defmodule Electric.Shapes.Shape.SubqueryMoves do
                 {conds_acc, params_acc, idx}
               end
           end
-        end)
+        else
+          sql = SqlGenerator.to_sql(info.ast)
 
-      if conditions == [] do
-        nil
-      else
-        clause = " AND NOT (#{Enum.join(Enum.reverse(conditions), " AND ")})"
-        {clause, params, next_idx}
-      end
+          condition =
+            case polarity do
+              :positive -> sql
+              :negated -> "(NOT #{sql})"
+            end
+
+          {[condition | conds_acc], params_acc, idx}
+        end
+      end)
+
+    if conditions == [] do
+      nil
+    else
+      clause = " AND NOT (#{Enum.join(Enum.reverse(conditions), " AND ")})"
+      {clause, params, next_idx}
     end
   end
 
@@ -564,30 +564,18 @@ defmodule Electric.Shapes.Shape.SubqueryMoves do
   end
 
   # Generate an exclusion clause for a single disjunct (conjunction of literals).
-  # Returns nil if the disjunct contains any non-subquery positions (weaker exclusion
-  # is safe since the client deduplicates via tags).
-  # Otherwise returns " AND NOT (cond1 AND cond2 AND ...)"
+  # Returns " AND NOT (cond1 AND cond2 AND ...)" or nil if no conditions could be built.
   defp generate_disjunct_exclusion(
          conjunction,
          decomposition,
          shape_dependencies,
          comparison_expressions
        ) do
-    all_subquery? =
-      Enum.all?(conjunction, fn {pos, _polarity} ->
-        case Map.get(decomposition.subexpressions, pos) do
-          %{is_subquery: true} -> true
-          _ -> false
-        end
-      end)
+    conditions =
+      Enum.flat_map(conjunction, fn {pos, polarity} ->
+        info = Map.get(decomposition.subexpressions, pos)
 
-    if not all_subquery? do
-      nil
-    else
-      conditions =
-        Enum.flat_map(conjunction, fn {pos, polarity} ->
-          info = Map.get(decomposition.subexpressions, pos)
-
+        if info.is_subquery do
           case extract_sublink_index(info.ast) do
             nil ->
               []
@@ -608,10 +596,17 @@ defmodule Electric.Shapes.Shape.SubqueryMoves do
                 []
               end
           end
-        end)
+        else
+          sql = SqlGenerator.to_sql(info.ast)
 
-      if conditions == [], do: nil, else: " AND NOT (#{Enum.join(conditions, " AND ")})"
-    end
+          case polarity do
+            :positive -> [sql]
+            :negated -> ["(NOT #{sql})"]
+          end
+        end
+      end)
+
+    if conditions == [], do: nil, else: " AND NOT (#{Enum.join(conditions, " AND ")})"
   end
 
   @doc """
