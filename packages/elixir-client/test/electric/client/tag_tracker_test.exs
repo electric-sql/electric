@@ -413,6 +413,139 @@ defmodule Electric.Client.TagTrackerTest do
       assert dp == [[0], [1]]
     end
 
+    test "multi-disjunct: row stays when one disjunct lost, deleted when all lost" do
+      # Tags: ["hash_a/hash_b/", "//hash_c"]
+      # Disjunct 0 covers positions [0, 1], disjunct 1 covers position [2]
+      msg =
+        make_change_msg("key1", :insert,
+          tags: ["hash_a/hash_b/", "//hash_c"],
+          active_conditions: [true, true, true],
+          value: %{"id" => "1", "name" => "User 1"}
+        )
+
+      {ttk, kd, dp} = TagTracker.update_tag_index(%{}, %{}, nil, msg)
+      assert dp == [[0, 1], [2]]
+
+      # Move-out at position 0 → disjunct 0 fails (needs [0,1]), disjunct 1 (pos 2) still satisfied
+      patterns = [%{pos: 0, value: "hash_a"}]
+      timestamp = DateTime.utc_now()
+
+      {deletes, ttk, kd} =
+        TagTracker.generate_synthetic_deletes(ttk, kd, dp, patterns, timestamp)
+
+      assert deletes == []
+      assert kd["key1"].active_conditions == [false, true, true]
+
+      # Move-out at position 2 → disjunct 1 also fails, no disjunct satisfied
+      patterns = [%{pos: 2, value: "hash_c"}]
+
+      {deletes, _ttk, _kd} =
+        TagTracker.generate_synthetic_deletes(ttk, kd, dp, patterns, timestamp)
+
+      assert length(deletes) == 1
+      assert hd(deletes).key == "key1"
+    end
+
+    test "overwrite active_conditions when row is re-sent (move-in overwrite)" do
+      # Insert row with active_conditions [true, false]
+      msg1 =
+        make_change_msg("key1", :insert,
+          tags: ["hash_a/hash_b"],
+          active_conditions: [true, false],
+          value: %{"id" => "1", "name" => "User 1"}
+        )
+
+      {ttk, kd, dp} = TagTracker.update_tag_index(%{}, %{}, nil, msg1)
+      assert kd["key1"].active_conditions == [true, false]
+
+      # Server re-sends the same row with updated active_conditions
+      msg2 =
+        make_change_msg("key1", :update,
+          tags: ["hash_a/hash_b"],
+          active_conditions: [true, true],
+          value: %{"id" => "1", "name" => "User 1 updated"}
+        )
+
+      {ttk, kd, dp} = TagTracker.update_tag_index(ttk, kd, dp, msg2)
+      assert kd["key1"].active_conditions == [true, true]
+
+      # Verify the overwritten active_conditions work correctly:
+      # With single disjunct [0,1], move-out at pos 0 should make row invisible
+      patterns = [%{pos: 0, value: "hash_a"}]
+      timestamp = DateTime.utc_now()
+
+      {deletes, _ttk, _kd} =
+        TagTracker.generate_synthetic_deletes(ttk, kd, dp, patterns, timestamp)
+
+      assert length(deletes) == 1
+      assert hd(deletes).key == "key1"
+    end
+
+    test "delete on empty tag set for simple shapes (no active_conditions)" do
+      # Insert row with a single-position tag but NO active_conditions
+      msg =
+        make_change_msg("key1", :insert,
+          tags: ["hash1"],
+          value: %{"id" => "1", "name" => "User 1"}
+        )
+
+      {ttk, kd, dp} = TagTracker.update_tag_index(%{}, %{}, nil, msg)
+      assert kd["key1"].active_conditions == nil
+
+      # Move-out at position 0 — no active_conditions: tag removed, tag set empty → delete
+      patterns = [%{pos: 0, value: "hash1"}]
+      timestamp = DateTime.utc_now()
+
+      {deletes, new_ttk, new_kd} =
+        TagTracker.generate_synthetic_deletes(ttk, kd, dp, patterns, timestamp)
+
+      assert length(deletes) == 1
+      assert hd(deletes).key == "key1"
+      assert new_kd == %{}
+      assert new_ttk == %{}
+    end
+
+    test "mixed rows: some with active_conditions, some without" do
+      # Row 1: DNF shape (with active_conditions)
+      msg1 =
+        make_change_msg("key1", :insert,
+          tags: ["hash_a/", "/hash_b"],
+          active_conditions: [true, true],
+          value: %{"id" => "1", "name" => "DNF User"}
+        )
+
+      # Row 2: simple shape (single-position tag, no active_conditions)
+      msg2 =
+        make_change_msg("key2", :insert,
+          tags: ["hash_a"],
+          value: %{"id" => "2", "name" => "Simple User"}
+        )
+
+      {ttk, kd, dp} = TagTracker.update_tag_index(%{}, %{}, nil, msg1)
+      {ttk, kd, dp} = TagTracker.update_tag_index(ttk, kd, dp, msg2)
+
+      assert Map.has_key?(kd, "key1")
+      assert Map.has_key?(kd, "key2")
+
+      # Move-out at position 0 with value hash_a
+      # DNF row: disjunct 0 ([0]) fails, but disjunct 1 ([1]) still satisfied → stays
+      # Simple row: tag "hash_a" at pos 0 removed, tag set empty → deleted
+      patterns = [%{pos: 0, value: "hash_a"}]
+      timestamp = DateTime.utc_now()
+
+      {deletes, _ttk, new_kd} =
+        TagTracker.generate_synthetic_deletes(ttk, kd, dp, patterns, timestamp)
+
+      # DNF row stays, simple row deleted
+      deleted_keys = Enum.map(deletes, & &1.key) |> MapSet.new()
+      assert MapSet.member?(deleted_keys, "key2")
+      refute MapSet.member?(deleted_keys, "key1")
+
+      assert Map.has_key?(new_kd, "key1")
+      assert new_kd["key1"].active_conditions == [false, true]
+      refute Map.has_key?(new_kd, "key2")
+    end
+
     test "disjunct_positions derived once and reused across keys" do
       msg1 =
         make_change_msg("key1", :insert,
