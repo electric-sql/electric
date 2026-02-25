@@ -974,7 +974,7 @@ defmodule Electric.Shapes.ApiTest do
             {response, response_body(response)}
           end)
 
-        assert_receive {:trace, _, :call, {Api, :hold_until_change, _}}
+        assert_receive {:trace, _, :call, {Api, :hold_until_change, _}}, @receive_timeout
 
         # Simulate new changes arriving via Registry.
         # Without ensure_subscribed, this dispatch would find no registered
