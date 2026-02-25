@@ -400,6 +400,21 @@ defmodule Electric.Shapes.Api do
     end
   end
 
+  # Ensure the request process is subscribed to shape events. This is needed
+  # for the out-of-bounds handler which calls handle_live_request() regardless
+  # of the `live` param. Without a subscription, the process would never receive
+  # :new_changes from the consumer and would be stuck until the timeout.
+  defp ensure_subscribed(%Request{new_changes_ref: ref} = request) when not is_nil(ref) do
+    request
+  end
+
+  defp ensure_subscribed(%Request{} = request) do
+    %{handle: handle, api: %{stack_id: stack_id}} = request
+    ref = Electric.StackSupervisor.subscribe_to_shape_events(stack_id, handle)
+    Logger.debug("Client #{inspect(self())} is registered for changes to #{handle}")
+    %{request | new_changes_pid: self(), new_changes_ref: ref}
+  end
+
   defp determine_global_last_seen_lsn(%Request{} = request) do
     offset =
       request.api.stack_id
@@ -597,13 +612,16 @@ defmodule Electric.Shapes.Api do
     }
   end
 
-  defp do_serve_shape_log(%Request{new_changes_ref: ref} = request)
+  defp do_serve_shape_log(%Request{} = request)
        when is_out_of_bounds(request) do
     # treat out of bounds requests like live requests with a
     # shorter timeout before failing them, as if the client happened
     # to be slightly ahead because of a restart or handover the
     # offset they have seen should show up shortly, otherwise we
     # assume it is an actually invalid out of bounds request
+    request = ensure_subscribed(request)
+    %{new_changes_ref: ref} = request
+
     Process.send_after(
       self(),
       {ref, :out_of_bounds_timeout},
