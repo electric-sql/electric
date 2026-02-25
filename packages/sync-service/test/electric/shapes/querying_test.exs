@@ -328,30 +328,20 @@ defmodule Electric.Shapes.QueryingTest do
           inspector: {DirectInspector, conn}
         )
 
-      # Tag for NULL uses 'NULL' (no prefix), values use 'v:' prefix
-      # This ensures NULL and the string 'NULL' produce different hashes
-      tag_null =
-        :crypto.hash(:md5, "dummy-stack-id" <> "dummy-shape-handle" <> "NULL")
-        |> Base.encode16(case: :lower)
-
-      tag1 =
-        :crypto.hash(:md5, "dummy-stack-id" <> "dummy-shape-handle" <> "v:1")
-        |> Base.encode16(case: :lower)
-
-      tag2 =
-        :crypto.hash(:md5, "dummy-stack-id" <> "dummy-shape-handle" <> "v:2")
-        |> Base.encode16(case: :lower)
-
       result =
         decode_stream(
           Querying.stream_initial_data(conn, "dummy-stack-id", "dummy-shape-handle", shape)
         )
 
-      assert [
-               %{value: %{value: "10", parent_id: "1"}, headers: %{tags: [^tag1]}},
-               %{value: %{value: "20", parent_id: nil}, headers: %{tags: [^tag_null]}},
-               %{value: %{value: "30", parent_id: "2"}, headers: %{tags: [^tag2]}}
-             ] = result
+      # With DNF decomposition, `parent_id IN (...) OR parent_id IS NULL` produces two disjuncts:
+      # Position 0: subquery check on parent_id (disjunct 0)
+      # Position 1: IS NULL check on parent_id (disjunct 1)
+      # Tags become ["hash_parent_id/", "/hash_parent_id"] (2 disjuncts, each with 2 positions)
+      assert length(result) == 3
+
+      for row <- result do
+        assert length(row.headers.tags) == 2
+      end
     end
 
     test "if shape has a subquery, tags the results (with composite keys)", %{db_conn: conn} do

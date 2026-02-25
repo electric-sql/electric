@@ -3,6 +3,8 @@ defmodule Electric.Shapes.Querying do
   alias Electric.Utils
   alias Electric.Shapes.Shape
   alias Electric.Shapes.Shape.SubqueryMoves
+  alias Electric.Shapes.Consumer.DnfContext
+  alias Electric.Replication.Eval.SqlGenerator
   alias Electric.Telemetry.OpenTelemetry
 
   @value_prefix SubqueryMoves.value_prefix()
@@ -11,17 +13,23 @@ defmodule Electric.Shapes.Querying do
   def query_move_in(conn, stack_id, shape_handle, shape, {where, params}) do
     table = Utils.relation_to_sql(shape.root_table)
 
+    dnf_context = DnfContext.from_shape(shape)
+
     {json_like_select, _} =
-      json_like_select(shape, %{"is_move_in" => true}, stack_id, shape_handle)
+      json_like_select(shape, %{"is_move_in" => true}, stack_id, shape_handle, dnf_context)
 
     key_select = key_select(shape)
-    tag_select = make_tags(shape, stack_id, shape_handle) |> Enum.join(", ")
+
+    # Use per-position condition_hashes for binary snapshot storage and filtering.
+    # Wire-format tags (slash-delimited) are still embedded in the JSON headers.
+    condition_hashes_select =
+      make_condition_hashes_select(shape, stack_id, shape_handle) |> Enum.join(", ")
 
     query =
       Postgrex.prepare!(
         conn,
         table,
-        ~s|SELECT #{key_select}, ARRAY[#{tag_select}]::text[], #{json_like_select} FROM #{table} WHERE #{where}|
+        ~s|SELECT #{key_select}, ARRAY[#{condition_hashes_select}]::text[], #{json_like_select} FROM #{table} WHERE #{where}|
       )
 
     Postgrex.stream(conn, query, params)
@@ -120,7 +128,8 @@ defmodule Electric.Shapes.Querying do
       where =
         if not is_nil(shape.where), do: " WHERE " <> shape.where.query, else: ""
 
-      {json_like_select, params} = json_like_select(shape, [], stack_id, shape_handle)
+      dnf_context = DnfContext.from_shape(shape)
+      {json_like_select, params} = json_like_select(shape, [], stack_id, shape_handle, dnf_context)
 
       query =
         Postgrex.prepare!(conn, table, ~s|SELECT #{json_like_select} FROM #{table} #{where}|)
@@ -149,10 +158,15 @@ defmodule Electric.Shapes.Querying do
   end
 
   # Converts a tag structure to something PG select can fill, but returns a list of separate strings for each tag
-  # - it's up to the caller to interpolate them into the query correctly
+  # - it's up to the caller to interpolate them into the query correctly.
+  # For DNF shapes, each disjunct pattern may contain nil entries for positions not in that disjunct.
+  # These become empty strings in the slash-delimited wire format.
   defp make_tags(%Shape{tag_structure: tag_structure}, stack_id, shape_handle) do
     Enum.map(tag_structure, fn pattern ->
       Enum.map(pattern, fn
+        nil ->
+          "''"
+
         column_name when is_binary(column_name) ->
           col = pg_cast_column_to_text(column_name)
           namespaced = pg_namespace_value_sql(col)
@@ -171,6 +185,8 @@ defmodule Electric.Shapes.Querying do
     end)
   end
 
+  defp json_like_select(shape, additional_headers, stack_id, shape_handle, dnf_context \\ nil)
+
   defp json_like_select(
          %Shape{
            root_table: root_table,
@@ -178,12 +194,17 @@ defmodule Electric.Shapes.Querying do
          } = shape,
          additional_headers,
          stack_id,
-         shape_handle
+         shape_handle,
+         dnf_context
        ) do
     tags = make_tags(shape, stack_id, shape_handle)
     key_part = build_key_part(shape)
     value_part = build_value_part(columns)
-    headers_part = build_headers_part(root_table, additional_headers, tags)
+
+    active_conditions_sql =
+      build_active_conditions_sql(dnf_context, shape)
+
+    headers_part = build_headers_part(root_table, additional_headers, tags, active_conditions_sql)
 
     # We're building a JSON string that looks like this:
     #
@@ -203,10 +224,10 @@ defmodule Electric.Shapes.Querying do
     {query, []}
   end
 
-  defp build_headers_part(rel, headers, tags) when is_list(headers),
-    do: build_headers_part(rel, Map.new(headers), tags)
+  defp build_headers_part(rel, headers, tags, active_conditions_sql) when is_list(headers),
+    do: build_headers_part(rel, Map.new(headers), tags, active_conditions_sql)
 
-  defp build_headers_part({relation, table}, additional_headers, tags) do
+  defp build_headers_part({relation, table}, additional_headers, tags, active_conditions_sql) do
     headers = %{operation: "insert", relation: [relation, table]}
 
     headers =
@@ -221,6 +242,21 @@ defmodule Electric.Shapes.Querying do
 
         tags = Enum.join(tags, ~s[ || '","' || ])
         ~s/{"tags":["' || #{tags} || '"],/ <> json
+      else
+        headers
+      end
+
+    # Inject active_conditions into the JSON if present.
+    # `headers` is content wrapped by the template below as '#{headers}',
+    # so it must NOT end with a trailing ' — the template provides it.
+    headers =
+      if active_conditions_sql do
+        # Insert before the closing }
+        # headers looks like: ...,"is_move_in":true}
+        # We want:            ...,"is_move_in":true,"active_conditions":' || array_sql || '}
+        # (the outer template adds the closing ' to form the SQL literal '}'.)
+        {prefix, "}"} = String.split_at(headers, -1)
+        prefix <> ~s(,"active_conditions":' || #{active_conditions_sql} || '})
       else
         headers
       end
@@ -283,5 +319,105 @@ defmodule Electric.Shapes.Querying do
   # the same input values, or Elixir-side and SQL-side tag computation will diverge.
   defp pg_namespace_value_sql(col_sql) do
     ~s[CASE WHEN #{col_sql} IS NULL THEN '#{@null_sentinel}' ELSE '#{@value_prefix}' || #{col_sql} END]
+  end
+
+  # Build a SQL expression that produces a JSON array of booleans for active_conditions.
+  # Returns nil if no dnf_context or no positions.
+  defp build_active_conditions_sql(nil, _shape), do: nil
+
+  defp build_active_conditions_sql(
+         %DnfContext{
+           decomposition: %{subexpressions: subexpressions, position_count: position_count}
+         },
+         shape
+       )
+       when position_count > 0 do
+    conditions =
+      Enum.map(0..(position_count - 1)//1, fn pos ->
+        subexpr = Map.fetch!(subexpressions, pos)
+
+        sql =
+          if subexpr.is_subquery do
+            generate_subquery_condition_sql(
+              subexpr,
+              shape.subquery_comparison_expressions,
+              shape.shape_dependencies
+            )
+          else
+            SqlGenerator.to_sql(subexpr.ast)
+          end
+
+        # For negated positions, wrap in NOT
+        if subexpr.negated, do: "(NOT #{sql})", else: sql
+      end)
+
+    # Produce JSON array like [true,false,true]
+    # Use array_to_json to convert boolean[] to JSON text
+    conditions_sql = Enum.join(conditions, ", ")
+    "array_to_json(ARRAY[#{conditions_sql}]::boolean[])::text"
+  end
+
+  defp build_active_conditions_sql(_, _shape), do: nil
+
+  # Generate SQL for a subquery condition, e.g.:
+  #   ("parent_id" IN (SELECT id FROM parent WHERE category = 'a'))
+  defp generate_subquery_condition_sql(subexpr, comparison_expressions, shape_dependencies) do
+    sublink_index = SubqueryMoves.extract_sublink_index(subexpr.ast)
+    dep_shape = if sublink_index, do: Enum.at(shape_dependencies, sublink_index)
+
+    if dep_shape do
+      subquery_section = rebuild_subquery_section(dep_shape)
+      column_sql = get_column_sql_for_subexpr(comparison_expressions, sublink_index)
+      ~s[(#{column_sql} #{subquery_section})]
+    else
+      raise "Could not resolve dependency shape for sublink index #{inspect(sublink_index)}"
+    end
+  end
+
+  defp rebuild_subquery_section(dep_shape) do
+    base =
+      ~s|IN (SELECT #{Enum.join(dep_shape.explicitly_selected_columns, ", ")} FROM #{Utils.relation_to_sql(dep_shape.root_table)}|
+
+    where = if dep_shape.where, do: " WHERE #{dep_shape.where.query}", else: ""
+    base <> where <> ")"
+  end
+
+  defp get_column_sql_for_subexpr(comparison_expressions, dep_index) do
+    key = ["$sublink", "#{dep_index}"]
+
+    case Map.get(comparison_expressions, key) do
+      nil -> raise "No comparison expression found for sublink index #{dep_index}"
+      %Electric.Replication.Eval.Expr{eval: ast} -> SqlGenerator.to_sql(ast)
+    end
+  end
+
+  # Build per-position condition hash SQL for move-in snapshot binary storage.
+  # Produces one MD5 hash per DNF position, using the same hashing formula as
+  # make_tags/make_move_out_pattern so that moved_out_tags filtering matches.
+  defp make_condition_hashes_select(%Shape{tag_structure: tag_structure}, stack_id, shape_handle) do
+    position_count = length(hd(tag_structure))
+
+    Enum.map(0..(position_count - 1)//1, fn pos ->
+      # Find the column spec for this position from any disjunct that has it
+      col_spec = Enum.find_value(tag_structure, fn disjunct -> Enum.at(disjunct, pos) end)
+      make_position_hash_sql(col_spec, stack_id, shape_handle)
+    end)
+  end
+
+  defp make_position_hash_sql(column_name, stack_id, shape_handle)
+       when is_binary(column_name) do
+    col = pg_cast_column_to_text(column_name)
+    namespaced = pg_namespace_value_sql(col)
+    ~s[md5('#{stack_id}#{shape_handle}' || #{namespaced})]
+  end
+
+  defp make_position_hash_sql({:hash_together, columns}, stack_id, shape_handle) do
+    column_parts =
+      Enum.map(columns, fn col_name ->
+        col = pg_cast_column_to_text(col_name)
+        ~s['#{col_name}:' || #{pg_namespace_value_sql(col)}]
+      end)
+
+    ~s[md5('#{stack_id}#{shape_handle}' || #{Enum.join(column_parts, " || ")})]
   end
 end

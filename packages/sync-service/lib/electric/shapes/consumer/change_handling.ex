@@ -61,7 +61,8 @@ defmodule Electric.Shapes.Consumer.ChangeHandling do
       case Shape.convert_change(shape, change,
              stack_id: stack_id,
              shape_handle: shape_handle,
-             extra_refs: ctx.extra_refs
+             extra_refs: ctx.extra_refs,
+             dnf_context: state.dnf_context
            ) do
         [] ->
           do_process_changes(rest, state, ctx, acc, count)
