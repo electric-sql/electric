@@ -354,6 +354,10 @@ defmodule Electric.Shapes.Api.Response do
     Plug.Conn.put_resp_header(conn, "etag", etag(response))
   end
 
+  defp put_has_data_header(conn, %__MODULE__{status: status}) when status >= 400 do
+    conn
+  end
+
   defp put_has_data_header(conn, %__MODULE__{no_changes: true}) do
     Plug.Conn.put_resp_header(conn, @electric_has_data_header, "false")
   end
