@@ -171,7 +171,8 @@ const stream = new ShapeStream({
 ```
 
 Complex WHERE clauses with many values hit HTTP 414 (URI Too Long). Use POST
-with JSON body. In Electric 2.0, GET for subsets will be deprecated.
+with JSON body. GET for subset snapshots is planned for deprecation
+(see [troubleshooting docs](https://electric-sql.com/docs/guides/troubleshooting#414-request-uri-too-long)).
 
 Source: typescript-client CHANGELOG.md v1.5.0
 

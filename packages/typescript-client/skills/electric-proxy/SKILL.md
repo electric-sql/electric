@@ -114,7 +114,8 @@ export async function GET(request: NextRequest) {
 
   const originUrl = prepareElectricUrl(request.url)
   originUrl.searchParams.set('table', 'todos')
-  originUrl.searchParams.set('where', `user_id = '${session.user.id}'`)
+  originUrl.searchParams.set('where', 'user_id = $1')
+  originUrl.searchParams.set('params', JSON.stringify([session.user.id]))
   return proxyElectricRequest(originUrl)
 }
 ```
@@ -194,8 +195,15 @@ headers.delete('content-length')
 return new Response(response.body, { headers })
 ```
 
-`electric-offset`, `electric-handle`, and `electric-schema` must be forwarded.
-Stripping them throws `MissingHeadersError` in the client.
+These headers must be forwarded to the client:
+
+- `electric-offset` — next position in the shape log
+- `electric-handle` — shape identifier for subsequent requests
+- `electric-schema` — JSON schema (first request only)
+- `cache-control`, `etag` — caching directives for CDN/browser
+
+Stripping the `electric-*` headers throws `MissingHeadersError` in the client.
+Stripping cache headers breaks request collapsing and CDN efficiency.
 
 Source: packages/typescript-client/src/fetch.ts
 

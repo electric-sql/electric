@@ -60,9 +60,13 @@ export async function GET(request: Request) {
 
   origin.searchParams.set('table', 'todos')
 
+  // Electric Cloud: include source_id + secret
   if (process.env.ELECTRIC_SOURCE_ID) {
     origin.searchParams.set('source_id', process.env.ELECTRIC_SOURCE_ID)
-    origin.searchParams.set('secret', process.env.ELECTRIC_SECRET!)
+  }
+  // Auth: secret is required for both Cloud and self-hosted production
+  if (process.env.ELECTRIC_SECRET) {
+    origin.searchParams.set('secret', process.env.ELECTRIC_SECRET)
   }
 
   const res = await fetch(origin)
@@ -95,10 +99,18 @@ shape.subscribe(({ rows }) => {
 ### 4. Environment
 
 ```bash
-# .env
-ELECTRIC_URL=http://localhost:3000        # or https://api.electric-sql.cloud
-ELECTRIC_SOURCE_ID=your-source-id         # Cloud only
-ELECTRIC_SECRET=your-secret-keep-server   # Cloud only
+# .env — Electric Cloud
+ELECTRIC_URL=https://api.electric-sql.cloud
+ELECTRIC_SOURCE_ID=your-source-id         # identifies your Cloud source
+ELECTRIC_SECRET=your-secret-keep-server   # authenticates upstream requests
+
+# .env — Self-hosted (production)
+ELECTRIC_URL=http://localhost:3000
+ELECTRIC_SECRET=your-secret-keep-server   # required since v1.0
+
+# .env — Self-hosted (dev only)
+ELECTRIC_URL=http://localhost:3000
+# No secret needed when ELECTRIC_INSECURE=true on the server
 ```
 
 ## Core Patterns

@@ -173,7 +173,8 @@ export async function GET(request: Request) {
 
   const originUrl = prepareElectricUrl(request.url)
   originUrl.searchParams.set('table', 'todos')
-  originUrl.searchParams.set('where', `user_id = '${session.user.id}'`)
+  originUrl.searchParams.set('where', 'user_id = $1')
+  originUrl.searchParams.set('params', JSON.stringify([session.user.id]))
 
   return proxyElectricRequest(originUrl)
 }

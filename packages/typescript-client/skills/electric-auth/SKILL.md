@@ -179,12 +179,20 @@ return new Response(response.body, { headers })
 Correct:
 
 ```typescript
+// Bearer token auth:
 headers.set('Vary', 'Authorization')
+// Cookie/session auth:
+headers.set('Vary', 'Cookie')
+
+// For CDN-fronted deployments, also consider:
+headers.set('Cache-Control', 'private, no-store')
 return new Response(response.body, { headers })
 ```
 
-Without `Vary: Authorization`, CDN or browser caches serve one user's shape
-response to another user. This leaks data between sessions.
+Without `Vary`, CDN or browser caches serve one user's shape response to another
+user. Use `Vary: Authorization` for bearer tokens, `Vary: Cookie` for session
+cookies. For authenticated shapes behind a CDN, add `Cache-Control: private,
+no-store` to prevent the CDN from caching user-scoped data.
 
 Source: website/docs/guides/auth.md
 
