@@ -263,6 +263,46 @@ defmodule Electric.Integration.OracleViewTest do
     end
   end
 
+  describe "exclusion clause vs change_will_be_covered_by_move_in" do
+    test "row value change + subquery dep change in same txn with OR clause", ctx do
+      # WHERE has two disjuncts:
+      #   disjunct 0: level_3_id IN (SELECT id FROM level_3 WHERE active = false)  [subquery]
+      #   disjunct 1: value LIKE '%1%'  [direct column condition]
+      #
+      # Initial state: l3-1 has active=true, l4-1 has level_3_id=l3-1, value='v0'
+      #   → l4-1 matches neither disjunct, not in shape
+      #
+      # Single transaction changes both:
+      #   1. l3-1.active → false  (triggers move-in for disjunct 0)
+      #   2. l4-1.value → 'v100'  (now matches disjunct 1: contains '1')
+      #
+      # Bug: move-in query has AND NOT (value LIKE '%1%') exclusion for disjunct 1,
+      #      which filters out l4-1. Meanwhile WAL change for l4-1 is skipped by
+      #      change_will_be_covered_by_move_in? (pending move-in for l3-1 values).
+      #      Both sides defer to the other — l4-1 is lost.
+      shapes = [
+        %{
+          name: "subquery_or_value",
+          table: "level_4",
+          where:
+            "(level_3_id IN (SELECT id FROM level_3 WHERE active = false)) OR (value LIKE '%1%')",
+          columns: ["id", "level_3_id", "value"],
+          pk: ["id"],
+          optimized: false
+        }
+      ]
+
+      mutations = [
+        [
+          %{name: "deactivate_l3_1", sql: "UPDATE level_3 SET active = false WHERE id = 'l3-1'"},
+          %{name: "update_l4_1_value", sql: "UPDATE level_4 SET value = 'v100' WHERE id = 'l4-1'"}
+        ]
+      ]
+
+      test_against_oracle(ctx, shapes, mutations)
+    end
+  end
+
   describe "multiple parallel shapes" do
     test "same mutation affects different shapes differently", ctx do
       shapes = [
