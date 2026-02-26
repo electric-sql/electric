@@ -1,5 +1,14 @@
 # @core/sync-service
 
+## 1.4.8
+
+### Patch Changes
+
+- 9c4ace0: Fix out-of-bounds request handler to subscribe to shape events before entering the live request wait loop. Without the subscription, non-live requests that hit the out-of-bounds guard would hang for the full timeout duration (long_poll_timeout/2) instead of recovering when the expected offset becomes available.
+- 8691a61: Make gathering of SQLite memory usage metrics optional and default to off to prevent instability in some environments
+- d14f504: Handle missing memstat SQLite extension gracefully instead of crashing on startup. When the extension is unavailable, memory statistics are simply omitted from the periodic stats collection.
+- 1d1f793: Add `electric-has-data` response header to distinguish data-bearing responses from control-only responses (e.g. long-poll timeouts, `offset=now` requests).
+
 ## 1.4.7
 
 ### Patch Changes

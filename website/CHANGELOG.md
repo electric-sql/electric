@@ -1,5 +1,11 @@
 # @electric-sql/docs
 
+## 0.0.6
+
+### Patch Changes
+
+- 8691a61: Make gathering of SQLite memory usage metrics optional and default to off to prevent instability in some environments
+
 ## 0.0.5
 
 ### Patch Changes
