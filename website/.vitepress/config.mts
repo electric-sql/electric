@@ -83,7 +83,7 @@ export default defineConfig({
   lang: 'en',
   title: 'Electric',
   description:
-    "Build fast, modern, collaborative apps without changing your stack. Using Electric's composable sync primitives, including Postgres Sync, Durable Streams, TanStack DB and PGlite.",
+    "Electric provides the data primitives and infra to build collaborative, multi-agent systems. Including Postgres Sync, Durable Streams, TanStack DB and PGlite.",
   appearance: 'force-dark',
   base: '/',
   cleanUrls: true,
