@@ -41,31 +41,47 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Statistics do
     Logger.metadata(stack_id: stack_id)
     Electric.Telemetry.Sentry.set_tags_context(stack_id: stack_id)
 
-    {:ok, %{stack_id: stack_id, page_size: 0, memstat_available?: false, stats: %{}},
-     {:continue, :initialize_stats}}
+    enable_memory_stats? = Keyword.get(args, :enable_memory_stats?, false)
+
+    {:ok,
+     %{
+       stack_id: stack_id,
+       page_size: 0,
+       memstat_available?: false,
+       stats: %{}
+     }, {:continue, {:initialize_stats, enable_memory_stats?}}}
   end
 
   @impl GenServer
-  def handle_continue(:initialize_stats, state) do
+  def handle_continue({:initialize_stats, enable_memory_stats?}, state) do
     %{stack_id: stack_id} = state
 
     {:ok, {page_size, memstat_available?}} =
       ShapeDb.Connection.checkout_write!(stack_id, :read_stats, fn %{conn: conn} ->
         memstat_available? =
-          case ShapeDb.Connection.enable_extension(conn, "memstat") do
-            :ok ->
-              true
+          if enable_memory_stats? do
+            # don't even try to load the extension unless enabled -- loading the extension
+            # may be the cause of segfaults we've seen in prod
+            case ShapeDb.Connection.enable_extension(conn, "memstat") do
+              :ok ->
+                Logger.info("SQLite memory statistics enabled")
 
-            {:error, reason} ->
-              Logger.warning(
-                "Failed to load memstat SQLite extension: #{inspect(reason)}. " <>
-                  "Memory statistics will not be available."
-              )
+                true
 
-              false
+              {:error, reason} ->
+                Logger.warning(
+                  "Failed to load memstat SQLite extension: #{inspect(reason)}. " <>
+                    "Memory statistics will not be available."
+                )
+
+                false
+            end
+          else
+            false
           end
 
         {:ok, [page_size]} = ShapeDb.Connection.fetch_one(conn, "PRAGMA page_size", [])
+
         {:ok, {page_size, memstat_available?}}
       end)
 

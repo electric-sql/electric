@@ -164,7 +164,8 @@ defmodule Electric.StackSupervisor do
                      storage_dir: [type: :string, required: true],
                      exclusive_mode: [type: :boolean],
                      synchronous: [type: :string],
-                     cache_size: [type: :integer]
+                     cache_size: [type: :integer],
+                     enable_memory_stats?: [type: :boolean]
                    ]
                  ],
                  telemetry_opts: [type: :keyword_list, default: []],

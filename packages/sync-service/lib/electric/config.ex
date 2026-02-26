@@ -112,7 +112,8 @@ defmodule Electric.Config do
     # TODO: fix defaults to synchronous=NORMAL and shape_db_cache_size=2048
     shape_db_synchronous:
       Electric.ShapeCache.ShapeStatus.ShapeDb.Connection.default!(:synchronous),
-    shape_db_cache_size: Electric.ShapeCache.ShapeStatus.ShapeDb.Connection.default!(:cache_size)
+    shape_db_cache_size: Electric.ShapeCache.ShapeStatus.ShapeDb.Connection.default!(:cache_size),
+    shape_db_enable_memory_stats: false
   ]
 
   @installation_id_key "electric_installation_id"

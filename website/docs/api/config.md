@@ -354,6 +354,17 @@ The value of the [`cache_size` PRAGMA](https://sqlite.org/pragma.html#pragma_cac
 
 </EnvVarConfig>
 
+### ELECTRIC_SHAPE_DB_ENABLE_MEMORY_STATS
+
+<EnvVarConfig
+    name="ELECTRIC_SHAPE_DB_ENABLE_MEMORY_STATS"
+    defaultValue="false"
+    example="true">
+
+Set `ELECTRIC_SHAPE_DB_ENABLE_MEMORY_STATS=true` to enable collection of memory usage statistics for the SQLite shape db system. Requires the loading of a pre-compiled extension so may cause issues on some architectures and is disabled by default for stability reasons.
+
+</EnvVarConfig>
+
 ## Feature Flags
 
 Feature flags enable experimental or advanced features that are not yet enabled by default in production.
