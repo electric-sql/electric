@@ -88,7 +88,8 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Statistics do
        page_size: 0,
        stats: %__MODULE__{},
        connections: 0,
-       use_pool?: Keyword.get(args, :exclusive_mode, false),
+       first_run?: true,
+       exclusive_mode?: Keyword.get(args, :exclusive_mode, false),
        enable_stats?: enable_stats?,
        dbstat_available?: true,
        enable_memory_stats?: enable_memory_stats?,
@@ -157,7 +158,12 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Statistics do
     state
     |> open_connection(fn conn ->
       with {:ok, memstat_available?, dbstat_available?, page_size} <-
-             initialize_connection(conn, state.enable_memory_stats?, state.dbstat_available?) do
+             initialize_connection(
+               conn,
+               state.first_run?,
+               state.enable_memory_stats?,
+               state.dbstat_available?
+             ) do
         if dbstat_available? do
           with {:ok, stats} <-
                  Connection.fetch_all(
@@ -177,21 +183,37 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Statistics do
         %{state | stats: stats}
 
       {:error, reason} ->
-        Logger.warning(["Failed to read statistics: ", inspect(reason)])
+        Logger.warning(["Failed to read SQLite statistics: ", inspect(reason)])
+        state
+
+      :error ->
+        Logger.warning("Failed to read SQLite statistics")
         state
     end
+    |> then(fn
+      %{first_run?: true} = state ->
+        %{state | first_run?: false}
+
+      state ->
+        state
+    end)
     |> tap(fn state ->
       Process.send_after(self(), :read_stats, state.measurement_period)
     end)
   end
 
-  defp open_connection(%{use_pool?: true} = state, fun) do
+  # In exclusive_mode we *must* use a pooled connection because the db maybe
+  # in-memory. This is ok because in this mode we never close the single
+  # connection instance so using it won't prevent closing idle connections.
+  defp open_connection(%{exclusive_mode?: true} = state, fun) do
     Connection.checkout_write!(state.stack_id, :read_stats, fn %{conn: conn} ->
       fun.(conn)
     end)
   end
 
-  defp open_connection(%{use_pool?: false, pool_opts: pool_opts} = _state, fun) do
+  # read the stats over a completely new connection to avoid waking a pool
+  # worker and preventing it from reaching the idle timeout
+  defp open_connection(%{exclusive_mode?: false, pool_opts: pool_opts} = _state, fun) do
     with {:ok, conn} <- Connection.open(pool_opts) do
       try do
         fun.(conn)
@@ -201,11 +223,12 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Statistics do
     end
   end
 
-  defp initialize_connection(conn, enable_memory_stats?, dbstat_available?) do
+  defp initialize_connection(conn, first_run?, enable_memory_stats?, dbstat_available?) do
     memstat_available? =
       if enable_memory_stats? do
         case Connection.enable_extension(conn, "memstat") do
           :ok ->
+            if first_run?, do: Logger.info("SQLite memory statistics enabled")
             true
 
           {:error, reason} ->

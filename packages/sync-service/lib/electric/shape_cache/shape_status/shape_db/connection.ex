@@ -220,20 +220,22 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
   end
 
   @impl NimblePool
-  def handle_ping(%__MODULE__{} = state, pool_state) do
-    Logger.debug(fn -> ["Closing idle SQLite ", to_string(state.mode), " connection"] end)
-
+  def handle_ping(%__MODULE__{} = _conn, _pool_state) do
     # the idle timeout is only enabled in non-exclusive mode, so we're free
     # to close all the connections, including write.
-
-    :ok = close(state)
-    :ok = Statistics.worker_stop(Keyword.get(pool_state, :stack_id))
-
     {:remove, :idle}
   end
 
-  def shrink_memory(conn) when is_raw_connection(conn) do
-    execute(conn, "PRAGMA shrink_memory")
+  @impl NimblePool
+  def terminate_worker(reason, conn, pool_state) do
+    Logger.debug(fn ->
+      ["Closing SQLite ", to_string(conn.mode), " connection for reason: ", inspect(reason)]
+    end)
+
+    _ = close(conn)
+    :ok = Statistics.worker_stop(Keyword.get(pool_state, :stack_id))
+
+    {:ok, pool_state}
   end
 
   @max_recovery_attempts 2
