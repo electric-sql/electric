@@ -635,15 +635,13 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDbTest do
   end
 
   describe "pool scaling" do
-    @tag shape_db_opts: [connection_idle_timeout: 10, statistics_collection_period: 10]
+    @tag shape_db_opts: [connection_idle_timeout: 5, statistics_collection_period: 5]
     test "scales to 0 if nothing is active", ctx do
       ShapeDb.Connection.checkout!(ctx.stack_id, :test, fn _conn ->
-        Process.sleep(1)
-        {:ok, %{connections: n}} = ShapeDb.statistics(ctx.stack_id)
-        assert n == 1
+        assert :ok = assert_stats_match(ctx, connections: 1)
       end)
 
-      assert :ok = assert_zero_memory(ctx)
+      assert :ok = assert_stats_match(ctx, connections: 0, total_memory: 0)
     end
 
     @tag shape_db_opts: [
@@ -653,30 +651,26 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDbTest do
          ]
     test "does not scale the pool in exclusive mode", ctx do
       ShapeDb.Connection.checkout!(ctx.stack_id, :test, fn _conn ->
-        Process.sleep(1)
-        {:ok, %{connections: n}} = ShapeDb.statistics(ctx.stack_id)
-        assert n == 1
+        assert :ok = assert_stats_match(ctx, connections: 1)
       end)
 
-      :error = assert_zero_memory(ctx)
+      assert :error = assert_stats_match(ctx, connections: 0, total_memory: 0)
     end
 
-    defp assert_zero_memory(ctx, repeats \\ 10)
+    defp assert_stats_match(ctx, match, repeats \\ 10)
 
-    defp assert_zero_memory(_ctx, 0) do
+    defp assert_stats_match(_ctx, _match, 0) do
       :error
     end
 
-    defp assert_zero_memory(ctx, repeats) do
+    defp assert_stats_match(ctx, match, repeats) do
       {:ok, stats} = ShapeDb.statistics(ctx.stack_id)
 
-      case stats do
-        %{connections: 0, total_memory: 0} ->
-          :ok
-
-        _ ->
-          Process.sleep(10)
-          assert_zero_memory(ctx, repeats - 1)
+      if Enum.all?(match, fn {k, v} -> stats[k] == v end) do
+        :ok
+      else
+        Process.sleep(10)
+        assert_stats_match(ctx, match, repeats - 1)
       end
     end
   end
