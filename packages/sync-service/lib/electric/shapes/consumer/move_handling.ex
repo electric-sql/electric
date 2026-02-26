@@ -201,6 +201,11 @@ defmodule Electric.Shapes.Consumer.MoveHandling do
         exclusion_context
       )
 
+    # Compute which disjuncts the move-in query excludes (non-containing disjuncts).
+    # These are stored with the pending move-in so that change_will_be_covered_by_move_in?
+    # can detect when a record would be filtered out by the move-in's exclusion clauses.
+    excluded_disjuncts = compute_excluded_disjuncts(state, dep_handle)
+
     storage = state.storage
     name = Electric.Utils.uuid4()
     consumer_pid = self()
@@ -238,12 +243,44 @@ defmodule Electric.Shapes.Consumer.MoveHandling do
       MoveIns.add_waiting(
         state.move_handling_state,
         name,
-        {["$sublink", Integer.to_string(index)], MapSet.new(Enum.map(values, &elem(&1, 0)))}
+        {["$sublink", Integer.to_string(index)], MapSet.new(Enum.map(values, &elem(&1, 0)))},
+        excluded_disjuncts
       )
 
     Logger.debug("Move-in #{name} has been triggered from #{dep_handle}")
 
     %{state | move_handling_state: move_handling_state}
+  end
+
+  # Compute the non-containing disjunct positions for a move-in query.
+  # These are the disjuncts that DON'T contain the trigger dependency and thus
+  # have exclusion clauses (AND NOT ...) in the move-in query.
+  defp compute_excluded_disjuncts(%State{dnf_context: nil}, _dep_handle), do: []
+
+  defp compute_excluded_disjuncts(%State{dnf_context: dnf_context, shape: shape}, dep_handle) do
+    if DnfContext.has_valid_dnf?(dnf_context) do
+      decomposition = dnf_context.decomposition
+
+      all_trigger_indices =
+        shape.shape_dependencies_handles
+        |> Enum.with_index()
+        |> Enum.filter(fn {h, _} -> h == dep_handle end)
+        |> Enum.map(fn {_, i} -> i end)
+
+      trigger_positions =
+        Enum.flat_map(all_trigger_indices, fn idx ->
+          SubqueryMoves.find_dnf_positions_for_dep_index(decomposition, idx)
+        end)
+
+      {_containing, not_containing} =
+        Enum.split_with(decomposition.disjuncts_positions, fn positions ->
+          Enum.any?(positions, &(&1 in trigger_positions))
+        end)
+
+      not_containing
+    else
+      []
+    end
   end
 
   defp build_exclusion_context(%State{dnf_context: nil}, _) do

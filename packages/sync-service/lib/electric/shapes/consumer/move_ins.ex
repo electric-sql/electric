@@ -13,7 +13,8 @@ defmodule Electric.Shapes.Consumer.MoveIns do
             in_flight_values: %{},
             moved_out_tags: %{},
             maximum_resolved_snapshot: nil,
-            minimum_unresolved_snapshot: nil
+            minimum_unresolved_snapshot: nil,
+            excluded_disjuncts: %{}
 
   @type pg_snapshot() :: SnapshotQuery.pg_snapshot()
   @type move_in_name() :: String.t()
@@ -48,7 +49,8 @@ defmodule Electric.Shapes.Consumer.MoveIns do
           in_flight_values: in_flight_values(),
           moved_out_tags: %{move_in_name() => %{non_neg_integer() => MapSet.t(String.t())}},
           maximum_resolved_snapshot: nil | pg_snapshot(),
-          minimum_unresolved_snapshot: nil | pg_snapshot()
+          minimum_unresolved_snapshot: nil | pg_snapshot(),
+          excluded_disjuncts: %{move_in_name() => [[non_neg_integer()]]}
         }
   def new() do
     %__MODULE__{}
@@ -58,11 +60,12 @@ defmodule Electric.Shapes.Consumer.MoveIns do
   Add information about a new move-in to the state for which we're waiting.
   Snapshot is initially nil and will be set later when the query begins.
   """
-  @spec add_waiting(t(), move_in_name(), {term(), MapSet.t()}) :: t()
+  @spec add_waiting(t(), move_in_name(), {term(), MapSet.t()}, [[non_neg_integer()]]) :: t()
   def add_waiting(
         %__MODULE__{waiting_move_ins: waiting_move_ins} = state,
         name,
-        moved_values
+        moved_values,
+        excluded_disjuncts \\ []
       ) do
     new_waiting_move_ins = Map.put(waiting_move_ins, name, {nil, moved_values})
     new_buffering_snapshot = make_move_in_buffering_snapshot(new_waiting_move_ins)
@@ -72,7 +75,8 @@ defmodule Electric.Shapes.Consumer.MoveIns do
       | waiting_move_ins: new_waiting_move_ins,
         move_in_buffering_snapshot: new_buffering_snapshot,
         in_flight_values: make_in_flight_values(new_waiting_move_ins),
-        moved_out_tags: Map.put(state.moved_out_tags, name, %{})
+        moved_out_tags: Map.put(state.moved_out_tags, name, %{}),
+        excluded_disjuncts: Map.put(state.excluded_disjuncts, name, excluded_disjuncts)
     }
   end
 
@@ -176,6 +180,7 @@ defmodule Electric.Shapes.Consumer.MoveIns do
         move_in_buffering_snapshot: buffering_snapshot,
         in_flight_values: make_in_flight_values(waiting_move_ins),
         moved_out_tags: Map.delete(state.moved_out_tags, name),
+        excluded_disjuncts: Map.delete(state.excluded_disjuncts, name),
         minimum_unresolved_snapshot: find_minimum_unresolved_snapshot(waiting_move_ins),
         maximum_resolved_snapshot: maximum_resolved_snapshot
     }
@@ -224,6 +229,53 @@ defmodule Electric.Shapes.Consumer.MoveIns do
   def change_already_visible?(%__MODULE__{filtering_move_ins: filters}, xid, %{key: key}) do
     Enum.any?(filters, fn {snapshot, key_set} ->
       Transaction.visible_in_snapshot?(xid, snapshot) and MapSet.member?(key_set, key)
+    end)
+  end
+
+  @doc """
+  Check if a record would be excluded by a matching pending move-in's exclusion clauses.
+
+  Returns true if the record matches a non-containing disjunct of any matching
+  move-in, meaning the move-in query's `AND NOT (...)` exclusion clause would
+  filter it out and the change should NOT be skipped.
+  """
+  @spec record_excluded_by_matching_move_in?(t(), map(), [boolean()], Xid.anyxid()) :: boolean()
+  def record_excluded_by_matching_move_in?(
+        %__MODULE__{
+          waiting_move_ins: waiting_move_ins,
+          excluded_disjuncts: excluded_disjuncts
+        },
+        referenced_values,
+        active_conditions,
+        xid
+      ) do
+    Enum.any?(waiting_move_ins, fn {name, {snapshot, {path, moved_values}}} ->
+      case Map.fetch(referenced_values, path) do
+        {:ok, value} ->
+          matches =
+            (is_nil(snapshot) or Transaction.visible_in_snapshot?(xid, snapshot)) and
+              MapSet.member?(moved_values, value)
+
+          if matches do
+            excluded = Map.get(excluded_disjuncts, name, [])
+            record_matches_any_disjunct?(active_conditions, excluded)
+          else
+            false
+          end
+
+        :error ->
+          false
+      end
+    end)
+  end
+
+  defp record_matches_any_disjunct?(_active_conditions, []), do: false
+
+  defp record_matches_any_disjunct?(active_conditions, disjuncts) do
+    Enum.any?(disjuncts, fn conjunction_positions ->
+      Enum.all?(conjunction_positions, fn pos ->
+        Enum.at(active_conditions, pos, false) == true
+      end)
     end)
   end
 

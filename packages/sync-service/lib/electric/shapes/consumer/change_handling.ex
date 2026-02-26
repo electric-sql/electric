@@ -1,4 +1,5 @@
 defmodule Electric.Shapes.Consumer.ChangeHandling do
+  alias Electric.Shapes.Consumer.DnfContext
   alias Electric.Shapes.Consumer.MoveIns
   alias Electric.Replication.Eval.Runner
   alias Electric.Shapes.Shape
@@ -103,7 +104,14 @@ defmodule Electric.Shapes.Consumer.ChangeHandling do
         # won't return this row and we need to process this change normally.
         case ctx.extra_refs do
           {_extra_refs_old, extra_refs_new} ->
-            WhereClause.includes_record?(state.shape.where, change.record, extra_refs_new)
+            WhereClause.includes_record?(state.shape.where, change.record, extra_refs_new) and
+              not record_excluded_by_move_in?(
+                change,
+                state,
+                ctx,
+                referenced_values,
+                extra_refs_new
+              )
 
           _ ->
             # If extra_refs is not a tuple (e.g., empty map in tests), fall back to
@@ -113,6 +121,32 @@ defmodule Electric.Shapes.Consumer.ChangeHandling do
       end
     else
       false
+    end
+  end
+
+  # Check if the record would be excluded by the move-in query's exclusion clauses.
+  # If the record matches a non-containing disjunct, the move-in's AND NOT (...)
+  # will filter it out, so we should NOT skip this change.
+  defp record_excluded_by_move_in?(change, state, ctx, referenced_values, extra_refs) do
+    case state.dnf_context do
+      %DnfContext{decomposition: decomposition} when decomposition != nil ->
+        active_conditions =
+          DnfContext.compute_active_conditions(
+            state.dnf_context,
+            change.record,
+            state.shape.where.used_refs,
+            extra_refs
+          )
+
+        MoveIns.record_excluded_by_matching_move_in?(
+          state.move_handling_state,
+          referenced_values,
+          active_conditions,
+          ctx.xid
+        )
+
+      _ ->
+        false
     end
   end
 

@@ -276,10 +276,11 @@ defmodule Electric.Integration.OracleViewTest do
       #   1. l3-1.active → false  (triggers move-in for disjunct 0)
       #   2. l4-1.value → 'v100'  (now matches disjunct 1: contains '1')
       #
-      # Bug: move-in query has AND NOT (value LIKE '%1%') exclusion for disjunct 1,
-      #      which filters out l4-1. Meanwhile WAL change for l4-1 is skipped by
-      #      change_will_be_covered_by_move_in? (pending move-in for l3-1 values).
-      #      Both sides defer to the other — l4-1 is lost.
+      # Bug (fixed): move-in query has AND NOT (value LIKE '%1%') exclusion for
+      #      disjunct 1, which filters out l4-1. Previously the WAL change for l4-1
+      #      was skipped by change_will_be_covered_by_move_in? — both sides deferred
+      #      to the other and l4-1 was lost. Fix: store excluded disjuncts per
+      #      move-in and check them in change_will_be_covered_by_move_in?.
       shapes = [
         %{
           name: "subquery_or_value",
