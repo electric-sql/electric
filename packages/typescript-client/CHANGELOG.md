@@ -1,5 +1,11 @@
 # @electric-sql/client
 
+## 1.5.9
+
+### Patch Changes
+
+- 24b140f: Fix wake detection not re-arming after snapshot pause/resume. In daemon flows using `requestSnapshot` with `changes_only` mode, the wake detection timer was torn down during the pause but never re-armed on resume, causing the stream to behave as if wake detection was never enabled.
+
 ## 1.5.8
 
 ### Patch Changes
