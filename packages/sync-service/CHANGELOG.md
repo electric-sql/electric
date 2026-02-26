@@ -1,5 +1,11 @@
 # @core/sync-service
 
+## 1.4.10
+
+### Patch Changes
+
+- 6022ae0: Change info log messages to notice except shape add/remove and relation received
+
 ## 1.4.9
 
 ### Patch Changes
