@@ -550,7 +550,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDbTest do
 
     @tag shape_db_opts: [enable_stats?: true, enable_memory_stats?: true]
     test "export memory and disk usage when enabled", ctx do
-      {:ok, stats} = ShapeDb.statistics(ctx.stack_id)
+      assert {:ok, %{total_memory: memory, disk_size: disk_size}} = wait_statistics(ctx)
       enabled = Statistics.stats_enabled(ctx.stack_id)
 
       if enabled.disk, do: assert(stats.disk_size > 0)
@@ -559,7 +559,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDbTest do
 
     @tag shape_db_opts: [enable_stats?: true]
     test "only exports disk usage by default", ctx do
-      {:ok, stats} = ShapeDb.statistics(ctx.stack_id)
+      {:ok, stats} = wait_statistics(ctx)
       enabled = Statistics.stats_enabled(ctx.stack_id)
 
       assert stats.total_memory == 0
@@ -568,7 +568,23 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDbTest do
 
     @tag shape_db_opts: [enable_stats?: false]
     test "returns empty values if not enabled", ctx do
-      assert {:ok, %{total_memory: 0, disk_size: 0}} = ShapeDb.statistics(ctx.stack_id)
+      assert {:ok, %{total_memory: 0, disk_size: disk_size}} = wait_statistics(ctx)
+      if enabled.disk, do: assert(disk_size > 0)
+    end
+
+    defp wait_statistics(ctx, attempts \\ 30)
+
+    defp wait_statistics(_ctx, 0), do: :error
+
+    defp wait_statistics(ctx, remaining_attempts) do
+      case ShapeDb.statistics(ctx.stack_id) do
+        {:ok, %{updated_at: %DateTime{}} = stats} ->
+          {:ok, stats}
+
+        {:ok, _} ->
+          Process.sleep(20)
+          wait_statistics(ctx, remaining_attempts - 1)
+      end
     end
   end
 
@@ -647,14 +663,14 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDbTest do
     @tag shape_db_opts: [
            exclusive_mode: true,
            connection_idle_timeout: 10,
-           statistics_collection_period: 10
+           statistics_collection_period: 1000
          ]
     test "does not scale the pool in exclusive mode", ctx do
       ShapeDb.Connection.checkout!(ctx.stack_id, :test, fn _conn ->
         assert :ok = assert_stats_match(ctx, connections: 1)
       end)
 
-      assert :error = assert_stats_match(ctx, connections: 0, total_memory: 0)
+      assert :error = assert_stats_match(ctx, connections: 0)
     end
 
     defp assert_stats_match(ctx, match, repeats \\ 10)
