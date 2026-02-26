@@ -36,9 +36,9 @@
 [invoke setup_electric_shell_with_tenant "electric_1" "3000"]
 
 [shell electric_1]
-  ??[info] Acquiring lock from postgres with name electric_slot_integration
-  ??[info] Lock acquired from postgres with name electric_slot_integration
-  ??[info] Starting replication from postgres
+  ??[notice] Acquiring lock from postgres with name electric_slot_integration
+  ??[notice] Lock acquired from postgres with name electric_slot_integration
+  ??[notice] Starting replication from postgres
 
 # First service should be health and active
 [shell orchestator]
@@ -61,7 +61,7 @@
 ## in the second electric
 [shell electric_2]
   -Lock acquired from postgres|Starting replication from postgres|$fail_pattern
-  ??[info] Acquiring lock from postgres with name electric_slot_integration
+  ??[notice] Acquiring lock from postgres with name electric_slot_integration
   [sleep 2]
 
 
@@ -104,7 +104,7 @@
 # Lock should now be acquired and replication starting
 [shell electric_2]
   -$fail_pattern
-  ??[info] Lock acquired from postgres with name electric_slot_integration
+  ??[notice] Lock acquired from postgres with name electric_slot_integration
 
 # Add more data after handover
 [shell psql]
@@ -116,8 +116,8 @@
 
 # Second service should reach healthy and active with loaded backup
 [shell electric_2]
-  ??[info] Found 1 existing valid shapes
-  ??[info] Starting replication from postgres
+  ??[notice] Found 1 existing valid shapes
+  ??[notice] Starting replication from postgres
 
 [shell orchestator]
   # Use wait-for to poll for active status since shape initialization may still be in progress

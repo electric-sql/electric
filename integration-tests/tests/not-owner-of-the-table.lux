@@ -43,7 +43,7 @@
 [shell electric]
   -
 
-  ??[info] Configuring publication electric_publication_integration to drop [] tables, add ["public.items"] tables
+  ??[notice] Configuring publication electric_publication_integration to drop [] tables, add ["public.items"] tables
   ?\[warning\] Failed to configure publication for relation \{\d+, \{"public", "items"\}\}: %Postgrex.Error\{message: nil, postgres: %\{code: :insufficient_privilege,.*message: "must be owner of table items"
 
 ## Add the table to the publication and try again
@@ -64,12 +64,12 @@
   ??{"message":"Unable to create initial snapshot: must be owner of table items"}
 
 [shell electric]
-	??[info] Configuring publication electric_publication_integration to drop [] tables, add [] tables, and configure replica identity for ["public.items"] tables
+	??[notice] Configuring publication electric_publication_integration to drop [] tables, add [] tables, and configure replica identity for ["public.items"] tables
   ?\[warning\] Failed to configure publication for relation \{\d+, \{"public", "items"\}\}: %Postgrex.Error\{message: nil, postgres: %\{code: :insufficient_privilege,.*message: "must be owner of table items"
 
 ## Wait for the publication to be refreshed and verify that the table is removed from it
 [shell electric]
-  ??[info] Configuring publication electric_publication_integration to drop ["public.items"] tables, add [] tables
+  ??[notice] Configuring publication electric_publication_integration to drop ["public.items"] tables, add [] tables
   ??[debug] Processed all publication relation actions
 
 [shell psql]

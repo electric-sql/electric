@@ -11,7 +11,7 @@
 [invoke setup_electric_with_env "ELECTRIC_TWEAKS_PUBLICATION_REFRESH_PERIOD=2s"]
 
 [shell electric]
-  ??[info] Starting replication from postgres
+  ??[notice] Starting replication from postgres
 
 ## Create a shape
 [invoke start_psql]
@@ -53,8 +53,8 @@
   ??[debug] ReplicationClient step: drop_slot
   ??[debug] ReplicationClient step: create_slot
   ??[debug] Created new slot at lsn=
-  ??[info] Purging all shapes.
-  ??[info] Starting replication from postgres
+  ??[notice] Purging all shapes.
+  ??[notice] Starting replication from postgres
 
 ## Verify that the old shape is no longer accessible
 [shell client]

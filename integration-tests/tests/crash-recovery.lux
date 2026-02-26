@@ -56,7 +56,7 @@
 [invoke setup_electric]
 
 [shell electric]
-  ??[info] Starting replication from postgres
+  ??[notice] Starting replication from postgres
 
 # Initialize a shape, wait for it to persist and collect the offset
 [shell client]
@@ -92,8 +92,8 @@
 [invoke setup_electric]
 [shell electric]
   # no invalid shapes because the items2 shape wasn't persisted
-  ??[info] Found 1 existing valid shapes and 0 shapes in an invalid state
-  ??[info] Starting replication from postgres
+  ??[notice] Found 1 existing valid shapes and 0 shapes in an invalid state
+  ??[notice] Starting replication from postgres
 
 # Client should be able to continue same with old offset or 0_inf offset
 [shell client]
@@ -158,7 +158,7 @@
 ## Start the sync service again.
 [invoke setup_electric]
 [shell electric]
-  ??[info] Starting replication from postgres
+  ??[notice] Starting replication from postgres
   ??[notice] Consumers ready
   # We have a small race-condition here. we rely on the un-acked transaction from pg to
   # be received by the storage in order to populate the offset information
