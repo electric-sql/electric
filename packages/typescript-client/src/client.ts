@@ -698,7 +698,6 @@ export class ShapeStream<T extends Row<unknown> = Row>
     this.#fetchClient = createFetchWithConsumedMessages(this.#sseFetchClient)
 
     this.#subscribeToVisibilityChanges()
-    this.#subscribeToWakeDetection()
   }
 
   get shapeHandle() {
@@ -723,6 +722,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
   async #start(): Promise<void> {
     this.#started = true
+    this.#subscribeToWakeDetection()
 
     try {
       await this.#requestShape()
@@ -1643,6 +1643,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
       // Store cleanup function to remove the event listener
       this.#unsubscribeFromVisibilityChanges = () => {
         document.removeEventListener(`visibilitychange`, visibilityHandler)
+        this.#unsubscribeFromVisibilityChanges = undefined
       }
     }
   }
@@ -1661,6 +1662,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
    */
   #subscribeToWakeDetection() {
     if (this.#hasBrowserVisibilityAPI()) return
+    if (this.#unsubscribeFromWakeDetection) return
 
     const INTERVAL_MS = 2_000
     const WAKE_THRESHOLD_MS = 4_000
@@ -1695,6 +1697,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
     this.#unsubscribeFromWakeDetection = () => {
       clearInterval(timer)
+      this.#unsubscribeFromWakeDetection = undefined
     }
   }
 
