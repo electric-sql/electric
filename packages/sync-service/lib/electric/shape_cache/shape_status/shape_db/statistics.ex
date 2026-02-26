@@ -94,6 +94,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Statistics do
        dbstat_available?: true,
        enable_memory_stats?: enable_memory_stats?,
        measurement_period: measurement_period,
+       task: nil,
        pool_opts: args
      }}
   end
@@ -101,6 +102,36 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Statistics do
   @impl GenServer
   def handle_info(:read_stats, state) do
     {:noreply, read_stats(state), :hibernate}
+  end
+
+  def handle_info({ref, read_stats_result}, %{task: %{ref: ref}} = state) do
+    state =
+      case read_stats_result do
+        {:ok, stats} ->
+          %{state | stats: stats}
+
+        {:error, reason} ->
+          Logger.warning(["Failed to read SQLite statistics: ", inspect(reason)])
+          state
+
+        :error ->
+          Logger.warning("Failed to read SQLite statistics")
+          state
+      end
+      |> then(fn
+        %{first_run?: true} = state ->
+          %{state | first_run?: false}
+
+        state ->
+          state
+      end)
+
+    {:noreply, state}
+  end
+
+  def handle_info({:DOWN, ref, :process, _pid, _reason}, %{task: %{ref: ref}} = state) do
+    Process.send_after(self(), :read_stats, state.measurement_period)
+    {:noreply, %{state | task: nil}}
   end
 
   def handle_info(msg, state) do
@@ -155,51 +186,35 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Statistics do
   end
 
   defp do_read_stats(state, include_memory?) do
-    state
-    |> open_connection(fn conn ->
-      with {:ok, memstat_available?, dbstat_available?, page_size} <-
-             initialize_connection(
-               conn,
-               state.first_run?,
-               state.enable_memory_stats?,
-               state.dbstat_available?
-             ) do
-        if dbstat_available? do
-          with {:ok, stats} <-
-                 Connection.fetch_all(
+    # Read the stats in an async task so that we don't block reading the stats
+    # and get spurious timeout errors
+    task =
+      Task.async(fn ->
+        open_connection(state, fn conn ->
+          with {:ok, memstat_available?, dbstat_available?, page_size} <-
+                 initialize_connection(
                    conn,
-                   stats_query(memstat_available? && include_memory?),
-                   []
+                   state.first_run?,
+                   state.enable_memory_stats?,
+                   state.dbstat_available?
                  ) do
-            {:ok, analyze_stats(stats, page_size)}
+            if(dbstat_available?) do
+              with {:ok, stats} <-
+                     Connection.fetch_all(
+                       conn,
+                       stats_query(memstat_available? && include_memory?),
+                       []
+                     ) do
+                {:ok, analyze_stats(stats, page_size)}
+              end
+            else
+              {:ok, %__MODULE__{updated_at: DateTime.utc_now()}}
+            end
           end
-        else
-          {:ok, %__MODULE__{updated_at: DateTime.utc_now()}}
-        end
-      end
-    end)
-    |> case do
-      {:ok, stats} ->
-        %{state | stats: stats}
+        end)
+      end)
 
-      {:error, reason} ->
-        Logger.warning(["Failed to read SQLite statistics: ", inspect(reason)])
-        state
-
-      :error ->
-        Logger.warning("Failed to read SQLite statistics")
-        state
-    end
-    |> then(fn
-      %{first_run?: true} = state ->
-        %{state | first_run?: false}
-
-      state ->
-        state
-    end)
-    |> tap(fn state ->
-      Process.send_after(self(), :read_stats, state.measurement_period)
-    end)
+    %{state | task: task}
   end
 
   # In exclusive_mode we *must* use a pooled connection because the db maybe
@@ -228,7 +243,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Statistics do
       if enable_memory_stats? do
         case Connection.enable_extension(conn, "memstat") do
           :ok ->
-            if first_run?, do: Logger.info("SQLite memory statistics enabled")
+            if first_run?, do: Logger.notice("SQLite memory statistics enabled")
             true
 
           {:error, reason} ->

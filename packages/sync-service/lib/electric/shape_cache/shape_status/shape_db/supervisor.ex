@@ -22,6 +22,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Supervisor do
     exclusive_mode = Keyword.get(opts, :exclusive_mode, false)
     idle_timeout = Keyword.get(opts, :connection_idle_timeout, @default_connection_idle_timeout)
     # don't close the write connection in exclusive mode
+    # NimblePool treats `worker_idle_timeout: nil` as no idle timeout
     write_pool_idle_timeout = if(exclusive_mode, do: nil, else: idle_timeout)
 
     read_pool_spec =
