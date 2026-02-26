@@ -134,7 +134,7 @@ defmodule Electric.Config do
       nil ->
         instance_id = generate_instance_id()
 
-        Logger.info("Setting electric instance_id: #{instance_id}")
+        Logger.notice("Setting electric instance_id: #{instance_id}")
         Application.put_env(:electric, :instance_id, instance_id)
 
         instance_id
@@ -588,7 +588,7 @@ defmodule Electric.Config do
     end)
     |> tap(fn process_spawn_opts ->
       if map_size(process_spawn_opts) > 0 do
-        Logger.info("Process spawn opts: #{inspect(process_spawn_opts)}")
+        Logger.notice("Process spawn opts: #{inspect(process_spawn_opts)}")
       end
     end)
   end

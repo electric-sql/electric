@@ -440,7 +440,7 @@ defmodule Electric.Shapes.Consumer do
   defp handle_event(%Changes.Relation{}, state) do
     %{shape: %Shape{root_table_id: root_table_id, root_table: root_table}} = state
 
-    Logger.info(
+    Logger.notice(
       "Schema for the table #{Utils.inspect_relation(root_table)} changed - terminating shape #{state.shape_handle}"
     )
 

@@ -64,7 +64,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Statistics do
             # may be the cause of segfaults we've seen in prod
             case ShapeDb.Connection.enable_extension(conn, "memstat") do
               :ok ->
-                Logger.info("SQLite memory statistics enabled")
+                Logger.notice("SQLite memory statistics enabled")
 
                 true
 

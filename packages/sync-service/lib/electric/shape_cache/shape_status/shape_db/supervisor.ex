@@ -21,7 +21,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Supervisor do
 
     read_pool_spec =
       if exclusive_mode do
-        Logger.info("Starting ShapeDb in exclusive mode")
+        Logger.notice("Starting ShapeDb in exclusive mode")
         []
       else
         [

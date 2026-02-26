@@ -176,7 +176,7 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
           end)
           |> Task.await(:infinity)
 
-        Logger.info(
+        Logger.notice(
           "Restored publication filters in #{System.convert_time_unit(System.monotonic_time() - start, :native, :millisecond)}ms"
         )
 

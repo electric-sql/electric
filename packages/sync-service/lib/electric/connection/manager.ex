@@ -543,7 +543,7 @@ defmodule Electric.Connection.Manager do
         } = state
       ) do
     # Everything is ready to start accepting and processing logical messages from Postgres.
-    Logger.info("Starting replication from postgres")
+    Logger.notice("Starting replication from postgres")
     Electric.Postgres.ReplicationClient.start_streaming(state.replication_client_pid)
     dispatch_stack_event(:ready, state)
 
@@ -581,7 +581,7 @@ defmodule Electric.Connection.Manager do
       end
     else
       if not lock_breaker_allowed do
-        Logger.info(
+        Logger.notice(
           "Lock breaker skipped: guard callback returned false (instance may not have ownership rights)"
         )
       end
@@ -862,7 +862,7 @@ defmodule Electric.Connection.Manager do
   end
 
   def handle_cast({:pg_info_obtained, info}, state) do
-    Logger.info(
+    Logger.notice(
       "Postgres server version = #{info.server_version_num}, " <>
         "system identifier = #{state.pg_system_identifier}, " <>
         "timeline_id = #{state.pg_timeline_id}"
@@ -1140,7 +1140,7 @@ defmodule Electric.Connection.Manager do
     {total_retry_time, conn_backoff} = ConnectionBackoff.succeed(conn_backoff)
 
     if total_retry_time > 0 do
-      Logger.info("Reconnection succeeded after #{inspect(total_retry_time)}ms")
+      Logger.notice("Reconnection succeeded after #{inspect(total_retry_time)}ms")
     end
 
     %{state | connection_backoff: {conn_backoff, nil}}
@@ -1159,7 +1159,7 @@ defmodule Electric.Connection.Manager do
   end
 
   defp drop_publication(state) when state.manual_table_publishing? do
-    Logger.info("Skipping publication drop, manual_table_publishing is enabled")
+    Logger.notice("Skipping publication drop, manual_table_publishing is enabled")
   end
 
   defp drop_publication(state) do

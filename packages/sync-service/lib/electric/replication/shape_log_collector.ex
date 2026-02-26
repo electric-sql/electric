@@ -274,7 +274,7 @@ defmodule Electric.Replication.ShapeLogCollector do
             end
           )
 
-        Logger.info(
+        Logger.notice(
           "Restored filters for #{count} shapes in #{System.convert_time_unit(System.monotonic_time() - start, :native, :millisecond)}ms"
         )
 

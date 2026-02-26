@@ -74,7 +74,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
     case db_version(conn) do
       # not been initialized
       {:ok, 0} ->
-        Logger.info("Migrating shape db to version #{@schema_version}")
+        Logger.notice("Migrating shape db to version #{@schema_version}")
 
         with :ok <- execute_all(conn, migration_sqls(opts)) do
           {:ok, @schema_version}
@@ -489,7 +489,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
       case storage_dir do
         ":memory:" ->
           if Keyword.get(pool_state, :exclusive_mode, false) do
-            Logger.info("ShapeDb using in-memory database")
+            Logger.notice("ShapeDb using in-memory database")
             {:ok, ":memory:"}
           else
             Logger.error(
@@ -504,7 +504,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
 
           with :ok <- File.mkdir_p(Path.dirname(path)) do
             if Keyword.get(pool_state, :mode) == :write do
-              Logger.info("Shape database file: #{inspect(path)}")
+              Logger.notice("Shape database file: #{inspect(path)}")
             end
 
             {:ok, path}

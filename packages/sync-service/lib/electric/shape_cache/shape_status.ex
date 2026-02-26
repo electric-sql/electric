@@ -51,7 +51,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
 
     {:ok, invalid_handles, valid_shape_count} = ShapeDb.validate_existing_shapes(stack_id)
 
-    Logger.info(
+    Logger.notice(
       "Found #{valid_shape_count} existing valid shapes and #{length(invalid_handles)} shapes in an invalid state"
     )
 

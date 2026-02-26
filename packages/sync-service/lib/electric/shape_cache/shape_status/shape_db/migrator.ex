@@ -50,7 +50,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Migrator do
   end
 
   def handle_info(:optimize, {stack_id, conn}) do
-    Logger.info("Optimizing shape db tables")
+    Logger.notice("Optimizing shape db tables")
     :ok = ShapeDb.Connection.optimize(conn)
 
     {:noreply, schedule_optimize(stack_id, conn), :hibernate}
