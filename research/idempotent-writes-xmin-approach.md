@@ -284,14 +284,79 @@ a no-op transaction.
 problem is that `pg_current_xact_id()` returns a txid with no corresponding change
 in the replication stream. No amount of waiting will make that change appear.
 
-The `xmin` approach remains the correct solution because it returns a txid that
-**actually has a change in the stream**. The `awaitTxId` function can match it
-either via `seenTxids` (the change message itself) or via `seenSnapshots` (if the
-txid is old enough to be covered by a snapshot's xmin).
+---
 
-If simplicity is a priority, the `ON CONFLICT DO UPDATE ... RETURNING xmin::text`
-approach (described earlier) is also viable — it ensures every transaction produces
-a change in the stream, at the cost of extra WAL traffic for duplicates.
+## Simplest Approach: Skip `awaitTxId` for Duplicates
+
+The cleanest solution is to **not call `awaitTxId` at all** when the write was a
+no-op. If the INSERT is a duplicate (ON CONFLICT DO NOTHING, 0 rows affected),
+nothing changed on the backend — the row already exists and its original INSERT
+change is already in (or arriving in) the Electric stream. There's nothing new to
+wait for.
+
+### Implementation Pattern
+
+```ts
+// Server-side API endpoint
+const result = await tx.execute(
+  sql`INSERT INTO table_name (id, col1, col2)
+      VALUES ($1, $2, $3)
+      ON CONFLICT (id) DO NOTHING`
+)
+
+if (result.rowCount === 0) {
+  // Duplicate — row already exists, no change produced
+  return { txid: null }
+}
+
+// Successful write — get the txid to await
+const txidResult = await tx.execute(
+  sql`SELECT pg_current_xact_id()::xid::text AS txid`
+)
+return { txid: parseInt(txidResult.rows[0].txid, 10) }
+```
+
+```ts
+// Client-side mutationFn / onInsert
+onInsert: async ({ transaction }) => {
+  const newTodo = transaction.mutations[0].modified
+  const { txid } = await api.todos.create(newTodo)
+
+  // If txid is null, it was a duplicate — nothing to await
+  if (txid != null) {
+    return { txid }
+  }
+  // Return without txid → optimistic state is dropped immediately
+}
+```
+
+### Why This Works
+
+- **Duplicate INSERT**: The row already exists in Postgres. The original INSERT's
+  change is already in the shape stream (or will arrive from the original
+  transaction). The optimistic state shows the same data as the synced row, so
+  dropping it immediately is correct — TanStack DB deduplicates.
+- **Successful INSERT**: Normal `pg_current_xact_id()` path works as before.
+- **No extra queries**: No `SELECT xmin` needed. No infinite timeouts. Just check
+  the affected row count.
+
+### Comparison of All Approaches
+
+| Approach | Duplicate handling | Extra queries | Complexity |
+|---|---|---|---|
+| `pg_current_xact_id()` only | **Broken** — awaitTxId times out | None | Low |
+| Always use `xmin::text` | Works — returns original txid | 1 SELECT per write | Low |
+| Skip awaitTxId for duplicates | Works — returns immediately | None for duplicates | Low |
+| `ON CONFLICT DO UPDATE ... RETURNING xmin` | Works — always produces change | None | Low, but extra WAL |
+| Infinite timeout | **Broken** — hangs forever | None | Low |
+
+**Recommendation:** The "skip awaitTxId for duplicates" approach is the simplest
+and most correct. It avoids unnecessary `xmin` queries, avoids extra WAL traffic,
+and directly addresses the root cause: a no-op transaction has nothing to wait for.
+
+The `xmin` approach also works and may be preferable if you want a single code path
+that always returns a txid (e.g., for logging or debugging). But the skip approach
+has fewer moving parts.
 
 ---
 
@@ -302,4 +367,5 @@ a change in the stream, at the cost of extra WAL traffic for duplicates.
 | Is `xmin::text` the correct format? | **Yes** — same 32-bit xid format that Electric sends in the `txids` header |
 | Equivalent to `pg_current_xact_id()` for normal writes? | **Yes** — identical value for rows modified in the current transaction |
 | Key advantage of `xmin` approach | Returns the txid that *actually produced a change* in the replication stream, not a new txid for a no-op transaction |
-| Main edge case to handle | Row deleted between attempts → `SELECT xmin` returns no rows |
+| **Simplest approach for duplicates** | **Skip `awaitTxId` entirely** — if 0 rows affected, return no txid; nothing changed, nothing to wait for |
+| Main edge case to handle | Row deleted between attempts → retry INSERT succeeds normally (not a duplicate) |
