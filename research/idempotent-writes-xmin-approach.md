@@ -1,0 +1,217 @@
+# Research: Idempotent Writes — Using `xmin` for `awaitTxId`
+
+## Context
+
+A user is implementing idempotent writes for their sync endpoint and changed from
+`pg_current_xact_id()` to querying `xmin` from the affected row after each write.
+This document analyzes whether the `xmin` approach is correct and identifies edge cases.
+
+## Background: How the txid Write-Path Works
+
+The write-path contract in Electric + TanStack DB is:
+
+1. Client performs an optimistic mutation on a collection
+2. Collection's `onInsert`/`onUpdate`/`onDelete` calls the server API
+3. Server writes to Postgres within a transaction, returns a `txid`
+4. Client calls `collection.utils.awaitTxId(txid)` — watches the Electric shape
+   stream for a change message whose `txids` header contains that value
+5. When the matching change arrives, the optimistic state is dropped
+
+### How Electric Gets the txid
+
+- PostgreSQL's logical replication protocol sends a **32-bit xid** in the Begin
+  message for each transaction
+  ([`decoder.ex:67`](../packages/sync-service/lib/electric/postgres/logical_replication/decoder.ex))
+- Electric attaches this xid to every change in the log as `txids: [xid]`
+  ([`log_items.ex:45`](../packages/sync-service/lib/electric/log_items.ex))
+- The TypeScript client receives `txids` as `number[]`
+  ([`types.ts:137`](../packages/typescript-client/src/types.ts))
+
+### Recommended SQL
+
+```sql
+SELECT pg_current_xact_id()::xid::text AS txid
+```
+
+- `pg_current_xact_id()` → 64-bit `xid8` (includes epoch)
+- `::xid` → strips the epoch, producing the raw 32-bit value that matches the
+  replication stream
+- `::text` → decimal string for transport
+- Client parses with `parseInt(txid, 10)` → JavaScript `number`
+
+---
+
+## Question 1: Is `xmin::text` the Correct Format?
+
+**Yes.** The `xmin` system column is of type `xid` (32-bit). Casting it to text
+(`xmin::text`) produces the same decimal string representation as
+`pg_current_xact_id()::xid::text`. After `parseInt()`, the value will match what
+Electric sends in the `txids` header of change messages.
+
+Both produce: a **decimal string of a 32-bit unsigned integer**.
+
+---
+
+## Question 2: Is `xmin` Equivalent to `pg_current_xact_id()` for Successful Writes?
+
+**Yes, for the row you just wrote.** When you INSERT a new row, the `xmin` of that
+row is set to the current transaction's xid. So:
+
+```sql
+-- These produce the same 32-bit value for a row you just inserted:
+SELECT xmin::text FROM table_name WHERE id = $1;
+SELECT pg_current_xact_id()::xid::text;
+```
+
+The same holds for UPDATE — `xmin` is set to the xid of the transaction that
+created the current tuple version.
+
+---
+
+## Question 3: Edge Cases
+
+### 3a. The Core Win — Idempotent Retries (ON CONFLICT DO NOTHING)
+
+This is the scenario that motivated the change, and it works correctly:
+
+| Scenario | `pg_current_xact_id()` | `xmin` of existing row |
+|---|---|---|
+| First INSERT succeeds (txid=100) | 100 | 100 |
+| Retry: INSERT ON CONFLICT DO NOTHING (txid=105) | **105** (new txid, no change in stream) | **100** (original txid) |
+
+With `pg_current_xact_id()`:
+- Returns 105, but **no change with txid=105 will ever appear** in the replication
+  stream (because DO NOTHING produced no WAL entry)
+- `awaitTxId(105)` **times out** — this is the bug they experienced
+
+With `xmin`:
+- Returns 100, which is the txid of the original INSERT
+- That transaction's change **is already in** (or will arrive in) the Electric stream
+- `awaitTxId(100)` **resolves correctly**
+
+### 3b. Row Was Subsequently Updated by Another Transaction
+
+If between the original INSERT and the retry, another transaction updated the row:
+
+- `xmin` will be the UPDATE's txid (e.g., 103), not the original INSERT's (100)
+- `awaitTxId(103)` is still correct — the UPDATE produced a change in the
+  replication stream, and once that change is replicated, the row is visible
+- In fact, this is *more* correct than returning the original INSERT txid, because
+  the row's current state reflects the UPDATE
+
+### 3c. Row Was Deleted Between Retry Attempts
+
+If the row was deleted between the first attempt and the retry:
+
+- The retry INSERT succeeds (no conflict) — this is a normal write, not idempotent
+- `xmin` returns the current transaction's xid (same as `pg_current_xact_id()`)
+- Works correctly — the new INSERT produces a change in the stream
+
+**However:** the `SELECT xmin FROM table WHERE id = $1` query returns **no rows**.
+The code must handle this case (e.g., fall back to `pg_current_xact_id()`, or
+recognize that the INSERT succeeded).
+
+### 3d. ON CONFLICT DO UPDATE (Upsert) Instead of DO NOTHING
+
+If using `ON CONFLICT DO UPDATE SET col = EXCLUDED.col`:
+
+- The row is always modified by the current transaction (even if values are identical)
+- `xmin` = current transaction's xid = `pg_current_xact_id()::xid::text`
+- Both approaches work identically
+- **But:** this produces WAL traffic and replication events even for "no-op" updates,
+  and may trigger unnecessary re-renders on other clients
+
+### 3e. VACUUM FREEZE
+
+After `VACUUM FREEZE`, PostgreSQL can replace `xmin` with `FrozenTransactionId` (2).
+This would return a meaningless txid.
+
+**In practice this is not a concern** — VACUUM FREEZE only affects rows older than
+`vacuum_freeze_min_age` (default: 50 million transactions). Rows being actively
+written to in a sync workflow will never be frozen.
+
+### 3f. Multiple Tables in a Single Transaction
+
+If a single API endpoint writes to multiple tables in one transaction:
+
+- All rows written in the transaction will have the same `xmin`
+- Reading `xmin` from any of them produces the correct value
+- Equivalent to `pg_current_xact_id()` for normal writes
+
+### 3g. Read-Only Transactions
+
+If `pg_current_xact_id()` is called in a transaction that makes no changes, it still
+assigns a transaction ID. With the `xmin` approach, if the INSERT was a no-op
+(DO NOTHING) and you query the existing row's `xmin`, you get the *right* txid
+(the one that actually produced a change). This is the key advantage.
+
+---
+
+## Marius's Question: Only Query xmin for Duplicates?
+
+Marius asked whether `xmin` should only be used for duplicates, with
+`pg_current_xact_id()` for normal writes.
+
+**Tomas is correct** — for successful writes, `xmin` of the just-written row returns
+the same 32-bit value as `pg_current_xact_id()::xid::text`. Using `xmin`
+unconditionally is simpler and correct in both cases.
+
+That said, there are two valid approaches:
+
+### Approach A: Always Use `xmin` (Tomas's approach)
+
+```sql
+-- After INSERT/UPDATE/DELETE:
+SELECT xmin::text FROM table_name WHERE id = $1;
+```
+
+- Simpler: one pattern for all cases
+- Correct for both normal writes and idempotent retries
+- **Caveat:** must handle the empty-result case (row deleted between write and SELECT)
+
+### Approach B: Detect Duplicates, Use `pg_current_xact_id()` for Normal Writes
+
+```sql
+-- After INSERT ... ON CONFLICT DO NOTHING:
+-- Check if the INSERT actually inserted (via RETURNING or affected rows count)
+-- If inserted: SELECT pg_current_xact_id()::xid::text
+-- If duplicate: SELECT xmin::text FROM table_name WHERE id = $1
+```
+
+- More explicit about what's happening
+- Avoids the extra SELECT for normal writes
+- More code to maintain
+
+**Recommendation:** Approach A (always use `xmin`) is simpler and correct. The
+performance difference of the extra SELECT is negligible compared to the transaction
+itself.
+
+---
+
+## Alternative: ON CONFLICT DO UPDATE with RETURNING
+
+Another pattern that avoids the issue entirely:
+
+```sql
+INSERT INTO table_name (id, col1, col2)
+VALUES ($1, $2, $3)
+ON CONFLICT (id) DO UPDATE SET col1 = EXCLUDED.col1, col2 = EXCLUDED.col2
+RETURNING xmin::text AS txid;
+```
+
+- Always modifies the row → always produces a replication event
+- `RETURNING xmin` gives the current transaction's xid in all cases
+- No need for a separate SELECT
+- **Downside:** produces WAL traffic and replication events for retries, which means
+  other clients will see a spurious update
+
+---
+
+## Summary
+
+| Question | Answer |
+|---|---|
+| Is `xmin::text` the correct format? | **Yes** — same 32-bit xid format that Electric sends in the `txids` header |
+| Equivalent to `pg_current_xact_id()` for normal writes? | **Yes** — identical value for rows modified in the current transaction |
+| Key advantage of `xmin` approach | Returns the txid that *actually produced a change* in the replication stream, not a new txid for a no-op transaction |
+| Main edge case to handle | Row deleted between attempts → `SELECT xmin` returns no rows |
