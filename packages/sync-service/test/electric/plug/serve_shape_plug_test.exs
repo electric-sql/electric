@@ -1028,6 +1028,42 @@ defmodule Electric.Plug.ServeShapePlugTest do
     end
   end
 
+  describe "parse_body error handling" do
+    setup :with_lsn_tracker
+
+    setup ctx do
+      {:via, _, {registry_name, registry_key}} =
+        Electric.Shapes.Supervisor.name(ctx.stack_id)
+
+      {:ok, _} = Registry.register(registry_name, registry_key, nil)
+      set_status_to_active(ctx)
+
+      patch_storage(for_shape: fn @test_shape_handle, _opts -> @test_opts end)
+
+      :ok
+    end
+
+    test "returns 400 for invalid JSON body without crashing", ctx do
+      conn =
+        Plug.Test.conn(:post, "/?offset=-1", "not valid json")
+        |> put_req_header("content-type", "application/json")
+        |> call_serve_shape_plug(ctx)
+
+      assert conn.status == 400
+      assert %{"error" => "Invalid JSON in request body"} = Jason.decode!(conn.resp_body)
+    end
+
+    test "returns 400 for non-object JSON body without crashing", ctx do
+      conn =
+        Plug.Test.conn(:post, "/?offset=-1", Jason.encode!(["an", "array"]))
+        |> put_req_header("content-type", "application/json")
+        |> call_serve_shape_plug(ctx)
+
+      assert conn.status == 400
+      assert %{"error" => "Request body must be a JSON object"} = Jason.decode!(conn.resp_body)
+    end
+  end
+
   describe "stack not ready" do
     test "returns 503", ctx do
       conn =
