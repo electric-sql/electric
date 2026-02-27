@@ -207,6 +207,94 @@ RETURNING xmin::text AS txid;
 
 ---
 
+## Follow-up: Would an Infinite `awaitTxId` Timeout Work Instead?
+
+Tomas asked whether simply increasing the `awaitTxId` timeout to infinity would
+eliminate the need for the `xmin` approach, allowing them to continue using
+`pg_current_xact_id()`.
+
+### How `awaitTxId` Actually Resolves
+
+Based on the TanStack DB `@tanstack/electric-db-collection` source, `awaitTxId`
+resolves via **two mechanisms**:
+
+1. **`seenTxids` store** — a `Set<number>` populated from `message.headers.txids`
+   on change messages. When a batch of changes arrives and an `up-to-date` control
+   message is received, all txids from that batch are committed to the set.
+
+2. **`seenSnapshots` store** — an array of `PostgresSnapshot` objects (with
+   `xmin`, `xmax`, `xip_list`) populated from `snapshot-end` control messages.
+   Uses the `isVisibleInSnapshot()` function from `@electric-sql/client` to check
+   if `txid < xmin || (txid < xmax && txid not in xip_list)`.
+
+The function checks both stores immediately, resolving synchronously if the txid
+is already known. Otherwise it subscribes to both stores and resolves when either
+matches. The default timeout is **5000ms** (5 seconds).
+
+### Why Infinite Timeout Does NOT Solve the Problem
+
+Consider the DO NOTHING retry scenario:
+
+```
+1. Client starts shape stream → initial snapshot: xmin=90, xmax=100, xip=[]
+2. First INSERT succeeds → txid=100 → change appears in stream
+3. Network failure → client retries
+4. Retry: INSERT ON CONFLICT DO NOTHING → pg_current_xact_id() = 105
+5. Client calls awaitTxId(105)
+```
+
+At step 5, the `awaitTxId(105)` check:
+
+- **seenTxids**: Does the set contain 105? **No** — no change message ever
+  carries txid 105 (DO NOTHING produced no WAL entry)
+- **seenSnapshots**: Is 105 visible in snapshot {xmin=90, xmax=100}?
+  105 >= xmax → **No**
+
+The function subscribes to both stores and waits. During normal live streaming:
+
+- New change messages arrive with txids like 106, 110, 115... but never 105
+  → `seenTxids` never contains 105
+- **No new `snapshot-end` messages arrive during live streaming** — snapshots
+  are only sent on initial load and `must-refetch`
+  → No new snapshot to make 105 visible
+
+**Result: `awaitTxId(105)` hangs forever**, regardless of timeout duration.
+
+The only way it could resolve is if:
+- A `must-refetch` triggers a new snapshot where `xmin > 105`
+- The client reconnects and gets a fresh snapshot
+- But these events are unpredictable and could take minutes, hours, or never happen
+
+### Valter's Point: "Any txid >= current xmin will do"
+
+Valter suggested that any txid >= the current snapshot's xmin should work because
+"either you already received it, or will receive." This is true for txids that
+**produce actual changes** — those txids will appear in `seenTxids` when the
+corresponding change message arrives.
+
+However, a DO NOTHING transaction's txid **never produces a change**, so it will
+never appear in `seenTxids` regardless of its value relative to the snapshot.
+Valter's logic holds for the `xmin` approach (where you return the txid of the
+transaction that actually modified the row), but not for `pg_current_xact_id()` on
+a no-op transaction.
+
+### Recommendation
+
+**The infinite timeout approach does not fix the root cause.** The fundamental
+problem is that `pg_current_xact_id()` returns a txid with no corresponding change
+in the replication stream. No amount of waiting will make that change appear.
+
+The `xmin` approach remains the correct solution because it returns a txid that
+**actually has a change in the stream**. The `awaitTxId` function can match it
+either via `seenTxids` (the change message itself) or via `seenSnapshots` (if the
+txid is old enough to be covered by a snapshot's xmin).
+
+If simplicity is a priority, the `ON CONFLICT DO UPDATE ... RETURNING xmin::text`
+approach (described earlier) is also viable — it ensures every transaction produces
+a change in the stream, at the cost of extra WAL traffic for duplicates.
+
+---
+
 ## Summary
 
 | Question | Answer |
