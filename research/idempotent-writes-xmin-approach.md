@@ -6,6 +6,31 @@ A user is implementing idempotent writes for their sync endpoint and changed fro
 `pg_current_xact_id()` to querying `xmin` from the affected row after each write.
 This document analyzes whether the `xmin` approach is correct and identifies edge cases.
 
+## Root Cause: The Offline Retry Loop
+
+The actual failure mode observed in production with offline transactions:
+
+```
+1. Client offline → makes optimistic mutation
+2. Client comes online → mutationFn fires → plain INSERT succeeds (txid=100)
+3. Response lost OR awaitTxId(100) times out (stream slow, connection drops)
+4. TanStack DB treats mutation as failed → retries mutationFn
+5. Retry INSERT → DUPLICATE KEY ERROR (row already exists from step 2)
+```
+
+The duplicate key error is the **symptom**. The root cause is `awaitTxId` timing
+out, which triggers TanStack DB to retry the entire `mutationFn`.
+
+**The fix requires two parts:**
+
+1. **Make writes idempotent** — use `ON CONFLICT DO NOTHING` so retries don't error
+2. **Handle the txid correctly on retry** — so `awaitTxId` resolves and stops the
+   retry loop
+
+Without part 2, fixing the error alone creates an infinite retry loop: each retry
+is a no-op → returns a txid with no change in stream → `awaitTxId` times out again
+→ retries again → forever.
+
 ## Background: How the txid Write-Path Works
 
 The write-path contract in Electric + TanStack DB is:
