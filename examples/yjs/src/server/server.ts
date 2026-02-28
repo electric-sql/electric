@@ -30,13 +30,6 @@ app.use(
     origin: `*`,
     allowHeaders: [`Content-Type`, `Authorization`],
     allowMethods: [`GET`, `POST`, `PUT`, `DELETE`, `OPTIONS`],
-    exposeHeaders: [
-      `Content-Length`,
-      `electric-offset`,
-      `electric-handle`,
-      `electric-schema`,
-      `electric-cursor`,
-    ],
     credentials: true,
     maxAge: 600,
   })
@@ -88,7 +81,7 @@ app.put(`/api/update`, async (c: Context) => {
   }
 })
 
-// Shape proxy endpoint to forward requests to Electric and handle required headers
+// Shape proxy endpoint to forward requests to Electric
 app.get(`/shape-proxy/v1/shape`, async (c: Context) => {
   const url = new URL(c.req.url)
   const electricUrl = process.env.ELECTRIC_URL || `http://localhost:3000`
@@ -124,46 +117,20 @@ app.get(`/shape-proxy/v1/shape`, async (c: Context) => {
       headers,
     })
 
-    let resp = await fetch(newRequest)
+    const resp = await fetch(newRequest)
 
-    // Handle content-encoding issues
-    if (resp.headers.get(`content-encoding`)) {
-      const respHeaders = new Headers(resp.headers)
+    // Create a new Response with mutable headers so that
+    // Hono's CORS middleware can merge its headers in
+    const respHeaders = new Headers(resp.headers)
+    if (respHeaders.get(`content-encoding`)) {
       respHeaders.delete(`content-encoding`)
       respHeaders.delete(`content-length`)
-      resp = new Response(resp.body, {
-        status: resp.status,
-        statusText: resp.statusText,
-        headers: respHeaders,
-      })
-    }
-
-    // Create a response with all headers from the Electric response
-    const responseHeaders = new Headers()
-
-    // Copy all headers from the original response
-    // Using forEach which is available in the Headers implementation
-    resp.headers.forEach((value, key) => {
-      responseHeaders.set(key, value)
-    })
-
-    // Ensure the Electric headers are explicitly included
-    const electricHeaders = [
-      `electric-offset`,
-      `electric-handle`,
-      `electric-schema`,
-      `electric-total-count`,
-    ]
-    for (const header of electricHeaders) {
-      const value = resp.headers.get(header)
-      if (value) {
-        responseHeaders.set(header, value)
-      }
     }
 
     return new Response(resp.body, {
       status: resp.status,
-      headers: responseHeaders,
+      statusText: resp.statusText,
+      headers: respHeaders,
     })
   } catch (error) {
     console.error(`Error proxying to Electric:`, error)
