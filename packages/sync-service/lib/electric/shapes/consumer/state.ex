@@ -29,7 +29,8 @@ defmodule Electric.Shapes.Consumer.State do
     terminating?: false,
     buffering?: false,
     dnf_context: nil,
-    dep_lsns: %{}
+    dep_lsns: %{},
+    last_processed_xid: nil
   ]
 
   @type pg_snapshot() :: SnapshotQuery.pg_snapshot()

@@ -10,6 +10,7 @@ defmodule Electric.Shapes.Consumer.MoveHandling do
   alias Electric.Shapes.Consumer.Materializer
   alias Electric.Shapes.Consumer.MoveIns
   alias Electric.Replication.Eval
+  alias Electric.Replication.Changes.Transaction
 
   require Logger
 
@@ -88,6 +89,16 @@ defmodule Electric.Shapes.Consumer.MoveHandling do
   end
 
   def query_complete(%State{} = state, name, key_set, snapshot) do
+    if state.last_processed_xid &&
+         not Transaction.visible_in_snapshot?(state.last_processed_xid, snapshot) do
+      raise """
+      Move-in query snapshot response is BEHIND replication stream!
+        last_processed_xid=#{state.last_processed_xid}
+        snapshot=#{inspect(snapshot)}
+        This must not happen because the move-in could overwrite changes that should be applied after it.
+      """
+    end
+
     # Filter moved_out_tags to only include positions relevant to this move-in's
     # dependency. Without this, move-out patterns from unrelated dependencies can
     # incorrectly filter rows (especially when different positions use the same column).

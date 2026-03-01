@@ -504,6 +504,7 @@ defmodule Electric.Shapes.Consumer do
       writer: writer
     } = state
 
+    state = %{state | last_processed_xid: xid}
     state = State.reset_dep_lsns(state)
     state = State.remove_completed_move_ins(state, txn)
 
