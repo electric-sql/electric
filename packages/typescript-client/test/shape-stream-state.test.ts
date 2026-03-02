@@ -1183,15 +1183,22 @@ describe(`fuzz testing`, () => {
   const SINGLE_SEED = process.env.FUZZ_SEED
     ? parseInt(process.env.FUZZ_SEED)
     : undefined
-  const SEEDS =
-    SINGLE_SEED !== undefined
-      ? 1
-      : process.env.FUZZ_DEEP
-        ? 1000
-        : IS_COVERAGE
-          ? 20
-          : 100
-  const STEPS = process.env.FUZZ_DEEP ? 50 : IS_COVERAGE ? 15 : 30
+
+  function getSeedCount(): number {
+    if (SINGLE_SEED !== undefined) return 1
+    if (process.env.FUZZ_DEEP) return 1000
+    if (IS_COVERAGE) return 20
+    return 100
+  }
+
+  function getStepCount(): number {
+    if (process.env.FUZZ_DEEP) return 50
+    if (IS_COVERAGE) return 15
+    return 30
+  }
+
+  const SEEDS = getSeedCount()
+  const STEPS = getStepCount()
 
   it(`survives ${SEEDS} random ${STEPS}-step sequences`, () => {
     const seedsToRun =

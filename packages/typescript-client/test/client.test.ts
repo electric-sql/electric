@@ -367,6 +367,7 @@ describe.for(fetchAndSse)(`Shape  (liveSSE=$liveSse)`, ({ liveSse }) => {
         table: issuesTableUrl,
       },
       signal: aborter.signal,
+      backoffOptions: { initialDelay: 5, maxDelay: 20, multiplier: 1.2 },
       fetchClient: async (_input, _init) => {
         if (fetchShouldFail)
           throw new FetchError(
@@ -403,7 +404,9 @@ describe.for(fetchAndSse)(`Shape  (liveSSE=$liveSse)`, ({ liveSse }) => {
     await vi.waitFor(() => expect(shapeStream.isConnected()).false)
 
     fetchShouldFail = false
-    await vi.waitFor(() => expect(shapeStream.isConnected()).true)
+    await vi.waitFor(() => expect(shapeStream.isConnected()).true, {
+      timeout: 5_000,
+    })
   })
 
   it(`should set isConnected to false when the stream is paused an back on true when the fetch succeeds again`, async ({

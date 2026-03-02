@@ -129,7 +129,7 @@ export function assertStateInvariants(state: ShapeStreamState): void {
     expect(state.staleCacheRetryCount).toBeGreaterThan(0)
   }
 
-  // I8: ReplayingState always has replayCursor
+  // I7: ReplayingState always has replayCursor
   if (state.kind === `replaying`) {
     expect(state.replayCursor).toBeDefined()
   }
@@ -574,14 +574,10 @@ export function makeAllStates(): Array<{
 // ─── Counterexample shrinking ───
 
 export function replayEvents(events: EventSpec[]): ShapeStreamState {
-  let state: ShapeStreamState = createInitialState({ offset: `-1` })
-  for (const event of events) {
-    const result = applyEvent(state, event)
-    assertStateInvariants(result.state)
-    assertReachableInvariants(event, result.prevState, result.state)
-    state = result.state
-  }
-  return state
+  const initial = createInitialState({ offset: `-1` })
+  const results = rawEvents(initial, events)
+  const last = results[results.length - 1]
+  return last ? last.state : initial
 }
 
 export function shrinkFailingSequence(
@@ -590,7 +586,7 @@ export function shrinkFailingSequence(
 ): EventSpec[] {
   let current = [...events]
   for (let i = current.length - 1; i >= 0; i--) {
-    const without = [...current.slice(0, i), ...current.slice(i + 1)]
+    const without = dropEvent(current, i)
     if (stillFails(without)) {
       current = without
     }
@@ -610,7 +606,9 @@ export function reorderEvents(
   j: number
 ): EventSpec[] {
   const result = [...trace]
-  ;[result[i], result[j]] = [result[j], result[i]]
+  const temp = result[i]
+  result[i] = result[j]
+  result[j] = temp
   return result
 }
 

@@ -4,52 +4,35 @@ import type { Schema } from '../../src/types'
 
 // ─── Response template helpers ───
 
-export function upToDateResponse(opts?: {
+interface ElectricResponseOpts {
   handle?: string
   offset?: string
   cursor?: string
   schema?: Schema
-}): Response {
-  const handle = opts?.handle ?? `test-handle`
-  const offset = opts?.offset ?? `0_0`
-  const cursor = opts?.cursor ?? `cursor-1`
-  const schema = opts?.schema ?? {}
+}
 
+function electricHeaders(opts?: ElectricResponseOpts): Headers {
+  return new Headers({
+    'electric-handle': opts?.handle ?? `test-handle`,
+    'electric-offset': opts?.offset ?? `0_0`,
+    'electric-schema': JSON.stringify(opts?.schema ?? {}),
+    'electric-cursor': opts?.cursor ?? `cursor-1`,
+  })
+}
+
+export function upToDateResponse(opts?: ElectricResponseOpts): Response {
   return new Response(
     JSON.stringify([{ headers: { control: `up-to-date` } }]),
-    {
-      status: 200,
-      headers: new Headers({
-        'electric-handle': handle,
-        'electric-offset': offset,
-        'electric-schema': JSON.stringify(schema),
-        'electric-cursor': cursor,
-      }),
-    }
+    { status: 200, headers: electricHeaders(opts) }
   )
 }
 
-export function initialSyncResponse(opts?: {
-  handle?: string
-  offset?: string
-  cursor?: string
-  schema?: Schema
-  messages?: object[]
-}): Response {
-  const handle = opts?.handle ?? `test-handle`
-  const offset = opts?.offset ?? `0_0`
-  const cursor = opts?.cursor ?? `cursor-1`
-  const schema = opts?.schema ?? {}
-  const messages = opts?.messages ?? []
-
-  return new Response(JSON.stringify(messages), {
+export function initialSyncResponse(
+  opts?: ElectricResponseOpts & { messages?: object[] }
+): Response {
+  return new Response(JSON.stringify(opts?.messages ?? []), {
     status: 200,
-    headers: new Headers({
-      'electric-handle': handle,
-      'electric-offset': offset,
-      'electric-schema': JSON.stringify(schema),
-      'electric-cursor': cursor,
-    }),
+    headers: electricHeaders(opts),
   })
 }
 
@@ -58,21 +41,17 @@ export function staleResponse(opts?: {
   expiredHandle?: string
   offset?: string
 }): Response {
-  const handle = opts?.handle ?? `stale-handle`
-  const offset = opts?.offset ?? `0_0`
-
-  return new Response(JSON.stringify([]), {
-    status: 200,
-    headers: new Headers({
-      'electric-handle': handle,
-      'electric-offset': offset,
-      'electric-schema': ``,
-      'electric-cursor': ``,
-      ...(opts?.expiredHandle
-        ? { 'electric-expired-handle': opts.expiredHandle }
-        : {}),
-    }),
+  const headers = new Headers({
+    'electric-handle': opts?.handle ?? `stale-handle`,
+    'electric-offset': opts?.offset ?? `0_0`,
+    'electric-schema': ``,
+    'electric-cursor': ``,
   })
+  if (opts?.expiredHandle) {
+    headers.set(`electric-expired-handle`, opts.expiredHandle)
+  }
+
+  return new Response(JSON.stringify([]), { status: 200, headers })
 }
 
 export function mustRefetchResponse(): Response {
