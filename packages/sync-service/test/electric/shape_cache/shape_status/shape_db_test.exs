@@ -561,6 +561,23 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDbTest do
     end
   end
 
+  describe "transaction error handling" do
+    test "checkout_write! does not mask original exception when rollback fails", ctx do
+      # When a function raises inside a transaction, the rescue block should
+      # propagate the original exception even if ROLLBACK itself fails
+      # (e.g. because the transaction was already auto-rolled-back by SQLite).
+      assert_raise RuntimeError, "original error", fn ->
+        ShapeDb.Connection.checkout_write!(
+          ctx.stack_id,
+          :test_rollback,
+          fn _conn ->
+            raise RuntimeError, "original error"
+          end
+        )
+      end
+    end
+  end
+
   describe "recovery" do
     test "resets state when db file is corrupted", ctx do
       {:ok, path} = ShapeDb.Connection.db_path(storage_dir: ctx.tmp_dir)

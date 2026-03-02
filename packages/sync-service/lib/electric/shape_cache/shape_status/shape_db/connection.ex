@@ -409,9 +409,11 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
   end
 
   defp transaction(%__MODULE__{conn: conn}, fun) when is_function(fun, 0) do
-    try do
-      :ok = execute(conn, "BEGIN IMMEDIATE TRANSACTION")
+    # BEGIN outside try so a failure to start the transaction doesn't
+    # trigger a nonsensical ROLLBACK attempt in the rescue block.
+    :ok = execute(conn, "BEGIN IMMEDIATE TRANSACTION")
 
+    try do
       {result, commit} =
         case fun.() do
           :ok -> {:ok, true}
@@ -419,15 +421,32 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
           error -> {error, false}
         end
 
-      if commit,
-        do: :ok = execute(conn, "COMMIT"),
-        else: :ok = execute(conn, "ROLLBACK")
+      if commit do
+        :ok = execute(conn, "COMMIT")
+      else
+        # Use safe_rollback to avoid masking the original error
+        safe_rollback(conn)
+      end
 
       result
     rescue
       e ->
-        :ok = execute(conn, "ROLLBACK")
+        # Use safe_rollback to avoid masking the original exception with
+        # a MatchError when ROLLBACK fails (e.g. because the transaction
+        # was already auto-rolled-back due to SQLite corruption/IO errors).
+        safe_rollback(conn)
         reraise e, __STACKTRACE__
+    end
+  end
+
+  defp safe_rollback(conn) when is_raw_connection(conn) do
+    case execute(conn, "ROLLBACK") do
+      :ok ->
+        :ok
+
+      {:error, reason} ->
+        Logger.warning("Failed to rollback transaction: #{inspect(reason)}")
+        {:error, reason}
     end
   end
 
