@@ -12,6 +12,7 @@ defmodule Electric.Integration.OracleViewTest do
 
   import Support.ComponentSetup
   import Support.DbSetup
+  import Support.DbStructureSetup
   import Support.IntegrationSetup
   import Support.OracleHarness
   import Support.OracleHarness.StandardSchema
@@ -257,6 +258,65 @@ defmodule Electric.Integration.OracleViewTest do
       ]
 
       test_against_oracle(ctx, shapes, mutations)
+    end
+  end
+
+  describe "intra-transaction double-move (#3892)" do
+    setup :with_sql_execute
+
+    @tag with_sql: [
+           # Custom schema: projects → teams → tasks
+           "CREATE TABLE projects (id TEXT PRIMARY KEY)",
+           "CREATE TABLE teams (id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES projects(id))",
+           "CREATE TABLE tasks (id TEXT PRIMARY KEY, team_id TEXT NOT NULL REFERENCES teams(id), title TEXT NOT NULL)",
+           "INSERT INTO projects (id) VALUES ('proj_alpha'), ('proj_beta')",
+           "INSERT INTO teams (id, project_id) VALUES ('team_a', 'proj_alpha'), ('team_b', 'proj_beta'), ('team_c', 'proj_beta')",
+           "INSERT INTO tasks (id, team_id, title) VALUES ('task_1', 'team_a', 'Build feature')"
+         ]
+    test "stale row after task reassigned twice through intermediate team", ctx do
+      # Shape: all tasks belonging to teams in proj_alpha
+      shapes = [
+        %{
+          name: "tasks_in_proj_alpha",
+          table: "tasks",
+          where: "team_id IN (SELECT id FROM teams WHERE project_id = 'proj_alpha')",
+          columns: ["id", "team_id", "title"],
+          pk: ["id"],
+          optimized: true
+        }
+      ]
+
+      # In a single atomic transaction:
+      #   1. Move team_b into proj_alpha (adds team_b to the dependency set)
+      #   2. Reassign task_1 from team_a → team_b
+      #   3. Reassign task_1 from team_b → team_c
+      #
+      # After commit: task_1 → team_c → proj_beta, so task_1 is NOT in shape.
+      #
+      # Bug: 
+      # team_a→team_b is delivered by the filter and processed, keeping task_1 in the shape view.
+      # team_b→team_c is NOT delivered by the filter because neither team_b
+      # nor team_c are in pre-txn refs. The move-in snapshot for team_b doesn't
+      # find task_1 either (post-commit has team_id=team_c). Result: task_1
+      # stuck in shape view with stale data.
+      transactions = [
+        [
+          %{
+            name: "move_team_b_to_alpha",
+            sql: "UPDATE teams SET project_id = 'proj_alpha' WHERE id = 'team_b'"
+          },
+          %{
+            name: "reassign_task_1_to_team_b",
+            sql: "UPDATE tasks SET team_id = 'team_b' WHERE id = 'task_1'"
+          },
+          %{
+            name: "reassign_task_1_to_team_c",
+            sql: "UPDATE tasks SET team_id = 'team_c' WHERE id = 'task_1'"
+          }
+        ]
+      ]
+
+      test_against_oracle(ctx, shapes, transactions)
     end
   end
 
