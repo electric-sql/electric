@@ -392,7 +392,8 @@ describe(`shape stream state machine`, () => {
       .expectHandle(`new-handle`)
       .done()
 
-    expect(state.liveCacheBuster).toBe(``)
+    // I10: liveCacheBuster is a fresh random token after reset (never empty)
+    expect(state.liveCacheBuster).not.toBe(``)
     expect(state.lastSyncedAt).toBe(12345)
     expect(state.schema).toBe(undefined)
     expect(state.isUpToDate).toBe(false)

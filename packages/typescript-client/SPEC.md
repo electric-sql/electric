@@ -169,7 +169,10 @@ For any state, `state.markMustRefetch(handle)` produces an InitialState with:
 - `handle === handle` (the argument)
 - `lastSyncedAt` preserved from previous state
 - `schema === undefined`
-- `liveCacheBuster === ''`
+- `liveCacheBuster` is a fresh random token (non-empty, different from the previous
+  state's `liveCacheBuster`). A random token prevents the initial live request after
+  any reset from colliding with a URL that a previous session may have stored in a
+  browser HTTP disk cache (e.g. WKWebView in Tauri).
 
 **Enforcement**: Algebraic property test across all 7 states.
 

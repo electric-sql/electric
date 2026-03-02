@@ -216,7 +216,7 @@ export abstract class ShapeStreamState {
     return new InitialState({
       handle,
       offset: `-1`,
-      liveCacheBuster: ``,
+      liveCacheBuster: freshLiveCacheBuster(),
       lastSyncedAt: this.lastSyncedAt,
       schema: undefined,
     })
@@ -827,6 +827,19 @@ export class ErrorState extends ShapeStreamState {
 // Type alias & factory
 // ---------------------------------------------------------------------------
 
+/**
+ * Returns a fresh, unpredictable live-cache-buster token (invariant I10).
+ *
+ * Every reset (createInitialState / markMustRefetch) uses a new random token
+ * so that the first live request after a reset can never collide with a URL
+ * that a previous session may have cached in the browser's HTTP disk cache
+ * (e.g. WKWebView in Tauri).  An empty string would always produce the same
+ * URL, making cross-session cache replays possible.
+ */
+export function freshLiveCacheBuster(): string {
+  return `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`
+}
+
 export function createInitialState(opts: {
   offset: Offset
   handle?: string
@@ -834,7 +847,7 @@ export function createInitialState(opts: {
   return new InitialState({
     handle: opts.handle,
     offset: opts.offset,
-    liveCacheBuster: ``,
+    liveCacheBuster: freshLiveCacheBuster(),
     lastSyncedAt: undefined,
     schema: undefined,
   })
