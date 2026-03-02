@@ -1,5 +1,11 @@
 # @electric-sql/client
 
+## 1.5.10
+
+### Patch Changes
+
+- 243c7d7: Add multi-tier testing DSL for ShapeStream state machine with fluent scenario builder, transition truth table, algebraic property tests, seeded fuzz testing, and mutation testing.
+
 ## 1.5.9
 
 ### Patch Changes
