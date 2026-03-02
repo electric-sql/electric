@@ -245,6 +245,7 @@ defmodule Electric.Shapes.ConsumerRegistry do
 
   def new(stack_id, opts \\ []) when is_binary(stack_id) do
     table = registry_table(stack_id)
+    Electric.Shapes.Consumer.Materializer.init_link_values_table(stack_id)
 
     state = struct(__MODULE__, Keyword.merge(opts, stack_id: stack_id, table: table))
 

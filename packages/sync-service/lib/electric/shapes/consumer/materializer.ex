@@ -57,7 +57,34 @@ defmodule Electric.Shapes.Consumer.Materializer do
     GenServer.call(name(state), :wait_until_ready, :infinity)
   end
 
-  def get_link_values(opts) do
+  @doc """
+  Creates the per-stack ETS table that caches link values for all materializers
+  in a stack. Must be called before any materializer in the stack starts.
+  """
+  @spec init_link_values_table(stack_id :: term()) :: :ets.table()
+  def init_link_values_table(stack_id) do
+    :ets.new(link_values_table_name(stack_id), [
+      :named_table,
+      :public,
+      :set,
+      read_concurrency: true
+    ])
+  rescue
+    ArgumentError -> :ets.whereis(link_values_table_name(stack_id))
+  end
+
+  def get_link_values(%{stack_id: stack_id, shape_handle: shape_handle} = opts) do
+    table = link_values_table_name(stack_id)
+
+    case :ets.lookup(table, shape_handle) do
+      [{^shape_handle, values}] -> values
+      _ -> genserver_get_link_values(opts)
+    end
+  rescue
+    ArgumentError -> genserver_get_link_values(opts)
+  end
+
+  defp genserver_get_link_values(opts) do
     GenServer.call(name(opts), :get_link_values)
   catch
     :exit, _reason ->
@@ -149,6 +176,8 @@ defmodule Electric.Shapes.Consumer.Materializer do
       |> decode_json_stream()
       |> apply_changes(state)
 
+    write_link_values(state)
+
     {:noreply, %{state | offset: offset}}
   end
 
@@ -230,6 +259,17 @@ defmodule Electric.Shapes.Consumer.Materializer do
 
   def handle_info({:DOWN, _ref, :process, pid, _reason}, state) do
     {:noreply, %{state | subscribers: MapSet.delete(state.subscribers, pid)}}
+  end
+
+  defp link_values_table_name(stack_id) do
+    :"Electric.Materializer.LinkValues:#{stack_id}"
+  end
+
+  defp write_link_values(%{stack_id: stack_id, shape_handle: shape_handle, value_counts: value_counts}) do
+    link_values = MapSet.new(Map.keys(value_counts))
+    :ets.insert(link_values_table_name(stack_id), {shape_handle, link_values})
+  rescue
+    ArgumentError -> :ok
   end
 
   defp decode_json_stream(stream) do
@@ -317,6 +357,8 @@ defmodule Electric.Shapes.Consumer.Materializer do
         send(pid, {:materializer_changes, state.shape_handle, events})
       end
     end
+
+    write_link_values(state)
 
     %{state | pending_events: %{}}
   end
