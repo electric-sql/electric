@@ -171,25 +171,6 @@ defmodule Support.OracleHarness.StandardSchema do
     :ok
   end
 
-  @doc """
-  Resets the standard schema data to its initial seeded state.
-  Faster than full schema recreation.
-  """
-  def reset_standard_data(ctx) do
-    # Delete in reverse order of dependencies (avoid TRUNCATE which invalidates shapes via replication)
-    OracleHarness.apply_sql(ctx, [
-      "DELETE FROM level_4",
-      "DELETE FROM level_3_tags",
-      "DELETE FROM level_3",
-      "DELETE FROM level_2_tags",
-      "DELETE FROM level_2",
-      "DELETE FROM level_1_tags",
-      "DELETE FROM level_1"
-    ])
-
-    OracleHarness.apply_sql(ctx, seed_sql())
-    :ok
-  end
 
   # ----------------------------------------------------------------------------
   # Mutation Generation
