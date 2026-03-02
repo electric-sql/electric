@@ -153,9 +153,10 @@ describe(`shape stream state machine`, () => {
 
   // 10. LiveState.handleSseConnectionClosed — healthy connection resets counter
   it(`LiveState resets counter on healthy SSE connection`, () => {
-    const live = new LiveState(
-      makeShared({ consecutiveShortSseConnections: 2 })
-    )
+    const live = new LiveState(makeShared(), {
+      consecutiveShortSseConnections: 2,
+    })
+    expect(live.consecutiveShortSseConnections).toBe(2)
 
     const transition = live.handleSseConnectionClosed({
       connectionDuration: 5000,
@@ -733,55 +734,105 @@ describe(`shape stream state machine`, () => {
     expect(state.kind).toBe(`paused`)
   })
 
+  it(`PausedState stays paused while applying accepted response metadata`, () => {
+    const { state } = scenario()
+      .response({ responseHandle: `h1`, responseOffset: `0_0` })
+      .expectKind(`syncing`)
+      .pause()
+      .expectKind(`paused`)
+      .response({ responseHandle: `h2`, responseOffset: `10_1` })
+      .expectAction(`accepted`)
+      .expectKind(`paused`)
+      .done()
+
+    expect(state.handle).toBe(`h2`)
+    expect(state.offset).toBe(`10_1`)
+  })
+
+  it(`PausedState ignores stale metadata without unpausing`, () => {
+    const { state } = scenario({ handle: `good-handle` })
+      .response({ responseHandle: `good-handle` })
+      .expectKind(`syncing`)
+      .pause()
+      .expectKind(`paused`)
+      .response({
+        responseHandle: `expired-handle`,
+        responseOffset: `999_999`,
+        responseCursor: `cursor-stale`,
+        expiredHandle: `expired-handle`,
+      })
+      .expectAction(`ignored`)
+      .expectKind(`paused`)
+      .done()
+
+    expect(state.handle).toBe(`good-handle`)
+    expect(state.offset).toBe(`0_0`)
+  })
+
+  it(`PausedState preserves paused wrapper for stale-retry transitions`, () => {
+    const { state } = scenario({ handle: `h1` })
+      .response({ responseHandle: `h1` })
+      .expectKind(`syncing`)
+      .pause()
+      .expectKind(`paused`)
+      .response({
+        responseHandle: `h1`,
+        expiredHandle: `h1`,
+      })
+      .expectAction(`stale-retry`)
+      .expectKind(`paused`)
+      .done()
+
+    expect(state.staleCacheRetryCount).toBe(1)
+    expect(state.staleCacheBuster).toBeDefined()
+  })
+
   // --- 204 "No Content" handling ---
 
   it(`204 response should transition to LiveState (up-to-date)`, () => {
-    const state = new SyncingState(makeShared())
-    const transition = state.handleResponseMetadata(
-      makeResponseInput({ status: 204 })
-    )
+    const { state } = scenario()
+      .response({ status: 204, responseHandle: `h1` })
+      .expectAction(`accepted`)
+      .expectKind(`live`)
+      .expectUpToDate(true)
+      .done()
 
-    // A 204 means "no content, you're caught up" — should become live
-    expect(transition.state).toBeInstanceOf(LiveState)
-    expect(transition.state.isUpToDate).toBe(true)
-    expect(transition.state.lastSyncedAt).toBeDefined()
+    expect(state.lastSyncedAt).toBeDefined()
     // 204 gives no indication SSE will work — skip SSE detection cycle
-    expect(transition.state.sseFallbackToLongPolling).toBe(true)
+    expect(state.sseFallbackToLongPolling).toBe(true)
   })
 
   it(`repeated 204 responses should transition to LiveState after first 204`, () => {
-    // Simulates a deprecated server that only sends 204 "No Content".
-    // The client should become up-to-date after the first 204.
-    let state = createInitialState({ offset: `-1` }) as InstanceType<
-      typeof InitialState | typeof SyncingState | typeof LiveState
-    >
-
-    // Simulate 5 fetch cycles, each returning 204 with a valid handle
+    const events: EventSpec[] = []
     for (let i = 0; i < 5; i++) {
-      // 1. handleResponseMetadata for the 204 response
-      const responseTransition = state.handleResponseMetadata(
-        makeResponseInput({
-          status: 204,
-          responseHandle: `h1`,
-          responseOffset: `0_0`,
-          responseCursor: `cursor-1`,
-        })
+      events.push(
+        {
+          type: `response`,
+          input: {
+            status: 204,
+            responseHandle: `h1`,
+            responseOffset: `0_0`,
+            responseCursor: `cursor-1`,
+          },
+        },
+        {
+          type: `messages`,
+          input: {
+            hasMessages: false,
+            hasUpToDateMessage: false,
+          },
+        }
       )
-      state = responseTransition.state as typeof state
-
-      // 2. handleMessageBatch with empty batch (204 has no body)
-      const batchTransition = state.handleMessageBatch(
-        makeMessageBatchInput({
-          hasMessages: false,
-          hasUpToDateMessage: false,
-        })
-      )
-      state = batchTransition.state as typeof state
     }
 
-    // After receiving a 204, the client should be live and up-to-date
-    expect(state.isUpToDate).toBe(true)
-    expect(state.kind).toBe(`live`)
+    const results = rawEvents(createInitialState({ offset: `-1` }), events)
+    const state = results.at(-1)?.state
+    expect(state).toBeDefined()
+
+    // Simulates a deprecated server that only sends 204 "No Content".
+    // The client should become up-to-date after the first 204.
+    expect(state!.isUpToDate).toBe(true)
+    expect(state!.kind).toBe(`live`)
   })
 })
 

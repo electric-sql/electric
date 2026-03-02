@@ -529,6 +529,7 @@ export function rawEvents(
   for (const event of events) {
     const result = applyEvent(current, event)
     assertStateInvariants(result.state)
+    assertReachableInvariants(event, result.prevState, result.state)
     results.push(result)
     current = result.state
   }

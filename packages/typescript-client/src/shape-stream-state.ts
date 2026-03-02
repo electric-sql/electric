@@ -75,7 +75,7 @@ export type ResponseMetadataTransition =
   | { action: `ignored`; state: ShapeStreamState }
   | {
       action: `stale-retry`
-      state: StaleRetryState
+      state: ShapeStreamState
       exceededMaxRetries: boolean
     }
 
@@ -122,7 +122,7 @@ export interface UrlParamsContext {
  * Each concrete state carries only its relevant fields — there is no shared
  * flat context bag. Transitions create new immutable state objects.
  *
- * `isUpToDate` returns true for LiveState and PausedState wrapping LiveState.
+ * `isUpToDate` returns true for LiveState and delegating states wrapping LiveState.
  */
 export abstract class ShapeStreamState {
   abstract readonly kind: ShapeStreamStateKind
@@ -368,8 +368,8 @@ abstract class ActiveState extends ShapeStreamState {
 
 /**
  * Captures shared behavior of InitialState, SyncingState, StaleRetryState:
- * - handleResponseMetadata: stale check → parse fields → new SyncingState
- * - enterReplayMode(cursor) → new ReplayingState (null → this)
+ * - handleResponseMetadata: stale check → parse fields → new SyncingState (or LiveState for 204)
+ * - enterReplayMode(cursor) → new ReplayingState
  */
 abstract class FetchingState extends ActiveState {
   handleResponseMetadata(
@@ -712,6 +712,16 @@ export class PausedState extends ShapeStreamState {
     const transition = this.previousState.handleResponseMetadata(input)
     if (transition.action === `accepted`) {
       return { action: `accepted`, state: new PausedState(transition.state) }
+    }
+    if (transition.action === `ignored`) {
+      return { action: `ignored`, state: this }
+    }
+    if (transition.action === `stale-retry`) {
+      return {
+        action: `stale-retry`,
+        state: new PausedState(transition.state),
+        exceededMaxRetries: transition.exceededMaxRetries,
+      }
     }
     return transition
   }

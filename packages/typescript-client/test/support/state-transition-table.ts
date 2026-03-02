@@ -251,9 +251,9 @@ export const TRANSITION_TABLE: Record<
   },
   paused: {
     response: {
-      action: `ignored`,
-      sameReference: true,
-      description: `Paused ignores response (base class no-op)`,
+      action: `accepted`,
+      resultKind: `paused`,
+      description: `Paused applies accepted response metadata while preserving paused wrapper`,
     },
     messages: {
       sameReference: true,

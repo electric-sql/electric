@@ -62,7 +62,9 @@ Any ──markMustRefetch─► Initial (offset = -1)
 - `retry` on a non-Error state returns `this` (no-op)
 - `enterReplayMode(cursor)` returns `this` for states that don't support replay (base class default); callers should check `canEnterReplayMode()` first
 - `pause` on PausedState returns `this` (idempotent)
-- `response`/`messages`/`sseClose` on Paused or Error return `this` (ignored)
+- `messages`/`sseClose` on Paused return `this` (ignored)
+- `response` on Paused delegates to `previousState`, preserving the Paused wrapper for `accepted` and `stale-retry` transitions; `ignored` returns `this`
+- `response`/`messages`/`sseClose` on Error return `this` (ignored)
 
 ## Invariants
 
@@ -212,12 +214,16 @@ up-to-date; replay is meaningless.
 
 **Enforcement**: Truth table entry (sameReference no-op).
 
-### C3: Paused/Error states ignore response and message events
+### C3: Error ignores response/messages; Paused ignores messages/SSE close
 
-`handleResponseMetadata` returns `{ action: 'ignored', state: this }`.
-`handleMessageBatch` returns `{ state: this, suppressBatch: false, becameUpToDate: false }`.
+- ErrorState:
+  `handleResponseMetadata` returns `{ action: 'ignored', state: this }`
+  and `handleMessageBatch` returns `{ state: this, suppressBatch: false, becameUpToDate: false }`
+- PausedState:
+  `handleMessageBatch` and `handleSseConnectionClosed` are no-ops
+  and `handleResponseMetadata` delegates to `previousState`, preserving the paused wrapper for `accepted` and `stale-retry` transitions (`ignored` returns `this`)
 
-**Enforcement**: Truth table entries with `sameReference: true`.
+**Enforcement**: Truth table entries (`error + response/messages` and `paused + response/messages/sseClose`).
 
 ### C4: Schema adoption is first-write-wins
 
