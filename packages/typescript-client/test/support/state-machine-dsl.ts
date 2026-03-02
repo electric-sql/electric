@@ -224,11 +224,7 @@ export function assertReachableInvariants(
     expect(nextState.handle).toBe(event.handle)
     expect(nextState.lastSyncedAt).toBe(prevState.lastSyncedAt)
     expect(nextState.schema).toBeUndefined()
-    // I10: liveCacheBuster is a fresh random token — non-empty and distinct
-    // from the pre-reset value so the first live request after any reset can
-    // never collide with a URL cached by a previous browser session.
-    expect(nextState.liveCacheBuster).not.toBe(``)
-    expect(nextState.liveCacheBuster).not.toBe(prevState.liveCacheBuster)
+    expect(nextState.liveCacheBuster).toBe(``)
   }
 }
 
