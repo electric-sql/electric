@@ -161,20 +161,26 @@ ErrorState delegates ALL field getters to `previousState` (same list as I8 minus
 
 **Enforcement**: Field-by-field equality checks in `assertStateInvariants`.
 
-### I10: markMustRefetch always resets
+### I10: markMustRefetch and createInitialState always produce a fresh liveCacheBuster
 
-For any state, `state.markMustRefetch(handle)` produces an InitialState with:
+`state.markMustRefetch(handle)` produces an InitialState with:
 
 - `offset === '-1'`
 - `handle === handle` (the argument)
 - `lastSyncedAt` preserved from previous state
 - `schema === undefined`
-- `liveCacheBuster` is a fresh random token (non-empty, different from the previous
-  state's `liveCacheBuster`). A random token prevents the initial live request after
-  any reset from colliding with a URL that a previous session may have stored in a
-  browser HTTP disk cache (e.g. WKWebView in Tauri).
+- `liveCacheBuster` is a fresh random token — non-empty and different from the
+  previous state's `liveCacheBuster`.
 
-**Enforcement**: Algebraic property test across all 7 states.
+`createInitialState` likewise sets `liveCacheBuster` to a fresh random token.
+
+A random token ensures the first live request after any reset can never collide
+with a URL that a previous browser session may have cached on disk (e.g.
+WKWebView in Tauri). An empty string would be a predictable collision target.
+
+**Enforcement**: `assertReachableInvariants` (non-empty + changed on every
+`markMustRefetch` event); algebraic property test across all 7 states; dedicated
+test (`markMustRefetch resets to InitialState with correct defaults`).
 
 ### I11: withHandle preserves everything except handle
 
@@ -288,7 +294,7 @@ back to Live, SSE state resets to defaults.
 | I7        | -        | yes                   | -                         | -                 | -                   | -              |
 | I8        | -        | yes                   | -                         | yes (idempotence) | -                   | -              |
 | I9        | -        | yes                   | -                         | -                 | -                   | -              |
-| I10       | -        | -                     | -                         | yes               | -                   | -              |
+| I10       | -        | -                     | yes                       | yes               | -                   | yes            |
 | I11       | -        | -                     | -                         | yes               | -                   | -              |
 | I12       | -        | yes                   | -                         | yes               | -                   | yes            |
 
