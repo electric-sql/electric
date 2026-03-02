@@ -1,5 +1,11 @@
 # @core/elixir-client
 
+## 0.9.1
+
+### Patch Changes
+
+- dfa6301: Fix elixir client's cache busting behaviour for expired shapes
+
 ## 0.9.0
 
 ### Minor Changes

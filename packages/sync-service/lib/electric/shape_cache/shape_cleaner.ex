@@ -70,7 +70,7 @@ defmodule Electric.ShapeCache.ShapeCleaner do
     CleanupTaskSupervisor.perform_async(stack_id, fn ->
       affected_shapes = ShapeStatus.list_shape_handles_for_relations(stack_id, relations)
 
-      Logger.info(fn ->
+      Logger.notice(fn ->
         "Cleaning up all shapes for relations #{inspect(relations)}: #{length(affected_shapes)} shapes total"
       end)
 
@@ -128,7 +128,7 @@ defmodule Electric.ShapeCache.ShapeCleaner do
           inspect(other)
       end
 
-    Logger.info(
+    Logger.notice(
       "Removing shape #{inspect(shape_handle)} due to abnormal shutdown: #{reason_message}"
     )
 

@@ -19,7 +19,7 @@ const linearlite = demos.find(x => x.link === '/demos/linearlite')
 
 # Documentation
 
-How to build [fast, modern, collaborative apps](/sync) with the Electric stack.
+How to build [fast,&nbsp;modern&nbsp;apps](/blog/2025/07/29/super-fast-apps-on-sync-with-tanstack-db) and [<span class="no-wrap">multi-agent systems</span>](/blog/2026/01/12/durable-sessions-for-collaborative-ai) with&nbsp;Electric.
 
 ## Getting started
 

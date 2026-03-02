@@ -707,6 +707,7 @@ defmodule Electric.Shapes.ApiTest do
       assert response.shape_definition == @test_shape
       assert response.offset == next_next_offset
       refute response.up_to_date
+      refute response.no_changes
     end
 
     test "returns immediate up-to-date message when offset is 'now'", ctx do
@@ -744,6 +745,7 @@ defmodule Electric.Shapes.ApiTest do
       # Should have the latest offset from the shape
       assert response.offset == @test_offset
       assert response.handle == @test_shape_handle
+      assert response.no_changes
     end
 
     test "handles live updates", ctx do
@@ -920,71 +922,83 @@ defmodule Electric.Shapes.ApiTest do
              }
     end
 
-    test "recovers from out of bounds offset if appropriate change arrives", ctx do
-      test_pid = self()
-      next_offset = LogOffset.increment(@test_offset)
-      next_next_offset = LogOffset.increment(next_offset)
+    for live <- [true, false] do
+      @live live
+      test "live=#{@live} request recovers from out of bounds offset via subscription", ctx do
+        next_offset = LogOffset.increment(@test_offset)
+        next_next_offset = LogOffset.increment(next_offset)
 
-      patch_shape_cache(
-        has_shape?: fn @test_shape_handle, _opts -> true end,
-        await_snapshot_start: fn @test_shape_handle, _ -> :started end,
-        resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id ->
-          {@test_shape_handle, @test_offset}
-        end
-      )
+        # resolve_shape_handle always returns @test_offset (behind next_offset),
+        # so notify_changes_since_request_start won't self-send :new_changes.
+        # Recovery must come from the Registry subscription added by ensure_subscribed.
+        patch_shape_cache(
+          has_shape?: fn @test_shape_handle, _opts -> true end,
+          await_snapshot_start: fn @test_shape_handle, _ -> :started end,
+          resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id ->
+            {@test_shape_handle, @test_offset}
+          end
+        )
 
-      patch_storage(
-        for_shape: fn @test_shape_handle, _opts -> @test_opts end,
-        get_chunk_end_log_offset: fn ^next_offset, _ -> nil end
-      )
+        patch_storage(
+          for_shape: fn @test_shape_handle, _opts -> @test_opts end,
+          get_chunk_end_log_offset: fn ^next_offset, _ -> nil end
+        )
 
-      expect_storage(
-        get_log_stream: fn ^next_offset, ^next_next_offset, @test_opts ->
-          [Jason.encode!("test result")]
-        end
-      )
+        expect_storage(
+          get_log_stream: fn ^next_offset, ^next_next_offset, @test_opts ->
+            [Jason.encode!("test result")]
+          end
+        )
 
-      task =
-        Task.async(fn ->
-          assert {:ok, request} =
-                   Api.validate(
-                     ctx.api,
-                     %{
-                       table: "public.users",
-                       offset: "#{next_offset}",
-                       handle: @test_shape_handle,
-                       live: true
-                     }
-                   )
+        # Use :trace to wait until the task process has entered hold_until_change, which runs
+        # after ensure_subscribed, by which point it is safe to send it the new_changes
+        # notification.
+        trace_session = :trace.session_create(:oob_test, self(), [])
+        :trace.function(trace_session, {Api, :hold_until_change, 1}, true, [:local])
 
-          send(test_pid, :serving_req)
+        task =
+          Task.async(fn ->
+            :trace.process(trace_session, self(), true, [:call])
 
-          response = Api.serve_shape_response(request)
+            assert {:ok, request} =
+                     Api.validate(
+                       ctx.api,
+                       %{
+                         table: "public.users",
+                         offset: "#{next_offset}",
+                         handle: @test_shape_handle,
+                         live: @live
+                       }
+                     )
 
-          {response, response_body(response)}
+            response = Api.serve_shape_response(request)
+
+            {response, response_body(response)}
+          end)
+
+        assert_receive {:trace, _, :call, {Api, :hold_until_change, _}}, @receive_timeout
+
+        # Simulate new changes arriving via Registry.
+        # Without ensure_subscribed, this dispatch would find no registered
+        # process and the request would hang until out_of_bounds_timeout.
+        Registry.dispatch(ctx.registry, @test_shape_handle, fn [{pid, ref}] ->
+          send(pid, {ref, :new_changes, next_next_offset})
         end)
 
-      assert_receive :serving_req, @receive_timeout
+        assert {response, response_body} = Task.await(task)
 
-      # Simulate new changes arriving
-      Registry.dispatch(ctx.registry, @test_shape_handle, fn [{pid, ref}] ->
-        send(pid, {ref, :new_changes, next_next_offset})
-      end)
+        assert response.status == 200
 
-      # The conn process should exit after sending the response
-      assert {response, response_body} = Task.await(task)
-
-      assert response.status == 200
-
-      assert response_body == [
-               "test result",
-               %{
-                 headers: %{
-                   control: "up-to-date",
-                   global_last_seen_lsn: to_string(next_offset.tx_offset)
+        assert response_body == [
+                 "test result",
+                 %{
+                   headers: %{
+                     control: "up-to-date",
+                     global_last_seen_lsn: to_string(next_offset.tx_offset)
+                   }
                  }
-               }
-             ]
+               ]
+      end
     end
 
     test "returns correct global_last_seen_lsn on non-live responses during data race", ctx do
@@ -1273,6 +1287,71 @@ defmodule Electric.Shapes.ApiTest do
     end
 
     @tag long_poll_timeout: 100
+    test "handles shape offset regression during live polling (issue #3760)", ctx do
+      # This test reproduces the CaseClauseError described in issue #3760.
+      # The bug occurs when:
+      # 1. A live request is waiting for changes
+      # 2. Shape invalidation spawns an async cleanup task
+      # 3. Between consumer termination and async cleanup completion,
+      #    the writer ETS gets deleted while ShapeStatus retains the shape entry
+      # 4. When notify_changes_since_request_start/1 calls resolve_shape_handle,
+      #    it returns {shape_handle, LogOffset.last_before_real_offsets()} as a fallback
+      # 5. This offset is *less than* the client's stored offset, causing a
+      #    CaseClauseError because no case clause handles offset regression
+
+      regressed_offset = LogOffset.last_before_real_offsets()
+
+      expect_shape_cache(
+        # First call during validation - returns valid offset
+        resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id ->
+          {@test_shape_handle, @test_offset}
+        end,
+        # Second call during notify_changes_since_request_start - simulates
+        # the race condition where shape metadata was partially cleaned up,
+        # causing offset to regress to last_before_real_offsets()
+        resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id ->
+          {@test_shape_handle, regressed_offset}
+        end
+      )
+
+      patch_shape_cache(
+        has_shape?: fn @test_shape_handle, _opts -> true end,
+        await_snapshot_start: fn @test_shape_handle, _ -> :started end
+      )
+
+      patch_storage(
+        for_shape: fn @test_shape_handle, _opts -> @test_opts end,
+        get_chunk_end_log_offset: fn _, @test_opts -> nil end,
+        get_log_stream: fn @test_offset, _, @test_opts -> [] end
+      )
+
+      # The flow is:
+      # 1. validate() calls resolve_shape_handle (first expectation - returns valid offset)
+      # 2. serve_shape_response() -> handle_live_request() -> notify_changes_since_request_start()
+      # 3. notify_changes_since_request_start() calls resolve_shape_handle (second expectation)
+      # 4. Second call returns regressed offset (last_before_real_offsets)
+      # 5. The fix detects offset regression and sends :shape_rotation message
+      # 6. hold_until_change() receives :shape_rotation and returns 409
+      assert {:ok, request} =
+               Api.validate(
+                 ctx.api,
+                 %{
+                   table: "public.users",
+                   offset: "#{@test_offset}",
+                   handle: @test_shape_handle,
+                   live: true
+                 }
+               )
+
+      response = Api.serve_shape_response(request)
+
+      # With the fix in place, offset regression should be treated as shape rotation
+      # and return a 409 with must-refetch control header
+      assert response.status == 409
+      assert [%{headers: %{control: "must-refetch"}}] = response_body(response)
+    end
+
+    @tag long_poll_timeout: 100
     test "sends an up-to-date response after a timeout if no changes are observed", ctx do
       patch_shape_cache(
         resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id ->
@@ -1307,6 +1386,7 @@ defmodule Electric.Shapes.ApiTest do
 
       assert [%{headers: %{control: "up-to-date"}}] = response_body(response)
       assert response.up_to_date
+      assert response.no_changes
     end
 
     @tag long_poll_timeout: 100

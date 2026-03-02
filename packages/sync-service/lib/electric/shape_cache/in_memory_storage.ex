@@ -131,12 +131,6 @@ defmodule Electric.ShapeCache.InMemoryStorage do
   def get_all_stored_shape_handles(_opts), do: {:ok, MapSet.new()}
 
   @impl Electric.ShapeCache.Storage
-  def get_stored_shapes(_opts, _shape_handles), do: %{}
-
-  @impl Electric.ShapeCache.Storage
-  def metadata_backup_dir(_opts), do: nil
-
-  @impl Electric.ShapeCache.Storage
   def get_total_disk_usage(_opts), do: 0
 
   @impl Electric.ShapeCache.Storage
@@ -316,6 +310,19 @@ defmodule Electric.ShapeCache.InMemoryStorage do
     send(self(), {Storage, :flushed, elem(List.last(log_items), 0)})
 
     opts
+  end
+
+  @impl Electric.ShapeCache.Storage
+  def supports_txn_fragment_streaming?, do: false
+
+  @impl Electric.ShapeCache.Storage
+  def append_fragment_to_log!(_log_items, %MS{} = _opts) do
+    raise "Not implemented; InMemoryStorage does not support txn fragment streaming. Use PureFileStorage instead."
+  end
+
+  @impl Electric.ShapeCache.Storage
+  def signal_txn_commit!(_xid, %MS{} = _opts) do
+    raise "Not implemented; InMemoryStorage does not support txn fragment streaming. Use PureFileStorage instead."
   end
 
   @impl Electric.ShapeCache.Storage

@@ -68,7 +68,7 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverter do
           | {:error, {:replica_not_full, String.t()}}
           | {:error, {:exceeded_max_tx_size, String.t()}}
   def convert(%LR.Message{} = msg, state) do
-    Logger.info("Got a message from PG via logical replication: #{inspect(msg)}")
+    Logger.notice("Got a message from PG via logical replication: #{inspect(msg)}")
     {:buffering, state}
   end
 
@@ -215,10 +215,15 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverter do
   end
 
   def convert(%LR.Commit{} = msg, %__MODULE__{txn_fragment: fragment} = state) do
+    now_mono = System.monotonic_time()
+    initial_lag = Commit.calculate_initial_receive_lag(msg.commit_timestamp, DateTime.utc_now())
+
     commit = %Commit{
       commit_timestamp: msg.commit_timestamp,
       transaction_size: state.tx_size,
-      txn_change_count: state.tx_change_count
+      txn_change_count: state.tx_change_count,
+      received_at_mono: now_mono,
+      initial_receive_lag: initial_lag
     }
 
     returned_txn_fragment =

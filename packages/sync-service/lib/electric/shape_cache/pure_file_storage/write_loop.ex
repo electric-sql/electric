@@ -86,9 +86,16 @@ defmodule Electric.ShapeCache.PureFileStorage.WriteLoop do
   end
 
   @doc """
-  Append a stream of log lines to the log.
+  Append log lines from a transaction fragment.
+
+  Unlike `append_to_log!/3`, this does NOT advance `last_seen_txn_offset` or
+  call `register_complete_txn`. Transaction completion should be signaled
+  separately via `register_complete_txn/2` after the commit is received.
+
+  This ensures that on crash/recovery, `fetch_latest_offset` returns the
+  last committed transaction offset, not a mid-transaction offset.
   """
-  def append_to_log!(txn_lines, writer_acc(times_flushed: times_flushed) = acc, state) do
+  def append_fragment_to_log!(txn_lines, writer_acc(times_flushed: times_flushed) = acc, state) do
     acc = ensure_json_file_open(acc, state)
 
     txn_lines
@@ -105,27 +112,20 @@ defmodule Electric.ShapeCache.PureFileStorage.WriteLoop do
         |> maybe_write_closing_chunk_boundary(state)
         |> maybe_flush_buffer(state)
     end)
+    |> close_chunk_file()
     |> case do
       # If the buffer has been fully flushed, no need to schedule more flushes
-      writer_acc(buffer_size: 0, last_seen_offset: offset) = acc ->
-        acc =
-          acc
-          |> writer_acc(last_seen_txn_offset: offset)
-          |> register_complete_txn(state)
-          |> close_chunk_file()
-
-        {acc, cancel_flush_timer: true}
-
-      writer_acc(last_seen_offset: offset) = acc ->
-        acc =
-          acc
-          |> writer_acc(last_seen_txn_offset: offset)
-          |> store_lines_in_ets(state)
-          |> register_complete_txn(state)
-          |> close_chunk_file()
-
-        {acc, schedule_flush: times_flushed}
+      writer_acc(buffer_size: 0) = acc -> {acc, cancel_flush_timer: true}
+      acc -> {acc, schedule_flush: times_flushed}
     end
+  end
+
+  @doc """
+  Append a stream of log lines to the log.
+  """
+  def append_to_log!(txn_lines, acc, state) do
+    {acc, opts} = append_fragment_to_log!(txn_lines, acc, state)
+    {finalize_txn(acc, state), opts}
   end
 
   ### Working with the buffer
@@ -280,7 +280,9 @@ defmodule Electric.ShapeCache.PureFileStorage.WriteLoop do
 
   ### Working with ets
 
-  defp store_lines_in_ets(
+  defp maybe_store_lines_in_ets(writer_acc(buffer_size: 0) = acc, _state), do: acc
+
+  defp maybe_store_lines_in_ets(
          writer_acc(ets_line_buffer: buffer) = acc,
          writer_state(ets: ets) = state
        ) do
@@ -359,6 +361,17 @@ defmodule Electric.ShapeCache.PureFileStorage.WriteLoop do
     acc
   end
 
+  # This helper function must be called after the last log items of a transaction has been
+  # written. It ensures that txn offset is advanced forward in the writer state.
+  defp finalize_txn(acc, state) do
+    writer_acc(last_seen_offset: offset) = acc
+
+    acc
+    |> writer_acc(last_seen_txn_offset: offset)
+    |> maybe_store_lines_in_ets(state)
+    |> register_complete_txn(state)
+  end
+
   defp register_complete_txn(
          writer_acc(
            last_seen_offset: last_seen,
@@ -373,5 +386,16 @@ defmodule Electric.ShapeCache.PureFileStorage.WriteLoop do
       writer_acc(acc, last_seen_txn_offset: last_seen)
     end
     |> update_persistance_metadata(state, prev_persisted_txn)
+  end
+
+  @doc """
+  Signal that a transaction has been committed.
+
+  This updates `last_seen_txn_offset` and potentially `last_persisted_txn_offset`
+  to mark the transaction as complete. Should be called after all fragments
+  have been written via `append_fragment_to_log!/3`.
+  """
+  def signal_txn_commit(acc, state) do
+    finalize_txn(acc, state)
   end
 end

@@ -15,7 +15,12 @@ import {
   encodeWhereClause,
   quoteIdentifier,
 } from './column-mapper'
-import { getOffset, isUpToDateMessage, isChangeMessage } from './helpers'
+import {
+  getOffset,
+  isUpToDateMessage,
+  isChangeMessage,
+  bigintSafeStringify,
+} from './helpers'
 import {
   FetchError,
   FetchBackoffAbortError,
@@ -88,6 +93,8 @@ const RESERVED_PARAMS: Set<ReservedParamKeys> = new Set([
   OFFSET_QUERY_PARAM,
   CACHE_BUSTER_QUERY_PARAM,
 ])
+
+const TROUBLESHOOTING_URL = `https://electric-sql.com/docs/guides/troubleshooting`
 
 type Replica = `full` | `default`
 export type LogMode = `changes_only` | `full`
@@ -601,6 +608,15 @@ export class ShapeStream<T extends Row<unknown> = Row>
   #unsubscribeFromVisibilityChanges?: () => void
   #unsubscribeFromWakeDetection?: () => void
   #maxStaleCacheRetries = 3
+  // Fast-loop detection: track recent non-live requests to detect tight retry
+  // loops caused by proxy/CDN misconfiguration or stale client-side caches
+  #recentRequestEntries: Array<{ timestamp: number; offset: string }> = []
+  #fastLoopWindowMs = 500
+  #fastLoopThreshold = 5
+  #fastLoopBackoffBaseMs = 100
+  #fastLoopBackoffMaxMs = 5_000
+  #fastLoopConsecutiveCount = 0
+  #fastLoopMaxCount = 5
 
   constructor(options: ShapeStreamOptions<GetExtensions<T>>) {
     this.options = { subscribe: true, ...options }
@@ -682,7 +698,6 @@ export class ShapeStream<T extends Row<unknown> = Row>
     this.#fetchClient = createFetchWithConsumedMessages(this.#sseFetchClient)
 
     this.#subscribeToVisibilityChanges()
-    this.#subscribeToWakeDetection()
   }
 
   get shapeHandle() {
@@ -707,6 +722,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
   async #start(): Promise<void> {
     this.#started = true
+    this.#subscribeToWakeDetection()
 
     try {
       await this.#requestShape()
@@ -745,6 +761,8 @@ export class ShapeStream<T extends Row<unknown> = Row>
           if (this.#syncState instanceof ErrorState) {
             this.#syncState = this.#syncState.retry()
           }
+          this.#fastLoopConsecutiveCount = 0
+          this.#recentRequestEntries = []
 
           // Restart from current offset
           this.#started = false
@@ -786,6 +804,14 @@ export class ShapeStream<T extends Row<unknown> = Row>
       (this.options.signal?.aborted || this.#syncState.isUpToDate)
     ) {
       return
+    }
+
+    // Only check for fast loops on non-live requests; live polling is expected to be rapid
+    if (!this.#syncState.isUpToDate) {
+      await this.#checkFastLoop()
+    } else {
+      this.#fastLoopConsecutiveCount = 0
+      this.#recentRequestEntries = []
     }
 
     let resumingFromPause = false
@@ -865,11 +891,15 @@ export class ShapeStream<T extends Row<unknown> = Row>
         this.#reset(newShapeHandle)
 
         // must refetch control message might be in a list or not depending
-        // on whether it came from an SSE request or long poll - handle both
-        // cases for safety here but worth revisiting 409 handling
-        await this.#publish(
-          (Array.isArray(e.json) ? e.json : [e.json]) as Message<T>[]
-        )
+        // on whether it came from an SSE request or long poll. The body may
+        // also be null/undefined if a proxy returned an unexpected response.
+        // Handle all cases defensively here.
+        const messages409 = Array.isArray(e.json)
+          ? e.json
+          : e.json != null
+            ? [e.json]
+            : []
+        await this.#publish(messages409 as Message<T>[])
         return this.#requestShape()
       } else {
         // errors that have reached this point are not actionable without
@@ -887,6 +917,88 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
     this.#tickPromiseResolver?.()
     return this.#requestShape()
+  }
+
+  /**
+   * Detects tight retry loops (e.g., from stale client-side caches or
+   * proxy/CDN misconfiguration) and attempts recovery. On first detection,
+   * clears client-side caches (in-memory and localStorage) and resets the
+   * stream to fetch from scratch.
+   * If the loop persists, applies exponential backoff and eventually throws.
+   */
+  async #checkFastLoop(): Promise<void> {
+    const now = Date.now()
+    const currentOffset = this.#syncState.offset
+
+    this.#recentRequestEntries = this.#recentRequestEntries.filter(
+      (e) => now - e.timestamp < this.#fastLoopWindowMs
+    )
+    this.#recentRequestEntries.push({ timestamp: now, offset: currentOffset })
+
+    // Only flag as a fast loop if requests are stuck at the same offset.
+    // Normal rapid syncing advances the offset with each response.
+    const sameOffsetCount = this.#recentRequestEntries.filter(
+      (e) => e.offset === currentOffset
+    ).length
+
+    if (sameOffsetCount < this.#fastLoopThreshold) return
+
+    this.#fastLoopConsecutiveCount++
+
+    if (this.#fastLoopConsecutiveCount >= this.#fastLoopMaxCount) {
+      throw new FetchError(
+        502,
+        undefined,
+        undefined,
+        {},
+        this.options.url,
+        `Client is stuck in a fast retry loop ` +
+          `(${this.#fastLoopThreshold} requests in ${this.#fastLoopWindowMs}ms at the same offset, ` +
+          `repeated ${this.#fastLoopMaxCount} times). ` +
+          `Client-side caches were cleared automatically on first detection, but the loop persists. ` +
+          `This usually indicates a proxy or CDN misconfiguration. ` +
+          `Common causes:\n` +
+          `  - Proxy is not including query parameters (handle, offset) in its cache key\n` +
+          `  - CDN is serving stale 409 responses\n` +
+          `  - Proxy is stripping required Electric headers from responses\n` +
+          `For more information visit the troubleshooting guide: ${TROUBLESHOOTING_URL}`
+      )
+    }
+
+    if (this.#fastLoopConsecutiveCount === 1) {
+      console.warn(
+        `[Electric] Detected fast retry loop ` +
+          `(${this.#fastLoopThreshold} requests in ${this.#fastLoopWindowMs}ms at the same offset). ` +
+          `Clearing client-side caches and resetting stream to recover. ` +
+          `If this persists, check that your proxy includes all query parameters ` +
+          `(especially 'handle' and 'offset') in its cache key, ` +
+          `and that required Electric headers are forwarded to the client. ` +
+          `For more information visit the troubleshooting guide: ${TROUBLESHOOTING_URL}`
+      )
+
+      if (this.#currentFetchUrl) {
+        const shapeKey = canonicalShapeKey(this.#currentFetchUrl)
+        expiredShapesCache.delete(shapeKey)
+        upToDateTracker.delete(shapeKey)
+      } else {
+        expiredShapesCache.clear()
+        upToDateTracker.clear()
+      }
+      this.#reset()
+      this.#recentRequestEntries = []
+      return
+    }
+
+    // Exponential backoff with full jitter
+    const maxDelay = Math.min(
+      this.#fastLoopBackoffMaxMs,
+      this.#fastLoopBackoffBaseMs * Math.pow(2, this.#fastLoopConsecutiveCount)
+    )
+    const delayMs = Math.floor(Math.random() * maxDelay)
+
+    await new Promise((resolve) => setTimeout(resolve, delayMs))
+
+    this.#recentRequestEntries = []
   }
 
   async #constructUrl(
@@ -983,7 +1095,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
         // Serialize params as JSON to keep the parameter name constant for proxy configs
         fetchUrl.searchParams.set(
           SUBSET_PARAM_WHERE_PARAMS,
-          JSON.stringify(subsetParams.params)
+          bigintSafeStringify(subsetParams.params)
         )
       if (subsetParams.limit)
         setQueryParam(fetchUrl, SUBSET_PARAM_LIMIT, subsetParams.limit)
@@ -1106,7 +1218,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
           `CDN continues serving stale cached responses after ${this.#maxStaleCacheRetries} retry attempts. ` +
             `This indicates a severe proxy/CDN misconfiguration. ` +
             `Check that your proxy includes all query parameters (especially 'handle' and 'offset') in its cache key. ` +
-            `For more information visit the troubleshooting guide: https://electric-sql.com/docs/guides/troubleshooting`
+            `For more information visit the troubleshooting guide: ${TROUBLESHOOTING_URL}`
         )
       }
       console.warn(
@@ -1114,7 +1226,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
           `This should not happen and indicates a proxy/CDN caching misconfiguration. ` +
           `The response contained handle "${shapeHandle}" which was previously marked as expired. ` +
           `Check that your proxy includes all query parameters (especially 'handle' and 'offset') in its cache key. ` +
-          `For more information visit the troubleshooting guide: https://electric-sql.com/docs/guides/troubleshooting ` +
+          `For more information visit the troubleshooting guide: ${TROUBLESHOOTING_URL} ` +
           `Retrying with a random cache buster to bypass the stale cache (attempt ${this.#syncState.staleCacheRetryCount}/${this.#maxStaleCacheRetries}).`
       )
       throw new StaleCacheError(
@@ -1142,6 +1254,13 @@ export class ShapeStream<T extends Row<unknown> = Row>
   }
 
   async #onMessages(batch: Array<Message<T>>, isSseMessage = false) {
+    if (!Array.isArray(batch)) {
+      console.warn(
+        `[Electric] #onMessages called with non-array argument (${typeof batch}). ` +
+          `This is a client bug — please report it.`
+      )
+      return
+    }
     if (batch.length === 0) return
 
     const lastMessage = batch[batch.length - 1]
@@ -1249,6 +1368,19 @@ export class ShapeStream<T extends Row<unknown> = Row>
     const messages = res || `[]`
     const batch = this.#messageParser.parse<Array<Message<T>>>(messages, schema)
 
+    if (!Array.isArray(batch)) {
+      const preview = bigintSafeStringify(batch)?.slice(0, 200)
+      throw new FetchError(
+        response.status,
+        `Received non-array response body from shape endpoint. ` +
+          `This may indicate a proxy or CDN is returning an unexpected response. ` +
+          `Expected a JSON array, got ${typeof batch}: ${preview}`,
+        undefined,
+        Object.fromEntries(response.headers.entries()),
+        fetchUrl.toString()
+      )
+    }
+
     await this.#onMessages(batch)
   }
 
@@ -1318,7 +1450,18 @@ export class ShapeStream<T extends Row<unknown> = Row>
         // #start handles it correctly.
         throw new FetchBackoffAbortError()
       }
-      throw error
+      // Re-throw known Electric errors so the caller can handle them
+      // (e.g., 409 shape rotation, stale cache retry, missing headers).
+      // Other errors (body parsing, SSE protocol failures, null body)
+      // are SSE connection failures handled by the fallback mechanism
+      // in the finally block below.
+      if (
+        error instanceof FetchError ||
+        error instanceof StaleCacheError ||
+        error instanceof MissingHeadersError
+      ) {
+        throw error
+      }
     } finally {
       // Check if the SSE connection closed too quickly
       // This can happen when responses are cached or when the proxy/server
@@ -1500,6 +1643,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
       // Store cleanup function to remove the event listener
       this.#unsubscribeFromVisibilityChanges = () => {
         document.removeEventListener(`visibilitychange`, visibilityHandler)
+        this.#unsubscribeFromVisibilityChanges = undefined
       }
     }
   }
@@ -1518,6 +1662,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
    */
   #subscribeToWakeDetection() {
     if (this.#hasBrowserVisibilityAPI()) return
+    if (this.#unsubscribeFromWakeDetection) return
 
     const INTERVAL_MS = 2_000
     const WAKE_THRESHOLD_MS = 4_000
@@ -1552,6 +1697,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
     this.#unsubscribeFromWakeDetection = () => {
       clearInterval(timer)
+      this.#unsubscribeFromWakeDetection = undefined
     }
   }
 
@@ -1615,7 +1761,8 @@ export class ShapeStream<T extends Row<unknown> = Row>
     }, 30_000)
 
     try {
-      const { metadata, data } = await this.fetchSnapshot(opts)
+      const { metadata, data, responseOffset, responseHandle } =
+        await this.fetchSnapshot(opts)
 
       const dataWithEndBoundary = (data as Array<Message<T>>).concat([
         { headers: { control: `snapshot-end`, ...metadata } },
@@ -1627,6 +1774,31 @@ export class ShapeStream<T extends Row<unknown> = Row>
         new Set(data.map((message) => message.key))
       )
       this.#onMessages(dataWithEndBoundary, false)
+
+      // On cold start the stream's offset is still at "now". Advance it
+      // to the snapshot's position so no updates are missed in between.
+      if (responseOffset !== null || responseHandle !== null) {
+        const transition = this.#syncState.handleResponseMetadata({
+          status: 200,
+          responseHandle,
+          responseOffset,
+          responseCursor: null,
+          expiredHandle: null,
+          now: Date.now(),
+          maxStaleCacheRetries: this.#maxStaleCacheRetries,
+          createCacheBuster: () =>
+            `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+        })
+        if (transition.action === `accepted`) {
+          this.#syncState = transition.state
+        } else {
+          console.warn(
+            `[Electric] Snapshot response metadata was not accepted ` +
+              `by state "${this.#syncState.kind}" (action: ${transition.action}). ` +
+              `Stream offset was not advanced from snapshot.`
+          )
+        }
+      }
 
       return {
         metadata,
@@ -1647,11 +1819,13 @@ export class ShapeStream<T extends Row<unknown> = Row>
    * `subsetMethod: 'POST'` on the stream to send parameters in the request body instead.
    *
    * @param opts - The options for the snapshot request.
-   * @returns The metadata and the data for the snapshot.
+   * @returns The metadata, data, and the response's offset/handle for state advancement.
    */
   async fetchSnapshot(opts: SubsetParams): Promise<{
     metadata: SnapshotMetadata
     data: Array<ChangeMessage<T>>
+    responseOffset: Offset | null
+    responseHandle: string | null
   }> {
     const method = opts.method ?? this.options.subsetMethod ?? `GET`
     const usePost = method === `POST`
@@ -1668,7 +1842,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
           ...result.requestHeaders,
           'Content-Type': `application/json`,
         },
-        body: JSON.stringify(this.#buildSubsetBody(opts)),
+        body: bigintSafeStringify(this.#buildSubsetBody(opts)),
       }
     } else {
       const result = await this.#constructUrl(this.options.url, true, opts)
@@ -1722,7 +1896,11 @@ export class ShapeStream<T extends Row<unknown> = Row>
       schema
     )
 
-    return { metadata, data }
+    const responseOffset =
+      (response.headers.get(CHUNK_LAST_OFFSET_HEADER) as Offset) || null
+    const responseHandle = response.headers.get(SHAPE_HANDLE_HEADER)
+
+    return { metadata, data, responseOffset, responseHandle }
   }
 
   #buildSubsetBody(opts: SubsetParams): Record<string, unknown> {

@@ -18,7 +18,9 @@ defmodule Electric.Shapes.Shape.Validators do
   end
 
   defp all_keys_are_sequential(keys) do
-    Enum.with_index(keys, fn key, index -> key == index + 1 end)
+    keys
+    |> Enum.sort()
+    |> Enum.with_index(fn key, index -> key == index + 1 end)
     |> Enum.all?()
     |> if(
       do: :ok,

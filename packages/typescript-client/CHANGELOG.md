@@ -1,5 +1,47 @@
 # @electric-sql/client
 
+## 1.5.9
+
+### Patch Changes
+
+- 24b140f: Fix wake detection not re-arming after snapshot pause/resume. In daemon flows using `requestSnapshot` with `changes_only` mode, the wake detection timer was torn down during the pause but never re-armed on resume, causing the stream to behave as if wake detection was never enabled.
+
+## 1.5.8
+
+### Patch Changes
+
+- 8600d25: Add fast-loop detection with automatic cache recovery to ShapeStream. When the client detects rapid requests stuck at the same offset (indicating stale client-side caches or proxy/CDN misconfiguration), it clears the affected shape's cached state and resets the stream to fetch from scratch. If the loop persists, exponential backoff is applied before eventually throwing a diagnostic error.
+- 1e1123b: Fixed `isControlMessage` type guard crashing on messages without a `control` header (e.g. `EventMessage`s or malformed responses). The function previously used a negation check (`!isChangeMessage()`) which misclassified any non-change message as a `ControlMessage`, causing `TypeError: Cannot read property 'control' of undefined` in `Shape.process_fn`. Now uses a positive check for `'control' in message.headers`, consistent with how `isChangeMessage` checks for `'key' in message`.
+- e172d4b: Increase default retry backoff parameters to reduce retry storms when a proxy fails, aligning with industry-standard values (gRPC, AWS). `initialDelay` 100ms → 1s, `multiplier` 1.3 → 2, `maxDelay` 60s → 32s. Reaches cap in 5 retries instead of ~25.
+
+## 1.5.7
+
+### Patch Changes
+
+- ca931d9: Fix BigInt values in subset loading parameters causing `JSON.stringify` to throw "Do not know how to serialize a BigInt". Values from parsed int8 columns can now be passed directly as `requestSnapshot`/`fetchSnapshot` params without manual conversion.
+- 858e13d: Fix on-demand mode (`offset: "now"`) to advance the stream's offset/handle after a cold-start `requestSnapshot()`, so the stream resumes from the snapshot's position rather than the stale `"now"` offset. Prevents updates committed between the snapshot and the stream's next live poll from being missed.
+
+## 1.5.6
+
+### Patch Changes
+
+- 4c7855b: Fix prefetch buffer incorrectly serving cached GET responses to POST subset/snapshot requests that share the same URL, which could route stream chunks into the subset handler.
+- c84d985: Fix handling of deprecated 204 responses from old Electric servers. Previously, a 204 ("no content, you're caught up") only updated `lastSyncedAt` but never transitioned to the live state, so `isUpToDate` stayed false, `live=true` was never added to the URL, and subscribers waiting for the up-to-date signal were never notified. The bug is inert with current servers (which never send 204) but would cause an infinite catch-up polling loop against older servers.
+
+## 1.5.5
+
+### Patch Changes
+
+- e9bc504: Fix `TypeError: Cannot use 'in' operator` crash when a proxy or CDN returns a non-array JSON response from the shape endpoint. Add null-safety to message type guards and throw a proper `FetchError` for non-array responses so the existing retry/backoff infrastructure handles it.
+
+## 1.5.4
+
+### Patch Changes
+
+- 186b8f8: Properly bundle `fetch-event-source`, so consumer use patched version.
+
+  When liveSse mode got introduced, it included `fetch-event-source` which is used instead of built-in `EventSource` because of richer capabilities. However, it had a few assumptions (document/window existence) + bugs, when it comes to aborting. This was patched, however, when building `typescript-client` patched version isn't included and when user uses it - they have unpatched version.
+
 ## 1.5.3
 
 ### Patch Changes

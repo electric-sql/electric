@@ -2105,10 +2105,9 @@ defmodule Electric.Plug.RouterTest do
 
       assert %{status: 503} = conn3
 
-      assert Jason.decode!(conn3.resp_body) == %{
-               "code" => "overloaded",
-               "message" => "Server is currently overloaded, please retry"
-             }
+      body = Jason.decode!(conn3.resp_body)
+      assert body["code"] == "concurrent_request_limit_exceeded"
+      assert body["message"] =~ "Concurrent existing request limit exceeded"
 
       # Should have Retry-After header
       assert [retry_after] = Plug.Conn.get_resp_header(conn3, "retry-after")

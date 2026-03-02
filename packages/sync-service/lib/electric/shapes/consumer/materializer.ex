@@ -46,9 +46,11 @@ defmodule Electric.Shapes.Consumer.Materializer do
 
   def whereis(stack_id, shape_handle), do: GenServer.whereis(name(stack_id, shape_handle))
 
-  @spec new_changes(map(), list(Changes.change()) | {LogOffset.t(), LogOffset.t()}) :: :ok
-  def new_changes(state, changes) do
-    GenServer.call(name(state), {:new_changes, changes}, :infinity)
+  @spec new_changes(map(), list(Changes.change()) | {LogOffset.t(), LogOffset.t()}, keyword()) ::
+          :ok
+  def new_changes(state, changes, opts \\ []) do
+    commit? = Keyword.get(opts, :commit, true)
+    GenServer.call(name(state), {:new_changes, changes, commit?}, :infinity)
   end
 
   def wait_until_ready(state) do
@@ -74,7 +76,9 @@ defmodule Electric.Shapes.Consumer.Materializer do
     end)
   end
 
-  def subscribe(opts), do: GenServer.call(name(opts), :subscribe)
+  def subscribe(pid) when is_pid(pid), do: GenServer.call(pid, :subscribe)
+
+  def subscribe(opts) when is_map(opts), do: GenServer.call(name(opts), :subscribe)
 
   def subscribe(stack_id, shape_handle),
     do: subscribe(%{stack_id: stack_id, shape_handle: shape_handle})
@@ -96,6 +100,7 @@ defmodule Electric.Shapes.Consumer.Materializer do
         index: %{},
         tag_indices: %{},
         value_counts: %{},
+        pending_events: %{},
         offset: LogOffset.before_all(),
         subscribed_offset: nil,
         ref: nil,
@@ -174,18 +179,26 @@ defmodule Electric.Shapes.Consumer.Materializer do
     {:reply, :ok, state}
   end
 
-  def handle_call({:new_changes, {range_start, range_end}}, _from, state) do
+  def handle_call({:new_changes, {range_start, range_end}, commit?}, _from, state) do
     stack_storage = Storage.for_stack(state.stack_id)
     storage = Storage.for_shape(state.shape_handle, stack_storage)
 
-    Storage.get_log_stream(range_start, range_end, storage)
-    |> decode_json_stream()
-    |> apply_changes_and_notify(state)
-    |> then(fn state -> {:reply, :ok, state} end)
+    state =
+      Storage.get_log_stream(range_start, range_end, storage)
+      |> decode_json_stream()
+      |> apply_and_accumulate_events(state)
+      |> maybe_flush_pending_events(commit?)
+
+    {:reply, :ok, state}
   end
 
-  def handle_call({:new_changes, changes}, _from, state) when is_list(changes) do
-    {:reply, :ok, apply_changes_and_notify(changes, state)}
+  def handle_call({:new_changes, changes, commit?}, _from, state) when is_list(changes) do
+    state =
+      changes
+      |> apply_and_accumulate_events(state)
+      |> maybe_flush_pending_events(commit?)
+
+    {:reply, :ok, state}
   end
 
   def handle_call(:subscribe, {pid, _ref} = _from, state) do
@@ -290,22 +303,63 @@ defmodule Electric.Shapes.Consumer.Materializer do
     Eval.Env.const_to_pg_string(Eval.Env.new(), value, type)
   end
 
-  defp apply_changes_and_notify(changes, state) do
+  defp apply_and_accumulate_events(changes, state) do
     {state, events} = apply_changes(changes, state)
+    %{state | pending_events: merge_events(state.pending_events, events)}
+  end
+
+  defp maybe_flush_pending_events(state, true) do
+    events =
+      cancel_matching_move_events(state.pending_events)
 
     if events != %{} do
-      events =
-        events
-        |> Map.put_new(:move_in, [])
-        |> Map.put_new(:move_out, [])
-
       for pid <- state.subscribers do
         send(pid, {:materializer_changes, state.shape_handle, events})
       end
     end
 
-    state
+    %{state | pending_events: %{}}
   end
+
+  defp maybe_flush_pending_events(state, _commit?), do: state
+
+  defp merge_events(pending, new) when pending == %{}, do: new
+  defp merge_events(pending, new) when new == %{}, do: pending
+
+  defp merge_events(pending, new) do
+    %{
+      move_in: Map.get(new, :move_in, []) ++ Map.get(pending, :move_in, []),
+      move_out: Map.get(new, :move_out, []) ++ Map.get(pending, :move_out, [])
+    }
+  end
+
+  # A value's count can cross the 0↔1 boundary multiple times in a single batch
+  # (e.g., toggled twice in one transaction: 0→1 move_in, 1→0 move_out, 0→1 move_in).
+  # Emitting both move_in and move_out for the same value causes the consumer to
+  # fire a move-in query while simultaneously marking the value's tag as moved-out,
+  # which filters out the query results - losing the data entirely.
+  #
+  # We resolve this by sorting events by value, then walking through the list
+  # cancelling adjacent move_in/move_out pairs for the same value.
+  defp cancel_matching_move_events(events) do
+    ins = events |> Map.get(:move_in, []) |> Enum.sort_by(fn {v, _} -> v end)
+    outs = events |> Map.get(:move_out, []) |> Enum.sort_by(fn {v, _} -> v end)
+    cancel_sorted_pairs(ins, outs, %{move_in: [], move_out: []})
+  end
+
+  defp cancel_sorted_pairs([{v, _} | ins], [{v, _} | outs], acc),
+    do: cancel_sorted_pairs(ins, outs, acc)
+
+  defp cancel_sorted_pairs([{v1, _} = i | ins], [{v2, _} | _] = outs, acc) when v1 < v2,
+    do: cancel_sorted_pairs(ins, outs, %{acc | move_in: [i | acc.move_in]})
+
+  defp cancel_sorted_pairs([{v1, _} | _] = ins, [{v2, _} = o | outs], acc) when v2 < v1,
+    do: cancel_sorted_pairs(ins, outs, %{acc | move_out: [o | acc.move_out]})
+
+  defp cancel_sorted_pairs([], [], %{move_in: [], move_out: []}), do: %{}
+
+  defp cancel_sorted_pairs(ins, outs, acc),
+    do: %{acc | move_in: ins ++ acc.move_in, move_out: outs ++ acc.move_out}
 
   defp apply_changes(changes, state) do
     {{index, tag_indices}, {value_counts, events}} =

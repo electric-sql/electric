@@ -80,5 +80,59 @@ defmodule Electric.Client.PollTest do
       assert resumed.schema == original.schema
       assert resumed.up_to_date? == true
     end
+
+    test "new/0 initializes stale retry fields" do
+      state = ShapeState.new()
+
+      assert state.stale_cache_buster == nil
+      assert state.stale_cache_retry_count == 0
+    end
+
+    test "enter_stale_retry/1 sets cache buster and increments count" do
+      state = ShapeState.new()
+
+      state = ShapeState.enter_stale_retry(state)
+
+      assert is_binary(state.stale_cache_buster)
+      assert String.length(state.stale_cache_buster) == 16
+      assert state.stale_cache_retry_count == 1
+
+      # Calling again increments count and generates new cache buster
+      old_buster = state.stale_cache_buster
+      state = ShapeState.enter_stale_retry(state)
+
+      assert state.stale_cache_retry_count == 2
+      assert state.stale_cache_buster != old_buster
+    end
+
+    test "clear_stale_retry/1 resets stale retry state" do
+      state =
+        ShapeState.new()
+        |> ShapeState.enter_stale_retry()
+        |> ShapeState.enter_stale_retry()
+
+      assert state.stale_cache_retry_count == 2
+      assert state.stale_cache_buster != nil
+
+      state = ShapeState.clear_stale_retry(state)
+
+      assert state.stale_cache_buster == nil
+      assert state.stale_cache_retry_count == 0
+    end
+
+    test "generate_cache_buster/0 returns 16-character hex string" do
+      buster = ShapeState.generate_cache_buster()
+
+      assert is_binary(buster)
+      assert String.length(buster) == 16
+      assert String.match?(buster, ~r/^[0-9a-f]+$/)
+    end
+
+    test "generate_cache_buster/0 returns unique values" do
+      busters = for _ <- 1..100, do: ShapeState.generate_cache_buster()
+      unique_busters = Enum.uniq(busters)
+
+      assert length(unique_busters) == 100
+    end
   end
 end

@@ -51,13 +51,26 @@ defmodule Electric.ShapeCache.ShapeStatus do
 
     {:ok, invalid_handles, valid_shape_count} = ShapeDb.validate_existing_shapes(stack_id)
 
-    Logger.info(
+    Logger.notice(
       "Found #{valid_shape_count} existing valid shapes and #{length(invalid_handles)} shapes in an invalid state"
     )
 
-    :ok = Electric.ShapeCache.ShapeCleaner.remove_shape_storage_async(stack_id, invalid_handles)
+    if valid_shape_count == 0 do
+      # delete any orphaned shape data
+      stack_id
+      |> Electric.ShapeCache.Storage.for_stack()
+      |> Electric.ShapeCache.Storage.cleanup_all!()
 
-    populate_shape_meta_table(stack_id)
+      :ok
+    else
+      with :ok <-
+             Electric.ShapeCache.ShapeCleaner.remove_shape_storage_async(
+               stack_id,
+               invalid_handles
+             ) do
+        populate_shape_meta_table(stack_id)
+      end
+    end
   end
 
   @spec add_shape(stack_id(), Shape.t()) :: {:ok, shape_handle()} | {:error, term()}
@@ -70,7 +83,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
         # Cache shape metadata: {handle, hash, snapshot_started, last_read_time}
         if :ets.insert_new(
              shape_meta_table(stack_id),
-             {shape_handle, shape_hash, false, System.monotonic_time()}
+             {shape_handle, shape_hash, false, nil}
            ) do
           {:ok, shape_handle}
         else
@@ -177,6 +190,19 @@ defmodule Electric.ShapeCache.ShapeStatus do
     :ets.member(shape_meta_table(stack_id), shape_handle)
   end
 
+  @spec shape_has_been_activated?(stack_id(), shape_handle()) :: boolean()
+  def shape_has_been_activated?(stack_id, shape_handle) do
+    last_used_timestamp =
+      :ets.lookup_element(
+        shape_meta_table(stack_id),
+        shape_handle,
+        @shape_last_used_time_pos,
+        nil
+      )
+
+    not is_nil(last_used_timestamp)
+  end
+
   @doc """
   Cheaply validate that a shape handle matches the shape definition by matching
   the shape's saved hash against the provided shape's hash.
@@ -252,24 +278,30 @@ defmodule Electric.ShapeCache.ShapeStatus do
     # entire table into memory and without sorting on every iteration
     tree =
       :ets.foldl(
-        fn {handle, _hash, _snapshot_started, last_read}, tree ->
-          last_read_tuple = {last_read, handle}
+        fn
+          # This shape has only just been created, so it's too young to be considered for
+          # expiration.
+          {_handle, _hash, _snapshot_started, nil}, tree ->
+            tree
 
-          if :gb_trees.size(tree) < shape_count do
-            # Insert into the tree until we reach the desired size
-            :gb_trees.insert(last_read_tuple, true, tree)
-          else
-            # If entry being examined was used less recently than the
-            # most recently used tracked entry in the tree so far, replace it
-            {most_recent_tuple, _} = :gb_trees.largest(tree)
+          {handle, _hash, _snapshot_started, last_read}, tree ->
+            last_read_tuple = {last_read, handle}
 
-            if last_read_tuple < most_recent_tuple do
-              tree = :gb_trees.delete(most_recent_tuple, tree)
+            if :gb_trees.size(tree) < shape_count do
+              # Insert into the tree until we reach the desired size
               :gb_trees.insert(last_read_tuple, true, tree)
             else
-              tree
+              # If entry being examined was used less recently than the
+              # most recently used tracked entry in the tree so far, replace it
+              {most_recent_tuple, _} = :gb_trees.largest(tree)
+
+              if last_read_tuple < most_recent_tuple do
+                tree = :gb_trees.delete(most_recent_tuple, tree)
+                :gb_trees.insert(last_read_tuple, true, tree)
+              else
+                tree
+              end
             end
-          end
         end,
         :gb_trees.empty(),
         table

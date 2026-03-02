@@ -23,11 +23,12 @@ defmodule Electric.StackSupervisor.Telemetry do
       telemetry_opts =
         config.telemetry_opts
         |> Keyword.put(:stack_id, config.stack_id)
-        # Use user-provided periodic measurements or default ones otherwise
+        |> Keyword.put(:storage_dir, config.storage_dir)
+        # Always enable default periodic measurements in addition to the user-provided ones
         |> Keyword.update(
           :periodic_measurements,
           default_periodic_measurements(config),
-          & &1
+          &(default_periodic_measurements(config) ++ &1)
         )
         # Add metrics for the default periodic measurements regardless of whether the
         # measurements themselves are occuring.
@@ -51,7 +52,9 @@ defmodule Electric.StackSupervisor.Telemetry do
         ),
         Telemetry.Metrics.last_value("electric.postgres.replication.slot_confirmed_flush_lsn_lag",
           unit: :byte
-        )
+        ),
+        Telemetry.Metrics.last_value("electric.shape_db.sqlite.total_memory", unit: :byte),
+        Telemetry.Metrics.last_value("electric.shape_db.sqlite.disk_size", unit: :byte)
       ]
     end
 
@@ -59,7 +62,9 @@ defmodule Electric.StackSupervisor.Telemetry do
       [
         {__MODULE__, :count_shapes, [stack_id]},
         {__MODULE__, :report_write_buffer_size, [stack_id]},
-        {__MODULE__, :report_retained_wal_size, [stack_id, config.replication_opts[:slot_name]]}
+        {__MODULE__, :report_retained_wal_size, [stack_id, config.replication_opts[:slot_name]]},
+        {__MODULE__, :report_disk_usage, [stack_id]},
+        {__MODULE__, :report_shape_db_stats, [stack_id]}
       ]
     end
 
@@ -150,6 +155,34 @@ defmodule Electric.StackSupervisor.Telemetry do
             stack_id: stack_id,
             slot_name: slot_name
           )
+      end
+    end
+
+    def report_disk_usage(stack_id, _telemetry_opts) do
+      case ElectricTelemetry.DiskUsage.current(stack_id) do
+        {:ok, usage_bytes, measurement_duration} ->
+          Electric.Telemetry.OpenTelemetry.execute(
+            [:electric, :storage, :used],
+            %{bytes: usage_bytes, measurement_duration: measurement_duration},
+            %{stack_id: stack_id}
+          )
+
+        :pending ->
+          :ok
+      end
+    end
+
+    def report_shape_db_stats(stack_id, _telemetry_opts) do
+      case Electric.ShapeCache.ShapeStatus.ShapeDb.statistics(stack_id) do
+        {:ok, stats} ->
+          Electric.Telemetry.OpenTelemetry.execute(
+            [:electric, :shape_db, :sqlite],
+            stats,
+            %{stack_id: stack_id}
+          )
+
+        _ ->
+          :ok
       end
     end
   else

@@ -11,6 +11,7 @@ defmodule Electric.Shapes.Api.Response do
   @electric_offset_header "electric-offset"
   @electric_schema_header "electric-schema"
   @electric_up_to_date_header "electric-up-to-date"
+  @electric_has_data_header "electric-has-data"
   @electric_known_error_header "electric-internal-known-error"
   @retry_after_header "retry-after"
 
@@ -18,6 +19,7 @@ defmodule Electric.Shapes.Api.Response do
   @electric_headers [
     @electric_cursor_header,
     @electric_handle_header,
+    @electric_has_data_header,
     @electric_offset_header,
     @electric_schema_header,
     @electric_up_to_date_header,
@@ -220,6 +222,7 @@ defmodule Electric.Shapes.Api.Response do
     |> put_shape_handle_header(response)
     |> put_schema_header(response)
     |> put_up_to_date_header(response)
+    |> put_has_data_header(response)
     |> put_offset_header(response)
     |> put_known_error_header(response)
     |> put_retry_after_header(response)
@@ -349,6 +352,18 @@ defmodule Electric.Shapes.Api.Response do
   defp put_etag_headers(conn, %__MODULE__{} = response) do
     # etag values should be in double quotes: https://www.rfc-editor.org/rfc/rfc7232#section-2.3
     Plug.Conn.put_resp_header(conn, "etag", etag(response))
+  end
+
+  defp put_has_data_header(conn, %__MODULE__{status: status}) when status >= 400 do
+    conn
+  end
+
+  defp put_has_data_header(conn, %__MODULE__{no_changes: true}) do
+    Plug.Conn.put_resp_header(conn, @electric_has_data_header, "false")
+  end
+
+  defp put_has_data_header(conn, %__MODULE__{no_changes: false}) do
+    Plug.Conn.put_resp_header(conn, @electric_has_data_header, "true")
   end
 
   defp put_up_to_date_header(conn, %__MODULE__{up_to_date: true}) do

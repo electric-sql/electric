@@ -6,6 +6,7 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
   alias Electric.Shapes.Shape
 
   import Support.ComponentSetup
+  import Support.TestUtils, only: [expect_storage: 2, patch_storage: 1]
 
   @inspector Support.StubInspector.new(
                tables: [{1, {"public", "items"}}, {2, {"public", "other_table"}}],
@@ -28,6 +29,16 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
   test "starts empty", ctx do
     {:ok, state, []} = new_state(ctx)
     assert [] = ShapeStatus.list_shapes(state)
+  end
+
+  test "deletes any orphaned shape data if empty", ctx do
+    expect_storage([force: true],
+      cleanup_all!: fn _ ->
+        :ok
+      end
+    )
+
+    {:ok, _state, []} = new_state(ctx)
   end
 
   test "can add shapes", ctx do
@@ -142,13 +153,14 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
       assert {[^shape2], +0.0} = ShapeStatus.least_recently_used(state, _count = 1)
     end
 
-    test "returns shape first created if update_last_read_time_to_now has not been called", %{
-      state: state
-    } do
-      {:ok, shape1} = ShapeStatus.add_shape(state, shape!())
-      {:ok, _shape2} = ShapeStatus.add_shape(state, shape2!())
+    test "does not return shapes which have only just been created and didn't have update_last_read_time_to_now called",
+         %{
+           state: state
+         } do
+      {:ok, _} = ShapeStatus.add_shape(state, shape!())
+      {:ok, _} = ShapeStatus.add_shape(state, shape2!())
 
-      assert {[^shape1], _} = ShapeStatus.least_recently_used(state, _count = 1)
+      assert {[], _} = ShapeStatus.least_recently_used(state, _count = 1)
     end
 
     test "returns empty list if no shapes have been added", %{state: state} do
@@ -158,6 +170,11 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
     test "returns empty list if all shapes have been deleted", %{state: state} do
       {:ok, shape1} = ShapeStatus.add_shape(state, shape!())
       {:ok, shape2} = ShapeStatus.add_shape(state, shape2!())
+
+      now = System.monotonic_time()
+      ShapeStatus.update_last_read_time(state, shape2, now)
+      ShapeStatus.update_last_read_time(state, shape1, now + 10)
+
       ShapeStatus.remove_shape(state, shape1)
       ShapeStatus.remove_shape(state, shape2)
 
@@ -167,6 +184,10 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
     test "returns all shapes when count exceeds total shapes", %{state: state} do
       {:ok, shape1} = ShapeStatus.add_shape(state, shape!())
       {:ok, shape2} = ShapeStatus.add_shape(state, shape2!())
+
+      now = System.monotonic_time()
+      ShapeStatus.update_last_read_time(state, shape2, now)
+      ShapeStatus.update_last_read_time(state, shape1, now + 10)
 
       {handles, _} = ShapeStatus.least_recently_used(state, _count = 100)
       assert length(handles) == 2
@@ -322,6 +343,17 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
     Electric.StackConfig.put(ctx.stack_id, Electric.ShapeCache.Storage, {Mock.Storage, []})
 
     stored_shapes = Access.get(opts, :stored_shapes, [])
+
+    try do
+      patch_storage(
+        cleanup_all!: fn _ ->
+          :ok
+        end
+      )
+    rescue
+      # ignore any existing mocking on this function
+      ArgumentError -> :ok
+    end
 
     :ok = ShapeStatus.initialize(ctx.stack_id)
 

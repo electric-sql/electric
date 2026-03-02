@@ -130,7 +130,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDbTest do
     {:ok, _hash1} = ShapeDb.add_shape(ctx.stack_id, shape1, handle1)
     assert {:ok, 1} = ShapeDb.count_shapes(ctx.stack_id)
 
-    assert {:error, "No shape matching \"no-such-handle\""} =
+    assert {:error, {:enoshape, "no-such-handle"}} =
              ShapeDb.remove_shape(ctx.stack_id, "no-such-handle")
 
     assert {:ok, 1} = ShapeDb.count_shapes(ctx.stack_id)
@@ -440,6 +440,173 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDbTest do
       ShapeDb.WriteBuffer.flush_sync(ctx.stack_id)
 
       assert 0 = ShapeDb.WriteBuffer.pending_count_diff(ctx.stack_id)
+    end
+
+    test "duplicate removal operations do not block the write queue", ctx do
+      shape = Shape.new!("items", inspector: @stub_inspector)
+      handle = "handle-0"
+
+      {:ok, _hash} = ShapeDb.add_shape(ctx.stack_id, shape, handle)
+
+      assert 1 = ShapeDb.WriteBuffer.pending_count_diff(ctx.stack_id)
+
+      ShapeDb.WriteBuffer.flush_sync(ctx.stack_id)
+      assert 0 = ShapeDb.WriteBuffer.pending_count_diff(ctx.stack_id)
+      assert :ok = ShapeDb.remove_shape(ctx.stack_id, handle)
+
+      ShapeDb.WriteBuffer.flush_sync(ctx.stack_id)
+      assert 0 = ShapeDb.WriteBuffer.pending_count_diff(ctx.stack_id)
+
+      ShapeDb.WriteBuffer.remove_shape(ctx.stack_id, handle)
+      assert -1 = ShapeDb.WriteBuffer.pending_count_diff(ctx.stack_id)
+
+      ShapeDb.WriteBuffer.flush_sync(ctx.stack_id)
+      assert 0 = ShapeDb.WriteBuffer.pending_count_diff(ctx.stack_id)
+    end
+
+    test "failing to mark a snapshot completed does not block the write queue", ctx do
+      handle = "handle-0"
+      ShapeDb.WriteBuffer.queue_snapshot_complete(ctx.stack_id, handle)
+      assert 1 = ShapeDb.WriteBuffer.pending_operations_count(ctx.stack_id)
+      ShapeDb.WriteBuffer.flush_sync(ctx.stack_id)
+      assert 0 = ShapeDb.WriteBuffer.pending_operations_count(ctx.stack_id)
+    end
+  end
+
+  describe "exclusive mode" do
+    @describetag shape_db_opts: [exclusive_mode: true]
+
+    @tag shape_db_opts: [exclusive_mode: false]
+    test "when disabled read and write connections are different", ctx do
+      assert {:ok, read_conn} =
+               ShapeDb.Connection.checkout!(ctx.stack_id, :read_call, fn %{conn: conn} ->
+                 {:ok, conn}
+               end)
+
+      assert {:ok, write_conn} =
+               ShapeDb.Connection.checkout_write!(ctx.stack_id, :write_call, fn %{conn: conn} ->
+                 {:ok, conn}
+               end)
+
+      refute read_conn == write_conn
+
+      assert {:ok, [path]} =
+               ShapeDb.Connection.checkout!(ctx.stack_id, :read_call, fn %{conn: conn} ->
+                 ShapeDb.Connection.fetch_one(conn, "SELECT file FROM pragma_database_list", [])
+               end)
+
+      assert path =~ ~r/meta\/shape-db/
+    end
+
+    test "returns the same connection for both read and write calls", ctx do
+      assert {:ok, read_conn} =
+               ShapeDb.Connection.checkout!(ctx.stack_id, :read_call, fn %{conn: conn} ->
+                 {:ok, conn}
+               end)
+
+      assert {:ok, write_conn} =
+               ShapeDb.Connection.checkout_write!(ctx.stack_id, :write_call, fn %{conn: conn} ->
+                 {:ok, conn}
+               end)
+
+      assert read_conn == write_conn
+    end
+
+    @tag shape_db_opts: [exclusive_mode: false]
+    test "when disabled sets journal_mode=WAL", ctx do
+      assert {:ok, ["wal"]} =
+               ShapeDb.Connection.checkout!(ctx.stack_id, :read_call, fn %{conn: conn} ->
+                 ShapeDb.Connection.fetch_one(conn, "PRAGMA journal_mode", [])
+               end)
+    end
+
+    test "sets journal_mode=DELETE", ctx do
+      assert {:ok, ["delete"]} =
+               ShapeDb.Connection.checkout!(ctx.stack_id, :read_call, fn %{conn: conn} ->
+                 ShapeDb.Connection.fetch_one(conn, "PRAGMA journal_mode", [])
+               end)
+    end
+
+    test "includes read-mode queries", ctx do
+      assert {:ok, 0} = ShapeDb.count_shapes(ctx.stack_id)
+    end
+
+    @tag shape_db_opts: [exclusive_mode: true, storage_dir: ":memory:"]
+    test "allows for an in-memory database", ctx do
+      # file is empty for in-memory
+      assert {:ok, [[""]]} =
+               ShapeDb.Connection.checkout!(ctx.stack_id, :read_call, fn %{conn: conn} ->
+                 ShapeDb.Connection.fetch_all(
+                   conn,
+                   "SELECT file FROM pragma_database_list WHERE name = 'main'",
+                   []
+                 )
+               end)
+    end
+  end
+
+  describe "statistics" do
+    @tag shape_db_opts: [enable_memory_stats?: true]
+    test "export memory and disk usage when enabled", ctx do
+      assert {:ok, %{total_memory: memory, disk_size: disk_size}} =
+               ShapeDb.statistics(ctx.stack_id)
+
+      assert memory > 0
+      assert disk_size > 0
+    end
+
+    test "only exports disk usage by default", ctx do
+      assert {:ok, %{total_memory: 0, disk_size: disk_size}} = ShapeDb.statistics(ctx.stack_id)
+      assert disk_size > 0
+    end
+  end
+
+  describe "recovery" do
+    test "resets state when db file is corrupted", ctx do
+      {:ok, path} = ShapeDb.Connection.db_path(storage_dir: ctx.tmp_dir)
+      assert {:ok, 0} = ShapeDb.count_shapes(ctx.stack_id)
+
+      stop_supervised!(ctx.shape_db)
+
+      File.write!(path, "invalid!")
+
+      assert {:ok, _pid} =
+               start_supervised(
+                 {Electric.ShapeCache.ShapeStatus.ShapeDb.Supervisor,
+                  [
+                    stack_id: ctx.stack_id,
+                    shape_db_opts: [
+                      storage_dir: ctx.tmp_dir,
+                      manual_flush_only: true,
+                      read_pool_size: 1
+                    ]
+                  ]},
+                 id: "shape_db"
+               )
+    end
+
+    @tag shape_db_opts: [exclusive_mode: true]
+    test "resets state when db file is corrupted in exclusive mode", ctx do
+      {:ok, path} = ShapeDb.Connection.db_path(storage_dir: ctx.tmp_dir)
+      assert {:ok, 0} = ShapeDb.count_shapes(ctx.stack_id)
+
+      stop_supervised!(ctx.shape_db)
+
+      File.write!(path, "invalid!")
+
+      assert {:ok, _pid} =
+               start_supervised(
+                 {Electric.ShapeCache.ShapeStatus.ShapeDb.Supervisor,
+                  [
+                    stack_id: ctx.stack_id,
+                    shape_db_opts: [
+                      storage_dir: ctx.tmp_dir,
+                      manual_flush_only: true,
+                      read_pool_size: 1
+                    ]
+                  ]},
+                 id: "shape_db"
+               )
     end
   end
 end

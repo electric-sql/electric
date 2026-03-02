@@ -269,7 +269,8 @@ defmodule Electric.Postgres.Xid do
   @type pg_snapshot() :: {anyxid, anyxid, [anyxid]}
 
   @doc """
-  Check if a transaction is after the end of a snapshot - if it's xid is over xmax
+  Check if a transaction is in the future from the POV of the snapshot. In other words, if its
+  xid is >= xmax, its changes are definitely *not* visible and *won't become* visible in this snapshot.
   """
   @spec after_snapshot?(anyxid, pg_snapshot()) :: boolean()
   def after_snapshot?(xid, {_, xmax, _}) when not is_lt(xid, xmax), do: true

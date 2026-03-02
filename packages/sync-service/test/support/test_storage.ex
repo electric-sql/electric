@@ -78,18 +78,6 @@ defmodule Support.TestStorage do
   end
 
   @impl Electric.ShapeCache.Storage
-  def get_stored_shapes({parent, _init, storage}, shape_handles) do
-    send(parent, {__MODULE__, :get_stored_shapes, shape_handles})
-    Storage.get_stored_shapes(storage, shape_handles)
-  end
-
-  @impl Electric.ShapeCache.Storage
-  def metadata_backup_dir({parent, _init, storage}) do
-    send(parent, {__MODULE__, :metadata_backup_dir})
-    Storage.metadata_backup_dir(storage)
-  end
-
-  @impl Electric.ShapeCache.Storage
   def get_total_disk_usage({parent, _init, storage}) do
     send(parent, {__MODULE__, :get_total_disk_usage})
     Storage.get_total_disk_usage(storage)
@@ -148,6 +136,19 @@ defmodule Support.TestStorage do
     send(parent, {__MODULE__, :append_to_log!, shape_handle, log_items})
     storage = Storage.append_to_log!(log_items, storage)
     {parent, shape_handle, data, storage}
+  end
+
+  @impl Electric.ShapeCache.Storage
+  def supports_txn_fragment_streaming?, do: false
+
+  @impl Electric.ShapeCache.Storage
+  def append_fragment_to_log!(_, _) do
+    raise "Intentionally not implemented. Use Support.StorageTracer instead"
+  end
+
+  @impl Electric.ShapeCache.Storage
+  def signal_txn_commit!(_, _) do
+    raise "Intentionally not implemented. Use Support.StorageTracer instead"
   end
 
   @impl Electric.ShapeCache.Storage

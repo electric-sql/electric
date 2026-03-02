@@ -2274,4 +2274,294 @@ defmodule Electric.ClientTest do
       end
     )
   end
+
+  describe "cache busting" do
+    setup [:start_bypass, :bypass_client, :shape_definition]
+
+    setup ctx do
+      # Clear the expired shapes cache before each test
+      Electric.Client.ExpiredShapesCache.clear()
+      ctx
+    end
+
+    test "409 response marks handle as expired in cache", ctx do
+      alias Electric.Client.ShapeKey
+      alias Electric.Client.ExpiredShapesCache
+
+      # First request succeeds with handle "my-shape"
+      body1 =
+        Jason.encode!([
+          %{
+            "headers" => %{"operation" => "insert"},
+            "offset" => "1_0",
+            "value" => %{"id" => "1"}
+          },
+          %{"headers" => %{"control" => "up-to-date", "global_last_seen_lsn" => 9998}}
+        ])
+
+      # Second request returns 409 with new handle "my-shape-2"
+      body409 = Jason.encode!([%{"headers" => %{"control" => "must-refetch"}}])
+
+      # Third request succeeds with new handle
+      body2 =
+        Jason.encode!([
+          %{
+            "headers" => %{"operation" => "insert"},
+            "offset" => "1_0",
+            "value" => %{"id" => "2"}
+          },
+          %{"headers" => %{"control" => "up-to-date", "global_last_seen_lsn" => 9999}}
+        ])
+
+      schema = Jason.encode!(%{"id" => %{type: "text"}})
+
+      {:ok, responses} =
+        start_supervised(
+          {Agent,
+           fn ->
+             %{
+               {"-1", nil} => [
+                 &bypass_resp(&1, body1,
+                   shape_handle: "my-shape",
+                   last_offset: "1_0",
+                   schema: schema
+                 )
+               ],
+               {"1_0", "my-shape"} => [
+                 &bypass_resp(&1, body409, status: 409, shape_handle: "my-shape-2")
+               ],
+               {"-1", "my-shape-2"} => [
+                 &bypass_resp(&1, body2,
+                   shape_handle: "my-shape-2",
+                   last_offset: "1_0",
+                   schema: schema
+                 )
+               ]
+             }
+           end}
+        )
+
+      bypass_response(ctx, responses)
+
+      # Stream enough messages to trigger the 409 and recovery
+      _msgs = stream(ctx, 5)
+
+      # Verify handle was marked as expired
+      # Note: use the table param from the shape, which is what gets merged into the client
+      shape_params = ShapeDefinition.params(ctx.shape)
+      shape_key = ShapeKey.canonical(ctx.client.endpoint, shape_params)
+      assert ExpiredShapesCache.get_expired_handle(shape_key) == "my-shape"
+    end
+
+    test "subsequent requests include expired_handle parameter after 409", ctx do
+      alias Electric.Client.ShapeKey
+      alias Electric.Client.ExpiredShapesCache
+
+      parent = self()
+
+      # Setup: mark a handle as expired using the same shape key that will be used
+      shape_params = ShapeDefinition.params(ctx.shape)
+      shape_key = ShapeKey.canonical(ctx.client.endpoint, shape_params)
+      ExpiredShapesCache.mark_expired(shape_key, "old-expired-handle")
+
+      body =
+        Jason.encode!([
+          %{"headers" => %{"control" => "up-to-date", "global_last_seen_lsn" => 9999}}
+        ])
+
+      schema = Jason.encode!(%{"id" => %{type: "text"}})
+
+      Bypass.expect(ctx.bypass, fn conn ->
+        # Verify expired_handle param is included
+        send(parent, {:query_params, conn.query_params})
+        bypass_resp(conn, body, shape_handle: "new-shape", last_offset: "1_0", schema: schema)
+      end)
+
+      stream(ctx, live: false) |> Enum.take(1)
+
+      assert_receive {:query_params, params}
+      assert params["expired_handle"] == "old-expired-handle"
+    end
+
+    test "stale response triggers retry with cache-buster parameter", ctx do
+      alias Electric.Client.ShapeKey
+      alias Electric.Client.ExpiredShapesCache
+
+      parent = self()
+      {:ok, request_count} = Agent.start_link(fn -> 0 end)
+
+      # Mark handle as expired (simulating previous 409)
+      shape_params = ShapeDefinition.params(ctx.shape)
+      shape_key = ShapeKey.canonical(ctx.client.endpoint, shape_params)
+      ExpiredShapesCache.mark_expired(shape_key, "stale-handle")
+
+      schema = Jason.encode!(%{"id" => %{type: "text"}})
+
+      body_fresh =
+        Jason.encode!([
+          %{"headers" => %{"control" => "up-to-date", "global_last_seen_lsn" => 9999}}
+        ])
+
+      Bypass.expect(ctx.bypass, fn conn ->
+        count = Agent.get_and_update(request_count, fn c -> {c + 1, c + 1} end)
+        send(parent, {:request, count, conn.query_params})
+
+        if count == 1 do
+          # First response: return the stale handle (CDN serving cached response)
+          bypass_resp(conn, "[]",
+            shape_handle: "stale-handle",
+            last_offset: "1_0",
+            schema: schema
+          )
+        else
+          # Second response: return fresh handle
+          bypass_resp(conn, body_fresh,
+            shape_handle: "fresh-handle",
+            last_offset: "1_0",
+            schema: schema
+          )
+        end
+      end)
+
+      stream(ctx, 1)
+
+      # First request should NOT have cache-buster
+      assert_receive {:request, 1, params1}
+      refute Map.has_key?(params1, "cache-buster")
+
+      # Second request SHOULD have cache-buster (retry after stale detection)
+      assert_receive {:request, 2, params2}
+      assert Map.has_key?(params2, "cache-buster")
+    end
+
+    test "fails after max stale cache retries exceeded", ctx do
+      alias Electric.Client.ShapeKey
+      alias Electric.Client.ExpiredShapesCache
+
+      # Mark handle as expired
+      shape_params = ShapeDefinition.params(ctx.shape)
+      shape_key = ShapeKey.canonical(ctx.client.endpoint, shape_params)
+      ExpiredShapesCache.mark_expired(shape_key, "permanently-stale-handle")
+
+      schema = Jason.encode!(%{"id" => %{type: "text"}})
+
+      # Always return the stale handle (simulating broken CDN)
+      Bypass.expect(ctx.bypass, fn conn ->
+        bypass_resp(conn, "[]",
+          shape_handle: "permanently-stale-handle",
+          last_offset: "1_0",
+          schema: schema
+        )
+      end)
+
+      # Should raise error after 3 retries
+      assert_raise Client.Error, ~r/stale cached responses/, fn ->
+        stream(ctx) |> Enum.take(1)
+      end
+    end
+
+    test "ignores stale response when client has valid local handle", ctx do
+      alias Electric.Client.ShapeKey
+      alias Electric.Client.ExpiredShapesCache
+
+      body1 =
+        Jason.encode!([
+          %{
+            "headers" => %{"operation" => "insert"},
+            "offset" => "1_0",
+            "value" => %{"id" => "1"}
+          },
+          %{"headers" => %{"control" => "up-to-date", "global_last_seen_lsn" => 9998}}
+        ])
+
+      body2 =
+        Jason.encode!([
+          %{
+            "headers" => %{"operation" => "insert"},
+            "offset" => "2_0",
+            "value" => %{"id" => "2"}
+          },
+          %{"headers" => %{"control" => "up-to-date", "global_last_seen_lsn" => 9999}}
+        ])
+
+      schema = Jason.encode!(%{"id" => %{type: "text"}})
+
+      # Mark a handle as expired BEFORE we start streaming
+      shape_params = ShapeDefinition.params(ctx.shape)
+      shape_key = ShapeKey.canonical(ctx.client.endpoint, shape_params)
+      ExpiredShapesCache.mark_expired(shape_key, "stale-handle")
+
+      {:ok, responses} =
+        start_supervised({Agent,
+         fn ->
+           %{
+             {"-1", nil} => [
+               &bypass_resp(&1, body1,
+                 shape_handle: "good-handle",
+                 last_offset: "1_0",
+                 schema: schema
+               )
+             ],
+             {"1_0", "good-handle"} => [
+               # CDN returns stale cached response with old handle
+               &bypass_resp(&1, "[]", shape_handle: "stale-handle", last_offset: "1_0"),
+               # Next request gets fresh response
+               &bypass_resp(&1, body2, shape_handle: "good-handle", last_offset: "2_0")
+             ]
+           }
+         end})
+
+      bypass_response(ctx, responses)
+      msgs = stream(ctx, 4)
+
+      # Should get both inserts - stale response was ignored, not treated as error
+      insert_msgs =
+        Enum.filter(msgs, &match?(%ChangeMessage{headers: %{operation: :insert}}, &1))
+
+      assert length(insert_msgs) == 2
+    end
+
+    test "does not mark handle as expired for normal success responses", ctx do
+      alias Electric.Client.ShapeKey
+      alias Electric.Client.ExpiredShapesCache
+
+      body =
+        Jason.encode!([
+          %{
+            "headers" => %{"operation" => "insert"},
+            "offset" => "1_0",
+            "value" => %{"id" => "1"}
+          },
+          %{"headers" => %{"control" => "up-to-date", "global_last_seen_lsn" => 9999}}
+        ])
+
+      schema = Jason.encode!(%{"id" => %{type: "text"}})
+
+      {:ok, responses} =
+        start_supervised(
+          {Agent,
+           fn ->
+             %{
+               {"-1", nil} => [
+                 &bypass_resp(&1, body,
+                   shape_handle: "my-shape",
+                   last_offset: "1_0",
+                   schema: schema
+                 )
+               ]
+             }
+           end}
+        )
+
+      bypass_response(ctx, responses)
+
+      # Stream messages
+      stream(ctx, live: false) |> Enum.to_list()
+
+      # Verify no handle was marked as expired
+      shape_params = ShapeDefinition.params(ctx.shape)
+      shape_key = ShapeKey.canonical(ctx.client.endpoint, shape_params)
+      assert ExpiredShapesCache.get_expired_handle(shape_key) == nil
+    end
+  end
 end

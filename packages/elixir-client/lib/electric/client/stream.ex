@@ -166,6 +166,16 @@ defmodule Electric.Client.Stream do
         |> handle_messages(messages)
         |> dispatch()
 
+      {:stale_retry, new_poll_state} ->
+        # Retry immediately with cache buster
+        %{stream | poll_state: new_poll_state}
+        |> fetch()
+
+      {:stale_ignored, new_poll_state} ->
+        # Stale response ignored, continue polling
+        %{stream | poll_state: new_poll_state}
+        |> fetch()
+
       {:error, error} ->
         handle_error(error, stream)
     end

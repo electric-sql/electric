@@ -171,17 +171,156 @@ The problem will resolve itself as client/proxy caches empty. You can force this
 
 ## Production
 
+### 503 &mdash; concurrent request limit exceeded
+
+When too many clients are connected simultaneously, Electric responds with a `503` status and a JSON body:
+
+```json
+{
+  "code": "concurrent_request_limit_exceeded",
+  "message": "Concurrent existing request limit exceeded (limit: 10000), please retry"
+}
+```
+
+This happens when the number of in-flight requests exceeds the configured limit. Each `live=true` long-poll request holds the connection open for up to 20 seconds (the long-poll timeout), so concurrent connections add up quickly.
+
+Note that this is an **application-level limit**, not a system resource issue. Your server's CPU and memory may look healthy while requests are being rejected.
+
+##### Solution &mdash; use a CDN and/or increase the limit
+
+**Put a CDN in front of Electric** (recommended). Electric's caching headers are designed for CDN [request collapsing](/docs/api/http#collapsing-live-requests). When multiple clients poll the same shape at the same offset, the CDN collapses them into a single request to Electric and fans out the response. This dramatically reduces concurrent connections. See the [deployment guide](/docs/guides/deployment) for CDN setup.
+
+**Increase the concurrent request limit** as a stopgap. Set [`ELECTRIC_MAX_CONCURRENT_REQUESTS`](/docs/api/config#electric-max-concurrent-requests) to raise the limits:
+
+```shell
+ELECTRIC_MAX_CONCURRENT_REQUESTS='{"initial": 500, "existing": 30000}'
+```
+
+Live long-poll connections are lightweight Erlang processes, so most hardware can handle higher limits.
+
+**Reduce the number of concurrent shape subscriptions** by lazy-loading shapes only when needed (e.g. per screen) rather than subscribing to all shapes on app boot.
+
 ### WAL growth &mdash; why is my Postgres database storage filling up?
 
-Electric creates a durable replication slot in Postgres to prevent data loss during downtime.
+Electric creates a logical replication slot in Postgres to stream changes. This slot tracks a position in the Write-Ahead Log (WAL) and prevents Postgres from removing WAL segments that Electric hasn't yet processed. If the slot doesn't advance, WAL accumulates and consumes disk space.
 
-During normal execution, Electric consumes the WAL file and keeps advancing `confirmed_flush_lsn`. However, if Electric is disconnected, the WAL file accumulates the changes that haven't been delivered to Electric.
+#### Understanding replication slot status
 
-##### Solution &mdash; Remove replication slot after Electric is gone
+Run this query to check your replication slot's health:
 
-If you're stopping Electric for the weekend, we recommend removing the `electric_slot_default` replication slot to prevent unbounded WAL growth. When Electric restarts, if it doesn't find the replication slot at resume point, it will recreate the replication slot and drop all shape logs.
+```sql
+SELECT
+    slot_name,
+    active,
+    wal_status,
+    pg_size_pretty(pg_wal_lsn_diff(pg_current_wal_lsn(), restart_lsn)) AS retained_wal,
+    pg_size_pretty(safe_wal_size) AS safe_wal_remaining,
+    restart_lsn,
+    confirmed_flush_lsn
+FROM pg_replication_slots
+WHERE slot_name LIKE 'electric%';
+```
 
-You can also control the size of the WAL with [`wal_keep_size`](https://www.postgresql.org/docs/current/runtime-config-replication.html#GUC-WAL-KEEP-SIZE). On restart, Electric will detect if the WAL is past the resume point too.
+**Key columns:**
+
+| Column | Meaning |
+|--------|---------|
+| `active` | `true` if Electric is currently connected |
+| `wal_status` | Current WAL retention state (see below) |
+| `retained_wal` | Total WAL size held by this slot |
+| `confirmed_flush_lsn` | Last position Electric confirmed processing |
+
+**Understanding `wal_status` values:**
+
+| Status | Meaning | Action |
+|--------|---------|--------|
+| `reserved` | Normal &mdash; WAL is within `max_wal_size` | None required |
+| `extended` | Warning &mdash; exceeded `max_wal_size` but protected by slot limits | Monitor closely |
+| `unreserved` | Danger &mdash; WAL may be removed at next checkpoint | Urgent: slot will be invalidated |
+| `lost` | Critical &mdash; required WAL was removed, slot is invalid | Must recreate slot |
+
+#### Common causes and solutions
+
+##### Electric is disconnected
+
+When Electric isn't running, its replication slot remains but becomes inactive. WAL accumulates indefinitely until Electric reconnects or the slot is removed.
+
+**Solution:** If stopping Electric for an extended period, remove the replication slot:
+
+```sql
+SELECT pg_drop_replication_slot('electric_slot_default');
+```
+
+When Electric restarts, it will recreate the slot and rebuild shape logs from scratch.
+
+##### Slot is active but not advancing
+
+If `active = true` but `confirmed_flush_lsn` isn't advancing, verify Electric is processing changes:
+
+1. **Check for errors in Electric logs** &mdash; storage issues or database connectivity problems can prevent processing
+
+2. **Verify shaped tables are in the publication:**
+   ```sql
+   SELECT * FROM pg_publication_tables
+   WHERE pubname LIKE 'electric_publication%';
+   ```
+
+3. **Test that changes flow through** &mdash; make a change to a shaped table and check if `confirmed_flush_lsn` advances:
+   ```sql
+   -- Note the current position
+   SELECT confirmed_flush_lsn FROM pg_replication_slots
+   WHERE slot_name = 'electric_slot_default';
+
+   -- Make a change to a table with an active shape
+   UPDATE your_shaped_table SET updated_at = now() WHERE id = 1;
+
+   -- After a few seconds, check if position advanced
+   SELECT confirmed_flush_lsn FROM pg_replication_slots
+   WHERE slot_name = 'electric_slot_default';
+   ```
+
+4. **Check Electric's storage** &mdash; if [`ELECTRIC_STORAGE_DIR`](/docs/api/config#electric-storage-dir) has disk space or permission issues, Electric can't flush data and won't acknowledge progress
+
+##### High write volume
+
+If your database has heavy write activity, there will always be some lag between writes and Electric's acknowledgment. This is normal, but you should configure limits to prevent unbounded growth.
+
+**Solution:** Set `max_slot_wal_keep_size` to cap WAL retention:
+
+```sql
+-- Limit each slot to 10GB of WAL (adjust based on your needs)
+ALTER SYSTEM SET max_slot_wal_keep_size = '10GB';
+SELECT pg_reload_conf();
+```
+
+> [!WARNING]
+> If a slot exceeds this limit, Postgres will invalidate it at the next checkpoint. Electric will detect this, drop all shapes, and recreate the slot. This is generally preferable to filling your disk.
+
+#### Recommended PostgreSQL settings
+
+| Setting | Recommended Value | Purpose |
+|---------|-------------------|---------|
+| `max_slot_wal_keep_size` | `10GB` - `50GB` | Prevents any single slot from causing unbounded WAL growth. Default is `-1` (unlimited). |
+| `wal_keep_size` | `2GB` (RDS default) | Minimum WAL retained regardless of slots |
+
+For AWS RDS, these can be set in your parameter group. Note that `max_slot_wal_keep_size` requires PostgreSQL 13+.
+
+#### Monitoring replication health
+
+Electric exposes metrics for monitoring replication slot health. If you have [Prometheus configured](/docs/api/config#electric-prometheus-port), watch these metrics:
+
+- `electric.postgres.replication.slot_retained_wal_size` &mdash; bytes of WAL retained by the slot
+- `electric.postgres.replication.slot_confirmed_flush_lsn_lag` &mdash; bytes between Electric's confirmed position and current WAL
+
+Set alerts when retained WAL exceeds your threshold or when lag grows continuously.
+
+#### Quick diagnostic checklist
+
+1. **Is the slot active?** &mdash; `active = true` means Electric is connected
+2. **Is `confirmed_flush_lsn` advancing?** &mdash; should increase after changes to shaped tables
+3. **What's the `wal_status`?** &mdash; `reserved` is healthy, `extended` needs attention
+4. **Is `max_slot_wal_keep_size` set?** &mdash; prevents unbounded growth (default is unlimited)
+5. **Any errors in Electric logs?** &mdash; storage or connectivity issues prevent processing
 
 ### Database permissions &mdash; how do I configure PostgreSQL users for Electric?
 
@@ -239,6 +378,38 @@ GRANT SELECT ON schema.tablename TO electric_user;
 ```sql
 ALTER TABLE schema.tablename OWNER TO electric_user;
 ```
+
+### Vercel CDN caching &mdash; why are my shapes not updating on Vercel?
+
+Vercel's CDN can cache responses when you proxy requests to an external Electric service using [rewrites](https://vercel.com/docs/edge-network/caching). Vercel's [cache keys are not configurable](https://vercel.com/docs/cdn-cache/purge#cache-keys) and may not differentiate between requests with different query parameters. Since Electric uses query parameters like `offset` and `handle` to track shape log position, this can result in stale or incorrect cached responses being served instead of reaching your Electric backend.
+
+##### Solution &mdash; disable Vercel CDN caching for Electric routes
+
+Add the following to your `vercel.json` to disable CDN caching for Electric API routes:
+
+```json
+{
+  "headers": [
+    {
+      "source": "/api/electric/(.*)",
+      "headers": [
+        {
+          "key": "CDN-Cache-Control",
+          "value": "no-store"
+        },
+        {
+          "key": "Vercel-CDN-Cache-Control",
+          "value": "no-store"
+        }
+      ]
+    }
+  ]
+}
+```
+
+Adjust the `source` pattern to match the route where your Electric proxy is mounted.
+
+The [`Vercel-CDN-Cache-Control`](https://vercel.com/docs/headers/cache-control-headers#cdn-cache-control-header) header specifically controls Vercel's edge cache without affecting browser caching or other CDNs. The `CDN-Cache-Control` header is a [standard](https://httpwg.org/specs/rfc9213.html) that also controls other CDN caches upstream of Vercel. Together, these ensure that shape requests always reach your Electric backend.
 
 ## IPv6 support
 

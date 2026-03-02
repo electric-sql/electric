@@ -12,6 +12,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb do
   alias Electric.ShapeCache.ShapeStatus.ShapeDb.Connection
   alias Electric.ShapeCache.ShapeStatus.ShapeDb.Query
   alias Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer
+  alias Electric.ShapeCache.ShapeStatus.ShapeDb.Statistics
 
   import Electric, only: [is_stack_id: 1, is_shape_handle: 1]
 
@@ -58,7 +59,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb do
     if handle_exists?(stack_id, shape_handle) do
       WriteBuffer.remove_shape(stack_id, shape_handle)
     else
-      {:error, "No shape matching #{inspect(shape_handle)}"}
+      {:error, {:enoshape, shape_handle}}
     end
   end
 
@@ -273,5 +274,9 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb do
 
   defp raise_on_error!({:error, reason}, action) do
     raise Error, error: reason, action: action
+  end
+
+  def statistics(stack_id) do
+    Statistics.current(stack_id)
   end
 end

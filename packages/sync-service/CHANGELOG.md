@@ -1,5 +1,75 @@
 # @core/sync-service
 
+## 1.4.11
+
+### Patch Changes
+
+- 58c06d8: Fixed ArithmeticError in `ServeShapePlug.end_telemetry_span/2` when `parse_body` halts before the telemetry span is started. Moved `parse_body` plug after `start_telemetry_span` in the pipeline.
+- 9ca341c: Improve 503 error response when concurrent request limit is exceeded. Change error code from generic `"overloaded"` to `"concurrent_request_limit_exceeded"` and include the request kind and configured limit in the message.
+
+## 1.4.10
+
+### Patch Changes
+
+- 6022ae0: Change info log messages to notice except shape add/remove and relation received
+
+## 1.4.9
+
+### Patch Changes
+
+- 48bbbe3: Implement a write mode in shape consumer that can write transaction fragments directly to the shape log, without buffering the complete transaction in memory.
+
+  The Storage behaviour now includes three new optional callbacks for fragment streaming:
+  - `append_fragment_to_log!/2` — writes log items for a transaction fragment without advancing the committed transaction boundary.
+  - `signal_txn_commit!/2` — advances the committed transaction boundary after all fragments have been written.
+  - `supports_txn_fragment_streaming?/0` — returns `true` if the backend implements the above two callbacks.
+
+  Custom storage backends that do not implement these callbacks will automatically fall back to the default `write_unit=txn` mode (full transaction buffering) with a warning logged at startup.
+
+## 1.4.8
+
+### Patch Changes
+
+- 9c4ace0: Fix out-of-bounds request handler to subscribe to shape events before entering the live request wait loop. Without the subscription, non-live requests that hit the out-of-bounds guard would hang for the full timeout duration (long_poll_timeout/2) instead of recovering when the expected offset becomes available.
+- 8691a61: Make gathering of SQLite memory usage metrics optional and default to off to prevent instability in some environments
+- d14f504: Handle missing memstat SQLite extension gracefully instead of crashing on startup. When the extension is unavailable, memory statistics are simply omitted from the periodic stats collection.
+- 1d1f793: Add `electric-has-data` response header to distinguish data-bearing responses from control-only responses (e.g. long-poll timeouts, `offset=now` requests).
+
+## 1.4.7
+
+### Patch Changes
+
+- ae593c6: Add lock_breaker_guard to optionally disable the lock breaker behaviour
+- c293009: Clean up orphaned shape data when encountering an empty shape db
+- 02cd199: Add exclusive mode with a single read-write sqlite connection to support AWS EFS
+- 9f57a8b: Fix parameter validation rejecting valid sequential params when there are 10 or more of them, due to map keys being iterated in lexicographic rather than numeric order.
+- be42de5: Fix storage race condition when deleting shape during a live poll request
+- e1028b5: Recover shape db startup when opening a corrupt database file
+- 24b0426: Include memory and disk usage statistics from the shape db sqlite instance
+- 27fc808: Handle invalid write operations without blocking the write buffer
+- 7c2d1fe: Fix an infinite recursive loop that API request processes may get stuck in when the consumer process is slow to start or dies unexpectedly, without cleaning up after itself.
+- 8f2f7bd: Handle server clockskew that presents as a -ve replication lag in statistics
+
+## 1.4.6
+
+### Patch Changes
+
+- cc7cfc2: Add disk usage statistics to metrics collection
+
+## 1.4.5
+
+### Patch Changes
+
+- 03943ad: Fix subquery materializer bug where a value toggling across the 0↔1 boundary multiple times in a single batch could lose data by emitting conflicting move_in/move_out events for the same value.
+
+## 1.4.4
+
+### Patch Changes
+
+- 34a240b: fix: metrics from consumer seem to not be emitted because of a struct
+- bbfd752: Fixed a bug where rows with subquery-based WHERE clauses could retain stale move tags when the sublink column value changed during a pending move-in, causing the row to not be properly removed on subsequent move-outs.
+- dfcfa40: Add disk usage telemetry to stacks.
+
 ## 1.4.3
 
 ### Patch Changes

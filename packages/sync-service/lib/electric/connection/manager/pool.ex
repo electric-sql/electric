@@ -132,7 +132,7 @@ defmodule Electric.Connection.Manager.Pool do
 
     case {state.status, pool_is_ready} do
       {:starting, true} ->
-        Logger.info(
+        Logger.notice(
           "Connection pool [#{state.role}: #{state.host}] is ready with #{state.pool_size} connections"
         )
 

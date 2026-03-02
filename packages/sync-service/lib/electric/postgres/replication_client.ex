@@ -416,11 +416,13 @@ defmodule Electric.Postgres.ReplicationClient do
 
   defp acknowledge_transaction(%TransactionFragment{lsn: lsn, commit: commit}, state) do
     if Sampler.sample_metrics?() do
+      alias Electric.Replication.Changes.Commit
+
       OpenTelemetry.execute(
         [:electric, :postgres, :replication, :transaction_received],
         %{
           monotonic_time: System.monotonic_time(),
-          receive_lag: DateTime.diff(DateTime.utc_now(), commit.commit_timestamp, :millisecond),
+          receive_lag: Commit.calculate_final_receive_lag(commit, System.monotonic_time()),
           bytes: commit.transaction_size,
           count: 1,
           operations: commit.txn_change_count

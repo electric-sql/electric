@@ -13,6 +13,8 @@ export default defineConfig({
       `test/wake-detection.test.ts`,
       `test/shape-stream-state.test.ts`,
       `test/pause-lock.test.ts`,
+      `test/stream.test.ts`,
+      `test/204-no-content.test.ts`,
     ],
     testTimeout: 30000,
     environment: `jsdom`,

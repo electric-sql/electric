@@ -28,7 +28,7 @@
 
 [invoke setup_electric]
 [shell electric]
-  ??[info] Starting replication from postgres
+  ??[notice] Starting replication from postgres
   -
 
 [invoke stop_electric]
@@ -70,7 +70,7 @@
 ## Configure Electric with the correct certificate and verify that it successfully connects to the database
 [invoke setup_electric_with_env "ELECTRIC_DATABASE_CA_CERTIFICATE_FILE=../../integration-tests/support_files/root.crt"]
 [shell electric]
-  ??[info] Starting replication from postgres
+  ??[notice] Starting replication from postgres
 
 [cleanup]
   [invoke teardown]

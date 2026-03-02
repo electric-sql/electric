@@ -22,16 +22,19 @@ defmodule Electric.Client.ShapeState do
   alias Electric.Client
   alias Electric.Client.Offset
   alias Electric.Client.Message.ResumeMessage
+  alias Electric.Client.Util
 
   defstruct [
     :shape_handle,
     :schema,
     :value_mapper_fun,
     :next_cursor,
+    :stale_cache_buster,
     offset: Offset.before_all(),
     up_to_date?: false,
     tag_to_keys: %{},
-    key_data: %{}
+    key_data: %{},
+    stale_cache_retry_count: 0
   ]
 
   @type t :: %__MODULE__{
@@ -42,7 +45,9 @@ defmodule Electric.Client.ShapeState do
           next_cursor: binary() | nil,
           up_to_date?: boolean(),
           tag_to_keys: %{optional(term()) => MapSet.t()},
-          key_data: %{optional(term()) => %{tags: MapSet.t(), msg: term()}}
+          key_data: %{optional(term()) => %{tags: MapSet.t(), msg: term()}},
+          stale_cache_buster: String.t() | nil,
+          stale_cache_retry_count: non_neg_integer()
         }
 
   @doc """
@@ -110,5 +115,44 @@ defmodule Electric.Client.ShapeState do
       tag_to_keys: state.tag_to_keys,
       key_data: state.key_data
     }
+  end
+
+  @doc """
+  Enter stale retry mode by setting a cache buster and incrementing the retry count.
+
+  Called when a stale CDN response is detected - the server returns an expired
+  handle that matches our cached expired handle.
+  """
+  @spec enter_stale_retry(t()) :: t()
+  def enter_stale_retry(%__MODULE__{} = state) do
+    %{
+      state
+      | stale_cache_buster: generate_cache_buster(),
+        stale_cache_retry_count: state.stale_cache_retry_count + 1
+    }
+  end
+
+  @doc """
+  Clear stale retry state after a successful response.
+
+  Called when we receive a fresh (non-stale) response from the server.
+  """
+  @spec clear_stale_retry(t()) :: t()
+  def clear_stale_retry(%__MODULE__{} = state) do
+    %{
+      state
+      | stale_cache_buster: nil,
+        stale_cache_retry_count: 0
+    }
+  end
+
+  @doc """
+  Generate a random cache buster string.
+
+  Uses 8 random bytes encoded as hex (16 characters).
+  """
+  @spec generate_cache_buster() :: String.t()
+  def generate_cache_buster do
+    Util.generate_id(8)
   end
 end

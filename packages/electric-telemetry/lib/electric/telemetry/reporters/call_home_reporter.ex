@@ -68,7 +68,8 @@ defmodule ElectricTelemetry.Reporters.CallHomeReporter do
           stored_bytes: sum("electric.storage.transaction_stored.bytes", unit: :byte),
           stored_transactions: sum("electric.storage.transaction_stored.count"),
           stored_operations: sum("electric.storage.transaction_stored.operations"),
-          total_used_storage_kb: last_value("electric.storage.used", unit: {:byte, :kilobyte}),
+          total_used_storage_kb:
+            last_value("electric.storage.used.bytes", unit: {:byte, :kilobyte}),
           total_shapes: last_value("electric.shapes.total_shapes.count"),
           active_shapes:
             summary("electric.plug.serve_shape.monotonic_time",

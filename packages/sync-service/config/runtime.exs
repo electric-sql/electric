@@ -129,13 +129,6 @@ storage_spec =
         "fast_file" ->
           {Electric.ShapeCache.PureFileStorage, storage_dir: shape_path}
 
-        "crashing_file" ->
-          num_calls_until_crash =
-            env!("CRASHING_FILE_ELECTRIC_STORAGE__NUM_CALLS_UNTIL_CRASH", :integer)
-
-          {Electric.ShapeCache.CrashingFileStorage,
-           storage_dir: shape_path, num_calls_until_crash: num_calls_until_crash}
-
         _ ->
           raise Dotenvy.Error, message: "storage must be one of: MEMORY, FAST_FILE, LEGACY_FILE"
       end
@@ -284,7 +277,13 @@ config :electric,
       "ELECTRIC_REPLICATION_IDLE_TIMEOUT",
       &Electric.Config.parse_human_readable_time!/1,
       nil
-    )
+    ),
+  shape_db_exclusive_mode: env!("ELECTRIC_SHAPE_DB_EXCLUSIVE_MODE", :boolean, false),
+  shape_db_storage_dir: env!("ELECTRIC_SHAPE_DB_STORAGE_DIR", :string, nil),
+  shape_db_synchronous: env!("ELECTRIC_SHAPE_DB_SYNCHRONOUS", :string, nil),
+  shape_db_cache_size:
+    env!("ELECTRIC_SHAPE_DB_CACHE_SIZE", &Electric.Config.parse_human_readable_size!/1, nil),
+  shape_db_enable_memory_stats: env!("ELECTRIC_SHAPE_DB_ENABLE_MEMORY_STATS", :boolean, nil)
 
 if Electric.telemetry_enabled?() do
   # Disable the default telemetry_poller process since we start our own in
