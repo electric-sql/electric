@@ -75,7 +75,7 @@ export type ResponseMetadataTransition =
   | { action: `ignored`; state: ShapeStreamState }
   | {
       action: `stale-retry`
-      state: StaleRetryState
+      state: ShapeStreamState
       exceededMaxRetries: boolean
     }
 
@@ -122,7 +122,7 @@ export interface UrlParamsContext {
  * Each concrete state carries only its relevant fields — there is no shared
  * flat context bag. Transitions create new immutable state objects.
  *
- * `isUpToDate` is derived from state kind (only LiveState returns true).
+ * `isUpToDate` returns true for LiveState and delegating states wrapping LiveState.
  */
 export abstract class ShapeStreamState {
   abstract readonly kind: ShapeStreamStateKind
@@ -368,9 +368,10 @@ abstract class ActiveState extends ShapeStreamState {
 
 /**
  * Captures shared behavior of InitialState, SyncingState, StaleRetryState:
- * - handleResponseMetadata: stale check → parse fields → new SyncingState
- * - canEnterReplayMode → true
- * - enterReplayMode → new ReplayingState
+ * - handleResponseMetadata: stale check → parse fields → new SyncingState (or LiveState for 204)
+ * - enterReplayMode(cursor) → new ReplayingState
+ * - canEnterReplayMode(): boolean — returns true (StaleRetryState overrides to return false,
+ *   because entering replay would lose the stale-retry count; see C1 in SPEC.md)
  */
 abstract class FetchingState extends ActiveState {
   handleResponseMetadata(
@@ -659,48 +660,60 @@ export class ReplayingState extends ActiveState {
 // Delegating states (Paused / Error)
 // ---------------------------------------------------------------------------
 
+// Union of all non-delegating states — used to type previousState fields so
+// that PausedState.previousState is never another PausedState, and
+// ErrorState.previousState is never another ErrorState.
+export type ShapeStreamActiveState =
+  | InitialState
+  | SyncingState
+  | LiveState
+  | ReplayingState
+  | StaleRetryState
+
 export class PausedState extends ShapeStreamState {
   readonly kind = `paused` as const
-  readonly previousState: ShapeStreamState
+  readonly previousState: ShapeStreamActiveState | ErrorState
 
   constructor(previousState: ShapeStreamState) {
     super()
-    this.previousState = previousState
+    this.previousState = (
+      previousState instanceof PausedState
+        ? previousState.previousState
+        : previousState
+    ) as ShapeStreamActiveState | ErrorState
   }
 
-  get handle() {
+  get handle(): string | undefined {
     return this.previousState.handle
   }
-  get offset() {
+  get offset(): Offset {
     return this.previousState.offset
   }
-  get schema() {
+  get schema(): Schema | undefined {
     return this.previousState.schema
   }
-  get liveCacheBuster() {
+  get liveCacheBuster(): string {
     return this.previousState.liveCacheBuster
   }
-  get lastSyncedAt() {
+  get lastSyncedAt(): number | undefined {
     return this.previousState.lastSyncedAt
   }
-
   get isUpToDate(): boolean {
     return this.previousState.isUpToDate
   }
-
-  get staleCacheBuster() {
+  get staleCacheBuster(): string | undefined {
     return this.previousState.staleCacheBuster
   }
-  get staleCacheRetryCount() {
+  get staleCacheRetryCount(): number {
     return this.previousState.staleCacheRetryCount
   }
-  get sseFallbackToLongPolling() {
+  get sseFallbackToLongPolling(): boolean {
     return this.previousState.sseFallbackToLongPolling
   }
-  get consecutiveShortSseConnections() {
+  get consecutiveShortSseConnections(): number {
     return this.previousState.consecutiveShortSseConnections
   }
-  get replayCursor() {
+  get replayCursor(): string | undefined {
     return this.previousState.replayCursor
   }
 
@@ -711,7 +724,20 @@ export class PausedState extends ShapeStreamState {
     if (transition.action === `accepted`) {
       return { action: `accepted`, state: new PausedState(transition.state) }
     }
-    return transition
+    if (transition.action === `ignored`) {
+      return { action: `ignored`, state: this }
+    }
+    if (transition.action === `stale-retry`) {
+      return {
+        action: `stale-retry`,
+        state: new PausedState(transition.state),
+        exceededMaxRetries: transition.exceededMaxRetries,
+      }
+    }
+    const _exhaustive: never = transition
+    throw new Error(
+      `PausedState.handleResponseMetadata: unhandled transition action "${(_exhaustive as ResponseMetadataTransition).action}"`
+    )
   }
 
   withHandle(handle: string): PausedState {
@@ -733,33 +759,51 @@ export class PausedState extends ShapeStreamState {
 
 export class ErrorState extends ShapeStreamState {
   readonly kind = `error` as const
-  readonly previousState: ShapeStreamState
+  readonly previousState: ShapeStreamActiveState | PausedState
   readonly error: Error
 
   constructor(previousState: ShapeStreamState, error: Error) {
     super()
-    this.previousState = previousState
+    this.previousState = (
+      previousState instanceof ErrorState
+        ? previousState.previousState
+        : previousState
+    ) as ShapeStreamActiveState | PausedState
     this.error = error
   }
 
-  get handle() {
+  get handle(): string | undefined {
     return this.previousState.handle
   }
-  get offset() {
+  get offset(): Offset {
     return this.previousState.offset
   }
-  get schema() {
+  get schema(): Schema | undefined {
     return this.previousState.schema
   }
-  get liveCacheBuster() {
+  get liveCacheBuster(): string {
     return this.previousState.liveCacheBuster
   }
-  get lastSyncedAt() {
+  get lastSyncedAt(): number | undefined {
     return this.previousState.lastSyncedAt
   }
-
   get isUpToDate(): boolean {
     return this.previousState.isUpToDate
+  }
+  get staleCacheBuster(): string | undefined {
+    return this.previousState.staleCacheBuster
+  }
+  get staleCacheRetryCount(): number {
+    return this.previousState.staleCacheRetryCount
+  }
+  get sseFallbackToLongPolling(): boolean {
+    return this.previousState.sseFallbackToLongPolling
+  }
+  get consecutiveShortSseConnections(): number {
+    return this.previousState.consecutiveShortSseConnections
+  }
+  get replayCursor(): string | undefined {
+    return this.previousState.replayCursor
   }
 
   withHandle(handle: string): ErrorState {
@@ -782,13 +826,6 @@ export class ErrorState extends ShapeStreamState {
 // ---------------------------------------------------------------------------
 // Type alias & factory
 // ---------------------------------------------------------------------------
-
-export type ShapeStreamActiveState =
-  | InitialState
-  | SyncingState
-  | LiveState
-  | ReplayingState
-  | StaleRetryState
 
 export function createInitialState(opts: {
   offset: Offset

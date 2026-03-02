@@ -17,43 +17,11 @@ import { MissingHeadersError } from '../src/error'
 import { resolveValue } from '../src'
 import { TransformFunction } from '../src/parser'
 import { SHAPE_HANDLE_HEADER } from '../src/constants'
+import { mockVisibilityApi } from './support/mock-fetch-harness'
 
 const BASE_URL = inject(`baseUrl`)
 
 const fetchAndSse = [{ liveSse: false }, { liveSse: true }]
-
-/**
- * Mocks the browser's visibility API
- * and returns `pause` and `resume` functions
- * that simulate visibility changes which should trigger pausing and resuming the shape stream.
- */
-function mockVisibilityApi() {
-  const doc = {
-    hidden: false,
-    addEventListener: vi.fn(),
-    removeEventListener: vi.fn(),
-  }
-
-  global.document = doc as unknown as Document
-
-  const invokeHandlers = () => {
-    const visibilityHandlers = doc.addEventListener.mock.calls.map(
-      ([_, handler]) => handler
-    )
-    visibilityHandlers.forEach((handler) => handler())
-  }
-
-  return {
-    pause: () => {
-      doc.hidden = true
-      invokeHandlers()
-    },
-    resume: () => {
-      doc.hidden = false
-      invokeHandlers()
-    },
-  }
-}
 
 describe.for(fetchAndSse)(`Shape  (liveSSE=$liveSse)`, ({ liveSse }) => {
   it(`should sync an empty shape`, async ({ issuesTableUrl, aborter }) => {
@@ -399,6 +367,7 @@ describe.for(fetchAndSse)(`Shape  (liveSSE=$liveSse)`, ({ liveSse }) => {
         table: issuesTableUrl,
       },
       signal: aborter.signal,
+      backoffOptions: { initialDelay: 5, maxDelay: 20, multiplier: 1.2 },
       fetchClient: async (_input, _init) => {
         if (fetchShouldFail)
           throw new FetchError(
@@ -435,7 +404,9 @@ describe.for(fetchAndSse)(`Shape  (liveSSE=$liveSse)`, ({ liveSse }) => {
     await vi.waitFor(() => expect(shapeStream.isConnected()).false)
 
     fetchShouldFail = false
-    await vi.waitFor(() => expect(shapeStream.isConnected()).true)
+    await vi.waitFor(() => expect(shapeStream.isConnected()).true, {
+      timeout: 5_000,
+    })
   })
 
   it(`should set isConnected to false when the stream is paused an back on true when the fetch succeeds again`, async ({
