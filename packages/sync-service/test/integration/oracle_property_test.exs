@@ -63,6 +63,7 @@ defmodule Electric.Integration.OraclePropertyTest do
     mutations_per_txn = env_int("MUTATIONS_PER_TXN") || @default_mutations_per_txn
 
     total_mutations = batch_count * txns_per_batch * mutations_per_txn
+
     check all shapes <- WhereClauseGenerator.shapes_gen(shape_count),
               mutations <- StandardSchema.mutations_gen(total_mutations),
               max_runs: run_count do

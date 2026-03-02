@@ -208,8 +208,12 @@ defmodule Support.OracleHarness do
   """
   def env_int(name) do
     case System.get_env(name) do
-      nil -> nil
-      "" -> nil
+      nil ->
+        nil
+
+      "" ->
+        nil
+
       value ->
         case Integer.parse(value) do
           {int, ""} -> int
@@ -221,5 +225,4 @@ defmodule Support.OracleHarness do
   defp log(message) do
     IO.puts("[oracle] #{message}")
   end
-
 end
