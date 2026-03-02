@@ -12,12 +12,12 @@ defmodule Electric.Plug.ServeShapePlug do
 
   require Logger
 
+  plug :put_resp_content_type, "application/json"
   plug :fetch_query_params
 
   # start_telemetry_span needs to always be the first plug after fetching query params.
   plug :start_telemetry_span
   plug :parse_body
-  plug :put_resp_content_type, "application/json"
 
   plug :validate_request
   # Admission control is applied here, but note:
