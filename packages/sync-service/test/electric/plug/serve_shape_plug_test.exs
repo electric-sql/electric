@@ -1062,6 +1062,30 @@ defmodule Electric.Plug.ServeShapePlugTest do
       assert conn.status == 400
       assert %{"error" => "Request body must be a JSON object"} = Jason.decode!(conn.resp_body)
     end
+
+    test "returns 413 for oversized body without crashing", ctx do
+      Repatch.patch(Plug.Conn, :read_body, fn conn, _opts -> {:more, "partial", conn} end)
+
+      conn =
+        Plug.Test.conn(:post, "/?offset=-1", "body")
+        |> put_req_header("content-type", "application/json")
+        |> call_serve_shape_plug(ctx)
+
+      assert conn.status == 413
+      assert %{"error" => "Request body too large"} = Jason.decode!(conn.resp_body)
+    end
+
+    test "returns 400 for body read failure without crashing", ctx do
+      Repatch.patch(Plug.Conn, :read_body, fn _conn, _opts -> {:error, :timeout} end)
+
+      conn =
+        Plug.Test.conn(:post, "/?offset=-1", "body")
+        |> put_req_header("content-type", "application/json")
+        |> call_serve_shape_plug(ctx)
+
+      assert conn.status == 400
+      assert %{"error" => "Failed to read request body"} = Jason.decode!(conn.resp_body)
+    end
   end
 
   describe "stack not ready" do
