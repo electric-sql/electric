@@ -114,4 +114,5 @@ jobs:
 
             Start by reading `.claude/commands/pr-review.md`, then follow its phases to conduct the review.
 
+          allowed_bots: 'claude[bot]'
           claude_args: '--allowedTools "Bash(gh issue view:*),Bash(gh search:*),Bash(gh issue list:*),Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr list:*),Bash(gh api:*),Bash(cat:*),Read,Glob,Grep"'
