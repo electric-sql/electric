@@ -1,7 +1,7 @@
 {
   "name": "@core/sync-service",
   "private": true,
-  "version": "1.4.10",
+  "version": "1.4.11",
   "scripts": {
     "publish:hex": "../../scripts/publish_hex.sh electric",
     "changeset": "pushd ../..; pnpm changeset; popd"
