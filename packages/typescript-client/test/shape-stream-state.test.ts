@@ -209,6 +209,26 @@ describe(`shape stream state machine`, () => {
     expect(transition.fellBackToLongPolling).toBe(true)
   })
 
+  // wasAborted=true: connection was intentionally aborted, not a short-lived failure.
+  // The counter must NOT increment, because aborted connections are not network problems.
+  it(`wasAborted=true leaves short-connection counter unchanged`, () => {
+    const live = new LiveState(makeShared(), {
+      consecutiveShortSseConnections: 1,
+    })
+
+    const transition = live.handleSseConnectionClosed({
+      connectionDuration: 100, // short duration, but aborted intentionally
+      wasAborted: true,
+      minConnectionDuration: 1000,
+      maxShortConnections: 3,
+    })
+
+    expect(transition.state).toBeInstanceOf(LiveState)
+    expect(transition.state.consecutiveShortSseConnections).toBe(1) // unchanged
+    expect(transition.wasShortConnection).toBe(false)
+    expect(transition.fellBackToLongPolling).toBe(false)
+  })
+
   // SSE state is preserved when LiveState transitions to itself
   it(`SSE state is preserved through LiveState self-transitions`, () => {
     const live = new LiveState(makeShared(), {
@@ -397,7 +417,33 @@ describe(`shape stream state machine`, () => {
     expect(state.staleCacheRetryCount).toBe(0)
   })
 
-  // 24. StaleRetryState exceededMaxRetries flag
+  // 24a. First stale retry: exceededMaxRetries must be false (count goes 0 → 1)
+  it(`StaleRetryState first stale retry has exceededMaxRetries false`, () => {
+    const { state: initial } = scenario()
+      .response({
+        responseHandle: `stale-h`,
+        expiredHandle: `stale-h`,
+      })
+      .expectAction(`stale-retry`)
+      .expectKind(`stale-retry`)
+      .done()
+
+    // Simulate another stale response on the first retry (count: 1 → 2)
+    const transition = initial.handleResponseMetadata(
+      makeResponseInput({
+        responseHandle: `stale-h`,
+        expiredHandle: `stale-h`,
+      })
+    )
+
+    expect(transition.action).toBe(`stale-retry`)
+    if (transition.action === `stale-retry`) {
+      expect(transition.state.staleCacheRetryCount).toBe(2)
+      expect(transition.exceededMaxRetries).toBe(false)
+    }
+  })
+
+  // 24b. StaleRetryState exceededMaxRetries flag
   it(`StaleRetryState exceeds max retries`, () => {
     const stale = new StaleRetryState({
       ...makeShared({ handle: undefined }),
@@ -466,6 +512,22 @@ describe(`shape stream state machine`, () => {
       .done()
 
     expect(state.replayCursor).toBe(`my-cursor`)
+  })
+
+  // ReplayingState.replayCursor must survive a handleResponseMetadata round-trip
+  // (I7: ReplayingState always has replayCursor). The server can issue multiple
+  // responses before the replay up-to-date message arrives; each response must
+  // carry the cursor forward so the client knows when to stop suppressing batches.
+  it(`ReplayingState.replayCursor is preserved through handleResponseMetadata`, () => {
+    const { state } = scenario()
+      .enterReplayMode(`replay-cursor`)
+      .expectKind(`replaying`)
+      .response({ responseHandle: `h1` })
+      .expectAction(`accepted`)
+      .expectKind(`replaying`)
+      .done()
+
+    expect(state.replayCursor).toBe(`replay-cursor`)
   })
 
   // 28. handleMessageBatch returns no-op when no messages

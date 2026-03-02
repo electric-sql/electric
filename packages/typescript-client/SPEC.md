@@ -101,7 +101,9 @@ For PausedState input: `paused.pause()` is idempotent (returns `this` by I8), so
 `paused.pause().resume()` returns `paused.previousState`, not `paused`. Handle and
 offset are still preserved through the round-trip for all states.
 
-**Enforcement**: Algebraic property test across all 7 states + `assertReachableInvariants`.
+**Enforcement**: Algebraic property test across all 7 states (`state.pause().resume() === state`).
+`assertReachableInvariants` verifies the pause/resume round-trip holds on every transition
+recorded by the DSL scenario builder.
 
 ### I4: Error/retry preserves identity
 

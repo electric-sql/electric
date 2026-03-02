@@ -306,6 +306,11 @@ export function applyEvent(
 }
 
 // ─── Seeded PRNG (mulberry32) ───
+//
+// A seeded PRNG lets fuzz test failures be reproduced exactly from the logged
+// seed alone — no need to snapshot the full event sequence. mulberry32 is a
+// well-known 32-bit PRNG with good statistical properties and a tiny
+// implementation: one multiply + xorshift per call.
 
 export function mulberry32(seed: number): () => number {
   let s = seed | 0
@@ -417,7 +422,11 @@ export class ScenarioBuilder<K extends ShapeStreamStateKind = `initial`> {
     return new ScenarioBuilder(result.state, [...this.#trace, result])
   }
 
-  // ─── Event handlers (return unknown kind — determined at runtime) ───
+  // ─── Event handlers ───
+  // TypeScript cannot narrow the result kind at compile time (it depends on
+  // the current state at runtime), so these methods return the wide
+  // ScenarioBuilder<ShapeStreamStateKind> type. Use expectKind() after calling
+  // them to narrow the type for subsequent chained calls.
 
   response(
     input?: Partial<ResponseMetadataInput>
@@ -442,6 +451,9 @@ export class ScenarioBuilder<K extends ShapeStreamStateKind = `initial`> {
   }
 
   // ─── Universal transitions ───
+  // These transitions always produce the same kind regardless of starting state
+  // (every state delegates pause/error/markMustRefetch to PausedState, ErrorState,
+  // or InitialState), so the casts below are always safe.
 
   pause(): ScenarioBuilder<`paused`> {
     return this.#step({ type: `pause` }) as ScenarioBuilder<`paused`>
@@ -458,6 +470,8 @@ export class ScenarioBuilder<K extends ShapeStreamStateKind = `initial`> {
     }) as ScenarioBuilder<`initial`>
   }
 
+  // withHandle preserves the current kind (every state returns same-kind), so
+  // casting back to ScenarioBuilder<K> is safe.
   withHandle(handle: string): ScenarioBuilder<K> {
     return this.#step({ type: `withHandle`, handle }) as ScenarioBuilder<K>
   }

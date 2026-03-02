@@ -370,6 +370,8 @@ abstract class ActiveState extends ShapeStreamState {
  * Captures shared behavior of InitialState, SyncingState, StaleRetryState:
  * - handleResponseMetadata: stale check → parse fields → new SyncingState (or LiveState for 204)
  * - enterReplayMode(cursor) → new ReplayingState
+ * - canEnterReplayMode(): boolean — returns true (StaleRetryState overrides to return false,
+ *   because entering replay would lose the stale-retry count; see C1 in SPEC.md)
  */
 abstract class FetchingState extends ActiveState {
   handleResponseMetadata(
