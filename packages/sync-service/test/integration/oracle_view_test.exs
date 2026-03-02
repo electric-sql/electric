@@ -45,13 +45,15 @@ defmodule Electric.Integration.OracleViewTest do
         }
       ]
 
-      mutations = [
-        %{name: "update_value", sql: "UPDATE level_4 SET value = 'updated' WHERE id = 'l4-1'"},
-        %{name: "move_out", sql: "UPDATE level_4 SET level_3_id = 'l3-2' WHERE id = 'l4-1'"},
-        %{name: "move_in", sql: "UPDATE level_4 SET level_3_id = 'l3-1' WHERE id = 'l4-6'"}
+      batches = [
+        [
+          [%{name: "update_value", sql: "UPDATE level_4 SET value = 'updated' WHERE id = 'l4-1'"}],
+          [%{name: "move_out", sql: "UPDATE level_4 SET level_3_id = 'l3-2' WHERE id = 'l4-1'"}],
+          [%{name: "move_in", sql: "UPDATE level_4 SET level_3_id = 'l3-1' WHERE id = 'l4-6'"}]
+        ]
       ]
 
-      test_against_oracle(ctx, shapes, mutations)
+      test_against_oracle(ctx, shapes, batches)
     end
   end
 
@@ -68,15 +70,17 @@ defmodule Electric.Integration.OracleViewTest do
         }
       ]
 
-      mutations = [
-        %{name: "noop_toggle", sql: "UPDATE level_3 SET active = false WHERE id = 'l3-2'"},
-        %{name: "deactivate_l3", sql: "UPDATE level_3 SET active = false WHERE id = 'l3-1'"},
-        %{name: "activate_l3", sql: "UPDATE level_3 SET active = true WHERE id = 'l3-2'"},
-        %{name: "update_child", sql: "UPDATE level_4 SET value = 'changed' WHERE id = 'l4-2'"},
-        %{name: "move_child", sql: "UPDATE level_4 SET level_3_id = 'l3-3' WHERE id = 'l4-1'"}
+      batches = [
+        [
+          [%{name: "noop_toggle", sql: "UPDATE level_3 SET active = false WHERE id = 'l3-2'"}],
+          [%{name: "deactivate_l3", sql: "UPDATE level_3 SET active = false WHERE id = 'l3-1'"}],
+          [%{name: "activate_l3", sql: "UPDATE level_3 SET active = true WHERE id = 'l3-2'"}],
+          [%{name: "update_child", sql: "UPDATE level_4 SET value = 'changed' WHERE id = 'l4-2'"}],
+          [%{name: "move_child", sql: "UPDATE level_4 SET level_3_id = 'l3-3' WHERE id = 'l4-1'"}]
+        ]
       ]
 
-      test_against_oracle(ctx, shapes, mutations)
+      test_against_oracle(ctx, shapes, batches)
     end
 
     test "IN subquery on specific grandparent", ctx do
@@ -91,13 +95,15 @@ defmodule Electric.Integration.OracleViewTest do
         }
       ]
 
-      mutations = [
-        %{name: "move_l3_out", sql: "UPDATE level_3 SET level_2_id = 'l2-2' WHERE id = 'l3-1'"},
-        %{name: "move_l3_in", sql: "UPDATE level_3 SET level_2_id = 'l2-1' WHERE id = 'l3-2'"},
-        %{name: "move_l4", sql: "UPDATE level_4 SET level_3_id = 'l3-3' WHERE id = 'l4-1'"}
+      batches = [
+        [
+          [%{name: "move_l3_out", sql: "UPDATE level_3 SET level_2_id = 'l2-2' WHERE id = 'l3-1'"}],
+          [%{name: "move_l3_in", sql: "UPDATE level_3 SET level_2_id = 'l2-1' WHERE id = 'l3-2'"}],
+          [%{name: "move_l4", sql: "UPDATE level_4 SET level_3_id = 'l3-3' WHERE id = 'l4-1'"}]
+        ]
       ]
 
-      test_against_oracle(ctx, shapes, mutations)
+      test_against_oracle(ctx, shapes, batches)
     end
   end
 
@@ -115,14 +121,16 @@ defmodule Electric.Integration.OracleViewTest do
         }
       ]
 
-      mutations = [
-        %{name: "toggle_l2", sql: "UPDATE level_2 SET active = NOT active WHERE id = 'l2-1'"},
-        %{name: "toggle_l3", sql: "UPDATE level_3 SET active = NOT active WHERE id = 'l3-1'"},
-        %{name: "move_l3", sql: "UPDATE level_3 SET level_2_id = 'l2-3' WHERE id = 'l3-1'"},
-        %{name: "move_l4", sql: "UPDATE level_4 SET level_3_id = 'l3-4' WHERE id = 'l4-1'"}
+      batches = [
+        [
+          [%{name: "toggle_l2", sql: "UPDATE level_2 SET active = NOT active WHERE id = 'l2-1'"}],
+          [%{name: "toggle_l3", sql: "UPDATE level_3 SET active = NOT active WHERE id = 'l3-1'"}],
+          [%{name: "move_l3", sql: "UPDATE level_3 SET level_2_id = 'l2-3' WHERE id = 'l3-1'"}],
+          [%{name: "move_l4", sql: "UPDATE level_4 SET level_3_id = 'l3-4' WHERE id = 'l4-1'"}]
+        ]
       ]
 
-      test_against_oracle(ctx, shapes, mutations)
+      test_against_oracle(ctx, shapes, batches)
     end
 
     test "through specific level_1", ctx do
@@ -138,13 +146,15 @@ defmodule Electric.Integration.OracleViewTest do
         }
       ]
 
-      mutations = [
-        %{name: "move_l2", sql: "UPDATE level_2 SET level_1_id = 'l1-2' WHERE id = 'l2-1'"},
-        %{name: "move_l3", sql: "UPDATE level_3 SET level_2_id = 'l2-3' WHERE id = 'l3-1'"},
-        %{name: "move_l4", sql: "UPDATE level_4 SET level_3_id = 'l3-3' WHERE id = 'l4-1'"}
+      batches = [
+        [
+          [%{name: "move_l2", sql: "UPDATE level_2 SET level_1_id = 'l1-2' WHERE id = 'l2-1'"}],
+          [%{name: "move_l3", sql: "UPDATE level_3 SET level_2_id = 'l2-3' WHERE id = 'l3-1'"}],
+          [%{name: "move_l4", sql: "UPDATE level_4 SET level_3_id = 'l3-3' WHERE id = 'l4-1'"}]
+        ]
       ]
 
-      test_against_oracle(ctx, shapes, mutations)
+      test_against_oracle(ctx, shapes, batches)
     end
   end
 
@@ -162,15 +172,17 @@ defmodule Electric.Integration.OracleViewTest do
         }
       ]
 
-      mutations = [
-        %{name: "toggle_l1_1", sql: "UPDATE level_1 SET active = NOT active WHERE id = 'l1-1'"},
-        %{name: "toggle_l1_2", sql: "UPDATE level_1 SET active = NOT active WHERE id = 'l1-2'"},
-        %{name: "move_l2", sql: "UPDATE level_2 SET level_1_id = 'l1-3' WHERE id = 'l2-1'"},
-        %{name: "move_l3", sql: "UPDATE level_3 SET level_2_id = 'l2-4' WHERE id = 'l3-1'"},
-        %{name: "update_l4", sql: "UPDATE level_4 SET value = 'new' WHERE id = 'l4-1'"}
+      batches = [
+        [
+          [%{name: "toggle_l1_1", sql: "UPDATE level_1 SET active = NOT active WHERE id = 'l1-1'"}],
+          [%{name: "toggle_l1_2", sql: "UPDATE level_1 SET active = NOT active WHERE id = 'l1-2'"}],
+          [%{name: "move_l2", sql: "UPDATE level_2 SET level_1_id = 'l1-3' WHERE id = 'l2-1'"}],
+          [%{name: "move_l3", sql: "UPDATE level_3 SET level_2_id = 'l2-4' WHERE id = 'l3-1'"}],
+          [%{name: "update_l4", sql: "UPDATE level_4 SET value = 'new' WHERE id = 'l4-1'"}]
+        ]
       ]
 
-      test_against_oracle(ctx, shapes, mutations)
+      test_against_oracle(ctx, shapes, batches)
     end
   end
 
@@ -188,20 +200,26 @@ defmodule Electric.Integration.OracleViewTest do
         }
       ]
 
-      mutations = [
-        %{
-          name: "add_alpha_tag",
-          sql:
-            "INSERT INTO level_3_tags (level_3_id, tag) VALUES ('l3-2', 'alpha') ON CONFLICT DO NOTHING"
-        },
-        %{
-          name: "remove_alpha_tag",
-          sql: "DELETE FROM level_3_tags WHERE level_3_id = 'l3-1' AND tag = 'alpha'"
-        },
-        %{name: "move_l4", sql: "UPDATE level_4 SET level_3_id = 'l3-3' WHERE id = 'l4-1'"}
+      batches = [
+        [
+          [
+            %{
+              name: "add_alpha_tag",
+              sql:
+                "INSERT INTO level_3_tags (level_3_id, tag) VALUES ('l3-2', 'alpha') ON CONFLICT DO NOTHING"
+            }
+          ],
+          [
+            %{
+              name: "remove_alpha_tag",
+              sql: "DELETE FROM level_3_tags WHERE level_3_id = 'l3-1' AND tag = 'alpha'"
+            }
+          ],
+          [%{name: "move_l4", sql: "UPDATE level_4 SET level_3_id = 'l3-3' WHERE id = 'l4-1'"}]
+        ]
       ]
 
-      test_against_oracle(ctx, shapes, mutations)
+      test_against_oracle(ctx, shapes, batches)
     end
 
     test "2-level tag filter through level_2", ctx do
@@ -217,20 +235,26 @@ defmodule Electric.Integration.OracleViewTest do
         }
       ]
 
-      mutations = [
-        %{
-          name: "add_beta_tag",
-          sql:
-            "INSERT INTO level_2_tags (level_2_id, tag) VALUES ('l2-3', 'beta') ON CONFLICT DO NOTHING"
-        },
-        %{
-          name: "remove_beta_tag",
-          sql: "DELETE FROM level_2_tags WHERE level_2_id = 'l2-2' AND tag = 'beta'"
-        },
-        %{name: "move_l3", sql: "UPDATE level_3 SET level_2_id = 'l2-4' WHERE id = 'l3-1'"}
+      batches = [
+        [
+          [
+            %{
+              name: "add_beta_tag",
+              sql:
+                "INSERT INTO level_2_tags (level_2_id, tag) VALUES ('l2-3', 'beta') ON CONFLICT DO NOTHING"
+            }
+          ],
+          [
+            %{
+              name: "remove_beta_tag",
+              sql: "DELETE FROM level_2_tags WHERE level_2_id = 'l2-2' AND tag = 'beta'"
+            }
+          ],
+          [%{name: "move_l3", sql: "UPDATE level_3 SET level_2_id = 'l2-4' WHERE id = 'l3-1'"}]
+        ]
       ]
 
-      test_against_oracle(ctx, shapes, mutations)
+      test_against_oracle(ctx, shapes, batches)
     end
 
     test "3-level tag filter through level_1", ctx do
@@ -246,20 +270,26 @@ defmodule Electric.Integration.OracleViewTest do
         }
       ]
 
-      mutations = [
-        %{
-          name: "add_gamma_tag",
-          sql:
-            "INSERT INTO level_1_tags (level_1_id, tag) VALUES ('l1-2', 'gamma') ON CONFLICT DO NOTHING"
-        },
-        %{
-          name: "remove_gamma_tag",
-          sql: "DELETE FROM level_1_tags WHERE level_1_id = 'l1-3' AND tag = 'gamma'"
-        },
-        %{name: "move_l2", sql: "UPDATE level_2 SET level_1_id = 'l1-4' WHERE id = 'l2-1'"}
+      batches = [
+        [
+          [
+            %{
+              name: "add_gamma_tag",
+              sql:
+                "INSERT INTO level_1_tags (level_1_id, tag) VALUES ('l1-2', 'gamma') ON CONFLICT DO NOTHING"
+            }
+          ],
+          [
+            %{
+              name: "remove_gamma_tag",
+              sql: "DELETE FROM level_1_tags WHERE level_1_id = 'l1-3' AND tag = 'gamma'"
+            }
+          ],
+          [%{name: "move_l2", sql: "UPDATE level_2 SET level_1_id = 'l1-4' WHERE id = 'l2-1'"}]
+        ]
       ]
 
-      test_against_oracle(ctx, shapes, mutations)
+      test_against_oracle(ctx, shapes, batches)
     end
   end
 
@@ -333,16 +363,18 @@ defmodule Electric.Integration.OracleViewTest do
         }
       ]
 
-      mutations = [
-        # This moves l4-1 from l3-1 to l3-2, affecting first two shapes
-        %{name: "move_l4_1", sql: "UPDATE level_4 SET level_3_id = 'l3-2' WHERE id = 'l4-1'"},
-        # This affects the subquery shape by changing which l3s are active
-        %{name: "toggle_l3_1", sql: "UPDATE level_3 SET active = NOT active WHERE id = 'l3-1'"},
-        # Move it back
-        %{name: "move_l4_1_back", sql: "UPDATE level_4 SET level_3_id = 'l3-1' WHERE id = 'l4-1'"}
+      batches = [
+        [
+          # This moves l4-1 from l3-1 to l3-2, affecting first two shapes
+          [%{name: "move_l4_1", sql: "UPDATE level_4 SET level_3_id = 'l3-2' WHERE id = 'l4-1'"}],
+          # This affects the subquery shape by changing which l3s are active
+          [%{name: "toggle_l3_1", sql: "UPDATE level_3 SET active = NOT active WHERE id = 'l3-1'"}],
+          # Move it back
+          [%{name: "move_l4_1_back", sql: "UPDATE level_4 SET level_3_id = 'l3-1' WHERE id = 'l4-1'"}]
+        ]
       ]
 
-      test_against_oracle(ctx, shapes, mutations)
+      test_against_oracle(ctx, shapes, batches)
     end
   end
 end

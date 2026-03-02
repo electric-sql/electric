@@ -7,7 +7,8 @@ defmodule Electric.Integration.OraclePropertyTest do
 
   Configuration via environment variables:
     - SHAPE_COUNT: Number of shapes to run in parallel (default: 100)
-    - TXN_COUNT: Number of transactions per test (default: 100)
+    - BATCH_COUNT: Number of batches per test (default: 10)
+    - TXNS_PER_BATCH: Number of transactions per batch (default: 10)
     - MUTATIONS_PER_TXN: Number of mutations per transaction (default: 5)
     - PROP_RUNS: Number of property test iterations (default: 1)
     - LONG_POLL_TIMEOUT: Server long-poll timeout in ms (default: 100)
@@ -30,7 +31,8 @@ defmodule Electric.Integration.OraclePropertyTest do
 
   @default_long_poll_timeout 100
   @default_shape_count 100
-  @default_txn_count 100
+  @default_batch_count 10
+  @default_txns_per_batch 10
   @default_mutations_per_txn 5
 
   setup [:with_unique_db]
@@ -58,14 +60,18 @@ defmodule Electric.Integration.OraclePropertyTest do
   test "shapes with generated where clauses and mutations", ctx do
     max_runs = env_int("PROP_RUNS") || 1
     shape_count = env_int("SHAPE_COUNT") || @default_shape_count
-    txn_count = env_int("TXN_COUNT") || @default_txn_count
+    batch_count = env_int("BATCH_COUNT") || @default_batch_count
+    txns_per_batch = env_int("TXNS_PER_BATCH") || @default_txns_per_batch
     mutations_per_txn = env_int("MUTATIONS_PER_TXN") || @default_mutations_per_txn
 
+    total_mutations = batch_count * txns_per_batch * mutations_per_txn
+
     check all shapes <- WhereClauseGenerator.shapes_gen(shape_count),
-              mutations <- StandardSchema.mutations_gen(txn_count * mutations_per_txn),
+              mutations <- StandardSchema.mutations_gen(total_mutations),
               max_runs: max_runs do
       transactions = Enum.chunk_every(mutations, mutations_per_txn)
-      test_against_oracle(ctx, shapes, transactions)
+      batches = Enum.chunk_every(transactions, txns_per_batch)
+      test_against_oracle(ctx, shapes, batches)
     end
   end
 end

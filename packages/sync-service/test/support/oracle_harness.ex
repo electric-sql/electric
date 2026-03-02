@@ -43,25 +43,23 @@ defmodule Support.OracleHarness do
   end
 
   @doc """
-  Runs with explicit shapes and transactions, comparing Electric's output against Postgres.
+  Runs with explicit shapes and batches of transactions, comparing Electric's output against Postgres.
 
-  Transactions can be:
-  - A list of transactions, where each transaction is a list of mutations (executed atomically)
-  - A flat list of mutations (each mutation becomes its own transaction for backwards compatibility)
+  Batches is a list of batches, where each batch is a list of transactions,
+  and each transaction is a list of mutations. All transactions in a batch are
+  applied sequentially (each in its own Postgres transaction), then all shape
+  checkers verify once at the end of the batch.
 
   ## Options
 
     - :oracle_pool_size - number of parallel oracle connections (default: 50, env: ORACLE_POOL_SIZE)
     - :timeout_ms - timeout for waiting on shapes (default: 20_000)
   """
-  def test_against_oracle(ctx, shapes, transactions, opts \\ %{}) do
+  def test_against_oracle(ctx, shapes, batches, opts \\ %{}) do
     opts = Map.merge(default_opts_from_env(), opts)
     timeout_ms = opts[:timeout_ms] || @default_timeout_ms
 
-    # Normalize transactions: wrap flat mutation lists into single-mutation transactions
-    transactions = normalize_transactions(transactions)
-
-    log_test_config(shapes, transactions)
+    log_test_config(shapes, batches)
 
     # Start oracle pool for parallel Postgres queries
     {:ok, oracle_pool} = start_oracle_pool(ctx, opts)
@@ -76,13 +74,13 @@ defmodule Support.OracleHarness do
     |> Task.async_stream(&ShapeChecker.check_initial_state/1, timeout: :infinity)
     |> Stream.run()
 
-    # Run each transaction
-    log("Running #{length(transactions)} transactions")
+    # Run each batch
+    log("Running #{length(batches)} batches")
 
-    transactions
+    batches
     |> Enum.with_index(1)
-    |> Enum.each(fn {mutations, txn_idx} ->
-      run_transaction(ctx, pids, mutations, txn_idx)
+    |> Enum.each(fn {transactions, batch_idx} ->
+      run_batch(ctx, pids, transactions, batch_idx)
     end)
 
     # Cleanup
@@ -116,31 +114,34 @@ defmodule Support.OracleHarness do
     end)
   end
 
-  defp run_transaction(ctx, pids, mutations, txn_idx) do
-    txn_name = "txn_#{txn_idx}"
+  defp run_batch(ctx, pids, transactions, batch_idx) do
+    batch_name = "batch_#{batch_idx}"
+    total_mutations = transactions |> Enum.map(&length/1) |> Enum.sum()
     cycle_start = System.monotonic_time(:millisecond)
 
-    # Apply all mutations in a single transaction
-    sql_statements = Enum.map(mutations, & &1.sql)
-    apply_sql_transaction(ctx, sql_statements)
+    # Apply all transactions in the batch sequentially
+    Enum.each(transactions, fn mutations ->
+      sql_statements = Enum.map(mutations, & &1.sql)
+      apply_sql_transaction(ctx, sql_statements)
+    end)
 
     apply_end = System.monotonic_time(:millisecond)
 
-    # Check all shapes (polls until up_to_date, then verifies against oracle)
+    # Check all shapes once for the entire batch
     pids
-    |> Task.async_stream(&ShapeChecker.check_transaction(&1, txn_name), timeout: :infinity)
+    |> Task.async_stream(&ShapeChecker.check_transaction(&1, batch_name), timeout: :infinity)
     |> Stream.run()
 
     check_end = System.monotonic_time(:millisecond)
 
     log(
-      "#{txn_name} (#{length(mutations)} mutations): " <>
+      "#{batch_name} (#{length(transactions)} txns, #{total_mutations} mutations): " <>
         "total=#{check_end - cycle_start}ms " <>
         "(apply=#{apply_end - cycle_start}ms, check=#{check_end - apply_end}ms)"
     )
   end
 
-  defp log_test_config(shapes, transactions) do
+  defp log_test_config(shapes, batches) do
     log("Starting #{length(shapes)} shapes")
 
     IO.puts("\n=== SHAPES ===")
@@ -149,17 +150,26 @@ defmodule Support.OracleHarness do
       IO.puts("  #{shape.name}: #{shape.where}")
     end)
 
-    total_mutations = transactions |> Enum.map(&length/1) |> Enum.sum()
+    total_txns = batches |> Enum.map(&length/1) |> Enum.sum()
+    total_mutations = batches |> Enum.flat_map(& &1) |> Enum.map(&length/1) |> Enum.sum()
 
-    IO.puts("\n=== TRANSACTIONS (#{length(transactions)} txns, #{total_mutations} mutations) ===")
+    IO.puts(
+      "\n=== BATCHES (#{length(batches)} batches, #{total_txns} txns, #{total_mutations} mutations) ==="
+    )
 
-    transactions
+    batches
     |> Enum.with_index(1)
-    |> Enum.each(fn {mutations, txn_idx} ->
-      IO.puts("  txn_#{txn_idx} (#{length(mutations)} mutations):")
+    |> Enum.each(fn {transactions, batch_idx} ->
+      IO.puts("  batch_#{batch_idx} (#{length(transactions)} txns):")
 
-      Enum.each(mutations, fn mutation ->
-        IO.puts("    #{mutation.name}: #{mutation.sql}")
+      transactions
+      |> Enum.with_index(1)
+      |> Enum.each(fn {mutations, txn_idx} ->
+        IO.puts("    txn_#{txn_idx} (#{length(mutations)} mutations):")
+
+        Enum.each(mutations, fn mutation ->
+          IO.puts("      #{mutation.name}: #{mutation.sql}")
+        end)
       end)
     end)
 
@@ -207,16 +217,4 @@ defmodule Support.OracleHarness do
     IO.puts("[oracle] #{message}")
   end
 
-  # Normalize transactions: if it's a flat list of mutations, wrap each in its own transaction
-  defp normalize_transactions([]), do: []
-
-  defp normalize_transactions([first | _] = transactions) when is_list(first) do
-    # Already a list of transactions
-    transactions
-  end
-
-  defp normalize_transactions([first | _] = mutations) when is_map(first) do
-    # Flat list of mutations - wrap each in its own transaction
-    Enum.map(mutations, &[&1])
-  end
 end
