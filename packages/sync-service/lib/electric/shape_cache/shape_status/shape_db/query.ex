@@ -56,7 +56,8 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Query do
 
   alias Electric.ShapeCache.ShapeStatus.ShapeDb.Connection, as: Conn
 
-  alias Exqlite.Sqlite3
+  # alias Exqlite.Sqlite3
+  alias Electric.ShapeCache.ShapeStatus.ShapeDb.Sqlite3
 
   import Conn,
     only: [
