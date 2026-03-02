@@ -249,6 +249,13 @@ responses cannot overwrite it.
 **Enforcement**: Dedicated tests (`SSE up-to-date message updates offset`,
 `non-SSE up-to-date message preserves existing offset`).
 
+### C7: Stale response with valid local handle is ignored
+
+When a stale response arrives but the state already has a different valid handle,
+the response is ignored (action: `ignored`, state unchanged).
+
+**Enforcement**: Truth table + dedicated stale-handle tests.
+
 ### C8: SSE state is private to LiveState
 
 `sseFallbackToLongPolling` and `consecutiveShortSseConnections` are private fields
@@ -259,13 +266,6 @@ Other states don't carry SSE state — when transitioning from a non-Live state
 back to Live, SSE state resets to defaults.
 
 **Enforcement**: Dedicated test (`SSE state is preserved through LiveState self-transitions`).
-
-### C7: Stale response with valid local handle is ignored
-
-When a stale response arrives but the state already has a different valid handle,
-the response is ignored (action: `ignored`, state unchanged).
-
-**Enforcement**: Truth table + dedicated stale-handle tests.
 
 ## Bidirectional Enforcement Checklist
 
@@ -305,8 +305,8 @@ the response is ignored (action: `ignored`, state unchanged).
 | Tier 1: scenario builder tests | I0-I11 (via auto-check) |
 | Tier 2: transition truth table | All 70 cells            |
 | Algebraic property tests       | I3, I4, I10, I11, I8    |
-| Fuzz testing                   | I0-I9 (all invariants)  |
-| Mutation testing               | I0-I9 (robustness)      |
+| Fuzz testing                   | I0-I12 (all invariants) |
+| Mutation testing               | I0-I12 (robustness)     |
 | shouldUseSse guard tests       | LiveState SSE behavior  |
 | SSE connection closed tests    | LiveState SSE fallback  |
 | applyUrlParams tests           | URL construction        |

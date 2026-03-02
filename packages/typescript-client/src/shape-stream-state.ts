@@ -723,7 +723,10 @@ export class PausedState extends ShapeStreamState {
         exceededMaxRetries: transition.exceededMaxRetries,
       }
     }
-    return transition
+    const _exhaustive: never = transition
+    throw new Error(
+      `PausedState.handleResponseMetadata: unhandled transition action "${(_exhaustive as ResponseMetadataTransition).action}"`
+    )
   }
 
   withHandle(handle: string): PausedState {
@@ -775,6 +778,21 @@ export class ErrorState extends ShapeStreamState {
 
   get isUpToDate(): boolean {
     return this.previousState.isUpToDate
+  }
+  get staleCacheBuster() {
+    return this.previousState.staleCacheBuster
+  }
+  get staleCacheRetryCount() {
+    return this.previousState.staleCacheRetryCount
+  }
+  get sseFallbackToLongPolling() {
+    return this.previousState.sseFallbackToLongPolling
+  }
+  get consecutiveShortSseConnections() {
+    return this.previousState.consecutiveShortSseConnections
+  }
+  get replayCursor() {
+    return this.previousState.replayCursor
   }
 
   withHandle(handle: string): ErrorState {

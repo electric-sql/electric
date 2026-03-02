@@ -12,11 +12,11 @@ export type EventType =
   | `withHandle`
   | `enterReplayMode`
 
-export interface ExpectedBehavior {
-  /** Expected kind of the resulting state */
-  resultKind?: ShapeStreamStateKind
-  /** If true, the result state should be reference-equal to the input state (no-op) */
-  sameReference?: boolean
+type StateOutcome =
+  | { resultKind: ShapeStreamStateKind; sameReference?: never }
+  | { sameReference: true; resultKind?: never }
+
+export type ExpectedBehavior = StateOutcome & {
   /** For response events: expected action in the transition */
   action?: `accepted` | `ignored` | `stale-retry`
   /** For message events: expected becameUpToDate flag */
@@ -246,7 +246,7 @@ export const TRANSITION_TABLE: Record<
     },
     enterReplayMode: {
       resultKind: `replaying`,
-      description: `StaleRetry enterReplayMode creates Replaying (caller should check canEnterReplayMode first)`,
+      description: `StaleRetry.enterReplayMode() creates Replaying at the method level (inherited from FetchingState) — but canEnterReplayMode() returns false, so production (client.ts) never calls this; this cell tests the raw unguarded method, not the guarded production path (see C1)`,
     },
   },
   paused: {

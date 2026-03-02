@@ -164,7 +164,7 @@ export function assertStateInvariants(state: ShapeStreamState): void {
     expect(state.previousState).not.toBeInstanceOf(ErrorState)
   }
 
-  // ErrorState invariants: always has error + delegates all field getters
+  // I9: ErrorState delegation — always has error + delegates all field getters
   if (state instanceof ErrorState) {
     expect(state.error).toBeDefined()
     expect(state.error).toBeInstanceOf(Error)
@@ -174,6 +174,17 @@ export function assertStateInvariants(state: ShapeStreamState): void {
     expect(state.liveCacheBuster).toBe(state.previousState.liveCacheBuster)
     expect(state.lastSyncedAt).toBe(state.previousState.lastSyncedAt)
     expect(state.isUpToDate).toBe(state.previousState.isUpToDate)
+    expect(state.staleCacheBuster).toBe(state.previousState.staleCacheBuster)
+    expect(state.staleCacheRetryCount).toBe(
+      state.previousState.staleCacheRetryCount
+    )
+    expect(state.sseFallbackToLongPolling).toBe(
+      state.previousState.sseFallbackToLongPolling
+    )
+    expect(state.consecutiveShortSseConnections).toBe(
+      state.previousState.consecutiveShortSseConnections
+    )
+    expect(state.replayCursor).toBe(state.previousState.replayCursor)
   }
 }
 
@@ -199,16 +210,21 @@ export function assertReachableInvariants(
     expect(nextState).toBe(prevState.previousState)
   }
 
-  // I11: withHandle preserves kind and offset
+  // I11: withHandle produces same kind with new handle, offset unchanged
   if (event.type === `withHandle`) {
     expect(nextState.kind).toBe(prevState.kind)
+    expect(nextState.handle).toBe(event.handle)
     expect(nextState.offset).toBe(prevState.offset)
   }
 
-  // I10: markMustRefetch always produces InitialState with offset '-1'
+  // I10: markMustRefetch always produces InitialState with reset fields, lastSyncedAt preserved
   if (event.type === `markMustRefetch`) {
     expect(nextState).toBeInstanceOf(InitialState)
     expect(nextState.offset).toBe(`-1`)
+    expect(nextState.handle).toBe(event.handle)
+    expect(nextState.lastSyncedAt).toBe(prevState.lastSyncedAt)
+    expect(nextState.schema).toBeUndefined()
+    expect(nextState.liveCacheBuster).toBe(``)
   }
 }
 
@@ -278,6 +294,12 @@ export function applyEvent(
         nextState = state.enterReplayMode(event.cursor)
       }
       break
+    default: {
+      const _exhaustive: never = event
+      throw new Error(
+        `applyEvent: unhandled event type "${(_exhaustive as EventSpec).type}". Add a case here and in pickRandomEvent.`
+      )
+    }
   }
 
   return { event, prevState, state: nextState, transition }
@@ -487,6 +509,11 @@ export class ScenarioBuilder<K extends ShapeStreamStateKind = `initial`> {
           `but it only applies to 'response' events`
       )
     }
+    if (!lastEntry.transition) {
+      throw new Error(
+        `expectAction: transition was not recorded for the last 'response' event — this is a DSL bug`
+      )
+    }
     expect((lastEntry.transition as ResponseMetadataTransition).action).toBe(
       action
     )
@@ -597,6 +624,10 @@ export function shrinkFailingSequence(
 // ─── Event mutation helpers ───
 
 export function duplicateEvent(trace: EventSpec[], index: number): EventSpec[] {
+  if (index < 0 || index >= trace.length)
+    throw new Error(
+      `duplicateEvent: index ${index} out of bounds for trace of length ${trace.length}`
+    )
   return [...trace.slice(0, index), trace[index], ...trace.slice(index)]
 }
 
@@ -605,6 +636,14 @@ export function reorderEvents(
   i: number,
   j: number
 ): EventSpec[] {
+  if (i < 0 || i >= trace.length)
+    throw new Error(
+      `reorderEvents: index i=${i} out of bounds for trace of length ${trace.length}`
+    )
+  if (j < 0 || j >= trace.length)
+    throw new Error(
+      `reorderEvents: index j=${j} out of bounds for trace of length ${trace.length}`
+    )
   const result = [...trace]
   const temp = result[i]
   result[i] = result[j]
@@ -613,6 +652,10 @@ export function reorderEvents(
 }
 
 export function dropEvent(trace: EventSpec[], index: number): EventSpec[] {
+  if (index < 0 || index >= trace.length)
+    throw new Error(
+      `dropEvent: index ${index} out of bounds for trace of length ${trace.length}`
+    )
   return [...trace.slice(0, index), ...trace.slice(index + 1)]
 }
 

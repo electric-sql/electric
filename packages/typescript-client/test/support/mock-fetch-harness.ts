@@ -36,20 +36,19 @@ export function initialSyncResponse(
   })
 }
 
-export function staleResponse(opts?: {
+export function staleResponse(opts: {
+  expiredHandle: string
   handle?: string
-  expiredHandle?: string
   offset?: string
 }): Response {
+  const handle = opts.handle ?? opts.expiredHandle
   const headers = new Headers({
-    'electric-handle': opts?.handle ?? `stale-handle`,
-    'electric-offset': opts?.offset ?? `0_0`,
+    'electric-handle': handle,
+    'electric-offset': opts.offset ?? `0_0`,
     'electric-schema': ``,
     'electric-cursor': ``,
+    'electric-expired-handle': opts.expiredHandle,
   })
-  if (opts?.expiredHandle) {
-    headers.set(`electric-expired-handle`, opts.expiredHandle)
-  }
 
   return new Response(JSON.stringify([]), { status: 200, headers })
 }
@@ -146,20 +145,20 @@ export function mockVisibilityApi(): {
 
   global.document = doc as unknown as Document
 
-  const invokeHandlers = () => {
-    for (const [, handler] of doc.addEventListener.mock.calls) {
-      handler()
+  const invokeHandlers = (eventType: string) => {
+    for (const [type, handler] of doc.addEventListener.mock.calls) {
+      if (type === eventType) handler()
     }
   }
 
   return {
     pause: () => {
       doc.hidden = true
-      invokeHandlers()
+      invokeHandlers(`visibilitychange`)
     },
     resume: () => {
       doc.hidden = false
-      invokeHandlers()
+      invokeHandlers(`visibilitychange`)
     },
   }
 }
