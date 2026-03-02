@@ -1063,6 +1063,8 @@ defmodule Electric.ShapeCacheTest do
   end
 
   describe "after restart" do
+    @describetag skip: not ShapeStatus.ShapeDb.persistent?()
+
     setup [
       :with_noop_publication_manager,
       :with_log_chunking,
@@ -1189,8 +1191,10 @@ defmodule Electric.ShapeCacheTest do
       assert [{^dep_handle, _}, {^shape_handle, _}] = ShapeCache.list_shapes(ctx.stack_id)
     end
 
+    # Stops and restarts the full process tree including the shape db. Use
+    # this when testing recovery of persisted shape data across restarts.
     defp restart_shape_cache(ctx, opts \\ []) do
-      stop_shape_cache(ctx)
+      stop_shape_cache_and_db(ctx)
 
       with_lsn_tracker(ctx)
 
@@ -1202,14 +1206,39 @@ defmodule Electric.ShapeCacheTest do
       with_shape_cache(ctx, opts)
     end
 
-    defp stop_shape_cache(ctx) do
+    # Stops and restarts only the shape cache, consumer supervisor and shape
+    # log collector, leaving the shape db running. Use this when testing that
+    # the process tree is correctly initialised from existing in-memory state.
+    defp restart_shape_cache_only(ctx, opts \\ []) do
+      stop_shape_cache_processes(ctx)
+
+      with_lsn_tracker(ctx)
+
+      start_supervised!(%{
+        id: "shape_status_owner",
+        start: {Electric.ShapeCache.ShapeStatusOwner, :start_link, [[stack_id: ctx.stack_id]]},
+        restart: :temporary
+      })
+
+      :ok = Electric.ShapeCache.ShapeStatusOwner.initialize(ctx.stack_id)
+
+      ctx = Map.merge(ctx, with_shape_log_collector(ctx))
+
+      with_shape_cache(ctx, opts)
+    end
+
+    defp stop_shape_cache_and_db(ctx) do
+      stop_shape_cache_processes(ctx)
+      :ok = stop_supervised(ctx.shape_db)
+    end
+
+    defp stop_shape_cache_processes(ctx) do
       for name <-
             [
               ctx.shape_cache,
               ctx.consumer_supervisor,
               ctx.shape_log_collector,
               ctx.shape_status_owner,
-              ctx.shape_db,
               "shape_task_supervisor"
             ] do
         :ok = stop_supervised(name)
@@ -1255,8 +1284,9 @@ defmodule Electric.ShapeCacheTest do
                GenServer.whereis(Electric.Shapes.Consumer.Materializer.name(stack_id, dep_handle))
              )
 
-      # Register this test as the connection manager to get "consumers ready" notification
-      restart_shape_cache(ctx)
+      # Restart only the shape cache processes, not the shape db, so existing
+      # in-memory shape data is preserved and we test process tree initialisation.
+      restart_shape_cache_only(ctx)
 
       assert [{^dep_handle, _}, {^shape_handle, _}] = ShapeCache.list_shapes(stack_id)
 

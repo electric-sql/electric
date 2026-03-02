@@ -24,8 +24,8 @@ defmodule Electric.MonitoredCoreSupervisor do
       {Electric.StatusMonitor, stack_id: stack_id},
       {Electric.ShapeCache.ShapeCleaner.CleanupTaskSupervisor,
        [stack_id: stack_id] ++ Keyword.get(tweaks, :shape_cleaner_opts, [])},
-      {Electric.ShapeCache.ShapeStatus.ShapeDb.Supervisor,
-       Keyword.take(opts, [:stack_id, :shape_db_opts])},
+      {Electric.ShapeCache.ShapeStatus.ShapeDb.InMemory.Supervisor,
+       Keyword.take(opts, [:stack_id])},
       {Electric.ShapeCache.ShapeStatusOwner, [stack_id: stack_id]},
       {Electric.CoreSupervisor, opts}
     ]

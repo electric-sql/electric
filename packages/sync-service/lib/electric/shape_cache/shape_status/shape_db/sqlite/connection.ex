@@ -1,10 +1,10 @@
-defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
+defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Sqlite.Connection do
   @moduledoc false
 
   # alias Exqlite.Sqlite3
   alias Electric.ShapeCache.ShapeStatus.ShapeDb.Sqlite3
-  alias Electric.ShapeCache.ShapeStatus.ShapeDb.Query
-  alias Electric.ShapeCache.ShapeStatus.ShapeDb.PoolRegistry
+  alias Electric.ShapeCache.ShapeStatus.ShapeDb.Sqlite.Query
+  alias Electric.ShapeCache.ShapeStatus.ShapeDb.Sqlite.PoolRegistry
   alias Electric.Telemetry.OpenTelemetry
 
   require Logger

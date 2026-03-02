@@ -1,4 +1,4 @@
-defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Query do
+defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Sqlite.Query do
   @read_queries [
     list_shapes: """
     SELECT handle, shape FROM shapes ORDER BY handle
@@ -54,7 +54,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Query do
 
   defstruct Enum.uniq(Keyword.keys(@read_queries) ++ Keyword.keys(@write_queries))
 
-  alias Electric.ShapeCache.ShapeStatus.ShapeDb.Connection, as: Conn
+  alias Electric.ShapeCache.ShapeStatus.ShapeDb.Sqlite.Connection, as: Conn
 
   # alias Exqlite.Sqlite3
   alias Electric.ShapeCache.ShapeStatus.ShapeDb.Sqlite3
@@ -89,7 +89,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Query do
           {name, stmt}
 
         {:error, _reason} = error ->
-          raise Electric.ShapeCache.ShapeStatus.ShapeDb.Error,
+          raise Electric.ShapeCache.ShapeStatus.ShapeDb.Sqlite.Error,
             action: :prepare_stmts,
             error: error
       end

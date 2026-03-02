@@ -257,22 +257,8 @@ defmodule Support.ComponentSetup do
   end
 
   def with_shape_db(ctx) do
-    shape_db_opts = Map.get(ctx, :shape_db_opts, [])
-
     start_supervised!(
-      {Electric.ShapeCache.ShapeStatus.ShapeDb.Supervisor,
-       [
-         stack_id: ctx.stack_id,
-         shape_db_opts:
-           Keyword.merge(
-             [
-               storage_dir: ctx.tmp_dir,
-               manual_flush_only: true,
-               read_pool_size: 1
-             ],
-             shape_db_opts
-           )
-       ]},
+      {Electric.ShapeCache.ShapeStatus.ShapeDb.InMemory.Supervisor, [stack_id: ctx.stack_id]},
       id: "shape_db"
     )
 

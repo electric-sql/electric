@@ -1,7 +1,7 @@
-defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Migrator do
+defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Sqlite.Migrator do
   use GenServer
 
-  alias Electric.ShapeCache.ShapeStatus.ShapeDb
+  alias Electric.ShapeCache.ShapeStatus.ShapeDb.Sqlite.Connection
 
   require Logger
 
@@ -28,25 +28,26 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Migrator do
   defp apply_migration(_stack_id, _opts, true = _exclusive?) do
     # In exclusive  mode we *must* apply the migrations within the pool
     # connection initialization because we might be using a memory db.
+    # We return nil to trigger checkout-mode.
     :ok
   end
 
   defp apply_migration(_stack_id, opts, false = _exclusive?) do
-    with {:ok, conn} <- ShapeDb.Connection.open(opts, integrity_check: true),
-         {:ok, _version} <- ShapeDb.Connection.migrate(conn, opts),
+    with {:ok, conn} <- Connection.open(opts, integrity_check: true),
+         {:ok, _version} <- Connection.migrate(conn, opts),
          # https://sqlite.org/pragma.html#pragma_optimize
          # Applications with long-lived database connections should run "PRAGMA
          # optimize=0x10002" when the database connection first opens
-         :ok = ShapeDb.Connection.optimize(conn, "0x10002"),
-         :ok = ShapeDb.Connection.close(conn) do
+         :ok = Connection.optimize(conn, "0x10002"),
+         :ok = Connection.close(conn) do
       :ok
     end
   end
 
   @impl GenServer
   def handle_info(:optimize, stack_id) do
-    ShapeDb.Connection.checkout_write!(stack_id, :optimize, fn %{conn: conn} ->
-      :ok = ShapeDb.Connection.optimize(conn)
+    Connection.checkout_write!(stack_id, :optimize, fn %{conn: conn} ->
+      :ok = Connection.optimize(conn)
     end)
 
     {:noreply, schedule_optimize(stack_id), :hibernate}

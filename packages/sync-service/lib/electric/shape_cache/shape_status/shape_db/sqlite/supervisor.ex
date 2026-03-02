@@ -1,9 +1,15 @@
-defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Supervisor do
+defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Sqlite.Supervisor do
   use Supervisor
 
-  alias Electric.ShapeCache.ShapeStatus.ShapeDb
+  alias Electric.ShapeCache.ShapeStatus.ShapeDb.Sqlite
 
   require Logger
+
+  @doc """
+  Returns `true` — the SQLite implementation persists data across process
+  restarts.
+  """
+  def persistent?, do: true
 
   def name(stack_ref) do
     Electric.ProcessRegistry.name(stack_ref, __MODULE__)
@@ -28,9 +34,9 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Supervisor do
           Supervisor.child_spec(
             {
               NimblePool,
-              worker: {ShapeDb.Connection, Keyword.put(opts, :mode, :read)},
+              worker: {Sqlite.Connection, Keyword.put(opts, :mode, :read)},
               pool_size: Keyword.get(opts, :read_pool_size, 2 * System.schedulers_online()),
-              name: ShapeDb.PoolRegistry.pool_name(stack_id, :read, exclusive_mode)
+              name: Sqlite.PoolRegistry.pool_name(stack_id, :read, exclusive_mode)
             },
             id: {:pool, :read}
           )
@@ -40,8 +46,8 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Supervisor do
     children =
       Enum.concat([
         [
-          {ShapeDb.PoolRegistry, stack_id: stack_id},
-          {ShapeDb.Migrator, opts}
+          {Sqlite.PoolRegistry, stack_id: stack_id},
+          {Sqlite.Migrator, opts}
         ],
         read_pool_spec,
         [
@@ -49,14 +55,14 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Supervisor do
           # to avoid busy errors
           Supervisor.child_spec(
             {NimblePool,
-             worker: {ShapeDb.Connection, Keyword.put(opts, :mode, :write)},
+             worker: {Sqlite.Connection, Keyword.put(opts, :mode, :write)},
              pool_size: 1,
-             name: ShapeDb.PoolRegistry.pool_name(stack_id, :write, exclusive_mode)},
+             name: Sqlite.PoolRegistry.pool_name(stack_id, :write, exclusive_mode)},
             id: {:pool, :write}
           ),
           # write buffer for batching SQLite writes to avoid timeout cascades
-          {ShapeDb.WriteBuffer, opts},
-          {ShapeDb.Statistics, opts}
+          {Sqlite.WriteBuffer, opts},
+          {Sqlite.Statistics, opts}
         ]
       ])
 
