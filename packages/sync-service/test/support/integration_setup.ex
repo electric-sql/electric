@@ -35,7 +35,12 @@ defmodule Support.IntegrationSetup do
     client_opts =
       if num_clients > 1 do
         finch_name = :"Electric.Client.Finch.Test.#{System.unique_integer([:positive])}"
-        {:ok, _} = Finch.start_link(name: finch_name, pools: %{default: [size: num_clients]})
+
+        {:ok, _} =
+          ExUnit.Callbacks.start_supervised(
+            {Finch, name: finch_name, pools: %{default: [size: num_clients]}}
+          )
+
         [fetch: {Electric.Client.Fetch.HTTP, [request: [finch: finch_name]]}]
       else
         []
