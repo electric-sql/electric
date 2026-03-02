@@ -2,9 +2,10 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDbTest do
   use ExUnit.Case, async: true
 
   alias Electric.Shapes.Shape
-  alias Electric.ShapeCache.ShapeStatus.ShapeDb
+  alias Electric.ShapeCache.ShapeStatus.ShapeDb.InMemory
+  alias Electric.ShapeCache.ShapeStatus.ShapeDb.Sqlite
 
-  import Support.ComponentSetup
+  import Support.ComponentSetup, only: [with_stack_id_from_test: 1]
 
   @moduletag :tmp_dir
 
@@ -22,292 +23,303 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDbTest do
                     ]
                   )
 
-  setup [:with_stack_id_from_test, :with_shape_db]
+  setup :with_stack_id_from_test
 
-  test "add_shape inserts shape data", ctx do
-    assert {:ok, []} = ShapeDb.list_shapes(ctx.stack_id)
-    shape1 = Shape.new!("items", inspector: @stub_inspector)
-    handle1 = "handle-1"
+  for module <- [InMemory, Sqlite] do
+    module_name = module |> Module.split() |> List.last()
 
-    {:ok, _hash1} = ShapeDb.add_shape(ctx.stack_id, shape1, handle1)
+    describe "#{module_name}" do
+      setup ctx do
+        start_impl(unquote(module), ctx)
+      end
 
-    assert {:ok, [{^handle1, ^shape1}]} = ShapeDb.list_shapes(ctx.stack_id)
+      test "add_shape inserts shape data", %{impl: impl, stack_id: stack_id} do
+        assert {:ok, []} = impl.list_shapes(stack_id)
 
-    shape2 = Shape.new!("items", inspector: @stub_inspector, where: "id = 1")
-    handle2 = "handle-2"
+        shape1 = Shape.new!("items", inspector: @stub_inspector)
+        handle1 = "handle-1"
+        {:ok, _hash1} = impl.add_shape(stack_id, shape1, handle1)
+        assert {:ok, [{^handle1, ^shape1}]} = impl.list_shapes(stack_id)
 
-    {:ok, _hash2} = ShapeDb.add_shape(ctx.stack_id, shape2, handle2)
+        shape2 = Shape.new!("items", inspector: @stub_inspector, where: "id = 1")
+        handle2 = "handle-2"
+        {:ok, _hash2} = impl.add_shape(stack_id, shape2, handle2)
+        assert {:ok, [{^handle1, ^shape1}, {^handle2, ^shape2}]} = impl.list_shapes(stack_id)
+      end
 
-    assert {:ok, [{^handle1, ^shape1}, {^handle2, ^shape2}]} = ShapeDb.list_shapes(ctx.stack_id)
+      test "add_shape returns consistent hash for same shape", %{impl: impl, stack_id: stack_id} do
+        shape = Shape.new!("items", inspector: @stub_inspector)
+
+        {:ok, hash1} = impl.add_shape(stack_id, shape, "handle-1")
+        impl.reset(stack_id)
+        {:ok, hash2} = impl.add_shape(stack_id, shape, "handle-2")
+
+        assert hash1 == hash2
+      end
+
+      test "handle_exists?", %{impl: impl, stack_id: stack_id} do
+        shape = Shape.new!("items", inspector: @stub_inspector)
+        handle = "handle-1"
+
+        refute impl.handle_exists?(stack_id, handle)
+        {:ok, _} = impl.add_shape(stack_id, shape, handle)
+        assert impl.handle_exists?(stack_id, handle)
+      end
+
+      test "shape_handles_for_relations", %{impl: impl, stack_id: stack_id} do
+        shape1 = Shape.new!("items", inspector: @stub_inspector)
+        handle1 = "handle-1"
+        {:ok, _} = impl.add_shape(stack_id, shape1, handle1)
+
+        shape2 = Shape.new!("items", inspector: @stub_inspector, where: "id = 1")
+        handle2 = "handle-2"
+        {:ok, _} = impl.add_shape(stack_id, shape2, handle2)
+
+        shape3 = Shape.new!("other_table", inspector: @stub_inspector)
+        handle3 = "handle-3"
+        {:ok, _} = impl.add_shape(stack_id, shape3, handle3)
+
+        assert {:ok, [^handle1, ^handle2]} =
+                 impl.shape_handles_for_relations(stack_id, [{1, {"public", "items"}}])
+
+        assert {:ok, [^handle3]} =
+                 impl.shape_handles_for_relations(stack_id, [{2, {"public", "other_table"}}])
+
+        assert {:ok, [^handle1, ^handle2, ^handle3]} =
+                 impl.shape_handles_for_relations(stack_id, [
+                   {1, {"public", "items"}},
+                   {2, {"public", "other_table"}}
+                 ])
+      end
+
+      test "remove_shape", %{impl: impl, stack_id: stack_id} do
+        shape1 = Shape.new!("items", inspector: @stub_inspector)
+        handle1 = "handle-1"
+        {:ok, _} = impl.add_shape(stack_id, shape1, handle1)
+
+        shape2 = Shape.new!("items", inspector: @stub_inspector, where: "id = 1")
+        handle2 = "handle-2"
+        {:ok, _} = impl.add_shape(stack_id, shape2, handle2)
+
+        shape3 = Shape.new!("other_table", inspector: @stub_inspector)
+        handle3 = "handle-3"
+        {:ok, _} = impl.add_shape(stack_id, shape3, handle3)
+
+        assert {:ok, [{^handle1, ^shape1}, {^handle2, ^shape2}, {^handle3, ^shape3}]} =
+                 impl.list_shapes(stack_id)
+
+        :ok = impl.remove_shape(stack_id, handle1)
+
+        assert {:ok, [{^handle2, ^shape2}, {^handle3, ^shape3}]} = impl.list_shapes(stack_id)
+
+        assert {:ok, [^handle2, ^handle3]} =
+                 impl.shape_handles_for_relations(stack_id, [
+                   {1, {"public", "items"}},
+                   {2, {"public", "other_table"}}
+                 ])
+
+        :ok = impl.remove_shape(stack_id, handle3)
+        assert {:ok, [{^handle2, ^shape2}]} = impl.list_shapes(stack_id)
+
+        :ok = impl.remove_shape(stack_id, handle2)
+        assert {:ok, []} = impl.list_shapes(stack_id)
+
+        assert {:ok, []} =
+                 impl.shape_handles_for_relations(stack_id, [{1, {"public", "items"}}])
+      end
+
+      test "remove non-existing shape", %{impl: impl, stack_id: stack_id} do
+        shape = Shape.new!("items", inspector: @stub_inspector)
+        {:ok, _} = impl.add_shape(stack_id, shape, "handle-1")
+        assert {:ok, 1} = impl.count_shapes(stack_id)
+
+        assert {:error, {:enoshape, "no-such-handle"}} =
+                 impl.remove_shape(stack_id, "no-such-handle")
+
+        assert {:ok, 1} = impl.count_shapes(stack_id)
+      end
+
+      test "handle_for_shape/2", %{impl: impl, stack_id: stack_id} do
+        shape1 = Shape.new!("items", inspector: @stub_inspector)
+        handle1 = "handle-1"
+        {:ok, _} = impl.add_shape(stack_id, shape1, handle1)
+        shape2 = Shape.new!("items", inspector: @stub_inspector, where: "id = 99")
+
+        assert {:ok, ^handle1} = impl.handle_for_shape(stack_id, shape1)
+        assert :error = impl.handle_for_shape(stack_id, shape2)
+      end
+
+      test "handle_for_shape_critical/2", %{impl: impl, stack_id: stack_id} do
+        shape1 = Shape.new!("items", inspector: @stub_inspector)
+        handle1 = "handle-1"
+        {:ok, _} = impl.add_shape(stack_id, shape1, handle1)
+        shape2 = Shape.new!("items", inspector: @stub_inspector, where: "id = 99")
+
+        assert {:ok, ^handle1} = impl.handle_for_shape_critical(stack_id, shape1)
+        assert :error = impl.handle_for_shape_critical(stack_id, shape2)
+      end
+
+      test "shape_for_handle/2", %{impl: impl, stack_id: stack_id} do
+        shape = Shape.new!("items", inspector: @stub_inspector)
+        handle = "handle-1"
+        {:ok, _} = impl.add_shape(stack_id, shape, handle)
+
+        assert {:ok, ^shape} = impl.shape_for_handle(stack_id, handle)
+        assert :error = impl.shape_for_handle(stack_id, "no-such-handle")
+      end
+
+      test "reduce_shapes/3", %{impl: impl, stack_id: stack_id} do
+        {handles, _} =
+          Enum.map(1..100, fn n ->
+            shape = Shape.new!("items", inspector: @stub_inspector, where: "id = #{n}")
+            handle = "handle-#{n}"
+            {:ok, _} = impl.add_shape(stack_id, shape, handle)
+            {handle, shape}
+          end)
+          |> Enum.unzip()
+
+        result =
+          impl.reduce_shapes(stack_id, MapSet.new(), fn {handle, %Shape{}}, acc ->
+            MapSet.put(acc, handle)
+          end)
+
+        assert result == MapSet.new(handles)
+      end
+
+      test "reduce_shape_meta/3", %{impl: impl, stack_id: stack_id, flush: flush} do
+        expected =
+          Enum.map(1..100, fn n ->
+            shape = Shape.new!("items", inspector: @stub_inspector, where: "id = #{n}")
+            handle = "handle-#{n}"
+            {:ok, hash} = impl.add_shape(stack_id, shape, handle)
+
+            if rem(n, 2) == 0 do
+              :ok = impl.mark_snapshot_complete(stack_id, handle)
+              {handle, hash, true}
+            else
+              {handle, hash, false}
+            end
+          end)
+
+        # Allow implementations with a write buffer to flush before reading
+        flush.()
+
+        result =
+          impl.reduce_shape_meta(stack_id, MapSet.new(), fn {handle, hash, complete}, acc ->
+            MapSet.put(acc, {handle, hash, complete})
+          end)
+
+        assert result == MapSet.new(expected)
+      end
+
+      test "count_shapes/1", %{impl: impl, stack_id: stack_id} do
+        assert {:ok, 0} = impl.count_shapes(stack_id)
+
+        Enum.each(1..100, fn n ->
+          shape = Shape.new!("items", inspector: @stub_inspector, where: "id = #{n}")
+          {:ok, _} = impl.add_shape(stack_id, shape, "handle-#{n}")
+          assert {:ok, n} == impl.count_shapes(stack_id)
+        end)
+
+        Enum.each(100..1//-1, fn n ->
+          :ok = impl.remove_shape(stack_id, "handle-#{n}")
+          assert {:ok, n - 1} == impl.count_shapes(stack_id)
+        end)
+
+        assert {:ok, 0} = impl.count_shapes(stack_id)
+      end
+
+      test "mark_snapshot_complete/2", %{impl: impl, stack_id: stack_id} do
+        assert :error = impl.mark_snapshot_complete(stack_id, "no-such-handle")
+
+        shape1 = Shape.new!("items", inspector: @stub_inspector)
+        handle1 = "handle-1"
+        {:ok, _} = impl.add_shape(stack_id, shape1, handle1)
+        assert :ok = impl.mark_snapshot_complete(stack_id, handle1)
+
+        shape2 = Shape.new!("items", inspector: @stub_inspector, where: "id = 2")
+        handle2 = "handle-2"
+        {:ok, _} = impl.add_shape(stack_id, shape2, handle2)
+        assert :ok = impl.mark_snapshot_complete(stack_id, handle2)
+      end
+
+      test "validate_existing_shapes/1", %{impl: impl, stack_id: stack_id} do
+        valid_shapes =
+          Enum.map(1..10, fn n ->
+            shape = Shape.new!("items", inspector: @stub_inspector, where: "id = #{n}")
+            handle = "handle-#{n}"
+            {:ok, _} = impl.add_shape(stack_id, shape, handle)
+            :ok = impl.mark_snapshot_complete(stack_id, handle)
+            {handle, shape}
+          end)
+
+        not_completed =
+          Enum.map(21..30, fn n ->
+            shape = Shape.new!("items", inspector: @stub_inspector, where: "id = #{n}")
+            handle = "handle-#{n}"
+            {:ok, _} = impl.add_shape(stack_id, shape, handle)
+            {handle, shape}
+          end)
+
+        {remove_handles, _} = Enum.unzip(not_completed)
+        {valid_handles, _} = Enum.unzip(valid_shapes)
+
+        {:ok, invalid_handles, 10} = impl.validate_existing_shapes(stack_id)
+
+        assert MapSet.new(invalid_handles) == MapSet.new(remove_handles)
+
+        assert impl.reduce_shapes(stack_id, MapSet.new(), fn {handle, %Shape{}}, acc ->
+                 MapSet.put(acc, handle)
+               end) == MapSet.new(valid_handles)
+      end
+
+      test "reset/1", %{impl: impl, stack_id: stack_id} do
+        assert {:ok, 0} = impl.count_shapes(stack_id)
+
+        Enum.each(1..10, fn n ->
+          shape = Shape.new!("items", inspector: @stub_inspector, where: "id = #{n}")
+          handle = "handle-#{n}"
+          {:ok, _} = impl.add_shape(stack_id, shape, handle)
+          :ok = impl.mark_snapshot_complete(stack_id, handle)
+        end)
+
+        assert {:ok, 10} = impl.count_shapes(stack_id)
+        assert :ok = impl.reset(stack_id)
+        assert {:ok, 0} = impl.count_shapes(stack_id)
+        assert {:ok, []} = impl.list_shapes(stack_id)
+      end
+    end
   end
 
-  test "handle_exists?", ctx do
-    assert {:ok, []} = ShapeDb.list_shapes(ctx.stack_id)
-    shape1 = Shape.new!("items", inspector: @stub_inspector)
-    handle1 = "handle-1"
+  # ---------------------------------------------------------------------------
+  # Helpers
+  # ---------------------------------------------------------------------------
 
-    refute ShapeDb.handle_exists?(ctx.stack_id, handle1)
-    {:ok, _hash1} = ShapeDb.add_shape(ctx.stack_id, shape1, handle1)
-    assert ShapeDb.handle_exists?(ctx.stack_id, handle1)
+  defp start_impl(InMemory, ctx) do
+    start_supervised!(
+      {InMemory.Supervisor, stack_id: ctx.stack_id},
+      id: "shape_db"
+    )
+
+    {:ok, %{impl: InMemory, flush: fn -> :ok end}}
   end
 
-  test "shape_handles_for_relations", ctx do
-    shape1 = Shape.new!("items", inspector: @stub_inspector)
-    handle1 = "handle-1"
-    {:ok, _hash1} = ShapeDb.add_shape(ctx.stack_id, shape1, handle1)
+  defp start_impl(Sqlite, ctx) do
+    shape_db_opts = Map.get(ctx, :shape_db_opts, [])
 
-    shape2 = Shape.new!("items", inspector: @stub_inspector, where: "id = 1")
-    handle2 = "handle-2"
-    {:ok, _hash2} = ShapeDb.add_shape(ctx.stack_id, shape2, handle2)
+    start_supervised!(
+      {Sqlite.Supervisor,
+       [
+         stack_id: ctx.stack_id,
+         shape_db_opts:
+           Keyword.merge(
+             [storage_dir: ctx.tmp_dir, manual_flush_only: true, read_pool_size: 1],
+             shape_db_opts
+           )
+       ]},
+      id: "shape_db"
+    )
 
-    shape3 = Shape.new!("other_table", inspector: @stub_inspector)
-    handle3 = "handle-3"
-    {:ok, _hash3} = ShapeDb.add_shape(ctx.stack_id, shape3, handle3)
-
-    assert {:ok, [^handle1, ^handle2]} =
-             ShapeDb.shape_handles_for_relations(ctx.stack_id, [{1, {"public", "items"}}])
-
-    assert {:ok, [^handle3]} =
-             ShapeDb.shape_handles_for_relations(ctx.stack_id, [{2, {"public", "other_table"}}])
-
-    assert {:ok, [^handle1, ^handle2, ^handle3]} =
-             ShapeDb.shape_handles_for_relations(ctx.stack_id, [
-               {1, {"public", "items"}},
-               {2, {"public", "other_table"}}
-             ])
-  end
-
-  test "remove_shape", ctx do
-    shape1 = Shape.new!("items", inspector: @stub_inspector)
-    handle1 = "handle-1"
-    {:ok, _hash1} = ShapeDb.add_shape(ctx.stack_id, shape1, handle1)
-
-    shape2 = Shape.new!("items", inspector: @stub_inspector, where: "id = 1")
-    handle2 = "handle-2"
-    {:ok, _hash2} = ShapeDb.add_shape(ctx.stack_id, shape2, handle2)
-
-    shape3 = Shape.new!("other_table", inspector: @stub_inspector)
-    handle3 = "handle-3"
-    {:ok, _hash3} = ShapeDb.add_shape(ctx.stack_id, shape3, handle3)
-
-    assert {:ok, [{^handle1, ^shape1}, {^handle2, ^shape2}, {^handle3, ^shape3}]} =
-             ShapeDb.list_shapes(ctx.stack_id)
-
-    :ok = ShapeDb.remove_shape(ctx.stack_id, handle1)
-
-    assert {:ok, [{^handle2, ^shape2}, {^handle3, ^shape3}]} = ShapeDb.list_shapes(ctx.stack_id)
-
-    assert {:ok, [^handle2, ^handle3]} =
-             ShapeDb.shape_handles_for_relations(ctx.stack_id, [
-               {1, {"public", "items"}},
-               {2, {"public", "other_table"}}
-             ])
-
-    :ok = ShapeDb.remove_shape(ctx.stack_id, handle3)
-
-    assert {:ok, [{^handle2, ^shape2}]} = ShapeDb.list_shapes(ctx.stack_id)
-
-    assert {:ok, [^handle2]} =
-             ShapeDb.shape_handles_for_relations(ctx.stack_id, [
-               {1, {"public", "items"}},
-               {2, {"public", "other_table"}}
-             ])
-
-    :ok = ShapeDb.remove_shape(ctx.stack_id, handle2)
-
-    assert {:ok, []} =
-             ShapeDb.shape_handles_for_relations(ctx.stack_id, [
-               {1, {"public", "items"}},
-               {2, {"public", "other_table"}}
-             ])
-
-    assert {:ok, []} = ShapeDb.list_shapes(ctx.stack_id)
-  end
-
-  test "remove non-existing shape", ctx do
-    shape1 = Shape.new!("items", inspector: @stub_inspector)
-    handle1 = "handle-1"
-    {:ok, _hash1} = ShapeDb.add_shape(ctx.stack_id, shape1, handle1)
-    assert {:ok, 1} = ShapeDb.count_shapes(ctx.stack_id)
-
-    assert {:error, {:enoshape, "no-such-handle"}} =
-             ShapeDb.remove_shape(ctx.stack_id, "no-such-handle")
-
-    assert {:ok, 1} = ShapeDb.count_shapes(ctx.stack_id)
-  end
-
-  test "handle_for_shape/2", ctx do
-    shape1 = Shape.new!("items", inspector: @stub_inspector)
-    handle1 = "handle-1"
-    {:ok, _hash1} = ShapeDb.add_shape(ctx.stack_id, shape1, handle1)
-    shape2 = Shape.new!("items", inspector: @stub_inspector, where: "id = 99")
-
-    assert {:ok, ^handle1} = ShapeDb.handle_for_shape(ctx.stack_id, shape1)
-
-    assert :error = ShapeDb.handle_for_shape(ctx.stack_id, shape2)
-  end
-
-  test "handle_for_shape_critical/2", ctx do
-    shape1 = Shape.new!("items", inspector: @stub_inspector)
-    handle1 = "handle-1"
-    {:ok, _hash1} = ShapeDb.add_shape(ctx.stack_id, shape1, handle1)
-    shape2 = Shape.new!("items", inspector: @stub_inspector, where: "id = 99")
-
-    assert {:ok, ^handle1} = ShapeDb.handle_for_shape_critical(ctx.stack_id, shape1)
-
-    assert :error = ShapeDb.handle_for_shape_critical(ctx.stack_id, shape2)
-  end
-
-  test "shape_for_handle", ctx do
-    shape1 = Shape.new!("items", inspector: @stub_inspector)
-    handle1 = "handle-1"
-    {:ok, _hash1} = ShapeDb.add_shape(ctx.stack_id, shape1, handle1)
-
-    assert {:ok, ^shape1} = ShapeDb.shape_for_handle(ctx.stack_id, handle1)
-    assert :error = ShapeDb.shape_for_handle(ctx.stack_id, "no-such-handle")
-  end
-
-  test "reduce_shapes/3", ctx do
-    {handles, _shapes} =
-      Enum.map(1..100, fn n ->
-        shape = Shape.new!("items", inspector: @stub_inspector, where: "id = #{n}")
-        handle = "handle-#{n}"
-        {:ok, _hash} = ShapeDb.add_shape(ctx.stack_id, shape, handle)
-        {handle, shape}
-      end)
-      |> Enum.unzip()
-
-    assert ShapeDb.reduce_shapes(
-             ctx.stack_id,
-             MapSet.new(),
-             fn {handle, %Shape{} = _shape}, acc -> MapSet.put(acc, handle) end
-           ) == MapSet.new(handles)
-  end
-
-  test "reduce_shape_meta/3", ctx do
-    expected =
-      Enum.map(1..100, fn n ->
-        shape = Shape.new!("items", inspector: @stub_inspector, where: "id = #{n}")
-        handle = "handle-#{n}"
-        {:ok, hash} = ShapeDb.add_shape(ctx.stack_id, shape, handle)
-
-        # Mark some shapes as snapshot_complete
-        if rem(n, 2) == 0 do
-          :ok = ShapeDb.mark_snapshot_complete(ctx.stack_id, handle)
-          {handle, hash, true}
-        else
-          {handle, hash, false}
-        end
-      end)
-
-    assert ShapeDb.reduce_shape_meta(
-             ctx.stack_id,
-             MapSet.new(),
-             fn {handle, hash, snapshot_complete}, acc ->
-               MapSet.put(acc, {handle, hash, snapshot_complete})
-             end
-           ) == MapSet.new(expected)
-  end
-
-  test "count_shapes/1", ctx do
-    assert {:ok, 0} = ShapeDb.count_shapes(ctx.stack_id)
-
-    Enum.each(1..100, fn n ->
-      shape = Shape.new!("items", inspector: @stub_inspector, where: "id = #{n}")
-      handle = "handle-#{n}"
-      {:ok, _hash} = ShapeDb.add_shape(ctx.stack_id, shape, handle)
-      assert {:ok, n} == ShapeDb.count_shapes(ctx.stack_id)
-    end)
-
-    Enum.each(100..1//-1, fn n ->
-      handle = "handle-#{n}"
-      :ok = ShapeDb.remove_shape(ctx.stack_id, handle)
-      assert {:ok, n - 1} == ShapeDb.count_shapes(ctx.stack_id)
-    end)
-
-    assert {:ok, 0} = ShapeDb.count_shapes(ctx.stack_id)
-  end
-
-  test "mark_snapshot_complete/2", ctx do
-    assert :error = ShapeDb.mark_snapshot_complete(ctx.stack_id, "no-such-handle")
-
-    shape1 = Shape.new!("items", inspector: @stub_inspector)
-    handle1 = "handle-1"
-    {:ok, _hash1} = ShapeDb.add_shape(ctx.stack_id, shape1, handle1)
-
-    # should allow for marking a snapshot complete before the snapshot
-    # has been marked started
-    assert :ok = ShapeDb.mark_snapshot_complete(ctx.stack_id, handle1)
-
-    shape2 = Shape.new!("items", inspector: @stub_inspector, where: "id = 2")
-    handle2 = "handle-2"
-    {:ok, _hash2} = ShapeDb.add_shape(ctx.stack_id, shape2, handle2)
-
-    assert :ok = ShapeDb.mark_snapshot_complete(ctx.stack_id, handle2)
-  end
-
-  defp make_valid_shape(ctx, shape, handle) do
-    make_shape_with_snapshot_status(ctx, shape, handle, snapshot_complete: true)
-  end
-
-  defp make_shape_with_snapshot_status(%{stack_id: stack_id}, shape, handle, opts \\ []) do
-    snapshot_complete? = Keyword.get(opts, :snapshot_complete, false)
-
-    {:ok, _hash1} = ShapeDb.add_shape(stack_id, shape, handle)
-
-    if snapshot_complete?,
-      do: :ok = ShapeDb.mark_snapshot_complete(stack_id, handle)
-
-    {handle, shape}
-  end
-
-  test "validate_existing_shapes/1", ctx do
-    valid_shapes =
-      Enum.map(1..10, fn n ->
-        shape = Shape.new!("items", inspector: @stub_inspector, where: "id = #{n}")
-        handle = "handle-#{n}"
-        make_valid_shape(ctx, shape, handle)
-      end)
-
-    not_completed =
-      Enum.map(21..30, fn n ->
-        shape = Shape.new!("items", inspector: @stub_inspector, where: "id = #{n}")
-        handle = "handle-#{n}"
-        make_shape_with_snapshot_status(ctx, shape, handle)
-      end)
-
-    {remove_handles, _shapes} = Enum.unzip(not_completed)
-
-    {:ok, invalid_handles, 10} = ShapeDb.validate_existing_shapes(ctx.stack_id)
-
-    assert MapSet.new(invalid_handles) == MapSet.new(remove_handles)
-
-    {handles, _shapes} = Enum.unzip(valid_shapes)
-
-    assert ShapeDb.reduce_shapes(
-             ctx.stack_id,
-             MapSet.new(),
-             fn {handle, %Shape{} = _shape}, acc -> MapSet.put(acc, handle) end
-           ) == MapSet.new(handles)
-  end
-
-  test "reset/1", ctx do
-    assert {:ok, 0} = ShapeDb.count_shapes(ctx.stack_id)
-
-    Enum.map(1..10, fn n ->
-      shape = Shape.new!("items", inspector: @stub_inspector, where: "id = #{n}")
-      handle = "handle-#{n}"
-      make_valid_shape(ctx, shape, handle)
-    end)
-
-    assert {:ok, 10} = ShapeDb.count_shapes(ctx.stack_id)
-
-    assert :ok = ShapeDb.reset(ctx.stack_id)
-
-    assert ShapeDb.reduce_shapes(ctx.stack_id, 0, fn {_handle, %Shape{} = _shape}, acc ->
-             acc + 1
-           end) == 0
-
-    assert {:ok, 0} = ShapeDb.count_shapes(ctx.stack_id)
+    {:ok, %{impl: Sqlite, flush: fn -> Sqlite.WriteBuffer.flush_sync(ctx.stack_id) end}}
   end
 end
