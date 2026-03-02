@@ -1,4 +1,4 @@
-defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Statistics do
+defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Sqlite.Statistics do
   @moduledoc """
   Uses SQLite's built-in statistics to report memory usage.
 
@@ -15,7 +15,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Statistics do
 
   use GenServer
 
-  alias Electric.ShapeCache.ShapeStatus.ShapeDb
+  alias Electric.ShapeCache.ShapeStatus.ShapeDb.Sqlite.Connection
 
   require Logger
 
@@ -91,12 +91,12 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Statistics do
     %{stack_id: stack_id} = state
 
     {:ok, {page_size, memstat_available?}} =
-      ShapeDb.Connection.checkout_write!(stack_id, :read_stats, fn %{conn: conn} ->
+      Connection.checkout_write!(stack_id, :read_stats, fn %{conn: conn} ->
         memstat_available? =
           if enable_memory_stats? do
             # don't even try to load the extension unless enabled -- loading the extension
             # may be the cause of segfaults we've seen in prod
-            case ShapeDb.Connection.enable_extension(conn, "memstat") do
+            case Connection.enable_extension(conn, "memstat") do
               ## Commented out temporarily to avoid typing violation caused by the stub impl of enable_extension()
               # :ok ->
               #   Logger.notice("SQLite memory statistics enabled")
@@ -115,7 +115,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Statistics do
             false
           end
 
-        {:ok, [page_size]} = ShapeDb.Connection.fetch_one(conn, "PRAGMA page_size", [])
+        {:ok, [page_size]} = Connection.fetch_one(conn, "PRAGMA page_size", [])
 
         {:ok, {page_size, memstat_available?}}
       end)
@@ -149,8 +149,8 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Statistics do
            state
        ) do
     result =
-      ShapeDb.Connection.checkout_write!(stack_id, :read_stats, fn %{conn: conn} ->
-        ShapeDb.Connection.fetch_all(conn, stats_query(memstat_available?), [])
+      Connection.checkout_write!(stack_id, :read_stats, fn %{conn: conn} ->
+        Connection.fetch_all(conn, stats_query(memstat_available?), [])
       end)
 
     case result do

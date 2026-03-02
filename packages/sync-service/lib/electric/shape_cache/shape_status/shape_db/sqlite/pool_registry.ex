@@ -1,4 +1,4 @@
-defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.PoolRegistry do
+defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Sqlite.PoolRegistry do
   @moduledoc """
   Manages pool registration for a stack. Contains the `exclusive_mode` logic,
   so that when enabled, the same write connection is returned for reads and
@@ -95,5 +95,5 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.PoolRegistry do
   end
 
   defp ets_table(stack_id),
-    do: :"Electric.ShapeCache.ShapeStatus.ShapeDb.PoolRegistry:#{stack_id}"
+    do: :"Electric.ShapeCache.ShapeStatus.ShapeDb.Sqlite.PoolRegistry:#{stack_id}"
 end

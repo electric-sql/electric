@@ -1,4 +1,4 @@
-defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
+defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Sqlite.WriteBuffer do
   @moduledoc """
   Buffers SQLite metadata writes using ETS for immediate return to callers,
   then batches and flushes to SQLite in the background.
@@ -46,8 +46,8 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
 
   require Logger
 
-  alias Electric.ShapeCache.ShapeStatus.ShapeDb.Connection
-  alias Electric.ShapeCache.ShapeStatus.ShapeDb.Query
+  alias Electric.ShapeCache.ShapeStatus.ShapeDb.Sqlite.Connection
+  alias Electric.ShapeCache.ShapeStatus.ShapeDb.Sqlite.Query
   alias Electric.Telemetry.OpenTelemetry
 
   import Electric, only: [is_stack_id: 1]
