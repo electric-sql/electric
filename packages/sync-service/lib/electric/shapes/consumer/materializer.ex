@@ -199,9 +199,7 @@ defmodule Electric.Shapes.Consumer.Materializer do
   end
 
   def handle_call(:get_link_values, _from, %{value_counts: value_counts} = state) do
-    values = MapSet.new(Map.keys(value_counts))
-
-    {:reply, values, state}
+    {:reply, link_values_from_counts(value_counts), state}
   end
 
   def handle_call(:wait_until_ready, _from, state) do
@@ -265,9 +263,19 @@ defmodule Electric.Shapes.Consumer.Materializer do
     :"Electric.Materializer.LinkValues:#{stack_id}"
   end
 
-  defp write_link_values(%{stack_id: stack_id, shape_handle: shape_handle, value_counts: value_counts}) do
-    link_values = MapSet.new(Map.keys(value_counts))
-    :ets.insert(link_values_table_name(stack_id), {shape_handle, link_values})
+  defp link_values_from_counts(value_counts) do
+    MapSet.new(Map.keys(value_counts))
+  end
+
+  defp write_link_values(%{
+         stack_id: stack_id,
+         shape_handle: shape_handle,
+         value_counts: value_counts
+       }) do
+    :ets.insert(
+      link_values_table_name(stack_id),
+      {shape_handle, link_values_from_counts(value_counts)}
+    )
   rescue
     ArgumentError -> :ok
   end
