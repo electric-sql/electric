@@ -65,12 +65,16 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Supervisor do
              lazy: not exclusive_mode},
             id: {:pool, :write}
           ),
-          # write buffer for batching SQLite writes to avoid timeout cascades
+          # Write buffer for batching SQLite writes to avoid timeout cascades.
           {ShapeDb.WriteBuffer, opts},
           {Task, fn -> ShapeDb.Statistics.initialize(stack_id) end}
         ]
       ])
 
-    Supervisor.init(children, strategy: :one_for_one)
+    # Because the full state of the system is split between the actual db, the
+    # writeBuffer and the ShapeStatus ets caches, we are not safe to adopt a
+    # one_for_one strategy and need to propagate an exit in the children of
+    # this supervisor to the parent
+    Supervisor.init(children, strategy: :one_for_all, max_restarts: 0)
   end
 end
