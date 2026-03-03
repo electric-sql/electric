@@ -17,7 +17,8 @@ defmodule Electric.Shapes.FilterTest do
                columns: [
                  %{name: "id", type: "int8", pk_position: 0},
                  %{name: "number", type: "int8"},
-                 %{name: "an_array", array_type: "int8"}
+                 %{name: "an_array", array_type: "int8"},
+                 %{name: "data", type: "jsonb"}
                ]
              )
 
@@ -386,6 +387,25 @@ defmodule Electric.Shapes.FilterTest do
           {%{"id" => "8", "an_array" => "{1}"}, false},
           {%{"id" => "7", "an_array" => nil}, false}
         ]
+      },
+      # JSONB key existence operator
+      %{
+        where: "data ? 'status'",
+        records: [
+          {%{"data" => ~s|{"status": "active"}|}, true},
+          {%{"data" => ~s|{"status": "inactive", "id": 1}|}, true},
+          {%{"data" => ~s|{"id": 1}|}, false},
+          {%{"data" => ~s|{}|}, false},
+          {%{"data" => nil}, false}
+        ]
+      },
+      %{
+        where: "data ? 'user_id'",
+        records: [
+          {%{"data" => ~s|{"user_id": 123}|}, true},
+          {%{"data" => ~s|{"user_id": null}|}, true},
+          {%{"data" => ~s|{"name": "test"}|}, false}
+        ]
       }
     ]
 
@@ -420,7 +440,9 @@ defmodule Electric.Shapes.FilterTest do
       Shape.new!("table", where: "an_array @> '{1,2}'", inspector: @inspector),
       Shape.new!("table", where: "an_array @> '{1,3}'", inspector: @inspector),
       Shape.new!("table", where: "id = 1 AND an_array @> '{1}'", inspector: @inspector),
-      Shape.new!("table", where: "id = 1 AND an_array @> '{1,2}'", inspector: @inspector)
+      Shape.new!("table", where: "id = 1 AND an_array @> '{1,2}'", inspector: @inspector),
+      Shape.new!("table", where: "data ? 'status'", inspector: @inspector),
+      Shape.new!("table", where: "data ? 'user_id'", inspector: @inspector)
     ]
 
     filter = Filter.new()
@@ -455,7 +477,8 @@ defmodule Electric.Shapes.FilterTest do
       tables: :ets.tab2list(filter.tables_table) |> Enum.sort(),
       where_cond: :ets.tab2list(filter.where_cond_table) |> Enum.sort(),
       eq_index: :ets.tab2list(filter.eq_index_table) |> Enum.sort(),
-      incl_index: :ets.tab2list(filter.incl_index_table) |> Enum.sort()
+      incl_index: :ets.tab2list(filter.incl_index_table) |> Enum.sort(),
+      key_exists_index: :ets.tab2list(filter.key_exists_index_table) |> Enum.sort()
     }
   end
 
@@ -642,6 +665,35 @@ defmodule Electric.Shapes.FilterTest do
       Enum.each(arrays, fn array ->
         remove_reductions = reductions(fn -> Filter.remove_shape(filter, array) end)
         assert remove_reductions < max_reductions
+      end)
+    end
+
+    test "where clause in the form `jsonb_field ? 'key'` is optimised" do
+      filter = Filter.new()
+
+      # Create shapes that each require a different key
+      keys = Enum.map(1..@shape_count, &"key_#{&1}")
+
+      Enum.each(keys, fn key ->
+        shape = Shape.new!("t1", where: "data ? '#{key}'", inspector: @inspector)
+        add_reductions = reductions(fn -> Filter.add_shape(filter, key, shape) end)
+        assert add_reductions < @max_reductions
+      end)
+
+      # Record has one of the keys - should match that shape
+      change = change("t1", %{"data" => ~s|{"key_7": "value"}|})
+      assert Filter.affected_shapes(filter, change) == MapSet.new(["key_7"])
+
+      affected_reductions =
+        reductions(fn ->
+          Filter.affected_shapes(filter, change)
+        end)
+
+      assert affected_reductions < @max_reductions
+
+      Enum.each(keys, fn key ->
+        remove_reductions = reductions(fn -> Filter.remove_shape(filter, key) end)
+        assert remove_reductions < @max_reductions
       end)
     end
 

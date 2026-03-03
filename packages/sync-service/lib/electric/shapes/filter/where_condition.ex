@@ -88,6 +88,15 @@ defmodule Electric.Shapes.Filter.WhereCondition do
     %{operation: "@>", field: field, type: type, value: value, and_where: nil}
   end
 
+  # JSONB key existence: field ? 'key'
+  defp optimise_where(%Func{
+         name: ~s("?"),
+         args: [%Ref{path: [field], type: type}, %Const{value: key}]
+       })
+       when is_binary(key) do
+    %{operation: "?", field: field, type: type, value: key, and_where: nil}
+  end
+
   defp optimise_where(%Func{name: "and", args: [arg1, arg2]}) do
     case {optimise_where(arg1), optimise_where(arg2)} do
       {%{operation: "=", and_where: nil} = params, _} ->

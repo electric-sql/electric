@@ -10,9 +10,11 @@ defmodule Electric.Shapes.Filter.Index do
   alias Electric.Shapes.Filter
   alias Electric.Shapes.Filter.Indexes.EqualityIndex
   alias Electric.Shapes.Filter.Indexes.InclusionIndex
+  alias Electric.Shapes.Filter.Indexes.KeyExistenceIndex
 
   defp module_for("="), do: EqualityIndex
   defp module_for("@>"), do: InclusionIndex
+  defp module_for("?"), do: KeyExistenceIndex
 
   def add_shape(%Filter{} = filter, where_cond_id, shape_id, %{operation: op} = optimisation) do
     module_for(op).add_shape(filter, where_cond_id, shape_id, optimisation)
