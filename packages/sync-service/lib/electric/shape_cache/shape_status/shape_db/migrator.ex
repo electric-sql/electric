@@ -20,44 +20,40 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Migrator do
     Logger.metadata(stack_id: stack_id)
     Electric.Telemetry.Sentry.set_tags_context(stack_id: stack_id)
 
-    with {:ok, conn} <- apply_migration(stack_id, args, exclusive_mode) do
-      {:ok, schedule_optimize(stack_id, conn), :hibernate}
+    with :ok <- apply_migration(stack_id, args, exclusive_mode) do
+      {:ok, schedule_optimize(stack_id), :hibernate}
     end
   end
 
   defp apply_migration(_stack_id, _opts, true = _exclusive?) do
     # In exclusive  mode we *must* apply the migrations within the pool
     # connection initialization because we might be using a memory db.
-    # We return nil to trigger checkout-mode.
-    {:ok, nil}
+    :ok
   end
 
   defp apply_migration(_stack_id, opts, false = _exclusive?) do
     with {:ok, conn} <- ShapeDb.Connection.open(opts, integrity_check: true),
          {:ok, _version} <- ShapeDb.Connection.migrate(conn, opts),
-         :ok = ShapeDb.Connection.optimize(conn) do
-      {:ok, conn}
+         # https://sqlite.org/pragma.html#pragma_optimize
+         # Applications with long-lived database connections should run "PRAGMA
+         # optimize=0x10002" when the database connection first opens
+         :ok = ShapeDb.Connection.optimize(conn, "0x10002"),
+         :ok = ShapeDb.Connection.close(conn) do
+      :ok
     end
   end
 
   @impl GenServer
-  def handle_info(:optimize, {stack_id, nil}) do
+  def handle_info(:optimize, stack_id) do
     ShapeDb.Connection.checkout_write!(stack_id, :optimize, fn %{conn: conn} ->
       :ok = ShapeDb.Connection.optimize(conn)
     end)
 
-    {:noreply, schedule_optimize(stack_id, nil), :hibernate}
+    {:noreply, schedule_optimize(stack_id), :hibernate}
   end
 
-  def handle_info(:optimize, {stack_id, conn}) do
-    Logger.notice("Optimizing shape db tables")
-    :ok = ShapeDb.Connection.optimize(conn)
-
-    {:noreply, schedule_optimize(stack_id, conn), :hibernate}
-  end
-
-  defp schedule_optimize(stack_id, conn) do
+  defp schedule_optimize(stack_id) do
     Process.send_after(self(), :optimize, @optimization_period)
-    {stack_id, conn}
+    stack_id
   end
 end
