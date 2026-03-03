@@ -118,8 +118,20 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
     end
   end
 
-  def optimize(conn) when is_raw_connection(conn) do
-    execute_all(conn, ["PRAGMA optimize=0x10002"])
+  # https://sqlite.org/pragma.html#pragma_optimize
+  # This pragma is usually a no-op or nearly so and is very fast. On the
+  # occasions where it does need to run ANALYZE on one or more tables, it sets
+  # a temporary analysis limit, valid for the duration of this pragma only,
+  # that prevents the ANALYZE invocations from running for too long.
+  def optimize(conn, mask \\ nil) when is_raw_connection(conn) do
+    stmts =
+      if is_nil(mask) do
+        ["PRAGMA optimize"]
+      else
+        ["PRAGMA optimize=#{mask}"]
+      end
+
+    execute_all(conn, stmts)
   end
 
   def enable_extension(conn, extension) when is_raw_connection(conn) do

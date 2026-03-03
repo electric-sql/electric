@@ -38,7 +38,7 @@ defmodule ElectricTelemetry.StackTelemetry do
         [
           ElectricTelemetry.Poller.child_spec(opts,
             callback_module: __MODULE__,
-            init_delay: :timer.seconds(3)
+            init_delay: :timer.seconds(30)
           )
         ],
         disk_usage_child_specs(opts),
