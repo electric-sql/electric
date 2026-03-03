@@ -385,6 +385,7 @@ defmodule Electric.Shapes.Consumer.Materializer do
           {{index, tag_indices}, counts_and_events} ->
             # When the primary key doesn't change, old_key may be nil; default to key
             old_key = old_key || key
+
             # TODO: this is written as if it supports multiple selected columns, but it doesn't for now
             columns_present = Enum.any?(state.columns, &is_map_key(record, &1))
             has_tag_updates = removed_move_tags != []
