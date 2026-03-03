@@ -207,15 +207,36 @@ defmodule Support.OracleHarness.ShapeChecker do
     Enum.reduce(messages, state, &apply_message/2)
   end
 
-  defp apply_message(%ChangeMessage{headers: %{operation: :delete}, value: value}, state) do
+  defp apply_message(%ChangeMessage{headers: %{operation: :insert}, value: value}, state) do
     key = key_from_value(state.pk, value)
-    %{state | rows: Map.delete(state.rows, key)}
-  end
 
-  defp apply_message(%ChangeMessage{value: value}, state) do
-    key = key_from_value(state.pk, value)
+    if Map.has_key?(state.rows, key) do
+      flunk("shape=#{state.name}: insert for row that already exists: #{inspect(key)}")
+    end
+
     row = Map.take(value, state.columns)
     %{state | rows: Map.put(state.rows, key, row)}
+  end
+
+  defp apply_message(%ChangeMessage{headers: %{operation: :update}, value: value}, state) do
+    key = key_from_value(state.pk, value)
+
+    if not Map.has_key?(state.rows, key) do
+      flunk("shape=#{state.name}: update for row that does not exist: #{inspect(key)}")
+    end
+
+    row = Map.take(value, state.columns)
+    %{state | rows: Map.put(state.rows, key, row)}
+  end
+
+  defp apply_message(%ChangeMessage{headers: %{operation: :delete}, value: value}, state) do
+    key = key_from_value(state.pk, value)
+
+    if not Map.has_key?(state.rows, key) do
+      flunk("shape=#{state.name}: delete for row that does not exist: #{inspect(key)}")
+    end
+
+    %{state | rows: Map.delete(state.rows, key)}
   end
 
   defp apply_message(%ControlMessage{}, state), do: state
