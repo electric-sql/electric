@@ -609,4 +609,17 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDbTest do
                )
     end
   end
+
+  describe "error handling" do
+    test "errors raised within transaction do not cause errors attempting to rollback", ctx do
+      assert_raise RuntimeError, "source error", fn ->
+        ShapeDb.Connection.checkout_write!(ctx.stack_id, :raising, fn %{conn: conn} ->
+          # commit the txn so that attempting to rollback after the exception
+          # will return an error
+          :ok = ShapeDb.Connection.execute(conn, "COMMIT")
+          raise RuntimeError, "source error"
+        end)
+      end
+    end
+  end
 end

@@ -426,7 +426,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
       result
     rescue
       e ->
-        :ok = execute(conn, "ROLLBACK")
+        _ = execute(conn, "ROLLBACK")
         reraise e, __STACKTRACE__
     end
   end
