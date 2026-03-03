@@ -91,6 +91,14 @@ defmodule Electric.Shapes.Consumer.Materializer do
       raise ~s|Materializer for stack "#{opts.stack_id}" and handle "#{opts.shape_handle}" is not available|
   end
 
+  @spec delete_link_values(stack_id :: term(), shape_handle :: term()) :: :ok
+  def delete_link_values(stack_id, shape_handle) do
+    :ets.delete(link_values_table_name(stack_id), shape_handle)
+    :ok
+  rescue
+    ArgumentError -> :ok
+  end
+
   def get_all_as_refs(shape, stack_id) when are_deps_filled(shape) do
     shape.shape_dependencies_handles
     |> Enum.with_index()

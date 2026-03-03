@@ -1,6 +1,7 @@
 defmodule Electric.Shapes.ConsumerRegistryTest do
   use ExUnit.Case, async: true
 
+  alias Electric.Shapes.Consumer.Materializer
   alias Electric.Shapes.ConsumerRegistry
 
   import Support.ComponentSetup
@@ -253,6 +254,42 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
       :ok = ConsumerRegistry.remove_consumer(handle, ctx.registry_state)
       assert ConsumerRegistry.active_consumer_count(ctx.stack_id) == 0
     end
+
+    test "removes cached materializer link values when removing via registry state", ctx do
+      handle = "handle-1"
+      link_values_table = link_values_table_name(ctx.stack_id)
+
+      :ets.insert(link_values_table, {handle, MapSet.new([1, 2])})
+      assert [{^handle, _}] = :ets.lookup(link_values_table, handle)
+
+      :ok = ConsumerRegistry.remove_consumer(handle, ctx.registry_state)
+
+      assert [] == :ets.lookup(link_values_table, handle)
+    end
+
+    test "remove_consumer via registry state is safe when materializer link table does not exist",
+         ctx do
+      handle = "handle-1"
+      link_values_table = link_values_table_name(ctx.stack_id)
+
+      true = :ets.delete(link_values_table)
+      assert :undefined == :ets.whereis(link_values_table)
+
+      assert :ok == ConsumerRegistry.remove_consumer(handle, ctx.registry_state)
+      assert :ok == Materializer.delete_link_values(ctx.stack_id, handle)
+    end
+
+    test "removes cached materializer link values when removing by stack_id", ctx do
+      handle = "handle-1"
+      link_values_table = link_values_table_name(ctx.stack_id)
+
+      :ets.insert(link_values_table, {handle, MapSet.new([1, 2])})
+      assert [{^handle, _}] = :ets.lookup(link_values_table, handle)
+
+      :ok = ConsumerRegistry.remove_consumer(handle, ctx.stack_id)
+
+      assert [] == :ets.lookup(link_values_table, handle)
+    end
   end
 
   describe "broadcast/1" do
@@ -405,5 +442,9 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
 
       assert_receive {:broadcast, :event}
     end
+  end
+
+  defp link_values_table_name(stack_id) do
+    :"Electric.Materializer.LinkValues:#{stack_id}"
   end
 end

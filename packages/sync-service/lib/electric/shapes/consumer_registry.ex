@@ -1,5 +1,6 @@
 defmodule Electric.Shapes.ConsumerRegistry do
   alias Electric.ShapeCache
+  alias Electric.Shapes.Consumer.Materializer
   alias Electric.Telemetry.OpenTelemetry
 
   import Electric, only: [is_stack_id: 1, is_shape_handle: 1]
@@ -90,13 +91,15 @@ defmodule Electric.Shapes.ConsumerRegistry do
   end
 
   @spec remove_consumer(shape_handle(), t()) :: :ok
-  def remove_consumer(shape_handle, %__MODULE__{table: table}) do
+  def remove_consumer(shape_handle, %__MODULE__{table: table, stack_id: stack_id}) do
     do_remove_consumer(shape_handle, table)
+    Materializer.delete_link_values(stack_id, shape_handle)
   end
 
   @spec remove_consumer(shape_handle(), stack_id()) :: :ok
   def remove_consumer(shape_handle, stack_id) when is_stack_id(stack_id) do
     do_remove_consumer(shape_handle, ets_name(stack_id))
+    Materializer.delete_link_values(stack_id, shape_handle)
   end
 
   @spec do_remove_consumer(shape_handle(), :ets.table()) :: :ok
