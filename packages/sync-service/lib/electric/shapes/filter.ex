@@ -394,9 +394,8 @@ defmodule Electric.Shapes.Filter do
       :ets.insert(filter.sublink_dep_table, {dep_handle, MapSet.put(existing_shapes, shape_id)})
     end
 
-    # Only add to the fast-path set when at least one field was indexed.
-    # Shapes with composite-key subqueries (RowExpr left-hand sides) produce no
-    # sublink_fields and must fall through to other_shapes_affected instead.
+    # RowExpr subqueries (e.g. `(a, b) IN (SELECT ...)`) produce no indexable fields;
+    # those shapes stay in other_shapes and must not be marked as indexed.
     if map_size(sublink_fields) > 0 do
       %{filter | sublink_shapes_set: MapSet.put(filter.sublink_shapes_set, shape_id)}
     else
