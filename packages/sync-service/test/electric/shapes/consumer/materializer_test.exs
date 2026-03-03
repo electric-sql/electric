@@ -350,6 +350,60 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
       end)
     end
 
+    @tag snapshot_data: {
+           [%Changes.NewRecord{record: %{"id" => "1", "value" => "10"}}],
+           [pk_cols: ["id"]]
+         }
+    test "update that changes the primary key is handled correctly", ctx do
+      ctx = with_materializer(ctx)
+
+      assert Materializer.get_link_values(ctx) == MapSet.new([10])
+
+      # Update where the PK changes from "1" to "2"
+      Materializer.new_changes(
+        ctx,
+        [
+          %Changes.UpdatedRecord{
+            record: %{"id" => "2", "value" => "20"},
+            old_record: %{"id" => "1", "value" => "10"}
+          }
+        ]
+        |> prep_changes()
+      )
+
+      assert Materializer.get_link_values(ctx) == MapSet.new([20])
+
+      assert_receive {:materializer_changes, _, %{move_out: [{10, "10"}], move_in: [{20, "20"}]}}
+    end
+
+    @tag snapshot_data: {
+           [%Changes.NewRecord{record: %{"id" => "1", "value" => "10"}}],
+           [pk_cols: ["id"]]
+         }
+    test "update that changes the primary key but keeps the same value", ctx do
+      ctx = with_materializer(ctx)
+
+      assert Materializer.get_link_values(ctx) == MapSet.new([10])
+
+      # Update where the PK changes but tracked value stays the same
+      Materializer.new_changes(
+        ctx,
+        [
+          %Changes.UpdatedRecord{
+            record: %{"id" => "2", "value" => "10"},
+            old_record: %{"id" => "1", "value" => "10"}
+          }
+        ]
+        |> prep_changes()
+      )
+
+      # Value should still be present
+      assert Materializer.get_link_values(ctx) == MapSet.new([10])
+
+      # No events since the tracked value didn't change
+      refute_received {:materializer_changes, _, _}
+    end
+
     test "events are accumulated across uncommitted fragments", ctx do
       ctx = with_materializer(ctx)
 

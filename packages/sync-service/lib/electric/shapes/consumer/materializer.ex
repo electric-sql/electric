@@ -377,11 +377,14 @@ defmodule Electric.Shapes.Consumer.Materializer do
 
           %Changes.UpdatedRecord{
             key: key,
+            old_key: old_key,
             record: record,
             move_tags: move_tags,
             removed_move_tags: removed_move_tags
           },
           {{index, tag_indices}, counts_and_events} ->
+            # When the primary key doesn't change, old_key may be nil; default to key
+            old_key = old_key || key
             # TODO: this is written as if it supports multiple selected columns, but it doesn't for now
             columns_present = Enum.any?(state.columns, &is_map_key(record, &1))
             has_tag_updates = removed_move_tags != []
@@ -389,12 +392,12 @@ defmodule Electric.Shapes.Consumer.Materializer do
             if columns_present or has_tag_updates do
               tag_indices =
                 tag_indices
-                |> remove_row_from_tag_indices(key, removed_move_tags)
+                |> remove_row_from_tag_indices(old_key, removed_move_tags)
                 |> add_row_to_tag_indices(key, move_tags)
 
               if columns_present do
                 {value, original_string} = cast!(record, state)
-                old_value = Map.fetch!(index, key)
+                {old_value, index} = Map.pop!(index, old_key)
                 index = Map.put(index, key, value)
 
                 # Skip decrement/increment dance if value hasn't changed to avoid
