@@ -20,6 +20,8 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Migrator do
     Logger.metadata(stack_id: stack_id)
     Electric.Telemetry.Sentry.set_tags_context(stack_id: stack_id)
 
+    Logger.notice("Shape database file: #{inspect(ShapeDb.Connection.db_path!(args))}")
+
     with :ok <- apply_migration(stack_id, args, exclusive_mode) do
       {:ok, schedule_optimize(stack_id), :hibernate}
     end
