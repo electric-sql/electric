@@ -20,14 +20,33 @@ defmodule Support.OracleHarness do
         }
       ]
 
-      mutations = [
-        %{name: "update_value", sql: "UPDATE my_table SET some_column = 'new' WHERE id = '1'"}
+      # Batches: list of batches, each batch is a list of transactions,
+      # each transaction is a list of mutations
+      batches = [
+        [  # batch 1
+          [  # transaction 1
+            %{name: "update_value", sql: "UPDATE my_table SET some_column = 'new' WHERE id = '1'"}
+          ]
+        ]
       ]
 
-      test_against_oracle(ctx, shapes, mutations)
+      test_against_oracle(ctx, shapes, batches)
   """
 
   alias Support.OracleHarness.ShapeChecker
+
+  @type shape :: %{
+          name: String.t(),
+          table: String.t(),
+          where: String.t() | nil,
+          columns: [String.t()],
+          pk: [String.t()],
+          optimized: boolean()
+        }
+
+  @type mutation :: %{name: String.t(), sql: String.t()}
+  @type transaction :: [mutation()]
+  @type batch :: [transaction()]
 
   @default_timeout_ms 10_000
   @default_oracle_pool_size 50
@@ -55,6 +74,7 @@ defmodule Support.OracleHarness do
     - :oracle_pool_size - number of parallel oracle connections (default: 50, env: ORACLE_POOL_SIZE)
     - :timeout_ms - timeout for waiting on shapes (default: 10_000)
   """
+  @spec test_against_oracle(map(), [shape()], [batch()], map()) :: :ok
   def test_against_oracle(ctx, shapes, batches, opts \\ %{}) do
     opts = Map.merge(default_opts_from_env(), opts)
     timeout_ms = opts[:timeout_ms] || @default_timeout_ms
