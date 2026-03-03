@@ -59,7 +59,8 @@ defmodule Electric.Shapes.Consumer.Materializer do
       :named_table,
       :public,
       :set,
-      read_concurrency: true
+      read_concurrency: true,
+      write_concurrency: true
     ])
   rescue
     ArgumentError -> :ets.whereis(link_values_table_name(stack_id))
@@ -82,7 +83,7 @@ defmodule Electric.Shapes.Consumer.Materializer do
   end
 
   defp genserver_get_link_values(opts) do
-    GenServer.call(name(opts), :get_link_values, :infinity)
+    GenServer.call(name(opts), :get_link_values)
   catch
     :exit, reason ->
       raise "Materializer for stack #{inspect(opts.stack_id)} and handle " <>
