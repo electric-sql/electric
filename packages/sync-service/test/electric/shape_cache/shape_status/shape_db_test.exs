@@ -648,6 +648,17 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDbTest do
         end)
       end
     end
+
+    test "crashing WriteBuffer restarts entire supervision tree", ctx do
+      assert supervisor_pid = GenServer.whereis(ShapeDb.Supervisor.name(ctx.stack_id))
+      super_ref = Process.monitor(supervisor_pid)
+      assert write_buffer_pid = GenServer.whereis(ShapeDb.WriteBuffer.name(ctx.stack_id))
+
+      buffer_ref = Process.monitor(write_buffer_pid)
+      Process.exit(write_buffer_pid, :some_reason)
+      assert_receive {:DOWN, ^buffer_ref, :process, ^write_buffer_pid, :some_reason}
+      assert_receive {:DOWN, ^super_ref, :process, ^supervisor_pid, _}
+    end
   end
 
   describe "pool scaling" do
