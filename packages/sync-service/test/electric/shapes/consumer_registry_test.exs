@@ -279,16 +279,16 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
       assert :ok == Materializer.delete_link_values(ctx.stack_id, handle)
     end
 
-    test "removes cached materializer link values when removing by stack_id", ctx do
+    test "keeps cached materializer link values when removing by stack_id", ctx do
       handle = "handle-1"
       link_values_table = link_values_table_name(ctx.stack_id)
 
       :ets.insert(link_values_table, {handle, MapSet.new([1, 2])})
-      assert [{^handle, _}] = :ets.lookup(link_values_table, handle)
+      assert [{^handle, expected_values}] = :ets.lookup(link_values_table, handle)
 
       :ok = ConsumerRegistry.remove_consumer(handle, ctx.stack_id)
 
-      assert [] == :ets.lookup(link_values_table, handle)
+      assert [{^handle, ^expected_values}] = :ets.lookup(link_values_table, handle)
     end
   end
 

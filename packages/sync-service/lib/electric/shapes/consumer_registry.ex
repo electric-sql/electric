@@ -99,7 +99,6 @@ defmodule Electric.Shapes.ConsumerRegistry do
   @spec remove_consumer(shape_handle(), stack_id()) :: :ok
   def remove_consumer(shape_handle, stack_id) when is_stack_id(stack_id) do
     do_remove_consumer(shape_handle, ets_name(stack_id))
-    Materializer.delete_link_values(stack_id, shape_handle)
   end
 
   @spec do_remove_consumer(shape_handle(), :ets.table()) :: :ok
