@@ -162,7 +162,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
   end
 
   defp init_worker_for_pool(pool_state) do
-    if(Keyword.get(pool_state, :exclusive_mode, false)) do
+    if Keyword.get(pool_state, :exclusive_mode, false) do
       init_worker_exclusive(pool_state)
     else
       init_worker_pooled(pool_state)
@@ -170,8 +170,9 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
   end
 
   defp init_worker_pooled(pool_state) do
-    with mode = Keyword.get(pool_state, :mode, :readwrite),
-         {:ok, conn} <- open(pool_state),
+    mode = Keyword.get(pool_state, :mode, :readwrite)
+
+    with {:ok, conn} <- open(pool_state),
          stmts <- Query.prepare!(conn, mode) do
       {:ok, %__MODULE__{conn: conn, mode: mode, stmts: stmts}}
     end
@@ -183,8 +184,9 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
   # over the same, single, connection since every connection is a separate db
   # in in-memory mode.
   defp init_worker_exclusive(pool_state) do
-    with mode = :readwrite,
-         {:ok, conn} <- open(pool_state, integrity_check: true),
+    mode = :readwrite
+
+    with {:ok, conn} <- open(pool_state, integrity_check: true),
          {:ok, _version} <- migrate(conn, pool_state),
          stmts <- Query.prepare!(conn, mode) do
       {:ok, %__MODULE__{conn: conn, mode: mode, stmts: stmts}}
