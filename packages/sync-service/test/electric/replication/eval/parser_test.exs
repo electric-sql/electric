@@ -702,6 +702,44 @@ defmodule Electric.Replication.Eval.ParserTest do
     end
   end
 
+  describe "validate_order_by/2" do
+    @columns [%{name: "id"}, %{name: "value"}, %{name: "created_at"}]
+
+    test "accepts valid column references" do
+      assert :ok = Parser.validate_order_by("id ASC", @columns)
+      assert :ok = Parser.validate_order_by("value DESC", @columns)
+      assert :ok = Parser.validate_order_by("id ASC, value DESC", @columns)
+      assert :ok = Parser.validate_order_by("created_at ASC NULLS LAST", @columns)
+    end
+
+    test "rejects references to non-existent columns" do
+      assert {:error, "At location " <> _} =
+               Parser.validate_order_by("nonexistent ASC", @columns)
+    end
+
+    test "rejects parameter placeholders" do
+      assert {:error, "At location " <> rest} = Parser.validate_order_by("$1", @columns)
+      assert rest =~ "parameter $1 is not supported in ORDER BY clauses"
+
+      assert {:error, "At location " <> rest} =
+               Parser.validate_order_by("$1 ASC, $2 DESC", @columns)
+
+      assert rest =~ "parameter $1 is not supported in ORDER BY clauses"
+    end
+
+    test "rejects parameter placeholders mixed with valid columns" do
+      assert {:error, "At location " <> rest} =
+               Parser.validate_order_by("id ASC, $1 DESC", @columns)
+
+      assert rest =~ "parameter $1 is not supported in ORDER BY clauses"
+    end
+
+    test "rejects multiple statements" do
+      assert {:error, "Unexpected `;` in order by"} =
+               Parser.validate_order_by("id; DROP TABLE users", @columns)
+    end
+  end
+
   describe "parse_and_validate_expression/3 with parameters" do
     test "uses parameters and save a parsed value" do
       assert {:ok, %Expr{eval: result, query: query}} =
