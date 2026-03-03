@@ -42,7 +42,10 @@ defmodule Electric.Shapes.Filter do
     # {relation, field_name} -> [{dep_handle, field_type}]
     :sublink_field_table,
     # dep_handle -> MapSet(outer_shape_ids)
-    :sublink_dep_table
+    :sublink_dep_table,
+    # MapSet of shape_ids registered in the inverted index — enables O(1) membership
+    # check in the hot path without loading the shape or touching dep ETS tables.
+    :sublink_shapes_set
   ]
 
   @type t :: %Filter{}
@@ -59,7 +62,8 @@ defmodule Electric.Shapes.Filter do
       refs_fun: Keyword.get(opts, :refs_fun, fn _shape -> %{} end),
       stack_id: Keyword.get(opts, :stack_id),
       sublink_field_table: :ets.new(:filter_sublink_field, [:set, :private]),
-      sublink_dep_table: :ets.new(:filter_sublink_dep, [:set, :private])
+      sublink_dep_table: :ets.new(:filter_sublink_dep, [:set, :private]),
+      sublink_shapes_set: MapSet.new()
     }
   end
 
@@ -94,9 +98,9 @@ defmodule Electric.Shapes.Filter do
     if shape.shape_dependencies_handles != [] and
          in_other_shapes?(filter, where_cond_id, shape_id) do
       register_sublink_shape(filter, shape_id, shape)
+    else
+      filter
     end
-
-    filter
   end
 
   defp get_or_create_table_condition(filter, table_name) do
@@ -127,9 +131,12 @@ defmodule Electric.Shapes.Filter do
       :ok -> :ok
     end
 
-    if registered_in_inverted_index?(filter, shape_id, shape) do
-      unregister_sublink_shape(filter, shape_id, shape)
-    end
+    filter =
+      if registered_in_inverted_index?(filter, shape_id) do
+        unregister_sublink_shape(filter, shape_id, shape)
+      else
+        filter
+      end
 
     :ets.delete(filter.shapes_table, shape_id)
 
@@ -236,14 +243,18 @@ defmodule Electric.Shapes.Filter do
         end
       end)
 
+    OpenTelemetry.add_span_attributes("filter.sublink_candidates_count": MapSet.size(candidates))
+
     # Re-evaluate full WHERE for candidates to handle any non-sublink conditions
-    for shape_id <- candidates,
-        shape = get_shape(filter, shape_id),
-        not is_nil(shape),
-        WhereClause.includes_record?(shape.where, record, filter.refs_fun.(shape)),
-        into: MapSet.new() do
-      shape_id
-    end
+    OpenTelemetry.timed_fun("filter.sublink_reeval.duration_µs", fn ->
+      for shape_id <- candidates,
+          shape = get_shape(filter, shape_id),
+          not is_nil(shape),
+          WhereClause.includes_record?(shape.where, record, filter.refs_fun.(shape)),
+          into: MapSet.new() do
+        shape_id
+      end
+    end)
   rescue
     # The named ETS table may not exist during a ConsumerRegistry restart window.
     # Return empty rather than propagating to the broad "return all shapes" fallback.
@@ -314,17 +325,9 @@ defmodule Electric.Shapes.Filter do
   Dep shapes that go through an equality index end up in nested other_shapes and
   must be evaluated normally by `other_shapes_affected`.
   """
-  def registered_in_inverted_index?(_filter, _shape_id, %{shape_dependencies_handles: []}),
-    do: false
-
-  def registered_in_inverted_index?(%Filter{sublink_dep_table: table}, shape_id, shape) do
-    Enum.any?(shape.shape_dependencies_handles, fn dep_handle ->
-      case :ets.lookup(table, dep_handle) do
-        [{_, shape_ids}] -> MapSet.member?(shape_ids, shape_id)
-        [] -> false
-      end
-    end)
-  end
+  @spec registered_in_inverted_index?(t(), shape_id()) :: boolean()
+  def registered_in_inverted_index?(%Filter{sublink_shapes_set: set}, shape_id),
+    do: MapSet.member?(set, shape_id)
 
   defp in_other_shapes?(filter, where_cond_id, shape_id) do
     case :ets.lookup(filter.where_cond_table, where_cond_id) do
@@ -390,6 +393,8 @@ defmodule Electric.Shapes.Filter do
 
       :ets.insert(filter.sublink_dep_table, {dep_handle, MapSet.put(existing_shapes, shape_id)})
     end
+
+    %{filter | sublink_shapes_set: MapSet.put(filter.sublink_shapes_set, shape_id)}
   end
 
   defp unregister_sublink_shape(filter, shape_id, shape) do
@@ -433,5 +438,7 @@ defmodule Electric.Shapes.Filter do
         end
       end
     end
+
+    %{filter | sublink_shapes_set: MapSet.delete(filter.sublink_shapes_set, shape_id)}
   end
 end
