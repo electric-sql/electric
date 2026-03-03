@@ -16,6 +16,8 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Migrator do
     {:ok, stack_id} = Keyword.fetch(args, :stack_id)
     exclusive_mode = Keyword.get(args, :exclusive_mode, false)
 
+    Logger.notice("Shape database file: #{inspect(ShapeDb.Connection.db_path!(args))}")
+
     Process.set_label({:shape_db_migrator, stack_id})
     Logger.metadata(stack_id: stack_id)
     Electric.Telemetry.Sentry.set_tags_context(stack_id: stack_id)

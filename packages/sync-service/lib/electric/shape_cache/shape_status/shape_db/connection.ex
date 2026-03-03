@@ -549,7 +549,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
     end)
   end
 
-  # used in testing
+  # used in testing and logging
   def db_path(pool_state) do
     # Manage compatibility by embedding all versions into the db name rather
     # than embed the values in the db itself and then have to manage schema
@@ -584,14 +584,15 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
           path = Path.join(storage_dir, "meta/shape-db/#{version}.sqlite")
 
           with :ok <- File.mkdir_p(Path.dirname(path)) do
-            if Keyword.get(pool_state, :mode) == :write do
-              Logger.notice("Shape database file: #{inspect(path)}")
-            end
-
             {:ok, path}
           end
       end
     end
+  end
+
+  def db_path!(pool_state) do
+    {:ok, path} = db_path(pool_state)
+    path
   end
 
   defp now, do: System.monotonic_time()
