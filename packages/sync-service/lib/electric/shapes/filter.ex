@@ -288,6 +288,25 @@ defmodule Electric.Shapes.Filter do
     end
   end
 
+  @doc """
+  Returns true if a dep shape is registered in the inverted index, meaning
+  `sublink_affected_shapes` will handle it. Used by WhereCondition to decide
+  whether to skip dep shapes in `other_shapes_affected`.
+
+  Dep shapes reach the inverted index only when they land in the *top-level*
+  other_shapes (i.e. the WHERE clause is non-optimisable). Dep shapes that go
+  through an equality index end up in a *nested* other_shapes and are NOT
+  registered here — they must be evaluated normally by `other_shapes_affected`.
+  """
+  def registered_in_inverted_index?(%Filter{sublink_dep_table: table}, shape_id, shape) do
+    Enum.any?(shape.shape_dependencies_handles, fn dep_handle ->
+      case :ets.lookup(table, dep_handle) do
+        [{_, shape_ids}] -> MapSet.member?(shape_ids, shape_id)
+        [] -> false
+      end
+    end)
+  end
+
   defp in_other_shapes?(filter, where_cond_id, shape_id) do
     case :ets.lookup(filter.where_cond_table, where_cond_id) do
       [{_, {_index_keys, other_shapes}}] -> Map.has_key?(other_shapes, shape_id)
