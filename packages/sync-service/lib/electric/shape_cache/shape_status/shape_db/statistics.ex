@@ -107,8 +107,8 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Statistics do
   def handle_info({ref, read_stats_result}, %{task: %{ref: ref}} = state) do
     state =
       case read_stats_result do
-        {:ok, stats} ->
-          %{state | stats: stats}
+        {:ok, dbstat_available?, stats} ->
+          %{state | enable_stats?: dbstat_available?, stats: stats}
 
         {:error, reason} ->
           Logger.warning(["Failed to read SQLite statistics: ", inspect(reason)])
@@ -190,28 +190,34 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Statistics do
     # and get spurious timeout errors
     task =
       Task.async(fn ->
-        open_connection(state, fn conn ->
-          with {:ok, memstat_available?, dbstat_available?, page_size} <-
-                 initialize_connection(
-                   conn,
-                   state.first_run?,
-                   state.enable_memory_stats?,
-                   state.dbstat_available?
-                 ) do
-            if(dbstat_available?) do
-              with {:ok, stats} <-
-                     Connection.fetch_all(
-                       conn,
-                       stats_query(memstat_available? && include_memory?),
-                       []
-                     ) do
-                {:ok, analyze_stats(stats, page_size)}
+        try do
+          Connection.checkout_write!(state.stack_id, :read_stats, fn %{conn: conn} ->
+            with {:ok, memstat_available?, dbstat_available?, page_size} <-
+                   initialize_connection(
+                     conn,
+                     state.first_run?,
+                     state.enable_memory_stats?,
+                     state.dbstat_available?
+                   ) do
+              if dbstat_available? do
+                with {:ok, stats} <-
+                       Connection.fetch_all(
+                         conn,
+                         stats_query(memstat_available? && include_memory?),
+                         []
+                       ) do
+                  {:ok, dbstat_available?, analyze_stats(stats, page_size)}
+                end
+              else
+                {:ok, dbstat_available?, %__MODULE__{updated_at: DateTime.utc_now()}}
               end
-            else
-              {:ok, %__MODULE__{updated_at: DateTime.utc_now()}}
             end
-          end
-        end)
+          end)
+        catch
+          type, error ->
+            # don't want a failure to read stats to propagate and crash the rest of the stack
+            {:error, Exception.format(type, error, __STACKTRACE__)}
+        end
       end)
 
     %{state | task: task}
