@@ -207,6 +207,9 @@ defmodule Electric.Shapes.Filter.WhereCondition do
       fn ->
         for {shape_id, where} <- other_shapes,
             shape = Filter.get_shape(filter, shape_id),
+            not is_nil(shape),
+            # Dep shapes in other_shapes are handled by the inverted index in Filter
+            shape.shape_dependencies_handles == [],
             WhereClause.includes_record?(where, record, refs_fun.(shape)),
             into: MapSet.new() do
           shape_id

@@ -259,7 +259,7 @@ defmodule Electric.Shapes.Consumer.Materializer do
     {:noreply, %{state | subscribers: MapSet.delete(state.subscribers, pid)}}
   end
 
-  defp link_values_table_name(stack_id) do
+  def link_values_table_name(stack_id) do
     :"Electric.Materializer.LinkValues:#{stack_id}"
   end
 
