@@ -227,15 +227,25 @@ defmodule Electric.Shapes.Filter do
 
           [{_, dep_infos}] ->
             Enum.reduce(dep_infos, acc, fn {dep_handle, field_type}, inner_acc ->
-              with false <- is_nil(string_value),
-                   [{_, linked_values}] <- :ets.lookup(link_values_table, dep_handle),
-                   {:ok, parsed_value} <-
-                     Eval.Env.parse_const(Eval.Env.new(), string_value, field_type),
-                   true <- MapSet.member?(linked_values, parsed_value),
-                   [{_, shape_ids}] <- :ets.lookup(filter.sublink_dep_table, dep_handle) do
-                MapSet.union(inner_acc, shape_ids)
-              else
-                _ -> inner_acc
+              case :ets.lookup(link_values_table, dep_handle) do
+                [] ->
+                  # No cached values yet (materializer not started) — include all dep
+                  # shapes as candidates so the re-eval via refs_fun handles it correctly.
+                  case :ets.lookup(filter.sublink_dep_table, dep_handle) do
+                    [{_, shape_ids}] -> MapSet.union(inner_acc, shape_ids)
+                    [] -> inner_acc
+                  end
+
+                [{_, linked_values}] ->
+                  with false <- is_nil(string_value),
+                       {:ok, parsed_value} <-
+                         Eval.Env.parse_const(Eval.Env.new(), string_value, field_type),
+                       true <- MapSet.member?(linked_values, parsed_value),
+                       [{_, shape_ids}] <- :ets.lookup(filter.sublink_dep_table, dep_handle) do
+                    MapSet.union(inner_acc, shape_ids)
+                  else
+                    _ -> inner_acc
+                  end
               end
             end)
         end
