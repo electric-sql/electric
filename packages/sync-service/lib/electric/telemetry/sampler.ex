@@ -9,9 +9,20 @@ defmodule Electric.Telemetry.Sampler do
   they are only sampled if the parent span is sampled.
   """
 
-  def include_span?("filter." <> _), do: Application.get_env(:electric, :profile_where_clauses?)
-  def include_span?("pg_txn.replication_client.transaction_received"), do: sample?()
-  def include_span?(_), do: true
+  def include_span?(name) do
+    !excluded?(name) && included?(name)
+  end
+
+  defp included?("filter." <> _), do: Application.get_env(:electric, :profile_where_clauses?)
+  defp included?("pg_txn.replication_client.transaction_received"), do: sample?()
+  defp included?(_), do: true
+
+  defp excluded?(name) do
+    case Electric.Config.get_env(:exclude_spans) do
+      nil -> false
+      set -> MapSet.member?(set, name)
+    end
+  end
 
   defp sample? do
     :rand.uniform() <= Electric.Config.get_env(:otel_sampling_ratio)
