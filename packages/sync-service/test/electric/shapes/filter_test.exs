@@ -455,7 +455,9 @@ defmodule Electric.Shapes.FilterTest do
       tables: :ets.tab2list(filter.tables_table) |> Enum.sort(),
       where_cond: :ets.tab2list(filter.where_cond_table) |> Enum.sort(),
       eq_index: :ets.tab2list(filter.eq_index_table) |> Enum.sort(),
-      incl_index: :ets.tab2list(filter.incl_index_table) |> Enum.sort()
+      incl_index: :ets.tab2list(filter.incl_index_table) |> Enum.sort(),
+      sublink_field: :ets.tab2list(filter.sublink_field_table) |> Enum.sort(),
+      sublink_dep: :ets.tab2list(filter.sublink_dep_table) |> Enum.sort()
     }
   end
 

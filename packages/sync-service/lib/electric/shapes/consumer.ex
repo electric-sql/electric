@@ -425,8 +425,9 @@ defmodule Electric.Shapes.Consumer do
       end
     end)
 
-    # Clean up the link values ETS entry for this shape handle, if any.
-    # This prevents stale entries when a dep shape's consumer terminates.
+    # Clean up this shape's link-values ETS entry. This consumer may itself be
+    # a dep shape; removing the entry prevents stale cached values from persisting
+    # after shutdown.
     Materializer.delete_link_values(state.stack_id, state.shape_handle)
 
     # always need to terminate writer to remove the writer ets (which belongs

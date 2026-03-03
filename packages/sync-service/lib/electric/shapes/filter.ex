@@ -38,14 +38,10 @@ defmodule Electric.Shapes.Filter do
     :eq_index_table,
     :incl_index_table,
     :refs_fun,
-    # stack_id is needed to read the shared Materializer link-values ETS table
     :stack_id,
     # {relation, field_name} -> [{dep_handle, field_type}]
-    # Tells the filter which dep handles provide values for a given outer-table field.
-    # Populated only for dep shapes that land in other_shapes (non-indexed WHERE clauses).
     :sublink_field_table,
     # dep_handle -> MapSet(outer_shape_ids)
-    # Reverse map: given a dep handle, which outer shapes depend on it?
     :sublink_dep_table
   ]
 
@@ -93,9 +89,8 @@ defmodule Electric.Shapes.Filter do
 
     WhereCondition.add_shape(filter, where_cond_id, shape_id, shape.where)
 
-    # Register dep shapes in the inverted index, but only when they landed in
-    # other_shapes (non-optimisable WHERE). Indexed dep shapes are already
-    # efficiently handled via the equality/inclusion index + ETS-backed refs_fun.
+    # Only register in the inverted index when the WHERE is non-optimisable
+    # (landed in other_shapes). Indexed dep shapes use the equality/inclusion path.
     if shape.shape_dependencies_handles != [] and
          in_other_shapes?(filter, where_cond_id, shape_id) do
       register_sublink_shape(filter, shape_id, shape)
@@ -227,25 +222,15 @@ defmodule Electric.Shapes.Filter do
 
           [{_, dep_infos}] ->
             Enum.reduce(dep_infos, acc, fn {dep_handle, field_type}, inner_acc ->
-              case :ets.lookup(link_values_table, dep_handle) do
-                [] ->
-                  # No cached values yet (materializer not started) — include all dep
-                  # shapes as candidates so the re-eval via refs_fun handles it correctly.
-                  case :ets.lookup(filter.sublink_dep_table, dep_handle) do
-                    [{_, shape_ids}] -> MapSet.union(inner_acc, shape_ids)
-                    [] -> inner_acc
-                  end
-
-                [{_, linked_values}] ->
-                  with false <- is_nil(string_value),
-                       {:ok, parsed_value} <-
-                         Eval.Env.parse_const(Eval.Env.new(), string_value, field_type),
-                       true <- MapSet.member?(linked_values, parsed_value),
-                       [{_, shape_ids}] <- :ets.lookup(filter.sublink_dep_table, dep_handle) do
-                    MapSet.union(inner_acc, shape_ids)
-                  else
-                    _ -> inner_acc
-                  end
+              if record_matches_dep?(
+                   link_values_table,
+                   dep_handle,
+                   field_type,
+                   string_value
+                 ) do
+                union_shapes_for_dep(filter, dep_handle, inner_acc)
+              else
+                inner_acc
               end
             end)
         end
@@ -258,6 +243,40 @@ defmodule Electric.Shapes.Filter do
         WhereClause.includes_record?(shape.where, record, filter.refs_fun.(shape)),
         into: MapSet.new() do
       shape_id
+    end
+  rescue
+    # The named ETS table may not exist during a ConsumerRegistry restart window.
+    # Return empty rather than propagating to the broad "return all shapes" fallback.
+    ArgumentError -> MapSet.new()
+  end
+
+  # Returns true if the record's field value is present in the dep handle's
+  # cached link values, or if no cached values exist yet (optimistic inclusion).
+  defp record_matches_dep?(link_values_table, dep_handle, _field_type, nil = _string_value) do
+    # Null field values never match link values, but we still include
+    # candidates when no cache exists (materializer not started).
+    :ets.lookup(link_values_table, dep_handle) == []
+  end
+
+  defp record_matches_dep?(link_values_table, dep_handle, field_type, string_value) do
+    case :ets.lookup(link_values_table, dep_handle) do
+      [] ->
+        # No cached values yet (materializer not started) -- include as candidate
+        # so the re-eval via refs_fun handles it correctly.
+        true
+
+      [{_, linked_values}] ->
+        case Eval.Env.parse_const(Eval.Env.new(), string_value, field_type) do
+          {:ok, parsed_value} -> MapSet.member?(linked_values, parsed_value)
+          _ -> false
+        end
+    end
+  end
+
+  defp union_shapes_for_dep(filter, dep_handle, acc) do
+    case :ets.lookup(filter.sublink_dep_table, dep_handle) do
+      [{_, shape_ids}] -> MapSet.union(acc, shape_ids)
+      [] -> acc
     end
   end
 
@@ -289,15 +308,15 @@ defmodule Electric.Shapes.Filter do
   end
 
   @doc """
-  Returns true if a dep shape is registered in the inverted index, meaning
-  `sublink_affected_shapes` will handle it. Used by WhereCondition to decide
-  whether to skip dep shapes in `other_shapes_affected`.
+  Returns true if a dep shape is registered in the sublink inverted index.
 
-  Dep shapes reach the inverted index only when they land in the *top-level*
-  other_shapes (i.e. the WHERE clause is non-optimisable). Dep shapes that go
-  through an equality index end up in a *nested* other_shapes and are NOT
-  registered here — they must be evaluated normally by `other_shapes_affected`.
+  Only dep shapes in top-level other_shapes (non-optimisable WHERE) are registered.
+  Dep shapes that go through an equality index end up in nested other_shapes and
+  must be evaluated normally by `other_shapes_affected`.
   """
+  def registered_in_inverted_index?(_filter, _shape_id, %{shape_dependencies_handles: []}),
+    do: false
+
   def registered_in_inverted_index?(%Filter{sublink_dep_table: table}, shape_id, shape) do
     Enum.any?(shape.shape_dependencies_handles, fn dep_handle ->
       case :ets.lookup(table, dep_handle) do

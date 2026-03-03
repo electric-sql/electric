@@ -208,9 +208,7 @@ defmodule Electric.Shapes.Filter.WhereCondition do
         for {shape_id, where} <- other_shapes,
             shape = Filter.get_shape(filter, shape_id),
             not is_nil(shape),
-            # Skip dep shapes only when they're registered in Filter's inverted index
-            # (top-level other_shapes). Dep shapes in nested other_shapes (reached via
-            # an equality index) are NOT registered there and must be evaluated here.
+            # Skip shapes handled by the sublink inverted index
             not Filter.registered_in_inverted_index?(filter, shape_id, shape),
             WhereClause.includes_record?(where, record, refs_fun.(shape)),
             into: MapSet.new() do
