@@ -132,7 +132,7 @@ defmodule Electric.Shapes.Filter do
       :ok -> :ok
     end
 
-    if shape.shape_dependencies_handles != [] do
+    if registered_in_inverted_index?(filter, shape_id, shape) do
       unregister_sublink_shape(filter, shape_id, shape)
     end
 

@@ -259,8 +259,17 @@ defmodule Electric.Shapes.Consumer.Materializer do
     {:noreply, %{state | subscribers: MapSet.delete(state.subscribers, pid)}}
   end
 
+  @spec link_values_table_name(Electric.stack_id()) :: atom()
   def link_values_table_name(stack_id) do
     :"Electric.Materializer.LinkValues:#{stack_id}"
+  end
+
+  @spec delete_link_values(Electric.stack_id(), Electric.shape_handle()) :: :ok
+  def delete_link_values(stack_id, shape_handle) do
+    :ets.delete(link_values_table_name(stack_id), shape_handle)
+    :ok
+  rescue
+    ArgumentError -> :ok
   end
 
   defp link_values_from_counts(value_counts) do

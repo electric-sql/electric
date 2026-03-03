@@ -364,6 +364,8 @@ defmodule Electric.Shapes.Consumer do
       "Materializer down for a dependency: #{handle} (#{inspect(pid)}) (#{inspect(reason)})"
     )
 
+    Materializer.delete_link_values(state.stack_id, handle)
+
     handle_materializer_down(reason, state)
   end
 
@@ -422,6 +424,10 @@ defmodule Electric.Shapes.Consumer do
           "Shapes.Consumer terminating with reason: #{inspect(other)}"
       end
     end)
+
+    # Clean up the link values ETS entry for this shape handle, if any.
+    # This prevents stale entries when a dep shape's consumer terminates.
+    Materializer.delete_link_values(state.stack_id, state.shape_handle)
 
     # always need to terminate writer to remove the writer ets (which belongs
     # to this process). leads to unecessary writes in the case of a deleted
