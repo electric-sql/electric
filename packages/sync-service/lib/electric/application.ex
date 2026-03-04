@@ -155,6 +155,7 @@ defmodule Electric.Application do
           end),
         synchronous: get_env(opts, :shape_db_synchronous),
         cache_size: get_env(opts, :shape_db_cache_size),
+        enable_stats?: get_env(opts, :shape_db_enable_stats),
         enable_memory_stats?: get_env(opts, :shape_db_enable_memory_stats)
       ]
     )

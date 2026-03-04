@@ -19,6 +19,12 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Statistics do
 
   require Logger
 
+  defstruct total_memory: 0,
+            page_cache_overflow: 0,
+            disk_size: 0,
+            data_size: 0,
+            updated_at: nil
+
   @measurement_period 60_000
 
   def name(stack_ref) do
@@ -41,6 +47,9 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Statistics do
     Logger.metadata(stack_id: stack_id)
     Electric.Telemetry.Sentry.set_tags_context(stack_id: stack_id)
 
+    enable_stats? = Keyword.get(args, :enable_stats?, false)
+    # don't need to && with enable_stats because if enable_stats? is false,
+    # we never test this secondary flag
     enable_memory_stats? = Keyword.get(args, :enable_memory_stats?, false)
 
     {:ok,
@@ -48,12 +57,19 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Statistics do
        stack_id: stack_id,
        page_size: 0,
        memstat_available?: false,
-       stats: %{}
-     }, {:continue, {:initialize_stats, enable_memory_stats?}}}
+       stats: %__MODULE__{}
+     }, {:continue, {:initialize_stats, enable_stats?, enable_memory_stats?}}}
   end
 
   @impl GenServer
-  def handle_continue({:initialize_stats, enable_memory_stats?}, state) do
+  def handle_continue({:initialize_stats, _enable_stats? = false, _enable_memory_stats?}, state) do
+    # Because we don't read the stats on init the timer is never triggered and
+    # we never read any stats, ever. We still need this process alive in order
+    # to fulfil requests for stats from the metrics system though.
+    {:noreply, state}
+  end
+
+  def handle_continue({:initialize_stats, _enable_stats?, enable_memory_stats?}, state) do
     %{stack_id: stack_id} = state
 
     {:ok, {page_size, memstat_available?}} =
@@ -95,9 +111,14 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Statistics do
     {:noreply, read_stats(state), :hibernate}
   end
 
+  def handle_info(msg, state) do
+    Logger.warning(["Received unexpected message: ", inspect(msg)])
+    {:noreply, state}
+  end
+
   @impl GenServer
   def handle_call(:statistics, _from, state) do
-    {:reply, {:ok, state.stats}, state}
+    {:reply, {:ok, Map.from_struct(state.stats)}, state}
   end
 
   defp read_stats(%{stack_id: stack_id, memstat_available?: memstat_available?} = state) do
@@ -143,7 +164,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Statistics do
       #
       # 3. PAGECACHE_OVERFLOW (heap fallback): When the pre-allocated page
       #    cache is full, overflow goes to heap. This is already in bytes.
-      %{
+      %__MODULE__{
         total_memory: memory_used + pagecache_used + pagecache_overflow,
         page_cache_overflow: pagecache_overflow,
         disk_size: disk_size,
