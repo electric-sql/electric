@@ -52,7 +52,7 @@ defmodule Electric.Shapes.Api do
     :max_concurrent_requests,
     allow_shape_deletion: false,
     keepalive_interval: 21_000,
-    long_poll_timeout: 20_000,
+    long_poll_timeout: 40_000,
     sse_timeout: 60_000,
     max_age: 60,
     stack_ready_timeout: 5_000,

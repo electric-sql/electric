@@ -182,7 +182,7 @@ When too many clients are connected simultaneously, Electric responds with a `50
 }
 ```
 
-This happens when the number of in-flight requests exceeds the configured limit. Each `live=true` long-poll request holds the connection open for up to 20 seconds (the long-poll timeout), so concurrent connections add up quickly.
+This happens when the number of in-flight requests exceeds the configured limit. Each `live=true` long-poll request holds the connection open for up to 40 seconds (the long-poll timeout), so concurrent connections add up quickly.
 
 Note that this is an **application-level limit**, not a system resource issue. Your server's CPU and memory may look healthy while requests are being rejected.
 
