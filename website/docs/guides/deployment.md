@@ -227,7 +227,51 @@ See the [Telemetry reference](/docs/reference/telemetry#opentelemetry) for confi
 
 Electric is designed to run behind a caching proxy, such as [Nginx](https://nginx.org/en), [Caddy](https://caddyserver.com), [Varnish](https://varnish-cache.org) or a CDN like [Cloudflare](https://www.cloudflare.com/en-gb/application-services/products/cdn) or [Fastly](https://www.fastly.com/products/cdn). You don't _have_ to run a proxy in front of Electric but you will benefit from radically better performance if you do.
 
-See the [Caching section](/docs/api/http#caching) of the HTTP API docs and the [Proxy costs guide](/docs/guides/proxy-costs) for more information.
+See the [Caching section](/docs/api/http#caching) of the HTTP API docs for more information.
+
+### Proxy costs
+
+Understanding the request pattern Electric generates is key to managing proxy costs.
+
+Electric uses [long polling](/docs/api/http#live-mode) (or [SSE](/docs/api/http#server-sent-events-sse)) to keep clients in sync. When a client subscribes to a [Shape](/docs/guides/shapes), it makes an initial sync request (which can be cached), then switches into live mode where long-poll requests are held open until new data arrives or a timeout expires. When the long-poll returns, the client immediately reconnects. This means **every connected client generates a steady stream of HTTP requests**, even when no data is changing.
+
+The request rate per shape subscription is `1 / long_poll_timeout`. With the default 40-second timeout, that's 1.5 requests/minute per shape per client. For example, 1,000 concurrent users each subscribing to 15 shapes generates:
+
+```
+1,000 × 15 / 40 = 375 requests/second → ~972 million requests/month
+```
+
+On a **serverless platform** like Cloudflare Workers (at [$0.30 per million requests](https://developers.cloudflare.com/workers/platform/pricing/)), that's roughly **$290/month** just in request costs.
+
+> [!WARNING] Serverless is easy but not always cheap
+> Serverless platforms like Cloudflare Workers, Vercel Functions and AWS Lambda charge per-request. They were designed for short-lived request-response cycles, not for holding thousands of long-polling connections. The steady request volume from long polling can add up fast.
+>
+> A **dedicated server or VM** is often dramatically cheaper for this workload.
+
+#### Use a server instead of serverless
+
+Serverless platforms charge per request. Long-polling workloads generate a high volume of requests that are mostly idle (waiting for data). A dedicated server handles this much more efficiently.
+
+A **$5–10/month VM** running [Caddy](https://caddyserver.com), [Nginx](https://nginx.org), or a simple Node.js/Bun proxy can handle the same workload that costs hundreds of dollars on serverless:
+
+| Approach | ~Cost for 1k users, 15 shapes |
+| --- | --- |
+| Cloudflare Workers | ~$600/month |
+| Vercel Functions | Higher (shorter timeouts, more reconnects) |
+| Caddy on a $5 VM | ~$5/month |
+| Node.js on a $10 VM | ~$10/month |
+
+Servers excel at holding many concurrent connections open with minimal resource usage. A single VM can comfortably hold tens of thousands of concurrent long-poll connections.
+
+#### Don't expect high cache-hit rates on live requests
+
+A common misconception is that putting Electric behind a CDN should yield near-100% cache-hit rates. In practice, **live-mode requests are usually cache misses** because each request is waiting for *new* data. Cache-hit rates of 10–20% on overall traffic are normal when most requests are live-mode long polls.
+
+High cache-hit rates happen when:
+- Many clients request the **same shape's initial sync** data
+- You have popular, slowly-changing shapes where [request collapsing](/docs/api/http#collapsing-live-requests) can help
+
+The primary value of a CDN with Electric is **accelerating initial sync** and **request collapsing**, not caching live-mode responses.
 
 ## 3. Connecting your app
 

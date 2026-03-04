@@ -249,7 +249,7 @@ Electric works with [any Postgres with logical replication](/docs/guides/deploym
 
 You can proxy requests to Electric either [through your backend API](/docs/guides/auth#it-s-all-http), or through a cloud worker. [Cloudflare](/docs/integrations/cloudflare) is a great choice for hosting workers because it only charges for actual processing time (not for wall clock time holding [sync connections](/docs/api/http#live-mode) open).
 
-See the [Proxy costs guide](/docs/guides/proxy-costs) for strategies to minimize the cost of proxying sync requests, including when to use a server instead of serverless.
+See the [Proxy costs](/docs/guides/deployment#proxy-costs) section of the Deployment guide for strategies to minimize the cost of proxying sync requests, including when to use a server instead of serverless.
 
 ### Other stacks
 
