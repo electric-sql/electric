@@ -56,49 +56,84 @@ defmodule Electric.Shapes.Consumer.ChangeHandling do
         acc,
         count
       ) do
-    if not change_visible_in_resolved_move_ins?(change, state, ctx) and
-         not change_will_be_covered_by_move_in?(change, state, ctx) do
-      case Shape.convert_change(shape, change,
-             stack_id: stack_id,
-             shape_handle: shape_handle,
-             extra_refs: ctx.extra_refs
-           ) do
-        [] ->
-          do_process_changes(rest, state, ctx, acc, count)
+    case decide_action_for_change(change, state, ctx) do
+      {false, false} ->
+        do_process_changes(rest, state, ctx, acc, count)
 
-        [change] ->
-          state = State.track_change(state, ctx.xid, change)
-          do_process_changes(rest, state, ctx, [change | acc], count + 1)
-      end
-    else
-      do_process_changes(rest, state, ctx, acc, count)
+      {false, true} ->
+        state = shadow_key(state, ctx.xid, change)
+        do_process_changes(rest, state, ctx, acc, count)
+
+      {true, shadow?} ->
+        case Shape.convert_change(shape, change,
+               stack_id: stack_id,
+               shape_handle: shape_handle,
+               extra_refs: ctx.extra_refs
+             ) do
+          [] ->
+            state = if shadow?, do: shadow_key(state, ctx.xid, change), else: state
+            do_process_changes(rest, state, ctx, acc, count)
+
+          [converted] ->
+            state = State.track_change(state, ctx.xid, converted)
+            state = if shadow?, do: shadow_key(state, ctx.xid, change), else: state
+            do_process_changes(rest, state, ctx, [converted | acc], count + 1)
+        end
     end
   end
 
-  defp change_visible_in_resolved_move_ins?(change, state, ctx) do
-    Consumer.MoveIns.change_already_visible?(state.move_handling_state, ctx.xid, change)
+  # Returns {emit :: boolean(), shadow :: boolean()} telling the caller whether to
+  # write the WAL change to the log and whether to record the key in touch_tracker
+  # so that move-in results skip this key.
+  @spec decide_action_for_change(Changes.change(), State.t(), map()) ::
+          {boolean(), boolean()}
+
+  # 1. Already visible in RESOLVED (filtering) move-ins → skip entirely
+  defp decide_action_for_change(change, state, ctx) do
+    if Consumer.MoveIns.change_already_visible?(state.move_handling_state, ctx.xid, change) do
+      {false, false}
+    else
+      decide_action_for_change_inner(change, state, ctx)
+    end
   end
 
-  defp change_will_be_covered_by_move_in?(%Changes.DeletedRecord{}, _, _), do: false
+  # 2. DELETE: always emit, shadow if old sublink value is in any waiting move-in
+  defp decide_action_for_change_inner(%Changes.DeletedRecord{} = change, state, _ctx) do
+    old_in_mi? = old_value_in_pending_move_in?(change, state)
+    {true, old_in_mi?}
+  end
 
-  defp change_will_be_covered_by_move_in?(change, state, ctx) do
+  # 3/4. INSERT or UPDATE
+  defp decide_action_for_change_inner(change, state, ctx) do
     referenced_values = get_referenced_values(change, state)
+    new_in_mi? = change_visible_in_unresolved_move_ins_for_values?(referenced_values, state, ctx)
 
-    if change_visible_in_unresolved_move_ins_for_values?(referenced_values, state, ctx) do
-      sublink_changed? =
-        is_struct(change, Changes.UpdatedRecord) and sublink_value_changed?(change, state)
+    sublink_changed? =
+      is_struct(change, Changes.UpdatedRecord) and sublink_value_changed?(change, state)
 
-      if sublink_changed? do
-        # When the sublink value changed, we can only skip if a KNOWN snapshot
-        # confirms coverage. With nil snapshot the move-in query might see the
-        # old sublink value and not return this row, causing data loss.
-        change_covered_by_known_snapshot?(referenced_values, state, ctx) and
-          where_clause_matches?(change, state, ctx)
+    if sublink_changed? do
+      # Case 4: UPDATE with sublink change
+      old_in_mi? = old_value_in_pending_move_in?(change, state)
+
+      if new_in_mi? do
+        # New value is in a pending move-in — can we skip?
+        if change_covered_by_known_snapshot?(referenced_values, state, ctx) and
+             where_clause_matches?(change, state, ctx) do
+          {false, old_in_mi?}
+        else
+          {true, old_in_mi?}
+        end
       else
-        where_clause_matches?(change, state, ctx)
+        # New value NOT in any pending move-in
+        {true, old_in_mi?}
       end
     else
-      false
+      # Case 3: INSERT or UPDATE without sublink change
+      if new_in_mi? and where_clause_matches?(change, state, ctx) do
+        {false, false}
+      else
+        {true, false}
+      end
     end
   end
 
@@ -131,6 +166,29 @@ defmodule Electric.Shapes.Consumer.ChangeHandling do
       {:ok, value} = Runner.execute_for_record(expr, change.record)
       {path, value}
     end)
+  end
+
+  defp get_referenced_values_from_old(%{old_record: old_record}, state) do
+    state.shape.subquery_comparison_expressions
+    |> Map.new(fn {path, expr} ->
+      {:ok, value} = Runner.execute_for_record(expr, old_record)
+      {path, value}
+    end)
+  end
+
+  defp old_value_in_pending_move_in?(change, state) do
+    old_values = get_referenced_values_from_old(change, state)
+    MoveIns.values_in_any_pending_move_in?(state.move_handling_state, old_values)
+  end
+
+  defp shadow_key(%State{move_handling_state: move_handling_state} = state, xid, %{key: key}) do
+    %{
+      state
+      | move_handling_state: %{
+          move_handling_state
+          | touch_tracker: Map.put(move_handling_state.touch_tracker, key, xid)
+        }
+    }
   end
 
   defp change_visible_in_unresolved_move_ins_for_values?(referenced_values, state, ctx) do

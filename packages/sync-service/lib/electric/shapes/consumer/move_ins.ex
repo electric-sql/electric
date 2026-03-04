@@ -211,6 +211,25 @@ defmodule Electric.Shapes.Consumer.MoveIns do
     end)
   end
 
+  @doc """
+  Check if the given referenced values match any waiting move-in's moved values.
+  Unlike `change_visible_in_unresolved_move_ins_for_values?/3`, this does NOT check
+  snapshot coverage — it's a pure membership test used to decide whether to shadow
+  the old sublink value during change processing.
+  """
+  @spec values_in_any_pending_move_in?(t(), map()) :: boolean()
+  def values_in_any_pending_move_in?(
+        %__MODULE__{waiting_move_ins: waiting_move_ins},
+        referenced_values
+      ) do
+    Enum.any?(Map.values(waiting_move_ins), fn {_snapshot, {path, moved_values}} ->
+      case Map.fetch(referenced_values, path) do
+        {:ok, value} -> MapSet.member?(moved_values, value)
+        :error -> false
+      end
+    end)
+  end
+
   def change_visible_in_unresolved_move_ins_for_values?(
         %__MODULE__{waiting_move_ins: waiting_move_ins},
         referenced_values,
