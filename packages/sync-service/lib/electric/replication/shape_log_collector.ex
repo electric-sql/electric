@@ -545,6 +545,12 @@ defmodule Electric.Replication.ShapeLogCollector do
       "shape_log_collector.affected_shape_count": affected_shape_count
     )
 
+    OpenTelemetry.execute(
+      [:electric, :shape_log_collector, :transaction],
+      %{affected_shape_count: affected_shape_count},
+      %{stack_id: state.stack_id}
+    )
+
     OpenTelemetry.start_interval(:"shape_log_collector.publish.duration_µs")
     context = OpenTelemetry.get_current_context()
 
