@@ -1,0 +1,200 @@
+# skills/_artifacts/skill_tree.yaml
+library:
+  name: '@electric-sql/client'
+  version: '1.5.10'
+  repository: 'https://github.com/electric-sql/electric'
+  description: 'Read-path sync engine for Postgres that streams real-time data changes to clients via HTTP shapes.'
+generated_from:
+  domain_map: '_artifacts/domain_map.yaml'
+  skill_spec: '_artifacts/skill_spec.md'
+generated_at: '2026-03-04'
+
+skills:
+  - name: 'Electric Shapes'
+    slug: 'electric-shapes'
+    type: 'core'
+    domain: 'syncing-data'
+    path: 'skills/electric-shapes/SKILL.md'
+    package: 'packages/typescript-client'
+    description: >
+      Configure ShapeStream and Shape to sync a Postgres table to the client.
+      Covers table, where, columns, replica mode, custom type parsers
+      (timestamptz, jsonb), column mappers (snake_case/camelCase), offset/handle
+      resumption, onError retry semantics, backoff options, log modes, and
+      requestSnapshot/fetchSnapshot for on-demand subsets.
+    sources:
+      - 'electric-sql/electric:packages/typescript-client/src/client.ts'
+      - 'electric-sql/electric:packages/typescript-client/src/shape.ts'
+      - 'electric-sql/electric:packages/typescript-client/src/types.ts'
+      - 'electric-sql/electric:packages/typescript-client/src/parser.ts'
+      - 'electric-sql/electric:packages/typescript-client/src/column-mapper.ts'
+      - 'electric-sql/electric:website/docs/guides/shapes.md'
+    references:
+      - 'references/where-clause.md'
+      - 'references/type-parsers.md'
+
+  - name: 'Electric Proxy and Auth'
+    slug: 'electric-proxy-auth'
+    type: 'core'
+    domain: 'securing-access'
+    path: 'skills/electric-proxy-auth/SKILL.md'
+    package: 'packages/typescript-client'
+    description: >
+      Set up a server-side proxy to forward Electric shape requests. Covers
+      ELECTRIC_PROTOCOL_QUERY_PARAMS forwarding, server-side shape definition
+      (table/where/params), content-encoding/content-length header cleanup,
+      CORS configuration for Electric response headers, auth token injection,
+      tenant isolation via WHERE positional params, onError 401 token refresh,
+      and subset security (AND semantics).
+    requires:
+      - 'electric-shapes'
+    sources:
+      - 'electric-sql/electric:packages/typescript-client/src/constants.ts'
+      - 'electric-sql/electric:examples/proxy-auth/app/shape-proxy/route.ts'
+      - 'electric-sql/electric:website/docs/guides/auth.md'
+      - 'electric-sql/electric:website/docs/guides/security.md'
+
+  - name: 'Electric Postgres Security'
+    slug: 'electric-postgres-security'
+    type: 'security'
+    domain: 'securing-access'
+    path: 'skills/electric-postgres-security/SKILL.md'
+    package: 'packages/typescript-client'
+    description: >
+      Pre-deploy security checklist for Postgres with Electric. Checks
+      REPLICATION role, SELECT grants, CREATE on database, table ownership,
+      REPLICA IDENTITY FULL, publication management (auto vs manual with
+      ELECTRIC_MANUAL_TABLE_PUBLISHING), connection pooler exclusion for
+      DATABASE_URL, and ELECTRIC_POOLED_DATABASE_URL for pooled queries.
+    requires:
+      - 'electric-proxy-auth'
+    sources:
+      - 'electric-sql/electric:website/docs/guides/postgres-permissions.md'
+      - 'electric-sql/electric:website/docs/guides/troubleshooting.md'
+      - 'electric-sql/electric:website/docs/guides/deployment.md'
+
+  - name: 'Electric Schema and Shapes'
+    slug: 'electric-schema-shapes'
+    type: 'core'
+    domain: 'building-features'
+    path: 'skills/electric-schema-shapes/SKILL.md'
+    package: 'packages/typescript-client'
+    description: >
+      Design Postgres schema and Electric shape definitions together for a new
+      feature. Covers single-table shape constraint, WHERE clause design for
+      tenant isolation, column selection for bandwidth, replica mode choice
+      (default vs full for old_value), enum casting in WHERE, txid handshake
+      for optimistic writes with pg_current_xact_id(), and cross-table patterns
+      using multiple shapes with client-side joins.
+    requires:
+      - 'electric-shapes'
+    sources:
+      - 'electric-sql/electric:AGENTS.md'
+      - 'electric-sql/electric:website/docs/guides/shapes.md'
+
+  - name: 'Electric Debugging'
+    slug: 'electric-debugging'
+    type: 'lifecycle'
+    domain: 'running-in-production'
+    path: 'skills/electric-debugging/SKILL.md'
+    package: 'packages/typescript-client'
+    description: >
+      Troubleshoot Electric sync issues. Covers fast-loop detection from CDN/proxy
+      misconfiguration, stale cache diagnosis, MissingHeadersError from CORS,
+      409 shape expired handling, SSE proxy buffering (nginx proxy_buffering off,
+      Caddy flush_interval -1), HTTP/1.1 6-connection limit in local dev (Caddy
+      HTTP/2 proxy fix), WAL growth from replication slots, and Vercel CDN
+      cache key issues.
+    requires:
+      - 'electric-shapes'
+      - 'electric-proxy-auth'
+    sources:
+      - 'electric-sql/electric:packages/typescript-client/src/client.ts'
+      - 'electric-sql/electric:packages/typescript-client/src/fetch.ts'
+      - 'electric-sql/electric:packages/typescript-client/src/error.ts'
+      - 'electric-sql/electric:website/docs/guides/troubleshooting.md'
+
+  - name: 'Electric Deployment'
+    slug: 'electric-deployment'
+    type: 'lifecycle'
+    domain: 'running-in-production'
+    path: 'skills/electric-deployment/SKILL.md'
+    package: 'packages/typescript-client'
+    description: >
+      Deploy Electric via Docker, Docker Compose, or Electric Cloud. Covers
+      DATABASE_URL configuration (direct connection, not pooler),
+      ELECTRIC_SECRET (required since v1.x, ELECTRIC_INSECURE for dev only),
+      wal_level=logical, max_replication_slots, ELECTRIC_STORAGE_DIR persistence,
+      ELECTRIC_POOLED_DATABASE_URL for pooled queries, IPv6 with
+      ELECTRIC_DATABASE_USE_IPV6, Kubernetes readiness vs liveness probes,
+      and replication slot cleanup.
+    sources:
+      - 'electric-sql/electric:website/docs/guides/deployment.md'
+      - 'electric-sql/electric:packages/sync-service/dev/postgres.conf'
+      - 'electric-sql/electric:packages/sync-service/CHANGELOG.md'
+
+  - name: 'Electric Yjs'
+    slug: 'electric-yjs'
+    type: 'composition'
+    domain: 'integrating-with-frameworks'
+    path: 'skills/electric-yjs/SKILL.md'
+    package: 'packages/y-electric'
+    description: >
+      Set up ElectricProvider for real-time collaborative editing with Yjs via
+      Electric shapes. Covers ElectricProvider configuration, document updates
+      shape with BYTEA parser (parseToDecoder), awareness shape at offset='now',
+      LocalStorageResumeStateProvider for efficient reconnection with
+      stableStateVector diff, debounceMs for batching writes, sendUrl PUT
+      endpoint setup, required Postgres schema (ydoc_update, ydoc_awareness
+      tables), sendErrorRetryHandler, and CORS header exposure.
+    requires:
+      - 'electric-shapes'
+    sources:
+      - 'electric-sql/electric:packages/y-electric/src/y-electric.ts'
+      - 'electric-sql/electric:packages/y-electric/src/types.ts'
+      - 'electric-sql/electric:packages/y-electric/src/local-storage-resume-state.ts'
+      - 'electric-sql/electric:packages/y-electric/src/utils.ts'
+      - 'electric-sql/electric:examples/yjs/'
+
+  - name: 'Electric New Feature'
+    slug: 'electric-new-feature'
+    type: 'lifecycle'
+    domain: 'building-features'
+    path: 'skills/electric-new-feature/SKILL.md'
+    package: 'packages/typescript-client'
+    description: >
+      End-to-end guide for adding a new synced feature with Electric: design
+      Postgres schema, define shape, create proxy route, set up TanStack DB
+      collection with electricCollectionOptions, implement optimistic mutations
+      with txid handshake (pg_current_xact_id, awaitTxId), and build live
+      queries. Covers migration from old ElectricSQL (electrify/db pattern),
+      current API patterns (table as query param, handle not shape_id).
+    requires:
+      - 'electric-shapes'
+      - 'electric-proxy-auth'
+      - 'electric-schema-shapes'
+    sources:
+      - 'electric-sql/electric:AGENTS.md'
+      - 'electric-sql/electric:examples/tanstack-db-web-starter/'
+
+  - name: 'Electric ORM'
+    slug: 'electric-orm'
+    type: 'composition'
+    domain: 'integrating-with-frameworks'
+    path: 'skills/electric-orm/SKILL.md'
+    package: 'packages/typescript-client'
+    description: >
+      Use Electric with Drizzle ORM or Prisma for the write path. Covers
+      getting pg_current_xact_id() from ORM transactions (raw SQL in Drizzle
+      tx.execute, Prisma $queryRaw), running migrations that preserve REPLICA
+      IDENTITY FULL, and schema management patterns that work with Electric
+      shapes.
+    requires:
+      - 'electric-shapes'
+      - 'electric-schema-shapes'
+    sources:
+      - 'electric-sql/electric:AGENTS.md'
+      - 'electric-sql/electric:website/docs/guides/troubleshooting.md'
+    subsystems:
+      - 'Drizzle ORM'
+      - 'Prisma'
