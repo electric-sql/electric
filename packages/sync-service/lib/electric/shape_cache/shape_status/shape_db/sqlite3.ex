@@ -24,6 +24,21 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Sqlite3 do
   | multi_step(conn, stmt)              | step loop; returns {:rows, rows}/{:done, rows} |
   | enable_load_extension(conn, bool)   | not supported – always returns error       |
   | bind_parameter_count(stmt)          | column_names heuristic (explain only)      |
+
+  ## How esqlite manages prepared statements
+
+  When `prepare` is called, the NIF allocates an `esqlite3_stmt` resource,
+  immediately calls `enif_release_resource` to drop the C-side reference, and
+  returns the resource wrapped in an Erlang term. From that point the BEAM
+  garbage collector is the sole owner: when no Erlang process holds a reference
+  to the term, the GC calls the registered destructor which runs
+  `sqlite3_finalize`. The NIF also holds an `enif_keep_resource` reference from the
+  statement back to its connection, ensuring the connection is never finalized
+  before all its statements are. There is no explicit finalize or release call
+  exposed — lifetime is entirely GC- driven.
+
+  Hence the `release/1` function is a no-op.
+
   """
 
   # ── Types ──────────────────────────────────────────────────────────────────
@@ -80,7 +95,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Sqlite3 do
   """
   @spec bind(statement(), list()) :: :ok | {:error, term()}
   def bind(stmt, binds) do
-    converted = Enum.map(binds, &convert_bind/1)
+    converted = convert_binds(binds)
     :esqlite3.bind(stmt, converted)
   end
 
@@ -176,12 +191,31 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Sqlite3 do
     0
   end
 
-  # ── Private helpers ────────────────────────────────────────────────────────
+  @doc """
+  Build a file: URI from a path with the given opts as query params
 
-  # Build a SQLite URI from a file path and exqlite-style opts.
-  defp build_uri(":memory:", _opts), do: "file:memory?mode=memory&cache=shared"
+  See: https://sqlite.org/uri.html#uri_filenames_in_sqlite
 
-  defp build_uri(path, opts) do
+  ## Examples
+
+      iex> build_uri(":memory:", [])
+      "file:memory?mode=memory&cache=shared"
+
+      iex> build_uri("/my/path/here", [])
+      "file:/my/path/here?mode=rwc"
+
+      iex> build_uri("/my/path/here", mode: :readonly)
+      "file:/my/path/here?mode=ro"
+
+      iex> build_uri("/my/#path?/is-here", mode: :readonly)
+      "file:/my/%23path%3F/is-here?mode=ro"
+
+      iex> build_uri("/my//path//here", mode: :readwrite)
+      "file:/my/path/here?mode=rwc"
+  """
+  def build_uri(":memory:", _opts), do: "file:memory?mode=memory&cache=shared"
+
+  def build_uri(path, opts) do
     mode =
       case Keyword.get(opts, :mode, []) do
         modes when is_list(modes) ->
@@ -194,7 +228,19 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Sqlite3 do
           "rwc"
       end
 
-    "file:#{URI.encode(path)}?mode=#{mode}"
+    "file:#{URI.encode(Path.absname(path), &unescaped?/1)}?mode=#{mode}"
+  end
+
+  defp unescaped?(?/), do: true
+  defp unescaped?(char), do: URI.char_unreserved?(char)
+
+  # Maps are used for named binds in the form `%{name => bind}`
+  defp convert_binds(binds) when is_map(binds) do
+    Map.new(binds, fn {name, value} -> {name, convert_bind(value)} end)
+  end
+
+  defp convert_binds(binds) when is_list(binds) do
+    Enum.map(binds, &convert_bind/1)
   end
 
   # Convert an exqlite bind value to an esqlite bind value.
@@ -202,5 +248,8 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Sqlite3 do
   # {:blob, binary} tuples for BLOBs.  nil/null map to undefined.
   defp convert_bind(nil), do: :undefined
   defp convert_bind(:null), do: :undefined
-  defp convert_bind(value), do: value
+  defp convert_bind({:blob, _} = blob), do: blob
+  # Deliberately being conservative with the types of binds we support
+  defp convert_bind(value) when is_integer(value) or is_binary(value) or is_float(value),
+    do: value
 end
