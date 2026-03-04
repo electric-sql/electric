@@ -1,7 +1,7 @@
 {
   "name": "@electric-sql/docs",
   "private": true,
-  "version": "0.0.6",
+  "version": "0.0.7",
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",

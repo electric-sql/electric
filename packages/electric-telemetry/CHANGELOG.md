@@ -1,5 +1,12 @@
 # @core/electric-telemetry
 
+## 0.1.7
+
+### Patch Changes
+
+- fa61cc1: Export number of affected shapes per transaction into the global metrics
+- 7e9791c: Delay first collection of statistics so that shape db system has time to start properly
+
 ## 0.1.6
 
 ### Patch Changes

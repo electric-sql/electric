@@ -1,5 +1,11 @@
 # @electric-sql/docs
 
+## 0.0.7
+
+### Patch Changes
+
+- d63e3f5: Disable SQLite metric collection by default
+
 ## 0.0.6
 
 ### Patch Changes
