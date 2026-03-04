@@ -154,14 +154,3 @@ Here's a rough comparison for 1,000 concurrent users subscribing to 15 shapes ea
 | **Switch to a VM** (any of the above) | Same volume | **$5–10 flat** |
 
 The cheapest path is almost always: **use a server, increase the timeout, and pause when inactive**.
-
-## Advanced: splitting non-live and live requests
-
-Electric's sync has two distinct phases with different caching characteristics:
-
-1. **Initial sync (non-live)**: Fetches the current shape data. These requests are heavily cached and benefit greatly from a CDN.
-2. **Live mode**: Long-polls (or SSE) for real-time updates. These requests are rarely cache hits and generate most of the request volume.
-
-One emerging pattern is to **route these phases differently**. Since the CDN doesn't help much for live-mode requests, you could potentially give live-mode requests a short-lived token and have them bypass your proxy entirely, going straight to the Electric server. The initial sync requests would still go through your proxy (and CDN) for caching and authorization.
-
-This split approach could significantly reduce proxy costs for large deployments while keeping the benefits of CDN caching for initial sync. The details of implementing this depend on your authorization model — see the [Auth guide](/docs/guides/auth) for more on proxy-based authorization patterns.
