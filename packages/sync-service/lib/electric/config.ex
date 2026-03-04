@@ -113,7 +113,8 @@ defmodule Electric.Config do
     shape_db_synchronous:
       Electric.ShapeCache.ShapeStatus.ShapeDb.Connection.default!(:synchronous),
     shape_db_cache_size: Electric.ShapeCache.ShapeStatus.ShapeDb.Connection.default!(:cache_size),
-    shape_db_enable_memory_stats: false
+    shape_db_enable_memory_stats: false,
+    exclude_spans: MapSet.new()
   ]
 
   @installation_id_key "electric_installation_id"
@@ -612,6 +613,30 @@ defmodule Electric.Config do
     do: {:ok, Electric.Utils.deobfuscate_password(connection_opts)}
 
   def deobfuscate(other), do: other
+
+  @doc ~S"""
+  Parse a comma-separated string into a MapSet of trimmed values.
+
+  ## Examples
+
+      iex> parse_comma_separated_set!("foo,bar,baz")
+      MapSet.new(["bar", "baz", "foo"])
+
+      iex> parse_comma_separated_set!(" foo , bar , baz ")
+      MapSet.new(["bar", "baz", "foo"])
+
+      iex> parse_comma_separated_set!("single")
+      MapSet.new(["single"])
+
+      iex> parse_comma_separated_set!(",,,")
+      MapSet.new()
+
+      iex> parse_comma_separated_set!("")
+      MapSet.new()
+  """
+  def parse_comma_separated_set!(str) do
+    str |> String.split(",", trim: true) |> Enum.map(&String.trim/1) |> MapSet.new()
+  end
 
   def parse_feature_flags(str) do
     str
