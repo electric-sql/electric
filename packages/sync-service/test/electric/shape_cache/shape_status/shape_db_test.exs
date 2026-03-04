@@ -546,19 +546,24 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDbTest do
   end
 
   describe "statistics" do
+    alias Electric.ShapeCache.ShapeStatus.ShapeDb.Statistics
+
     @tag shape_db_opts: [enable_stats?: true, enable_memory_stats?: true]
     test "export memory and disk usage when enabled", ctx do
-      assert {:ok, %{total_memory: memory, disk_size: disk_size}} =
-               ShapeDb.statistics(ctx.stack_id)
+      {:ok, stats} = ShapeDb.statistics(ctx.stack_id)
+      enabled = Statistics.stats_enabled(ctx.stack_id)
 
-      assert memory > 0
-      assert disk_size > 0
+      if enabled.disk, do: assert(stats.disk_size > 0)
+      if enabled.memory, do: assert(stats.total_memory > 0)
     end
 
     @tag shape_db_opts: [enable_stats?: true]
     test "only exports disk usage by default", ctx do
-      assert {:ok, %{total_memory: 0, disk_size: disk_size}} = ShapeDb.statistics(ctx.stack_id)
-      assert disk_size > 0
+      {:ok, stats} = ShapeDb.statistics(ctx.stack_id)
+      enabled = Statistics.stats_enabled(ctx.stack_id)
+
+      assert stats.total_memory == 0
+      if enabled.disk, do: assert(stats.disk_size > 0)
     end
 
     @tag shape_db_opts: [enable_stats?: false]

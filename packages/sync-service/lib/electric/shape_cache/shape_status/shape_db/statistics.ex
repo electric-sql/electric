@@ -39,6 +39,23 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Statistics do
     GenServer.call(name(stack_id), :statistics)
   end
 
+  @doc """
+  Returns a map describing which stat categories are currently operational.
+
+      %{disk: true, memory: false}
+
+  `disk` is `true` when the `dbstat` virtual table is available in the
+  SQLite build (used to report `disk_size` / `data_size`).
+
+  `memory` is `true` when the `memstat` loadable extension was successfully
+  loaded (requires `ELECTRIC_SHAPE_DB_ENABLE_MEMORY_STATS=true` *and* the
+  `ExSqlean` extension being present and loadable).
+  """
+  @spec stats_enabled(term()) :: %{disk: boolean(), memory: boolean()}
+  def stats_enabled(stack_id) do
+    GenServer.call(name(stack_id), :stats_enabled)
+  end
+
   @impl GenServer
   def init(args) do
     stack_id = Keyword.fetch!(args, :stack_id)
@@ -56,6 +73,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Statistics do
      %{
        stack_id: stack_id,
        page_size: 0,
+       dbstat_available?: true,
        memstat_available?: false,
        stats: %__MODULE__{}
      }, {:continue, {:initialize_stats, enable_stats?, enable_memory_stats?}}}
@@ -121,15 +139,37 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Statistics do
     {:reply, {:ok, Map.from_struct(state.stats)}, state}
   end
 
-  defp read_stats(%{stack_id: stack_id, memstat_available?: memstat_available?} = state) do
-    {:ok, stats} =
+  def handle_call(:stats_enabled, _from, state) do
+    {:reply, %{disk: state.dbstat_available?, memory: state.memstat_available?}, state}
+  end
+
+  defp read_stats(
+         %{stack_id: stack_id, dbstat_available?: true, memstat_available?: memstat_available?} =
+           state
+       ) do
+    result =
       ShapeDb.Connection.checkout_write!(stack_id, :read_stats, fn %{conn: conn} ->
         ShapeDb.Connection.fetch_all(conn, stats_query(memstat_available?), [])
       end)
 
-    Process.send_after(self(), :read_stats, @measurement_period)
+    case result do
+      {:ok, stats} ->
+        Process.send_after(self(), :read_stats, @measurement_period)
+        %{state | stats: analyze_stats(stats, state.page_size)}
 
-    %{state | stats: analyze_stats(stats, state.page_size)}
+      {:error, reason} ->
+        Logger.warning(
+          "Failed to read SQLite db stats: #{inspect(reason)}. " <>
+            "Disk size statistics will not be available."
+        )
+
+        %{state | dbstat_available?: false}
+    end
+  end
+
+  # if dbstat is disabled then there are no stats we can collect
+  defp read_stats(%{dbstat_available?: false} = state) do
+    state
   end
 
   defp stats_query(true) do
@@ -168,7 +208,8 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Statistics do
         total_memory: memory_used + pagecache_used + pagecache_overflow,
         page_cache_overflow: pagecache_overflow,
         disk_size: disk_size,
-        data_size: data_size
+        data_size: data_size,
+        updated_at: DateTime.utc_now()
       }
     end)
   end

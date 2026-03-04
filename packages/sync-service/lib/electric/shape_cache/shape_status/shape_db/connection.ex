@@ -1,7 +1,8 @@
 defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
   @moduledoc false
 
-  alias Exqlite.Sqlite3
+  # alias Exqlite.Sqlite3
+  alias Electric.ShapeCache.ShapeStatus.ShapeDb.Sqlite3
   alias Electric.ShapeCache.ShapeStatus.ShapeDb.Query
   alias Electric.ShapeCache.ShapeStatus.ShapeDb.PoolRegistry
   alias Electric.Telemetry.OpenTelemetry
@@ -63,7 +64,16 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
     "PRAGMA user_version=#{@schema_version}"
   ]
 
-  defguardp is_raw_connection(conn) when is_reference(conn)
+  # exqlite represents connections and statements as plain references.
+  # esqlite wraps them in {:esqlite3, ref} and {:esqlite3_stmt, ref} records.
+  # Both guards accept either form so the module works with either backend.
+  defguardp is_raw_connection(conn)
+            when is_reference(conn) or
+                   (is_tuple(conn) and tuple_size(conn) == 2 and elem(conn, 0) == :esqlite3)
+
+  defguardp is_prepared_statement(stmt)
+            when is_reference(stmt) or
+                   (is_tuple(stmt) and tuple_size(stmt) == 2 and elem(stmt, 0) == :esqlite3_stmt)
 
   defstruct [:conn, :stmts]
 
@@ -305,7 +315,8 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
     end
   end
 
-  def fetch_one(conn, stmt, binds) when is_raw_connection(conn) and is_reference(stmt) do
+  def fetch_one(conn, stmt, binds)
+      when is_raw_connection(conn) and is_prepared_statement(stmt) do
     with :ok <- Sqlite3.bind(stmt, binds) do
       case Sqlite3.step(conn, stmt) do
         {:row, row} ->
@@ -333,7 +344,8 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
     end
   end
 
-  def fetch_all(conn, stmt, binds) when is_raw_connection(conn) and is_reference(stmt) do
+  def fetch_all(conn, stmt, binds)
+      when is_raw_connection(conn) and is_prepared_statement(stmt) do
     with :ok <- Sqlite3.bind(stmt, binds),
          {:ok, rows} <- Sqlite3.fetch_all(conn, stmt),
          :ok <- Sqlite3.reset(stmt) do
@@ -348,13 +360,14 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
   end
 
   def fetch_all(conn, stmt, binds, mapper_fun)
-      when is_raw_connection(conn) and is_reference(stmt) do
+      when is_raw_connection(conn) and is_prepared_statement(stmt) do
     with {:ok, rows} <- fetch_all(conn, stmt, binds) do
       {:ok, Enum.map(rows, mapper_fun)}
     end
   end
 
-  def modify(conn, stmt, binds) when is_raw_connection(conn) and is_reference(stmt) do
+  def modify(conn, stmt, binds)
+      when is_raw_connection(conn) and is_prepared_statement(stmt) do
     with :ok <- Sqlite3.bind(stmt, binds),
          :done <- Sqlite3.step(conn, stmt),
          {:ok, changes} <- Sqlite3.changes(conn),
@@ -444,7 +457,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
   end
 
   def stream_query(conn, stmt, row_mapper_fun)
-      when is_raw_connection(conn) and is_reference(stmt) do
+      when is_raw_connection(conn) and is_prepared_statement(stmt) do
     Stream.resource(
       fn -> {:cont, conn, stmt} end,
       fn
