@@ -323,16 +323,9 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
     # close doesn't actually release the resources.
     stmts
     |> Query.active_stmts()
-    |> Enum.each(fn {name, stmt} ->
-      case Sqlite3.release(conn, stmt) do
-        :ok ->
-          :ok
-
-        {:error, reason} ->
-          Logger.warning(
-            "Failed to release prepared statement #{inspect(name)}: #{inspect(reason)}"
-          )
-      end
+    |> Enum.each(fn {_name, stmt} ->
+      # For exqlite release/2 can return an error
+      :ok = Sqlite3.release(conn, stmt)
     end)
 
     close(conn)
