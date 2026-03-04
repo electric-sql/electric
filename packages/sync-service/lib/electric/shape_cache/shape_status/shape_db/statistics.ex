@@ -88,10 +88,10 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Statistics do
        page_size: 0,
        stats: %__MODULE__{},
        connections: 0,
-       first_run?: true,
        exclusive_mode?: Keyword.get(args, :exclusive_mode, false),
        enable_stats?: enable_stats?,
        dbstat_available?: true,
+       memstat_available?: true,
        enable_memory_stats?: enable_memory_stats?,
        measurement_period: measurement_period,
        task: nil,
@@ -107,8 +107,14 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Statistics do
   def handle_info({ref, read_stats_result}, %{task: %{ref: ref}} = state) do
     state =
       case read_stats_result do
-        {:ok, dbstat_available?, stats} ->
-          %{state | enable_stats?: dbstat_available?, stats: stats}
+        {:ok, dbstat_available?, memstat_available?, stats} ->
+          %{
+            state
+            | enable_stats?: dbstat_available?,
+              dbstat_available?: dbstat_available?,
+              memstat_available?: memstat_available?,
+              stats: stats
+          }
 
         {:error, reason} ->
           Logger.warning(["Failed to read SQLite statistics: ", inspect(reason)])
@@ -118,13 +124,6 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Statistics do
           Logger.warning("Failed to read SQLite statistics")
           state
       end
-      |> then(fn
-        %{first_run?: true} = state ->
-          %{state | first_run?: false}
-
-        state ->
-          state
-      end)
 
     {:noreply, state}
   end
@@ -164,28 +163,28 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Statistics do
   end
 
   def handle_cast(:initialize, state) do
-    {:noreply, read_stats(state, _force = true)}
+    {:noreply, read_stats(state, _force = true, _first_run? = true)}
   end
 
-  defp read_stats(state, force? \\ false)
+  defp read_stats(state, force? \\ false, first_run? \\ false)
 
   # If the pools have no open connections, then don't read memory usage because
   # the report would only include memory used by the temporary statistics
   # connection. We're assuming that 0 open connections == 0 sqlite memory
   # usage, which seems reasonable
-  defp read_stats(%{connections: 0} = state, false) do
-    do_read_stats(state, false)
+  defp read_stats(%{connections: 0} = state, false, first_run?) do
+    do_read_stats(state, false, first_run?)
   end
 
-  defp read_stats(%{enable_stats?: false} = state, _force?) do
+  defp read_stats(%{enable_stats?: false} = state, _force?, _first_run?) do
     state
   end
 
-  defp read_stats(state, _force?) do
-    do_read_stats(state, true)
+  defp read_stats(state, _force?, first_run?) do
+    do_read_stats(state, true, first_run?)
   end
 
-  defp do_read_stats(state, include_memory?) do
+  defp do_read_stats(state, include_memory?, first_run?) do
     # Read the stats in an async task so that we don't block reading the stats
     # and get spurious timeout errors
     task =
@@ -195,7 +194,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Statistics do
             with {:ok, memstat_available?, dbstat_available?, page_size} <-
                    initialize_connection(
                      conn,
-                     state.first_run?,
+                     first_run?,
                      state.enable_memory_stats?,
                      state.dbstat_available?
                    ) do
@@ -206,10 +205,11 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Statistics do
                          stats_query(memstat_available? && include_memory?),
                          []
                        ) do
-                  {:ok, dbstat_available?, analyze_stats(stats, page_size)}
+                  {:ok, dbstat_available?, memstat_available?, analyze_stats(stats, page_size)}
                 end
               else
-                {:ok, dbstat_available?, %__MODULE__{updated_at: DateTime.utc_now()}}
+                {:ok, dbstat_available?, memstat_available?,
+                 %__MODULE__{updated_at: DateTime.utc_now()}}
               end
             end
           end)
@@ -223,40 +223,21 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Statistics do
     %{state | task: task}
   end
 
-  # In exclusive_mode we *must* use a pooled connection because the db maybe
-  # in-memory. This is ok because in this mode we never close the single
-  # connection instance so using it won't prevent closing idle connections.
-  defp open_connection(%{exclusive_mode?: true} = state, fun) do
-    Connection.checkout_write!(state.stack_id, :read_stats, fn %{conn: conn} ->
-      fun.(conn)
-    end)
-  end
-
-  # read the stats over a completely new connection to avoid waking a pool
-  # worker and preventing it from reaching the idle timeout
-  defp open_connection(%{exclusive_mode?: false, pool_opts: pool_opts} = _state, fun) do
-    with {:ok, conn} <- Connection.open(pool_opts) do
-      try do
-        fun.(conn)
-      after
-        Connection.close(conn)
-      end
-    end
-  end
-
   defp initialize_connection(conn, first_run?, enable_memory_stats?, dbstat_available?) do
     memstat_available? =
       if enable_memory_stats? do
         case Connection.enable_extension(conn, "memstat") do
-          :ok ->
-            if first_run?, do: Logger.notice("SQLite memory statistics enabled")
-            true
+          # :ok ->
+          #   if first_run?, do: Logger.notice("SQLite memory statistics enabled")
+          #   true
 
           {:error, reason} ->
-            Logger.warning(
-              "Failed to load memstat SQLite extension: #{inspect(reason)}. " <>
-                "Memory statistics will not be available."
-            )
+            if first_run?,
+              do:
+                Logger.warning(
+                  "Failed to load memstat SQLite extension: #{inspect(reason)}. " <>
+                    "Memory statistics will not be available."
+                )
 
             false
         end
@@ -275,7 +256,9 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Statistics do
             true
 
           :error ->
-            Logger.warning("SQLite disk size statistics will not be available.")
+            if first_run?,
+              do: Logger.warning("SQLite disk size statistics will not be available.")
+
             false
         end
       else

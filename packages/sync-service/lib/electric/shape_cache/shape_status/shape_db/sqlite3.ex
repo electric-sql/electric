@@ -84,7 +84,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Sqlite3 do
   end
 
   @doc "Release a prepared statement.  esqlite relies on GC; this is a no-op."
-  @spec release(connection(), statement()) :: :ok
+  @spec release(connection(), statement()) :: :ok | {:error, term()}
   def release(_conn, _stmt), do: :ok
 
   @doc """

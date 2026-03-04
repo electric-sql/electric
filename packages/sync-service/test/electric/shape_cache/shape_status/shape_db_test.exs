@@ -553,8 +553,8 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDbTest do
       assert {:ok, %{total_memory: memory, disk_size: disk_size}} = wait_statistics(ctx)
       enabled = Statistics.stats_enabled(ctx.stack_id)
 
-      if enabled.disk, do: assert(stats.disk_size > 0)
-      if enabled.memory, do: assert(stats.total_memory > 0)
+      if enabled.disk, do: assert(disk_size > 0)
+      if enabled.memory, do: assert(memory > 0)
     end
 
     @tag shape_db_opts: [enable_stats?: true]
@@ -568,8 +568,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDbTest do
 
     @tag shape_db_opts: [enable_stats?: false]
     test "returns empty values if not enabled", ctx do
-      assert {:ok, %{total_memory: 0, disk_size: disk_size}} = wait_statistics(ctx)
-      if enabled.disk, do: assert(disk_size > 0)
+      assert :error = wait_statistics(ctx)
     end
 
     defp wait_statistics(ctx, attempts \\ 10)
