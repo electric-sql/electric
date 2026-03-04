@@ -82,37 +82,36 @@ defmodule Electric.Shapes.Consumer.ChangeHandling do
   defp change_will_be_covered_by_move_in?(%Changes.DeletedRecord{}, _, _), do: false
 
   defp change_will_be_covered_by_move_in?(change, state, ctx) do
-    # First check if the new record's sublink values are in pending move-ins
     referenced_values = get_referenced_values(change, state)
 
     if change_visible_in_unresolved_move_ins_for_values?(referenced_values, state, ctx) do
-      # For UpdatedRecords where the sublink value changed, we must NOT skip the change.
-      # The move-in query will return this row as an INSERT, which doesn't carry
-      # removed_move_tags. Without the tag transition from the WAL change, the client
-      # will retain the old tag, causing the row to not be properly cleaned up on
-      # subsequent move-outs.
-      if is_struct(change, Changes.UpdatedRecord) and
-           sublink_value_changed?(change, state) do
-        false
-      else
-        # Even if the sublink value is in a pending move-in, we should only skip
-        # this change if the new record actually matches the full WHERE clause.
-        # The move-in query uses the full WHERE clause, so if the record doesn't
-        # match other non-subquery conditions in the WHERE clause, the move-in
-        # won't return this row and we need to process this change normally.
-        case ctx.extra_refs do
-          {_extra_refs_old, extra_refs_new} ->
-            WhereClause.includes_record?(state.shape.where, change.record, extra_refs_new)
+      sublink_changed? =
+        is_struct(change, Changes.UpdatedRecord) and sublink_value_changed?(change, state)
 
-          _ ->
-            # If extra_refs is not a tuple (e.g., empty map in tests), fall back to
-            # the old behavior of skipping the change
-            true
-        end
+      if sublink_changed? do
+        # When the sublink value changed, we can only skip if a KNOWN snapshot
+        # confirms coverage. With nil snapshot the move-in query might see the
+        # old sublink value and not return this row, causing data loss.
+        change_covered_by_known_snapshot?(referenced_values, state, ctx) and
+          where_clause_matches?(change, state, ctx)
+      else
+        where_clause_matches?(change, state, ctx)
       end
     else
       false
     end
+  end
+
+  defp where_clause_matches?(change, state, %{extra_refs: {_old, extra_refs_new}}) do
+    # The move-in query uses the full WHERE clause. If the record doesn't match
+    # non-subquery conditions, the move-in won't return this row.
+    WhereClause.includes_record?(state.shape.where, change.record, extra_refs_new)
+  end
+
+  defp where_clause_matches?(_change, _state, _ctx) do
+    # If extra_refs is not a tuple (e.g., empty map in tests), fall back to
+    # the old behavior of skipping the change
+    true
   end
 
   defp sublink_value_changed?(
@@ -136,6 +135,14 @@ defmodule Electric.Shapes.Consumer.ChangeHandling do
 
   defp change_visible_in_unresolved_move_ins_for_values?(referenced_values, state, ctx) do
     MoveIns.change_visible_in_unresolved_move_ins_for_values?(
+      state.move_handling_state,
+      referenced_values,
+      ctx.xid
+    )
+  end
+
+  defp change_covered_by_known_snapshot?(referenced_values, state, ctx) do
+    MoveIns.change_covered_by_known_snapshot?(
       state.move_handling_state,
       referenced_values,
       ctx.xid
