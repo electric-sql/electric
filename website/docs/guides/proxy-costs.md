@@ -64,13 +64,13 @@ On a **serverless platform** like Cloudflare Workers (at [$0.30 per million requ
 
 ### Increase the long-poll timeout
 
-The single most impactful change you can make. Increasing the timeout directly reduces the request rate. For example, going from 20 seconds to 60 seconds cuts requests by 3x:
+The single most impactful change you can make. Increasing the timeout directly reduces the request rate. For example, going from 20 seconds to 40 seconds cuts requests in half:
 
 ```
-1,000 users × 15 shapes / 60s = 250 req/s  (vs 750 req/s at 20s)
+1,000 users × 15 shapes / 40s = 375 req/s  (vs 750 req/s at 20s)
 ```
 
-Configure this with the [`ELECTRIC_LONG_POLL_TIMEOUT`](/docs/api/config) environment variable on the Electric sync service.
+The default long-poll timeout in the open source Electric sync service is 20 seconds. [Electric Cloud](https://electric-sql.com/product/cloud) uses 40 seconds. If you're self-hosting, you can change the `long_poll_timeout` in your Electric configuration.
 
 ### Pause syncing when the app is inactive
 
@@ -116,7 +116,7 @@ Strategies:
 
 ### Use SSE instead of long polling
 
-[Server-Sent Events (SSE)](/docs/api/http#server-sent-events-sse) maintains a persistent connection instead of reconnecting on every timeout. This eliminates the per-timeout request overhead entirely.
+[Server-Sent Events (SSE)](/docs/api/http#server-sent-events-sse) maintains a persistent connection instead of reconnecting on every timeout. This eliminates the per-timeout request overhead entirely. The SSE connection stays open for its timeout duration (default 60 seconds), during which the server pushes updates as they arrive — no reconnect needed.
 
 Enable SSE by using the `live_sse=true` parameter. Note that SSE requires your proxy to support streaming responses without buffering — see the [SSE proxy configuration](/docs/api/http#server-sent-events-sse) docs.
 
@@ -148,14 +148,20 @@ Here's a rough comparison for 1,000 concurrent users subscribing to 15 shapes ea
 | Strategy | Monthly request volume | Estimated proxy cost |
 | --- | --- | --- |
 | **Baseline** (serverless, 20s timeout) | ~1.94B requests | ~$600 |
-| **Increase timeout to 60s** | ~648M requests | ~$200 |
-| **+ Pause when inactive** (50% reduction) | ~324M requests | ~$100 |
-| **+ Reduce shapes** (15 → 5) | ~108M requests | ~$35 |
+| **Increase timeout to 40s** | ~972M requests | ~$290 |
+| **+ Pause when inactive** (50% reduction) | ~486M requests | ~$145 |
+| **+ Reduce shapes** (15 → 5) | ~162M requests | ~$50 |
 | **Switch to a VM** (any of the above) | Same volume | **$5–10 flat** |
 
 The cheapest path is almost always: **use a server, increase the timeout, and pause when inactive**.
 
-## What's coming next
+## Advanced: splitting non-live and live requests
 
-- **Multiplexing**: Subscribe to multiple shapes over a single connection, dramatically reducing the number of concurrent connections needed. This is especially valuable for apps with many shape subscriptions per user.
-- **Smarter polling**: Adaptive polling intervals based on shape activity, so quiet shapes don't generate unnecessary requests.
+Electric's sync has two distinct phases with different caching characteristics:
+
+1. **Initial sync (non-live)**: Fetches the current shape data. These requests are heavily cached and benefit greatly from a CDN.
+2. **Live mode**: Long-polls (or SSE) for real-time updates. These requests are rarely cache hits and generate most of the request volume.
+
+One emerging pattern is to **route these phases differently**. Since the CDN doesn't help much for live-mode requests, you could potentially give live-mode requests a short-lived token and have them bypass your proxy entirely, going straight to the Electric server. The initial sync requests would still go through your proxy (and CDN) for caching and authorization.
+
+This split approach could significantly reduce proxy costs for large deployments while keeping the benefits of CDN caching for initial sync. The details of implementing this depend on your authorization model — see the [Auth guide](/docs/guides/auth) for more on proxy-based authorization patterns.
