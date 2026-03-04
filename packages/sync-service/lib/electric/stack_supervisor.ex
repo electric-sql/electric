@@ -140,6 +140,10 @@ defmodule Electric.StackSupervisor do
                        type: :pos_integer,
                        default: Electric.Config.default(:conn_max_requests)
                      ],
+                     handler_fullsweep_after: [
+                       type: {:or, [:pos_integer, nil]},
+                       default: nil
+                     ],
                      process_spawn_opts: [type: :map, default: %{}]
                    ]
                  ],
