@@ -227,7 +227,7 @@ See the [Telemetry reference](/docs/reference/telemetry#opentelemetry) for confi
 
 Electric is designed to run behind a caching proxy, such as [Nginx](https://nginx.org/en), [Caddy](https://caddyserver.com), [Varnish](https://varnish-cache.org) or a CDN like [Cloudflare](https://www.cloudflare.com/en-gb/application-services/products/cdn) or [Fastly](https://www.fastly.com/products/cdn). You don't _have_ to run a proxy in front of Electric but you will benefit from radically better performance if you do.
 
-See the [Caching section](/docs/api/http#caching) of the HTTP API docs for more information.
+See the [Caching section](/docs/api/http#caching) of the HTTP API docs and the [Proxy costs guide](/docs/guides/proxy-costs) for more information.
 
 ## 3. Connecting your app
 

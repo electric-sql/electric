@@ -263,6 +263,7 @@ export default defineConfig({
               link: '/docs/guides/postgres-permissions',
             },
             { text: 'Deployment', link: '/docs/guides/deployment' },
+            { text: 'Proxy costs', link: '/docs/guides/proxy-costs' },
             { text: 'Sharding', link: '/docs/guides/sharding' },
             { text: 'Security', link: '/docs/guides/security' },
             { text: 'Troubleshooting', link: '/docs/guides/troubleshooting' },
