@@ -381,6 +381,57 @@ defmodule Electric.Shapes.Consumer.ChangeHandlingTest do
       assert processed.removed_move_tags != []
     end
 
+    test "skips UpdatedRecord with changed sublink value when move-in covers the change and WHERE matches",
+         %{state: state} do
+      # Bug: when the sublink value changes (e.g., parent_id 2→3), the code
+      # unconditionally processes the change even when the move-in covers it.
+      # Per algorithm: if move-in covers + WHERE matches → skip [2].
+      # Without the skip, we get INSERT from convert_change AND INSERT from
+      # move-in results → double INSERT invariant violation.
+
+      # Move-in for parent_id=3 with KNOWN snapshot
+      move_handling_state =
+        MoveIns.new()
+        |> MoveIns.add_waiting(
+          "move-in-for-parent-3",
+          {["$sublink", "0"], MapSet.new([3])}
+        )
+        |> MoveIns.set_snapshot("move-in-for-parent-3", {963, 963, []})
+
+      state = %{state | move_handling_state: move_handling_state}
+
+      # parent_id changes from 5 (not in any linked set) to 3 (in pending move-in)
+      # xid=962 is visible in snapshot {963,963,[]} → covered by move-in
+      change = %UpdatedRecord{
+        relation: {"public", "users"},
+        old_record: %{"id" => "10", "parent_id" => "5", "value" => "hello"},
+        record: %{"id" => "10", "parent_id" => "3", "value" => "hello"},
+        log_offset: LogOffset.new(12345, 0),
+        key: "\"public\".\"users\"/\"10\"",
+        changed_columns: MapSet.new(["parent_id"])
+      }
+
+      # extra_refs: old has nothing (parent_id=5 not in linked set),
+      # new has {3} from the pending move-in
+      ctx = %{
+        xid: 962,
+        extra_refs:
+          {%{["$sublink", "0"] => MapSet.new([])}, %{["$sublink", "0"] => MapSet.new([3])}}
+      }
+
+      {filtered_changes, _state, count, _offset} =
+        ChangeHandling.process_changes([change], state, ctx)
+
+      # Per algorithm (case b): old value (5) NOT in linked set, new value (3)
+      # in pending move-in. Move-in covers this change (xid=962 visible in
+      # snapshot {963,963,[]}). Record matches WHERE clause (parent_id=3 is in
+      # the sublink set {3}). Therefore: skip [2].
+      # If not skipped: convert_change produces INSERT + move-in produces INSERT
+      # = double INSERT invariant violation.
+      assert filtered_changes == []
+      assert count == 0
+    end
+
     test "skips UpdatedRecord when sublink value is unchanged and in a pending move-in",
          %{state: state} do
       # Only a non-sublink field changes — the move-in will return the row with

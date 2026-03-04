@@ -229,6 +229,30 @@ defmodule Electric.Shapes.Consumer.MoveIns do
   end
 
   @doc """
+  Like `change_visible_in_unresolved_move_ins_for_values?/3` but only considers
+  move-ins with a known (non-nil) snapshot. This is needed when the sublink value
+  changed: with nil snapshot we can't guarantee the move-in query will see the new
+  sublink value, so we must not skip the WAL change.
+  """
+  @spec change_covered_by_known_snapshot?(t(), map(), Xid.anyxid()) :: boolean()
+  def change_covered_by_known_snapshot?(
+        %__MODULE__{waiting_move_ins: waiting_move_ins},
+        referenced_values,
+        xid
+      ) do
+    Enum.any?(Map.values(waiting_move_ins), fn {snapshot, {path, moved_values}} ->
+      case Map.fetch(referenced_values, path) do
+        {:ok, value} ->
+          not is_nil(snapshot) and Transaction.visible_in_snapshot?(xid, snapshot) and
+            MapSet.member?(moved_values, value)
+
+        :error ->
+          false
+      end
+    end)
+  end
+
+  @doc """
   Track a touch for a non-delete change.
   Returns updated touch_tracker.
   """
