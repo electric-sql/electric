@@ -191,6 +191,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
           Enum.any?(shape_relations, fn {oid, _} -> MapSet.member?(oids_set, oid) end)
       end)
       |> Enum.map(fn [handle, _] -> handle end)
+      |> Enum.sort()
     end
   end
 
