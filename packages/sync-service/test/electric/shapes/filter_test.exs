@@ -386,6 +386,37 @@ defmodule Electric.Shapes.FilterTest do
           {%{"id" => "8", "an_array" => "{1}"}, false},
           {%{"id" => "7", "an_array" => nil}, false}
         ]
+      },
+      %{
+        where: "1 = ANY(an_array)",
+        records: [
+          {%{"an_array" => "{1}"}, true},
+          {%{"an_array" => "{1,2}"}, true},
+          {%{"an_array" => "{3,2,1}"}, true},
+          {%{"an_array" => "{2}"}, false},
+          {%{"an_array" => "{2,3,4}"}, false},
+          {%{"an_array" => nil}, false}
+        ]
+      },
+      %{
+        where: "1 = ANY(an_array) AND id = 7",
+        records: [
+          {%{"id" => "7", "an_array" => "{1}"}, true},
+          {%{"id" => "7", "an_array" => "{1,2}"}, true},
+          {%{"id" => "7", "an_array" => "{2}"}, false},
+          {%{"id" => "8", "an_array" => "{1}"}, false},
+          {%{"id" => "7", "an_array" => nil}, false}
+        ]
+      },
+      %{
+        where: "id = 7 AND 1 = ANY(an_array)",
+        records: [
+          {%{"id" => "7", "an_array" => "{1}"}, true},
+          {%{"id" => "7", "an_array" => "{1,2}"}, true},
+          {%{"id" => "7", "an_array" => "{2}"}, false},
+          {%{"id" => "8", "an_array" => "{1}"}, false},
+          {%{"id" => "7", "an_array" => nil}, false}
+        ]
       }
     ]
 
@@ -420,7 +451,10 @@ defmodule Electric.Shapes.FilterTest do
       Shape.new!("table", where: "an_array @> '{1,2}'", inspector: @inspector),
       Shape.new!("table", where: "an_array @> '{1,3}'", inspector: @inspector),
       Shape.new!("table", where: "id = 1 AND an_array @> '{1}'", inspector: @inspector),
-      Shape.new!("table", where: "id = 1 AND an_array @> '{1,2}'", inspector: @inspector)
+      Shape.new!("table", where: "id = 1 AND an_array @> '{1,2}'", inspector: @inspector),
+      Shape.new!("table", where: "1 = ANY(an_array)", inspector: @inspector),
+      Shape.new!("table", where: "2 = ANY(an_array)", inspector: @inspector),
+      Shape.new!("table", where: "id = 1 AND 1 = ANY(an_array)", inspector: @inspector)
     ]
 
     filter = Filter.new()

@@ -88,12 +88,41 @@ defmodule Electric.Shapes.Filter.WhereCondition do
     %{operation: "@>", field: field, type: type, value: value, and_where: nil}
   end
 
+  # const = ANY(array_ref) → reuse @> index with [const] as single-element array
+  defp optimise_where(%Func{
+         name: "any",
+         args: [
+           %Func{
+             name: ~s("="),
+             map_over_array_in_pos: 1,
+             args: [%Const{value: value}, %Ref{path: [field], type: {:array, _} = type}]
+           }
+         ]
+       })
+       when not is_nil(value) do
+    %{operation: "@>", field: field, type: type, value: [value], and_where: nil}
+  end
+
+  defp optimise_where(%Func{
+         name: "any",
+         args: [
+           %Func{
+             name: ~s("="),
+             map_over_array_in_pos: 1,
+             args: [%Ref{path: [field], type: {:array, _} = type}, %Const{value: value}]
+           }
+         ]
+       })
+       when not is_nil(value) do
+    %{operation: "@>", field: field, type: type, value: [value], and_where: nil}
+  end
+
   defp optimise_where(%Func{name: "and", args: [arg1, arg2]}) do
     case {optimise_where(arg1), optimise_where(arg2)} do
-      {%{operation: "=", and_where: nil} = params, _} ->
+      {%{operation: op, and_where: nil} = params, _} when op in ["=", "@>"] ->
         %{params | and_where: where_expr(arg2)}
 
-      {_, %{operation: "=", and_where: nil} = params} ->
+      {_, %{operation: op, and_where: nil} = params} when op in ["=", "@>"] ->
         %{params | and_where: where_expr(arg1)}
 
       _ ->
