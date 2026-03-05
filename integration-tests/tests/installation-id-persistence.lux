@@ -13,7 +13,7 @@
 [invoke setup_electric]
 
 [shell electric]
-  ??[info] Starting replication from postgres
+  ??[notice] Starting replication from postgres
 
   !instance_id = Electric.Config.fetch_env!(:instance_id)
   ?"([0-9a-f]{8}-([0-9a-f]{4}-){3}[0-9a-f]{12})"
@@ -37,7 +37,7 @@
 [invoke setup_electric]
 
 [shell electric]
-  ??[info] Starting replication from postgres
+  ??[notice] Starting replication from postgres
 
   # Verify the same installation ID is retained, even though the instance ID has changed
   !{m, f, a} = Electric.Config.get_env(:persistent_kv)

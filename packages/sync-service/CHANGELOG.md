@@ -1,5 +1,208 @@
 # @core/sync-service
 
+## 1.4.12
+
+### Patch Changes
+
+- e423cb7: Add `ELECTRIC_EXCLUDE_SPANS` env var to exclude arbitrary OTel spans by name, helping manage telemetry quota usage.
+- 8fe0a37: Fix head-of-line blocking in ShapeLogCollector for shapes with subqueries. Shapes using `IN (SELECT ...)` clauses were causing 6–14 second SLC stalls under load due to O(N×D) serialised GenServer calls to Materializer. Replaced with concurrent ETS reads via a per-stack link-values cache, and added an inverted index in Filter so dep-shape record changes bypass the O(N) other_shapes scan.
+- 9ea6a31: Ignore failures to rollback a transaction when handling a shape db write exception.
+- 4608e2e: Replace exqlite SQLite driver with esqlite
+- 7e9791c: Run optimize using the write pool rather than using a separate persistent connection even in non-exclusive mode
+- fa61cc1: Export number of affected shapes per transaction into the global metrics
+- d63e3f5: Disable SQLite metric collection by default
+
+## 1.4.11
+
+### Patch Changes
+
+- 58c06d8: Fixed ArithmeticError in `ServeShapePlug.end_telemetry_span/2` when `parse_body` halts before the telemetry span is started. Moved `parse_body` plug after `start_telemetry_span` in the pipeline.
+- 9ca341c: Improve 503 error response when concurrent request limit is exceeded. Change error code from generic `"overloaded"` to `"concurrent_request_limit_exceeded"` and include the request kind and configured limit in the message.
+
+## 1.4.10
+
+### Patch Changes
+
+- 6022ae0: Change info log messages to notice except shape add/remove and relation received
+
+## 1.4.9
+
+### Patch Changes
+
+- 48bbbe3: Implement a write mode in shape consumer that can write transaction fragments directly to the shape log, without buffering the complete transaction in memory.
+
+  The Storage behaviour now includes three new optional callbacks for fragment streaming:
+  - `append_fragment_to_log!/2` — writes log items for a transaction fragment without advancing the committed transaction boundary.
+  - `signal_txn_commit!/2` — advances the committed transaction boundary after all fragments have been written.
+  - `supports_txn_fragment_streaming?/0` — returns `true` if the backend implements the above two callbacks.
+
+  Custom storage backends that do not implement these callbacks will automatically fall back to the default `write_unit=txn` mode (full transaction buffering) with a warning logged at startup.
+
+## 1.4.8
+
+### Patch Changes
+
+- 9c4ace0: Fix out-of-bounds request handler to subscribe to shape events before entering the live request wait loop. Without the subscription, non-live requests that hit the out-of-bounds guard would hang for the full timeout duration (long_poll_timeout/2) instead of recovering when the expected offset becomes available.
+- 8691a61: Make gathering of SQLite memory usage metrics optional and default to off to prevent instability in some environments
+- d14f504: Handle missing memstat SQLite extension gracefully instead of crashing on startup. When the extension is unavailable, memory statistics are simply omitted from the periodic stats collection.
+- 1d1f793: Add `electric-has-data` response header to distinguish data-bearing responses from control-only responses (e.g. long-poll timeouts, `offset=now` requests).
+
+## 1.4.7
+
+### Patch Changes
+
+- ae593c6: Add lock_breaker_guard to optionally disable the lock breaker behaviour
+- c293009: Clean up orphaned shape data when encountering an empty shape db
+- 02cd199: Add exclusive mode with a single read-write sqlite connection to support AWS EFS
+- 9f57a8b: Fix parameter validation rejecting valid sequential params when there are 10 or more of them, due to map keys being iterated in lexicographic rather than numeric order.
+- be42de5: Fix storage race condition when deleting shape during a live poll request
+- e1028b5: Recover shape db startup when opening a corrupt database file
+- 24b0426: Include memory and disk usage statistics from the shape db sqlite instance
+- 27fc808: Handle invalid write operations without blocking the write buffer
+- 7c2d1fe: Fix an infinite recursive loop that API request processes may get stuck in when the consumer process is slow to start or dies unexpectedly, without cleaning up after itself.
+- 8f2f7bd: Handle server clockskew that presents as a -ve replication lag in statistics
+
+## 1.4.6
+
+### Patch Changes
+
+- cc7cfc2: Add disk usage statistics to metrics collection
+
+## 1.4.5
+
+### Patch Changes
+
+- 03943ad: Fix subquery materializer bug where a value toggling across the 0↔1 boundary multiple times in a single batch could lose data by emitting conflicting move_in/move_out events for the same value.
+
+## 1.4.4
+
+### Patch Changes
+
+- 34a240b: fix: metrics from consumer seem to not be emitted because of a struct
+- bbfd752: Fixed a bug where rows with subquery-based WHERE clauses could retain stale move tags when the sublink column value changed during a pending move-in, causing the row to not be properly removed on subsequent move-outs.
+- dfcfa40: Add disk usage telemetry to stacks.
+
+## 1.4.3
+
+### Patch Changes
+
+- f9b25d6: Fix the issue where transactions that had exactly max_batch_size changes weren't written to the shape log.
+
+## 1.4.2
+
+### Patch Changes
+
+- 2a0902e: Fix race condition crash in DependencyLayers when a dependency shape is removed before its dependent shape is registered.
+
+  When a dependency shape's materializer crashes and is removed while a dependent shape is being added, `DependencyLayers.add_after_dependencies/3` would crash with a `FunctionClauseError` due to a missing clause for exhausted layers with unfound dependencies. This would take down the ShapeLogCollector and cascade into OOM failures.
+
+  `add_dependency/3` now returns `{:ok, layers}` or `{:error, {:missing_dependencies, missing}}`, and the ShapeLogCollector handles the error case gracefully instead of crashing.
+
+- 1c20fac: Fix Materializer startup race condition that caused "Key already exists" crashes
+
+  The Materializer subscribed to the Consumer before reading from storage, creating a window where the same record could be delivered twice (via storage AND via new_changes). Now the Consumer returns its current offset on subscription, and the Materializer reads storage only up to that offset.
+
+- 0b9e38c: Fixed a bug where changes were incorrectly skipped when a record's subquery reference value was in a pending move-in, but the record didn't match other non-subquery conditions in the WHERE clause. For example, with a shape `parent_id IN (SELECT ...) AND status = 'published'`, if the parent became active (triggering a move-in) but the child had `status = 'draft'`, the change would incorrectly be skipped instead of being processed as a delete.
+- b134ccb: Fix memory spike during Materializer startup by using lazy stream operations instead of eager Enum functions in `decode_json_stream/1`.
+
+## 1.4.1
+
+### Patch Changes
+
+- b3aa571: Fix missing `electric-offset` header in subset snapshot responses. This header was not being set for subset responses, causing POST subset requests to fail with `MissingHeadersError` in the TypeScript client.
+
+## 1.4.0
+
+### Minor Changes
+
+- 3f257aa: Add POST support for subset snapshots to avoid URL length limits. Clients can now send subset parameters (WHERE clauses, ordering, pagination) in the request body instead of URL query parameters, preventing HTTP 414 errors with complex queries or large IN lists.
+
+## 1.3.4
+
+### Patch Changes
+
+- a1b736f: Fix dependency tracking for nested subqueries when intermediate rows change their linking column without changing the tracked column. Previously, such updates were incorrectly filtered out, causing stale tag tracking that led to incorrect row deletions when the old parent lost its qualifying status.
+- dba090e: Fix RelationTracker not syncing with Configurator after restart
+
+  When the RelationTracker restarts while the Configurator is still running, it now properly notifies the Configurator of the restored filters. Previously, after a RelationTracker restart, subsequent shape removals would not update the publication because the internal filter state was inconsistent.
+
+- ba6dd2c: Optimize shape metadata operations by introducing an ETS-based write-through cache with asynchronous SQLite writes
+
+## 1.3.3
+
+### Patch Changes
+
+- b2d28cf: Fix race condition in Materializer startup where the Materializer would crash if the Consumer died during `await_snapshot_start` or `subscribe_materializer` calls. The Materializer now handles GenServer.call exits gracefully and shuts down cleanly.
+- edd8fe3: Fix race condition crash in ConsumerRegistry when shape is removed during transaction processing
+- d3a79b0: Make rate limit error a known error
+
+## 1.3.2
+
+### Patch Changes
+
+- 8fa682c: Skip hex.pm publish when version already exists to avoid unnecessary CI builds
+- c162905: Fix crash when subquery column is NULL
+
+  Fixes a crash (`ArgumentError: not an iodata term`) when using on-demand sync with subqueries (e.g., `task_id IN (SELECT ...)`) and rows have NULL values in the referenced column.
+
+  **Root cause:** In `make_tags`, the SQL expression `md5('...' || col::text)` returns NULL when `col` is NULL (because `|| NULL` = NULL in PostgreSQL). This NULL propagates through all string concatenation in the row's JSON construction, causing the encoder to receive `nil` instead of valid iodata.
+
+  **Fix:** Namespace column values with a `v:` prefix, and represent NULL as `NULL` (no prefix). This ensures:
+  - NULL values don't propagate through concatenation
+  - NULL and the string literal `'NULL'` produce distinct hashes
+  - No restrictions on what values users can have in their columns
+
+- fe2c6b2: Fix ETS read/write race condition in PureFileStorage
+
+  Fixed a race condition where readers could miss data when using stale metadata to read from ETS while a concurrent flush was clearing the ETS buffer. The fix detects both empty and partial ETS reads and retries with fresh metadata, which will correctly read from disk after the flush completes.
+
+- c4dc4c6: Fix hex.pm publishing for Electric package
+
+## 1.3.1
+
+### Patch Changes
+
+- 5a767e6: Add Move-Out Support for Subqueries in Elixir Client
+- af2a1f4: fix: mark one more service-specific error as known
+- bcda65b: Fix: Return 409 on move-ins/outs for where clauses of the form 'NOT IN (subquery)' since this is not supported yet
+- 795a35d: fix: ensure materializer starting after consumer died doesn't log an error
+
+## 1.3.0
+
+### Minor Changes
+
+- cb9f571: Replace in-memory shape metadata storage with SQLite
+
+### Patch Changes
+
+- b11b8ea: Support multiple subqueries on the same level, returning 409s on move-ins/outs
+- 9d27e85: Fix handling of explicit casts on query parameters
+- 1397e7c: Add function to dynamically re-enable consumer suspension
+
+## 1.2.11
+
+### Patch Changes
+
+- 10c11ac: Disallow multiple subqueries at the same level in where clauses
+- 393eca2: Support OR with subqueries with tagged_subqueries feature flag turned on by returning 409s on move-ins or outs
+- 12ce210: Fix bug with case-sensitive column names in subqueries
+
+## 1.2.10
+
+### Patch Changes
+
+- dd85d67: fix: wrong return value caused metric sending to fail sometimes
+- 3c88770: Remove persistence of metadata from `ShapeStatus` and instead rely on storage for reading and caching.
+- 4a28afa: fix: ensure abscense of a materializer doesn't crash a part of electric
+
+## 1.2.9
+
+### Patch Changes
+
+- 5e936f6: fix: correct refs usage inside shape indices
+- 4803b5e: Minimize off-heap string allocation for high-frequency ShapeLogCollector process.
+- 7804860: fix: ensure correct change handling and transformations on active move-ins
+
 ## 1.2.8
 
 ### Patch Changes

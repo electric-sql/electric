@@ -1,12 +1,14 @@
 <script setup>
-import { watch, onMounted } from 'vue'
+import { watch, onMounted, computed, ref } from 'vue'
 import { useData, useRouter } from 'vitepress'
 import { posthog } from 'posthog-js'
-import { useSidebar } from 'vitepress/theme'
+import { useSidebar, useLocalNav } from 'vitepress/theme'
 
 import DefaultTheme from 'vitepress/theme-without-fonts'
 
 import BlogPostHeader from '../../src/components/BlogPostHeader.vue'
+import LocalNavOutlineDropdown from '../../src/components/LocalNavOutlineDropdown.vue'
+import MarkdownLink from '../../src/components/MarkdownLink.vue'
 import NavSignupButton from '../../src/components/NavSignupButton.vue'
 import SiteFooter from '../../src/components/SiteFooter.vue'
 import UseCaseHeader from '../../src/components/UseCaseHeader.vue'
@@ -39,8 +41,23 @@ onMounted(() => {
 
 const { Layout } = DefaultTheme
 
-const { frontmatter } = useData()
+const { frontmatter, page } = useData()
 const { hasSidebar } = useSidebar()
+const { headers } = useLocalNav()
+
+// Show markdown link on docs pages (same pages that show edit link)
+const showMarkdownLink = computed(() => {
+  return page.value.relativePath?.startsWith('docs') ?? false
+})
+
+// Local nav height for dropdown positioning
+const navHeight = ref(0)
+
+onMounted(() => {
+  navHeight.value = parseInt(
+    getComputedStyle(document.documentElement).getPropertyValue('--vp-nav-height')
+  )
+})
 </script>
 
 <template>
@@ -53,12 +70,32 @@ const { hasSidebar } = useSidebar()
     <template #nav-bar-content-after>
       <NavSignupButton />
     </template>
+    <template #doc-top>
+      <!-- Local nav bar: Medium screens - markdown link floats right -->
+      <div v-if="showMarkdownLink" class="markdown-link-local-nav-container">
+        <MarkdownLink variant="local-nav" />
+      </div>
+      <!-- Small screens: Custom dropdown with markdown link -->
+      <div v-if="showMarkdownLink" class="custom-local-nav-dropdown">
+        <LocalNavOutlineDropdown :headers="headers" :navHeight="navHeight" />
+      </div>
+    </template>
     <template #doc-before>
       <div class="vp-doc" v-if="frontmatter.case">
         <UseCaseHeader />
       </div>
       <div class="vp-doc" v-if="frontmatter.post">
         <BlogPostHeader />
+      </div>
+    </template>
+    <template #aside-outline-before>
+      <!-- Wide screens: Above "On this page" -->
+      <MarkdownLink v-if="showMarkdownLink" variant="aside" />
+    </template>
+    <template #doc-footer-before>
+      <!-- Footer: Right-aligned next to "Edit this page" -->
+      <div v-if="showMarkdownLink" class="markdown-link-footer-container">
+        <MarkdownLink variant="footer" />
       </div>
     </template>
     <template #layout-bottom>

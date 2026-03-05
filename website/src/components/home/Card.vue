@@ -12,7 +12,8 @@ const { background, body, href, icon, image, title } = defineProps([
 <style scoped>
 .card {
   position: relative;
-  display: block;
+  display: flex;
+  flex-direction: column;
   border-radius: 12px;
   background-color: var(--vp-c-bg-soft);
   border: 1px solid rgba(42, 44, 52, 0.5);
@@ -69,7 +70,9 @@ const { background, body, href, icon, image, title } = defineProps([
 }
 .body {
   position: relative;
-  display: block;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
   padding: var(--padding-height)
     calc(var(--padding-width) - var(--extra-padding-width))
     calc(var(--padding-height) - 4px) var(--padding-width);
@@ -94,7 +97,7 @@ const { background, body, href, icon, image, title } = defineProps([
 </style>
 
 <template>
-  <a class="no-visual" :href="href">
+  <a v-if="href" class="no-visual" :href="href">
     <div
       class="card"
       :style="{
@@ -123,4 +126,32 @@ const { background, body, href, icon, image, title } = defineProps([
       </slot>
     </div>
   </a>
+  <div
+    v-else
+    class="card"
+    :style="{
+      backgroundColor: background ? background : 'var(--vp-c-bg-soft)',
+    }"
+  >
+    <slot name="override_contents">
+      <div v-if="image" class="image">
+        <img :src="image" />
+      </div>
+      <div v-if="icon" class="icon">
+        <img :src="icon" />
+      </div>
+      <div
+        class="body"
+        :style="{
+          backgroundColor: background ? background : 'var(--vp-c-bg-soft)',
+        }"
+      >
+        <h3 v-if="title">
+          {{ title }}
+        </h3>
+        <p v-if="body" v-html="body"></p>
+        <slot></slot>
+      </div>
+    </slot>
+  </div>
 </template>

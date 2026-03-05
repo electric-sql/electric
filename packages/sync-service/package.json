@@ -1,9 +1,9 @@
 {
   "name": "@core/sync-service",
   "private": true,
-  "version": "1.2.8",
+  "version": "1.4.12",
   "scripts": {
-    "publish:hex": "mix do deps.get + hex.publish --yes || true",
+    "publish:hex": "../../scripts/publish_hex.sh electric",
     "changeset": "pushd ../..; pnpm changeset; popd"
   }
 }

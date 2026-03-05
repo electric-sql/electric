@@ -20,12 +20,16 @@ export const EXPERIMENTAL_LIVE_SSE_QUERY_PARAM = `experimental_live_sse`
 export const LIVE_SSE_QUERY_PARAM = `live_sse`
 export const FORCE_DISCONNECT_AND_REFRESH = `force-disconnect-and-refresh`
 export const PAUSE_STREAM = `pause-stream`
+export const SYSTEM_WAKE = `system-wake`
 export const LOG_MODE_QUERY_PARAM = `log`
 export const SUBSET_PARAM_WHERE = `subset__where`
 export const SUBSET_PARAM_LIMIT = `subset__limit`
 export const SUBSET_PARAM_OFFSET = `subset__offset`
 export const SUBSET_PARAM_ORDER_BY = `subset__order_by`
 export const SUBSET_PARAM_WHERE_PARAMS = `subset__params`
+export const SUBSET_PARAM_WHERE_EXPR = `subset__where_expr`
+export const SUBSET_PARAM_ORDER_BY_EXPR = `subset__order_by_expr`
+export const CACHE_BUSTER_QUERY_PARAM = `cache-buster` // Random cache buster to bypass stale CDN responses
 
 // Query parameters that should be passed through when proxying Electric requests
 export const ELECTRIC_PROTOCOL_QUERY_PARAMS: Array<string> = [
@@ -41,4 +45,7 @@ export const ELECTRIC_PROTOCOL_QUERY_PARAMS: Array<string> = [
   SUBSET_PARAM_OFFSET,
   SUBSET_PARAM_ORDER_BY,
   SUBSET_PARAM_WHERE_PARAMS,
+  SUBSET_PARAM_WHERE_EXPR,
+  SUBSET_PARAM_ORDER_BY_EXPR,
+  CACHE_BUSTER_QUERY_PARAM,
 ]

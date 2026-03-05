@@ -167,7 +167,7 @@ defmodule Electric.Replication.PublicationManager.Configurator do
             to_configure_list =
               for {_, rel} <- to_configure_replica_identity, do: Utils.relation_to_sql(rel)
 
-            Logger.info(
+            Logger.notice(
               "Configuring publication #{state.publication_name} to " <>
                 "drop #{inspect(to_drop_list)} tables, " <>
                 "add #{inspect(to_add_list)} tables, " <>
@@ -191,7 +191,7 @@ defmodule Electric.Replication.PublicationManager.Configurator do
           )
 
           if MapSet.size(to_add) == 0 and MapSet.size(to_configure_replica_identity) == 0 do
-            Logger.info(fn ->
+            Logger.notice(fn ->
               tables = for {_, rel} <- to_preserve, do: Utils.relation_to_sql(rel)
 
               "Verified publication #{state.publication_name} to include #{inspect(tables)} " <>

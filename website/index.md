@@ -1,28 +1,17 @@
 ---
 layout: home
+title: "Electric"
+titleTemplate: ":title | Data platform for multi-agent"
 hero:
-  name: 'Sync'
-  text: 'solved'
+  name: 'The data platform'
+  text: '<br />for multi-agent'
   tagline: >-
-    Sync makes apps awesome.<br />Electric solves sync.
+    Electric provides the data primitives and&nbsp;infra to build collaborative,
+    <span class="no-wrap">multi-agent systems</span>
   actions:
     - theme: brand
-      text: Sign-up to Cloud
+      text: Start building now »
       link: https://dashboard.electric-sql.cloud/
-    - theme: brand
-      text: Sign-up
-      link: https://dashboard.electric-sql.cloud/
-    - theme: alt
-      text: Quickstart
-      link: /docs/quickstart
-    - theme: alt
-      text: '​'
-      target: '_blank'
-      link: https://github.com/electric-sql/electric
-    - theme: alt
-      text: GitHub
-      target: '_blank'
-      link: https://github.com/electric-sql/electric
   image:
     src: /img/home/zap-with-halo.svg
 ---
@@ -32,15 +21,14 @@ import { onMounted } from 'vue'
 
 import {
   BackedBySection,
+  DeploymentSection,
   GetStartedStrap,
   LatestNewsSection,
   NoSilosStrap,
   OpenSourceSection,
-  PGliteStrap,
+  ProductsSection,
   ScalesToSection,
-  SolvesSyncSection,
-  SyncAwesomeSection,
-  UsedBySection,
+  SolutionsSection,
   WorksWithSection
 } from './src/components/home'
 
@@ -61,44 +49,40 @@ onMounted(() => {
 <div data-template="true" class="hidden" id="works-with-sql-template">
 
 ```sql
-CREATE TABLE projects (
-  id SERIAL PRIMARY KEY,
-  title TEXT UNIQUE
-);
+INSERT INTO todos VALUES ('sync');
+```
 
-CREATE TABLE issues (
-  id SERIAL PRIMARY KEY,
-  project_id INTEGER
-    REFERENCES projects(id)
-);
+</div>
+<div data-template="true" class="hidden" id="works-with-sse-template">
+
+```json
+data: {"type": "text-delta", "delta": "Hi, "}
 ```
 
 </div>
 <div data-template="true" class="hidden" id="works-with-tsx-template">
 
 ```tsx
-function Component({ project }) {
-  const { data } = useShape({
-    params: {
-      table: 'issues',
-      where: `project_id = ${project.id}`,
-    },
-  })
+const Todos = () => {
+  const { data } = useLiveQuery(query =>
+    query
+      .from({ todo: todoCollection })
+      .where(({ todo }) => todo.completed)
+  )
 
-  return <List issues={data} />
+  return <List todos={data} />
 }
 ```
 
 </div>
 
-<SyncAwesomeSection />
-<SolvesSyncSection />
+<SolutionsSection />
+<ProductsSection />
 <WorksWithSection />
+<DeploymentSection />
 <ScalesToSection />
 <NoSilosStrap />
-<UsedBySection />
-<BackedBySection />
-<OpenSourceSection />
-<PGliteStrap />
 <LatestNewsSection />
 <GetStartedStrap />
+<BackedBySection />
+<OpenSourceSection />

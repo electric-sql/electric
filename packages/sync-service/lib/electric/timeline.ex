@@ -36,13 +36,13 @@ defmodule Electric.Timeline do
 
   @spec verify_timeline(timeline(), timeline()) :: check_result()
   defp verify_timeline({pg_id, timeline_id} = timeline, timeline) do
-    Logger.info("Connected to Postgres #{pg_id} and timeline #{timeline_id}")
+    Logger.notice("Connected to Postgres #{pg_id} and timeline #{timeline_id}")
     :ok
   end
 
   defp verify_timeline({pg_id, timeline_id}, nil) do
-    Logger.info("No previous timeline detected.")
-    Logger.info("Connected to Postgres #{pg_id} and timeline #{timeline_id}")
+    Logger.notice("No previous timeline detected.")
+    Logger.notice("Connected to Postgres #{pg_id} and timeline #{timeline_id}")
     :no_previous_timeline
   end
 

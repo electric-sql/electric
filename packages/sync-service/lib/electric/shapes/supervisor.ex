@@ -21,7 +21,7 @@ defmodule Electric.Shapes.Supervisor do
     stack_id = Keyword.fetch!(shape_cache_opts, :stack_id)
     stack_storage = Electric.ShapeCache.Storage.for_stack(stack_id)
 
-    Logger.info("Purging all shapes.")
+    Logger.notice("Purging all shapes.")
     Electric.ShapeCache.Storage.cleanup_all!(stack_storage)
   end
 
@@ -37,9 +37,8 @@ defmodule Electric.Shapes.Supervisor do
     Logger.metadata(stack_id: stack_id)
     Electric.Telemetry.Sentry.set_tags_context(stack_id: stack_id)
 
-    Logger.info("Starting shape replication pipeline")
+    Logger.notice("Starting shape replication pipeline")
 
-    shape_cleaner = Keyword.fetch!(opts, :shape_cleaner)
     log_collector = Keyword.fetch!(opts, :log_collector)
     publication_manager = Keyword.fetch!(opts, :publication_manager)
     consumer_supervisor = Keyword.fetch!(opts, :consumer_supervisor)
@@ -50,7 +49,6 @@ defmodule Electric.Shapes.Supervisor do
     children = [
       {Task.Supervisor,
        name: Electric.ProcessRegistry.name(stack_id, Electric.StackTaskSupervisor)},
-      shape_cleaner,
       log_collector,
       publication_manager,
       consumer_supervisor,

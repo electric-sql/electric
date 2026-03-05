@@ -1,5 +1,149 @@
 # @electric-sql/client
 
+## 1.5.10
+
+### Patch Changes
+
+- 243c7d7: Add multi-tier testing DSL for ShapeStream state machine with fluent scenario builder, transition truth table, algebraic property tests, seeded fuzz testing, and mutation testing.
+
+## 1.5.9
+
+### Patch Changes
+
+- 24b140f: Fix wake detection not re-arming after snapshot pause/resume. In daemon flows using `requestSnapshot` with `changes_only` mode, the wake detection timer was torn down during the pause but never re-armed on resume, causing the stream to behave as if wake detection was never enabled.
+
+## 1.5.8
+
+### Patch Changes
+
+- 8600d25: Add fast-loop detection with automatic cache recovery to ShapeStream. When the client detects rapid requests stuck at the same offset (indicating stale client-side caches or proxy/CDN misconfiguration), it clears the affected shape's cached state and resets the stream to fetch from scratch. If the loop persists, exponential backoff is applied before eventually throwing a diagnostic error.
+- 1e1123b: Fixed `isControlMessage` type guard crashing on messages without a `control` header (e.g. `EventMessage`s or malformed responses). The function previously used a negation check (`!isChangeMessage()`) which misclassified any non-change message as a `ControlMessage`, causing `TypeError: Cannot read property 'control' of undefined` in `Shape.process_fn`. Now uses a positive check for `'control' in message.headers`, consistent with how `isChangeMessage` checks for `'key' in message`.
+- e172d4b: Increase default retry backoff parameters to reduce retry storms when a proxy fails, aligning with industry-standard values (gRPC, AWS). `initialDelay` 100ms → 1s, `multiplier` 1.3 → 2, `maxDelay` 60s → 32s. Reaches cap in 5 retries instead of ~25.
+
+## 1.5.7
+
+### Patch Changes
+
+- ca931d9: Fix BigInt values in subset loading parameters causing `JSON.stringify` to throw "Do not know how to serialize a BigInt". Values from parsed int8 columns can now be passed directly as `requestSnapshot`/`fetchSnapshot` params without manual conversion.
+- 858e13d: Fix on-demand mode (`offset: "now"`) to advance the stream's offset/handle after a cold-start `requestSnapshot()`, so the stream resumes from the snapshot's position rather than the stale `"now"` offset. Prevents updates committed between the snapshot and the stream's next live poll from being missed.
+
+## 1.5.6
+
+### Patch Changes
+
+- 4c7855b: Fix prefetch buffer incorrectly serving cached GET responses to POST subset/snapshot requests that share the same URL, which could route stream chunks into the subset handler.
+- c84d985: Fix handling of deprecated 204 responses from old Electric servers. Previously, a 204 ("no content, you're caught up") only updated `lastSyncedAt` but never transitioned to the live state, so `isUpToDate` stayed false, `live=true` was never added to the URL, and subscribers waiting for the up-to-date signal were never notified. The bug is inert with current servers (which never send 204) but would cause an infinite catch-up polling loop against older servers.
+
+## 1.5.5
+
+### Patch Changes
+
+- e9bc504: Fix `TypeError: Cannot use 'in' operator` crash when a proxy or CDN returns a non-array JSON response from the shape endpoint. Add null-safety to message type guards and throw a proper `FetchError` for non-array responses so the existing retry/backoff infrastructure handles it.
+
+## 1.5.4
+
+### Patch Changes
+
+- 186b8f8: Properly bundle `fetch-event-source`, so consumer use patched version.
+
+  When liveSse mode got introduced, it included `fetch-event-source` which is used instead of built-in `EventSource` because of richer capabilities. However, it had a few assumptions (document/window existence) + bugs, when it comes to aborting. This was patched, however, when building `typescript-client` patched version isn't included and when user uses it - they have unpatched version.
+
+## 1.5.3
+
+### Patch Changes
+
+- 9698b03: Add PauseLock to coordinate pause/resume across visibility changes and snapshot requests, preventing race conditions where one subsystem's resume could override another's pause.
+- b0cbe75: Fix crash when receiving a stale cached response on a resumed session with no schema yet. When the client resumes from a persisted handle/offset, the schema starts undefined. If the first response is stale (expired handle from a misconfigured CDN), the response is ignored and body parsing is skipped — but the code then accesses `schema!`, which is still undefined, causing a parse error. Now the client skips body parsing entirely for ignored stale responses.
+- b0cbe75: Refactor ShapeStream's implicit sync state into an explicit state machine using the OOP state pattern. Each state (Initial, Syncing, Live, Replaying, StaleRetry, Paused, Error) is a separate class carrying only its relevant fields, with transitions producing new immutable state objects. This replaces the previous flat context bag where all fields existed simultaneously regardless of the current state.
+- b0cbe75: Fix infinite loop when the client resumes with a persisted handle that matches an expired handle. The stale cache detection assumed that having a local handle meant it was different from the expired one, so it returned "ignored" instead of retrying with a cache buster. When `localHandle === expiredHandle`, the client would loop forever: fetch stale response, ignore it, retry without cache buster, get the same stale response. Now the client correctly enters stale-retry with a cache buster when its own handle is the expired one.
+
+## 1.5.2
+
+### Patch Changes
+
+- 091a232: Fix ShapeStream hanging after system sleep in non-browser environments (Bun, Node.js). Stale in-flight HTTP requests are now automatically aborted and reconnected on wake, preventing hangs until TCP timeout.
+
+## 1.5.1
+
+### Patch Changes
+
+- 42aee8a: Fix 409 must-refetch error handling in fetchSnapshot. The method now correctly catches FetchError exceptions thrown by the fetch wrapper chain, matching the pattern used by the main request loop.
+- fef494e: Fix stale CDN response incorrectly updating client offset. When a CDN returns a cached response with an expired shape handle, the client now ignores the entire response (including offset) to prevent handle/offset mismatch that would cause server errors.
+
+## 1.5.0
+
+### Minor Changes
+
+- 3f257aa: Add POST support for subset snapshots to avoid URL length limits. Clients can now send subset parameters (WHERE clauses, ordering, pagination) in the request body instead of URL query parameters, preventing HTTP 414 errors with complex queries or large IN lists.
+
+## 1.4.2
+
+### Patch Changes
+
+- a428324: Fix infinite loop in replay mode when CDN returns the same cursor repeatedly. The client now exits replay mode after the first suppressed up-to-date notification, preventing the loop while still correctly suppressing duplicate notifications from cached responses.
+
+## 1.4.1
+
+### Patch Changes
+
+- 6d6e199: Fix infinite loop when response is missing required headers
+
+  When the server returns 200 OK but with missing required headers (like `electric-cursor`), the client would enter an infinite retry loop if `onError` returned `{}`. Now `MissingHeadersError` is treated as non-retryable since it's a configuration issue that won't self-heal.
+
+- 594afee: Fix stale cached responses with expired shape handles
+
+  When a CDN/proxy is misconfigured and serves a stale cached response with an expired shape handle, the client would get into a broken state where the handle was rejected but the offset was still advanced. This fix detects stale responses and triggers a retry with a cache buster parameter to bypass the misconfigured CDN cache.
+
+## 1.4.0
+
+### Minor Changes
+
+- 78fc0ae: Add structured subset params support (whereExpr, orderByExpr) to enable proper columnMapper transformations for subset queries. When TanStack DB sends structured expression data alongside compiled SQL strings, the client can now apply column name transformations (e.g., camelCase to snake_case) before generating the final SQL.
+
+## 1.3.1
+
+### Patch Changes
+
+- f6e7c75: Fix infinite 409 loop when proxy returns stale cached response with expired shape handle.
+
+  **Root cause:** When a 409 response arrives, the client marks the old handle as expired and fetches with a new handle. If a proxy ignores the `expired_handle` cache buster parameter and returns a stale cached response containing the old handle, the client would accept it and enter an infinite 409 loop.
+
+  **The fix:**
+  - In `#onInitialResponse`: Don't accept a shape handle from the response if it matches the expired handle in the expired shapes cache
+  - In `getNextChunkUrl` (prefetch): Don't prefetch the next chunk if the response handle equals the `expired_handle` from the request URL
+  - Added console warnings when this situation is detected to help developers debug proxy misconfigurations
+
+  This provides defense-in-depth against misconfigured proxies that don't include all query parameters in their cache keys.
+
+## 1.3.0
+
+### Minor Changes
+
+- ed98c6b: feat: denote end of injected subset snapshot with an additional message
+
+### Patch Changes
+
+- 8fd8c8f: Fix memory leak from recursive async functions by upgrading TypeScript target to ES2017.
+
+  The ES2016 target caused async/await to be transpiled using the `__async` helper which creates nested Promise chains that cannot be garbage collected when recursive async functions like `requestShape()` call themselves. With ES2017+, native async/await is used which doesn't have this issue.
+
+- 5ab082b: Fix stream stopping after tab visibility changes due to stale aborted requests in PrefetchQueue.
+
+  **Root cause:** When a page is hidden, the stream pauses and aborts in-flight prefetch requests. The aborted promises remained in the PrefetchQueue's internal Map. When the page became visible and the stream resumed, `consume()` returned the stale aborted promise, causing an AbortError to propagate to ShapeStream and stop syncing.
+
+  **The fix:**
+  - `PrefetchQueue.consume()` now checks if the request's abort signal is already aborted before returning it
+  - `PrefetchQueue.abort()` now clears the internal map after aborting controllers
+  - The fetch wrapper clears `prefetchQueue` after calling `abort()` to ensure fresh requests
+
+  Fixes #3460
+
+## 1.2.2
+
+### Patch Changes
+
+- c8ad84a: Fix columnMapper to support loading subsets. When using `columnMapper` with ShapeStream, the `columns` parameter is now properly encoded from application column names (e.g., camelCase) to database column names (e.g., snake_case) before transmission to the server.
+
 ## 1.2.1
 
 ### Patch Changes

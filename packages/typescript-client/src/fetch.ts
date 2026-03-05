@@ -1,6 +1,7 @@
 import {
   CHUNK_LAST_OFFSET_HEADER,
   CHUNK_UP_TO_DATE_HEADER,
+  EXPIRED_HANDLE_QUERY_PARAM,
   LIVE_QUERY_PARAM,
   OFFSET_QUERY_PARAM,
   SHAPE_HANDLE_HEADER,
@@ -43,9 +44,9 @@ export interface BackoffOptions {
 }
 
 export const BackoffDefaults = {
-  initialDelay: 100,
-  maxDelay: 60_000, // Cap at 60s - reasonable for long-lived connections
-  multiplier: 1.3,
+  initialDelay: 1_000,
+  maxDelay: 32_000,
+  multiplier: 2,
   maxRetries: Infinity, // Retry forever - clients may go offline and come back
 }
 
@@ -221,10 +222,21 @@ export function createFetchWithChunkBuffer(
 ): typeof fetch {
   const { maxChunksToPrefetch } = prefetchOptions
 
-  let prefetchQueue: PrefetchQueue
+  let prefetchQueue: PrefetchQueue | undefined
 
   const prefetchClient = async (...args: Parameters<typeof fetchClient>) => {
     const url = args[0].toString()
+    const method = getRequestMethod(args[0], args[1])
+
+    // Prefetch is only valid for GET requests. The prefetch queue matches
+    // requests by URL alone and ignores HTTP method/body, so a POST request
+    // with the same URL would incorrectly consume the prefetched stream
+    // response instead of making its own request.
+    if (method !== `GET`) {
+      prefetchQueue?.abort()
+      prefetchQueue = undefined
+      return fetchClient(...args)
+    }
 
     // try to consume from the prefetch queue first, and if request is
     // not present abort the prefetch queue as it must no longer be valid
@@ -233,7 +245,10 @@ export function createFetchWithChunkBuffer(
       return prefetchedRequest
     }
 
+    // Clear the prefetch queue after aborting to prevent returning
+    // stale/aborted requests on future calls with the same URL
     prefetchQueue?.abort()
+    prefetchQueue = undefined
 
     // perform request and fire off prefetch queue if request is eligible
     const response = await fetchClient(...args)
@@ -340,16 +355,24 @@ class PrefetchQueue {
 
   abort(): void {
     this.#prefetchQueue.forEach(([_, aborter]) => aborter.abort())
+    this.#prefetchQueue.clear()
   }
 
   consume(...args: Parameters<typeof fetch>): Promise<Response> | void {
     const url = args[0].toString()
 
-    const request = this.#prefetchQueue.get(url)?.[0]
+    const entry = this.#prefetchQueue.get(url)
     // only consume if request is in queue and is the queue "head"
     // if request is in the queue but not the head, the queue is being
     // consumed out of order and should be restarted
-    if (!request || url !== this.#queueHeadUrl) return
+    if (!entry || url !== this.#queueHeadUrl) return
+
+    const [request, aborter] = entry
+    // Don't return aborted requests - they will reject with AbortError
+    if (aborter.signal.aborted) {
+      this.#prefetchQueue.delete(url)
+      return
+    }
     this.#prefetchQueue.delete(url)
 
     // fire off new prefetch since request has been consumed
@@ -425,6 +448,21 @@ function getNextChunkUrl(url: string, res: Response): string | void {
   // potentially miss more recent data
   if (nextUrl.searchParams.has(LIVE_QUERY_PARAM)) return
 
+  // don't prefetch if the response handle is the expired handle from the request
+  // this can happen when a proxy serves a stale cached response despite the
+  // expired_handle cache buster parameter
+  const expiredHandle = nextUrl.searchParams.get(EXPIRED_HANDLE_QUERY_PARAM)
+  if (expiredHandle && shapeHandle === expiredHandle) {
+    console.warn(
+      `[Electric] Received stale cached response with expired shape handle. ` +
+        `This should not happen and indicates a proxy/CDN caching misconfiguration. ` +
+        `The response contained handle "${shapeHandle}" which was previously marked as expired. ` +
+        `Check that your proxy includes all query parameters (especially 'handle' and 'offset') in its cache key. ` +
+        `Skipping prefetch to prevent infinite 409 loop.`
+    )
+    return
+  }
+
   nextUrl.searchParams.set(SHAPE_HANDLE_QUERY_PARAM, shapeHandle)
   nextUrl.searchParams.set(OFFSET_QUERY_PARAM, lastOffset)
   nextUrl.searchParams.sort()
@@ -467,3 +505,18 @@ function chainAborter(
 }
 
 function noop() {}
+
+function getRequestMethod(
+  input: Parameters<typeof fetch>[0],
+  init?: Parameters<typeof fetch>[1]
+): string {
+  if (init?.method) {
+    return init.method.toUpperCase()
+  }
+
+  if (typeof Request !== `undefined` && input instanceof Request) {
+    return input.method.toUpperCase()
+  }
+
+  return `GET`
+}

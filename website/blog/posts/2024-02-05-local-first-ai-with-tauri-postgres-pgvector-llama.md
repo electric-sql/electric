@@ -11,6 +11,9 @@ outline: deep
 post: true
 ---
 
+> [!WARNING]
+> This post was written for a previous version of Electric that is no longer active. It is preserved for historical interest only. See the [Electric Next](/blog/2024/07/17/electric-next) post for context on the new system.
+
 The first wave of LLM-enabled apps used large models running in the cloud. It's a running joke that most AI startups are just a wrapper around the OpenAI API. This naturally involves sending your prompt and context data to a third party API.
 
 This typically doesn't matter too much when you're just generating [funny elephant pictures](/img/blog/local-first-ai-with-tauri-postgres-pgvector-llama/electric-elephant.jpg). But if you're building consumer or professional apps, you don't want to leak sensitive and private data. Retrieval-augmented generation (RAG) compounds the problem, by feeding even more data into the model &mdash; silently, in the background.

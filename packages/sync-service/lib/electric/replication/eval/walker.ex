@@ -125,6 +125,20 @@ defmodule Electric.Replication.Eval.Walker do
     end
   end
 
+  @doc """
+  Same as `reduce/4`, but raises on error instead of returning an error tuple.
+  """
+  @spec reduce!(target :: struct() | nil, reduce_fn, acc, context) :: acc
+        when acc: any(),
+             context: any(),
+             reduce_fn: (struct(), acc, context -> {:ok, acc} | {:error, any()})
+  def reduce!(tree, reduce_fn, acc, ctx \\ []) do
+    case reduce(tree, reduce_fn, acc, ctx) do
+      {:ok, acc} -> acc
+      {:error, reason} -> raise "Walker.reduce! failed: #{inspect(reason)}"
+    end
+  end
+
   defp process_child_groups(child_groups, fold_fn, acc_fn, acc, ctx) do
     Enum.reduce_while(child_groups, {:ok, {%{}, acc}}, fn
       {group_name, children}, {:ok, {results, acc}} when is_list(children) ->

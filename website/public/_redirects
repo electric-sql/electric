@@ -83,10 +83,17 @@ https://next.electric-sql.com/* https://electric-sql.com/:splat 301!
 # Renamed pages on new site
 /product/ddn                          /product/cloud
 /product/sync                         /product/electric
-/docs/api/integrations/react          /docs/integrations/react
-/docs/guides/writing-your-own-client  /docs/guides/client-development
-/use-cases/state-transfer             /use-cases/data-sync
-/product/cloud/sign-up                https://dashboard.electric-sql.cloud
-/product/cloud/onboarding             https://dashboard.electric-sql.cloud
-/product/cloud/usage                  /product/cloud
-/docs/guides/llms                     /docs/agents
+
+# Site restructure (2026-01) - products and sync pages
+/product/electric                                   /products/postgres-sync
+/product/cloud                                      /cloud
+/product/pglite                                     /products/pglite
+/use-cases/*                                        /sync
+/docs/api/integrations/react                        /docs/integrations/react
+/docs/guides/writing-your-own-client                /docs/guides/client-development
+/use-cases/state-transfer                           /use-cases/data-sync
+/product/cloud/sign-up                              https://dashboard.electric-sql.cloud
+/product/cloud/onboarding                           /cloud/overview
+/product/cloud/usage                                /cloud/usage
+/docs/guides/llms                                   /docs/agents
+/blog/2025/07/29/local-first-sync-with-tanstack-db  /blog/2025/07/29/super-fast-apps-on-sync-with-tanstack-db

@@ -2,7 +2,11 @@ import fs from 'node:fs'
 import { defineConfig } from 'vitepress'
 import { tabsMarkdownPlugin } from 'vitepress-plugin-tabs'
 import llmstxt from 'vitepress-plugin-llms'
+import type { LanguageRegistration } from 'shiki'
 
+import caddyfileGrammar from './theme/syntax/caddyfile.json'
+
+import { buildMetaImageUrl } from '../src/lib/meta-image'
 import demosData from '../data/demos.data.ts'
 import postsData from '../data/posts.data.ts'
 
@@ -31,6 +35,12 @@ const blogSidebarItems = await posts.map((post) => ({
   text: post.title,
   link: post.path,
 }))
+
+const caddyfileLanguage: LanguageRegistration = {
+  ...caddyfileGrammar,
+  name: 'caddyfile',
+  aliases: ['caddy', 'Caddyfile'],
+}
 
 // https://vitepress.dev/reference/site-config
 export default defineConfig({
@@ -71,9 +81,9 @@ export default defineConfig({
     ],
   },
   lang: 'en',
-  title: 'ElectricSQL',
+  title: 'Electric',
   description:
-    "Electric is a Postgres sync engine. It solves the hard problems of sync so that you don't have to.",
+    "Electric provides the data primitives and infra to build collaborative, multi-agent systems. Including Postgres Sync, Durable Streams, TanStack DB and PGlite.",
   appearance: 'force-dark',
   base: '/',
   cleanUrls: true,
@@ -110,7 +120,7 @@ export default defineConfig({
       },
     ],
   ],
-  ignoreDeadLinks: [/localhost/, /^\/AGENTS(\.md)?$/],
+  ignoreDeadLinks: [/localhost/, /^\/AGENTS(\.md)?$/, /^\/cloud$/],
   markdown: {
     theme: 'github-dark',
     languages: [
@@ -124,6 +134,7 @@ export default defineConfig({
       'sql',
       'tsx',
       'typescript',
+      caddyfileLanguage
     ],
     config(md) {
       md.use(tabsMarkdownPlugin)
@@ -149,12 +160,9 @@ export default defineConfig({
     },
     logo: '/img/brand/logo.svg',
     nav: [
-      { text: 'Product', link: '/product/electric', activeMatch: '/product/' },
-      {
-        text: 'Use cases',
-        link: '/use-cases/data-sync',
-        activeMatch: '/use-cases/',
-      },
+      { text: 'Sync', link: '/sync', activeMatch: '/sync' },
+      { text: 'Products', link: '/products', activeMatch: '/products' },
+      { text: 'Cloud', link: '/cloud', activeMatch: '/cloud' },
       { text: 'Docs', link: '/docs/intro', activeMatch: '/docs/' },
       { text: 'Demos', link: '/demos', activeMatch: '/demos' },
       { text: 'Blog', link: '/blog', activeMatch: '/blog' },
@@ -165,13 +173,26 @@ export default defineConfig({
       provider: 'local',
     },
     sidebar: {
-      '/product': [
+      '/products': [
         {
-          text: 'Product',
+          text: 'Products',
           items: [
-            { text: 'Electric', link: '/product/electric' },
-            { text: 'Cloud', link: '/product/cloud' },
-            { text: 'PGlite', link: '/product/pglite' },
+            { text: 'Overview', link: '/products/' },
+            { text: 'Postgres Sync', link: '/products/postgres-sync' },
+            { text: 'Durable Streams', link: '/products/durable-streams' },
+            { text: 'TanStack DB', link: '/products/tanstack-db' },
+            { text: 'PGlite', link: '/products/pglite' },
+          ],
+        },
+      ],
+      '/cloud': [
+        {
+          text: 'Electric Cloud',
+          items: [
+            { text: 'Overview', link: '/cloud/' },
+            { text: 'Usage', link: '/cloud/usage' },
+            { text: 'Protocols', link: '/cloud/protocols' },
+            { text: 'Pricing', link: '/cloud/pricing' },
           ],
         },
       ],
@@ -242,6 +263,7 @@ export default defineConfig({
               link: '/docs/guides/postgres-permissions',
             },
             { text: 'Deployment', link: '/docs/guides/deployment' },
+            { text: 'Sharding', link: '/docs/guides/sharding' },
             { text: 'Security', link: '/docs/guides/security' },
             { text: 'Troubleshooting', link: '/docs/guides/troubleshooting' },
             {
@@ -367,6 +389,7 @@ export default defineConfig({
     },
     siteTitle: false,
     socialLinks: [
+      { icon: 'durable-streams', link: 'https://github.com/durable-streams/durable-streams' },
       { icon: 'tanstack', link: 'https://tanstack.com/db' },
       { icon: 'pglite', link: 'https://pglite.dev' },
       { icon: 'x', link: 'https://x.com/ElectricSQL' },
@@ -378,35 +401,29 @@ export default defineConfig({
     const fm = pageData.frontmatter
     const head = []
 
-    const title = `${fm.title || siteData.title} | ${fm.titleTemplate || 'ElectricSQL'}`
+    const pageTitle = fm.title || siteData.title
+    const titleTemplate = fm.titleTemplate || ':title | ElectricSQL'
+    const title = titleTemplate.replace(':title', pageTitle)
     const description = fm.description || siteData.description
 
-    // Get site origin from environment or use production URL
+    const PRODUCTION_URL = 'https://electric-sql.com'
+    const LOCAL_DEV_URL = 'http://localhost:5173'
+    const DEFAULT_IMAGE = '/img/meta/electric-sync-primitives.jpg'
+
     const siteOrigin =
-      process.env.DEPLOY_PRIME_URL || 'https://electric-sql.com'
+      process.env.CONTEXT === 'production'
+        ? process.env.URL || PRODUCTION_URL
+        : process.env.DEPLOY_PRIME_URL ||
+          (process.env.NODE_ENV === 'development'
+            ? LOCAL_DEV_URL
+            : PRODUCTION_URL)
 
-    // Generate optimized social media image URL using Netlify Image CDN
-    const getOptimizedImageUrl = (imagePath?: string) => {
-      if (!imagePath) {
-        return `${siteOrigin}/img/meta/sync-solved.jpg`
-      }
+    const image = buildMetaImageUrl(fm.image || DEFAULT_IMAGE, siteOrigin)
 
-      const fullImageUrl = `${siteOrigin}${imagePath}`
-
-      // Use Netlify Image CDN to optimize for social media (1200x630 is the standard for og:image)
-      const netlifyImageUrl = `${siteOrigin}/.netlify/images?url=${encodeURIComponent(
-        fullImageUrl
-      )}&w=1200&h=630&fit=cover&fm=jpg&q=80`
-
-      return netlifyImageUrl
-    }
-
-    const image = getOptimizedImageUrl(fm.image)
-
-    head.push([
-      'meta',
-      { name: 'twitter:card', content: 'summary_large_image' },
-    ])
+    head.push(['meta', { name: 'twitter:card', content: 'summary_large_image' }])
+    head.push(['meta', { name: 'twitter:site', content: '@ElectricSQL' }])
+    head.push(['meta', { name: 'twitter:title', content: title }])
+    head.push(['meta', { name: 'twitter:description', content: description }])
     head.push(['meta', { name: 'twitter:image', content: image }])
     head.push(['meta', { property: 'og:title', content: title }])
     head.push(['meta', { property: 'og:description', content: description }])

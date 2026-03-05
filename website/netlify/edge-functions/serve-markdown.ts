@@ -1,5 +1,7 @@
 import type { Context } from 'https://edge.netlify.com'
 
+import { isSocialMediaBot } from '../../src/lib/social-bot-detection.ts'
+
 // Path prefixes that should serve markdown to agents
 const PATH_PREFIXES = [
   `/about/`,
@@ -51,7 +53,19 @@ function transformBlogPostPath(pathname: string): string | null {
 export default async (request: Request, context: Context) => {
   const url = new URL(request.url)
   const acceptHeader = request.headers.get(`accept`) || ``
+  const userAgent = request.headers.get(`user-agent`) || ``
   let targetPath = url.pathname
+
+  // Social media bots need HTML with Open Graph / Twitter Card meta tags
+  // to generate rich link preview cards. Always serve HTML to these bots.
+  if (isSocialMediaBot(userAgent)) {
+    return context.next()
+  }
+
+  // Skip hidden paths (like /.vitepress/) - these are internal files
+  if (url.pathname.startsWith(`/.`)) {
+    return context.next()
+  }
 
   // Check if this is a blog post
   const isBlogPost =

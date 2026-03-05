@@ -13,7 +13,7 @@
 [invoke setup_electric]
 
 [shell electric]
-  ??[info] Starting replication from postgres
+  ??[notice] Starting replication from postgres
 
   # Reset the failure pattern because we'll be matching on an error.
   -
@@ -34,7 +34,7 @@
   # Increase the timeout before the next match to give Electric time to reconnect
   [timeout 15]
 
-  ??[info] Starting replication from postgres
+  ??[notice] Starting replication from postgres
 
 [cleanup]
   [invoke teardown]

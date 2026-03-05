@@ -1689,7 +1689,7 @@ defmodule Electric.Plug.RouterTest do
         |> Enum.map(&String.trim/1)
         |> MapSet.new()
 
-      assert allowed_methods == MapSet.new(["GET", "HEAD", "OPTIONS", "DELETE"])
+      assert allowed_methods == MapSet.new(["GET", "POST", "HEAD", "OPTIONS", "DELETE"])
     end
 
     @tag slow: true
@@ -2105,10 +2105,9 @@ defmodule Electric.Plug.RouterTest do
 
       assert %{status: 503} = conn3
 
-      assert Jason.decode!(conn3.resp_body) == %{
-               "code" => "overloaded",
-               "message" => "Server is currently overloaded, please retry"
-             }
+      body = Jason.decode!(conn3.resp_body)
+      assert body["code"] == "concurrent_request_limit_exceeded"
+      assert body["message"] =~ "Concurrent existing request limit exceeded"
 
       # Should have Retry-After header
       assert [retry_after] = Plug.Conn.get_resp_header(conn3, "retry-after")
@@ -2300,7 +2299,7 @@ defmodule Electric.Plug.RouterTest do
       assert {req, 200, [data, snapshot_end]} = shape_req(req, opts)
 
       tag =
-        :crypto.hash(:md5, stack_id <> req.handle <> "1")
+        :crypto.hash(:md5, stack_id <> req.handle <> "v:1")
         |> Base.encode16(case: :lower)
 
       assert %{"id" => "1", "parent_id" => "1", "value" => "10"} = data["value"]
@@ -2313,7 +2312,7 @@ defmodule Electric.Plug.RouterTest do
       Postgrex.query!(db_conn, "UPDATE parent SET value = 1 WHERE id = 2", [])
 
       tag2 =
-        :crypto.hash(:md5, stack_id <> req.handle <> "2")
+        :crypto.hash(:md5, stack_id <> req.handle <> "v:2")
         |> Base.encode16(case: :lower)
 
       assert {_, 200, [data, %{"headers" => %{"control" => "snapshot-end"}}, up_to_date_ctl()]} =
@@ -2323,6 +2322,45 @@ defmodule Electric.Plug.RouterTest do
 
       assert %{"operation" => "insert", "is_move_in" => true, "tags" => [^tag2]} =
                data["headers"]
+    end
+
+    @tag with_sql: [
+           "CREATE TABLE parent (id INT PRIMARY KEY, excluded BOOLEAN NOT NULL DEFAULT FALSE)",
+           "CREATE TABLE child (id INT PRIMARY KEY, parent_id INT NOT NULL REFERENCES parent(id), value INT NOT NULL)",
+           "INSERT INTO parent (id, excluded) VALUES (1, false), (2, true)",
+           "INSERT INTO child (id, parent_id, value) VALUES (1, 1, 10), (2, 2, 20)"
+         ]
+    test "NOT IN subquery should return 409 on move-in to subquery", %{
+      opts: opts,
+      db_conn: db_conn
+    } do
+      # Child rows where parent_id is NOT IN the set of excluded parents
+      # Initially: parent 1 is not excluded, so child 1 is in the shape
+      # parent 2 is excluded, so child 2 is NOT in the shape
+      req =
+        make_shape_req("child",
+          where: "parent_id NOT IN (SELECT id FROM parent WHERE excluded = true)"
+        )
+
+      assert {req, 200, [data, snapshot_end]} = shape_req(req, opts)
+
+      # Only child 1 should be in the shape (parent 1 is not excluded)
+      assert %{
+               "value" => %{"id" => "1", "parent_id" => "1", "value" => "10"},
+               "headers" => %{"operation" => "insert"}
+             } = data
+
+      assert %{"headers" => %{"control" => "snapshot-end"}} = snapshot_end
+
+      task = live_shape_req(req, opts)
+
+      # Now set parent 1 to excluded = true
+      # This causes parent 1 to move INTO the subquery result
+      # Which should cause child 1 to move OUT of the outer shape
+      # Since NOT IN subquery move-out isn't implemented, we expect a 409
+      Postgrex.query!(db_conn, "UPDATE parent SET excluded = true WHERE id = 1", [])
+
+      assert {_req, 409, _response} = Task.await(task)
     end
 
     @tag with_sql: [
@@ -2448,6 +2486,108 @@ defmodule Electric.Plug.RouterTest do
     end
 
     @tag with_sql: [
+           "CREATE TABLE parent (id INT PRIMARY KEY, include_parent BOOLEAN NOT NULL DEFAULT FALSE)",
+           "CREATE TABLE child (id INT PRIMARY KEY, parent_id INT NOT NULL REFERENCES parent(id), include_child BOOLEAN NOT NULL DEFAULT FALSE)",
+           "INSERT INTO parent (id, include_parent) VALUES (1, true)",
+           "INSERT INTO child (id, parent_id, include_child) VALUES (1, 1, true)"
+         ]
+    test "subquery combined with OR should return a 409 on move-out", %{
+      opts: opts,
+      db_conn: db_conn
+    } do
+      orig_req =
+        make_shape_req("child",
+          where:
+            "parent_id in (SELECT id FROM parent WHERE include_parent = true) OR include_child = true"
+        )
+
+      assert {req, 200, response} = shape_req(orig_req, opts)
+      # Should contain the data record and the snapshot-end control message
+      assert length(response) == 2
+
+      assert %{"value" => %{"id" => "1", "include_child" => "true"}} =
+               Enum.find(response, &Map.has_key?(&1, "key"))
+
+      task = live_shape_req(req, opts)
+
+      # Setting include_parent to false may cause a move out, but it doesn't in this case because include_child is still true
+      Postgrex.query!(db_conn, "UPDATE parent SET include_parent = false WHERE id = 1", [])
+
+      # Rather than working out whether this is a move out or not we return a 409
+      assert {_req, 409, _response} = Task.await(task)
+    end
+
+    @tag with_sql: [
+           "CREATE TABLE parent (id INT PRIMARY KEY, include_parent BOOLEAN NOT NULL DEFAULT FALSE)",
+           "CREATE TABLE child (id INT PRIMARY KEY, parent_id INT NOT NULL REFERENCES parent(id), include_child BOOLEAN NOT NULL DEFAULT FALSE)",
+           "INSERT INTO parent (id, include_parent) VALUES (1, false)",
+           "INSERT INTO child (id, parent_id, include_child) VALUES (1, 1, true)"
+         ]
+    test "subquery combined with OR should return a 409 on move-in", %{
+      opts: opts,
+      db_conn: db_conn
+    } do
+      orig_req =
+        make_shape_req("child",
+          where:
+            "parent_id in (SELECT id FROM parent WHERE include_parent = true) OR include_child = true"
+        )
+
+      assert {req, 200, response} = shape_req(orig_req, opts)
+      # Should contain the data record and the snapshot-end control message
+      assert length(response) == 2
+
+      assert %{"value" => %{"id" => "1", "include_child" => "true"}} =
+               Enum.find(response, &Map.has_key?(&1, "key"))
+
+      task = live_shape_req(req, opts)
+
+      # Setting include_parent to true may cause a move in, but it doesn't in this case because include_child is already true
+      Postgrex.query!(db_conn, "UPDATE parent SET include_parent = true WHERE id = 1", [])
+
+      # Rather than working out whether this is a move in or not we return a 409
+      assert {_req, 409, _response} = Task.await(task)
+    end
+
+    @tag with_sql: [
+           "CREATE TABLE grandparent (id INT PRIMARY KEY, include_grandparent BOOLEAN NOT NULL DEFAULT FALSE)",
+           "CREATE TABLE parent (id INT PRIMARY KEY, grandparent_id INT NOT NULL REFERENCES grandparent(id), include_parent BOOLEAN NOT NULL DEFAULT FALSE)",
+           "CREATE TABLE child (id INT PRIMARY KEY, parent_id INT NOT NULL REFERENCES parent(id))",
+           "INSERT INTO grandparent (id, include_grandparent) VALUES (1, false)",
+           "INSERT INTO parent (id, grandparent_id, include_parent) VALUES (1, 1, true)",
+           "INSERT INTO child (id, parent_id) VALUES (1, 1)"
+         ]
+    test "nested subquery combined with OR should return a 409 on move-in", %{
+      opts: opts,
+      db_conn: db_conn
+    } do
+      orig_req =
+        make_shape_req("child",
+          where:
+            "parent_id in (SELECT id FROM parent WHERE include_parent = true OR grandparent_id in (SELECT id FROM grandparent WHERE include_grandparent = true))"
+        )
+
+      assert {req, 200, response} = shape_req(orig_req, opts)
+      # Should contain the data record and the snapshot-end control message
+      assert length(response) == 2
+
+      assert %{"value" => %{"id" => "1"}} =
+               Enum.find(response, &Map.has_key?(&1, "key"))
+
+      task = live_shape_req(req, opts)
+
+      # Setting include_grandparent to true may cause a move in, but it doesn't in this case because include_parent is already true
+      Postgrex.query!(
+        db_conn,
+        "UPDATE grandparent SET include_grandparent = true WHERE id = 1",
+        []
+      )
+
+      # Rather than working out whether this is a move in or not we return a 409
+      assert {_req, 409, _response} = Task.await(task)
+    end
+
+    @tag with_sql: [
            "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL)",
            "CREATE TABLE teams (id INTEGER PRIMARY KEY, name TEXT NOT NULL)",
            "CREATE TABLE members (user_id INTEGER REFERENCES users(id), team_id INTEGER REFERENCES teams(id), PRIMARY KEY (user_id, team_id))",
@@ -2483,7 +2623,7 @@ defmodule Electric.Plug.RouterTest do
       Postgrex.query!(ctx.db_conn, "INSERT INTO members (user_id, team_id) VALUES (1, 2)")
 
       tag =
-        :crypto.hash(:md5, ctx.stack_id <> req.handle <> "2")
+        :crypto.hash(:md5, ctx.stack_id <> req.handle <> "v:2")
         |> Base.encode16(case: :lower)
 
       assert {req, 200,
@@ -2560,7 +2700,7 @@ defmodule Electric.Plug.RouterTest do
       )
 
       tag =
-        :crypto.hash(:md5, ctx.stack_id <> req.handle <> "user_id:2" <> "team_id:2")
+        :crypto.hash(:md5, ctx.stack_id <> req.handle <> "user_id:v:2" <> "team_id:v:2")
         |> Base.encode16(case: :lower)
 
       assert {req, 200,
@@ -2631,7 +2771,7 @@ defmodule Electric.Plug.RouterTest do
       Postgrex.query!(ctx.db_conn, "UPDATE parent SET other_value = 10 WHERE id = 2")
 
       tag =
-        :crypto.hash(:md5, ctx.stack_id <> req.handle <> "20")
+        :crypto.hash(:md5, ctx.stack_id <> req.handle <> "v:20")
         |> Base.encode16(case: :lower)
 
       assert {_, 200,
@@ -2661,7 +2801,7 @@ defmodule Electric.Plug.RouterTest do
       # Should contain the data record and the snapshot-end control message
       assert length(response) == 2
 
-      tag = :crypto.hash(:md5, ctx.stack_id <> req.handle <> "1") |> Base.encode16(case: :lower)
+      tag = :crypto.hash(:md5, ctx.stack_id <> req.handle <> "v:1") |> Base.encode16(case: :lower)
 
       assert %{
                "value" => %{"id" => "1", "parentId" => "1", "Value" => "10"},
@@ -2702,7 +2842,7 @@ defmodule Electric.Plug.RouterTest do
           ],
           do: Postgrex.query!(ctx.db_conn, stmt)
 
-      Process.sleep(100)
+      Process.sleep(120)
 
       assert {req, 200,
               [
@@ -2831,6 +2971,86 @@ defmodule Electric.Plug.RouterTest do
                 up_to_date_ctl()
               ]} =
                Task.await(task)
+    end
+
+    @tag with_sql: [
+           "CREATE TABLE projects (id INT PRIMARY KEY, workspace_id INT NOT NULL, name TEXT NOT NULL)",
+           "CREATE TABLE workspace_members (workspace_id INT, user_id INT, PRIMARY KEY (workspace_id, user_id))",
+           "CREATE TABLE project_members (project_id INT, user_id INT, PRIMARY KEY (project_id, user_id))",
+           "INSERT INTO workspace_members (workspace_id, user_id) VALUES (1, 100)",
+           "INSERT INTO project_members (project_id, user_id) VALUES (1, 100), (3, 100)",
+           "INSERT INTO projects (id, workspace_id, name) VALUES (1, 1, 'project 1'), (2, 1, 'project 2')"
+         ]
+    test "supports two subqueries at the same level but returns 409 on move-in", %{
+      opts: opts,
+      db_conn: db_conn
+    } do
+      where =
+        "workspace_id IN (SELECT workspace_id FROM workspace_members WHERE user_id = 100) " <>
+          "AND id IN (SELECT project_id FROM project_members WHERE user_id = 100)"
+
+      assert %{status: 200} =
+               conn =
+               conn("GET", "/v1/shape", %{
+                 table: "projects",
+                 offset: "-1",
+                 where: where
+               })
+               |> Router.call(opts)
+
+      shape_handle = get_resp_header(conn, "electric-handle")
+
+      task =
+        Task.async(fn ->
+          conn("GET", "/v1/shape", %{
+            table: "projects",
+            offset: get_resp_header(conn, "electric-offset"),
+            handle: shape_handle,
+            where: where,
+            live: "true"
+          })
+          |> Router.call(opts)
+        end)
+
+      # Insert a project that satisfies both subqueries - user 100 is already a member of project 3
+      # (added in setup) and workspace 1
+      Postgrex.query!(
+        db_conn,
+        "INSERT INTO projects (id, workspace_id, name) VALUES (3, 1, 'project 3')",
+        []
+      )
+
+      assert %{status: 200} = conn = Task.await(task)
+
+      assert [
+               %{
+                 "headers" => %{"operation" => "insert"},
+                 "value" => %{"id" => "3", "workspace_id" => "1", "name" => "project 3"}
+               },
+               _
+             ] = Jason.decode!(conn.resp_body)
+
+      task =
+        Task.async(fn ->
+          conn("GET", "/v1/shape", %{
+            table: "projects",
+            offset: get_resp_header(conn, "electric-offset"),
+            handle: shape_handle,
+            where: where,
+            live: "true"
+          })
+          |> Router.call(opts)
+        end)
+
+      # Cause a move-in by adding user 100 to project 2's project_members
+      Postgrex.query!(
+        db_conn,
+        "INSERT INTO project_members (project_id, user_id) VALUES (2, 100)",
+        []
+      )
+
+      # Should get a 409 because multiple same-level subqueries cannot currently correctly handle move-ins
+      assert %{status: 409} = Task.await(task)
     end
   end
 
@@ -3012,6 +3232,28 @@ defmodule Electric.Plug.RouterTest do
                )
 
       assert message =~ "invalid_value"
+    end
+
+    @tag with_sql: [
+           "INSERT INTO items VALUES (gen_random_uuid(), 'test value 1')"
+         ]
+    test "subsets can filter with explicit type cast on parameter", ctx do
+      req = make_shape_req("items", log: "changes_only")
+
+      # Explicit casts on parameters (e.g. $1::text) must preserve param_ref
+      # metadata so the parameter can be resolved during query rebuilding
+      assert {_, 200,
+              %{
+                "metadata" => _,
+                "data" => [
+                  %{
+                    "value" => %{"id" => _, "value" => "test value 1"}
+                  }
+                ]
+              }} =
+               shape_req(req, ctx.opts,
+                 subset: %{where: "value = $1::text", params: %{"1" => "test value 1"}}
+               )
     end
 
     test "GET requests aren't cached", ctx do

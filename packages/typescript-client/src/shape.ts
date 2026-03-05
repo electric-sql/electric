@@ -1,5 +1,9 @@
 import { Message, Offset, Row } from './types'
-import { isChangeMessage, isControlMessage } from './helpers'
+import {
+  isChangeMessage,
+  isControlMessage,
+  bigintSafeStringify,
+} from './helpers'
 import { FetchError } from './error'
 import { LogMode, ShapeStreamInterface } from './client'
 
@@ -51,7 +55,7 @@ export class Shape<T extends Row<unknown> = Row> {
   readonly stream: ShapeStreamInterface<T>
 
   readonly #data: ShapeData<T> = new Map()
-  readonly #subscribers = new Map<number, ShapeChangedCallback<T>>()
+  readonly #subscribers = new Map<object, ShapeChangedCallback<T>>()
   readonly #insertedKeys = new Set<string>()
   readonly #requestedSubSnapshots = new Set<string>()
   #reexecuteSnapshotsPending = false
@@ -141,7 +145,7 @@ export class Shape<T extends Row<unknown> = Row> {
     params: Parameters<ShapeStreamInterface<T>[`requestSnapshot`]>[0]
   ): Promise<void> {
     // Track this snapshot request for future re-execution on shape rotation
-    const key = JSON.stringify(params)
+    const key = bigintSafeStringify(params)
     this.#requestedSubSnapshots.add(key)
     // Ensure the stream is up-to-date so schema is available for parsing
     await this.#awaitUpToDate()
@@ -149,7 +153,7 @@ export class Shape<T extends Row<unknown> = Row> {
   }
 
   subscribe(callback: ShapeChangedCallback<T>): () => void {
-    const subscriptionId = Math.random()
+    const subscriptionId = {}
 
     this.#subscribers.set(subscriptionId, callback)
 

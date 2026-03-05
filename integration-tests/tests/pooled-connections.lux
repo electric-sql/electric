@@ -35,7 +35,7 @@
 [invoke setup_electric_with_pooler]
 
 [shell electric]
-  ??[info] Starting replication from postgres
+  ??[notice] Starting replication from postgres
   
 # Initialize a shape and collect the offset
 [shell client]

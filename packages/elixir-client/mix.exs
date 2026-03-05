@@ -17,17 +17,6 @@ defmodule Electric.Client.MixProject do
       package: package(),
       source_url: "#{@github_repo}/tree/main/packages/elixir-client",
       homepage_url: "https://electric-sql.com",
-      # This will go away after we upgrade Elixir to 1.19, which expects the public `cli/0`
-      # function to be defined instead.
-      preferred_cli_env: [
-        dialyzer: :test,
-        coveralls: :test,
-        "coveralls.detail": :test,
-        "coveralls.post": :test,
-        "coveralls.html": :test,
-        "coveralls.cobertura": :test,
-        "coveralls.lcov": :test
-      ],
       test_coverage: [
         tool: ExCoveralls,
         ignore_modules: [
@@ -63,7 +52,7 @@ defmodule Electric.Client.MixProject do
 
   defp deps do
     [
-      {:electric, "~> 1.1.11 or ~> 1.2.4", optional: true},
+      {:electric, "~> 1.1.11 or ~> 1.2.4 or ~> 1.3.3", optional: true},
       {:ecto_sql, "~> 3.12", optional: true},
       {:gen_stage, "~> 1.2", optional: true},
       {:jason, "~> 1.4"},

@@ -110,6 +110,10 @@ defmodule Electric.Connection.Manager do
       :max_shapes,
       :persistent_kv,
       purge_all_shapes?: false,
+      # Optional guard callback for the lock breaker. When set, the lock breaker
+      # will only run if this callback returns true. Used by cloud-sync-service to
+      # prevent non-owner instances from terminating backends during rolling deployments.
+      lock_breaker_guard: nil,
       # PIDs of the database connection pools
       pool_pids: %{admin: nil, snapshot: nil},
       validated_connection_opts: %{replication: nil, pool: nil},
@@ -289,7 +293,8 @@ defmodule Electric.Connection.Manager do
         tweaks: Keyword.fetch!(opts, :tweaks),
         persistent_kv: Keyword.fetch!(opts, :persistent_kv),
         manual_table_publishing?: Keyword.get(opts, :manual_table_publishing?, false),
-        max_shapes: Keyword.fetch!(opts, :max_shapes)
+        max_shapes: Keyword.fetch!(opts, :max_shapes),
+        lock_breaker_guard: Keyword.get(opts, :lock_breaker_guard)
       }
       |> initialize_connection_opts(opts)
 
@@ -383,53 +388,63 @@ defmodule Electric.Connection.Manager do
       when is_nil(pool_pids.admin) or is_nil(pool_pids.snapshot) do
     Logger.debug("Starting connection pool for stack #{state.stack_id}")
 
-    case validate_connection(pooled_connection_opts(state), :pool, state) do
-      {:ok, conn_opts, state} ->
-        pool_sizes = pool_sizes(Keyword.get(state.pool_opts, :pool_size, 2))
+    # The admin pool uses replication credentials because the replication user
+    # owns the publication and has the privileges needed to alter it. The pooled
+    # connection user may be a lower-privilege user (e.g. on Crunchy Bridge where
+    # superusers can't connect through PgBouncer).
+    with {:pool, {:ok, pooled_conn_opts, state}} <-
+           {:pool, validate_connection(pooled_connection_opts(state), :pool, state)},
+         {:replication, {:ok, replication_conn_opts, state}} <-
+           {:replication,
+            validate_connection(replication_connection_opts(state), :replication, state)} do
+      pool_sizes = pool_sizes(Keyword.get(state.pool_opts, :pool_size, 2))
 
-        state =
-          [:snapshot, :admin]
-          |> Enum.filter(fn role -> is_nil(state.pool_pids[role]) end)
-          |> Enum.reduce(state, fn pool_role, state ->
-            pool_size = Map.fetch!(pool_sizes, pool_role)
+      state =
+        [{:snapshot, pooled_conn_opts}, {:admin, replication_conn_opts}]
+        |> Enum.filter(fn {role, _conn_opts} -> is_nil(state.pool_pids[role]) end)
+        |> Enum.reduce(state, fn {pool_role, conn_opts}, state ->
+          pool_size = Map.fetch!(pool_sizes, pool_role)
 
-            # The snapshot pool connections might run for long periods of time
-            # depending on the nature of the query, and during bursts it is preferred
-            # to have new queries queued for a longer time than failing them continuously
-            pool_queue_config =
-              if pool_role == :snapshot,
-                do: [queue_target: 5_000, queue_interval: 10_000],
-                else: []
+          # The snapshot pool connections might run for long periods of time
+          # depending on the nature of the query, and during bursts it is preferred
+          # to have new queries queued for a longer time than failing them continuously
+          pool_queue_config =
+            if pool_role == :snapshot,
+              do: [queue_target: 5_000, queue_interval: 10_000],
+              else: []
 
-            {:ok, pool_pid} =
-              Electric.Connection.Manager.Pool.start_link(
-                stack_id: state.stack_id,
-                role: pool_role,
-                connection_manager: self(),
-                pool_opts:
-                  Keyword.merge(
-                    state.pool_opts,
-                    [pool_size: pool_size] ++ pool_queue_config
-                  ),
-                conn_opts: conn_opts
-              )
+          {:ok, pool_pid} =
+            Electric.Connection.Manager.Pool.start_link(
+              stack_id: state.stack_id,
+              role: pool_role,
+              connection_manager: self(),
+              pool_opts:
+                Keyword.merge(
+                  state.pool_opts,
+                  [pool_size: pool_size] ++ pool_queue_config
+                ),
+              conn_opts: conn_opts
+            )
 
-            %{
-              state
-              | pool_pids: Map.put(state.pool_pids, pool_role, {pool_pid, false})
-            }
-          end)
+          %{
+            state
+            | pool_pids: Map.put(state.pool_pids, pool_role, {pool_pid, false})
+          }
+        end)
 
-        state = %{state | current_step: {:start_connection_pool, :connecting}}
-        {:noreply, state}
-
+      state = %{state | current_step: {:start_connection_pool, :connecting}}
+      {:noreply, state}
+    else
       # the ConnectionResolver process was killed, as part of the application
       # shutdown in which case we'll be killed next so just return here
-      {:error, :killed} ->
+      {_source, {:error, :killed}} ->
         {:noreply, state}
 
-      {:error, reason} ->
-        shutdown_or_reconnect(reason, :pools, state)
+      {:pool, {:error, reason}} ->
+        shutdown_or_reconnect(reason, :snapshot_pool, state)
+
+      {:replication, {:error, reason}} ->
+        shutdown_or_reconnect(reason, :admin_pool, state)
     end
   end
 
@@ -528,7 +543,7 @@ defmodule Electric.Connection.Manager do
         } = state
       ) do
     # Everything is ready to start accepting and processing logical messages from Postgres.
-    Logger.info("Starting replication from postgres")
+    Logger.notice("Starting replication from postgres")
     Electric.Postgres.ReplicationClient.start_streaming(state.replication_client_pid)
     dispatch_stack_event(:ready, state)
 
@@ -545,7 +560,11 @@ defmodule Electric.Connection.Manager do
         :check_lock_not_abandoned,
         %State{replication_pg_backend_pid: pg_backend_pid} = state
       ) do
-    if state.current_step == {:start_replication_client, :acquiring_lock} and
+    lock_breaker_allowed =
+      is_nil(state.lock_breaker_guard) or state.lock_breaker_guard.()
+
+    if lock_breaker_allowed and
+         state.current_step == {:start_replication_client, :acquiring_lock} and
          not is_nil(pg_backend_pid) do
       with {:ok, conn_opts, state} <-
              validate_connection(pooled_connection_opts(state), :pool, state),
@@ -559,6 +578,12 @@ defmodule Electric.Connection.Manager do
           # no-op, this is a one-shot attempt at fixing a lock
           Logger.warning("Failed try and break stuck lock connection: #{inspect(reason)}")
           :ok
+      end
+    else
+      if not lock_breaker_allowed do
+        Logger.notice(
+          "Lock breaker skipped: guard callback returned false (instance may not have ownership rights)"
+        )
       end
     end
 
@@ -733,7 +758,7 @@ defmodule Electric.Connection.Manager do
 
     # Initialize the ShapeStatusOwner process once the lock is acquired and
     # storage is entirely within this service's control
-    :ok = Electric.ShapeCache.ShapeStatusOwner.initialize_from_storage(state.stack_id)
+    :ok = Electric.ShapeCache.ShapeStatusOwner.initialize(state.stack_id)
 
     state = %{
       state
@@ -837,7 +862,7 @@ defmodule Electric.Connection.Manager do
   end
 
   def handle_cast({:pg_info_obtained, info}, state) do
-    Logger.info(
+    Logger.notice(
       "Postgres server version = #{info.server_version_num}, " <>
         "system identifier = #{state.pg_system_identifier}, " <>
         "timeline_id = #{state.pg_timeline_id}"
@@ -886,10 +911,6 @@ defmodule Electric.Connection.Manager do
     # drop publication before replication client so that we ensure anyone
     # acquiring the lock next will recreate the replication slot
     if state.drop_slot_requested, do: drop_publication(state)
-
-    # perform a backup of our shape metadata after the snapshotter processes and
-    # publication have been removed to guarantee a consistent checkpoint
-    Electric.ShapeCache.ShapeStatus.save_checkpoint(state.stack_id)
 
     if is_pid(replication_client_pid) do
       # if we are acquiring the lock, we should kill the replication client brutally
@@ -1119,7 +1140,7 @@ defmodule Electric.Connection.Manager do
     {total_retry_time, conn_backoff} = ConnectionBackoff.succeed(conn_backoff)
 
     if total_retry_time > 0 do
-      Logger.info("Reconnection succeeded after #{inspect(total_retry_time)}ms")
+      Logger.notice("Reconnection succeeded after #{inspect(total_retry_time)}ms")
     end
 
     %{state | connection_backoff: {conn_backoff, nil}}
@@ -1138,7 +1159,7 @@ defmodule Electric.Connection.Manager do
   end
 
   defp drop_publication(state) when state.manual_table_publishing? do
-    Logger.info("Skipping publication drop, manual_table_publishing is enabled")
+    Logger.notice("Skipping publication drop, manual_table_publishing is enabled")
   end
 
   defp drop_publication(state) do

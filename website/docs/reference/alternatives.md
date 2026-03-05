@@ -25,7 +25,7 @@ We list a selection of projects below, including for example:
 
 ### Real-time and sync
 
-[Electric](/product/electric) is a sync-engine. It syncs subsets of data from Postgres, in real-time, into local apps and services. Other real-time streaming systems and sync engines include:
+[Electric](/products/postgres-sync) is a sync-engine. It syncs subsets of data from Postgres, in real-time, into local apps and services. Other real-time streaming systems and sync engines include:
 
 - [Ably](https://ably.com)
 - [Ampli-sync](https://ampliapps.com/sqlite-sync)
@@ -58,7 +58,7 @@ We list a selection of projects below, including for example:
 
 ### Embedded databases
 
-[PGlite](/product/pglite) is an embedded database. Other embedded databases include:
+[PGlite](/products/pglite) is an embedded database. Other embedded databases include:
 
 - [CozoDB](https://www.cozodb.org)
 - [DuckDB](https://duckdb.org)

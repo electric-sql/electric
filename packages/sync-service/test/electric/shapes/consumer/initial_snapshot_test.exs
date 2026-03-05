@@ -1,11 +1,13 @@
 defmodule Electric.Shapes.Consumer.InitialSnapshotTest do
   use ExUnit.Case, async: true
+  use Repatch.ExUnit, assert_expectations: true
 
   alias Electric.Shapes.Consumer.InitialSnapshot
   alias Electric.Replication.Changes.Transaction
   alias Electric.ShapeCache.Storage
 
   import Support.ComponentSetup
+  import Support.TestUtils, only: [expect_shape_status: 1]
 
   @moduletag :tmp_dir
 
@@ -142,7 +144,7 @@ defmodule Electric.Shapes.Consumer.InitialSnapshotTest do
       assert state.filtering? == true
 
       # Verify storage was updated
-      {:ok, _offset, stored_snapshot} = Storage.get_current_position(storage)
+      {:ok, stored_snapshot} = Storage.fetch_pg_snapshot(storage)
       assert stored_snapshot == %{xmin: 100, xmax: 200, xip_list: [150], filter_txns?: true}
     end
 
@@ -156,12 +158,12 @@ defmodule Electric.Shapes.Consumer.InitialSnapshotTest do
       assert state.filtering? == true
 
       # Verify storage was updated
-      {:ok, _offset, stored_snapshot} = Storage.get_current_position(storage)
+      {:ok, stored_snapshot} = Storage.fetch_pg_snapshot(storage)
       assert stored_snapshot == %{xmin: 100, xmax: 200, xip_list: [], filter_txns?: true}
     end
   end
 
-  describe "mark_snapshot_started/2" do
+  describe "mark_snapshot_started/4" do
     setup [:with_stack_id_from_test, :with_in_memory_storage]
 
     setup %{storage: storage} do
@@ -170,15 +172,20 @@ defmodule Electric.Shapes.Consumer.InitialSnapshotTest do
       %{shape_storage: shape_storage}
     end
 
-    test "marks snapshot as started and replies to waiters", %{shape_storage: storage} do
+    test "marks snapshot as started and replies to waiters", %{
+      shape_storage: storage,
+      stack_id: stack_id
+    } do
       parent = self()
       ref = make_ref()
+
+      expect_shape_status(mark_snapshot_started: fn ^stack_id, "shape-handle" -> :ok end)
 
       state =
         InitialSnapshot.new(nil)
         |> InitialSnapshot.add_waiter({parent, ref})
 
-      state = InitialSnapshot.mark_snapshot_started(state, storage)
+      state = InitialSnapshot.mark_snapshot_started(state, stack_id, "shape-handle", storage)
 
       assert state.snapshot_started? == true
       assert state.awaiting_snapshot_start == []
@@ -188,14 +195,18 @@ defmodule Electric.Shapes.Consumer.InitialSnapshotTest do
       assert Storage.snapshot_started?(storage)
     end
 
-    test "is idempotent when already started", %{shape_storage: storage} do
+    test "is idempotent when already started", %{shape_storage: storage, stack_id: stack_id} do
       state = InitialSnapshot.new(nil)
 
-      state = InitialSnapshot.mark_snapshot_started(state, storage)
+      expect_shape_status(
+        mark_snapshot_started: {fn ^stack_id, "shape-handle" -> :ok end, exactly: 1}
+      )
+
+      state = InitialSnapshot.mark_snapshot_started(state, stack_id, "shape-handle", storage)
       assert state.snapshot_started? == true
 
       # Call again
-      state = InitialSnapshot.mark_snapshot_started(state, storage)
+      state = InitialSnapshot.mark_snapshot_started(state, stack_id, "shape-handle", storage)
       assert state.snapshot_started? == true
     end
   end
@@ -220,7 +231,7 @@ defmodule Electric.Shapes.Consumer.InitialSnapshotTest do
       assert state.filtering? == false
 
       # Verify storage was updated
-      {:ok, _offset, stored_snapshot} = Storage.get_current_position(storage)
+      {:ok, stored_snapshot} = Storage.fetch_pg_snapshot(storage)
       assert stored_snapshot.filter_txns? == false
     end
 

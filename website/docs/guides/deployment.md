@@ -17,13 +17,13 @@ import ComponentsSmPNG from '/static/img/docs/guides/deployment/components.sm.pn
 
 # Deployment
 
-How to deploy the [Electric sync engine](/product/electric), with links to integration docs for specific platforms like [Supabase](/docs/integrations/supabase), [Neon](/docs/integrations/neon), [Render](/docs/integrations/render) and [AWS](/docs/integrations/aws).
+How to deploy the [Electric sync engine](/products/postgres-sync), with links to integration docs for specific platforms like [Supabase](/docs/integrations/supabase), [Neon](/docs/integrations/neon), [Render](/docs/integrations/render) and [AWS](/docs/integrations/aws).
 
 > [!TIP] Electric Cloud &ndash; the simplest way to use Electric
-> The simplest way to use Electric is via the [Electric Cloud](/product/cloud), which is a simple, scalable, <span class="no-wrap">low-cost</span>, managed Electric hosting service.
+> The simplest way to use Electric is via the [Electric Cloud](/cloud), which is a simple, scalable, <span class="no-wrap">low-cost</span>, managed Electric hosting service.
 >
 >   <p class="action cloud-cta">
->     <a href="/product/cloud" class="VPButton small brand vspace">
+>     <a href="/cloud" class="VPButton small brand vspace">
 >       <span class="vpi-electric-icon"></span> View Cloud</a>
 >   </p>
 
@@ -116,7 +116,7 @@ When running, Electric also keeps a pool of active database connections open. Th
 
 ## 2. Running Electric
 
-The [Electric sync engine](/product/electric) is an Elixir web service, packaged using Docker.
+The [Electric sync engine](/products/postgres-sync) is an Elixir web service, packaged using Docker.
 
 You can deploy it anywhere you can run a container with a filesystem and exposed HTTP port. This includes cloud and application hosting platforms like:
 
@@ -159,6 +159,69 @@ The file system location configured via `ELECTRIC_STORAGE_DIR` and the data Elec
 ### HTTP port
 
 Electric provides an HTTP API exposed on a configurable [`ELECTRIC_PORT`](/docs/api/config#electric-port). You should make sure this is exposed to the Internet.
+
+### Health checks
+
+Electric provides a health check endpoint at `/v1/health` that can be used for liveness and readiness probes. This endpoint does not require authentication, so it works even when [`ELECTRIC_SECRET`](/docs/api/config#electric-secret) is set.
+
+The endpoint returns a JSON response with a `status` field:
+
+| HTTP Status | Response | Meaning |
+|-------------|----------|---------|
+| `200` | `{"status": "active"}` | Electric is fully operational and ready to serve requests |
+| `202` | `{"status": "waiting"}` | Electric is waiting to acquire the replication lock |
+| `202` | `{"status": "starting"}` | Electric is starting up and establishing connections |
+
+For **liveness probes**, any response (200 or 202) indicates the service is alive.
+
+For **readiness probes**, you should check for a `200` status code to ensure Electric is fully ready to handle shape requests.
+
+Example health check using curl:
+
+```shell
+curl http://localhost:3000/v1/health
+# {"status":"active"}
+```
+
+#### Kubernetes probes
+
+When deploying Electric on Kubernetes, note that standard `httpGet` probes consider any 2xx response as success. This means an `httpGet` readiness probe would incorrectly mark the pod as ready when Electric returns `202` (still starting up).
+
+For **liveness probes**, `httpGet` works fine since any response indicates the service is alive:
+
+```yaml
+livenessProbe:
+  httpGet:
+    path: /v1/health
+    port: 3000
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  timeoutSeconds: 2
+```
+
+For **readiness probes**, use an `exec` probe to check for exactly HTTP 200. The Electric container includes `curl`:
+
+```yaml
+readinessProbe:
+  exec:
+    command:
+      - sh
+      - -c
+      - |
+        test "$(curl -so /dev/null -w '%{http_code}' http://localhost:3000/v1/health)" = "200"
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  timeoutSeconds: 2
+  failureThreshold: 3
+```
+
+This ensures the pod is only marked ready when Electric is fully operational and ready to serve shape requests.
+
+### Observability
+
+Electric supports [OpenTelemetry](https://opentelemetry.io/) for exporting traces, with built-in support for [Honeycomb.io](https://www.honeycomb.io/). Metrics are also available in StatsD and Prometheus formats.
+
+See the [Telemetry reference](/docs/reference/telemetry#opentelemetry) for configuration details.
 
 ### Caching proxy
 

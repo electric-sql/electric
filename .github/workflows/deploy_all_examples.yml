@@ -35,6 +35,8 @@ jobs:
             path: examples/react
           - name: burn
             path: examples/burn
+          - name: tanstack-db-web-starter
+            path: examples/tanstack-db-web-starter
 
     env:
       DEPLOY_ENV: 'production'
@@ -53,7 +55,13 @@ jobs:
       ELECTRIC_API: ${{ secrets.ELECTRIC_API }}
       ELECTRIC_ADMIN_API: ${{ secrets.ELECTRIC_ADMIN_API }}
       ELECTRIC_TEAM_ID: ${{ secrets.ELECTRIC_TEAM_ID }}
+      ELECTRIC_ADMIN_API_AUTH_TOKEN: ${{ secrets.ELECTRIC_ADMIN_API_AUTH_TOKEN }}
       ANTHROPIC_KEY: ${{ secrets.ANTHROPIC_KEY }}
+      QUICKSTART_DATABASE_URI: ${{ secrets.QUICKSTART_DATABASE_URI }}
+      QUICKSTART_POOLED_DATABASE_URI: ${{ secrets.QUICKSTART_POOLED_DATABASE_URI }}
+      QUICKSTART_SOURCE_ID: ${{ vars.QUICKSTART_SOURCE_ID }}
+      QUICKSTART_SOURCE_SECRET: ${{ secrets.QUICKSTART_SOURCE_SECRET }}
+      BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET }}
       # HONEYCOMB_API_KEY: ${{ secrets.HONEYCOMB_API_KEY }} TODO
 
     steps:

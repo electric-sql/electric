@@ -15,7 +15,7 @@
   [invoke setup_electric]
 
   [shell electric]
-    ??[info] Starting replication from postgres
+    ??[notice] Starting replication from postgres
 
   ## Add some data
   [invoke start_psql]

@@ -35,7 +35,8 @@ defmodule Electric.Shapes.Partitions do
   table) then this will expand the mapping function to add a change to the
   partition root for every change to a partition of that root.
   """
-  @spec add_shape(t(), shape_id(), Electric.Shapes.Shape.t()) :: t()
+  @spec add_shape(t(), shape_id(), Electric.Shapes.Shape.t()) ::
+          {:ok, t()} | {:error, :connection_not_available}
   def add_shape(%__MODULE__{} = state, shape_id, shape) do
     case Inspector.load_relation_info(shape.root_table_id, state.inspector) do
       {:ok, relation} ->

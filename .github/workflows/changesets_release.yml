@@ -11,6 +11,7 @@ permissions:
   id-token: write # Required for OIDC
   contents: write # Required to push tags and create releases
   pull-requests: write # Required for changesets to create PRs
+  issues: write # Required for changesets to comment on issues about the release in which they were fixed
 
 jobs:
   changesets:
@@ -18,10 +19,10 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       published: ${{ steps.changesets.outputs.published }}
+      sync_service_release_tag: ${{ steps.sync_service_release_tag.outputs.tag }}
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
@@ -45,6 +46,15 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           HEX_API_KEY: ${{ secrets.HEX_API_KEY }}
+      - name: Capture the new sync-service release as an output (if any)
+        id: sync_service_release_tag
+        if: steps.changesets.outputs.published == 'true'
+        run: |
+          # Assign publishedPackages to a variable first to avoid any interpretation of JSON special chars by the shell
+          PUBLISHED_PACKAGES='${{ steps.changesets.outputs.publishedPackages }}'
+          # Use jq to pick the relevant package from the JSON array and format it into a <package>@<version> output
+          TAGS=$(echo "$PUBLISHED_PACKAGES" | jq -r '.[] | select(.name == "@core/sync-service") | .name + "@" + .version')
+          echo "tag=$TAGS" >> "$GITHUB_OUTPUT"
       - name: Add latest tag to published packages
         if: steps.changesets.outputs.published == 'true'
         run: node scripts/tag-latest.mjs
@@ -54,6 +64,15 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PUBLISHED_PACKAGES: ${{ steps.changesets.outputs.publishedPackages }}
+
+  publish-to-dockerhub:
+    needs: changesets
+    if: ${{ needs.changesets.outputs.published == 'true' && needs.changesets.outputs.sync_service_release_tag  != '' }}
+    uses: ./.github/workflows/sync_service_dockerhub_image.yml
+    secrets: inherit
+    with:
+      release_tag: ${{ needs.changesets.outputs.sync_service_release_tag }}
+
   update-cloud:
     name: Update Electric version used by Cloud
     runs-on: ubuntu-latest
@@ -61,7 +80,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
       # Get the Electric version of the Docker image
       - name: Get Electric version

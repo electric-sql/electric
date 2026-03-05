@@ -1009,17 +1009,18 @@ describe(`HTTP Sync`, () => {
       await insertIssues({ id: rowId, title: `foo1` })
 
       const statusCodesReceived: number[] = []
-      let numRequests = 0
+      let firstUpToDateReceived = false
+      let shapeCleared = false
 
       const fetchWrapper = async (...args: Parameters<typeof fetch>) => {
-        // before any subsequent requests after the initial one, ensure
-        // that the existing shape is deleted and some more data is inserted
-        if (numRequests === 2) {
+        // after the first up-to-date is received, clear the shape
+        // on the next request (but only once)
+        if (firstUpToDateReceived && !shapeCleared) {
+          shapeCleared = true
           await insertIssues({ id: rowId2, title: `foo2` })
           await clearIssuesShape(issueStream.shapeHandle!)
         }
 
-        numRequests++
         const response = await fetch(...args)
 
         if (response.status < 500) {
@@ -1040,27 +1041,34 @@ describe(`HTTP Sync`, () => {
         liveSse,
       })
 
-      expect.assertions(12)
+      expect.assertions(10)
 
       let originalShapeHandle: string | undefined
       let upToDateReachedCount = 0
+      let statusCodesAtFirstUpToDate = 0
       await h.forEachMessage(issueStream, aborter, async (res, msg, nth) => {
         // shapeData.set(msg.key, msg.value)
         if (isUpToDateMessage(msg)) {
           upToDateReachedCount++
           if (upToDateReachedCount === 1) {
-            // upon reaching up to date initially, we have one
-            // response with the initial data
-            expect(statusCodesReceived).toHaveLength(2)
-            expect(statusCodesReceived[0]).toBe(200)
-            expect(statusCodesReceived[1]).toBe(200)
+            // upon reaching up to date initially, all responses should be 200
+            // (no 409 yet since shape hasn't been cleared)
+            expect(statusCodesReceived.every((code) => code === 200)).toBe(true)
+            statusCodesAtFirstUpToDate = statusCodesReceived.length
+            // Signal that we've reached up-to-date, so next request can clear shape
+            firstUpToDateReceived = true
           } else if (upToDateReachedCount === 2) {
             // the next up to date message should have had
             // a 409 interleaved before it that instructed the
             // client to go and fetch data from scratch
-            expect(statusCodesReceived.length).greaterThanOrEqual(5)
-            expect(statusCodesReceived[2]).toBe(409)
-            expect(statusCodesReceived[3]).toBe(200)
+            expect(statusCodesReceived).toContain(409)
+            // Find the 409 and verify it came after the first up-to-date
+            const indexOf409 = statusCodesReceived.indexOf(409)
+            expect(indexOf409).toBeGreaterThanOrEqual(
+              statusCodesAtFirstUpToDate
+            )
+            // After the 409, there should be at least one 200 for the new shape
+            expect(statusCodesReceived[indexOf409 + 1]).toBe(200)
             return res()
           }
           return

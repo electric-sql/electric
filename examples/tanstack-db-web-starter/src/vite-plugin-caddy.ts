@@ -1,11 +1,10 @@
-import { spawn, type ChildProcess } from "child_process"
+import { spawn, spawnSync, type ChildProcess } from "child_process"
 import { writeFileSync } from "fs"
-import { readFileSync } from "fs"
-import { networkInterfaces } from "os"
 import type { Plugin } from "vite"
 
 interface CaddyPluginOptions {
   host?: string
+  httpsPort?: number
   encoding?: boolean
   autoStart?: boolean
   configPath?: string
@@ -14,6 +13,7 @@ interface CaddyPluginOptions {
 export function caddyPlugin(options: CaddyPluginOptions = {}): Plugin {
   const {
     host = `localhost`,
+    httpsPort = 5173,
     encoding = true,
     autoStart = true,
     configPath = `Caddyfile`,
@@ -23,36 +23,8 @@ export function caddyPlugin(options: CaddyPluginOptions = {}): Plugin {
   let vitePort: number | undefined
   let caddyStarted = false
 
-  const generateCaddyfile = (projectName: string, vitePort: number) => {
-    // Get network IP for network access
-    const nets = networkInterfaces()
-    let networkIP = `192.168.1.1` // fallback
-
-    for (const name of Object.keys(nets)) {
-      const netInterfaces = nets[name]
-      if (netInterfaces) {
-        for (const net of netInterfaces) {
-          if (net.family === `IPv4` && !net.internal) {
-            networkIP = net.address
-            break
-          }
-        }
-      }
-    }
-
-    const config = `${projectName}.localhost {
-  reverse_proxy ${host}:${vitePort}${
-    encoding
-      ? `
-  encode {
-    gzip
-  }`
-      : ``
-  }
-}
-
-# Network access
-${networkIP} {
+  const generateCaddyfile = (vitePort: number) => {
+    const config = `localhost:${httpsPort} {
   reverse_proxy ${host}:${vitePort}${
     encoding
       ? `
@@ -121,12 +93,31 @@ ${networkIP} {
     }
   }
 
-  const startCaddyIfReady = (projectName: string) => {
+  const startCaddyIfReady = () => {
     if (autoStart && vitePort && !caddyStarted) {
       caddyStarted = true
+
+      // Check if `caddy` binary is available before starting (sync)
+      try {
+        const check = spawnSync(`caddy`, [`--version`], { stdio: `ignore` })
+        if (check.error || check.status !== 0) {
+          throw new Error(
+            `\`caddy\` binary not found or is not working. Please ensure Caddy is installed and available in your PATH.`
+          )
+        }
+      } catch (_err) {
+        console.error(
+          `\`caddy\` binary not found or is not working. Please ensure Caddy is installed and available in your PATH.`,
+          `\nCaddy is required to be able to serve local development with HTTP2 support.`,
+          `\n  - Install Caddy: https://caddyserver.com/docs/install`,
+          `\n  - If you have \`asdf\`, run \`asdf install\``
+        )
+        process.exit(1)
+      }
       // Generate Caddyfile
-      const caddyConfig = generateCaddyfile(projectName, vitePort)
+      const caddyConfig = generateCaddyfile(vitePort)
       writeFileSync(configPath, caddyConfig)
+
       // Start Caddy
       startCaddy(configPath)
     }
@@ -135,62 +126,31 @@ ${networkIP} {
   return {
     name: `vite-plugin-caddy`,
     configureServer(server) {
-      let projectName = `app`
-
-      // Get project name from package.json
-      try {
-        const packageJsonContent = readFileSync(
-          process.cwd() + `/package.json`,
-          `utf8`
-        )
-        const packageJson = JSON.parse(packageJsonContent)
-        projectName = packageJson.name || `app`
-      } catch (_error) {
-        console.warn(
-          `Could not read package.json for project name, using "app"`
-        )
-      }
-
       // Override Vite's printUrls function
       server.printUrls = function () {
-        // Get network IP
-        const nets = networkInterfaces()
-        let networkIP = `192.168.1.1` // fallback
-
-        for (const name of Object.keys(nets)) {
-          const netInterfaces = nets[name]
-          if (netInterfaces) {
-            for (const net of netInterfaces) {
-              if (net.family === `IPv4` && !net.internal) {
-                networkIP = net.address
-                break
-              }
-            }
-          }
-        }
-
         console.log()
-        console.log(`  ➜  Local:   https://${projectName}.localhost/`)
-        console.log(`  ➜  Network: https://${networkIP}/`)
-        console.log(`  ➜  press h + enter to show help`)
+        console.log(`  ➜  Local:   https://localhost:${httpsPort}/`)
         console.log()
+        console.log(
+          `  Note: running through Caddy. You might be prompted for password to install HTTPS certificates for local development.`
+        )
       }
 
       server.middlewares.use((_req, _res, next) => {
         if (!vitePort && server.config.server.port) {
           vitePort = server.config.server.port
-          startCaddyIfReady(projectName)
+          startCaddyIfReady()
         }
         next()
       })
 
       const originalListen = server.listen
-      server.listen = function (port?: number, ...args: unknown[]) {
+      server.listen = function (port?: number, isRestart?: boolean) {
         if (port) {
           vitePort = port
         }
 
-        const result = originalListen.call(this, port, ...args)
+        const result = originalListen.call(this, port, isRestart)
 
         // Try to start Caddy after server is listening
         if (result && typeof result.then === `function`) {
@@ -199,10 +159,10 @@ ${networkIP} {
             if (!vitePort && server.config.server.port) {
               vitePort = server.config.server.port
             }
-            startCaddyIfReady(projectName)
+            startCaddyIfReady()
           })
         } else {
-          startCaddyIfReady(projectName)
+          startCaddyIfReady()
         }
 
         return result

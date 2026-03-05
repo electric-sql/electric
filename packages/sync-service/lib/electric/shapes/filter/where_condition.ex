@@ -164,10 +164,10 @@ defmodule Electric.Shapes.Filter.WhereCondition do
     :ok
   end
 
-  def affected_shapes(%Filter{where_cond_table: table} = filter, condition_id, record, refs_fun) do
+  def affected_shapes(%Filter{where_cond_table: table} = filter, condition_id, record) do
     MapSet.union(
       indexed_shapes_affected(filter, condition_id, record),
-      other_shapes_affected(filter, table, condition_id, record, refs_fun)
+      other_shapes_affected(filter, table, condition_id, record)
     )
   rescue
     error ->
@@ -197,7 +197,8 @@ defmodule Electric.Shapes.Filter.WhereCondition do
     )
   end
 
-  defp other_shapes_affected(filter, table, condition_id, record, refs_fun) do
+  defp other_shapes_affected(%Filter{refs_fun: refs_fun} = filter, table, condition_id, record)
+       when is_function(refs_fun, 1) do
     [{_, {_index_keys, other_shapes}}] = :ets.lookup(table, condition_id)
 
     OpenTelemetry.with_child_span(
@@ -205,7 +206,10 @@ defmodule Electric.Shapes.Filter.WhereCondition do
       [shape_count: map_size(other_shapes)],
       fn ->
         for {shape_id, where} <- other_shapes,
+            # Cheap MapSet check before touching ETS — skips shapes handled by the sublink inverted index
+            not Filter.registered_in_inverted_index?(filter, shape_id),
             shape = Filter.get_shape(filter, shape_id),
+            not is_nil(shape),
             WhereClause.includes_record?(where, record, refs_fun.(shape)),
             into: MapSet.new() do
           shape_id

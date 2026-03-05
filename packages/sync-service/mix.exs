@@ -33,17 +33,6 @@ defmodule Electric.MixProject do
       start_permanent: Mix.env() == :prod,
       deps: deps(),
       aliases: aliases(),
-      # This will go away after we upgrade Elixir to 1.19, which expects the public `cli/0`
-      # function to be defined instead.
-      preferred_cli_env: [
-        dialyzer: :test,
-        coveralls: :test,
-        "coveralls.detail": :test,
-        "coveralls.post": :test,
-        "coveralls.html": :test,
-        "coveralls.cobertura": :test,
-        "coveralls.lcov": :test
-      ],
       releases: [
         electric: [
           applications: @telemetry_applications_in_release,
@@ -103,8 +92,12 @@ defmodule Electric.MixProject do
         {:bandit, "~> 1.6"},
         {:dotenvy, "~> 1.1"},
         {:ecto, "~> 3.12"},
+        {:exqlite, "~> 0.35"},
+        {:esqlite, "~> 0.9.0"},
+        {:ex_sqlean, "~> 0.8.7"},
         {:jason, "~> 1.4"},
         {:nimble_options, "~> 1.1"},
+        {:nimble_pool, "~> 1.1"},
         {:opentelemetry_telemetry, "~> 1.1"},
         {:opentelemetry_semantic_conventions, "~> 1.27"},
         {:pg_query_ex, "0.9.0"},
@@ -117,7 +110,7 @@ defmodule Electric.MixProject do
         {:tz, "~> 0.28"}
       ],
       dev_and_test_deps(),
-      telemetry_deps()
+      telemetry_deps(Mix.target())
     ])
   end
 
@@ -128,11 +121,15 @@ defmodule Electric.MixProject do
       {:junit_formatter, "~> 3.4", only: [:test], runtime: false},
       {:ex_doc, ">= 0.0.0", only: :dev, runtime: false},
       {:stream_data, "~> 1.2", only: [:dev, :test]},
-      {:repatch, "~> 1.0", only: [:test]}
+      {:repatch, "~> 1.0", only: [:test]},
+      {:electric_client, path: "../elixir-client", only: [:test], runtime: false}
     ]
   end
 
-  defp telemetry_deps do
+  # Only include telemetry deps when building for the telemetry target.
+  # This avoids issues with hex.pm when the deps include path dependencies or overrides
+  # that would otherwise prevent package building.
+  defp telemetry_deps(@telemetry_target) do
     [
       {:electric_telemetry, path: "../electric-telemetry"},
       {:opentelemetry, "~> 1.6"},
@@ -142,21 +139,9 @@ defmodule Electric.MixProject do
       {:protobuf, "~> 0.13.0", override: true},
       {:sentry, "~> 11.0"}
     ]
-    |> Enum.map(fn
-      {package, version} when is_binary(version) ->
-        {package, version, telemetry_dep_opts([])}
-
-      {package, opts} when is_list(opts) ->
-        {package, telemetry_dep_opts(opts)}
-
-      {package, version, opts} when is_binary(version) and is_list(opts) ->
-        {package, version, telemetry_dep_opts(opts)}
-    end)
   end
 
-  defp telemetry_dep_opts(source_opts) do
-    Keyword.merge(source_opts, targets: @telemetry_target)
-  end
+  defp telemetry_deps(_), do: []
 
   defp aliases do
     [

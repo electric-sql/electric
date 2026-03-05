@@ -4,6 +4,7 @@ defmodule ElectricTelemetry.Opts do
       instance_id: [type: :string, required: true],
       installation_id: [type: :string],
       stack_id: [type: :string],
+      storage_dir: [type: :string],
       version: [type: :string, required: true],
       reporters: [
         type: :keyword_list,
@@ -71,6 +72,20 @@ defmodule ElectricTelemetry.Opts do
           otlp_headers: [type: :map, default: %{}],
           export_period: [type: :integer, default: :timer.seconds(30)],
           resource: [type: :map, default: %{}]
+        ],
+        default: []
+      ],
+      call_home_reporter_opts: [
+        type: :keyword_list,
+        keys: [
+          first_report_in: [
+            type: {:tuple, [:pos_integer, {:in, [:millisecond, :second, :minute]}]},
+            default: {2, :minute}
+          ],
+          reporting_period: [
+            type: {:tuple, [:pos_integer, {:in, [:millisecond, :second, :minute]}]},
+            default: {30, :minute}
+          ]
         ],
         default: []
       ]

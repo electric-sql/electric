@@ -2,6 +2,7 @@ defmodule Electric.Shapes do
   alias Electric.Replication.LogOffset
   alias Electric.ShapeCache.Storage
   alias Electric.ShapeCache
+  alias Electric.ShapeCache.ShapeStatus
   alias Electric.Shapes.Shape
 
   import Electric, only: [is_stack_id: 1, is_shape_handle: 1]
@@ -30,11 +31,11 @@ defmodule Electric.Shapes do
   end
 
   @doc """
-  Get the shape that corresponds to this shape definition and return it along with the latest offset of the shape
+  Get the shape handle that corresponds to this shape definition and return it
   """
-  @spec get_shape(stack_id(), Shape.t()) :: {shape_handle(), LogOffset.t()} | nil
-  def get_shape(stack_id, %Shape{} = shape_def) when is_stack_id(stack_id) do
-    ShapeCache.get_shape(shape_def, stack_id)
+  @spec fetch_handle_by_shape(stack_id(), Shape.t()) :: {:ok, shape_handle()} | :error
+  def fetch_handle_by_shape(stack_id, %Shape{} = shape_def) when is_stack_id(stack_id) do
+    ShapeCache.fetch_handle_by_shape(shape_def, stack_id)
   end
 
   @spec fetch_shape_by_handle(stack_id(), shape_handle()) :: Shape.t() | :error
@@ -98,6 +99,31 @@ defmodule Electric.Shapes do
     end
 
     :ok
+  end
+
+  @doc """
+  Wrap the writing of a snapshot to some Storage backend with the required
+  ShapeStatus update calls.
+  """
+  @spec make_new_snapshot!(
+          Electric.Shapes.Querying.json_result_stream(),
+          Storage.shape_storage(),
+          stack_id(),
+          shape_handle()
+        ) :: :ok | {:error, term()}
+  def make_new_snapshot!(stream, storage, stack_id, shape_handle) do
+    with :ok <- Storage.make_new_snapshot!(stream, storage),
+         :ok <- ShapeStatus.mark_snapshot_complete(stack_id, shape_handle) do
+      :ok
+    end
+  end
+
+  @spec mark_snapshot_started(Storage.shape_storage(), stack_id(), shape_handle()) ::
+          :ok | {:error, term()}
+  def mark_snapshot_started(storage, stack_id, shape_handle) do
+    with :ok <- Storage.mark_snapshot_as_started(storage) do
+      ShapeStatus.mark_snapshot_started(stack_id, shape_handle)
+    end
   end
 
   defp shape_storage(stack_id, shape_handle) do

@@ -1,4 +1,16 @@
+import "@dotenvx/dotenvx/config"
 import { ELECTRIC_PROTOCOL_QUERY_PARAMS } from "@electric-sql/client"
+
+/**
+ * Gets the Electric SQL endpoint URL based on environment configuration.
+ *
+ * If running in production, or `USE_ELECTRIC_URL` is set to `true`, the `ELECTRIC_URL` env var is used,
+ * if available, otherwise the default cloud endpoint is used.
+ * Otherwise, the local docker endpoint is used, assuming default port 30000.
+ */
+function getElectricUrl(): string {
+  return process.env.ELECTRIC_URL || `http://localhost:30000`
+}
 
 /**
  * Prepares the Electric SQL proxy URL from a request URL
@@ -8,10 +20,7 @@ import { ELECTRIC_PROTOCOL_QUERY_PARAMS } from "@electric-sql/client"
  */
 export function prepareElectricUrl(requestUrl: string): URL {
   const url = new URL(requestUrl)
-  const electricUrl =
-    process.env.NODE_ENV === `production`
-      ? `https://api.electric-sql.cloud`
-      : `http://localhost:30000`
+  const electricUrl = getElectricUrl()
   const originUrl = new URL(`${electricUrl}/v1/shape`)
 
   // Copy Electric-specific query params
@@ -22,9 +31,9 @@ export function prepareElectricUrl(requestUrl: string): URL {
   })
 
   // Add Electric Cloud authentication if configured
-  if (process.env.ELECTRIC_SOURCE_ID && process.env.ELECTRIC_SOURCE_SECRET) {
+  if (process.env.ELECTRIC_SOURCE_ID && process.env.ELECTRIC_SECRET) {
     originUrl.searchParams.set(`source_id`, process.env.ELECTRIC_SOURCE_ID)
-    originUrl.searchParams.set(`secret`, process.env.ELECTRIC_SOURCE_SECRET)
+    originUrl.searchParams.set(`secret`, process.env.ELECTRIC_SECRET)
   }
 
   return originUrl

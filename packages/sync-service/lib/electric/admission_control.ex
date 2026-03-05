@@ -26,7 +26,7 @@ defmodule Electric.AdmissionControl do
 
   The max_concurrent limit can be configured in your config files:
 
-      config :electric, :max_concurrent_requests, %{initial: 300, existing: 1000}
+      config :electric, :max_concurrent_requests, %{initial: 300, existing: 10_000}
 
   """
 
@@ -175,7 +175,7 @@ defmodule Electric.AdmissionControl do
       read_concurrency: true
     ])
 
-    Logger.info("Admission control initialized with table: #{table_name}")
+    Logger.notice("Admission control initialized with table: #{table_name}")
     {:ok, %{table_name: table_name}}
   end
 

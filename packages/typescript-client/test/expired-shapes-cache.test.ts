@@ -4,7 +4,10 @@ import {
   ExpiredShapesCache,
   expiredShapesCache,
 } from '../src/expired-shapes-cache'
-import { EXPIRED_HANDLE_QUERY_PARAM } from '../src/constants'
+import {
+  CACHE_BUSTER_QUERY_PARAM,
+  EXPIRED_HANDLE_QUERY_PARAM,
+} from '../src/constants'
 
 function waitForFetch(stream: ShapeStream): Promise<void> {
   let unsub = () => {}
@@ -245,5 +248,482 @@ describe(`ExpiredShapesCache`, () => {
     expect(expiredShapesCache.getExpiredHandle(expectedShapeUrl)).toBe(
       `original-handle`
     )
+  })
+
+  it(`should not accept expired handle from stale cached response after 409`, async () => {
+    // This test simulates the infinite loop bug:
+    // 1. Client has handle H1, server returns 409 with new handle H2
+    // 2. Client marks H1 as expired, resets to H2, makes new request
+    // 3. Proxy returns stale cached response with H1 in headers
+    // 4. Bug: Client accepts H1, causing infinite 409 loop
+    // Fix: Client should ignore expired handle from response
+
+    let requestCount = 0
+    const capturedHandles: string[] = []
+    let resolveSecondRequest: () => void
+    const secondRequestMade = new Promise<void>((resolve) => {
+      resolveSecondRequest = resolve
+    })
+
+    fetchMock.mockImplementation((input: RequestInfo | URL) => {
+      requestCount++
+      const url = new URL(input.toString())
+      const handle = url.searchParams.get(`handle`)
+      capturedHandles.push(handle || `none`)
+
+      if (requestCount === 1) {
+        // First request: return 409 with new handle
+        return Promise.resolve(
+          new Response(`[]`, {
+            status: 409,
+            headers: {
+              'electric-handle': `new-handle-H2`,
+            },
+          })
+        )
+      } else if (requestCount === 2) {
+        // Second request: simulate stale cached response returning OLD expired handle
+        // This is the bug scenario - proxy ignores cache buster and returns stale response
+        resolveSecondRequest()
+        return Promise.resolve(
+          new Response(
+            JSON.stringify([{ headers: { control: `up-to-date` } }]),
+            {
+              status: 200,
+              headers: {
+                'electric-handle': `original-handle-H1`, // OLD handle from cached response!
+                'electric-offset': `0_0`,
+                'electric-schema': `{}`,
+                'electric-cursor': `cursor-1`,
+              },
+            }
+          )
+        )
+      } else {
+        // Third+ request: if client incorrectly accepted H1, it would 409 again
+        // If fixed, client should keep H2 and this shouldn't happen
+        if (handle === `original-handle-H1`) {
+          // This means the bug occurred - client accepted the expired handle
+          return Promise.resolve(
+            new Response(`[]`, {
+              status: 409,
+              headers: {
+                'electric-handle': `new-handle-H3`,
+              },
+            })
+          )
+        }
+        // Normal response for H2
+        aborter.abort()
+        return Promise.resolve(
+          new Response(
+            JSON.stringify([{ headers: { control: `up-to-date` } }]),
+            {
+              status: 200,
+              headers: {
+                'electric-handle': `new-handle-H2`,
+                'electric-offset': `0_0`,
+                'electric-schema': `{}`,
+                'electric-cursor': `cursor-1`,
+                'electric-up-to-date': ``,
+              },
+            }
+          )
+        )
+      }
+    })
+
+    const stream = new ShapeStream({
+      url: shapeUrl,
+      params: { table: `test` },
+      handle: `original-handle-H1`,
+      signal: aborter.signal,
+      fetchClient: fetchMock,
+      subscribe: false,
+    })
+
+    // Subscribe to trigger fetching
+    stream.subscribe(() => {})
+
+    // Wait for the second request to be made (after 409 handling)
+    await secondRequestMade
+
+    // Wait for the stale response to be ignored and the third request to complete
+    await new Promise((resolve) => setTimeout(resolve, 100))
+
+    // After 409, the expired handle should be stored
+    const expectedShapeUrl = `${shapeUrl}?table=test`
+    expect(expiredShapesCache.getExpiredHandle(expectedShapeUrl)).toBe(
+      `original-handle-H1`
+    )
+
+    // The client should have made exactly 3 requests:
+    // 1. Original request with H1 -> 409
+    // 2. New request with H2 -> 200 (but response has stale H1 in header -> ignored)
+    // 3. Retry with H2 -> 200 with correct H2 header -> processed
+    // Before fix: Client would accept H1 from stale response and make request 3 with H1
+    expect(requestCount).toBe(3)
+    expect(capturedHandles).toEqual([
+      `original-handle-H1`,
+      `new-handle-H2`,
+      `new-handle-H2`,
+    ])
+
+    // Verify the stream's current handle is H2 (not the stale H1)
+    expect(stream.shapeHandle).toBe(`new-handle-H2`)
+  })
+
+  it(`should retry with cache buster when receiving stale response with no handle yet`, async () => {
+    // This test verifies the fix for a bug where the client gets into a broken state:
+    // 1. Client starts fresh (no handle, offset=-1)
+    // 2. expiredShapesCache has a stale expired handle from a previous session
+    // 3. CDN returns cached response with that expired handle in headers
+    // 4. Bug: Client didn't accept the handle because it matched expired cache
+    // 5. Bug: Offset advanced but handle stayed undefined
+    // 6. Bug: Next request failed with "handle can't be blank when offset != -1"
+    // Fix: Client retries with a random cache buster to bypass the CDN cache
+
+    const expectedShapeUrl = `${shapeUrl}?table=test`
+    const staleHandle = `stale-handle-from-previous-session`
+    const freshHandle = `fresh-handle-from-origin`
+
+    // Pre-populate expiredShapesCache with stale expired handle data
+    // (simulating leftover from previous browser session)
+    expiredShapesCache.markExpired(expectedShapeUrl, staleHandle)
+
+    let requestCount = 0
+    const capturedUrls: string[] = []
+    let resolveSecondRequest: () => void
+    const secondRequestMade = new Promise<void>((resolve) => {
+      resolveSecondRequest = resolve
+    })
+
+    fetchMock.mockImplementation((input: RequestInfo | URL) => {
+      requestCount++
+      capturedUrls.push(input.toString())
+
+      if (requestCount === 1) {
+        // First request: CDN returns stale cached response with the expired handle
+        // This simulates proxy/CDN ignoring the expired_handle cache buster
+        return Promise.resolve(
+          new Response(JSON.stringify([{ value: { id: 1 } }]), {
+            status: 200,
+            headers: {
+              'electric-handle': staleHandle, // Same as expired handle!
+              'electric-offset': `0_0`,
+              'electric-schema': `{"id":"int4"}`,
+              'electric-cursor': `cursor-1`,
+            },
+          })
+        )
+      } else {
+        // Second request: should include random cache buster (_cb param)
+        // and get fresh response from origin
+        resolveSecondRequest()
+        return Promise.resolve(
+          new Response(
+            JSON.stringify([{ headers: { control: `up-to-date` } }]),
+            {
+              status: 200,
+              headers: {
+                'electric-handle': freshHandle, // Fresh handle from origin
+                'electric-offset': `0_0`,
+                'electric-schema': `{"id":"int4"}`,
+                'electric-cursor': `cursor-2`,
+              },
+            }
+          )
+        )
+      }
+    })
+
+    const stream = new ShapeStream({
+      url: shapeUrl,
+      params: { table: `test` },
+      // NO handle provided - client starts fresh
+      signal: aborter.signal,
+      fetchClient: fetchMock,
+      subscribe: false,
+    })
+
+    // Subscribe to trigger fetching
+    stream.subscribe(() => {})
+
+    // Wait for second request to be made
+    await secondRequestMade
+
+    // Small delay to let the response be processed
+    await new Promise((resolve) => setTimeout(resolve, 10))
+
+    // The client should have retried and gotten a fresh handle
+    expect(stream.shapeHandle).toBe(freshHandle)
+
+    // Verify the second request includes the cache buster parameter
+    expect(requestCount).toBeGreaterThanOrEqual(2)
+    const secondUrl = new URL(capturedUrls[1])
+    expect(secondUrl.searchParams.has(CACHE_BUSTER_QUERY_PARAM)).toBe(true)
+
+    // The key assertion: client should NOT be in a broken state
+    expect(stream.shapeHandle).not.toBe(undefined)
+  })
+
+  it(`should not update offset from stale response when client already has a handle`, async () => {
+    // Regression test: When CDN returns a stale response with an expired handle,
+    // the client should ignore the entire response (including body) to prevent
+    // a mismatch between handle and offset that would cause server errors.
+
+    const expiredHandle = `expired-handle-A`
+    const currentHandle = `current-handle-B`
+    const originalOffset = `0_0`
+
+    expiredShapesCache.markExpired(`${shapeUrl}?table=test`, expiredHandle)
+
+    let fetchCount = 0
+    fetchMock.mockImplementation(() => {
+      fetchCount++
+      if (fetchCount >= 3) aborter.abort()
+      return Promise.resolve(
+        new Response(JSON.stringify([{ headers: { control: `up-to-date` } }]), {
+          status: 200,
+          headers: {
+            'electric-handle': expiredHandle,
+            'electric-offset': `0_inf`, // Different offset from stale response
+            'electric-schema': `{"id":"int4"}`,
+            'electric-cursor': `cursor-1`,
+          },
+        })
+      )
+    })
+
+    const stream = new ShapeStream({
+      url: shapeUrl,
+      params: { table: `test` },
+      handle: currentHandle,
+      offset: originalOffset,
+      signal: aborter.signal,
+      fetchClient: fetchMock,
+      subscribe: false,
+    })
+
+    stream.subscribe(() => {})
+
+    // Wait for the fetch cycles to complete (aborts after 3 fetches)
+    await new Promise((resolve) => setTimeout(resolve, 100))
+
+    // Stale responses should be fully ignored — handle and offset unchanged
+    expect(stream.shapeHandle).toBe(currentHandle)
+    expect(stream.lastOffset).toBe(originalOffset)
+    expect(fetchCount).toBeGreaterThanOrEqual(3)
+  })
+
+  it(`should throw error after max stale cache retries exceeded`, async () => {
+    // This test verifies that the client doesn't retry forever when CDN
+    // continues serving stale responses despite cache buster
+    const expectedShapeUrl = `${shapeUrl}?table=test`
+    const staleHandle = `persistent-stale-handle`
+
+    // Pre-populate expiredShapesCache with stale expired handle data
+    expiredShapesCache.markExpired(expectedShapeUrl, staleHandle)
+
+    let requestCount = 0
+    const capturedUrls: string[] = []
+
+    fetchMock.mockImplementation((input: RequestInfo | URL) => {
+      requestCount++
+      capturedUrls.push(input.toString())
+
+      // Always return stale response - simulating severely misconfigured CDN
+      return Promise.resolve(
+        new Response(JSON.stringify([{ value: { id: 1 } }]), {
+          status: 200,
+          headers: {
+            'electric-handle': staleHandle, // Always stale!
+            'electric-offset': `0_0`,
+            'electric-schema': `{"id":"int4"}`,
+            'electric-cursor': `cursor-1`,
+          },
+        })
+      )
+    })
+
+    let caughtError: Error | null = null
+
+    const stream = new ShapeStream({
+      url: shapeUrl,
+      params: { table: `test` },
+      signal: aborter.signal,
+      fetchClient: fetchMock,
+      subscribe: false,
+      onError: (error) => {
+        caughtError = error
+      },
+    })
+
+    // Subscribe to trigger fetching
+    stream.subscribe(() => {})
+
+    // Wait for retries to exhaust (should be fast since no real network)
+    await new Promise((resolve) => setTimeout(resolve, 100))
+
+    // Should have made initial request + 3 retries = 4 total requests
+    expect(requestCount).toBe(4)
+
+    // Verify each retry after the first includes cache buster
+    for (let i = 1; i < capturedUrls.length; i++) {
+      const url = new URL(capturedUrls[i])
+      expect(url.searchParams.has(CACHE_BUSTER_QUERY_PARAM)).toBe(true)
+    }
+
+    // Should have thrown an error after max retries
+    expect(caughtError).not.toBe(null)
+    expect(caughtError!.message).toContain(`stale cached responses`)
+    expect(caughtError!.message).toContain(`3 retry attempts`)
+  })
+
+  it(`client should retry with cache buster when local handle matches expired handle`, async () => {
+    // When the client's own persisted handle IS the expired handle,
+    // the client should detect that localHandle === expiredHandle and
+    // use stale-retry (with cache buster) to bypass the stale CDN cache.
+
+    const expiredHandle = `expired-H1`
+    const freshHandle = `fresh-H2`
+    const expectedShapeUrl = `${shapeUrl}?table=test`
+    expiredShapesCache.markExpired(expectedShapeUrl, expiredHandle)
+
+    let fetchCount = 0
+    const capturedUrls: string[] = []
+
+    fetchMock.mockImplementation(
+      (input: RequestInfo | URL, _init?: RequestInit) => {
+        fetchCount++
+        const url = input.toString()
+        capturedUrls.push(url)
+
+        const hasCacheBuster = new URL(url).searchParams.has(
+          CACHE_BUSTER_QUERY_PARAM
+        )
+
+        // Once the client sends a cache buster, the CDN is bypassed
+        // and the backend returns a fresh handle
+        const handle = hasCacheBuster ? freshHandle : expiredHandle
+
+        // Abort after recovery to prevent infinite live polling loop
+        if (fetchCount >= 5) {
+          aborter.abort()
+        }
+
+        return Promise.resolve(
+          new Response(JSON.stringify([]), {
+            status: 200,
+            headers: {
+              'electric-handle': handle,
+              'electric-offset': `0_0`,
+              'electric-schema': `{}`,
+              'electric-cursor': `cursor-1`,
+              'electric-up-to-date': ``,
+            },
+          })
+        )
+      }
+    )
+
+    const stream = new ShapeStream({
+      url: shapeUrl,
+      params: { table: `test` },
+      handle: expiredHandle, // client's own handle IS the expired one
+      offset: `0_0`,
+      signal: aborter.signal,
+      fetchClient: fetchMock,
+      subscribe: false,
+    })
+
+    stream.subscribe(() => {})
+
+    await new Promise((resolve) => setTimeout(resolve, 200))
+
+    // The client should have used a cache buster to escape the stale CDN
+    const usedCacheBuster = capturedUrls.some((url) =>
+      new URL(url).searchParams.has(CACHE_BUSTER_QUERY_PARAM)
+    )
+    expect(usedCacheBuster).toBe(true)
+  })
+
+  it(`client should gracefully handle stale ignored response with undefined schema`, async () => {
+    // Scenario:
+    // 1. Client resumes from persisted handle/offset (schema is undefined)
+    // 2. The expired shapes cache has 'stale-handle' marked as expired
+    // 3. First fetch returns a stale response with data messages
+    // 4. checkStaleResponse: client has local handle → returns 'ignored'
+    // 5. #onInitialResponse returns false — body parsing is skipped
+    // 6. Client retries and eventually gets a valid response
+
+    const expectedShapeUrl = `${shapeUrl}?table=test`
+    expiredShapesCache.markExpired(expectedShapeUrl, `stale-handle`)
+
+    let fetchCount = 0
+    const errors: Error[] = []
+
+    fetchMock.mockImplementation(
+      (_input: RequestInfo | URL, _init?: RequestInit) => {
+        fetchCount++
+
+        if (fetchCount >= 5) {
+          aborter.abort()
+        }
+
+        // Return a stale response with actual data messages.
+        // The body contains an insert message with a `value` object —
+        // the parser will try to look up column types in the schema,
+        // which is undefined after the ignored stale transition.
+        const body = JSON.stringify([
+          {
+            key: `test-1`,
+            value: { id: `1`, name: `test` },
+            headers: { operation: `insert` },
+            offset: `0_0`,
+          },
+        ])
+
+        return Promise.resolve(
+          new Response(body, {
+            status: 200,
+            headers: {
+              'electric-handle': `stale-handle`,
+              'electric-offset': `0_0`,
+              'electric-schema': JSON.stringify({
+                id: { type: `text` },
+                name: { type: `text` },
+              }),
+              'electric-cursor': `123`,
+            },
+          })
+        )
+      }
+    )
+
+    const stream = new ShapeStream({
+      url: shapeUrl,
+      params: { table: `test` },
+      handle: `my-persisted-handle`,
+      offset: `0_0`,
+      signal: aborter.signal,
+      fetchClient: fetchMock,
+      subscribe: false,
+      onError: (error) => {
+        errors.push(error)
+        // Don't retry — let the error surface
+        return
+      },
+    })
+
+    stream.subscribe(() => {})
+
+    // Wait for the fetch cycle to complete
+    await new Promise((resolve) => setTimeout(resolve, 200))
+
+    // The client should skip body parsing for ignored stale responses
+    // and continue fetching without errors.
+    expect(errors).toHaveLength(0)
+    expect(fetchCount).toBeGreaterThan(1) // should keep fetching, not crash
   })
 })

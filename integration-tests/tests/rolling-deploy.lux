@@ -36,10 +36,10 @@
 [invoke setup_electric_shell_with_tenant "electric_1" "3000"]
 
 [shell electric_1]
-  ??[info] Acquiring lock from postgres with name electric_slot_integration
-  ??[info] Lock acquired from postgres with name electric_slot_integration
-  ??[info] Starting replication from postgres
-  
+  ??[notice] Acquiring lock from postgres with name electric_slot_integration
+  ??[notice] Lock acquired from postgres with name electric_slot_integration
+  ??[notice] Starting replication from postgres
+
 # First service should be health and active
 [shell orchestator]
   !curl -X GET http://localhost:3000/v1/health?database_id=integration_test_tenant
@@ -61,7 +61,7 @@
 ## in the second electric
 [shell electric_2]
   -Lock acquired from postgres|Starting replication from postgres|$fail_pattern
-  ??[info] Acquiring lock from postgres with name electric_slot_integration
+  ??[notice] Acquiring lock from postgres with name electric_slot_integration
   [sleep 2]
 
 
@@ -95,7 +95,7 @@
 # Should continue same shape in new instance
 [shell client]
   [invoke shape_get_live items $handle $offset]
-  
+
 # Terminate first electric
 [shell electric_1]
   -
@@ -104,7 +104,7 @@
 # Lock should now be acquired and replication starting
 [shell electric_2]
   -$fail_pattern
-  ??[info] Lock acquired from postgres with name electric_slot_integration
+  ??[notice] Lock acquired from postgres with name electric_slot_integration
 
 # Add more data after handover
 [shell psql]
@@ -116,12 +116,12 @@
 
 # Second service should reach healthy and active with loaded backup
 [shell electric_2]
-  ??[info] Loaded shape status from backup
-  ??[info] Starting replication from postgres
+  ??[notice] Found 1 existing valid shapes
+  ??[notice] Starting replication from postgres
 
 [shell orchestator]
-  !curl -X GET http://localhost:3001/v1/health?database_id=integration_test_tenant
-  ??{"status":"active"}
+  # Use wait-for to poll for active status since shape initialization may still be in progress
+  [invoke wait-for "curl -X GET http://localhost:3001/v1/health?database_id=integration_test_tenant" "\{\"status\":\"active\"\}" 10 $PS1]
 
 # Should see post handover update
 [shell client]

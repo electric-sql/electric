@@ -6,6 +6,7 @@ export default defineConfig({
     setupFiles: [`vitest-localstorage-mock`],
     typecheck: { enabled: true },
     fileParallelism: false,
+    testTimeout: 30000, // 30s default timeout to catch hanging tests
     coverage: {
       provider: `istanbul`,
       reporter: [`text`, `json`, `html`, `lcov`],

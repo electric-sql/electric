@@ -1,3 +1,7 @@
+[dev]
+  command = "pnpm dev"
+  targetPort = 5173
+
 [build.environment]
   # Environment variables are set here
 

@@ -1,13 +1,4 @@
 defmodule Electric.Shapes.Consumer.Materializer do
-  # TODOS:
-  # - [x] Keep lockstep with the consumer
-  # - [ ] Think about initial materialization needing to finish before we can continue
-  # - [ ]
-  # - [ ] Use the `get_link_values`
-
-  # NOTES:
-  # - Consumer does txn buffering until pg snapshot is known
-
   # The lifecycle of a materializer is linked to its source consumer. If the consumer
   # goes down for any reason other than a clean supervisor/stack shutdown then we
   # need to invalidate all dependent outer shapes.
@@ -15,6 +6,8 @@ defmodule Electric.Shapes.Consumer.Materializer do
   # restart: :temporary because the materalizer crashing brings down dependent shapes
   # and restarting would make no sense.
   use GenServer, restart: :temporary
+
+  require Logger
 
   alias Electric.Utils
   alias Electric.Replication.Changes
@@ -44,17 +37,57 @@ defmodule Electric.Shapes.Consumer.Materializer do
 
   def whereis(stack_id, shape_handle), do: GenServer.whereis(name(stack_id, shape_handle))
 
-  @spec new_changes(map(), list(Changes.change()) | {LogOffset.t(), LogOffset.t()}) :: :ok
-  def new_changes(state, changes) do
-    GenServer.call(name(state), {:new_changes, changes}, :infinity)
+  @spec new_changes(map(), list(Changes.change()) | {LogOffset.t(), LogOffset.t()}, keyword()) ::
+          :ok
+  def new_changes(state, changes, opts \\ []) do
+    commit? = Keyword.get(opts, :commit, true)
+    GenServer.call(name(state), {:new_changes, changes, commit?}, :infinity)
   end
 
   def wait_until_ready(state) do
     GenServer.call(name(state), :wait_until_ready, :infinity)
   end
 
-  def get_link_values(opts) do
+  @doc """
+  Creates the per-stack ETS table that caches link values for all materializers
+  in a stack. Called by `ConsumerRegistry` during stack initialization. Idempotent —
+  safe to call when the table already exists.
+  """
+  @spec init_link_values_table(stack_id :: term()) :: :ets.table() | :undefined
+  def init_link_values_table(stack_id) do
+    :ets.new(link_values_table_name(stack_id), [
+      :named_table,
+      :public,
+      :set,
+      read_concurrency: true,
+      write_concurrency: true
+    ])
+  rescue
+    ArgumentError -> :ets.whereis(link_values_table_name(stack_id))
+  end
+
+  @doc """
+  Returns the current set of materialized link values for a shape.
+  Checks the shared ETS cache first (written after each committed transaction);
+  falls back to a synchronous GenServer call if the cache has no entry yet.
+  """
+  def get_link_values(%{stack_id: stack_id, shape_handle: shape_handle} = opts) do
+    table = link_values_table_name(stack_id)
+
+    case :ets.lookup(table, shape_handle) do
+      [{^shape_handle, values}] -> values
+      _ -> genserver_get_link_values(opts)
+    end
+  rescue
+    ArgumentError -> genserver_get_link_values(opts)
+  end
+
+  defp genserver_get_link_values(opts) do
     GenServer.call(name(opts), :get_link_values)
+  catch
+    :exit, reason ->
+      raise "Materializer for stack #{inspect(opts.stack_id)} and handle " <>
+              "#{inspect(opts.shape_handle)} is not available: #{inspect(reason)}"
   end
 
   def get_all_as_refs(shape, stack_id) when are_deps_filled(shape) do
@@ -69,7 +102,9 @@ defmodule Electric.Shapes.Consumer.Materializer do
     end)
   end
 
-  def subscribe(opts), do: GenServer.call(name(opts), :subscribe)
+  def subscribe(pid) when is_pid(pid), do: GenServer.call(pid, :subscribe)
+
+  def subscribe(opts) when is_map(opts), do: GenServer.call(name(opts), :subscribe)
 
   def subscribe(stack_id, shape_handle),
     do: subscribe(%{stack_id: stack_id, shape_handle: shape_handle})
@@ -91,7 +126,9 @@ defmodule Electric.Shapes.Consumer.Materializer do
         index: %{},
         tag_indices: %{},
         value_counts: %{},
+        pending_events: %{},
         offset: LogOffset.before_all(),
+        subscribed_offset: nil,
         ref: nil,
         subscribers: MapSet.new()
       })
@@ -105,69 +142,89 @@ defmodule Electric.Shapes.Consumer.Materializer do
     stack_storage = Storage.for_stack(stack_id)
     shape_storage = Storage.for_shape(shape_handle, stack_storage)
 
-    :started = Consumer.await_snapshot_start(stack_id, shape_handle, :infinity)
+    try do
+      case Consumer.await_snapshot_start(stack_id, shape_handle, :infinity) do
+        :started ->
+          {:ok, subscribed_offset} =
+            Consumer.subscribe_materializer(stack_id, shape_handle, self())
 
-    Consumer.subscribe_materializer(stack_id, shape_handle, self())
+          Process.monitor(Consumer.whereis(stack_id, shape_handle),
+            tag: {:consumer_down, state.shape_handle}
+          )
 
-    Process.monitor(Consumer.whereis(stack_id, shape_handle),
-      tag: {:consumer_down, state.shape_handle}
-    )
+          {:noreply, %{state | subscribed_offset: subscribed_offset},
+           {:continue, {:read_stream, shape_storage}}}
 
-    {:noreply, state, {:continue, {:read_stream, shape_storage}}}
+        {:error, _reason} ->
+          {:stop, :shutdown, state}
+      end
+    catch
+      # GenServer.call fails with :exit when Consumer is dead or dies mid-call
+      :exit, reason ->
+        Logger.warning("Materializer startup failed with exit reason: #{inspect(reason)}")
+        {:stop, :shutdown, state}
+    end
   end
 
   def handle_continue({:read_stream, storage}, state) do
-    {:ok, offset, stream} = get_stream_up_to_date(state.offset, storage)
+    {:ok, offset, stream} =
+      get_stream_up_to_offset(state.offset, state.subscribed_offset, storage)
 
     {state, _} =
       stream
       |> decode_json_stream()
       |> apply_changes(state)
 
+    write_link_values(state)
+
     {:noreply, %{state | offset: offset}}
   end
 
-  def get_stream_up_to_date(min_offset, storage) do
-    case Storage.get_chunk_end_log_offset(min_offset, storage) do
-      nil ->
-        {:ok, max_offset, _} = Storage.get_current_position(storage)
+  @doc """
+  Get a stream of log entries from storage, bounded by the subscribed offset.
 
-        if is_log_offset_lte(max_offset, min_offset) do
-          {:ok, min_offset, []}
-        else
-          stream = Storage.get_log_stream(min_offset, max_offset, storage)
-          {:ok, max_offset, stream}
-        end
-
-      max_offset ->
-        stream1 = Storage.get_log_stream(min_offset, max_offset, storage)
-        {:ok, offset, stream2} = get_stream_up_to_date(max_offset, storage)
-        {:ok, offset, Stream.concat(stream1, stream2)}
+  The subscribed_offset is the Consumer's latest_offset at the time of subscription.
+  We only read up to this offset to avoid duplicates - any changes after this offset
+  will be delivered via new_changes messages from the Consumer.
+  """
+  def get_stream_up_to_offset(min_offset, subscribed_offset, storage) do
+    # If subscribed_offset is nil or at/before min_offset, nothing to read
+    if is_nil(subscribed_offset) or is_log_offset_lte(subscribed_offset, min_offset) do
+      {:ok, min_offset, []}
+    else
+      stream = Storage.get_log_stream(min_offset, subscribed_offset, storage)
+      {:ok, subscribed_offset, stream}
     end
   end
 
   def handle_call(:get_link_values, _from, %{value_counts: value_counts} = state) do
-    values = MapSet.new(Map.keys(value_counts))
-
-    {:reply, values, state}
+    {:reply, link_values_from_counts(value_counts), state}
   end
 
   def handle_call(:wait_until_ready, _from, state) do
     {:reply, :ok, state}
   end
 
-  def handle_call({:new_changes, {range_start, range_end}}, _from, state) do
+  def handle_call({:new_changes, {range_start, range_end}, commit?}, _from, state) do
     stack_storage = Storage.for_stack(state.stack_id)
     storage = Storage.for_shape(state.shape_handle, stack_storage)
 
-    Storage.get_log_stream(range_start, range_end, storage)
-    |> decode_json_stream()
-    |> apply_changes_and_notify(state)
-    |> then(fn state -> {:reply, :ok, state} end)
+    state =
+      Storage.get_log_stream(range_start, range_end, storage)
+      |> decode_json_stream()
+      |> apply_and_accumulate_events(state)
+      |> maybe_flush_pending_events(commit?)
+
+    {:reply, :ok, state}
   end
 
-  def handle_call({:new_changes, changes}, _from, state) when is_list(changes) do
-    {:reply, :ok, apply_changes_and_notify(changes, state)}
+  def handle_call({:new_changes, changes, commit?}, _from, state) when is_list(changes) do
+    state =
+      changes
+      |> apply_and_accumulate_events(state)
+      |> maybe_flush_pending_events(commit?)
+
+    {:reply, :ok, state}
   end
 
   def handle_call(:subscribe, {pid, _ref} = _from, state) do
@@ -201,13 +258,59 @@ defmodule Electric.Shapes.Consumer.Materializer do
     {:noreply, %{state | subscribers: MapSet.delete(state.subscribers, pid)}}
   end
 
+  @spec link_values_table_name(Electric.stack_id()) :: atom()
+  def link_values_table_name(stack_id) do
+    :"Electric.Materializer.LinkValues:#{stack_id}"
+  end
+
+  @doc """
+  Removes the cached link values for `shape_handle` from the shared ETS table.
+  Safe to call even if the table does not exist (e.g. after a stack shutdown).
+  """
+  @spec delete_link_values(Electric.stack_id(), Electric.shape_handle()) :: :ok
+  def delete_link_values(stack_id, shape_handle) do
+    :ets.delete(link_values_table_name(stack_id), shape_handle)
+    :ok
+  rescue
+    ArgumentError ->
+      Logger.debug(fn ->
+        "delete_link_values: link-values table for stack #{inspect(stack_id)} " <>
+          "not found when deleting handle #{inspect(shape_handle)}"
+      end)
+
+      :ok
+  end
+
+  defp link_values_from_counts(value_counts) do
+    MapSet.new(Map.keys(value_counts))
+  end
+
+  defp write_link_values(%{
+         stack_id: stack_id,
+         shape_handle: shape_handle,
+         value_counts: value_counts
+       }) do
+    :ets.insert(
+      link_values_table_name(stack_id),
+      {shape_handle, link_values_from_counts(value_counts)}
+    )
+  rescue
+    ArgumentError ->
+      Logger.warning(
+        "write_link_values: link-values ETS table missing for stack #{inspect(stack_id)} " <>
+          "— cache will fall back to GenServer calls for handle #{inspect(shape_handle)}"
+      )
+
+      :ok
+  end
+
   defp decode_json_stream(stream) do
     stream
     |> Stream.map(&Jason.decode!/1)
-    |> Enum.filter(fn decoded ->
+    |> Stream.filter(fn decoded ->
       Map.has_key?(decoded, "key") || Map.has_key?(decoded["headers"], "event")
     end)
-    |> Enum.map(fn
+    |> Stream.map(fn
       %{
         "key" => key,
         "value" => value,
@@ -272,22 +375,65 @@ defmodule Electric.Shapes.Consumer.Materializer do
     Eval.Env.const_to_pg_string(Eval.Env.new(), value, type)
   end
 
-  defp apply_changes_and_notify(changes, state) do
+  defp apply_and_accumulate_events(changes, state) do
     {state, events} = apply_changes(changes, state)
+    %{state | pending_events: merge_events(state.pending_events, events)}
+  end
+
+  defp maybe_flush_pending_events(state, true) do
+    events =
+      cancel_matching_move_events(state.pending_events)
 
     if events != %{} do
-      events =
-        events
-        |> Map.put_new(:move_in, [])
-        |> Map.put_new(:move_out, [])
-
       for pid <- state.subscribers do
         send(pid, {:materializer_changes, state.shape_handle, events})
       end
     end
 
-    state
+    write_link_values(state)
+
+    %{state | pending_events: %{}}
   end
+
+  defp maybe_flush_pending_events(state, _commit?), do: state
+
+  defp merge_events(pending, new) when pending == %{}, do: new
+  defp merge_events(pending, new) when new == %{}, do: pending
+
+  defp merge_events(pending, new) do
+    %{
+      move_in: Map.get(new, :move_in, []) ++ Map.get(pending, :move_in, []),
+      move_out: Map.get(new, :move_out, []) ++ Map.get(pending, :move_out, [])
+    }
+  end
+
+  # A value's count can cross the 0↔1 boundary multiple times in a single batch
+  # (e.g., toggled twice in one transaction: 0→1 move_in, 1→0 move_out, 0→1 move_in).
+  # Emitting both move_in and move_out for the same value causes the consumer to
+  # fire a move-in query while simultaneously marking the value's tag as moved-out,
+  # which filters out the query results - losing the data entirely.
+  #
+  # We resolve this by sorting events by value, then walking through the list
+  # cancelling adjacent move_in/move_out pairs for the same value.
+  defp cancel_matching_move_events(events) do
+    ins = events |> Map.get(:move_in, []) |> Enum.sort_by(fn {v, _} -> v end)
+    outs = events |> Map.get(:move_out, []) |> Enum.sort_by(fn {v, _} -> v end)
+    cancel_sorted_pairs(ins, outs, %{move_in: [], move_out: []})
+  end
+
+  defp cancel_sorted_pairs([{v, _} | ins], [{v, _} | outs], acc),
+    do: cancel_sorted_pairs(ins, outs, acc)
+
+  defp cancel_sorted_pairs([{v1, _} = i | ins], [{v2, _} | _] = outs, acc) when v1 < v2,
+    do: cancel_sorted_pairs(ins, outs, %{acc | move_in: [i | acc.move_in]})
+
+  defp cancel_sorted_pairs([{v1, _} | _] = ins, [{v2, _} = o | outs], acc) when v2 < v1,
+    do: cancel_sorted_pairs(ins, outs, %{acc | move_out: [o | acc.move_out]})
+
+  defp cancel_sorted_pairs([], [], %{move_in: [], move_out: []}), do: %{}
+
+  defp cancel_sorted_pairs(ins, outs, acc),
+    do: %{acc | move_in: ins ++ acc.move_in, move_out: outs ++ acc.move_out}
 
   defp apply_changes(changes, state) do
     {{index, tag_indices}, {value_counts, events}} =
@@ -311,20 +457,33 @@ defmodule Electric.Shapes.Consumer.Materializer do
           },
           {{index, tag_indices}, counts_and_events} ->
             # TODO: this is written as if it supports multiple selected columns, but it doesn't for now
-            if Enum.any?(state.columns, &is_map_key(record, &1)) do
-              {value, original_string} = cast!(record, state)
-              old_value = Map.fetch!(index, key)
-              index = Map.put(index, key, value)
+            columns_present = Enum.any?(state.columns, &is_map_key(record, &1))
+            has_tag_updates = removed_move_tags != []
 
+            if columns_present or has_tag_updates do
               tag_indices =
                 tag_indices
                 |> remove_row_from_tag_indices(key, removed_move_tags)
                 |> add_row_to_tag_indices(key, move_tags)
 
-              {{index, tag_indices},
-               counts_and_events
-               |> decrement_value(old_value, value_to_string(old_value, state))
-               |> increment_value(value, original_string)}
+              if columns_present do
+                {value, original_string} = cast!(record, state)
+                old_value = Map.fetch!(index, key)
+                index = Map.put(index, key, value)
+
+                # Skip decrement/increment dance if value hasn't changed to avoid
+                # spurious move_out/move_in events when only the tag changed
+                if old_value == value do
+                  {{index, tag_indices}, counts_and_events}
+                else
+                  {{index, tag_indices},
+                   counts_and_events
+                   |> decrement_value(old_value, value_to_string(old_value, state))
+                   |> increment_value(value, original_string)}
+                end
+              else
+                {{index, tag_indices}, counts_and_events}
+              end
             else
               # Nothing relevant to this materializer has been updated
               {{index, tag_indices}, counts_and_events}

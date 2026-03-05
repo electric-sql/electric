@@ -3,7 +3,7 @@ layout: page
 title: Blog
 description: >-
   The latest news and updates from ElectricSQL.
-image: /img/blog/electric-elephant.jpg
+image: /static/img/blog/electric-elephant.jpg
 sidebar: false
 ---
 
@@ -12,7 +12,9 @@ import { onMounted } from 'vue'
 
 import { data as posts } from './data/posts.data.ts'
 
+import ElectricElephant from '/static/img/blog/electric-elephant.jpg?url'
 import BlogPostListing from './src/components/BlogPostListing.vue'
+import NetlifyImage from './src/components/NetlifyImage.vue'
 
 onMounted(async () => {
   if (typeof window !== 'undefined' && document.querySelector) {
@@ -50,21 +52,27 @@ onMounted(async () => {
 <style scoped>
   .header {
     text-align: center;
-    padding: 0 12px;
+    padding: 0;
+    margin: 60px 48px 32px;
   }
   .header img {
-    width: 65%;
-    max-width: 360px;
-    margin: 60px auto 32px;
+    width: 100%;
+    max-width: 720px;
+    margin: 0 auto 36px;
+  }
+  @media (max-width: 949px) {
+    .header {
+      margin: 58px 40px 32px;
+    }
   }
   @media (max-width: 749px) {
-    .header img {
-      margin: 54px auto 32px;
+    .header {
+      margin: 54px 32px 32px;
     }
   }
   @media (max-width: 549px) {
-    .header img {
-      margin: 42px auto 24px;
+    .header {
+      margin: 42px 24px 24px;
     }
   }
   .header hr {
@@ -112,7 +120,11 @@ onMounted(async () => {
   <div class="container">
     <main>
       <div class="header">
-        <img src="/img/blog/electric-elephant.jpg" />
+        <NetlifyImage
+          :src="ElectricElephant"
+          :width="720"
+          :height="440"
+        />
         <h1>
           ElectricSQL Blog
         </h1>

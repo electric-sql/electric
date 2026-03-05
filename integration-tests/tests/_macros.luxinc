@@ -181,7 +181,7 @@
   [shell $shell_name]
     -$fail_pattern
 
-    ??[info] Starting ElectricSQL
+    ??[notice] Starting ElectricSQL
 
     !if is_nil(System.get_env("DO_NOT_START_CONN_MAN_PING")) do \
       {:ok, _pid} = Electric.TestUtils.ConnectionManagerPing.start_link(manager_name: Electric.Connection.Manager.name("single_stack")) \
@@ -227,6 +227,8 @@
       -p 4318:4318 \
       -v $(realpath ../support_files/otel-collector-config.yaml):/conf/otel-collector-config.yaml \
       otel/opentelemetry-collector-contrib --config=/conf/otel-collector-config.yaml
+    # Allow time for docker to pull the image if not cached
+    [timeout 120]
     ??Starting HTTP server
     ?"endpoint": "(0\.0\.0\.0|\[::\]):4318"
     ??Everything is ready. Begin running and processing data.

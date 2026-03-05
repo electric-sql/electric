@@ -10,13 +10,26 @@ We sync normalized data from tables into TanStack DB collections in the client &
 
 ## General Usage
 
-Read https://electric-sql.com/AGENTS.md for general information on developing wth Electric and TanStack DB.
+You MUST read https://electric-sql.com/AGENTS.md for general information on developing wth Electric and TanStack DB.
 
 ## Starter template specifics
 
+You CAN choose to read the `README.md` for this project if useful. Much of it is summarized below.
+
+### Pre-reqs
+
+Docker, Caddy (with root cert installed using `caddy trust`), Node and pnpm. Versions in `.tool-versions`.
+
 ### Initial setup
 
-Before you started, all necessary package install is done via `pnpm install` and a dev server is started with `pnpm dev`.
+```sh
+pnpm install    # install deps
+pnpm backend:up # run backend services using docker compose
+pnpm migrate    # apply migrations
+pnpm dev        # run dev server
+```
+
+The dev server runs over HTTPS via a CaddyPlugin in the vite config. This supports HTTP/2 which is essential to avoid slow shapes for Electric.
 
 ### Linting and formatting
 
@@ -26,11 +39,11 @@ This command will also report linter errors that were not automatically fixable.
 
 ### Build/Test Commands
 
-- `pnpm run dev` - Start development server with Docker services
-- `pnpm run build` - Build for production
-- `pnpm run test` - Run all Vitest tests
+- `pnpm dev` - Start development server with Docker services
+- `pnpm build` - Build for production
+- `pnpm test` - Run all Vitest tests
 - `vitest run <test-file>` - Run single test file
-- `pnpm run start` - Start production server
+- `pnpm start` - Start production server
 
 ### Architecture
 

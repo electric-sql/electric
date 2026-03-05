@@ -324,4 +324,85 @@ describe(`UpToDateTracker`, () => {
     // Shape2 should not (no previous up-to-date)
     expect(tracker.shouldEnterReplayMode(shapeKey2)).toBe(null)
   })
+
+  it(`should not infinite loop when CDN keeps returning same cursor`, async () => {
+    // This test reproduces a bug where replay mode never exits when CDN
+    // keeps returning the same cursor, causing all up-to-dates to be suppressed.
+    //
+    // Bug scenario (without fix):
+    // 1. User had cursor=1000 in tracker from previous session
+    // 2. CDN keeps returning cursor=1000 (cached responses)
+    // 3. Each up-to-date is suppressed because cursor matches
+    // 4. #lastSeenCursor never cleared -> infinite loop of suppressed requests
+    //
+    // Fixed behavior:
+    // 1. First request: cursor matches, suppress up-to-date, clear #lastSeenCursor
+    // 2. Second request: #replayMode is false, up-to-date published normally
+
+    let fetchCallCount = 0
+    let gotUpToDate = false
+    const maxCalls = 10
+
+    // Pre-populate the tracker: user got up-to-date recently with cursor=1000
+    const shapeKey = `${shapeUrl}?table=cdn_loop_test`
+    upToDateTracker.recordUpToDate(shapeKey, `1000`)
+
+    // Mock CDN that always returns the same cursor (simulates cached responses)
+    // Abort after maxCalls to prevent actual infinite loop
+    fetchMock.mockImplementation(() => {
+      fetchCallCount++
+      if (fetchCallCount >= maxCalls) {
+        aborter.abort()
+        return Promise.reject(new Error(`Aborted - too many calls`))
+      }
+
+      return Promise.resolve(
+        new Response(JSON.stringify([{ headers: { control: `up-to-date` } }]), {
+          status: 200,
+          headers: {
+            'electric-handle': `test-handle`,
+            'electric-offset': `0_0`,
+            'electric-schema': `{}`,
+            'electric-cursor': `1000`, // Always same cursor
+          },
+        })
+      )
+    })
+
+    const stream = new ShapeStream({
+      url: shapeUrl,
+      params: { table: `cdn_loop_test` },
+      signal: aborter.signal,
+      fetchClient: fetchMock,
+      subscribe: true,
+    })
+
+    // Wait for up-to-date message or timeout
+    const upToDatePromise = new Promise<void>((resolve) => {
+      stream.subscribe((messages) => {
+        const hasUpToDate = messages.some(
+          (msg) => `headers` in msg && msg.headers.control === `up-to-date`
+        )
+        if (hasUpToDate) {
+          gotUpToDate = true
+          aborter.abort()
+          resolve()
+        }
+      })
+    })
+
+    const timeoutPromise = new Promise<void>((resolve) => {
+      setTimeout(() => {
+        aborter.abort()
+        resolve()
+      }, 500)
+    })
+
+    await Promise.race([upToDatePromise, timeoutPromise])
+
+    // With the fix: should get up-to-date within 2-3 requests
+    // Without the fix: would hit maxCalls without getting up-to-date
+    expect(gotUpToDate).toBe(true)
+    expect(fetchCallCount).toBeLessThanOrEqual(3)
+  })
 })

@@ -6,7 +6,7 @@ defmodule Electric.Plug.DeleteShapePlugTest do
   alias Electric.Shapes.Shape
 
   import Support.ComponentSetup
-  import Support.TestUtils, only: [set_status_to_active: 1, expect_shape_cache: 1]
+  import Support.TestUtils
 
   @registry Registry.DeleteShapePlugTest
 
@@ -58,6 +58,8 @@ defmodule Electric.Plug.DeleteShapePlugTest do
 
     DeleteShapePlug.call(conn, config)
   end
+
+  @moduletag :tmp_dir
 
   setup :with_persistent_kv
 
@@ -153,9 +155,6 @@ defmodule Electric.Plug.DeleteShapePlugTest do
       %{stack_id: stack_id} = ctx
 
       {:ok, shape_handle} = Electric.ShapeCache.ShapeStatus.add_shape(stack_id, @test_shape)
-
-      :ok =
-        Electric.ShapeCache.ShapeStatus.initialise_shape(stack_id, shape_handle, :something)
 
       expect_shape_cache(clean_shape: fn ^shape_handle, ^stack_id -> :ok end)
 

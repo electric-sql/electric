@@ -1,5 +1,23 @@
 # @electric-sql/docs
 
+## 0.0.7
+
+### Patch Changes
+
+- d63e3f5: Disable SQLite metric collection by default
+
+## 0.0.6
+
+### Patch Changes
+
+- 8691a61: Make gathering of SQLite memory usage metrics optional and default to off to prevent instability in some environments
+
+## 0.0.5
+
+### Patch Changes
+
+- 02cd199: Add exclusive mode with a single read-write sqlite connection to support AWS EFS
+
 ## 0.0.4
 
 ### Patch Changes

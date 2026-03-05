@@ -318,6 +318,126 @@ describe(`createFetchWithChunkBuffer`, () => {
     expect(mockFetch).toHaveBeenCalledWith(nextUrl, expect.anything())
   })
 
+  it(`should not consume prefetched GET responses for POST requests with same URL`, async () => {
+    const fetchWrapper = createFetchWithChunkBuffer(mockFetch)
+    const initialResponse = new Response(`initial chunk`, {
+      status: 200,
+      headers: responseHeaders({
+        [SHAPE_HANDLE_HEADER]: `123`,
+        [CHUNK_LAST_OFFSET_HEADER]: `456`,
+      }),
+    })
+    const prefetchedGetResponse = new Response(`prefetched GET chunk`, {
+      status: 200,
+    })
+    const postResponse = new Response(`fresh POST response`, { status: 200 })
+
+    mockFetch
+      .mockResolvedValueOnce(initialResponse)
+      .mockResolvedValueOnce(prefetchedGetResponse)
+      .mockResolvedValueOnce(postResponse)
+
+    await fetchWrapper(baseUrl)
+    await sleep()
+
+    const nextUrl = sortUrlParams(`${baseUrl}&handle=123&offset=456`)
+    const result = await fetchWrapper(nextUrl, { method: `POST` })
+
+    expect(await result.text()).toBe(`fresh POST response`)
+    expect(mockFetch).toHaveBeenCalledTimes(3)
+    expect(mockFetch).toHaveBeenNthCalledWith(
+      3,
+      nextUrl,
+      expect.objectContaining({ method: `POST` })
+    )
+  })
+
+  it(`should not prefetch for non-GET requests`, async () => {
+    const fetchWrapper = createFetchWithChunkBuffer(mockFetch)
+    const postResponse = new Response(`snapshot chunk`, {
+      status: 200,
+      headers: responseHeaders({
+        [SHAPE_HANDLE_HEADER]: `123`,
+        [CHUNK_LAST_OFFSET_HEADER]: `456`,
+      }),
+    })
+
+    mockFetch.mockResolvedValueOnce(postResponse)
+
+    const result = await fetchWrapper(baseUrl, { method: `POST` })
+    await sleep()
+
+    expect(result).toBe(postResponse)
+    expect(mockFetch).toHaveBeenCalledTimes(1)
+    expect(mockFetch).toHaveBeenCalledWith(
+      baseUrl,
+      expect.objectContaining({ method: `POST` })
+    )
+  })
+
+  it(`should abort prefetch queue when POST arrives and let subsequent GET start fresh`, async () => {
+    const fetchWrapper = createFetchWithChunkBuffer(mockFetch)
+    const initialResponse = new Response(`initial`, {
+      status: 200,
+      headers: responseHeaders({
+        [SHAPE_HANDLE_HEADER]: `123`,
+        [CHUNK_LAST_OFFSET_HEADER]: `456`,
+      }),
+    })
+    const prefetchedResponse = new Response(`prefetched`, { status: 200 })
+    const postResponse = new Response(`post`, { status: 200 })
+    const freshGetResponse = new Response(`fresh get`, {
+      status: 200,
+      headers: responseHeaders({
+        [SHAPE_HANDLE_HEADER]: `123`,
+        [CHUNK_LAST_OFFSET_HEADER]: `789`,
+      }),
+    })
+
+    mockFetch
+      .mockResolvedValueOnce(initialResponse)
+      .mockResolvedValueOnce(prefetchedResponse)
+      .mockResolvedValueOnce(postResponse)
+      .mockResolvedValueOnce(freshGetResponse)
+
+    // GET triggers prefetch of nextUrl
+    await fetchWrapper(baseUrl)
+    await sleep()
+
+    // POST clears the queue
+    await fetchWrapper(baseUrl, { method: `POST` })
+
+    // Subsequent GET should make a fresh request, not consume stale prefetch
+    const nextUrl = sortUrlParams(`${baseUrl}&handle=123&offset=456`)
+    const result = await fetchWrapper(nextUrl)
+    expect(await result.text()).toBe(`fresh get`)
+  })
+
+  it(`should detect method from Request object input`, async () => {
+    const fetchWrapper = createFetchWithChunkBuffer(mockFetch)
+    const postResponse = new Response(`post response`, { status: 200 })
+    mockFetch.mockResolvedValueOnce(postResponse)
+
+    const request = new Request(baseUrl, { method: `POST` })
+    const result = await fetchWrapper(request)
+    await sleep()
+
+    expect(result).toBe(postResponse)
+    expect(mockFetch).toHaveBeenCalledTimes(1)
+  })
+
+  it(`should handle lowercase method in init`, async () => {
+    const fetchWrapper = createFetchWithChunkBuffer(mockFetch)
+    const response = new Response(`ok`, { status: 200 })
+    mockFetch.mockResolvedValueOnce(response)
+
+    const result = await fetchWrapper(baseUrl, { method: `post` })
+    await sleep()
+
+    expect(result).toBe(response)
+    expect(mockFetch).toHaveBeenCalledTimes(1)
+  })
+
   it(`should stop and resume prefetching after reaching maxChunksToPrefetch`, async () => {
     const maxPrefetchNum = 2
     const fetchWrapper = createFetchWithChunkBuffer(mockFetch, {
@@ -524,6 +644,78 @@ describe(`createFetchWithChunkBuffer`, () => {
 
     // no new prefetches since main request was aborted
     expect(mockFetch).toHaveBeenCalledTimes(2)
+  })
+
+  it(`should not return aborted prefetch requests after queue is cleared`, async () => {
+    // This test verifies the fix for issue #3460:
+    // When a page is hidden, the stream pauses and aborts in-flight prefetches.
+    // Previously, the aborted promises stayed in the queue and would be returned
+    // on resume, causing the stream to incorrectly interpret the abort as fatal.
+    const fetchWrapper = createFetchWithChunkBuffer(mockFetch, {
+      maxChunksToPrefetch: 1,
+    })
+
+    const nextUrl = sortUrlParams(`${baseUrl}&handle=123&offset=0`)
+
+    // Initial response that triggers prefetch of nextUrl
+    const initialResponse = new Response(`initial chunk`, {
+      status: 200,
+      headers: responseHeaders({
+        [SHAPE_HANDLE_HEADER]: `123`,
+        [CHUNK_LAST_OFFSET_HEADER]: `0`,
+      }),
+    })
+
+    // Fresh response for when we request nextUrl after clearing queue
+    const freshResponse = new Response(`fresh chunk`, {
+      status: 200,
+      headers: responseHeaders({
+        [SHAPE_HANDLE_HEADER]: `123`,
+        [CHUNK_LAST_OFFSET_HEADER]: `1`,
+      }),
+    })
+
+    // Create an outer abort controller that we'll use to abort the stream
+    // This simulates ShapeStream's #requestAbortController
+    const outerAbortController = new AbortController()
+
+    mockFetch
+      .mockResolvedValueOnce(initialResponse) // Initial request
+      .mockImplementationOnce((_url, init) => {
+        // Return a promise that hangs until the signal is aborted
+        const signal = init?.signal as AbortSignal | undefined
+        return new Promise<Response>((_, reject) => {
+          if (signal) {
+            signal.addEventListener(`abort`, () => {
+              reject(new DOMException(`Aborted`, `AbortError`))
+            })
+          }
+        })
+      })
+      .mockResolvedValueOnce(freshResponse) // Fresh request after queue cleared
+
+    // Make initial request with abort signal - this triggers prefetch of nextUrl
+    // The prefetch inherits the signal through chainAborter
+    await fetchWrapper(baseUrl, { signal: outerAbortController.signal })
+    await sleep() // Let prefetch start
+
+    expect(mockFetch).toHaveBeenCalledTimes(2)
+    expect(mockFetch).toHaveBeenNthCalledWith(2, nextUrl, expect.anything())
+
+    // Simulate page hidden: abort the stream's request controller
+    // This propagates through chainAborter to abort the prefetch's internal aborter
+    outerAbortController.abort()
+    await sleep()
+
+    // Simulate page visible: request the same URL that was being prefetched
+    // Before fix: this would return the aborted promise and throw
+    // After fix: consume() checks aborter.signal.aborted and makes a fresh request
+    const result = await fetchWrapper(nextUrl)
+
+    expect(result).toBe(freshResponse)
+    // 4 calls: initial, prefetch (aborted), fresh request, new prefetch triggered by fresh response
+    expect(mockFetch).toHaveBeenCalledTimes(4)
+    expect(mockFetch).toHaveBeenNthCalledWith(3, nextUrl)
   })
 })
 

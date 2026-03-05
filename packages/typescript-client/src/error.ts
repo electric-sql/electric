@@ -116,3 +116,10 @@ export class MissingHeadersError extends Error {
     super(msg)
   }
 }
+
+export class StaleCacheError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = `StaleCacheError`
+  }
+}

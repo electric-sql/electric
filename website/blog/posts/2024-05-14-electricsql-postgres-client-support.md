@@ -7,7 +7,7 @@ excerpt: >-
   support for syncing to Postgres in the client.
 authors: [samwillis]
 image: /img/blog/electric-released-with-postgres-support/header.jpg
-tags: [release]
+tags: [release, pglite]
 outline: deep
 post: true
 ---
@@ -130,7 +130,7 @@ const conn = new pg.Client({
 await conn.connect()
 
 // Instantiate your electric client.
-const electric = await electrify(conn, schema, , {
+const electric = await electrify(conn, schema, {
   url: 'https://example.com:5133'
 })
 ```

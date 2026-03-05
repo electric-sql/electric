@@ -8,17 +8,17 @@ import { execSync } from 'child_process'
  * and posts comments on both.
  */
 
-const REPO = process.env.GITHUB_REPOSITORY || 'electric-sql/electric'
+const REPO = process.env.GITHUB_REPOSITORY || `electric-sql/electric`
 
 async function main() {
-  const publishedPackages = JSON.parse(process.env.PUBLISHED_PACKAGES || '[]')
+  const publishedPackages = JSON.parse(process.env.PUBLISHED_PACKAGES || `[]`)
 
   if (publishedPackages.length === 0) {
-    console.log('No published packages found')
+    console.log(`No published packages found`)
     return
   }
 
-  console.log('Published packages:', publishedPackages)
+  console.log(`Published packages:`, publishedPackages)
 
   // Map to collect PRs and their associated packages
   const prToPackages = new Map()
@@ -91,19 +91,19 @@ async function main() {
 function findChangelogPath(packageName) {
   // Map package names to their directories
   const packageDirs = [
-    'packages/typescript-client',
-    'packages/react-hooks',
-    'packages/experimental',
-    'packages/sync-service',
-    'packages/elixir-client',
-    'packages/y-electric',
+    `packages/typescript-client`,
+    `packages/react-hooks`,
+    `packages/experimental`,
+    `packages/sync-service`,
+    `packages/elixir-client`,
+    `packages/y-electric`,
   ]
 
   for (const dir of packageDirs) {
     const pkgJsonPath = `${dir}/package.json`
     if (existsSync(pkgJsonPath)) {
       try {
-        const pkgJson = JSON.parse(readFileSync(pkgJsonPath, 'utf8'))
+        const pkgJson = JSON.parse(readFileSync(pkgJsonPath, `utf8`))
         if (pkgJson.name === packageName) {
           const changelogPath = `${dir}/CHANGELOG.md`
           if (existsSync(changelogPath)) {
@@ -120,7 +120,7 @@ function findChangelogPath(packageName) {
 }
 
 function extractCommitsFromChangelog(changelogPath, version) {
-  const changelog = readFileSync(changelogPath, 'utf8')
+  const changelog = readFileSync(changelogPath, `utf8`)
   const commits = []
 
   // Find the section for this version
@@ -159,10 +159,10 @@ async function findPRForCommit(commitHash) {
     // Use gh CLI to find PR associated with commit
     const result = execSync(
       `gh api repos/${REPO}/commits/${commitHash}/pulls --jq '.[0].number'`,
-      { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] }
+      { encoding: `utf8`, stdio: [`pipe`, `pipe`, `pipe`] }
     ).trim()
 
-    if (result && result !== 'null') {
+    if (result && result !== `null`) {
       console.log(`  Commit ${commitHash} -> PR #${result}`)
       return parseInt(result, 10)
     }
@@ -176,7 +176,7 @@ async function findPRForCommit(commitHash) {
 async function commentOnPR(prNumber, packages) {
   const packageList = packages
     .map((p) => `- \`${p.name}@${p.version}\``)
-    .join('\n')
+    .join(`\n`)
 
   const body = `This PR has been released! :rocket:
 
@@ -190,7 +190,7 @@ Thanks for contributing to Electric!`
     // Check if we already commented on this PR
     const existingComments = execSync(
       `gh api repos/${REPO}/issues/${prNumber}/comments --jq '[.[] | select(.body | contains("This PR has been released!"))] | length'`,
-      { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] }
+      { encoding: `utf8`, stdio: [`pipe`, `pipe`, `pipe`] }
     ).trim()
 
     if (parseInt(existingComments, 10) > 0) {
@@ -201,8 +201,8 @@ Thanks for contributing to Electric!`
     // Use --body-file with stdin to avoid shell interpretation of backticks
     execSync(`gh pr comment ${prNumber} --repo ${REPO} --body-file -`, {
       input: body,
-      encoding: 'utf8',
-      stdio: ['pipe', 'inherit', 'inherit'],
+      encoding: `utf8`,
+      stdio: [`pipe`, `inherit`, `inherit`],
     })
     console.log(`  Commented on PR #${prNumber}`)
   } catch (e) {
@@ -211,7 +211,7 @@ Thanks for contributing to Electric!`
 }
 
 async function findLinkedIssues(prNumber) {
-  const [owner, repo] = REPO.split('/')
+  const [owner, repo] = REPO.split(`/`)
   const query = `
     query($owner: String!, $repo: String!, $pr: Int!) {
       repository(owner: $owner, name: $repo) {
@@ -229,12 +229,12 @@ async function findLinkedIssues(prNumber) {
   try {
     const result = execSync(
       `gh api graphql -f query='${query}' -F owner='${owner}' -F repo='${repo}' -F pr=${prNumber} --jq '.data.repository.pullRequest.closingIssuesReferences.nodes[].number'`,
-      { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] }
+      { encoding: `utf8`, stdio: [`pipe`, `pipe`, `pipe`] }
     ).trim()
 
     if (result) {
-      const issues = result.split('\n').map((n) => parseInt(n, 10))
-      console.log(`  PR #${prNumber} links to issues: ${issues.join(', ')}`)
+      const issues = result.split(`\n`).map((n) => parseInt(n, 10))
+      console.log(`  PR #${prNumber} links to issues: ${issues.join(`, `)}`)
       return issues
     }
   } catch (e) {
@@ -247,10 +247,10 @@ async function findLinkedIssues(prNumber) {
 async function commentOnIssue(issueNumber, prNumbers, packages) {
   const packageList = packages
     .map((p) => `- \`${p.name}@${p.version}\``)
-    .join('\n')
+    .join(`\n`)
 
-  const prLinks = prNumbers.map((pr) => `#${pr}`).join(', ')
-  const prWord = prNumbers.length === 1 ? 'PR' : 'PRs'
+  const prLinks = prNumbers.map((pr) => `#${pr}`).join(`, `)
+  const prWord = prNumbers.length === 1 ? `PR` : `PRs`
 
   const body = `The ${prWord} fixing this issue (${prLinks}) has been released! :rocket:
 
@@ -264,7 +264,7 @@ Thanks for reporting!`
     // Check if we already commented on this issue
     const existingComments = execSync(
       `gh api repos/${REPO}/issues/${issueNumber}/comments --jq '[.[] | select(.body | contains("A fix for this issue has been released!"))] | length'`,
-      { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] }
+      { encoding: `utf8`, stdio: [`pipe`, `pipe`, `pipe`] }
     ).trim()
 
     if (parseInt(existingComments, 10) > 0) {
@@ -275,8 +275,8 @@ Thanks for reporting!`
     // Use --body-file with stdin to avoid shell interpretation of backticks
     execSync(`gh issue comment ${issueNumber} --repo ${REPO} --body-file -`, {
       input: body,
-      encoding: 'utf8',
-      stdio: ['pipe', 'inherit', 'inherit'],
+      encoding: `utf8`,
+      stdio: [`pipe`, `inherit`, `inherit`],
     })
     console.log(`  Commented on issue #${issueNumber}`)
   } catch (e) {

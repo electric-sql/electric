@@ -68,6 +68,52 @@ export type MoveTag = string
  */
 export type MoveOutPattern = { pos: number; value: string }
 
+/**
+ * Serialized expression types for structured subset queries.
+ * These allow Electric to properly apply columnMapper transformations
+ * before generating the final SQL.
+ */
+export type SerializedExpression =
+  | { type: `ref`; column: string } // Column reference
+  | { type: `val`; paramIndex: number } // Parameter placeholder ($1, $2, etc.)
+  | { type: `func`; name: string; args: SerializedExpression[] } // Operator/function
+
+/**
+ * Serialized ORDER BY clause for structured subset queries.
+ */
+export type SerializedOrderByClause = {
+  column: string
+  direction?: `asc` | `desc` // omitted means 'asc'
+  nulls?: `first` | `last`
+}
+
+export type SubsetParams = {
+  /** Legacy string format WHERE clause */
+  where?: string
+  /** Positional parameter values for WHERE clause */
+  params?: Record<string, string | bigint | number>
+  /** Maximum number of rows to return */
+  limit?: number
+  /** Number of rows to skip */
+  offset?: number
+  /** Legacy string format ORDER BY clause */
+  orderBy?: string
+  /** Structured WHERE expression (preferred when available) */
+  whereExpr?: SerializedExpression
+  /** Structured ORDER BY clauses (preferred when available) */
+  orderByExpr?: SerializedOrderByClause[]
+  /**
+   * HTTP method to use for the request. Overrides `subsetMethod` from ShapeStreamOptions.
+   * - `GET` (default): Sends subset params as query parameters. May fail with 414 errors
+   *   for large queries.
+   * - `POST`: Sends subset params in request body as JSON. Recommended to avoid URL
+   *   length limits with large WHERE clauses or many parameters.
+   *
+   * In Electric 2.0, GET will be deprecated and only POST will be supported.
+   */
+  method?: `GET` | `POST`
+}
+
 export type ControlMessage = {
   headers:
     | (Header & {
@@ -75,6 +121,7 @@ export type ControlMessage = {
         global_last_seen_lsn?: string
       })
     | (Header & { control: `snapshot-end` } & PostgresSnapshot)
+    | (Header & { control: `subset-end` } & SubsetParams)
 }
 
 export type EventMessage = {

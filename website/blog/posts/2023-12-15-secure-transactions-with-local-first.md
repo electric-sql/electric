@@ -2,12 +2,17 @@
 title: Secure transactions with local-first
 description: >-
   You don't need to expose an API to perform secure transactions with local-first. Just emulate request - response over the in-paradigm sync.
+excerpt: >-
+  One of the most common questions we get asked about developing on ElectricSQL is how to do secure, confirmed transactions like bookings and payments.
 authors: [thruflo]
 image: /img/blog/secure-transactions-with-local-first/header.png
 tags: [local-first, example app]
 outline: deep
 post: true
 ---
+
+> [!WARNING]
+> This post was written for a previous version of Electric that is no longer active. It is preserved for historical interest only. See the [Electric Next](/blog/2024/07/17/electric-next) post for context on the new system.
 
 One of the most common questions we get asked about developing on ElectricSQL and local-first in general is how to do secure, confirmed transactions like bookings and payments. <!--truncate-->It's a great question, because you typically need to use a server for these type of transactions. You don't want to bundle secrets into a client app and the server can make sure that a transaction is only executed once.
 
@@ -42,7 +47,7 @@ In addition, you have concurrency challenges. Multiple people can edit the same 
 
 ## Going out-of-band loses consistency
 
-One obvious solution is to use a local-first architecture for "normal" operations and a cloud-first architecture for operations that do. For example, provide an API endpoint that your client can call to place a Stripe payment. Call this directly over the network when you want to perform a payment. Then write the results back into the local database when done.
+One obvious solution is to use a local-first architecture for "normal" operations and a cloud-first architecture for operations that require it. For example, provide an API endpoint that your client can call to place a Stripe payment. Call this directly over the network when you want to perform a payment. Then write the results back into the local database when done.
 
 This can work fine for some systems. However, the problem is that you lose consistency.
 
@@ -87,7 +92,7 @@ You can see it running at [checkout-demo.electric-sql.com](http://checkout-demo.
   <YoutubeEmbed video-id="WhRBvJ4cUWk" />
 </div>
 
-### trcp-crdt
+### trpc-crdt
 
 Kyle Mathews' [trpc-crdt](https://bricolage.io/announcing-trpc-crdt/) is another twist on this pattern. It uses Electric as the transport layer for tRPC requests.
 

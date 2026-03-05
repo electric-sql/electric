@@ -209,6 +209,168 @@ defmodule Electric.Shapes.ShapeTest do
 
       assert Shape.convert_change(shape, non_matching_update) == []
     end
+
+    test "keeps update with tag changes even if filtered columns have not changed" do
+      shape = %Shape{
+        root_table: {"public", "table"},
+        root_table_id: @relation_id,
+        selected_columns: ["id"],
+        # tag_structure means this shape tracks tags based on the "parent_id" column
+        tag_structure: [["parent_id"]]
+      }
+
+      # Update where only parent_id changed (tag change), but id (selected column) didn't
+      update_with_tag_change = %UpdatedRecord{
+        relation: {"public", "table"},
+        old_record: %{"id" => 1, "parent_id" => "old_parent"},
+        record: %{"id" => 1, "parent_id" => "new_parent"}
+      }
+
+      result =
+        Shape.convert_change(shape, update_with_tag_change,
+          stack_id: "test_stack",
+          shape_handle: "test_handle"
+        )
+
+      # The change should be kept (not filtered out) because it has tag changes
+      assert length(result) == 1
+      [converted] = result
+
+      # The converted change should have removed_move_tags set (indicating the old tag)
+      assert converted.removed_move_tags != []
+      # And move_tags for the new tag
+      assert converted.move_tags != []
+      # Tags should be different since parent_id changed
+      assert converted.move_tags != converted.removed_move_tags
+    end
+
+    test "correctly keeps updates with subqueries if the referenced set has not changed" do
+      shape = %Shape{
+        root_table: {"public", "table"},
+        root_table_id: @relation_id,
+        where:
+          Parser.parse_and_validate_expression!(
+            "id IN (SELECT id FROM other_table WHERE value = 'test')",
+            refs: %{["$sublink", "0"] => {:array, :int4}, ["id"] => :int4},
+            sublink_queries: %{0 => "SELECT id FROM other_table WHERE value = 'test'"}
+          )
+      }
+
+      update_to_new_record = %UpdatedRecord{
+        relation: {"public", "table"},
+        old_record: %{"id" => "1", "value" => "old doesn't match"},
+        record: %{"id" => "1", "value" => "new matches"}
+      }
+
+      extra_refs =
+        {%{["$sublink", "0"] => MapSet.new([1])}, %{["$sublink", "0"] => MapSet.new([1])}}
+
+      assert Shape.convert_change(shape, update_to_new_record, extra_refs: extra_refs) == [
+               update_to_new_record
+             ]
+    end
+
+    test "correctly converts updates to new records with subqueries if the referenced set has changed" do
+      shape = %Shape{
+        root_table: {"public", "table"},
+        root_table_id: @relation_id,
+        where:
+          Parser.parse_and_validate_expression!(
+            "id IN (SELECT id FROM other_table WHERE value = 'test')",
+            refs: %{["$sublink", "0"] => {:array, :int4}, ["id"] => :int4},
+            sublink_queries: %{0 => "SELECT id FROM other_table WHERE value = 'test'"}
+          )
+      }
+
+      update_to_new_record = %UpdatedRecord{
+        relation: {"public", "table"},
+        old_record: %{"id" => "1", "value" => "old doesn't match"},
+        record: %{"id" => "1", "value" => "new matches"}
+      }
+
+      extra_refs =
+        {%{["$sublink", "0"] => MapSet.new([])}, %{["$sublink", "0"] => MapSet.new([1])}}
+
+      assert Shape.convert_change(shape, update_to_new_record, extra_refs: extra_refs) == [
+               Changes.convert_update(update_to_new_record, to: :new_record)
+             ]
+    end
+
+    test "correctly converts updates to deleted records with subqueries if the referenced set has changed" do
+      shape = %Shape{
+        root_table: {"public", "table"},
+        root_table_id: @relation_id,
+        where:
+          Parser.parse_and_validate_expression!(
+            "id IN (SELECT id FROM other_table WHERE value = 'test')",
+            refs: %{["$sublink", "0"] => {:array, :int4}, ["id"] => :int4},
+            sublink_queries: %{0 => "SELECT id FROM other_table WHERE value = 'test'"}
+          )
+      }
+
+      update_to_deleted_record = %UpdatedRecord{
+        relation: {"public", "table"},
+        old_record: %{"id" => "1", "value" => "old doesn't match"},
+        record: %{"id" => "1", "value" => "new matches"}
+      }
+
+      extra_refs =
+        {%{["$sublink", "0"] => MapSet.new([1])}, %{["$sublink", "0"] => MapSet.new([])}}
+
+      assert Shape.convert_change(shape, update_to_deleted_record, extra_refs: extra_refs) == [
+               Changes.convert_update(update_to_deleted_record, to: :deleted_record)
+             ]
+    end
+
+    test "uses new referenced set when checking inserts with subqueries" do
+      shape = %Shape{
+        root_table: {"public", "table"},
+        root_table_id: @relation_id,
+        where:
+          Parser.parse_and_validate_expression!(
+            "id IN (SELECT id FROM other_table WHERE value = 'test')",
+            refs: %{["$sublink", "0"] => {:array, :int4}, ["id"] => :int4},
+            sublink_queries: %{0 => "SELECT id FROM other_table WHERE value = 'test'"}
+          )
+      }
+
+      insert = %NewRecord{
+        relation: {"public", "table"},
+        record: %{"id" => "1", "value" => "new matches"}
+      }
+
+      extra_refs =
+        {%{["$sublink", "0"] => MapSet.new([])}, %{["$sublink", "0"] => MapSet.new([1])}}
+
+      assert Shape.convert_change(shape, insert, extra_refs: extra_refs) == [
+               insert
+             ]
+    end
+
+    test "uses old referenced set when checking deletes with subqueries" do
+      shape = %Shape{
+        root_table: {"public", "table"},
+        root_table_id: @relation_id,
+        where:
+          Parser.parse_and_validate_expression!(
+            "id IN (SELECT id FROM other_table WHERE value = 'test')",
+            refs: %{["$sublink", "0"] => {:array, :int4}, ["id"] => :int4},
+            sublink_queries: %{0 => "SELECT id FROM other_table WHERE value = 'test'"}
+          )
+      }
+
+      delete = %DeletedRecord{
+        relation: {"public", "table"},
+        old_record: %{"id" => "1", "value" => "new matches"}
+      }
+
+      extra_refs =
+        {%{["$sublink", "0"] => MapSet.new([1])}, %{["$sublink", "0"] => MapSet.new([])}}
+
+      assert Shape.convert_change(shape, delete, extra_refs: extra_refs) == [
+               delete
+             ]
+    end
   end
 
   describe "new/2" do
@@ -430,7 +592,9 @@ defmodule Electric.Shapes.ShapeTest do
                    relation: {"public", "child"},
                    record: %{"id" => "1", "par_id" => "1"}
                  },
-                 extra_refs: %{["$sublink", "0"] => MapSet.new([1])}
+                 extra_refs:
+                   {%{["$sublink", "0"] => MapSet.new([1])},
+                    %{["$sublink", "0"] => MapSet.new([1])}}
                )
 
       assert [] =
@@ -440,7 +604,9 @@ defmodule Electric.Shapes.ShapeTest do
                    relation: {"public", "child"},
                    record: %{"id" => "1", "par_id" => "1"}
                  },
-                 extra_refs: %{["$sublink", "0"] => MapSet.new([2])}
+                 extra_refs:
+                   {%{["$sublink", "0"] => MapSet.new([2])},
+                    %{["$sublink", "0"] => MapSet.new([2])}}
                )
     end
 
@@ -474,7 +640,9 @@ defmodule Electric.Shapes.ShapeTest do
                    relation: {"public", "item"},
                    record: %{"id" => "1", "value" => "10"}
                  },
-                 extra_refs: %{["$sublink", "0"] => MapSet.new([10])}
+                 extra_refs:
+                   {%{["$sublink", "0"] => MapSet.new([10])},
+                    %{["$sublink", "0"] => MapSet.new([10])}}
                )
 
       assert [] =
@@ -484,7 +652,9 @@ defmodule Electric.Shapes.ShapeTest do
                    relation: {"public", "item"},
                    record: %{"id" => "1", "value" => "10"}
                  },
-                 extra_refs: %{["$sublink", "0"] => MapSet.new([20])}
+                 extra_refs:
+                   {%{["$sublink", "0"] => MapSet.new([20])},
+                    %{["$sublink", "0"] => MapSet.new([20])}}
                )
     end
 
@@ -511,6 +681,31 @@ defmodule Electric.Shapes.ShapeTest do
     end
 
     @tag with_sql: [
+           ~s|CREATE TABLE IF NOT EXISTS channel_members ("channelId" UUID NOT NULL, "userId" UUID NOT NULL, PRIMARY KEY ("channelId", "userId"))|,
+           ~s|CREATE TABLE IF NOT EXISTS messages (id UUID PRIMARY KEY, "channelId" UUID NOT NULL)|
+         ]
+    test "subquery properly quotes case-sensitive column names", %{inspector: inspector} do
+      assert {:ok,
+              %Shape{
+                root_table: {"public", "messages"},
+                where: %{query: query},
+                shape_dependencies: [
+                  %Shape{
+                    root_table: {"public", "channel_members"},
+                    explicitly_selected_columns: ["channelId"]
+                  }
+                ]
+              }} =
+               Shape.new("messages",
+                 inspector: inspector,
+                 where: ~s|"channelId" IN (SELECT "channelId" FROM channel_members)|
+               )
+
+      # The where clause must quote the column name in the subquery to preserve case
+      assert query == ~s|"channelId" IN (SELECT "channelId" FROM public.channel_members)|
+    end
+
+    @tag with_sql: [
            "CREATE TABLE IF NOT EXISTS project (id INT PRIMARY KEY, value INT NOT NULL)",
            "CREATE TABLE IF NOT EXISTS item (id INT PRIMARY KEY, value INT NOT NULL)"
          ]
@@ -534,6 +729,22 @@ defmodule Electric.Shapes.ShapeTest do
                  inspector: inspector,
                  where: "value IN (SELECT value FROM project WHERE value > $0) AND value > $4",
                  params: %{"0" => "10", "4" => "5"}
+               )
+    end
+
+    @tag with_sql: [
+           "CREATE TABLE IF NOT EXISTS item (id INT PRIMARY KEY, value INT NOT NULL)"
+         ]
+    test "sequential parameters with 10+ keys are accepted", %{inspector: inspector} do
+      params = Map.new(1..20, fn i -> {"#{i}", "#{i * 10}"} end)
+
+      where = Enum.map_join(1..20, " OR ", fn i -> "value = $#{i}" end)
+
+      assert {:ok, _} =
+               Shape.new("item",
+                 inspector: inspector,
+                 where: where,
+                 params: params
                )
     end
   end

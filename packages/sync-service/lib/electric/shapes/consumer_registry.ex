@@ -44,7 +44,10 @@ defmodule Electric.Shapes.ConsumerRegistry do
 
   @spec active_consumer_count(stack_id()) :: non_neg_integer()
   def active_consumer_count(stack_id) when is_binary(stack_id) do
-    :ets.info(ets_name(stack_id), :size)
+    case :ets.info(ets_name(stack_id), :size) do
+      :undefined -> 0
+      size -> size
+    end
   rescue
     ArgumentError -> 0
   end
@@ -115,11 +118,16 @@ defmodule Electric.Shapes.ConsumerRegistry do
   There is no timeout so if the GenServers do not respond or die, this
   function will block indefinitely.
   """
-  @spec broadcast([{shape_handle(), term(), pid()}]) :: %{shape_handle() => term()}
+  @spec broadcast([{shape_handle(), term(), pid() | nil}]) :: %{shape_handle() => term()}
   def broadcast(handle_event_pids) do
     # Based on OTP GenServer.call, see:
     # https://github.com/erlang/otp/blob/090c308d7c925e154240685174addaa516ea2f69/lib/stdlib/src/gen.erl#L243
+    #
+    # Filter out nil pids to handle the race condition where a shape is removed
+    # from ShapeStatus but events still arrive for it (EventRouter removal is async).
+    # When start_consumer_for_handle returns {:error, :no_shape}, the pid is nil.
     handle_event_pids
+    |> Enum.reject(fn {_handle, _event, pid} -> is_nil(pid) end)
     |> Enum.map(fn {handle, event, pid} ->
       ref = Process.monitor(pid)
       send(pid, {:"$gen_call", {self(), ref}, event})
@@ -151,6 +159,48 @@ defmodule Electric.Shapes.ConsumerRegistry do
           ["Re-trying suspended shape handles ", inspect(Map.keys(suspended_handles))]
         end)
     end)
+  end
+
+  @doc """
+  Dynamically (re-)enable consumer suspension on all running consumers.
+
+  This allows for dynamically re-configuring consumer suspension even if it was
+  disabled, because the configuration message will have the side-effect of
+  waking all consumers from hibernation.
+
+  The `jitter_period` value allows for spreading the suspension of existing
+  consumers over a large time period to avoid a sudden rush of consumer
+  shutdowns after `hibernate_after` ms.
+
+  To re-enable consumer suspend:
+
+      # set the hibernation timeout to 1 minute but phase the suspension of
+      # existing consumers over a 20 minute period
+      Electric.Shapes.ConsumerRegistry.enable_suspend(stack_id, 60_000, 60_000 * 20)
+
+  Disabling suspension is as easy as:
+
+      Electric.StackConfig.put(stack_id, :shape_enable_suspend?, false)
+
+  """
+  @spec enable_suspend(stack_id(), pos_integer(), pos_integer()) ::
+          consumer_count :: non_neg_integer()
+  def enable_suspend(stack_id, hibernate_after, jitter_period)
+      when is_integer(hibernate_after) and is_integer(jitter_period) and
+             jitter_period > hibernate_after do
+    Electric.StackConfig.put(stack_id, :shape_hibernate_after, hibernate_after)
+    Electric.StackConfig.put(stack_id, :shape_enable_suspend?, true)
+
+    :ets.foldl(
+      fn {_shape_handle, pid}, n ->
+        if Process.alive?(pid),
+          do: send(pid, {:configure_suspend, hibernate_after, jitter_period})
+
+        n + 1
+      end,
+      0,
+      ets_name(stack_id)
+    )
   end
 
   defp consumer_pid(handle, table) do
@@ -195,6 +245,7 @@ defmodule Electric.Shapes.ConsumerRegistry do
 
   def new(stack_id, opts \\ []) when is_binary(stack_id) do
     table = registry_table(stack_id)
+    Electric.Shapes.Consumer.Materializer.init_link_values_table(stack_id)
 
     state = struct(__MODULE__, Keyword.merge(opts, stack_id: stack_id, table: table))
 

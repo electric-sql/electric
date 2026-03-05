@@ -12,6 +12,9 @@ outline: deep
 post: true
 ---
 
+> [!WARNING]
+> This post was written for a previous version of Electric that is no longer active. It is preserved for historical interest only. See the [Electric Next](/blog/2024/07/17/electric-next) post for context on the new system.
+
 ElectricSQL was selected by Intel as one of 10 startups to participate in [batch #6](https://intelignite.com/intel-ignite-selects-10-startups-for-fall-2023-european-cohort/) of it's [Intel Ignite](https://intelignite.com) accelerator programme in Munich.
 
 It's a unique opportunity and our thanks go to [Alois](https://www.linkedin.com/in/alois-eder-013b0460/), [Kate](https://www.linkedin.com/in/katehach/), [Markus](https://www.linkedin.com/in/markusbohl/) and [Martha](https://www.linkedin.com/in/martha-ivanovas-78a897b/) on the programme team. We'd also like to thank our mentors [Ralph](https://www.linkedin.com/in/ralphdw/), [Karl](https://www.linkedin.com/in/0xpit/), [Benny](https://www.linkedin.com/in/fuhry/) and of course, the amazing [Diego](https://www.linkedin.com/in/diego-bailón-humpert-92390a28b/).

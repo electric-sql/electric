@@ -104,6 +104,7 @@ defmodule Electric.Postgres.ConfigurationTest do
                Configuration.drop_table_from_publication(conn, "nonexistent", oid_rel)
     end
 
+    @tag connection_opt_overrides: [pool_size: 2]
     test "fails relation configuration if timing out on lock", %{
       pool: conn,
       publication_name: publication

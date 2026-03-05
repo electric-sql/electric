@@ -129,6 +129,10 @@ defmodule Support.ComponentSetup do
     %{registry: registry_name}
   end
 
+  def with_async_deleter(%{async_deleter: "async_deleter"} = ctx) do
+    ctx
+  end
+
   def with_async_deleter(ctx) do
     storage_dir =
       ctx[:storage_dir] || ctx[:tmp_dir] ||
@@ -139,10 +143,11 @@ defmodule Support.ComponentSetup do
 
     start_supervised!(
       {Electric.AsyncDeleter,
-       stack_id: ctx.stack_id, storage_dir: storage_dir, cleanup_interval_ms: 0}
+       stack_id: ctx.stack_id, storage_dir: storage_dir, cleanup_interval_ms: 0},
+      id: "async_deleter"
     )
 
-    %{}
+    %{async_deleter: "async_deleter"}
   end
 
   def with_in_memory_storage(ctx) do
@@ -237,13 +242,8 @@ defmodule Support.ComponentSetup do
   end
 
   def with_shape_status(ctx) do
-    if Electric.StackConfig.lookup(ctx.stack_id, Electric.ShapeCache.Storage) do
-      Electric.StackConfig.put(
-        ctx.stack_id,
-        Electric.ShapeCache.Storage,
-        Map.get(ctx, :storage, {Mock.Storage, []})
-      )
-    end
+    %{shape_db: shape_db} = with_shape_db(ctx)
+    %{async_deleter: async_deleter} = with_async_deleter(ctx)
 
     start_supervised!(%{
       id: "shape_status_owner",
@@ -251,9 +251,32 @@ defmodule Support.ComponentSetup do
       restart: :temporary
     })
 
-    :ok = Electric.ShapeCache.ShapeStatusOwner.initialize_from_storage(ctx.stack_id)
+    :ok = Electric.ShapeCache.ShapeStatusOwner.initialize(ctx.stack_id)
 
-    %{shape_status_owner: "shape_status_owner"}
+    %{shape_status_owner: "shape_status_owner", shape_db: shape_db, async_deleter: async_deleter}
+  end
+
+  def with_shape_db(ctx) do
+    shape_db_opts = Map.get(ctx, :shape_db_opts, [])
+
+    start_supervised!(
+      {Electric.ShapeCache.ShapeStatus.ShapeDb.Supervisor,
+       [
+         stack_id: ctx.stack_id,
+         shape_db_opts:
+           Keyword.merge(
+             [
+               storage_dir: ctx.tmp_dir,
+               manual_flush_only: true,
+               read_pool_size: 1
+             ],
+             shape_db_opts
+           )
+       ]},
+      id: "shape_db"
+    )
+
+    %{shape_db: "shape_db"}
   end
 
   def with_dynamic_consumer_supervisor(%{consumer_supervisor: name} = ctx) do
@@ -434,13 +457,17 @@ defmodule Support.ComponentSetup do
          storage: storage,
          storage_dir: ctx.tmp_dir,
          connection_opts: connection_opts,
-         replication_opts: [
-           connection_opts: replication_connection_opts,
-           slot_name: "electric_test_slot_#{:erlang.phash2(stack_id)}",
-           publication_name: publication_name,
-           try_creating_publication?: true,
-           slot_temporary?: true
-         ],
+         replication_opts:
+           Keyword.merge(
+             [
+               connection_opts: replication_connection_opts,
+               slot_name: "electric_test_slot_#{:erlang.phash2(stack_id)}",
+               publication_name: publication_name,
+               try_creating_publication?: true,
+               slot_temporary?: true
+             ],
+             List.wrap(ctx[:replication_opts_overrides])
+           ),
          pool_opts: [
            backoff_type: :stop,
            max_restarts: 0,
@@ -451,7 +478,11 @@ defmodule Support.ComponentSetup do
            shape_cleaner_opts: shape_cleaner_opts(ctx)
          ],
          manual_table_publishing?: Map.get(ctx, :manual_table_publishing?, false),
-         feature_flags: Electric.Config.get_env(:feature_flags)},
+         telemetry_opts: [instance_id: "test_instance", version: Electric.version()],
+         feature_flags: Electric.Config.get_env(:feature_flags),
+         shape_db_opts: [
+           storage_dir: ctx.tmp_dir
+         ]},
         restart: :temporary,
         significant: false
       )

@@ -4,7 +4,7 @@ defmodule Support.DbSetup do
   @postgrex_start_opts [
     backoff_type: :stop,
     max_restarts: 0,
-    pool_size: 2,
+    pool_size: 1,
     types: PgInterop.Postgrex.Types
   ]
 

@@ -82,6 +82,10 @@ defmodule Electric.StackSupervisor do
                      slot_temporary?: [type: :boolean, default: false],
                      try_creating_publication?: [type: :boolean, default: true],
                      max_txn_size: [type: {:or, [:non_neg_integer, nil]}, default: nil],
+                     max_batch_size: [
+                       type: :non_neg_integer,
+                       default: Electric.Config.default(:max_batch_size)
+                     ],
                      replication_idle_timeout: [
                        type: :non_neg_integer,
                        default: Electric.Config.default(:replication_idle_timeout)
@@ -139,12 +143,31 @@ defmodule Electric.StackSupervisor do
                      process_spawn_opts: [type: :map, default: %{}]
                    ]
                  ],
+                 lock_breaker_guard: [
+                   type: {:or, [{:fun, 0}, nil]},
+                   default: nil,
+                   doc:
+                     "Optional guard callback for the lock breaker. When set, the lock breaker will only run if this callback returns true."
+                 ],
                  manual_table_publishing?: [
                    type: :boolean,
                    required: false,
                    doc:
                      "Specify whether tables are to be added to the Postgres publication automatically or by hand",
                    default: false
+                 ],
+                 shape_db_opts: [
+                   type: :keyword_list,
+                   required: true,
+                   doc: "Configuration of the shape db sub-system",
+                   keys: [
+                     storage_dir: [type: :string, required: true],
+                     exclusive_mode: [type: :boolean],
+                     synchronous: [type: :string],
+                     cache_size: [type: :integer],
+                     enable_stats?: [type: :boolean],
+                     enable_memory_stats?: [type: :boolean]
+                   ]
                  ],
                  telemetry_opts: [type: :keyword_list, default: []],
                  telemetry_span_attrs: [
@@ -344,7 +367,8 @@ defmodule Electric.StackSupervisor do
       inspector: inspector,
       max_shapes: config.max_shapes,
       tweaks: config.tweaks,
-      manual_table_publishing?: config.manual_table_publishing?
+      manual_table_publishing?: config.manual_table_publishing?,
+      lock_breaker_guard: config.lock_breaker_guard
     ]
 
     registry_partitions =
@@ -377,7 +401,9 @@ defmodule Electric.StackSupervisor do
         {Electric.Postgres.Inspector.EtsInspector,
          stack_id: stack_id, pool: metadata_db_pool, persistent_kv: config.persistent_kv},
         {Electric.MonitoredCoreSupervisor,
-         stack_id: stack_id, connection_manager_opts: connection_manager_opts}
+         stack_id: stack_id,
+         connection_manager_opts: connection_manager_opts,
+         shape_db_opts: config.shape_db_opts}
       ]
       |> Enum.reject(&is_nil/1)
 

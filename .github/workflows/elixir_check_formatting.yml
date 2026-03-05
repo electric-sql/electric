@@ -1,0 +1,68 @@
+name: Elixir formatting
+
+on:
+  pull_request:
+    paths:
+      - 'packages/electric-telemetry/**'
+      - 'packages/elixir-client/**'
+      - 'packages/sync-service/**'
+
+permissions:
+  contents: read
+
+jobs:
+  elixir_check_formatting:
+    strategy:
+      matrix:
+        package: [sync-service, elixir-client, electric-telemetry]
+    name: Check Elixir formatting and compilation issues
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    defaults:
+      run:
+        working-directory: packages/${{ matrix.package }}
+    env:
+      MIX_ENV: test
+      MIX_TARGET: application
+      MIX_OS_DEPS_COMPILE_PARTITION_COUNT: 4
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Elixir
+        uses: erlef/setup-beam@v1
+        with:
+          version-type: strict
+          version-file: '.tool-versions'
+
+      - name: Restore dependencies cache
+        uses: actions/cache/restore@v4
+        with:
+          path: packages/${{ matrix.package }}/deps
+          key: "${{ runner.os }}-${{ matrix.package }}-deps-${{ env.MIX_ENV }}-${{ hashFiles(format('packages/{0}/mix.lock', matrix.package)) }}"
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.package }}-deps-${{ env.MIX_ENV }}-${{ hashFiles(format('packages/{0}/mix.lock', matrix.package)) }}
+            ${{ runner.os }}-${{ matrix.package }}-deps-${{ env.MIX_ENV }}
+            ${{ runner.os }}-${{ matrix.package }}-deps
+
+      - name: Restore compiled code
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            packages/${{ matrix.package }}/_build/*/lib
+            !packages/${{ matrix.package }}/_build/*/lib/electric
+            !packages/${{ matrix.package }}/_build/*/lib/electric_client
+            !packages/${{ matrix.package }}/_build/*/lib/electric_telemetry
+          key: "${{ runner.os }}-${{ matrix.package }}-build-${{ env.MIX_ENV }}-${{ hashFiles(format('packages/{0}/mix.lock', matrix.package)) }}"
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.package }}-build-${{ env.MIX_ENV }}-${{ hashFiles(format('packages/{0}/mix.lock', matrix.package)) }}
+            ${{ runner.os }}-${{ matrix.package }}-build-${{ env.MIX_ENV }}
+            ${{ runner.os }}-${{ matrix.package }}-build
+
+      - name: Install dependencies
+        run: mix deps.get
+
+      - name: Check Elixir formatting
+        run: mix format --check-formatted
+
+      - name: Check the package compiles without warnings
+        run: mix compile --force --all-warnings --warnings-as-errors

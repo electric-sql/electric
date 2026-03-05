@@ -1,10 +1,34 @@
 Welcome to your new TanStack [Start](https://tanstack.com/start/latest) / [DB](https://tanstack.com/db/latest) + [Electric](https://electric-sql.com/) app!
 
-# Getting Started
+# Getting started
 
-## Create a new project
+## Pre-requisites
 
-To create a new project based on this starter, run the following commands:
+You need:
+
+- [Docker](https://www.docker.com)
+- [Caddy](https://caddyserver.com)
+- [Node](https://nodejs.org/en) with [pnpm](https://pnpm.io)
+
+You can see compatible versions in the `.tool-versions` file.
+
+### Docker
+
+Make sure you have [Docker](https://www.docker.com) running. Docker is used to run the [Postgres](https://www.postgresql.org) and [Electric](https://electric-sql.com) services defined in `docker-compose.yaml`.
+
+### Caddy
+
+Make sure you have [Caddy installed](https://caddyserver.com/docs/install) and have [installed its root certificate](https://caddyserver.com/docs/command-line#caddy-trust) using:
+
+```sh
+caddy trust # may require sudo
+```
+
+Electric [benefits significantly from `HTTP/2` multiplexing](https://electric-sql.com/docs/guides/troubleshooting#slow-shapes-mdash-why-are-my-shapes-slow-in-the-browser-in-local-development). `HTTP/2` requires `HTTPS`. Caddy is necessary for `HTTPS` to work in local development.
+
+## Quickstart
+
+Create a new project based on this starter:
 
 ```sh
 npx gitpick electric-sql/electric/tree/main/examples/tanstack-db-web-starter my-tanstack-db-project
@@ -17,42 +41,175 @@ Copy the `.env.example` file to `.env`:
 cp .env.example .env
 ```
 
-_You can edit the values in the `.env` file, although the default values are fine for local development (with the `DATABASE_URL` defaulting to the development Postgres docker container and the `BETTER_AUTH_SECRET` not required)._
+> [!Tip]
+> You can edit the values in the `.env` file. The default values are configured for local development with Docker. You can run against a different Postgres and Electric, for example using the Electric Cloud, by changing the `DATABASE_URL` and `ELECTRIC_URL`.
 
-## Quick Start
+Install the dependencies:
 
-Follow these steps in order for a smooth first-time setup:
+```sh
+pnpm install
+```
 
-1. **Install dependencies:**
+Start the backend services (Postgres and Electric) running in the background using Docker:
 
-   ```sh
-   pnpm install
-   ```
+```sh
+pnpm backend:up
+```
 
-2. **Start Docker services:**
+Apply the database migrations:
 
-   ```sh
-   pnpm run dev
-   ```
+```sh
+pnpm migrate
+```
 
-   This starts the dev server, Docker Compose (Postgres + Electric), and Caddy automatically.
+Start the dev server:
 
-3. **Run database migrations** (in a new terminal):
+```sh
+pnpm dev
+```
 
-   ```sh
-   pnpm run migrate
-   ```
+Open the application on [https://localhost:5173](https://localhost:5173).
 
-4. **Visit the application:**
-   Open [https://tanstack-start-db-electric-starter.localhost](https://tanstack-start-db-electric-starter.localhost)
+> [!Tip]
+> If you run into any issues, see the [troubleshooting](#troubleshooting) section below.
 
-If you run into issues, see the [pre-reqs](#pre-requisites) and [troubleshooting](#common-pitfalls) sections below.
+# How Authentication Works
+
+This starter implements a secure authentication pattern for Electric sync. If you're new to Electric, it's worth understanding how the pieces fit together since this is a novel part of the stack.
+
+## Overview
+
+Electric is a Postgres sync engine that streams data to clients via HTTP. Unlike traditional REST APIs where each request is authenticated individually, Electric maintains persistent sync connections. This requires a different approach to authorization.
+
+The starter uses a **Shape Proxy Pattern** where:
+
+1. Users authenticate with [Better Auth](https://www.better-auth.com/) (session cookies)
+2. API routes validate the session before proxying requests to Electric
+3. Row-level filtering ensures users only see their own data
+4. tRPC mutations re-validate permissions server-side
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                      Client (Browser)                        │
+│                                                              │
+│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐  │
+│  │  TanStack DB │    │   Electric   │    │    tRPC      │  │
+│  │  Collection  │───▶│ Shape Client │    │   Client     │  │
+│  └──────────────┘    └──────────────┘    └──────────────┘  │
+│         │                   │                    │          │
+└─────────│───────────────────│────────────────────│──────────┘
+          │                   │                    │
+          │    Session Cookie │ (automatic)        │
+          │                   ▼                    ▼
+┌─────────│───────────────────────────────────────────────────┐
+│         │           Server (TanStack Start)                  │
+│         │                                                    │
+│         │    ┌────────────────────────────────────────────┐ │
+│         │    │           Shape Proxy Routes               │ │
+│         │    │     (/api/todos, /api/projects, etc)       │ │
+│         │    │                                            │ │
+│         │    │  1. Validate session                       │ │
+│         │    │  2. Add WHERE user_id = ?                  │ │
+│         │    │  3. Forward to Electric                    │ │
+│         │    └────────────────────────────────────────────┘ │
+│         │                         │                         │
+│         │    ┌────────────────────│───────────────────────┐ │
+│         │    │  tRPC Router       ▼                       │ │
+│         └───▶│  - Validates session                       │ │
+│              │  - Checks ownership before mutations       │ │
+│              │  - Returns transaction IDs for sync        │ │
+│              └────────────────────────────────────────────┘ │
+│                                   │                         │
+└───────────────────────────────────│─────────────────────────┘
+                                    │
+                   ┌────────────────┴────────────────┐
+                   ▼                                 ▼
+            ┌──────────┐                      ┌──────────┐
+            │ Electric │                      │ Postgres │
+            │  Server  │◀────────────────────▶│ Database │
+            └──────────┘                      └──────────┘
+```
+
+## Shape Proxy Routes
+
+Each table that syncs via Electric has a corresponding API route that acts as an authenticated proxy. Here's what happens in `/api/todos`:
+
+```typescript
+const serve = async ({ request }: { request: Request }) => {
+  // 1. Validate the session
+  const session = await auth.api.getSession({ headers: request.headers })
+  if (!session) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401,
+    })
+  }
+
+  // 2. Build the Electric URL with row-level filtering
+  const originUrl = prepareElectricUrl(request.url)
+  originUrl.searchParams.set("table", "todos")
+  // Only sync rows where the user has access
+  const filter = `'${session.user.id}' = ANY(user_ids)`
+  originUrl.searchParams.set("where", filter)
+
+  // 3. Proxy the request to Electric
+  return proxyElectricRequest(originUrl)
+}
+```
+
+This pattern ensures:
+
+- **Electric never receives unauthenticated requests** - the proxy validates first
+- **Users only see their own data** - the `WHERE` clause filters at the database level
+- **Session cookies work automatically** - no special client configuration needed
+
+## Mutation Authorization
+
+While Electric handles reads, mutations go through tRPC with additional authorization:
+
+```typescript
+// src/lib/trpc/todos.ts
+delete: authedProcedure
+  .input(deleteTodoSchema)
+  .mutation(async ({ ctx, input }) => {
+    // Find the todo first
+    const [todo] = await ctx.db.select().from(todosTable).where(eq(id, input.id))
+
+    // Verify the user has access
+    if (!todo.user_ids.includes(ctx.session.user.id)) {
+      throw new TRPCError({ code: "FORBIDDEN" })
+    }
+
+    // Proceed with deletion
+    // ...
+  })
+```
+
+## Adding Auth to New Tables
+
+When you add a new table (see [Adding a New Table](#adding-a-new-table)), you need to:
+
+1. **Include a user reference** in your schema (e.g., `user_id` column)
+2. **Create a shape proxy route** that validates the session and filters by user
+3. **Add ownership checks** in your tRPC mutations
+
+The "Adding a New Table" section below shows the complete pattern.
+
+## Learn More
+
+For more details on Electric's authentication model, see:
+
+- [Electric Auth Guide](https://electric-sql.com/docs/guides/auth) - comprehensive auth documentation
+- [Electric Shapes](https://electric-sql.com/docs/guides/shapes) - how partial replication works
+
+# Developing your app
 
 ## Adding a New Table
 
 Here's how to add a new table to your app (using a "categories" table as an example):
 
-### 1. Define the Drizzle Schema
+### 1. Define the Drizzle schema
 
 Add your table to `src/db/schema.ts`:
 
@@ -75,7 +232,7 @@ export const createCategorySchema = createInsertSchema(categoriesTable).omit({
 export const updateCategorySchema = createUpdateSchema(categoriesTable)
 ```
 
-### 2. Generate & Run Migration
+### 2. Generate and run migrations
 
 ```sh
 # Generate migration file
@@ -85,12 +242,12 @@ pnpm migrate:generate
 pnpm migrate
 ```
 
-### 3. Add Electric Shape Route
+### 3. Expose an Electric shape route
 
 Create `src/routes/api/categories.ts`:
 
 ```tsx
-import { createServerFileRoute } from "@tanstack/react-start/server"
+import { createFileRoute } from "@tanstack/react-router"
 import { auth } from "@/lib/auth"
 import { prepareElectricUrl, proxyElectricRequest } from "@/lib/electric-proxy"
 
@@ -112,12 +269,16 @@ const serve = async ({ request }: { request: Request }) => {
   return proxyElectricRequest(originUrl)
 }
 
-export const ServerRoute = createServerFileRoute("/api/categories").methods({
-  GET: serve,
+export const Route = createFileRoute("/api/categories")({
+  server: {
+    handlers: {
+      GET: serve,
+    },
+  },
 })
 ```
 
-### 4. Add tRPC Router
+### 4. Add a tRPC router
 
 Create `src/lib/trpc/categories.ts`:
 
@@ -150,7 +311,7 @@ export const categoriesRouter = router({
 })
 ```
 
-### 5. Wire Up tRPC Router
+### 5. Wire up the tRPC router
 
 Add to `src/routes/api/trpc/$.ts`:
 
@@ -163,7 +324,7 @@ export const appRouter = router({
 })
 ```
 
-### 6. Add Collection
+### 6. Add a TanStack DB collection
 
 Add to `src/lib/collections.ts`:
 
@@ -192,7 +353,7 @@ export const categoriesCollection = createCollection(
 )
 ```
 
-### 7. Use in Routes
+### 7. Use the collection in your routes
 
 Preload in route loaders and use with `useLiveQuery`:
 
@@ -212,17 +373,9 @@ const { data: categories } = useLiveQuery((q) =>
 
 That's it! Your new table is now fully integrated with Electric sync, tRPC mutations, and TanStack DB queries.
 
-## Pre-requisites
+## Notes
 
-This project uses [Docker](https://www.docker.com), [Node](https://nodejs.org/en) with [pnpm](https://pnpm.io) and [Caddy](https://caddyserver.com/). You can see compatible versions in the `.tool-versions` file.
-
-### Docker
-
-Make sure you have Docker running. Docker is used to run the Postgres and Electric services defined in `docker-compose.yaml`.
-
-### Caddy
-
-#### Why Caddy?
+### About Caddy
 
 Electric SQL's shape delivery benefits significantly from **HTTP/2 multiplexing**. Without HTTP/2, each shape subscription creates a new HTTP/1.1 connection, which browsers limit to 6 concurrent connections per domain. This creates a bottleneck that makes shapes appear slow.
 
@@ -315,7 +468,7 @@ caddy start
 To build this application for production:
 
 ```bash
-pnpm run build
+pnpm build
 ```
 
 ### Production Deployment Checklist

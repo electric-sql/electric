@@ -1,9 +1,9 @@
 <script setup>
 import { useData } from 'vitepress'
 import { computed } from 'vue'
+import NetlifyImage from './NetlifyImage.vue'
 
 import { data as authors } from '../../data/authors.data.ts'
-import { getNetlifyImageUrl } from '../utils/netlify-images.ts'
 
 const { page, frontmatter } = useData()
 
@@ -23,36 +23,18 @@ const formattedDate = computed(() => {
   })
 })
 
-const optimizedImageSrcset = computed(() => {
-  if (!frontmatter.value.image) return { src: '', srcset: '' }
-
-  const img1x = getNetlifyImageUrl(frontmatter.value.image, {
-    width: 1530,
-    height: 874,
-    fit: 'cover',
-    format: 'jpg',
-    quality: 80,
-  })
-
-  const img2x = getNetlifyImageUrl(frontmatter.value.image, {
-    width: 1530 * 2,
-    height: 874 * 2,
-    fit: 'cover',
-    format: 'jpg',
-    quality: 80,
-  })
-
-  return {
-    src: img1x,
-    srcset: `${img1x} 1x, ${img2x} 2x`,
-  }
-})
+const headerImageWidth = computed(() => frontmatter.value.imageWidth ?? 1376)
+const headerImageHeight = computed(() => frontmatter.value.imageHeight ?? 860)
 </script>
 
 <style scoped>
 .post-image {
   margin-top: -2px !important;
   margin-bottom: 32px;
+}
+.post-image img {
+  width: 100%;
+  height: auto;
 }
 @media (max-width: 559px) {
   .post-image {
@@ -101,9 +83,10 @@ h1 {
 <template>
   <div class="post-header">
     <p class="post-image">
-      <img
-        :src="optimizedImageSrcset.src"
-        :srcset="optimizedImageSrcset.srcset"
+      <NetlifyImage
+        :src="frontmatter.image"
+        :width="headerImageWidth"
+        :height="headerImageHeight"
       />
     </p>
     <h1>

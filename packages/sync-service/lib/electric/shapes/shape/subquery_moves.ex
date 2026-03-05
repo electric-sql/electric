@@ -4,6 +4,12 @@ defmodule Electric.Shapes.Shape.SubqueryMoves do
   alias Electric.Replication.Eval.Walker
   alias Electric.Shapes.Shape
 
+  @value_prefix "v:"
+  @null_sentinel "NULL"
+
+  def value_prefix, do: @value_prefix
+  def null_sentinel, do: @null_sentinel
+
   @doc """
   Given a shape with a where clause that contains a subquery, make a query that can use a
   list of value in place of the subquery.
@@ -103,7 +109,9 @@ defmodule Electric.Shapes.Shape.SubqueryMoves do
 
         {:hash_together, columns} ->
           column_parts =
-            &(Enum.zip_with(&1, columns, fn value, column -> column <> ":" <> value end)
+            &(Enum.zip_with(&1, columns, fn value, column ->
+                column <> ":" <> namespace_value(value)
+              end)
               |> Enum.join())
 
           Enum.map(
@@ -111,7 +119,11 @@ defmodule Electric.Shapes.Shape.SubqueryMoves do
             &%{
               pos: 0,
               value:
-                make_value_hash(stack_id, shape_handle, column_parts.(Tuple.to_list(elem(&1, 1))))
+                make_value_hash_raw(
+                  stack_id,
+                  shape_handle,
+                  column_parts.(Tuple.to_list(elem(&1, 1)))
+                )
             }
           )
       end
@@ -119,9 +131,26 @@ defmodule Electric.Shapes.Shape.SubqueryMoves do
   end
 
   def make_value_hash(stack_id, shape_handle, value) do
-    :crypto.hash(:md5, "#{stack_id}#{shape_handle}#{value}")
+    make_value_hash_raw(stack_id, shape_handle, namespace_value(value))
+  end
+
+  @doc """
+  Hash a pre-namespaced value. Use `make_value_hash/3` for single values that need namespacing.
+  """
+  def make_value_hash_raw(stack_id, shape_handle, namespaced_value) do
+    :crypto.hash(:md5, "#{stack_id}#{shape_handle}#{namespaced_value}")
     |> Base.encode16(case: :lower)
   end
+
+  @doc """
+  Namespace a value for hashing.
+
+  To distinguish NULL from the literal string 'NULL', values are prefixed with
+  'v:' and NULL becomes 'NULL' (no prefix). This MUST match the SQL logic in
+  `Querying.pg_namespace_value_sql/1` - see lib/electric/shapes/querying.ex.
+  """
+  def namespace_value(nil), do: @null_sentinel
+  def namespace_value(value), do: @value_prefix <> value
 
   @doc """
   Generate a tag structure for a shape.
@@ -138,36 +167,42 @@ defmodule Electric.Shapes.Shape.SubqueryMoves do
   def move_in_tag_structure(%Shape{} = shape)
       when is_nil(shape.where)
       when shape.shape_dependencies == [],
-      do: []
+      do: {[], %{}}
 
   def move_in_tag_structure(shape) do
     # TODO: For multiple subqueries this should be a DNF form
-    {:ok, tag_structure} =
+    #       and this walking overrides the comparison expressions
+    {:ok, {tag_structure, comparison_expressions}} =
       Walker.reduce(
         shape.where.eval,
         fn
-          %Eval.Parser.Func{name: "sublink_membership_check", args: [testexpr, _]},
-          [current_tag | others],
+          %Eval.Parser.Func{name: "sublink_membership_check", args: [testexpr, sublink_ref]},
+          {[current_tag | others], comparison_expressions},
           _ ->
-            case testexpr do
-              %Eval.Parser.Ref{path: [column_name]} ->
-                {:ok, [[column_name | current_tag] | others]}
+            tags =
+              case testexpr do
+                %Eval.Parser.Ref{path: [column_name]} ->
+                  [[column_name | current_tag] | others]
 
-              %Eval.Parser.RowExpr{elements: elements} ->
-                elements =
-                  Enum.map(elements, fn %Eval.Parser.Ref{path: [column_name]} ->
-                    column_name
-                  end)
+                %Eval.Parser.RowExpr{elements: elements} ->
+                  elements =
+                    Enum.map(elements, fn %Eval.Parser.Ref{path: [column_name]} ->
+                      column_name
+                    end)
 
-                {:ok, [[{:hash_together, elements} | current_tag] | others]}
-            end
+                  [[{:hash_together, elements} | current_tag] | others]
+              end
+
+            {:ok, {tags, Map.put(comparison_expressions, sublink_ref.path, testexpr)}}
 
           _, acc, _ ->
             {:ok, acc}
         end,
-        [[]]
+        {[[]], %{}}
       )
 
-    tag_structure
+    comparison_expressions
+    |> Map.new(fn {path, expr} -> {path, Eval.Expr.wrap_parser_part(expr)} end)
+    |> then(&{tag_structure, &1})
   end
 end

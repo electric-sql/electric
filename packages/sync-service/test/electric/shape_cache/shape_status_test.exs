@@ -2,12 +2,11 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
   use ExUnit.Case, async: true
   use Repatch.ExUnit, assert_expectations: true
 
-  alias Electric.Replication.LogOffset
   alias Electric.ShapeCache.ShapeStatus
   alias Electric.Shapes.Shape
 
   import Support.ComponentSetup
-  import Support.TestUtils, only: [expect_calls: 3, patch_calls: 3]
+  import Support.TestUtils, only: [expect_storage: 2, patch_storage: 1]
 
   @inspector Support.StubInspector.new(
                tables: [{1, {"public", "items"}}, {2, {"public", "other_table"}}],
@@ -23,37 +22,23 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
                ]
              )
 
-  setup [:with_stack_id_from_test, :with_async_deleter]
+  @moduletag :tmp_dir
+
+  setup [:with_stack_id_from_test, :with_async_deleter, :with_shape_db]
 
   test "starts empty", ctx do
     {:ok, state, []} = new_state(ctx)
     assert [] = ShapeStatus.list_shapes(state)
   end
 
-  test "can recover shapes from storage", ctx do
-    {:ok, state, []} = new_state(ctx)
-    shape = shape!()
-    assert {:ok, shape_handle} = ShapeStatus.add_shape(state, shape)
-    assert [{^shape_handle, ^shape}] = ShapeStatus.list_shapes(state)
+  test "deletes any orphaned shape data if empty", ctx do
+    expect_storage([force: true],
+      cleanup_all!: fn _ ->
+        :ok
+      end
+    )
 
-    ShapeStatus.remove(state)
-
-    {:ok, state, []} =
-      new_state(ctx,
-        stored_shapes: %{
-          shape_handle => {:ok, {shape, true, LogOffset.last_before_real_offsets()}},
-          "invalid" => {:error, :corrupted}
-        }
-      )
-
-    assert [{^shape_handle, ^shape}] = ShapeStatus.list_shapes(state)
-
-    assert [^shape_handle] =
-             ShapeStatus.list_shape_handles_for_relations(state, [
-               {shape.root_table_id, {"public", "other_table"}}
-             ])
-
-    assert ShapeStatus.snapshot_started?(state, shape_handle)
+    {:ok, _state, []} = new_state(ctx)
   end
 
   test "can add shapes", ctx do
@@ -75,7 +60,7 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
     assert Enum.sort_by([{shape_handle_1, shape_1}, {shape_handle_2, shape_2}], &elem(&1, 0)) ==
              ShapeStatus.list_shapes(state) |> Enum.sort_by(&elem(&1, 0))
 
-    assert {:ok, ^shape_1} = ShapeStatus.remove_shape(state, shape_handle_1)
+    assert :ok = ShapeStatus.remove_shape(state, shape_handle_1)
     assert [{^shape_handle_2, ^shape_2}] = ShapeStatus.list_shapes(state)
 
     assert [^shape_handle_2] =
@@ -89,17 +74,18 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
              ])
   end
 
-  test "get_existing_shape/2 with %Shape{}", ctx do
+  test "fetch_handle_by_shape/2", ctx do
     {:ok, state, []} = new_state(ctx)
     shape = shape!()
 
-    refute ShapeStatus.get_existing_shape(state, shape)
+    assert :error = ShapeStatus.fetch_handle_by_shape(state, shape)
 
     assert {:ok, shape_handle} = ShapeStatus.add_shape(state, shape)
-    assert {^shape_handle, _} = ShapeStatus.get_existing_shape(state, shape)
 
-    assert {:ok, ^shape} = ShapeStatus.remove_shape(state, shape_handle)
-    refute ShapeStatus.get_existing_shape(state, shape)
+    assert {:ok, ^shape_handle} = ShapeStatus.fetch_handle_by_shape(state, shape)
+
+    assert :ok = ShapeStatus.remove_shape(state, shape_handle)
+    assert :error = ShapeStatus.fetch_handle_by_shape(state, shape)
   end
 
   test "fetch_shape_by_handle/2", ctx do
@@ -122,78 +108,13 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
 
     {:ok, state, [shape_handle1, shape_handle2]} = new_state(ctx, shapes: [shape1, shape2])
 
-    offset = LogOffset.new(100, 3)
-
-    ShapeStatus.set_latest_offset(ctx.stack_id, shape_handle1, offset)
-
-    assert {:ok, ^offset} = ShapeStatus.validate_shape_handle(state, shape_handle1, shape1)
-    assert {:ok, _} = ShapeStatus.validate_shape_handle(state, shape_handle2, shape2)
+    assert :ok = ShapeStatus.validate_shape_handle(state, shape_handle1, shape1)
+    assert :ok = ShapeStatus.validate_shape_handle(state, shape_handle2, shape2)
 
     # not a valid handle
     assert :error = ShapeStatus.validate_shape_handle(state, "not-the-handle", shape1)
     # wrong handle for the shape
     assert :error = ShapeStatus.validate_shape_handle(state, shape_handle1, shape2)
-  end
-
-  test "latest_offset", ctx do
-    {:ok, state, [shape_handle]} = new_state(ctx, shapes: [shape!()])
-    assert :error = ShapeStatus.latest_offset(state, "sdfsodf")
-
-    assert ShapeStatus.latest_offset(state, shape_handle) ==
-             {:ok, LogOffset.last_before_real_offsets()}
-
-    # virtual latest offsets are always normalized to the last before the
-    # real offsets to avoid client backtracking
-    assert ShapeStatus.set_latest_offset(state, shape_handle, LogOffset.new(0, 100))
-
-    assert ShapeStatus.latest_offset(state, shape_handle) ==
-             {:ok, LogOffset.last_before_real_offsets()}
-
-    offset = LogOffset.new(100, 3)
-    assert ShapeStatus.set_latest_offset(state, shape_handle, offset)
-
-    # set latest offset for an unknown shape silently does nothing
-    # this is because real-world race conditions mean that we may
-    # still receive updates on a shape that is in the process of
-    # being deleted
-    assert ShapeStatus.set_latest_offset(state, "not my shape", offset)
-
-    assert ShapeStatus.latest_offset(state, shape_handle) == {:ok, offset}
-  end
-
-  test "latest_offset public api", ctx do
-    {:ok, state, [shape_handle]} = new_state(ctx, shapes: [shape!()])
-    assert :error = ShapeStatus.latest_offset(state, "sdfsodf")
-
-    assert ShapeStatus.latest_offset(state, shape_handle) ==
-             {:ok, LogOffset.last_before_real_offsets()}
-
-    offset = LogOffset.new(100, 3)
-
-    assert ShapeStatus.set_latest_offset(state, "not my shape", offset)
-
-    assert ShapeStatus.set_latest_offset(state, shape_handle, offset)
-    assert ShapeStatus.latest_offset(state, shape_handle) == {:ok, offset}
-  end
-
-  test "initialise_shape/3", ctx do
-    {:ok, state, [shape_handle]} = new_state(ctx, shapes: [shape!()])
-    offset = LogOffset.new(100, 3)
-    assert :ok = ShapeStatus.initialise_shape(state, shape_handle, offset)
-    assert ShapeStatus.latest_offset(state, shape_handle) == {:ok, offset}
-  end
-
-  test "snapshot_started?/2", ctx do
-    {:ok, state, [shape_handle]} = new_state(ctx, shapes: [shape!()])
-
-    refute ShapeStatus.snapshot_started?(state, "sdfsodf")
-    refute ShapeStatus.snapshot_started?(state.stack_id, "sdfsodf")
-    refute ShapeStatus.snapshot_started?(state, shape_handle)
-
-    ShapeStatus.mark_snapshot_as_started(state, shape_handle)
-
-    assert ShapeStatus.snapshot_started?(state, shape_handle)
-    assert ShapeStatus.snapshot_started?(state.stack_id, shape_handle)
   end
 
   describe "list_shapes/2" do
@@ -232,13 +153,14 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
       assert {[^shape2], +0.0} = ShapeStatus.least_recently_used(state, _count = 1)
     end
 
-    test "returns shape first created if update_last_read_time_to_now has not been called", %{
-      state: state
-    } do
-      {:ok, shape1} = ShapeStatus.add_shape(state, shape!())
-      {:ok, _shape2} = ShapeStatus.add_shape(state, shape2!())
+    test "does not return shapes which have only just been created and didn't have update_last_read_time_to_now called",
+         %{
+           state: state
+         } do
+      {:ok, _} = ShapeStatus.add_shape(state, shape!())
+      {:ok, _} = ShapeStatus.add_shape(state, shape2!())
 
-      assert {[^shape1], _} = ShapeStatus.least_recently_used(state, _count = 1)
+      assert {[], _} = ShapeStatus.least_recently_used(state, _count = 1)
     end
 
     test "returns empty list if no shapes have been added", %{state: state} do
@@ -248,6 +170,11 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
     test "returns empty list if all shapes have been deleted", %{state: state} do
       {:ok, shape1} = ShapeStatus.add_shape(state, shape!())
       {:ok, shape2} = ShapeStatus.add_shape(state, shape2!())
+
+      now = System.monotonic_time()
+      ShapeStatus.update_last_read_time(state, shape2, now)
+      ShapeStatus.update_last_read_time(state, shape1, now + 10)
+
       ShapeStatus.remove_shape(state, shape1)
       ShapeStatus.remove_shape(state, shape2)
 
@@ -257,6 +184,10 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
     test "returns all shapes when count exceeds total shapes", %{state: state} do
       {:ok, shape1} = ShapeStatus.add_shape(state, shape!())
       {:ok, shape2} = ShapeStatus.add_shape(state, shape2!())
+
+      now = System.monotonic_time()
+      ShapeStatus.update_last_read_time(state, shape2, now)
+      ShapeStatus.update_last_read_time(state, shape1, now + 10)
 
       {handles, _} = ShapeStatus.least_recently_used(state, _count = 100)
       assert length(handles) == 2
@@ -312,6 +243,7 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
 
     use ExUnitProperties
 
+    @tag slow: true
     property "returns correct number of shapes in LRU order", %{state: state} do
       check all(
               num_shapes <- StreamData.integer(1..100),
@@ -368,8 +300,8 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
       add_task =
         Task.async(fn ->
           for _ <- 1..1000 do
-            case ShapeStatus.get_existing_shape(state, shape) do
-              nil -> ShapeStatus.add_shape(state, shape)
+            case ShapeStatus.fetch_handle_by_shape(state, shape) do
+              :error -> ShapeStatus.add_shape(state, shape)
               _ -> :ok
             end
           end
@@ -378,126 +310,14 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
       remove_tasks =
         for _ <- 1..1000 do
           Task.async(fn ->
-            case ShapeStatus.get_existing_shape(state, shape) do
-              nil -> :ok
-              {handle, _} -> ShapeStatus.remove_shape(state, handle)
+            case ShapeStatus.fetch_handle_by_shape(state, shape) do
+              :error -> :ok
+              {:ok, handle} -> ShapeStatus.remove_shape(state, handle)
             end
           end)
         end
 
       Task.await_many([add_task | remove_tasks], 20_000)
-    end
-  end
-
-  describe "shape storage and backup" do
-    setup ctx do
-      Electric.StackConfig.put(ctx.stack_id, Electric.ShapeCache.Storage, {Mock.Storage, []})
-      %{state: %{stack_id: ctx.stack_id}}
-    end
-
-    test "terminate stores backup and initialise loads from backup instead of storage", %{
-      state: state
-    } do
-      backup_base_dir =
-        Path.join(System.tmp_dir!(), "shape_status_test_#{System.unique_integer([:positive])}")
-
-      # First lifecycle: no shapes in storage, start empty, add a shape, terminate to create backup
-      stub_storage(metadata_backup_dir: fn _ -> backup_base_dir end)
-
-      expect_storage(
-        get_all_stored_shape_handles: fn _ -> {:ok, MapSet.new()} end,
-        get_stored_shapes: fn _, _ -> %{} end
-      )
-
-      assert :ok = ShapeStatus.initialize_from_storage(state)
-      shape = shape!()
-      assert {:ok, shape_handle} = ShapeStatus.add_shape(state, shape)
-      assert [{^shape_handle, ^shape}] = ShapeStatus.list_shapes(state)
-
-      # Persist backup
-      assert :ok = ShapeStatus.save_checkpoint(state)
-
-      backup_dir = Path.join([backup_base_dir, "shape_status_backups"])
-      assert File.exists?(backup_dir)
-
-      ShapeStatus.remove(state)
-
-      # Second lifecycle: should load from backup (so must NOT call get_stored_shapes)
-      stub_storage([force: true],
-        get_stored_shapes: fn _, _ ->
-          flunk("get_stored_shapes should not be called when backup exists")
-        end
-      )
-
-      expect_storage([force: true],
-        get_all_stored_shape_handles: fn _ -> {:ok, MapSet.new([shape_handle])} end
-      )
-
-      assert :ok = ShapeStatus.initialize_from_storage(state)
-      assert [{^shape_handle, ^shape}] = ShapeStatus.list_shapes(state)
-      assert {^shape_handle, _offset} = ShapeStatus.get_existing_shape(state, shape)
-      assert ShapeStatus.count_shapes(state) == 1
-      # consuming backup directory should have removed it after load
-      refute File.exists?(backup_dir)
-    end
-
-    test "backup restore reconciled if stored handles missing", %{state: state} do
-      backup_base_dir =
-        Path.join(System.tmp_dir!(), "shape_status_test_#{System.unique_integer([:positive])}")
-
-      # First lifecycle: create backup containing one shape
-      stub_storage(metadata_backup_dir: fn _ -> backup_base_dir end)
-
-      expect_storage(
-        get_all_stored_shape_handles: fn _ -> {:ok, MapSet.new()} end,
-        get_stored_shapes: fn _, _ -> %{} end
-      )
-
-      assert :ok = ShapeStatus.initialize_from_storage(state)
-      to_keep_shape = shape!()
-      to_invalidate_shape = shape!("to be invalidated")
-      assert {:ok, to_keep_shape_handle} = ShapeStatus.add_shape(state, to_keep_shape)
-      assert {:ok, to_invalidate_shape_handle} = ShapeStatus.add_shape(state, to_invalidate_shape)
-
-      assert [
-               {to_invalidate_shape_handle, to_invalidate_shape},
-               {to_keep_shape_handle, to_keep_shape}
-             ] == ShapeStatus.list_shapes(state)
-
-      assert :ok = ShapeStatus.save_checkpoint(state)
-
-      backup_dir = Path.join([backup_base_dir, "shape_status_backups"])
-      assert File.exists?(backup_dir)
-
-      ShapeStatus.remove(state)
-
-      not_backed_up_shape = shape!("not backed up")
-      not_backed_up_shape_handle = "not-backed-up-handle"
-
-      expected_handles_to_load = MapSet.new([not_backed_up_shape_handle])
-
-      expect_storage([force: true],
-        # After loading from backup and showing mismatch of stored vs in-memory handles,
-        # the missing stored handle should be loaded from storage and in memory removed
-        get_all_stored_shape_handles: fn _ ->
-          {:ok, MapSet.new([to_keep_shape_handle, not_backed_up_shape_handle])}
-        end,
-        get_stored_shapes: fn _, ^expected_handles_to_load ->
-          %{
-            not_backed_up_shape_handle =>
-              {:ok, {not_backed_up_shape, false, LogOffset.last_before_real_offsets()}}
-          }
-        end
-      )
-
-      assert :ok = ShapeStatus.initialize_from_storage(state)
-      # after reconciliation, only the to_keep_shape and not_backed_up_shape remain
-      assert [
-               {to_keep_shape_handle, to_keep_shape},
-               {not_backed_up_shape_handle, not_backed_up_shape}
-             ] == ShapeStatus.list_shapes(state)
-
-      refute File.exists?(backup_dir)
     end
   end
 
@@ -521,39 +341,34 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
 
   defp new_state(ctx, opts \\ []) do
     Electric.StackConfig.put(ctx.stack_id, Electric.ShapeCache.Storage, {Mock.Storage, []})
-    stub_storage([force: true], metadata_backup_dir: fn _ -> nil end)
 
-    stored_shapes = Access.get(opts, :stored_shapes, %{})
-    stored_shape_handles = Map.keys(stored_shapes) |> MapSet.new()
+    stored_shapes = Access.get(opts, :stored_shapes, [])
 
-    expect_storage(
-      get_all_stored_shape_handles: fn _ -> {:ok, stored_shape_handles} end,
-      get_stored_shapes: fn _, _ -> Access.get(opts, :stored_shapes, %{}) end
-    )
+    try do
+      patch_storage(
+        cleanup_all!: fn _ ->
+          :ok
+        end
+      )
+    rescue
+      # ignore any existing mocking on this function
+      ArgumentError -> :ok
+    end
 
-    state = %{
-      storage: {Mock.Storage, []},
-      stack_id: ctx.stack_id
-    }
+    :ok = ShapeStatus.initialize(ctx.stack_id)
 
-    :ok = ShapeStatus.initialize_from_storage(state)
+    for {handle, shape} <- stored_shapes do
+      {:ok, _hash} = ShapeStatus.ShapeDb.add_shape(ctx.stack_id, shape, handle)
+    end
 
     shapes = Keyword.get(opts, :shapes, [])
 
     shape_handles =
       for shape <- shapes do
-        {:ok, shape_handle} = ShapeStatus.add_shape(state, shape)
+        {:ok, shape_handle} = ShapeStatus.add_shape(ctx.stack_id, shape)
         shape_handle
       end
 
-    {:ok, state, shape_handles}
-  end
-
-  defp stub_storage(opts \\ [], stubs) do
-    patch_calls(Electric.ShapeCache.Storage, opts, stubs)
-  end
-
-  defp expect_storage(opts \\ [], expectations) do
-    expect_calls(Electric.ShapeCache.Storage, opts, expectations)
+    {:ok, ctx.stack_id, shape_handles}
   end
 end

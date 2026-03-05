@@ -18,7 +18,7 @@ example: true
 
 This is an example TanStack application developed using Electric for read-path sync, together with Tanstack Query for local writes with [optimistic state](/docs/guides/writes#optimistic-state).
 
-See the [Electric <> Tanstack integration docs](https://electric-sql.com/docs/integrations/tanstack) for more context and a [video of the example running here](https://x.com/msfstef/status/1828763769498952173).
+See the [Electric <> Tanstack integration docs](/docs/integrations/tanstack) for more context and a [video of the example running here](https://x.com/msfstef/status/1828763769498952173).
 
 The main Electric code is in [`./src/Example.tsx`](https://github.com/electric-sql/electric/blob/main/examples/tanstack/src/Example.tsx):
 

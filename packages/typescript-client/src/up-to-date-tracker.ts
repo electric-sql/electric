@@ -151,6 +151,11 @@ export class UpToDateTracker {
     }
     this.save()
   }
+
+  delete(shapeKey: string): void {
+    delete this.data[shapeKey]
+    this.save()
+  }
 }
 
 // Module-level singleton instance
