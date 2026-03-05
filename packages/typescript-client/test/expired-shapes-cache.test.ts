@@ -726,4 +726,144 @@ describe(`ExpiredShapesCache`, () => {
     expect(errors).toHaveLength(0)
     expect(fetchCount).toBeGreaterThan(1) // should keep fetching, not crash
   })
+
+  it(`should use cache buster instead of handle mutation on 409 without handle header`, async () => {
+    // Regression test for ELECTRIC-4GV: When a proxy strips the handle header
+    // from 409 responses, the client must use a random cache-buster query param
+    // to ensure unique URLs on retries, rather than mutating the handle.
+
+    let requestCount = 0
+    const capturedUrls: string[] = []
+    const maxRequests = 10
+
+    fetchMock.mockImplementation((input: RequestInfo | URL) => {
+      requestCount++
+      capturedUrls.push(input.toString())
+
+      if (requestCount >= maxRequests) {
+        aborter.abort()
+        return Promise.resolve(
+          new Response(JSON.stringify([]), {
+            status: 200,
+            headers: {
+              'electric-handle': `final-handle`,
+              'electric-offset': `0_0`,
+              'electric-schema': `{}`,
+              'electric-cursor': `cursor-1`,
+            },
+          })
+        )
+      }
+
+      // Return 409 WITHOUT a handle header — simulating a proxy that strips it
+      return Promise.resolve(
+        new Response(`[]`, {
+          status: 409,
+        })
+      )
+    })
+
+    const stream = new ShapeStream({
+      url: shapeUrl,
+      params: { table: `test` },
+      handle: `original-handle`,
+      signal: aborter.signal,
+      fetchClient: fetchMock,
+      subscribe: false,
+    })
+
+    stream.subscribe(() => {})
+
+    await new Promise((resolve) => setTimeout(resolve, 500))
+
+    // Invariant: no URL should contain "-next" in any parameter
+    for (const urlStr of capturedUrls) {
+      expect(urlStr, `URL contains "-next": ${urlStr}`).not.toContain(`-next`)
+    }
+
+    // Invariant: after the first 409, retries should include a cache-buster param
+    const urlsAfterFirst = capturedUrls.slice(1)
+    for (const urlStr of urlsAfterFirst) {
+      const url = new URL(urlStr)
+      const hasCacheBuster = url.searchParams.has(`cache-buster`)
+      const hasExpiredHandle = url.searchParams.has(`expired_handle`)
+      // URL uniqueness comes from either cache-buster or expired_handle
+      expect(
+        hasCacheBuster || hasExpiredHandle,
+        `Retry URL lacks cache-buster and expired_handle: ${urlStr}`
+      ).toBe(true)
+    }
+
+    // Invariant: all retry URLs must be unique (no identical URLs)
+    const uniqueUrls = new Set(capturedUrls)
+    expect(
+      uniqueUrls.size,
+      `Expected ${capturedUrls.length} unique URLs but got ${uniqueUrls.size}`
+    ).toBe(capturedUrls.length)
+  })
+
+  it(`should use cache buster on 409 without handle header when initial handle is undefined`, async () => {
+    // Regression test for ELECTRIC-4GV Pattern A: client never received a
+    // valid handle. Previously produced "undefined-next-next-next..." because
+    // the non-null assertion stringified undefined.
+
+    let requestCount = 0
+    const capturedUrls: string[] = []
+    const maxRequests = 10
+
+    fetchMock.mockImplementation((input: RequestInfo | URL) => {
+      requestCount++
+      capturedUrls.push(input.toString())
+
+      if (requestCount >= maxRequests) {
+        aborter.abort()
+        return Promise.resolve(
+          new Response(JSON.stringify([]), {
+            status: 200,
+            headers: {
+              'electric-handle': `final-handle`,
+              'electric-offset': `0_0`,
+              'electric-schema': `{}`,
+              'electric-cursor': `cursor-1`,
+            },
+          })
+        )
+      }
+
+      // Return 409 WITHOUT a handle header
+      return Promise.resolve(
+        new Response(`[]`, {
+          status: 409,
+        })
+      )
+    })
+
+    // No handle provided — simulates a client that never received one
+    const stream = new ShapeStream({
+      url: shapeUrl,
+      params: { table: `test` },
+      signal: aborter.signal,
+      fetchClient: fetchMock,
+      subscribe: false,
+    })
+
+    stream.subscribe(() => {})
+
+    await new Promise((resolve) => setTimeout(resolve, 500))
+
+    // Invariant: no URL should contain "undefined" or "-next"
+    for (const urlStr of capturedUrls) {
+      expect(urlStr, `URL contains "undefined": ${urlStr}`).not.toContain(
+        `undefined`
+      )
+      expect(urlStr, `URL contains "-next": ${urlStr}`).not.toContain(`-next`)
+    }
+
+    // Invariant: all retry URLs must be unique
+    const uniqueUrls = new Set(capturedUrls)
+    expect(
+      uniqueUrls.size,
+      `Expected ${capturedUrls.length} unique URLs but got ${uniqueUrls.size}`
+    ).toBe(capturedUrls.length)
+  })
 })

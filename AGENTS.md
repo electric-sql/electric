@@ -215,6 +215,10 @@ const bootstrapTodoListAction = createOptimisticAction<string>({
 })
 ```
 
+## Working on the TypeScript client
+
+Before making changes to `packages/typescript-client`, **always read `packages/typescript-client/SPEC.md` first**. It is the single source of truth for the ShapeStream state machine — invariants, constraints, state transitions, and how they're enforced. Design fixes and features around the spec's invariants rather than patching symptoms ad-hoc.
+
 ## Testing
 
 ### Unit testing (mocked)
