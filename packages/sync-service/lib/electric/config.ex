@@ -107,14 +107,6 @@ defmodule Electric.Config do
     publication_refresh_period: 60_000,
     schema_reconciler_period: 60_000,
     snapshot_timeout_to_first_data: :timer.seconds(30),
-    shape_db_exclusive_mode: false,
-    shape_db_storage_dir: @default_storage_dir,
-    # TODO: fix defaults to synchronous=NORMAL and shape_db_cache_size=2048
-    shape_db_synchronous:
-      Electric.ShapeCache.ShapeStatus.ShapeDb.Connection.default!(:synchronous),
-    shape_db_cache_size: Electric.ShapeCache.ShapeStatus.ShapeDb.Connection.default!(:cache_size),
-    shape_db_enable_stats: false,
-    shape_db_enable_memory_stats: false,
     exclude_spans: MapSet.new()
   ]
 
