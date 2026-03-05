@@ -398,6 +398,38 @@ describe(`shape stream state machine`, () => {
     expect(state.isUpToDate).toBe(false)
   })
 
+  // 22b. markMustRefetch without handle (409 with missing header)
+  it(`markMustRefetch without handle resets to InitialState with undefined handle`, () => {
+    const { state } = scenario()
+      .response({ responseHandle: `h1`, now: 12345 })
+      .expectKind(`syncing`)
+      .messages({ now: 12345 })
+      .expectKind(`live`)
+      .markMustRefetch()
+      .expectKind(`initial`)
+      .expectOffset(`-1`)
+      .done()
+
+    expect(state.handle).toBeUndefined()
+    expect(state.liveCacheBuster).toBe(``)
+    expect(state.lastSyncedAt).toBe(12345)
+    expect(state.schema).toBe(undefined)
+  })
+
+  // 22c. InitialState from markMustRefetch(undefined) omits handle in URL params
+  it(`InitialState without handle omits handle from URL params`, () => {
+    const { state } = scenario()
+      .response({ responseHandle: `h1` })
+      .expectKind(`syncing`)
+      .markMustRefetch()
+      .expectKind(`initial`)
+      .done()
+
+    const params = applyAndGetParams(state)
+    expect(params.has(SHAPE_HANDLE_QUERY_PARAM)).toBe(false)
+    expect(params.get(OFFSET_QUERY_PARAM)).toBe(`-1`)
+  })
+
   // 23. StaleRetryState → SyncingState on successful response
   it(`StaleRetryState → SyncingState on successful response`, () => {
     const { state } = scenario()
@@ -1190,6 +1222,17 @@ describe(`algebraic properties`, () => {
       expect(fresh).toBeInstanceOf(InitialState)
       expect(fresh.offset).toBe(`-1`)
       expect(fresh.handle).toBe(`fresh-h`)
+    }
+  )
+
+  it.each(allStates)(
+    `markMustRefetch(undefined) produces InitialState with no handle ($kind)`,
+    ({ state }) => {
+      const fresh = state.markMustRefetch()
+      assertStateInvariants(fresh)
+      expect(fresh).toBeInstanceOf(InitialState)
+      expect(fresh.offset).toBe(`-1`)
+      expect(fresh.handle).toBeUndefined()
     }
   )
 
