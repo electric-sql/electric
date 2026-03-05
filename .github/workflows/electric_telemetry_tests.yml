@@ -21,7 +21,6 @@ jobs:
         working-directory: packages/electric-telemetry
     env:
       MIX_ENV: test
-      MIX_OS_DEPS_COMPILE_PARTITION_COUNT: 4
     steps:
       - uses: actions/checkout@v4
 
