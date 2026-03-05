@@ -327,8 +327,14 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
     {:noreply, schedule_poll(state), :hibernate}
   end
 
+  # Because we're trapping exits to enable the terminate/2 callback
+  # we need to handle the :EXIT signals
+  def handle_info({:EXIT, _pid, reason}, state) do
+    {:stop, reason, state}
+  end
+
   def handle_info(msg, state) do
-    Logger.warning("Received unexpected message #{inspect(msg)}")
+    Logger.warning("#{__MODULE__} Received unexpected message #{inspect(msg)}")
     {:noreply, state}
   end
 

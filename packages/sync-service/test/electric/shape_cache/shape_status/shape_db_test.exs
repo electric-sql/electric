@@ -653,6 +653,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDbTest do
       super_ref = Process.monitor(supervisor_pid)
       assert write_buffer_pid = GenServer.whereis(ShapeDb.WriteBuffer.name(ctx.stack_id))
 
+      Process.unlink(supervisor_pid)
       buffer_ref = Process.monitor(write_buffer_pid)
       Process.exit(write_buffer_pid, :some_reason)
       assert_receive {:DOWN, ^buffer_ref, :process, ^write_buffer_pid, :some_reason}

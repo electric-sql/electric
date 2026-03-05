@@ -11,6 +11,24 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Statistics do
   Note that the reported values are per-db, not per-connection. There are
   per-connection stats included in the query result but they're not included in
   the export.
+
+  ## Lifecycle
+
+  On startup the GenServer only tracks `connections` (active pool workers).
+
+  After `initialize/1` is cast (triggered by the supervisor once all children
+  are up), the module probes the database once to determine which extensions
+  are available:
+
+  - If `enable_stats?` is `false` the probe is skipped entirely and the module
+    only ever increments/decrements the connections counter.
+  - If `dbstat` is not present, disk-size queries are permanently disabled.
+  - If `enable_memory_stats?` is `true` and the `memstat` extension loads
+    successfully, memory stats are included in every subsequent query.
+  - If neither `dbstat` nor `memstat` is available the module stops scheduling
+    further DB reads.
+  - Otherwise a timer fires every `statistics_collection_period` milliseconds
+    (default 60 s) and the results are stored in `stats`.
   """
 
   use GenServer
@@ -78,8 +96,8 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Statistics do
 
     measurement_period = Keyword.get(args, :statistics_collection_period, @measurement_period)
     enable_stats? = Keyword.get(args, :enable_stats?, false)
-    # don't need to && with enable_stats because if enable_stats? is false,
-    # we never test this secondary flag
+    # don't need to && with enable_stats? because if enable_stats? is false we
+    # never test this secondary flag
     enable_memory_stats? = Keyword.get(args, :enable_memory_stats?, false)
 
     {:ok,
@@ -88,31 +106,33 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Statistics do
        page_size: 0,
        stats: %__MODULE__{},
        connections: 0,
-       exclusive_mode?: Keyword.get(args, :exclusive_mode, false),
+       # User-configured flag – never mutated at runtime.
        enable_stats?: enable_stats?,
-       dbstat_available?: true,
-       memstat_available?: true,
        enable_memory_stats?: enable_memory_stats?,
+       # Whether each extension is actually available in this SQLite build /
+       # runtime.  Both start as `nil` (unknown) and are set to true/false
+       # during the first initialisation probe.
+       dbstat_available?: nil,
+       memstat_available?: nil,
        measurement_period: measurement_period,
-       task: nil,
-       pool_opts: args
+       task: nil
      }}
   end
 
   @impl GenServer
   def handle_info(:read_stats, state) do
-    {:noreply, read_stats(state), :hibernate}
+    {:noreply, schedule_read_stats(state), :hibernate}
   end
 
-  def handle_info({ref, read_stats_result}, %{task: %{ref: ref}} = state) do
+  def handle_info({ref, result}, %{task: %{ref: ref}} = state) do
     state =
-      case read_stats_result do
-        {:ok, dbstat_available?, memstat_available?, stats} ->
+      case result do
+        {:ok, dbstat_available?, memstat_available?, page_size, stats} ->
           %{
             state
-            | enable_stats?: dbstat_available?,
-              dbstat_available?: dbstat_available?,
+            | dbstat_available?: dbstat_available?,
               memstat_available?: memstat_available?,
+              page_size: page_size,
               stats: stats
           }
 
@@ -129,12 +149,19 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Statistics do
   end
 
   def handle_info({:DOWN, ref, :process, _pid, _reason}, %{task: %{ref: ref}} = state) do
-    Process.send_after(self(), :read_stats, state.measurement_period)
-    {:noreply, %{state | task: nil}}
+    # The task finished (normal exit after returning its result).  The result
+    # was already handled in the clause above; schedule the next measurement.
+    state = %{state | task: nil}
+
+    if keep_querying?(state) do
+      Process.send_after(self(), :read_stats, state.measurement_period)
+    end
+
+    {:noreply, state}
   end
 
   def handle_info(msg, state) do
-    Logger.warning(["Received unexpected message: ", inspect(msg)])
+    Logger.warning(["#{__MODULE__} Received unexpected message: ", inspect(msg)])
     {:noreply, state}
   end
 
@@ -144,7 +171,8 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Statistics do
   end
 
   def handle_call(:stats_enabled, _from, state) do
-    {:reply, %{disk: state.dbstat_available?, memory: state.memstat_available?}, state}
+    {:reply, %{disk: state.dbstat_available? == true, memory: state.memstat_available? == true},
+     state}
   end
 
   @impl GenServer
@@ -162,115 +190,140 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Statistics do
     {:noreply, state}
   end
 
+  # :initialize is cast once by the supervisor after all children are up.
+  # It runs the capability probe unconditionally (force? = true) and, if
+  # anything useful is available, schedules the recurring measurement.
+  def handle_cast(:initialize, %{enable_stats?: false} = state) do
+    # Stats are disabled by configuration – nothing to do.
+    {:noreply, state}
+  end
+
   def handle_cast(:initialize, state) do
-    {:noreply, read_stats(state, _force = true, _first_run? = true)}
+    {:noreply, run_probe(state)}
   end
 
-  defp read_stats(state, force? \\ false, first_run? \\ false)
+  # Decide whether continued DB querying makes sense given current state.
+  defp keep_querying?(%{enable_stats?: false}), do: false
+  defp keep_querying?(%{dbstat_available?: false, memstat_available?: false}), do: false
+  defp keep_querying?(_state), do: true
 
-  # If the pools have no open connections, then don't read memory usage because
-  # the report would only include memory used by the temporary statistics
-  # connection. We're assuming that 0 open connections == 0 sqlite memory
-  # usage, which seems reasonable
-  defp read_stats(%{connections: 0} = state, false, first_run?) do
-    do_read_stats(state, false, first_run?)
-  end
-
-  defp read_stats(%{enable_stats?: false} = state, _force?, _first_run?) do
-    state
-  end
-
-  defp read_stats(state, _force?, first_run?) do
-    do_read_stats(state, true, first_run?)
-  end
-
-  defp do_read_stats(state, include_memory?, first_run?) do
-    # Read the stats in an async task so that we don't block reading the stats
-    # and get spurious timeout errors
+  # Run the capability probe (first measurement + extension discovery).
+  defp run_probe(state) do
     task =
       Task.async(fn ->
         try do
           Connection.checkout_write!(state.stack_id, :read_stats, fn %{conn: conn} ->
             with {:ok, memstat_available?, dbstat_available?, page_size} <-
-                   initialize_connection(
-                     conn,
-                     first_run?,
-                     state.enable_memory_stats?,
-                     state.dbstat_available?
-                   ) do
-              if dbstat_available? do
-                with {:ok, stats} <-
-                       Connection.fetch_all(
-                         conn,
-                         stats_query(memstat_available? && include_memory?),
-                         []
-                       ) do
-                  {:ok, dbstat_available?, memstat_available?, analyze_stats(stats, page_size)}
+                   probe_capabilities(conn, state.enable_memory_stats?) do
+              stats =
+                if dbstat_available? || memstat_available? do
+                  query_stats(conn, dbstat_available?, memstat_available?, page_size)
+                else
+                  {:ok, %__MODULE__{updated_at: DateTime.utc_now()}}
                 end
-              else
-                {:ok, dbstat_available?, memstat_available?,
-                 %__MODULE__{updated_at: DateTime.utc_now()}}
+
+              with {:ok, s} <- stats do
+                {:ok, dbstat_available?, memstat_available?, page_size, s}
               end
             end
           end)
         catch
-          type, error ->
-            # don't want a failure to read stats to propagate and crash the rest of the stack
-            {:error, Exception.format(type, error, __STACKTRACE__)}
+          type, error -> {:error, Exception.format(type, error, __STACKTRACE__)}
         end
       end)
 
     %{state | task: task}
   end
 
-  defp initialize_connection(conn, first_run?, enable_memory_stats?, dbstat_available?) do
+  # Schedule a normal (non-probe) stats read, skipping if we should not query.
+  defp schedule_read_stats(%{enable_stats?: false} = state), do: state
+
+  defp schedule_read_stats(%{dbstat_available?: false, memstat_available?: false} = state),
+    do: state
+
+  defp schedule_read_stats(state) do
+    # If connections == 0 skip memory stats (only the temporary stats
+    # connection itself would be counted, giving a misleading result).
+    include_memory? = state.connections > 0 && state.memstat_available? == true
+
+    task =
+      Task.async(fn ->
+        try do
+          Connection.checkout_write!(state.stack_id, :read_stats, fn %{conn: conn} ->
+            case query_stats(
+                   conn,
+                   state.dbstat_available?,
+                   include_memory?,
+                   state.page_size
+                 ) do
+              {:ok, stats} ->
+                {:ok, state.dbstat_available?, state.memstat_available?, state.page_size, stats}
+
+              err ->
+                err
+            end
+          end)
+        catch
+          type, error -> {:error, Exception.format(type, error, __STACKTRACE__)}
+        end
+      end)
+
+    %{state | task: task}
+  end
+
+  defp probe_capabilities(conn, enable_memory_stats?) do
     memstat_available? =
       if enable_memory_stats? do
         case Connection.enable_extension(conn, "memstat") do
-          # :ok ->
-          #   if first_run?, do: Logger.notice("SQLite memory statistics enabled")
-          #   true
-
           {:error, reason} ->
-            if first_run?,
-              do:
-                Logger.warning(
-                  "Failed to load memstat SQLite extension: #{inspect(reason)}. " <>
-                    "Memory statistics will not be available."
-                )
+            Logger.warning(
+              "Failed to load memstat SQLite extension: #{inspect(reason)}. " <>
+                "Memory statistics will not be available."
+            )
 
             false
+
+          _ok ->
+            Logger.notice("SQLite memory statistics enabled")
+            true
         end
       else
         false
       end
 
     dbstat_available? =
-      if dbstat_available? do
-        case Connection.fetch_one(
-               conn,
-               "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'dbstat'",
-               []
-             ) do
-          {:ok, [1]} ->
-            true
+      case Connection.fetch_one(
+             conn,
+             "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'dbstat'",
+             []
+           ) do
+        {:ok, [1]} ->
+          true
 
-          :error ->
-            if first_run?,
-              do: Logger.warning("SQLite disk size statistics will not be available.")
-
-            false
-        end
-      else
-        false
+        :error ->
+          Logger.warning("SQLite disk size statistics will not be available.")
+          false
       end
+
+    if !memstat_available? && !dbstat_available? do
+      Logger.warning(
+        "Neither dbstat nor memstat is available – SQLite statistics collection disabled."
+      )
+    end
 
     with {:ok, [page_size]} <- Connection.fetch_one(conn, "PRAGMA page_size", []) do
       {:ok, memstat_available?, dbstat_available?, page_size}
     end
   end
 
-  defp stats_query(true) do
+  defp query_stats(conn, dbstat_available?, include_memory?, page_size) do
+    with {:ok, rows} <-
+           Connection.fetch_all(conn, stats_sql(dbstat_available?, include_memory?), []) do
+      {:ok, analyze_stats(rows, page_size)}
+    end
+  end
+
+  defp stats_sql(true, true) do
     """
     SELECT '__dbstat__', sum(pgsize), sum(unused) FROM dbstat WHERE aggregate = TRUE
     UNION ALL
@@ -278,8 +331,18 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Statistics do
     """
   end
 
-  defp stats_query(false) do
+  defp stats_sql(true, _include_memory?) do
     "SELECT '__dbstat__', sum(pgsize), sum(unused) FROM dbstat WHERE aggregate = TRUE"
+  end
+
+  defp stats_sql(false, true) do
+    "SELECT name, hiwtr, value FROM sqlite_memstat"
+  end
+
+  # Should not normally be reached (we guard against this before calling), but
+  # handle it gracefully rather than crash.
+  defp stats_sql(false, false) do
+    "SELECT 1 WHERE 0"
   end
 
   defp analyze_stats(stats, page_size) do
