@@ -793,4 +793,76 @@ describe(`ExpiredShapesCache`, () => {
       }
     }
   })
+
+  it(`should not accumulate -next suffixes when initial handle is undefined`, async () => {
+    // Regression test for ELECTRIC-4GV Pattern A: when the client never
+    // received a valid handle (undefined), repeated 409s without a handle
+    // header previously produced "undefined-next-next-next..." because the
+    // non-null assertion stringified undefined.
+
+    let requestCount = 0
+    const capturedHandles: (string | null)[] = []
+    const capturedExpiredHandles: (string | null)[] = []
+    const maxRequests = 10
+
+    fetchMock.mockImplementation((input: RequestInfo | URL) => {
+      requestCount++
+      const url = new URL(input.toString())
+      capturedHandles.push(url.searchParams.get(`handle`))
+      capturedExpiredHandles.push(url.searchParams.get(`expired_handle`))
+
+      if (requestCount >= maxRequests) {
+        aborter.abort()
+        return Promise.resolve(
+          new Response(JSON.stringify([]), {
+            status: 200,
+            headers: {
+              'electric-handle': `final-handle`,
+              'electric-offset': `0_0`,
+              'electric-schema': `{}`,
+              'electric-cursor': `cursor-1`,
+            },
+          })
+        )
+      }
+
+      // Return 409 WITHOUT a handle header
+      return Promise.resolve(
+        new Response(`[]`, {
+          status: 409,
+        })
+      )
+    })
+
+    // No handle provided — simulates a client that never received one
+    const stream = new ShapeStream({
+      url: shapeUrl,
+      params: { table: `test` },
+      signal: aborter.signal,
+      fetchClient: fetchMock,
+      subscribe: false,
+    })
+
+    stream.subscribe(() => {})
+
+    await new Promise((resolve) => setTimeout(resolve, 500))
+
+    // No handle should contain "undefined" (the old bug stringified it)
+    const allParams = [...capturedHandles, ...capturedExpiredHandles]
+    for (const param of allParams) {
+      if (param) {
+        expect(
+          param,
+          `Parameter "${param}" contains stringified "undefined"`
+        ).not.toContain(`undefined`)
+        if (param.includes(`-next`)) {
+          const nextCount = (param.match(/-next/g) || []).length
+          expect(
+            nextCount,
+            `Parameter "${param}" has ${nextCount} "-next" suffixes, expected exactly 1`
+          ).toBe(1)
+        }
+      }
+    }
+  })
 })
