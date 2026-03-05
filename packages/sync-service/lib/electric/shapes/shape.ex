@@ -692,6 +692,25 @@ defmodule Electric.Shapes.Shape do
 
   defp should_keep_change?(_), do: true
 
+  @doc """
+  Returns a slim copy of the shape suitable for Filter ETS storage.
+
+  Keeps only the fields accessed by Filter operations and resets
+  large unused fields (most notably `shape_dependencies` which may
+  contain full recursive Shape structs) to their defaults.
+  """
+  def for_filter(%__MODULE__{} = shape) do
+    %__MODULE__{
+      root_table: shape.root_table,
+      root_table_id: shape.root_table_id,
+      where: shape.where,
+      shape_dependencies_handles: shape.shape_dependencies_handles,
+      root_column_count: shape.root_column_count,
+      flags: shape.flags,
+      selected_columns: shape.selected_columns
+    }
+  end
+
   # If neither oid nor schema/table name matches, then shape is not affected
   def is_affected_by_relation_change?(
         %__MODULE__{root_table_id: id1, root_table: {schema1, table1}},

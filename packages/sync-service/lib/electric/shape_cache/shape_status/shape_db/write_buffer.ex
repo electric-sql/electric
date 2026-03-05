@@ -379,7 +379,12 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
             Enum.each(entries, fn {ts, op} ->
               case op do
                 {:add, handle} ->
-                  # Look up comparable for cleanup (may be gone if shape was removed)
+                  # NOTE: This is a second ETS lookup for the same handle (first is in
+                  # do_batch_write above). The two lookups serve different purposes:
+                  # do_batch_write reads shape data to write to SQLite, while this one
+                  # reads the comparable key to clean up the ETS index after a successful
+                  # flush. We could consolidate by collecting comparables during the batch
+                  # write, but the cost of a same-process ETS lookup is negligible.
                   case :ets.lookup(shapes_table, {:shape, handle}) do
                     [{{:shape, ^handle}, _shape, comparable, _hash, _relations}] ->
                       :ets.delete(shapes_table, {:comparable, comparable})

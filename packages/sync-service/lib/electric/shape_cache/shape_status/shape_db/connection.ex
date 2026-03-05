@@ -393,9 +393,9 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
     synchronous: "OFF",
     # Default page cache size per connection. Multiplied by 1024, because
     # SQLite works in KiB but we configure in bytes. With 2*schedulers+1
-    # connections, total cache = this * connection_count. 512 KB is sufficient
-    # for the small shape metadata database.
-    cache_size: 512 * 1024
+    # connections, total cache = this * connection_count. 2 MB balances
+    # memory savings with headroom for larger deployments.
+    cache_size: 2 * 1024 * 1024
   ]
 
   def default!(pragma) do

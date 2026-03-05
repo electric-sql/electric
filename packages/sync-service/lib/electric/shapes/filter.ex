@@ -87,7 +87,8 @@ defmodule Electric.Shapes.Filter do
   def add_shape(%Filter{} = filter, shape_id, shape) do
     if has_shape?(filter, shape_id), do: raise("duplicate shape #{shape_id}")
 
-    :ets.insert(filter.shapes_table, {shape_id, shape})
+    filter_shape = Shape.for_filter(shape)
+    :ets.insert(filter.shapes_table, {shape_id, filter_shape})
 
     where_cond_id = get_or_create_table_condition(filter, shape.root_table)
 
