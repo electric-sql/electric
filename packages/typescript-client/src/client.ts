@@ -887,7 +887,8 @@ export class ShapeStream<T extends Row<unknown> = Row>
         }
 
         const newShapeHandle =
-          e.headers[SHAPE_HANDLE_HEADER] || `${this.#syncState.handle!}-next`
+          e.headers[SHAPE_HANDLE_HEADER] ||
+          `${(this.#syncState.handle ?? ``).replace(/-next((-next)*)$/, ``)}-next`
         this.#reset(newShapeHandle)
 
         // must refetch control message might be in a list or not depending
@@ -1870,7 +1871,8 @@ export class ShapeStream<T extends Row<unknown> = Row>
         // For snapshot 409s, only update the handle — don't reset offset/schema/etc.
         // The main stream is paused and should not be disturbed.
         const nextHandle =
-          e.headers[SHAPE_HANDLE_HEADER] || `${usedHandle ?? `handle`}-next`
+          e.headers[SHAPE_HANDLE_HEADER] ||
+          `${(usedHandle ?? ``).replace(/-next((-next)*)$/, ``)}-next`
         this.#syncState = this.#syncState.withHandle(nextHandle)
 
         return this.fetchSnapshot(opts)

@@ -726,4 +726,68 @@ describe(`ExpiredShapesCache`, () => {
     expect(errors).toHaveLength(0)
     expect(fetchCount).toBeGreaterThan(1) // should keep fetching, not crash
   })
+
+  it(`should not accumulate -next suffixes on handle across repeated 409s without handle header`, async () => {
+    // Regression test for ELECTRIC-4GV: When a proxy strips the handle header
+    // from 409 responses, the client falls back to appending "-next" to the
+    // current handle. Without the fix, each retry appends another "-next",
+    // growing the URL unboundedly until it exceeds URI limits (414).
+
+    let requestCount = 0
+    const capturedHandles: (string | null)[] = []
+    const maxRequests = 10
+
+    fetchMock.mockImplementation((input: RequestInfo | URL) => {
+      requestCount++
+      const url = new URL(input.toString())
+      capturedHandles.push(url.searchParams.get(`handle`))
+
+      if (requestCount >= maxRequests) {
+        aborter.abort()
+        // Return a valid response to stop retrying
+        return Promise.resolve(
+          new Response(JSON.stringify([]), {
+            status: 200,
+            headers: {
+              'electric-handle': `final-handle`,
+              'electric-offset': `0_0`,
+              'electric-schema': `{}`,
+              'electric-cursor': `cursor-1`,
+            },
+          })
+        )
+      }
+
+      // Return 409 WITHOUT a handle header — simulating a proxy that strips it
+      return Promise.resolve(
+        new Response(`[]`, {
+          status: 409,
+        })
+      )
+    })
+
+    const stream = new ShapeStream({
+      url: shapeUrl,
+      params: { table: `test` },
+      handle: `original-handle`,
+      signal: aborter.signal,
+      fetchClient: fetchMock,
+      subscribe: false,
+    })
+
+    stream.subscribe(() => {})
+
+    await new Promise((resolve) => setTimeout(resolve, 500))
+
+    // The key assertion: no handle should contain more than one "-next" suffix
+    for (const handle of capturedHandles) {
+      if (handle && handle.includes(`-next`)) {
+        const nextCount = (handle.match(/-next/g) || []).length
+        expect(
+          nextCount,
+          `Handle "${handle}" has ${nextCount} "-next" suffixes, expected at most 1`
+        ).toBeLessThanOrEqual(1)
+      }
+    }
+  })
 })
