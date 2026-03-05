@@ -48,7 +48,7 @@ defmodule Electric.Shapes.Filter.WhereCondition do
          optimisation
        ) do
     [{_, {index_keys, other_shapes}}] = :ets.lookup(table, condition_id)
-    key = {optimisation.field, optimisation.operation}
+    key = {optimisation.field, index_key(optimisation.operation)}
     index_keys = MapSet.put(index_keys, key)
     :ets.insert(table, {condition_id, {index_keys, other_shapes}})
 
@@ -143,6 +143,10 @@ defmodule Electric.Shapes.Filter.WhereCondition do
 
   defp optimise_where(_), do: :not_optimised
 
+  # "in" shares the EqualityIndex with "=", so use the same index key
+  defp index_key("in"), do: "="
+  defp index_key(op), do: op
+
   defp where_expr(eval) do
     %Expr{eval: eval, used_refs: Parser.find_refs(eval), returns: :bool}
   end
@@ -222,7 +226,7 @@ defmodule Electric.Shapes.Filter.WhereCondition do
     case Index.remove_shape(filter, condition_id, shape_id, optimisation) do
       :deleted ->
         [{_, {index_keys, other_shapes}}] = :ets.lookup(table, condition_id)
-        key = {optimisation.field, optimisation.operation}
+        key = {optimisation.field, index_key(optimisation.operation)}
         index_keys = MapSet.delete(index_keys, key)
         update_or_delete_condition(table, condition_id, index_keys, other_shapes)
 

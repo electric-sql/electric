@@ -713,10 +713,10 @@ defmodule Electric.Shapes.FilterTest do
     end
 
     test "where clause in the form `const = ANY(array_field)` is optimised" do
-      # Same multiplier as @> since it reuses the InclusionIndex
-      multiplier = 5
-      shape_count = @shape_count * multiplier
-      max_reductions = @max_reductions * multiplier
+      # Same shape count as @> but higher budget per shape because the ANY
+      # AST is deeper to pattern-match through optimise_where
+      shape_count = @shape_count * 5
+      max_reductions = @max_reductions * 10
 
       filter = Filter.new()
 
