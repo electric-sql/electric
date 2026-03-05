@@ -779,14 +779,17 @@ describe(`ExpiredShapesCache`, () => {
 
     await new Promise((resolve) => setTimeout(resolve, 500))
 
-    // The key assertion: no handle should contain more than one "-next" suffix
-    for (const handle of capturedHandles) {
+    // First request uses the original handle; retries should never accumulate
+    // multiple "-next" suffixes. The fast-loop detector may reset the handle
+    // mid-sequence, so we check that each handle with "-next" has exactly one.
+    expect(capturedHandles[0]).toBe(`original-handle`)
+    for (const handle of capturedHandles.slice(1)) {
       if (handle && handle.includes(`-next`)) {
         const nextCount = (handle.match(/-next/g) || []).length
         expect(
           nextCount,
-          `Handle "${handle}" has ${nextCount} "-next" suffixes, expected at most 1`
-        ).toBeLessThanOrEqual(1)
+          `Handle "${handle}" has ${nextCount} "-next" suffixes, expected exactly 1`
+        ).toBe(1)
       }
     }
   })

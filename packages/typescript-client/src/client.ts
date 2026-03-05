@@ -886,9 +886,16 @@ export class ShapeStream<T extends Row<unknown> = Row>
           expiredShapesCache.markExpired(shapeKey, this.#syncState.handle)
         }
 
+        if (!e.headers[SHAPE_HANDLE_HEADER]) {
+          console.warn(
+            `[Electric] Received 409 response without a shape handle header. ` +
+              `This likely indicates a proxy or CDN stripping required headers. ` +
+              `Deriving fallback handle from "${this.#syncState.handle ?? ``}".`
+          )
+        }
         const newShapeHandle =
           e.headers[SHAPE_HANDLE_HEADER] ||
-          `${(this.#syncState.handle ?? ``).replace(/-next((-next)*)$/, ``)}-next`
+          `${(this.#syncState.handle ?? ``).replace(/(-next)+$/, ``)}-next`
         this.#reset(newShapeHandle)
 
         // must refetch control message might be in a list or not depending
@@ -1870,9 +1877,16 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
         // For snapshot 409s, only update the handle — don't reset offset/schema/etc.
         // The main stream is paused and should not be disturbed.
+        if (!e.headers[SHAPE_HANDLE_HEADER]) {
+          console.warn(
+            `[Electric] Received 409 response without a shape handle header. ` +
+              `This likely indicates a proxy or CDN stripping required headers. ` +
+              `Deriving fallback handle from "${usedHandle ?? ``}".`
+          )
+        }
         const nextHandle =
           e.headers[SHAPE_HANDLE_HEADER] ||
-          `${(usedHandle ?? ``).replace(/-next((-next)*)$/, ``)}-next`
+          `${(usedHandle ?? ``).replace(/(-next)+$/, ``)}-next`
         this.#syncState = this.#syncState.withHandle(nextHandle)
 
         return this.fetchSnapshot(opts)
