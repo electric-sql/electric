@@ -880,10 +880,10 @@ export class ShapeStream<T extends Row<unknown> = Row>
       if (!(e instanceof FetchError)) throw e // should never happen
 
       if (e.status == 409) {
-        // Upon receiving a 409, we should start from scratch
-        // with the newly provided shape handle, or a fallback
-        // pseudo-handle based on the current one to act as a
-        // consistent cache buster
+        // Upon receiving a 409, start from scratch with the newly
+        // provided shape handle. If the header is missing (e.g. proxy
+        // stripped it), reset without a handle and use a random
+        // cache-buster query param to ensure the retry URL is unique.
 
         // Store the current shape URL as expired to avoid future 409s
         if (this.#syncState.handle) {
@@ -899,7 +899,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
           )
           this.#refetchCacheBuster = createCacheBuster()
         }
-        this.#reset(newShapeHandle || undefined)
+        this.#reset(newShapeHandle)
 
         // must refetch control message might be in a list or not depending
         // on whether it came from an SSE request or long poll. The body may
@@ -1889,15 +1889,14 @@ export class ShapeStream<T extends Row<unknown> = Row>
         // For snapshot 409s, only update the handle — don't reset offset/schema/etc.
         // The main stream is paused and should not be disturbed.
         const nextHandle = e.headers[SHAPE_HANDLE_HEADER]
-        if (!nextHandle) {
+        if (nextHandle) {
+          this.#syncState = this.#syncState.withHandle(nextHandle)
+        } else {
           console.warn(
             `[Electric] Received 409 response without a shape handle header. ` +
               `This likely indicates a proxy or CDN stripping required headers.`
           )
           this.#refetchCacheBuster = createCacheBuster()
-        }
-        if (nextHandle) {
-          this.#syncState = this.#syncState.withHandle(nextHandle)
         }
 
         return this.fetchSnapshot(opts)
