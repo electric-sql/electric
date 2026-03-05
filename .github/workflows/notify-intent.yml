@@ -9,9 +9,9 @@
 #     as the INTENT_NOTIFY_TOKEN repository secret.
 #
 # Template variables (replaced by `intent setup`):
-#   unknown  — e.g. @tanstack/query
-#   docs/**     — e.g. docs/**
-#   packages/unknown/src/**      — e.g. packages/query-core/src/**
+#   @electric-sql/client
+#   website/docs/**
+#   packages/typescript-client/src/**
 
 name: Notify Intent
 
@@ -19,8 +19,9 @@ on:
   push:
     branches: [main]
     paths:
-      - 'docs/**'
-      - 'packages/unknown/src/**'
+      - 'website/docs/**'
+      - 'packages/typescript-client/src/**'
+      - 'packages/y-electric/src/**'
 
 jobs:
   notify:
@@ -46,7 +47,7 @@ jobs:
           event-type: skill-check
           client-payload: |
             {
-              "package": "unknown",
+              "package": "@electric-sql/client",
               "sha": "${{ github.sha }}",
               "changed_files": ${{ steps.changes.outputs.files }}
             }

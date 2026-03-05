@@ -181,11 +181,7 @@ Some migration tools reset table properties. Always ensure `REPLICA IDENTITY FUL
 
 Source: `website/docs/guides/troubleshooting.md:373`
 
-### HIGH Tension: Read-only sync vs. full-stack data flow
-
-Electric only syncs reads. The ORM handles writes via your API. Agents trained on bidirectional sync libraries skip the txid handshake entirely. Every write operation must: run in a transaction, get `pg_current_xact_id()`, return it as an integer, and the client must call `awaitTxId(txid)`.
-
-See also: electric-new-feature/SKILL.md — Full write-path journey.
+See also: electric-new-feature/SKILL.md — Full write-path journey including txid handshake.
 See also: electric-schema-shapes/SKILL.md — Schema design affects both shapes and ORM queries.
 
 ## Version

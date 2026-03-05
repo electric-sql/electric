@@ -187,12 +187,7 @@ Renamed from `ELECTRIC_QUERY_DATABASE_URL` to `ELECTRIC_POOLED_DATABASE_URL` in 
 
 Source: `packages/sync-service/CHANGELOG.md:415`
 
-### HIGH Tension: Security vs. getting-started simplicity
-
-This skill's production requirements conflict with getting-started simplicity. `ELECTRIC_INSECURE=true` and direct access work in dev but are security holes in production. Agents optimizing for simplicity generate insecure deployments.
-
-See also: electric-proxy-auth/SKILL.md
-
+See also: electric-proxy-auth/SKILL.md — Production requires proxy with ELECTRIC_SECRET.
 See also: electric-postgres-security/SKILL.md — Deployment requires correct Postgres configuration.
 See also: electric-debugging/SKILL.md — Many sync issues stem from deployment configuration.
 

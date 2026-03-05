@@ -230,10 +230,6 @@ Renamed from `shape_id` to `handle` in v0.8.0.
 
 Source: `packages/sync-service/CHANGELOG.md:1123`
 
-### HIGH Tension: Read-only sync vs. full-stack data flow
-
-Electric only syncs reads from Postgres to clients. Agents trained on older sync libraries generate bidirectional sync code, skipping the write-path API and txid reconciliation entirely. Always implement the full write path: `collection.insert()` → `onInsert` → API → Postgres → txid → `awaitTxId`.
-
 See also: electric-orm/SKILL.md — Getting txid from ORM transactions.
 See also: electric-proxy-auth/SKILL.md — E2E feature journey includes setting up proxy routes.
 

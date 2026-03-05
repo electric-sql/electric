@@ -85,23 +85,19 @@ const stream = new ShapeStream({
 // WHERE clauses auto-translate: "createdAt" → "created_at"
 ```
 
-### Handle errors with retry and auth token refresh
+### Handle errors with retry
 
 ```ts
 const stream = new ShapeStream({
   url: '/api/todos',
-  headers: {
-    Authorization: async () => `Bearer ${await getToken()}`,
-  },
-  onError: async (error) => {
-    if (error instanceof FetchError && error.status === 401) {
-      const newToken = await refreshToken()
-      return { headers: { Authorization: `Bearer ${newToken}` } }
-    }
-    return {} // Return {} to retry with same params
+  onError: (error) => {
+    console.error('sync error', error)
+    return {} // Return {} to retry; returning void stops the stream
   },
 })
 ```
+
+For auth token refresh on 401 errors, see electric-proxy-auth/SKILL.md.
 
 ### Resume from stored offset
 
@@ -329,12 +325,6 @@ const newStream = new ShapeStream({
 Shapes are immutable per subscription. Changing params on a running stream has no effect. Create a new `ShapeStream` instance for different filters.
 
 Source: `AGENTS.md:106`
-
-### HIGH Tension: Shape immutability vs. dynamic filtering
-
-This skill's immutable shape pattern conflicts with dynamic filtering needs in schema-and-shapes design. Agents optimizing for dynamic UX (search, pagination) tend to mutate running stream options instead of creating new `ShapeStream` instances per filter state.
-
-See also: electric-schema-shapes/SKILL.md
 
 ## References
 

@@ -177,12 +177,7 @@ Without txid, the UI flickers when optimistic state is dropped before the synced
 
 Source: `AGENTS.md:116-119`
 
-### HIGH Tension: Shape immutability vs. dynamic filtering
-
-This skill's schema design patterns must account for shape immutability. Dynamic filters (search, pagination) require creating new `ShapeStream` instances, not mutating running ones. Design WHERE clauses for stable tenant/scope filtering, and use client-side filtering for dynamic UI state.
-
-See also: electric-shapes/SKILL.md
-
+See also: electric-shapes/SKILL.md — Shapes are immutable; dynamic filters require new ShapeStream instances.
 See also: electric-orm/SKILL.md — Schema design affects both shapes (read) and ORM queries (write).
 
 ## Version

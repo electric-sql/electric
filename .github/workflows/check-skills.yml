@@ -7,7 +7,7 @@
 # Triggers: new release published, or manual workflow_dispatch.
 #
 # Template variables (replaced by `intent setup`):
-#   unknown  — e.g. @tanstack/query
+#   @electric-sql/client
 
 name: Check Skills
 
@@ -36,7 +36,7 @@ jobs:
           node-version: 20
 
       - name: Install intent
-        run: npm install unknown
+        run: npm install -g @tanstack/intent
 
       - name: Check staleness
         id: stale
@@ -81,7 +81,7 @@ jobs:
             const summary = lines.join('\n');
 
             const prompt = [
-              'Review and update the following stale intent skills for unknown:',
+              'Review and update the following stale intent skills for @electric-sql/client:',
               '',
               ...stale.map(s => '- ' + s.skill + ': ' + s.reasons.join(', ')),
               '',
@@ -94,7 +94,6 @@ jobs:
 
             // Write outputs
             const fs = require('fs');
-            const env = fs.readFileSync(process.env.GITHUB_OUTPUT, 'utf8');
             const eof = require('crypto').randomBytes(15).toString('base64');
             fs.appendFileSync(process.env.GITHUB_OUTPUT,
               'summary<<' + eof + '\n' + summary + '\n' + eof + '\n' +

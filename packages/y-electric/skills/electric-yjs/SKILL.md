@@ -11,7 +11,7 @@ description: >
   editing with Yjs and Electric.
 type: composition
 library: electric
-library_version: '1.5.10'
+library_version: '0.1.36'
 requires:
   - electric-shapes
 sources:

@@ -260,13 +260,8 @@ Electric's HTTP API is public by default with no auth. Always proxy through your
 
 Source: `AGENTS.md:19-20`
 
-### HIGH Tension: Security vs. getting-started simplicity
-
-This skill's security requirements conflict with getting-started simplicity. Production requires a proxy, `ELECTRIC_SECRET`, and careful param forwarding, while dev examples use `ELECTRIC_INSECURE=true` and direct client access. Agents optimizing for simplicity skip the proxy entirely.
-
-See also: electric-deployment/SKILL.md
-
 See also: electric-shapes/SKILL.md — Shape URLs must point to proxy routes, not directly to Electric.
+See also: electric-deployment/SKILL.md — Production requires ELECTRIC_SECRET and proxy; dev uses ELECTRIC_INSECURE=true.
 See also: electric-postgres-security/SKILL.md — Proxy injects secrets that Postgres security enforces.
 
 ## Version
