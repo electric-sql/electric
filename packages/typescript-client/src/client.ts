@@ -96,6 +96,10 @@ const RESERVED_PARAMS: Set<ReservedParamKeys> = new Set([
 
 const TROUBLESHOOTING_URL = `https://electric-sql.com/docs/guides/troubleshooting`
 
+function createCacheBuster(): string {
+  return `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`
+}
+
 type Replica = `full` | `default`
 export type LogMode = `changes_only` | `full`
 
@@ -893,7 +897,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
             `[Electric] Received 409 response without a shape handle header. ` +
               `This likely indicates a proxy or CDN stripping required headers.`
           )
-          this.#refetchCacheBuster = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`
+          this.#refetchCacheBuster = createCacheBuster()
         }
         this.#reset(newShapeHandle || undefined)
 
@@ -1216,8 +1220,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
       expiredHandle,
       now: Date.now(),
       maxStaleCacheRetries: this.#maxStaleCacheRetries,
-      createCacheBuster: () =>
-        `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+      createCacheBuster,
     })
 
     this.#syncState = transition.state
@@ -1803,8 +1806,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
           expiredHandle: null,
           now: Date.now(),
           maxStaleCacheRetries: this.#maxStaleCacheRetries,
-          createCacheBuster: () =>
-            `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+          createCacheBuster,
         })
         if (transition.action === `accepted`) {
           this.#syncState = transition.state
@@ -1892,7 +1894,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
             `[Electric] Received 409 response without a shape handle header. ` +
               `This likely indicates a proxy or CDN stripping required headers.`
           )
-          this.#refetchCacheBuster = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`
+          this.#refetchCacheBuster = createCacheBuster()
         }
         if (nextHandle) {
           this.#syncState = this.#syncState.withHandle(nextHandle)
