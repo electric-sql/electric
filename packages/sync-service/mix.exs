@@ -92,7 +92,6 @@ defmodule Electric.MixProject do
         {:bandit, "~> 1.6"},
         {:dotenvy, "~> 1.1"},
         {:ecto, "~> 3.12"},
-        {:esqlite, "~> 0.9.0"},
         {:jason, "~> 1.4"},
         {:nimble_options, "~> 1.1"},
         {:nimble_pool, "~> 1.1"},

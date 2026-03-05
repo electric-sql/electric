@@ -465,10 +465,7 @@ defmodule Support.ComponentSetup do
          ],
          manual_table_publishing?: Map.get(ctx, :manual_table_publishing?, false),
          telemetry_opts: [instance_id: "test_instance", version: Electric.version()],
-         feature_flags: Electric.Config.get_env(:feature_flags),
-         shape_db_opts: [
-           storage_dir: ctx.tmp_dir
-         ]},
+         feature_flags: Electric.Config.get_env(:feature_flags)},
         restart: :temporary,
         significant: false
       )
