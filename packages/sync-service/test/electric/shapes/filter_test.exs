@@ -417,6 +417,34 @@ defmodule Electric.Shapes.FilterTest do
           {%{"id" => "8", "an_array" => "{1}"}, false},
           {%{"id" => "7", "an_array" => nil}, false}
         ]
+      },
+      %{
+        where: "id IN (1, 2, 3)",
+        records: [
+          {%{"id" => "1"}, true},
+          {%{"id" => "2"}, true},
+          {%{"id" => "3"}, true},
+          {%{"id" => "4"}, false},
+          {%{"id" => "0"}, false}
+        ]
+      },
+      %{
+        where: "id IN (1, 2) AND number > 5",
+        records: [
+          {%{"id" => "1", "number" => "6"}, true},
+          {%{"id" => "2", "number" => "10"}, true},
+          {%{"id" => "1", "number" => "3"}, false},
+          {%{"id" => "3", "number" => "6"}, false}
+        ]
+      },
+      %{
+        where: "number > 5 AND id IN (1, 2)",
+        records: [
+          {%{"id" => "1", "number" => "6"}, true},
+          {%{"id" => "2", "number" => "10"}, true},
+          {%{"id" => "1", "number" => "3"}, false},
+          {%{"id" => "3", "number" => "6"}, false}
+        ]
       }
     ]
 
@@ -454,7 +482,10 @@ defmodule Electric.Shapes.FilterTest do
       Shape.new!("table", where: "id = 1 AND an_array @> '{1,2}'", inspector: @inspector),
       Shape.new!("table", where: "1 = ANY(an_array)", inspector: @inspector),
       Shape.new!("table", where: "2 = ANY(an_array)", inspector: @inspector),
-      Shape.new!("table", where: "id = 1 AND 1 = ANY(an_array)", inspector: @inspector)
+      Shape.new!("table", where: "id = 1 AND 1 = ANY(an_array)", inspector: @inspector),
+      Shape.new!("table", where: "id IN (1, 2, 3)", inspector: @inspector),
+      Shape.new!("table", where: "id IN (4, 5)", inspector: @inspector),
+      Shape.new!("table", where: "id IN (1, 2) AND number > 5", inspector: @inspector)
     ]
 
     filter = Filter.new()
@@ -705,6 +736,30 @@ defmodule Electric.Shapes.FilterTest do
       Enum.each(1..shape_count, fn i ->
         remove_reductions = reductions(fn -> Filter.remove_shape(filter, i) end)
         assert remove_reductions < max_reductions
+      end)
+    end
+
+    test "where clause in the form `field IN (const1, const2, ...)` is optimised" do
+      filter = Filter.new()
+
+      Enum.each(1..@shape_count, fn i ->
+        shape =
+          Shape.new!("t1", where: "id IN (#{i}, #{i + @shape_count})", inspector: @inspector)
+
+        add_reductions = reductions(fn -> Filter.add_shape(filter, i, shape) end)
+        assert add_reductions < @max_reductions
+      end)
+
+      change = change("t1", %{"id" => "7"})
+      assert Filter.affected_shapes(filter, change) == MapSet.new([7])
+
+      affected_reductions = reductions(fn -> Filter.affected_shapes(filter, change) end)
+
+      assert affected_reductions < @max_reductions
+
+      Enum.each(1..@shape_count, fn i ->
+        remove_reductions = reductions(fn -> Filter.remove_shape(filter, i) end)
+        assert remove_reductions < @max_reductions
       end)
     end
 

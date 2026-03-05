@@ -14,16 +14,51 @@ defmodule Electric.Shapes.Filter.Index do
   defp module_for("="), do: EqualityIndex
   defp module_for("@>"), do: InclusionIndex
 
+  # "in" delegates to EqualityIndex, registering the shape under each value
+  def add_shape(%Filter{} = filter, where_cond_id, shape_id, %{operation: "in"} = optimisation) do
+    eq_base = optimisation |> Map.delete(:values) |> Map.put(:operation, "=")
+
+    for value <- optimisation.values do
+      EqualityIndex.add_shape(filter, where_cond_id, shape_id, Map.put(eq_base, :value, value))
+    end
+
+    :ok
+  end
+
   def add_shape(%Filter{} = filter, where_cond_id, shape_id, %{operation: op} = optimisation) do
     module_for(op).add_shape(filter, where_cond_id, shape_id, optimisation)
+  end
+
+  def remove_shape(
+        %Filter{} = filter,
+        where_cond_id,
+        shape_id,
+        %{operation: "in"} = optimisation
+      ) do
+    eq_base = optimisation |> Map.delete(:values) |> Map.put(:operation, "=")
+
+    results =
+      for value <- optimisation.values do
+        EqualityIndex.remove_shape(filter, where_cond_id, shape_id, Map.put(eq_base, :value, value))
+      end
+
+    if Enum.all?(results, &(&1 == :deleted)), do: :deleted, else: :ok
   end
 
   def remove_shape(%Filter{} = filter, where_cond_id, shape_id, %{operation: op} = optimisation) do
     module_for(op).remove_shape(filter, where_cond_id, shape_id, optimisation)
   end
 
+  def affected_shapes(%Filter{} = filter, where_cond_id, field, "in", record) do
+    EqualityIndex.affected_shapes(filter, where_cond_id, field, record)
+  end
+
   def affected_shapes(%Filter{} = filter, where_cond_id, field, operation, record) do
     module_for(operation).affected_shapes(filter, where_cond_id, field, record)
+  end
+
+  def all_shape_ids(%Filter{} = filter, where_cond_id, field, "in") do
+    EqualityIndex.all_shape_ids(filter, where_cond_id, field)
   end
 
   def all_shape_ids(%Filter{} = filter, where_cond_id, field, operation) do
