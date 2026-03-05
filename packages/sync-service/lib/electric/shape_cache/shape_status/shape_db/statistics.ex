@@ -97,10 +97,11 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Statistics do
             # don't even try to load the extension unless enabled -- loading the extension
             # may be the cause of segfaults we've seen in prod
             case ShapeDb.Connection.enable_extension(conn, "memstat") do
-              :ok ->
-                Logger.notice("SQLite memory statistics enabled")
+              ## Commented out temporarily to avoid typing violation caused by the stub impl of enable_extension()
+              # :ok ->
+              #   Logger.notice("SQLite memory statistics enabled")
 
-                true
+              #   true
 
               {:error, reason} ->
                 Logger.warning(
