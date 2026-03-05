@@ -727,24 +727,21 @@ describe(`ExpiredShapesCache`, () => {
     expect(fetchCount).toBeGreaterThan(1) // should keep fetching, not crash
   })
 
-  it(`should not accumulate -next suffixes on handle across repeated 409s without handle header`, async () => {
+  it(`should use cache buster instead of handle mutation on 409 without handle header`, async () => {
     // Regression test for ELECTRIC-4GV: When a proxy strips the handle header
-    // from 409 responses, the client falls back to appending "-next" to the
-    // current handle. Without the fix, each retry appends another "-next",
-    // growing the URL unboundedly until it exceeds URI limits (414).
+    // from 409 responses, the client must use a random cache-buster query param
+    // to ensure unique URLs on retries, rather than mutating the handle.
 
     let requestCount = 0
-    const capturedHandles: (string | null)[] = []
+    const capturedUrls: string[] = []
     const maxRequests = 10
 
     fetchMock.mockImplementation((input: RequestInfo | URL) => {
       requestCount++
-      const url = new URL(input.toString())
-      capturedHandles.push(url.searchParams.get(`handle`))
+      capturedUrls.push(input.toString())
 
       if (requestCount >= maxRequests) {
         aborter.abort()
-        // Return a valid response to stop retrying
         return Promise.resolve(
           new Response(JSON.stringify([]), {
             status: 200,
@@ -779,37 +776,44 @@ describe(`ExpiredShapesCache`, () => {
 
     await new Promise((resolve) => setTimeout(resolve, 500))
 
-    // First request uses the original handle; retries should never accumulate
-    // multiple "-next" suffixes. The fast-loop detector may reset the handle
-    // mid-sequence, so we check that each handle with "-next" has exactly one.
-    expect(capturedHandles[0]).toBe(`original-handle`)
-    for (const handle of capturedHandles.slice(1)) {
-      if (handle && handle.includes(`-next`)) {
-        const nextCount = (handle.match(/-next/g) || []).length
-        expect(
-          nextCount,
-          `Handle "${handle}" has ${nextCount} "-next" suffixes, expected exactly 1`
-        ).toBe(1)
-      }
+    // Invariant: no URL should contain "-next" in any parameter
+    for (const urlStr of capturedUrls) {
+      expect(urlStr, `URL contains "-next": ${urlStr}`).not.toContain(`-next`)
     }
+
+    // Invariant: after the first 409, retries should include a cache-buster param
+    const urlsAfterFirst = capturedUrls.slice(1)
+    for (const urlStr of urlsAfterFirst) {
+      const url = new URL(urlStr)
+      const hasCacheBuster = url.searchParams.has(`cache-buster`)
+      const hasExpiredHandle = url.searchParams.has(`expired_handle`)
+      // URL uniqueness comes from either cache-buster or expired_handle
+      expect(
+        hasCacheBuster || hasExpiredHandle,
+        `Retry URL lacks cache-buster and expired_handle: ${urlStr}`
+      ).toBe(true)
+    }
+
+    // Invariant: all retry URLs must be unique (no identical URLs)
+    const uniqueUrls = new Set(capturedUrls)
+    expect(
+      uniqueUrls.size,
+      `Expected ${capturedUrls.length} unique URLs but got ${uniqueUrls.size}`
+    ).toBe(capturedUrls.length)
   })
 
-  it(`should not accumulate -next suffixes when initial handle is undefined`, async () => {
-    // Regression test for ELECTRIC-4GV Pattern A: when the client never
-    // received a valid handle (undefined), repeated 409s without a handle
-    // header previously produced "undefined-next-next-next..." because the
-    // non-null assertion stringified undefined.
+  it(`should use cache buster on 409 without handle header when initial handle is undefined`, async () => {
+    // Regression test for ELECTRIC-4GV Pattern A: client never received a
+    // valid handle. Previously produced "undefined-next-next-next..." because
+    // the non-null assertion stringified undefined.
 
     let requestCount = 0
-    const capturedHandles: (string | null)[] = []
-    const capturedExpiredHandles: (string | null)[] = []
+    const capturedUrls: string[] = []
     const maxRequests = 10
 
     fetchMock.mockImplementation((input: RequestInfo | URL) => {
       requestCount++
-      const url = new URL(input.toString())
-      capturedHandles.push(url.searchParams.get(`handle`))
-      capturedExpiredHandles.push(url.searchParams.get(`expired_handle`))
+      capturedUrls.push(input.toString())
 
       if (requestCount >= maxRequests) {
         aborter.abort()
@@ -847,22 +851,19 @@ describe(`ExpiredShapesCache`, () => {
 
     await new Promise((resolve) => setTimeout(resolve, 500))
 
-    // No handle should contain "undefined" (the old bug stringified it)
-    const allParams = [...capturedHandles, ...capturedExpiredHandles]
-    for (const param of allParams) {
-      if (param) {
-        expect(
-          param,
-          `Parameter "${param}" contains stringified "undefined"`
-        ).not.toContain(`undefined`)
-        if (param.includes(`-next`)) {
-          const nextCount = (param.match(/-next/g) || []).length
-          expect(
-            nextCount,
-            `Parameter "${param}" has ${nextCount} "-next" suffixes, expected exactly 1`
-          ).toBe(1)
-        }
-      }
+    // Invariant: no URL should contain "undefined" or "-next"
+    for (const urlStr of capturedUrls) {
+      expect(urlStr, `URL contains "undefined": ${urlStr}`).not.toContain(
+        `undefined`
+      )
+      expect(urlStr, `URL contains "-next": ${urlStr}`).not.toContain(`-next`)
     }
+
+    // Invariant: all retry URLs must be unique
+    const uniqueUrls = new Set(capturedUrls)
+    expect(
+      uniqueUrls.size,
+      `Expected ${capturedUrls.length} unique URLs but got ${uniqueUrls.size}`
+    ).toBe(capturedUrls.length)
   })
 })

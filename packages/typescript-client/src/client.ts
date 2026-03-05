@@ -617,6 +617,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
   #fastLoopBackoffMaxMs = 5_000
   #fastLoopConsecutiveCount = 0
   #fastLoopMaxCount = 5
+  #refetchCacheBuster?: string
 
   constructor(options: ShapeStreamOptions<GetExtensions<T>>) {
     this.options = { subscribe: true, ...options }
@@ -886,17 +887,15 @@ export class ShapeStream<T extends Row<unknown> = Row>
           expiredShapesCache.markExpired(shapeKey, this.#syncState.handle)
         }
 
-        if (!e.headers[SHAPE_HANDLE_HEADER]) {
+        const newShapeHandle = e.headers[SHAPE_HANDLE_HEADER]
+        if (!newShapeHandle) {
           console.warn(
             `[Electric] Received 409 response without a shape handle header. ` +
-              `This likely indicates a proxy or CDN stripping required headers. ` +
-              `Deriving fallback handle from "${this.#syncState.handle ?? ``}".`
+              `This likely indicates a proxy or CDN stripping required headers.`
           )
+          this.#refetchCacheBuster = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`
         }
-        const newShapeHandle =
-          e.headers[SHAPE_HANDLE_HEADER] ||
-          `${(this.#syncState.handle ?? ``).replace(/(-next)+$/, ``)}-next`
-        this.#reset(newShapeHandle)
+        this.#reset(newShapeHandle || undefined)
 
         // must refetch control message might be in a list or not depending
         // on whether it came from an SSE request or long poll. The body may
@@ -1150,6 +1149,16 @@ export class ShapeStream<T extends Row<unknown> = Row>
     const expiredHandle = expiredShapesCache.getExpiredHandle(shapeKey)
     if (expiredHandle) {
       fetchUrl.searchParams.set(EXPIRED_HANDLE_QUERY_PARAM, expiredHandle)
+    }
+
+    // Add one-shot cache buster when a 409 response lacked a handle header
+    // (e.g. proxy stripped it). Ensures each retry has a unique URL.
+    if (this.#refetchCacheBuster) {
+      fetchUrl.searchParams.set(
+        CACHE_BUSTER_QUERY_PARAM,
+        this.#refetchCacheBuster
+      )
+      this.#refetchCacheBuster = undefined
     }
 
     // sort query params in-place for stable URLs and improved cache hits
@@ -1877,17 +1886,17 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
         // For snapshot 409s, only update the handle — don't reset offset/schema/etc.
         // The main stream is paused and should not be disturbed.
-        if (!e.headers[SHAPE_HANDLE_HEADER]) {
+        const nextHandle = e.headers[SHAPE_HANDLE_HEADER]
+        if (!nextHandle) {
           console.warn(
             `[Electric] Received 409 response without a shape handle header. ` +
-              `This likely indicates a proxy or CDN stripping required headers. ` +
-              `Deriving fallback handle from "${usedHandle ?? ``}".`
+              `This likely indicates a proxy or CDN stripping required headers.`
           )
+          this.#refetchCacheBuster = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`
         }
-        const nextHandle =
-          e.headers[SHAPE_HANDLE_HEADER] ||
-          `${(usedHandle ?? ``).replace(/(-next)+$/, ``)}-next`
-        this.#syncState = this.#syncState.withHandle(nextHandle)
+        if (nextHandle) {
+          this.#syncState = this.#syncState.withHandle(nextHandle)
+        }
 
         return this.fetchSnapshot(opts)
       }
