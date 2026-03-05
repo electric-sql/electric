@@ -681,6 +681,33 @@ defmodule Electric.Shapes.FilterTest do
       end)
     end
 
+    test "where clause in the form `const = ANY(array_field)` is optimised" do
+      # Same multiplier as @> since it reuses the InclusionIndex
+      multiplier = 5
+      shape_count = @shape_count * multiplier
+      max_reductions = @max_reductions * multiplier
+
+      filter = Filter.new()
+
+      Enum.each(1..shape_count, fn i ->
+        shape = Shape.new!("t1", where: "#{i} = ANY(an_array)", inspector: @inspector)
+        add_reductions = reductions(fn -> Filter.add_shape(filter, i, shape) end)
+        assert add_reductions < max_reductions
+      end)
+
+      change = change("t1", %{"an_array" => "{7}"})
+      assert Filter.affected_shapes(filter, change) == MapSet.new([7])
+
+      affected_reductions = reductions(fn -> Filter.affected_shapes(filter, change) end)
+
+      assert affected_reductions < max_reductions
+
+      Enum.each(1..shape_count, fn i ->
+        remove_reductions = reductions(fn -> Filter.remove_shape(filter, i) end)
+        assert remove_reductions < max_reductions
+      end)
+    end
+
     defp reductions(fun) do
       {:reductions, reductions_before} = :erlang.process_info(self(), :reductions)
       fun.()
