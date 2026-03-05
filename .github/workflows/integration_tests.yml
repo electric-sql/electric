@@ -24,7 +24,6 @@ jobs:
     env:
       MIX_ENV: dev
       MIX_TARGET: application
-      MIX_OS_DEPS_COMPILE_PARTITION_COUNT: 4
     steps:
       - uses: actions/checkout@v4
 
