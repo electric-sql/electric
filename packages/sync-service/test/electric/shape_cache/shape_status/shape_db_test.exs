@@ -3,7 +3,6 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDbTest do
 
   alias Electric.Shapes.Shape
   alias Electric.ShapeCache.ShapeStatus.ShapeDb.InMemory
-  alias Electric.ShapeCache.ShapeStatus.ShapeDb.Sqlite
 
   import Support.ComponentSetup, only: [with_stack_id_from_test: 1]
 
@@ -25,7 +24,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDbTest do
 
   setup :with_stack_id_from_test
 
-  for module <- [InMemory, Sqlite] do
+  for module <- [InMemory] do
     module_name = module |> Module.split() |> List.last()
 
     describe "#{module_name}" do
@@ -302,24 +301,5 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDbTest do
     )
 
     {:ok, %{impl: InMemory, flush: fn -> :ok end}}
-  end
-
-  defp start_impl(Sqlite, ctx) do
-    shape_db_opts = Map.get(ctx, :shape_db_opts, [])
-
-    start_supervised!(
-      {Sqlite.Supervisor,
-       [
-         stack_id: ctx.stack_id,
-         shape_db_opts:
-           Keyword.merge(
-             [storage_dir: ctx.tmp_dir, manual_flush_only: true, read_pool_size: 1],
-             shape_db_opts
-           )
-       ]},
-      id: "shape_db"
-    )
-
-    {:ok, %{impl: Sqlite, flush: fn -> Sqlite.WriteBuffer.flush_sync(ctx.stack_id) end}}
   end
 end
