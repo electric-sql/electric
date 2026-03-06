@@ -355,10 +355,12 @@ defmodule Electric.ShapeCache do
 
     feature_flags = Electric.StackConfig.lookup(stack_id, :feature_flags, [])
 
+    # put the shape into a temporary mailbox to speed retrieval from consumer
+    :ok = ShapeStatus.post_shape(stack_id, shape_handle, shape)
+
     start_opts =
       opts
       |> Map.put(:shape_handle, shape_handle)
-      |> Map.put(:shape, shape)
       |> Map.put(:subqueries_enabled_for_stack?, "allow_subqueries" in feature_flags)
 
     case Shapes.DynamicConsumerSupervisor.start_shape_consumer(stack_id, start_opts) do
