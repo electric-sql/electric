@@ -63,7 +63,7 @@
 
 [shell electric]
   -
-  ?\[warning\] Failed to create snapshot for \d+-\d+: Database table \"public.items\" does not have its replica identity set to FULL
+  ?shape_handle=\d+-\d+.*error_message=Database table.*public\.items.*replica identity.*\[warning\] Failed to create snapshot
   -$fail_pattern
 
 ## Set table's replica identity to FULL and try again
