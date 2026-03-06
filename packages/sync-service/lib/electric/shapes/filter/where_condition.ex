@@ -103,20 +103,6 @@ defmodule Electric.Shapes.Filter.WhereCondition do
     %{operation: "@>", field: field, type: type, value: [value], and_where: nil}
   end
 
-  defp optimise_where(%Func{
-         name: "any",
-         args: [
-           %Func{
-             name: ~s("="),
-             map_over_array_in_pos: 1,
-             args: [%Ref{path: [field], type: {:array, _} = type}, %Const{value: value}]
-           }
-         ]
-       })
-       when not is_nil(value) do
-    %{operation: "@>", field: field, type: type, value: [value], and_where: nil}
-  end
-
   # field IN (const1, const2, ...) → reuse = index with multiple values
   defp optimise_where(%Func{name: "or"} = expr) do
     case flatten_or_equalities(expr) do
