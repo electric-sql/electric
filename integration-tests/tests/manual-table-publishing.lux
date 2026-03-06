@@ -42,7 +42,7 @@
 
 [shell electric]
   -
-  ?shape_handle=\d+-\d+.*error_message=Database table.*public\.items.*ELECTRIC_MANUAL_TABLE_PUBLISHING.*\[warning\] Failed to create snapshot
+  ?shape_handle=\d+-\d+.*err_msg=Database table.*public\.items.*ELECTRIC_MANUAL_TABLE_PUBLISHING.*\[warning\] Failed to create snapshot
   -$fail_pattern
 
 ## Add the table to the publication and try again
@@ -63,7 +63,7 @@
 
 [shell electric]
   -
-  ?shape_handle=\d+-\d+.*error_message=Database table.*public\.items.*replica identity.*\[warning\] Failed to create snapshot
+  ?shape_handle=\d+-\d+.*err_msg=Database table.*public\.items.*replica identity.*\[warning\] Failed to create snapshot
   -$fail_pattern
 
 ## Set table's replica identity to FULL and try again
