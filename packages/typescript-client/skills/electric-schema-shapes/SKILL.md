@@ -83,12 +83,14 @@ SELECT pg_current_xact_id()::xid::text AS txid;
 ```
 
 ```ts
-// Return txid as integer from API
+// Return txid from API — accepts number, bigint, or numeric string
 res.json({ id: newTodo.id, txid: parseInt(txid) })
 
 // Client awaits txid before dropping optimistic state
 await todoCollection.utils.awaitTxId(txid)
 ```
+
+Note: `txid` accepts `number | bigint | \`${bigint}\``. Using `parseInt()` to return a number is the simplest approach.
 
 ## Common Mistakes
 

@@ -27,6 +27,35 @@ This skill builds on electric-shapes, electric-proxy-auth, and electric-schema-s
 
 ## Setup
 
+### 0. Start Electric locally
+
+```yaml
+# docker-compose.yml
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: electric
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+    ports:
+      - '5432:5432'
+
+  electric:
+    image: electricsql/electric
+    environment:
+      DATABASE_URL: postgres://postgres:password@postgres:5432/electric
+      ELECTRIC_INSECURE: true # Dev only — use ELECTRIC_SECRET in production
+    ports:
+      - '3000:3000'
+    depends_on:
+      - postgres
+```
+
+```bash
+docker compose up -d
+```
+
 ### 1. Create Postgres table
 
 ```sql
@@ -94,6 +123,9 @@ export const todoCollection = createCollection(
           ? window.location.origin
           : 'http://localhost:5173'
       ).toString(),
+      // Electric auto-parses: bool, int2, int4, float4, float8, json, jsonb
+      // You only need custom parsers for types like timestamptz, date, numeric
+      // See electric-shapes/references/type-parsers.md for the full list
       parser: {
         timestamptz: (date: string) => new Date(date),
       },
@@ -163,6 +195,32 @@ const handleDelete = (todoId) => todoCollection.delete(todoId)
 ```
 
 ## Common Mistakes
+
+### HIGH Removing parsers because the TanStack DB schema handles types
+
+Wrong:
+
+```ts
+// "My Zod schema has z.coerce.date() so I don't need a parser"
+electricCollectionOptions({
+  schema: z.object({ created_at: z.coerce.date() }),
+  shapeOptions: { url: '/api/todos' }, // No parser!
+})
+```
+
+Correct:
+
+```ts
+electricCollectionOptions({
+  schema: z.object({ created_at: z.coerce.date() }),
+  shapeOptions: {
+    url: '/api/todos',
+    parser: { timestamptz: (date: string) => new Date(date) },
+  },
+})
+```
+
+Electric's sync path delivers data directly into the collection store, bypassing the TanStack DB schema. The `parser` in `shapeOptions` handles type coercion on the sync path; the schema handles the mutation path. You need both. Without the parser, `timestamptz` arrives as a string and `getTime()` or other Date methods will fail at runtime.
 
 ### CRITICAL Using old electrify() bidirectional sync API
 

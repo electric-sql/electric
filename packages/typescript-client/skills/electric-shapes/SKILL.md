@@ -29,9 +29,10 @@ import { ShapeStream, Shape } from '@electric-sql/client'
 
 const stream = new ShapeStream({
   url: '/api/todos', // Your proxy route, NOT direct Electric URL
+  // Built-in parsers auto-handle: bool, int2, int4, float4, float8, json, jsonb
+  // Add custom parsers for other types (see references/type-parsers.md)
   parser: {
     timestamptz: (date: string) => new Date(date),
-    jsonb: (json: string) => JSON.parse(json),
   },
 })
 
@@ -258,12 +259,11 @@ const stream = new ShapeStream({
   parser: {
     timestamptz: (date: string) => new Date(date),
     timestamp: (date: string) => new Date(date),
-    jsonb: (json: string) => JSON.parse(json),
   },
 })
 ```
 
-All values from Electric arrive as strings. Without custom parsers, `timestamptz` columns are strings, not `Date` objects. Built-in parsers handle `int2`, `int4`, `float4`, `float8`, `bool`, `json`, `jsonb`, and `int8` (returns `BigInt`).
+Electric auto-parses `bool`, `int2`, `int4`, `float4`, `float8`, `json`, `jsonb`, and `int8` (→ BigInt). All other types arrive as strings — add custom parsers for `timestamptz`, `date`, `numeric`, etc. See [references/type-parsers.md](references/type-parsers.md) for the full list.
 
 Source: `AGENTS.md:300-308`
 
