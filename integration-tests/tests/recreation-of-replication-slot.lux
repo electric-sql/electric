@@ -73,7 +73,7 @@
   ??"value":{"val":"3"}
 
 [shell electric]
-  ??[debug] Snapshot started shape_handle: $new_shape_handle
+  ?shape_handle=$new_shape_handle.*\[debug\] Snapshot started
   ??[debug] Chunked 200
 
 [cleanup]
