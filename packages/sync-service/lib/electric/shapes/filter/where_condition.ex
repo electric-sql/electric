@@ -48,7 +48,7 @@ defmodule Electric.Shapes.Filter.WhereCondition do
          optimisation
        ) do
     [{_, {index_keys, other_shapes}}] = :ets.lookup(table, condition_id)
-    key = {optimisation.field, optimisation.operation}
+    key = {optimisation.field, index_key(optimisation.operation)}
     index_keys = MapSet.put(index_keys, key)
     :ets.insert(table, {condition_id, {index_keys, other_shapes}})
 
@@ -88,12 +88,38 @@ defmodule Electric.Shapes.Filter.WhereCondition do
     %{operation: "@>", field: field, type: type, value: value, and_where: nil}
   end
 
+  # const = ANY(array_ref) → reuse @> index with [const] as single-element array
+  defp optimise_where(%Func{
+         name: "any",
+         args: [
+           %Func{
+             name: ~s("="),
+             map_over_array_in_pos: 1,
+             args: [%Const{value: value}, %Ref{path: [field], type: {:array, _} = type}]
+           }
+         ]
+       })
+       when not is_nil(value) do
+    %{operation: "@>", field: field, type: type, value: [value], and_where: nil}
+  end
+
+  # field IN (const1, const2, ...) → reuse = index with multiple values
+  defp optimise_where(%Func{name: "or"} = expr) do
+    case flatten_or_equalities(expr) do
+      {:ok, field, type, values} ->
+        %{operation: "in", field: field, type: type, values: values, and_where: nil}
+
+      :error ->
+        :not_optimised
+    end
+  end
+
   defp optimise_where(%Func{name: "and", args: [arg1, arg2]}) do
     case {optimise_where(arg1), optimise_where(arg2)} do
-      {%{operation: "=", and_where: nil} = params, _} ->
+      {%{operation: op, and_where: nil} = params, _} when op in ["=", "@>", "in"] ->
         %{params | and_where: where_expr(arg2)}
 
-      {_, %{operation: "=", and_where: nil} = params} ->
+      {_, %{operation: op, and_where: nil} = params} when op in ["=", "@>", "in"] ->
         %{params | and_where: where_expr(arg1)}
 
       _ ->
@@ -103,9 +129,51 @@ defmodule Electric.Shapes.Filter.WhereCondition do
 
   defp optimise_where(_), do: :not_optimised
 
+  # "in" shares the EqualityIndex with "=", so use the same index key
+  defp index_key("in"), do: "="
+  defp index_key(op), do: op
+
   defp where_expr(eval) do
     %Expr{eval: eval, used_refs: Parser.find_refs(eval), returns: :bool}
   end
+
+  # Flatten an OR chain of equalities on the same field into {field, type, [values]}
+  defp flatten_or_equalities(expr) do
+    case collect_or_equalities(expr, []) do
+      {:ok, [{field, type, _} | _] = pairs} ->
+        if Enum.all?(pairs, fn {f, t, _} -> f == field and t == type end) do
+          values = Enum.map(pairs, fn {_, _, v} -> v end)
+          {:ok, field, type, values}
+        else
+          :error
+        end
+
+      _ ->
+        :error
+    end
+  end
+
+  defp collect_or_equalities(%Func{name: "or", args: [left, right]}, acc) do
+    with {:ok, acc} <- collect_or_equalities(left, acc) do
+      collect_or_equalities(right, acc)
+    end
+  end
+
+  defp collect_or_equalities(
+         %Func{name: ~s("="), args: [%Ref{path: [field], type: type}, %Const{value: value}]},
+         acc
+       ) do
+    {:ok, [{field, type, value} | acc]}
+  end
+
+  defp collect_or_equalities(
+         %Func{name: ~s("="), args: [%Const{value: value}, %Ref{path: [field], type: type}]},
+         acc
+       ) do
+    {:ok, [{field, type, value} | acc]}
+  end
+
+  defp collect_or_equalities(_, _acc), do: :error
 
   @doc """
   Remove a shape from a WhereCondition.
@@ -144,7 +212,7 @@ defmodule Electric.Shapes.Filter.WhereCondition do
     case Index.remove_shape(filter, condition_id, shape_id, optimisation) do
       :deleted ->
         [{_, {index_keys, other_shapes}}] = :ets.lookup(table, condition_id)
-        key = {optimisation.field, optimisation.operation}
+        key = {optimisation.field, index_key(optimisation.operation)}
         index_keys = MapSet.delete(index_keys, key)
         update_or_delete_condition(table, condition_id, index_keys, other_shapes)
 
