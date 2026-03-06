@@ -1,22 +1,22 @@
-name: 'Pro'
-order: 20
+name: 'Scale'
+order: 30
 type: tier
 
-monthlyFee: 249
-discountPercent: 10
+monthlyFee: 1999
+discountPercent: 20
 priceQualifier: '/ month'
 
 limits:
-  maxDatabases: 50
+  maxDatabases: 200
   streamTTL: 'User-defined'
-  concurrentReadersPerStream: 1000
+  concurrentReadersPerStream: 10000
   maxUsersPerWorkspace: 50
 
 featureGates:
   postgresSubqueries: true
 
-commitment: '6 months'
-support: 'Priority email'
+commitment: '12 months'
+support: 'Direct access to founders'
 
 who: 'Lorem ipsum dolor sit amet'
 featuresTitle: 'Includes'
@@ -27,5 +27,5 @@ features:
 
 ctaText: 'Sign up now'
 ctaTextSmall: 'Sign up'
-ctaHref: 'https://dashboard.electric-sql.cloud?plan=pro'
+ctaHref: 'https://dashboard.electric-sql.cloud?plan=scale'
 ctaTheme: 'brand'

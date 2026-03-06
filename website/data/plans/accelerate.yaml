@@ -1,21 +1,15 @@
-name: Accelerate
+name: 'Accelerate'
 order: 40
 type: service
 
-price: "Faster"
-priceQualifier: "→ prod"
-
-# Hero card display
-who: "fewer mistakes and faster time to market"
-featuresTitle: "Direct access"
+who: 'Lorem ipsum dolor sit amet'
+featuresTitle: 'Direct access'
 features:
-  - "Dedicated resources"
-  - "Design and architecture"
-  - "Integration and rollout"
+  - 'Lorem ipsum'
+  - 'Lorem ipsum'
+  - 'Lorem ipsum'
 
-
-# CTA
-ctaText: "Free consultation"
-ctaHref: "/about/contact#sales"
-ctaTheme: "alt"
-priceColor: "ddn"
+ctaText: 'Contact sales'
+ctaHref: '/about/contact#sales'
+ctaTheme: 'alt'
+priceColor: 'ddn'

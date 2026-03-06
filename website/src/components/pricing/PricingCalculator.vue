@@ -1,123 +1,135 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { data as pricing } from '../../../data/pricing.data.ts'
 
-// ============================================================================
-// CALCULATOR DEFAULTS - Pro plan workload
-// ============================================================================
-const monthlyActiveUsers = ref(2000)
-const writesPerMinute = ref(60)
-const dataThroughputGB = ref(20)
+const config = pricing.config
+const tiers = pricing.tiers
 
-// Feature toggles with clear business logic
-const needsDedicatedResources = ref(false)
-const needsOptimumExperience = ref(false)
-const needsTeamManagement = ref(false)
-const needsBespokeInfrastructure = ref(false)
+const PLAN_HIERARCHY = ['payg', 'pro', 'scale']
 
-// ============================================================================
-// PLAN THRESHOLDS - Derived from YAML data
-// ============================================================================
-const PLAN_THRESHOLDS = {
-  free: pricing.tiers.find(t => t.slug === 'free'),
-  pro: pricing.tiers.find(t => t.slug === 'pro'),
-  growth: pricing.tiers.find(t => t.slug === 'growth'),
-  enterprise: pricing.enterprise[0]
-}
-
-// ============================================================================
-// FEATURE-TO-PLAN MAPPING
-// ============================================================================
-// Each feature requirement maps to minimum plan tier needed
-const FEATURE_REQUIREMENTS = {
-  dedicatedResources: 'pro',      // Pro+: "Dedicated resources"
-  optimumExperience: 'pro',        // Pro+: Better performance/reliability
-  teamManagement: 'growth',        // Growth+: "Role-based access control"
-  bespokeInfrastructure: 'enterprise' // Enterprise: "Custom infrastructure"
-}
-
-// Plan hierarchy for feature requirements
-const PLAN_HIERARCHY = ['free', 'pro', 'growth', 'enterprise']
-
-// ============================================================================
-// CALCULATOR LOGIC
-// ============================================================================
-const recommendedPlan = computed(() => {
-  let requiredPlan = 'free'
-  
-  // STEP 1: Check workload-based requirements
-  // Find minimum plan that can handle the workload
-  const mau = monthlyActiveUsers.value
-  const wpm = writesPerMinute.value
-  const dataGB = dataThroughputGB.value
-  
-  const parseNumeric = (val) => {
-    if (typeof val === 'string') {
-      if (val.toLowerCase() === 'unlimited') return Infinity
-      const match = val.match(/[\d.]+/)
-      if (!match) return Infinity
-      let num = parseFloat(match[0])
-      if (val.toLowerCase().includes('k')) num *= 1000
-      if (val.toLowerCase().includes('m')) num *= 1000000
-      return num
-    }
-    return val
-  }
-
-  if (mau > parseNumeric(PLAN_THRESHOLDS.free.monthlyActiveUsers) ||
-      wpm > parseNumeric(PLAN_THRESHOLDS.free.writesPerMinute) ||
-      dataGB > PLAN_THRESHOLDS.free.gbProcessed) {
-    requiredPlan = 'pro'
-  }
-  
-  if (mau > parseNumeric(PLAN_THRESHOLDS.pro.monthlyActiveUsers) ||
-      wpm > parseNumeric(PLAN_THRESHOLDS.pro.writesPerMinute) ||
-      dataGB > PLAN_THRESHOLDS.pro.gbProcessed) {
-    requiredPlan = 'growth'
-  }
-  
-  if (mau > parseNumeric(PLAN_THRESHOLDS.growth.monthlyActiveUsers) ||
-      wpm > parseNumeric(PLAN_THRESHOLDS.growth.writesPerMinute) ||
-      dataGB > PLAN_THRESHOLDS.growth.gbProcessed) {
-    requiredPlan = 'enterprise'
-  }
-  
-  // STEP 2: Check feature-based requirements
-  // Upgrade plan if features require higher tier
-  const featureChecks = [
-    { enabled: needsDedicatedResources.value, requires: FEATURE_REQUIREMENTS.dedicatedResources },
-    { enabled: needsOptimumExperience.value, requires: FEATURE_REQUIREMENTS.optimumExperience },
-    { enabled: needsTeamManagement.value, requires: FEATURE_REQUIREMENTS.teamManagement },
-    { enabled: needsBespokeInfrastructure.value, requires: FEATURE_REQUIREMENTS.bespokeInfrastructure }
-  ]
-  
-  for (const check of featureChecks) {
-    if (check.enabled) {
-      const requiredIndex = PLAN_HIERARCHY.indexOf(requiredPlan)
-      const featureIndex = PLAN_HIERARCHY.indexOf(check.requires)
-      
-      // Upgrade to higher tier if feature requires it
-      if (featureIndex > requiredIndex) {
-        requiredPlan = check.requires
+// Validate calculator features at dev time
+onMounted(() => {
+  if (import.meta.env.DEV && config.calculatorFeatures) {
+    const slugs = tiers.map(t => t.slug)
+    for (const feature of config.calculatorFeatures) {
+      if (!slugs.includes(feature.minimumTier)) {
+        console.warn(`[PricingCalculator] Feature "${feature.id}" has minimumTier "${feature.minimumTier}" which doesn't match any loaded plan slug (${slugs.join(', ')})`)
       }
     }
   }
-  
-  return PLAN_THRESHOLDS[requiredPlan]
 })
 
-// Format display values
-const formattedPrice = computed(() => {
-  if (typeof recommendedPlan.value.price === 'number') {
-    return `$${recommendedPlan.value.price}`
-  }
-  return recommendedPlan.value.price
+// Inputs
+const writesPerMonth = ref(5000000)
+const retentionGB = ref(50)
+
+// Feature checkbox state: { [featureId]: boolean }
+const featureChecks = ref(
+  Object.fromEntries((config.calculatorFeatures || []).map(f => [f.id, false]))
+)
+
+// Currency formatter
+const currencyFmt = new Intl.NumberFormat('en-US', {
+  style: 'currency',
+  currency: 'USD',
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 2,
 })
 
-// Input formatting for display
-function formatNumberInput(value) {
-  return value.toLocaleString()
+function safeVal(v) {
+  const n = Number(v)
+  return (isNaN(n) || n < 0) ? 0 : n
 }
+
+// Compute costs for all tiers
+const tierCosts = computed(() => {
+  const w = safeVal(writesPerMonth.value)
+  const r = safeVal(retentionGB.value)
+
+  return tiers.map(tier => {
+    const writeCost = (w / 1000000) * tier.effectiveWriteRate
+    const retentionCost = r * tier.effectiveRetentionRate
+    const usageCost = writeCost + retentionCost
+
+    let totalCost
+    let waived = false
+    if (tier.slug === 'payg') {
+      if (usageCost < config.paygWaiverThreshold) {
+        totalCost = 0
+        waived = true
+      } else {
+        totalCost = usageCost
+      }
+    } else {
+      totalCost = Math.max(usageCost, tier.monthlyFee)
+    }
+
+    return {
+      tier,
+      writeCost,
+      retentionCost,
+      usageCost,
+      totalCost,
+      waived,
+    }
+  })
+})
+
+// Find minimum tier required by feature checkboxes
+const featureMinTierIndex = computed(() => {
+  let maxIndex = 0
+  for (const feature of (config.calculatorFeatures || [])) {
+    if (featureChecks.value[feature.id]) {
+      const idx = PLAN_HIERARCHY.indexOf(feature.minimumTier)
+      if (idx > maxIndex) maxIndex = idx
+    }
+  }
+  return maxIndex
+})
+
+// Recommended result
+const recommendation = computed(() => {
+  // Find cheapest tier
+  let best = tierCosts.value[0]
+  for (const tc of tierCosts.value) {
+    if (tc.totalCost < best.totalCost) {
+      best = tc
+    }
+  }
+
+  // Bump up if feature checkboxes require a higher tier
+  const bestIndex = PLAN_HIERARCHY.indexOf(best.tier.slug)
+  const requiredIndex = featureMinTierIndex.value
+  if (requiredIndex > bestIndex) {
+    best = tierCosts.value[requiredIndex]
+  }
+
+  return best
+})
+
+const formattedTotal = computed(() => {
+  return currencyFmt.format(recommendation.value.totalCost)
+})
+
+const breakdownText = computed(() => {
+  const r = recommendation.value
+  if (r.waived) return 'Under $5 \u2014 waived'
+  const w = currencyFmt.format(r.writeCost)
+  const ret = currencyFmt.format(r.retentionCost)
+  const total = currencyFmt.format(r.usageCost)
+  return `Writes: ${w} + Retention: ${ret} = ${total}`
+})
+
+const planNote = computed(() => {
+  const r = recommendation.value
+  if (r.tier.slug === 'payg') return ''
+  const fee = currencyFmt.format(r.tier.monthlyFee)
+  if (r.usageCost <= r.tier.monthlyFee) {
+    return `The base plan cost of ${fee}, with no additional usage charges`
+  }
+  const extra = currencyFmt.format(r.usageCost - r.tier.monthlyFee)
+  return `The base plan cost of ${fee}, plus an additional ${extra} in usage fees`
+})
 </script>
 
 <template>
@@ -125,34 +137,22 @@ function formatNumberInput(value) {
     <div class="calculator-inputs">
       <div class="input-group">
         <label class="input-label">
-          Monthly active users
-          <input 
-            v-model.number="monthlyActiveUsers" 
-            type="number" 
+          Writes per month
+          <input
+            v-model.number="writesPerMonth"
+            type="number"
             class="input-field"
             min="0"
-            step="100"
+            step="1000000"
           />
         </label>
       </div>
       <div class="input-group">
         <label class="input-label">
-          Write workload (writes per minute)
-          <input 
-            v-model.number="writesPerMinute" 
-            type="number" 
-            class="input-field"
-            min="0"
-            step="10"
-          />
-        </label>
-      </div>
-      <div class="input-group">
-        <label class="input-label">
-          Data throughput (ingested, GB/month)
-          <input 
-            v-model.number="dataThroughputGB" 
-            type="number" 
+          Data retention (GB-months)
+          <input
+            v-model.number="retentionGB"
+            type="number"
             class="input-field"
             min="0"
             step="10"
@@ -160,54 +160,32 @@ function formatNumberInput(value) {
         </label>
       </div>
       <div class="toggles-section">
-        <label class="toggle-label">
-          <input 
-            v-model="needsDedicatedResources" 
-            type="checkbox" 
+        <label v-for="feature in config.calculatorFeatures" :key="feature.id" class="toggle-label">
+          <input
+            v-model="featureChecks[feature.id]"
+            type="checkbox"
             class="toggle-input"
           />
-          <span class="toggle-text">Dedicated resources</span>
-        </label>
-        <label class="toggle-label">
-          <input 
-            v-model="needsOptimumExperience" 
-            type="checkbox" 
-            class="toggle-input"
-          />
-          <span class="toggle-text">Optimum user experience</span>
-        </label>
-        <label class="toggle-label">
-          <input 
-            v-model="needsTeamManagement" 
-            type="checkbox" 
-            class="toggle-input"
-          />
-          <span class="toggle-text">Team-based management features</span>
-        </label>
-        <label class="toggle-label">
-          <input 
-            v-model="needsBespokeInfrastructure" 
-            type="checkbox" 
-            class="toggle-input"
-          />
-          <span class="toggle-text">Bespoke infrastructure</span>
+          <span class="toggle-text">{{ feature.label }}</span>
         </label>
       </div>
     </div>
     <div class="calculator-result">
-      <div :class="`result-content result-content-${recommendedPlan.ctaTheme}`">
+      <div :class="`result-content result-content-${recommendation.tier.ctaTheme}`">
         <div class="result-header">
           <h4 class="result-label">Recommended plan</h4>
-          <h2 :class="`result-plan-name result-plan-name-${recommendedPlan.ctaTheme}`">{{ recommendedPlan.name }}</h2>
+          <h2 :class="`result-plan-name result-plan-name-${recommendation.tier.ctaTheme}`">{{ recommendation.tier.name }}</h2>
         </div>
         <div class="result-pricing">
-          <div class="result-price">{{ formattedPrice }}</div>
-          <div v-if="typeof recommendedPlan.price === 'number'" class="result-period">/ month</div>
+          <div class="result-price">{{ formattedTotal }}</div>
+          <div class="result-period">/ month</div>
         </div>
+        <div v-if="breakdownText" class="result-breakdown">{{ breakdownText }}</div>
+        <div v-if="planNote" class="result-note">{{ planNote }}</div>
         <div class="result-cta">
           <VPButton
-            :href="recommendedPlan.ctaHref"
-            :text="recommendedPlan.ctaText"
+            :href="recommendation.tier.ctaHref"
+            :text="recommendation.tier.ctaText"
             theme="brand"
           />
         </div>
@@ -363,7 +341,7 @@ function formatNumberInput(value) {
 }
 
 .result-pricing {
-  margin-bottom: 30px;
+  margin-bottom: 16px;
   display: flex;
   align-items: baseline;
   justify-content: center;
@@ -383,6 +361,21 @@ function formatNumberInput(value) {
   font-weight: 500;
 }
 
+.result-breakdown {
+  font-size: 0.8rem;
+  color: var(--vp-c-text-3);
+  margin-bottom: 8px;
+  line-height: 1.5;
+}
+
+.result-note {
+  font-size: 0.8rem;
+  color: var(--vp-c-text-3);
+  margin-bottom: 24px;
+  line-height: 1.5;
+  font-style: italic;
+}
+
 .result-cta {
   display: flex;
   justify-content: center;
@@ -394,7 +387,7 @@ function formatNumberInput(value) {
     gap: 24px;
     padding: 32px 24px;
   }
-  
+
   .calculator-result {
     order: -1;
     padding-top: 0;
@@ -413,15 +406,15 @@ function formatNumberInput(value) {
   .calculator-container {
     padding: 24px 20px;
   }
-  
+
   .result-content {
     padding: 24px 20px;
   }
-  
+
   .result-plan-name {
     font-size: 1.75rem;
   }
-  
+
   .result-price {
     font-size: 2rem;
   }

@@ -1,5 +1,5 @@
 <script setup>
-const { comparisonPlans } = defineProps(['comparisonPlans'])
+const { comparisonPlans, config } = defineProps(['comparisonPlans', 'config'])
 
 function formatNumber(num) {
   if (typeof num === 'string') return num
@@ -18,13 +18,83 @@ function formatNumber(num) {
   return num.toString()
 }
 
-function formatStorage(num) {
-  if (typeof num === 'string') return num
-  if (num >= 1000) {
-    const value = num / 1000
-    return value % 1 === 0 ? value + 'TB' : value.toFixed(1) + 'TB'
+function formatLimitValue(val) {
+  if (typeof val === 'string') return val
+  return new Intl.NumberFormat('en-US').format(val)
+}
+
+function formatCurrency(amount, suffix) {
+  // Strip trailing zeros: $1/1M, $0.9/1M, $0.08/GB-mo
+  const str = amount % 1 === 0
+    ? '$' + amount
+    : '$' + parseFloat(amount.toFixed(4))
+  return str + suffix
+}
+
+function formatCheck(val) {
+  return val ? '\u2713' : '\u2014'
+}
+
+function formatFee(plan) {
+  if (plan.type === 'enterprise') return 'Custom'
+  if (typeof plan.monthlyFee === 'number') {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      maximumFractionDigits: 0,
+    }).format(plan.monthlyFee)
   }
-  return num + 'GB'
+  return '\u2014'
+}
+
+function formatDiscount(plan) {
+  if (plan.type === 'enterprise') return 'Custom'
+  if (!plan.discountPercent) return '\u2014'
+  return plan.discountPercent + '%'
+}
+
+function formatWriteRate(plan) {
+  if (plan.type === 'enterprise') return 'Custom'
+  return formatCurrency(plan.effectiveWriteRate, '/1M')
+}
+
+function formatRetentionRate(plan) {
+  if (plan.type === 'enterprise') return 'Custom'
+  return formatCurrency(plan.effectiveRetentionRate, '/GB-mo')
+}
+
+function getCommitment(plan) {
+  return plan.commitment || '\u2014'
+}
+
+function getSupport(plan) {
+  return plan.support || '\u2014'
+}
+
+function getLimitValue(plan, key) {
+  if (!plan.limits) return '\u2014'
+  const val = plan.limits[key]
+  if (val === undefined || val === null) return '\u2014'
+  return formatLimitValue(val)
+}
+
+function getFeatureGate(plan, key) {
+  if (!plan.featureGates) return '\u2014'
+  return formatCheck(plan.featureGates[key])
+}
+
+function computeScenarioCost(plan, scenario) {
+  if (scenario.writesPerMonth === null || scenario.retentionGB === null) return '...'
+  if (plan.type === 'enterprise') return 'Custom'
+  const writeCost = (scenario.writesPerMonth / 1000000) * plan.effectiveWriteRate
+  const retentionCost = scenario.retentionGB * plan.effectiveRetentionRate
+  const total = writeCost + retentionCost
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  }).format(total)
 }
 </script>
 
@@ -50,138 +120,112 @@ function formatStorage(num) {
         />
       </div>
     </div>
+
+    <!-- Group 1: Pricing -->
     <div class="section first-section">
       <div class="section-header">
         <div class="section-title-wrapper">
-          <div class="section-title">Typical workload</div>
+          <div class="section-title">Pricing</div>
           <div class="section-tagline">
-            Maximum usage levels typically supported by this plan.
-            <span class="no-wrap-xs">
-              These are estimates, not hard&nbsp;limits</span>.</div>
-        </div>
-        <div v-for="plan in comparisonPlans" :key="plan.slug" class="plan-column"></div>
-      </div>
-      <div class="metric-row">
-        <div class="metric-column metric-label">Monthly active users</div>
-        <div class="plan-column">
-          <div v-for="plan in comparisonPlans" :key="plan.slug" class="metric-value" :data-plan="plan.name">{{ plan.monthlyActiveUsers }}</div>
-        </div>
-      </div>
-      <div class="metric-row">
-        <div class="metric-column metric-label">Writes per minute</div>
-        <div class="plan-column">
-          <div v-for="plan in comparisonPlans" :key="plan.slug" class="metric-value" :data-plan="plan.name">{{ plan.writesPerMinute }}</div>
-        </div>
-      </div>
-    </div>
-    <div class="section">
-      <div class="section-header">
-        <div class="section-title-wrapper">
-          <div class="section-title">Source databases</div>
-          <div class="section-tagline">
-            A "source" is a Postgres database connected to an
-            <span class="no-wrap-xs">
-              Electric sync&nbsp;service.
-              Typically one per app/env.</span>
+            Usage-based pricing with volume discounts on higher tiers.
           </div>
         </div>
         <div v-for="plan in comparisonPlans" :key="plan.slug" class="plan-column"></div>
       </div>
       <div class="metric-row">
-        <div class="metric-column metric-label">Monthly active sources</div>
+        <div class="metric-column metric-label">Monthly fee</div>
         <div class="plan-column">
-          <div v-for="plan in comparisonPlans" :key="plan.slug" class="metric-value" :data-plan="plan.name">{{ formatNumber(plan.sources) }}</div>
+          <div v-for="plan in comparisonPlans" :key="plan.slug" class="metric-value" :data-plan="plan.name">{{ formatFee(plan) }}</div>
+        </div>
+      </div>
+      <div class="metric-row">
+        <div class="metric-column metric-label">Usage discount</div>
+        <div class="plan-column">
+          <div v-for="plan in comparisonPlans" :key="plan.slug" class="metric-value" :data-plan="plan.name">{{ formatDiscount(plan) }}</div>
+        </div>
+      </div>
+      <div class="metric-row">
+        <div class="metric-column metric-label">Writes</div>
+        <div class="plan-column">
+          <div v-for="plan in comparisonPlans" :key="plan.slug" class="metric-value" :data-plan="plan.name">{{ formatWriteRate(plan) }}</div>
+        </div>
+      </div>
+      <div class="metric-row">
+        <div class="metric-column metric-label">Retention</div>
+        <div class="plan-column">
+          <div v-for="plan in comparisonPlans" :key="plan.slug" class="metric-value" :data-plan="plan.name">{{ formatRetentionRate(plan) }}</div>
+        </div>
+      </div>
+      <div class="metric-row">
+        <div class="metric-column metric-label">Commitment</div>
+        <div class="plan-column">
+          <div v-for="plan in comparisonPlans" :key="plan.slug" class="metric-value" :data-plan="plan.name">{{ getCommitment(plan) }}</div>
         </div>
       </div>
     </div>
+
+    <!-- Group 2: Limits & Features -->
     <div class="section">
       <div class="section-header">
         <div class="section-title-wrapper">
-          <div class="section-title">Data processing</div>
+          <div class="section-title">Limits &amp; features</div>
           <div class="section-tagline">
-            An "operation processed" is a change ingested from Postgres and
-            <span class="no-wrap-xs">
-              written to a shape&nbsp;log</span>.
-            <span class="hidden-sm">
-              3 inserts written to
-              3 shapes = 9 operations&nbsp;processed.</span>
+            Resource limits and feature availability by plan.
           </div>
         </div>
         <div v-for="plan in comparisonPlans" :key="plan.slug" class="plan-column"></div>
       </div>
       <div class="metric-row">
-        <div class="metric-column metric-label">Operations processed</div>
+        <div class="metric-column metric-label">Max databases</div>
         <div class="plan-column">
-          <div v-for="plan in comparisonPlans" :key="plan.slug" class="metric-value" :data-plan="plan.name">{{ formatNumber(plan.operations) }}</div>
+          <div v-for="plan in comparisonPlans" :key="plan.slug" class="metric-value" :data-plan="plan.name">{{ getLimitValue(plan, 'maxDatabases') }}</div>
         </div>
       </div>
       <div class="metric-row">
-        <div class="metric-column metric-label">Data ingested</div>
+        <div class="metric-column metric-label">Stream TTL</div>
         <div class="plan-column">
-          <div v-for="plan in comparisonPlans" :key="plan.slug" class="metric-value" :data-plan="plan.name">{{ formatStorage(plan.gbProcessed) }}</div>
+          <div v-for="plan in comparisonPlans" :key="plan.slug" class="metric-value" :data-plan="plan.name">{{ getLimitValue(plan, 'streamTTL') }}</div>
+        </div>
+      </div>
+      <div class="metric-row">
+        <div class="metric-column metric-label">Concurrent readers/stream</div>
+        <div class="plan-column">
+          <div v-for="plan in comparisonPlans" :key="plan.slug" class="metric-value" :data-plan="plan.name">{{ getLimitValue(plan, 'concurrentReadersPerStream') }}</div>
+        </div>
+      </div>
+      <div class="metric-row">
+        <div class="metric-column metric-label">Postgres subqueries</div>
+        <div class="plan-column">
+          <div v-for="plan in comparisonPlans" :key="plan.slug" class="metric-value" :data-plan="plan.name">{{ getFeatureGate(plan, 'postgresSubqueries') }}</div>
+        </div>
+      </div>
+      <div class="metric-row">
+        <div class="metric-column metric-label">Support</div>
+        <div class="plan-column">
+          <div v-for="plan in comparisonPlans" :key="plan.slug" class="metric-value" :data-plan="plan.name">{{ getSupport(plan) }}</div>
         </div>
       </div>
     </div>
-    <div class="section">
+
+    <!-- Group 3: Workload Scenarios (placeholder) -->
+    <div v-if="config && config.workloadScenarios && config.workloadScenarios.length" class="section">
       <div class="section-header">
         <div class="section-title-wrapper">
-          <div class="section-title">Shape retention</div>
+          <div class="section-title">Workload scenarios</div>
           <div class="section-tagline">
-            Electric caches shapes on disk and deletes inactive shapes after a retention&nbsp;period.
-            <span class="hidden-sm">
-              Clients re-connecting to deleted shapes re-sync from scratch.</span>
+            Estimated monthly usage cost for typical workloads.
           </div>
         </div>
         <div v-for="plan in comparisonPlans" :key="plan.slug" class="plan-column"></div>
       </div>
-      <div class="metric-row">
-        <div class="metric-column metric-label">Active shapes</div>
+      <div v-for="scenario in config.workloadScenarios" :key="scenario.id" class="metric-row">
+        <div class="metric-column metric-label">{{ scenario.label }}</div>
         <div class="plan-column">
-          <div v-for="plan in comparisonPlans" :key="plan.slug" class="metric-value" :data-plan="plan.name">{{ formatNumber(plan.shapes) }}</div>
-        </div>
-      </div>
-      <div class="metric-row">
-        <div class="metric-column metric-label">Inactive shape retention</div>
-        <div class="plan-column">
-          <div v-for="plan in comparisonPlans" :key="plan.slug" class="metric-value" :data-plan="plan.name">{{ plan.shapeRetention }}</div>
+          <div v-for="plan in comparisonPlans" :key="plan.slug" class="metric-value" :data-plan="plan.name">{{ computeScenarioCost(plan, scenario) }}</div>
         </div>
       </div>
     </div>
-    <div class="section">
-      <div class="section-header">
-        <div class="section-title-wrapper">
-          <div class="section-title">Delivery to clients</div>
-          <div class="section-tagline">
-            Electric Cloud's built-in CDN enables unlimited data delivery to
-            <span class="no-wrap-xs">any number of&nbsp;clients</span><span class="hidden-sm"> &mdash; <span class="no-wrap-sm">without any fan-out limits or&nbsp;charges</span></span>.</div>
-        </div>
-        <div v-for="plan in comparisonPlans" :key="plan.slug" class="plan-column"></div>
-      </div>
-      <div class="metric-row">
-        <div class="metric-column metric-label">Operations delivered</div>
-        <div class="plan-column">
-          <div v-for="plan in comparisonPlans" :key="plan.slug" class="metric-value" :data-plan="plan.name">Unlimited</div>
-        </div>
-      </div>
-      <div class="metric-row">
-        <div class="metric-column metric-label">Data delivered</div>
-        <div class="plan-column">
-          <div v-for="plan in comparisonPlans" :key="plan.slug" class="metric-value" :data-plan="plan.name">Unlimited</div>
-        </div>
-      </div>
-      <div class="metric-row">
-        <div class="metric-column metric-label">Active clients</div>
-        <div class="plan-column">
-          <div v-for="plan in comparisonPlans" :key="plan.slug" class="metric-value" :data-plan="plan.name">Unlimited</div>
-        </div>
-      </div>
-      <div class="metric-row">
-        <div class="metric-column metric-label">Concurrent clients</div>
-        <div class="plan-column">
-          <div v-for="plan in comparisonPlans" :key="plan.slug" class="metric-value" :data-plan="plan.name">Unlimited</div>
-        </div>
-      </div>
-    </div>
+
     <div class="cta-row">
       <div class="metric-column"></div>
       <div v-for="plan in comparisonPlans" :key="plan.slug" class="plan-column">
@@ -325,12 +369,6 @@ function formatStorage(num) {
 .metric-label {
   font-size: 0.875rem;
   color: var(--vp-c-text-1);
-  font-weight: 500;
-}
-
-.metric-value {
-  font-size: 0.875rem;
-  color: var(--vp-c-text-1-5);
   font-weight: 500;
 }
 
