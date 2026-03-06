@@ -3,34 +3,46 @@ import path from 'node:path'
 import { parse } from 'yaml'
 
 export default {
-  watch: ['./plans/*.yaml'],
+  watch: [`./plans/*.yaml`, `./pricing.yaml`],
 
   load(files) {
-    const plans = files.map((file) => {
-      const slug = path.basename(file, '.yaml')
-      const contents = fs.readFileSync(file, 'utf-8')
-      const data = parse(contents)
-      
-      return {
-        slug,
-        ...data
-      }
-    }).sort((a, b) => {
-      return (a.order || 999) - (b.order || 999)
-    })
+    // Separate global config from plan files
+    const configFile = files.find(
+      (f) => f.endsWith(`pricing.yaml`) && !f.includes(`plans/`)
+    )
+    const planFiles = files.filter((f) => f !== configFile)
 
-    // Filter by type
-    const tiers = plans.filter(plan => plan.type === 'tier')
-    const services = plans.filter(plan => plan.type === 'service')
-    const enterprise = plans.filter(plan => plan.type === 'enterprise')
-    const comparisonPlans = plans.filter(plan => plan.type === 'tier' || plan.type === 'enterprise')
+    const config = parse(fs.readFileSync(configFile, `utf-8`))
 
-    return {
-      plans,
-      tiers,
-      services,
-      enterprise,
-      comparisonPlans
-    }
-  }
+    const plans = planFiles
+      .map((file) => {
+        const slug = path.basename(file, `.yaml`)
+        const data = parse(fs.readFileSync(file, `utf-8`))
+
+        // Derive effective rates for tier plans
+        if (data.type === `tier` && data.discountPercent !== undefined) {
+          const discount = data.discountPercent / 100
+          data.effectiveWriteRate = +(
+            config.baseRates.writesPerMillion *
+            (1 - discount)
+          ).toFixed(4)
+          data.effectiveRetentionRate = +(
+            config.baseRates.retentionPerGBMonth *
+            (1 - discount)
+          ).toFixed(4)
+        }
+
+        return { slug, ...data }
+      })
+      .sort((a, b) => (a.order || 999) - (b.order || 999))
+
+    const tiers = plans.filter((p) => p.type === `tier`)
+    const services = plans.filter((p) => p.type === `service`)
+    const enterprise = plans.filter((p) => p.type === `enterprise`)
+    const comparisonPlans = plans.filter(
+      (p) => p.type === `tier` || p.type === `enterprise`
+    )
+
+    return { config, plans, tiers, services, enterprise, comparisonPlans }
+  },
 }

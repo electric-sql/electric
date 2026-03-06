@@ -1,0 +1,44 @@
+# Base rates (PAYG, before any discount)
+baseRates:
+  writesPerMillion: 1 # $1 per 1M writes
+  retentionPerGBMonth: 0.10 # $0.10 per GB-month
+
+# Write unit definition
+writeUnitSizeKB: 10 # Each write is up to 10KB; larger messages auto-chunk
+
+# PAYG waiver
+paygWaiverThreshold: 5 # Bills under $5/mo waived (display-only; authoritative billing threshold is defined in the billing system)
+
+# Calculator feature checkboxes
+# Each defines: label, description, minimumTier
+# Valid minimumTier values: payg | pro | scale (must match plan file slugs)
+calculatorFeatures:
+  - id: premiumSupport
+    label: 'Premium support'
+    description: 'Priority email support'
+    minimumTier: pro
+  - id: networkSecurity
+    label: 'Network security controls'
+    description: 'VPC peering and IP allowlists'
+    minimumTier: pro
+  - id: earlyAccess
+    label: 'Early feature access'
+    description: 'Access to beta features'
+    minimumTier: pro
+  - id: founderAccess
+    label: 'Direct access to founders'
+    description: 'Proactive hands-on support'
+    minimumTier: scale
+
+# Workload scenarios for comparison table (placeholder — human fills in real numbers)
+workloadScenarios:
+  - id: appDev
+    label: 'Typical app development'
+    description: 'Lorem ipsum dolor sit amet'
+    writesPerMonth: null # Human fills in
+    retentionGB: null # Human fills in
+  - id: aiStreaming
+    label: 'AI token streaming'
+    description: 'Lorem ipsum dolor sit amet'
+    writesPerMonth: null # Human fills in
+    retentionGB: null # Human fills in

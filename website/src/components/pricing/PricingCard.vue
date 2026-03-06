@@ -4,8 +4,16 @@ const { plan } = defineProps(['plan'])
 const priceColorVar = (plan.priceColor === 'ddn') ? 'var(--ddn-color)' : 'var(--electric-color)'
 
 function formatPrice(p) {
-  if (typeof p === 'number') return '$' + p
-  return p
+  if (p.type === 'enterprise') return 'Custom'
+  if (p.type === 'service') return ''
+  if (typeof p.monthlyFee === 'number') {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      maximumFractionDigits: 0,
+    }).format(p.monthlyFee)
+  }
+  return ''
 }
 </script>
 
@@ -14,7 +22,7 @@ function formatPrice(p) {
     <div class="card-header">
       <h3 class="card-name">{{ plan.name }}</h3>
       <div class="card-price">
-        <span class="price-amount" :style="{ color: priceColorVar }">{{ formatPrice(plan.price) }}</span>
+        <span class="price-amount" :style="{ color: priceColorVar }">{{ formatPrice(plan) }}</span>
         <span v-if="plan.priceQualifier" class="price-qualifier">{{ plan.priceQualifier }}</span>
       </div>
     </div>

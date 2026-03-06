@@ -2,15 +2,12 @@
 layout: home
 title: Pricing
 description: >-
-  Electric Cloud has scalable pricing for teams of all sizes, with a generous free tier, unlimited data delivery and support to get you into production faster.
+  Electric Cloud has usage-based pricing with unlimited data delivery. Pay for writes and retention, not egress.
 hideReleaseBanner: true
 ---
 
 <script setup>
-import { onMounted } from 'vue'
-import { UsedBySection } from './src/components/home'
 import Section from './src/components/home/Section.vue'
-import Quote from './src/components/home/Quote.vue'
 import PricingCard from './src/components/pricing/PricingCard.vue'
 import ComparisonTable from './src/components/pricing/ComparisonTable.vue'
 import PricingCalculator from './src/components/pricing/PricingCalculator.vue'
@@ -25,79 +22,26 @@ const tiers = pricing.tiers
 const services = pricing.services
 const enterprise = pricing.enterprise
 const comparisonPlans = pricing.comparisonPlans
-
-onMounted(() => {
-  if (typeof window !== 'undefined' && document.querySelector) {
-    document.querySelectorAll('.strap-actions a[href^="https://github.com"]').forEach((link) => {
-      if (!link.querySelector('.vpi-social-github')) {
-        const icon = document.createElement('span')
-        icon.classList.add('vpi-social-github')
-
-        link.prepend(icon)
-      }
-    })
-  }
-})
+const config = pricing.config
 </script>
-
-<p class="intro-zap-container hidden-lg">
-  <img src="/img/home/zap-with-halo.svg"
-      alt="Electric zap with halo"
-      class="intro-zap"
-  />
-</p>
-<p class="intro-zap-container block-lg">
-  <img src="/img/home/zap-with-halo.svg"
-      alt="Electric zap with halo"
-      class="intro-zap-sm"
-  />
-</p>
 
 <Section :actions="[]">
   <template #title>
-    Scalable pricing for
-    <span class="no-wrap">teams of all sizes</span>
+    Placeholder hero title
   </template>
   <template #tagline>
+    Placeholder hero tagline for the
     <a href="/product/cloud">Electric Cloud</a>
-    has a generous free tier,
-    <span class="inline hidden-md">
-      fixed plans with</span> <a class="no-wrap" href="#details">unlimited data delivery</a> and
-    <span class="no-wrap-lg">
-      <span class="inline hidden-sm">
-        additional</span>
-      support</span>
-    <span class="no-wrap-sm">
-      to get you</span> <span class="no-wrap-sm">
-      into production&nbsp;faster</span>.
+    pricing page.
   </template>
+  <div class="ingress-egress-illustration">
+    <p class="illustration-placeholder">[Ingress/Egress illustration — to be designed]</p>
+  </div>
   <div class="pricing-grid">
     <PricingCard
       v-for="tier in tiers"
       :key="tier.slug"
       :plan="tier"
-    />
-    <PricingCard
-      v-for="service in services"
-      :key="service.slug"
-      :plan="service"
-      class="service-card"
-    />
-  </div>
-</Section>
-
-<Section :actions="[]">
-  <template #title>
-    Need more?
-  </template>
-  <template #tagline>
-    Higher limits<span class="inline hidden-sm">, more support,</span> or bespoke&nbsp;requirements?
-  </template>
-  <div class="enterprise-card">
-    <PricingCard
-      v-for="ent in enterprise"
-      :key="ent.slug"
-      :plan="ent"
     />
   </div>
 </Section>
@@ -108,55 +52,55 @@ onMounted(() => {
   <img :src="LogoStripXxs" class="block-sm hidden-md logo-strap-sm" />
 </figure>
 
-<div class="quotes">
-  <Quote image="/img/home/quotes/trigger.jpg">
-    <template #quote>
-        “We use ElectricSQL to power Trigger.dev Realtime<span class="hidden-md">, a core feature of our product</span><span class="hidden-xs">. It<span class="inline hidden-sm">'s&nbsp;simple to operate and it</span>&nbsp;scales to</span><span class="inline-xs"> with</span> millions of updates per&nbsp;day.”
-    </template>
-    <template #attribution>
-      <span class="hidden-md">
-        &mdash;</span>
-      Matt Aitken, CEO, <a href="https://trigger.dev"><cite class="highlight">Trigger.dev</cite></a>
-    </template>
-  </Quote>
-  <Quote image="/img/home/quotes/otto.jpg">
-    <template #quote>
-      “ElectricSQL enables us to reliably stream agent updates
-      in real-time at&nbsp;scale.<span class="hidden-xs"> It has dramatically simplified
-      our&nbsp;architecture<span class="hidden-md">
-        while delivering cell-level reactive updates</span>.</span>
-    </template>
-    <template #attribution>
-      <span class="hidden-md">
-        &mdash;</span>
-      Sully Omar, CEO, <a href="https://ottogrid.ai"><cite class="highlight">Otto</cite></a>
-    </template>
-  </Quote>
-</div>
+<Section :actions="[]">
+  <template #title>Need more support?</template>
+  <template #tagline>Placeholder tagline</template>
+  <div class="support-card">
+    <div class="support-options">
+      <div class="support-option">
+        <h3>Accelerate</h3>
+        <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit.</p>
+      </div>
+      <div class="support-option">
+        <h3>Enterprise</h3>
+        <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit.</p>
+      </div>
+    </div>
+    <div class="support-cta">
+      <VPButton href="/about/contact#sales" text="Contact sales" theme="alt" />
+    </div>
+  </div>
+</Section>
 
 <div class="open-source-strap">
   <div class="section-head">
-    <h1>Open source</h1>
+    <h1>Unlimited data delivery</h1>
     <p>
-      Want free with unlimited use?
-      <span class="no-wrap">Electric is fully open-source</span><span class="hidden inline-sm">.</span> <span class="hidden-sm">
-        <span class="no-wrap-sm"> and <span class="no-wrap">designed for self-hosting.</span></span></span>
+      We don't charge for egress, data delivery, fan-out, active users,
+      concurrent users, clients, connections, seats, apps, sources — or monthly
+      bills under $5/month.
+    </p>
+  </div>
+  <div class="section-head" style="margin-top: 24px;">
+    <h2 style="font-size: 1.25rem; margin-bottom: 12px;">Using existing CDN infrastructure</h2>
+    <p>
+      We uniquely can do this because we deliver real-time data through
+      existing CDN infrastructure. Using caching and request-collapsing to handle
+      concurrency at the CDN layer.
     </p>
   </div>
   <div class="strap-actions">
     <div class="action">
       <VPButton
-        href="/docs/guides/deployment"
-        text="Self-hosting"
+        href="https://dashboard.electric-sql.cloud"
+        text="Sign up"
         theme="brand"
       />
-    </div>
-    <div class="action">
+      &nbsp;
       <VPButton
-        href="https://github.com/electric-sql/electric"
-        text="GitHub"
+        href="/docs/api/http"
+        text="Learn more"
         theme="alt"
-        target="_blank"
       />
     </div>
   </div>
@@ -175,7 +119,7 @@ onMounted(() => {
       <span class="no-wrap">
         right for you</span></span>.
   </template>
-  <ComparisonTable :comparisonPlans="comparisonPlans" />
+  <ComparisonTable :comparisonPlans="comparisonPlans" :config="config" />
 </Section>
 
 <Section :actions="[]">
@@ -223,6 +167,32 @@ onMounted(() => {
   </div>
 </div>
 
+<Section :actions="[]">
+  <template #title>Frequently asked questions</template>
+  <div class="faq-list">
+    <details class="faq-item">
+      <summary>Lorem ipsum question one?</summary>
+      <p>Lorem ipsum answer one. Placeholder content to be replaced.</p>
+    </details>
+    <details class="faq-item">
+      <summary>Lorem ipsum question two?</summary>
+      <p>Lorem ipsum answer two. Placeholder content to be replaced.</p>
+    </details>
+    <details class="faq-item">
+      <summary>Lorem ipsum question three?</summary>
+      <p>Lorem ipsum answer three. Placeholder content to be replaced.</p>
+    </details>
+    <details class="faq-item">
+      <summary>Lorem ipsum question four?</summary>
+      <p>Lorem ipsum answer four. Placeholder content to be replaced.</p>
+    </details>
+    <details class="faq-item">
+      <summary>Lorem ipsum question five?</summary>
+      <p>Lorem ipsum answer five. Placeholder content to be replaced.</p>
+    </details>
+  </div>
+</Section>
+
 <style>
   @supports (overflow: clip) {
     @media (max-width: 959px) {
@@ -235,75 +205,12 @@ onMounted(() => {
 </style>
 
 <style scoped>
-.electric-green {
-  color: var(--electric-color);
-  font-weight: 600;
-}
-.intro-zap-sm {
-  height: 60px;
-  margin: 36px auto -6px;
-}
-@media (min-width: 768px) and (max-width: 959px) {
-  .intro-zap-sm {
-    margin: 48px auto 0px;
-  }
-}
-@media (max-width: 767px) {
-  .intro-zap-sm {
-    height: 52px;
-  }
-}
-
 .pricing-grid {
   margin: 40px 0 40px;
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr 1fr;
+  grid-template-columns: 1fr 1fr 1fr;
   gap: 24px;
   align-items: start;
-}
-
-@media (max-width: 1149px) and (min-width: 806px) {
-  .pricing-grid {
-    grid-template-columns: 1fr 1fr 1fr;
-    gap: 24px;
-  }
-
-  .service-card {
-    grid-column: 1 / -1;
-  }
-
-  .service-card :deep(.card-features),
-  .enterprise-card :deep(.card-features) {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0;
-  }
-
-  .service-card :deep(.features-title),
-  .enterprise-card :deep(.features-title) {
-    width: 100%;
-    margin-bottom: 8px;
-  }
-
-  .service-card :deep(.feature-item),
-  .enterprise-card :deep(.feature-item) {
-    margin-bottom: 0;
-    display: flex;
-    align-items: center;
-  }
-
-  .service-card :deep(.feature-item::after),
-  .enterprise-card :deep(.feature-item::after) {
-    content: "•";
-    margin: 0 10px;
-    color: var(--vp-c-text-3);
-  }
-
-  .service-card :deep(.feature-item:last-child::after),
-  .enterprise-card :deep(.feature-item:last-child::after) {
-    content: none;
-  }
 }
 
 @media (max-width: 805px) and (min-width: 530px) {
@@ -317,40 +224,6 @@ onMounted(() => {
   .pricing-grid {
     grid-template-columns: 1fr;
     gap: 24px;
-  }
-}
-
-.enterprise-card {
-  margin: 40px 0 0;
-}
-
-@media (min-width: 530px) {
-  .enterprise-card :deep(.card-features) {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0;
-  }
-
-  .enterprise-card :deep(.features-title) {
-    width: 100%;
-    margin-bottom: 8px;
-  }
-
-  .enterprise-card :deep(.feature-item) {
-    margin-bottom: 0;
-    display: flex;
-    align-items: center;
-  }
-
-  .enterprise-card :deep(.feature-item::after) {
-    content: "•";
-    margin: 0 10px;
-    color: var(--vp-c-text-3);
-  }
-
-  .enterprise-card :deep(.feature-item:last-child::after) {
-    content: none;
   }
 }
 
@@ -435,19 +308,101 @@ onMounted(() => {
 .logo-strap-sm {
   max-width: 320px;
 }
-.quotes {
-  padding: 16px 0;
+
+.ingress-egress-illustration {
+  margin: 40px 0;
+  padding: 40px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 0.5px solid rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  text-align: center;
+}
+
+.illustration-placeholder {
+  color: var(--vp-c-text-3);
+  font-style: italic;
+}
+
+.support-card {
+  margin: 40px 0;
+  padding: 40px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 0.5px solid rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+}
+
+.support-options {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 32px;
-  flex: row;
-  margin-bottom: 100px;
+  gap: 40px;
+  margin-bottom: 32px;
 }
-@media (max-width: 749px) {
-  .quotes {
+
+.support-option h3 {
+  font-size: 1.25rem;
+  font-weight: 650;
+  color: var(--vp-c-text-1);
+  margin-bottom: 12px;
+}
+
+.support-option p {
+  font-size: 0.875rem;
+  color: var(--vp-c-text-2);
+  line-height: 1.6;
+}
+
+.support-cta {
+  text-align: center;
+}
+
+@media (max-width: 639px) {
+  .support-options {
     grid-template-columns: 1fr;
-    max-width: 512px;
-    margin: 0 auto;
+    gap: 24px;
   }
+}
+
+.faq-list {
+  margin: 40px 0;
+}
+
+.faq-item {
+  background: rgba(255, 255, 255, 0.03);
+  border: 0.5px solid rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+  margin-bottom: 12px;
+  overflow: hidden;
+}
+
+.faq-item summary {
+  padding: 16px 20px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--vp-c-text-1);
+  cursor: pointer;
+  list-style: none;
+}
+
+.faq-item summary::-webkit-details-marker {
+  display: none;
+}
+
+.faq-item summary::before {
+  content: "+";
+  display: inline-block;
+  width: 20px;
+  font-weight: 400;
+  color: var(--vp-c-text-3);
+}
+
+.faq-item[open] summary::before {
+  content: "\2212";
+}
+
+.faq-item p {
+  padding: 0 20px 16px 40px;
+  font-size: 0.875rem;
+  color: var(--vp-c-text-2);
+  line-height: 1.6;
 }
 </style>
