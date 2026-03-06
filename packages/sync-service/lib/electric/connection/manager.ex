@@ -985,7 +985,7 @@ defmodule Electric.Connection.Manager do
 
     Logger.warning("Connection manager is restarting after an error",
       connection_mode: connection_mode,
-      error_message: extended_message
+      err_msg: extended_message
     )
 
     dispatch_stack_event(
@@ -1008,7 +1008,7 @@ defmodule Electric.Connection.Manager do
 
     Logger.warning("Database connection failed, retrying",
       connection_mode: connection_mode,
-      error_message: extended_message
+      err_msg: extended_message
     )
 
     dispatch_stack_event(

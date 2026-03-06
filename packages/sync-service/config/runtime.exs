@@ -43,7 +43,7 @@ config :logger, :default_formatter,
     :query_string,
     :idle_time_s,
     :connection_mode,
-    :error_message,
+    :err_msg,
     :host
   ],
   colors: [enabled: env!("ELECTRIC_LOG_COLORS", :boolean!, true)]
