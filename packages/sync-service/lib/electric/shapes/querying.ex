@@ -219,8 +219,9 @@ defmodule Electric.Shapes.Querying do
       if tags != [] do
         "{" <> json = headers
 
+        active_conditions = List.duplicate(true, length(tags)) |> Jason.encode!()
         tags = Enum.join(tags, ~s[ || '","' || ])
-        ~s/{"tags":["' || #{tags} || '"],/ <> json
+        ~s/{"active_conditions":#{active_conditions},"tags":["' || #{tags} || '"],/ <> json
       else
         headers
       end
