@@ -52,7 +52,7 @@
   ??[debug] ReplicationClient step: create_publication_query
   ??[debug] ReplicationClient step: drop_slot
   ??[debug] ReplicationClient step: create_slot
-  ??[debug] Created new slot at lsn=
+  ?lsn=.*\[debug\] Created new slot
   ??[notice] Purging all shapes.
   ??[notice] Starting replication from postgres
 

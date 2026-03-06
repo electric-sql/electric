@@ -36,7 +36,7 @@ defmodule Electric.PersistentKV.Filesystem do
     def set(fs, key, value) when is_binary(key) do
       with file_path = mkdir(fs, key),
            :ok <- atomic_write(file_path, value) do
-        Logger.debug("[SET] #{file_path}")
+        Logger.debug("Persistent KV set", file_path: file_path)
         :ok
       end
     end

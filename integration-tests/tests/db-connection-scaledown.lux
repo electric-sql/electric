@@ -74,7 +74,7 @@
   !Electric.Postgres.ReplicationClient.name("single_stack") |> GenServer.whereis() |> send(:check_if_idle)
   ??[notice] Closing all database connections after the replication stream has been idle for
 
-  ??[debug] Terminating connection manager with reason :shutdown.
+  ?reason=shutdown.*\[debug\] Terminating connection manager
 
 # Confirm that Postgres no longer sees any open connections for the electric user
 [shell psql]
@@ -119,7 +119,7 @@
 
 [shell electric]
   ??[debug] GET /v1/shape
-  ??[debug] Query String: table=items&handle=$handle&offset=0_0&live
+  ?query_string=table=items&handle=$handle&offset=0_0&live.*\[debug\] Query String
 
 
   ??[notice] Acquiring lock from postgres

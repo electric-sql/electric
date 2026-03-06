@@ -179,7 +179,7 @@ defmodule ElectricTelemetry.ApplicationTelemetry do
   def cpu_utilization(_) do
     case :cpu_sup.util([:per_cpu]) do
       {:error, reason} ->
-        Logger.debug("Failed to collect CPU utilization: #{inspect(reason)}")
+        Logger.debug("Failed to collect CPU utilization", reason: reason)
 
       data ->
         {per_core_utilization, bare_values} =
@@ -304,7 +304,7 @@ defmodule ElectricTelemetry.ApplicationTelemetry do
         |> Enum.reduce(%{}, fn probe, acc ->
           case apply(:cpu_sup, probe, []) do
             {:error, reason} ->
-              Logger.debug("Failed to collect system load #{probe}: #{inspect(reason)}")
+              Logger.debug("Failed to collect system load", probe: probe, reason: reason)
               acc
 
             value ->
@@ -333,9 +333,8 @@ defmodule ElectricTelemetry.ApplicationTelemetry do
     mem_stats =
       cond do
         missing_system_memory_keys != [] ->
-          Logger.warning(
-            "Error gathering system memory stats: " <>
-              "missing data points #{Enum.join(missing_system_memory_keys, ", ")}"
+          Logger.warning("Error gathering system memory stats: missing data points",
+            data_points: missing_system_memory_keys
           )
 
           %{}
@@ -387,9 +386,8 @@ defmodule ElectricTelemetry.ApplicationTelemetry do
       @resident_memory_keys
       |> Enum.reject(&Map.has_key?(system_memory, &1))
 
-    Logger.warning(
-      "Error gathering resident memory stats: " <>
-        "missing data points #{Enum.join(missing_keys, ", ")}"
+    Logger.warning("Error gathering resident memory stats: missing data points",
+      data_points: missing_keys
     )
 
     %{}
@@ -422,9 +420,8 @@ defmodule ElectricTelemetry.ApplicationTelemetry do
   defp swap_stats(_os_type, system_memory) do
     missing_swap_keys = Enum.reject(@required_swap_keys, &Map.has_key?(system_memory, &1))
 
-    Logger.warning(
-      "Error gathering system swap stats: " <>
-        "missing data points #{Enum.join(missing_swap_keys, ", ")}"
+    Logger.warning("Error gathering system swap stats: missing data points",
+      data_points: missing_swap_keys
     )
 
     %{}

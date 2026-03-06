@@ -197,15 +197,15 @@ defmodule Electric.Shapes.ConsumerRegistry do
 
       {suspended, crashed} ->
         if suspended != %{} do
-          Logger.debug(fn ->
-            ["Re-trying suspended shape handles ", inspect(Map.keys(suspended))]
-          end)
+          Logger.debug("Re-trying suspended shape handles",
+            shape_handles: Map.keys(suspended)
+          )
         end
 
         if crashed != %{} do
-          Logger.warning(fn ->
-            ["Consumer processes crashed or missing during broadcast: ", inspect(crashed)]
-          end)
+          Logger.warning("Consumer processes crashed or missing during broadcast",
+            crashed: crashed
+          )
         end
     end)
   end
@@ -266,7 +266,7 @@ defmodule Electric.Shapes.ConsumerRegistry do
       fn ->
         case ShapeCache.start_consumer_for_handle(handle, stack_id) do
           {:ok, pid} ->
-            Logger.debug(fn -> ["Started consumer for existing handle ", handle] end)
+            Logger.debug("Started consumer for existing handle", shape_handle: handle)
 
             pid
 

@@ -141,7 +141,7 @@ defmodule Electric.Config do
       nil ->
         instance_id = generate_instance_id()
 
-        Logger.notice("Setting electric instance_id: #{instance_id}")
+        Logger.notice("Setting electric instance_id", instance_id: instance_id)
         Application.put_env(:electric, :instance_id, instance_id)
 
         instance_id
@@ -625,7 +625,7 @@ defmodule Electric.Config do
     end)
     |> tap(fn process_spawn_opts ->
       if map_size(process_spawn_opts) > 0 do
-        Logger.notice("Process spawn opts: #{inspect(process_spawn_opts)}")
+        Logger.notice("Process spawn opts", process_spawn_opts: process_spawn_opts)
       end
     end)
   end
@@ -687,8 +687,9 @@ defmodule Electric.Config do
       {known, unknown} ->
         # Log an error but don't raise so that deployments can proceeed without
         # removal of old flags and new flags can be added before deployment
-        Logger.error(
-          "Unknown feature flags specified: #{inspect(unknown)}. Known feature flags: #{inspect(@known_feature_flags)}"
+        Logger.error("Unknown feature flags specified",
+          unknown_flags: unknown,
+          known_flags: @known_feature_flags
         )
 
         known

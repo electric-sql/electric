@@ -495,7 +495,7 @@ defmodule Electric.DbConnectionError do
   end
 
   defp unknown_error(error) do
-    Logger.error("Electric.DBConnection unknown error: #{inspect(error)}")
+    Logger.error("Electric.DBConnection unknown error", error: error)
 
     %DbConnectionError{
       message: inspect(error),

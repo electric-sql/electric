@@ -46,7 +46,7 @@
 [shell electric]
   [sleep 1]
 
-  ??[debug] Suspending consumer $handle
+  ?shape_handle=$handle.*\[debug\] Suspending consumer
   !{:active_consumer_count, Electric.Shapes.ConsumerRegistry.active_consumer_count("single_stack")}
   ?{:active_consumer_count, 0}
 
@@ -57,7 +57,7 @@
 
 
 [shell electric]
-  ??[debug] Started consumer for existing handle $handle
+  ?shape_handle=$handle.*\[debug\] Started consumer for existing handle
   !{:active_consumer_count, Electric.Shapes.ConsumerRegistry.active_consumer_count("single_stack")}
   ?{:active_consumer_count, 1}
 

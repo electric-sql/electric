@@ -161,7 +161,7 @@ defmodule Electric.Shapes.Consumer.Materializer do
     catch
       # GenServer.call fails with :exit when Consumer is dead or dies mid-call
       :exit, reason ->
-        Logger.warning("Materializer startup failed with exit reason: #{inspect(reason)}")
+        Logger.warning("Materializer startup failed with exit reason", reason: reason)
         {:stop, :shutdown, state}
     end
   end

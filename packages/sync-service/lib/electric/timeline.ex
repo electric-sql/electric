@@ -36,19 +36,20 @@ defmodule Electric.Timeline do
 
   @spec verify_timeline(timeline(), timeline()) :: check_result()
   defp verify_timeline({pg_id, timeline_id} = timeline, timeline) do
-    Logger.notice("Connected to Postgres #{pg_id} and timeline #{timeline_id}")
+    Logger.notice("Connected to Postgres", pg_id: pg_id, timeline_id: timeline_id)
     :ok
   end
 
   defp verify_timeline({pg_id, timeline_id}, nil) do
-    Logger.notice("No previous timeline detected.")
-    Logger.notice("Connected to Postgres #{pg_id} and timeline #{timeline_id}")
+    Logger.notice("No previous timeline detected")
+    Logger.notice("Connected to Postgres", pg_id: pg_id, timeline_id: timeline_id)
     :no_previous_timeline
   end
 
   defp verify_timeline({pg_id, _}, {electric_pg_id, _}) when pg_id != electric_pg_id do
-    Logger.warning(
-      "Detected different Postgres DB, with ID: #{pg_id}. Old Postgres DB had ID #{electric_pg_id}."
+    Logger.warning("Detected different Postgres DB",
+      new_pg_id: pg_id,
+      old_pg_id: electric_pg_id
     )
 
     :timeline_changed
@@ -59,7 +60,7 @@ defmodule Electric.Timeline do
   end
 
   defp verify_timeline({_, timeline_id}, _) do
-    Logger.warning("Detected PITR to timeline #{timeline_id}")
+    Logger.warning("Detected PITR", timeline_id: timeline_id)
     :timeline_changed
   end
 
@@ -76,7 +77,7 @@ defmodule Electric.Timeline do
         nil
 
       error ->
-        Logger.warning("Failed to load timeline ID from persistent storage: #{inspect(error)}")
+        Logger.warning("Failed to load timeline ID from persistent storage", error: error)
         nil
     end
   end
