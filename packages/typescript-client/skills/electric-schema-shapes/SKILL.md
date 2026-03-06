@@ -76,21 +76,34 @@ const stream = new ShapeStream({
 
 ### Backend txid handshake for optimistic writes
 
-```sql
--- In your API endpoint's transaction:
-INSERT INTO todos (id, text, org_id) VALUES ($1, $2, $3);
-SELECT pg_current_xact_id()::xid::text AS txid;
+Call `pg_current_xact_id()::xid::text` inside the same transaction as your mutation. If you query it outside the transaction, you get a different txid and the client will never reconcile.
+
+```ts
+// API endpoint — txid MUST be in the same transaction as the INSERT
+app.post('/api/todos', async (req, res) => {
+  const client = await pool.connect()
+  try {
+    await client.query('BEGIN')
+    const result = await client.query(
+      'INSERT INTO todos (id, text, org_id) VALUES ($1, $2, $3) RETURNING id',
+      [crypto.randomUUID(), req.body.text, req.body.orgId]
+    )
+    const txResult = await client.query(
+      'SELECT pg_current_xact_id()::xid::text AS txid'
+    )
+    await client.query('COMMIT')
+    // txid accepts number | bigint | `${bigint}`
+    res.json({ id: result.rows[0].id, txid: parseInt(txResult.rows[0].txid) })
+  } finally {
+    client.release()
+  }
+})
 ```
 
 ```ts
-// Return txid from API — accepts number, bigint, or numeric string
-res.json({ id: newTodo.id, txid: parseInt(txid) })
-
 // Client awaits txid before dropping optimistic state
 await todoCollection.utils.awaitTxId(txid)
 ```
-
-Note: `txid` accepts `number | bigint | \`${bigint}\``. Using `parseInt()` to return a number is the simplest approach.
 
 ## Common Mistakes
 

@@ -33,18 +33,25 @@ This skill builds on electric-shapes, electric-proxy-auth, and electric-schema-s
 # docker-compose.yml
 services:
   postgres:
-    image: postgres:16
+    image: postgres:17-alpine
     environment:
       POSTGRES_DB: electric
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: password
     ports:
-      - '5432:5432'
+      - '54321:5432'
+    tmpfs:
+      - /tmp
+    command:
+      - -c
+      - listen_addresses=*
+      - -c
+      - wal_level=logical
 
   electric:
-    image: electricsql/electric
+    image: electricsql/electric:latest
     environment:
-      DATABASE_URL: postgres://postgres:password@postgres:5432/electric
+      DATABASE_URL: postgresql://postgres:password@postgres:5432/electric?sslmode=disable
       ELECTRIC_INSECURE: true # Dev only — use ELECTRIC_SECRET in production
     ports:
       - '3000:3000'
