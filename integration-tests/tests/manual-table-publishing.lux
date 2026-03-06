@@ -42,7 +42,7 @@
 
 [shell electric]
   -
-  ?\[warning\] Failed to create snapshot for \d+-\d+: Database table \"public.items\" is missing from the publication \"electric_publication_integration\" and the ELECTRIC_MANUAL_TABLE_PUBLISHING setting prevents Electric from adding it
+  ?shape_handle=\d+-\d+.*error_message=Database table.*public\.items.*ELECTRIC_MANUAL_TABLE_PUBLISHING.*\[warning\] Failed to create snapshot
   -$fail_pattern
 
 ## Add the table to the publication and try again

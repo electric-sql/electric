@@ -40,7 +40,11 @@ config :logger, :default_formatter,
     :count,
     :lock_name,
     :slot_name,
-    :query_string
+    :query_string,
+    :idle_time_s,
+    :connection_mode,
+    :error_message,
+    :host
   ],
   colors: [enabled: env!("ELECTRIC_LOG_COLORS", :boolean!, true)]
 

@@ -72,7 +72,7 @@
   [sleep 2]
 
   !Electric.Postgres.ReplicationClient.name("single_stack") |> GenServer.whereis() |> send(:check_if_idle)
-  ??[notice] Closing all database connections after the replication stream has been idle for
+  ?idle_time_s=.*\[notice\] Closing all database connections after the replication stream has been idle
 
   ?reason=shutdown.*\[debug\] Terminating connection manager
 

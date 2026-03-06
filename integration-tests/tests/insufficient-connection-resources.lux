@@ -20,7 +20,7 @@
 
 ## Observe the connection error.
 [shell electric]
-  ??[warning] Database connection in connection_pool mode failed: sorry, too many clients already
+  ?connection_mode=connection_pool.*error_message=.*too many clients.*\[warning\] Database connection failed
   ?delay_ms=.*\[warning\] Reconnecting
 
 
