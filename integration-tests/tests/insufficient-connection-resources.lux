@@ -21,7 +21,7 @@
 ## Observe the connection error.
 [shell electric]
   ??[warning] Database connection in connection_pool mode failed: sorry, too many clients already
-  ??[warning] Reconnecting in 
+  ?delay_ms=.*\[warning\] Reconnecting
 
 
 ## Restarting Postgres with a higher number of max_connections should fix the issue

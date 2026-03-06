@@ -326,7 +326,7 @@ defmodule Electric.StackSupervisor do
 
   @impl true
   def init(%{stack_id: stack_id} = config) do
-    Logger.debug("StackSupervisor for stack #{inspect(stack_id)} is initializing...")
+    Logger.debug("StackSupervisor is initializing")
 
     Process.set_label({:stack_supervisor, stack_id})
     Logger.metadata(stack_id: stack_id)

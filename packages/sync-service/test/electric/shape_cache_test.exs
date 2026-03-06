@@ -922,10 +922,9 @@ defmodule Electric.ShapeCacheTest do
       # attempts, we are expecting the task to return here.
       log = capture_log(fn -> assert {:ok, {:error, :unknown}} = Task.yield(task, 1000) end)
 
-      assert String.contains?(
-               log,
-               "[error] No consumer process when waiting on initial snapshot creation for #{shape_handle}"
-             )
+      assert log =~ "[error]" and
+               log =~ "No consumer process when waiting on initial snapshot creation" and
+               log =~ shape_handle
 
       assert_receive {ShapeCache.ShapeCleaner, :cleanup, ^shape_handle}
       assert_receive {ShapeCache.ShapeCleaner, :cleanup, ^subshape_handle}

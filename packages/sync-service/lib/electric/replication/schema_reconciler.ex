@@ -47,7 +47,7 @@ defmodule Electric.Replication.SchemaReconciler do
     Logger.metadata(stack_id: opts.stack_id)
     Electric.Telemetry.Sentry.set_tags_context(stack_id: opts.stack_id)
 
-    Logger.debug("SchemaReconciler started with state #{inspect(opts)}")
+    Logger.debug("SchemaReconciler started", opts: opts)
     {:ok, opts, {:continue, :reconcile}}
   end
 
@@ -78,14 +78,16 @@ defmodule Electric.Replication.SchemaReconciler do
         |> handle_diverged_relations(state)
 
       status ->
-        Logger.debug("Schema reconciliation skipped due to inactive stack: #{inspect(status)}")
+        Logger.debug("Schema reconciliation skipped due to inactive stack", status: status)
     end
   catch
     # We essentially never want to fail here, as this is a periodic task.
     # If it fails, we'll just try again next time, so no additional retries are implemented
     type, reason ->
       st = __STACKTRACE__
-      Logger.error("Schema reconciliation failed: #{Exception.format(type, reason, st)}")
+      Logger.error("Schema reconciliation failed",
+        error: Exception.format(type, reason, st)
+      )
       :error
   end
 
@@ -98,7 +100,7 @@ defmodule Electric.Replication.SchemaReconciler do
       :ok
     else
       {:error, reason} ->
-        Logger.warning("Schema reconciliation failed: #{reason}")
+        Logger.warning("Schema reconciliation failed", reason: reason)
         :error
     end
   end

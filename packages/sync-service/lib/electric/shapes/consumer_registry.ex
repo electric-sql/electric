@@ -103,7 +103,7 @@ defmodule Electric.Shapes.ConsumerRegistry do
   defp do_remove_consumer(shape_handle, table) when is_atom(table) or is_reference(table) do
     :ets.delete(table, shape_handle)
 
-    Logger.debug(fn -> "Removed consumer #{shape_handle}" end)
+    Logger.debug("Removed consumer", shape_handle: shape_handle)
 
     :ok
   end
@@ -155,9 +155,9 @@ defmodule Electric.Shapes.ConsumerRegistry do
         :ok
 
       suspended_handles ->
-        Logger.debug(fn ->
-          ["Re-trying suspended shape handles ", inspect(Map.keys(suspended_handles))]
-        end)
+        Logger.debug("Re-trying suspended shape handles",
+          shape_handles: Map.keys(suspended_handles)
+        )
     end)
   end
 
@@ -217,7 +217,7 @@ defmodule Electric.Shapes.ConsumerRegistry do
       fn ->
         case ShapeCache.start_consumer_for_handle(handle, stack_id) do
           {:ok, pid} ->
-            Logger.debug(fn -> ["Started consumer for existing handle ", handle] end)
+            Logger.debug("Started consumer for existing handle", shape_handle: handle)
 
             pid
 
