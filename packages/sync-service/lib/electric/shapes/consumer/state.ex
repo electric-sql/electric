@@ -1,6 +1,7 @@
 defmodule Electric.Shapes.Consumer.State do
   @moduledoc false
   alias Electric.Shapes.Consumer.MoveIns
+  alias Electric.Shapes.Consumer.SubqueryRuntime
   alias Electric.Shapes.Consumer.InitialSnapshot
   alias Electric.Shapes.Shape
   alias Electric.Replication.Eval.Parser
@@ -26,6 +27,7 @@ defmodule Electric.Shapes.Consumer.State do
     :writer,
     initial_snapshot_state: InitialSnapshot.new(nil),
     move_handling_state: MoveIns.new(),
+    subquery_runtime: SubqueryRuntime.new(),
     transaction_builder: TransactionBuilder.new(),
     buffer: [],
     txn_offset_mapping: [],

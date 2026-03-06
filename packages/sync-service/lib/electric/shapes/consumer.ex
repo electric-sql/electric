@@ -3,10 +3,10 @@ defmodule Electric.Shapes.Consumer do
 
   alias Electric.Shapes.Consumer.ChangeHandling
   alias Electric.Shapes.Consumer.InitialSnapshot
-  alias Electric.Shapes.Consumer.MoveHandling
-  alias Electric.Shapes.Consumer.MoveIns
   alias Electric.Shapes.Consumer.PendingTxn
   alias Electric.Shapes.Consumer.State
+  alias Electric.Shapes.Consumer.SubqueryRuntime
+  alias Electric.Shapes.Consumer.SubqueryView
 
   import Electric.Shapes.Consumer.State, only: :macros
   require Electric.Replication.LogOffset
@@ -297,12 +297,18 @@ defmodule Electric.Shapes.Consumer do
     if should_invalidate? do
       stop_and_clean(state)
     else
-      {state, notification} =
-        state
-        |> MoveHandling.process_move_ins(dep_handle, move_in)
-        |> MoveHandling.process_move_outs(dep_handle, move_out)
+      state =
+        SubqueryRuntime.queue_dependency_changes(
+          state,
+          dep_handle,
+          %{move_in: move_in, move_out: move_out}
+        )
 
-      :ok = notify_new_changes(state, notification)
+      {state, notifications} = SubqueryRuntime.process_queue(state)
+
+      Enum.each(notifications, fn notification ->
+        :ok = notify_new_changes(state, notification)
+      end)
 
       {:noreply, state}
     end
@@ -310,13 +316,7 @@ defmodule Electric.Shapes.Consumer do
 
   def handle_info({:pg_snapshot_known, name, snapshot}, state) do
     Logger.debug(fn -> "Snapshot known for move-in #{name}" end)
-
-    # Update the snapshot in waiting_move_ins
-    move_handling_state = MoveIns.set_snapshot(state.move_handling_state, name, snapshot)
-
-    # Garbage collect touches visible in all known snapshots
-    state = %{state | move_handling_state: move_handling_state}
-    state = State.gc_touch_tracker(state)
+    state = SubqueryRuntime.on_move_in_snapshot_known(state, name, snapshot)
 
     {:noreply, state, state.hibernate_after}
   end
@@ -326,11 +326,8 @@ defmodule Electric.Shapes.Consumer do
       "Consumer query move in complete for #{name} with #{length(key_set)} keys"
     end)
 
-    {state, notification} = MoveHandling.query_complete(state, name, key_set, snapshot)
-    :ok = notify_new_changes(state, notification)
-
-    # Garbage collect touches after query completes (no buffer consumption needed)
-    state = State.gc_touch_tracker(state)
+    {state, notifications} = SubqueryRuntime.on_move_in_complete(state, name, key_set, snapshot)
+    Enum.each(notifications, fn notification -> :ok = notify_new_changes(state, notification) end)
 
     {:noreply, state, state.hibernate_after}
   end
@@ -776,17 +773,14 @@ defmodule Electric.Shapes.Consumer do
     %{shape: shape, writer: writer} = state
 
     state = State.remove_completed_move_ins(state, txn)
+    {state, notifications} = SubqueryRuntime.process_queue(state)
 
-    extra_refs_full =
-      Materializer.get_all_as_refs(shape, state.stack_id)
+    Enum.each(notifications, fn notification ->
+      :ok = notify_new_changes(state, notification)
+    end)
 
-    extra_refs_before_move_ins =
-      Enum.reduce(state.move_handling_state.in_flight_values, extra_refs_full, fn {key, value},
-                                                                                  acc ->
-        if is_map_key(acc, key),
-          do: Map.update!(acc, key, &MapSet.difference(&1, value)),
-          else: acc
-      end)
+    {extra_refs_before_move_ins, extra_refs_full} =
+      SubqueryView.refs_for_txn(shape, state.stack_id, state.move_handling_state.in_flight_values)
 
     Logger.debug(fn -> "Extra refs: #{inspect(extra_refs_before_move_ins)}" end)
 
