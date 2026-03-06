@@ -186,6 +186,15 @@ defmodule Electric.ShapeCache.ShapeStatus do
     end)
   end
 
+  @spec fetch_shape_by_handle!(stack_id(), shape_handle()) :: Shape.t() | no_return()
+  def fetch_shape_by_handle!(stack_id, shape_handle)
+      when is_stack_id(stack_id) and is_shape_handle(shape_handle) do
+    case fetch_shape_by_handle(stack_id, shape_handle) do
+      {:ok, shape} -> shape
+      :error -> raise ArgumentError, message: "No shape found for handle #{inspect(shape_handle)}"
+    end
+  end
+
   def has_shape_handle?(stack_id, shape_handle) do
     :ets.member(shape_meta_table(stack_id), shape_handle)
   end
