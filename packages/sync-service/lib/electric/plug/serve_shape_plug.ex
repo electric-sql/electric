@@ -101,6 +101,10 @@ defmodule Electric.Plug.ServeShapePlug do
         Map.get(merged_params, "experimental_live_sse", "false"),
         &(&1 != "false")
       )
+      |> Map.put(
+        "electric_protocol_version",
+        Conn.get_req_header(conn, "electric-protocol-version") |> List.first()
+      )
 
     case Api.validate(api, all_params) do
       {:ok, request} ->
