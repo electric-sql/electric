@@ -3,4 +3,4 @@
 // Exposes the intent end-user CLI for consumers of this library.
 // Commit this file, then add to your package.json:
 //   "bin": { "intent": "./bin/intent.mjs" }
-await import('@tanstack/intent/intent-library')
+await import(`@tanstack/intent/intent-library`)
