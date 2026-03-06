@@ -692,6 +692,7 @@ defmodule Electric.Shapes.Api do
           Logger.error("Unknown error while creating snapshot",
             original_error: error.original_error
           )
+
           message = "Unexpected error while creating snapshot: " <> error.message
           Response.error(request, message, status: 500)
         else

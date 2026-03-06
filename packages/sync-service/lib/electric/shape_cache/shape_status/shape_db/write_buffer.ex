@@ -454,7 +454,9 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
             # `Query.mark_snapshot_complete` only returns `:error` if the query
             # modified 0 rows, i.e. the shape does not exist. Rather than crash
             # just warn as we can continue in this scenario.
-            Logger.warning("Unable to mark snapshot complete: shape does not exist", shape_handle: handle)
+            Logger.warning("Unable to mark snapshot complete: shape does not exist",
+              shape_handle: handle
+            )
           end
       end)
 

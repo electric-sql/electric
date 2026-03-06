@@ -147,6 +147,7 @@ defmodule Electric.ShapeCache do
             Logger.error("Failed to await snapshot start for shape: timeout",
               shape_handle: shape_handle
             )
+
             {:error, %RuntimeError{message: "Timed out while waiting for snapshot to start"}}
 
           :exit, {:noproc, _} ->
