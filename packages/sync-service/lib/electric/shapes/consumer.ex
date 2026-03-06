@@ -111,22 +111,18 @@ defmodule Electric.Shapes.Consumer do
     Logger.metadata(metadata)
     Electric.Telemetry.Sentry.set_tags_context(metadata)
 
-    {:ok, State.new(stack_id, shape_handle), {:continue, {:init_consumer, config}}}
+    shape = ShapeCache.ShapeStatus.deliver_shape!(stack_id, shape_handle)
+
+    {:ok, State.new(stack_id, shape_handle, shape), {:continue, {:init_consumer, config}}}
   end
 
   @impl GenServer
   def handle_continue({:init_consumer, config}, state) do
     %{
       stack_id: stack_id,
-      shape_handle: shape_handle
+      shape_handle: shape_handle,
+      shape: shape
     } = state
-
-    shape =
-      Map.get_lazy(config, :shape, fn ->
-        ShapeCache.ShapeStatus.fetch_shape_by_handle!(stack_id, shape_handle)
-      end)
-
-    state = State.initialize_shape(state, shape, config)
 
     stack_storage = ShapeCache.Storage.for_stack(stack_id)
     storage = ShapeCache.Storage.for_shape(shape_handle, stack_storage)

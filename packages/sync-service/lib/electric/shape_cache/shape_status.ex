@@ -48,6 +48,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
   @spec initialize(stack_id()) :: :ok | {:error, term()}
   def initialize(stack_id) when is_stack_id(stack_id) do
     create_shape_meta_table(stack_id)
+    create_shape_mailbox(stack_id)
 
     {:ok, invalid_handles, valid_shape_count} = ShapeDb.validate_existing_shapes(stack_id)
 
@@ -141,6 +142,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
     OpenTelemetry.with_span("shape_status.remove_shape", [], stack_id, fn ->
       with :ok <- ShapeDb.remove_shape(stack_id, shape_handle) do
         :ets.delete(shape_meta_table(stack_id), shape_handle)
+        :ets.delete(shape_mailbox(stack_id), shape_handle)
         :ok
       end
     end)
@@ -150,6 +152,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
   def reset(stack_id) when is_stack_id(stack_id) do
     :ok = ShapeDb.reset(stack_id)
     :ets.delete_all_objects(shape_meta_table(stack_id))
+    :ets.delete_all_objects(shape_mailbox(stack_id))
     :ok
   end
 
@@ -331,6 +334,58 @@ defmodule Electric.ShapeCache.ShapeStatus do
       :none ->
         {handles, largest_last_read}
     end
+  end
+
+  @spec post_shape(stack_id(), shape_handle(), Shape.t()) :: :ok | {:error, term()}
+  def post_shape(stack_id, shape_handle, shape) do
+    if :ets.insert_new(shape_mailbox(stack_id), {shape_handle, shape}) do
+      :ok
+    else
+      {:error, "Duplicate shape in mailbox: #{inspect(shape_handle)}"}
+    end
+  end
+
+  @spec deliver_shape!(stack_id(), shape_handle()) :: Shape.t() | no_return()
+  def deliver_shape!(stack_id, shape_handle) do
+    table = shape_mailbox(stack_id)
+
+    case :ets.lookup_element(table, shape_handle, 2, nil) do
+      nil ->
+        Logger.warning("Shape not available in mailbox: #{inspect(shape_handle)}")
+        # Fall back to the shapedb - mostly to support test scenarios since
+        # consumers are not restarted on error, so won't be re-retrieving the
+        # shape from the mailbox
+        case fetch_shape_by_handle(stack_id, shape_handle) do
+          {:ok, shape} ->
+            shape
+
+          :error ->
+            raise ArgumentError,
+              message: "Unable to retrieve shape for handle #{inspect(shape_handle)}"
+        end
+
+      %Shape{} = shape ->
+        :ets.delete(table, shape_handle)
+        shape
+    end
+  end
+
+  @spec shape_mailbox(stack_id()) :: atom()
+  defp shape_mailbox(stack_id),
+    do: :"shape_mailbox:#{stack_id}"
+
+  defp create_shape_mailbox(stack_id) do
+    table = shape_mailbox(stack_id)
+
+    :ets.new(table, [
+      :named_table,
+      :public,
+      :set,
+      read_concurrency: true,
+      write_concurrency: :auto
+    ])
+
+    table
   end
 
   @spec shape_meta_table(stack_id()) :: atom()
