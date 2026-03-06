@@ -1714,6 +1714,9 @@ importers:
         specifier: ^2.0.1
         version: 2.0.1(patch_hash=46f4e76dd960e002a542732bb4323817a24fce1673cb71e2f458fe09776fa188)
     devDependencies:
+      '@tanstack/intent':
+        specifier: ^0.0.9
+        version: 0.0.9
       '@types/pg':
         specifier: ^8.11.6
         version: 8.11.10
@@ -1794,6 +1797,9 @@ importers:
         specifier: ^13.6.6
         version: 13.6.26
     devDependencies:
+      '@tanstack/intent':
+        specifier: ^0.0.9
+        version: 0.0.9
       '@types/node':
         specifier: ^22.0.0
         version: 22.19.1
@@ -6594,6 +6600,10 @@ packages:
   '@tanstack/history@1.139.0':
     resolution: {integrity: sha512-l6wcxwDBeh/7Dhles23U1O8lp9kNJmAb2yNjekR6olZwCRNAVA8TCXlVCrueELyFlYZqvQkh0ofxnzG62A1Kkg==}
     engines: {node: '>=12'}
+
+  '@tanstack/intent@0.0.9':
+    resolution: {integrity: sha512-Ionw2sYSXlbg9AsA0iXDEo+kO75uzgKeX7B9YV6I2O9+CAYaqxblyM0ASIMGirqfv8NkHvBK4wb5zXjrqDUT+A==}
+    hasBin: true
 
   '@tanstack/pacer-lite@0.1.0':
     resolution: {integrity: sha512-a5A0PI0H4npUy7u3VOjOhdynXnRBna+mDvpt8ghDCVzS3Tgn8DlGzHlRqS2rKJP8ZcLuVO2qxlIIblhcoaiv8Q==}
@@ -21079,6 +21089,10 @@ snapshots:
 
   '@tanstack/history@1.139.0': {}
 
+  '@tanstack/intent@0.0.9':
+    dependencies:
+      yaml: 2.8.1
+
   '@tanstack/pacer-lite@0.1.0': {}
 
   '@tanstack/query-core@5.59.20': {}
@@ -28755,7 +28769,7 @@ snapshots:
   postcss-load-config@4.0.2(postcss@8.4.47):
     dependencies:
       lilconfig: 3.1.2
-      yaml: 2.6.0
+      yaml: 2.8.1
     optionalDependencies:
       postcss: 8.4.47
 
