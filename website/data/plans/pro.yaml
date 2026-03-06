@@ -1,0 +1,31 @@
+name: 'Pro'
+order: 20
+type: tier
+
+monthlyFee: 249
+discountPercent: 10
+priceQualifier: '/ month'
+
+limits:
+  maxDatabases: 50
+  streamTTL: 'User-defined'
+  concurrentReadersPerStream: 1000
+  maxUsersPerWorkspace: 50
+
+featureGates:
+  postgresSubqueries: true
+
+commitment: '6 months'
+support: 'Priority email'
+
+who: 'Lorem ipsum dolor sit amet'
+featuresTitle: 'Includes'
+features:
+  - 'Lorem ipsum'
+  - 'Lorem ipsum'
+  - 'Lorem ipsum'
+
+ctaText: 'Sign up now'
+ctaTextSmall: 'Sign up'
+ctaHref: 'https://dashboard.electric-sql.cloud?plan=pro'
+ctaTheme: 'brand'

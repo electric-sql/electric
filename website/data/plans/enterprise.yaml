@@ -1,0 +1,28 @@
+name: 'Enterprise'
+order: 50
+type: enterprise
+
+who: 'Lorem ipsum dolor sit amet'
+featuresTitle: 'Bespoke solutions'
+features:
+  - 'Lorem ipsum'
+  - 'Lorem ipsum'
+  - 'Lorem ipsum'
+
+limits:
+  maxDatabases: 'Unlimited'
+  streamTTL: 'Unlimited'
+  concurrentReadersPerStream: 'Unlimited'
+  maxUsersPerWorkspace: 'Unlimited'
+
+featureGates:
+  postgresSubqueries: true
+
+commitment: 'Custom'
+support: 'Custom'
+
+ctaText: 'Contact sales'
+ctaTextSmall: 'Contact'
+ctaHref: '/about/contact#sales'
+ctaTheme: 'alt'
+priceColor: 'ddn'

@@ -1,0 +1,15 @@
+name: 'Accelerate'
+order: 40
+type: service
+
+who: 'Lorem ipsum dolor sit amet'
+featuresTitle: 'Direct access'
+features:
+  - 'Lorem ipsum'
+  - 'Lorem ipsum'
+  - 'Lorem ipsum'
+
+ctaText: 'Contact sales'
+ctaHref: '/about/contact#sales'
+ctaTheme: 'alt'
+priceColor: 'ddn'
