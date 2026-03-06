@@ -45,7 +45,7 @@
   -
   
   ??[warning] Publication fatal misconfiguration: %Electric.DbConfigurationError{type: :publication_missing
-  ??[debug] Starting replication client for stack single_stack
+  ??[debug] Starting replication client
 
   -$fail_pattern
 

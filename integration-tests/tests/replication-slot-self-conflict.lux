@@ -35,7 +35,7 @@
   # it's blocked by the pending transaction.
   -Starting replication from postgres|$fail_pattern
 
-  ??[debug] Starting replication client for stack single_stack
+  ??[debug] Starting replication client
   ?lock_name=electric_slot_integration.*\[notice\] Acquiring lock from postgres
   ?slot_name=electric_slot_integration.*\[notice\] Lock acquired from postgres
   ??[debug] ReplicationClient step: create_slot
