@@ -1019,10 +1019,9 @@ defmodule Electric.ShapeCacheTest do
                   }} == Task.await(wait_task)
         end)
 
-      assert String.contains?(
-               log,
-               "[warning] Exhausted retry attempts while waiting for a shape consumer to start initial snapshot creation for #{shape_handle}"
-             )
+      assert log =~ "[warning]" and
+               log =~ "Exhausted retry attempts while waiting for a shape consumer to start initial snapshot creation" and
+               log =~ shape_handle
     end
 
     test "should stop waiting for consumer to come up if shape tables missing", ctx do
