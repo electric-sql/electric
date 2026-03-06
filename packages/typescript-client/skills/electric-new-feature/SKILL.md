@@ -77,15 +77,19 @@ CREATE TABLE todos (
 ALTER TABLE todos REPLICA IDENTITY FULL;
 ```
 
-### 2. Create proxy route (TanStack Start example)
+### 2. Create proxy route
+
+The proxy forwards Electric protocol params and injects server-side secrets. Use your framework's server route pattern (TanStack Start, Next.js API route, Express, etc.).
 
 ```ts
-import { createServerFileRoute } from '@tanstack/react-start/server'
+// Example: TanStack Start — src/routes/api/todos.ts
+import { createFileRoute } from '@tanstack/react-router'
 import { ELECTRIC_PROTOCOL_QUERY_PARAMS } from '@electric-sql/client'
 
 const serve = async ({ request }: { request: Request }) => {
   const url = new URL(request.url)
-  const origin = new URL(process.env.ELECTRIC_URL!)
+  const electricUrl = process.env.ELECTRIC_URL || 'http://localhost:3000'
+  const origin = new URL(`${electricUrl}/v1/shape`)
 
   url.searchParams.forEach((v, k) => {
     if (ELECTRIC_PROTOCOL_QUERY_PARAMS.includes(k))
@@ -93,8 +97,12 @@ const serve = async ({ request }: { request: Request }) => {
   })
 
   origin.searchParams.set('table', 'todos')
-  origin.searchParams.set('source_id', process.env.SOURCE_ID!)
-  origin.searchParams.set('secret', process.env.SOURCE_SECRET!)
+
+  // Add auth if using Electric Cloud
+  if (process.env.ELECTRIC_SOURCE_ID && process.env.ELECTRIC_SECRET) {
+    origin.searchParams.set('source_id', process.env.ELECTRIC_SOURCE_ID)
+    origin.searchParams.set('secret', process.env.ELECTRIC_SECRET)
+  }
 
   const res = await fetch(origin)
   const headers = new Headers(res.headers)
@@ -107,16 +115,65 @@ const serve = async ({ request }: { request: Request }) => {
   })
 }
 
-export const ServerRoute = createServerFileRoute('/api/todos').methods({
-  GET: serve,
+export const Route = createFileRoute('/api/todos')({
+  server: {
+    handlers: {
+      GET: serve,
+    },
+  },
 })
 ```
 
-### 3. Create TanStack DB collection
+### 3. Define schema
+
+```ts
+// db/schema.ts — Zod schema matching your Postgres table
+import { z } from 'zod'
+
+export const todoSchema = z.object({
+  id: z.string().uuid(),
+  user_id: z.string().uuid(),
+  text: z.string(),
+  completed: z.boolean(),
+  created_at: z.date(),
+})
+
+export type Todo = z.infer<typeof todoSchema>
+```
+
+If using Drizzle, generate schemas from your table definitions with `createSelectSchema(todosTable)` from `drizzle-zod`.
+
+### 4. Create mutation endpoint
+
+Implement your write endpoint using your framework's server function or API route. The endpoint must return `{ txid }` from the same transaction as the mutation.
+
+```ts
+// Example: server function that inserts and returns txid
+async function createTodo(todo: { text: string; user_id: string }) {
+  const client = await pool.connect()
+  try {
+    await client.query('BEGIN')
+    const result = await client.query(
+      'INSERT INTO todos (text, user_id) VALUES ($1, $2) RETURNING id',
+      [todo.text, todo.user_id]
+    )
+    const txResult = await client.query(
+      'SELECT pg_current_xact_id()::xid::text AS txid'
+    )
+    await client.query('COMMIT')
+    return { id: result.rows[0].id, txid: Number(txResult.rows[0].txid) }
+  } finally {
+    client.release()
+  }
+}
+```
+
+### 5. Create TanStack DB collection
 
 ```ts
 import { createCollection } from '@tanstack/react-db'
 import { electricCollectionOptions } from '@tanstack/electric-db-collection'
+import { todoSchema } from './db/schema'
 
 export const todoCollection = createCollection(
   electricCollectionOptions({
@@ -138,25 +195,31 @@ export const todoCollection = createCollection(
       },
     },
     onInsert: async ({ transaction }) => {
-      const newTodo = transaction.mutations[0].modified
-      const { txid } = await api.todos.create(newTodo)
-      return { txid }
+      const { modified: newTodo } = transaction.mutations[0]
+      const result = await createTodo({
+        text: newTodo.text,
+        user_id: newTodo.user_id,
+      })
+      return { txid: result.txid }
     },
     onUpdate: async ({ transaction }) => {
-      const updated = transaction.mutations[0].modified
-      const { txid } = await api.todos.update(updated)
-      return { txid }
+      const { modified: updated } = transaction.mutations[0]
+      const result = await updateTodo(updated.id, {
+        text: updated.text,
+        completed: updated.completed,
+      })
+      return { txid: result.txid }
     },
     onDelete: async ({ transaction }) => {
-      const deleted = transaction.mutations[0].modified
-      const { txid } = await api.todos.delete(deleted.id)
-      return { txid }
+      const { original: deleted } = transaction.mutations[0]
+      const result = await deleteTodo(deleted.id)
+      return { txid: result.txid }
     },
   })
 )
 ```
 
-### 4. Build live queries
+### 6. Build live queries
 
 ```tsx
 import { useLiveQuery, eq } from '@tanstack/react-db'
@@ -180,7 +243,7 @@ export function TodoList() {
 }
 ```
 
-### 5. Optimistic mutations
+### 7. Optimistic mutations
 
 ```tsx
 const handleAdd = () => {
