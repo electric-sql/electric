@@ -336,7 +336,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
   end
 
   def handle_info(msg, state) do
-    Logger.warning("Received unexpected message", msg: msg)
+    Logger.warning("Received unexpected message", unexpected_msg: msg)
     {:noreply, state}
   end
 

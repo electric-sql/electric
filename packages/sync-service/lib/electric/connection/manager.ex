@@ -985,8 +985,7 @@ defmodule Electric.Connection.Manager do
 
     Logger.warning("Connection manager is restarting after an error",
       connection_mode: connection_mode,
-      error_message: extended_message,
-      state: state
+      error_message: extended_message
     )
 
     dispatch_stack_event(
