@@ -358,6 +358,7 @@ defmodule Electric.ShapeCache do
     start_opts =
       opts
       |> Map.put(:shape_handle, shape_handle)
+      |> Map.put(:shape, shape)
       |> Map.put(:subqueries_enabled_for_stack?, "allow_subqueries" in feature_flags)
 
     case Shapes.DynamicConsumerSupervisor.start_shape_consumer(stack_id, start_opts) do

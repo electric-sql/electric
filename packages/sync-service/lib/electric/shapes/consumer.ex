@@ -121,7 +121,10 @@ defmodule Electric.Shapes.Consumer do
       shape_handle: shape_handle
     } = state
 
-    {:ok, shape} = ShapeCache.ShapeStatus.fetch_shape_by_handle(stack_id, shape_handle)
+    shape =
+      Map.get_lazy(config, :shape, fn ->
+        ShapeCache.ShapeStatus.fetch_shape_by_handle!(stack_id, shape_handle)
+      end)
 
     state = State.initialize_shape(state, shape, config)
 
