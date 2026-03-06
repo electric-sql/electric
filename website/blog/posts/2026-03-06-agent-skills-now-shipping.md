@@ -6,6 +6,8 @@ excerpt: >-
   We've been collaborating with the TanStack maintainers to ship agent skills directly in our npm packages. Update your dependencies and run one command to give your coding agent deep knowledge of Electric, TanStack DB, and Durable Streams.
 authors: [kyle]
 image: /img/blog/agent-skills-now-shipping/hero.png
+imageWidth: 2752
+imageHeight: 1536
 tags: [agentic, AI, development]
 outline: [2, 3]
 post: true
