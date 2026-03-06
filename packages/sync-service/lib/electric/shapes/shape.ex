@@ -692,6 +692,42 @@ defmodule Electric.Shapes.Shape do
 
   defp should_keep_change?(_), do: true
 
+  @doc """
+  Returns a slim copy of the shape suitable for Filter ETS storage.
+
+  Keeps only the fields accessed by Filter operations and resets
+  large unused fields (most notably `shape_dependencies` which may
+  contain full recursive Shape structs) to their defaults.
+
+  ## Maintenance note
+
+  If you add new fields to `Shape` and access them in `Electric.Shapes.Filter`
+  (e.g. in `add_shape/3`, `remove_shape/2`, `affected_shapes/2`, or
+  `is_affected_by_relation_change?/2`), you **must** also add those fields here.
+  Filter stores the result of this function in ETS, so any field not listed
+  below will be `nil` at filter evaluation time.
+
+  Fields currently accessed by Filter:
+  - `root_table` — table-condition routing and sublink index keys
+  - `root_table_id` — `is_affected_by_relation_change?/2`
+  - `where` — WHERE-clause evaluation and WhereCondition indexing
+  - `shape_dependencies_handles` — sublink dep-handle lookups
+  - `root_column_count` — `is_affected_by_relation_change?/2` column count check
+  - `flags` — `is_affected_by_relation_change?/2` selects_all_columns guard
+  - `selected_columns` — `is_affected_by_relation_change?/2` column intersection
+  """
+  def for_filter(%__MODULE__{} = shape) do
+    %__MODULE__{
+      root_table: shape.root_table,
+      root_table_id: shape.root_table_id,
+      where: shape.where,
+      shape_dependencies_handles: shape.shape_dependencies_handles,
+      root_column_count: shape.root_column_count,
+      flags: shape.flags,
+      selected_columns: shape.selected_columns
+    }
+  end
+
   # If neither oid nor schema/table name matches, then shape is not affected
   def is_affected_by_relation_change?(
         %__MODULE__{root_table_id: id1, root_table: {schema1, table1}},

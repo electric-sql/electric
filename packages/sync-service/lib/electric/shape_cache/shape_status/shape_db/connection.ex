@@ -11,7 +11,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
 
   @behaviour NimblePool
 
-  @schema_version 4
+  @schema_version 5
 
   @migration_sqls [
     """
@@ -31,9 +31,6 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
     """,
     """
     CREATE INDEX shapes_comparable_cover_idx ON shapes (comparable, handle)
-    """,
-    """
-    CREATE INDEX shapes_handle_cover_idx ON shapes (handle, shape, hash, snapshot_complete)
     """,
     """
     CREATE INDEX shapes_snapshot_idx ON shapes (snapshot_complete, handle)
@@ -394,9 +391,11 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
     # data to kernel, don't fsync) but for oss deploys we should keep it at a
     # higher durability setting
     synchronous: "OFF",
-    # Default to a beefy page cache size because we want decent read performance
-    # Multiplied by 1024, because SQLite works in KiB but we configure in bytes.
-    cache_size: 4096 * 1024
+    # Default page cache size per connection. Multiplied by 1024, because
+    # SQLite works in KiB but we configure in bytes. With 2*schedulers+1
+    # connections, total cache = this * connection_count. 2 MB balances
+    # memory savings with headroom for larger deployments.
+    cache_size: 2 * 1024 * 1024
   ]
 
   def default!(pragma) do

@@ -10,14 +10,15 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
 
   Two ETS tables are used:
 
-  1. **Operations table** (ordered_set) - queue of operations to flush to SQLite
+  1. **Operations table** (ordered_set) - queue of operations to flush to SQLite.
+     Operations reference shape handles; full shape data lives only in the shapes table.
   2. **Shapes table** (set) - buffered shapes, comparable index, and tombstones with namespaced keys
 
   ## How it works
 
   1. When a shape is added, insert into shapes table and queue :add operation
   2. When a shape is removed, insert tombstone and queue :remove operation
-  3. GenServer polls every 50ms and flushes pending operations to SQLite
+  3. GenServer polls every 100ms and flushes pending operations to SQLite
   4. After successful flush, clean up entries from shapes table
 
   ## Crash recovery
@@ -37,7 +38,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
   ## Shapes table key formats
 
   - `{:pending_count, integer}` - count of shapes pending addition
-  - `{{:shape, handle}, shape, comparable}` - shape data
+  - `{{:shape, handle}, shape, comparable, hash, relations}` - shape data
   - `{{:comparable, comparable}, handle}` - reverse index for O(1) lookup
   - `{{:tombstone, handle}, timestamp}` - handles marked for deletion
   """
@@ -101,7 +102,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
     shapes_table = shapes_table_name(stack_id)
 
     case :ets.lookup(shapes_table, {:shape, handle}) do
-      [{{:shape, ^handle}, shape, _comparable}] ->
+      [{{:shape, ^handle}, shape, _comparable, _hash, _relations}] ->
         if :ets.member(shapes_table, {:tombstone, handle}) do
           :not_found
         else
@@ -169,7 +170,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
     tombstones = tombstoned_handles(stack_id)
 
     shapes_table_name(stack_id)
-    |> :ets.match({{:shape, :"$1"}, :"$2", :_})
+    |> :ets.match({{:shape, :"$1"}, :"$2", :_, :_, :_})
     |> Enum.reject(fn [handle, _] -> MapSet.member?(tombstones, handle) end)
     |> Enum.map(fn [handle, shape] -> {handle, shape} end)
     |> Enum.sort_by(fn {handle, _} -> handle end)
@@ -183,13 +184,14 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
       tombstones = tombstoned_handles(stack_id)
       oids_set = relations |> Enum.map(fn {oid, _relation} -> oid end) |> MapSet.new()
 
-      operations_table_name(stack_id)
-      |> :ets.match({:_, {:add, :"$1", :_, :_, :_, :"$2"}, :_})
+      shapes_table_name(stack_id)
+      |> :ets.match({{:shape, :"$1"}, :_, :_, :_, :"$2"})
       |> Enum.filter(fn [handle, shape_relations] ->
         not MapSet.member?(tombstones, handle) and
           Enum.any?(shape_relations, fn {oid, _} -> MapSet.member?(oids_set, oid) end)
       end)
       |> Enum.map(fn [handle, _] -> handle end)
+      |> Enum.sort()
     end
   end
 
@@ -209,17 +211,13 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
     ts = op_key()
 
     if :ets.insert_new(shapes_table, [
-         {{:shape, handle}, shape, comparable},
+         {{:shape, handle}, shape, comparable, hash, relations},
          {{:comparable, comparable}, handle}
        ]) do
       :ets.update_counter(shapes_table, :count_add, 1)
 
-      # Queue operation for SQLite (contains full data including hash and relations)
-      true =
-        :ets.insert(
-          ops_table,
-          {ts, {:add, handle, shape, comparable, hash, relations}, false}
-        )
+      # Queue operation for SQLite - shape data is looked up from shapes table during flush
+      true = :ets.insert(ops_table, {ts, {:add, handle}, false})
 
       :ok
     else
@@ -236,7 +234,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
     case :ets.insert_new(shapes_table, {{:tombstone, handle}, ts}) do
       true ->
         case :ets.lookup(shapes_table, {:shape, handle}) do
-          [{{:shape, ^handle}, _shape, comparable}] ->
+          [{{:shape, ^handle}, _shape, comparable, _hash, _relations}] ->
             :ets.delete(shapes_table, {:comparable, comparable})
 
           [] ->
@@ -376,13 +374,26 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
       [entry_count: length(entries)],
       stack_id,
       fn ->
-        case do_batch_write(stack_id, entries) do
+        case do_batch_write(stack_id, entries, shapes_table) do
           :ok ->
             Enum.each(entries, fn {ts, op} ->
               case op do
-                {:add, handle, _shape, comparable, _hash, _relations} ->
+                {:add, handle} ->
+                  # NOTE: This is a second ETS lookup for the same handle (first is in
+                  # do_batch_write above). The two lookups serve different purposes:
+                  # do_batch_write reads shape data to write to SQLite, while this one
+                  # reads the comparable key to clean up the ETS index after a successful
+                  # flush. We could consolidate by collecting comparables during the batch
+                  # write, but the cost of a same-process ETS lookup is negligible.
+                  case :ets.lookup(shapes_table, {:shape, handle}) do
+                    [{{:shape, ^handle}, _shape, comparable, _hash, _relations}] ->
+                      :ets.delete(shapes_table, {:comparable, comparable})
+
+                    [] ->
+                      :ok
+                  end
+
                   :ets.delete(shapes_table, {:shape, handle})
-                  :ets.delete(shapes_table, {:comparable, comparable})
                   :ets.update_counter(shapes_table, :count_add, {2, -1, 0, 0})
                   {:add, handle}
 
@@ -429,11 +440,19 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
     end
   end
 
-  defp do_batch_write(stack_id, entries) do
+  defp do_batch_write(stack_id, entries, shapes_table) do
     Connection.checkout_write!(stack_id, :batch_write, fn conn ->
       Enum.each(entries, fn
-        {_ts, {:add, handle, shape, comparable, hash, relations}} ->
-          :ok = Query.add_shape(conn, handle, shape, comparable, hash, relations)
+        {_ts, {:add, handle}} ->
+          # Look up full shape data from shapes table
+          case :ets.lookup(shapes_table, {:shape, handle}) do
+            [{{:shape, ^handle}, shape, comparable, hash, relations}] ->
+              :ok = Query.add_shape(conn, handle, shape, comparable, hash, relations)
+
+            [] ->
+              # Shape was removed before flush - skip (the :remove op will follow)
+              Logger.debug("Shape #{inspect(handle)} removed before flush, skipping add")
+          end
 
         {_ts, {:remove, handle}} ->
           case Query.remove_shape(conn, handle) do
