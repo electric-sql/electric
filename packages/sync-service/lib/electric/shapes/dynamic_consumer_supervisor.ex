@@ -59,7 +59,10 @@ defmodule Electric.Shapes.DynamicConsumerSupervisor do
 
     routing_key = :erlang.phash2(shape_handle)
 
-    Logger.debug("Starting child for shape", child_module: child_module, shape_handle: shape_handle)
+    Logger.debug("Starting child for shape",
+      child_module: child_module,
+      shape_handle: shape_handle
+    )
 
     DynamicSupervisor.start_child(
       {:via, PartitionSupervisor, {name(supervisor_ref), routing_key}},

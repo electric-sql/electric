@@ -1020,7 +1020,8 @@ defmodule Electric.ShapeCacheTest do
         end)
 
       assert log =~ "[warning]" and
-               log =~ "Exhausted retry attempts while waiting for a shape consumer to start initial snapshot creation" and
+               log =~
+                 "Exhausted retry attempts while waiting for a shape consumer to start initial snapshot creation" and
                log =~ shape_handle
     end
 

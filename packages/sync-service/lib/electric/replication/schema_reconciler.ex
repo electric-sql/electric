@@ -85,9 +85,11 @@ defmodule Electric.Replication.SchemaReconciler do
     # If it fails, we'll just try again next time, so no additional retries are implemented
     type, reason ->
       st = __STACKTRACE__
+
       Logger.error("Schema reconciliation failed",
         error: Exception.format(type, reason, st)
       )
+
       :error
   end
 

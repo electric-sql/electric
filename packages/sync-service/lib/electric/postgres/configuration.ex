@@ -143,6 +143,7 @@ defmodule Electric.Postgres.Configuration do
       ) do
     {_oid, relation} = oid_relation
     table = Utils.relation_to_sql(relation)
+
     Logger.debug("Removing table from publication",
       table: table,
       publication_name: publication_name
