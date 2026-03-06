@@ -56,63 +56,97 @@ defmodule Electric.Shapes.Consumer.ChangeHandling do
         acc,
         count
       ) do
-    if not change_visible_in_resolved_move_ins?(change, state, ctx) and
-         not change_will_be_covered_by_move_in?(change, state, ctx) do
-      case Shape.convert_change(shape, change,
-             stack_id: stack_id,
-             shape_handle: shape_handle,
-             extra_refs: ctx.extra_refs
-           ) do
-        [] ->
-          do_process_changes(rest, state, ctx, acc, count)
+    case decide_action_for_change(change, state, ctx) do
+      {false, false} ->
+        do_process_changes(rest, state, ctx, acc, count)
 
-        [change] ->
-          state = State.track_change(state, ctx.xid, change)
-          do_process_changes(rest, state, ctx, [change | acc], count + 1)
-      end
-    else
-      do_process_changes(rest, state, ctx, acc, count)
-    end
-  end
+      {false, true} ->
+        state = shadow_key(state, ctx.xid, change)
+        do_process_changes(rest, state, ctx, acc, count)
 
-  defp change_visible_in_resolved_move_ins?(change, state, ctx) do
-    Consumer.MoveIns.change_already_visible?(state.move_handling_state, ctx.xid, change)
-  end
+      {true, shadow?} ->
+        case Shape.convert_change(shape, change,
+               stack_id: stack_id,
+               shape_handle: shape_handle,
+               extra_refs: ctx.extra_refs
+             ) do
+          [] ->
+            state = if shadow?, do: shadow_key(state, ctx.xid, change), else: state
+            do_process_changes(rest, state, ctx, acc, count)
 
-  defp change_will_be_covered_by_move_in?(%Changes.DeletedRecord{}, _, _), do: false
-
-  defp change_will_be_covered_by_move_in?(change, state, ctx) do
-    # First check if the new record's sublink values are in pending move-ins
-    referenced_values = get_referenced_values(change, state)
-
-    if change_visible_in_unresolved_move_ins_for_values?(referenced_values, state, ctx) do
-      # For UpdatedRecords where the sublink value changed, we must NOT skip the change.
-      # The move-in query will return this row as an INSERT, which doesn't carry
-      # removed_move_tags. Without the tag transition from the WAL change, the client
-      # will retain the old tag, causing the row to not be properly cleaned up on
-      # subsequent move-outs.
-      if is_struct(change, Changes.UpdatedRecord) and
-           sublink_value_changed?(change, state) do
-        false
-      else
-        # Even if the sublink value is in a pending move-in, we should only skip
-        # this change if the new record actually matches the full WHERE clause.
-        # The move-in query uses the full WHERE clause, so if the record doesn't
-        # match other non-subquery conditions in the WHERE clause, the move-in
-        # won't return this row and we need to process this change normally.
-        case ctx.extra_refs do
-          {_extra_refs_old, extra_refs_new} ->
-            WhereClause.includes_record?(state.shape.where, change.record, extra_refs_new)
-
-          _ ->
-            # If extra_refs is not a tuple (e.g., empty map in tests), fall back to
-            # the old behavior of skipping the change
-            true
+          [converted] ->
+            state = State.track_change(state, ctx.xid, converted)
+            state = if shadow?, do: shadow_key(state, ctx.xid, change), else: state
+            do_process_changes(rest, state, ctx, [converted | acc], count + 1)
         end
+    end
+  end
+
+  # Returns {emit :: boolean(), shadow :: boolean()} telling the caller whether to
+  # write the WAL change to the log and whether to record the key in touch_tracker
+  # so that move-in results skip this key.
+  @spec decide_action_for_change(Changes.change(), State.t(), map()) ::
+          {boolean(), boolean()}
+
+  # 1. Already visible in RESOLVED (filtering) move-ins → skip entirely
+  defp decide_action_for_change(change, state, ctx) do
+    if Consumer.MoveIns.change_already_visible?(state.move_handling_state, ctx.xid, change) do
+      {false, false}
+    else
+      decide_action_for_change_inner(change, state, ctx)
+    end
+  end
+
+  # 2. DELETE: always emit, shadow if old sublink value is in any waiting move-in
+  defp decide_action_for_change_inner(%Changes.DeletedRecord{} = change, state, _ctx) do
+    old_in_mi? = old_value_in_pending_move_in?(change, state)
+    {true, old_in_mi?}
+  end
+
+  # 3/4. INSERT or UPDATE
+  defp decide_action_for_change_inner(change, state, ctx) do
+    referenced_values = get_referenced_values(change, state)
+    new_in_mi? = change_visible_in_unresolved_move_ins_for_values?(referenced_values, state, ctx)
+
+    sublink_changed? =
+      is_struct(change, Changes.UpdatedRecord) and sublink_value_changed?(change, state)
+
+    if sublink_changed? do
+      # Case 4: UPDATE with sublink change
+      old_in_mi? = old_value_in_pending_move_in?(change, state)
+
+      if new_in_mi? do
+        # New value is in a pending move-in — can we skip?
+        if change_covered_by_known_snapshot?(referenced_values, state, ctx) and
+             where_clause_matches?(change, state, ctx) do
+          {false, old_in_mi?}
+        else
+          {true, old_in_mi?}
+        end
+      else
+        # New value NOT in any pending move-in
+        {true, old_in_mi?}
       end
     else
-      false
+      # Case 3: INSERT or UPDATE without sublink change
+      if new_in_mi? and where_clause_matches?(change, state, ctx) do
+        {false, false}
+      else
+        {true, false}
+      end
     end
+  end
+
+  defp where_clause_matches?(change, state, %{extra_refs: {_old, extra_refs_new}}) do
+    # The move-in query uses the full WHERE clause. If the record doesn't match
+    # non-subquery conditions, the move-in won't return this row.
+    WhereClause.includes_record?(state.shape.where, change.record, extra_refs_new)
+  end
+
+  defp where_clause_matches?(_change, _state, _ctx) do
+    # If extra_refs is not a tuple (e.g., empty map in tests), fall back to
+    # the old behavior of skipping the change
+    true
   end
 
   defp sublink_value_changed?(
@@ -134,8 +168,39 @@ defmodule Electric.Shapes.Consumer.ChangeHandling do
     end)
   end
 
+  defp get_referenced_values_from_old(%{old_record: old_record}, state) do
+    state.shape.subquery_comparison_expressions
+    |> Map.new(fn {path, expr} ->
+      {:ok, value} = Runner.execute_for_record(expr, old_record)
+      {path, value}
+    end)
+  end
+
+  defp old_value_in_pending_move_in?(change, state) do
+    old_values = get_referenced_values_from_old(change, state)
+    MoveIns.values_in_any_pending_move_in?(state.move_handling_state, old_values)
+  end
+
+  defp shadow_key(%State{move_handling_state: move_handling_state} = state, xid, %{key: key}) do
+    %{
+      state
+      | move_handling_state: %{
+          move_handling_state
+          | touch_tracker: Map.put(move_handling_state.touch_tracker, key, xid)
+        }
+    }
+  end
+
   defp change_visible_in_unresolved_move_ins_for_values?(referenced_values, state, ctx) do
     MoveIns.change_visible_in_unresolved_move_ins_for_values?(
+      state.move_handling_state,
+      referenced_values,
+      ctx.xid
+    )
+  end
+
+  defp change_covered_by_known_snapshot?(referenced_values, state, ctx) do
+    MoveIns.change_covered_by_known_snapshot?(
       state.move_handling_state,
       referenced_values,
       ctx.xid

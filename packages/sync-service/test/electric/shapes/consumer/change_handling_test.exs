@@ -1,6 +1,7 @@
 defmodule Electric.Shapes.Consumer.ChangeHandlingTest do
   use ExUnit.Case, async: true
 
+  alias Electric.Replication.Changes.DeletedRecord
   alias Electric.Replication.Changes.NewRecord
   alias Electric.Replication.Changes.UpdatedRecord
   alias Electric.Replication.LogOffset
@@ -381,6 +382,57 @@ defmodule Electric.Shapes.Consumer.ChangeHandlingTest do
       assert processed.removed_move_tags != []
     end
 
+    test "skips UpdatedRecord with changed sublink value when move-in covers the change and WHERE matches",
+         %{state: state} do
+      # Bug: when the sublink value changes (e.g., parent_id 2→3), the code
+      # unconditionally processes the change even when the move-in covers it.
+      # Per algorithm: if move-in covers + WHERE matches → skip [2].
+      # Without the skip, we get INSERT from convert_change AND INSERT from
+      # move-in results → double INSERT invariant violation.
+
+      # Move-in for parent_id=3 with KNOWN snapshot
+      move_handling_state =
+        MoveIns.new()
+        |> MoveIns.add_waiting(
+          "move-in-for-parent-3",
+          {["$sublink", "0"], MapSet.new([3])}
+        )
+        |> MoveIns.set_snapshot("move-in-for-parent-3", {963, 963, []})
+
+      state = %{state | move_handling_state: move_handling_state}
+
+      # parent_id changes from 5 (not in any linked set) to 3 (in pending move-in)
+      # xid=962 is visible in snapshot {963,963,[]} → covered by move-in
+      change = %UpdatedRecord{
+        relation: {"public", "users"},
+        old_record: %{"id" => "10", "parent_id" => "5", "value" => "hello"},
+        record: %{"id" => "10", "parent_id" => "3", "value" => "hello"},
+        log_offset: LogOffset.new(12345, 0),
+        key: "\"public\".\"users\"/\"10\"",
+        changed_columns: MapSet.new(["parent_id"])
+      }
+
+      # extra_refs: old has nothing (parent_id=5 not in linked set),
+      # new has {3} from the pending move-in
+      ctx = %{
+        xid: 962,
+        extra_refs:
+          {%{["$sublink", "0"] => MapSet.new([])}, %{["$sublink", "0"] => MapSet.new([3])}}
+      }
+
+      {filtered_changes, _state, count, _offset} =
+        ChangeHandling.process_changes([change], state, ctx)
+
+      # Per algorithm (case b): old value (5) NOT in linked set, new value (3)
+      # in pending move-in. Move-in covers this change (xid=962 visible in
+      # snapshot {963,963,[]}). Record matches WHERE clause (parent_id=3 is in
+      # the sublink set {3}). Therefore: skip [2].
+      # If not skipped: convert_change produces INSERT + move-in produces INSERT
+      # = double INSERT invariant violation.
+      assert filtered_changes == []
+      assert count == 0
+    end
+
     test "skips UpdatedRecord when sublink value is unchanged and in a pending move-in",
          %{state: state} do
       # Only a non-sublink field changes — the move-in will return the row with
@@ -414,6 +466,241 @@ defmodule Electric.Shapes.Consumer.ChangeHandlingTest do
 
       assert filtered_changes == []
       assert count == 0
+    end
+  end
+
+  describe "process_changes/3 delete shadowing (Gap 1)" do
+    setup [:with_stack_id_from_test]
+
+    setup %{stack_id: stack_id} do
+      shape =
+        Shape.new!("users", where: "parent_id IN (SELECT id FROM users)", inspector: @inspector)
+
+      state = State.new(stack_id, "test-handle", shape)
+      %{state: state, shape: shape}
+    end
+
+    test "DELETE with old parent_id in pending move-in shadows the key", %{state: state} do
+      # Gap 1: Deletes were never shadowed. A move-in could re-insert the deleted row.
+      # Fix: DELETE always emits, and shadows if old sublink value is in a pending move-in.
+      move_handling_state =
+        MoveIns.new()
+        |> MoveIns.add_waiting(
+          "move-in-for-parent-5",
+          {["$sublink", "0"], MapSet.new([5])}
+        )
+
+      state = %{state | move_handling_state: move_handling_state}
+
+      change = %DeletedRecord{
+        relation: {"public", "users"},
+        old_record: %{"id" => "10", "parent_id" => "5", "value" => "hello"},
+        log_offset: LogOffset.new(12345, 0),
+        key: "\"public\".\"users\"/\"10\""
+      }
+
+      ctx = %{
+        xid: 962,
+        extra_refs:
+          {%{["$sublink", "0"] => MapSet.new([5])}, %{["$sublink", "0"] => MapSet.new([])}},
+        num_changes: 1
+      }
+
+      {filtered_changes, new_state, count, _offset} =
+        ChangeHandling.process_changes([change], state, ctx)
+
+      # DELETE should always be emitted
+      assert count == 1
+      assert [%DeletedRecord{}] = filtered_changes
+
+      # Key should be in touch_tracker because old parent_id=5 is in a pending move-in
+      assert Map.has_key?(new_state.move_handling_state.touch_tracker, change.key)
+      assert new_state.move_handling_state.touch_tracker[change.key] == 962
+    end
+
+    test "DELETE with old parent_id NOT in any pending move-in does not shadow", %{state: state} do
+      move_handling_state =
+        MoveIns.new()
+        |> MoveIns.add_waiting(
+          "move-in-for-parent-5",
+          {["$sublink", "0"], MapSet.new([5])}
+        )
+
+      state = %{state | move_handling_state: move_handling_state}
+
+      # old parent_id=7, not in any move-in
+      change = %DeletedRecord{
+        relation: {"public", "users"},
+        old_record: %{"id" => "10", "parent_id" => "7", "value" => "hello"},
+        log_offset: LogOffset.new(12345, 0),
+        key: "\"public\".\"users\"/\"10\""
+      }
+
+      ctx = %{
+        xid: 962,
+        extra_refs:
+          {%{["$sublink", "0"] => MapSet.new([7])}, %{["$sublink", "0"] => MapSet.new([])}},
+        num_changes: 1
+      }
+
+      {filtered_changes, new_state, count, _offset} =
+        ChangeHandling.process_changes([change], state, ctx)
+
+      # DELETE should still be emitted
+      assert count == 1
+      assert [%DeletedRecord{}] = filtered_changes
+
+      # But key should NOT be in touch_tracker since old value is not in any move-in
+      refute Map.has_key?(new_state.move_handling_state.touch_tracker, change.key)
+    end
+  end
+
+  describe "process_changes/3 old value shadowing (Gap 2)" do
+    setup [:with_stack_id_from_test]
+
+    setup %{stack_id: stack_id} do
+      shape =
+        Shape.new!("users", where: "parent_id IN (SELECT id FROM users)", inspector: @inspector)
+
+      state = State.new(stack_id, "test-handle", shape)
+      %{state: state, shape: shape}
+    end
+
+    test "UPDATE old_sl→new_sl, old in MI(A), new in linked set: emit + shadow", %{
+      state: state
+    } do
+      # Gap 2a: old value is in move-in A, new value is in the linked set (not a move-in).
+      # The update is emitted, AND we shadow because move-in A would return stale row.
+      move_handling_state =
+        MoveIns.new()
+        |> MoveIns.add_waiting(
+          "move-in-for-parent-2",
+          {["$sublink", "0"], MapSet.new([2])}
+        )
+
+      state = %{state | move_handling_state: move_handling_state}
+
+      # parent_id changes from 2 (in move-in A) to 1 (in linked set, not in any move-in)
+      change = %UpdatedRecord{
+        relation: {"public", "users"},
+        old_record: %{"id" => "10", "parent_id" => "2", "value" => "hello"},
+        record: %{"id" => "10", "parent_id" => "1", "value" => "hello"},
+        log_offset: LogOffset.new(12345, 0),
+        key: "\"public\".\"users\"/\"10\"",
+        changed_columns: MapSet.new(["parent_id"])
+      }
+
+      # new parent_id=1 is already in the linked set (extra_refs_new has 1),
+      # but NOT in any pending move-in. old parent_id=2 IS in pending move-in.
+      ctx = %{
+        xid: 962,
+        extra_refs:
+          {%{["$sublink", "0"] => MapSet.new([1, 2])}, %{["$sublink", "0"] => MapSet.new([1, 2])}}
+      }
+
+      {filtered_changes, new_state, count, _offset} =
+        ChangeHandling.process_changes([change], state, ctx)
+
+      # Should emit the change (new value not in any move-in)
+      assert count == 1
+      assert length(filtered_changes) == 1
+
+      # Should shadow because old parent_id=2 is in pending move-in A
+      assert Map.has_key?(new_state.move_handling_state.touch_tracker, change.key)
+    end
+
+    test "UPDATE old_sl→X, old in MI(A), new not in anything: nothing emitted + shadow", %{
+      state: state
+    } do
+      # Gap 2b: old value is in move-in A, new value is NOT in the linked set.
+      # convert_change produces nothing (or DELETE), but we still shadow for move-in A.
+      move_handling_state =
+        MoveIns.new()
+        |> MoveIns.add_waiting(
+          "move-in-for-parent-2",
+          {["$sublink", "0"], MapSet.new([2])}
+        )
+
+      state = %{state | move_handling_state: move_handling_state}
+
+      # parent_id changes from 2 (in move-in A) to 99 (not in linked set at all)
+      change = %UpdatedRecord{
+        relation: {"public", "users"},
+        old_record: %{"id" => "10", "parent_id" => "2", "value" => "hello"},
+        record: %{"id" => "10", "parent_id" => "99", "value" => "hello"},
+        log_offset: LogOffset.new(12345, 0),
+        key: "\"public\".\"users\"/\"10\"",
+        changed_columns: MapSet.new(["parent_id"])
+      }
+
+      # old parent_id=2 in move-in. new parent_id=99 not in any linked set.
+      # extra_refs_old has {2}, extra_refs_new has {2} (move-in still active)
+      # but parent_id=99 doesn't match anything
+      ctx = %{
+        xid: 962,
+        extra_refs:
+          {%{["$sublink", "0"] => MapSet.new([2])}, %{["$sublink", "0"] => MapSet.new([2])}}
+      }
+
+      {_filtered_changes, new_state, _count, _offset} =
+        ChangeHandling.process_changes([change], state, ctx)
+
+      # Key should be shadowed regardless of whether convert_change produced output,
+      # because old parent_id=2 was in pending move-in A
+      assert Map.has_key?(new_state.move_handling_state.touch_tracker, change.key)
+    end
+
+    test "UPDATE cross-move-in: old in A, new in B (B covers, A doesn't): skip + shadow", %{
+      state: state
+    } do
+      # Gap 2c: old value in move-in A (not covered), new value in move-in B (covered + WHERE matches).
+      # B covers → skip the WAL change. A doesn't cover → shadow for A.
+      # Result: {false, true}
+
+      # Move-in A for parent_id=2 — no snapshot yet (not covered)
+      # Move-in B for parent_id=3 — known snapshot covering xid=962
+      move_handling_state =
+        MoveIns.new()
+        |> MoveIns.add_waiting(
+          "move-in-A-for-parent-2",
+          {["$sublink", "0"], MapSet.new([2])}
+        )
+        |> MoveIns.add_waiting(
+          "move-in-B-for-parent-3",
+          {["$sublink", "0"], MapSet.new([3])}
+        )
+        |> MoveIns.set_snapshot("move-in-B-for-parent-3", {963, 963, []})
+
+      state = %{state | move_handling_state: move_handling_state}
+
+      # parent_id changes from 2 (in move-in A) to 3 (in move-in B)
+      change = %UpdatedRecord{
+        relation: {"public", "users"},
+        old_record: %{"id" => "10", "parent_id" => "2", "value" => "hello"},
+        record: %{"id" => "10", "parent_id" => "3", "value" => "hello"},
+        log_offset: LogOffset.new(12345, 0),
+        key: "\"public\".\"users\"/\"10\"",
+        changed_columns: MapSet.new(["parent_id"])
+      }
+
+      # xid=962 is visible in B's snapshot {963, 963, []} → B covers this change
+      # A has nil snapshot → A doesn't cover
+      ctx = %{
+        xid: 962,
+        extra_refs:
+          {%{["$sublink", "0"] => MapSet.new([2])}, %{["$sublink", "0"] => MapSet.new([2, 3])}}
+      }
+
+      {filtered_changes, new_state, count, _offset} =
+        ChangeHandling.process_changes([change], state, ctx)
+
+      # B covers + WHERE matches → skip the WAL change
+      assert filtered_changes == []
+      assert count == 0
+
+      # A doesn't cover old value → shadow the key for move-in A
+      assert Map.has_key?(new_state.move_handling_state.touch_tracker, change.key)
+      assert new_state.move_handling_state.touch_tracker[change.key] == 962
     end
   end
 end
