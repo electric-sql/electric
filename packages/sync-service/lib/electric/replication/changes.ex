@@ -182,7 +182,15 @@ defmodule Electric.Replication.Changes do
   end
 
   defmodule NewRecord do
-    defstruct [:relation, :record, :log_offset, :key, last?: false, move_tags: []]
+    defstruct [
+      :relation,
+      :record,
+      :log_offset,
+      :key,
+      last?: false,
+      move_tags: [],
+      active_conditions: nil
+    ]
 
     @type t() :: %__MODULE__{
             relation: Changes.relation_name(),
@@ -190,7 +198,8 @@ defmodule Electric.Replication.Changes do
             log_offset: LogOffset.t(),
             key: String.t() | nil,
             last?: boolean(),
-            move_tags: [Changes.tag()]
+            move_tags: [Changes.tag()],
+            active_conditions: [boolean()] | nil
           }
   end
 
@@ -205,7 +214,8 @@ defmodule Electric.Replication.Changes do
       move_tags: [],
       removed_move_tags: [],
       changed_columns: MapSet.new(),
-      last?: false
+      last?: false,
+      active_conditions: nil
     ]
 
     @type t() :: %__MODULE__{
@@ -218,7 +228,8 @@ defmodule Electric.Replication.Changes do
             move_tags: [Changes.tag()],
             removed_move_tags: [Changes.tag()],
             changed_columns: MapSet.t(),
-            last?: boolean()
+            last?: boolean(),
+            active_conditions: [boolean()] | nil
           }
 
     def new(attrs) do
@@ -254,7 +265,15 @@ defmodule Electric.Replication.Changes do
   end
 
   defmodule DeletedRecord do
-    defstruct [:relation, :old_record, :log_offset, :key, move_tags: [], last?: false]
+    defstruct [
+      :relation,
+      :old_record,
+      :log_offset,
+      :key,
+      move_tags: [],
+      last?: false,
+      active_conditions: nil
+    ]
 
     @type t() :: %__MODULE__{
             relation: Changes.relation_name(),
@@ -262,7 +281,8 @@ defmodule Electric.Replication.Changes do
             log_offset: LogOffset.t(),
             key: String.t() | nil,
             move_tags: [Changes.tag()],
-            last?: boolean()
+            last?: boolean(),
+            active_conditions: [boolean()] | nil
           }
   end
 
@@ -412,7 +432,8 @@ defmodule Electric.Replication.Changes do
       relation: change.relation,
       record: change.record,
       key: change.key,
-      log_offset: change.log_offset
+      log_offset: change.log_offset,
+      active_conditions: change.active_conditions
     }
   end
 
@@ -422,7 +443,8 @@ defmodule Electric.Replication.Changes do
       old_record: change.old_record,
       key: change.old_key || change.key,
       log_offset: change.log_offset,
-      move_tags: change.move_tags
+      move_tags: change.move_tags,
+      active_conditions: change.active_conditions
     }
   end
 
