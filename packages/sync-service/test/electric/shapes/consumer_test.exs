@@ -168,13 +168,12 @@ defmodule Electric.Shapes.ConsumerTest do
               {Shapes.Consumer,
                %{
                  shape_handle: shape_handle,
-                 stack_id: ctx.stack_id,
-                 # inspector: {Mock.Inspector, []},
-                 otel_ctx: nil,
-                 action: :create
+                 stack_id: ctx.stack_id
                }},
               id: {Shapes.Consumer, shape_handle}
             )
+
+          Shapes.Consumer.initialize_shape(consumer, shape, %{action: :create, otel_ctx: nil})
 
           assert_receive {Support.TestStorage, :init_writer!, ^shape_handle, ^shape}
 

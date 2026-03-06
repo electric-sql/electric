@@ -165,6 +165,9 @@ defmodule Electric.Shapes.Consumer.State do
 
   @spec initialize_shape(uninitialized_t(), Shape.t(), map()) :: uninitialized_t()
   def initialize_shape(%__MODULE__{} = state, shape, opts) do
+    feature_flags = Map.get(opts, :feature_flags, [])
+    is_subquery_shape? = Map.get(opts, :is_subquery_shape?, false)
+
     %{
       state
       | shape: shape,
@@ -173,8 +176,8 @@ defmodule Electric.Shapes.Consumer.State do
         # Enable direct fragment-to-storage streaming for shapes without subquery dependencies
         # and if the current shape itself isn't an inner shape of a shape with subqueries.
         write_unit:
-          if Map.get(opts, :subqueries_enabled_for_stack?, false) or
-               shape.shape_dependencies != [] or Map.get(opts, :is_subquery_shape?, false) do
+          if "allow_subqueries" in feature_flags or shape.shape_dependencies != [] or
+               is_subquery_shape? do
             @write_unit_txn
           else
             @write_unit_txn_fragment
