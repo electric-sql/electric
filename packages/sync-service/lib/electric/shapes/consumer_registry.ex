@@ -73,20 +73,59 @@ defmodule Electric.Shapes.ConsumerRegistry do
     :ets.insert_new(table, [{shape_handle, pid}])
   end
 
-  @spec publish(%{shape_handle() => term()}, t()) :: :ok
+  @doc """
+  Publishes events to consumers, starting new ones if needed.
+
+  Returns a `MapSet` of shape handles where delivery permanently failed
+  (e.g. the shape was removed between event routing and delivery).
+  An empty `MapSet` means all events were delivered successfully.
+  """
+  @spec publish(%{shape_handle() => term()}, t()) :: MapSet.t(shape_handle())
   def publish(events_by_handle, _registry_state) when events_by_handle == %{} do
-    :ok
+    MapSet.new()
   end
 
   def publish(events_by_handle, registry_state) do
     %{table: table} = registry_state
 
-    events_by_handle
-    |> Enum.map(fn {handle, event} ->
-      {handle, event, consumer_pid(handle, table) || start_consumer!(handle, registry_state)}
+    handle_event_pids =
+      Enum.map(events_by_handle, fn {handle, event} ->
+        {handle, event, consumer_pid(handle, table) || start_consumer!(handle, registry_state)}
+      end)
+
+    # Handles with nil PIDs are permanently undeliverable (shape was removed).
+    undeliverable =
+      for {handle, _event, nil} <- handle_event_pids, into: MapSet.new(), do: handle
+
+    if MapSet.size(undeliverable) > 0 do
+      Logger.warning(fn ->
+        ["Undeliverable events for removed shapes: ", inspect(MapSet.to_list(undeliverable))]
+      end)
+    end
+
+    retry_handles = broadcast(handle_event_pids)
+
+    # Clean up dead consumer PIDs from ETS before retrying.
+    # When a consumer crashes (non-suspend DOWN), broadcast returns the handle
+    # for retry, but the dead PID is still in ETS. We must remove it so that
+    # the recursive publish call triggers start_consumer! for a fresh consumer.
+    Enum.each(retry_handles, fn {handle, _event} ->
+      case consumer_pid(handle, table) do
+        nil ->
+          :ok
+
+        pid ->
+          unless Process.alive?(pid) do
+            :ets.delete(table, handle)
+
+            Logger.warning(fn ->
+              "Removed dead consumer for shape #{handle}, starting replacement"
+            end)
+          end
+      end
     end)
-    |> broadcast()
-    |> publish(registry_state)
+
+    MapSet.union(undeliverable, publish(retry_handles, registry_state))
   end
 
   @spec remove_consumer(shape_handle(), t()) :: :ok
@@ -146,7 +185,9 @@ defmodule Electric.Shapes.ConsumerRegistry do
           [{handle, event}]
 
         {:DOWN, ^ref, _, _, _reason} ->
-          []
+          # Consumer crashed — return for retry so publish/2 can clean up
+          # the dead PID from ETS and start a replacement consumer.
+          [{handle, event}]
       end
     end)
     |> Map.new()
@@ -154,9 +195,9 @@ defmodule Electric.Shapes.ConsumerRegistry do
       map when map == %{} ->
         :ok
 
-      suspended_handles ->
+      retry_handles ->
         Logger.debug(fn ->
-          ["Re-trying suspended shape handles ", inspect(Map.keys(suspended_handles))]
+          ["Re-trying shape handles ", inspect(Map.keys(retry_handles))]
         end)
     end)
   end

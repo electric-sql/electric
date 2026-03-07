@@ -163,6 +163,58 @@ defmodule Electric.Replication.ShapeLogCollector.FlushTrackerTest do
     end
   end
 
+  describe "dead consumer blocks flush advancement" do
+    test "a shape that never flushes permanently blocks last_global_flushed_offset", %{
+      tracker: tracker
+    } do
+      # Simulate: two shapes affected by txn at lsn 5
+      tracker =
+        FlushTracker.handle_txn_fragment(tracker, batch(lsn: 5, last_offset: 10), [
+          "alive_shape",
+          "dead_shape"
+        ])
+
+      # alive_shape flushes normally
+      tracker =
+        FlushTracker.handle_flush_notification(tracker, "alive_shape", LogOffset.new(5, 10))
+
+      # dead_shape never flushes (simulates dead consumer)
+      # Global offset should NOT advance to lsn 5
+      refute_receive {:flush_confirmed, 5}, 50
+
+      # Even subsequent transactions with no affected shapes can't unstick it
+      tracker = FlushTracker.handle_txn_fragment(tracker, batch(lsn: 6, last_offset: 10), [])
+      refute_receive {:flush_confirmed, 6}, 50
+
+      # The tracker is NOT empty - it's stuck on dead_shape
+      refute FlushTracker.empty?(tracker)
+
+      # Only handle_shape_removed can unstick it
+      _tracker = FlushTracker.handle_shape_removed(tracker, "dead_shape")
+      assert_receive {:flush_confirmed, 6}
+    end
+
+    test "a single dead shape blocks advancement even when many shapes flush", %{
+      tracker: tracker
+    } do
+      shapes = for i <- 1..100, do: "shape_#{i}"
+      all_shapes = ["dead_shape" | shapes]
+
+      tracker =
+        FlushTracker.handle_txn_fragment(tracker, batch(lsn: 10, last_offset: 10), all_shapes)
+
+      # All 100 live shapes flush
+      tracker =
+        Enum.reduce(shapes, tracker, fn shape, acc ->
+          FlushTracker.handle_flush_notification(acc, shape, LogOffset.new(10, 10))
+        end)
+
+      # Global offset still blocked by the single dead shape
+      refute_receive {:flush_confirmed, 10}, 50
+      refute FlushTracker.empty?(tracker)
+    end
+  end
+
   describe "handle_shape_removed/2" do
     test "should notify immediately when last shape catches up", %{tracker: tracker} do
       tracker =
