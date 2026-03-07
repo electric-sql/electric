@@ -49,6 +49,7 @@ defmodule Electric.LogItems do
            }
            |> put_if_true(:last, change.last?)
            |> put_if_true(:tags, change.move_tags != [], change.move_tags)
+           |> put_if_true(:active_conditions, change.active_conditions)
        }}
     ]
   end
@@ -69,6 +70,7 @@ defmodule Electric.LogItems do
            }
            |> put_if_true(:last, change.last?)
            |> put_if_true(:tags, change.move_tags != [], change.move_tags)
+           |> put_if_true(:active_conditions, change.active_conditions)
        }}
     ]
   end
@@ -90,6 +92,7 @@ defmodule Electric.LogItems do
            |> put_if_true(:last, change.last?)
            |> put_if_true(:tags, change.move_tags != [], change.move_tags)
            |> put_if_true(:removed_tags, change.move_tags != [], change.removed_move_tags)
+           |> put_if_true(:active_conditions, change.active_conditions)
        }
        |> Map.merge(put_update_values(change, pk_cols, replica))}
     ]
@@ -117,6 +120,7 @@ defmodule Electric.LogItems do
              change.move_tags != [],
              change.move_tags ++ change.removed_move_tags
            )
+           |> put_if_true(:active_conditions, change.active_conditions)
        }},
       {new_offset,
        %{
@@ -133,6 +137,7 @@ defmodule Electric.LogItems do
            }
            |> put_if_true(:last, change.last?)
            |> put_if_true(:tags, change.move_tags != [], change.move_tags)
+           |> put_if_true(:active_conditions, change.active_conditions)
        }}
     ]
   end
