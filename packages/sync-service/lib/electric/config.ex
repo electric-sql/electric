@@ -93,6 +93,13 @@ defmodule Electric.Config do
     # "The maximum number of requests to serve in a single HTTP/{1,2}
     # connection before closing the connection"
     conn_max_requests: 50,
+    # Sets fullsweep_after for Bandit handler processes.
+    # Bandit reuses handler processes across requests (capped by conn_max_requests).
+    # These processes can accumulate garbage on the old heap since BEAM's generational
+    # GC only does fullsweep after a certain number of minor collections. This setting
+    # forces a fullsweep after N minor collections to reclaim that memory.
+    # See https://www.erlang.org/doc/apps/erts/erlang.html#spawn_opt/4
+    handler_fullsweep_after: nil,
     ## Performance tweaks
     publication_alter_debounce_ms: 0,
     # allow for configuring per-process `Process.spawn_opt()`. In the form
