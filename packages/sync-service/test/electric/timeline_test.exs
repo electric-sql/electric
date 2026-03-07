@@ -90,7 +90,7 @@ defmodule Electric.TimelineTest do
 
       assert capture_log(fn ->
                assert :timeline_changed = Timeline.check(pg_timeline, opts)
-             end) =~ "Detected PITR to timeline"
+             end) =~ "Detected PITR"
 
       assert ^pg_timeline = Timeline.load_timeline(opts)
     end

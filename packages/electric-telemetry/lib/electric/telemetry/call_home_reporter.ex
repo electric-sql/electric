@@ -157,7 +157,8 @@ defmodule ElectricTelemetry.CallHomeReporter do
       rescue
         e ->
           Logger.warning(
-            "Reporter function failed while trying to send telemetry data.\nError: #{Exception.format(:error, e, __STACKTRACE__)}"
+            "Reporter function failed while trying to send telemetry data",
+            error: Exception.format(:error, e, __STACKTRACE__)
           )
 
           state

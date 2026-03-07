@@ -139,7 +139,7 @@ defmodule Electric.Shapes.Consumer do
     state = State.initialize(state, storage, writer)
 
     if all_materializers_alive?(state) && subscribe(state, config.action) do
-      Logger.debug("Writer for #{shape_handle} initialized")
+      Logger.debug("Writer initialized", shape_handle: shape_handle)
 
       # We start the snapshotter even if there's a snapshot because it also performs the call
       # to PublicationManager.add_shape/3. We *could* do that call here and avoid spawning a
@@ -190,7 +190,7 @@ defmodule Electric.Shapes.Consumer do
   end
 
   def handle_call(:await_snapshot_start, from, state) do
-    Logger.debug("Starting a wait on the snapshot #{state.shape_handle} for #{inspect(from)}}")
+    Logger.debug("Starting a wait on the snapshot", shape_handle: state.shape_handle, from: from)
 
     {:noreply, State.add_waiter(state, from), state.hibernate_after}
   end
@@ -208,7 +208,7 @@ defmodule Electric.Shapes.Consumer do
   end
 
   def handle_call({:subscribe_materializer, pid}, _from, state) do
-    Logger.debug("Subscribing materializer for #{state.shape_handle}")
+    Logger.debug("Subscribing materializer", shape_handle: state.shape_handle)
     Process.monitor(pid, tag: :materializer_down)
 
     {:reply, {:ok, state.latest_offset}, %{state | materializer_subscribed?: true},
@@ -225,15 +225,18 @@ defmodule Electric.Shapes.Consumer do
         {:pg_snapshot_known, shape_handle, {xmin, xmax, xip_list} = snapshot},
         %{shape_handle: shape_handle} = state
       ) do
-    Logger.debug(
-      "Snapshot known for shape_handle: #{shape_handle} xmin: #{xmin}, xmax: #{xmax}, xip_list: #{inspect(xip_list)}"
+    Logger.debug("Snapshot known",
+      shape_handle: shape_handle,
+      xmin: xmin,
+      xmax: xmax,
+      xip_list: xip_list
     )
 
     {:noreply, State.set_initial_snapshot(state, snapshot), {:continue, :consume_buffer}}
   end
 
   def handle_cast({:snapshot_started, shape_handle}, %{shape_handle: shape_handle} = state) do
-    Logger.debug("Snapshot started shape_handle: #{shape_handle}")
+    Logger.debug("Snapshot started", shape_handle: shape_handle)
     {:noreply, State.mark_snapshot_started(state), state.hibernate_after}
   end
 
@@ -275,9 +278,11 @@ defmodule Electric.Shapes.Consumer do
         {:materializer_changes, dep_handle, %{move_in: move_in, move_out: move_out}},
         state
       ) do
-    Logger.debug(fn ->
-      "Consumer reacting to #{length(move_in)} move ins and #{length(move_out)} move outs from its #{dep_handle} dependency"
-    end)
+    Logger.debug("Consumer reacting to move ins and move outs from its dependency",
+      move_in_count: length(move_in),
+      move_out_count: length(move_out),
+      dep_handle: dep_handle
+    )
 
     feature_flags = Electric.StackConfig.lookup(state.stack_id, :feature_flags, [])
     tagged_subqueries_enabled? = "tagged_subqueries" in feature_flags
@@ -309,7 +314,7 @@ defmodule Electric.Shapes.Consumer do
   end
 
   def handle_info({:pg_snapshot_known, name, snapshot}, state) do
-    Logger.debug(fn -> "Snapshot known for move-in #{name}" end)
+    Logger.debug("Snapshot known for move-in", name: name)
 
     # Update the snapshot in waiting_move_ins
     move_handling_state = MoveIns.set_snapshot(state.move_handling_state, name, snapshot)
@@ -322,9 +327,7 @@ defmodule Electric.Shapes.Consumer do
   end
 
   def handle_info({:query_move_in_complete, name, key_set, snapshot}, state) do
-    Logger.debug(fn ->
-      "Consumer query move in complete for #{name} with #{length(key_set)} keys"
-    end)
+    Logger.debug("Consumer query move in complete", name: name, key_count: length(key_set))
 
     {state, notification} = MoveHandling.query_complete(state, name, key_set, snapshot)
     :ok = notify_new_changes(state, notification)
@@ -336,8 +339,9 @@ defmodule Electric.Shapes.Consumer do
   end
 
   def handle_info({:query_move_in_error, _, error, stacktrace}, state) do
-    Logger.error(
-      "Error querying move in for #{state.shape_handle}: #{Exception.format(:error, error, stacktrace)}"
+    Logger.error("Error querying move in",
+      shape_handle: state.shape_handle,
+      error: Exception.format(:error, error, stacktrace)
     )
 
     reraise(error, stacktrace)
@@ -347,21 +351,25 @@ defmodule Electric.Shapes.Consumer do
   end
 
   def handle_info({:materializer_shape_invalidated, shape_handle}, state) do
-    Logger.warning("Materializer shape invalidated for #{shape_handle}")
+    Logger.warning("Materializer shape invalidated", shape_handle: shape_handle)
     stop_and_clean(state)
   end
 
   def handle_info({:materializer_down, _ref, :process, pid, reason}, state) do
-    Logger.warning(
-      "Materializer down for consumer: #{state.shape_handle} (#{inspect(pid)}) (#{inspect(reason)})"
+    Logger.warning("Materializer down for consumer",
+      shape_handle: state.shape_handle,
+      pid: pid,
+      reason: reason
     )
 
     handle_materializer_down(reason, state)
   end
 
   def handle_info({{:dependency_materializer_down, handle}, _ref, :process, pid, reason}, state) do
-    Logger.warning(
-      "Materializer down for a dependency: #{handle} (#{inspect(pid)}) (#{inspect(reason)})"
+    Logger.warning("Materializer down for a dependency",
+      dependency_handle: handle,
+      pid: pid,
+      reason: reason
     )
 
     Materializer.delete_link_values(state.stack_id, handle)
@@ -373,7 +381,7 @@ defmodule Electric.Shapes.Consumer do
   # otherwise we respect the OTP exit protocol. Since nothing is linked to the consumer
   # we shouldn't see this...
   def handle_info({:EXIT, _pid, reason}, state) do
-    Logger.error("Caught EXIT: #{inspect(reason)}")
+    Logger.error("Caught EXIT", reason: reason)
     {:stop, reason, state}
   end
 
@@ -395,7 +403,7 @@ defmodule Electric.Shapes.Consumer do
     #   b. we don't have a materializer subscribed
 
     if consumer_suspend_enabled?(state) and consumer_can_suspend?(state) do
-      Logger.debug(fn -> ["Suspending consumer ", to_string(state.shape_handle)] end)
+      Logger.debug("Suspending consumer", shape_handle: state.shape_handle)
       {:stop, ShapeCleaner.consumer_suspend_reason(), state}
     else
       state = %{state | writer: ShapeCache.Storage.hibernate(state.writer)}
@@ -415,15 +423,16 @@ defmodule Electric.Shapes.Consumer do
 
   @impl GenServer
   def terminate(reason, state) do
-    Logger.debug(fn ->
-      case reason do
-        {error, stacktrace} when is_tuple(error) and is_list(stacktrace) ->
-          "Shapes.Consumer terminating with reason: #{Exception.format(:error, error, stacktrace)}"
+    Logger.debug("Shapes.Consumer terminating",
+      reason:
+        case reason do
+          {error, stacktrace} when is_tuple(error) and is_list(stacktrace) ->
+            Exception.format(:error, error, stacktrace)
 
-        other ->
-          "Shapes.Consumer terminating with reason: #{inspect(other)}"
-      end
-    end)
+          other ->
+            other
+        end
+    )
 
     # Clean up this shape's link-values ETS entry. This consumer may itself be
     # a dep shape; removing the entry prevents stale cached values from persisting
@@ -445,8 +454,9 @@ defmodule Electric.Shapes.Consumer do
   defp handle_event(%Changes.Relation{}, state) do
     %{shape: %Shape{root_table_id: root_table_id, root_table: root_table}} = state
 
-    Logger.notice(
-      "Schema for the table #{Utils.inspect_relation(root_table)} changed - terminating shape #{state.shape_handle}"
+    Logger.notice("Schema for the table changed - terminating shape",
+      root_table: Utils.inspect_relation(root_table),
+      shape_handle: state.shape_handle
     )
 
     # We clean up the relation info from ETS as it has changed and we want
@@ -461,7 +471,7 @@ defmodule Electric.Shapes.Consumer do
   end
 
   defp handle_event(%TransactionFragment{} = txn_fragment, state) do
-    Logger.debug(fn -> "Txn fragment received in Shapes.Consumer: #{inspect(txn_fragment)}" end)
+    Logger.debug("Txn fragment received in Shapes.Consumer", txn_fragment: txn_fragment)
     handle_txn_fragment(txn_fragment, state)
   end
 
@@ -566,7 +576,7 @@ defmodule Electric.Shapes.Consumer do
             state
 
           [txn] ->
-            Logger.debug(fn -> "Txn assembled in Shapes.Consumer: #{inspect(txn)}" end)
+            Logger.debug("Txn assembled in Shapes.Consumer", txn: txn)
             handle_txn(txn, %{state | pending_txn: nil})
         end
 
@@ -610,9 +620,7 @@ defmodule Electric.Shapes.Consumer do
         handle_txn_with_truncate(xid, state)
 
       {[], 0} ->
-        Logger.debug(fn ->
-          "No relevant changes found for #{inspect(shape)} in txn fragment of txn #{xid}"
-        end)
+        Logger.debug("No relevant changes found in txn fragment", shape: shape, xid: xid)
 
         state
 
@@ -719,9 +727,10 @@ defmodule Electric.Shapes.Consumer do
         Map.new(State.telemetry_attrs(state))
       )
 
-      Logger.debug(fn ->
-        "Processed the final fragment for transaction xid=#{txn.xid}, total_changes=#{txn.num_changes}"
-      end)
+      Logger.debug("Processed the final fragment for transaction",
+        xid: txn.xid,
+        total_changes: txn.num_changes
+      )
 
       %{
         state
@@ -731,9 +740,7 @@ defmodule Electric.Shapes.Consumer do
             state.txn_offset_mapping ++ [{state.latest_offset, txn_fragment.last_log_offset}]
       }
     else
-      Logger.debug(fn ->
-        "No relevant changes written in transaction xid=#{txn.xid}"
-      end)
+      Logger.debug("No relevant changes written in transaction", xid: txn.xid)
 
       state = %{state | pending_txn: nil}
       consider_flushed(state, txn_fragment.last_log_offset)
@@ -741,7 +748,7 @@ defmodule Electric.Shapes.Consumer do
   end
 
   def process_buffered_txn_fragments(%State{buffer: buffer} = state) do
-    Logger.debug(fn -> "Consumer catching up on #{length(buffer)} transaction fragments" end)
+    Logger.debug("Consumer catching up on transaction fragments", count: length(buffer))
     {txn_fragments, state} = State.pop_buffered(state)
 
     Enum.reduce_while(txn_fragments, state, fn txn_fragment, state ->
@@ -788,7 +795,7 @@ defmodule Electric.Shapes.Consumer do
           else: acc
       end)
 
-    Logger.debug(fn -> "Extra refs: #{inspect(extra_refs_before_move_ins)}" end)
+    Logger.debug("Extra refs", extra_refs: extra_refs_before_move_ins)
 
     case ChangeHandling.process_changes(
            changes,
@@ -799,9 +806,7 @@ defmodule Electric.Shapes.Consumer do
         handle_txn_with_truncate(txn.xid, state)
 
       {_, state, 0, _} ->
-        Logger.debug(fn ->
-          "No relevant changes found for #{inspect(shape)} in txn #{txn.xid}"
-        end)
+        Logger.debug("No relevant changes found in txn", shape: shape, xid: txn.xid)
 
         consider_flushed(state, txn.last_log_offset)
 
@@ -847,8 +852,9 @@ defmodule Electric.Shapes.Consumer do
     # TODO: This is a very naive way to handle truncations: if ANY relevant truncates are
     #       present in the transaction, we're considering the whole transaction empty, and
     #       just rotate the shape handle. "Correct" way to handle truncates is to be designed.
-    Logger.warning(
-      "Truncate operation encountered while processing txn #{xid} for #{state.shape_handle}"
+    Logger.warning("Truncate operation encountered while processing txn",
+      xid: xid,
+      shape_handle: state.shape_handle
     )
 
     mark_for_removal(state)
@@ -879,9 +885,10 @@ defmodule Electric.Shapes.Consumer do
       Electric.StackSupervisor.registry_name(state.stack_id),
       state.shape_handle,
       fn registered ->
-        Logger.debug(fn ->
-          "Notifying ~#{length(registered)} clients about new changes to #{state.shape_handle}"
-        end)
+        Logger.debug("Notifying clients about new changes",
+          client_count: length(registered),
+          shape_handle: state.shape_handle
+        )
 
         for {pid, ref} <- registered,
             do: send(pid, {ref, :new_changes, latest_log_offset})
@@ -1000,8 +1007,9 @@ defmodule Electric.Shapes.Consumer do
         true
 
       {:error, error} ->
-        Logger.warning(
-          "Shape #{state.shape_handle} cannot subscribe due to #{inspect(error)} - invalidating shape"
+        Logger.warning("Shape cannot subscribe - invalidating shape",
+          shape_handle: state.shape_handle,
+          error: error
         )
 
         false
@@ -1023,8 +1031,9 @@ defmodule Electric.Shapes.Consumer do
         true
       else
         _ ->
-          Logger.warning(
-            "Materializer for #{shape_handle} is not alive, invalidating shape #{state.shape_handle}"
+          Logger.warning("Materializer is not alive, invalidating shape",
+            materializer_shape_handle: shape_handle,
+            shape_handle: state.shape_handle
           )
 
           false

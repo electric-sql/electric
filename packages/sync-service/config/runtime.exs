@@ -21,7 +21,31 @@ config :logger, level: log_level
 config :logger, :default_formatter,
   # Doubled line breaks serve as long message boundaries
   format: "\n$time $metadata[$level] $message\n",
-  metadata: [:pid, :shape_handle, :request_id],
+  metadata: [
+    :pid,
+    :shape_handle,
+    :request_id,
+    :error,
+    :reason,
+    :path,
+    :db_path,
+    :lsn,
+    :query,
+    :delay_ms,
+    :timeout_ms,
+    :duration_ms,
+    :schema,
+    :table,
+    :role,
+    :count,
+    :lock_name,
+    :slot_name,
+    :query_string,
+    :idle_time_s,
+    :connection_mode,
+    :err_msg,
+    :host
+  ],
   colors: [enabled: env!("ELECTRIC_LOG_COLORS", :boolean!, true)]
 
 # Enable this to get **very noisy** but useful messages from BEAM about
@@ -357,7 +381,24 @@ if Electric.telemetry_enabled?() do
              received_transaction_lsn: "received.transaction.lsn",
              publication_alter_drop_tables: "publication.alter.drop_tables",
              publication_alter_add_tables: "publication.alter.add_tables",
-             publication_alter_set_tables: "publication.alter.set_tables"
+             publication_alter_set_tables: "publication.alter.set_tables",
+             error: "error",
+             reason: "reason",
+             path: "file.path",
+             db_path: "db.path",
+             lsn: "pg.lsn",
+             query: "db.query",
+             delay_ms: "retry.delay_ms",
+             timeout_ms: "timeout_ms",
+             duration_ms: "duration_ms",
+             schema: "db.schema",
+             table: "db.table",
+             role: "connection.role",
+             count: "count",
+             slot_name: "pg.slot_name",
+             lock_name: "pg.lock_name",
+             timeline_id: "pg.timeline_id",
+             pg_id: "pg.id"
            }
          }
        }}

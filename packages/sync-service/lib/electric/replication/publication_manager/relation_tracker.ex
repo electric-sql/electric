@@ -311,7 +311,7 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
         {:noreply, state, state.publication_refresh_period}
 
       status ->
-        Logger.debug("Publication update skipped due to inactive stack: #{inspect(status)}")
+        Logger.debug("Publication update skipped due to inactive stack", status: status)
         {:noreply, state}
     end
   end
@@ -357,7 +357,7 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
          state
        ) do
     if is_handle_tracked?(shape_handle, state) do
-      Logger.debug("Shape handle already tracked: #{inspect(shape_handle)}")
+      Logger.debug("Shape handle already tracked", shape_handle: shape_handle)
       state
     else
       state = Map.update!(state, :oid_to_relation, &Map.put_new(&1, oid, relation))
@@ -373,7 +373,7 @@ defmodule Electric.Replication.PublicationManager.RelationTracker do
       state = untrack_shape_handle(shape_handle, state)
       do_update_relation_filters(rel_key, :remove, state)
     else
-      Logger.debug("Shape handle already not tracked: #{inspect(shape_handle)}")
+      Logger.debug("Shape handle already not tracked", shape_handle: shape_handle)
       state
     end
   end

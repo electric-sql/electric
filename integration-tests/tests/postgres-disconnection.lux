@@ -22,8 +22,8 @@
 
 ## Observe the connection error.
 [shell electric]
-  ??[warning] Database connection in replication mode failed
-  ??[warning] Reconnecting in 
+  ?connection_mode=replication.*\[warning\] Database connection failed
+  ?delay_ms=.*\[warning\] Reconnecting
 
 ## Start the Postgres container back up.
 [invoke resume_pg]

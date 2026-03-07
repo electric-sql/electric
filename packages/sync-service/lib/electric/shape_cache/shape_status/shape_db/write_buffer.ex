@@ -326,7 +326,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
   end
 
   def handle_info(msg, state) do
-    Logger.warning("Received unexpected message #{inspect(msg)}")
+    Logger.warning("Received unexpected message", unexpected_msg: msg)
     {:noreply, state}
   end
 
@@ -440,7 +440,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
             {:error, {:enoshape, ^handle}} ->
               # tried to delete a shape that doesn't exist, in which case the
               # failure is ok, it's already deleted
-              Logger.warning("Attempt to delete non-existent shape #{inspect(handle)}")
+              Logger.warning("Attempt to delete non-existent shape", shape_handle: handle)
 
             :ok ->
               :ok
@@ -454,7 +454,9 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
             # `Query.mark_snapshot_complete` only returns `:error` if the query
             # modified 0 rows, i.e. the shape does not exist. Rather than crash
             # just warn as we can continue in this scenario.
-            Logger.warning("Unable to mark snapshot complete: #{handle} does not exist")
+            Logger.warning("Unable to mark snapshot complete: shape does not exist",
+              shape_handle: handle
+            )
           end
       end)
 
