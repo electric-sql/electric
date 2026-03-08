@@ -341,67 +341,56 @@ defmodule Electric.Replication.ShapeLogCollector do
       ) do
     OpenTelemetry.with_span(
       "shape_log_collector.handle_shape_registration_updates",
-      [],
+      [
+        shapes_to_add_count: Enum.count(shapes_to_add),
+        shapes_to_remove_count: Enum.count(shapes_to_remove)
+      ],
       state.stack_id,
       fn ->
         {state, results} =
           shapes_to_remove
           |> Enum.reduce({state, %{}}, fn shape_handle, {state, results} ->
-            OpenTelemetry.with_span(
-              "shape_log_collector.unsubscribe",
-              [shape_handle: shape_handle],
-              state.stack_id,
-              fn ->
-                case remove_subscription(state, shape_handle) do
-                  {:ok, state} -> {state, Map.put(results, shape_handle, :ok)}
-                  {:error, reason} -> {state, Map.put(results, shape_handle, {:error, reason})}
-                end
-              end
-            )
+            case remove_subscription(state, shape_handle) do
+              {:ok, state} -> {state, Map.put(results, shape_handle, :ok)}
+              {:error, reason} -> {state, Map.put(results, shape_handle, {:error, reason})}
+            end
           end)
 
         {state, results} =
           shapes_to_add
           |> Enum.reduce({state, results}, fn {shape_handle, shape}, {state, results} ->
-            OpenTelemetry.with_span(
-              "shape_log_collector.subscribe",
-              [shape_handle: shape_handle],
-              state.stack_id,
-              fn ->
-                case Partitions.add_shape(state.partitions, shape_handle, shape) do
-                  {:ok, partitions} ->
-                    case DependencyLayers.add_dependency(
-                           state.dependency_layers,
-                           shape,
-                           shape_handle
-                         ) do
-                      {:ok, dependency_layers} ->
-                        state =
-                          %{
-                            state
-                            | partitions: partitions,
-                              event_router:
-                                EventRouter.add_shape(state.event_router, shape_handle, shape),
-                              dependency_layers: dependency_layers
-                          }
-                          |> Map.update!(:subscriptions, &(&1 + 1))
-                          |> log_subscription_status()
+            case Partitions.add_shape(state.partitions, shape_handle, shape) do
+              {:ok, partitions} ->
+                case DependencyLayers.add_dependency(
+                       state.dependency_layers,
+                       shape,
+                       shape_handle
+                     ) do
+                  {:ok, dependency_layers} ->
+                    state =
+                      %{
+                        state
+                        | partitions: partitions,
+                          event_router:
+                            EventRouter.add_shape(state.event_router, shape_handle, shape),
+                          dependency_layers: dependency_layers
+                      }
+                      |> Map.update!(:subscriptions, &(&1 + 1))
+                      |> log_subscription_status()
 
-                        {state, Map.put(results, shape_handle, :ok)}
+                    {state, Map.put(results, shape_handle, :ok)}
 
-                      {:error, {:missing_dependencies, missing_deps}} ->
-                        Logger.warning(
-                          "Shape #{shape_handle} cannot be added: missing dependencies #{inspect(MapSet.to_list(missing_deps))}"
-                        )
+                  {:error, {:missing_dependencies, missing_deps}} ->
+                    Logger.warning(
+                      "Shape #{shape_handle} cannot be added: missing dependencies #{inspect(MapSet.to_list(missing_deps))}"
+                    )
 
-                        {state, Map.put(results, shape_handle, {:error, :missing_dependencies})}
-                    end
-
-                  {:error, :connection_not_available} ->
-                    {state, Map.put(results, shape_handle, {:error, :connection_not_available})}
+                    {state, Map.put(results, shape_handle, {:error, :missing_dependencies})}
                 end
-              end
-            )
+
+              {:error, :connection_not_available} ->
+                {state, Map.put(results, shape_handle, {:error, :connection_not_available})}
+            end
           end)
 
         __MODULE__.RequestBatcher.handle_processor_update_response(
