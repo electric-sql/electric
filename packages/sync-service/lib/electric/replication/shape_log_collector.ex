@@ -342,8 +342,8 @@ defmodule Electric.Replication.ShapeLogCollector do
     OpenTelemetry.with_span(
       "shape_log_collector.handle_shape_registration_updates",
       [
-        shapes_to_add_count: length(shapes_to_add),
-        shapes_to_remove_count: length(shapes_to_remove)
+        shapes_to_add_count: Enum.count(shapes_to_add),
+        shapes_to_remove_count: Enum.count(shapes_to_remove)
       ],
       state.stack_id,
       fn ->
