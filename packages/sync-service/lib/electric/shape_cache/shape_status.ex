@@ -210,15 +210,13 @@ defmodule Electric.ShapeCache.ShapeStatus do
   @spec validate_shape_handle(stack_id(), shape_handle(), Shape.t()) :: :ok | :error
   def validate_shape_handle(stack_id, shape_handle, %Shape{} = shape)
       when is_stack_id(stack_id) do
-    OpenTelemetry.with_child_span("shape_status.validate_shape_handle", [], stack_id, fn ->
-      case :ets.lookup(shape_meta_table(stack_id), shape_handle) do
-        [{^shape_handle, hash, _snapshot_started, _last_read}] ->
-          if Shape.hash(shape) == hash, do: :ok, else: :error
+    case :ets.lookup(shape_meta_table(stack_id), shape_handle) do
+      [{^shape_handle, hash, _snapshot_started, _last_read}] ->
+        if Shape.hash(shape) == hash, do: :ok, else: :error
 
-        [] ->
-          :error
-      end
-    end)
+      [] ->
+        :error
+    end
   end
 
   @spec mark_snapshot_started(stack_id(), shape_handle()) :: :ok | :error
