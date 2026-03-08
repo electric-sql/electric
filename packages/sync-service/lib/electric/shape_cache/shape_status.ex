@@ -131,9 +131,14 @@ defmodule Electric.ShapeCache.ShapeStatus do
           shape_handle()
         ]
   def list_shape_handles_for_relations(stack_id, relations) when is_stack_id(stack_id) do
-    OpenTelemetry.with_child_span("shape_status.list_shape_handles_for_relations", [], stack_id, fn ->
-      ShapeDb.shape_handles_for_relations!(stack_id, relations)
-    end)
+    OpenTelemetry.with_child_span(
+      "shape_status.list_shape_handles_for_relations",
+      [],
+      stack_id,
+      fn ->
+        ShapeDb.shape_handles_for_relations!(stack_id, relations)
+      end
+    )
   end
 
   @spec remove_shape(stack_id(), shape_handle()) :: :ok | {:error, term()}
@@ -173,9 +178,14 @@ defmodule Electric.ShapeCache.ShapeStatus do
   """
   @spec fetch_handle_by_shape_critical(stack_id(), Shape.t()) :: {:ok, shape_handle()} | :error
   def fetch_handle_by_shape_critical(stack_id, %Shape{} = shape) when is_stack_id(stack_id) do
-    OpenTelemetry.with_child_span("shape_status.fetch_handle_by_shape_critical", [], stack_id, fn ->
-      ShapeDb.handle_for_shape_critical(stack_id, shape)
-    end)
+    OpenTelemetry.with_child_span(
+      "shape_status.fetch_handle_by_shape_critical",
+      [],
+      stack_id,
+      fn ->
+        ShapeDb.handle_for_shape_critical(stack_id, shape)
+      end
+    )
   end
 
   @spec fetch_shape_by_handle(stack_id(), shape_handle()) :: {:ok, Shape.t()} | :error
