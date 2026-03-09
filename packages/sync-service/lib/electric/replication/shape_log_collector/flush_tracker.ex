@@ -186,6 +186,8 @@ defmodule Electric.Replication.ShapeLogCollector.FlushTracker do
     }
   end
 
+  defp record_shapes_in_txn(%__MODULE__{} = state, _xid, []), do: state
+
   defp record_shapes_in_txn(%__MODULE__{} = state, xid, affected_shapes) do
     new_set =
       Enum.reduce(affected_shapes, Map.get(state.shapes_in_txn, xid, MapSet.new()), fn shape,
