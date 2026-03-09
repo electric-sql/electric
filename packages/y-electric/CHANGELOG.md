@@ -1,5 +1,13 @@
 # @electric-sql/y-electric
 
+## 0.1.38
+
+### Patch Changes
+
+- d1e08b8: Add TanStack Intent skills for AI agent guidance. Ships 9 skills covering shapes, proxy auth, schema design, debugging, deployment, new feature setup, ORM integration, Postgres security, and Yjs collaboration.
+- Updated dependencies [d1e08b8]
+  - @electric-sql/client@1.5.12
+
 ## 0.1.37
 
 ### Patch Changes

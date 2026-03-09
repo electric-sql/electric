@@ -29,3 +29,4 @@ response.tmp
 .claude
 !website/.claude/commands
 !website/.claude/skills
+_artifacts
