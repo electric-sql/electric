@@ -392,7 +392,7 @@ defmodule Electric.Shapes.Api do
     if LogOffset.compare(offset, last_offset) != :lt or
          last_offset == LogOffset.last_before_real_offsets() do
       ref = Electric.StackSupervisor.subscribe_to_shape_events(stack_id, handle)
-      Logger.debug("Client is registered for changes", client_pid: self(), shape_handle: handle)
+      Logger.debug("Client is registered for changes", shape_handle: handle)
 
       %{request | new_changes_pid: self(), new_changes_ref: ref}
     else
@@ -411,7 +411,7 @@ defmodule Electric.Shapes.Api do
   defp ensure_subscribed(%Request{} = request) do
     %{handle: handle, api: %{stack_id: stack_id}} = request
     ref = Electric.StackSupervisor.subscribe_to_shape_events(stack_id, handle)
-    Logger.debug("Client is registered for changes", client_pid: self(), shape_handle: handle)
+    Logger.debug("Client is registered for changes", shape_handle: handle)
     %{request | new_changes_pid: self(), new_changes_ref: ref}
   end
 
@@ -748,7 +748,6 @@ defmodule Electric.Shapes.Api do
     } = request
 
     Logger.debug("Client is checking for any changes since start of request",
-      client_pid: self(),
       shape_handle: shape_handle
     )
 
@@ -793,7 +792,7 @@ defmodule Electric.Shapes.Api do
       api: %{long_poll_timeout: long_poll_timeout} = api
     } = request
 
-    Logger.debug("Client is waiting for changes", client_pid: self(), shape_handle: shape_handle)
+    Logger.debug("Client is waiting for changes", shape_handle: shape_handle)
 
     # Bandit reuses handler processes across requests. This process may have accumulated
     # garbage from previous requests or from building the response for this request.
@@ -858,7 +857,6 @@ defmodule Electric.Shapes.Api do
     } = request
 
     Logger.debug("Client is streaming SSE for changes",
-      client_pid: self(),
       shape_handle: shape_handle,
       since_offset: since_offset
     )
