@@ -543,6 +543,24 @@ defmodule Electric.Shapes.Consumer do
 
   defp handle_txn_fragment(txn_fragment, state), do: process_txn_fragment(txn_fragment, state)
 
+  # A replacement consumer (started after a crash) may receive a mid-transaction
+  # fragment before seeing the begin fragment. Since we have no transaction context,
+  # skip the fragment. If it's the commit fragment, mark it as flushed so the
+  # FlushTracker doesn't get permanently stuck waiting for this shape.
+  defp process_txn_fragment(
+         %TransactionFragment{has_begin?: false} = txn_fragment,
+         %State{pending_txn: nil} = state
+       ) do
+    Logger.warning(fn ->
+      "Received non-begin fragment with no pending transaction, skipping"
+    end)
+
+    case txn_fragment do
+      %TransactionFragment{commit: nil} -> state
+      _ -> consider_flushed(state, txn_fragment.last_log_offset)
+    end
+  end
+
   defp process_txn_fragment(
          %TransactionFragment{} = txn_fragment,
          %State{pending_txn: txn} = state

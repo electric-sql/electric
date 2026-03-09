@@ -61,7 +61,7 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
   describe "publish/2" do
     test "starts consumer when receiving a message", ctx do
       assert ConsumerRegistry.active_consumer_count(ctx.stack_id) == 0
-      :ok = ConsumerRegistry.publish(%{"handle-1" => {:txn, %{lsn: 1}}}, ctx.registry_state)
+      %MapSet{} = ConsumerRegistry.publish(%{"handle-1" => {:txn, %{lsn: 1}}}, ctx.registry_state)
 
       assert_receive {:start_consumer, "handle-1"}
       assert_receive {:broadcast, "handle-1", {:txn, %{lsn: 1}}}
@@ -70,13 +70,13 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
 
     test "uses existing consumer when already active", ctx do
       assert ConsumerRegistry.active_consumer_count(ctx.stack_id) == 0
-      :ok = ConsumerRegistry.publish(%{"handle-1" => {:txn, %{lsn: 1}}}, ctx.registry_state)
+      %MapSet{} = ConsumerRegistry.publish(%{"handle-1" => {:txn, %{lsn: 1}}}, ctx.registry_state)
 
       assert_receive {:start_consumer, "handle-1"}
       assert_receive {:broadcast, "handle-1", {:txn, %{lsn: 1}}}
       assert ConsumerRegistry.active_consumer_count(ctx.stack_id) == 1
 
-      :ok = ConsumerRegistry.publish(%{"handle-1" => {:txn, %{lsn: 2}}}, ctx.registry_state)
+      %MapSet{} = ConsumerRegistry.publish(%{"handle-1" => {:txn, %{lsn: 2}}}, ctx.registry_state)
 
       assert ConsumerRegistry.active_consumer_count(ctx.stack_id) == 1
       assert_receive {:broadcast, "handle-1", {:txn, %{lsn: 2}}}
@@ -85,13 +85,13 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
 
     test "starts any missing consumers", ctx do
       assert ConsumerRegistry.active_consumer_count(ctx.stack_id) == 0
-      :ok = ConsumerRegistry.publish(%{"handle-1" => {:txn, %{lsn: 1}}}, ctx.registry_state)
+      %MapSet{} = ConsumerRegistry.publish(%{"handle-1" => {:txn, %{lsn: 1}}}, ctx.registry_state)
 
       assert_receive {:start_consumer, "handle-1"}
       assert_receive {:broadcast, "handle-1", {:txn, %{lsn: 1}}}
       assert ConsumerRegistry.active_consumer_count(ctx.stack_id) == 1
 
-      :ok =
+      %MapSet{} =
         ConsumerRegistry.publish(
           %{"handle-1" => {:txn, %{lsn: 2}}, "handle-2" => {:txn, %{lsn: 2}}},
           ctx.registry_state
@@ -150,7 +150,7 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
 
       assert ConsumerRegistry.active_consumer_count(ctx.stack_id) == 3
 
-      :ok =
+      %MapSet{} =
         ConsumerRegistry.publish(
           %{
             "handle-1" => {:txn, %{lsn: 1}},
@@ -166,6 +166,68 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
       assert_receive {:broadcast, "handle-1", {:txn, %{lsn: 1}}}
       assert_receive {:broadcast, "handle-2", {:txn, %{lsn: 1}}}
       assert_receive {:broadcast, "handle-3", {:txn, %{lsn: 1}}}
+    end
+  end
+
+  describe "dead consumer recovery" do
+    test "crashed consumer is replaced and event is retried", ctx do
+      Process.flag(:trap_exit, true)
+
+      # Start a consumer that will crash on message
+      {:ok, doomed} =
+        TestSubscriber.start_link(ctx.stack_id, "handle-crash", fn _msg, _state ->
+          raise "consumer crash"
+        end)
+
+      assert Process.alive?(doomed)
+      assert ConsumerRegistry.active_consumer_count(ctx.stack_id) == 1
+
+      # Publish to the crashing consumer — should recover by starting a replacement
+      %MapSet{} =
+        ConsumerRegistry.publish(
+          %{"handle-crash" => {:txn, %{lsn: 1}}},
+          ctx.registry_state
+        )
+
+      # Drain the EXIT message from the crashed consumer
+      assert_receive {:EXIT, ^doomed, _}
+
+      # A replacement consumer was started via start_consumer!
+      assert_receive {:start_consumer, "handle-crash"}
+
+      # The event was retried and delivered to the replacement consumer
+      assert_receive {:broadcast, "handle-crash", {:txn, %{lsn: 1}}}
+    end
+
+    test "dead PID is cleaned from ETS before retry", ctx do
+      Process.flag(:trap_exit, true)
+
+      {:ok, doomed} =
+        TestSubscriber.start_link(ctx.stack_id, "handle-dead", fn _msg, _state ->
+          raise "consumer crash"
+        end)
+
+      # First message causes crash — ETS is cleaned and consumer is restarted
+      %MapSet{} =
+        ConsumerRegistry.publish(
+          %{"handle-dead" => {:txn, %{lsn: 1}}},
+          ctx.registry_state
+        )
+
+      assert_receive {:EXIT, ^doomed, _}
+      assert_receive {:start_consumer, "handle-dead"}
+      assert_receive {:broadcast, "handle-dead", {:txn, %{lsn: 1}}}
+
+      # Second message goes to the replacement consumer directly (no crash recovery needed)
+      %MapSet{} =
+        ConsumerRegistry.publish(
+          %{"handle-dead" => {:txn, %{lsn: 2}}},
+          ctx.registry_state
+        )
+
+      assert_receive {:broadcast, "handle-dead", {:txn, %{lsn: 2}}}
+      # No new start_consumer! call — the replacement from the first publish is reused
+      refute_receive {:start_consumer, "handle-dead"}, 50
     end
   end
 
@@ -186,7 +248,7 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
 
       assert ConsumerRegistry.active_consumer_count(ctx.stack_id) == 1
 
-      :ok = ConsumerRegistry.publish(%{handle => {:txn, %{lsn: 1}}}, ctx.registry_state)
+      %MapSet{} = ConsumerRegistry.publish(%{handle => {:txn, %{lsn: 1}}}, ctx.registry_state)
       assert_receive {:broadcast, ^handle, {:txn, %{lsn: 1}}}
       refute_receive {:start_consumer, ^handle}, 10
     end
@@ -222,7 +284,7 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
 
       assert ConsumerRegistry.active_consumer_count(ctx.stack_id) == 1
 
-      :ok = ConsumerRegistry.publish(%{handle => {:txn, %{lsn: 1}}}, ctx.registry_state)
+      %MapSet{} = ConsumerRegistry.publish(%{handle => {:txn, %{lsn: 1}}}, ctx.registry_state)
       assert_receive {:broadcast, ^handle, {:txn, %{lsn: 1}}}
       refute_receive {:start_consumer, ^handle}, 10
 
@@ -230,7 +292,7 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
 
       assert ConsumerRegistry.active_consumer_count(ctx.stack_id) == 0
 
-      :ok = ConsumerRegistry.publish(%{"handle-1" => {:txn, %{lsn: 1}}}, ctx.registry_state)
+      %MapSet{} = ConsumerRegistry.publish(%{"handle-1" => {:txn, %{lsn: 1}}}, ctx.registry_state)
 
       assert_receive {:start_consumer, "handle-1"}
       assert_receive {:broadcast, "handle-1", {:txn, %{lsn: 1}}}

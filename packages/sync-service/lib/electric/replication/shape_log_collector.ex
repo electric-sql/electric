@@ -554,25 +554,34 @@ defmodule Electric.Replication.ShapeLogCollector do
     OpenTelemetry.start_interval(:"shape_log_collector.publish.duration_µs")
     context = OpenTelemetry.get_current_context()
 
-    for layer <- DependencyLayers.get_for_handles(state.dependency_layers, affected_shapes) do
-      # Each publish is synchronous, so layers will be processed in order
-      layer_events =
-        Map.new(layer, fn handle ->
-          {handle, {:handle_event, Map.fetch!(events_by_handle, handle), context}}
-        end)
+    undeliverable =
+      for layer <- DependencyLayers.get_for_handles(state.dependency_layers, affected_shapes),
+          reduce: MapSet.new() do
+        acc ->
+          # Each publish is synchronous, so layers will be processed in order
+          layer_events =
+            Map.new(layer, fn handle ->
+              {handle, {:handle_event, Map.fetch!(events_by_handle, handle), context}}
+            end)
 
-      ConsumerRegistry.publish(layer_events, state.registry_state)
-    end
+          failed = ConsumerRegistry.publish(layer_events, state.registry_state)
+          MapSet.union(acc, failed)
+      end
 
     OpenTelemetry.start_interval(:"shape_log_collector.set_last_processed_lsn.duration_µs")
 
     lsn = Lsn.from_integer(state.last_processed_offset.tx_offset)
     LsnTracker.set_last_processed_lsn(state.lsn_tracker_ref, lsn)
 
+    # Exclude shapes where delivery permanently failed — tracking them in the
+    # FlushTracker would block flush advancement since no consumer will ever
+    # report a flush for these handles.
+    delivered_shapes = MapSet.difference(affected_shapes, undeliverable)
+
     flush_tracker =
       case event do
         %TransactionFragment{commit: commit} when not is_nil(commit) ->
-          FlushTracker.handle_txn_fragment(state.flush_tracker, event, affected_shapes)
+          FlushTracker.handle_txn_fragment(state.flush_tracker, event, delivered_shapes)
 
         _ ->
           state.flush_tracker
