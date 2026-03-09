@@ -76,6 +76,9 @@ This ensures shapes are registered early (when non-commit fragments arrive), so
 subsequent flush notifications from Consumers are properly handled, while
 avoiding notifying ReplicationClient about non-committed data.
 
+The `Commit` alias becomes unused after removing the pattern match and can be
+dropped.
+
 ### 2. ShapeLogCollector (`shape_log_collector.ex`)
 
 In `publish/2` (lines 572-579), remove the `case event do` condition and always
@@ -85,19 +88,38 @@ pass the event to FlushTracker:
 flush_tracker = FlushTracker.handle_txn_fragment(state.flush_tracker, event, affected_shapes)
 ```
 
-### 3. No additional "stuck shape" concern for common cases
+No Consumer changes are needed. The storage `:flushed` message already carries
+`%LogOffset{}` structs (verified: `LogItems.from_change` -> `prepare_log_entries`
+-> `normalize_log_stream` -> `add_to_buffer` -> `flush_buffer` — the offset is a
+struct the entire way).
 
-For `NewRecord` changes, `LogItems.expected_offset_after_split` returns the
-change's `log_offset` unchanged (`log_items.ex:144`). When all fragment changes
-match the shape, `consumer.latest_offset == fragment.last_log_offset`. So the
-storage's flushed offset matches FlushTracker's `last_sent` and the shape is
-removed.
+## Offset alignment between FlushTracker and Consumer
 
-For edge cases where not all changes match (consumer writes fewer changes than
-the fragment contains), the consumer's flushed offset may be less than
-`fragment.last_log_offset`. The shape stays tracked after the early flush, gets
-`last_sent` updated to the commit offset when the commit arrives, and catches up
-when `txn_offset_mapping` alignment produces a flush at the commit offset.
+FlushTracker sets `last_sent` to the **original fragment's** `last_log_offset`
+(which covers all changes in the fragment, across all shapes). Each shape's
+Consumer only writes matching changes and sets `latest_offset` to
+`LogItems.expected_offset_after_split(last_matching_change)`.
+
+**When all fragment changes match the shape** (the common case): Consumer's
+`latest_offset == fragment.last_log_offset`. Storage flushes at this offset. If
+the shape was tracked from a non-commit fragment, the flush matches `last_sent`
+and the shape is removed from tracking.
+
+**When not all fragment changes match** (i.e. a fragment has changes for multiple
+shapes): Consumer's `latest_offset < fragment.last_log_offset`. Storage flushes
+at a lower offset than `last_sent`. The shape stays tracked but `last_flushed`
+advances. When the commit fragment arrives, `last_sent` is updated to the
+commit's offset. The Consumer's `txn_offset_mapping` (set by
+`maybe_complete_pending_txn`) maps `{latest_offset, commit.last_log_offset}`. The
+next storage flush aligns via this mapping and catches the shape up.
+
+If the commit fragment has matching changes for the shape, the Consumer writes
+them (adding to the buffer), so a new flush is scheduled and fires promptly.
+
+If the commit fragment has NO matching changes, no new buffer data is added and
+`signal_txn_commit!` does not schedule a flush. The shape catches up on the next
+transaction that triggers a storage flush. This is a temporary delay, not a
+permanent block.
 
 ## Changes summary
 
@@ -105,8 +127,3 @@ when `txn_offset_mapping` alignment produces a flush at the commit offset.
 |------|--------|-----|
 | `flush_tracker.ex` | Handle all fragments; gate `last_seen_offset`/`update_global_offset` on commit | Register shapes early so flush notifications aren't lost |
 | `shape_log_collector.ex` | Remove `case event do` guard in `publish/2` | Pass all fragments to FlushTracker |
-
-Note: no Consumer changes are needed. The storage `:flushed` message already
-carries `%LogOffset{}` structs (verified: `LogItems.from_change` produces
-structs, `normalize_log_stream` preserves them, `add_to_buffer` stores them in
-`last_seen_offset`, and `flush_buffer` sends them via the `:flushed` message).
