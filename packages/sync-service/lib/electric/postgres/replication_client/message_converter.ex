@@ -68,7 +68,7 @@ defmodule Electric.Postgres.ReplicationClient.MessageConverter do
           | {:error, {:replica_not_full, String.t()}}
           | {:error, {:exceeded_max_tx_size, String.t()}}
   def convert(%LR.Message{} = msg, state) do
-    Logger.notice("Got a message from PG via logical replication", message: msg)
+    Logger.notice("Got a message from PG via logical replication", pg_message: msg)
     {:buffering, state}
   end
 
