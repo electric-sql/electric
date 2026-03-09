@@ -47,7 +47,7 @@ defmodule Electric.Replication.SchemaReconciler do
     Logger.metadata(stack_id: opts.stack_id)
     Electric.Telemetry.Sentry.set_tags_context(stack_id: opts.stack_id)
 
-    Logger.debug("SchemaReconciler started", opts: opts)
+    Logger.debug("SchemaReconciler started")
     {:ok, opts, {:continue, :reconcile}}
   end
 

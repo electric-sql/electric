@@ -36,7 +36,7 @@
 [invoke setup_electric_shell_with_tenant "electric_1" "3000"]
 
 [shell electric_1]
-  ?lock_name=electric_slot_integration.*\[notice\] Acquiring lock from postgres
+  ?slot_name=electric_slot_integration.*\[notice\] Acquiring lock from postgres
   ?slot_name=electric_slot_integration.*\[notice\] Lock acquired from postgres
   ??[notice] Starting replication from postgres
 
@@ -61,7 +61,7 @@
 ## in the second electric
 [shell electric_2]
   -Lock acquired from postgres|Starting replication from postgres|$fail_pattern
-  ?lock_name=electric_slot_integration.*\[notice\] Acquiring lock from postgres
+  ?slot_name=electric_slot_integration.*\[notice\] Acquiring lock from postgres
   [sleep 2]
 
 

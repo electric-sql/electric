@@ -105,7 +105,7 @@ defmodule Electric.Postgres.ReplicationClient.ConnectionSetup do
   # a single active sync service is connected to Postgres per slot.
   defp acquire_lock_query(%State{slot_name: lock_name} = state) do
     Logger.debug("ReplicationClient step: acquire_lock")
-    Logger.notice("Acquiring lock from postgres", lock_name: lock_name)
+    Logger.notice("Acquiring lock from postgres", slot_name: lock_name)
     query = "SELECT pg_advisory_lock(hashtext('#{lock_name}'))"
     {:query, query, state}
   end

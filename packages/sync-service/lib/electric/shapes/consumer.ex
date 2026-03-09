@@ -281,11 +281,13 @@ defmodule Electric.Shapes.Consumer do
         {:materializer_changes, dep_handle, %{move_in: move_in, move_out: move_out}},
         state
       ) do
-    Logger.debug("Consumer reacting to move ins and move outs from its dependency",
-      move_in_count: length(move_in),
-      move_out_count: length(move_out),
-      dep_handle: dep_handle
-    )
+    if Logger.enabled?(:debug) do
+      Logger.debug("Consumer reacting to move ins and move outs from its dependency",
+        move_in_count: length(move_in),
+        move_out_count: length(move_out),
+        dep_handle: dep_handle
+      )
+    end
 
     feature_flags = Electric.StackConfig.lookup(state.stack_id, :feature_flags, [])
     tagged_subqueries_enabled? = "tagged_subqueries" in feature_flags
@@ -330,7 +332,9 @@ defmodule Electric.Shapes.Consumer do
   end
 
   def handle_info({:query_move_in_complete, name, key_set, snapshot}, state) do
-    Logger.debug("Consumer query move in complete", name: name, key_count: length(key_set))
+    if Logger.enabled?(:debug) do
+      Logger.debug("Consumer query move in complete", name: name, key_count: length(key_set))
+    end
 
     {state, notification} = MoveHandling.query_complete(state, name, key_set, snapshot)
     :ok = notify_new_changes(state, notification)
@@ -751,7 +755,9 @@ defmodule Electric.Shapes.Consumer do
   end
 
   def process_buffered_txn_fragments(%State{buffer: buffer} = state) do
-    Logger.debug("Consumer catching up on transaction fragments", count: length(buffer))
+    if Logger.enabled?(:debug) do
+      Logger.debug("Consumer catching up on transaction fragments", count: length(buffer))
+    end
     {txn_fragments, state} = State.pop_buffered(state)
 
     Enum.reduce_while(txn_fragments, state, fn txn_fragment, state ->
@@ -888,10 +894,12 @@ defmodule Electric.Shapes.Consumer do
       Electric.StackSupervisor.registry_name(state.stack_id),
       state.shape_handle,
       fn registered ->
-        Logger.debug("Notifying clients about new changes",
-          client_count: length(registered),
-          shape_handle: state.shape_handle
-        )
+        if Logger.enabled?(:debug) do
+          Logger.debug("Notifying clients about new changes",
+            client_count: length(registered),
+            shape_handle: state.shape_handle
+          )
+        end
 
         for {pid, ref} <- registered,
             do: send(pid, {ref, :new_changes, latest_log_offset})
