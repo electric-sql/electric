@@ -1680,8 +1680,8 @@ defmodule Electric.Shapes.ConsumerTest do
       #
       # When a multi-fragment transaction's non-commit fragments are flushed to disk
       # before the commit fragment is processed by ShapeLogCollector, the flush
-      # notification is lost because FlushTracker hasn't registered the shape yet.
-      # This causes the shape to be stuck in the FlushTracker forever, blocking
+      # notification was lost because FlushTracker hadn't registered the shape yet.
+      # This caused the shape to be stuck in the FlushTracker, blocking
       # the global flush offset from advancing.
       {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape1, stack_id)
 
@@ -1738,12 +1738,10 @@ defmodule Electric.Shapes.ConsumerTest do
       assert :ok = ShapeLogCollector.handle_event(fragment1, stack_id)
       assert :ok = ShapeLogCollector.handle_event(fragment2, stack_id)
 
-      flushed_log_offset = fragment2.last_log_offset
-
-      # With flush_period: 1ms, the timer may fire between handle_event calls,
-      # producing more than one traced call. Assert the last one matches.
       traced_calls = Support.Trace.collect_traced_calls()
       assert length(traced_calls) >= 1
+
+      flushed_log_offset = fragment2.last_log_offset
 
       assert {ShapeLogCollector, :notify_flushed, [^stack_id, ^shape_handle, ^flushed_log_offset]} =
                List.last(traced_calls)
@@ -1767,13 +1765,11 @@ defmodule Electric.Shapes.ConsumerTest do
         )
 
       assert :ok = ShapeLogCollector.handle_event(commit_fragment, ctx.stack_id)
-
-      last_log_offset = LogOffset.new(lsn, 6)
       assert_receive {^ref, :new_changes, _}, @receive_timeout
 
-      # The critical assertion: the flush boundary should advance.
-      # With the bug, this times out because the FlushTracker shape is stuck.
-      tx_offset = last_log_offset.tx_offset
+      # Assert that the flush boundary has advanced which wasn't the case before due to the
+      # aforementioned bug,
+      tx_offset = commit_fragment.last_log_offset.tx_offset
       assert_receive {:flush_boundary_updated, ^tx_offset}, @receive_timeout
     end
 
