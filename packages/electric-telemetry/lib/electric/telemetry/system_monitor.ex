@@ -39,7 +39,7 @@ defmodule ElectricTelemetry.SystemMonitor do
     type = proc_type(gc_pid)
 
     Logger.debug("Long GC detected",
-      pid: gc_pid,
+      monitored_pid: gc_pid,
       process_type: type,
       timeout_ms: Keyword.fetch!(info, :timeout),
       gc_info: info
@@ -65,7 +65,7 @@ defmodule ElectricTelemetry.SystemMonitor do
     type = proc_type(pid)
 
     Logger.debug("Long schedule detected for pid",
-      pid: pid,
+      monitored_pid: pid,
       process_type: type,
       timeout_ms: Keyword.fetch!(info, :timeout),
       locations:
@@ -86,7 +86,7 @@ defmodule ElectricTelemetry.SystemMonitor do
   def handle_info({:monitor, pid, :long_message_queue, true}, state) do
     type = proc_type(pid)
 
-    Logger.debug("Long message queue detected", pid: pid, process_type: type)
+    Logger.debug("Long message queue detected", monitored_pid: pid, process_type: type)
 
     log_long_message_queue_event(pid, type)
 
@@ -98,7 +98,7 @@ defmodule ElectricTelemetry.SystemMonitor do
   end
 
   def handle_info({:monitor, pid, :long_message_queue, false}, state) do
-    Logger.debug("Long message queue no longer detected", pid: pid)
+    Logger.debug("Long message queue no longer detected", monitored_pid: pid)
 
     {:noreply, %{state | long_message_queue_pids: Map.delete(state.long_message_queue_pids, pid)}}
   end

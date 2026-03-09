@@ -164,7 +164,7 @@ defmodule Electric.Connection.Manager.Pool do
   @impl true
   def handle_info({:pool_conn_started, pid}, state) do
     # The connection pool has started a new connection, so we need to remember it.
-    Logger.debug("Pooled connection started", role: state.role, pid: pid)
+    Logger.debug("Pooled connection started", role: state.role, connection_pid: pid)
 
     {
       :noreply,
@@ -175,7 +175,7 @@ defmodule Electric.Connection.Manager.Pool do
   # The following two messages are sent by the DBConnection library because we've configured
   # the connection manager process as connection listener for the DB connection pool.
   def handle_info({:connected, pid, ref}, %{pool_ref: ref} = state) do
-    Logger.debug("Pooled connection connected", role: state.role, pid: pid)
+    Logger.debug("Pooled connection connected", role: state.role, connection_pid: pid)
 
     {
       :noreply,
@@ -185,7 +185,7 @@ defmodule Electric.Connection.Manager.Pool do
   end
 
   def handle_info({:disconnected, pid, ref}, %{pool_ref: ref} = state) do
-    Logger.debug("Pooled connection disconnected", role: state.role, pid: pid)
+    Logger.debug("Pooled connection disconnected", role: state.role, connection_pid: pid)
 
     {
       :noreply,
@@ -223,7 +223,7 @@ defmodule Electric.Connection.Manager.Pool do
   end
 
   def handle_info({:EXIT, pid, reason}, state) when is_map_key(state.connection_pids, pid) do
-    Logger.debug("Pooled connection exited", role: state.role, pid: pid, reason: reason)
+    Logger.debug("Pooled connection exited", role: state.role, connection_pid: pid, reason: reason)
 
     # Keep track of the most recent pooled connection error seen so we can use it as the
     # reason for the pool failing as a whole if it does not manage to recover.

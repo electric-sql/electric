@@ -365,7 +365,7 @@ defmodule Electric.Shapes.Consumer do
   def handle_info({:materializer_down, _ref, :process, pid, reason}, state) do
     Logger.warning("Materializer down for consumer",
       shape_handle: state.shape_handle,
-      pid: pid,
+      materializer_pid: pid,
       reason: reason
     )
 
@@ -374,8 +374,8 @@ defmodule Electric.Shapes.Consumer do
 
   def handle_info({{:dependency_materializer_down, handle}, _ref, :process, pid, reason}, state) do
     Logger.warning("Materializer down for a dependency",
-      dependency_handle: handle,
-      pid: pid,
+      dep_handle: handle,
+      materializer_pid: pid,
       reason: reason
     )
 
