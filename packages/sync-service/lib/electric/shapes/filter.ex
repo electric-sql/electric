@@ -31,6 +31,7 @@ defmodule Electric.Shapes.Filter do
     :where_cond_table,
     :eq_index_table,
     :incl_index_table,
+    :subquery_shapes_table,
     :refs_fun
   ]
 
@@ -45,6 +46,7 @@ defmodule Electric.Shapes.Filter do
       where_cond_table: :ets.new(:filter_where, [:set, :private]),
       eq_index_table: :ets.new(:filter_eq, [:set, :private]),
       incl_index_table: :ets.new(:filter_incl, [:set, :private]),
+      subquery_shapes_table: :ets.new(:filter_subquery, [:set, :private]),
       refs_fun: Keyword.get(opts, :refs_fun, fn _shape -> %{} end)
     }
   end
@@ -74,9 +76,20 @@ defmodule Electric.Shapes.Filter do
     where_cond_id = get_or_create_table_condition(filter, shape.root_table)
 
     WhereCondition.add_shape(filter, where_cond_id, shape_id, shape.where)
+    maybe_track_subquery_shape(filter, shape_id, shape)
 
     filter
   end
+
+  defp maybe_track_subquery_shape(
+         %Filter{subquery_shapes_table: table},
+         shape_id,
+         %Shape{shape_dependencies: [_ | _], root_table: root_table}
+       ) do
+    :ets.insert(table, {{root_table, shape_id}, true})
+  end
+
+  defp maybe_track_subquery_shape(_filter, _shape_id, _shape), do: :ok
 
   defp get_or_create_table_condition(filter, table_name) do
     case :ets.lookup(filter.tables_table, table_name) do
@@ -106,10 +119,21 @@ defmodule Electric.Shapes.Filter do
       :ok -> :ok
     end
 
+    maybe_untrack_subquery_shape(filter, shape_id, shape)
     :ets.delete(filter.shapes_table, shape_id)
 
     filter
   end
+
+  defp maybe_untrack_subquery_shape(
+         %Filter{subquery_shapes_table: table},
+         shape_id,
+         %Shape{shape_dependencies: [_ | _], root_table: root_table}
+       ) do
+    :ets.delete(table, {root_table, shape_id})
+  end
+
+  defp maybe_untrack_subquery_shape(_filter, _shape_id, _shape), do: :ok
 
   @doc """
   Returns the shape IDs for all shapes that have been added to the filter
@@ -172,30 +196,50 @@ defmodule Electric.Shapes.Filter do
   end
 
   defp shapes_affected_by_record(filter, table_name, record) do
-    case :ets.lookup(filter.tables_table, table_name) do
-      [] ->
-        MapSet.new()
+    from_where_condition =
+      case :ets.lookup(filter.tables_table, table_name) do
+        [] ->
+          MapSet.new()
 
-      [{_, where_cond_id}] ->
-        WhereCondition.affected_shapes(filter, where_cond_id, record)
-    end
+        [{_, where_cond_id}] ->
+          WhereCondition.affected_shapes(filter, where_cond_id, record)
+      end
+
+    MapSet.union(from_where_condition, subquery_shape_ids_for_table(filter, table_name))
   end
 
   defp all_shape_ids(%Filter{} = filter) do
-    :ets.foldl(
-      fn {_table_name, where_cond_id}, acc ->
-        MapSet.union(acc, WhereCondition.all_shape_ids(filter, where_cond_id))
-      end,
-      MapSet.new(),
-      filter.tables_table
+    from_where_conditions =
+      :ets.foldl(
+        fn {_table_name, where_cond_id}, acc ->
+          MapSet.union(acc, WhereCondition.all_shape_ids(filter, where_cond_id))
+        end,
+        MapSet.new(),
+        filter.tables_table
+      )
+
+    MapSet.union(
+      from_where_conditions,
+      filter.subquery_shapes_table
+      |> :ets.select([{{{:_, :"$1"}, :_}, [], [:"$1"]}])
+      |> MapSet.new()
     )
   end
 
   defp shape_ids_for_table(%Filter{} = filter, table_name) do
-    case :ets.lookup(filter.tables_table, table_name) do
-      [] -> MapSet.new()
-      [{_, where_cond_id}] -> WhereCondition.all_shape_ids(filter, where_cond_id)
-    end
+    from_where_condition =
+      case :ets.lookup(filter.tables_table, table_name) do
+        [] -> MapSet.new()
+        [{_, where_cond_id}] -> WhereCondition.all_shape_ids(filter, where_cond_id)
+      end
+
+    MapSet.union(from_where_condition, subquery_shape_ids_for_table(filter, table_name))
+  end
+
+  defp subquery_shape_ids_for_table(%Filter{subquery_shapes_table: table}, table_name) do
+    table
+    |> :ets.select([{{{table_name, :"$1"}, :_}, [], [:"$1"]}])
+    |> MapSet.new()
   end
 
   @doc """
