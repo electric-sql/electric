@@ -143,12 +143,12 @@ defmodule Support.TestStorage do
 
   @impl Electric.ShapeCache.Storage
   def append_fragment_to_log!(_, _) do
-    raise "Intentionally not implemented. Use Support.StorageTracer instead"
+    raise "Intentionally not implemented. Use Support.Trace.trace_storage_calls() instead"
   end
 
   @impl Electric.ShapeCache.Storage
   def signal_txn_commit!(_, _) do
-    raise "Intentionally not implemented. Use Support.StorageTracer instead"
+    raise "Intentionally not implemented. Use Support.Trace.trace_storage_calls() instead"
   end
 
   @impl Electric.ShapeCache.Storage
