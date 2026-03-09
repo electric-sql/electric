@@ -1,8 +1,9 @@
 defmodule Electric.Replication.ShapeLogCollector.FlushTracker do
   alias Electric.Replication.LogOffset
-  alias Electric.Replication.Changes.TransactionFragment
+  alias Electric.Replication.Changes.{Commit, TransactionFragment}
 
   @type shape_id() :: term()
+  @type xid() :: Xid.anyxid()
 
   defstruct [
     :last_global_flushed_offset,
@@ -21,7 +22,7 @@ defmodule Electric.Replication.ShapeLogCollector.FlushTracker do
           },
           min_incomplete_flush_tree: :gb_trees.tree(LogOffset.t_tuple(), MapSet.t(shape_id())),
           notify_fn: (non_neg_integer() -> any()),
-          shapes_in_txn: %{optional(term()) => MapSet.t(shape_id())}
+          shapes_in_txn: %{optional(xid()) => MapSet.t(shape_id())}
         }
 
   @doc """
@@ -117,10 +118,9 @@ defmodule Electric.Replication.ShapeLogCollector.FlushTracker do
   # (tracked in shapes_in_txn but no longer in last_flushed) are skipped.
   def handle_txn_fragment(
         %__MODULE__{} = state,
-        %TransactionFragment{commit: commit, xid: xid, last_log_offset: last_log_offset},
+        %TransactionFragment{commit: %Commit{}, xid: xid, last_log_offset: last_log_offset},
         affected_shapes
-      )
-      when not is_nil(commit) do
+      ) do
     # Filter out shapes that were tracked by earlier non-commit fragments
     # but have already been flushed (no longer in last_flushed)
     txn_shapes = Map.get(state.shapes_in_txn, xid, MapSet.new())
@@ -130,9 +130,9 @@ defmodule Electric.Replication.ShapeLogCollector.FlushTracker do
         MapSet.member?(txn_shapes, shape) and not is_map_key(state.last_flushed, shape)
       end)
 
-    %__MODULE__{} = state = track_shapes(state, last_log_offset, filtered_shapes)
+    state = track_shapes(state, last_log_offset, filtered_shapes)
 
-    state = %__MODULE__{
+    state = %{
       state
       | last_seen_offset: last_log_offset,
         shapes_in_txn: Map.delete(state.shapes_in_txn, xid)
@@ -179,7 +179,7 @@ defmodule Electric.Replication.ShapeLogCollector.FlushTracker do
         do: min_incomplete_flush_tree,
         else: add_to_tree(min_incomplete_flush_tree, prev_log_offset, new_shape_ids)
 
-    %__MODULE__{
+    %{
       state
       | last_flushed: last_flushed,
         min_incomplete_flush_tree: min_incomplete_flush_tree
@@ -189,13 +189,10 @@ defmodule Electric.Replication.ShapeLogCollector.FlushTracker do
   defp record_shapes_in_txn(%__MODULE__{} = state, _xid, []), do: state
 
   defp record_shapes_in_txn(%__MODULE__{} = state, xid, affected_shapes) do
-    new_set =
-      Enum.reduce(affected_shapes, Map.get(state.shapes_in_txn, xid, MapSet.new()), fn shape,
-                                                                                       set ->
-        MapSet.put(set, shape)
-      end)
-
-    %__MODULE__{state | shapes_in_txn: Map.put(state.shapes_in_txn, xid, new_set)}
+    update_in(state.shapes_in_txn[xid], fn set ->
+      set = set || MapSet.new()
+      Enum.into(affected_shapes, set)
+    end)
   end
 
   @spec handle_flush_notification(t(), shape_id(), LogOffset.t()) :: t()
@@ -222,7 +219,7 @@ defmodule Electric.Replication.ShapeLogCollector.FlushTracker do
            |> add_to_tree(last_flushed_offset, shape_id)}
       end
 
-    state = %__MODULE__{
+    state = %{
       state
       | last_flushed: last_flushed,
         min_incomplete_flush_tree: min_incomplete_flush_tree
@@ -246,7 +243,7 @@ defmodule Electric.Replication.ShapeLogCollector.FlushTracker do
   def handle_shape_removed(%__MODULE__{last_flushed: last_flushed} = state, shape_id) do
     case Map.fetch(last_flushed, shape_id) do
       {:ok, {_, last_flushed_offset}} ->
-        %__MODULE__{
+        %{
           state
           | last_flushed: Map.delete(last_flushed, shape_id),
             min_incomplete_flush_tree:
@@ -263,7 +260,7 @@ defmodule Electric.Replication.ShapeLogCollector.FlushTracker do
          %__MODULE__{last_flushed: last_flushed, last_seen_offset: last_seen} = state
        )
        when last_flushed == %{} do
-    %__MODULE__{
+    %{
       state
       | last_global_flushed_offset: last_seen,
         min_incomplete_flush_tree: :gb_trees.empty()
@@ -283,7 +280,7 @@ defmodule Electric.Replication.ShapeLogCollector.FlushTracker do
       LogOffset.max(prev_last_global_flushed_offset, LogOffset.new(offset))
 
     if prev_last_global_flushed_offset != last_global_flushed_offset do
-      %__MODULE__{state | last_global_flushed_offset: last_global_flushed_offset}
+      %{state | last_global_flushed_offset: last_global_flushed_offset}
       |> notify_global_offset_updated()
     else
       state
