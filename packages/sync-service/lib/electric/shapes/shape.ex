@@ -2,7 +2,7 @@ defmodule Electric.Shapes.Shape do
   @moduledoc """
   Struct describing the requested shape
   """
-  alias Electric.Shapes.Shape.SubqueryMoves
+  alias Electric.Shapes.Consumer.Subqueries
   alias Electric.Replication.Eval.Expr
   alias Electric.Postgres.Inspector
   alias Electric.Replication.Eval.Parser
@@ -265,7 +265,7 @@ defmodule Electric.Shapes.Shape do
   end
 
   defp fill_tag_structure(shape) do
-    {tag_structure, comparison_expressions} = SubqueryMoves.move_in_tag_structure(shape)
+    {tag_structure, comparison_expressions} = Subqueries.move_in_tag_structure(shape)
 
     %{
       shape
@@ -670,15 +670,15 @@ defmodule Electric.Shapes.Shape do
     Enum.map(patterns, fn pattern ->
       Enum.map(pattern, fn
         column_name when is_binary(column_name) ->
-          SubqueryMoves.make_value_hash(stack_id, shape_handle, Map.get(record, column_name))
+          Subqueries.make_value_hash(stack_id, shape_handle, Map.get(record, column_name))
 
         {:hash_together, columns} ->
           column_parts =
             Enum.map(columns, fn col ->
-              col <> ":" <> SubqueryMoves.namespace_value(Map.get(record, col))
+              col <> ":" <> Subqueries.namespace_value(Map.get(record, col))
             end)
 
-          SubqueryMoves.make_value_hash_raw(stack_id, shape_handle, Enum.join(column_parts))
+          Subqueries.make_value_hash_raw(stack_id, shape_handle, Enum.join(column_parts))
       end)
       |> Enum.join("/")
     end)

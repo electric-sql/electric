@@ -1,43 +1,24 @@
 defmodule Electric.Shapes.Consumer.Materializer do
-  # TODOS:
-  # - [x] Keep lockstep with the consumer
-  # - [ ] Think about initial materialization needing to finish before we can continue
-  # - [ ]
-  # - [ ] Use the `get_link_values`
-
-  # NOTES:
-  # - Consumer does txn buffering until pg snapshot is known
-
-  # The lifecycle of a materializer is linked to its source consumer. If the consumer
-  # goes down for any reason other than a clean supervisor/stack shutdown then we
-  # need to invalidate all dependent outer shapes.
-  #
-  # restart: :temporary because the materalizer crashing brings down dependent shapes
-  # and restarting would make no sense.
   use GenServer, restart: :temporary
 
   require Logger
 
-  alias Electric.Utils
   alias Electric.Replication.Changes
-  alias Electric.Shapes.Consumer
-  alias Electric.ShapeCache.Storage
   alias Electric.Replication.LogOffset
-  alias Electric.Replication.Eval
+  alias Electric.ShapeCache.Storage
+  alias Electric.Shapes.Consumer
+  alias Electric.Shapes.Consumer.Subqueries.MaterializedView
   alias Electric.Shapes.Shape
 
   import Electric.Replication.LogOffset
-  import Electric, only: [is_stack_id: 1, is_shape_handle: 1]
+  import Electric, only: [is_shape_handle: 1, is_stack_id: 1]
   import Shape, only: :macros
 
   def name(stack_id, shape_handle) when is_stack_id(stack_id) and is_shape_handle(shape_handle) do
     Electric.ProcessRegistry.name(stack_id, __MODULE__, shape_handle)
   end
 
-  def name(%{
-        stack_id: stack_id,
-        shape_handle: shape_handle
-      }) do
+  def name(%{stack_id: stack_id, shape_handle: shape_handle}) do
     name(stack_id, shape_handle)
   end
 
@@ -68,16 +49,14 @@ defmodule Electric.Shapes.Consumer.Materializer do
     shape.shape_dependencies_handles
     |> Enum.with_index()
     |> Map.new(fn {shape_handle, index} ->
-      {["$sublink", Integer.to_string(index)],
-       get_link_values(%{
-         shape_handle: shape_handle,
-         stack_id: stack_id
-       })}
+      {[
+         "$sublink",
+         Integer.to_string(index)
+       ], get_link_values(%{shape_handle: shape_handle, stack_id: stack_id})}
     end)
   end
 
   def subscribe(pid) when is_pid(pid), do: GenServer.call(pid, :subscribe)
-
   def subscribe(opts) when is_map(opts), do: GenServer.call(name(opts), :subscribe)
 
   def subscribe(stack_id, shape_handle),
@@ -97,9 +76,12 @@ defmodule Electric.Shapes.Consumer.Materializer do
 
     state =
       Map.merge(opts, %{
-        index: %{},
-        tag_indices: %{},
-        value_counts: %{},
+        view:
+          MaterializedView.new(
+            dependency_handle: shape_handle,
+            columns: opts[:columns],
+            materialized_type: opts[:materialized_type]
+          ),
         pending_events: %{},
         offset: LogOffset.before_all(),
         subscribed_offset: nil,
@@ -133,7 +115,6 @@ defmodule Electric.Shapes.Consumer.Materializer do
           {:stop, :shutdown, state}
       end
     catch
-      # GenServer.call fails with :exit when Consumer is dead or dies mid-call
       :exit, reason ->
         Logger.warning("Materializer startup failed with exit reason: #{inspect(reason)}")
         {:stop, :shutdown, state}
@@ -160,7 +141,6 @@ defmodule Electric.Shapes.Consumer.Materializer do
   will be delivered via new_changes messages from the Consumer.
   """
   def get_stream_up_to_offset(min_offset, subscribed_offset, storage) do
-    # If subscribed_offset is nil or at/before min_offset, nothing to read
     if is_nil(subscribed_offset) or is_log_offset_lte(subscribed_offset, min_offset) do
       {:ok, min_offset, []}
     else
@@ -169,10 +149,8 @@ defmodule Electric.Shapes.Consumer.Materializer do
     end
   end
 
-  def handle_call(:get_link_values, _from, %{value_counts: value_counts} = state) do
-    values = MapSet.new(Map.keys(value_counts))
-
-    {:reply, values, state}
+  def handle_call(:get_link_values, _from, %{view: view} = state) do
+    {:reply, MaterializedView.values(view), state}
   end
 
   def handle_call(:wait_until_ready, _from, state) do
@@ -201,14 +179,11 @@ defmodule Electric.Shapes.Consumer.Materializer do
     {:reply, :ok, state}
   end
 
-  def handle_call(:subscribe, {pid, _ref} = _from, state) do
+  def handle_call(:subscribe, {pid, _ref}, state) do
     Process.monitor(pid)
-
     {:reply, :ok, %{state | subscribers: MapSet.put(state.subscribers, pid)}}
   end
 
-  # if the supervisor is going down then this process will also be taken down
-  # but let's state the dependency explictly.
   def handle_info({{:consumer_down, _}, _ref, :process, _pid, :shutdown}, state) do
     {:stop, :shutdown, state}
   end
@@ -218,8 +193,6 @@ defmodule Electric.Shapes.Consumer.Materializer do
     {:stop, :shutdown, state}
   end
 
-  # notify subscribers of the shape removal if the consumer exit reason is
-  # anything other than a clean supervisor shutdown.
   def handle_info({{:consumer_down, _}, _ref, :process, _pid, _reason}, state) do
     for pid <- state.subscribers do
       send(pid, {:materializer_shape_invalidated, state.shape_handle})
@@ -274,43 +247,13 @@ defmodule Electric.Shapes.Consumer.Materializer do
     end)
   end
 
-  defp cast!(record, %{columns: columns, materialized_type: {:array, {:row, types}}}) do
-    original_strings = Enum.map(columns, &Map.fetch!(record, &1))
-
-    {:ok, values} =
-      Enum.zip(original_strings, types)
-      |> Utils.map_while_ok(fn {const, type} ->
-        Eval.Env.parse_const(Eval.Env.new(), const, type)
-      end)
-
-    {List.to_tuple(values), List.to_tuple(original_strings)}
-  end
-
-  defp cast!(record, %{columns: [column], materialized_type: {:array, type}}) do
-    original_string = Map.fetch!(record, column)
-    {:ok, value} = Eval.Env.parse_const(Eval.Env.new(), original_string, type)
-    {value, original_string}
-  end
-
-  defp value_to_string(value, %{materialized_type: {:array, {:row, type}}}) do
-    value
-    |> Tuple.to_list()
-    |> Enum.zip_with(type, &Eval.Env.const_to_pg_string(Eval.Env.new(), &1, &2))
-    |> List.to_tuple()
-  end
-
-  defp value_to_string(value, %{materialized_type: {:array, type}}) do
-    Eval.Env.const_to_pg_string(Eval.Env.new(), value, type)
-  end
-
   defp apply_and_accumulate_events(changes, state) do
     {state, events} = apply_changes(changes, state)
     %{state | pending_events: merge_events(state.pending_events, events)}
   end
 
   defp maybe_flush_pending_events(state, true) do
-    events =
-      cancel_matching_move_events(state.pending_events)
+    events = cancel_matching_move_events(state.pending_events)
 
     if events != %{} do
       for pid <- state.subscribers do
@@ -333,14 +276,6 @@ defmodule Electric.Shapes.Consumer.Materializer do
     }
   end
 
-  # A value's count can cross the 0↔1 boundary multiple times in a single batch
-  # (e.g., toggled twice in one transaction: 0→1 move_in, 1→0 move_out, 0→1 move_in).
-  # Emitting both move_in and move_out for the same value causes the consumer to
-  # fire a move-in query while simultaneously marking the value's tag as moved-out,
-  # which filters out the query results - losing the data entirely.
-  #
-  # We resolve this by sorting events by value, then walking through the list
-  # cancelling adjacent move_in/move_out pairs for the same value.
   defp cancel_matching_move_events(events) do
     ins = events |> Map.get(:move_in, []) |> Enum.sort_by(fn {v, _} -> v end)
     outs = events |> Map.get(:move_out, []) |> Enum.sort_by(fn {v, _} -> v end)
@@ -362,141 +297,12 @@ defmodule Electric.Shapes.Consumer.Materializer do
     do: %{acc | move_in: ins ++ acc.move_in, move_out: outs ++ acc.move_out}
 
   defp apply_changes(changes, state) do
-    {{index, tag_indices}, {value_counts, events}} =
-      Enum.reduce(
-        changes,
-        {{state.index, state.tag_indices}, {state.value_counts, []}},
-        fn
-          %Changes.NewRecord{key: key, record: record, move_tags: move_tags},
-          {{index, tag_indices}, counts_and_events} ->
-            {value, original_string} = cast!(record, state)
-            if is_map_key(index, key), do: raise("Key #{key} already exists")
-            index = Map.put(index, key, value)
-            tag_indices = add_row_to_tag_indices(tag_indices, key, move_tags)
-            {{index, tag_indices}, increment_value(counts_and_events, value, original_string)}
+    case MaterializedView.handle_changes(state.view, changes) do
+      {nil, view} ->
+        {%{state | view: view}, %{}}
 
-          %Changes.UpdatedRecord{
-            key: key,
-            record: record,
-            move_tags: move_tags,
-            removed_move_tags: removed_move_tags
-          },
-          {{index, tag_indices}, counts_and_events} ->
-            # TODO: this is written as if it supports multiple selected columns, but it doesn't for now
-            columns_present = Enum.any?(state.columns, &is_map_key(record, &1))
-            has_tag_updates = removed_move_tags != []
-
-            if columns_present or has_tag_updates do
-              tag_indices =
-                tag_indices
-                |> remove_row_from_tag_indices(key, removed_move_tags)
-                |> add_row_to_tag_indices(key, move_tags)
-
-              if columns_present do
-                {value, original_string} = cast!(record, state)
-                old_value = Map.fetch!(index, key)
-                index = Map.put(index, key, value)
-
-                # Skip decrement/increment dance if value hasn't changed to avoid
-                # spurious move_out/move_in events when only the tag changed
-                if old_value == value do
-                  {{index, tag_indices}, counts_and_events}
-                else
-                  {{index, tag_indices},
-                   counts_and_events
-                   |> decrement_value(old_value, value_to_string(old_value, state))
-                   |> increment_value(value, original_string)}
-                end
-              else
-                {{index, tag_indices}, counts_and_events}
-              end
-            else
-              # Nothing relevant to this materializer has been updated
-              {{index, tag_indices}, counts_and_events}
-            end
-
-          %Changes.DeletedRecord{key: key, move_tags: move_tags},
-          {{index, tag_indices}, counts_and_events} ->
-            {value, index} = Map.pop!(index, key)
-
-            tag_indices = remove_row_from_tag_indices(tag_indices, key, move_tags)
-
-            {{index, tag_indices},
-             decrement_value(counts_and_events, value, value_to_string(value, state))}
-
-          %{headers: %{event: "move-out", patterns: patterns}},
-          {{index, tag_indices}, counts_and_events} ->
-            {keys, tag_indices} = pop_keys_from_tag_indices(tag_indices, patterns)
-
-            {index, counts_and_events} =
-              Enum.reduce(keys, {index, counts_and_events}, fn key, {index, counts_and_events} ->
-                {value, index} = Map.pop!(index, key)
-                {index, decrement_value(counts_and_events, value, value_to_string(value, state))}
-              end)
-
-            {{index, tag_indices}, counts_and_events}
-        end
-      )
-
-    events = Enum.group_by(events, &elem(&1, 0), &elem(&1, 1))
-
-    {%{state | index: index, value_counts: value_counts, tag_indices: tag_indices}, events}
-  end
-
-  defp increment_value({value_counts, events}, value, original_string) do
-    case Map.fetch(value_counts, value) do
-      {:ok, count} ->
-        {Map.put(value_counts, value, count + 1), events}
-
-      :error ->
-        {Map.put(value_counts, value, 1), [{:move_in, {value, original_string}} | events]}
+      {{:materializer_changes, _dep_handle, payload}, view} ->
+        {%{state | view: view}, payload}
     end
-  end
-
-  defp decrement_value({value_counts, events}, value, original_string) do
-    # If we're decrementing, it must have been added before
-    case Map.fetch!(value_counts, value) do
-      1 ->
-        {Map.delete(value_counts, value), [{:move_out, {value, original_string}} | events]}
-
-      count ->
-        {Map.put(value_counts, value, count - 1), events}
-    end
-  end
-
-  defp add_row_to_tag_indices(tag_indices, key, move_tags) do
-    # For now we only support one move tag per row (i.e. no `OR`s in the where clause if there's a subquery)
-    Enum.reduce(move_tags, tag_indices, fn tag, acc when is_binary(tag) ->
-      Map.update(acc, tag, MapSet.new([key]), &MapSet.put(&1, key))
-    end)
-  end
-
-  defp remove_row_from_tag_indices(tag_indices, key, move_tags) do
-    Enum.reduce(move_tags, tag_indices, fn tag, acc when is_binary(tag) ->
-      case Map.fetch(acc, tag) do
-        {:ok, v} ->
-          new_mapset = MapSet.delete(v, key)
-
-          if MapSet.size(new_mapset) == 0 do
-            Map.delete(acc, tag)
-          else
-            Map.put(acc, tag, new_mapset)
-          end
-
-        :error ->
-          acc
-      end
-    end)
-  end
-
-  defp pop_keys_from_tag_indices(tag_indices, patterns) do
-    # This implementation is naive while we support only one tag per row and no composite tags.
-    Enum.reduce(patterns, {MapSet.new(), tag_indices}, fn %{pos: _pos, value: value},
-                                                          {keys, acc} ->
-      case Map.pop(acc, value) do
-        {nil, acc} -> {keys, acc}
-        {v, acc} -> {MapSet.union(keys, v), acc}
-      end
-    end)
   end
 end

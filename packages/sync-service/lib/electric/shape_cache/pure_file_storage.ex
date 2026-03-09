@@ -966,7 +966,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
                <<json::binary-size(json_size)>> <- IO.binread(file, json_size) do
             # Check if this row should be skipped
             if all_parents_moved_out?(tags, tags_to_skip) or
-                 Electric.Shapes.Consumer.MoveIns.should_skip_query_row?(
+                 Electric.Shapes.Consumer.Subqueries.should_skip_query_row?(
                    touch_tracker,
                    snapshot,
                    key

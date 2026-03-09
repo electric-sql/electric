@@ -215,6 +215,42 @@ defmodule Electric.Shapes.Consumer.SubqueriesTest do
     end
   end
 
+  test "builds a move-in where clause that excludes the current view" do
+    shape = shape()
+
+    assert {where, [[1, 2], [3]]} =
+             Subqueries.move_in_where_clause(
+               shape,
+               hd(shape.shape_dependencies_handles),
+               [1, 2],
+               MapSet.new([3])
+             )
+
+    assert where == "parent_id = ANY ($1::int8[]) AND NOT parent_id = ANY ($2::int8[])"
+  end
+
+  test "builds move-out control messages with the current hashing scheme" do
+    state = new_state()
+
+    assert %{
+             headers: %{
+               event: "move-out",
+               patterns: [%{pos: 0, value: value}]
+             }
+           } = Subqueries.make_move_out_control_message(state, [{1, "1"}])
+
+    assert value ==
+             :crypto.hash(:md5, "stack-id" <> "shape-handle" <> "v:1")
+             |> Base.encode16(case: :lower)
+  end
+
+  test "extracts tag structure for the direct subquery predicate" do
+    shape = shape()
+
+    assert {[["parent_id"]], %{["$sublink", "0"] => _comparison_expr}} =
+             Subqueries.move_in_tag_structure(shape)
+  end
+
   defp new_state(opts \\ []) do
     shape = shape()
 
