@@ -290,7 +290,7 @@ defmodule Electric.Shapes.Consumer do
         {:materializer_changes, dep_handle, %{move_in: move_in, move_out: move_out}},
         state
       ) do
-    if Logger.enabled?(:debug) do
+    if Logger.compare_levels(Logger.level(), :debug) != :gt do
       Logger.debug("Consumer reacting to move ins and move outs from its dependency",
         move_in_count: length(move_in),
         move_out_count: length(move_out),
@@ -341,7 +341,7 @@ defmodule Electric.Shapes.Consumer do
   end
 
   def handle_info({:query_move_in_complete, name, key_set, snapshot}, state) do
-    if Logger.enabled?(:debug) do
+    if Logger.compare_levels(Logger.level(), :debug) != :gt do
       Logger.debug("Consumer query move in complete", name: name, key_count: length(key_set))
     end
 
@@ -764,7 +764,7 @@ defmodule Electric.Shapes.Consumer do
   end
 
   def process_buffered_txn_fragments(%State{buffer: buffer} = state) do
-    if Logger.enabled?(:debug) do
+    if Logger.compare_levels(Logger.level(), :debug) != :gt do
       Logger.debug("Consumer catching up on transaction fragments", count: length(buffer))
     end
 
@@ -904,7 +904,7 @@ defmodule Electric.Shapes.Consumer do
       Electric.StackSupervisor.registry_name(state.stack_id),
       state.shape_handle,
       fn registered ->
-        if Logger.enabled?(:debug) do
+        if Logger.compare_levels(Logger.level(), :debug) != :gt do
           Logger.debug("Notifying clients about new changes",
             client_count: length(registered),
             shape_handle: state.shape_handle
