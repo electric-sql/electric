@@ -98,7 +98,7 @@ defmodule Electric.ShapeCache.ShapeCleaner do
   @type reason() :: {:shutdown, :cleanup} | {:shutdown, :suspend} | term()
   @spec handle_writer_termination(stack_id(), shape_handle(), reason()) :: :removed | :ok
   def handle_writer_termination(stack_id, shape_handle, @shutdown_cleanup) do
-    Logger.info("Removing shape #{inspect(shape_handle)}")
+    Logger.info("Removing shape", shape_handle: shape_handle)
 
     remove_shape_async(stack_id, shape_handle)
 

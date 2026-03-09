@@ -613,8 +613,8 @@ defmodule Electric.Postgres.ReplicationClientTest do
 
       # should have logged lock acquisition process
       lock_name = ctx.slot_name
-      assert log =~ "Acquiring lock from postgres with name #{lock_name}"
-      assert log =~ "Lock acquired from postgres with name #{lock_name}"
+      assert log =~ "slot_name=#{lock_name}" and log =~ "Acquiring lock from postgres"
+      assert log =~ "slot_name=#{lock_name}" and log =~ "Lock acquired from postgres"
 
       # should have acquired an advisory lock on PG
       assert %Postgrex.Result{rows: [[false]]} =

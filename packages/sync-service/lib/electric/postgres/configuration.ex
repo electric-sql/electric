@@ -85,7 +85,7 @@ defmodule Electric.Postgres.Configuration do
     {_oid, relation} = oid_relation
     table = Utils.relation_to_sql(relation)
 
-    Logger.debug("Adding #{table} to publication #{publication_name}")
+    Logger.debug("Adding table to publication", table: table, publication_name: publication_name)
 
     run_in_transaction(
       conn,
@@ -99,7 +99,7 @@ defmodule Electric.Postgres.Configuration do
   def set_table_replica_identity_full(conn, oid_relation, timeout \\ @default_action_timeout) do
     {_oid, relation} = oid_relation
     table = Utils.relation_to_sql(relation)
-    Logger.debug("Setting #{table} replica identity to FULL")
+    Logger.debug("Setting table replica identity to FULL", table: table)
     run_in_transaction(conn, &exec_set_replica_identity_full(&1, table), timeout)
   end
 
@@ -143,7 +143,11 @@ defmodule Electric.Postgres.Configuration do
       ) do
     {_oid, relation} = oid_relation
     table = Utils.relation_to_sql(relation)
-    Logger.debug("Removing #{table} from publication #{publication_name}")
+
+    Logger.debug("Removing table from publication",
+      table: table,
+      publication_name: publication_name
+    )
 
     run_in_transaction(
       conn,

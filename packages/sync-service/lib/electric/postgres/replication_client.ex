@@ -293,7 +293,7 @@ defmodule Electric.Postgres.ReplicationClient do
   end
 
   def handle_info(:start_streaming, %State{step: step} = state) do
-    Logger.debug("Replication client requested to start streaming while step=#{step}")
+    Logger.debug("Replication client requested to start streaming", step: step)
     {:noreply, state}
   end
 
@@ -309,7 +309,7 @@ defmodule Electric.Postgres.ReplicationClient do
 
   # This callback is invoked when the connection process receives a shutdown signal.
   def handle_info({:EXIT, _pid, :shutdown}, _state) do
-    Logger.debug("Replication client #{inspect(self())} received shutdown signal, stopping")
+    Logger.debug("Replication client received shutdown signal, stopping")
     {:disconnect, :shutdown}
   end
 
