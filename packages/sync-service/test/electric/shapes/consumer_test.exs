@@ -1738,13 +1738,14 @@ defmodule Electric.Shapes.ConsumerTest do
       assert :ok = ShapeLogCollector.handle_event(fragment1, stack_id)
       assert :ok = ShapeLogCollector.handle_event(fragment2, stack_id)
 
-      traced_calls = Support.Trace.collect_traced_calls()
-      assert length(traced_calls) >= 1
-
       flushed_log_offset = fragment2.last_log_offset
 
-      assert {ShapeLogCollector, :notify_flushed, [^stack_id, ^shape_handle, ^flushed_log_offset]} =
-               List.last(traced_calls)
+      # Matching on a traced call inline to avoid any timing issues that
+      # Trace.collect_traced_calls() is susceptible to in this case.
+      assert_receive {:trace, _, :call,
+                      {ShapeLogCollector, :notify_flushed,
+                       [^stack_id, ^shape_handle, ^flushed_log_offset]}},
+                     @receive_timeout
 
       # Now send the commit fragment. The commit fragment itself has NO matching
       # changes for the shape — all changes were in earlier fragments.
