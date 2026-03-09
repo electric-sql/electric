@@ -92,7 +92,7 @@ defmodule Electric.Postgres.SnapshotQuery do
          query_or_queries,
          opts
        ) do
-    OpenTelemetry.with_span(
+    OpenTelemetry.with_child_span(
       Keyword.fetch!(opts, :span_name),
       span_attrs,
       stack_id,

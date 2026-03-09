@@ -75,7 +75,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
 
   @spec add_shape(stack_id(), Shape.t()) :: {:ok, shape_handle()} | {:error, term()}
   def add_shape(stack_id, shape) when is_stack_id(stack_id) do
-    OpenTelemetry.with_span("shape_status.add_shape", [], stack_id, fn ->
+    OpenTelemetry.with_child_span("shape_status.add_shape", [], stack_id, fn ->
       {_, shape_handle} = Shape.generate_id(shape)
 
       # Add the lookup last as it is the one that enables clients to find the shape
@@ -95,7 +95,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
 
   @spec list_shapes(stack_id()) :: [{shape_handle(), Shape.t()}]
   def list_shapes(stack_id) when is_stack_id(stack_id) do
-    OpenTelemetry.with_span("shape_status.list_shapes", [], stack_id, fn ->
+    OpenTelemetry.with_child_span("shape_status.list_shapes", [], stack_id, fn ->
       stack_id
       |> ShapeDb.list_shapes!()
       |> topological_sort()
@@ -131,14 +131,19 @@ defmodule Electric.ShapeCache.ShapeStatus do
           shape_handle()
         ]
   def list_shape_handles_for_relations(stack_id, relations) when is_stack_id(stack_id) do
-    OpenTelemetry.with_span("shape_status.list_shape_handles_for_relations", [], stack_id, fn ->
-      ShapeDb.shape_handles_for_relations!(stack_id, relations)
-    end)
+    OpenTelemetry.with_child_span(
+      "shape_status.list_shape_handles_for_relations",
+      [],
+      stack_id,
+      fn ->
+        ShapeDb.shape_handles_for_relations!(stack_id, relations)
+      end
+    )
   end
 
   @spec remove_shape(stack_id(), shape_handle()) :: :ok | {:error, term()}
   def remove_shape(stack_id, shape_handle) when is_stack_id(stack_id) do
-    OpenTelemetry.with_span("shape_status.remove_shape", [], stack_id, fn ->
+    OpenTelemetry.with_child_span("shape_status.remove_shape", [], stack_id, fn ->
       with :ok <- ShapeDb.remove_shape(stack_id, shape_handle) do
         :ets.delete(shape_meta_table(stack_id), shape_handle)
         :ok
@@ -155,7 +160,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
 
   @spec fetch_handle_by_shape(stack_id(), Shape.t()) :: {:ok, shape_handle()} | :error
   def fetch_handle_by_shape(stack_id, %Shape{} = shape) when is_stack_id(stack_id) do
-    OpenTelemetry.with_span("shape_status.fetch_handle_by_shape", [], stack_id, fn ->
+    OpenTelemetry.with_child_span("shape_status.fetch_handle_by_shape", [], stack_id, fn ->
       ShapeDb.handle_for_shape(stack_id, shape)
     end)
   end
@@ -173,15 +178,20 @@ defmodule Electric.ShapeCache.ShapeStatus do
   """
   @spec fetch_handle_by_shape_critical(stack_id(), Shape.t()) :: {:ok, shape_handle()} | :error
   def fetch_handle_by_shape_critical(stack_id, %Shape{} = shape) when is_stack_id(stack_id) do
-    OpenTelemetry.with_span("shape_status.fetch_handle_by_shape_critical", [], stack_id, fn ->
-      ShapeDb.handle_for_shape_critical(stack_id, shape)
-    end)
+    OpenTelemetry.with_child_span(
+      "shape_status.fetch_handle_by_shape_critical",
+      [],
+      stack_id,
+      fn ->
+        ShapeDb.handle_for_shape_critical(stack_id, shape)
+      end
+    )
   end
 
   @spec fetch_shape_by_handle(stack_id(), shape_handle()) :: {:ok, Shape.t()} | :error
   def fetch_shape_by_handle(stack_id, shape_handle)
       when is_stack_id(stack_id) and is_shape_handle(shape_handle) do
-    OpenTelemetry.with_span("shape_status.fetch_shape_by_handle", [], stack_id, fn ->
+    OpenTelemetry.with_child_span("shape_status.fetch_shape_by_handle", [], stack_id, fn ->
       ShapeDb.shape_for_handle(stack_id, shape_handle)
     end)
   end
@@ -210,20 +220,18 @@ defmodule Electric.ShapeCache.ShapeStatus do
   @spec validate_shape_handle(stack_id(), shape_handle(), Shape.t()) :: :ok | :error
   def validate_shape_handle(stack_id, shape_handle, %Shape{} = shape)
       when is_stack_id(stack_id) do
-    OpenTelemetry.with_span("shape_status.validate_shape_handle", [], stack_id, fn ->
-      case :ets.lookup(shape_meta_table(stack_id), shape_handle) do
-        [{^shape_handle, hash, _snapshot_started, _last_read}] ->
-          if Shape.hash(shape) == hash, do: :ok, else: :error
+    case :ets.lookup(shape_meta_table(stack_id), shape_handle) do
+      [{^shape_handle, hash, _snapshot_started, _last_read}] ->
+        if Shape.hash(shape) == hash, do: :ok, else: :error
 
-        [] ->
-          :error
-      end
-    end)
+      [] ->
+        :error
+    end
   end
 
   @spec mark_snapshot_started(stack_id(), shape_handle()) :: :ok | :error
   def mark_snapshot_started(stack_id, shape_handle) when is_stack_id(stack_id) do
-    OpenTelemetry.with_span("shape_status.mark_snapshot_started", [], stack_id, fn ->
+    OpenTelemetry.with_child_span("shape_status.mark_snapshot_started", [], stack_id, fn ->
       with true <- :ets.update_element(shape_meta_table(stack_id), shape_handle, {3, true}) do
         :ok
       else
@@ -241,7 +249,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
 
   @spec mark_snapshot_complete(stack_id(), shape_handle()) :: :ok | :error
   def mark_snapshot_complete(stack_id, shape_handle) when is_stack_id(stack_id) do
-    OpenTelemetry.with_span("shape_status.mark_snapshot_complete", [], stack_id, fn ->
+    OpenTelemetry.with_child_span("shape_status.mark_snapshot_complete", [], stack_id, fn ->
       ShapeDb.mark_snapshot_complete(stack_id, shape_handle)
     end)
   end
