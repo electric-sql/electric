@@ -85,33 +85,7 @@ pass the event to FlushTracker:
 flush_tracker = FlushTracker.handle_txn_fragment(state.flush_tracker, event, affected_shapes)
 ```
 
-### 3. Consumer offset type mismatch (`consumer.ex`)
-
-The PureFileStorage write loop stores offsets as **tuples** `{tx_offset,
-op_offset}` (from `LogOffset.to_tuple` in log items). The `:flushed` message
-sends this tuple. When `txn_offset_mapping` is empty (flush fires before
-commit), `align_offset_to_txn_boundary` passes the raw tuple through to
-FlushTracker.
-
-But FlushTracker stores `last_sent` as `%LogOffset{}` **structs** (from
-`TransactionFragment.last_log_offset`). The pin match in
-`handle_flush_notification` (line 169) compares the tuple against the struct --
-they won't match. Additionally, `delete_from_tree` and `add_to_tree` call
-`LogOffset.to_tuple/1` which expects a struct, so passing a tuple would crash.
-
-**Fix**: Convert the offset to a `%LogOffset{}` struct in the Consumer's
-`handle_info(:flushed)` handler:
-
-```elixir
-def handle_info({ShapeCache.Storage, :flushed, offset_in}, state) do
-  {state, offset_txn} = State.align_offset_to_txn_boundary(state, LogOffset.new(offset_in))
-  ...
-```
-
-`LogOffset.new/1` already accepts tuples:
-`def new({tx_offset, op_offset}), do: new(tx_offset, op_offset)`.
-
-### 4. No additional "stuck shape" concern for common cases
+### 3. No additional "stuck shape" concern for common cases
 
 For `NewRecord` changes, `LogItems.expected_offset_after_split` returns the
 change's `log_offset` unchanged (`log_items.ex:144`). When all fragment changes
@@ -131,4 +105,8 @@ when `txn_offset_mapping` alignment produces a flush at the commit offset.
 |------|--------|-----|
 | `flush_tracker.ex` | Handle all fragments; gate `last_seen_offset`/`update_global_offset` on commit | Register shapes early so flush notifications aren't lost |
 | `shape_log_collector.ex` | Remove `case event do` guard in `publish/2` | Pass all fragments to FlushTracker |
-| `consumer.ex` | Convert storage offset to `LogOffset` struct | Fix tuple vs struct mismatch in pin match and tree operations |
+
+Note: no Consumer changes are needed. The storage `:flushed` message already
+carries `%LogOffset{}` structs (verified: `LogItems.from_change` produces
+structs, `normalize_log_stream` preserves them, `add_to_buffer` stores them in
+`last_seen_offset`, and `flush_buffer` sends them via the `:flushed` message).

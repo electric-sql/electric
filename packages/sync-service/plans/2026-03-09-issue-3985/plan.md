@@ -12,28 +12,7 @@ this fix.
 
 ## Implementation steps
 
-### Step 1: Fix offset type mismatch in Consumer
-
-**File**: `lib/electric/shapes/consumer.ex`
-
-In `handle_info({ShapeCache.Storage, :flushed, offset_in}, state)` (line 261),
-convert the storage-provided tuple offset to a `%LogOffset{}` struct before
-passing it to `align_offset_to_txn_boundary`:
-
-```elixir
-def handle_info({ShapeCache.Storage, :flushed, offset_in}, state) do
-  {state, offset_txn} = State.align_offset_to_txn_boundary(state, LogOffset.new(offset_in))
-  ShapeLogCollector.notify_flushed(state.stack_id, state.shape_handle, offset_txn)
-  {:noreply, state, state.hibernate_after}
-end
-```
-
-This is a prerequisite for Step 3: once FlushTracker tracks shapes from
-non-commit fragments, flush notifications will reach `handle_flush_notification`
-with the shape present in `last_flushed`. The pin match and tree operations
-require `%LogOffset{}` structs, not tuples.
-
-### Step 2: Remove commit-only guard in ShapeLogCollector
+### Step 1: Remove commit-only guard in ShapeLogCollector
 
 **File**: `lib/electric/replication/shape_log_collector.ex`
 
@@ -54,7 +33,7 @@ flush_tracker =
 flush_tracker = FlushTracker.handle_txn_fragment(state.flush_tracker, event, affected_shapes)
 ```
 
-### Step 3: Make FlushTracker handle all fragment types
+### Step 2: Make FlushTracker handle all fragment types
 
 **File**: `lib/electric/replication/shape_log_collector/flush_tracker.ex`
 
@@ -117,7 +96,7 @@ def handle_txn_fragment(
 end
 ```
 
-### Step 4: Update FlushTracker tests
+### Step 3: Update FlushTracker tests
 
 **File**: `test/electric/replication/shape_log_collector/flush_tracker_test.exs`
 
@@ -134,7 +113,7 @@ Update or add tests:
 - Add a test: multiple non-commit fragments update `last_sent` progressively,
   then commit finalizes.
 
-### Step 5: Validate
+### Step 4: Validate
 
 Run the regression test added in commit `4049f75db`:
 
