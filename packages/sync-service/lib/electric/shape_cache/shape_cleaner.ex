@@ -138,7 +138,7 @@ defmodule Electric.ShapeCache.ShapeCleaner do
   end
 
   defp remove_shapes_immediate(stack_id, shape_handles, reason) when is_list(shape_handles) do
-    OpenTelemetry.with_span(
+    OpenTelemetry.with_child_span(
       "shape_cleaner.remove_shapes.remove_shapes_immediate",
       [count: length(shape_handles)],
       stack_id,

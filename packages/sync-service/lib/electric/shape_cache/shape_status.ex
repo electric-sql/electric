@@ -143,12 +143,10 @@ defmodule Electric.ShapeCache.ShapeStatus do
 
   @spec remove_shape(stack_id(), shape_handle()) :: :ok | {:error, term()}
   def remove_shape(stack_id, shape_handle) when is_stack_id(stack_id) do
-    OpenTelemetry.with_child_span("shape_status.remove_shape", [], stack_id, fn ->
-      with :ok <- ShapeDb.remove_shape(stack_id, shape_handle) do
-        :ets.delete(shape_meta_table(stack_id), shape_handle)
-        :ok
-      end
-    end)
+    with :ok <- ShapeDb.remove_shape(stack_id, shape_handle) do
+      :ets.delete(shape_meta_table(stack_id), shape_handle)
+      :ok
+    end
   end
 
   @spec reset(stack_id()) :: :ok
@@ -231,13 +229,11 @@ defmodule Electric.ShapeCache.ShapeStatus do
 
   @spec mark_snapshot_started(stack_id(), shape_handle()) :: :ok | :error
   def mark_snapshot_started(stack_id, shape_handle) when is_stack_id(stack_id) do
-    OpenTelemetry.with_child_span("shape_status.mark_snapshot_started", [], stack_id, fn ->
-      with true <- :ets.update_element(shape_meta_table(stack_id), shape_handle, {3, true}) do
-        :ok
-      else
-        _ -> :error
-      end
-    end)
+    with true <- :ets.update_element(shape_meta_table(stack_id), shape_handle, {3, true}) do
+      :ok
+    else
+      _ -> :error
+    end
   end
 
   def snapshot_started?(stack_id, shape_handle) do
