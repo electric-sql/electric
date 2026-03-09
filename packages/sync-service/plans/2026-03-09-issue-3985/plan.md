@@ -12,28 +12,7 @@ this fix.
 
 ## Implementation steps
 
-### Step 1: Remove commit-only guard in ShapeLogCollector
-
-**File**: `lib/electric/replication/shape_log_collector.ex`
-
-In `publish/2` (lines 572-581), replace the `case event do` block with an
-unconditional call:
-
-```elixir
-# Before:
-flush_tracker =
-  case event do
-    %TransactionFragment{commit: commit} when not is_nil(commit) ->
-      FlushTracker.handle_txn_fragment(state.flush_tracker, event, affected_shapes)
-    _ ->
-      state.flush_tracker
-  end
-
-# After:
-flush_tracker = FlushTracker.handle_txn_fragment(state.flush_tracker, event, affected_shapes)
-```
-
-### Step 2: Make FlushTracker handle all fragment types
+### Step 1: Make FlushTracker handle all fragment types
 
 **File**: `lib/electric/replication/shape_log_collector/flush_tracker.ex`
 
@@ -42,10 +21,12 @@ Merge the two `handle_txn_fragment` clauses into one:
 1. Remove the `commit: nil` no-op clause (lines 149-155).
 2. Remove the `commit: %Commit{}` pattern requirement from the main clause
    (line 104). Accept any `%TransactionFragment{}`.
-3. Always track affected shapes (update `last_flushed` map and
+3. Remove the now-unused `Commit` alias (line 3).
+4. Always track affected shapes (update `last_flushed` map and
    `min_incomplete_flush_tree`).
-4. Only update `last_seen_offset` when `commit != nil`.
-5. Only call `update_global_offset` when `commit != nil` and `last_flushed == %{}`.
+5. Only update `last_seen_offset` when `commit != nil`.
+6. Only call `update_global_offset` when `commit != nil` and
+   `last_flushed == %{}`.
 
 Sketch:
 
@@ -61,15 +42,21 @@ def handle_txn_fragment(
   prev_log_offset = %LogOffset{tx_offset: last_log_offset.tx_offset - 1}
 
   {last_flushed, new_shape_ids} =
-    Enum.reduce(affected_shapes, {last_flushed, MapSet.new()}, fn shape, {new_last_flushed, new_shape_ids} ->
-      case Map.fetch(new_last_flushed, shape) do
-        {:ok, {_, last_flushed_offset}} ->
-          {Map.put(new_last_flushed, shape, {last_log_offset, last_flushed_offset}), new_shape_ids}
-        :error ->
-          {Map.put(new_last_flushed, shape, {last_log_offset, prev_log_offset}),
-           MapSet.put(new_shape_ids, shape)}
+    Enum.reduce(
+      affected_shapes,
+      {last_flushed, MapSet.new()},
+      fn shape, {new_last_flushed, new_shape_ids} ->
+        case Map.fetch(new_last_flushed, shape) do
+          {:ok, {_, last_flushed_offset}} ->
+            {Map.put(new_last_flushed, shape, {last_log_offset, last_flushed_offset}),
+             new_shape_ids}
+
+          :error ->
+            {Map.put(new_last_flushed, shape, {last_log_offset, prev_log_offset}),
+             MapSet.put(new_shape_ids, shape)}
+        end
       end
-    end)
+    )
 
   min_incomplete_flush_tree =
     if MapSet.size(new_shape_ids) == 0,
@@ -96,22 +83,40 @@ def handle_txn_fragment(
 end
 ```
 
+### Step 2: Remove commit-only guard in ShapeLogCollector
+
+**File**: `lib/electric/replication/shape_log_collector.ex`
+
+In `publish/2` (lines 572-581), replace the `case event do` block with an
+unconditional call:
+
+```elixir
+flush_tracker = FlushTracker.handle_txn_fragment(state.flush_tracker, event, affected_shapes)
+```
+
+Steps 1 and 2 can be done in a single commit since the ShapeLogCollector change
+depends on FlushTracker accepting non-commit fragments.
+
 ### Step 3: Update FlushTracker tests
 
 **File**: `test/electric/replication/shape_log_collector/flush_tracker_test.exs`
 
-Update or add tests:
+Update existing tests for the new behavior:
 
-- The "should ignore fragments without commits" test (line 30) should be updated
-  to verify that shapes ARE tracked but no notification is sent.
-- The "should ignore fragments without commits and not affect subsequent
-  tracking" test (line 42) should be updated for the new behavior where
-  non-commit fragments DO affect tracking.
-- Add a test: non-commit fragment registers shape, flush notification catches it
-  up, then commit fragment with no affected shapes triggers global offset
-  notification.
-- Add a test: multiple non-commit fragments update `last_sent` progressively,
-  then commit finalizes.
+- **"should ignore fragments without commits"** (line 30): now shapes ARE tracked
+  (not empty) but no flush notification is sent (no commit to finalize).
+- **"should ignore fragments without commits and not affect subsequent tracking"**
+  (line 42): non-commit fragments now DO affect tracking — a shape registered by
+  a non-commit fragment carries over to subsequent commit fragment processing.
+
+Add new tests:
+
+- Non-commit fragment registers shape, flush notification catches it up, then
+  commit fragment with no affected shapes triggers global offset notification.
+- Multiple non-commit fragments update `last_sent` progressively, then commit
+  finalizes and notifies.
+- Non-commit fragment with no affected shapes is a no-op (no tracking, no
+  notification).
 
 ### Step 4: Validate
 
@@ -120,7 +125,7 @@ Run the regression test added in commit `4049f75db`:
 ```sh
 cd packages/sync-service
 mix test test/electric/shapes/consumer_test.exs \
-  --only "flush notification for multi-fragment txn is not lost when storage flushes before commit fragment"
+  --only "flush notification for multi-fragment txn is not lost"
 ```
 
 Run the full FlushTracker test suite:
