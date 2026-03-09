@@ -3,15 +3,13 @@ defmodule Electric.Replication.ShapeLogCollector.FlushTracker do
   alias Electric.Replication.Changes.{Commit, TransactionFragment}
 
   @type shape_id() :: term()
-  @type xid() :: Xid.anyxid()
 
   defstruct [
     :last_global_flushed_offset,
     :last_seen_offset,
     :last_flushed,
     :min_incomplete_flush_tree,
-    :notify_fn,
-    :shapes_in_txn
+    :notify_fn
   ]
 
   @type t() :: %__MODULE__{
@@ -21,8 +19,7 @@ defmodule Electric.Replication.ShapeLogCollector.FlushTracker do
             optional(shape_id()) => {last_sent :: LogOffset.t(), last_flushed :: LogOffset.t()}
           },
           min_incomplete_flush_tree: :gb_trees.tree(LogOffset.t_tuple(), MapSet.t(shape_id())),
-          notify_fn: (non_neg_integer() -> any()),
-          shapes_in_txn: %{optional(xid()) => MapSet.t(shape_id())}
+          notify_fn: (non_neg_integer() -> any())
         }
 
   @doc """
@@ -90,8 +87,7 @@ defmodule Electric.Replication.ShapeLogCollector.FlushTracker do
       last_seen_offset: LogOffset.before_all(),
       last_flushed: %{},
       min_incomplete_flush_tree: :gb_trees.empty(),
-      notify_fn: opts[:notify_fn],
-      shapes_in_txn: %{}
+      notify_fn: opts[:notify_fn]
     }
   end
 
@@ -99,44 +95,43 @@ defmodule Electric.Replication.ShapeLogCollector.FlushTracker do
     last_flushed == %{} and :gb_trees.is_empty(tree)
   end
 
-  @spec handle_txn_fragment(t(), TransactionFragment.t(), Enumerable.t(shape_id())) :: t()
+  @spec handle_txn_fragment(
+          t(),
+          TransactionFragment.t(),
+          Enumerable.t(shape_id()),
+          MapSet.t(shape_id())
+        ) :: t()
 
   # Non-commit fragment: track affected shapes but don't update last_seen_offset
   # or notify. This ensures shapes are registered early so flush notifications
   # from Consumers aren't lost when storage flushes before the commit arrives.
   def handle_txn_fragment(
         %__MODULE__{} = state,
-        %TransactionFragment{commit: nil, xid: xid, last_log_offset: last_log_offset},
-        affected_shapes
+        %TransactionFragment{commit: nil, last_log_offset: last_log_offset},
+        affected_shapes,
+        _shapes_with_changes
       ) do
-    state = track_shapes(state, last_log_offset, affected_shapes)
-    record_shapes_in_txn(state, xid, affected_shapes)
+    track_shapes(state, last_log_offset, affected_shapes)
   end
 
-  # Commit fragment: track any new affected shapes, update last_seen_offset,
-  # and notify if caught up. Shapes already flushed from non-commit fragments
-  # (tracked in shapes_in_txn but no longer in last_flushed) are skipped.
+  # Commit fragment: track shapes that have actual changes in this fragment
+  # or are already being tracked (need last_sent updated to commit offset).
+  # Skip shapes that only have a commit marker and already flushed from
+  # earlier non-commit fragments — there's nothing new to flush for them.
   def handle_txn_fragment(
         %__MODULE__{} = state,
-        %TransactionFragment{commit: %Commit{}, xid: xid, last_log_offset: last_log_offset},
-        affected_shapes
+        %TransactionFragment{commit: %Commit{}, last_log_offset: last_log_offset},
+        affected_shapes,
+        shapes_with_changes
       ) do
-    # Filter out shapes that were tracked by earlier non-commit fragments
-    # but have already been flushed (no longer in last_flushed)
-    txn_shapes = Map.get(state.shapes_in_txn, xid, MapSet.new())
-
-    filtered_shapes =
-      Enum.reject(affected_shapes, fn shape ->
-        MapSet.member?(txn_shapes, shape) and not is_map_key(state.last_flushed, shape)
+    shapes_to_track =
+      Enum.filter(affected_shapes, fn shape ->
+        shape in shapes_with_changes or is_map_key(state.last_flushed, shape)
       end)
 
-    state = track_shapes(state, last_log_offset, filtered_shapes)
+    state = track_shapes(state, last_log_offset, shapes_to_track)
 
-    state = %{
-      state
-      | last_seen_offset: last_log_offset,
-        shapes_in_txn: Map.delete(state.shapes_in_txn, xid)
-    }
+    state = %{state | last_seen_offset: last_log_offset}
 
     if state.last_flushed == %{} do
       update_global_offset(state)
@@ -184,15 +179,6 @@ defmodule Electric.Replication.ShapeLogCollector.FlushTracker do
       | last_flushed: last_flushed,
         min_incomplete_flush_tree: min_incomplete_flush_tree
     }
-  end
-
-  defp record_shapes_in_txn(%__MODULE__{} = state, _xid, []), do: state
-
-  defp record_shapes_in_txn(%__MODULE__{} = state, xid, affected_shapes) do
-    update_in(state.shapes_in_txn[xid], fn set ->
-      set = set || MapSet.new()
-      Enum.into(affected_shapes, set)
-    end)
   end
 
   @spec handle_flush_notification(t(), shape_id(), LogOffset.t()) :: t()
