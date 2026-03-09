@@ -23,6 +23,7 @@ defmodule Electric.Replication.ShapeLogCollector do
   alias Electric.Replication.PersistentReplicationState
   alias Electric.Postgres.Inspector
   alias Electric.Replication.Changes
+  alias Electric.Replication.Changes.LsnUpdate
   alias Electric.Replication.Changes.Relation
   alias Electric.Replication.Changes.TransactionFragment
   alias Electric.Replication.LogOffset
@@ -418,6 +419,10 @@ defmodule Electric.Replication.ShapeLogCollector do
         result
       end
     )
+  end
+
+  defp do_handle_event(%LsnUpdate{} = lsn_update, state) do
+    {:ok, publish(state, lsn_update)}
   end
 
   defp do_handle_event(%TransactionFragment{} = txn_fragment, state) do
