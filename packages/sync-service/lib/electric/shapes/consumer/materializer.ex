@@ -389,11 +389,19 @@ defmodule Electric.Shapes.Consumer.Materializer do
             # TODO: this is written as if it supports multiple selected columns, but it doesn't for now
             columns_present = Enum.any?(state.columns, &is_map_key(record, &1))
             has_tag_updates = removed_move_tags != []
+            pk_changed = old_key != key
 
-            if columns_present or has_tag_updates do
+            if columns_present or has_tag_updates or pk_changed do
+              # When PK changes, old_key must be removed from all tag indices it
+              # belongs to (both removed and retained tags), not just removed_move_tags
+              tags_to_remove =
+                if pk_changed,
+                  do: removed_move_tags ++ move_tags,
+                  else: removed_move_tags
+
               tag_indices =
                 tag_indices
-                |> remove_row_from_tag_indices(old_key, removed_move_tags)
+                |> remove_row_from_tag_indices(old_key, tags_to_remove)
                 |> add_row_to_tag_indices(key, move_tags)
 
               if columns_present do
@@ -412,7 +420,14 @@ defmodule Electric.Shapes.Consumer.Materializer do
                    |> increment_value(value, original_string)}
                 end
               else
-                {{index, tag_indices}, counts_and_events}
+                # PK changed but tracked column not in record — re-key the index entry
+                if pk_changed do
+                  {value, index} = Map.pop!(index, old_key)
+                  index = Map.put(index, key, value)
+                  {{index, tag_indices}, counts_and_events}
+                else
+                  {{index, tag_indices}, counts_and_events}
+                end
               end
             else
               # Nothing relevant to this materializer has been updated
