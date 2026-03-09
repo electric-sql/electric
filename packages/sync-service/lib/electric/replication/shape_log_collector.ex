@@ -560,7 +560,7 @@ defmodule Electric.Replication.ShapeLogCollector do
 
     flush_tracker =
       case event do
-        %TransactionFragment{commit: commit} when not is_nil(commit) ->
+        %TransactionFragment{} ->
           FlushTracker.handle_txn_fragment(state.flush_tracker, event, affected_shapes)
 
         _ ->

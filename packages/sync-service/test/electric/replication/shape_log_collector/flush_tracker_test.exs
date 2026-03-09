@@ -27,8 +27,11 @@ defmodule Electric.Replication.ShapeLogCollector.FlushTrackerTest do
       refute_receive {:flush_confirmed, _}, 50
     end
 
-    test "should ignore fragments without commits", %{tracker: tracker} do
+    test "non-commit fragment tracks shapes but does not notify or update last_seen", %{
+      tracker: tracker
+    } do
       fragment = %TransactionFragment{
+        xid: 1,
         lsn: 1,
         last_log_offset: LogOffset.new(1, 0),
         commit: nil
@@ -36,30 +39,162 @@ defmodule Electric.Replication.ShapeLogCollector.FlushTrackerTest do
 
       tracker = FlushTracker.handle_txn_fragment(tracker, fragment, ["shape1"])
       refute_receive {:flush_confirmed, _}, 50
-      assert FlushTracker.empty?(tracker)
+      # Shape is tracked in last_flushed
+      refute FlushTracker.empty?(tracker)
     end
 
-    test "should ignore fragments without commits and not affect subsequent tracking", %{
-      tracker: tracker
-    } do
-      fragment_without_commit = %TransactionFragment{
+    test "non-commit fragment with no affected shapes is a no-op", %{tracker: tracker} do
+      fragment = %TransactionFragment{
+        xid: 1,
         lsn: 1,
         last_log_offset: LogOffset.new(1, 0),
         commit: nil
       }
 
-      tracker = FlushTracker.handle_txn_fragment(tracker, fragment_without_commit, ["shape1"])
-
-      # Subsequent fragment with commit should be tracked normally
-      tracker =
-        FlushTracker.handle_txn_fragment(tracker, batch(lsn: 2, last_offset: 10), ["shape1"])
-
-      # Flush notification should work for the fragment with commit
-      _ = FlushTracker.handle_flush_notification(tracker, "shape1", LogOffset.new(2, 10))
-
-      # Should only receive flush for lsn 2, not lsn 1
-      assert_receive {:flush_confirmed, 2}
+      tracker = FlushTracker.handle_txn_fragment(tracker, fragment, [])
       refute_receive {:flush_confirmed, _}, 50
+      assert FlushTracker.empty?(tracker)
+    end
+
+    test "shape tracked by non-commit fragment can be flushed before commit arrives", %{
+      tracker: tracker
+    } do
+      # Non-commit fragment registers shape
+      fragment = %TransactionFragment{
+        xid: 1,
+        lsn: 5,
+        last_log_offset: LogOffset.new(5, 4),
+        commit: nil
+      }
+
+      tracker = FlushTracker.handle_txn_fragment(tracker, fragment, ["shape1"])
+
+      # Flush notification catches up the shape
+      tracker = FlushTracker.handle_flush_notification(tracker, "shape1", LogOffset.new(5, 4))
+
+      # No notification yet — no commit seen
+      refute_receive {:flush_confirmed, _}, 50
+      assert FlushTracker.empty?(tracker)
+
+      # Commit arrives with same shape in affected_shapes (via EventRouter's shapes_in_txn),
+      # but shape was already flushed — should not be re-registered
+      tracker =
+        FlushTracker.handle_txn_fragment(
+          tracker,
+          batch(xid: 1, lsn: 5, last_offset: 10),
+          ["shape1"]
+        )
+
+      # Shape was skipped, tracker is empty, global offset notified
+      assert_receive {:flush_confirmed, 5}
+      assert FlushTracker.empty?(tracker)
+    end
+
+    test "shape tracked by non-commit and still pending is updated by commit", %{
+      tracker: tracker
+    } do
+      # Non-commit fragment registers shape
+      fragment = %TransactionFragment{
+        xid: 1,
+        lsn: 5,
+        last_log_offset: LogOffset.new(5, 2),
+        commit: nil
+      }
+
+      tracker = FlushTracker.handle_txn_fragment(tracker, fragment, ["shape1"])
+
+      # Commit arrives — shape is still in last_flushed, so last_sent is updated
+      tracker =
+        FlushTracker.handle_txn_fragment(
+          tracker,
+          batch(xid: 1, lsn: 5, last_offset: 10),
+          ["shape1"]
+        )
+
+      refute FlushTracker.empty?(tracker)
+
+      # Flush at the commit's offset catches up the shape
+      tracker =
+        FlushTracker.handle_flush_notification(tracker, "shape1", LogOffset.new(5, 10))
+
+      assert_receive {:flush_confirmed, 5}
+      assert FlushTracker.empty?(tracker)
+    end
+
+    test "shape only in commit (not in non-commit fragments) is tracked normally", %{
+      tracker: tracker
+    } do
+      # Non-commit fragment for a different shape
+      fragment = %TransactionFragment{
+        xid: 1,
+        lsn: 5,
+        last_log_offset: LogOffset.new(5, 2),
+        commit: nil
+      }
+
+      tracker = FlushTracker.handle_txn_fragment(tracker, fragment, ["shape1"])
+
+      # Commit has both shapes — shape2 is new (not in shapes_in_txn)
+      tracker =
+        FlushTracker.handle_txn_fragment(
+          tracker,
+          batch(xid: 1, lsn: 5, last_offset: 10),
+          ["shape1", "shape2"]
+        )
+
+      refute FlushTracker.empty?(tracker)
+
+      # Both shapes need to be flushed
+      tracker =
+        FlushTracker.handle_flush_notification(tracker, "shape1", LogOffset.new(5, 10))
+
+      tracker =
+        FlushTracker.handle_flush_notification(tracker, "shape2", LogOffset.new(5, 10))
+
+      assert_receive {:flush_confirmed, 5}
+      assert FlushTracker.empty?(tracker)
+    end
+
+    test "multiple non-commit fragments update last_sent progressively", %{
+      tracker: tracker
+    } do
+      frag1 = %TransactionFragment{
+        xid: 1,
+        lsn: 5,
+        last_log_offset: LogOffset.new(5, 2),
+        commit: nil
+      }
+
+      frag2 = %TransactionFragment{
+        xid: 1,
+        lsn: 5,
+        last_log_offset: LogOffset.new(5, 5),
+        commit: nil
+      }
+
+      tracker =
+        tracker
+        |> FlushTracker.handle_txn_fragment(frag1, ["shape1"])
+        |> FlushTracker.handle_txn_fragment(frag2, ["shape1"])
+
+      # Flushing to the latest non-commit offset catches up the shape
+      tracker =
+        FlushTracker.handle_flush_notification(tracker, "shape1", LogOffset.new(5, 5))
+
+      # No notification — no commit seen
+      refute_receive {:flush_confirmed, _}, 50
+      assert FlushTracker.empty?(tracker)
+
+      # Commit with no new shapes — shape was flushed, skipped
+      tracker =
+        FlushTracker.handle_txn_fragment(
+          tracker,
+          batch(xid: 1, lsn: 5, last_offset: 10),
+          ["shape1"]
+        )
+
+      assert_receive {:flush_confirmed, 5}
+      assert FlushTracker.empty?(tracker)
     end
   end
 
@@ -177,6 +312,7 @@ defmodule Electric.Replication.ShapeLogCollector.FlushTrackerTest do
     lsn = Keyword.fetch!(opts, :lsn)
 
     %TransactionFragment{
+      xid: Keyword.get(opts, :xid, lsn),
       lsn: lsn,
       last_log_offset: LogOffset.new(lsn, Keyword.get(opts, :last_offset, 0)),
       commit: %Commit{}

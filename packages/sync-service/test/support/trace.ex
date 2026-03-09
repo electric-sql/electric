@@ -25,7 +25,7 @@ defmodule Support.Trace do
 
     - `pid: <pid>` - trace this process instead of self()
 
-  Returns the trace session which can be passed to `collect_traced_calls/1`.
+  Returns the trace session.
   """
   def trace_calls(trace_specs, opts \\ []) do
     session = :trace.session_create(__MODULE__, self(), [])

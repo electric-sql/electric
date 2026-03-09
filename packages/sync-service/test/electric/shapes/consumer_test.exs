@@ -1740,10 +1740,13 @@ defmodule Electric.Shapes.ConsumerTest do
 
       flushed_log_offset = fragment2.last_log_offset
 
-      assert [
-               {ShapeLogCollector, :notify_flushed,
-                [^stack_id, ^shape_handle, ^flushed_log_offset]}
-             ] = Support.Trace.collect_traced_calls()
+      # With flush_period: 1ms, the timer may fire between handle_event calls,
+      # producing more than one traced call. Assert the last one matches.
+      traced_calls = Support.Trace.collect_traced_calls()
+      assert length(traced_calls) >= 1
+
+      assert {ShapeLogCollector, :notify_flushed, [^stack_id, ^shape_handle, ^flushed_log_offset]} =
+               List.last(traced_calls)
 
       # Now send the commit fragment. The commit fragment itself has NO matching
       # changes for the shape — all changes were in earlier fragments.
