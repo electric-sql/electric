@@ -2,11 +2,11 @@ defmodule Electric.Shapes.Querying do
   alias Electric.ShapeCache.LogChunker
   alias Electric.Utils
   alias Electric.Shapes.Shape
-  alias Electric.Shapes.Shape.SubqueryMoves
+  alias Electric.Shapes.Consumer.Subqueries
   alias Electric.Telemetry.OpenTelemetry
 
-  @value_prefix SubqueryMoves.value_prefix()
-  @null_sentinel SubqueryMoves.null_sentinel()
+  @value_prefix Subqueries.value_prefix()
+  @null_sentinel Subqueries.null_sentinel()
 
   def query_move_in(conn, stack_id, shape_handle, shape, {where, params}) do
     table = Utils.relation_to_sql(shape.root_table)
@@ -279,7 +279,7 @@ defmodule Electric.Shapes.Querying do
   defp pg_coalesce_json_string(str), do: ~s[coalesce(#{str} , 'null')]
 
   # Generates SQL to namespace a value for tag hashing.
-  # This MUST produce identical output to SubqueryMoves.namespace_value/1 for
+  # This MUST produce identical output to Subqueries.namespace_value/1 for
   # the same input values, or Elixir-side and SQL-side tag computation will diverge.
   defp pg_namespace_value_sql(col_sql) do
     ~s[CASE WHEN #{col_sql} IS NULL THEN '#{@null_sentinel}' ELSE '#{@value_prefix}' || #{col_sql} END]

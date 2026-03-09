@@ -1,18 +1,31 @@
 defmodule Electric.Shapes.Consumer.Subqueries do
   @moduledoc false
 
+  alias Electric.Connection.Manager
   alias Electric.Postgres.Lsn
+  alias Electric.Postgres.SnapshotQuery
   alias Electric.Replication.Changes
   alias Electric.Replication.Changes.Transaction
+  alias Electric.Replication.Eval
+  alias Electric.Replication.Eval.Walker
   alias Electric.Shapes.Consumer.Subqueries.Buffering
+  alias Electric.Shapes.Consumer.Subqueries.QueryRow
   alias Electric.Shapes.Consumer.Subqueries.Steady
   alias Electric.Shapes.Consumer.Subqueries.StateMachine
+  alias Electric.Shapes.Querying
   alias Electric.Shapes.Shape
+  alias Electric.Utils
+
+  @value_prefix "v:"
+  @null_sentinel "NULL"
 
   @type move_value() :: {term(), term()}
   @type queue_op() :: {:move_in, move_value()} | {:move_out, move_value()}
   @type move_out_control() :: %{headers: %{event: String.t(), patterns: [map()]}}
-  @type output() :: Changes.change() | move_out_control()
+  @type output() :: Changes.change() | move_out_control() | QueryRow.t()
+
+  def value_prefix, do: @value_prefix
+  def null_sentinel, do: @null_sentinel
 
   @spec new(keyword() | map()) :: Steady.t()
   def new(opts) when is_list(opts) or is_map(opts) do
@@ -33,6 +46,138 @@ defmodule Electric.Shapes.Consumer.Subqueries do
           {[output()], Steady.t() | Buffering.t()}
   def handle_event(state, event), do: StateMachine.handle_event(state, event)
 
+  @spec query_move_in_async(pid() | atom(), map(), Buffering.t(), pid()) :: :ok
+  def query_move_in_async(
+        supervisor,
+        consumer_state,
+        %Buffering{} = buffering_state,
+        consumer_pid
+      ) do
+    {where, params} =
+      move_in_where_clause(
+        consumer_state.shape,
+        consumer_state.subquery_state.dependency_handle,
+        [elem(buffering_state.move_in_value, 0)],
+        buffering_state.subquery_view_before_move_in
+      )
+
+    pool = Manager.pool_name(consumer_state.stack_id, :snapshot)
+    stack_id = consumer_state.stack_id
+    shape = consumer_state.shape
+    shape_handle = consumer_state.shape_handle
+
+    :telemetry.execute([:electric, :subqueries, :move_in_triggered], %{count: 1}, %{
+      stack_id: stack_id
+    })
+
+    Task.Supervisor.start_child(supervisor, fn ->
+      try do
+        SnapshotQuery.execute_for_shape(pool, shape_handle, shape,
+          stack_id: stack_id,
+          query_reason: "move_in_query",
+          snapshot_info_fn: fn _, pg_snapshot, _lsn ->
+            send(consumer_pid, {:pg_snapshot_known, pg_snapshot})
+          end,
+          query_fn: fn conn, _pg_snapshot, lsn ->
+            rows =
+              Querying.query_move_in(conn, stack_id, shape_handle, shape, {where, params})
+              |> Enum.map(fn [key, _tags, json] -> %QueryRow{key: key, json: json} end)
+
+            send(consumer_pid, {:query_move_in_complete, rows, lsn})
+          end
+        )
+      rescue
+        error ->
+          send(consumer_pid, {:query_move_in_error, error, __STACKTRACE__})
+      end
+    end)
+
+    :ok
+  end
+
+  @spec move_in_where_clause(Shape.t(), Shape.handle(), [term()], Enumerable.t()) ::
+          {String.t(), [list()]}
+  def move_in_where_clause(
+        %Shape{
+          where: %{query: query, used_refs: used_refs},
+          shape_dependencies: shape_dependencies,
+          shape_dependencies_handles: shape_dependencies_handles,
+          subquery_comparison_expressions: comparison_expressions
+        },
+        shape_handle,
+        move_ins,
+        current_view
+      ) do
+    index = Enum.find_index(shape_dependencies_handles, &(&1 == shape_handle))
+    target_section = Enum.at(shape_dependencies, index) |> rebuild_subquery_section()
+    subquery_ref = ["$sublink", Integer.to_string(index)]
+    comparison_expr = Map.fetch!(comparison_expressions, subquery_ref)
+    lhs_sql = comparison_sql(comparison_expr)
+    current_view = Enum.to_list(current_view)
+
+    case used_refs[subquery_ref] do
+      {:array, {:row, cols}} ->
+        {inclusion_sql, inclusion_params} = composite_membership_sql(cols, move_ins, 1)
+
+        {exclusion_sql, exclusion_params} =
+          composite_membership_sql(cols, current_view, length(cols) + 1)
+
+        replacement = "#{inclusion_sql} AND NOT #{lhs_sql} #{exclusion_sql}"
+
+        {String.replace(query, target_section, replacement), inclusion_params ++ exclusion_params}
+
+      _col ->
+        type = Electric.Replication.Eval.type_to_pg_cast(comparison_expr.returns)
+
+        replacement =
+          "= ANY ($1::#{type}[]) AND NOT #{lhs_sql} = ANY ($2::#{type}[])"
+
+        {String.replace(query, target_section, replacement), [move_ins, current_view]}
+    end
+  end
+
+  @spec move_in_tag_structure(Shape.t()) ::
+          {list(list(String.t() | {:hash_together, [String.t(), ...]})), map()}
+  def move_in_tag_structure(%Shape{} = shape)
+      when is_nil(shape.where)
+      when shape.shape_dependencies == [],
+      do: {[], %{}}
+
+  def move_in_tag_structure(shape) do
+    {:ok, {tag_structure, comparison_expressions}} =
+      Walker.reduce(
+        shape.where.eval,
+        fn
+          %Eval.Parser.Func{name: "sublink_membership_check", args: [testexpr, sublink_ref]},
+          {[current_tag | others], comparison_expressions},
+          _ ->
+            tags =
+              case testexpr do
+                %Eval.Parser.Ref{path: [column_name]} ->
+                  [[column_name | current_tag] | others]
+
+                %Eval.Parser.RowExpr{elements: elements} ->
+                  elements =
+                    Enum.map(elements, fn %Eval.Parser.Ref{path: [column_name]} ->
+                      column_name
+                    end)
+
+                  [[{:hash_together, elements} | current_tag] | others]
+              end
+
+            {:ok, {tags, Map.put(comparison_expressions, sublink_ref.path, testexpr)}}
+
+          _, acc, _ ->
+            {:ok, acc}
+        end,
+        {[[]], %{}}
+      )
+
+    comparison_expressions
+    |> Map.new(fn {path, expr} -> {path, Eval.Expr.wrap_parser_part(expr)} end)
+    |> then(&{tag_structure, &1})
+  end
+
   @spec enqueue_materializer_ops([queue_op()], map()) :: [queue_op()]
   def enqueue_materializer_ops(queue, payload) do
     new_ops =
@@ -48,15 +193,18 @@ defmodule Electric.Shapes.Consumer.Subqueries do
       nil ->
         {outputs, state}
 
+      {index, :skip} ->
+        {_op, queue} = List.pop_at(state.queue, index)
+        drain_queue(%{state | queue: queue}, outputs)
+
       {index, {:move_out, move_value}} ->
         {_op, queue} = List.pop_at(state.queue, index)
 
-        next_state =
-          %{
-            state
-            | queue: queue,
-              subquery_view: MapSet.delete(state.subquery_view, elem(move_value, 0))
-          }
+        next_state = %{
+          state
+          | queue: queue,
+            subquery_view: MapSet.delete(state.subquery_view, elem(move_value, 0))
+        }
 
         drain_queue(
           next_state,
@@ -179,6 +327,73 @@ defmodule Electric.Shapes.Consumer.Subqueries do
     }
   end
 
+  @spec should_skip_query_row?(
+          %{String.t() => pos_integer()},
+          SnapshotQuery.pg_snapshot(),
+          String.t()
+        ) ::
+          boolean()
+  def should_skip_query_row?(touch_tracker, _snapshot, key)
+      when not is_map_key(touch_tracker, key),
+      do: false
+
+  def should_skip_query_row?(touch_tracker, snapshot, key) do
+    touch_xid = Map.fetch!(touch_tracker, key)
+    not Transaction.visible_in_snapshot?(touch_xid, snapshot)
+  end
+
+  @spec namespace_value(nil | binary()) :: binary()
+  def namespace_value(nil), do: @null_sentinel
+  def namespace_value(value), do: @value_prefix <> value
+
+  @spec make_value_hash(binary(), binary(), nil | binary()) :: binary()
+  def make_value_hash(stack_id, shape_handle, value) do
+    make_value_hash_raw(stack_id, shape_handle, namespace_value(value))
+  end
+
+  @spec make_value_hash_raw(binary(), binary(), binary()) :: binary()
+  def make_value_hash_raw(stack_id, shape_handle, namespaced_value) do
+    :crypto.hash(:md5, "#{stack_id}#{shape_handle}#{namespaced_value}")
+    |> Base.encode16(case: :lower)
+  end
+
+  defp composite_membership_sql(cols, values, first_param_index) do
+    casts = Enum.map(cols, &Electric.Replication.Eval.type_to_pg_cast/1)
+
+    params =
+      case values do
+        [] -> Enum.map(casts, fn _ -> [] end)
+        values -> values |> Utils.unzip_any() |> Tuple.to_list()
+      end
+
+    sql =
+      casts
+      |> Enum.with_index(first_param_index)
+      |> Enum.map_join(", ", fn {col, index} -> "$#{index}::#{col}[]" end)
+      |> then(&"IN (SELECT * FROM unnest(#{&1}))")
+
+    {sql, params}
+  end
+
+  defp rebuild_subquery_section(shape) do
+    base =
+      ~s|IN (SELECT #{Enum.join(shape.explicitly_selected_columns, ", ")} FROM #{Utils.relation_to_sql(shape.root_table)}|
+
+    where = if shape.where, do: " WHERE #{shape.where.query}", else: ""
+    base <> where <> ")"
+  end
+
+  defp comparison_sql(%Eval.Expr{eval: %Eval.Parser.Ref{path: [column_name]}}), do: column_name
+
+  defp comparison_sql(%Eval.Expr{eval: %Eval.Parser.RowExpr{elements: elements}}) do
+    columns =
+      Enum.map(elements, fn %Eval.Parser.Ref{path: [column_name]} ->
+        column_name
+      end)
+
+    "(" <> Enum.join(columns, ", ") <> ")"
+  end
+
   defp make_move_out_patterns(tag_structure, stack_id, shape_handle, values) do
     Enum.flat_map(tag_structure, fn [column_or_expr] ->
       Enum.map(values, fn {_typed_value, original_value} ->
@@ -205,21 +420,6 @@ defmodule Electric.Shapes.Consumer.Subqueries do
       |> Enum.join()
 
     make_value_hash_raw(stack_id, shape_handle, namespaced_value)
-  end
-
-  @spec namespace_value(nil | binary()) :: binary()
-  def namespace_value(nil), do: "NULL"
-  def namespace_value(value), do: "v:" <> value
-
-  @spec make_value_hash(binary(), binary(), nil | binary()) :: binary()
-  def make_value_hash(stack_id, shape_handle, value) do
-    make_value_hash_raw(stack_id, shape_handle, namespace_value(value))
-  end
-
-  @spec make_value_hash_raw(binary(), binary(), binary()) :: binary()
-  def make_value_hash_raw(stack_id, shape_handle, namespaced_value) do
-    :crypto.hash(:md5, "#{stack_id}#{shape_handle}#{namespaced_value}")
-    |> Base.encode16(case: :lower)
   end
 
   defp to_steady_state(%Buffering{} = state) do
@@ -262,8 +462,16 @@ defmodule Electric.Shapes.Consumer.Subqueries do
           nil
       end)
 
-    index = eligible_move_out_index || 0
-    {index, Enum.at(queue, index)}
+    cond do
+      not is_nil(eligible_move_out_index) ->
+        {eligible_move_out_index, Enum.at(queue, eligible_move_out_index)}
+
+      match?({:move_out, _}, hd(queue)) ->
+        {0, :skip}
+
+      true ->
+        {0, hd(queue)}
+    end
   end
 
   defp no_earlier_op_for_value?(queue, index, value) do

@@ -1686,15 +1686,11 @@ defmodule Electric.Shapes.ConsumerTest do
 
       # Mock query_move_in_async to simulate a query without hitting the database
       Repatch.patch(
-        Electric.Shapes.PartialModes,
+        Electric.Shapes.Consumer.Subqueries,
         :query_move_in_async,
         [mode: :shared],
-        fn _task_sup, _shape_handle, _shape, _where_clause, opts ->
-          consumer_pid = opts[:consumer_pid]
-          name = opts[:move_in_name]
-          results_fn = opts[:results_fn]
-
-          send(parent, {:query_requested, name, consumer_pid, results_fn})
+        fn _task_sup, _consumer_state, _buffering_state, consumer_pid ->
+          send(parent, {:query_requested, consumer_pid})
 
           :ok
         end
@@ -1724,10 +1720,10 @@ defmodule Electric.Shapes.ConsumerTest do
         ctx.stack_id
       )
 
-      assert_receive {:query_requested, name, ^consumer_pid, results_fn}
+      assert_receive {:query_requested, ^consumer_pid}
 
       # Snapshot here is intentionally before the update to make sure the update is considered shadowing
-      send(consumer_pid, {:pg_snapshot_known, name, {90, 95, []}})
+      send(consumer_pid, {:pg_snapshot_known, {90, 95, []}})
 
       # Now send an UPDATE (xid = 100) before move-in query completes
       # This should be converted to INSERT
@@ -1747,22 +1743,24 @@ defmodule Electric.Shapes.ConsumerTest do
 
       assert :ok = ShapeLogCollector.handle_event(txn, ctx.stack_id)
 
-      # Should get new_changes notification for the UPDATE-as-INSERT
-      assert_receive {^ref, :new_changes, _offset}, @receive_timeout
-
-      # Now write data for the move-in query
-      results_fn.(
-        [
-          [
-            "\"public\".\"test_table\"/\"1\"",
-            ["tag_does_not_matter"],
-            Jason.encode!(%{"value" => %{"id" => "1", "value" => "old"}})
-          ]
-        ],
-        {90, 95, []}
+      send(
+        consumer_pid,
+        {:query_move_in_complete,
+         [
+           %Electric.Shapes.Consumer.Subqueries.QueryRow{
+             key: ~s'"public"."test_table"/"1"',
+             json:
+               Jason.encode!(%{
+                 "key" => ~s'"public"."test_table"/"1"',
+                 "value" => %{"id" => "1", "value" => "old"},
+                 "headers" => %{
+                   "operation" => "insert",
+                   "relation" => ["public", "test_table"]
+                 }
+               })
+           }
+         ], Lsn.from_integer(100)}
       )
-
-      send(consumer_pid, {:query_move_in_complete, name, ["test_key"], {90, 95, []}})
 
       assert_receive {^ref, :new_changes, _offset}, @receive_timeout
 
@@ -1772,15 +1770,12 @@ defmodule Electric.Shapes.ConsumerTest do
       assert [
                %{
                  "headers" => %{"operation" => "insert"},
-                 "value" => %{"id" => "1", "value" => "updated"}
+                 "key" => ~s'"public"."test_table"/"1"',
+                 "value" => %{"id" => "1", "value" => "old"}
                },
                %{
-                 "headers" => %{
-                   "control" => "snapshot-end",
-                   "xmin" => "90",
-                   "xmax" => "95",
-                   "xip_list" => []
-                 }
+                 "headers" => %{"operation" => "update"},
+                 "key" => ~s'"public"."test_table"/"1"'
                }
              ] = get_log_items_from_storage(LogOffset.last_before_real_offsets(), shape_storage)
     end

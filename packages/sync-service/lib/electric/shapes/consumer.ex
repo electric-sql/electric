@@ -1,12 +1,12 @@
 defmodule Electric.Shapes.Consumer do
   use GenServer, restart: :temporary
 
-  alias Electric.Shapes.Consumer.ChangeHandling
   alias Electric.Shapes.Consumer.InitialSnapshot
-  alias Electric.Shapes.Consumer.MoveHandling
-  alias Electric.Shapes.Consumer.MoveIns
   alias Electric.Shapes.Consumer.PendingTxn
   alias Electric.Shapes.Consumer.State
+  alias Electric.Shapes.Consumer.Subqueries
+  alias Electric.Shapes.Consumer.Subqueries.Buffering
+  alias Electric.Shapes.Consumer.Subqueries.QueryRow
 
   import Electric.Shapes.Consumer.State, only: :macros
   require Electric.Replication.LogOffset
@@ -138,28 +138,34 @@ defmodule Electric.Shapes.Consumer do
 
     state = State.initialize(state, storage, writer)
 
-    if all_materializers_alive?(state) && subscribe(state, config.action) do
-      Logger.debug("Writer for #{shape_handle} initialized")
+    if all_materializers_alive?(state) do
+      state = initialize_subquery_runtime(state)
 
-      # We start the snapshotter even if there's a snapshot because it also performs the call
-      # to PublicationManager.add_shape/3. We *could* do that call here and avoid spawning a
-      # process if the shape already has a snapshot but the current semantics rely on being able
-      # to wait for the snapshot asynchronously and if we called publication manager here it would
-      # block and prevent await_snapshot_start calls from adding snapshot subscribers.
+      if subscribe(state, config.action) do
+        Logger.debug("Writer for #{shape_handle} initialized")
 
-      {:ok, _pid} =
-        Shapes.DynamicConsumerSupervisor.start_snapshotter(
-          stack_id,
-          %{
-            stack_id: stack_id,
-            shape: shape,
-            shape_handle: shape_handle,
-            storage: storage,
-            otel_ctx: config.otel_ctx
-          }
-        )
+        # We start the snapshotter even if there's a snapshot because it also performs the call
+        # to PublicationManager.add_shape/3. We *could* do that call here and avoid spawning a
+        # process if the shape already has a snapshot but the current semantics rely on being able
+        # to wait for the snapshot asynchronously and if we called publication manager here it would
+        # block and prevent await_snapshot_start calls from adding snapshot subscribers.
 
-      {:noreply, state}
+        {:ok, _pid} =
+          Shapes.DynamicConsumerSupervisor.start_snapshotter(
+            stack_id,
+            %{
+              stack_id: stack_id,
+              shape: shape,
+              shape_handle: shape_handle,
+              storage: storage,
+              otel_ctx: config.otel_ctx
+            }
+          )
+
+        {:noreply, state}
+      else
+        stop_and_clean(state)
+      end
     else
       stop_and_clean(state)
     end
@@ -279,63 +285,62 @@ defmodule Electric.Shapes.Consumer do
       "Consumer reacting to #{length(move_in)} move ins and #{length(move_out)} move outs from its #{dep_handle} dependency"
     end)
 
-    feature_flags = Electric.StackConfig.lookup(state.stack_id, :feature_flags, [])
-    tagged_subqueries_enabled? = "tagged_subqueries" in feature_flags
-
     # We need to invalidate the consumer in the following cases:
-    # - tagged subqueries are disabled since we cannot support causally correct event processing of 3+ level dependency trees
-    #   so we just invalidating this middle shape instead
     # - the where clause has an OR combined with the subquery so we can't tell if the move ins/outs actually affect the shape or not
     # - the where clause has a NOT combined with the subquery (e.g. NOT IN) since move-in to the subquery
     #   should cause move-out from the outer shape, which isn't implemented
     # - the shape has multiple subqueries at the same level since we can't correctly determine
     #   which dependency caused the move-in/out
     should_invalidate? =
-      not tagged_subqueries_enabled? or state.or_with_subquery? or state.not_with_subquery? or
+      is_nil(state.subquery_state) or state.or_with_subquery? or state.not_with_subquery? or
         length(state.shape.shape_dependencies) > 1
 
     if should_invalidate? do
       stop_and_clean(state)
     else
-      {state, notification} =
-        state
-        |> MoveHandling.process_move_ins(dep_handle, move_in)
-        |> MoveHandling.process_move_outs(dep_handle, move_out)
+      {state, notification, _num_changes, _total_size} =
+        apply_subquery_event(
+          state,
+          {:materializer_changes, dep_handle, %{move_in: move_in, move_out: move_out}}
+        )
 
-      :ok = notify_new_changes(state, notification)
+      if notification do
+        :ok = notify_new_changes(state, notification)
+      end
 
-      {:noreply, state}
+      {:noreply, state, state.hibernate_after}
     end
   end
 
-  def handle_info({:pg_snapshot_known, name, snapshot}, state) do
-    Logger.debug(fn -> "Snapshot known for move-in #{name}" end)
+  def handle_info({:pg_snapshot_known, snapshot}, state) do
+    Logger.debug(fn -> "Snapshot known for active move-in" end)
 
-    # Update the snapshot in waiting_move_ins
-    move_handling_state = MoveIns.set_snapshot(state.move_handling_state, name, snapshot)
+    {state, notification, _num_changes, _total_size} =
+      apply_subquery_event(state, {:pg_snapshot_known, snapshot})
 
-    # Garbage collect touches visible in all known snapshots
-    state = %{state | move_handling_state: move_handling_state}
-    state = State.gc_touch_tracker(state)
+    if notification do
+      :ok = notify_new_changes(state, notification)
+    end
 
     {:noreply, state, state.hibernate_after}
   end
 
-  def handle_info({:query_move_in_complete, name, key_set, snapshot}, state) do
+  def handle_info({:query_move_in_complete, rows, move_in_lsn}, state) do
     Logger.debug(fn ->
-      "Consumer query move in complete for #{name} with #{length(key_set)} keys"
+      "Consumer query move in complete for #{state.shape_handle} with #{length(rows)} rows"
     end)
 
-    {state, notification} = MoveHandling.query_complete(state, name, key_set, snapshot)
-    :ok = notify_new_changes(state, notification)
+    {state, notification, _num_changes, _total_size} =
+      apply_subquery_event(state, {:query_move_in_complete, rows, move_in_lsn})
 
-    # Garbage collect touches after query completes (no buffer consumption needed)
-    state = State.gc_touch_tracker(state)
+    if notification do
+      :ok = notify_new_changes(state, notification)
+    end
 
     {:noreply, state, state.hibernate_after}
   end
 
-  def handle_info({:query_move_in_error, _, error, stacktrace}, state) do
+  def handle_info({:query_move_in_error, error, stacktrace}, state) do
     Logger.error(
       "Error querying move in for #{state.shape_handle}: #{Exception.format(:error, error, stacktrace)}"
     )
@@ -453,9 +458,18 @@ defmodule Electric.Shapes.Consumer do
     |> mark_for_removal()
   end
 
-  # Keepalive-driven LSN updates are currently forwarded to consumers for
-  # future move-in splice coordination but intentionally ignored for now.
-  defp handle_event(%Changes.LsnUpdate{}, state), do: state
+  defp handle_event(%Changes.LsnUpdate{} = _lsn_update, %{subquery_state: nil} = state),
+    do: state
+
+  defp handle_event(%Changes.LsnUpdate{} = lsn_update, state) do
+    {state, notification, _num_changes, _total_size} = apply_subquery_event(state, lsn_update)
+
+    if notification do
+      :ok = notify_new_changes(state, notification)
+    end
+
+    state
+  end
 
   defp handle_event(%TransactionFragment{} = txn_fragment, state) do
     Logger.debug(fn -> "Txn fragment received in Shapes.Consumer: #{inspect(txn_fragment)}" end)
@@ -772,48 +786,76 @@ defmodule Electric.Shapes.Consumer do
   defp do_handle_txn(%Transaction{xid: xid, changes: changes} = txn, state) do
     %{shape: shape, writer: writer} = state
 
-    state = State.remove_completed_move_ins(state, txn)
+    if is_nil(state.subquery_state) do
+      case convert_txn_changes(changes, xid, state) do
+        :includes_truncate ->
+          handle_txn_with_truncate(txn.xid, state)
 
-    extra_refs_full =
-      Materializer.get_all_as_refs(shape, state.stack_id)
+        {[], 0, _} ->
+          Logger.debug(fn ->
+            "No relevant changes found for #{inspect(shape)} in txn #{txn.xid}"
+          end)
 
-    extra_refs_before_move_ins =
-      Enum.reduce(state.move_handling_state.in_flight_values, extra_refs_full, fn {key, value},
-                                                                                  acc ->
-        if is_map_key(acc, key),
-          do: Map.update!(acc, key, &MapSet.difference(&1, value)),
-          else: acc
-      end)
+          consider_flushed(state, txn.last_log_offset)
 
-    Logger.debug(fn -> "Extra refs: #{inspect(extra_refs_before_move_ins)}" end)
+        {changes, num_changes, last_log_offset} ->
+          timestamp = System.monotonic_time()
 
-    case ChangeHandling.process_changes(
-           changes,
-           state,
-           %{xid: xid, extra_refs: {extra_refs_before_move_ins, extra_refs_full}}
-         ) do
-      :includes_truncate ->
-        handle_txn_with_truncate(txn.xid, state)
+          {lines, total_size} = prepare_log_entries(changes, xid, shape)
+          writer = ShapeCache.Storage.append_to_log!(lines, writer)
 
-      {_, state, 0, _} ->
-        Logger.debug(fn ->
-          "No relevant changes found for #{inspect(shape)} in txn #{txn.xid}"
-        end)
+          OpenTelemetry.add_span_attributes(%{
+            num_bytes: total_size,
+            actual_num_changes: num_changes
+          })
 
-        consider_flushed(state, txn.last_log_offset)
+          updated_state = %{
+            state
+            | writer: writer,
+              latest_offset: last_log_offset,
+              txn_offset_mapping:
+                state.txn_offset_mapping ++ [{last_log_offset, txn.last_log_offset}]
+          }
 
-      {changes, state, num_changes, last_log_offset} ->
-        timestamp = System.monotonic_time()
+          :ok = notify_new_changes(updated_state, changes, last_log_offset)
 
-        {lines, total_size} = prepare_log_entries(changes, xid, shape)
-        writer = ShapeCache.Storage.append_to_log!(lines, writer)
+          lag = calculate_replication_lag(txn.commit_timestamp)
+          OpenTelemetry.add_span_attributes(replication_lag: lag)
+
+          Electric.Telemetry.OpenTelemetry.execute(
+            [:electric, :storage, :transaction_stored],
+            %{
+              duration: System.monotonic_time() - timestamp,
+              bytes: total_size,
+              count: 1,
+              operations: num_changes,
+              replication_lag: lag
+            },
+            Map.new(State.telemetry_attrs(updated_state))
+          )
+
+          updated_state
+      end
+    else
+      handle_txn_with_subqueries(txn, state)
+    end
+  end
+
+  defp handle_txn_with_subqueries(%Transaction{} = txn, state) do
+    timestamp = System.monotonic_time()
+    was_buffering = match?(%Buffering{}, state.subquery_state)
+
+    {state, notification, num_changes, total_size} =
+      apply_subquery_event(state, txn, default_xid: txn.xid)
+
+    cond do
+      notification ->
+        :ok = notify_new_changes(state, notification)
 
         OpenTelemetry.add_span_attributes(%{
           num_bytes: total_size,
           actual_num_changes: num_changes
         })
-
-        :ok = notify_new_changes(state, changes, last_log_offset)
 
         lag = calculate_replication_lag(txn.commit_timestamp)
         OpenTelemetry.add_span_attributes(replication_lag: lag)
@@ -830,14 +872,188 @@ defmodule Electric.Shapes.Consumer do
           Map.new(State.telemetry_attrs(state))
         )
 
-        %{
-          state
-          | writer: writer,
-            latest_offset: last_log_offset,
-            txn_offset_mapping:
-              state.txn_offset_mapping ++ [{last_log_offset, txn.last_log_offset}]
-        }
+        state
+
+      was_buffering or match?(%Buffering{}, state.subquery_state) ->
+        state
+
+      true ->
+        Logger.debug(fn ->
+          "No relevant changes found for #{inspect(state.shape)} in txn #{txn.xid}"
+        end)
+
+        consider_flushed(state, txn.last_log_offset)
     end
+  end
+
+  defp convert_txn_changes(changes, _xid, state) do
+    case convert_fragment_changes(changes, state.stack_id, state.shape_handle, state.shape) do
+      :includes_truncate ->
+        :includes_truncate
+
+      {reversed_changes, num_changes, last_log_offset} ->
+        {Enum.reverse(reversed_changes), num_changes, last_log_offset}
+
+      acc ->
+        acc
+    end
+  end
+
+  defp apply_subquery_event(state, event, opts \\ []) do
+    previous_subquery_state = state.subquery_state
+    {outputs, subquery_state} = Subqueries.handle_event(state.subquery_state, event)
+    state = %{state | subquery_state: subquery_state}
+    state = maybe_start_move_in_query(state, previous_subquery_state)
+
+    case append_subquery_outputs(state, outputs, event, previous_subquery_state, opts) do
+      {state, nil, 0, 0} ->
+        {state, nil, 0, 0}
+
+      {state, range, num_changes, total_size} ->
+        {state, {range, state.latest_offset}, num_changes, total_size}
+    end
+  end
+
+  defp maybe_start_move_in_query(
+         %{subquery_state: %Buffering{} = buffering_state} = state,
+         previous_subquery_state
+       ) do
+    if should_start_move_in_query?(previous_subquery_state, buffering_state) do
+      Electric.ProcessRegistry.name(state.stack_id, Electric.StackTaskSupervisor)
+      |> Subqueries.query_move_in_async(state, buffering_state, self())
+    end
+
+    state
+  end
+
+  defp maybe_start_move_in_query(state, _previous_subquery_state), do: state
+
+  defp should_start_move_in_query?(%Buffering{move_in_value: previous}, %Buffering{
+         move_in_value: current
+       })
+       when previous == current,
+       do: false
+
+  defp should_start_move_in_query?(%Buffering{}, %Buffering{}), do: true
+  defp should_start_move_in_query?(_, %Buffering{}), do: true
+  defp should_start_move_in_query?(_, _), do: false
+
+  defp append_subquery_outputs(state, [], event, previous_subquery_state, _opts) do
+    state = finalize_subquery_flush_tracking(state, event, previous_subquery_state, nil)
+    {state, nil, 0, 0}
+  end
+
+  defp append_subquery_outputs(state, outputs, event, previous_subquery_state, opts) do
+    previous_offset = state.latest_offset
+
+    {state, latest_offset, total_size, num_changes} =
+      Enum.reduce(outputs, {state, previous_offset, 0, 0}, fn output,
+                                                              {state, current_offset, size, count} ->
+        case output do
+          %QueryRow{key: key, json: json} ->
+            json = IO.iodata_to_binary(json)
+            offset = LogOffset.increment(current_offset)
+
+            writer =
+              ShapeCache.Storage.append_to_log!([{offset, key, :insert, json}], state.writer)
+
+            {%{state | writer: writer, latest_offset: offset}, offset, size + byte_size(json),
+             count + 1}
+
+          %{headers: %{event: _}} = control_message ->
+            encoded = Jason.encode!(control_message)
+
+            {{_, offset}, writer} =
+              ShapeCache.Storage.append_control_message!(encoded, state.writer)
+
+            {%{state | writer: writer, latest_offset: offset}, offset, size + byte_size(encoded),
+             count + 1}
+
+          %Changes.TruncatedRelation{} ->
+            raise ArgumentError, "unexpected truncate emitted from subquery state machine"
+
+          %Changes.NewRecord{} = change ->
+            append_change_output(state, size, count, change, opts[:default_xid])
+
+          %Changes.UpdatedRecord{} = change ->
+            append_change_output(state, size, count, change, opts[:default_xid])
+
+          %Changes.DeletedRecord{} = change ->
+            append_change_output(state, size, count, change, opts[:default_xid])
+        end
+      end)
+
+    state =
+      finalize_subquery_flush_tracking(state, event, previous_subquery_state, latest_offset)
+
+    {state, {previous_offset, latest_offset}, num_changes, total_size}
+  end
+
+  defp append_change_output(state, size, count, change, xid) do
+    lines =
+      change
+      |> LogItems.from_change(
+        xid,
+        Shape.pk(state.shape, change.relation),
+        state.shape.replica
+      )
+      |> Enum.map(fn {offset, %{key: key} = log_item} ->
+        {offset, key, log_item.headers.operation, Jason.encode!(log_item)}
+      end)
+
+    writer = ShapeCache.Storage.append_to_log!(lines, state.writer)
+    last_offset = lines |> List.last() |> elem(0)
+    size_increase = Enum.reduce(lines, 0, fn {_, _, _, json}, acc -> acc + byte_size(json) end)
+
+    {%{state | writer: writer, latest_offset: last_offset}, last_offset, size + size_increase,
+     count + 1}
+  end
+
+  defp finalize_subquery_flush_tracking(state, event, previous_subquery_state, latest_offset) do
+    case {previous_subquery_state, state.subquery_state, event} do
+      {%Buffering{move_in_value: move_in_value}, %Buffering{move_in_value: move_in_value}, _event} ->
+        state
+
+      {%Buffering{} = buffering_state, _current_subquery_state, _event} ->
+        buffered_txns = buffered_txns_for_flush(buffering_state, event)
+        maybe_track_buffered_flush(state, buffered_txns, latest_offset)
+
+      {_subquery_state, _current_subquery_state, %Transaction{last_log_offset: last_log_offset}} ->
+        maybe_track_txn_flush(state, last_log_offset, latest_offset)
+
+      _ ->
+        state
+    end
+  end
+
+  defp buffered_txns_for_flush(%Buffering{buffered_txns: buffered_txns}, %Transaction{} = txn),
+    do: buffered_txns ++ [txn]
+
+  defp buffered_txns_for_flush(%Buffering{buffered_txns: buffered_txns}, _event),
+    do: buffered_txns
+
+  defp maybe_track_buffered_flush(state, [], _latest_offset), do: state
+
+  defp maybe_track_buffered_flush(state, buffered_txns, nil) do
+    buffered_txns
+    |> List.last()
+    |> then(&consider_flushed(state, &1.last_log_offset))
+  end
+
+  defp maybe_track_buffered_flush(state, buffered_txns, latest_offset) do
+    last_log_offset = buffered_txns |> List.last() |> Map.fetch!(:last_log_offset)
+
+    %{
+      state
+      | txn_offset_mapping: state.txn_offset_mapping ++ [{latest_offset, last_log_offset}]
+    }
+  end
+
+  defp maybe_track_txn_flush(state, last_log_offset, nil),
+    do: consider_flushed(state, last_log_offset)
+
+  defp maybe_track_txn_flush(state, last_log_offset, latest_offset) do
+    %{state | txn_offset_mapping: state.txn_offset_mapping ++ [{latest_offset, last_log_offset}]}
   end
 
   defp handle_txn_with_truncate(xid, state) do
@@ -1004,6 +1220,33 @@ defmodule Electric.Shapes.Consumer do
         false
     end
   end
+
+  defp initialize_subquery_runtime(
+         %State{
+           shape: %Shape{shape_dependencies_handles: [dependency_handle]},
+           or_with_subquery?: false,
+           not_with_subquery?: false
+         } = state
+       ) do
+    materializer_opts = %{stack_id: state.stack_id, shape_handle: dependency_handle}
+    :ok = Materializer.wait_until_ready(materializer_opts)
+    subquery_view = Materializer.get_link_values(materializer_opts)
+
+    %{
+      state
+      | subquery_state:
+          Subqueries.new(
+            shape: state.shape,
+            stack_id: state.stack_id,
+            shape_handle: state.shape_handle,
+            dependency_handle: dependency_handle,
+            subquery_ref: ["$sublink", "0"],
+            subquery_view: subquery_view
+          )
+    }
+  end
+
+  defp initialize_subquery_runtime(state), do: state
 
   defp all_materializers_alive?(state) do
     Enum.all?(state.shape.shape_dependencies_handles, fn shape_handle ->

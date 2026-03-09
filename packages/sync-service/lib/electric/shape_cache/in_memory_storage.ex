@@ -390,7 +390,7 @@ defmodule Electric.ShapeCache.InMemoryStorage do
         {{:movein, {^name, _}} = ets_key, [{{:movein, {^name, key}}, {tags, json}}]} ->
           # Check if this row should be skipped
           if (tags != [] and Enum.all?(tags, &MapSet.member?(tags_to_skip, &1))) or
-               Electric.Shapes.Consumer.MoveIns.should_skip_query_row?(
+               Electric.Shapes.Consumer.Subqueries.should_skip_query_row?(
                  touch_tracker,
                  snapshot,
                  key
