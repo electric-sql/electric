@@ -1501,7 +1501,7 @@ defmodule Electric.Replication.Eval.Parser do
              ctx
            ) do
       %PgQuery.ParseResult{
-        version: 150_001,
+        version: 170_007,
         stmts: [
           %PgQuery.RawStmt{
             stmt: %PgQuery.Node{

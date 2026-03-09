@@ -54,31 +54,11 @@ defmodule Electric.Replication.Eval.PgQueryFuzzTest do
   @tables ~w[t1 t2 t3 t4 t5 parent child users items orders]
   @columns ~w[id name value parent_id status]
 
-  @moduletag timeout: :infinity
+  @moduletag timeout: :infinity, fuzz: true
 
   # ============================================================================
   # Full pipeline fuzz tests (Shape.new)
   # ============================================================================
-
-  test "humanlayer" do
-    where = """
-    organization_id = '019c26f8-5a48-7256-a1d3-9b7ab52ff22d'
-    AND (
-      resource_owner_user_id = 'user_01KG5ZWBTG7SCCC0AMJ155FPT3'
-      OR (
-        task_id IS NOT NULL
-        AND task_id IN (
-          SELECT task_id FROM public.task_user_acl WHERE subject_user_id = 'user_01KG5ZWBTG7SCCC0AMJ155FPT3' AND organization_id = '019c26f8-5a48-7256-a1d3-9b7ab52ff22d'
-        )
-      ) OR (
-        task_id IS NOT NULL
-        AND task_id IN (
-          SELECT task_id FROM public.task_organization_acl WHERE organization_id = '019c26f8-5a48-7256-a1d3-9b7ab52ff22d'
-        )
-      )
-    )
-    """
-  end
 
   describe "Shape.new fuzz — subqueries without params" do
     property "does not segfault on IN subqueries" do
@@ -1429,6 +1409,379 @@ defmodule Electric.Replication.Eval.PgQueryFuzzTest do
       {1, constant("00001")},
       {1, constant("+42")}
     ])
+  end
+
+  # ============================================================================
+  # Generators — ACL-style queries (production pattern)
+  #
+  # Mimics real customer queries like:
+  #   organization_id = '<uuid>' AND (
+  #     resource_owner_user_id = '<uid>'
+  #     OR (task_id IS NOT NULL AND task_id IN (SELECT task_id FROM task_user_acl WHERE ...))
+  #     OR (task_id IS NOT NULL AND task_id IN (SELECT task_id FROM task_org_acl WHERE ...))
+  #   )
+  # ============================================================================
+
+  @acl_inspector Support.StubInspector.new(
+                   tables: [
+                     {1, {"public", "tasks"}},
+                     {2, {"public", "task_user_acl"}},
+                     {3, {"public", "task_org_acl"}},
+                     {4, {"public", "task_team_acl"}},
+                     {5, {"public", "task_role_acl"}},
+                     {6, {"public", "projects"}},
+                     {7, {"public", "project_members"}},
+                     {8, {"public", "team_members"}},
+                     {9, {"public", "resources"}},
+                     {10, {"public", "resource_acl"}}
+                   ],
+                   columns: [
+                     %{name: "id", type: "text", pk_position: 0, type_id: {25, -1}},
+                     %{name: "task_id", type: "text", type_id: {25, -1}},
+                     %{name: "project_id", type: "text", type_id: {25, -1}},
+                     %{name: "organization_id", type: "text", type_id: {25, -1}},
+                     %{name: "user_id", type: "text", type_id: {25, -1}},
+                     %{name: "subject_user_id", type: "text", type_id: {25, -1}},
+                     %{name: "resource_owner_user_id", type: "text", type_id: {25, -1}},
+                     %{name: "team_id", type: "text", type_id: {25, -1}},
+                     %{name: "role", type: "text", type_id: {25, -1}},
+                     %{name: "status", type: "text", type_id: {25, -1}},
+                     %{name: "active", type: "bool", type_id: {16, -1}}
+                   ]
+                 )
+
+  @acl_tables ~w[task_user_acl task_org_acl task_team_acl task_role_acl project_members team_members resource_acl]
+  @acl_root_tables ~w[tasks projects resources]
+  @acl_id_cols ~w[task_id project_id organization_id user_id subject_user_id resource_owner_user_id team_id]
+  @acl_filter_cols ~w[organization_id user_id subject_user_id team_id role status]
+
+  defp uuid_gen do
+    bind(
+      {integer(0..0xFFFFFFFF), integer(0..0xFFFF), integer(0..0xFFFF), integer(0..0xFFFF),
+       integer(0..0xFFFFFFFFFFFF)},
+      fn {a, b, c, d, e} ->
+        constant(
+          :io_lib.format("~8.16.0b-~4.16.0b-~4.16.0b-~4.16.0b-~12.16.0b", [a, b, c, d, e])
+          |> IO.iodata_to_binary()
+        )
+      end
+    )
+  end
+
+  defp uid_gen do
+    bind(string(:alphanumeric, length: 24), fn s ->
+      constant("user_" <> s)
+    end)
+  end
+
+  defp acl_literal_gen do
+    frequency([
+      {4, uuid_gen()},
+      {3, uid_gen()},
+      {2, member_of(~w[admin editor viewer member owner])},
+      {1, member_of(~w[active inactive pending archived])}
+    ])
+  end
+
+  defp acl_eq_condition_gen do
+    bind({member_of(@acl_filter_cols), acl_literal_gen()}, fn {col, val} ->
+      constant("#{col} = '#{val}'")
+    end)
+  end
+
+  defp acl_subquery_gen do
+    bind(
+      {member_of(@acl_id_cols), member_of(@acl_tables), member_of(@acl_id_cols),
+       list_of(acl_eq_condition_gen(), min_length: 1, max_length: 3)},
+      fn {select_col, table, _join_col, conditions} ->
+        where = Enum.join(conditions, " AND ")
+        constant("SELECT #{select_col} FROM public.#{table} WHERE #{where}")
+      end
+    )
+  end
+
+  # IS NOT NULL guard + IN subquery (the production pattern)
+  defp acl_guarded_subquery_branch_gen do
+    bind({member_of(@acl_id_cols), acl_subquery_gen()}, fn {col, subq} ->
+      constant("(#{col} IS NOT NULL AND #{col} IN (#{subq}))")
+    end)
+  end
+
+  # Simple ownership check: col = 'literal'
+  defp acl_ownership_check_gen do
+    bind({member_of(@acl_id_cols), acl_literal_gen()}, fn {col, val} ->
+      constant("#{col} = '#{val}'")
+    end)
+  end
+
+  # Core ACL pattern: top_filter AND (ownership OR guarded_subq1 OR guarded_subq2 ...)
+  defp acl_where_clause_gen do
+    bind(
+      {member_of(@acl_root_tables), acl_eq_condition_gen(), acl_ownership_check_gen(),
+       list_of(acl_guarded_subquery_branch_gen(), min_length: 1, max_length: 4)},
+      fn {root, top_filter, ownership, branches} ->
+        or_parts = [ownership | branches] |> Enum.join(" OR ")
+        constant({root, "#{top_filter} AND (#{or_parts})"})
+      end
+    )
+  end
+
+  # Nested ACL: subqueries themselves contain further subqueries
+  defp acl_nested_subquery_gen do
+    bind(
+      {member_of(@acl_id_cols), member_of(@acl_tables), acl_eq_condition_gen(),
+       member_of(@acl_id_cols), member_of(@acl_tables), acl_eq_condition_gen()},
+      fn {col1, t1, cond1, col2, t2, cond2} ->
+        inner = "SELECT #{col2} FROM public.#{t2} WHERE #{cond2}"
+
+        constant("SELECT #{col1} FROM public.#{t1} WHERE #{cond1} AND #{col1} IN (#{inner})")
+      end
+    )
+  end
+
+  # ACL with nested subqueries (subqueries containing further subqueries)
+  defp acl_deep_where_clause_gen do
+    bind(
+      {member_of(@acl_root_tables), acl_eq_condition_gen(), acl_ownership_check_gen(),
+       list_of(
+         bind({member_of(@acl_id_cols), acl_nested_subquery_gen()}, fn {col, subq} ->
+           constant("(#{col} IS NOT NULL AND #{col} IN (#{subq}))")
+         end),
+         min_length: 1,
+         max_length: 3
+       )},
+      fn {root, top_filter, ownership, branches} ->
+        or_parts = [ownership | branches] |> Enum.join(" OR ")
+        constant({root, "#{top_filter} AND (#{or_parts})"})
+      end
+    )
+  end
+
+  # ACL with multiple top-level AND conditions
+  defp acl_multi_filter_where_clause_gen do
+    bind(
+      {member_of(@acl_root_tables), list_of(acl_eq_condition_gen(), min_length: 2, max_length: 4),
+       acl_ownership_check_gen(),
+       list_of(acl_guarded_subquery_branch_gen(), min_length: 1, max_length: 5)},
+      fn {root, top_filters, ownership, branches} ->
+        top = Enum.join(top_filters, " AND ")
+        or_parts = [ownership | branches] |> Enum.join(" OR ")
+        constant({root, "#{top} AND (#{or_parts})"})
+      end
+    )
+  end
+
+  # ACL pattern with NOT IN subqueries (deny lists)
+  defp acl_deny_where_clause_gen do
+    bind(
+      {member_of(@acl_root_tables), acl_eq_condition_gen(), acl_ownership_check_gen(),
+       list_of(acl_guarded_subquery_branch_gen(), min_length: 1, max_length: 2),
+       list_of(
+         bind({member_of(@acl_id_cols), acl_subquery_gen()}, fn {col, subq} ->
+           constant("#{col} NOT IN (#{subq})")
+         end),
+         min_length: 1,
+         max_length: 2
+       )},
+      fn {root, top_filter, ownership, allow_branches, deny_branches} ->
+        or_parts = [ownership | allow_branches] |> Enum.join(" OR ")
+        deny_parts = Enum.join(deny_branches, " AND ")
+        constant({root, "#{top_filter} AND (#{or_parts}) AND #{deny_parts}"})
+      end
+    )
+  end
+
+  # ACL with EXISTS subqueries instead of IN
+  defp acl_exists_where_clause_gen do
+    bind(
+      {member_of(@acl_root_tables), acl_eq_condition_gen(), acl_ownership_check_gen(),
+       list_of(
+         bind(
+           {member_of(@acl_tables),
+            list_of(acl_eq_condition_gen(), min_length: 1, max_length: 3)},
+           fn {table, conditions} ->
+             where = Enum.join(conditions, " AND ")
+             constant("EXISTS (SELECT 1 FROM public.#{table} WHERE #{where})")
+           end
+         ),
+         min_length: 1,
+         max_length: 3
+       )},
+      fn {root, top_filter, ownership, exists_branches} ->
+        or_parts = [ownership | exists_branches] |> Enum.join(" OR ")
+        constant({root, "#{top_filter} AND (#{or_parts})"})
+      end
+    )
+  end
+
+  # ACL with mixed IN/EXISTS/NOT IN in same query
+  defp acl_mixed_subquery_where_clause_gen do
+    bind(
+      {member_of(@acl_root_tables), acl_eq_condition_gen(),
+       list_of(
+         frequency([
+           {3, acl_guarded_subquery_branch_gen()},
+           {2,
+            bind(
+              {member_of(@acl_tables),
+               list_of(acl_eq_condition_gen(), min_length: 1, max_length: 2)},
+              fn {table, conditions} ->
+                where = Enum.join(conditions, " AND ")
+                constant("EXISTS (SELECT 1 FROM public.#{table} WHERE #{where})")
+              end
+            )},
+           {1,
+            bind({member_of(@acl_id_cols), acl_subquery_gen()}, fn {col, subq} ->
+              constant("#{col} NOT IN (#{subq})")
+            end)},
+           {2, acl_ownership_check_gen()}
+         ]),
+         min_length: 3,
+         max_length: 7
+       )},
+      fn {root, top_filter, clauses} ->
+        or_parts = Enum.join(clauses, " OR ")
+        constant({root, "#{top_filter} AND (#{or_parts})"})
+      end
+    )
+  end
+
+  defp assert_acl_no_segfault(root, where) do
+    IO.write(:stderr, "FUZZ [acl]: #{root} WHERE #{String.slice(where, 0, 120)}...\n")
+
+    result =
+      Shape.new(root,
+        where: where,
+        inspector: @acl_inspector,
+        feature_flags: ["allow_subqueries"]
+      )
+
+    assert match?({:ok, _}, result) or match?({:error, _}, result)
+  end
+
+  describe "ACL-pattern queries — production-like complexity" do
+    property "basic ACL pattern: filter AND (owner OR guarded subqueries)" do
+      check all({root, where} <- acl_where_clause_gen(), max_runs: @iterations) do
+        assert_acl_no_segfault(root, where)
+      end
+    end
+
+    property "ACL with nested subqueries (subqueries inside subqueries)" do
+      check all({root, where} <- acl_deep_where_clause_gen(), max_runs: @iterations) do
+        assert_acl_no_segfault(root, where)
+      end
+    end
+
+    property "ACL with multiple top-level filters and many subquery branches" do
+      check all({root, where} <- acl_multi_filter_where_clause_gen(), max_runs: @iterations) do
+        assert_acl_no_segfault(root, where)
+      end
+    end
+
+    property "ACL with deny-list (NOT IN) subqueries" do
+      check all({root, where} <- acl_deny_where_clause_gen(), max_runs: @iterations) do
+        assert_acl_no_segfault(root, where)
+      end
+    end
+
+    property "ACL with EXISTS subqueries" do
+      check all({root, where} <- acl_exists_where_clause_gen(), max_runs: @iterations) do
+        assert_acl_no_segfault(root, where)
+      end
+    end
+
+    property "ACL with mixed IN/EXISTS/NOT IN subqueries" do
+      check all({root, where} <- acl_mixed_subquery_where_clause_gen(), max_runs: @iterations) do
+        assert_acl_no_segfault(root, where)
+      end
+    end
+  end
+
+  describe "ACL-pattern queries — exact customer pattern" do
+    # Tests the exact structural pattern from the production crash report
+    property "exact pattern: org_id AND (owner OR (not null AND IN subq1) OR (not null AND IN subq2))" do
+      check all(
+              org_id <- uuid_gen(),
+              user_id <- uid_gen(),
+              acl_table_1 <- member_of(@acl_tables),
+              acl_table_2 <- member_of(@acl_tables),
+              extra_cond_1 <- acl_eq_condition_gen(),
+              extra_cond_2 <- acl_eq_condition_gen(),
+              max_runs: @iterations
+            ) do
+        where = """
+        organization_id = '#{org_id}' AND (\
+        resource_owner_user_id = '#{user_id}' \
+        OR (task_id IS NOT NULL AND task_id IN (\
+        SELECT task_id FROM public.#{acl_table_1} \
+        WHERE subject_user_id = '#{user_id}' AND #{extra_cond_1})) \
+        OR (task_id IS NOT NULL AND task_id IN (\
+        SELECT task_id FROM public.#{acl_table_2} \
+        WHERE #{extra_cond_2})))\
+        """
+
+        assert_acl_no_segfault("tasks", where)
+      end
+    end
+
+    # Same pattern but with 3-5 subquery branches
+    property "extended pattern: org_id AND (owner OR N guarded subquery branches)" do
+      check all(
+              org_id <- uuid_gen(),
+              user_id <- uid_gen(),
+              branch_count <- integer(3..5),
+              branches <-
+                list_of(
+                  bind(
+                    {member_of(@acl_tables),
+                     list_of(acl_eq_condition_gen(), min_length: 1, max_length: 3)},
+                    fn {table, conds} ->
+                      where = Enum.join(conds, " AND ")
+
+                      constant(
+                        "(task_id IS NOT NULL AND task_id IN (SELECT task_id FROM public.#{table} WHERE #{where}))"
+                      )
+                    end
+                  ),
+                  length: branch_count
+                ),
+              max_runs: @iterations
+            ) do
+        or_parts = ["resource_owner_user_id = '#{user_id}'" | branches] |> Enum.join(" OR ")
+        where = "organization_id = '#{org_id}' AND (#{or_parts})"
+        assert_acl_no_segfault("tasks", where)
+      end
+    end
+
+    # With params instead of literals
+    property "ACL pattern with parameterized values" do
+      check all(
+              org_id <- uuid_gen(),
+              user_id <- uid_gen(),
+              acl_table <- member_of(@acl_tables),
+              max_runs: @iterations
+            ) do
+        where = """
+        organization_id = $1 AND (\
+        resource_owner_user_id = $2 \
+        OR (task_id IS NOT NULL AND task_id IN (\
+        SELECT task_id FROM public.#{acl_table} \
+        WHERE subject_user_id = $2 AND organization_id = $1)))\
+        """
+
+        IO.write(:stderr, "FUZZ [acl-params]: tasks WHERE #{String.slice(where, 0, 100)}...\n")
+
+        result =
+          Shape.new("tasks",
+            where: where,
+            params: %{"1" => org_id, "2" => user_id},
+            inspector: @acl_inspector,
+            feature_flags: ["allow_subqueries"]
+          )
+
+        assert match?({:ok, _}, result) or match?({:error, _}, result)
+      end
+    end
   end
 
   # ============================================================================
@@ -2815,7 +3168,6 @@ defmodule Electric.Replication.Eval.PgQueryFuzzTest do
     property "|| operator" do
       check all(
               root <- exotic_table_gen(),
-              tbl <- exotic_table_gen(),
               val <- string(:alphanumeric, min_length: 1, max_length: 10),
               max_runs: @iterations
             ) do
