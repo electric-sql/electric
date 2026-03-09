@@ -402,20 +402,6 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
 
       assert_receive {:materializer_changes, _, %{move_out: [{2, "2"}], move_in: [{3, "3"}]}}
     end
-
-    @tag snapshot_data: [%Changes.NewRecord{record: %{"id" => "1", "value" => "10"}}]
-    test "get_link_values reads from ETS cache and does not require the GenServer to be alive",
-         ctx do
-      ctx = with_materializer(ctx)
-
-      assert Materializer.get_link_values(ctx) == MapSet.new([10])
-
-      # Stop the materializer GenServer — a pure GenServer.call path would now raise
-      GenServer.stop(Materializer.whereis(ctx))
-
-      # ETS-cached values should be returned without touching the (now-dead) GenServer
-      assert Materializer.get_link_values(ctx) == MapSet.new([10])
-    end
   end
 
   describe "same-batch move event cancellation" do

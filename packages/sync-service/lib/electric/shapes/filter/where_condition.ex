@@ -274,10 +274,7 @@ defmodule Electric.Shapes.Filter.WhereCondition do
       [shape_count: map_size(other_shapes)],
       fn ->
         for {shape_id, where} <- other_shapes,
-            # Cheap MapSet check before touching ETS — skips shapes handled by the sublink inverted index
-            not Filter.registered_in_inverted_index?(filter, shape_id),
             shape = Filter.get_shape(filter, shape_id),
-            not is_nil(shape),
             WhereClause.includes_record?(where, record, refs_fun.(shape)),
             into: MapSet.new() do
           shape_id
