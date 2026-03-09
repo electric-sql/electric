@@ -272,18 +272,24 @@ defmodule Electric.Replication.Eval.Parser do
       {:ok, value, computed_params} ->
         sublink_queries = Keyword.get(opts, :sublink_queries, %{})
 
-        updated_query =
-          rebuild_query_with_substituted_parts(ast, {params, computed_params, sublink_queries})
+        case rebuild_query_with_substituted_parts(
+               ast,
+               {params, computed_params, sublink_queries}
+             ) do
+          {:error, reason} ->
+            {:error, reason}
 
-        {:ok,
-         %Expr{
-           query: updated_query,
-           eval: value,
-           returns: value.type,
-           used_refs: find_refs(value)
-         }}
+          updated_query when is_binary(updated_query) ->
+            {:ok,
+             %Expr{
+               query: updated_query,
+               eval: value,
+               returns: value.type,
+               used_refs: find_refs(value)
+             }}
+        end
 
-      {:error, {loc, reason}} ->
+      {:error, {loc, reason}} when is_integer(loc) ->
         {:error, "At location #{max(loc - @prefix_length, 0)}: #{reason}"}
     end
   end
@@ -1500,7 +1506,7 @@ defmodule Electric.Replication.Eval.Parser do
              %{encountered_sublinks: 0},
              ctx
            ) do
-      %PgQuery.ParseResult{
+      parse_result = %PgQuery.ParseResult{
         version: 170_007,
         stmts: [
           %PgQuery.RawStmt{
@@ -1514,10 +1520,141 @@ defmodule Electric.Replication.Eval.Parser do
           }
         ]
       }
-      |> PgQuery.protobuf_to_query!()
-      |> String.replace_prefix("SELECT WHERE ", "")
+
+      case validate_protobuf_safety(rebuilt_protobuf) do
+        :ok ->
+          parse_result
+          |> PgQuery.protobuf_to_query!()
+          |> String.replace_prefix("SELECT WHERE ", "")
+
+        {:error, reason} ->
+          {original_params, _resolved_params, sublink_queries} = ctx
+
+          Logger.error(fn ->
+            # Deparse the original (pre-walk) AST to recover the where clause.
+            # This is safe because `query` came directly from PgQuery.parse.
+            original_where =
+              try do
+                %PgQuery.ParseResult{
+                  version: 170_007,
+                  stmts: [
+                    %PgQuery.RawStmt{
+                      stmt: %PgQuery.Node{
+                        node: {:select_stmt, %PgQuery.SelectStmt{where_clause: query}}
+                      }
+                    }
+                  ]
+                }
+                |> PgQuery.protobuf_to_query!()
+                |> String.replace_prefix("SELECT WHERE ", "")
+              rescue
+                _ -> "<deparse failed>"
+              end
+
+            "Unsafe protobuf detected before deparse: #{reason}. " <>
+              "WHERE clause: #{inspect(original_where)}" <>
+              if(map_size(original_params) > 0,
+                do: ", params: #{inspect(original_params)}",
+                else: ""
+              ) <>
+              if(map_size(sublink_queries) > 0,
+                do: ", sublink_queries: #{inspect(sublink_queries)}",
+                else: ""
+              )
+          end)
+
+          {:error, reason}
+      end
     end
   end
+
+  # Validates that a rebuilt protobuf AST does not contain nil nodes in positions
+  # that would cause a segfault in the C deparser (libpg_query).
+  # The C deparser does not NULL-check SubLink.subselect, TypeCast.arg, or
+  # TypeCast.type_name before dereferencing them.
+  defp validate_protobuf_safety(nil), do: :ok
+
+  defp validate_protobuf_safety(%PgQuery.Node{node: nil}), do: :ok
+
+  defp validate_protobuf_safety(%PgQuery.Node{node: {_type, child}}) do
+    validate_protobuf_safety(child)
+  end
+
+  defp validate_protobuf_safety(%PgQuery.SubLink{subselect: nil} = sublink) do
+    {:error, "SubLink has nil subselect (sub_link_type: #{inspect(sublink.sub_link_type)})"}
+  end
+
+  defp validate_protobuf_safety(%PgQuery.SubLink{} = sublink) do
+    with :ok <- validate_protobuf_safety(sublink.testexpr),
+         :ok <- validate_protobuf_safety(sublink.subselect) do
+      validate_protobuf_safety_list(sublink.oper_name)
+    end
+  end
+
+  defp validate_protobuf_safety(%PgQuery.TypeCast{arg: nil}) do
+    {:error, "TypeCast has nil arg"}
+  end
+
+  defp validate_protobuf_safety(%PgQuery.TypeCast{type_name: nil}) do
+    {:error, "TypeCast has nil type_name"}
+  end
+
+  defp validate_protobuf_safety(%PgQuery.TypeCast{} = tc) do
+    with :ok <- validate_protobuf_safety(tc.arg) do
+      validate_protobuf_safety_type_name(tc.type_name)
+    end
+  end
+
+  defp validate_protobuf_safety(%PgQuery.BoolExpr{args: args}) do
+    validate_protobuf_safety_list(args)
+  end
+
+  defp validate_protobuf_safety(%PgQuery.A_Expr{} = expr) do
+    with :ok <- validate_protobuf_safety(expr.lexpr) do
+      validate_protobuf_safety(expr.rexpr)
+    end
+  end
+
+  defp validate_protobuf_safety(%PgQuery.NullTest{arg: arg}) do
+    validate_protobuf_safety(arg)
+  end
+
+  defp validate_protobuf_safety(%PgQuery.BooleanTest{arg: arg}) do
+    validate_protobuf_safety(arg)
+  end
+
+  defp validate_protobuf_safety(%PgQuery.FuncCall{args: args}) do
+    validate_protobuf_safety_list(args)
+  end
+
+  defp validate_protobuf_safety(%PgQuery.RowExpr{args: args}) do
+    validate_protobuf_safety_list(args)
+  end
+
+  defp validate_protobuf_safety(%PgQuery.A_ArrayExpr{elements: elements}) do
+    validate_protobuf_safety_list(elements)
+  end
+
+  defp validate_protobuf_safety(%PgQuery.A_Indirection{arg: arg}) do
+    validate_protobuf_safety(arg)
+  end
+
+  defp validate_protobuf_safety(_), do: :ok
+
+  defp validate_protobuf_safety_list(nodes) do
+    Enum.reduce_while(nodes, :ok, fn node, :ok ->
+      case validate_protobuf_safety(node) do
+        :ok -> {:cont, :ok}
+        error -> {:halt, error}
+      end
+    end)
+  end
+
+  defp validate_protobuf_safety_type_name(%PgQuery.TypeName{names: []}),
+    do: {:error, "TypeName has empty names list"}
+
+  defp validate_protobuf_safety_type_name(%PgQuery.TypeName{}), do: :ok
+  defp validate_protobuf_safety_type_name(nil), do: {:error, "TypeName is nil"}
 
   defp replace_query_parts(
          %PgQuery.ParamRef{number: number, location: location},

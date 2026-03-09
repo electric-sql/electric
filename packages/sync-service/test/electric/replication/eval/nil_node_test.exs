@@ -5,6 +5,12 @@ defmodule Electric.Replication.Eval.NilNodeTest do
   """
   use ExUnit.Case, async: true
 
+  defp assert_raises_parser_error(parse_result) do
+    assert_raise PgQuery.Parser.Error, fn ->
+      PgQuery.protobuf_to_query!(parse_result)
+    end
+  end
+
   describe "nil nodes in protobuf_to_query!" do
     test "Node with {type, nil} inner struct" do
       result = %PgQuery.ParseResult{
@@ -24,11 +30,7 @@ defmodule Electric.Replication.Eval.NilNodeTest do
         ]
       }
 
-      try do
-        PgQuery.protobuf_to_query!(result)
-      rescue
-        _ -> :ok
-      end
+      assert_raises_parser_error(result)
     end
 
     test "Node with {type, nil} - bool_expr" do
@@ -49,11 +51,7 @@ defmodule Electric.Replication.Eval.NilNodeTest do
         ]
       }
 
-      try do
-        PgQuery.protobuf_to_query!(result)
-      rescue
-        _ -> :ok
-      end
+      assert_raises_parser_error(result)
     end
 
     test "Node with {type, nil} - sub_link" do
@@ -74,11 +72,7 @@ defmodule Electric.Replication.Eval.NilNodeTest do
         ]
       }
 
-      try do
-        PgQuery.protobuf_to_query!(result)
-      rescue
-        _ -> :ok
-      end
+      assert_raises_parser_error(result)
     end
 
     test "Node with {type, nil} - a_expr" do
@@ -99,11 +93,7 @@ defmodule Electric.Replication.Eval.NilNodeTest do
         ]
       }
 
-      try do
-        PgQuery.protobuf_to_query!(result)
-      rescue
-        _ -> :ok
-      end
+      assert_raises_parser_error(result)
     end
 
     test "Node with {type, nil} - type_cast" do
@@ -124,11 +114,7 @@ defmodule Electric.Replication.Eval.NilNodeTest do
         ]
       }
 
-      try do
-        PgQuery.protobuf_to_query!(result)
-      rescue
-        _ -> :ok
-      end
+      assert_raises_parser_error(result)
     end
 
     test "Node with nil node field" do
@@ -147,11 +133,7 @@ defmodule Electric.Replication.Eval.NilNodeTest do
         ]
       }
 
-      try do
-        PgQuery.protobuf_to_query!(result)
-      rescue
-        _ -> :ok
-      end
+      assert_raises_parser_error(result)
     end
 
     test "nil where_clause" do
@@ -170,13 +152,7 @@ defmodule Electric.Replication.Eval.NilNodeTest do
         ]
       }
 
-      # This should produce "SELECT" (no WHERE clause)
-      try do
-        query = PgQuery.protobuf_to_query!(result)
-        assert is_binary(query)
-      rescue
-        _ -> :ok
-      end
+      assert "SELECT" = PgQuery.protobuf_to_query!(result)
     end
 
     test "SubLink with nil testexpr and nil subselect" do
@@ -203,11 +179,7 @@ defmodule Electric.Replication.Eval.NilNodeTest do
         ]
       }
 
-      try do
-        PgQuery.protobuf_to_query!(result)
-      rescue
-        _ -> :ok
-      end
+      assert_raises_parser_error(result)
     end
 
     test "SubLink with nil subselect but valid testexpr" do
@@ -230,8 +202,7 @@ defmodule Electric.Replication.Eval.NilNodeTest do
                                %PgQuery.ColumnRef{
                                  fields: [
                                    %PgQuery.Node{
-                                     node:
-                                       {:string, %PgQuery.String{sval: "id"}}
+                                     node: {:string, %PgQuery.String{sval: "id"}}
                                    }
                                  ]
                                }}
@@ -245,11 +216,7 @@ defmodule Electric.Replication.Eval.NilNodeTest do
         ]
       }
 
-      try do
-        PgQuery.protobuf_to_query!(result)
-      rescue
-        _ -> :ok
-      end
+      assert_raises_parser_error(result)
     end
 
     test "TypeCast with nil arg" do
@@ -281,11 +248,7 @@ defmodule Electric.Replication.Eval.NilNodeTest do
         ]
       }
 
-      try do
-        PgQuery.protobuf_to_query!(result)
-      rescue
-        _ -> :ok
-      end
+      assert_raises_parser_error(result)
     end
 
     test "TypeCast with nil type_name" do
@@ -317,11 +280,7 @@ defmodule Electric.Replication.Eval.NilNodeTest do
         ]
       }
 
-      try do
-        PgQuery.protobuf_to_query!(result)
-      rescue
-        _ -> :ok
-      end
+      assert_raises_parser_error(result)
     end
 
     test "A_Expr with nil lexpr" do
@@ -359,11 +318,7 @@ defmodule Electric.Replication.Eval.NilNodeTest do
         ]
       }
 
-      try do
-        PgQuery.protobuf_to_query!(result)
-      rescue
-        _ -> :ok
-      end
+      PgQuery.protobuf_to_query!(result)
     end
 
     test "A_Expr with nil rexpr" do
@@ -405,11 +360,7 @@ defmodule Electric.Replication.Eval.NilNodeTest do
         ]
       }
 
-      try do
-        PgQuery.protobuf_to_query!(result)
-      rescue
-        _ -> :ok
-      end
+      PgQuery.protobuf_to_query!(result)
     end
 
     test "BoolExpr with empty args list" do
@@ -435,11 +386,7 @@ defmodule Electric.Replication.Eval.NilNodeTest do
         ]
       }
 
-      try do
-        PgQuery.protobuf_to_query!(result)
-      rescue
-        _ -> :ok
-      end
+      PgQuery.protobuf_to_query!(result)
     end
 
     test "BoolExpr with nil in args list" do
@@ -465,11 +412,7 @@ defmodule Electric.Replication.Eval.NilNodeTest do
         ]
       }
 
-      try do
-        PgQuery.protobuf_to_query!(result)
-      rescue
-        _ -> :ok
-      end
+      assert_raises_parser_error(result)
     end
 
     test "deeply nested nil - SubLink inside BoolExpr with nil subselect" do
@@ -499,11 +442,7 @@ defmodule Electric.Replication.Eval.NilNodeTest do
         ]
       }
 
-      try do
-        PgQuery.protobuf_to_query!(result)
-      rescue
-        _ -> :ok
-      end
+      assert_raises_parser_error(result)
     end
 
     test "real parse then corrupt: nil out TypeName in TypeCast" do
@@ -528,11 +467,7 @@ defmodule Electric.Replication.Eval.NilNodeTest do
         ]
       }
 
-      try do
-        PgQuery.protobuf_to_query!(result)
-      rescue
-        _ -> :ok
-      end
+      assert_raises_parser_error(result)
     end
 
     test "real parse then corrupt: nil out arg in TypeCast" do
@@ -556,11 +491,7 @@ defmodule Electric.Replication.Eval.NilNodeTest do
         ]
       }
 
-      try do
-        PgQuery.protobuf_to_query!(result)
-      rescue
-        _ -> :ok
-      end
+      assert_raises_parser_error(result)
     end
   end
 
@@ -571,16 +502,25 @@ defmodule Electric.Replication.Eval.NilNodeTest do
   end
 
   defp corrupt_subselects(%PgQuery.Node{node: {:bool_expr, bool_expr}} = node) do
-    %{node | node: {:bool_expr, %{bool_expr | args: Enum.map(bool_expr.args, &corrupt_subselects/1)}}}
+    %{
+      node
+      | node: {:bool_expr, %{bool_expr | args: Enum.map(bool_expr.args, &corrupt_subselects/1)}}
+    }
   end
 
   defp corrupt_subselects(other), do: other
 
   defp corrupt_type_names(%PgQuery.Node{node: {:a_expr, a_expr}} = node) do
-    %{node | node: {:a_expr, %{a_expr |
-      lexpr: corrupt_type_names(a_expr.lexpr),
-      rexpr: corrupt_type_names(a_expr.rexpr)
-    }}}
+    %{
+      node
+      | node:
+          {:a_expr,
+           %{
+             a_expr
+             | lexpr: corrupt_type_names(a_expr.lexpr),
+               rexpr: corrupt_type_names(a_expr.rexpr)
+           }}
+    }
   end
 
   defp corrupt_type_names(%PgQuery.Node{node: {:type_cast, tc}} = node) do
@@ -590,10 +530,16 @@ defmodule Electric.Replication.Eval.NilNodeTest do
   defp corrupt_type_names(other), do: other
 
   defp corrupt_typecast_args(%PgQuery.Node{node: {:a_expr, a_expr}} = node) do
-    %{node | node: {:a_expr, %{a_expr |
-      lexpr: corrupt_typecast_args(a_expr.lexpr),
-      rexpr: corrupt_typecast_args(a_expr.rexpr)
-    }}}
+    %{
+      node
+      | node:
+          {:a_expr,
+           %{
+             a_expr
+             | lexpr: corrupt_typecast_args(a_expr.lexpr),
+               rexpr: corrupt_typecast_args(a_expr.rexpr)
+           }}
+    }
   end
 
   defp corrupt_typecast_args(%PgQuery.Node{node: {:type_cast, tc}} = node) do

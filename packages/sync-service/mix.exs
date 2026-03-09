@@ -98,7 +98,7 @@ defmodule Electric.MixProject do
         {:opentelemetry_telemetry, "~> 1.1"},
         {:opentelemetry_semantic_conventions, "~> 1.27"},
         {:pg_query_ex,
-         github: "electric-sql/pg_query_ex", ref: "5926278d9e5d657db8cac6a1817523ecae4e6d33"},
+         github: "electric-sql/pg_query_ex", ref: "66b033e6448a0311803ae9339e9aca711bb87892"},
         {:plug, "~> 1.17"},
         {:postgrex, "~> 0.20"},
         {:retry, "~> 0.19"},
