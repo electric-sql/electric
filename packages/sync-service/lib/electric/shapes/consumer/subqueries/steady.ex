@@ -1,0 +1,54 @@
+defmodule Electric.Shapes.Consumer.Subqueries.Steady do
+  @moduledoc false
+
+  @enforce_keys [:shape, :stack_id, :shape_handle, :dependency_handle, :subquery_ref]
+  defstruct [
+    :shape,
+    :stack_id,
+    :shape_handle,
+    :dependency_handle,
+    :subquery_ref,
+    subquery_view: MapSet.new(),
+    queue: []
+  ]
+
+  @type t() :: %__MODULE__{
+          shape: Electric.Shapes.Shape.t(),
+          stack_id: String.t(),
+          shape_handle: String.t(),
+          dependency_handle: String.t(),
+          subquery_ref: [String.t()],
+          subquery_view: MapSet.t(),
+          queue: [Electric.Shapes.Consumer.Subqueries.queue_op()]
+        }
+end
+
+defimpl Electric.Shapes.Consumer.Subqueries.StateMachine,
+  for: Electric.Shapes.Consumer.Subqueries.Steady do
+  alias Electric.Replication.Changes.LsnUpdate
+  alias Electric.Replication.Changes.Transaction
+  alias Electric.Shapes.Consumer.Subqueries
+
+  def handle_event(state, %Transaction{} = txn) do
+    {Subqueries.convert_transaction(txn, state, state.subquery_view), state}
+  end
+
+  def handle_event(state, %LsnUpdate{}), do: {[], state}
+
+  def handle_event(state, {:materializer_changes, dep_handle, payload}) do
+    :ok = Subqueries.validate_dependency_handle!(state, dep_handle)
+
+    state
+    |> Map.update!(:queue, &Subqueries.enqueue_materializer_ops(&1, payload))
+    |> Subqueries.drain_queue()
+  end
+
+  def handle_event(_state, {:pg_snapshot_known, _snapshot}) do
+    raise ArgumentError, "received {:pg_snapshot_known, snapshot} while no move-in is buffering"
+  end
+
+  def handle_event(_state, {:query_move_in_complete, _rows, _move_in_lsn}) do
+    raise ArgumentError,
+          "received {:query_move_in_complete, rows, move_in_lsn} while no move-in is buffering"
+  end
+end
