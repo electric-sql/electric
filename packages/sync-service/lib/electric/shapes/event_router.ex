@@ -15,6 +15,7 @@ defmodule Electric.Shapes.EventRouter do
   """
 
   alias Electric.Replication.Changes.Relation
+  alias Electric.Replication.Changes.LsnUpdate
   alias Electric.Replication.Changes.TransactionFragment
   alias Electric.Shapes.EventRouter
   alias Electric.Shapes.Filter
@@ -68,10 +69,19 @@ defmodule Electric.Shapes.EventRouter do
     Filter.active_shapes(router.filter)
   end
 
-  @spec event_by_shape_handle(t(), Relation.t() | TransactionFragment.t()) ::
-          {%{shape_id() => Relation.t() | TransactionFragment.t()}, t()}
+  @spec event_by_shape_handle(t(), Relation.t() | TransactionFragment.t() | LsnUpdate.t()) ::
+          {%{shape_id() => Relation.t() | TransactionFragment.t() | LsnUpdate.t()}, t()}
   def event_by_shape_handle(%EventRouter{} = router, %Relation{} = relation) do
     result = route_relation_to_shapes(router, relation)
+    {result, router}
+  end
+
+  def event_by_shape_handle(%EventRouter{} = router, %LsnUpdate{} = lsn_update) do
+    result =
+      router
+      |> active_shapes()
+      |> Map.new(fn shape_id -> {shape_id, lsn_update} end)
+
     {result, router}
   end
 

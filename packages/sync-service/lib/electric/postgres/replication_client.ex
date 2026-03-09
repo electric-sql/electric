@@ -8,6 +8,7 @@ defmodule Electric.Postgres.ReplicationClient do
   alias Electric.Postgres.Lsn
   alias Electric.Postgres.ReplicationClient.MessageConverter
   alias Electric.Postgres.ReplicationClient.ConnectionSetup
+  alias Electric.Replication.Changes.LsnUpdate
   alias Electric.Replication.Changes.TransactionFragment
   alias Electric.Replication.Changes.Relation
   alias Electric.Telemetry.OpenTelemetry
@@ -61,6 +62,9 @@ defmodule Electric.Postgres.ReplicationClient do
       # shape log storage.
       received_wal: 0,
       flushed_wal: 0,
+      # Tracks latest keepalive wal_end value we've observed so we emit at most
+      # one LSN update event per LSN advancement.
+      last_seen_keepalive_wal: 0,
       last_seen_txn_lsn: Lsn.from_integer(0),
       last_seen_txn_timestamp: nil,
       flush_up_to_date?: true
@@ -84,6 +88,7 @@ defmodule Electric.Postgres.ReplicationClient do
             step: Electric.Postgres.ReplicationClient.step(),
             received_wal: non_neg_integer(),
             flushed_wal: non_neg_integer(),
+            last_seen_keepalive_wal: non_neg_integer(),
             last_seen_txn_lsn: Lsn.t(),
             last_seen_txn_timestamp: integer(),
             flush_up_to_date?: boolean()
@@ -350,6 +355,8 @@ defmodule Electric.Postgres.ReplicationClient do
       "Primary Keepalive: wal_end=#{wal_end} (#{Lsn.from_integer(wal_end)}) reply=#{reply}"
     end)
 
+    state = maybe_handle_lsn_update(state, wal_end)
+
     case reply do
       1 when MessageConverter.in_transaction?(state.message_converter) ->
         {:noreply, [encode_standby_status_update(state)], state}
@@ -411,6 +418,19 @@ defmodule Electric.Postgres.ReplicationClient do
 
     apply_with_retries({m, f, [event | args]}, state)
   end
+
+  defp maybe_handle_lsn_update(%State{} = state, wal_end)
+       when wal_end > state.last_seen_keepalive_wal do
+    lsn = Lsn.from_integer(wal_end)
+
+    if state.handle_event do
+      handle_event(%LsnUpdate{lsn: lsn}, state)
+    end
+
+    %{state | last_seen_keepalive_wal: wal_end}
+  end
+
+  defp maybe_handle_lsn_update(%State{} = state, _wal_end), do: state
 
   defp acknowledge_transaction(%TransactionFragment{commit: nil}, state), do: {[], state}
 

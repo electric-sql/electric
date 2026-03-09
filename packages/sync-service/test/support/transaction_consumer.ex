@@ -2,6 +2,7 @@ defmodule Support.TransactionConsumer do
   use GenServer, restart: :temporary
 
   alias Electric.Replication.Changes.Relation
+  alias Electric.Replication.Changes.LsnUpdate
   alias Electric.Replication.Changes.TransactionFragment
 
   import ExUnit.Assertions
@@ -83,6 +84,10 @@ defmodule Support.TransactionConsumer do
 
   def handle_call({:handle_event, %Relation{} = relation, _ctx}, _from, state) do
     send(state.parent, {__MODULE__, {state.id, self()}, [relation]})
+    {:reply, :ok, state}
+  end
+
+  def handle_call({:handle_event, %LsnUpdate{}, _ctx}, _from, state) do
     {:reply, :ok, state}
   end
 

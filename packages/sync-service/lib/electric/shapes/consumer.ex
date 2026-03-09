@@ -453,6 +453,10 @@ defmodule Electric.Shapes.Consumer do
     |> mark_for_removal()
   end
 
+  # Keepalive-driven LSN updates are currently forwarded to consumers for
+  # future move-in splice coordination but intentionally ignored for now.
+  defp handle_event(%Changes.LsnUpdate{}, state), do: state
+
   defp handle_event(%TransactionFragment{} = txn_fragment, state) do
     Logger.debug(fn -> "Txn fragment received in Shapes.Consumer: #{inspect(txn_fragment)}" end)
     handle_txn_fragment(txn_fragment, state)

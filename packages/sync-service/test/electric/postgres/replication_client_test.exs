@@ -13,6 +13,7 @@ defmodule Electric.Postgres.ReplicationClientTest do
   alias Electric.Postgres.ReplicationClient
 
   alias Electric.Replication.Changes.Relation
+  alias Electric.Replication.Changes.LsnUpdate
   alias Electric.Replication.Changes.DeletedRecord
   alias Electric.Replication.Changes.NewRecord
   alias Electric.Replication.Changes.UpdatedRecord
@@ -53,6 +54,7 @@ defmodule Electric.Postgres.ReplicationClientTest do
   defmodule MockTransactionProcessor do
     use GenServer, restart: :temporary
 
+    alias Electric.Replication.Changes.LsnUpdate
     alias Electric.Replication.Changes.TransactionFragment
 
     def start_link(test_pid) do
@@ -87,6 +89,10 @@ defmodule Electric.Postgres.ReplicationClientTest do
       {:reply, :ok, state}
     end
 
+    def handle_call({:handle_event, %LsnUpdate{}}, _from, state) do
+      {:reply, :ok, state}
+    end
+
     def handle_call({:toggle_crash, should_crash?}, _from, state) do
       {:reply, :ok, %{state | should_crash?: should_crash?}}
     end
@@ -101,6 +107,33 @@ defmodule Electric.Postgres.ReplicationClientTest do
 
   setup :with_stack_id_from_test
   setup :with_slot_name
+
+  describe "keepalive LSN updates" do
+    test "emits LsnUpdate only when keepalive wal_end increases" do
+      state =
+        ReplicationClient.State.new(
+          stack_id: "stack-id",
+          connection_manager: self(),
+          handle_event: {__MODULE__, :test_handle_keepalive_event, [self()]},
+          publication_name: "publication-name",
+          try_creating_publication?: false,
+          slot_name: "slot-name"
+        )
+
+      msg1 = <<?k, 10::64, 0::64, 0>>
+      assert {:noreply, [], state} = ReplicationClient.handle_data(msg1, state)
+      assert_receive {:from_replication, %LsnUpdate{lsn: lsn1}}
+      assert lsn1 == Lsn.from_integer(10)
+
+      assert {:noreply, [], state} = ReplicationClient.handle_data(msg1, state)
+      refute_receive {:from_replication, %LsnUpdate{}}
+
+      msg2 = <<?k, 12::64, 0::64, 0>>
+      assert {:noreply, [], _state} = ReplicationClient.handle_data(msg2, state)
+      assert_receive {:from_replication, %LsnUpdate{lsn: lsn2}}
+      assert lsn2 == Lsn.from_integer(12)
+    end
+  end
 
   describe "ReplicationClient init" do
     setup [:with_unique_db, :with_basic_tables, :with_status_monitor, :with_lsn_tracker]
@@ -751,6 +784,15 @@ defmodule Electric.Postgres.ReplicationClientTest do
     send(test_pid, {:from_replication, [relation]})
     :ok
   end
+
+  def test_handle_event(%LsnUpdate{}, _test_pid), do: :ok
+
+  def test_handle_keepalive_event(%LsnUpdate{} = lsn_update, test_pid) do
+    send(test_pid, {:from_replication, lsn_update})
+    :ok
+  end
+
+  def test_handle_keepalive_event(_event, _test_pid), do: :ok
 
   defp gen_random_string(length) do
     Stream.repeatedly(fn -> :rand.uniform(125 - 32) + 32 end)

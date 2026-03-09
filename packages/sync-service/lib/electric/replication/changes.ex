@@ -34,6 +34,14 @@ defmodule Electric.Replication.Changes do
 
   @type change() :: data_change() | Changes.TruncatedRelation.t()
 
+  defmodule LsnUpdate do
+    @type t() :: %__MODULE__{
+            lsn: Electric.Postgres.Lsn.t()
+          }
+
+    defstruct [:lsn]
+  end
+
   defmodule Commit do
     @type t() :: %__MODULE__{
             commit_timestamp: DateTime.t() | nil,
