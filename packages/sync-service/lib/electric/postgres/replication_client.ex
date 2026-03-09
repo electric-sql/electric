@@ -310,7 +310,7 @@ defmodule Electric.Postgres.ReplicationClient do
 
   # This callback is invoked when the connection process receives a shutdown signal.
   def handle_info({:EXIT, _pid, :shutdown}, _state) do
-    Logger.debug("Replication client received shutdown signal, stopping", pid: self())
+    Logger.debug("Replication client received shutdown signal, stopping")
     {:disconnect, :shutdown}
   end
 
