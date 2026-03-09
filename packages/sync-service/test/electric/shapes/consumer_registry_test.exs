@@ -255,6 +255,75 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
     end
   end
 
+  describe "unregister_name/1" do
+    test "removes entry when pid matches the calling process", ctx do
+      handle = "handle-1"
+      table = ctx.registry_state.table
+
+      # Register the current process
+      :ets.insert(table, {handle, self()})
+      assert [{^handle, pid}] = :ets.lookup(table, handle)
+      assert pid == self()
+
+      ConsumerRegistry.unregister_name({ctx.stack_id, handle})
+
+      assert :ets.lookup(table, handle) == []
+    end
+
+    test "does not remove entry belonging to a different process", ctx do
+      handle = "handle-1"
+      table = ctx.registry_state.table
+
+      other_pid = spawn(fn -> Process.sleep(:infinity) end)
+      :ets.insert(table, {handle, other_pid})
+
+      ConsumerRegistry.unregister_name({ctx.stack_id, handle})
+
+      assert [{^handle, ^other_pid}] = :ets.lookup(table, handle)
+    end
+
+    test "does not remove a replacement consumer's entry (race scenario)", ctx do
+      handle = "handle-1"
+      table = ctx.registry_state.table
+      parent = self()
+
+      # Simulate: old consumer (a spawned process) calls unregister_name,
+      # but a replacement has already registered under the same handle.
+      replacement_pid = spawn(fn -> Process.sleep(:infinity) end)
+
+      # First, register the old process
+      old_task =
+        Task.async(fn ->
+          :ets.insert(table, {handle, self()})
+          send(parent, :old_registered)
+
+          # Wait for the replacement to overwrite
+          receive do
+            :proceed_to_unregister -> :ok
+          end
+
+          # Now unregister_name should NOT delete the replacement's entry
+          ConsumerRegistry.unregister_name({ctx.stack_id, handle})
+          send(parent, :old_unregistered)
+        end)
+
+      assert_receive :old_registered
+
+      # Simulate the replacement consumer registering (delete old + insert new)
+      :ets.delete(table, handle)
+      :ets.insert(table, {handle, replacement_pid})
+
+      # Let the old process proceed with unregister
+      send(old_task.pid, :proceed_to_unregister)
+      assert_receive :old_unregistered
+
+      # The replacement's entry must still be there
+      assert [{^handle, ^replacement_pid}] = :ets.lookup(table, handle)
+
+      Task.await(old_task)
+    end
+  end
+
   describe "broadcast/1" do
     test "sends message to all subscribers" do
       pid = self()
