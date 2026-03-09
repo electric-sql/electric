@@ -767,6 +767,7 @@ defmodule Electric.Shapes.Consumer do
     if Logger.enabled?(:debug) do
       Logger.debug("Consumer catching up on transaction fragments", count: length(buffer))
     end
+
     {txn_fragments, state} = State.pop_buffered(state)
 
     Enum.reduce_while(txn_fragments, state, fn txn_fragment, state ->
