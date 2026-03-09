@@ -655,7 +655,7 @@ defmodule Electric.Shapes.Consumer do
     end
   end
 
-  defp convert_fragment_changes(changes, stack_id, shape_handle, shape) do
+  defp convert_fragment_changes(changes, stack_id, shape_handle, shape, extra_refs \\ nil) do
     Enum.reduce_while(changes, {[], 0}, fn
       %Changes.TruncatedRelation{}, _acc ->
         {:halt, :includes_truncate}
@@ -664,7 +664,11 @@ defmodule Electric.Shapes.Consumer do
         # Apply Shape.convert_change to each change to:
         # 1. Filter out changes not matching the shape's table
         # 2. Apply WHERE clause filtering
-        case Shape.convert_change(shape, change, stack_id: stack_id, shape_handle: shape_handle) do
+        case Shape.convert_change(shape, change,
+               stack_id: stack_id,
+               shape_handle: shape_handle,
+               extra_refs: extra_refs
+             ) do
           [] ->
             {:cont, acc}
 
@@ -791,6 +795,13 @@ defmodule Electric.Shapes.Consumer do
         :includes_truncate ->
           handle_txn_with_truncate(txn.xid, state)
 
+        {[], 0} ->
+          Logger.debug(fn ->
+            "No relevant changes found for #{inspect(shape)} in txn #{txn.xid}"
+          end)
+
+          consider_flushed(state, txn.last_log_offset)
+
         {[], 0, _} ->
           Logger.debug(fn ->
             "No relevant changes found for #{inspect(shape)} in txn #{txn.xid}"
@@ -887,17 +898,40 @@ defmodule Electric.Shapes.Consumer do
   end
 
   defp convert_txn_changes(changes, _xid, state) do
-    case convert_fragment_changes(changes, state.stack_id, state.shape_handle, state.shape) do
+    case convert_fragment_changes(
+           changes,
+           state.stack_id,
+           state.shape_handle,
+           state.shape,
+           txn_conversion_extra_refs(state)
+         ) do
       :includes_truncate ->
         :includes_truncate
 
-      {reversed_changes, num_changes, last_log_offset} ->
-        {Enum.reverse(reversed_changes), num_changes, last_log_offset}
+      {[], 0} ->
+        {[], 0, nil}
 
-      acc ->
-        acc
+      {reversed_changes, num_changes, last_log_offset} ->
+        converted_changes =
+          reversed_changes
+          |> maybe_mark_last_change(%{})
+          |> Enum.reverse()
+
+        {converted_changes, num_changes, last_log_offset}
+
+      result ->
+        result
     end
   end
+
+  defp txn_conversion_extra_refs(%State{shape: shape, stack_id: stack_id, subquery_state: nil}) do
+    if Shape.are_deps_filled(shape) do
+      refs = Materializer.get_all_as_refs(shape, stack_id)
+      {refs, refs}
+    end
+  end
+
+  defp txn_conversion_extra_refs(_state), do: nil
 
   defp apply_subquery_event(state, event, opts \\ []) do
     previous_subquery_state = state.subquery_state
@@ -916,27 +950,22 @@ defmodule Electric.Shapes.Consumer do
 
   defp maybe_start_move_in_query(
          %{subquery_state: %Buffering{} = buffering_state} = state,
-         previous_subquery_state
+         _previous_subquery_state
        ) do
-    if should_start_move_in_query?(previous_subquery_state, buffering_state) do
+    if should_start_move_in_query?(buffering_state) do
       Electric.ProcessRegistry.name(state.stack_id, Electric.StackTaskSupervisor)
       |> Subqueries.query_move_in_async(state, buffering_state, self())
-    end
 
-    state
+      %{state | subquery_state: %{buffering_state | query_started?: true}}
+    else
+      state
+    end
   end
 
   defp maybe_start_move_in_query(state, _previous_subquery_state), do: state
 
-  defp should_start_move_in_query?(%Buffering{move_in_value: previous}, %Buffering{
-         move_in_value: current
-       })
-       when previous == current,
-       do: false
-
-  defp should_start_move_in_query?(%Buffering{}, %Buffering{}), do: true
-  defp should_start_move_in_query?(_, %Buffering{}), do: true
-  defp should_start_move_in_query?(_, _), do: false
+  defp should_start_move_in_query?(%Buffering{query_started?: false}), do: true
+  defp should_start_move_in_query?(_), do: false
 
   defp append_subquery_outputs(state, [], event, previous_subquery_state, _opts) do
     state = finalize_subquery_flush_tracking(state, event, previous_subquery_state, nil)
@@ -944,6 +973,7 @@ defmodule Electric.Shapes.Consumer do
   end
 
   defp append_subquery_outputs(state, outputs, event, previous_subquery_state, opts) do
+    outputs = insert_move_in_snapshot_end(outputs)
     previous_offset = state.latest_offset
 
     {state, latest_offset, total_size, num_changes} =
@@ -960,14 +990,11 @@ defmodule Electric.Shapes.Consumer do
             {%{state | writer: writer, latest_offset: offset}, offset, size + byte_size(json),
              count + 1}
 
+          %{headers: %{control: _}} = control_message ->
+            append_control_message_output(state, size, count, control_message)
+
           %{headers: %{event: _}} = control_message ->
-            encoded = Jason.encode!(control_message)
-
-            {{_, offset}, writer} =
-              ShapeCache.Storage.append_control_message!(encoded, state.writer)
-
-            {%{state | writer: writer, latest_offset: offset}, offset, size + byte_size(encoded),
-             count + 1}
+            append_control_message_output(state, size, count, control_message)
 
           %Changes.TruncatedRelation{} ->
             raise ArgumentError, "unexpected truncate emitted from subquery state machine"
@@ -987,6 +1014,16 @@ defmodule Electric.Shapes.Consumer do
       finalize_subquery_flush_tracking(state, event, previous_subquery_state, latest_offset)
 
     {state, {previous_offset, latest_offset}, num_changes, total_size}
+  end
+
+  defp append_control_message_output(state, size, count, control_message) do
+    encoded = Jason.encode!(control_message)
+
+    {{_, offset}, writer} =
+      ShapeCache.Storage.append_control_message!(encoded, state.writer)
+
+    {%{state | writer: writer, latest_offset: offset}, offset, size + byte_size(encoded),
+     count + 1}
   end
 
   defp append_change_output(state, size, count, change, xid) do
@@ -1047,6 +1084,22 @@ defmodule Electric.Shapes.Consumer do
       state
       | txn_offset_mapping: state.txn_offset_mapping ++ [{latest_offset, last_log_offset}]
     }
+  end
+
+  defp insert_move_in_snapshot_end(outputs) do
+    {before_query_rows, remaining} = Enum.split_while(outputs, &(not match?(%QueryRow{}, &1)))
+
+    case Enum.split_while(remaining, &match?(%QueryRow{}, &1)) do
+      {[], _rest} ->
+        outputs
+
+      {query_rows, rest} ->
+        before_query_rows ++ query_rows ++ [snapshot_end_control_message()] ++ rest
+    end
+  end
+
+  defp snapshot_end_control_message do
+    %{headers: %{control: "snapshot-end"}}
   end
 
   defp maybe_track_txn_flush(state, last_log_offset, nil),

@@ -37,6 +37,7 @@ defmodule Electric.Shapes.Consumer.Subqueries do
       shape_handle: fetch_opt!(opts, :shape_handle),
       dependency_handle: fetch_opt!(opts, :dependency_handle),
       subquery_ref: fetch_opt!(opts, :subquery_ref),
+      latest_seen_lsn: Map.get(opts, :latest_seen_lsn),
       subquery_view: Map.get(opts, :subquery_view, MapSet.new()),
       queue: []
     }
@@ -198,17 +199,11 @@ defmodule Electric.Shapes.Consumer.Subqueries do
         drain_queue(%{state | queue: queue}, outputs)
 
       {index, {:move_out, move_value}} ->
-        {_op, queue} = List.pop_at(state.queue, index)
-
-        next_state = %{
-          state
-          | queue: queue,
-            subquery_view: MapSet.delete(state.subquery_view, elem(move_value, 0))
-        }
+        {move_out_values, next_state} = drain_move_out_batch(state, index, move_value, [])
 
         drain_queue(
           next_state,
-          outputs ++ [make_move_out_control_message(next_state, [move_value])]
+          outputs ++ [make_move_out_control_message(next_state, move_out_values)]
         )
 
       {index, {:move_in, move_value}} ->
@@ -302,6 +297,13 @@ defmodule Electric.Shapes.Consumer.Subqueries do
       :lt -> state
       _ -> %{state | boundary_txn_count: length(state.buffered_txns)}
     end
+  end
+
+  @spec maybe_buffer_boundary_from_seen_lsn(Buffering.t()) :: Buffering.t()
+  def maybe_buffer_boundary_from_seen_lsn(%Buffering{latest_seen_lsn: nil} = state), do: state
+
+  def maybe_buffer_boundary_from_seen_lsn(%Buffering{} = state) do
+    maybe_buffer_boundary_from_lsn(state, state.latest_seen_lsn)
   end
 
   @spec validate_dependency_handle!(Steady.t() | Buffering.t(), term()) :: :ok
@@ -429,6 +431,7 @@ defmodule Electric.Shapes.Consumer.Subqueries do
       shape_handle: state.shape_handle,
       dependency_handle: state.dependency_handle,
       subquery_ref: state.subquery_ref,
+      latest_seen_lsn: state.latest_seen_lsn,
       subquery_view: state.subquery_view_after_move_in,
       queue: state.queue
     }
@@ -478,6 +481,24 @@ defmodule Electric.Shapes.Consumer.Subqueries do
     queue
     |> Enum.take(index)
     |> Enum.all?(fn {_op_kind, {other_value, _}} -> other_value != value end)
+  end
+
+  defp drain_move_out_batch(state, index, move_out_value, acc) do
+    {_op, queue} = List.pop_at(state.queue, index)
+
+    next_state = %{
+      state
+      | queue: queue,
+        subquery_view: MapSet.delete(state.subquery_view, elem(move_out_value, 0))
+    }
+
+    case next_queue_op(next_state.queue, next_state.subquery_view) do
+      {next_index, {:move_out, next_move_out_value}} ->
+        drain_move_out_batch(next_state, next_index, next_move_out_value, acc ++ [move_out_value])
+
+      _ ->
+        {acc ++ [move_out_value], next_state}
+    end
   end
 
   defp fetch_opt!(opts, key) do

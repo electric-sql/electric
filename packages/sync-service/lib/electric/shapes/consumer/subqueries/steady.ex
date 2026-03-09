@@ -8,6 +8,7 @@ defmodule Electric.Shapes.Consumer.Subqueries.Steady do
     :shape_handle,
     :dependency_handle,
     :subquery_ref,
+    latest_seen_lsn: nil,
     subquery_view: MapSet.new(),
     queue: []
   ]
@@ -18,6 +19,7 @@ defmodule Electric.Shapes.Consumer.Subqueries.Steady do
           shape_handle: String.t(),
           dependency_handle: String.t(),
           subquery_ref: [String.t()],
+          latest_seen_lsn: Electric.Postgres.Lsn.t() | nil,
           subquery_view: MapSet.t(),
           queue: [Electric.Shapes.Consumer.Subqueries.queue_op()]
         }
@@ -33,7 +35,7 @@ defimpl Electric.Shapes.Consumer.Subqueries.StateMachine,
     {Subqueries.convert_transaction(txn, state, state.subquery_view), state}
   end
 
-  def handle_event(state, %LsnUpdate{}), do: {[], state}
+  def handle_event(state, %LsnUpdate{lsn: lsn}), do: {[], %{state | latest_seen_lsn: lsn}}
 
   def handle_event(state, {:materializer_changes, dep_handle, payload}) do
     :ok = Subqueries.validate_dependency_handle!(state, dep_handle)

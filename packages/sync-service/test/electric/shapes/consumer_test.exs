@@ -1773,6 +1773,7 @@ defmodule Electric.Shapes.ConsumerTest do
                  "key" => ~s'"public"."test_table"/"1"',
                  "value" => %{"id" => "1", "value" => "old"}
                },
+               %{"headers" => %{"control" => "snapshot-end"}},
                %{
                  "headers" => %{"operation" => "update"},
                  "key" => ~s'"public"."test_table"/"1"'

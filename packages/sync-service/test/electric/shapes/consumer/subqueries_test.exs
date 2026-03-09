@@ -88,6 +88,82 @@ defmodule Electric.Shapes.Consumer.SubqueriesTest do
     assert [%Changes.NewRecord{record: %{"id" => "99"}}] = changes
   end
 
+  test "waits for an lsn update even when the move-in query completes with an empty buffer" do
+    state = new_state()
+    dep_handle = state.dependency_handle
+
+    {[], state} =
+      Subqueries.handle_event(
+        state,
+        {:materializer_changes, dep_handle, %{move_in: [{1, "1"}], move_out: []}}
+      )
+
+    {[], state} = Subqueries.handle_event(state, {:pg_snapshot_known, {100, 300, []}})
+
+    {[], state} =
+      Subqueries.handle_event(
+        state,
+        {:query_move_in_complete, [child_insert("99", "1")], lsn(20)}
+      )
+
+    assert %Buffering{} = state
+
+    {changes, state} = Subqueries.handle_event(state, %Changes.LsnUpdate{lsn: lsn(20)})
+
+    assert %Steady{subquery_view: view} = state
+    assert view == MapSet.new([1])
+    assert [%Changes.NewRecord{record: %{"id" => "99"}}] = changes
+  end
+
+  test "uses an lsn update that arrived before the move-in query completed" do
+    state = new_state()
+    dep_handle = state.dependency_handle
+
+    {[], state} =
+      Subqueries.handle_event(
+        state,
+        {:materializer_changes, dep_handle, %{move_in: [{1, "1"}], move_out: []}}
+      )
+
+    {[], state} = Subqueries.handle_event(state, {:pg_snapshot_known, {100, 300, []}})
+    {[], state} = Subqueries.handle_event(state, %Changes.LsnUpdate{lsn: lsn(20)})
+
+    {changes, state} =
+      Subqueries.handle_event(
+        state,
+        {:query_move_in_complete, [child_insert("99", "1")], lsn(20)}
+      )
+
+    assert %Steady{subquery_view: view} = state
+    assert view == MapSet.new([1])
+    assert [%Changes.NewRecord{record: %{"id" => "99"}}] = changes
+  end
+
+  test "uses an lsn update that was already seen before the move-in started" do
+    state = new_state()
+    dep_handle = state.dependency_handle
+
+    {[], state} = Subqueries.handle_event(state, %Changes.LsnUpdate{lsn: lsn(20)})
+
+    {[], state} =
+      Subqueries.handle_event(
+        state,
+        {:materializer_changes, dep_handle, %{move_in: [{1, "1"}], move_out: []}}
+      )
+
+    {[], state} = Subqueries.handle_event(state, {:pg_snapshot_known, {100, 300, []}})
+
+    {changes, state} =
+      Subqueries.handle_event(
+        state,
+        {:query_move_in_complete, [child_insert("99", "1")], lsn(20)}
+      )
+
+    assert %Steady{subquery_view: view} = state
+    assert view == MapSet.new([1])
+    assert [%Changes.NewRecord{record: %{"id" => "99"}}] = changes
+  end
+
   test "defers queued move outs until after splice and starts the next move in" do
     state = new_state()
     dep_handle = state.dependency_handle

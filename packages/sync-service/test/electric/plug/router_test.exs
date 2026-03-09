@@ -2911,18 +2911,41 @@ defmodule Electric.Plug.RouterTest do
       # Hard to wait exactly what we want, so this should be OK
       Process.sleep(1000)
 
-      # We're essentially guaranteed, in this test environment, to see move-out before move-in resolves.
-      # It's safe to propagate a move-out even for stuff client hasn't seen (because of hashing in the pattern)
-      # as it's just a no-op.
-      # So we should see 2 move-outs and a move-in but only for the 3rd parent. The move-in should be filtered despite
-      # being triggered for 2 moved in parents initially
+      tag2 =
+        :crypto.hash(:md5, ctx.stack_id <> req.handle <> "v:2") |> Base.encode16(case: :lower)
+
+      tag3 =
+        :crypto.hash(:md5, ctx.stack_id <> req.handle <> "v:3") |> Base.encode16(case: :lower)
+
+      # Under simple-subqueries, move-in query rows are appended as-is. That means the second
+      # parent can move in, move out, move in again, and move out again before the third parent
+      # eventually moves in.
       assert {_req, 200,
               [
-                %{"headers" => %{"event" => "move-out", "patterns" => p1}},
-                %{"headers" => %{"event" => "move-out", "patterns" => p1}},
+                %{
+                  "headers" => %{"operation" => "insert", "is_move_in" => true, "tags" => [^tag2]},
+                  "value" => %{"id" => "2", "parent_id" => "2", "value" => "20"}
+                },
                 %{"headers" => %{"control" => "snapshot-end"}},
                 %{
-                  "headers" => %{"operation" => "insert", "is_move_in" => true},
+                  "headers" => %{
+                    "event" => "move-out",
+                    "patterns" => [%{"pos" => 0, "value" => ^tag2}]
+                  }
+                },
+                %{
+                  "headers" => %{"operation" => "insert", "is_move_in" => true, "tags" => [^tag2]},
+                  "value" => %{"id" => "2", "parent_id" => "2", "value" => "20"}
+                },
+                %{"headers" => %{"control" => "snapshot-end"}},
+                %{
+                  "headers" => %{
+                    "event" => "move-out",
+                    "patterns" => [%{"pos" => 0, "value" => ^tag2}]
+                  }
+                },
+                %{
+                  "headers" => %{"operation" => "insert", "is_move_in" => true, "tags" => [^tag3]},
                   "value" => %{"id" => "3", "parent_id" => "3", "value" => "30"}
                 },
                 %{"headers" => %{"control" => "snapshot-end"}},

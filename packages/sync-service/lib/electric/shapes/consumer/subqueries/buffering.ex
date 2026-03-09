@@ -11,7 +11,8 @@ defmodule Electric.Shapes.Consumer.Subqueries.Buffering do
     :subquery_ref,
     :move_in_value,
     :subquery_view_before_move_in,
-    :subquery_view_after_move_in
+    :subquery_view_after_move_in,
+    :latest_seen_lsn
   ]
   defstruct [
     :shape,
@@ -25,9 +26,11 @@ defmodule Electric.Shapes.Consumer.Subqueries.Buffering do
     snapshot: nil,
     move_in_rows: nil,
     move_in_lsn: nil,
+    latest_seen_lsn: nil,
     boundary_txn_count: nil,
     buffered_txns: [],
-    queue: []
+    queue: [],
+    query_started?: false
   ]
 
   @type t() :: %__MODULE__{
@@ -42,9 +45,11 @@ defmodule Electric.Shapes.Consumer.Subqueries.Buffering do
           snapshot: {term(), term(), [term()]} | nil,
           move_in_rows: [term()] | nil,
           move_in_lsn: Electric.Postgres.Lsn.t() | nil,
+          latest_seen_lsn: Electric.Postgres.Lsn.t() | nil,
           boundary_txn_count: non_neg_integer() | nil,
           buffered_txns: [Electric.Replication.Changes.Transaction.t()],
-          queue: [Electric.Shapes.Consumer.Subqueries.queue_op()]
+          queue: [Electric.Shapes.Consumer.Subqueries.queue_op()],
+          query_started?: boolean()
         }
 
   @spec from_steady(Steady.t(), Electric.Shapes.Consumer.Subqueries.move_value(), [
@@ -57,6 +62,7 @@ defmodule Electric.Shapes.Consumer.Subqueries.Buffering do
       shape_handle: state.shape_handle,
       dependency_handle: state.dependency_handle,
       subquery_ref: state.subquery_ref,
+      latest_seen_lsn: state.latest_seen_lsn,
       move_in_value: move_in_value,
       subquery_view_before_move_in: state.subquery_view,
       subquery_view_after_move_in: MapSet.put(state.subquery_view, elem(move_in_value, 0)),
@@ -82,6 +88,7 @@ defimpl Electric.Shapes.Consumer.Subqueries.StateMachine,
 
   def handle_event(state, %LsnUpdate{lsn: lsn}) do
     state
+    |> Map.put(:latest_seen_lsn, lsn)
     |> Subqueries.maybe_buffer_boundary_from_lsn(lsn)
     |> Subqueries.maybe_splice()
   end
@@ -113,6 +120,7 @@ defimpl Electric.Shapes.Consumer.Subqueries.StateMachine,
     state
     |> Map.put(:move_in_rows, rows)
     |> Map.put(:move_in_lsn, move_in_lsn)
+    |> Subqueries.maybe_buffer_boundary_from_seen_lsn()
     |> Subqueries.maybe_splice()
   end
 end
