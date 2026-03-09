@@ -1673,6 +1673,107 @@ defmodule Electric.Shapes.ConsumerTest do
       assert_receive {:flush_boundary_updated, ^offset}
     end
 
+    @tag allow_subqueries: false, with_pure_file_storage_opts: [flush_period: 1]
+    test "flush notification for multi-fragment txn is not lost when storage flushes before commit fragment",
+         %{stack_id: stack_id} = ctx do
+      # Regression test for https://github.com/electric-sql/electric/issues/3985
+      #
+      # When a multi-fragment transaction's non-commit fragments are flushed to disk
+      # before the commit fragment is processed by ShapeLogCollector, the flush
+      # notification is lost because FlushTracker hasn't registered the shape yet.
+      # This causes the shape to be stuck in the FlushTracker forever, blocking
+      # the global flush offset from advancing.
+      {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape1, stack_id)
+
+      :started = ShapeCache.await_snapshot_start(shape_handle, stack_id)
+
+      ref = Shapes.Consumer.register_for_changes(stack_id, shape_handle)
+
+      register_as_replication_client(stack_id)
+
+      xid = 11
+      lsn = Lsn.from_integer(10)
+
+      # Create non-commit fragments with matching changes
+      fragment1 =
+        txn_fragment(
+          xid,
+          lsn,
+          [
+            %Changes.NewRecord{
+              relation: {"public", "test_table"},
+              record: %{"id" => "1"},
+              log_offset: LogOffset.new(lsn, 0)
+            },
+            %Changes.NewRecord{
+              relation: {"public", "test_table"},
+              record: %{"id" => "2"},
+              log_offset: LogOffset.new(lsn, 2)
+            }
+          ],
+          has_begin?: true
+        )
+
+      fragment2 =
+        txn_fragment(
+          xid,
+          lsn,
+          [
+            %Changes.NewRecord{
+              relation: {"public", "test_table"},
+              record: %{"id" => "3"},
+              log_offset: LogOffset.new(lsn, 4)
+            }
+          ],
+          []
+        )
+
+      Support.Trace.trace_shape_log_collector_calls(
+        pid: Shapes.Consumer.whereis(stack_id, shape_handle),
+        functions: [:notify_flushed]
+      )
+
+      # Send non-commit fragments. With flush_period: 1ms, the storage will flush
+      # almost immediately after writing.
+      assert :ok = ShapeLogCollector.handle_event(fragment1, stack_id)
+      assert :ok = ShapeLogCollector.handle_event(fragment2, stack_id)
+
+      flushed_log_offset = fragment2.last_log_offset
+
+      assert [
+               {ShapeLogCollector, :notify_flushed,
+                [^stack_id, ^shape_handle, ^flushed_log_offset]}
+             ] = Support.Trace.collect_traced_calls()
+
+      # Now send the commit fragment. The commit fragment itself has NO matching
+      # changes for the shape — all changes were in earlier fragments.
+      # After this, FlushTracker registers the shape but the data was already
+      # flushed, so no new :flushed message will arrive.
+      commit_fragment =
+        txn_fragment(
+          xid,
+          lsn,
+          [
+            %Changes.NewRecord{
+              relation: {"public", "other_table"},
+              record: %{"id" => "99"},
+              log_offset: LogOffset.new(lsn, 6)
+            }
+          ],
+          has_commit?: true
+        )
+
+      assert :ok = ShapeLogCollector.handle_event(commit_fragment, ctx.stack_id)
+
+      last_log_offset = LogOffset.new(lsn, 6)
+      assert_receive {^ref, :new_changes, _}, @receive_timeout
+
+      # The critical assertion: the flush boundary should advance.
+      # With the bug, this times out because the FlushTracker shape is stuck.
+      tx_offset = last_log_offset.tx_offset
+      assert_receive {:flush_boundary_updated, ^tx_offset}, @receive_timeout
+    end
+
     test "UPDATE during pending move-in is converted to INSERT and query result skips duplicate key",
          ctx do
       # This test exposes an edge case where:
