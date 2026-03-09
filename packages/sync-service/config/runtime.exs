@@ -59,7 +59,20 @@ config :logger, :default_formatter,
     :pg_id,
     :name,
     :relation,
-    :xid
+    :xid,
+    :version,
+    :instance_id,
+    :interval_ms,
+    :trash_dir,
+    :number_to_expire,
+    :max_shapes,
+    :total_shapes,
+    :data_points,
+    :probe,
+    :schema_version,
+    :unexpected_msg,
+    :pg_message,
+    :step
   ],
   colors: [enabled: env!("ELECTRIC_LOG_COLORS", :boolean!, true)]
 
@@ -425,7 +438,17 @@ if Electric.telemetry_enabled?() do
              table_name: "db.table_name",
              original_error: "error.original",
              relation: "db.relation",
-             xid: "pg.xid"
+             xid: "pg.xid",
+             query_string: "db.query_string",
+             idle_time_s: "connection.idle_time_s",
+             connection_mode: "connection.mode",
+             err_msg: "error.message",
+             host: "server.host",
+             name: "name",
+             version: "service.version",
+             instance_id: "service.instance_id",
+             schema_version: "db.schema_version",
+             pg_message: "pg.message"
            }
          }
        }}
