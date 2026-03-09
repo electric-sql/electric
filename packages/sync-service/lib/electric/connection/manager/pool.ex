@@ -223,7 +223,11 @@ defmodule Electric.Connection.Manager.Pool do
   end
 
   def handle_info({:EXIT, pid, reason}, state) when is_map_key(state.connection_pids, pid) do
-    Logger.debug("Pooled connection exited", role: state.role, connection_pid: pid, reason: reason)
+    Logger.debug("Pooled connection exited",
+      role: state.role,
+      connection_pid: pid,
+      reason: reason
+    )
 
     # Keep track of the most recent pooled connection error seen so we can use it as the
     # reason for the pool failing as a whole if it does not manage to recover.
