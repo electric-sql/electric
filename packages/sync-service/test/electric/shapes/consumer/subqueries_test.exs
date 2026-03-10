@@ -62,6 +62,72 @@ defmodule Electric.Shapes.Consumer.SubqueriesTest do
            ] = changes
   end
 
+  test "splices move-in query rows between emitted pre and post boundary changes" do
+    state = new_state(subquery_view: MapSet.new([1]))
+    dep_handle = state.dependency_handle
+
+    {[], state} =
+      Subqueries.handle_event(
+        state,
+        {:materializer_changes, dep_handle, %{move_in: [{2, "2"}], move_out: []}}
+      )
+
+    {[], state} = Subqueries.handle_event(state, txn(50, [child_insert("10", "1")]))
+    {[], state} = Subqueries.handle_event(state, {:pg_snapshot_known, {100, 150, []}})
+    {[], state} = Subqueries.handle_event(state, txn(150, [child_insert("11", "2")]))
+
+    {changes, state} =
+      Subqueries.handle_event(
+        state,
+        {:query_move_in_complete, [child_insert("99", "2")], lsn(10)}
+      )
+
+    assert %Steady{subquery_view: view} = state
+    assert view == MapSet.new([1, 2])
+
+    assert [
+             %Changes.NewRecord{record: %{"id" => "10"}},
+             %Changes.NewRecord{record: %{"id" => "99"}},
+             %Changes.NewRecord{record: %{"id" => "11"}, last?: true}
+           ] = changes
+  end
+
+  test "splices updates that become a delete before the boundary and an insert after it" do
+    state = new_state(subquery_view: MapSet.new([1]))
+    dep_handle = state.dependency_handle
+
+    {[], state} =
+      Subqueries.handle_event(
+        state,
+        {:materializer_changes, dep_handle, %{move_in: [{2, "2"}], move_out: []}}
+      )
+
+    # Before the splice we still evaluate against the old view {1}, so moving
+    # from parent 1 to parent 2 means the row leaves the shape and becomes a delete.
+    {[], state} = Subqueries.handle_event(state, txn(50, [child_update("10", "1", "2")]))
+
+    # After the splice we evaluate against the new view {1, 2}, so moving from
+    # parent 3 to parent 2 means the row enters the shape and becomes a new record.
+    {[], state} = Subqueries.handle_event(state, txn(150, [child_update("11", "3", "2")]))
+
+    {[], state} = Subqueries.handle_event(state, {:pg_snapshot_known, {100, 150, []}})
+
+    {changes, state} =
+      Subqueries.handle_event(
+        state,
+        {:query_move_in_complete, [child_insert("99", "2")], lsn(10)}
+      )
+
+    assert %Steady{subquery_view: view} = state
+    assert view == MapSet.new([1, 2])
+
+    assert [
+             %Changes.DeletedRecord{old_record: %{"id" => "10"}},
+             %Changes.NewRecord{record: %{"id" => "99"}},
+             %Changes.NewRecord{record: %{"id" => "11"}, last?: true}
+           ] = changes
+  end
+
   test "uses lsn updates to splice at the current buffer tail" do
     state = new_state()
     dep_handle = state.dependency_handle
@@ -86,6 +152,121 @@ defmodule Electric.Shapes.Consumer.SubqueriesTest do
     assert %Steady{subquery_view: view} = state
     assert view == MapSet.new([1])
     assert [%Changes.NewRecord{record: %{"id" => "99"}}] = changes
+  end
+
+  test "splices buffered inserts, updates, and deletes around an lsn boundary" do
+    state = new_state()
+    dep_handle = state.dependency_handle
+
+    {[], state} =
+      Subqueries.handle_event(
+        state,
+        {:materializer_changes, dep_handle, %{move_in: [{1, "1"}], move_out: []}}
+      )
+
+    {[], state} =
+      Subqueries.handle_event(
+        state,
+        txn(120, [
+          child_insert("10", "1"),
+          child_update("20", "1"),
+          child_delete("30", "1")
+        ])
+      )
+
+    {[], state} =
+      Subqueries.handle_event(
+        state,
+        {:query_move_in_complete, [child_insert("99", "1")], lsn(20)}
+      )
+
+    {[], state} = Subqueries.handle_event(state, %Changes.LsnUpdate{lsn: lsn(20)})
+
+    {[], state} =
+      Subqueries.handle_event(
+        state,
+        txn(150, [
+          child_insert("11", "1"),
+          child_update("21", "1"),
+          child_delete("31", "1")
+        ])
+      )
+
+    {changes, state} = Subqueries.handle_event(state, {:pg_snapshot_known, {100, 300, []}})
+
+    assert %Steady{subquery_view: view} = state
+    assert view == MapSet.new([1])
+
+    assert [
+             %Changes.NewRecord{record: %{"id" => "99"}},
+             %Changes.NewRecord{record: %{"id" => "11"}},
+             %Changes.UpdatedRecord{record: %{"id" => "21"}},
+             %Changes.DeletedRecord{old_record: %{"id" => "31"}, last?: true}
+           ] = changes
+  end
+
+  test "keeps the transaction splice boundary when a later lsn update arrives" do
+    state = new_state()
+    dep_handle = state.dependency_handle
+
+    {[], state} =
+      Subqueries.handle_event(
+        state,
+        {:materializer_changes, dep_handle, %{move_in: [{1, "1"}], move_out: []}}
+      )
+
+    {[], state} = Subqueries.handle_event(state, txn(50, [child_insert("10", "1")]))
+    {[], state} = Subqueries.handle_event(state, {:pg_snapshot_known, {100, 150, []}})
+    {[], state} = Subqueries.handle_event(state, txn(150, [child_insert("11", "1")]))
+    {[], state} = Subqueries.handle_event(state, txn(160, [child_insert("12", "1")]))
+    {[], state} = Subqueries.handle_event(state, %Changes.LsnUpdate{lsn: lsn(20)})
+
+    {changes, state} =
+      Subqueries.handle_event(
+        state,
+        {:query_move_in_complete, [child_insert("99", "1")], lsn(20)}
+      )
+
+    assert %Steady{subquery_view: view} = state
+    assert view == MapSet.new([1])
+
+    assert [
+             %Changes.NewRecord{record: %{"id" => "99"}},
+             %Changes.NewRecord{record: %{"id" => "11"}},
+             %Changes.NewRecord{record: %{"id" => "12"}, last?: true}
+           ] = changes
+  end
+
+  test "keeps the lsn splice boundary when the snapshot later reveals invisible txns" do
+    state = new_state()
+    dep_handle = state.dependency_handle
+
+    {[], state} =
+      Subqueries.handle_event(
+        state,
+        {:materializer_changes, dep_handle, %{move_in: [{1, "1"}], move_out: []}}
+      )
+
+    {[], state} =
+      Subqueries.handle_event(
+        state,
+        {:query_move_in_complete, [child_insert("99", "1")], lsn(20)}
+      )
+
+    {[], state} = Subqueries.handle_event(state, %Changes.LsnUpdate{lsn: lsn(20)})
+    {[], state} = Subqueries.handle_event(state, txn(50, [child_insert("10", "1")]))
+    {[], state} = Subqueries.handle_event(state, txn(150, [child_insert("11", "1")]))
+
+    {changes, state} = Subqueries.handle_event(state, {:pg_snapshot_known, {100, 150, []}})
+
+    assert %Steady{subquery_view: view} = state
+    assert view == MapSet.new([1])
+
+    assert [
+             %Changes.NewRecord{record: %{"id" => "99"}},
+             %Changes.NewRecord{record: %{"id" => "10"}},
+             %Changes.NewRecord{record: %{"id" => "11"}, last?: true}
+           ] = changes
   end
 
   test "waits for an lsn update even when the move-in query completes with an empty buffer" do
@@ -365,6 +546,27 @@ defmodule Electric.Shapes.Consumer.SubqueriesTest do
     %Changes.NewRecord{
       relation: {"public", "child"},
       record: %{"id" => id, "parent_id" => parent_id, "name" => "child-#{id}"}
+    }
+    |> Changes.fill_key(["id"])
+  end
+
+  defp child_update(id, parent_id) do
+    child_update(id, parent_id, parent_id)
+  end
+
+  defp child_update(id, old_parent_id, new_parent_id) do
+    Changes.UpdatedRecord.new(
+      relation: {"public", "child"},
+      old_record: %{"id" => id, "parent_id" => old_parent_id, "name" => "child-#{id}-old"},
+      record: %{"id" => id, "parent_id" => new_parent_id, "name" => "child-#{id}-new"}
+    )
+    |> Changes.fill_key(["id"])
+  end
+
+  defp child_delete(id, parent_id) do
+    %Changes.DeletedRecord{
+      relation: {"public", "child"},
+      old_record: %{"id" => id, "parent_id" => parent_id, "name" => "child-#{id}"}
     }
     |> Changes.fill_key(["id"])
   end
