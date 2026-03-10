@@ -54,7 +54,7 @@ defmodule Electric.Replication.ShapeLogCollector.RequestBatcherTest do
 
     Repatch.allow(self(), request_batcher_pid)
 
-    :ok
+    %{request_batcher_pid: request_batcher_pid}
   end
 
   describe "add_shape/4" do
@@ -97,7 +97,8 @@ defmodule Electric.Replication.ShapeLogCollector.RequestBatcherTest do
 
   describe "batching behavior" do
     @tag processor_delay: 20
-    test "add is invalidated if removal occurs before update is submitted", %{stack_id: stack_id} do
+    test "add is invalidated if removal occurs before update is submitted",
+         %{stack_id: stack_id} = ctx do
       task1 =
         Task.async(fn ->
           RequestBatcher.add_shape(stack_id, @shape_handle_1, @shape_1, :create)
@@ -106,15 +107,15 @@ defmodule Electric.Replication.ShapeLogCollector.RequestBatcherTest do
       expected_msg = {:processor_called, %{@shape_handle_1 => @shape_1}, MapSet.new()}
       assert_receive ^expected_msg
 
-      test_pid = self()
-
       task2 =
         Task.async(fn ->
-          send(test_pid, :adding_shape_2)
           RequestBatcher.add_shape(stack_id, @shape_handle_2, @shape_2, :create)
         end)
 
-      assert_receive :adding_shape_2
+      # Wait until the GenServer has processed the add_shape call from task2
+      # before calling remove_shape. Without this, the remove_shape message may
+      # arrive at the GenServer before add_shape under CPU contention.
+      wait_for_shape_in_batcher(ctx.request_batcher_pid, @shape_handle_2)
 
       assert :ok = RequestBatcher.remove_shape(stack_id, @shape_handle_2)
 
@@ -163,6 +164,15 @@ defmodule Electric.Replication.ShapeLogCollector.RequestBatcherTest do
 
       assert [:ok, {:error, "failed to register"}, :ok] ==
                Task.await_many([task2, task3, task4], 500)
+    end
+  end
+
+  defp wait_for_shape_in_batcher(pid, shape_handle, attempts \\ 100) do
+    %{to_add: to_add} = :sys.get_state(pid)
+
+    if not is_map_key(to_add, shape_handle) and attempts > 0 do
+      Process.sleep(1)
+      wait_for_shape_in_batcher(pid, shape_handle, attempts - 1)
     end
   end
 end
