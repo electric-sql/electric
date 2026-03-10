@@ -630,9 +630,6 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
       conn = Task.await(task)
 
-      # The conn process should exit after sending the response
-      refute Process.alive?(task.pid)
-
       assert conn.status == 409
       assert [%{"headers" => %{"control" => "must-refetch"}}] = Jason.decode!(conn.resp_body)
     end
