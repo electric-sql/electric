@@ -185,6 +185,8 @@ defmodule Electric.StackSupervisor.Telemetry do
   def child_spec(%{stack_telemetry: stack_telemetry}), do: stack_telemetry
 
   if Code.ensure_loaded?(ElectricTelemetry.StackTelemetry) do
+    require Logger
+
     def child_spec(config) when is_map(config) do
       otel_opts_base = Keyword.get(config.telemetry_opts, :otel_opts, [])
       existing_resource = Keyword.get(otel_opts_base, :resource, %{})

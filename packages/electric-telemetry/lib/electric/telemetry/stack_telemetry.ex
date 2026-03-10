@@ -12,8 +12,6 @@ defmodule ElectricTelemetry.StackTelemetry do
 
   alias ElectricTelemetry.Reporters
 
-  require Logger
-
   @behaviour ElectricTelemetry.Poller
 
   def start_link(opts) do
