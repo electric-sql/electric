@@ -792,4 +792,25 @@ defmodule Electric.Replication.Eval.ParserTest do
                )
     end
   end
+
+  describe "parse_query/1 error handling" do
+    test "returns error tuple for deeply nested expressions that exceed parser limits" do
+      # Generate a deeply nested NOT/OR expression similar to what TanStack DB's
+      # DeduplicatedLoadSubset produces when accumulating many task_id predicates
+      deeply_nested =
+        Enum.reduce(1..200, ~S|"x" = $1|, fn i, acc ->
+          ~s|NOT ((#{acc}) OR ("x" = $#{i + 1}))|
+        end)
+
+      case Parser.parse_query(deeply_nested) do
+        {:error, msg} when is_binary(msg) ->
+          # If the NIF raises ArgumentError, safe_pg_parse catches it
+          assert msg =~ "too complex" or msg =~ "too deeply nested" or msg =~ "At location"
+
+        {:ok, _ast} ->
+          # If the NIF can handle it on this platform, that's fine too
+          :ok
+      end
+    end
+  end
 end

@@ -113,7 +113,7 @@ defmodule Electric.Replication.Eval.Parser do
   @prefix_length String.length("SELECT 1 WHERE ")
 
   def validate_order_by(order_by, columns) do
-    case PgQuery.parse("SELECT 1 ORDER BY #{order_by}") do
+    case safe_pg_parse("SELECT 1 ORDER BY #{order_by}") do
       {:ok, %{stmts: [%{stmt: %{node: {:select_stmt, stmt}}}]}} ->
         do_validate_order_by(stmt, columns)
 
@@ -122,6 +122,9 @@ defmodule Electric.Replication.Eval.Parser do
 
       {:error, %{cursorpos: loc, message: reason}} ->
         {:error, "At location #{loc}: #{reason}"}
+
+      {:error, reason} when is_binary(reason) ->
+        {:error, reason}
     end
   end
 
@@ -172,7 +175,7 @@ defmodule Electric.Replication.Eval.Parser do
   end
 
   def extract_parts_from_select(select) when is_binary(select) do
-    case PgQuery.parse(select) do
+    case safe_pg_parse(select) do
       {:ok, %{stmts: [%{stmt: %{node: {:select_stmt, stmt}}}]}} ->
         extract_parts_from_select(stmt)
 
@@ -181,6 +184,9 @@ defmodule Electric.Replication.Eval.Parser do
 
       {:error, %{cursorpos: loc, message: reason}} ->
         {:error, "At location #{loc}: #{reason}"}
+
+      {:error, reason} when is_binary(reason) ->
+        {:error, reason}
     end
   end
 
@@ -321,7 +327,7 @@ defmodule Electric.Replication.Eval.Parser do
   end
 
   defp get_where_internal_ast(query) do
-    case PgQuery.parse("SELECT 1 WHERE #{query}") do
+    case safe_pg_parse("SELECT 1 WHERE #{query}") do
       {:ok, %{stmts: [%{stmt: %{node: {:select_stmt, stmt}}}]}} ->
         extract_clause(stmt, :where_clause)
 
@@ -330,7 +336,23 @@ defmodule Electric.Replication.Eval.Parser do
 
       {:error, %{cursorpos: loc, message: reason}} ->
         {:error, "At location #{loc}: #{reason}"}
+
+      {:error, reason} when is_binary(reason) ->
+        {:error, reason}
     end
+  end
+
+  # Wraps PgQuery.parse/1 to rescue ArgumentError that can be raised by the NIF
+  # when the SQL expression is too deeply nested or too large for libpg_query to handle.
+  defp safe_pg_parse(query) do
+    PgQuery.parse(query)
+  rescue
+    e in ArgumentError ->
+      Logger.warning("PgQuery.parse failed with ArgumentError: #{Exception.message(e)}",
+        query_length: byte_size(query)
+      )
+
+      {:error, "Failed to parse expression: query is too complex or too deeply nested"}
   end
 
   @empty_list_clauses [
