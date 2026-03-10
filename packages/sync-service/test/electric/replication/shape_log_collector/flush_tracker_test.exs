@@ -69,7 +69,7 @@ defmodule Electric.Replication.ShapeLogCollector.FlushTrackerTest do
 
       tracker = handle_txn(tracker, fragment, ["shape1"])
 
-      # Flush notification catches up the shape
+      # Flush notification catches up the shape in last_flushed
       tracker = FlushTracker.handle_flush_notification(tracker, "shape1", LogOffset.new(5, 4))
 
       # No notification yet — no commit seen
@@ -173,7 +173,7 @@ defmodule Electric.Replication.ShapeLogCollector.FlushTrackerTest do
 
       tracker = handle_txn(tracker, fragment, ["shape1"])
 
-      # Flush notification catches up the shape
+      # Flush notification catches up the shape in last_flushed
       tracker = FlushTracker.handle_flush_notification(tracker, "shape1", LogOffset.new(5, 4))
       assert FlushTracker.empty?(tracker)
 
