@@ -17,7 +17,7 @@ defmodule Electric.Replication.Changes do
   @type db_identifier() :: String.t()
   @type xid() :: Xid.anyxid()
   @type relation_name() :: {schema :: db_identifier(), table :: db_identifier()}
-  @type record() :: %{(column_name :: db_identifier()) => column_data :: binary()}
+  @type row() :: %{(column_name :: db_identifier()) => column_data :: binary()}
   @type relation_id() :: non_neg_integer
 
   @typedoc """
@@ -186,7 +186,7 @@ defmodule Electric.Replication.Changes do
 
     @type t() :: %__MODULE__{
             relation: Changes.relation_name(),
-            record: Changes.record(),
+            record: Changes.row(),
             log_offset: LogOffset.t(),
             key: String.t() | nil,
             last?: boolean(),
@@ -210,8 +210,8 @@ defmodule Electric.Replication.Changes do
 
     @type t() :: %__MODULE__{
             relation: Changes.relation_name(),
-            old_record: Changes.record() | nil,
-            record: Changes.record(),
+            old_record: Changes.row() | nil,
+            record: Changes.row(),
             log_offset: LogOffset.t(),
             key: String.t() | nil,
             old_key: String.t() | nil,
@@ -258,7 +258,7 @@ defmodule Electric.Replication.Changes do
 
     @type t() :: %__MODULE__{
             relation: Changes.relation_name(),
-            old_record: Changes.record(),
+            old_record: Changes.row(),
             log_offset: LogOffset.t(),
             key: String.t() | nil,
             move_tags: [Changes.tag()],

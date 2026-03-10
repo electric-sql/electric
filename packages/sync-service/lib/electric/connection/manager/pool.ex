@@ -229,7 +229,6 @@ defmodule Electric.Connection.Manager.Pool do
     state =
       case reason do
         :killed -> state
-        :shutdown -> state
         {:shutdown, exit_reason} -> %{state | last_connection_error: exit_reason}
         reason -> %{state | last_connection_error: reason}
       end

@@ -3,8 +3,6 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Migrator do
 
   alias Electric.ShapeCache.ShapeStatus.ShapeDb
 
-  require Logger
-
   @optimization_period :timer.minutes(60)
 
   def start_link(args) do
