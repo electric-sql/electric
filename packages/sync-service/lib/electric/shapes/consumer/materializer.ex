@@ -421,13 +421,15 @@ defmodule Electric.Shapes.Consumer.Materializer do
                 end
               else
                 # PK changed but tracked column not in record — re-key the index entry
-                if pk_changed do
-                  {value, index} = Map.pop!(index, old_key)
-                  index = Map.put(index, key, value)
-                  {{index, tag_indices}, counts_and_events}
-                else
-                  {{index, tag_indices}, counts_and_events}
-                end
+                index =
+                  if pk_changed do
+                    {value, index} = Map.pop!(index, old_key)
+                    Map.put(index, key, value)
+                  else
+                    index
+                  end
+
+                {{index, tag_indices}, counts_and_events}
               end
             else
               # Nothing relevant to this materializer has been updated
