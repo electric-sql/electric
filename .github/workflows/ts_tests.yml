@@ -16,10 +16,44 @@ on:
 permissions:
   contents: read
   packages: write
+  pull-requests: read
 
 jobs:
+  check_ts_changes:
+    name: Check for TS-related changes
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    outputs:
+      should_run: ${{ steps.check.outputs.should_run }}
+    steps:
+      - id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Always run for push events (pushes to main)
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            echo "should_run=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          # Always run for the changesets release branch
+          if [[ "${{ github.head_ref }}" == "changeset-release/main" ]]; then
+            echo "should_run=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          # Check if any TS-related files changed in the PR
+          CHANGED=$(gh api "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" --paginate --jq '.[].filename')
+
+          if echo "$CHANGED" | grep -qE '^(packages/(typescript-client|react-hooks|y-electric|experimental|start)/|examples/|website/|pnpm-lock\.yaml$|package\.json$|pnpm-workspace\.yaml$|\.tool-versions$|\.github/workflows/(ts_|ensure_sync_service|pr\.)|\.github/actions/)'; then
+            echo "should_run=true" >> $GITHUB_OUTPUT
+          else
+            echo "should_run=false" >> $GITHUB_OUTPUT
+          fi
+
   list_ts_packages_and_examples:
     name: List TS packages and examples
+    needs: [check_ts_changes]
+    if: needs.check_ts_changes.outputs.should_run == 'true'
     runs-on: blacksmith-2vcpu-ubuntu-2404
     outputs:
       package_directories: ${{ steps.list_ts_packages.outputs.directories }}
@@ -56,6 +90,8 @@ jobs:
       - run: pnpm run typecheck
 
   ensure_sync_service_image:
+    needs: [check_ts_changes]
+    if: needs.check_ts_changes.outputs.should_run == 'true'
     uses: ./.github/workflows/ensure_sync_service_image.yml
 
   build_and_test_packages:
