@@ -469,7 +469,13 @@ defmodule Electric.Replication.ShapeLogCollector do
     {:ok,
      %{
        state
-       | flush_tracker: FlushTracker.handle_txn_fragment(state.flush_tracker, txn_fragment, [])
+       | flush_tracker:
+           FlushTracker.handle_txn_fragment(
+             state.flush_tracker,
+             txn_fragment,
+             [],
+             MapSet.new()
+           )
      }}
   end
 
@@ -560,8 +566,19 @@ defmodule Electric.Replication.ShapeLogCollector do
 
     flush_tracker =
       case event do
-        %TransactionFragment{commit: commit} when not is_nil(commit) ->
-          FlushTracker.handle_txn_fragment(state.flush_tracker, event, affected_shapes)
+        %TransactionFragment{} ->
+          shapes_with_changes =
+            for {id, frag} <- events_by_handle,
+                frag.change_count > 0,
+                do: id,
+                into: MapSet.new()
+
+          FlushTracker.handle_txn_fragment(
+            state.flush_tracker,
+            event,
+            affected_shapes,
+            shapes_with_changes
+          )
 
         _ ->
           state.flush_tracker

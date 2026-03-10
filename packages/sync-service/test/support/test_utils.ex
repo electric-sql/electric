@@ -46,6 +46,7 @@ defmodule Support.TestUtils do
       has_begin?: Keyword.get(opts, :has_begin?, false),
       commit: if(Keyword.get(opts, :has_commit?, false), do: %Changes.Commit{}),
       changes: changes,
+      change_count: length(changes),
       affected_relations: MapSet.new(changes, & &1.relation)
     }
   end

@@ -654,7 +654,7 @@ defmodule Electric.Shapes.ConsumerTest do
                   ],
                   _
                 ]}
-             ] = Support.StorageTracer.collect_traced_calls()
+             ] = Support.Trace.collect_traced_calls()
 
       last_log_offset = LogOffset.new(lsn, 2)
       assert_receive {^ref, :new_changes, ^last_log_offset}
@@ -666,7 +666,7 @@ defmodule Electric.Shapes.ConsumerTest do
       # In fact, ShapeLogCollector will simply drop this txn since it's already seen its offset before.
       assert :ok = ShapeLogCollector.handle_event(txn, ctx.stack_id)
 
-      assert [] == Support.StorageTracer.collect_traced_calls()
+      assert [] == Support.Trace.collect_traced_calls()
 
       # We should not re-process the same transaction
       refute_receive {^ref, :new_changes, _}
@@ -746,11 +746,11 @@ defmodule Electric.Shapes.ConsumerTest do
                   ],
                   _
                 ]}
-             ] = Support.StorageTracer.collect_traced_calls()
+             ] = Support.Trace.collect_traced_calls()
 
       # Repeat and observe idempotency
       assert :ok = ShapeLogCollector.handle_event(f1, ctx.stack_id)
-      assert [] == Support.StorageTracer.collect_traced_calls()
+      assert [] == Support.Trace.collect_traced_calls()
 
       assert :ok = ShapeLogCollector.handle_event(f2, ctx.stack_id)
       assert :ok = ShapeLogCollector.handle_event(f3, ctx.stack_id)
@@ -760,12 +760,12 @@ defmodule Electric.Shapes.ConsumerTest do
                 [[{_, ~s'"public"."test_table"/"3"', :insert, _}], _]},
                {Storage, :append_fragment_to_log!,
                 [[{_, ~s'"public"."test_table"/"4"', :insert, _}], _]}
-             ] = Support.StorageTracer.collect_traced_calls()
+             ] = Support.Trace.collect_traced_calls()
 
       # Repeat and observe idempotency
       assert :ok = ShapeLogCollector.handle_event(f2, ctx.stack_id)
       assert :ok = ShapeLogCollector.handle_event(f3, ctx.stack_id)
-      assert [] == Support.StorageTracer.collect_traced_calls()
+      assert [] == Support.Trace.collect_traced_calls()
 
       assert :ok = ShapeLogCollector.handle_event(f4, ctx.stack_id)
 
@@ -773,14 +773,14 @@ defmodule Electric.Shapes.ConsumerTest do
                {Storage, :append_fragment_to_log!,
                 [[{_, ~s'"public"."test_table"/"5"', :insert, _}], _]},
                {Storage, :signal_txn_commit!, [^xid, _]}
-             ] = Support.StorageTracer.collect_traced_calls()
+             ] = Support.Trace.collect_traced_calls()
 
       last_log_offset = LogOffset.new(lsn, 8)
       assert_receive {^ref, :new_changes, ^last_log_offset}
 
       # Repeat and observe idempotency
       assert :ok = ShapeLogCollector.handle_event(f4, ctx.stack_id)
-      assert [] == Support.StorageTracer.collect_traced_calls()
+      assert [] == Support.Trace.collect_traced_calls()
       refute_receive {^ref, :new_changes, _}
     end
 
@@ -871,7 +871,7 @@ defmodule Electric.Shapes.ConsumerTest do
       end)
 
       # No storage calls and no new changes at this point because the consumer process does not yet have snapshot info.
-      assert [] == Support.StorageTracer.collect_traced_calls()
+      assert [] == Support.Trace.collect_traced_calls()
       refute_receive {^ref, :new_changes, _}
       refute_receive {:flush_boundary_updated, _}
 
@@ -897,7 +897,7 @@ defmodule Electric.Shapes.ConsumerTest do
                {Storage, :append_to_log!, [log_items_txn2, _]},
                {Storage, :append_to_log!, [log_items_txn4, _]},
                {Storage, :append_to_log!, [log_items_txn5, _]}
-             ] = Support.StorageTracer.collect_traced_calls()
+             ] = Support.Trace.collect_traced_calls()
 
       traced_log_items =
         Stream.concat([log_items_txn2, log_items_txn4, log_items_txn5])
@@ -1031,7 +1031,7 @@ defmodule Electric.Shapes.ConsumerTest do
       assert :ok = ShapeLogCollector.handle_event(txn2_f2, ctx.stack_id)
 
       # No storage calls and no new changes at this point because the consumer process does not yet have snapshot info.
-      assert [] == Support.StorageTracer.collect_traced_calls()
+      assert [] == Support.Trace.collect_traced_calls()
 
       refute_receive {^ref, :new_changes, _}
       refute_receive {:flush_boundary_updated, _}
@@ -1079,7 +1079,7 @@ defmodule Electric.Shapes.ConsumerTest do
                 ]},
                {Storage, :append_fragment_to_log!,
                 [[{_, ~s'"public"."test_table"/"3"', :update, _}] = log_items_txn2_2, _]}
-             ] = Support.StorageTracer.collect_traced_calls()
+             ] = Support.Trace.collect_traced_calls()
 
       traced_log_items =
         Stream.concat([log_items1, log_items2, log_items3])
@@ -1112,7 +1112,7 @@ defmodule Electric.Shapes.ConsumerTest do
                {Storage, :append_fragment_to_log!,
                 [[{_, ~s'"public"."test_table"/"2"', :delete, _}] = log_items_txn2_4, _]},
                {Storage, :signal_txn_commit!, [^xid2, _]}
-             ] = Support.StorageTracer.collect_traced_calls()
+             ] = Support.Trace.collect_traced_calls()
 
       traced_log_items =
         Stream.concat([log_items_txn2_1, log_items_txn2_2, log_items_txn2_3, log_items_txn2_4])
@@ -1254,7 +1254,7 @@ defmodule Electric.Shapes.ConsumerTest do
                {Storage, :append_fragment_to_log!,
                 [[{^txn2_offset3, ~s'"public"."test_table"/"12"', :insert, _}], _]},
                {Storage, :signal_txn_commit!, [10, _]}
-             ] = Support.StorageTracer.collect_traced_calls()
+             ] = Support.Trace.collect_traced_calls()
 
       last_log_offset = txn2_offset3
       assert_receive {^ref, :new_changes, ^last_log_offset}
@@ -1613,7 +1613,7 @@ defmodule Electric.Shapes.ConsumerTest do
         assert :ok = ShapeLogCollector.handle_event(fragment, ctx.stack_id)
 
         assert [{Storage, :append_fragment_to_log!, [log_items, _]}] =
-                 Support.StorageTracer.collect_traced_calls()
+                 Support.Trace.collect_traced_calls()
 
         assert expected_log_items ==
                  Enum.map(log_items, fn {log_offset, key, op, _json} -> {log_offset, key, op} end)
@@ -1651,7 +1651,7 @@ defmodule Electric.Shapes.ConsumerTest do
                {Storage, :append_fragment_to_log!,
                 [[{^last_log_offset, ~s'"public"."test_table"/"5"', :insert, _json}], _]},
                {Storage, :signal_txn_commit!, [^xid, _]}
-             ] = Support.StorageTracer.collect_traced_calls()
+             ] = Support.Trace.collect_traced_calls()
 
       assert [
                %{"key" => ~s'"public"."test_table"/"1"', "value" => %{"id" => "1"}},
@@ -1671,6 +1671,107 @@ defmodule Electric.Shapes.ConsumerTest do
 
       offset = last_log_offset.tx_offset
       assert_receive {:flush_boundary_updated, ^offset}
+    end
+
+    @tag allow_subqueries: false, with_pure_file_storage_opts: [flush_period: 1]
+    test "flush notification for multi-fragment txn is not lost when storage flushes before commit fragment",
+         %{stack_id: stack_id} = ctx do
+      # Regression test for https://github.com/electric-sql/electric/issues/3985
+      #
+      # When a multi-fragment transaction's non-commit fragments are flushed to disk
+      # before the commit fragment is processed by ShapeLogCollector, the flush
+      # notification was lost because FlushTracker hadn't registered the shape yet.
+      # This caused the shape to be stuck in the FlushTracker, blocking
+      # the global flush offset from advancing.
+      {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape1, stack_id)
+
+      :started = ShapeCache.await_snapshot_start(shape_handle, stack_id)
+
+      ref = Shapes.Consumer.register_for_changes(stack_id, shape_handle)
+
+      register_as_replication_client(stack_id)
+
+      xid = 11
+      lsn = Lsn.from_integer(10)
+
+      # Create non-commit fragments with matching changes
+      fragment1 =
+        txn_fragment(
+          xid,
+          lsn,
+          [
+            %Changes.NewRecord{
+              relation: {"public", "test_table"},
+              record: %{"id" => "1"},
+              log_offset: LogOffset.new(lsn, 0)
+            },
+            %Changes.NewRecord{
+              relation: {"public", "test_table"},
+              record: %{"id" => "2"},
+              log_offset: LogOffset.new(lsn, 2)
+            }
+          ],
+          has_begin?: true
+        )
+
+      fragment2 =
+        txn_fragment(
+          xid,
+          lsn,
+          [
+            %Changes.NewRecord{
+              relation: {"public", "test_table"},
+              record: %{"id" => "3"},
+              log_offset: LogOffset.new(lsn, 4)
+            }
+          ],
+          []
+        )
+
+      Support.Trace.trace_shape_log_collector_calls(
+        pid: Shapes.Consumer.whereis(stack_id, shape_handle),
+        functions: [:notify_flushed]
+      )
+
+      # Send non-commit fragments. With flush_period: 1ms, the storage will flush
+      # almost immediately after writing.
+      assert :ok = ShapeLogCollector.handle_event(fragment1, stack_id)
+      assert :ok = ShapeLogCollector.handle_event(fragment2, stack_id)
+
+      flushed_log_offset = fragment2.last_log_offset
+
+      # Matching on a traced call inline to avoid any timing issues that
+      # Trace.collect_traced_calls() is susceptible to in this case.
+      assert_receive {:trace, _, :call,
+                      {ShapeLogCollector, :notify_flushed,
+                       [^stack_id, ^shape_handle, ^flushed_log_offset]}},
+                     @receive_timeout
+
+      # Now send the commit fragment. The commit fragment itself has NO matching
+      # changes for the shape — all changes were in earlier fragments.
+      # After this, FlushTracker registers the shape but the data was already
+      # flushed, so no new :flushed message will arrive.
+      commit_fragment =
+        txn_fragment(
+          xid,
+          lsn,
+          [
+            %Changes.NewRecord{
+              relation: {"public", "other_table"},
+              record: %{"id" => "99"},
+              log_offset: LogOffset.new(lsn, 6)
+            }
+          ],
+          has_commit?: true
+        )
+
+      assert :ok = ShapeLogCollector.handle_event(commit_fragment, ctx.stack_id)
+      assert_receive {^ref, :new_changes, _}, @receive_timeout
+
+      # Assert that the flush boundary has advanced which wasn't the case before due to the
+      # aforementioned bug,
+      tx_offset = commit_fragment.last_log_offset.tx_offset
+      assert_receive {:flush_boundary_updated, ^tx_offset}, @receive_timeout
     end
 
     test "UPDATE during pending move-in is converted to INSERT and query result skips duplicate key",
@@ -1813,7 +1914,7 @@ defmodule Electric.Shapes.ConsumerTest do
   end
 
   defp enable_storage_tracer_for(consumer_pid) do
-    Support.StorageTracer.trace_storage_calls(
+    Support.Trace.trace_storage_calls(
       pid: consumer_pid,
       functions: [:append_to_log!, :append_fragment_to_log!, :signal_txn_commit!]
     )
