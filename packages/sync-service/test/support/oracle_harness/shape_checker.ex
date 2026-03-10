@@ -157,33 +157,34 @@ defmodule Support.OracleHarness.ShapeChecker do
     elapsed = System.monotonic_time(:millisecond) - start_ms
 
     if elapsed >= state.timeout_ms do
-      flunk("Timeout waiting for shape=#{state.name} where=#{state.where}")
-    end
+      # Timed out — return state and let assert_consistent! report the mismatch
+      state
+    else
+      case Client.poll(state.client, state.shape_def, state.poll_state, replica: :full) do
+        {:ok, messages, new_state} ->
+          state = %{state | poll_state: new_state}
+          state = apply_messages(state, messages)
 
-    case Client.poll(state.client, state.shape_def, state.poll_state, replica: :full) do
-      {:ok, messages, new_state} ->
-        state = %{state | poll_state: new_state}
-        state = apply_messages(state, messages)
+          if new_state.up_to_date? do
+            handle_up_to_date(state, start_ms)
+          else
+            do_await(state, start_ms)
+          end
 
-        if new_state.up_to_date? do
-          handle_up_to_date(state, start_ms)
-        else
+        {:must_refetch, messages, new_state} ->
+          if state.optimized do
+            flunk(
+              "Unexpected 409 (must-refetch) in optimized shape=#{state.name} where=#{state.where}"
+            )
+          end
+
+          state = %{state | poll_state: new_state, rows: %{}}
+          state = apply_messages(state, messages)
           do_await(state, start_ms)
-        end
 
-      {:must_refetch, messages, new_state} ->
-        if state.optimized do
-          flunk(
-            "Unexpected 409 (must-refetch) in optimized shape=#{state.name} where=#{state.where}"
-          )
-        end
-
-        state = %{state | poll_state: new_state, rows: %{}}
-        state = apply_messages(state, messages)
-        do_await(state, start_ms)
-
-      {:error, error} ->
-        flunk("Poll error for shape=#{state.name} where=#{state.where}: #{inspect(error)}")
+        {:error, error} ->
+          flunk("Poll error for shape=#{state.name} where=#{state.where}: #{inspect(error)}")
+      end
     end
   end
 
