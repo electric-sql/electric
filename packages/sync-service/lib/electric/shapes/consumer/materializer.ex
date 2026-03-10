@@ -451,24 +451,36 @@ defmodule Electric.Shapes.Consumer.Materializer do
 
           %Changes.UpdatedRecord{
             key: key,
+            old_key: old_key,
             record: record,
             move_tags: move_tags,
             removed_move_tags: removed_move_tags
           },
           {{index, tag_indices}, counts_and_events} ->
+            # When the primary key doesn't change, old_key may be nil; default to key
+            old_key = old_key || key
+
             # TODO: this is written as if it supports multiple selected columns, but it doesn't for now
             columns_present = Enum.any?(state.columns, &is_map_key(record, &1))
             has_tag_updates = removed_move_tags != []
+            pk_changed = old_key != key
 
-            if columns_present or has_tag_updates do
+            if columns_present or has_tag_updates or pk_changed do
+              # When PK changes, old_key must be removed from all tag indices it
+              # belongs to (both removed and retained tags), not just removed_move_tags
+              tags_to_remove =
+                if pk_changed,
+                  do: removed_move_tags ++ move_tags,
+                  else: removed_move_tags
+
               tag_indices =
                 tag_indices
-                |> remove_row_from_tag_indices(key, removed_move_tags)
+                |> remove_row_from_tag_indices(old_key, tags_to_remove)
                 |> add_row_to_tag_indices(key, move_tags)
 
               if columns_present do
                 {value, original_string} = cast!(record, state)
-                old_value = Map.fetch!(index, key)
+                {old_value, index} = Map.pop!(index, old_key)
                 index = Map.put(index, key, value)
 
                 # Skip decrement/increment dance if value hasn't changed to avoid
@@ -482,6 +494,15 @@ defmodule Electric.Shapes.Consumer.Materializer do
                    |> increment_value(value, original_string)}
                 end
               else
+                # PK changed but tracked column not in record — re-key the index entry
+                index =
+                  if pk_changed do
+                    {value, index} = Map.pop!(index, old_key)
+                    Map.put(index, key, value)
+                  else
+                    index
+                  end
+
                 {{index, tag_indices}, counts_and_events}
               end
             else

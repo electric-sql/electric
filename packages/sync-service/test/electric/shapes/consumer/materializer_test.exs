@@ -350,6 +350,149 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
       end)
     end
 
+    @tag snapshot_data: {
+           [%Changes.NewRecord{record: %{"id" => "1", "value" => "10"}}],
+           [pk_cols: ["id"]]
+         }
+    test "update that changes the primary key is handled correctly", ctx do
+      ctx = with_materializer(ctx)
+
+      assert Materializer.get_link_values(ctx) == MapSet.new([10])
+
+      # Update where the PK changes from "1" to "2"
+      Materializer.new_changes(
+        ctx,
+        [
+          %Changes.UpdatedRecord{
+            record: %{"id" => "2", "value" => "20"},
+            old_record: %{"id" => "1", "value" => "10"}
+          }
+        ]
+        |> prep_changes()
+      )
+
+      assert Materializer.get_link_values(ctx) == MapSet.new([20])
+
+      assert_receive {:materializer_changes, _, %{move_out: [{10, "10"}], move_in: [{20, "20"}]}}
+    end
+
+    @tag snapshot_data: {
+           [%Changes.NewRecord{record: %{"id" => "1", "value" => "10"}}],
+           [pk_cols: ["id"]]
+         }
+    test "update that changes the primary key but keeps the same value", ctx do
+      ctx = with_materializer(ctx)
+
+      assert Materializer.get_link_values(ctx) == MapSet.new([10])
+
+      # Update where the PK changes but tracked value stays the same
+      Materializer.new_changes(
+        ctx,
+        [
+          %Changes.UpdatedRecord{
+            record: %{"id" => "2", "value" => "10"},
+            old_record: %{"id" => "1", "value" => "10"}
+          }
+        ]
+        |> prep_changes()
+      )
+
+      # Value should still be present
+      assert Materializer.get_link_values(ctx) == MapSet.new([10])
+
+      # No events since the tracked value didn't change
+      refute_received {:materializer_changes, _, _}
+    end
+
+    @tag snapshot_data: {
+           [
+             %Changes.NewRecord{
+               record: %{"id" => "1", "value" => "10"},
+               move_tags: ["tag_a"]
+             }
+           ],
+           [pk_cols: ["id"]]
+         }
+    test "update that changes PK and tag updates tag indices correctly", ctx do
+      ctx = with_materializer(ctx)
+
+      assert Materializer.get_link_values(ctx) == MapSet.new([10])
+
+      # Update where PK changes and tag changes
+      Materializer.new_changes(
+        ctx,
+        [
+          %Changes.UpdatedRecord{
+            record: %{"id" => "2", "value" => "20"},
+            old_record: %{"id" => "1", "value" => "10"},
+            move_tags: ["tag_b"],
+            removed_move_tags: ["tag_a"]
+          }
+        ]
+        |> prep_changes()
+      )
+
+      assert Materializer.get_link_values(ctx) == MapSet.new([20])
+      assert_receive {:materializer_changes, _, %{move_out: [{10, "10"}], move_in: [{20, "20"}]}}
+
+      # move_out for old tag should find nothing (old_key fully removed)
+      Materializer.new_changes(ctx, [
+        %{headers: %{event: "move-out", patterns: [%{pos: 0, value: "tag_a"}]}}
+      ])
+
+      assert Materializer.get_link_values(ctx) == MapSet.new([20])
+      refute_received {:materializer_changes, _, _}
+
+      # move_out for new tag should remove the row using the new key
+      Materializer.new_changes(ctx, [
+        %{headers: %{event: "move-out", patterns: [%{pos: 0, value: "tag_b"}]}}
+      ])
+
+      assert Materializer.get_link_values(ctx) == MapSet.new([])
+      assert_receive {:materializer_changes, _, %{move_out: [{20, "20"}], move_in: []}}
+    end
+
+    @tag snapshot_data: {
+           [
+             %Changes.NewRecord{
+               record: %{"id" => "1", "value" => "10"},
+               move_tags: ["tag_a"]
+             }
+           ],
+           [pk_cols: ["id"]]
+         }
+    test "update that changes PK but keeps same tag cleans up stale tag entry", ctx do
+      ctx = with_materializer(ctx)
+
+      assert Materializer.get_link_values(ctx) == MapSet.new([10])
+
+      # Update where PK changes but tag stays the same
+      Materializer.new_changes(
+        ctx,
+        [
+          %Changes.UpdatedRecord{
+            record: %{"id" => "2", "value" => "20"},
+            old_record: %{"id" => "1", "value" => "10"},
+            move_tags: ["tag_a"],
+            removed_move_tags: []
+          }
+        ]
+        |> prep_changes()
+      )
+
+      assert Materializer.get_link_values(ctx) == MapSet.new([20])
+      assert_receive {:materializer_changes, _, %{move_out: [{10, "10"}], move_in: [{20, "20"}]}}
+
+      # move_out for tag_a should remove the row using the new key, not crash
+      # looking for the old key
+      Materializer.new_changes(ctx, [
+        %{headers: %{event: "move-out", patterns: [%{pos: 0, value: "tag_a"}]}}
+      ])
+
+      assert Materializer.get_link_values(ctx) == MapSet.new([])
+      assert_receive {:materializer_changes, _, %{move_out: [{20, "20"}], move_in: []}}
+    end
+
     test "events are accumulated across uncommitted fragments", ctx do
       ctx = with_materializer(ctx)
 
