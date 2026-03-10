@@ -42,9 +42,13 @@ jobs:
           fi
 
           # Check if any TS-related files changed in the PR
-          CHANGED=$(gh api "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" --paginate --jq '.[].filename')
+          CHANGED=$(gh api "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" --paginate --jq '.[].filename') || {
+            echo "::warning::Failed to fetch PR files, defaulting to running TS CI"
+            echo "should_run=true" >> $GITHUB_OUTPUT
+            exit 0
+          }
 
-          if echo "$CHANGED" | grep -qE '^(packages/(typescript-client|react-hooks|y-electric|experimental|start)/|examples/|website/|pnpm-lock\.yaml$|package\.json$|pnpm-workspace\.yaml$|\.tool-versions$|\.github/workflows/(ts_|ensure_sync_service|pr\.)|\.github/actions/)'; then
+          if echo "$CHANGED" | grep -qE '^(packages/(typescript-client|react-hooks|y-electric|experimental|start)/|examples/|website/|pnpm-lock\.yaml$|package\.json$|pnpm-workspace\.yaml$|\.tool-versions$|tsconfig\.|eslint\.config|\.prettierrc|\.prettierignore|\.npmrc|\.github/workflows/(ts_|ensure_sync_service|pr\.)|\.github/actions/)'; then
             echo "should_run=true" >> $GITHUB_OUTPUT
           else
             echo "should_run=false" >> $GITHUB_OUTPUT
