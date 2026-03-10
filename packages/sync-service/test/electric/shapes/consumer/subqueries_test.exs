@@ -372,7 +372,7 @@ defmodule Electric.Shapes.Consumer.SubqueriesTest do
     {changes, state} = Subqueries.handle_event(state, %Changes.LsnUpdate{lsn: lsn(10)})
 
     assert %Buffering{
-             move_in_value: {2, "2"},
+             move_in_values: [{2, "2"}],
              subquery_view_before_move_in: view_before,
              subquery_view_after_move_in: view_after
            } = state
@@ -386,7 +386,7 @@ defmodule Electric.Shapes.Consumer.SubqueriesTest do
            ] = changes
   end
 
-  test "preserves same-value move in then move out ordering while buffering" do
+  test "applies a queued move out for the active move-in value after splice" do
     state = new_state()
     dep_handle = state.dependency_handle
 
@@ -421,7 +421,7 @@ defmodule Electric.Shapes.Consumer.SubqueriesTest do
            ] = changes
   end
 
-  test "serializes consecutive move ins" do
+  test "batches consecutive move ins into a single active move in" do
     state = new_state()
     dep_handle = state.dependency_handle
 
@@ -429,6 +429,38 @@ defmodule Electric.Shapes.Consumer.SubqueriesTest do
       Subqueries.handle_event(
         state,
         {:materializer_changes, dep_handle, %{move_in: [{1, "1"}, {2, "2"}], move_out: []}}
+      )
+
+    assert %Buffering{
+             move_in_values: [{1, "1"}, {2, "2"}],
+             subquery_view_before_move_in: before_view,
+             subquery_view_after_move_in: after_view
+           } = state
+
+    assert before_view == MapSet.new()
+    assert after_view == MapSet.new([1, 2])
+  end
+
+  test "cancels pending inverse ops while buffering" do
+    state = new_state()
+    dep_handle = state.dependency_handle
+
+    {[], state} =
+      Subqueries.handle_event(
+        state,
+        {:materializer_changes, dep_handle, %{move_in: [{1, "1"}], move_out: []}}
+      )
+
+    {[], state} =
+      Subqueries.handle_event(
+        state,
+        {:materializer_changes, dep_handle, %{move_in: [{2, "2"}], move_out: []}}
+      )
+
+    {[], state} =
+      Subqueries.handle_event(
+        state,
+        {:materializer_changes, dep_handle, %{move_in: [], move_out: [{2, "2"}]}}
       )
 
     {[], state} = Subqueries.handle_event(state, {:pg_snapshot_known, {100, 200, []}})
@@ -441,16 +473,52 @@ defmodule Electric.Shapes.Consumer.SubqueriesTest do
 
     {changes, state} = Subqueries.handle_event(state, %Changes.LsnUpdate{lsn: lsn(10)})
 
+    assert %Steady{subquery_view: view} = state
+    assert view == MapSet.new([1])
     assert [%Changes.NewRecord{record: %{"id" => "99"}}] = changes
+  end
 
-    assert %Buffering{
-             move_in_value: {2, "2"},
-             subquery_view_before_move_in: before_view,
-             subquery_view_after_move_in: after_view
-           } = state
+  test "merges queued move outs into a single control message after splice" do
+    state = new_state(subquery_view: MapSet.new([2]))
+    dep_handle = state.dependency_handle
 
-    assert before_view == MapSet.new([1])
-    assert after_view == MapSet.new([1, 2])
+    {[], state} =
+      Subqueries.handle_event(
+        state,
+        {:materializer_changes, dep_handle, %{move_in: [{1, "1"}], move_out: []}}
+      )
+
+    {[], state} =
+      Subqueries.handle_event(
+        state,
+        {:materializer_changes, dep_handle, %{move_in: [], move_out: [{1, "1"}]}}
+      )
+
+    {[], state} =
+      Subqueries.handle_event(
+        state,
+        {:materializer_changes, dep_handle, %{move_in: [], move_out: [{2, "2"}]}}
+      )
+
+    {[], state} = Subqueries.handle_event(state, {:pg_snapshot_known, {100, 200, []}})
+
+    {[], state} =
+      Subqueries.handle_event(
+        state,
+        {:query_move_in_complete, [child_insert("99", "1")], lsn(10)}
+      )
+
+    {changes, state} = Subqueries.handle_event(state, %Changes.LsnUpdate{lsn: lsn(10)})
+
+    assert %Steady{subquery_view: view} = state
+    assert view == MapSet.new()
+
+    assert [
+             %Changes.NewRecord{record: %{"id" => "99"}},
+             %{headers: %{event: "move-out", patterns: patterns}}
+           ] = changes
+
+    assert length(patterns) == 2
   end
 
   test "raises on dependency handle mismatch" do

@@ -9,6 +9,7 @@ defmodule Electric.Shapes.Consumer.Subqueries do
   alias Electric.Replication.Eval
   alias Electric.Replication.Eval.Walker
   alias Electric.Shapes.Consumer.Subqueries.Buffering
+  alias Electric.Shapes.Consumer.Subqueries.MoveQueue
   alias Electric.Shapes.Consumer.Subqueries.QueryRow
   alias Electric.Shapes.Consumer.Subqueries.Steady
   alias Electric.Shapes.Consumer.Subqueries.StateMachine
@@ -39,7 +40,7 @@ defmodule Electric.Shapes.Consumer.Subqueries do
       subquery_ref: fetch_opt!(opts, :subquery_ref),
       latest_seen_lsn: Map.get(opts, :latest_seen_lsn),
       subquery_view: Map.get(opts, :subquery_view, MapSet.new()),
-      queue: []
+      queue: MoveQueue.new()
     }
   end
 
@@ -58,7 +59,7 @@ defmodule Electric.Shapes.Consumer.Subqueries do
       move_in_where_clause(
         consumer_state.shape,
         consumer_state.subquery_state.dependency_handle,
-        [elem(buffering_state.move_in_value, 0)],
+        Enum.map(buffering_state.move_in_values, &elem(&1, 0)),
         buffering_state.subquery_view_before_move_in
       )
 
@@ -179,36 +180,26 @@ defmodule Electric.Shapes.Consumer.Subqueries do
     |> then(&{tag_structure, &1})
   end
 
-  @spec enqueue_materializer_ops([queue_op()], map()) :: [queue_op()]
-  def enqueue_materializer_ops(queue, payload) do
-    new_ops =
-      Enum.map(Map.get(payload, :move_out, []), &{:move_out, &1}) ++
-        Enum.map(Map.get(payload, :move_in, []), &{:move_in, &1})
-
-    queue ++ new_ops
-  end
-
   @spec drain_queue(Steady.t(), [output()]) :: {[output()], Steady.t() | Buffering.t()}
   def drain_queue(%Steady{} = state, outputs \\ []) do
-    case next_queue_op(state.queue, state.subquery_view) do
+    case MoveQueue.pop_next(state.queue) do
       nil ->
         {outputs, state}
 
-      {index, :skip} ->
-        {_op, queue} = List.pop_at(state.queue, index)
-        drain_queue(%{state | queue: queue}, outputs)
-
-      {index, {:move_out, move_value}} ->
-        {move_out_values, next_state} = drain_move_out_batch(state, index, move_value, [])
+      {{:move_out, move_out_values}, queue} ->
+        next_state = %{
+          state
+          | queue: queue,
+            subquery_view: remove_move_values(state.subquery_view, move_out_values)
+        }
 
         drain_queue(
           next_state,
           outputs ++ [make_move_out_control_message(next_state, move_out_values)]
         )
 
-      {index, {:move_in, move_value}} ->
-        {_op, queue} = List.pop_at(state.queue, index)
-        {outputs, Buffering.from_steady(state, move_value, queue)}
+      {{:move_in, move_in_values}, queue} ->
+        {outputs, Buffering.from_steady(state, move_in_values, queue)}
     end
   end
 
@@ -449,56 +440,10 @@ defmodule Electric.Shapes.Consumer.Subqueries do
     rest ++ [%{last | last?: true}]
   end
 
-  defp next_queue_op([], _subquery_view), do: nil
-
-  defp next_queue_op(queue, subquery_view) do
-    eligible_move_out_index =
-      queue
-      |> Enum.with_index()
-      |> Enum.find_value(fn
-        {{:move_out, {value, _}}, index} ->
-          if MapSet.member?(subquery_view, value) and
-               no_earlier_op_for_value?(queue, index, value),
-             do: index
-
-        _ ->
-          nil
-      end)
-
-    cond do
-      not is_nil(eligible_move_out_index) ->
-        {eligible_move_out_index, Enum.at(queue, eligible_move_out_index)}
-
-      match?({:move_out, _}, hd(queue)) ->
-        {0, :skip}
-
-      true ->
-        {0, hd(queue)}
-    end
-  end
-
-  defp no_earlier_op_for_value?(queue, index, value) do
-    queue
-    |> Enum.take(index)
-    |> Enum.all?(fn {_op_kind, {other_value, _}} -> other_value != value end)
-  end
-
-  defp drain_move_out_batch(state, index, move_out_value, acc) do
-    {_op, queue} = List.pop_at(state.queue, index)
-
-    next_state = %{
-      state
-      | queue: queue,
-        subquery_view: MapSet.delete(state.subquery_view, elem(move_out_value, 0))
-    }
-
-    case next_queue_op(next_state.queue, next_state.subquery_view) do
-      {next_index, {:move_out, next_move_out_value}} ->
-        drain_move_out_batch(next_state, next_index, next_move_out_value, acc ++ [move_out_value])
-
-      _ ->
-        {acc ++ [move_out_value], next_state}
-    end
+  defp remove_move_values(subquery_view, move_values) do
+    Enum.reduce(move_values, subquery_view, fn {value, _original_value}, view ->
+      MapSet.delete(view, value)
+    end)
   end
 
   defp fetch_opt!(opts, key) do

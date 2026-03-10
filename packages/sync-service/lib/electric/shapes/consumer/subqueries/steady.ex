@@ -1,6 +1,8 @@
 defmodule Electric.Shapes.Consumer.Subqueries.Steady do
   @moduledoc false
 
+  alias Electric.Shapes.Consumer.Subqueries.MoveQueue
+
   @enforce_keys [:shape, :stack_id, :shape_handle, :dependency_handle, :subquery_ref]
   defstruct [
     :shape,
@@ -10,7 +12,7 @@ defmodule Electric.Shapes.Consumer.Subqueries.Steady do
     :subquery_ref,
     latest_seen_lsn: nil,
     subquery_view: MapSet.new(),
-    queue: []
+    queue: MoveQueue.new()
   ]
 
   @type t() :: %__MODULE__{
@@ -21,7 +23,7 @@ defmodule Electric.Shapes.Consumer.Subqueries.Steady do
           subquery_ref: [String.t()],
           latest_seen_lsn: Electric.Postgres.Lsn.t() | nil,
           subquery_view: MapSet.t(),
-          queue: [Electric.Shapes.Consumer.Subqueries.queue_op()]
+          queue: MoveQueue.t()
         }
 end
 
@@ -30,6 +32,7 @@ defimpl Electric.Shapes.Consumer.Subqueries.StateMachine,
   alias Electric.Replication.Changes.LsnUpdate
   alias Electric.Replication.Changes.Transaction
   alias Electric.Shapes.Consumer.Subqueries
+  alias Electric.Shapes.Consumer.Subqueries.MoveQueue
 
   def handle_event(state, %Transaction{} = txn) do
     {Subqueries.convert_transaction(txn, state, state.subquery_view), state}
@@ -41,7 +44,7 @@ defimpl Electric.Shapes.Consumer.Subqueries.StateMachine,
     :ok = Subqueries.validate_dependency_handle!(state, dep_handle)
 
     state
-    |> Map.update!(:queue, &Subqueries.enqueue_materializer_ops(&1, payload))
+    |> Map.update!(:queue, &MoveQueue.enqueue(&1, payload, state.subquery_view))
     |> Subqueries.drain_queue()
   end
 

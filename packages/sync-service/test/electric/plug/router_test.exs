@@ -2886,7 +2886,8 @@ defmodule Electric.Plug.RouterTest do
            "INSERT INTO parent (id, value) VALUES (1, 1), (2, 2), (3, 3)",
            "INSERT INTO child (id, parent_id, value) VALUES (1, 1, 10), (2, 2, 20), (3, 3, 30)"
          ]
-    test "move-in into move-out into move-in of the same parent results in a ", ctx do
+    test "move-in into move-out into move-in of the same parent collapses queued oscillations",
+         ctx do
       req = make_shape_req("child", where: "parent_id in (SELECT id FROM parent WHERE value = 1)")
 
       assert {req, 200, [data, _snapshot_end]} = shape_req(req, ctx.opts)
@@ -2917,22 +2918,10 @@ defmodule Electric.Plug.RouterTest do
       tag3 =
         :crypto.hash(:md5, ctx.stack_id <> req.handle <> "v:3") |> Base.encode16(case: :lower)
 
-      # Under simple-subqueries, move-in query rows are appended as-is. That means the second
-      # parent can move in, move out, move in again, and move out again before the third parent
-      # eventually moves in.
+      # The reduced move queue keeps the first move-in/move-out pair for parent 2, then drops
+      # the later move-in/move-out oscillation before parent 3 moves in.
       assert {_req, 200,
               [
-                %{
-                  "headers" => %{"operation" => "insert", "is_move_in" => true, "tags" => [^tag2]},
-                  "value" => %{"id" => "2", "parent_id" => "2", "value" => "20"}
-                },
-                %{"headers" => %{"control" => "snapshot-end"}},
-                %{
-                  "headers" => %{
-                    "event" => "move-out",
-                    "patterns" => [%{"pos" => 0, "value" => ^tag2}]
-                  }
-                },
                 %{
                   "headers" => %{"operation" => "insert", "is_move_in" => true, "tags" => [^tag2]},
                   "value" => %{"id" => "2", "parent_id" => "2", "value" => "20"}

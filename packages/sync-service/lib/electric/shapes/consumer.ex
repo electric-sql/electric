@@ -1048,7 +1048,8 @@ defmodule Electric.Shapes.Consumer do
 
   defp finalize_subquery_flush_tracking(state, event, previous_subquery_state, latest_offset) do
     case {previous_subquery_state, state.subquery_state, event} do
-      {%Buffering{move_in_value: move_in_value}, %Buffering{move_in_value: move_in_value}, _event} ->
+      {%Buffering{move_in_values: move_in_values}, %Buffering{move_in_values: move_in_values},
+       _event} ->
         state
 
       {%Buffering{} = buffering_state, _current_subquery_state, _event} ->

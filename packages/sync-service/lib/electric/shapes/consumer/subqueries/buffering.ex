@@ -1,6 +1,7 @@
 defmodule Electric.Shapes.Consumer.Subqueries.Buffering do
   @moduledoc false
 
+  alias Electric.Shapes.Consumer.Subqueries.MoveQueue
   alias Electric.Shapes.Consumer.Subqueries.Steady
 
   @enforce_keys [
@@ -9,7 +10,7 @@ defmodule Electric.Shapes.Consumer.Subqueries.Buffering do
     :shape_handle,
     :dependency_handle,
     :subquery_ref,
-    :move_in_value,
+    :move_in_values,
     :subquery_view_before_move_in,
     :subquery_view_after_move_in,
     :latest_seen_lsn
@@ -20,7 +21,7 @@ defmodule Electric.Shapes.Consumer.Subqueries.Buffering do
     :shape_handle,
     :dependency_handle,
     :subquery_ref,
-    :move_in_value,
+    :move_in_values,
     :subquery_view_before_move_in,
     :subquery_view_after_move_in,
     snapshot: nil,
@@ -29,7 +30,7 @@ defmodule Electric.Shapes.Consumer.Subqueries.Buffering do
     latest_seen_lsn: nil,
     boundary_txn_count: nil,
     buffered_txns: [],
-    queue: [],
+    queue: MoveQueue.new(),
     query_started?: false
   ]
 
@@ -39,7 +40,7 @@ defmodule Electric.Shapes.Consumer.Subqueries.Buffering do
           shape_handle: String.t(),
           dependency_handle: String.t(),
           subquery_ref: [String.t()],
-          move_in_value: Electric.Shapes.Consumer.Subqueries.move_value(),
+          move_in_values: [Electric.Shapes.Consumer.Subqueries.move_value()],
           subquery_view_before_move_in: MapSet.t(),
           subquery_view_after_move_in: MapSet.t(),
           snapshot: {term(), term(), [term()]} | nil,
@@ -48,14 +49,16 @@ defmodule Electric.Shapes.Consumer.Subqueries.Buffering do
           latest_seen_lsn: Electric.Postgres.Lsn.t() | nil,
           boundary_txn_count: non_neg_integer() | nil,
           buffered_txns: [Electric.Replication.Changes.Transaction.t()],
-          queue: [Electric.Shapes.Consumer.Subqueries.queue_op()],
+          queue: MoveQueue.t(),
           query_started?: boolean()
         }
 
-  @spec from_steady(Steady.t(), Electric.Shapes.Consumer.Subqueries.move_value(), [
-          Electric.Shapes.Consumer.Subqueries.queue_op()
-        ]) :: t()
-  def from_steady(%Steady{} = state, move_in_value, queue) do
+  @spec from_steady(
+          Steady.t(),
+          [Electric.Shapes.Consumer.Subqueries.move_value()],
+          MoveQueue.t()
+        ) :: t()
+  def from_steady(%Steady{} = state, move_in_values, queue) do
     %__MODULE__{
       shape: state.shape,
       stack_id: state.stack_id,
@@ -63,11 +66,17 @@ defmodule Electric.Shapes.Consumer.Subqueries.Buffering do
       dependency_handle: state.dependency_handle,
       subquery_ref: state.subquery_ref,
       latest_seen_lsn: state.latest_seen_lsn,
-      move_in_value: move_in_value,
+      move_in_values: move_in_values,
       subquery_view_before_move_in: state.subquery_view,
-      subquery_view_after_move_in: MapSet.put(state.subquery_view, elem(move_in_value, 0)),
+      subquery_view_after_move_in: add_move_in_values(state.subquery_view, move_in_values),
       queue: queue
     }
+  end
+
+  defp add_move_in_values(subquery_view, move_in_values) do
+    Enum.reduce(move_in_values, subquery_view, fn {value, _original_value}, view ->
+      MapSet.put(view, value)
+    end)
   end
 end
 
@@ -76,6 +85,7 @@ defimpl Electric.Shapes.Consumer.Subqueries.StateMachine,
   alias Electric.Replication.Changes.LsnUpdate
   alias Electric.Replication.Changes.Transaction
   alias Electric.Shapes.Consumer.Subqueries
+  alias Electric.Shapes.Consumer.Subqueries.MoveQueue
 
   def handle_event(state, %Transaction{} = txn) do
     next_state =
@@ -95,7 +105,13 @@ defimpl Electric.Shapes.Consumer.Subqueries.StateMachine,
 
   def handle_event(state, {:materializer_changes, dep_handle, payload}) do
     :ok = Subqueries.validate_dependency_handle!(state, dep_handle)
-    {[], Map.update!(state, :queue, &Subqueries.enqueue_materializer_ops(&1, payload))}
+
+    {[],
+     Map.update!(
+       state,
+       :queue,
+       &MoveQueue.enqueue(&1, payload, state.subquery_view_after_move_in)
+     )}
   end
 
   def handle_event(%{snapshot: snapshot}, {:pg_snapshot_known, _new_snapshot})
