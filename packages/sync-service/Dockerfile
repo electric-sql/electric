@@ -75,7 +75,8 @@ ARG RELEASE_NAME=electric
 
 COPY --from=builder "/builder/electric/_build/${MIX_TARGET}_prod/rel/${RELEASE_NAME}" ./
 
-RUN mv /app/bin/${RELEASE_NAME} /app/bin/entrypoint
+COPY rel/entrypoint.sh /app/bin/entrypoint
+RUN chmod +x /app/bin/entrypoint
 
 HEALTHCHECK --start-period=10s CMD curl --fail http://localhost:${ELECTRIC_PORT-3000}/v1/health || exit 1
 
