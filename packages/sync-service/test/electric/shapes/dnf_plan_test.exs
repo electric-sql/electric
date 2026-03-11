@@ -533,6 +533,184 @@ defmodule Electric.Shapes.DnfPlanTest do
     end
   end
 
+  describe "move_in_where_clause/5 - x IN sq1 OR y IN sq2" do
+    setup do
+      {where, deps} =
+        parse_where_with_sublinks(
+          ~S"x IN (SELECT id FROM dep1) OR y IN (SELECT id FROM dep2)",
+          2
+        )
+
+      shape = make_shape(where, deps)
+      {:ok, plan} = DnfPlan.compile(shape)
+      %{plan: plan, where: where}
+    end
+
+    test "move on dep 0 generates candidate for sq1 and exclusion for sq2",
+         %{plan: plan, where: where} do
+      move_in_values = [1, 2, 3]
+      views = %{["$sublink", "0"] => MapSet.new([10]), ["$sublink", "1"] => MapSet.new([20, 30])}
+
+      {sql, params} =
+        DnfPlan.move_in_where_clause(plan, 0, move_in_values, views, where.used_refs)
+
+      # Candidate should reference move_in_values with = ANY ($1::...)
+      assert sql =~ "= ANY ($1::"
+      # Exclusion should reference sq2's current view
+      assert sql =~ "AND NOT"
+      assert sql =~ "= ANY ($2::"
+
+      # First param is move_in_values, second is current view for sq2
+      assert length(params) == 2
+      assert Enum.at(params, 0) == [1, 2, 3]
+      assert Enum.sort(Enum.at(params, 1)) == [20, 30]
+    end
+
+    test "move on dep 1 generates candidate for sq2 and exclusion for sq1",
+         %{plan: plan, where: where} do
+      move_in_values = [100]
+      views = %{["$sublink", "0"] => MapSet.new([5]), ["$sublink", "1"] => MapSet.new([10])}
+
+      {sql, params} =
+        DnfPlan.move_in_where_clause(plan, 1, move_in_values, views, where.used_refs)
+
+      assert sql =~ "AND NOT"
+      assert length(params) == 2
+      assert Enum.at(params, 0) == [100]
+      assert Enum.at(params, 1) == [5]
+    end
+  end
+
+  describe "move_in_where_clause/5 - (x IN sq1 AND status = 'open') OR y IN sq2" do
+    setup do
+      {where, deps} =
+        parse_where_with_sublinks(
+          ~S"(x IN (SELECT id FROM dep1) AND status = 'open') OR y IN (SELECT id FROM dep2)",
+          2
+        )
+
+      shape = make_shape(where, deps)
+      {:ok, plan} = DnfPlan.compile(shape)
+      %{plan: plan, where: where}
+    end
+
+    test "move on dep 0 includes row predicate in candidate",
+         %{plan: plan, where: where} do
+      move_in_values = [1, 2]
+      views = %{["$sublink", "0"] => MapSet.new([10]), ["$sublink", "1"] => MapSet.new([20])}
+
+      {sql, params} =
+        DnfPlan.move_in_where_clause(plan, 0, move_in_values, views, where.used_refs)
+
+      # Candidate should include both the subquery condition and the row predicate
+      assert sql =~ "= ANY ($1::"
+      assert sql =~ ~s|"status" = 'open'|
+      # Exclusion should be sq2's disjunct
+      assert sql =~ "AND NOT"
+      assert length(params) == 2
+    end
+  end
+
+  describe "make_move_in_broadcast/5" do
+    test "generates position-aware patterns" do
+      {where, deps} =
+        parse_where_with_sublinks(
+          ~S"x IN (SELECT id FROM dep1) OR y IN (SELECT id FROM dep2)",
+          2
+        )
+
+      shape = make_shape(where, deps)
+      {:ok, plan} = DnfPlan.compile(shape)
+
+      values = [{5, "5"}, {10, "10"}]
+      broadcast = DnfPlan.make_move_in_broadcast(plan, 0, values, @stack_id, @shape_handle)
+
+      assert broadcast.headers.event == "move-in"
+      assert length(broadcast.headers.patterns) == 2
+
+      # All patterns should reference pos 0 (dep 0's position)
+      dep0_positions = Map.get(plan.dependency_positions, 0, [])
+
+      Enum.each(broadcast.headers.patterns, fn pattern ->
+        assert pattern.pos in dep0_positions
+        assert is_binary(pattern.value)
+      end)
+    end
+  end
+
+  describe "make_move_out_broadcast/5" do
+    test "generates position-aware patterns" do
+      {where, deps} =
+        parse_where_with_sublinks(
+          ~S"x IN (SELECT id FROM dep1) OR y IN (SELECT id FROM dep2)",
+          2
+        )
+
+      shape = make_shape(where, deps)
+      {:ok, plan} = DnfPlan.compile(shape)
+
+      values = [{5, "5"}]
+      broadcast = DnfPlan.make_move_out_broadcast(plan, 1, values, @stack_id, @shape_handle)
+
+      assert broadcast.headers.event == "move-out"
+      assert length(broadcast.headers.patterns) == 1
+
+      dep1_positions = Map.get(plan.dependency_positions, 1, [])
+      [pattern] = broadcast.headers.patterns
+      assert pattern.pos in dep1_positions
+    end
+  end
+
+  describe "active_conditions_sql/1" do
+    test "generates per-position boolean SQL expressions" do
+      {where, deps} =
+        parse_where_with_sublinks(
+          ~S"(x IN (SELECT id FROM dep1) AND status = 'open') OR y IN (SELECT id FROM dep2)",
+          2
+        )
+
+      shape = make_shape(where, deps)
+      {:ok, plan} = DnfPlan.compile(shape)
+
+      sqls = DnfPlan.active_conditions_sql(plan)
+
+      assert length(sqls) == plan.position_count
+
+      # Each should be a boolean expression
+      Enum.each(sqls, fn sql ->
+        assert sql =~ "::boolean"
+      end)
+    end
+  end
+
+  describe "tags_sql/3" do
+    test "generates per-disjunct tag SQL with position slots" do
+      {where, deps} =
+        parse_where_with_sublinks(
+          ~S"(x IN (SELECT id FROM dep1) AND status = 'open') OR y IN (SELECT id FROM dep2)",
+          2
+        )
+
+      shape = make_shape(where, deps)
+      {:ok, plan} = DnfPlan.compile(shape)
+
+      sqls = DnfPlan.tags_sql(plan, @stack_id, @shape_handle)
+
+      # One tag SQL per disjunct
+      assert length(sqls) == length(plan.disjuncts)
+
+      # Each tag SQL should contain '/' separators between slots
+      Enum.each(sqls, fn sql ->
+        assert sql =~ "'/' ||"
+      end)
+
+      # First disjunct should have md5 for subquery + sentinel for row predicate
+      [tag0_sql, _tag1_sql] = sqls
+      assert tag0_sql =~ "md5("
+      assert tag0_sql =~ "'1'"
+    end
+  end
+
   # -- Helpers --
 
   defp parse_where(where_clause) do
