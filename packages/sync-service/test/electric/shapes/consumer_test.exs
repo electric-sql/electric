@@ -1768,6 +1768,7 @@ defmodule Electric.Shapes.ConsumerTest do
       shape_storage = Storage.for_shape(shape_handle, ctx.storage)
 
       assert [
+               %{"headers" => %{"event" => "move-in"}},
                %{
                  "headers" => %{"operation" => "insert"},
                  "key" => ~s'"public"."test_table"/"1"',

@@ -2315,7 +2315,13 @@ defmodule Electric.Plug.RouterTest do
         :crypto.hash(:md5, stack_id <> req.handle <> "v:2")
         |> Base.encode16(case: :lower)
 
-      assert {_, 200, [data, %{"headers" => %{"control" => "snapshot-end"}}, up_to_date_ctl()]} =
+      assert {_, 200,
+              [
+                %{"headers" => %{"event" => "move-in"}},
+                data,
+                %{"headers" => %{"control" => "snapshot-end"}},
+                up_to_date_ctl()
+              ]} =
                Task.await(task)
 
       assert %{"id" => "2", "parent_id" => "2", "value" => "20"} = data["value"]
@@ -2413,6 +2419,7 @@ defmodule Electric.Plug.RouterTest do
 
       assert {_, 200,
               [
+                %{"headers" => %{"event" => "move-in"}},
                 %{"value" => %{"id" => "2", "other_value" => "4"}},
                 %{"headers" => %{"control" => "snapshot-end"}},
                 up_to_date_ctl()
@@ -2460,6 +2467,7 @@ defmodule Electric.Plug.RouterTest do
 
       assert {req, 200,
               [
+                %{"headers" => %{"event" => "move-in"}},
                 %{
                   "value" => %{"id" => "2", "value" => "20"},
                   "headers" => %{"operation" => "insert", "is_move_in" => true, "tags" => [tag]}
@@ -2491,7 +2499,7 @@ defmodule Electric.Plug.RouterTest do
            "INSERT INTO parent (id, include_parent) VALUES (1, true)",
            "INSERT INTO child (id, parent_id, include_child) VALUES (1, 1, true)"
          ]
-    test "subquery combined with OR should return a 409 on move-out", %{
+    test "subquery combined with OR handles move-out via DNF without invalidation", %{
       opts: opts,
       db_conn: db_conn
     } do
@@ -2510,11 +2518,15 @@ defmodule Electric.Plug.RouterTest do
 
       task = live_shape_req(req, opts)
 
-      # Setting include_parent to false may cause a move out, but it doesn't in this case because include_child is still true
+      # Setting include_parent to false causes a move out on the subquery position,
+      # but the row stays because include_child is still true (second disjunct).
+      # With DNF runtime, this is handled as a position flip, not invalidation.
       Postgrex.query!(db_conn, "UPDATE parent SET include_parent = false WHERE id = 1", [])
 
-      # Rather than working out whether this is a move out or not we return a 409
-      assert {_req, 409, _response} = Task.await(task)
+      assert {_req, 200, response} = Task.await(task)
+
+      assert [%{"headers" => %{"event" => "move-out", "patterns" => [%{"pos" => 0}]}}] =
+               Enum.filter(response, &match?(%{"headers" => %{"event" => _}}, &1))
     end
 
     @tag with_sql: [
@@ -2523,7 +2535,7 @@ defmodule Electric.Plug.RouterTest do
            "INSERT INTO parent (id, include_parent) VALUES (1, false)",
            "INSERT INTO child (id, parent_id, include_child) VALUES (1, 1, true)"
          ]
-    test "subquery combined with OR should return a 409 on move-in", %{
+    test "subquery combined with OR handles move-in via DNF without invalidation", %{
       opts: opts,
       db_conn: db_conn
     } do
@@ -2542,11 +2554,18 @@ defmodule Electric.Plug.RouterTest do
 
       task = live_shape_req(req, opts)
 
-      # Setting include_parent to true may cause a move in, but it doesn't in this case because include_child is already true
+      # Setting include_parent to true causes a move in on the subquery position.
+      # The row is already present via include_child = true (second disjunct).
+      # With DNF runtime, the move-in is handled as a position flip, not invalidation.
       Postgrex.query!(db_conn, "UPDATE parent SET include_parent = true WHERE id = 1", [])
 
-      # Rather than working out whether this is a move in or not we return a 409
-      assert {_req, 409, _response} = Task.await(task)
+      assert {_req, 200, response} = Task.await(task)
+
+      # Move-in control message with move-in query rows
+      move_in_events =
+        Enum.filter(response, &match?(%{"headers" => %{"event" => "move-in"}}, &1))
+
+      assert length(move_in_events) >= 1
     end
 
     @tag with_sql: [
@@ -2557,7 +2576,7 @@ defmodule Electric.Plug.RouterTest do
            "INSERT INTO parent (id, grandparent_id, include_parent) VALUES (1, 1, true)",
            "INSERT INTO child (id, parent_id) VALUES (1, 1)"
          ]
-    test "nested subquery combined with OR should return a 409 on move-in", %{
+    test "nested subquery combined with OR handles move-in via DNF without invalidation", %{
       opts: opts,
       db_conn: db_conn
     } do
@@ -2576,15 +2595,25 @@ defmodule Electric.Plug.RouterTest do
 
       task = live_shape_req(req, opts)
 
-      # Setting include_grandparent to true may cause a move in, but it doesn't in this case because include_parent is already true
+      # Setting include_grandparent to true causes a move-in in the inner (parent)
+      # shape's subquery, but parent 1 is already in the result set because
+      # include_parent = true. With DNF on the inner shape, this is handled as a
+      # position flip on the inner shape — no new rows enter or leave.
+      # The outer (child) shape sees no change and stays live.
       Postgrex.query!(
         db_conn,
         "UPDATE grandparent SET include_grandparent = true WHERE id = 1",
         []
       )
 
-      # Rather than working out whether this is a move in or not we return a 409
-      assert {_req, 409, _response} = Task.await(task)
+      # The inner shape handles the move-in via DNF. The outer shape's dependency
+      # doesn't change, so no move event is triggered on the outer shape.
+      # The live request should receive the inner shape's move-in broadcast
+      # (propagated via the dependency materializer).
+      assert {_req, 200, response} = Task.await(task)
+
+      # Verify we got a response (move-in on inner shape, no invalidation)
+      assert is_list(response)
     end
 
     @tag with_sql: [
@@ -2628,6 +2657,7 @@ defmodule Electric.Plug.RouterTest do
 
       assert {req, 200,
               [
+                %{"headers" => %{"event" => "move-in"}},
                 %{
                   "value" => %{"id" => "2", "name" => "Team B"},
                   "headers" => %{"tags" => [^tag], "is_move_in" => true}
@@ -2705,6 +2735,7 @@ defmodule Electric.Plug.RouterTest do
 
       assert {req, 200,
               [
+                %{"headers" => %{"event" => "move-in"}},
                 %{
                   "headers" => %{"tags" => [^tag]},
                   "value" => %{"id" => "2", "role" => "Member"}
@@ -2776,6 +2807,7 @@ defmodule Electric.Plug.RouterTest do
 
       assert {_, 200,
               [
+                %{"headers" => %{"event" => "move-in"}},
                 %{"headers" => %{"tags" => [^tag]}, "value" => %{"id" => "3"}},
                 %{"headers" => %{"control" => "snapshot-end"}},
                 up_to_date_ctl()
@@ -2847,11 +2879,13 @@ defmodule Electric.Plug.RouterTest do
       assert {req, 200,
               [
                 %{"headers" => %{"event" => "move-out"}},
+                %{"headers" => %{"event" => "move-in"}},
                 %{
                   "headers" => %{"operation" => "insert", "is_move_in" => true, "tags" => [tag2]},
                   "value" => %{"parent_id" => "2", "value" => "12"}
                 },
                 %{"headers" => %{"control" => "snapshot-end"}},
+                %{"headers" => %{"event" => "move-in"}},
                 %{
                   "headers" => %{"operation" => "insert", "is_move_in" => true, "tags" => [^tag]},
                   "value" => %{"id" => "1", "parent_id" => "1", "value" => "13"}
@@ -2922,6 +2956,7 @@ defmodule Electric.Plug.RouterTest do
       # the later move-in/move-out oscillation before parent 3 moves in.
       assert {_req, 200,
               [
+                %{"headers" => %{"event" => "move-in"}},
                 %{
                   "headers" => %{"operation" => "insert", "is_move_in" => true, "tags" => [^tag2]},
                   "value" => %{"id" => "2", "parent_id" => "2", "value" => "20"}
@@ -2933,6 +2968,7 @@ defmodule Electric.Plug.RouterTest do
                     "patterns" => [%{"pos" => 0, "value" => ^tag2}]
                   }
                 },
+                %{"headers" => %{"event" => "move-in"}},
                 %{
                   "headers" => %{"operation" => "insert", "is_move_in" => true, "tags" => [^tag3]},
                   "value" => %{"id" => "3", "parent_id" => "3", "value" => "30"}
@@ -2959,6 +2995,7 @@ defmodule Electric.Plug.RouterTest do
 
       assert {req, 200,
               [
+                %{"headers" => %{"event" => "move-in"}},
                 %{
                   "value" => %{"id" => "1", "parent_id" => "1", "value" => "10"},
                   "headers" => %{"operation" => "insert", "tags" => [tag]}
@@ -2993,7 +3030,7 @@ defmodule Electric.Plug.RouterTest do
            "INSERT INTO project_members (project_id, user_id) VALUES (1, 100), (3, 100)",
            "INSERT INTO projects (id, workspace_id, name) VALUES (1, 1, 'project 1'), (2, 1, 'project 2')"
          ]
-    test "supports two subqueries at the same level but returns 409 on move-in", %{
+    test "supports two subqueries at the same level with move-in", %{
       opts: opts,
       db_conn: db_conn
     } do
@@ -3061,8 +3098,17 @@ defmodule Electric.Plug.RouterTest do
         []
       )
 
-      # Should get a 409 because multiple same-level subqueries cannot currently correctly handle move-ins
-      assert %{status: 409} = Task.await(task)
+      # With DNF runtime, multiple same-level subqueries now handle move-ins correctly
+      assert %{status: 200} = conn = Task.await(task)
+
+      body = Jason.decode!(conn.resp_body)
+
+      assert [%{"headers" => %{"event" => "move-in"}} | rest] = body
+
+      assert Enum.any?(rest, fn
+               %{"value" => %{"id" => "2", "name" => "project 2"}} -> true
+               _ -> false
+             end)
     end
   end
 

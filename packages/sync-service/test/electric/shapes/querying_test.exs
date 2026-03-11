@@ -1,7 +1,7 @@
 defmodule Electric.Shapes.QueryingTest do
   use Support.TransactionCase, async: true
 
-  alias Electric.Shapes.Consumer.Subqueries
+  alias Electric.Shapes.DnfPlan
   alias Electric.Postgres.Inspector.DirectInspector
   alias Electric.Shapes.Shape
   alias Electric.Shapes.Querying
@@ -438,7 +438,7 @@ defmodule Electric.Shapes.QueryingTest do
     end
   end
 
-  describe "query_move_in/5 with Subqueries.move_in_where_clause/4" do
+  describe "query_move_in/5 with DnfPlan.move_in_where_clause/5" do
     test "builds the correct query which executes", %{db_conn: conn} do
       for statement <- [
             "CREATE TABLE parent (id SERIAL PRIMARY KEY, value INTEGER)",
@@ -455,14 +455,16 @@ defmodule Electric.Shapes.QueryingTest do
         )
         |> fill_handles()
 
+      {:ok, dnf_plan} = DnfPlan.compile(shape)
       move_in_values = [1, 2]
 
       assert {where, params} =
-               Subqueries.move_in_where_clause(
-                 shape,
-                 hd(shape.shape_dependencies_handles),
+               DnfPlan.move_in_where_clause(
+                 dnf_plan,
+                 0,
                  move_in_values,
-                 MapSet.new()
+                 %{["$sublink", "0"] => MapSet.new()},
+                 shape.where.used_refs
                )
 
       tag1 =
@@ -504,14 +506,16 @@ defmodule Electric.Shapes.QueryingTest do
         )
         |> fill_handles()
 
+      {:ok, dnf_plan} = DnfPlan.compile(shape)
       move_in_values = [{1, 1}, {2, 2}]
 
       assert {where, params} =
-               Subqueries.move_in_where_clause(
-                 shape,
-                 hd(shape.shape_dependencies_handles),
+               DnfPlan.move_in_where_clause(
+                 dnf_plan,
+                 0,
                  move_in_values,
-                 MapSet.new()
+                 %{["$sublink", "0"] => MapSet.new()},
+                 shape.where.used_refs
                )
 
       tag1 =

@@ -268,6 +268,20 @@ defmodule Electric.Client.Poll do
     {:messages, synthetic_deletes, %{state | tag_to_keys: tag_to_keys, key_data: key_data}}
   end
 
+  defp handle_message(
+         %Message.MoveInMessage{patterns: patterns},
+         state
+       ) do
+    {tag_to_keys, key_data} =
+      TagTracker.handle_move_in(
+        state.tag_to_keys,
+        state.key_data,
+        patterns
+      )
+
+    {:skip, %{state | tag_to_keys: tag_to_keys, key_data: key_data}}
+  end
+
   defp handle_schema(%Fetch.Response{schema: schema}, client, %{value_mapper_fun: nil} = state)
        when is_map(schema) do
     {parser_module, parser_opts} = client.parser

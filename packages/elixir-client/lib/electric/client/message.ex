@@ -262,6 +262,57 @@ defmodule Electric.Client.Message do
     end
   end
 
+  defmodule MoveInMessage do
+    @moduledoc """
+    Represents a move-in event from the server.
+
+    Move-in events are sent when the server's subquery filter has changed and
+    rows may now be included in the shape. The `patterns` field contains position
+    and hash information that the client uses to update `active_conditions` on
+    tracked rows.
+    """
+
+    defstruct [:patterns, :handle, :request_timestamp]
+
+    @type pattern :: %{pos: non_neg_integer(), value: String.t()}
+    @type t :: %__MODULE__{
+            patterns: [pattern()],
+            handle: Client.shape_handle(),
+            request_timestamp: DateTime.t()
+          }
+
+    def from_message(
+          %{"headers" => %{"event" => "move-in", "patterns" => patterns}},
+          handle,
+          request_timestamp
+        ) do
+      %__MODULE__{
+        patterns: normalize_patterns(patterns),
+        handle: handle,
+        request_timestamp: request_timestamp
+      }
+    end
+
+    def from_message(
+          %{headers: %{event: "move-in", patterns: patterns}},
+          handle,
+          request_timestamp
+        ) do
+      %__MODULE__{
+        patterns: normalize_patterns(patterns),
+        handle: handle,
+        request_timestamp: request_timestamp
+      }
+    end
+
+    defp normalize_patterns(patterns) do
+      Enum.map(patterns, fn
+        %{"pos" => pos, "value" => value} -> %{pos: pos, value: value}
+        %{pos: _, value: _} = pattern -> pattern
+      end)
+    end
+  end
+
   defguard is_insert(msg) when is_struct(msg, ChangeMessage) and msg.headers.operation == :insert
 
   def parse(%{"value" => _} = msg, shape_handle, value_mapper_fun, request_timestamp) do
@@ -297,6 +348,24 @@ defmodule Electric.Client.Message do
         request_timestamp
       ) do
     [MoveOutMessage.from_message(msg, shape_handle, request_timestamp)]
+  end
+
+  def parse(
+        %{"headers" => %{"event" => "move-in"}} = msg,
+        shape_handle,
+        _value_mapper_fun,
+        request_timestamp
+      ) do
+    [MoveInMessage.from_message(msg, shape_handle, request_timestamp)]
+  end
+
+  def parse(
+        %{headers: %{event: "move-in"}} = msg,
+        shape_handle,
+        _value_mapper_fun,
+        request_timestamp
+      ) do
+    [MoveInMessage.from_message(msg, shape_handle, request_timestamp)]
   end
 
   def parse("", _handle, _value_mapper_fun, _request_timestamp) do
