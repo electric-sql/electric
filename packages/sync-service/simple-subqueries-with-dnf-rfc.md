@@ -97,7 +97,7 @@ DNF gives us the right planning unit:
 - each disjunct is one independent reason a row can be in the shape
 - a move only affects the disjuncts that reference that dependency
 - move-in queries can be restricted to those disjuncts
-- move-out tags can remove only the reason that actually disappeared
+- move broadcasts can flip only the condition positions that actually changed
 
 ## Core Model
 
@@ -324,8 +324,8 @@ Each row message carries:
 at the time the row message is emitted.
 
 - for normal row predicates, it is computed directly from the row
-- for subquery predicates in the initial snapshot, it is computed by SQL using
-  parameters for the current in-memory subquery views, not live subqueries
+- for subquery predicates in the initial snapshot, it is computed by SQL on the
+  existing snapshot query path
 - for replication-stream changes, it is computed against the correct in-memory
   subquery views for that log point
 - for move-in query rows, it is computed against `views_after_move`
@@ -424,9 +424,14 @@ has been spliced. This is the same serialization rule as in
 `simple-subqueries.md`, now applied across all direct dependencies of the
 shape.
 
-Rows that still have another disjunct tag stay in the shape.
+Tags stay on the row; they describe which disjunct positions the row can
+participate in. Subquery moves change `active_conditions`, not the tags
+themselves.
 
-Rows that lose their last tag are removed.
+Rows stay in the shape while at least one tag still evaluates to true against
+the current `active_conditions`.
+
+Rows leave the shape when no tag evaluates to true anymore.
 
 This is also why move-ins need broadcasts as well as query rows: `x IN sq1 OR y
 IN sq2` must not leave stale `active_conditions` on rows that were already
