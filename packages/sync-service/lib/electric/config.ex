@@ -303,7 +303,31 @@ defmodule Electric.Config do
       {:error, "missing host"}
 
       iex> parse_postgresql_uri("postgresql://user@localhost:5433/mydb?opts=-c%20synchronous_commit%3Doff&foo=bar")
-      {:error, "unsupported query options: \"foo\", \"opts\""}
+      {:ok, [
+        hostname: "localhost",
+        port: 5433,
+        database: "mydb",
+        username: "user"
+      ]}
+
+      iex> parse_postgresql_uri("postgres://user:pass@localhost:5432/db?uselibpqcompat=true") |> deobfuscate()
+      {:ok, [
+        hostname: "localhost",
+        port: 5432,
+        database: "db",
+        username: "user",
+        password: "pass"
+      ]}
+
+      iex> parse_postgresql_uri("postgres://user:pass@localhost:5432/db?uselibpqcompat=true&sslmode=require") |> deobfuscate()
+      {:ok, [
+        hostname: "localhost",
+        port: 5432,
+        database: "db",
+        username: "user",
+        password: "pass",
+        sslmode: :require
+      ]}
 
       iex> parse_postgresql_uri("postgresql://electric@localhost/db?replication=database")
       {:error, "unsupported \"replication\" query option. Electric opens both a replication connection and regular connections to Postgres as needed"}
@@ -375,30 +399,36 @@ defmodule Electric.Config do
   defp parse_url_query(nil), do: {:ok, []}
 
   defp parse_url_query(query_str) do
-    case URI.decode_query(query_str) do
-      empty when map_size(empty) == 0 ->
-        {:ok, []}
+    params = URI.decode_query(query_str)
 
-      %{"sslmode" => sslmode} when sslmode in ~w[disable allow prefer require] ->
-        {:ok, sslmode: String.to_existing_atom(sslmode)}
-
-      %{"sslmode" => sslmode} when sslmode in ~w[verify-ca verify-full] ->
-        {:error,
-         "unsupported \"sslmode\" value #{inspect(sslmode)}. Use sslmode=require and set the ELECTRIC_DATABASE_CA_CERTIFICATE_FILE config to ensure Electric verifies database server identity"}
-
-      %{"sslmode" => sslmode} ->
-        {:error, "invalid \"sslmode\" value: #{inspect(sslmode)}"}
-
-      %{"replication" => _} ->
-        {:error,
-         "unsupported \"replication\" query option. Electric opens both a replication connection and regular connections to Postgres as needed"}
-
-      map ->
-        {:error,
-         "unsupported query options: " <>
-           (map |> Map.keys() |> Enum.sort() |> Enum.map_join(", ", &inspect/1))}
+    with :ok <- validate_no_replication_param(params) do
+      parse_sslmode(params)
     end
   end
+
+  defp validate_no_replication_param(%{"replication" => _}) do
+    {:error,
+     "unsupported \"replication\" query option. Electric opens both a replication connection and regular connections to Postgres as needed"}
+  end
+
+  defp validate_no_replication_param(_), do: :ok
+
+  defp parse_sslmode(%{"sslmode" => sslmode})
+       when sslmode in ~w[disable allow prefer require] do
+    {:ok, sslmode: String.to_existing_atom(sslmode)}
+  end
+
+  defp parse_sslmode(%{"sslmode" => sslmode})
+       when sslmode in ~w[verify-ca verify-full] do
+    {:error,
+     "unsupported \"sslmode\" value #{inspect(sslmode)}. Use sslmode=require and set the ELECTRIC_DATABASE_CA_CERTIFICATE_FILE config to ensure Electric verifies database server identity"}
+  end
+
+  defp parse_sslmode(%{"sslmode" => sslmode}) do
+    {:error, "invalid \"sslmode\" value: #{inspect(sslmode)}"}
+  end
+
+  defp parse_sslmode(_), do: {:ok, []}
 
   defp parse_database(nil, username), do: username
   defp parse_database("/", username), do: username
