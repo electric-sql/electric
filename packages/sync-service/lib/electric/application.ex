@@ -11,6 +11,7 @@ defmodule Electric.Application do
     else
       app_vsn = Application.spec(:electric, :vsn)
       Logger.notice("Starting ElectricSQL #{app_vsn}")
+      Logger.notice("Maximum query size: #{inspect(PgQuery.max_query_size())}")
 
       Supervisor.start_link(
         children_application(),
