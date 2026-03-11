@@ -3,15 +3,15 @@ defmodule Electric.Shapes.Consumer.Subqueries.Steady do
 
   alias Electric.Shapes.Consumer.Subqueries.MoveQueue
 
-  @enforce_keys [:shape, :stack_id, :shape_handle, :dependency_handle, :subquery_ref]
+  @enforce_keys [:shape, :stack_id, :shape_handle, :dnf_plan, :dependency_handle_to_ref]
   defstruct [
     :shape,
     :stack_id,
     :shape_handle,
-    :dependency_handle,
-    :subquery_ref,
+    :dnf_plan,
+    views: %{},
+    dependency_handle_to_ref: %{},
     latest_seen_lsn: nil,
-    subquery_view: MapSet.new(),
     queue: MoveQueue.new()
   ]
 
@@ -19,10 +19,10 @@ defmodule Electric.Shapes.Consumer.Subqueries.Steady do
           shape: Electric.Shapes.Shape.t(),
           stack_id: String.t(),
           shape_handle: String.t(),
-          dependency_handle: String.t(),
-          subquery_ref: [String.t()],
+          dnf_plan: Electric.Shapes.DnfPlan.t(),
+          views: %{[String.t()] => MapSet.t()},
+          dependency_handle_to_ref: %{String.t() => {non_neg_integer(), [String.t()]}},
           latest_seen_lsn: Electric.Postgres.Lsn.t() | nil,
-          subquery_view: MapSet.t(),
           queue: MoveQueue.t()
         }
 end
@@ -35,16 +35,18 @@ defimpl Electric.Shapes.Consumer.Subqueries.StateMachine,
   alias Electric.Shapes.Consumer.Subqueries.MoveQueue
 
   def handle_event(state, %Transaction{} = txn) do
-    {Subqueries.convert_transaction(txn, state, state.subquery_view), state}
+    {Subqueries.convert_transaction(txn, state, state.views), state}
   end
 
   def handle_event(state, %LsnUpdate{lsn: lsn}), do: {[], %{state | latest_seen_lsn: lsn}}
 
   def handle_event(state, {:materializer_changes, dep_handle, payload}) do
     :ok = Subqueries.validate_dependency_handle!(state, dep_handle)
+    {dep_index, subquery_ref} = Map.fetch!(state.dependency_handle_to_ref, dep_handle)
+    dep_view = Map.get(state.views, subquery_ref, MapSet.new())
 
     state
-    |> Map.update!(:queue, &MoveQueue.enqueue(&1, payload, state.subquery_view))
+    |> Map.update!(:queue, &MoveQueue.enqueue(&1, dep_index, payload, dep_view))
     |> Subqueries.drain_queue()
   end
 

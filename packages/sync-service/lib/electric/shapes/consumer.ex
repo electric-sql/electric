@@ -7,6 +7,7 @@ defmodule Electric.Shapes.Consumer do
   alias Electric.Shapes.Consumer.Subqueries
   alias Electric.Shapes.Consumer.Subqueries.Buffering
   alias Electric.Shapes.Consumer.Subqueries.QueryRow
+  alias Electric.Shapes.DnfPlan
 
   import Electric.Shapes.Consumer.State, only: :macros
   require Electric.Replication.LogOffset
@@ -285,15 +286,10 @@ defmodule Electric.Shapes.Consumer do
       "Consumer reacting to #{length(move_in)} move ins and #{length(move_out)} move outs from its #{dep_handle} dependency"
     end)
 
-    # We need to invalidate the consumer in the following cases:
-    # - the where clause has an OR combined with the subquery so we can't tell if the move ins/outs actually affect the shape or not
-    # - the where clause has a NOT combined with the subquery (e.g. NOT IN) since move-in to the subquery
-    #   should cause move-out from the outer shape, which isn't implemented
-    # - the shape has multiple subqueries at the same level since we can't correctly determine
-    #   which dependency caused the move-in/out
-    should_invalidate? =
-      is_nil(state.subquery_state) or state.or_with_subquery? or state.not_with_subquery? or
-        length(state.shape.shape_dependencies) > 1
+    # Invalidate if subquery runtime was not initialized (e.g. NOT + subquery,
+    # or shapes that failed DNF compilation). With the DNF runtime, OR + subquery
+    # and multiple dependencies are handled correctly.
+    should_invalidate? = is_nil(state.subquery_state)
 
     if should_invalidate? do
       stop_and_clean(state)
@@ -1276,28 +1272,45 @@ defmodule Electric.Shapes.Consumer do
   end
 
   defp initialize_subquery_runtime(
-         %State{
-           shape: %Shape{shape_dependencies_handles: [dependency_handle]},
-           or_with_subquery?: false,
-           not_with_subquery?: false
-         } = state
-       ) do
-    materializer_opts = %{stack_id: state.stack_id, shape_handle: dependency_handle}
-    :ok = Materializer.wait_until_ready(materializer_opts)
-    subquery_view = Materializer.get_link_values(materializer_opts)
+         %State{shape: %Shape{shape_dependencies_handles: dep_handles}} = state
+       )
+       when dep_handles != [] do
+    case DnfPlan.compile(state.shape) do
+      {:ok, %DnfPlan{has_negated_subquery: true}} ->
+        # NOT + subquery: keep current invalidation path (subquery_state stays nil)
+        Logger.debug("Shape #{state.shape_handle} has negated subquery, using invalidation path")
+        state
 
-    %{
-      state
-      | subquery_state:
-          Subqueries.new(
-            shape: state.shape,
-            stack_id: state.stack_id,
-            shape_handle: state.shape_handle,
-            dependency_handle: dependency_handle,
-            subquery_ref: ["$sublink", "0"],
-            subquery_view: subquery_view
-          )
-    }
+      {:ok, dnf_plan} ->
+        # Initialize multi-dep DNF runtime
+        {views, dep_handle_to_ref} =
+          dep_handles
+          |> Enum.with_index()
+          |> Enum.reduce({%{}, %{}}, fn {handle, index}, {views, mapping} ->
+            materializer_opts = %{stack_id: state.stack_id, shape_handle: handle}
+            :ok = Materializer.wait_until_ready(materializer_opts)
+            view = Materializer.get_link_values(materializer_opts)
+            ref = ["$sublink", Integer.to_string(index)]
+            {Map.put(views, ref, view), Map.put(mapping, handle, {index, ref})}
+          end)
+
+        %{
+          state
+          | subquery_state:
+              Subqueries.new(
+                shape: state.shape,
+                stack_id: state.stack_id,
+                shape_handle: state.shape_handle,
+                dnf_plan: dnf_plan,
+                views: views,
+                dependency_handle_to_ref: dep_handle_to_ref
+              )
+        }
+
+      _other ->
+        # :no_subqueries or {:error, _} - no subquery runtime needed
+        state
+    end
   end
 
   defp initialize_subquery_runtime(state), do: state

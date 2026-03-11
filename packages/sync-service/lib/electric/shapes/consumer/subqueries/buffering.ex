@@ -8,22 +8,23 @@ defmodule Electric.Shapes.Consumer.Subqueries.Buffering do
     :shape,
     :stack_id,
     :shape_handle,
-    :dependency_handle,
-    :subquery_ref,
+    :dnf_plan,
+    :trigger_dep_index,
     :move_in_values,
-    :subquery_view_before_move_in,
-    :subquery_view_after_move_in,
+    :views_before_move,
+    :views_after_move,
     :latest_seen_lsn
   ]
   defstruct [
     :shape,
     :stack_id,
     :shape_handle,
-    :dependency_handle,
-    :subquery_ref,
+    :dnf_plan,
+    :trigger_dep_index,
     :move_in_values,
-    :subquery_view_before_move_in,
-    :subquery_view_after_move_in,
+    :views_before_move,
+    :views_after_move,
+    dependency_handle_to_ref: %{},
     snapshot: nil,
     move_in_rows: nil,
     move_in_lsn: nil,
@@ -38,11 +39,12 @@ defmodule Electric.Shapes.Consumer.Subqueries.Buffering do
           shape: Electric.Shapes.Shape.t(),
           stack_id: String.t(),
           shape_handle: String.t(),
-          dependency_handle: String.t(),
-          subquery_ref: [String.t()],
+          dnf_plan: Electric.Shapes.DnfPlan.t(),
+          trigger_dep_index: non_neg_integer(),
           move_in_values: [Electric.Shapes.Consumer.Subqueries.move_value()],
-          subquery_view_before_move_in: MapSet.t(),
-          subquery_view_after_move_in: MapSet.t(),
+          views_before_move: %{[String.t()] => MapSet.t()},
+          views_after_move: %{[String.t()] => MapSet.t()},
+          dependency_handle_to_ref: %{String.t() => {non_neg_integer(), [String.t()]}},
           snapshot: {term(), term(), [term()]} | nil,
           move_in_rows: [term()] | nil,
           move_in_lsn: Electric.Postgres.Lsn.t() | nil,
@@ -55,20 +57,26 @@ defmodule Electric.Shapes.Consumer.Subqueries.Buffering do
 
   @spec from_steady(
           Steady.t(),
+          non_neg_integer(),
+          [String.t()],
           [Electric.Shapes.Consumer.Subqueries.move_value()],
           MoveQueue.t()
         ) :: t()
-  def from_steady(%Steady{} = state, move_in_values, queue) do
+  def from_steady(%Steady{} = state, dep_index, subquery_ref, move_in_values, queue) do
+    views_after =
+      Map.update!(state.views, subquery_ref, &add_move_in_values(&1, move_in_values))
+
     %__MODULE__{
       shape: state.shape,
       stack_id: state.stack_id,
       shape_handle: state.shape_handle,
-      dependency_handle: state.dependency_handle,
-      subquery_ref: state.subquery_ref,
-      latest_seen_lsn: state.latest_seen_lsn,
+      dnf_plan: state.dnf_plan,
+      trigger_dep_index: dep_index,
       move_in_values: move_in_values,
-      subquery_view_before_move_in: state.subquery_view,
-      subquery_view_after_move_in: add_move_in_values(state.subquery_view, move_in_values),
+      views_before_move: state.views,
+      views_after_move: views_after,
+      dependency_handle_to_ref: state.dependency_handle_to_ref,
+      latest_seen_lsn: state.latest_seen_lsn,
       queue: queue
     }
   end
@@ -105,12 +113,14 @@ defimpl Electric.Shapes.Consumer.Subqueries.StateMachine,
 
   def handle_event(state, {:materializer_changes, dep_handle, payload}) do
     :ok = Subqueries.validate_dependency_handle!(state, dep_handle)
+    {dep_index, subquery_ref} = Map.fetch!(state.dependency_handle_to_ref, dep_handle)
+    dep_view = Map.get(state.views_after_move, subquery_ref, MapSet.new())
 
     {[],
      Map.update!(
        state,
        :queue,
-       &MoveQueue.enqueue(&1, payload, state.subquery_view_after_move_in)
+       &MoveQueue.enqueue(&1, dep_index, payload, dep_view)
      )}
   end
 

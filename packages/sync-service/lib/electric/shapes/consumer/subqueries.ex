@@ -13,9 +13,9 @@ defmodule Electric.Shapes.Consumer.Subqueries do
   alias Electric.Shapes.Consumer.Subqueries.QueryRow
   alias Electric.Shapes.Consumer.Subqueries.Steady
   alias Electric.Shapes.Consumer.Subqueries.StateMachine
+  alias Electric.Shapes.DnfPlan
   alias Electric.Shapes.Querying
   alias Electric.Shapes.Shape
-  alias Electric.Utils
 
   @value_prefix "v:"
   @null_sentinel "NULL"
@@ -36,10 +36,10 @@ defmodule Electric.Shapes.Consumer.Subqueries do
       shape: fetch_opt!(opts, :shape),
       stack_id: fetch_opt!(opts, :stack_id),
       shape_handle: fetch_opt!(opts, :shape_handle),
-      dependency_handle: fetch_opt!(opts, :dependency_handle),
-      subquery_ref: fetch_opt!(opts, :subquery_ref),
+      dnf_plan: fetch_opt!(opts, :dnf_plan),
+      views: Map.get(opts, :views, %{}),
+      dependency_handle_to_ref: Map.get(opts, :dependency_handle_to_ref, %{}),
       latest_seen_lsn: Map.get(opts, :latest_seen_lsn),
-      subquery_view: Map.get(opts, :subquery_view, MapSet.new()),
       queue: MoveQueue.new()
     }
   end
@@ -56,11 +56,12 @@ defmodule Electric.Shapes.Consumer.Subqueries do
         consumer_pid
       ) do
     {where, params} =
-      move_in_where_clause(
-        consumer_state.shape,
-        consumer_state.subquery_state.dependency_handle,
+      DnfPlan.move_in_where_clause(
+        buffering_state.dnf_plan,
+        buffering_state.trigger_dep_index,
         Enum.map(buffering_state.move_in_values, &elem(&1, 0)),
-        buffering_state.subquery_view_before_move_in
+        buffering_state.views_before_move,
+        consumer_state.shape.where.used_refs
       )
 
     pool = Manager.pool_name(consumer_state.stack_id, :snapshot)
@@ -95,47 +96,6 @@ defmodule Electric.Shapes.Consumer.Subqueries do
     end)
 
     :ok
-  end
-
-  @spec move_in_where_clause(Shape.t(), Shape.handle(), [term()], Enumerable.t()) ::
-          {String.t(), [list()]}
-  def move_in_where_clause(
-        %Shape{
-          where: %{query: query, used_refs: used_refs},
-          shape_dependencies: shape_dependencies,
-          shape_dependencies_handles: shape_dependencies_handles,
-          subquery_comparison_expressions: comparison_expressions
-        },
-        shape_handle,
-        move_ins,
-        current_view
-      ) do
-    index = Enum.find_index(shape_dependencies_handles, &(&1 == shape_handle))
-    target_section = Enum.at(shape_dependencies, index) |> rebuild_subquery_section()
-    subquery_ref = ["$sublink", Integer.to_string(index)]
-    comparison_expr = Map.fetch!(comparison_expressions, subquery_ref)
-    lhs_sql = comparison_sql(comparison_expr)
-    current_view = Enum.to_list(current_view)
-
-    case used_refs[subquery_ref] do
-      {:array, {:row, cols}} ->
-        {inclusion_sql, inclusion_params} = composite_membership_sql(cols, move_ins, 1)
-
-        {exclusion_sql, exclusion_params} =
-          composite_membership_sql(cols, current_view, length(cols) + 1)
-
-        replacement = "#{inclusion_sql} AND NOT #{lhs_sql} #{exclusion_sql}"
-
-        {String.replace(query, target_section, replacement), inclusion_params ++ exclusion_params}
-
-      _col ->
-        type = Electric.Replication.Eval.type_to_pg_cast(comparison_expr.returns)
-
-        replacement =
-          "= ANY ($1::#{type}[]) AND NOT #{lhs_sql} = ANY ($2::#{type}[])"
-
-        {String.replace(query, target_section, replacement), [move_ins, current_view]}
-    end
   end
 
   @spec move_in_tag_structure(Shape.t()) ::
@@ -186,20 +146,30 @@ defmodule Electric.Shapes.Consumer.Subqueries do
       nil ->
         {outputs, state}
 
-      {{:move_out, move_out_values}, queue} ->
+      {{:move_out, dep_index, move_out_values}, queue} ->
+        subquery_ref = dep_ref_for_index(state, dep_index)
+
         next_state = %{
           state
           | queue: queue,
-            subquery_view: remove_move_values(state.subquery_view, move_out_values)
+            views:
+              Map.update!(state.views, subquery_ref, &remove_move_values(&1, move_out_values))
         }
 
-        drain_queue(
-          next_state,
-          outputs ++ [make_move_out_control_message(next_state, move_out_values)]
-        )
+        broadcast =
+          DnfPlan.make_move_out_broadcast(
+            state.dnf_plan,
+            dep_index,
+            move_out_values,
+            state.stack_id,
+            state.shape_handle
+          )
 
-      {{:move_in, move_in_values}, queue} ->
-        {outputs, Buffering.from_steady(state, move_in_values, queue)}
+        drain_queue(next_state, outputs ++ [broadcast])
+
+      {{:move_in, dep_index, move_in_values}, queue} ->
+        subquery_ref = dep_ref_for_index(state, dep_index)
+        {outputs, Buffering.from_steady(state, dep_index, subquery_ref, move_in_values, queue)}
     end
   end
 
@@ -208,15 +178,25 @@ defmodule Electric.Shapes.Consumer.Subqueries do
     if ready_to_splice?(state) do
       {pre_txns, post_txns} = Enum.split(state.buffered_txns, state.boundary_txn_count)
 
+      move_in_broadcast =
+        DnfPlan.make_move_in_broadcast(
+          state.dnf_plan,
+          state.trigger_dep_index,
+          state.move_in_values,
+          state.stack_id,
+          state.shape_handle
+        )
+
       outputs =
         Enum.flat_map(
           pre_txns,
-          &convert_transaction(&1, state, state.subquery_view_before_move_in)
+          &convert_transaction(&1, state, state.views_before_move)
         ) ++
+          [move_in_broadcast] ++
           state.move_in_rows ++
           Enum.flat_map(
             post_txns,
-            &convert_transaction(&1, state, state.subquery_view_after_move_in)
+            &convert_transaction(&1, state, state.views_after_move)
           )
 
       state
@@ -227,18 +207,16 @@ defmodule Electric.Shapes.Consumer.Subqueries do
     end
   end
 
-  @spec convert_transaction(Transaction.t(), Steady.t() | Buffering.t(), MapSet.t()) :: [
+  @spec convert_transaction(Transaction.t(), Steady.t() | Buffering.t(), map()) :: [
           Changes.change()
         ]
-  def convert_transaction(%Transaction{changes: changes}, %{shape: shape} = state, subquery_view) do
-    refs = %{state.subquery_ref => subquery_view}
-
+  def convert_transaction(%Transaction{changes: changes}, %{shape: shape} = state, views) do
     changes
     |> Enum.flat_map(fn change ->
       Shape.convert_change(shape, change,
         stack_id: state.stack_id,
         shape_handle: state.shape_handle,
-        extra_refs: {refs, refs}
+        extra_refs: {views, views}
       )
     end)
     |> mark_last_change()
@@ -298,26 +276,26 @@ defmodule Electric.Shapes.Consumer.Subqueries do
   end
 
   @spec validate_dependency_handle!(Steady.t() | Buffering.t(), term()) :: :ok
-  def validate_dependency_handle!(%{dependency_handle: expected}, actual) when expected == actual,
-    do: :ok
+  def validate_dependency_handle!(%{dependency_handle_to_ref: mapping}, dep_handle) do
+    unless Map.has_key?(mapping, dep_handle) do
+      raise ArgumentError,
+            "unexpected dependency handle #{inspect(dep_handle)}, " <>
+              "known: #{inspect(Map.keys(mapping))}"
+    end
 
-  def validate_dependency_handle!(%{dependency_handle: expected}, actual) do
-    raise ArgumentError,
-          "expected dependency handle #{inspect(expected)}, got: #{inspect(actual)}"
+    :ok
   end
 
-  @spec make_move_out_control_message(Steady.t() | Buffering.t(), [move_value()]) ::
+  @spec make_move_out_control_message(Steady.t() | Buffering.t(), non_neg_integer(), [
+          move_value()
+        ]) ::
           move_out_control()
   def make_move_out_control_message(
-        %{shape: shape, stack_id: stack_id, shape_handle: shape_handle},
+        %{dnf_plan: dnf_plan, stack_id: stack_id, shape_handle: shape_handle},
+        dep_index,
         values
       ) do
-    %{
-      headers: %{
-        event: "move-out",
-        patterns: make_move_out_patterns(shape.tag_structure, stack_id, shape_handle, values)
-      }
-    }
+    DnfPlan.make_move_out_broadcast(dnf_plan, dep_index, values, stack_id, shape_handle)
   end
 
   @spec should_skip_query_row?(
@@ -350,69 +328,15 @@ defmodule Electric.Shapes.Consumer.Subqueries do
     |> Base.encode16(case: :lower)
   end
 
-  defp composite_membership_sql(cols, values, first_param_index) do
-    casts = Enum.map(cols, &Electric.Replication.Eval.type_to_pg_cast/1)
-
-    params =
-      case values do
-        [] -> Enum.map(casts, fn _ -> [] end)
-        values -> values |> Utils.unzip_any() |> Tuple.to_list()
-      end
-
-    sql =
-      casts
-      |> Enum.with_index(first_param_index)
-      |> Enum.map_join(", ", fn {col, index} -> "$#{index}::#{col}[]" end)
-      |> then(&"IN (SELECT * FROM unnest(#{&1}))")
-
-    {sql, params}
-  end
-
-  defp rebuild_subquery_section(shape) do
-    base =
-      ~s|IN (SELECT #{Enum.join(shape.explicitly_selected_columns, ", ")} FROM #{Utils.relation_to_sql(shape.root_table)}|
-
-    where = if shape.where, do: " WHERE #{shape.where.query}", else: ""
-    base <> where <> ")"
-  end
-
-  defp comparison_sql(%Eval.Expr{eval: %Eval.Parser.Ref{path: [column_name]}}), do: column_name
-
-  defp comparison_sql(%Eval.Expr{eval: %Eval.Parser.RowExpr{elements: elements}}) do
-    columns =
-      Enum.map(elements, fn %Eval.Parser.Ref{path: [column_name]} ->
-        column_name
-      end)
-
-    "(" <> Enum.join(columns, ", ") <> ")"
-  end
-
-  defp make_move_out_patterns(tag_structure, stack_id, shape_handle, values) do
-    Enum.flat_map(tag_structure, fn [column_or_expr] ->
-      Enum.map(values, fn {_typed_value, original_value} ->
-        %{
-          pos: 0,
-          value: make_pattern_hash(column_or_expr, stack_id, shape_handle, original_value)
-        }
-      end)
-    end)
-  end
-
-  defp make_pattern_hash(column_name, stack_id, shape_handle, value)
-       when is_binary(column_name) do
-    make_value_hash(stack_id, shape_handle, value)
-  end
-
-  defp make_pattern_hash({:hash_together, columns}, stack_id, shape_handle, original_value) do
-    namespaced_value =
-      original_value
-      |> Tuple.to_list()
-      |> Enum.zip_with(columns, fn value, column ->
-        column <> ":" <> namespace_value(value)
-      end)
-      |> Enum.join()
-
-    make_value_hash_raw(stack_id, shape_handle, namespaced_value)
+  @doc """
+  Returns the subquery ref path for a given dependency index, looking it up
+  via the dependency_handle_to_ref mapping.
+  """
+  def dep_ref_for_index(%{dependency_handle_to_ref: mapping}, dep_index) do
+    case Enum.find(mapping, fn {_handle, {idx, _ref}} -> idx == dep_index end) do
+      {_handle, {_idx, ref}} -> ref
+      nil -> raise ArgumentError, "no dependency found for index #{dep_index}"
+    end
   end
 
   defp to_steady_state(%Buffering{} = state) do
@@ -420,10 +344,10 @@ defmodule Electric.Shapes.Consumer.Subqueries do
       shape: state.shape,
       stack_id: state.stack_id,
       shape_handle: state.shape_handle,
-      dependency_handle: state.dependency_handle,
-      subquery_ref: state.subquery_ref,
+      dnf_plan: state.dnf_plan,
+      views: state.views_after_move,
+      dependency_handle_to_ref: state.dependency_handle_to_ref,
       latest_seen_lsn: state.latest_seen_lsn,
-      subquery_view: state.subquery_view_after_move_in,
       queue: state.queue
     }
   end

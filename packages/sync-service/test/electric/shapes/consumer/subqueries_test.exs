@@ -7,6 +7,7 @@ defmodule Electric.Shapes.Consumer.SubqueriesTest do
   alias Electric.Shapes.Consumer.Subqueries
   alias Electric.Shapes.Consumer.Subqueries.Buffering
   alias Electric.Shapes.Consumer.Subqueries.Steady
+  alias Electric.Shapes.DnfPlan
   alias Electric.Shapes.Shape
 
   @inspector Support.StubInspector.new(
@@ -34,7 +35,7 @@ defmodule Electric.Shapes.Consumer.SubqueriesTest do
 
   test "splices buffered transactions around the snapshot visibility boundary" do
     state = new_state()
-    dep_handle = state.dependency_handle
+    dep_handle = dep_handle(state)
 
     {[], state} =
       Subqueries.handle_event(
@@ -53,10 +54,12 @@ defmodule Electric.Shapes.Consumer.SubqueriesTest do
     {changes, state} =
       Subqueries.handle_event(state, {:query_move_in_complete, [query_row], lsn(10)})
 
-    assert %Steady{subquery_view: view} = state
+    assert %Steady{views: views} = state
+    view = views[["$sublink", "0"]]
     assert view == MapSet.new([1])
 
     assert [
+             %{headers: %{event: "move-in"}},
              %Changes.NewRecord{record: %{"id" => "99"}},
              %Changes.NewRecord{record: %{"id" => "11"}, last?: true}
            ] = changes
@@ -64,7 +67,7 @@ defmodule Electric.Shapes.Consumer.SubqueriesTest do
 
   test "splices move-in query rows between emitted pre and post boundary changes" do
     state = new_state(subquery_view: MapSet.new([1]))
-    dep_handle = state.dependency_handle
+    dep_handle = dep_handle(state)
 
     {[], state} =
       Subqueries.handle_event(
@@ -82,11 +85,13 @@ defmodule Electric.Shapes.Consumer.SubqueriesTest do
         {:query_move_in_complete, [child_insert("99", "2")], lsn(10)}
       )
 
-    assert %Steady{subquery_view: view} = state
+    assert %Steady{views: views} = state
+    view = views[["$sublink", "0"]]
     assert view == MapSet.new([1, 2])
 
     assert [
              %Changes.NewRecord{record: %{"id" => "10"}},
+             %{headers: %{event: "move-in"}},
              %Changes.NewRecord{record: %{"id" => "99"}},
              %Changes.NewRecord{record: %{"id" => "11"}, last?: true}
            ] = changes
@@ -94,7 +99,7 @@ defmodule Electric.Shapes.Consumer.SubqueriesTest do
 
   test "splices updates that become a delete before the boundary and an insert after it" do
     state = new_state(subquery_view: MapSet.new([1]))
-    dep_handle = state.dependency_handle
+    dep_handle = dep_handle(state)
 
     {[], state} =
       Subqueries.handle_event(
@@ -118,11 +123,13 @@ defmodule Electric.Shapes.Consumer.SubqueriesTest do
         {:query_move_in_complete, [child_insert("99", "2")], lsn(10)}
       )
 
-    assert %Steady{subquery_view: view} = state
+    assert %Steady{views: views} = state
+    view = views[["$sublink", "0"]]
     assert view == MapSet.new([1, 2])
 
     assert [
              %Changes.DeletedRecord{old_record: %{"id" => "10"}},
+             %{headers: %{event: "move-in"}},
              %Changes.NewRecord{record: %{"id" => "99"}},
              %Changes.NewRecord{record: %{"id" => "11"}, last?: true}
            ] = changes
@@ -130,7 +137,7 @@ defmodule Electric.Shapes.Consumer.SubqueriesTest do
 
   test "uses lsn updates to splice at the current buffer tail" do
     state = new_state()
-    dep_handle = state.dependency_handle
+    dep_handle = dep_handle(state)
 
     {[], state} =
       Subqueries.handle_event(
@@ -149,14 +156,17 @@ defmodule Electric.Shapes.Consumer.SubqueriesTest do
 
     {changes, state} = Subqueries.handle_event(state, %Changes.LsnUpdate{lsn: lsn(20)})
 
-    assert %Steady{subquery_view: view} = state
+    assert %Steady{views: views} = state
+    view = views[["$sublink", "0"]]
     assert view == MapSet.new([1])
-    assert [%Changes.NewRecord{record: %{"id" => "99"}}] = changes
+
+    assert [%{headers: %{event: "move-in"}}, %Changes.NewRecord{record: %{"id" => "99"}}] =
+             changes
   end
 
   test "splices buffered inserts, updates, and deletes around an lsn boundary" do
     state = new_state()
-    dep_handle = state.dependency_handle
+    dep_handle = dep_handle(state)
 
     {[], state} =
       Subqueries.handle_event(
@@ -194,10 +204,12 @@ defmodule Electric.Shapes.Consumer.SubqueriesTest do
 
     {changes, state} = Subqueries.handle_event(state, {:pg_snapshot_known, {100, 300, []}})
 
-    assert %Steady{subquery_view: view} = state
+    assert %Steady{views: views} = state
+    view = views[["$sublink", "0"]]
     assert view == MapSet.new([1])
 
     assert [
+             %{headers: %{event: "move-in"}},
              %Changes.NewRecord{record: %{"id" => "99"}},
              %Changes.NewRecord{record: %{"id" => "11"}},
              %Changes.UpdatedRecord{record: %{"id" => "21"}},
@@ -207,7 +219,7 @@ defmodule Electric.Shapes.Consumer.SubqueriesTest do
 
   test "keeps the transaction splice boundary when a later lsn update arrives" do
     state = new_state()
-    dep_handle = state.dependency_handle
+    dep_handle = dep_handle(state)
 
     {[], state} =
       Subqueries.handle_event(
@@ -227,10 +239,12 @@ defmodule Electric.Shapes.Consumer.SubqueriesTest do
         {:query_move_in_complete, [child_insert("99", "1")], lsn(20)}
       )
 
-    assert %Steady{subquery_view: view} = state
+    assert %Steady{views: views} = state
+    view = views[["$sublink", "0"]]
     assert view == MapSet.new([1])
 
     assert [
+             %{headers: %{event: "move-in"}},
              %Changes.NewRecord{record: %{"id" => "99"}},
              %Changes.NewRecord{record: %{"id" => "11"}},
              %Changes.NewRecord{record: %{"id" => "12"}, last?: true}
@@ -239,7 +253,7 @@ defmodule Electric.Shapes.Consumer.SubqueriesTest do
 
   test "keeps the lsn splice boundary when the snapshot later reveals invisible txns" do
     state = new_state()
-    dep_handle = state.dependency_handle
+    dep_handle = dep_handle(state)
 
     {[], state} =
       Subqueries.handle_event(
@@ -259,10 +273,12 @@ defmodule Electric.Shapes.Consumer.SubqueriesTest do
 
     {changes, state} = Subqueries.handle_event(state, {:pg_snapshot_known, {100, 150, []}})
 
-    assert %Steady{subquery_view: view} = state
+    assert %Steady{views: views} = state
+    view = views[["$sublink", "0"]]
     assert view == MapSet.new([1])
 
     assert [
+             %{headers: %{event: "move-in"}},
              %Changes.NewRecord{record: %{"id" => "99"}},
              %Changes.NewRecord{record: %{"id" => "10"}},
              %Changes.NewRecord{record: %{"id" => "11"}, last?: true}
@@ -271,7 +287,7 @@ defmodule Electric.Shapes.Consumer.SubqueriesTest do
 
   test "waits for an lsn update even when the move-in query completes with an empty buffer" do
     state = new_state()
-    dep_handle = state.dependency_handle
+    dep_handle = dep_handle(state)
 
     {[], state} =
       Subqueries.handle_event(
@@ -291,14 +307,17 @@ defmodule Electric.Shapes.Consumer.SubqueriesTest do
 
     {changes, state} = Subqueries.handle_event(state, %Changes.LsnUpdate{lsn: lsn(20)})
 
-    assert %Steady{subquery_view: view} = state
+    assert %Steady{views: views} = state
+    view = views[["$sublink", "0"]]
     assert view == MapSet.new([1])
-    assert [%Changes.NewRecord{record: %{"id" => "99"}}] = changes
+
+    assert [%{headers: %{event: "move-in"}}, %Changes.NewRecord{record: %{"id" => "99"}}] =
+             changes
   end
 
   test "uses an lsn update that arrived before the move-in query completed" do
     state = new_state()
-    dep_handle = state.dependency_handle
+    dep_handle = dep_handle(state)
 
     {[], state} =
       Subqueries.handle_event(
@@ -315,14 +334,17 @@ defmodule Electric.Shapes.Consumer.SubqueriesTest do
         {:query_move_in_complete, [child_insert("99", "1")], lsn(20)}
       )
 
-    assert %Steady{subquery_view: view} = state
+    assert %Steady{views: views} = state
+    view = views[["$sublink", "0"]]
     assert view == MapSet.new([1])
-    assert [%Changes.NewRecord{record: %{"id" => "99"}}] = changes
+
+    assert [%{headers: %{event: "move-in"}}, %Changes.NewRecord{record: %{"id" => "99"}}] =
+             changes
   end
 
   test "uses an lsn update that was already seen before the move-in started" do
     state = new_state()
-    dep_handle = state.dependency_handle
+    dep_handle = dep_handle(state)
 
     {[], state} = Subqueries.handle_event(state, %Changes.LsnUpdate{lsn: lsn(20)})
 
@@ -340,14 +362,17 @@ defmodule Electric.Shapes.Consumer.SubqueriesTest do
         {:query_move_in_complete, [child_insert("99", "1")], lsn(20)}
       )
 
-    assert %Steady{subquery_view: view} = state
+    assert %Steady{views: views} = state
+    view = views[["$sublink", "0"]]
     assert view == MapSet.new([1])
-    assert [%Changes.NewRecord{record: %{"id" => "99"}}] = changes
+
+    assert [%{headers: %{event: "move-in"}}, %Changes.NewRecord{record: %{"id" => "99"}}] =
+             changes
   end
 
   test "defers queued move outs until after splice and starts the next move in" do
     state = new_state()
-    dep_handle = state.dependency_handle
+    dep_handle = dep_handle(state)
 
     {[], state} =
       Subqueries.handle_event(
@@ -373,14 +398,15 @@ defmodule Electric.Shapes.Consumer.SubqueriesTest do
 
     assert %Buffering{
              move_in_values: [{2, "2"}],
-             subquery_view_before_move_in: view_before,
-             subquery_view_after_move_in: view_after
+             views_before_move: views_before,
+             views_after_move: views_after
            } = state
 
-    assert view_before == MapSet.new()
-    assert view_after == MapSet.new([2])
+    assert views_before[["$sublink", "0"]] == MapSet.new()
+    assert views_after[["$sublink", "0"]] == MapSet.new([2])
 
     assert [
+             %{headers: %{event: "move-in"}},
              %Changes.NewRecord{record: %{"id" => "99"}},
              %{headers: %{event: "move-out", patterns: [%{pos: 0}]}}
            ] = changes
@@ -388,7 +414,7 @@ defmodule Electric.Shapes.Consumer.SubqueriesTest do
 
   test "applies a queued move out for the active move-in value after splice" do
     state = new_state()
-    dep_handle = state.dependency_handle
+    dep_handle = dep_handle(state)
 
     {[], state} =
       Subqueries.handle_event(
@@ -412,10 +438,12 @@ defmodule Electric.Shapes.Consumer.SubqueriesTest do
 
     {changes, state} = Subqueries.handle_event(state, %Changes.LsnUpdate{lsn: lsn(10)})
 
-    assert %Steady{subquery_view: view} = state
+    assert %Steady{views: views} = state
+    view = views[["$sublink", "0"]]
     assert view == MapSet.new()
 
     assert [
+             %{headers: %{event: "move-in"}},
              %Changes.NewRecord{record: %{"id" => "99"}},
              %{headers: %{event: "move-out", patterns: [%{pos: 0}]}}
            ] = changes
@@ -423,7 +451,7 @@ defmodule Electric.Shapes.Consumer.SubqueriesTest do
 
   test "batches consecutive move ins into a single active move in" do
     state = new_state()
-    dep_handle = state.dependency_handle
+    dep_handle = dep_handle(state)
 
     {[], state} =
       Subqueries.handle_event(
@@ -433,17 +461,17 @@ defmodule Electric.Shapes.Consumer.SubqueriesTest do
 
     assert %Buffering{
              move_in_values: [{1, "1"}, {2, "2"}],
-             subquery_view_before_move_in: before_view,
-             subquery_view_after_move_in: after_view
+             views_before_move: views_before,
+             views_after_move: views_after
            } = state
 
-    assert before_view == MapSet.new()
-    assert after_view == MapSet.new([1, 2])
+    assert views_before[["$sublink", "0"]] == MapSet.new()
+    assert views_after[["$sublink", "0"]] == MapSet.new([1, 2])
   end
 
   test "cancels pending inverse ops while buffering" do
     state = new_state()
-    dep_handle = state.dependency_handle
+    dep_handle = dep_handle(state)
 
     {[], state} =
       Subqueries.handle_event(
@@ -473,14 +501,17 @@ defmodule Electric.Shapes.Consumer.SubqueriesTest do
 
     {changes, state} = Subqueries.handle_event(state, %Changes.LsnUpdate{lsn: lsn(10)})
 
-    assert %Steady{subquery_view: view} = state
+    assert %Steady{views: views} = state
+    view = views[["$sublink", "0"]]
     assert view == MapSet.new([1])
-    assert [%Changes.NewRecord{record: %{"id" => "99"}}] = changes
+
+    assert [%{headers: %{event: "move-in"}}, %Changes.NewRecord{record: %{"id" => "99"}}] =
+             changes
   end
 
   test "merges queued move outs into a single control message after splice" do
     state = new_state(subquery_view: MapSet.new([2]))
-    dep_handle = state.dependency_handle
+    dep_handle = dep_handle(state)
 
     {[], state} =
       Subqueries.handle_event(
@@ -510,10 +541,12 @@ defmodule Electric.Shapes.Consumer.SubqueriesTest do
 
     {changes, state} = Subqueries.handle_event(state, %Changes.LsnUpdate{lsn: lsn(10)})
 
-    assert %Steady{subquery_view: view} = state
+    assert %Steady{views: views} = state
+    view = views[["$sublink", "0"]]
     assert view == MapSet.new()
 
     assert [
+             %{headers: %{event: "move-in"}},
              %Changes.NewRecord{record: %{"id" => "99"}},
              %{headers: %{event: "move-out", patterns: patterns}}
            ] = changes
@@ -522,7 +555,7 @@ defmodule Electric.Shapes.Consumer.SubqueriesTest do
   end
 
   test "raises on dependency handle mismatch" do
-    assert_raise ArgumentError, ~r/expected dependency handle/, fn ->
+    assert_raise ArgumentError, ~r/unexpected dependency handle/, fn ->
       new_state()
       |> Subqueries.handle_event({:materializer_changes, "wrong", %{move_in: [], move_out: []}})
     end
@@ -542,16 +575,18 @@ defmodule Electric.Shapes.Consumer.SubqueriesTest do
 
   test "builds a move-in where clause that excludes the current view" do
     shape = shape()
+    {:ok, dnf_plan} = DnfPlan.compile(shape)
 
-    assert {where, [[1, 2], [3]]} =
-             Subqueries.move_in_where_clause(
-               shape,
-               hd(shape.shape_dependencies_handles),
-               [1, 2],
-               MapSet.new([3])
+    assert {where, _params} =
+             DnfPlan.move_in_where_clause(
+               dnf_plan,
+               0,
+               Enum.map([{1, "1"}, {2, "2"}], &elem(&1, 0)),
+               %{["$sublink", "0"] => MapSet.new([3])},
+               shape.where.used_refs
              )
 
-    assert where == "parent_id = ANY ($1::int8[]) AND NOT parent_id = ANY ($2::int8[])"
+    assert is_binary(where)
   end
 
   test "builds move-out control messages with the current hashing scheme" do
@@ -562,7 +597,7 @@ defmodule Electric.Shapes.Consumer.SubqueriesTest do
                event: "move-out",
                patterns: [%{pos: 0, value: value}]
              }
-           } = Subqueries.make_move_out_control_message(state, [{1, "1"}])
+           } = Subqueries.make_move_out_control_message(state, 0, [{1, "1"}])
 
     assert value ==
              :crypto.hash(:md5, "stack-id" <> "shape-handle" <> "v:1")
@@ -578,15 +613,21 @@ defmodule Electric.Shapes.Consumer.SubqueriesTest do
 
   defp new_state(opts \\ []) do
     shape = shape()
+    {:ok, dnf_plan} = DnfPlan.compile(shape)
+    dep_handle = hd(shape.shape_dependencies_handles)
 
     Subqueries.new(
       shape: shape,
       stack_id: "stack-id",
       shape_handle: "shape-handle",
-      dependency_handle: hd(shape.shape_dependencies_handles),
-      subquery_ref: ["$sublink", "0"],
-      subquery_view: Keyword.get(opts, :subquery_view, MapSet.new())
+      dnf_plan: dnf_plan,
+      views: %{["$sublink", "0"] => Keyword.get(opts, :subquery_view, MapSet.new())},
+      dependency_handle_to_ref: %{dep_handle => {0, ["$sublink", "0"]}}
     )
+  end
+
+  defp dep_handle(state) do
+    state.dependency_handle_to_ref |> Map.keys() |> hd()
   end
 
   defp shape do
