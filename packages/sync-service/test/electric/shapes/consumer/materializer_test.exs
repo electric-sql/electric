@@ -875,6 +875,221 @@ defmodule Electric.Shapes.Consumer.MaterializerTest do
     end
   end
 
+  describe "DNF: multiple tags per row with active_conditions" do
+    test "insert with active_conditions where row is not initially included", ctx do
+      ctx = with_materializer(ctx)
+
+      # Row has two disjunct tags but active_conditions says position 0 is false
+      # Tag "hash_a/" participates in position 0, tag "/hash_b" participates in position 1
+      Materializer.new_changes(ctx, [
+        %Changes.NewRecord{
+          key: "1",
+          record: %{"value" => "10"},
+          move_tags: ["hash_a/", "/hash_b"],
+          active_conditions: [false, false]
+        }
+      ])
+
+      # Row is not included because no disjunct has all positions active
+      assert Materializer.get_link_values(ctx) == MapSet.new()
+      refute_received {:materializer_changes, _, _}
+    end
+
+    test "insert with active_conditions where one disjunct is satisfied", ctx do
+      ctx = with_materializer(ctx)
+
+      Materializer.new_changes(ctx, [
+        %Changes.NewRecord{
+          key: "1",
+          record: %{"value" => "10"},
+          move_tags: ["hash_a/", "/hash_b"],
+          active_conditions: [true, false]
+        }
+      ])
+
+      # First disjunct "hash_a/" has position 0 active → included
+      assert Materializer.get_link_values(ctx) == MapSet.new([10])
+      assert_receive {:materializer_changes, _, %{move_in: [{10, "10"}]}}
+    end
+
+    test "move-in broadcast activates a previously excluded row", ctx do
+      ctx = with_materializer(ctx)
+
+      # Insert with position 0 inactive
+      Materializer.new_changes(ctx, [
+        %Changes.NewRecord{
+          key: "1",
+          record: %{"value" => "10"},
+          move_tags: ["hash_a/", "/hash_b"],
+          active_conditions: [false, false]
+        }
+      ])
+
+      assert Materializer.get_link_values(ctx) == MapSet.new()
+      refute_received {:materializer_changes, _, _}
+
+      # Move-in at position 0 with value "hash_a"
+      Materializer.new_changes(ctx, [
+        %{headers: %{event: "move-in", patterns: [%{pos: 0, value: "hash_a"}]}}
+      ])
+
+      # Now position 0 is true, first disjunct "hash_a/" is satisfied
+      assert Materializer.get_link_values(ctx) == MapSet.new([10])
+      assert_receive {:materializer_changes, _, %{move_in: [{10, "10"}]}}
+    end
+
+    test "move-out does not remove row when another disjunct still holds", ctx do
+      ctx = with_materializer(ctx)
+
+      # Insert with both positions active
+      Materializer.new_changes(ctx, [
+        %Changes.NewRecord{
+          key: "1",
+          record: %{"value" => "10"},
+          move_tags: ["hash_a/", "/hash_b"],
+          active_conditions: [true, true]
+        }
+      ])
+
+      assert Materializer.get_link_values(ctx) == MapSet.new([10])
+      assert_receive {:materializer_changes, _, %{move_in: [{10, "10"}]}}
+
+      # Move-out at position 0 - but position 1 still holds via second disjunct
+      Materializer.new_changes(ctx, [
+        %{headers: %{event: "move-out", patterns: [%{pos: 0, value: "hash_a"}]}}
+      ])
+
+      # Row should still be included because disjunct "/hash_b" at position 1 is still true
+      assert Materializer.get_link_values(ctx) == MapSet.new([10])
+      refute_received {:materializer_changes, _, _}
+    end
+
+    test "move-out removes row when last active disjunct becomes false", ctx do
+      ctx = with_materializer(ctx)
+
+      # Insert with only position 1 active
+      Materializer.new_changes(ctx, [
+        %Changes.NewRecord{
+          key: "1",
+          record: %{"value" => "10"},
+          move_tags: ["hash_a/", "/hash_b"],
+          active_conditions: [false, true]
+        }
+      ])
+
+      assert Materializer.get_link_values(ctx) == MapSet.new([10])
+      assert_receive {:materializer_changes, _, %{move_in: [{10, "10"}]}}
+
+      # Move-out at position 1 - now no disjunct holds
+      Materializer.new_changes(ctx, [
+        %{headers: %{event: "move-out", patterns: [%{pos: 1, value: "hash_b"}]}}
+      ])
+
+      assert Materializer.get_link_values(ctx) == MapSet.new()
+      assert_receive {:materializer_changes, _, %{move_out: [{10, "10"}]}}
+    end
+
+    test "move-in on already-present row is a no-op for value counts", ctx do
+      ctx = with_materializer(ctx)
+
+      # Insert with position 0 active
+      Materializer.new_changes(ctx, [
+        %Changes.NewRecord{
+          key: "1",
+          record: %{"value" => "10"},
+          move_tags: ["hash_a/", "/hash_b"],
+          active_conditions: [true, false]
+        }
+      ])
+
+      assert Materializer.get_link_values(ctx) == MapSet.new([10])
+      assert_receive {:materializer_changes, _, %{move_in: [{10, "10"}]}}
+
+      # Move-in at position 1 - row was already included via position 0
+      Materializer.new_changes(ctx, [
+        %{headers: %{event: "move-in", patterns: [%{pos: 1, value: "hash_b"}]}}
+      ])
+
+      # No value count change
+      assert Materializer.get_link_values(ctx) == MapSet.new([10])
+      refute_received {:materializer_changes, _, _}
+    end
+
+    test "multi-position disjunct requires all positions active", ctx do
+      ctx = with_materializer(ctx)
+
+      # Tag "hash_a/1" means positions 0 AND 1 must be active for this disjunct
+      Materializer.new_changes(ctx, [
+        %Changes.NewRecord{
+          key: "1",
+          record: %{"value" => "10"},
+          move_tags: ["hash_a/1"],
+          active_conditions: [true, false]
+        }
+      ])
+
+      # Position 1 is false, so the disjunct is not satisfied
+      assert Materializer.get_link_values(ctx) == MapSet.new()
+      refute_received {:materializer_changes, _, _}
+    end
+
+    test "multi-position disjunct becomes satisfied when all positions active", ctx do
+      ctx = with_materializer(ctx)
+
+      # Tag "hash_a/1" needs both positions active
+      Materializer.new_changes(ctx, [
+        %Changes.NewRecord{
+          key: "1",
+          record: %{"value" => "10"},
+          move_tags: ["hash_a/1"],
+          active_conditions: [false, true]
+        }
+      ])
+
+      assert Materializer.get_link_values(ctx) == MapSet.new()
+      refute_received {:materializer_changes, _, _}
+
+      # Move-in at position 0 makes both positions active
+      Materializer.new_changes(ctx, [
+        %{headers: %{event: "move-in", patterns: [%{pos: 0, value: "hash_a"}]}}
+      ])
+
+      assert Materializer.get_link_values(ctx) == MapSet.new([10])
+      assert_receive {:materializer_changes, _, %{move_in: [{10, "10"}]}}
+    end
+
+    test "composite-key tag indexing works for position lookup", ctx do
+      ctx = with_materializer(ctx)
+
+      # Two rows with different position-0 hashes
+      Materializer.new_changes(ctx, [
+        %Changes.NewRecord{
+          key: "1",
+          record: %{"value" => "10"},
+          move_tags: ["hash_x/"],
+          active_conditions: [true, false]
+        },
+        %Changes.NewRecord{
+          key: "2",
+          record: %{"value" => "20"},
+          move_tags: ["hash_y/"],
+          active_conditions: [true, false]
+        }
+      ])
+
+      assert Materializer.get_link_values(ctx) == MapSet.new([10, 20])
+      assert_receive {:materializer_changes, _, %{move_in: _}}
+
+      # Move-out only for hash_x at position 0
+      Materializer.new_changes(ctx, [
+        %{headers: %{event: "move-out", patterns: [%{pos: 0, value: "hash_x"}]}}
+      ])
+
+      assert Materializer.get_link_values(ctx) == MapSet.new([20])
+      assert_receive {:materializer_changes, _, %{move_out: [{10, "10"}]}}
+    end
+  end
+
   defp respond_to_call(request, response) do
     receive do
       {:"$gen_call", {from, ref}, {^request, _arg}} ->
