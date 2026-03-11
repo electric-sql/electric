@@ -11,8 +11,11 @@ defmodule Electric.Shapes.DnfPlan do
   """
 
   alias Electric.Replication.Eval.Decomposer
+  alias Electric.Replication.Eval.Expr
   alias Electric.Replication.Eval.Parser.{Func, Ref, RowExpr}
+  alias Electric.Replication.Eval.Runner
   alias Electric.Replication.Eval.SqlGenerator
+  alias Electric.Shapes.Consumer.Subqueries
 
   defstruct [
     :disjuncts,
@@ -60,6 +63,87 @@ defmodule Electric.Shapes.DnfPlan do
     else
       do_compile(shape)
     end
+  end
+
+  @doc """
+  Project row metadata from a DNF plan.
+
+  Given a record, subquery views, and the shape's WHERE clause expression,
+  computes whether the row is included, tags for each disjunct, and
+  active_conditions for each position.
+
+  `views` should be keyed by subquery ref path, e.g. `%{["$sublink", "0"] => MapSet}`.
+  """
+  @spec project_row(t(), map(), map(), Expr.t(), String.t(), String.t()) ::
+          {:ok, boolean(), [String.t()], [boolean()]} | :error
+  def project_row(plan, record, views, where_expr, stack_id, shape_handle) do
+    with {:ok, ref_values} <- Runner.record_to_ref_values(where_expr.used_refs, record) do
+      refs = Map.merge(ref_values, views)
+      active_conditions = compute_active_conditions(plan, refs)
+      tags = compute_tags(plan, record, stack_id, shape_handle)
+      included? = compute_inclusion(plan, active_conditions)
+      {:ok, included?, tags, active_conditions}
+    end
+  end
+
+  defp compute_active_conditions(plan, refs) do
+    Enum.map(0..(plan.position_count - 1), fn pos ->
+      info = plan.positions[pos]
+      pos_expr = Expr.wrap_parser_part(info.ast)
+
+      base_result =
+        case Runner.execute(pos_expr, refs) do
+          {:ok, value} when value not in [nil, false] -> true
+          _ -> false
+        end
+
+      if info.negated, do: not base_result, else: base_result
+    end)
+  end
+
+  defp compute_tags(plan, record, stack_id, shape_handle) do
+    Enum.map(plan.disjuncts, fn conj ->
+      positions_in_disjunct = MapSet.new(conj, &elem(&1, 0))
+
+      Enum.map(0..(plan.position_count - 1), fn pos ->
+        if MapSet.member?(positions_in_disjunct, pos) do
+          compute_tag_slot(plan.positions[pos], record, stack_id, shape_handle)
+        else
+          ""
+        end
+      end)
+      |> Enum.join("/")
+    end)
+  end
+
+  defp compute_tag_slot(%{is_subquery: true, tag_columns: [col]}, record, stack_id, shape_handle) do
+    Subqueries.make_value_hash(stack_id, shape_handle, Map.get(record, col))
+  end
+
+  defp compute_tag_slot(
+         %{is_subquery: true, tag_columns: {:hash_together, cols}},
+         record,
+         stack_id,
+         shape_handle
+       ) do
+    parts =
+      Enum.map(cols, fn col ->
+        col <> ":" <> Subqueries.namespace_value(Map.get(record, col))
+      end)
+
+    Subqueries.make_value_hash_raw(stack_id, shape_handle, Enum.join(parts))
+  end
+
+  defp compute_tag_slot(%{is_subquery: false}, _record, _stack_id, _shape_handle) do
+    "1"
+  end
+
+  defp compute_inclusion(plan, active_conditions) do
+    Enum.any?(plan.disjuncts, fn conj ->
+      Enum.all?(conj, fn {pos, _polarity} ->
+        Enum.at(active_conditions, pos)
+      end)
+    end)
   end
 
   defp do_compile(shape) do

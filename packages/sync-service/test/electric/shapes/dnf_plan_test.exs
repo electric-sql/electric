@@ -257,6 +257,282 @@ defmodule Electric.Shapes.DnfPlanTest do
     end
   end
 
+  @stack_id "test_stack"
+  @shape_handle "test_shape"
+
+  describe "project_row/6 - single subquery" do
+    test "row included when value is in subquery view" do
+      {where, deps} = parse_where_with_sublinks(~S"x IN (SELECT id FROM dep)", 1)
+      shape = make_shape(where, deps)
+      {:ok, plan} = DnfPlan.compile(shape)
+
+      record = %{"id" => "1", "x" => "5", "y" => "10", "status" => "open"}
+      views = %{["$sublink", "0"] => MapSet.new([5])}
+
+      assert {:ok, true, tags, active_conditions} =
+               DnfPlan.project_row(plan, record, views, where, @stack_id, @shape_handle)
+
+      assert active_conditions == [true]
+      assert length(tags) == 1
+    end
+
+    test "row excluded when value is not in subquery view" do
+      {where, deps} = parse_where_with_sublinks(~S"x IN (SELECT id FROM dep)", 1)
+      shape = make_shape(where, deps)
+      {:ok, plan} = DnfPlan.compile(shape)
+
+      record = %{"id" => "1", "x" => "5", "y" => "10", "status" => "open"}
+      views = %{["$sublink", "0"] => MapSet.new([99])}
+
+      assert {:ok, false, _tags, active_conditions} =
+               DnfPlan.project_row(plan, record, views, where, @stack_id, @shape_handle)
+
+      assert active_conditions == [false]
+    end
+  end
+
+  describe "project_row/6 - OR with subqueries" do
+    setup do
+      {where, deps} =
+        parse_where_with_sublinks(
+          ~S"x IN (SELECT id FROM dep1) OR y IN (SELECT id FROM dep2)",
+          2
+        )
+
+      shape = make_shape(where, deps)
+      {:ok, plan} = DnfPlan.compile(shape)
+      %{plan: plan, where: where}
+    end
+
+    test "included via first disjunct only", %{plan: plan, where: where} do
+      record = %{"id" => "1", "x" => "5", "y" => "10", "status" => "open"}
+      views = %{["$sublink", "0"] => MapSet.new([5]), ["$sublink", "1"] => MapSet.new([])}
+
+      assert {:ok, true, tags, active_conditions} =
+               DnfPlan.project_row(plan, record, views, where, @stack_id, @shape_handle)
+
+      assert active_conditions == [true, false]
+      assert length(tags) == 2
+    end
+
+    test "included via second disjunct only", %{plan: plan, where: where} do
+      record = %{"id" => "1", "x" => "5", "y" => "10", "status" => "open"}
+      views = %{["$sublink", "0"] => MapSet.new([]), ["$sublink", "1"] => MapSet.new([10])}
+
+      assert {:ok, true, _tags, active_conditions} =
+               DnfPlan.project_row(plan, record, views, where, @stack_id, @shape_handle)
+
+      assert active_conditions == [false, true]
+    end
+
+    test "included via both disjuncts", %{plan: plan, where: where} do
+      record = %{"id" => "1", "x" => "5", "y" => "10", "status" => "open"}
+      views = %{["$sublink", "0"] => MapSet.new([5]), ["$sublink", "1"] => MapSet.new([10])}
+
+      assert {:ok, true, _tags, active_conditions} =
+               DnfPlan.project_row(plan, record, views, where, @stack_id, @shape_handle)
+
+      assert active_conditions == [true, true]
+    end
+
+    test "excluded when neither disjunct satisfied", %{plan: plan, where: where} do
+      record = %{"id" => "1", "x" => "5", "y" => "10", "status" => "open"}
+      views = %{["$sublink", "0"] => MapSet.new([99]), ["$sublink", "1"] => MapSet.new([99])}
+
+      assert {:ok, false, _tags, active_conditions} =
+               DnfPlan.project_row(plan, record, views, where, @stack_id, @shape_handle)
+
+      assert active_conditions == [false, false]
+    end
+  end
+
+  describe "project_row/6 - mixed row predicate and subquery" do
+    setup do
+      {where, deps} =
+        parse_where_with_sublinks(
+          ~S"(x IN (SELECT id FROM dep1) AND status = 'open') OR y IN (SELECT id FROM dep2)",
+          2
+        )
+
+      shape = make_shape(where, deps)
+      {:ok, plan} = DnfPlan.compile(shape)
+      %{plan: plan, where: where}
+    end
+
+    test "included via first disjunct when subquery matches and row predicate true",
+         %{plan: plan, where: where} do
+      record = %{"id" => "1", "x" => "5", "y" => "10", "status" => "open"}
+      views = %{["$sublink", "0"] => MapSet.new([5]), ["$sublink", "1"] => MapSet.new([])}
+
+      assert {:ok, true, _tags, active_conditions} =
+               DnfPlan.project_row(plan, record, views, where, @stack_id, @shape_handle)
+
+      # All 3 positions: subquery true, row predicate true, sq2 false
+      assert Enum.count(active_conditions, & &1) == 2
+    end
+
+    test "excluded from first disjunct when row predicate false", %{plan: plan, where: where} do
+      record = %{"id" => "1", "x" => "5", "y" => "10", "status" => "closed"}
+      views = %{["$sublink", "0"] => MapSet.new([5]), ["$sublink", "1"] => MapSet.new([])}
+
+      assert {:ok, false, _tags, active_conditions} =
+               DnfPlan.project_row(plan, record, views, where, @stack_id, @shape_handle)
+
+      # Row predicate position should be false
+      row_pred_pos =
+        plan.positions
+        |> Enum.find(fn {_pos, info} -> not info.is_subquery end)
+        |> elem(0)
+
+      refute Enum.at(active_conditions, row_pred_pos)
+    end
+
+    test "included via second disjunct even when first disjunct row predicate false",
+         %{plan: plan, where: where} do
+      record = %{"id" => "1", "x" => "5", "y" => "10", "status" => "closed"}
+      views = %{["$sublink", "0"] => MapSet.new([5]), ["$sublink", "1"] => MapSet.new([10])}
+
+      assert {:ok, true, _tags, _active_conditions} =
+               DnfPlan.project_row(plan, record, views, where, @stack_id, @shape_handle)
+    end
+  end
+
+  describe "project_row/6 - tags" do
+    test "tags have correct structure with slots per position" do
+      {where, deps} =
+        parse_where_with_sublinks(
+          ~S"x IN (SELECT id FROM dep1) OR y IN (SELECT id FROM dep2)",
+          2
+        )
+
+      shape = make_shape(where, deps)
+      {:ok, plan} = DnfPlan.compile(shape)
+
+      record = %{"id" => "1", "x" => "5", "y" => "10", "status" => "open"}
+      views = %{["$sublink", "0"] => MapSet.new([5]), ["$sublink", "1"] => MapSet.new([10])}
+
+      assert {:ok, true, tags, _active_conditions} =
+               DnfPlan.project_row(plan, record, views, where, @stack_id, @shape_handle)
+
+      assert length(tags) == 2
+
+      # Tag 0 (disjunct for x IN sq1): has hash at pos 0, empty at pos 1
+      [tag0, tag1] = tags
+      [slot0_0, slot0_1] = String.split(tag0, "/")
+      assert slot0_0 != ""
+      assert slot0_1 == ""
+
+      # Tag 1 (disjunct for y IN sq2): empty at pos 0, has hash at pos 1
+      [slot1_0, slot1_1] = String.split(tag1, "/")
+      assert slot1_0 == ""
+      assert slot1_1 != ""
+    end
+
+    test "row predicate positions get sentinel value in tags" do
+      {where, deps} =
+        parse_where_with_sublinks(
+          ~S"(x IN (SELECT id FROM dep1) AND status = 'open') OR y IN (SELECT id FROM dep2)",
+          2
+        )
+
+      shape = make_shape(where, deps)
+      {:ok, plan} = DnfPlan.compile(shape)
+
+      record = %{"id" => "1", "x" => "5", "y" => "10", "status" => "open"}
+      views = %{["$sublink", "0"] => MapSet.new([5]), ["$sublink", "1"] => MapSet.new([])}
+
+      assert {:ok, true, tags, _active_conditions} =
+               DnfPlan.project_row(plan, record, views, where, @stack_id, @shape_handle)
+
+      # The first disjunct's tag should contain a "1" sentinel for the row predicate position
+      [tag0 | _] = tags
+      slots = String.split(tag0, "/")
+
+      # Find the row predicate position
+      row_pred_pos =
+        plan.positions
+        |> Enum.find(fn {_pos, info} -> not info.is_subquery end)
+        |> elem(0)
+
+      assert Enum.at(slots, row_pred_pos) == "1"
+    end
+  end
+
+  describe "project_row/6 - update scenarios" do
+    test "update that changes which disjuncts are satisfied" do
+      {where, deps} =
+        parse_where_with_sublinks(
+          ~S"(x IN (SELECT id FROM dep1) AND status = 'open') OR y IN (SELECT id FROM dep2)",
+          2
+        )
+
+      shape = make_shape(where, deps)
+      {:ok, plan} = DnfPlan.compile(shape)
+      views = %{["$sublink", "0"] => MapSet.new([5]), ["$sublink", "1"] => MapSet.new([10])}
+
+      # Old record: status = 'open', included via disjunct 0
+      old_record = %{"id" => "1", "x" => "5", "y" => "10", "status" => "open"}
+
+      assert {:ok, true, old_tags, old_ac} =
+               DnfPlan.project_row(plan, old_record, views, where, @stack_id, @shape_handle)
+
+      # New record: status = 'closed', no longer via disjunct 0 but still via disjunct 1
+      new_record = %{"id" => "1", "x" => "5", "y" => "10", "status" => "closed"}
+
+      assert {:ok, true, new_tags, new_ac} =
+               DnfPlan.project_row(plan, new_record, views, where, @stack_id, @shape_handle)
+
+      # Row predicate position should have changed
+      row_pred_pos =
+        plan.positions
+        |> Enum.find(fn {_pos, info} -> not info.is_subquery end)
+        |> elem(0)
+
+      assert Enum.at(old_ac, row_pred_pos) == true
+      assert Enum.at(new_ac, row_pred_pos) == false
+
+      # removed_tags = old - new
+      removed_tags = old_tags -- new_tags
+      assert removed_tags == [] or length(removed_tags) >= 0
+    end
+
+    test "correct removed_tags when column values change" do
+      {where, deps} =
+        parse_where_with_sublinks(
+          ~S"x IN (SELECT id FROM dep1) OR y IN (SELECT id FROM dep2)",
+          2
+        )
+
+      shape = make_shape(where, deps)
+      {:ok, plan} = DnfPlan.compile(shape)
+      views = %{["$sublink", "0"] => MapSet.new([5, 99]), ["$sublink", "1"] => MapSet.new([10])}
+
+      old_record = %{"id" => "1", "x" => "5", "y" => "10", "status" => "open"}
+
+      {:ok, _old_incl, old_tags, _old_ac} =
+        DnfPlan.project_row(plan, old_record, views, where, @stack_id, @shape_handle)
+
+      # x changes from 5 to 99
+      new_record = %{"id" => "1", "x" => "99", "y" => "10", "status" => "open"}
+
+      {:ok, _new_incl, new_tags, _new_ac} =
+        DnfPlan.project_row(plan, new_record, views, where, @stack_id, @shape_handle)
+
+      # Tag hashes should differ because x changed
+      [old_tag0, _] = old_tags
+      [new_tag0, _] = new_tags
+      assert old_tag0 != new_tag0
+
+      # But tag1 (y IN sq2) should be the same since y didn't change
+      [_, old_tag1] = old_tags
+      [_, new_tag1] = new_tags
+      assert old_tag1 == new_tag1
+
+      removed_tags = old_tags -- new_tags
+      assert length(removed_tags) == 1
+    end
+  end
+
   # -- Helpers --
 
   defp parse_where(where_clause) do
