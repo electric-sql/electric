@@ -39,12 +39,15 @@ defmodule Support.Trace do
 
     what_to_trace =
       Enum.map(List.wrap(trace_specs), fn
-        {mod, name, arity} -> {mod, name, arity}
-        {mod, name} when is_atom(mod) and is_atom(name) -> {mod, name, :_}
-        mod when is_atom(mod) -> {mod, :_, :_}
+        {mod, name, arity} when is_integer(arity) or arity == :_ -> {{mod, name, arity}, true}
+        {mod, name, match_spec} -> {{mod, name, :_}, match_spec}
+        {mod, name} when is_atom(mod) and is_atom(name) -> {{mod, name, :_}, true}
+        mod when is_atom(mod) -> {{mod, :_, :_}, true}
       end)
 
-    Enum.each(what_to_trace, &:trace.function(session, &1, true, [:local]))
+    Enum.each(what_to_trace, fn {mfa, match_spec} ->
+      :trace.function(session, mfa, match_spec, [:local])
+    end)
 
     session
   end
