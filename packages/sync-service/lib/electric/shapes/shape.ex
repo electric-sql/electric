@@ -2,6 +2,7 @@ defmodule Electric.Shapes.Shape do
   @moduledoc """
   Struct describing the requested shape
   """
+  alias Electric.Replication.Eval.Runner
   alias Electric.Shapes.Shape.SubqueryMoves
   alias Electric.Replication.Eval.Expr
   alias Electric.Postgres.Inspector
@@ -538,6 +539,35 @@ defmodule Electric.Shapes.Shape do
     [table]
   end
 
+  def should_be_visible?(%__MODULE__{where: nil}, _, _), do: true
+
+  def should_be_visible?(
+        %__MODULE__{where: where},
+        %Changes.NewRecord{record: record},
+        extra_refs
+      ) do
+    WhereClause.includes_record?(where, record, extra_refs)
+  end
+
+  def should_be_visible?(
+        %__MODULE__{where: where},
+        %Changes.UpdatedRecord{old_record: old_record, record: record},
+        extra_refs
+      ) do
+    WhereClause.includes_record?(where, old_record, extra_refs) or
+      WhereClause.includes_record?(where, record, extra_refs)
+  end
+
+  def should_be_visible?(
+        %__MODULE__{where: where},
+        %Changes.DeletedRecord{old_record: old_record},
+        extra_refs
+      ) do
+    WhereClause.includes_record?(where, old_record, extra_refs)
+  end
+
+  def should_be_visible?(_, _, _), do: false
+
   @doc """
   Convert a change to be correctly represented within the shape.
 
@@ -730,6 +760,18 @@ defmodule Electric.Shapes.Shape do
         %Changes.Relation{affected_columns: affected_columns}
       ) do
     Enum.any?(columns, &(&1 in affected_columns))
+  end
+
+  def sublinks_that_changed(
+        %Changes.UpdatedRecord{record: new_record, old_record: old_record},
+        %__MODULE__{subquery_comparison_expressions: subquery_comparison_expressions}
+      ) do
+    for {path, expr} <- subquery_comparison_expressions,
+        {:ok, new_value} = Runner.execute_for_record(expr, new_record),
+        {:ok, old_value} = Runner.execute_for_record(expr, old_record),
+        new_value != old_value do
+      {path, {new_value, old_value}}
+    end
   end
 
   @doc false

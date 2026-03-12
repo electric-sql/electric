@@ -12,6 +12,7 @@ defmodule Electric.Shapes.Consumer do
   require Electric.Replication.LogOffset
   require Electric.Shapes.Shape
 
+  alias Electric.LsnTracker
   alias Electric.Replication.LogOffset
   alias Electric.Shapes.Consumer.Materializer
   alias Electric.Shapes.ConsumerRegistry
@@ -264,6 +265,10 @@ defmodule Electric.Shapes.Consumer do
           }
         )
 
+      if Shape.has_dependencies(shape) do
+        LsnTracker.subscribe_to_global_lsn_updates(stack_id)
+      end
+
       {:noreply, state}
     else
       stop_and_clean(state)
@@ -321,28 +326,70 @@ defmodule Electric.Shapes.Consumer do
   end
 
   def handle_info({:pg_snapshot_known, name, snapshot}, state) do
+    handle_info({:pg_snapshot_known, name, snapshot, nil}, state)
+  end
+
+  def handle_info({:pg_snapshot_known, name, snapshot, wal_lsn}, state) do
     Logger.debug(fn -> "Snapshot known for move-in #{name}" end)
 
-    # Update the snapshot in waiting_move_ins
-    move_handling_state = MoveIns.set_snapshot(state.move_handling_state, name, snapshot)
+    # Update the snapshot and WAL LSN in waiting_move_ins
+    move_handling_state = MoveIns.set_snapshot(state.move_handling_state, name, snapshot, wal_lsn)
 
-    # Garbage collect touches visible in all known snapshots
+    # Garbage collect transient move-in state when no move-ins are active.
     state = %{state | move_handling_state: move_handling_state}
-    state = State.gc_touch_tracker(state)
+    state = State.gc_transient_move_in_state(state)
 
     {:noreply, state, state.hibernate_after}
   end
 
-  def handle_info({:query_move_in_complete, name, key_set, snapshot}, state) do
+  def handle_info({:query_move_in_complete, name, key_set_or_pairs, snapshot}, state) do
+    handle_info({:query_move_in_complete, name, key_set_or_pairs, snapshot, nil}, state)
+  end
+
+  def handle_info({:query_move_in_complete, name, key_set_or_pairs, snapshot, _wal_lsn}, state) do
+    # Normalize: accept both [{key, tags}, ...] pairs and plain [key, ...] lists
+    key_tag_pairs =
+      case key_set_or_pairs do
+        [] -> []
+        [{_key, _tags} | _] -> key_set_or_pairs
+        [key | _] when is_binary(key) -> Enum.map(key_set_or_pairs, fn k -> {k, []} end)
+      end
+
     Logger.debug(fn ->
-      "Consumer query move in complete for #{name} with #{length(key_set)} keys"
+      "Consumer query move in complete for #{name} with #{length(key_tag_pairs)} keys, buffering for snapshot-ordered splice"
     end)
 
-    {state, notification} = MoveHandling.query_complete(state, name, key_set, snapshot)
+    # Buffer the completed move-in instead of splicing immediately.
+    # [P.splice]: results will be spliced just before the first observed
+    # transaction that is NOT visible in the query snapshot.
+    state = MoveHandling.buffer_query_result(state, name, key_tag_pairs, snapshot)
+
+    # Attempt an immediate splice using the last seen global LSN. The
+    # global LSN notification may have arrived before this query
+    # completed — so we check using the stored value.
+    {state, notification} = MoveHandling.splice_buffered_by_lsn(state, state.last_seen_global_lsn)
+
     :ok = notify_new_changes(state, notification)
 
-    # Garbage collect touches after query completes (no buffer consumption needed)
-    state = State.gc_touch_tracker(state)
+    # Garbage collect transient move-in state after query completes.
+    state = State.gc_transient_move_in_state(state)
+
+    {:noreply, state, state.hibernate_after}
+  end
+
+  def handle_info({:global_last_seen_lsn, lsn}, state) do
+    Logger.debug(fn -> "Global last seen LSN: #{lsn}" end)
+
+    # Track the highest global LSN for use in query_move_in_complete.
+    state = %{state | last_seen_global_lsn: max(lsn, state.last_seen_global_lsn)}
+
+    # [P.splice] secondary trigger: splice any buffered move-ins whose
+    # WAL LSN is <= the globally acknowledged LSN, meaning the entire
+    # replication prefix visible to their snapshot has been observed.
+    {state, notification} = MoveHandling.splice_buffered_by_lsn(state, lsn)
+
+    :ok = notify_new_changes(state, notification)
+    state = State.gc_transient_move_in_state(state)
 
     {:noreply, state, state.hibernate_after}
   end
@@ -612,12 +659,10 @@ defmodule Electric.Shapes.Consumer do
     %{
       shape: shape,
       writer: writer,
-      pending_txn: txn,
-      stack_id: stack_id,
-      shape_handle: shape_handle
+      pending_txn: txn
     } = state
 
-    case convert_fragment_changes(changes, stack_id, shape_handle, shape) do
+    case convert_fragment_changes(changes, state) do
       :includes_truncate ->
         handle_txn_with_truncate(xid, state)
 
@@ -656,7 +701,10 @@ defmodule Electric.Shapes.Consumer do
     end
   end
 
-  defp convert_fragment_changes(changes, stack_id, shape_handle, shape) do
+  defp convert_fragment_changes(
+         changes,
+         %{stack_id: stack_id, shape_handle: shape_handle, shape: shape}
+       ) do
     Enum.reduce_while(changes, {[], 0}, fn
       %Changes.TruncatedRelation{}, _acc ->
         {:halt, :includes_truncate}
@@ -787,14 +835,29 @@ defmodule Electric.Shapes.Consumer do
   defp do_handle_txn(%Transaction{xid: xid, changes: changes} = txn, state) do
     %{shape: shape, writer: writer} = state
 
+    # [P.splice]: Before processing this txn, splice any buffered move-in
+    # results whose snapshot does NOT cover this xid. At this point, all
+    # earlier-visible stream operations have been appended to the log.
+    {state, splice_notification} = MoveHandling.splice_buffered_before_txn(state, xid)
+
+    :ok = notify_new_changes(state, splice_notification)
+
     state = State.remove_completed_move_ins(state, txn)
 
     extra_refs_full =
       Materializer.get_all_as_refs(shape, state.stack_id)
 
+    # Subtract values from waiting move-ins (in_flight_values) and from
+    # filtering move-ins whose snapshot covers this xid. The latter prevents
+    # spurious deletes when an async query completes before the consumer
+    # processes WAL events that were visible in the query's snapshot.
+    filtering_values =
+      MoveIns.filtering_values_for_xid(state.move_handling_state, xid)
+
     extra_refs_before_move_ins =
-      Enum.reduce(state.move_handling_state.in_flight_values, extra_refs_full, fn {key, value},
-                                                                                  acc ->
+      state.move_handling_state.in_flight_values
+      |> Map.merge(filtering_values, fn _k, v1, v2 -> MapSet.union(v1, v2) end)
+      |> Enum.reduce(extra_refs_full, fn {key, value}, acc ->
         if is_map_key(acc, key),
           do: Map.update!(acc, key, &MapSet.difference(&1, value)),
           else: acc
@@ -817,10 +880,10 @@ defmodule Electric.Shapes.Consumer do
 
         consider_flushed(state, txn.last_log_offset)
 
-      {changes, state, num_changes, last_log_offset} ->
+      {out_changes, state, num_changes, last_log_offset} ->
         timestamp = System.monotonic_time()
 
-        {lines, total_size} = prepare_log_entries(changes, xid, shape)
+        {lines, total_size} = prepare_log_entries(out_changes, xid, shape)
         writer = ShapeCache.Storage.append_to_log!(lines, writer)
 
         OpenTelemetry.add_span_attributes(%{
@@ -828,7 +891,7 @@ defmodule Electric.Shapes.Consumer do
           actual_num_changes: num_changes
         })
 
-        :ok = notify_new_changes(state, changes, last_log_offset)
+        :ok = notify_new_changes(state, out_changes, last_log_offset)
 
         lag = calculate_replication_lag(txn.commit_timestamp)
         OpenTelemetry.add_span_attributes(replication_lag: lag)

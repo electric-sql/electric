@@ -266,6 +266,14 @@ defmodule Electric.Postgres.Xid do
   def compare(xid8_l, xid8_r) when is_lt(xid8_l, xid8_r), do: :lt
   def compare(_, _), do: :gt
 
+  @doc """
+  Compare two xids and return the maximum of the two.
+  """
+  @spec max(anyxid, anyxid) :: anyxid
+  def max(xid1, xid2) when is_lt(xid1, xid2), do: xid2
+  def max(xid1, xid2) when is_eq(xid1, xid2), do: xid2
+  def max(xid1, _), do: xid1
+
   @type pg_snapshot() :: {anyxid, anyxid, [anyxid]}
 
   @doc """

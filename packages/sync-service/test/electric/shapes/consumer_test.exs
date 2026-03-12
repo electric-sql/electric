@@ -1884,6 +1884,106 @@ defmodule Electric.Shapes.ConsumerTest do
                }
              ] = get_log_items_from_storage(LogOffset.last_before_real_offsets(), shape_storage)
     end
+
+    test "pending move-in with nil snapshot covers WAL changes until query completion", ctx do
+      # Nil snapshots are treated as "will cover": the query has not obtained a
+      # connection yet, so when it eventually runs it will see all currently
+      # processing WAL changes. The WAL change below must therefore be skipped,
+      # and only the eventual query result should be emitted.
+
+      parent = self()
+
+      Repatch.patch(
+        Electric.Shapes.PartialModes,
+        :query_move_in_async,
+        [mode: :shared],
+        fn _task_sup, _shape_handle, _shape, _where_clause, opts ->
+          consumer_pid = opts[:consumer_pid]
+          name = opts[:move_in_name]
+          results_fn = opts[:results_fn]
+
+          send(parent, {:query_requested, name, consumer_pid, results_fn})
+
+          :ok
+        end
+      )
+
+      Support.TestUtils.activate_mocks_for_descendant_procs(Consumer)
+
+      {shape_handle, _} =
+        ShapeCache.get_or_create_shape_handle(@shape_with_subquery, ctx.stack_id)
+
+      :started = ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id)
+
+      consumer_pid = Consumer.whereis(ctx.stack_id, shape_handle)
+      ref = Shapes.Consumer.register_for_changes(ctx.stack_id, shape_handle)
+
+      key = ~s'"public"."test_table"/"1"'
+
+      # Step 1: Dependency change triggers move-in for value "1"
+      ShapeLogCollector.handle_event(
+        complete_txn_fragment(98, Lsn.from_integer(48), [
+          %Changes.NewRecord{
+            relation: {"public", "other_table"},
+            record: %{"id" => "1"},
+            log_offset: LogOffset.new(Lsn.from_integer(48), 0)
+          }
+        ]),
+        ctx.stack_id
+      )
+
+      assert_receive {:query_requested, name, ^consumer_pid, results_fn}
+
+      lsn = Lsn.from_integer(100)
+
+      txn =
+        complete_txn_fragment(100, lsn, [
+          %Changes.UpdatedRecord{
+            relation: {"public", "test_table"},
+            old_record: %{"id" => "2"},
+            record: %{"id" => "1", "value" => "from-wal"},
+            key: key,
+            log_offset: LogOffset.new(lsn, 0)
+          }
+        ])
+
+      assert :ok = ShapeLogCollector.handle_event(txn, ctx.stack_id)
+      refute_receive {^ref, :new_changes, _offset}, @receive_timeout
+
+      # Step 3: Snapshot known with xmin=101 > touch xid=100
+      # This is consistent with the earlier nil-snapshot assumption: when the
+      # query finally runs, it sees the WAL change.
+      send(consumer_pid, {:pg_snapshot_known, name, {101, 101, []}})
+
+      # Step 4: Move-in query completes with the visible row.
+      results_fn.(
+        [
+          [key, ["tag"], Jason.encode!(%{"value" => %{"id" => "1", "value" => "from-query"}})]
+        ],
+        {101, 101, []}
+      )
+
+      send(
+        consumer_pid,
+        {:query_move_in_complete, name, [key], {101, 101, []}}
+      )
+
+      assert_receive {^ref, :new_changes, _offset}, @receive_timeout
+
+      # Verify: the log should contain exactly one insert for this key, produced
+      # by the move-in query rather than the skipped WAL change.
+      shape_storage = Storage.for_shape(shape_handle, ctx.storage)
+
+      log_items = get_log_items_from_storage(LogOffset.last_before_real_offsets(), shape_storage)
+
+      assert Enum.any?(log_items, fn item ->
+               get_in(item, ["value", "value"]) == "from-query"
+             end)
+
+      refute Enum.any?(log_items, fn item ->
+               get_in(item, ["value", "value"]) == "from-wal"
+             end)
+    end
   end
 
   defp refute_storage_calls_for_txn_fragment(shape_handle) do
