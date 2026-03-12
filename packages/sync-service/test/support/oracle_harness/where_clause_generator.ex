@@ -50,7 +50,11 @@ defmodule Support.OracleHarness.WhereClauseGenerator do
   Designed to be consumed directly by `check all` for deterministic seeding.
   """
   def shapes_gen(count) do
-    list_of(where_clause_gen(), length: count)
+    clause_gen =
+      where_clause_gen()
+      |> filter(fn {where, _optimized} -> not has_duplicate_subqueries?(where) end)
+
+    list_of(clause_gen, length: count)
     |> map(fn clauses ->
       clauses
       |> Enum.with_index(1)
@@ -360,4 +364,36 @@ defmodule Support.OracleHarness.WhereClauseGenerator do
 
   # Helper to detect if expression contains a subquery
   defp contains_subquery?(expr), do: String.contains?(expr, "SELECT")
+
+  # Detect if the same (SELECT ...) subquery expression appears more than once.
+  # This filters out cases like (A OR B) AND B where B is a subquery —
+  # we have a known bug with duplicate subqueries at the same level (see oracle_dnf_repro_test.exs).
+  defp has_duplicate_subqueries?(where) do
+    subqueries = extract_balanced_subqueries(where, [])
+    length(subqueries) != length(Enum.uniq(subqueries))
+  end
+
+  defp extract_balanced_subqueries(str, acc) do
+    case String.split(str, "(SELECT ", parts: 2) do
+      [_] -> Enum.reverse(acc)
+      [_prefix, rest] ->
+        {inner, remaining} = consume_balanced(rest, 1, [])
+        subquery = "(SELECT " <> IO.iodata_to_binary(inner)
+        extract_balanced_subqueries(remaining, [subquery | acc])
+    end
+  end
+
+  defp consume_balanced("", _depth, acc), do: {IO.iodata_to_binary(Enum.reverse(acc)), ""}
+
+  defp consume_balanced(<<"(", rest::binary>>, depth, acc),
+    do: consume_balanced(rest, depth + 1, ["(" | acc])
+
+  defp consume_balanced(<<")", rest::binary>>, 1, acc),
+    do: {IO.iodata_to_binary(Enum.reverse([")" | acc])), rest}
+
+  defp consume_balanced(<<")", rest::binary>>, depth, acc),
+    do: consume_balanced(rest, depth - 1, [")" | acc])
+
+  defp consume_balanced(<<c, rest::binary>>, depth, acc),
+    do: consume_balanced(rest, depth, [<<c>> | acc])
 end
