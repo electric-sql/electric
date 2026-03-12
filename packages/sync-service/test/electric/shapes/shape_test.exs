@@ -4,6 +4,7 @@ defmodule Electric.Shapes.ShapeTest do
   alias Electric.Replication.Changes.{NewRecord, DeletedRecord, UpdatedRecord}
   alias Electric.Replication.Eval.Parser
   alias Electric.Replication.Changes
+  alias Electric.Shapes.DnfPlan
   alias Electric.Shapes.Shape
 
   @where Parser.parse_and_validate_expression!("value ILIKE '%matches%'",
@@ -294,6 +295,57 @@ defmodule Electric.Shapes.ShapeTest do
       assert Shape.convert_change(shape, update_to_new_record, extra_refs: extra_refs) == [
                Changes.convert_update(update_to_new_record, to: :new_record)
              ]
+    end
+
+    test "uses DNF metadata for streamed changes when a subquery is combined with OR" do
+      where =
+        Parser.parse_and_validate_expression!(
+          "parent_id IN (SELECT id FROM parent WHERE include_parent = true) OR include_child = true",
+          refs: %{
+            ["parent_id"] => :int4,
+            ["include_child"] => :bool,
+            ["$sublink", "0"] => {:array, :int4}
+          },
+          sublink_queries: %{0 => "SELECT id FROM parent WHERE include_parent = true"}
+        )
+
+      shape = %Shape{
+        root_table: {"public", "child"},
+        root_table_id: @relation_id,
+        where: where,
+        selected_columns: ["id", "parent_id", "include_child"],
+        explicitly_selected_columns: ["id", "parent_id", "include_child"],
+        shape_dependencies: [
+          %Shape{
+            root_table: {"public", "parent"},
+            root_table_id: 2,
+            selected_columns: ["id"],
+            explicitly_selected_columns: ["id"]
+          }
+        ]
+      }
+
+      {:ok, dnf_plan} = DnfPlan.compile(shape)
+
+      [converted] =
+        Shape.convert_change(
+          shape,
+          %NewRecord{
+            relation: {"public", "child"},
+            record: %{"id" => "1", "parent_id" => "1", "include_child" => "true"}
+          },
+          stack_id: "test_stack",
+          shape_handle: "test_handle",
+          extra_refs: {%{["$sublink", "0"] => MapSet.new()}, %{["$sublink", "0"] => MapSet.new()}},
+          dnf_plan: dnf_plan
+        )
+
+      subquery_tag =
+        :crypto.hash(:md5, "test_stack" <> "test_handle" <> "v:1")
+        |> Base.encode16(case: :lower)
+
+      assert converted.move_tags == [subquery_tag <> "/", "/1"]
+      assert converted.active_conditions == [false, true]
     end
 
     test "correctly converts updates to deleted records with subqueries if the referenced set has changed" do

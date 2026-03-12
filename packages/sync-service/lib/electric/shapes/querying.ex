@@ -3,19 +3,24 @@ defmodule Electric.Shapes.Querying do
   alias Electric.Utils
   alias Electric.Shapes.Shape
   alias Electric.Shapes.Consumer.Subqueries
+  alias Electric.Shapes.DnfPlan
   alias Electric.Telemetry.OpenTelemetry
 
   @value_prefix Subqueries.value_prefix()
   @null_sentinel Subqueries.null_sentinel()
 
-  def query_move_in(conn, stack_id, shape_handle, shape, {where, params}) do
+  def query_move_in(conn, stack_id, shape_handle, shape, {where, params}, opts \\ []) do
     table = Utils.relation_to_sql(shape.root_table)
+    metadata =
+      metadata_sql(shape, stack_id, shape_handle,
+        opts |> Keyword.put(:start_param_idx, length(params) + 1)
+      )
 
-    {json_like_select, _} =
-      json_like_select(shape, %{"is_move_in" => true}, stack_id, shape_handle)
+    {json_like_select, metadata_params} =
+      json_like_select(shape, %{"is_move_in" => true}, stack_id, shape_handle, metadata)
 
     key_select = key_select(shape)
-    tag_select = make_tags(shape, stack_id, shape_handle) |> Enum.join(", ")
+    tag_select = Enum.join(metadata.tags_sqls, ", ")
 
     query =
       Postgrex.prepare!(
@@ -24,7 +29,7 @@ defmodule Electric.Shapes.Querying do
         ~s|SELECT #{key_select}, ARRAY[#{tag_select}]::text[], #{json_like_select} FROM #{table} WHERE #{where}|
       )
 
-    Postgrex.stream(conn, query, params)
+    Postgrex.stream(conn, query, params ++ metadata_params)
     |> Stream.flat_map(& &1.rows)
   end
 
@@ -51,7 +56,8 @@ defmodule Electric.Shapes.Querying do
     limit = if limit = subset.limit, do: " LIMIT #{limit}", else: ""
     offset = if offset = subset.offset, do: " OFFSET #{offset}", else: ""
 
-    {json_like_select, params} = json_like_select(shape, headers, stack_id, shape_handle)
+    metadata = metadata_sql(shape, stack_id, shape_handle)
+    {json_like_select, params} = json_like_select(shape, headers, stack_id, shape_handle, metadata)
 
     query =
       Postgrex.prepare!(
@@ -120,7 +126,8 @@ defmodule Electric.Shapes.Querying do
       where =
         if not is_nil(shape.where), do: " WHERE " <> shape.where.query, else: ""
 
-      {json_like_select, params} = json_like_select(shape, [], stack_id, shape_handle)
+      metadata = metadata_sql(shape, stack_id, shape_handle)
+      {json_like_select, params} = json_like_select(shape, [], stack_id, shape_handle, metadata)
 
       query =
         Postgrex.prepare!(conn, table, ~s|SELECT #{json_like_select} FROM #{table} #{where}|)
@@ -177,13 +184,13 @@ defmodule Electric.Shapes.Querying do
            selected_columns: columns
          } = shape,
          additional_headers,
-         stack_id,
-         shape_handle
+         _stack_id,
+         _shape_handle,
+         metadata
        ) do
-    tags = make_tags(shape, stack_id, shape_handle)
     key_part = build_key_part(shape)
     value_part = build_value_part(columns)
-    headers_part = build_headers_part(root_table, additional_headers, tags)
+    headers_part = build_headers_part(root_table, additional_headers, metadata)
 
     # We're building a JSON string that looks like this:
     #
@@ -200,13 +207,13 @@ defmodule Electric.Shapes.Querying do
     query =
       ~s['{' || #{key_part} || ',' || #{value_part} || ',' || #{headers_part} || '}']
 
-    {query, []}
+    {query, metadata.params}
   end
 
-  defp build_headers_part(rel, headers, tags) when is_list(headers),
-    do: build_headers_part(rel, Map.new(headers), tags)
+  defp build_headers_part(rel, headers, metadata) when is_list(headers),
+    do: build_headers_part(rel, Map.new(headers), metadata)
 
-  defp build_headers_part({relation, table}, additional_headers, tags) do
+  defp build_headers_part({relation, table}, additional_headers, metadata) do
     headers = %{operation: "insert", relation: [relation, table]}
 
     headers =
@@ -216,12 +223,11 @@ defmodule Electric.Shapes.Querying do
       |> Utils.escape_quotes(?')
 
     headers =
-      if tags != [] do
+      if metadata.tags_sqls != [] do
         "{" <> json = headers
 
-        active_conditions = List.duplicate(true, length(tags)) |> Jason.encode!()
-        tags = Enum.join(tags, ~s[ || '","' || ])
-        ~s/{"active_conditions":#{active_conditions},"tags":["' || #{tags} || '"],/ <> json
+        ~s/{"active_conditions":#{active_conditions_json_expr(metadata)},"tags":#{tags_json_expr(metadata.tags_sqls)},/ <>
+          json
       else
         headers
       end
@@ -278,6 +284,63 @@ defmodule Electric.Shapes.Querying do
   defp pg_cast_column_to_text(column), do: ~s["#{Utils.escape_quotes(column)}"::text]
   defp pg_escape_string_for_json(str), do: ~s[to_json(#{str})::text]
   defp pg_coalesce_json_string(str), do: ~s[coalesce(#{str} , 'null')]
+
+  defp metadata_sql(shape, stack_id, shape_handle, opts \\ []) do
+    case dnf_plan_for_metadata(shape, opts) do
+      %DnfPlan{} = plan ->
+        tags_sqls = DnfPlan.tags_sql(plan, stack_id, shape_handle)
+
+        {active_conditions_sqls, params} =
+          case Keyword.get(opts, :views) do
+            nil ->
+              {DnfPlan.active_conditions_sql(plan), []}
+
+            views ->
+              {sqls, params, _next_idx} =
+                DnfPlan.active_conditions_sql_for_views(
+                  plan,
+                  views,
+                  shape.where.used_refs,
+                  Keyword.get(opts, :start_param_idx, 1)
+                )
+
+              {sqls, params}
+          end
+
+        %{tags_sqls: tags_sqls, active_conditions_sqls: active_conditions_sqls, params: params}
+
+      nil ->
+        %{tags_sqls: make_tags(shape, stack_id, shape_handle), active_conditions_sqls: nil, params: []}
+    end
+  end
+
+  defp dnf_plan_for_metadata(shape, opts) do
+    case Keyword.get(opts, :dnf_plan) do
+      %DnfPlan{has_negated_subquery: false} = plan ->
+        plan
+
+      %DnfPlan{} ->
+        nil
+
+      nil ->
+        case DnfPlan.compile(shape) do
+          {:ok, %DnfPlan{has_negated_subquery: false} = plan} -> plan
+          _ -> nil
+        end
+    end
+  end
+
+  defp active_conditions_json_expr(%{active_conditions_sqls: nil, tags_sqls: tags_sqls}) do
+    List.duplicate(true, length(tags_sqls)) |> Jason.encode!()
+  end
+
+  defp active_conditions_json_expr(%{active_conditions_sqls: sqls}) do
+    "' || to_json(ARRAY[" <> Enum.join(sqls, ", ") <> "]::boolean[])::text || '"
+  end
+
+  defp tags_json_expr(tags_sqls) do
+    "' || to_json(ARRAY[" <> Enum.join(tags_sqls, ", ") <> "]::text[])::text || '"
+  end
 
   # Generates SQL to namespace a value for tag hashing.
   # This MUST produce identical output to Subqueries.namespace_value/1 for

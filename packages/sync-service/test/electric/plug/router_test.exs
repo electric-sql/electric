@@ -2513,7 +2513,17 @@ defmodule Electric.Plug.RouterTest do
       # Should contain the data record and the snapshot-end control message
       assert length(response) == 2
 
-      assert %{"value" => %{"id" => "1", "include_child" => "true"}} =
+      tag =
+        :crypto.hash(:md5, opts[:stack_id] <> req.handle <> "v:1")
+        |> Base.encode16(case: :lower)
+
+      assert %{
+               "value" => %{"id" => "1", "include_child" => "true"},
+               "headers" => %{
+                 "tags" => [^tag <> "/", "/1"],
+                 "active_conditions" => [true, true]
+               }
+             } =
                Enum.find(response, &Map.has_key?(&1, "key"))
 
       task = live_shape_req(req, opts)
@@ -2527,6 +2537,8 @@ defmodule Electric.Plug.RouterTest do
 
       assert [%{"headers" => %{"event" => "move-out", "patterns" => [%{"pos" => 0}]}}] =
                Enum.filter(response, &match?(%{"headers" => %{"event" => _}}, &1))
+
+      refute Enum.any?(response, &Map.has_key?(&1, "key"))
     end
 
     @tag with_sql: [
@@ -2549,7 +2561,17 @@ defmodule Electric.Plug.RouterTest do
       # Should contain the data record and the snapshot-end control message
       assert length(response) == 2
 
-      assert %{"value" => %{"id" => "1", "include_child" => "true"}} =
+      tag =
+        :crypto.hash(:md5, opts[:stack_id] <> req.handle <> "v:1")
+        |> Base.encode16(case: :lower)
+
+      assert %{
+               "value" => %{"id" => "1", "include_child" => "true"},
+               "headers" => %{
+                 "tags" => [^tag <> "/", "/1"],
+                 "active_conditions" => [false, true]
+               }
+             } =
                Enum.find(response, &Map.has_key?(&1, "key"))
 
       task = live_shape_req(req, opts)
@@ -2566,6 +2588,7 @@ defmodule Electric.Plug.RouterTest do
         Enum.filter(response, &match?(%{"headers" => %{"event" => "move-in"}}, &1))
 
       assert length(move_in_events) >= 1
+      refute Enum.any?(response, &Map.has_key?(&1, "key"))
     end
 
     @tag with_sql: [

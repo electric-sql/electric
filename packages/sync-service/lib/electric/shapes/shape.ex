@@ -7,6 +7,7 @@ defmodule Electric.Shapes.Shape do
   alias Electric.Postgres.Inspector
   alias Electric.Replication.Eval.Parser
   alias Electric.Replication.Changes
+  alias Electric.Shapes.DnfPlan
   alias Electric.Shapes.WhereClause
   alias Electric.Utils
   alias Electric.Shapes.Shape.Validators
@@ -545,13 +546,23 @@ defmodule Electric.Shapes.Shape do
   Updates, on the other hand, may be converted to an "new record" or a "deleted record"
   if the previous/new version of the updated row isn't in the shape.
   """
-  def convert_change(shape, change, opts \\ [])
+  def convert_change(shape, change, opts \\ []) do
+    opts = Map.new(opts)
 
-  def convert_change(%__MODULE__{root_table: table}, %{relation: relation}, _)
+    case Map.get(opts, :dnf_plan) do
+      %DnfPlan{} = dnf_plan ->
+        convert_change_with_dnf(shape, change, Map.put(opts, :dnf_plan, dnf_plan))
+
+      _ ->
+        convert_change_legacy(shape, change, opts)
+    end
+  end
+
+  defp convert_change_legacy(%__MODULE__{root_table: table}, %{relation: relation}, _)
       when table != relation,
       do: []
 
-  def convert_change(
+  defp convert_change_legacy(
         %__MODULE__{where: nil, flags: %{selects_all_columns: true}} = shape,
         change,
         opts
@@ -564,9 +575,9 @@ defmodule Electric.Shapes.Shape do
     end
   end
 
-  def convert_change(%__MODULE__{}, %Changes.TruncatedRelation{} = change, _), do: [change]
+  defp convert_change_legacy(%__MODULE__{}, %Changes.TruncatedRelation{} = change, _), do: [change]
 
-  def convert_change(
+  defp convert_change_legacy(
         %__MODULE__{where: where, selected_columns: selected_columns} = shape,
         change,
         opts
@@ -593,7 +604,7 @@ defmodule Electric.Shapes.Shape do
     end
   end
 
-  def convert_change(
+  defp convert_change_legacy(
         %__MODULE__{where: where, selected_columns: selected_columns} = shape,
         %Changes.UpdatedRecord{old_record: old_record, record: record} = change,
         opts
@@ -612,6 +623,119 @@ defmodule Electric.Shapes.Shape do
 
     converted_changes
     |> Enum.map(&fill_move_tags(&1, shape, opts[:stack_id], opts[:shape_handle]))
+    |> Enum.map(&filter_change_columns(&1, selected_columns))
+    |> Enum.filter(&should_keep_change?/1)
+  end
+
+  defp convert_change_with_dnf(%__MODULE__{root_table: table}, %{relation: relation}, _opts)
+       when table != relation,
+       do: []
+
+  defp convert_change_with_dnf(
+         %__MODULE__{where: nil, flags: %{selects_all_columns: true}} = shape,
+         change,
+         opts
+       ) do
+    convert_change_legacy(shape, change, opts)
+  end
+
+  defp convert_change_with_dnf(%__MODULE__{}, %Changes.TruncatedRelation{} = change, _opts),
+    do: [change]
+
+  defp convert_change_with_dnf(
+         %__MODULE__{where: where, selected_columns: selected_columns},
+         %Changes.NewRecord{record: record} = change,
+         %{dnf_plan: dnf_plan, stack_id: stack_id, shape_handle: shape_handle} = opts
+       ) do
+    {_old_refs, new_refs} = opts[:extra_refs] || {%{}, %{}}
+
+    case DnfPlan.project_row(dnf_plan, record, new_refs, where, stack_id, shape_handle) do
+      {:ok, true, move_tags, active_conditions} ->
+        [
+          %{
+            change
+            | move_tags: move_tags,
+              active_conditions: active_conditions
+          }
+          |> filter_change_columns(selected_columns)
+        ]
+
+      {:ok, false, _move_tags, _active_conditions} ->
+        []
+    end
+  end
+
+  defp convert_change_with_dnf(
+         %__MODULE__{where: where, selected_columns: selected_columns},
+         %Changes.DeletedRecord{old_record: record} = change,
+         %{dnf_plan: dnf_plan, stack_id: stack_id, shape_handle: shape_handle} = opts
+       ) do
+    {old_refs, _new_refs} = opts[:extra_refs] || {%{}, %{}}
+
+    case DnfPlan.project_row(dnf_plan, record, old_refs, where, stack_id, shape_handle) do
+      {:ok, true, move_tags, active_conditions} ->
+        [
+          %{
+            change
+            | move_tags: move_tags,
+              active_conditions: active_conditions
+          }
+          |> filter_change_columns(selected_columns)
+        ]
+
+      {:ok, false, _move_tags, _active_conditions} ->
+        []
+    end
+  end
+
+  defp convert_change_with_dnf(
+         %__MODULE__{where: where, selected_columns: selected_columns},
+         %Changes.UpdatedRecord{old_record: old_record, record: record} = change,
+         %{dnf_plan: dnf_plan, stack_id: stack_id, shape_handle: shape_handle} = opts
+       ) do
+    {old_refs, new_refs} = opts[:extra_refs] || {%{}, %{}}
+
+    {:ok, old_included?, old_tags, old_active_conditions} =
+      DnfPlan.project_row(dnf_plan, old_record, old_refs, where, stack_id, shape_handle)
+
+    {:ok, new_included?, new_tags, new_active_conditions} =
+      DnfPlan.project_row(dnf_plan, record, new_refs, where, stack_id, shape_handle)
+
+    converted_changes =
+      case {old_included?, new_included?} do
+        {true, true} ->
+          [
+            %{
+              change
+              | move_tags: new_tags,
+                removed_move_tags: old_tags -- new_tags,
+                active_conditions: new_active_conditions
+            }
+          ]
+
+        {true, false} ->
+          [
+            %{
+              Changes.convert_update(change, to: :deleted_record)
+              | move_tags: old_tags,
+                active_conditions: old_active_conditions
+            }
+          ]
+
+        {false, true} ->
+          [
+            %{
+              Changes.convert_update(change, to: :new_record)
+              | move_tags: new_tags,
+                active_conditions: new_active_conditions
+            }
+          ]
+
+        {false, false} ->
+          []
+      end
+
+    converted_changes
     |> Enum.map(&filter_change_columns(&1, selected_columns))
     |> Enum.filter(&should_keep_change?/1)
   end

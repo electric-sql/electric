@@ -348,9 +348,27 @@ defmodule Electric.Shapes.QueryingTest do
         )
 
       assert [
-               %{value: %{value: "10", parent_id: "1"}, headers: %{tags: [^tag1]}},
-               %{value: %{value: "20", parent_id: nil}, headers: %{tags: [^tag_null]}},
-               %{value: %{value: "30", parent_id: "2"}, headers: %{tags: [^tag2]}}
+               %{
+                 value: %{value: "10", parent_id: "1"},
+                 headers: %{
+                   tags: [^tag1 <> "/", "/1"],
+                   active_conditions: [true, false]
+                 }
+               },
+               %{
+                 value: %{value: "20", parent_id: nil},
+                 headers: %{
+                   tags: [^tag_null <> "/", "/1"],
+                   active_conditions: [false, true]
+                 }
+               },
+               %{
+                 value: %{value: "30", parent_id: "2"},
+                 headers: %{
+                   tags: [^tag2 <> "/", "/1"],
+                   active_conditions: [true, false]
+                 }
+               }
              ] = result
     end
 

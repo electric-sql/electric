@@ -16,6 +16,7 @@ defmodule Electric.Shapes.DnfPlan do
   alias Electric.Replication.Eval.Runner
   alias Electric.Replication.Eval.SqlGenerator
   alias Electric.Shapes.Consumer.Subqueries
+  alias Electric.Utils
 
   defstruct [
     :disjuncts,
@@ -242,11 +243,42 @@ defmodule Electric.Shapes.DnfPlan do
       base_sql = info.sql
 
       if info.negated do
-        "(NOT (#{base_sql}))::boolean"
+        "(NOT COALESCE((#{base_sql})::boolean, false))::boolean"
       else
-        "(#{base_sql})::boolean"
+        "COALESCE((#{base_sql})::boolean, false)"
       end
     end)
+  end
+
+  @doc """
+  Generate per-position active_conditions SQL against a concrete subquery view map.
+
+  Used for move-in query rows, where subquery-backed positions must be evaluated
+  against `views_after_move` instead of live subqueries.
+  """
+  @spec active_conditions_sql_for_views(t(), map(), map(), pos_integer()) ::
+          {[String.t()], [list()], pos_integer()}
+  def active_conditions_sql_for_views(plan, views, used_refs, start_param_idx \\ 1) do
+    {sqls, params, next_param_idx} =
+      Enum.reduce(0..(plan.position_count - 1), {[], [], start_param_idx}, fn pos,
+                                                                               {sqls, params,
+                                                                                param_idx} ->
+        info = Map.fetch!(plan.positions, pos)
+
+        {base_sql, sql_params, next_param_idx} =
+          position_to_sql(info, nil, nil, views, used_refs, param_idx)
+
+        sql =
+          if info.negated do
+            "(NOT COALESCE((#{base_sql})::boolean, false))::boolean"
+          else
+            "COALESCE((#{base_sql})::boolean, false)"
+          end
+
+        {[sql | sqls], params ++ sql_params, next_param_idx}
+      end)
+
+    {Enum.reverse(sqls), params, next_param_idx}
   end
 
   @doc """
@@ -424,7 +456,7 @@ defmodule Electric.Shapes.DnfPlan do
 
   defp do_compile(shape) do
     with {:ok, decomposition} <- Decomposer.decompose(shape.where.eval) do
-      positions = enrich_positions(decomposition.subexpressions)
+      positions = enrich_positions(decomposition.subexpressions, shape)
 
       {:ok,
        %__MODULE__{
@@ -439,7 +471,7 @@ defmodule Electric.Shapes.DnfPlan do
     end
   end
 
-  defp enrich_positions(subexpressions) do
+  defp enrich_positions(subexpressions, shape) do
     Map.new(subexpressions, fn {pos, subexpr} ->
       {dep_index, subquery_ref, tag_columns} =
         if subexpr.is_subquery do
@@ -451,7 +483,7 @@ defmodule Electric.Shapes.DnfPlan do
       {pos,
        %{
          ast: subexpr.ast,
-         sql: SqlGenerator.to_sql(subexpr.ast),
+         sql: position_sql(subexpr.ast, subexpr.is_subquery, shape),
          is_subquery: subexpr.is_subquery,
          negated: subexpr.negated,
          dependency_index: dep_index,
@@ -505,5 +537,29 @@ defmodule Electric.Shapes.DnfPlan do
 
   defp has_negated_subquery?(positions) do
     Enum.any?(positions, fn {_pos, info} -> info.is_subquery and info.negated end)
+  end
+
+  defp position_sql(ast, false, _shape), do: SqlGenerator.to_sql(ast)
+
+  defp position_sql(
+         %Func{name: "sublink_membership_check", args: [testexpr, %Ref{path: path}]},
+         true,
+         shape
+       ) do
+    dep_index = path |> List.last() |> String.to_integer()
+    dependency = Enum.fetch!(shape.shape_dependencies, dep_index)
+
+    selected_columns =
+      dependency.explicitly_selected_columns
+      |> Enum.map_join(", ", &Utils.quote_name/1)
+
+    dependency_sql =
+      "SELECT " <>
+        selected_columns <>
+        " FROM " <>
+        Utils.relation_to_sql(dependency.root_table) <>
+        if(dependency.where, do: " WHERE " <> dependency.where.query, else: "")
+
+    SqlGenerator.to_sql(testexpr) <> " IN (" <> dependency_sql <> ")"
   end
 end

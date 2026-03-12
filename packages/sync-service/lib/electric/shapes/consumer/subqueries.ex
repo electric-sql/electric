@@ -83,7 +83,10 @@ defmodule Electric.Shapes.Consumer.Subqueries do
           end,
           query_fn: fn conn, _pg_snapshot, lsn ->
             rows =
-              Querying.query_move_in(conn, stack_id, shape_handle, shape, {where, params})
+              Querying.query_move_in(conn, stack_id, shape_handle, shape, {where, params},
+                dnf_plan: buffering_state.dnf_plan,
+                views: buffering_state.views_after_move
+              )
               |> Enum.map(fn [key, _tags, json] -> %QueryRow{key: key, json: json} end)
 
             send(consumer_pid, {:query_move_in_complete, rows, lsn})
@@ -216,7 +219,8 @@ defmodule Electric.Shapes.Consumer.Subqueries do
       Shape.convert_change(shape, change,
         stack_id: state.stack_id,
         shape_handle: state.shape_handle,
-        extra_refs: {views, views}
+        extra_refs: {views, views},
+        dnf_plan: state.dnf_plan
       )
     end)
     |> mark_last_change()
