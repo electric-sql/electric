@@ -20,6 +20,8 @@ if Mix.env() == :test do
     report_file: report_file_name,
     automatic_create_dir?: true,
     report_dir: "./junit"
+
+  config :stream_data, :inspect_opts, pretty: true, limit: :infinity
 end
 
 config :electric,

@@ -118,7 +118,7 @@ defmodule Electric.MixProject do
       {:excoveralls, "~> 0.18", only: [:test], runtime: false},
       {:junit_formatter, "~> 3.4", only: [:test], runtime: false},
       {:ex_doc, ">= 0.0.0", only: :dev, runtime: false},
-      {:stream_data, "~> 1.2", only: [:dev, :test]},
+      {:stream_data, "~> 1.3", only: [:dev, :test]},
       {:repatch, "~> 1.0", only: [:test]},
       {:electric_client, path: "../elixir-client", only: [:test], runtime: false}
     ]
