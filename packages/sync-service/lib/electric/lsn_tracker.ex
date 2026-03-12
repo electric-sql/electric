@@ -3,6 +3,7 @@ defmodule Electric.LsnTracker do
   import Electric, only: [is_stack_id: 1]
 
   @type stack_ref :: Electric.stack_id() | atom()
+  @global_lsn_updates_topic :global_lsn_updates
 
   # this function is idempotent to avoid problems in tests
   @spec initialize(stack_ref()) :: :ok
@@ -45,14 +46,48 @@ defmodule Electric.LsnTracker do
     initialize_last_processed_lsn(stack_ref, Lsn.from_integer(lsn))
   end
 
-  @spec get_last_processed_lsn(Electric.stack_id()) :: Lsn.t()
-  def get_last_processed_lsn(stack_id) do
+  @spec get_last_processed_lsn(stack_ref()) :: Lsn.t()
+  def get_last_processed_lsn(stack_ref) do
     [last_processed_lsn: lsn] =
-      stack_id
+      stack_ref
       |> table()
       |> :ets.lookup(:last_processed_lsn)
 
     lsn
+  end
+
+  @spec broadcast_last_seen_lsn(stack_ref(), Lsn.t() | non_neg_integer()) :: :ok
+  def broadcast_last_seen_lsn(stack_ref, lsn) when is_struct(lsn, Lsn) do
+    broadcast_last_seen_lsn(stack_ref, Lsn.to_integer(lsn))
+  end
+
+  def broadcast_last_seen_lsn(stack_ref, lsn) when is_integer(lsn) do
+    registry = Electric.StackSupervisor.registry_name(stack_ref)
+
+    if Process.whereis(registry) do
+      Registry.dispatch(registry, @global_lsn_updates_topic, fn entries ->
+        for {pid, _} <- entries, do: send(pid, {:global_last_seen_lsn, lsn})
+      end)
+    end
+
+    :ok
+  end
+
+  @spec subscribe_to_global_lsn_updates(stack_ref(), term()) :: {:ok, pid()} | {:error, term()}
+  def subscribe_to_global_lsn_updates(stack_ref, value \\ []) do
+    Registry.register(
+      Electric.StackSupervisor.registry_name(stack_ref),
+      @global_lsn_updates_topic,
+      value
+    )
+  end
+
+  @spec unsubscribe_from_global_lsn_updates(stack_ref()) :: :ok
+  def unsubscribe_from_global_lsn_updates(stack_ref) do
+    Registry.unregister(
+      Electric.StackSupervisor.registry_name(stack_ref),
+      @global_lsn_updates_topic
+    )
   end
 
   @doc """

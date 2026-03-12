@@ -1,7 +1,7 @@
 defmodule Electric.LsnTrackerTest do
   use ExUnit.Case, async: true
 
-  import Support.ComponentSetup, only: [with_stack_id_from_test: 1]
+  import Support.ComponentSetup, only: [with_registry: 1, with_stack_id_from_test: 1]
   alias Electric.LsnTracker
   alias Electric.Postgres.Lsn
 
@@ -71,6 +71,46 @@ defmodule Electric.LsnTrackerTest do
 
       # First call wins
       assert LsnTracker.get_last_processed_lsn(stack_id) == lsn1
+    end
+  end
+
+  describe "broadcast_last_seen_lsn/2" do
+    setup [:with_registry]
+
+    test "delivers messages to processes registered for global_lsn_updates", ctx do
+      LsnTracker.subscribe_to_global_lsn_updates(ctx.stack_id)
+
+      :ok = LsnTracker.broadcast_last_seen_lsn(ctx.stack_id, 42)
+
+      assert_receive {:global_last_seen_lsn, 42}
+    end
+
+    test "delivers to multiple registered processes", ctx do
+      test_pid = self()
+      LsnTracker.subscribe_to_global_lsn_updates(ctx.stack_id)
+
+      {other_pid, ref} =
+        spawn_monitor(fn ->
+          LsnTracker.subscribe_to_global_lsn_updates(ctx.stack_id)
+          send(test_pid, :registered)
+
+          receive do
+            {:global_last_seen_lsn, lsn} -> send(test_pid, {:got_lsn, lsn})
+          end
+        end)
+
+      assert_receive :registered
+
+      :ok = LsnTracker.broadcast_last_seen_lsn(ctx.stack_id, 99)
+
+      assert_receive {:global_last_seen_lsn, 99}
+      assert_receive {:got_lsn, 99}
+      assert_receive {:DOWN, ^ref, :process, ^other_pid, :normal}
+    end
+
+    test "is a no-op when no processes are registered", ctx do
+      assert :ok = LsnTracker.broadcast_last_seen_lsn(ctx.stack_id, 42)
+      refute_receive {:global_last_seen_lsn, _}
     end
   end
 end
