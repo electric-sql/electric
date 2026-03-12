@@ -101,24 +101,14 @@ defmodule Electric.ShapeCache.Storage do
   Since snapshot doesn't have an offset associated, the offsets are inferred at splice time, and the range is returned.
   Range is a tuple of {starting_offset, ending_offset}, with starting offset being right before the first item in
   the snapshot to match usage of `get_log_stream/3`
+
+  An optional `skip_row?` predicate can filter rows during splicing: it receives
+  `(key, tags)` and returns `true` if the row should be skipped.
   """
-  @callback append_move_in_snapshot_to_log!(name :: String.t(), writer_state()) ::
-              {inserted_range :: {LogOffset.t(), LogOffset.t()}, writer_state()} | no_return()
-
-  @doc """
-  Splice a move in snapshot into the main log with filtering.
-
-  Rows are filtered using the touch_tracker: if a row's key has been touched by a transaction
-  that is NOT visible in the snapshot, skip that row (stream has fresher data).
-
-  Returns the inserted range (excluding skipped rows) and updated writer state.
-  """
-  @callback append_move_in_snapshot_to_log_filtered!(
+  @callback append_move_in_snapshot_to_log!(
               name :: String.t(),
               writer_state(),
-              touch_tracker :: %{String.t() => pos_integer()},
-              snapshot :: {pos_integer(), pos_integer(), [pos_integer()]},
-              tags_to_skip :: MapSet.t(String.t())
+              skip_row? :: (String.t(), [String.t()] -> boolean())
             ) ::
               {inserted_range :: {LogOffset.t(), LogOffset.t()}, writer_state()} | no_return()
 
@@ -336,27 +326,13 @@ defmodule Electric.ShapeCache.Storage do
   end
 
   @impl __MODULE__
-  def append_move_in_snapshot_to_log!(name, {mod, writer_state}) do
-    {inserted_range, new_writer_state} = mod.append_move_in_snapshot_to_log!(name, writer_state)
-    {inserted_range, {mod, new_writer_state}}
-  end
-
-  @impl __MODULE__
-  def append_move_in_snapshot_to_log_filtered!(
+  def append_move_in_snapshot_to_log!(
         name,
         {mod, writer_state},
-        touch_tracker,
-        snapshot,
-        tags_to_skip
+        skip_row? \\ fn _, _ -> false end
       ) do
     {inserted_range, new_writer_state} =
-      mod.append_move_in_snapshot_to_log_filtered!(
-        name,
-        writer_state,
-        touch_tracker,
-        snapshot,
-        tags_to_skip
-      )
+      mod.append_move_in_snapshot_to_log!(name, writer_state, skip_row?)
 
     {inserted_range, {mod, new_writer_state}}
   end

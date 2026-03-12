@@ -152,35 +152,9 @@ defmodule Support.TestStorage do
   end
 
   @impl Electric.ShapeCache.Storage
-  def append_move_in_snapshot_to_log!(name, {parent, shape_handle, data, storage}) do
+  def append_move_in_snapshot_to_log!(name, {parent, shape_handle, data, storage}, skip_row?) do
     send(parent, {__MODULE__, :append_move_in_snapshot_to_log!, shape_handle, name})
-    {range, storage} = Storage.append_move_in_snapshot_to_log!(name, storage)
-    {range, {parent, shape_handle, data, storage}}
-  end
-
-  @impl Electric.ShapeCache.Storage
-  def append_move_in_snapshot_to_log_filtered!(
-        name,
-        {parent, shape_handle, data, storage},
-        touch_tracker,
-        snapshot,
-        tags_to_skip
-      ) do
-    send(
-      parent,
-      {__MODULE__, :append_move_in_snapshot_to_log_filtered!, shape_handle, name, touch_tracker,
-       snapshot, tags_to_skip}
-    )
-
-    {range, storage} =
-      Storage.append_move_in_snapshot_to_log_filtered!(
-        name,
-        storage,
-        touch_tracker,
-        snapshot,
-        tags_to_skip
-      )
-
+    {range, storage} = Storage.append_move_in_snapshot_to_log!(name, storage, skip_row?)
     {range, {parent, shape_handle, data, storage}}
   end
 

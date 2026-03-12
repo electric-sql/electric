@@ -895,7 +895,11 @@ defmodule Electric.ShapeCache.PureFileStorage do
     :ok
   end
 
-  def append_move_in_snapshot_to_log!(name, writer_state(opts: opts, writer_acc: acc) = state) do
+  def append_move_in_snapshot_to_log!(
+        name,
+        writer_state(opts: opts, writer_acc: acc) = state,
+        skip_row?
+      ) do
     starting_offset = WriteLoop.last_seen_offset(acc)
 
     writer_state(writer_acc: acc) =
@@ -908,11 +912,15 @@ defmodule Electric.ShapeCache.PureFileStorage do
         fn {file, offset} ->
           with {:meta, <<key_size::32, json_size::64, op_type::8, tag_count::16>>} <-
                  {:meta, IO.binread(file, 15)},
-               _tags = read_tags(file, tag_count),
+               tags = read_tags(file, tag_count),
                <<key::binary-size(key_size)>> <- IO.binread(file, key_size),
                <<json::binary-size(json_size)>> <- IO.binread(file, json_size) do
-            {[{offset, key_size, key, op_type, 0, json_size, json}],
-             {file, LogOffset.increment(offset)}}
+            if skip_row?.(key, tags) do
+              {[], {file, offset}}
+            else
+              {[{offset, key_size, key, op_type, 0, json_size, json}],
+               {file, LogOffset.increment(offset)}}
+            end
           else
             {:meta, :eof} ->
               {:halt, {file, offset}}
@@ -940,67 +948,6 @@ defmodule Electric.ShapeCache.PureFileStorage do
       <<tag::binary-size(tag_size)>> = IO.binread(file, tag_size)
       tag
     end
-  end
-
-  def append_move_in_snapshot_to_log_filtered!(
-        name,
-        writer_state(opts: opts, writer_acc: acc) = state,
-        touch_tracker,
-        snapshot,
-        tags_to_skip
-      ) do
-    starting_offset = WriteLoop.last_seen_offset(acc)
-
-    writer_state(writer_acc: acc) =
-      state =
-      Stream.resource(
-        fn ->
-          {File.open!(shape_snapshot_path(opts, name), [:read, :raw, :read_ahead]),
-           LogOffset.increment(starting_offset)}
-        end,
-        fn {file, offset} ->
-          with {:meta, <<key_size::32, json_size::64, op_type::8, tag_count::16>>} <-
-                 {:meta, IO.binread(file, 15)},
-               tags = read_tags(file, tag_count),
-               <<key::binary-size(key_size)>> <- IO.binread(file, key_size),
-               <<json::binary-size(json_size)>> <- IO.binread(file, json_size) do
-            # Check if this row should be skipped
-            if all_parents_moved_out?(tags, tags_to_skip) or
-                 Electric.Shapes.Consumer.MoveIns.should_skip_query_row?(
-                   touch_tracker,
-                   snapshot,
-                   key
-                 ) do
-              # Skip this row - don't increment offset
-              {[], {file, offset}}
-            else
-              # Include this row
-              {[{offset, key_size, key, op_type, 0, json_size, json}],
-               {file, LogOffset.increment(offset)}}
-            end
-          else
-            {:meta, :eof} ->
-              {:halt, {file, offset}}
-
-            _ ->
-              raise Storage.Error,
-                message: "Incomplete move-in snapshot file at #{shape_snapshot_path(opts, name)}"
-          end
-        end,
-        fn {file, _} ->
-          File.close(file)
-          FileInfo.delete(shape_snapshot_path(opts, name))
-        end
-      )
-      |> append_to_log!(state)
-
-    inserted_range = {starting_offset, WriteLoop.last_seen_offset(acc)}
-
-    {inserted_range, state}
-  end
-
-  defp all_parents_moved_out?(tags, tags_to_skip) do
-    tags != [] and Enum.all?(tags, &MapSet.member?(tags_to_skip, &1))
   end
 
   def append_control_message!(control_message, writer_state(writer_acc: acc) = state)
