@@ -120,8 +120,6 @@ defmodule Electric.Config do
     shape_db_synchronous:
       Electric.ShapeCache.ShapeStatus.ShapeDb.Connection.default!(:synchronous),
     shape_db_cache_size: Electric.ShapeCache.ShapeStatus.ShapeDb.Connection.default!(:cache_size),
-    shape_db_enable_stats: false,
-    shape_db_enable_memory_stats: false,
     exclude_spans: MapSet.new()
   ]
 

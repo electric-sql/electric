@@ -284,8 +284,6 @@ config :electric,
   shape_db_synchronous: env!("ELECTRIC_SHAPE_DB_SYNCHRONOUS", :string, nil),
   shape_db_cache_size:
     env!("ELECTRIC_SHAPE_DB_CACHE_SIZE", &Electric.Config.parse_human_readable_size!/1, nil),
-  shape_db_enable_stats: env!("ELECTRIC_SHAPE_DB_ENABLE_STATS", :boolean, nil),
-  shape_db_enable_memory_stats: env!("ELECTRIC_SHAPE_DB_ENABLE_MEMORY_STATS", :boolean, nil),
   exclude_spans:
     env!("ELECTRIC_EXCLUDE_SPANS", &Electric.Config.parse_comma_separated_set!/1, nil)
 

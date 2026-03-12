@@ -156,7 +156,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
   @impl NimblePool
   def init_worker(pool_state) do
     with {:ok, conn} <- init_worker_for_pool(pool_state) do
-      :ok = Statistics.worker_start(Keyword.get(pool_state, :stack_id))
+      :ok = Statistics.worker_start(pool_state)
       {:ok, conn, pool_state}
     end
   end
@@ -241,7 +241,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
     end)
 
     _ = close(conn)
-    :ok = Statistics.worker_stop(Keyword.get(pool_state, :stack_id))
+    :ok = Statistics.worker_stop(pool_state)
 
     {:ok, pool_state}
   end

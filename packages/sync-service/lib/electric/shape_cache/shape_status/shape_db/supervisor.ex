@@ -25,6 +25,10 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Supervisor do
     # NimblePool treats `worker_idle_timeout: nil` as no idle timeout
     write_pool_idle_timeout = if(exclusive_mode, do: nil, else: idle_timeout)
 
+    connection_count = :atomics.new(1, signed: false)
+
+    opts = Keyword.put(opts, :connection_count, connection_count)
+
     read_pool_spec =
       if exclusive_mode do
         Logger.notice("Starting ShapeDb in exclusive mode")
@@ -66,8 +70,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Supervisor do
             id: {:pool, :write}
           ),
           # Write buffer for batching SQLite writes to avoid timeout cascades.
-          {ShapeDb.WriteBuffer, opts},
-          {Task, fn -> ShapeDb.Statistics.initialize(stack_id) end}
+          {ShapeDb.WriteBuffer, opts}
         ]
       ])
 

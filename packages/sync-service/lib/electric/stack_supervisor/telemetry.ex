@@ -53,8 +53,6 @@ defmodule Electric.StackSupervisor.Telemetry do
         Telemetry.Metrics.last_value("electric.postgres.replication.slot_confirmed_flush_lsn_lag",
           unit: :byte
         ),
-        Telemetry.Metrics.last_value("electric.shape_db.sqlite.total_memory", unit: :byte),
-        Telemetry.Metrics.last_value("electric.shape_db.sqlite.disk_size", unit: :byte),
         Telemetry.Metrics.last_value("electric.shape_db.sqlite.connections")
       ]
     end
