@@ -788,6 +788,13 @@ defmodule Electric.Shapes.Api do
 
     Logger.debug("Client #{inspect(self())} is waiting for changes to #{shape_handle}")
 
+    # Bandit reuses handler processes across requests. This process may have accumulated
+    # garbage from previous requests or from building the response for this request.
+    # Before blocking in receive (potentially for up to long_poll_timeout seconds),
+    # run garbage collection so we don't hold onto memory while idle.
+    # Combined with handler_fullsweep_after config, this helps keep handler memory usage low.
+    :erlang.garbage_collect()
+
     receive do
       {^ref, :new_changes, latest_log_offset} ->
         # Stream new log since currently "held" offset
