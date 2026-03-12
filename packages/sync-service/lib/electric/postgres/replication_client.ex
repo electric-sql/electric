@@ -6,6 +6,7 @@ defmodule Electric.Postgres.ReplicationClient do
 
   alias Electric.Postgres.LogicalReplication.Decoder
   alias Electric.Postgres.Lsn
+  alias Electric.LsnTracker
   alias Electric.Postgres.ReplicationClient.MessageConverter
   alias Electric.Postgres.ReplicationClient.ConnectionSetup
   alias Electric.Replication.Changes.TransactionFragment
@@ -350,8 +351,17 @@ defmodule Electric.Postgres.ReplicationClient do
       "Primary Keepalive: wal_end=#{wal_end} (#{Lsn.from_integer(wal_end)}) reply=#{reply}"
     end)
 
+    in_transaction? = MessageConverter.in_transaction?(state.message_converter)
+
+    # Broadcast the server's latest WAL position to consumers with materializer
+    # dependencies. This covers silent-postgres periods where no transactions
+    # arrive but buffered move-in results may be ready to splice.
+    unless in_transaction? do
+      LsnTracker.broadcast_last_seen_lsn(state.stack_id, wal_end)
+    end
+
     case reply do
-      1 when MessageConverter.in_transaction?(state.message_converter) ->
+      1 when in_transaction? ->
         {:noreply, [encode_standby_status_update(state)], state}
 
       # if we are not in a transaction, advance the replication slot
@@ -361,7 +371,7 @@ defmodule Electric.Postgres.ReplicationClient do
         state = update_stored_wals(state, wal_end)
         {:noreply, [encode_standby_status_update(state)], state}
 
-      0 when MessageConverter.in_transaction?(state.message_converter) ->
+      0 when in_transaction? ->
         {:noreply, [], state}
 
       0 ->

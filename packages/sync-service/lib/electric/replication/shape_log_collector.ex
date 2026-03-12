@@ -231,7 +231,6 @@ defmodule Electric.Replication.ShapeLogCollector do
               end
             end
           ),
-        lsn_tracker_ref: LsnTracker.stack_ref(stack_id),
         registry_state: registry_state
       })
 
@@ -292,7 +291,7 @@ defmodule Electric.Replication.ShapeLogCollector do
   end
 
   def handle_call(:mark_as_ready, _from, state) do
-    lsn = LsnTracker.get_last_processed_lsn(state.lsn_tracker_ref)
+    lsn = LsnTracker.get_last_processed_lsn(state.stack_id)
     offset = LogOffset.new(Lsn.to_integer(lsn), :infinity)
     Electric.StatusMonitor.mark_shape_log_collector_ready(state.stack_id, self())
     {:reply, :ok, Map.put(state, :last_processed_offset, offset)}
@@ -562,7 +561,7 @@ defmodule Electric.Replication.ShapeLogCollector do
     OpenTelemetry.start_interval(:"shape_log_collector.set_last_processed_lsn.duration_µs")
 
     lsn = Lsn.from_integer(state.last_processed_offset.tx_offset)
-    LsnTracker.set_last_processed_lsn(state.lsn_tracker_ref, lsn)
+    LsnTracker.set_last_processed_lsn(state.stack_id, lsn)
 
     flush_tracker =
       case event do
@@ -572,6 +571,8 @@ defmodule Electric.Replication.ShapeLogCollector do
                 frag.change_count > 0,
                 do: id,
                 into: MapSet.new()
+
+          if event.commit, do: LsnTracker.broadcast_last_seen_lsn(state.stack_id, lsn)
 
           FlushTracker.handle_txn_fragment(
             state.flush_tracker,
