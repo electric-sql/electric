@@ -36,7 +36,13 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Statistics do
   end
 
   def current(stack_id) do
-    GenServer.call(name(stack_id), :statistics)
+    stack_id
+    |> name()
+    |> GenServer.whereis()
+    |> case do
+      nil -> {:error, "ShapeDb.Statistics for stack #{stack_id} is not running"}
+      pid when is_pid(pid) -> GenServer.call(pid, :statistics)
+    end
   end
 
   @doc """

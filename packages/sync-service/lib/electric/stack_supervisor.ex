@@ -380,11 +380,13 @@ defmodule Electric.StackSupervisor do
     registry_partitions =
       Keyword.get(config.tweaks, :registry_partitions, System.schedulers_online())
 
-    telemetry_child = Electric.StackSupervisor.Telemetry.configure(config)
+    telemetry_spec = Electric.StackSupervisor.Telemetry.configure(config)
 
     children =
       [
-        telemetry_child,
+        # put telemetry processes first so that they are torn down last and can
+        # continue reporting while the stack terminates.
+        telemetry_spec,
         {Electric.ProcessRegistry, partitions: registry_partitions, stack_id: stack_id},
         {Electric.StackConfig,
          stack_id: stack_id,
