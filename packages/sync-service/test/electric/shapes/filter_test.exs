@@ -988,5 +988,64 @@ defmodule Electric.Shapes.FilterTest do
 
       assert Filter.affected_shapes(filter, insert_not_in_subquery) == MapSet.new([])
     end
+
+    @tag with_sql: [
+           "CREATE TABLE IF NOT EXISTS or_parent (id INT PRIMARY KEY)",
+           "CREATE TABLE IF NOT EXISTS or_child (id INT PRIMARY KEY, par_id INT REFERENCES or_parent(id), value TEXT NOT NULL)"
+         ]
+    test "non-optimisable OR+subquery shape is affected by root table changes", %{
+      inspector: inspector
+    } do
+      # Shape with OR combining a subquery and a simple condition.
+      # OR is not optimisable, so the shape lands in other_shapes AND
+      # gets registered in the sublink inverted index. Root table changes
+      # must still be routed to this shape.
+      {:ok, shape} =
+        Shape.new("or_child",
+          inspector: inspector,
+          where: "par_id IN (SELECT id FROM or_parent) OR value = 'target'"
+        )
+
+      refs_fun = fn _shape ->
+        %{["$sublink", "0"] => MapSet.new([1, 2, 3])}
+      end
+
+      filter =
+        Filter.new(refs_fun: refs_fun)
+        |> Filter.add_shape("shape1", shape)
+
+      # Record matching the OR's simple condition (value = 'target')
+      insert_matching_value = %NewRecord{
+        relation: {"public", "or_child"},
+        record: %{"id" => "99", "par_id" => "99", "value" => "target"}
+      }
+
+      assert Filter.affected_shapes(filter, insert_matching_value) == MapSet.new(["shape1"])
+
+      # Record matching the OR's subquery condition (par_id in refs)
+      insert_matching_subquery = %NewRecord{
+        relation: {"public", "or_child"},
+        record: %{"id" => "10", "par_id" => "2", "value" => "other"}
+      }
+
+      assert Filter.affected_shapes(filter, insert_matching_subquery) == MapSet.new(["shape1"])
+
+      # Record matching neither condition
+      insert_no_match = %NewRecord{
+        relation: {"public", "or_child"},
+        record: %{"id" => "50", "par_id" => "99", "value" => "other"}
+      }
+
+      assert Filter.affected_shapes(filter, insert_no_match) == MapSet.new([])
+
+      # Update where new record matches but old doesn't
+      update_into_shape = %UpdatedRecord{
+        relation: {"public", "or_child"},
+        record: %{"id" => "50", "par_id" => "99", "value" => "target"},
+        old_record: %{"id" => "50", "par_id" => "99", "value" => "other"}
+      }
+
+      assert Filter.affected_shapes(filter, update_into_shape) == MapSet.new(["shape1"])
+    end
   end
 end
