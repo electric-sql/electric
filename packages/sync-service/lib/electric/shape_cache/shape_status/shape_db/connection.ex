@@ -5,6 +5,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
   alias Electric.ShapeCache.ShapeStatus.ShapeDb.Sqlite3
   alias Electric.ShapeCache.ShapeStatus.ShapeDb.Query
   alias Electric.ShapeCache.ShapeStatus.ShapeDb.PoolRegistry
+  alias Electric.ShapeCache.ShapeStatus.ShapeDb.Statistics
   alias Electric.Telemetry.OpenTelemetry
 
   require Logger
@@ -75,7 +76,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
             when is_reference(stmt) or
                    (is_tuple(stmt) and tuple_size(stmt) == 2 and elem(stmt, 0) == :esqlite3_stmt)
 
-  defstruct [:conn, :stmts]
+  defstruct [:conn, :mode, :stmts]
 
   def migrate(conn, opts) when is_raw_connection(conn) do
     # because we embed the storage version into the db path
@@ -154,6 +155,13 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
 
   @impl NimblePool
   def init_worker(pool_state) do
+    with {:ok, conn} <- init_worker_for_pool(pool_state) do
+      :ok = Statistics.worker_start(pool_state)
+      {:ok, conn, pool_state}
+    end
+  end
+
+  defp init_worker_for_pool(pool_state) do
     if Keyword.get(pool_state, :exclusive_mode, false) do
       init_worker_exclusive(pool_state)
     else
@@ -162,9 +170,11 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
   end
 
   defp init_worker_pooled(pool_state) do
+    mode = Keyword.get(pool_state, :mode, :readwrite)
+
     with {:ok, conn} <- open(pool_state),
-         stmts <- Query.prepare!(conn, pool_state) do
-      {:ok, %__MODULE__{conn: conn, stmts: stmts}, pool_state}
+         stmts <- Query.prepare!(conn, mode) do
+      {:ok, %__MODULE__{conn: conn, mode: mode, stmts: stmts}}
     end
   end
 
@@ -174,10 +184,12 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
   # over the same, single, connection since every connection is a separate db
   # in in-memory mode.
   defp init_worker_exclusive(pool_state) do
+    mode = :readwrite
+
     with {:ok, conn} <- open(pool_state, integrity_check: true),
          {:ok, _version} <- migrate(conn, pool_state),
-         stmts <- Query.prepare!(conn, Keyword.put(pool_state, :mode, :readwrite)) do
-      {:ok, %__MODULE__{conn: conn, stmts: stmts}, pool_state}
+         stmts <- Query.prepare!(conn, mode) do
+      {:ok, %__MODULE__{conn: conn, mode: mode, stmts: stmts}}
     end
   end
 
@@ -207,6 +219,31 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
   @impl NimblePool
   def handle_checkin(client_state, _from, _worker_state, pool_state) do
     {:ok, client_state, pool_state}
+  end
+
+  @impl NimblePool
+  def handle_ping(%__MODULE__{} = conn, pool_state) do
+    if Keyword.get(pool_state, :exclusive_mode, false) do
+      # keep the write connection alive in exclusive mode — closing it
+      # would destroy an in-memory database
+      {:ok, conn}
+    else
+      # the idle timeout is only enabled in non-exclusive mode, so we're free
+      # to close all the connections, including write.
+      {:remove, :idle}
+    end
+  end
+
+  @impl NimblePool
+  def terminate_worker(reason, conn, pool_state) do
+    Logger.debug(fn ->
+      ["Closing SQLite ", to_string(conn.mode), " connection for reason: ", inspect(reason)]
+    end)
+
+    _ = close(conn)
+    :ok = Statistics.worker_stop(pool_state)
+
+    {:ok, pool_state}
   end
 
   @max_recovery_attempts 2
@@ -279,6 +316,19 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
       _ ->
         []
     end
+  end
+
+  def close(%__MODULE__{conn: conn, stmts: stmts}) do
+    # Need to release all the prepared statements on the connection or the
+    # close doesn't actually release the resources.
+    stmts
+    |> Query.active_stmts()
+    |> Enum.each(fn {_name, stmt} ->
+      # For exqlite release/2 can return an error
+      :ok = Sqlite3.release(conn, stmt)
+    end)
+
+    close(conn)
   end
 
   def close(conn) when is_raw_connection(conn) do
@@ -494,7 +544,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
     end)
   end
 
-  # used in testing
+  # used in testing and logging
   def db_path(pool_state) do
     # Manage compatibility by embedding all versions into the db name rather
     # than embed the values in the db itself and then have to manage schema
@@ -529,14 +579,15 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
           path = Path.join(storage_dir, "meta/shape-db/#{version}.sqlite")
 
           with :ok <- File.mkdir_p(Path.dirname(path)) do
-            if Keyword.get(pool_state, :mode) == :write do
-              Logger.notice("Shape database file: #{inspect(path)}")
-            end
-
             {:ok, path}
           end
       end
     end
+  end
+
+  def db_path!(pool_state) do
+    {:ok, path} = db_path(pool_state)
+    path
   end
 
   defp now, do: System.monotonic_time()

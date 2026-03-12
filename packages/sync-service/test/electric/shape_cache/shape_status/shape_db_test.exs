@@ -545,33 +545,6 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDbTest do
     end
   end
 
-  describe "statistics" do
-    alias Electric.ShapeCache.ShapeStatus.ShapeDb.Statistics
-
-    @tag shape_db_opts: [enable_stats?: true, enable_memory_stats?: true]
-    test "export memory and disk usage when enabled", ctx do
-      {:ok, stats} = ShapeDb.statistics(ctx.stack_id)
-      enabled = Statistics.stats_enabled(ctx.stack_id)
-
-      if enabled.disk, do: assert(stats.disk_size > 0)
-      if enabled.memory, do: assert(stats.total_memory > 0)
-    end
-
-    @tag shape_db_opts: [enable_stats?: true]
-    test "only exports disk usage by default", ctx do
-      {:ok, stats} = ShapeDb.statistics(ctx.stack_id)
-      enabled = Statistics.stats_enabled(ctx.stack_id)
-
-      assert stats.total_memory == 0
-      if enabled.disk, do: assert(stats.disk_size > 0)
-    end
-
-    @tag shape_db_opts: [enable_stats?: false]
-    test "returns empty values if not enabled", ctx do
-      assert {:ok, %{total_memory: 0, disk_size: 0}} = ShapeDb.statistics(ctx.stack_id)
-    end
-  end
-
   describe "recovery" do
     test "resets state when db file is corrupted", ctx do
       {:ok, path} = ShapeDb.Connection.db_path(storage_dir: ctx.tmp_dir)
@@ -630,6 +603,81 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDbTest do
           :ok = ShapeDb.Connection.execute(conn, "COMMIT")
           raise RuntimeError, "source error"
         end)
+      end
+    end
+
+    test "crashing WriteBuffer restarts entire supervision tree", ctx do
+      assert supervisor_pid = GenServer.whereis(ShapeDb.Supervisor.name(ctx.stack_id))
+      super_ref = Process.monitor(supervisor_pid)
+      assert write_buffer_pid = GenServer.whereis(ShapeDb.WriteBuffer.name(ctx.stack_id))
+
+      buffer_ref = Process.monitor(write_buffer_pid)
+      Process.exit(write_buffer_pid, :some_reason)
+      assert_receive {:DOWN, ^buffer_ref, :process, ^write_buffer_pid, :some_reason}
+      assert_receive {:DOWN, ^super_ref, :process, ^supervisor_pid, _}
+    end
+  end
+
+  describe "pool scaling" do
+    @tag shape_db_opts: [connection_idle_timeout: 5, read_pool_size: 10]
+    test "scales to 0 if nothing is active", ctx do
+      parent = self()
+
+      n = ctx.shape_db_opts[:read_pool_size] || raise "missing :read_pool_size configuration"
+
+      pids =
+        for i <- 1..n do
+          start_supervised!(
+            {Task,
+             fn ->
+               ShapeDb.Connection.checkout!(ctx.stack_id, :test, fn _conn ->
+                 send(parent, {:ready, i})
+                 receive(do: (_msg -> :ok))
+               end)
+
+               send(parent, {:done, i})
+             end},
+            id: {:checkout, i}
+          )
+        end
+
+      for i <- 1..n, do: assert_receive({:ready, ^i})
+
+      assert :ok = assert_stats_match(ctx, connections: n)
+
+      for pid <- pids, do: send(pid, :done)
+      for i <- 1..n, do: assert_receive({:done, ^i})
+
+      assert :ok = assert_stats_match(ctx, connections: 0)
+    end
+
+    @tag shape_db_opts: [exclusive_mode: true, connection_idle_timeout: 10]
+    test "does not scale the pool in exclusive mode", ctx do
+      ShapeDb.Connection.checkout!(ctx.stack_id, :test, fn _conn ->
+        assert :ok = assert_stats_match(ctx, connections: 1)
+      end)
+
+      # refute the match rather than assert connections: 1 because the
+      # connections: 1 case is vulnerable to timing issues if the connection
+      # count lags
+      assert :error = assert_stats_match(ctx, connections: 0)
+      assert :ok = assert_stats_match(ctx, connections: 1)
+    end
+
+    defp assert_stats_match(ctx, match, repeats \\ 50)
+
+    defp assert_stats_match(_ctx, _match, 0) do
+      :error
+    end
+
+    defp assert_stats_match(ctx, match, repeats) do
+      {:ok, stats} = ShapeDb.statistics(ctx.stack_id)
+
+      if Enum.all?(match, fn {k, v} -> stats[k] == v end) do
+        :ok
+      else
+        Process.sleep(20)
+        assert_stats_match(ctx, match, repeats - 1)
       end
     end
   end

@@ -274,6 +274,8 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
 
   @impl GenServer
   def init(opts) do
+    # Trap exits to enable the terminate/2 callback, giving the buffer time
+    # to flush to the db before terminating
     Process.flag(:trap_exit, true)
 
     stack_id = Keyword.fetch!(opts, :stack_id)
@@ -323,6 +325,12 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
     flush_until_empty(state)
 
     {:noreply, schedule_poll(state), :hibernate}
+  end
+
+  def handle_info({:EXIT, _pid, reason}, state) do
+    # We're trapping exits to enable the terminate/2 callback, not to keep
+    # this process alive
+    {:stop, reason, state}
   end
 
   def handle_info(msg, state) do
