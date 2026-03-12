@@ -156,6 +156,8 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.WriteBuffer do
   @doc "Returns the number of pending operations in the buffer"
   def pending_operations_count(stack_id) do
     :ets.info(operations_table_name(stack_id), :size)
+  rescue
+    ArgumentError -> 0
   end
 
   @doc "Gives the change to the total count of shapes in the database once all buffered writes are applied"
