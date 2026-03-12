@@ -37,6 +37,13 @@ defmodule Electric.Shapes.Consumer do
   @stop_and_clean_timeout 30_000
   @stop_and_clean_reason ShapeCleaner.consumer_cleanup_reason()
 
+  @type initialize_shape_opts() :: %{
+          :action => :create | :restore,
+          optional(:otel_ctx) => map() | nil,
+          optional(:feature_flags) => [binary()],
+          optional(:is_subquery_shape?) => boolean()
+        }
+
   def name(stack_id, shape_handle) when is_binary(shape_handle) do
     ConsumerRegistry.name(stack_id, shape_handle)
   end
@@ -45,6 +52,13 @@ defmodule Electric.Shapes.Consumer do
     ref = make_ref()
     Registry.register(Electric.StackSupervisor.registry_name(stack_id), shape_handle, ref)
     ref
+  end
+
+  @spec initialize_shape(pid(), Shape.t(), initialize_shape_opts()) :: :ok
+  def initialize_shape(consumer_pid, shape, %{action: action} = opts)
+      when action in [:create, :restore] do
+    send(consumer_pid, {:initialize_shape, shape, opts})
+    :ok
   end
 
   @spec await_snapshot_start(Electric.stack_id(), Electric.shape_handle(), timeout()) ::
@@ -94,15 +108,15 @@ defmodule Electric.Shapes.Consumer do
     ConsumerRegistry.whereis(stack_id, shape_handle)
   end
 
-  def start_link(%{stack_id: stack_id, shape_handle: shape_handle} = config) do
-    GenServer.start_link(__MODULE__, config, name: name(stack_id, shape_handle))
+  def start_link(%{stack_id: stack_id, shape_handle: shape_handle} = _config) do
+    GenServer.start_link(__MODULE__, %{stack_id: stack_id, shape_handle: shape_handle},
+      name: name(stack_id, shape_handle)
+    )
   end
 
   @impl GenServer
-  def init(config) do
+  def init(%{stack_id: stack_id, shape_handle: shape_handle}) do
     activate_mocked_functions_from_test_process()
-
-    %{stack_id: stack_id, shape_handle: shape_handle} = config
 
     Process.set_label({:consumer, shape_handle})
     Process.flag(:trap_exit, true)
@@ -111,60 +125,13 @@ defmodule Electric.Shapes.Consumer do
     Logger.metadata(metadata)
     Electric.Telemetry.Sentry.set_tags_context(metadata)
 
-    {:ok, State.new(stack_id, shape_handle), {:continue, {:init_consumer, config}}}
+    # Shape initialization will be complete when we receive a message {:initialize_shape,
+    # <shape>, <shape_opts>} which the ShapeCache is expected to send as soon as this process
+    # is alive.
+    {:ok, State.new(stack_id, shape_handle)}
   end
 
   @impl GenServer
-  def handle_continue({:init_consumer, config}, state) do
-    %{
-      stack_id: stack_id,
-      shape_handle: shape_handle
-    } = state
-
-    {:ok, shape} = ShapeCache.ShapeStatus.fetch_shape_by_handle(stack_id, shape_handle)
-
-    state = State.initialize_shape(state, shape, config)
-
-    stack_storage = ShapeCache.Storage.for_stack(stack_id)
-    storage = ShapeCache.Storage.for_shape(shape_handle, stack_storage)
-
-    # TODO: Remove. Only needed for InMemoryStorage
-    case ShapeCache.Storage.start_link(storage) do
-      {:ok, _pid} -> :ok
-      :ignore -> :ok
-    end
-
-    writer = ShapeCache.Storage.init_writer!(storage, shape)
-
-    state = State.initialize(state, storage, writer)
-
-    if all_materializers_alive?(state) && subscribe(state, config.action) do
-      Logger.debug("Writer for #{shape_handle} initialized")
-
-      # We start the snapshotter even if there's a snapshot because it also performs the call
-      # to PublicationManager.add_shape/3. We *could* do that call here and avoid spawning a
-      # process if the shape already has a snapshot but the current semantics rely on being able
-      # to wait for the snapshot asynchronously and if we called publication manager here it would
-      # block and prevent await_snapshot_start calls from adding snapshot subscribers.
-
-      {:ok, _pid} =
-        Shapes.DynamicConsumerSupervisor.start_snapshotter(
-          stack_id,
-          %{
-            stack_id: stack_id,
-            shape: shape,
-            shape_handle: shape_handle,
-            storage: storage,
-            otel_ctx: config.otel_ctx
-          }
-        )
-
-      {:noreply, state}
-    else
-      stop_and_clean(state)
-    end
-  end
-
   def handle_continue(:stop_and_clean, state) do
     stop_and_clean(state)
   end
@@ -258,6 +225,51 @@ defmodule Electric.Shapes.Consumer do
   end
 
   @impl GenServer
+  def handle_info({:initialize_shape, shape, opts}, state) do
+    %{stack_id: stack_id, shape_handle: shape_handle} = state
+
+    state = State.initialize_shape(state, shape, opts)
+
+    stack_storage = ShapeCache.Storage.for_stack(stack_id)
+    storage = ShapeCache.Storage.for_shape(shape_handle, stack_storage)
+
+    # TODO: Remove. Only needed for InMemoryStorage
+    case ShapeCache.Storage.start_link(storage) do
+      {:ok, _pid} -> :ok
+      :ignore -> :ok
+    end
+
+    writer = ShapeCache.Storage.init_writer!(storage, shape)
+
+    state = State.initialize(state, storage, writer)
+
+    if all_materializers_alive?(state) && subscribe(state, opts.action) do
+      Logger.debug("Writer for #{shape_handle} initialized")
+
+      # We start the snapshotter even if there's a snapshot because it also performs the call
+      # to PublicationManager.add_shape/3. We *could* do that call here and avoid spawning a
+      # process if the shape already has a snapshot but the current semantics rely on being able
+      # to wait for the snapshot asynchronously and if we called publication manager here it would
+      # block and prevent await_snapshot_start calls from adding snapshot subscribers.
+
+      {:ok, _pid} =
+        Shapes.DynamicConsumerSupervisor.start_snapshotter(
+          stack_id,
+          %{
+            stack_id: stack_id,
+            shape: shape,
+            shape_handle: shape_handle,
+            storage: storage,
+            otel_ctx: Map.get(opts, :otel_ctx, nil)
+          }
+        )
+
+      {:noreply, state}
+    else
+      stop_and_clean(state)
+    end
+  end
+
   def handle_info({ShapeCache.Storage, :flushed, offset_in}, state) do
     {state, offset_txn} = State.align_offset_to_txn_boundary(state, offset_in)
 

@@ -242,7 +242,8 @@ defmodule Electric.ShapeCache do
     state = %{
       name: opts.name,
       stack_id: stack_id,
-      subscription: nil
+      subscription: nil,
+      feature_flags: Electric.StackConfig.lookup(stack_id, :feature_flags, [])
     }
 
     {:ok, state, {:continue, :wait_for_restore}}
@@ -278,7 +279,11 @@ defmodule Electric.ShapeCache do
   @impl GenServer
   def handle_call({:create_or_wait_shape_handle, shape, otel_ctx}, _from, state) do
     {shape_handle, latest_offset} =
-      maybe_create_shape(shape, %{stack_id: state.stack_id, otel_ctx: otel_ctx})
+      maybe_create_shape(shape, %{
+        stack_id: state.stack_id,
+        otel_ctx: otel_ctx,
+        feature_flags: state.feature_flags
+      })
 
     Logger.debug("Returning shape id #{shape_handle} for shape #{inspect(shape)}")
     {:reply, {shape_handle, latest_offset}, state}
@@ -302,7 +307,8 @@ defmodule Electric.ShapeCache do
           restore_shape_and_dependencies(shape_handle, shape, %{
             stack_id: state.stack_id,
             action: :restore,
-            otel_ctx: nil
+            otel_ctx: nil,
+            feature_flags: state.feature_flags
           }),
           state
         }
@@ -353,18 +359,17 @@ defmodule Electric.ShapeCache do
       })
     end)
 
-    feature_flags = Electric.StackConfig.lookup(stack_id, :feature_flags, [])
-
-    start_opts =
-      opts
-      |> Map.put(:shape_handle, shape_handle)
-      |> Map.put(:subqueries_enabled_for_stack?, "allow_subqueries" in feature_flags)
-
-    case Shapes.DynamicConsumerSupervisor.start_shape_consumer(stack_id, start_opts) do
+    case Shapes.DynamicConsumerSupervisor.start_shape_consumer(stack_id, %{
+           stack_id: stack_id,
+           shape_handle: shape_handle
+         }) do
       {:ok, consumer_pid} ->
+        Shapes.Consumer.initialize_shape(consumer_pid, shape, opts)
+
         # Now that the consumer process for this shape is running, we can finish initializing
         # the ShapeStatus record by recording a "last_read" timestamp on it.
         ShapeStatus.update_last_read_time_to_now(stack_id, shape_handle)
+
         {:ok, consumer_pid}
 
       {:error, _reason} = error ->
