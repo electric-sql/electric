@@ -515,7 +515,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
       end
     end
 
-    describe "#{module_name}.append_move_in_snapshot_to_log_filtered!/5" do
+    describe "#{module_name}.append_move_in_snapshot_to_log!/3 with skip_row?" do
       setup do
         {:ok, %{module: unquote(module)}}
       end
@@ -523,7 +523,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
       setup :start_storage
       setup :start_empty_snapshot
 
-      test "includes rows with keys in touch_tracker and visible txid", %{
+      test "skips rows where skip_row? returns true for owned keys", %{
         storage: opts,
         writer: writer
       } do
@@ -535,38 +535,32 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
 
         Storage.write_move_in_snapshot!(move_in_data, "test-move-in", opts)
 
-        # Touch tracker: key2 was touched by txid 120
-        touch_tracker = %{"key2" => 120}
+        # key2 is owned — skip_row? returns true for it unconditionally
+        owned_keys = MapSet.new(["key2"])
 
-        # Snapshot: {xmin: 100, xmax: 200, xip_list: [150]}
-        # txid 120 is visible in this snapshot (100 <= 120 < 200 and not in xip_list)
-        # This means the touch happened BEFORE the snapshot, so query data is fresher
-        snapshot = {100, 200, [150]}
-
-        tags_to_skip = MapSet.new()
+        skip_row? = fn key, _tags ->
+          MapSet.member?(owned_keys, key)
+        end
 
         {inserted_range, _writer} =
-          Storage.append_move_in_snapshot_to_log_filtered!(
+          Storage.append_move_in_snapshot_to_log!(
             "test-move-in",
             writer,
-            touch_tracker,
-            snapshot,
-            tags_to_skip
+            skip_row?
           )
 
         assert {%LogOffset{}, %LogOffset{}} = inserted_range
 
-        # All rows should be included (key2's touch was before snapshot)
+        # key2 is skipped, key1 and key3 are included
         stream = Storage.get_log_stream(LogOffset.first(), LogOffset.last(), opts)
         items = Enum.map(stream, &Jason.decode!(&1, keys: :atoms))
 
-        assert length(items) == 3
+        assert length(items) == 2
         assert Enum.any?(items, &(&1.id == "1" && &1.name == "row1"))
-        assert Enum.any?(items, &(&1.id == "2" && &1.name == "row2"))
         assert Enum.any?(items, &(&1.id == "3" && &1.name == "row3"))
       end
 
-      test "filters out rows with keys in touch_tracker and non-visible txid", %{
+      test "skips rows where skip_row? returns true", %{
         storage: opts,
         writer: writer
       } do
@@ -578,28 +572,23 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
 
         Storage.write_move_in_snapshot!(move_in_data, "test-move-in", opts)
 
-        # Touch tracker: key2 was touched by txid 150
-        touch_tracker = %{"key2" => 150}
+        # key2 should be skipped
+        owned_keys = MapSet.new(["key2"])
 
-        # Snapshot: {xmin: 100, xmax: 200, xip_list: [150]}
-        # txid 150 is NOT visible (in xip_list = in progress during snapshot)
-        # This means the touch happened AFTER the snapshot, so we have fresher data in stream
-        snapshot = {100, 200, [150]}
-
-        tags_to_skip = MapSet.new()
+        skip_row? = fn key, _tags ->
+          MapSet.member?(owned_keys, key)
+        end
 
         {inserted_range, _writer} =
-          Storage.append_move_in_snapshot_to_log_filtered!(
+          Storage.append_move_in_snapshot_to_log!(
             "test-move-in",
             writer,
-            touch_tracker,
-            snapshot,
-            tags_to_skip
+            skip_row?
           )
 
         assert {%LogOffset{}, %LogOffset{}} = inserted_range
 
-        # Only key1 and key3 should be included (key2 filtered out due to fresher data)
+        # Only key1 and key3 should be included (key2 filtered out)
         stream = Storage.get_log_stream(LogOffset.first(), LogOffset.last(), opts)
         items = Enum.map(stream, &Jason.decode!(&1, keys: :atoms))
 
@@ -622,18 +611,18 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
 
         Storage.write_move_in_snapshot!(move_in_data, "test-move-in", opts)
 
-        touch_tracker = %{}
-        snapshot = {100, 200, []}
         # Skip rows where ALL tags are in this set
         tags_to_skip = MapSet.new(["tag1", "tag2"])
 
+        skip_row? = fn _key, tags ->
+          tags != [] and Enum.all?(tags, &MapSet.member?(tags_to_skip, &1))
+        end
+
         {inserted_range, _writer} =
-          Storage.append_move_in_snapshot_to_log_filtered!(
+          Storage.append_move_in_snapshot_to_log!(
             "test-move-in",
             writer,
-            touch_tracker,
-            snapshot,
-            tags_to_skip
+            skip_row?
           )
 
         assert {%LogOffset{}, %LogOffset{}} = inserted_range
@@ -663,18 +652,18 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
 
         Storage.write_move_in_snapshot!(move_in_data, "test-move-in", opts)
 
-        touch_tracker = %{}
-        snapshot = {100, 200, []}
         # Only skip if ALL tags are in this set
         tags_to_skip = MapSet.new(["tag1", "tag2"])
 
+        skip_row? = fn _key, tags ->
+          tags != [] and Enum.all?(tags, &MapSet.member?(tags_to_skip, &1))
+        end
+
         {inserted_range, _writer} =
-          Storage.append_move_in_snapshot_to_log_filtered!(
+          Storage.append_move_in_snapshot_to_log!(
             "test-move-in",
             writer,
-            touch_tracker,
-            snapshot,
-            tags_to_skip
+            skip_row?
           )
 
         assert {%LogOffset{}, %LogOffset{}} = inserted_range
@@ -689,7 +678,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
         assert Enum.any?(items, &(&1.id == "2"))
       end
 
-      test "combines touch_tracker and tag filtering", %{
+      test "combines key ownership and tag filtering", %{
         storage: opts,
         writer: writer
       } do
@@ -702,19 +691,21 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
 
         Storage.write_move_in_snapshot!(move_in_data, "test-move-in", opts)
 
-        # key2 was touched by non-visible txid -> will be filtered by touch_tracker
-        touch_tracker = %{"key2" => 150}
-        snapshot = {100, 200, [150]}
+        # key2 is owned -> will be skipped by key check
+        owned_keys = MapSet.new(["key2"])
         # key3 will be filtered by tags (all tags in skip set)
         tags_to_skip = MapSet.new(["tag1"])
 
+        skip_row? = fn key, tags ->
+          (tags != [] and Enum.all?(tags, &MapSet.member?(tags_to_skip, &1))) or
+            MapSet.member?(owned_keys, key)
+        end
+
         {inserted_range, _writer} =
-          Storage.append_move_in_snapshot_to_log_filtered!(
+          Storage.append_move_in_snapshot_to_log!(
             "test-move-in",
             writer,
-            touch_tracker,
-            snapshot,
-            tags_to_skip
+            skip_row?
           )
 
         assert {%LogOffset{}, %LogOffset{}} = inserted_range
@@ -722,8 +713,8 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
         stream = Storage.get_log_stream(LogOffset.first(), LogOffset.last(), opts)
         items = Enum.map(stream, &Jason.decode!(&1, keys: :atoms))
 
-        # key1: no touch, no tags -> included
-        # key2: touched with non-visible txid (fresher data in stream) -> filtered by touch_tracker
+        # key1: not owned, no tags -> included
+        # key2: owned -> filtered by key ownership
         # key3: all tags in skip set -> filtered by tags
         # key4: has tag2 which is not in skip set -> included
         assert length(items) == 2
@@ -733,7 +724,7 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
         refute Enum.any?(items, &(&1.id == "3"))
       end
 
-      test "handles empty touch_tracker and tags_to_skip", %{
+      test "passes all rows when skip_row? always returns false", %{
         storage: opts,
         writer: writer
       } do
@@ -744,17 +735,13 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
 
         Storage.write_move_in_snapshot!(move_in_data, "test-move-in", opts)
 
-        touch_tracker = %{}
-        snapshot = {100, 200, []}
-        tags_to_skip = MapSet.new()
+        skip_row? = fn _key, _tags -> false end
 
         {inserted_range, _writer} =
-          Storage.append_move_in_snapshot_to_log_filtered!(
+          Storage.append_move_in_snapshot_to_log!(
             "test-move-in",
             writer,
-            touch_tracker,
-            snapshot,
-            tags_to_skip
+            skip_row?
           )
 
         assert {%LogOffset{}, %LogOffset{}} = inserted_range
@@ -779,17 +766,17 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
 
         Storage.write_move_in_snapshot!(move_in_data, "test-move-in", opts)
 
-        touch_tracker = %{}
-        snapshot = {100, 200, []}
         tags_to_skip = MapSet.new(["skip_tag"])
 
+        skip_row? = fn _key, tags ->
+          tags != [] and Enum.all?(tags, &MapSet.member?(tags_to_skip, &1))
+        end
+
         {inserted_range, _writer} =
-          Storage.append_move_in_snapshot_to_log_filtered!(
+          Storage.append_move_in_snapshot_to_log!(
             "test-move-in",
             writer,
-            touch_tracker,
-            snapshot,
-            tags_to_skip
+            skip_row?
           )
 
         assert {%LogOffset{}, %LogOffset{}} = inserted_range
@@ -812,23 +799,23 @@ defmodule Electric.ShapeCache.StorageImplimentationsTest do
 
         Storage.write_move_in_snapshot!(move_in_data, "test-move-in", opts)
 
-        touch_tracker = %{}
-        snapshot = {100, 200, []}
-        # Tags to skip set is non-empty
+        # Tags to skip set is non-empty, but rows have no tags
         tags_to_skip = MapSet.new(["tag1"])
 
+        skip_row? = fn _key, tags ->
+          tags != [] and Enum.all?(tags, &MapSet.member?(tags_to_skip, &1))
+        end
+
         {inserted_range, _writer} =
-          Storage.append_move_in_snapshot_to_log_filtered!(
+          Storage.append_move_in_snapshot_to_log!(
             "test-move-in",
             writer,
-            touch_tracker,
-            snapshot,
-            tags_to_skip
+            skip_row?
           )
 
         assert {%LogOffset{}, %LogOffset{}} = inserted_range
 
-        # Empty tag lists should NOT be filtered (not a full subset of tags_to_skip)
+        # Empty tag lists should NOT be filtered (skip_row? returns false for empty tags)
         stream = Storage.get_log_stream(LogOffset.first(), LogOffset.last(), opts)
         items = Enum.map(stream, &Jason.decode!(&1, keys: :atoms))
 
