@@ -33,11 +33,11 @@ jobs:
         uses: actions/cache@v4
         with:
           path: packages/electric-telemetry/deps
-          key: ${{ runner.os }}-electric-telemetry-deps-${{ env.MIX_ENV }}-${{ hashFiles('packages/electric-telemetry/mix.lock') }}
+          key: ${{ runner.os }}-${{ hashFiles('.tool-versions') }}-electric-telemetry-deps-${{ env.MIX_ENV }}-${{ hashFiles('packages/electric-telemetry/mix.lock') }}
           restore-keys: |
-            ${{ runner.os }}-electric-telemetry-deps-${{ env.MIX_ENV }}-${{ hashFiles('packages/electric-telemetry/mix.lock') }}
-            ${{ runner.os }}-electric-telemetry-deps-${{ env.MIX_ENV }}
-            ${{ runner.os }}-electric-telemetry-deps
+            ${{ runner.os }}-${{ hashFiles('.tool-versions') }}-electric-telemetry-deps-${{ env.MIX_ENV }}-${{ hashFiles('packages/electric-telemetry/mix.lock') }}
+            ${{ runner.os }}-${{ hashFiles('.tool-versions') }}-electric-telemetry-deps-${{ env.MIX_ENV }}
+            ${{ runner.os }}-${{ hashFiles('.tool-versions') }}-electric-telemetry-deps
 
       - name: Cache compiled code
         uses: actions/cache@v4
@@ -45,11 +45,11 @@ jobs:
           path: |
             packages/electric-telemetry/_build/*/lib
             !packages/electric-telemetry/_build/*/lib/electric_telemetry
-          key: "${{ runner.os }}-electric-telemetry-build-${{ env.MIX_ENV }}-${{ hashFiles('packages/electric-telemetry/mix.lock') }}"
+          key: "${{ runner.os }}-${{ hashFiles('.tool-versions') }}-electric-telemetry-build-${{ env.MIX_ENV }}-${{ hashFiles('packages/electric-telemetry/mix.lock') }}"
           restore-keys: |
-            ${{ runner.os }}-electric-telemetry-build-${{ env.MIX_ENV }}-${{ hashFiles('packages/electric-telemetry/mix.lock') }}
-            ${{ runner.os }}-electric-telemetry-build-${{ env.MIX_ENV }}
-            ${{ runner.os }}-electric-telemetry-build
+            ${{ runner.os }}-${{ hashFiles('.tool-versions') }}-electric-telemetry-build-${{ env.MIX_ENV }}-${{ hashFiles('packages/electric-telemetry/mix.lock') }}
+            ${{ runner.os }}-${{ hashFiles('.tool-versions') }}-electric-telemetry-build-${{ env.MIX_ENV }}
+            ${{ runner.os }}-${{ hashFiles('.tool-versions') }}-electric-telemetry-build
 
       - name: Install dependencies
         run: mix do deps.get + deps.compile

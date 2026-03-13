@@ -20,7 +20,6 @@ defmodule Electric.ShapeCache.ShapeStatus do
 
   import Electric, only: [is_stack_id: 1, is_shape_handle: 1]
 
-  require Electric.Shapes.Shape
   require Logger
 
   @type stack_id() :: Electric.stack_id()

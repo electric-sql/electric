@@ -1,9 +1,8 @@
 defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Migrator do
   use GenServer
+  require Logger
 
   alias Electric.ShapeCache.ShapeStatus.ShapeDb
-
-  require Logger
 
   @optimization_period :timer.minutes(60)
 
