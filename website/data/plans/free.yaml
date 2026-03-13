@@ -1,0 +1,27 @@
+name: Free
+order: 10
+type: tier
+
+price: 0
+priceQualifier: "/ month"
+
+# Hero card display
+who: "solo developers, side projects and prototypes"
+featuresTitle: "Features"
+features:
+  - "Fully managed"
+
+# Comparison table metrics
+monthlyActiveUsers: "~1K"
+writesPerMinute: "~20"
+operations: 1000000
+shapes: 10000
+sources: 10
+gbProcessed: 10
+shapeRetention: "1 week"
+
+# CTA
+ctaText: "Get started"
+ctaTextSmall: "Choose"
+ctaHref: "https://dashboard.electric-sql.cloud"
+ctaTheme: "brand"
