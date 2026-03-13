@@ -553,6 +553,27 @@ defmodule Electric.Shapes.Consumer do
     process_txn_fragment(txn_fragment, state)
   end
 
+  # Guard for replacement consumer receiving mid-transaction fragment.
+  # This is a defense-in-depth measure. The primary fix (in ShapeCleaner clause 3)
+  # triggers shape removal on consumer death, so the replacement consumer will
+  # soon be killed. But in the race window before removal fires, this guard
+  # prevents a crash.
+  defp handle_txn_fragment(
+         %TransactionFragment{has_begin?: false} = txn_fragment,
+         %State{pending_txn: nil} = state
+       ) do
+    Logger.warning(fn ->
+      "Consumer #{state.shape_handle} received mid-txn fragment without pending context, " <>
+        if(txn_fragment.commit, do: "marking as flushed", else: "skipping")
+    end)
+
+    if txn_fragment.commit do
+      consider_flushed(state, txn_fragment.last_log_offset)
+    else
+      state
+    end
+  end
+
   defp handle_txn_fragment(txn_fragment, state), do: process_txn_fragment(txn_fragment, state)
 
   defp process_txn_fragment(

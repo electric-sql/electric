@@ -1884,6 +1884,68 @@ defmodule Electric.Shapes.ConsumerTest do
                }
              ] = get_log_items_from_storage(LogOffset.last_before_real_offsets(), shape_storage)
     end
+
+    @tag allow_subqueries: false, with_pure_file_storage_opts: [flush_period: 1]
+    test "consumer does not crash when receiving mid-txn fragment without pending context", ctx do
+      # Regression test: when a consumer dies mid-transaction and a replacement starts,
+      # the replacement may receive subsequent fragments (has_begin?: false) without having
+      # seen the begin fragment. This used to crash on nil.consider_flushed?.
+      register_as_replication_client(ctx.stack_id)
+
+      {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape1, ctx.stack_id)
+      :started = ShapeCache.await_snapshot_start(shape_handle, ctx.stack_id)
+
+      consumer_pid = Shapes.Consumer.whereis(ctx.stack_id, shape_handle)
+      ref = Process.monitor(consumer_pid)
+
+      lsn = Lsn.from_integer(10)
+
+      # Send a mid-transaction fragment (no begin) without any prior begin fragment.
+      # This simulates the scenario where the replacement consumer receives fragment 2
+      # of a transaction that the previous consumer started processing.
+      mid_fragment_no_commit =
+        txn_fragment(
+          11,
+          lsn,
+          [
+            %Changes.NewRecord{
+              relation: {"public", "test_table"},
+              record: %{"id" => "1"},
+              log_offset: LogOffset.new(lsn, 2)
+            }
+          ],
+          []
+        )
+
+      assert :ok = ShapeLogCollector.handle_event(mid_fragment_no_commit, ctx.stack_id)
+
+      # Consumer should still be alive after receiving the mid-txn fragment
+      refute_receive {:DOWN, ^ref, :process, ^consumer_pid, _}, 200
+
+      # Now send a commit fragment (also without begin) to verify consider_flushed path
+      commit_fragment =
+        txn_fragment(
+          11,
+          lsn,
+          [
+            %Changes.NewRecord{
+              relation: {"public", "test_table"},
+              record: %{"id" => "2"},
+              log_offset: LogOffset.new(lsn, 4)
+            }
+          ],
+          has_commit?: true
+        )
+
+      assert :ok = ShapeLogCollector.handle_event(commit_fragment, ctx.stack_id)
+
+      # Consumer should still be alive after receiving the commit fragment
+      refute_receive {:DOWN, ^ref, :process, ^consumer_pid, _}, 200
+
+      # Verify the flush boundary was updated (commit fragment should call consider_flushed)
+      tx_offset = lsn |> Lsn.to_integer()
+      assert_receive {:flush_boundary_updated, ^tx_offset}, 1_000
+    end
   end
 
   defp refute_storage_calls_for_txn_fragment(shape_handle) do
