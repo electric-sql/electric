@@ -73,20 +73,46 @@ defmodule Electric.Shapes.ConsumerRegistry do
     :ets.insert_new(table, [{shape_handle, pid}])
   end
 
-  @spec publish(%{shape_handle() => term()}, t()) :: :ok
-  def publish(events_by_handle, _registry_state) when events_by_handle == %{} do
-    :ok
+  @spec publish(%{shape_handle() => term()}, t(), non_neg_integer()) :: MapSet.t(shape_handle())
+  def publish(events_by_handle, registry_state, max_retries \\ 3)
+
+  def publish(events_by_handle, _registry_state, _max_retries) when events_by_handle == %{} do
+    MapSet.new()
   end
 
-  def publish(events_by_handle, registry_state) do
+  def publish(events_by_handle, _registry_state, 0) do
+    Logger.warning(
+      "Max publish retries exceeded, marking remaining handles as undeliverable: #{inspect(Map.keys(events_by_handle))}"
+    )
+
+    MapSet.new(Map.keys(events_by_handle))
+  end
+
+  def publish(events_by_handle, registry_state, max_retries) do
     %{table: table} = registry_state
 
-    events_by_handle
-    |> Enum.map(fn {handle, event} ->
-      {handle, event, consumer_pid(handle, table) || start_consumer!(handle, registry_state)}
+    {to_broadcast, undeliverable} =
+      events_by_handle
+      |> Enum.reduce({[], MapSet.new()}, fn {handle, event}, {acc, undeliverable} ->
+        case consumer_pid(handle, table) || start_consumer!(handle, registry_state) do
+          nil ->
+            {acc, MapSet.put(undeliverable, handle)}
+
+          pid ->
+            {[{handle, event, pid} | acc], undeliverable}
+        end
+      end)
+
+    retries = broadcast(to_broadcast)
+
+    # Remove stale ETS entries for handles that need retry (crashed or suspended
+    # consumers) so that start_consumer! can register fresh replacements.
+    Enum.each(retries, fn {handle, _event} ->
+      :ets.delete(table, handle)
     end)
-    |> broadcast()
-    |> publish(registry_state)
+
+    retry_undeliverable = publish(retries, registry_state, max_retries - 1)
+    MapSet.union(undeliverable, retry_undeliverable)
   end
 
   @spec remove_consumer(shape_handle(), t()) :: :ok
