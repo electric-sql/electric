@@ -932,6 +932,7 @@ defmodule Electric.Shapes.Consumer do
   defp apply_subquery_event(state, event, opts \\ []) do
     previous_subquery_state = state.subquery_state
     {outputs, subquery_state} = Subqueries.handle_event(state.subquery_state, event)
+
     state = %{state | subquery_state: subquery_state}
     state = maybe_start_move_in_query(state, previous_subquery_state)
 

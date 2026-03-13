@@ -495,8 +495,9 @@ defmodule Electric.Shapes.Consumer.Materializer do
             # TODO: this is written as if it supports multiple selected columns, but it doesn't for now
             columns_present = Enum.any?(state.columns, &is_map_key(record, &1))
             has_tag_updates = removed_move_tags != []
+            has_ac_update = ac != nil and is_map_key(index, key)
 
-            if columns_present or has_tag_updates do
+            if columns_present or has_tag_updates or has_ac_update do
               old_entry = Map.fetch!(index, key)
 
               tag_indices =

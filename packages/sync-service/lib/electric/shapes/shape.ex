@@ -731,6 +731,20 @@ defmodule Electric.Shapes.Shape do
             }
           ]
 
+        {false, false} when old_active_conditions != new_active_conditions ->
+          # Position state changed but neither old nor new is fully included.
+          # The materializer needs to know about position changes even when
+          # the row isn't currently visible, so that future subquery moves
+          # can correctly re-evaluate inclusion.
+          [
+            %{
+              change
+              | move_tags: new_tags,
+                removed_move_tags: old_tags -- new_tags,
+                active_conditions: new_active_conditions
+            }
+          ]
+
         {false, false} ->
           []
       end
@@ -827,6 +841,9 @@ defmodule Electric.Shapes.Shape do
 
   defp should_keep_change?(%Changes.UpdatedRecord{removed_move_tags: removed_move_tags})
        when removed_move_tags != [], do: true
+
+  defp should_keep_change?(%Changes.UpdatedRecord{old_record: record, record: record, active_conditions: ac})
+       when ac != nil, do: true
 
   defp should_keep_change?(%Changes.UpdatedRecord{old_record: record, record: record}),
     do: false
