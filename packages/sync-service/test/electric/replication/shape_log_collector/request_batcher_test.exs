@@ -54,7 +54,7 @@ defmodule Electric.Replication.ShapeLogCollector.RequestBatcherTest do
 
     Repatch.allow(self(), request_batcher_pid)
 
-    :ok
+    %{request_batcher_pid: request_batcher_pid}
   end
 
   describe "add_shape/4" do
@@ -97,32 +97,38 @@ defmodule Electric.Replication.ShapeLogCollector.RequestBatcherTest do
 
   describe "batching behavior" do
     @tag processor_delay: 20
-    test "add is invalidated if removal occurs before update is submitted", %{stack_id: stack_id} do
-      task1 =
-        Task.async(fn ->
-          RequestBatcher.add_shape(stack_id, @shape_handle_1, @shape_1, :create)
-        end)
+    test "add is invalidated if removal occurs before update is submitted",
+         %{stack_id: stack_id, request_batcher_pid: request_batcher_pid} do
+      # This test requires a very precise ordering of events:
+      #
+      #   1. RequestBatcher.handle_call({:add_shape, @shape_handle_1, ...
+      #   2. RequestBatcher.handle_continue({:maybe_schedule_update, ... matches the 3rd clause
+      #   3. RequestBatcher.handle_call({:add_shape, @shape_handle_2, ...
+      #   4. RequestBatcher.handle_continue({:maybe_schedule_update, ... matches the 1rd clause
+      #   5. RequestBatcher.handle_call({:remove_shape, @shape_handle_2, ...
+      #
+      # We need to call remove_shape() not earlier than add_shape(@shape_handle_2) but not
+      # later than the async call of handle_processor_update_response() either.
+      # We simulate this by unwrapping GenServer.call() and doing all calls from the test
+      # process. This relies on BEAM's guarantee of message ordering for messages sent by the
+      # same process.
+
+      ref1 = inprocess_call(request_batcher_pid, {:add_shape, @shape_handle_1, @shape_1})
 
       expected_msg = {:processor_called, %{@shape_handle_1 => @shape_1}, MapSet.new()}
       assert_receive ^expected_msg
 
-      test_pid = self()
-
-      task2 =
-        Task.async(fn ->
-          send(test_pid, :adding_shape_2)
-          RequestBatcher.add_shape(stack_id, @shape_handle_2, @shape_2, :create)
-        end)
-
-      assert_receive :adding_shape_2
+      ref2 = inprocess_call(request_batcher_pid, {:add_shape, @shape_handle_2, @shape_2})
 
       assert :ok = RequestBatcher.remove_shape(stack_id, @shape_handle_2)
 
       expected_msg = {:processor_called, %{}, MapSet.new([@shape_handle_2])}
       assert_receive ^expected_msg
 
-      assert [:ok, {:error, "Shape #{@shape_handle_2} removed before registration completed"}] ==
-               Task.await_many([task1, task2], 500)
+      assert_receive {^ref1, :ok}
+
+      assert_receive {^ref2,
+                      {:error, "Shape #{@shape_handle_2} removed before registration completed"}}
     end
 
     @tag processor_delay: 20
@@ -164,5 +170,11 @@ defmodule Electric.Replication.ShapeLogCollector.RequestBatcherTest do
       assert [:ok, {:error, "failed to register"}, :ok] ==
                Task.await_many([task2, task3, task4], 500)
     end
+  end
+
+  defp inprocess_call(pid, payload) do
+    ref = Process.monitor(pid)
+    send(pid, {:"$gen_call", {self(), ref}, payload})
+    ref
   end
 end

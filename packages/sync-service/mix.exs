@@ -135,7 +135,7 @@ defmodule Electric.MixProject do
       # Pin protobuf to v0.13.x because starting with v0.14.0 it includes modules that conflict
       # with those of Protox (which itself is brought in by pg_query_ex).
       {:protobuf, "~> 0.13.0", override: true},
-      {:sentry, "~> 11.0"}
+      {:sentry, "~> 12.0"}
     ]
   end
 
