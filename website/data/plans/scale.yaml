@@ -1,0 +1,31 @@
+name: 'Scale'
+order: 30
+type: tier
+
+monthlyFee: 1999
+discountPercent: 20
+priceQualifier: '/ month'
+
+limits:
+  maxDatabases: 200
+  streamTTL: 'User-defined'
+  concurrentReadersPerStream: 10000
+  maxUsersPerWorkspace: 50
+
+featureGates:
+  postgresSubqueries: true
+
+commitment: '12 months'
+support: 'Direct access to founders'
+
+who: 'Lorem ipsum dolor sit amet'
+featuresTitle: 'Includes'
+features:
+  - 'Lorem ipsum'
+  - 'Lorem ipsum'
+  - 'Lorem ipsum'
+
+ctaText: 'Sign up now'
+ctaTextSmall: 'Sign up'
+ctaHref: 'https://dashboard.electric-sql.cloud?plan=scale'
+ctaTheme: 'brand'
