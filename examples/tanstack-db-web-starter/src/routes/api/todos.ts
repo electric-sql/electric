@@ -13,8 +13,9 @@ const serve = async ({ request }: { request: Request }) => {
 
   const originUrl = prepareElectricUrl(request.url)
   originUrl.searchParams.set(`table`, `todos`)
-  const filter = `'${session.user.id}' = ANY(user_ids)`
-  originUrl.searchParams.set(`where`, filter)
+  // Use parameterized query to prevent SQL injection
+  originUrl.searchParams.set(`where`, `$1 = ANY(user_ids)`)
+  originUrl.searchParams.set(`params[1]`, session.user.id)
 
   return proxyElectricRequest(originUrl)
 }
