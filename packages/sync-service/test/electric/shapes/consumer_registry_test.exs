@@ -405,5 +405,43 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
 
       assert_receive {:broadcast, :event}
     end
+
+    test "returns handles whose consumers crashed (non-suspend DOWN) for retry" do
+      parent = self()
+
+      # A consumer that crashes on receiving a message
+      {:ok, crash_sub} =
+        start_supervised(
+          {TestSubscriber,
+           fn _message, _state ->
+             exit(:boom)
+           end},
+          id: :crash_subscriber
+        )
+
+      # A healthy consumer
+      {:ok, healthy_sub} =
+        start_supervised(
+          {TestSubscriber,
+           fn message, state ->
+             send(parent, {:healthy, message})
+             {:reply, :ok, state}
+           end},
+          id: :healthy_subscriber
+        )
+
+      result =
+        ConsumerRegistry.broadcast([
+          {"crash-handle", :test_event, crash_sub},
+          {"healthy-handle", :test_event, healthy_sub}
+        ])
+
+      assert_receive {:healthy, :test_event}
+
+      # The crashed handle should appear in the retry map
+      assert Map.has_key?(result, "crash-handle")
+      # The healthy handle should NOT appear
+      refute Map.has_key?(result, "healthy-handle")
+    end
   end
 end
