@@ -1,5 +1,4 @@
 defmodule Electric.StackSupervisor.Telemetry do
-  require Logger
 
   def configure(config) do
     # Set shared OpenTelemetry span attributes for the given stack. They are stored in
