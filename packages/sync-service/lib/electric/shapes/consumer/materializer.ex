@@ -731,21 +731,33 @@ defmodule Electric.Shapes.Consumer.Materializer do
         new_ac = flip_active_conditions(ac, matched_positions, new_condition)
         new_included? = evaluate_inclusion(entry.tags, new_ac)
 
-        idx =
-          Map.put(idx, key, %{
-            entry
-            | active_conditions: new_ac,
-              included?: new_included?
-          })
-
         cond do
           entry.included? and not new_included? ->
+            # Remove row entirely to avoid stale tag_indices. If the row
+            # should become included again later, it will re-enter via a
+            # move-in query or NewRecord with fresh tags and ac.
+            ti = remove_row_from_tag_indices(ti, key, entry.tags)
+            idx = Map.delete(idx, key)
             {{idx, ti}, decrement_value(ce, entry.value, value_to_string(entry.value, state))}
 
           not entry.included? and new_included? ->
+            idx =
+              Map.put(idx, key, %{
+                entry
+                | active_conditions: new_ac,
+                  included?: new_included?
+              })
+
             {{idx, ti}, increment_value(ce, entry.value, value_to_string(entry.value, state))}
 
           true ->
+            idx =
+              Map.put(idx, key, %{
+                entry
+                | active_conditions: new_ac,
+                  included?: new_included?
+              })
+
             {{idx, ti}, ce}
         end
     end
