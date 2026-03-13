@@ -2824,9 +2824,12 @@ defmodule Electric.Plug.RouterTest do
       task = live_shape_req(req, ctx.opts)
       Postgrex.query!(ctx.db_conn, "UPDATE parent SET other_value = 10 WHERE id = 2")
 
-      tag =
+      tag_hash =
         :crypto.hash(:md5, ctx.stack_id <> req.handle <> "v:20")
         |> Base.encode16(case: :lower)
+
+      # DNF tags: "subquery_hash/row_predicate_slot"
+      tag = "#{tag_hash}/1"
 
       assert {_, 200,
               [
@@ -2856,7 +2859,11 @@ defmodule Electric.Plug.RouterTest do
       # Should contain the data record and the snapshot-end control message
       assert length(response) == 2
 
-      tag = :crypto.hash(:md5, ctx.stack_id <> req.handle <> "v:1") |> Base.encode16(case: :lower)
+      tag_hash =
+        :crypto.hash(:md5, ctx.stack_id <> req.handle <> "v:1") |> Base.encode16(case: :lower)
+
+      # DNF tags: "subquery_hash/row_predicate_slot"
+      tag = "#{tag_hash}/1"
 
       assert %{
                "value" => %{"id" => "1", "parentId" => "1", "Value" => "10"},
