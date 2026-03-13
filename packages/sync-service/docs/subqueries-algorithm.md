@@ -1,99 +1,560 @@
-Terms:
-- "to cover": when an operation is visible in the postgres shapsnot at which the query has been executed. It doesn't on it's own imply that the operation is present in the result set of the query.
-- "shadowed": a newer version of the row has been added to the shape log, so when splicing the query results into the log, we unconditionally skip the row if it has been shadowed. Shadowing for a key persists until a DELETE for that key is appended to the log.
-- "delegated": a covered operation for a key was skipped via [2], meaning the move-in query is authoritative for this key. All subsequent covered operations for a delegated key should also be skipped — the query's view is the authority. Delegation is per-move-in: a key can be delegated to one move-in and shadowed for another. An uncovered [1] operation on a delegated key transitions it from delegated to shadowed (WAL takes back authority).
-- "pending move-in": a move-in query has been executed and the results are in-flight, but not yet spliced into the log or we've spliced results but haven't finished filtering on them yet.
+# Subqueries Algorithm
 
-System invariants & behaviours:
-- INSERT->UPDATE->DELETE order for a single key: for a given key (inferred from table + PK), we never insert an update before an insert, or 2 inserts without a delete in between
-    - Every single client will be reading the log with no way to give feedback, so it's paramount that the log operations are correctly ordered and no duplicates are produced/operations are missed. __THIS INCLUDES THIS CODEBASE'S MATERIALIZER__ - it's "just another client", although with more direct access to the stream for efficiency.
-- Expected consistency model is a per-key eventual consistency, as modelled by directly applying the stream operations. This means a causally newer operation for a key must always occur after all prior operations for that key, and no operation for a key may be skipped unless we definitely know that the newer version will be added eventually.
-- Move-in queries back to postgres return at a defined but uncontrollable point in the replication stream, and we're trying to minimize replication stream processing buffering. Consumer's position in the replication stream may be arbitrarily behind or ahead the view of the database that the query had. It is the job of the consumer to reason about these timelines and place the results correctly and without duplicates
-- Move-in query result placement in the output operation log is done with skipping the rows that have already observed a newer operation in the stream (e.g. if query results have r1 and r2 at txn 10, but consumer has already seen a newer change to r2' at txn 11, then old r2 is skipped when splicing the query results into the log)
-- Move-out is applied immediately, because we see that operation in the correct order in the stream already, and it doesn't require query-back. If a move-out is observed over a pending move-in value, there are 2 possibilities:
-    - If the move-in query results alread inlcude the move-out, then we append the move-out message to the log and do nothing else
-    - If the move-in query results do not include the move-out, i.e. the move-out is after the move-in query results, then we append it to the log AND filter the move-in query results to remove the rows that should be no longer visible
-        - _Alternatively_, we could buffer at this point and only apply the move-out when the query results are appended to the log, but we're trying to minimize replication stream processing buffering.
-- Each row has a set of tags that are used by the client to reason about the row's lifecycle and apply the correct behavior when the row moves out of the shape. Tags are generated from the DNF-normalized where clause, where each tag corresponds to a disjunct. We're always sending an authoritative tag set & activation bitmap, not diffs, so move-in query results must generate complete tag information for each row.
-- **[P.shadow]** Once a row key is shadowed, all subsequent operations for that key must be appended to the log — the [2] skip must not be applied. The move-in query result for a shadowed key is unconditionally skipped when splicing, so if we also skip a stream operation for a shadowed key via [2], neither source provides the update and the row becomes stale. Shadowing for a key is released when a DELETE for that key is appended to the log, allowing future move-in queries to provide the row if it is re-inserted.
-- There are 3 operations, which may occur in some timing combination with move-ins/outs: INSERT, UPDATE, DELETE. If there are no active/recent moves for a shape, then the processing is trivial.
-- For all operations, given a move-out is applied immediately, we never propagate the operation if it can be considered moved out
-- INSERTs
-    - **[I.1]** If the pending move-in DOESN'T cover the insert, then we append the insert message to the log immediately and record this row key as shadowed [1].
-    - **[I.2]** If the pending move-in covers the insert, then we can check if the insert is expected to be present in the result set by executing the where clause. If it is going to be included, we can skip it and record the key as delegated to this move-in. [2]
-- DELETEs
-    - **[D.1]** If the pending move-in DOESN'T cover the delete, then we append the delete message to the log immediately and record this row key as shadowed [1].
-    - If the pending move-in covers the delete:
-        - **[D.2a]** If the key has been delegated to this move-in [2] (i.e. a prior covered INSERT/UPDATE for this key was skipped), then skip the delete as well. The query is authoritative for this key — it sees the deletion too and simply won't return the row. Both the INSERT and DELETE are handled by the query returning nothing.
-        - **[D.2b]** Otherwise (the key is in the log from before the move-in, or was appended via an uncovered [1] operation), append the delete immediately but don't record it as shadowed, as it won't be visible in the result set anyway.
-- UPDATEs - are more complicated because they might (a) change the row in a way that adds/removes itself to/from the shape, and (b) change the row in a way that touches the sublink value(s) which might be in-flight. There's also additional complexity for an `OR` - a given update might be affected by a move-in but also be already in the shape by the other `OR` clause. In that case, we're giving priority to the `OR` clause that is already in the shape in a way that UPDATEs are preferred to INSERTs/DELETEs.
-    - (a) Update doesn't touch any sublink values, but references a moved-in value
-        - **[Ua.1]** If the pending move-in DOESN'T cover the update, then we append the update message to the log immediately and record this row key as shadowed [1].
-        - **[Ua.2]** If the pending move-in covers the update, then we can check if the update is expected to be present in the result set by executing the where clause. If it is going to be included, we can skip it. [2]
-    - (b) Update updates a sublink value
-        - **[Ub.0]** If an updated value has been moved out prior to this, then we skip the update
-        - If old value is NOT in the linked value set and new value has a pending move-in, then convert the update to insert and:
-            - **[Ub.1a]** If pending move-in doesn't cover the update, then we append the update message to the log immediately and record this row key as shadowed [1].
-            - **[Ub.1b]** If pending move-in covers the update, then we can check if the update is expected to be present in the result set by executing the where clause. If it is going to be included, we can skip it. [2]
-        - If old value is in the linked value set and new value has a pending move-in, then keep update as update and:
-            - **[Ub.2a]** If pending move-in doesn't cover the update, then we append the update message to the log immediately and record this row key as shadowed [1].
-            - **[Ub.2b]** If pending move-in covers the update, then we can check if the update is expected to be present in the result set by executing the where clause. Since it's a linked value change, the upcoming covering move-in will return this row with the new value as an INSERT when we've already seen the old value as an INSERT. To avoid this, append the update to the log, and shadow.
-        - If old value is one of the pending move-in values and the new value is in the linked value set, then:
-            - **[Ub.3a]** If pending move-in doesn't cover the update, then convert the update to insert, append to the log immediately and record this row key as shadowed [1].
-            - **[Ub.3b]** If pending move-in covers the update, then it won't be present in the result set of the move-in (because link value has changed), so we convert it to insert and append to the log immediately, but don't record this row key as shadowed.
-        - If old value is one of the pending move-in values and the new value is NOT in the linked value set,
-            - **[Ub.4a]** If pending move-in doesn't cover the update, then it might be present in the result set, so we don't append it at all, but record this row key as shadowed for it to be skipped [1].
-            - **[Ub.4b]** If pending move-in covers the update, then it won't be present in the result set of the move-in (because link value has changed), so we skip it
-        - If old value is one of the pending move-in values (A) AND the new value is one of the pending move-in values (B), then we need to check whether the move-ins are the same or different.
-            - If pending move-ins are the same, then we
-                - **[Ub.5a]** If pending move-in doesn't cover the update, then we convert to insert and append to the log immediately and record this row key as shadowed [1].
-                - **[Ub.5b]** If pending move-in covers the update, then we can check if the update is expected to be present in the result set by executing the where clause. If it is going to be included, we can skip it. [2]
-            - If pending move-ins are different, then one is definitely ahead of the other
-                - **[Ub.6a]** If update is covered by both move-ins, then we can check if the update is expected to be present in the result set by executing the where clause. If it is going to be included, we can skip it. [2]
-                - **[Ub.6b]** If update is not covered by both move-ins, then we convert to insert and append to the log immediately, and record this row key as shadowed for both move-ins. [1]
-                - **[Ub.6c]** If update is covered by (B) but not (A), then it (A) will return this row with the old value, and (B) will return this row with the new value. We thus check if this update will be included in the result set of (B). If it is, we can skip it. [2], otherwise we convert to insert and append to the log immediately. In both cases we record this row key as shadowed for move-in (A) (because it will be either covered by the update or result set of (B))
-                - **[Ub.6d]** If update is covered by (A) but not (B), then move-in A's query sees the row with new_value. But new_value belongs to move-in B's linked set, not A's -> move-in A won't return this row. Move-in B's query sees the row with old_value. But old_value belongs to move-in A's linked set, not B's -> move-in B won't return this row either. Neither query captures the row, yet the row with new_value should be in the shape. So: convert to insert, append to log immediately, and shadow for both move-ins [1].
+This document describes the algorithm Electric uses to maintain a consistent shape log when a shape's WHERE clause contains subqueries. The subquery's result set can change at any time (rows move in and out), and the algorithm ensures the shape log remains correct, ordered, and duplicate-free for all consumers.
 
-- On delegation and covered INSERT+DELETE pairs:
-  When a move-in's snapshot covers both an INSERT and a subsequent DELETE for the same key, the query sees the net result (nothing) and won't return the row. Without delegation tracking, the INSERT is skipped via [2] ("the query will handle it") but the DELETE is appended (old rule: "always append covered DELETEs"). This produces an orphan DELETE — a DELETE in the log with no preceding INSERT, violating the INSERT→UPDATE→DELETE ordering invariant.
-  The "delegated" set fixes this: when we skip an INSERT via [2], we record the key as delegated (query-authoritative). When the covered DELETE arrives for a delegated key, we also skip it. The query's view is consistent — it sees INSERT+DELETE = nothing, returns nothing, and nothing appears in the log. Both operations are "handled" by the query returning an empty result for this key.
-  If an uncovered operation [1] arrives for a delegated key (e.g., a newer INSERT after the snapshot), the key transitions from delegated to shadowed — the WAL stream takes back authority. The move-in query result for this key will be skipped (shadowed), and the WAL stream provides the authoritative version.
+---
 
-- On mutual exclusion of concurrent move-in queries for different disjuncts:
-  Move-in queries for different disjuncts could theoretically produce a gap where a row matching both new linked values is excluded by both queries' NOT(other_disjunct) clauses. This doesn't happen because replication stream processing is sequential: when the first move-in event is processed, the second disjunct's linked value set hasn't been updated yet, so the first query's NOT clause doesn't exclude the row. By the time the second move-in is processed, the first disjunct's linked values already include the new value, so the second query correctly skips the row via NOT.
+## Table of Contents
 
-- On tag lifecycle for rows matching multiple disjuncts:
-  Tags are always sent as complete sets (all disjuncts) with an activation bitmap (which disjuncts are TRUE). When a move-in adds a new linked value that causes an already-present row to match an additional disjunct, a "move-in tag activation" message is sent to the client to update the activation bitmap. The client already has the full tag set and can recalculate references. Move-out events similarly update tag activation. A row with no active disjuncts is implicitly deleted on the client side - it is not visible, and the next visible update or move-in will be sent as an INSERT.
+1. [Summary](#summary)
+2. [Key Concepts & Terminology](#key-concepts--terminology)
+3. [System Invariants](#system-invariants)
+4. [Visual Explanation](#visual-explanation)
+5. [Pseudocode](#pseudocode)
+6. [Detailed Case Analysis](#detailed-case-analysis)
+7. [Additional Invariants & Edge Cases](#additional-invariants--edge-cases)
 
-- On nil vs known snapshots and coverage:
-  A nil snapshot (query hasn't obtained a connection yet) is NOT the same as "not covered." Since the query will execute at a future point, its snapshot will be after all currently-processing operations, meaning those operations WILL be visible (covered) when the query runs. The coverage case analysis above must treat nil-snapshot move-ins as "will cover" rather than "does not cover." Only a known snapshot that precedes the transaction's xid constitutes genuine non-coverage.
+---
 
-- On move-in queries, value disjointness, and snapshot-ordered splice:
-  Move-in queries are scoped to a fixed delta of newly-added linked values via IN (...). Two move-ins for different values are still disjoint by queried value (for the same disjunct), so they do not overlap each other merely by targeting the same linked value set. However, disjointness by queried value does not by itself imply that every row returned by the move-in is a fresh insertion relative to the shape log. A returned row may already be present in the log due to initial query results, an older move-in, or a covered stream operation that is earlier than the query snapshot but has not yet been observed by the consumer at the time the query finishes. Therefore, move-in query results must not be spliced into the log immediately on query completion. Instead, they are spliced only at the snapshot-ordered insertion point defined below. At that point, all operations visible to the query snapshot have either already been appended to the log or have delegated authority to the move-in query, so emitting non-shadowed query rows as inserts is again safe.
+## Summary
 
-- On why snapshot-ordered splice is required even for disjoint move-ins:
-  Consider a row already in the shape log via linked value A. A later update changes it to linked value B, where B has just moved in. The move-in query for B is disjoint from prior move-ins by value, but its snapshot may still see the row after the A -> B update. If the query result is inserted before the consumer has observed the full prefix visible to that snapshot, the row can be emitted as a duplicate INSERT even though the stream should have produced an UPDATE for the already-present key. Snapshot-ordered splicing fixes this by ensuring that all earlier-visible stream operations are known before the move-in is allowed to materialize. At splice time, either the earlier stream operation has already been appended and the key is shadowed, or authority for the key has been consistently delegated to the move-in. In either case, there is a single authoritative source for the key.
+Electric streams a subset of a Postgres table (a "shape") to clients via an append-only operation log. When the shape's WHERE clause contains a subquery (e.g., `WHERE parent_id IN (SELECT id FROM parent WHERE active)`), the set of matching rows can change not just from direct edits to the main table, but also from changes to the *subquery table*. When new values enter the subquery result (a "move-in"), Electric must query Postgres to discover which main-table rows now match. When values leave the subquery result (a "move-out"), those rows must be removed.
 
-- On move-out control messages and per-key ordering:
-  Move-outs are applied as pattern-based control messages (matching rows by tag), not as per-key DELETE operations. The client interprets a move-out control message as removing all rows whose tags match the pattern. For the purposes of the INSERT→UPDATE→DELETE ordering invariant, a move-out control message acts as a logical DELETE for all affected keys. A subsequent INSERT for any of those keys (whether from WAL or a new move-in query) is valid because it follows the logical DELETE.
+The core challenge is that **the move-in query executes asynchronously** against a Postgres snapshot that may be arbitrarily ahead of or behind the consumer's current position in the WAL replication stream. The algorithm must reconcile these two timelines (WAL stream and query snapshot) to produce a single, correctly-ordered log with no duplicates and no missed operations.
 
-- On UPDATE operations and WHERE clause evaluation:
-  A WAL UPDATE may change the row such that it enters or leaves the shape. When the old record does not match the shape's WHERE clause but the new record does, the UPDATE is equivalent to an INSERT (the row is new to the shape). When the old record matches but the new record does not, the UPDATE is equivalent to a DELETE (the row left the shape). When neither matches, the UPDATE is irrelevant and is not propagated. This applies independently of sublink changes — any column change that affects WHERE clause matching can cause these conversions. The case analysis for sublink changes (section (b) above) describes the sublink-specific scenarios, but the general WHERE clause evaluation applies to all UPDATEs and may produce any of these conversions.
+The algorithm works by:
 
-- On the linked value set and WHERE clause evaluation timing:
-  The linked value set (which values are currently active for each subquery) is updated eagerly when a transaction is processed — before evaluating individual changes within that transaction. This means the WHERE clause evaluation for a change sees the post-transaction linked value set, not the pre-transaction one. When a move-in is pending, the newly moved-in value is already in the linked set, so a naive WHERE clause evaluation would incorrectly treat rows referencing that value as "already in the shape." To prevent premature emissions, pending move-in values must be excluded from the linked set used for WHERE clause evaluation of stream operations (though not from the set used for move-in query result evaluation). Without this exclusion, the consumer would emit rows that the move-in query will also return, producing duplicates.
+1. **Immediately applying move-outs** as control messages (no query needed).
+2. **Firing an async query to Postgres** for move-ins, scoped to the new values.
+3. **Classifying each WAL operation** during the query's flight as either "covered" (visible to the query snapshot) or "uncovered" (not visible), and deciding whether to append it to the log or delegate authority to the query.
+4. **Tracking per-key authority** via two sets: the *shadow set* (WAL is authoritative) and the *delegated set* (query is authoritative).
+5. **Splicing query results** into the log at the correct snapshot-ordered position, skipping shadowed keys.
+6. **Garbage collecting** transient state once all move-ins have resolved.
 
-- On shadow set garbage collection:
-  The shadow set tracks which keys have been emitted to the log, so that move-in query results can skip those keys. When no move-ins are active (no pending queries, no in-flight filtering), the shadow set can be safely cleared. Any future move-in will be triggered by a new linked value (see "value disjointness" above), and rows matching that value could not have been previously emitted. A move-out → move-in cycle for the same value is safe because the move-out control message acts as a logical DELETE. Therefore, shadow entries are only needed during the window between a move-in trigger and the completion of filtering for that move-in's results.
+---
 
-- On move-in -> move-out -> move-in chains:
-  A move-out functionally invalidates a prior pending move-in by filtering its results. The second move-in starts with a fresh shadow set. Operations between the move-out and the second move-in are skipped (the row is moved out at that point, so they are not propagated). A single operation that occurs after both move-ins may shadow both; an operation after only one shadows only that one.
+## Key Concepts & Terminology
 
-- **[P.cross]** On shadowed keys and cross-sublink migration:
-  A row already in the shape (via linked value A) may change its sublink to reference a value B that has a pending move-in. The move-in query for B runs at a snapshot that sees this change and returns the row — but the row was already in the log via A. Without the shadowed-key rule above, the [2] skip would delegate to the move-in, which produces an INSERT for a key that already exists, violating the single-key ordering invariant. By appending the stream operation (as an update, since old value is in the linked set) and shadowing the key, we maintain a single authoritative source. The move-in result for this key is unconditionally skipped, and all further stream operations continue to be appended until a DELETE releases the shadow.
+| Term | Definition |
+|------|-----------|
+| **Shape log** | The append-only sequence of INSERT/UPDATE/DELETE operations that clients consume. Must maintain per-key INSERT->UPDATE->DELETE ordering. |
+| **Linked value set** | The current set of values from the subquery result. A row in the main table is "in the shape" if its sublink column references a value in this set (and satisfies the rest of the WHERE clause). |
+| **Move-in** | A new value enters the linked value set. Requires an async query to Postgres to find matching rows. |
+| **Move-out** | A value leaves the linked value set. Applied immediately as a control message (pattern-based tag removal). |
+| **Covered** | A WAL operation whose transaction is visible in the move-in query's Postgres snapshot. The query "sees" this operation. |
+| **Uncovered** | A WAL operation whose transaction is NOT visible in the query's snapshot. The query does NOT see this operation. |
+| **Shadowed** | A key for which the WAL stream is authoritative. The move-in query result for this key will be unconditionally skipped at splice time. Shadowing persists until a DELETE for the key is appended. |
+| **Delegated** | A key for which the move-in query is authoritative (a covered operation was skipped). All subsequent covered operations for a delegated key are also skipped. An uncovered operation transitions the key from delegated to shadowed. |
+| **Pending move-in** | A move-in whose query is in-flight or whose results haven't been fully filtered and spliced yet. |
+| **Splice** | The act of inserting buffered move-in query results into the shape log at the correct position. |
+| **Tags** | Per-row metadata derived from the DNF-normalized WHERE clause. Each tag corresponds to a disjunct. Sent as complete sets with activation bitmaps. |
+| **Nil snapshot** | Query hasn't obtained a DB connection yet. Treated as "will cover" (not "does not cover") because its eventual snapshot will be after all current operations. |
 
-- [P.splice] On snapshot-ordered placement of move-in query results:
-  A move-in query executes against a Postgres visibility snapshot (xmin, xmax, xiplist). A stream transaction is covered by that move-in iff it is visible in that snapshot. The move-in query results must be buffered and inserted into the shape log immediately before the first observed stream transaction that is not visible in the query snapshot. If no such transaction has yet been observed, the results remain buffered until global acknowledgement proves that the stream has advanced far enough that no earlier visible transaction can still arrive. In other words, a move-in may be spliced only once the consumer has definitely observed the entire replication-stream prefix visible to that query snapshot. This buffering is required for correctness: without it, a row already made visible by earlier history may be emitted a second time by the move-in query, violating the single-key INSERT→UPDATE→DELETE invariant.
+---
 
-[1]: _consistency note_: yes, that means one row might appear in the log earlier than the query results. Only avoidable with buffering. If a move-out occurs immediately after, then the client will know to remove/GC the row appropriately because move-outs are correctly ordered by stream definition.
-[2]: _implementation note_: current code is using old logic which doesn't account for arbitrary where clauses, and only checks for the sublink value in the where clause, this should be replaced with a proper where clause evaluation. When a [2] skip is applied, the key must be recorded in a per-move-in "delegated" set so that subsequent covered operations (especially DELETEs) for the same key are also skipped consistently.
+## System Invariants
+
+1. **Per-key ordering**: For any key, the log must follow INSERT -> UPDATE -> DELETE order. No two INSERTs without an intervening DELETE. No UPDATE before INSERT.
+2. **No duplicates**: Every row appears at most once unless deleted and re-inserted.
+3. **No gaps**: No operation for a key may be skipped unless a newer version will definitely arrive.
+4. **Single authority**: At any point during a pending move-in, each key has exactly one authoritative source: either the WAL stream (shadowed or normal) or the move-in query (delegated).
+5. **Eventual consistency**: A causally newer operation for a key must appear after all prior operations for that key.
+
+---
+
+## Visual Explanation
+
+### High-Level Flow
+
+```
+ Postgres WAL Stream                        Postgres DB (snapshot query)
+ ==================                         ==========================
+        |                                            ^
+        v                                            |
+ +--------------+    (2) async query    +-------------------+
+ |   Consumer   | -------------------> |  Move-in Query     |
+ |              |                      |  WHERE col IN (v1) |
+ |  Processing  |    (5) results       |  snapshot @ T=10   |
+ |  WAL ops     | <------------------- +-------------------+
+ |  one by one  |
+ |              |
+ |  (3) classify each op:              (4) track per-key authority:
+ |    covered vs uncovered               shadow set / delegated set
+ |    append vs skip
+ |              |
+ |  (6) splice results
+ |  at snapshot-ordered position
+ |              |
+ |  (7) GC state when all
+ |  move-ins resolved
+ +--------------+
+        |
+        v
+    Shape Log (append-only)
+    =======================
+    [INSERT k1] [INSERT k2] [move-out ctrl] [INSERT k3] ...
+                                    ^
+                              clients read this
+```
+
+### Timeline: Move-In Lifecycle
+
+```
+WAL Stream Position (time --->)
+=================================
+
+  T=5       T=8       T=10      T=12      T=15      T=18
+   |         |         |         |         |         |
+   v         v         v         v         v         v
+ [txn5]   [txn8]   [txn10]   [txn12]   [txn15]   [txn18]
+                      ^                    ^
+                      |                    |
+               Query snapshot        First txn NOT
+               (covers T<=10)        visible in snapshot
+                                          |
+                                    SPLICE POINT:
+                                    insert query results here
+
+  <---- covered by query ---->  <-- uncovered -->
+
+  Operations at T=5,8,10:           Operations at T=15,18:
+    - May be skipped if query         - Always appended to log
+      will return them (delegate)     - Key marked as shadowed
+    - Or appended if not matching
+```
+
+### Per-Key Authority Transitions
+
+```
+                    +--------+
+                    | normal |  (no pending move-in for this key)
+                    +--------+
+                   /          \
+      covered op  /            \  uncovered op
+      + WHERE    /              \  (or covered but
+        match   /                \  no WHERE match)
+               v                  v
+        +-----------+       +-----------+
+        | delegated |       | shadowed  |
+        | (query    |       | (WAL is   |
+        |  authority|       |  authority|
+        +-----------+       +-----------+
+               |                  |
+    uncovered  |                  |  DELETE appended
+    op arrives |                  |  to log
+               v                  v
+        +-----------+       +--------+
+        | shadowed  |       | normal |
+        | (WAL takes|       | (shadow|
+        |  back)    |       |  released)
+        +-----------+       +--------+
+```
+
+### Snapshot-Ordered Splice
+
+```
+Buffered move-in results: [{k1, tags1}, {k2, tags2}, {k3, tags3}]
+Query snapshot covers: T <= 10
+
+WAL stream as consumer processes it:
+
+  [T=7: INSERT k4]  [T=9: UPDATE k1]  |  [T=12: INSERT k5]  [T=15: ...]
+                                       |
+               covered by query        |  uncovered (T=12 > snapshot)
+                                       |
+                                 SPLICE HERE
+                                       |
+                              For each buffered row:
+                                k1: shadowed (T=9 UPDATE was appended) -> SKIP
+                                k2: not shadowed -> emit INSERT k2
+                                k3: not shadowed -> emit INSERT k3
+                                       |
+                                       v
+Final log:  [..., INSERT k4, UPDATE k1, INSERT k2, INSERT k3, INSERT k5, ...]
+```
+
+### Move-Out: Immediate Application
+
+```
+WAL: parent row changes value from "active" to "inactive"
+     -> value "X" leaves the linked value set
+
+Consumer:
+  1. Emit move-out control message:
+     { event: "move-out", patterns: [{pos: 0, value: hash("X")}] }
+
+  2. Client removes all rows whose tags match the pattern
+     (acts as logical DELETE for all affected keys)
+
+  3. If a pending move-in exists for value "X":
+     - Filter its buffered results to remove rows with value "X"
+     - Remove "X" from the move-in's tracked values
+```
+
+---
+
+## Pseudocode
+
+### Main Processing Loop
+
+```
+function process_transaction(txn, state):
+    # [P.splice] Check if any buffered move-ins should be spliced before this txn
+    ready_to_splice = pop_buffered_move_ins_not_visible_in(txn.xid, state)
+    for each (name, key_tag_pairs, snapshot) in ready_to_splice:
+        splice_move_in_results(name, key_tag_pairs, state)
+
+    for each change in txn.changes:
+        if change affects subquery table:
+            handle_subquery_change(change, state)
+        else:
+            handle_main_table_change(change, txn.xid, state)
+
+    # Remove filtering move-ins that are fully past this txn
+    state = remove_completed_filtering_move_ins(txn.xid, state)
+
+    # GC shadow/delegate sets if no move-ins are active
+    if no_active_move_ins(state):
+        state = clear_shadows_and_delegates(state)
+```
+
+### Handling Subquery Table Changes (Move-In/Move-Out Triggers)
+
+```
+function handle_subquery_change(change, state):
+    old_values = evaluate_subquery_for(change.old_record)
+    new_values = evaluate_subquery_for(change.new_record)
+
+    added_values   = new_values - old_values   # values entering linked set
+    removed_values = old_values - new_values   # values leaving linked set
+
+    # Move-outs: apply immediately
+    for each value in removed_values:
+        emit move_out_control_message(value)
+        state = filter_pending_move_in_results(value, state)
+
+    # Move-ins: fire async query
+    for each value in added_values:
+        query = build_move_in_query(shape.where, value)
+        state = add_waiting_move_in(name, value, state)
+        async execute query -> on_complete(name, results, snapshot)
+```
+
+### Handling Main Table Operations During Pending Move-Ins
+
+```
+function handle_main_table_change(change, xid, state):
+    key = extract_key(change)
+
+    # Skip if moved out
+    if is_moved_out(change, state):
+        return
+
+    # Already visible in a completed (filtering) move-in? Skip to avoid duplicates
+    if change_already_visible_in_filtering_move_in(change, xid, state):
+        return
+
+    relevant_move_ins = find_relevant_pending_move_ins(change, state)
+    if relevant_move_ins is empty:
+        # No pending move-ins affect this change -> normal processing
+        append_to_log(change)
+        return
+
+    # [P.shadow] If key is already shadowed, always append (WAL is authoritative)
+    if is_shadowed(key, state):
+        append_to_log(change)
+        return
+
+    match change:
+        INSERT -> handle_insert(change, xid, key, relevant_move_ins, state)
+        DELETE -> handle_delete(change, xid, key, relevant_move_ins, state)
+        UPDATE -> handle_update(change, xid, key, relevant_move_ins, state)
+```
+
+### INSERT Handling
+
+```
+function handle_insert(change, xid, key, relevant_move_ins, state):
+    owner = find_owning_move_in(change.record, relevant_move_ins)
+
+    if owner is nil:
+        # No move-in claims this row
+        append_to_log(change)
+        return
+
+    if not move_in_covers_xid(owner, xid):
+        # [I.1] Uncovered: append now, shadow for later
+        append_to_log(change)
+        shadow_key(key, relevant_move_ins, state)
+    else:
+        if where_clause_matches(change.record):
+            # [I.2] Covered + matches: delegate to query
+            delegate_key(key, owner, state)
+            # Do NOT append — query will return this row
+        else:
+            # Covered but doesn't match WHERE: append
+            append_to_log(change)
+```
+
+### DELETE Handling
+
+```
+function handle_delete(change, xid, key, relevant_move_ins, state):
+    owner = find_owning_move_in(change.record, relevant_move_ins)
+
+    if owner is nil or not move_in_covers_xid(owner, xid):
+        # [D.1] Uncovered: append now, shadow for later
+        append_to_log(change)
+        shadow_key(key, relevant_move_ins, state)
+    else:
+        # Covered by move-in
+        if is_delegated(key, state):
+            # [D.2a] Key was delegated (prior INSERT was skipped)
+            # Query sees INSERT+DELETE = nothing, returns nothing
+            # Skip this DELETE too — both handled by query returning empty
+            pass
+        else:
+            # [D.2b] Key existed before this move-in
+            # Append DELETE (it's a real deletion), but don't shadow
+            # (row won't be in query results anyway)
+            append_to_log(change)
+```
+
+### UPDATE Handling (Simplified)
+
+```
+function handle_update(change, xid, key, relevant_move_ins, state):
+    old_sublink = get_sublink_value(change.old_record)
+    new_sublink = get_sublink_value(change.new_record)
+
+    if old_sublink == new_sublink:
+        # (a) Sublink unchanged, but row references a moved-in value
+        handle_update_no_sublink_change(change, xid, key, relevant_move_ins, state)
+    else:
+        # (b) Sublink value changed — complex case analysis
+        handle_update_with_sublink_change(change, xid, key, old_sublink, new_sublink,
+                                          relevant_move_ins, state)
+
+function handle_update_no_sublink_change(change, xid, key, relevant_move_ins, state):
+    owner = find_owning_move_in(change.new_record, relevant_move_ins)
+
+    if not move_in_covers_xid(owner, xid):
+        # [Ua.1] Uncovered: append + shadow
+        append_to_log(change)
+        shadow_key(key, relevant_move_ins, state)
+    else:
+        if where_clause_matches(change.new_record):
+            # [Ua.2] Covered + matches: delegate to query
+            delegate_key(key, owner, state)
+        else:
+            append_to_log(change)
+
+function handle_update_with_sublink_change(change, xid, key, old_val, new_val,
+                                            relevant_move_ins, state):
+    old_in_linked = old_val in linked_value_set
+    new_in_linked = new_val in linked_value_set
+    old_in_pending = old_val in pending_move_in_values
+    new_in_pending = new_val in pending_move_in_values
+    owner = find_owning_move_in(change.new_record, relevant_move_ins)
+    covered = move_in_covers_xid(owner, xid)
+
+    # [Ub.0] Value was moved out -> skip entirely
+    if is_moved_out(change, state):
+        return
+
+    # Case: old NOT in linked, new has pending move-in
+    if not old_in_linked and new_in_pending:
+        convert_to_insert(change)
+        if not covered:
+            # [Ub.1a] Append + shadow
+            append_to_log(change)
+            shadow_key(key, relevant_move_ins, state)
+        else:
+            if where_clause_matches(change.new_record):
+                # [Ub.1b] Delegate to query
+                delegate_key(key, owner, state)
+            else:
+                append_to_log(change)
+
+    # Case: old in linked, new has pending move-in
+    if old_in_linked and new_in_pending:
+        # Keep as UPDATE (row already in shape via old value)
+        if not covered:
+            # [Ub.2a] Append + shadow
+            append_to_log(change)
+            shadow_key(key, relevant_move_ins, state)
+        else:
+            # [Ub.2b] Query would return INSERT for row we already have
+            # Append UPDATE now and shadow to prevent duplicate
+            append_to_log(change)
+            shadow_key(key, relevant_move_ins, state)
+
+    # Case: old is pending move-in value, new in linked set
+    if old_in_pending and new_in_linked:
+        convert_to_insert(change)
+        if not covered:
+            # [Ub.3a] Append + shadow
+            append_to_log(change)
+            shadow_key(key, relevant_move_ins, state)
+        else:
+            # [Ub.3b] Query won't return this (sublink changed away)
+            # Append but don't shadow
+            append_to_log(change)
+
+    # Case: old is pending, new NOT in linked set
+    if old_in_pending and not new_in_linked:
+        if not covered:
+            # [Ub.4a] Might be in query results; don't append, just shadow
+            shadow_key(key, relevant_move_ins, state)
+            add_to_mi_filter_keys(key, owner, state)
+        else:
+            # [Ub.4b] Won't be in results (sublink changed), skip entirely
+            pass
+
+    # Cases [Ub.5] and [Ub.6] handle old_in_pending AND new_in_pending
+    # with same or different move-ins — see detailed case analysis below
+```
+
+### Move-In Query Completion and Splice
+
+```
+function on_move_in_query_complete(name, results, query_snapshot, state):
+    key_tag_pairs = extract_key_tag_pairs(results)
+
+    # Buffer for snapshot-ordered splice [P.splice]
+    state = buffer_completed_move_in(name, key_tag_pairs, query_snapshot, state)
+
+function splice_move_in_results(name, key_tag_pairs, state):
+    # Filter out moved-out rows
+    moved_out_tags = get_moved_out_tags(name, state)
+    key_tag_pairs = reject_moved_out_rows(key_tag_pairs, moved_out_tags)
+
+    # Filter out mi_filter_keys [Ub.4a]
+    filter_keys = get_mi_filter_keys(name, state)
+    key_tag_pairs = reject_filter_keys(key_tag_pairs, filter_keys)
+
+    inserted_keys = empty_set()
+
+    for each (key, tags) in key_tag_pairs:
+        if is_shadowed(key, state):
+            # Key was updated by WAL after query ran -> skip query's stale version
+            continue
+
+        if already_in_log(key):
+            # Row already present from another source -> skip
+            continue
+
+        # Emit as INSERT with complete tag information
+        emit INSERT(key, tags)
+        inserted_keys.add(key)
+
+    # Transition from waiting to filtering (for duplicate prevention of future WAL ops)
+    state = change_to_filtering(name, inserted_keys, state)
+```
+
+### Splice Trigger Logic
+
+```
+function check_splice_triggers(txn, state):
+    # Trigger 1: WAL transaction not visible in query snapshot
+    for each buffered_move_in in state.buffered_move_ins:
+        if txn.xid NOT visible in buffered_move_in.query_snapshot:
+            splice this move-in NOW (before processing this txn)
+
+    # Trigger 2: Global LSN acknowledgement
+    if global_last_seen_lsn >= move_in.wal_lsn:
+        # Stream has advanced past the query's WAL position
+        # All visible transactions have been observed -> safe to splice
+        splice this move-in NOW
+```
+
+---
+
+## Detailed Case Analysis
+
+This section preserves the full case analysis for reference. Labels like `[I.1]`, `[D.2a]`, `[Ub.3b]` are referenced throughout the codebase.
+
+### INSERTs
+
+| Case | Covered? | WHERE match? | Action | Authority |
+|------|----------|-------------|--------|-----------|
+| **[I.1]** | No | - | Append to log | Shadow key |
+| **[I.2]** | Yes | Yes | Skip (query returns it) | Delegate key |
+| **[I.2]** | Yes | No | Append to log | - |
+
+### DELETEs
+
+| Case | Covered? | Delegated? | Action | Authority |
+|------|----------|-----------|--------|-----------|
+| **[D.1]** | No | - | Append to log | Shadow key |
+| **[D.2a]** | Yes | Yes | Skip (query sees INSERT+DELETE=nothing) | - |
+| **[D.2b]** | Yes | No | Append to log | - |
+
+### UPDATEs (sublink unchanged)
+
+| Case | Covered? | WHERE match? | Action | Authority |
+|------|----------|-------------|--------|-----------|
+| **[Ua.1]** | No | - | Append to log | Shadow key |
+| **[Ua.2]** | Yes | Yes | Skip (query returns it) | Delegate key |
+
+### UPDATEs (sublink changed)
+
+| Case | Old val | New val | Covered? | Action | Authority |
+|------|---------|---------|----------|--------|-----------|
+| **[Ub.0]** | moved-out | - | - | Skip | - |
+| **[Ub.1a]** | not linked | pending MI | No | Convert to INSERT, append | Shadow |
+| **[Ub.1b]** | not linked | pending MI | Yes | Delegate if WHERE matches | Delegate |
+| **[Ub.2a]** | linked | pending MI | No | Append as UPDATE | Shadow |
+| **[Ub.2b]** | linked | pending MI | Yes | Append as UPDATE | Shadow |
+| **[Ub.3a]** | pending MI | linked | No | Convert to INSERT, append | Shadow |
+| **[Ub.3b]** | pending MI | linked | Yes | Convert to INSERT, append | - |
+| **[Ub.4a]** | pending MI | not linked | No | Don't append | Shadow + filter |
+| **[Ub.4b]** | pending MI | not linked | Yes | Skip | - |
+| **[Ub.5a]** | pending MI(A) | pending MI(A) | No | Convert to INSERT, append | Shadow |
+| **[Ub.5b]** | pending MI(A) | pending MI(A) | Yes | Delegate if WHERE matches | Delegate |
+| **[Ub.6a]** | pending MI(A) | pending MI(B) | Both | Delegate if WHERE matches | Delegate |
+| **[Ub.6b]** | pending MI(A) | pending MI(B) | Neither | Convert to INSERT, append | Shadow both |
+| **[Ub.6c]** | pending MI(A) | pending MI(B) | B only | Delegate B if matches, shadow A | Shadow A |
+| **[Ub.6d]** | pending MI(A) | pending MI(B) | A only | Convert to INSERT, append | Shadow both |
+
+---
+
+## Additional Invariants & Edge Cases
+
+### Delegation and Covered INSERT+DELETE Pairs
+
+When a move-in's snapshot covers both an INSERT and a subsequent DELETE for the same key, the query sees the net result (nothing) and won't return the row. Without delegation tracking, the INSERT would be skipped via `[I.2]` but the DELETE would be appended, producing an orphan DELETE with no preceding INSERT. The delegated set prevents this: `[D.2a]` skips the DELETE for a delegated key.
+
+### Nil Snapshots and Coverage
+
+A nil snapshot (query hasn't obtained a connection yet) is treated as "will cover" rather than "does not cover." The query will execute at a future point, so its snapshot will be after all currently-processing operations.
+
+### Linked Value Set and WHERE Clause Evaluation Timing
+
+The linked value set is updated eagerly when a transaction is processed (before evaluating individual changes). Pending move-in values must be **excluded** from the linked set used for WHERE clause evaluation of WAL stream operations to prevent premature emissions and duplicates. They are included for move-in query result evaluation.
+
+### Shadow Set Garbage Collection
+
+When no move-ins are active (no pending queries, no in-flight filtering), the shadow and delegate sets can be safely cleared. Any future move-in will target new values that couldn't have been previously emitted.
+
+### Move-Out Control Messages
+
+Move-outs are pattern-based control messages (tag matching), not per-key DELETEs. They act as logical DELETEs for the INSERT->UPDATE->DELETE ordering invariant. A subsequent INSERT for any affected key is valid because it follows the logical DELETE.
+
+### Cross-Sublink Migration (`[P.cross]`)
+
+A row already in the shape via linked value A may change its sublink to reference value B with a pending move-in. The algorithm appends the stream operation as an UPDATE and shadows the key, ensuring the move-in query's stale version is skipped. Without this, the move-in would produce a duplicate INSERT.
+
+### Snapshot-Ordered Splice (`[P.splice]`)
+
+Move-in query results are buffered and spliced just before the first WAL transaction not visible in the query snapshot. This ensures all earlier-visible operations have been processed, making shadow/delegate decisions consistent. Two splice triggers exist:
+1. A WAL transaction arrives that is NOT visible in the query snapshot.
+2. Global LSN acknowledgement proves the stream has advanced past the query's position.
+
+### Concurrent Move-Ins for Different Disjuncts
+
+Sequential processing of the replication stream prevents gaps: when the first move-in is processed, the second disjunct's linked values haven't been updated yet, so the first query's NOT clause doesn't exclude the row.
+
+### Move-In -> Move-Out -> Move-In Chains
+
+A move-out invalidates a prior pending move-in by filtering its results. The second move-in starts fresh. Operations between the move-out and second move-in are not propagated (the row is moved out).
