@@ -28,8 +28,11 @@ defmodule Electric.Shapes.ConsumerRegistry do
     if register_consumer!(pid, shape_handle, ets_name(stack_id)), do: :yes, else: :no
   end
 
-  # don't unregister when the pid exits -- we have mechanisms to ensure that happens cleanly
-  def unregister_name({_stack_id, _shape_handle}) do
+  # When a consumer dies, OTP calls this in the dying process's context.
+  # Atomically remove the ETS entry only if it still belongs to the dying process,
+  # using match_delete to avoid TOCTOU races.
+  def unregister_name({stack_id, shape_handle}) do
+    :ets.match_delete(ets_name(stack_id), {shape_handle, self()})
     :ok
   end
 

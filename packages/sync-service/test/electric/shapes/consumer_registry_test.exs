@@ -406,4 +406,69 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
       assert_receive {:broadcast, :event}
     end
   end
+
+  describe "unregister_name/1" do
+    test "removes ETS entry when PID matches the dying process", ctx do
+      %{stack_id: stack_id, registry_state: %{table: table}} = ctx
+      handle = "handle-unreg-1"
+
+      # Manually insert an ETS entry for a spawned process, then have that
+      # process call unregister_name (simulating what OTP does on termination)
+      parent = self()
+
+      pid =
+        spawn(fn ->
+          receive do
+            :unregister ->
+              ConsumerRegistry.unregister_name({stack_id, handle})
+              send(parent, :unregistered)
+          end
+        end)
+
+      :ets.insert(table, {handle, pid})
+      assert ConsumerRegistry.whereis(stack_id, handle) == pid
+
+      send(pid, :unregister)
+      assert_receive :unregistered
+
+      assert ConsumerRegistry.whereis(stack_id, handle) == nil
+    end
+
+    test "does NOT remove ETS entry if a replacement consumer registered first", ctx do
+      %{stack_id: stack_id, registry_state: %{table: table}} = ctx
+      handle = "handle-unreg-2"
+      parent = self()
+
+      # Create an original process
+      original_pid =
+        spawn(fn ->
+          receive do
+            :unregister ->
+              ConsumerRegistry.unregister_name({stack_id, handle})
+              send(parent, :unregistered)
+          end
+        end)
+
+      :ets.insert(table, {handle, original_pid})
+      assert ConsumerRegistry.whereis(stack_id, handle) == original_pid
+
+      # Start a replacement process (not registered via name)
+      {:ok, replacement_pid} =
+        TestSubscriber.start_link(fn message, state ->
+          send(parent, {:replacement_broadcast, handle, message})
+          {:reply, :ok, state}
+        end)
+
+      # Overwrite the ETS entry with the replacement PID before the original unregisters
+      :ets.insert(table, {handle, replacement_pid})
+
+      # Now have the original process call unregister_name —
+      # it should NOT remove the replacement's entry because PIDs don't match
+      send(original_pid, :unregister)
+      assert_receive :unregistered
+
+      # Replacement's entry should survive
+      assert ConsumerRegistry.whereis(stack_id, handle) == replacement_pid
+    end
+  end
 end
