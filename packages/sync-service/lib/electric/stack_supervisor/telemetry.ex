@@ -1,5 +1,4 @@
 defmodule Electric.StackSupervisor.Telemetry do
-
   def configure(config) do
     # Set shared OpenTelemetry span attributes for the given stack. They are stored in
     # persistent_term so it doesn't matter which process this function is called from.
