@@ -48,11 +48,11 @@ jobs:
         uses: actions/cache@v4
         with:
           path: packages/elixir-client/deps
-          key: ${{ runner.os }}-elixir-client-deps-${{ env.MIX_ENV }}-${{ hashFiles('packages/elixir-client/mix.lock') }}
+          key: ${{ runner.os }}-${{ hashFiles('.tool-versions') }}-elixir-client-deps-${{ env.MIX_ENV }}-${{ hashFiles('packages/elixir-client/mix.lock') }}
           restore-keys: |
-            ${{ runner.os }}-elixir-client-deps-${{ env.MIX_ENV }}-${{ hashFiles('packages/elixir-client/mix.lock') }}
-            ${{ runner.os }}-elixir-client-deps-${{ env.MIX_ENV }}
-            ${{ runner.os }}-elixir-client-deps
+            ${{ runner.os }}-${{ hashFiles('.tool-versions') }}-elixir-client-deps-${{ env.MIX_ENV }}-${{ hashFiles('packages/elixir-client/mix.lock') }}
+            ${{ runner.os }}-${{ hashFiles('.tool-versions') }}-elixir-client-deps-${{ env.MIX_ENV }}
+            ${{ runner.os }}-${{ hashFiles('.tool-versions') }}-elixir-client-deps
 
       - name: Cache compiled code
         uses: actions/cache@v4
@@ -60,11 +60,11 @@ jobs:
           path: |
             packages/elixir-client/_build/*/lib
             !packages/elixir-client/_build/*/lib/electric_client
-          key: "${{ runner.os }}-elixir-client-build-${{ env.MIX_ENV }}-${{ hashFiles('packages/elixir-client/mix.lock') }}"
+          key: "${{ runner.os }}-${{ hashFiles('.tool-versions') }}-elixir-client-build-${{ env.MIX_ENV }}-${{ hashFiles('packages/elixir-client/mix.lock') }}"
           restore-keys: |
-            ${{ runner.os }}-elixir-client-build-${{ env.MIX_ENV }}-${{ hashFiles('packages/elixir-client/mix.lock') }}
-            ${{ runner.os }}-elixir-client-build-${{ env.MIX_ENV }}
-            ${{ runner.os }}-elixir-client-build
+            ${{ runner.os }}-${{ hashFiles('.tool-versions') }}-elixir-client-build-${{ env.MIX_ENV }}-${{ hashFiles('packages/elixir-client/mix.lock') }}
+            ${{ runner.os }}-${{ hashFiles('.tool-versions') }}-elixir-client-build-${{ env.MIX_ENV }}
+            ${{ runner.os }}-${{ hashFiles('.tool-versions') }}-elixir-client-build
 
       - name: Install dependencies
         run: mix do deps.get + deps.compile
