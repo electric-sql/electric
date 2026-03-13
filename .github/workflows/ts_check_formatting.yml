@@ -5,16 +5,45 @@ on:
     paths-ignore:
       - '**/README.md'
       - 'integration-tests/**'
-      - 'packages/electric-telemetry/**'
-      - 'packages/elixir-client/**'
-      - 'packages/sync-service/**'
 
 permissions:
   contents: read
+  pull-requests: read
 
 jobs:
+  check_ts_changes:
+    name: Check for TS-related changes
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    outputs:
+      should_run: ${{ steps.check.outputs.should_run }}
+    steps:
+      - id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Always run for the changesets release branch
+          if [[ "${{ github.head_ref }}" == "changeset-release/main" ]]; then
+            echo "should_run=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          # Check if any TS-related files changed in the PR
+          CHANGED=$(gh api "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" --paginate --jq '.[].filename') || {
+            echo "::warning::Failed to fetch PR files, defaulting to running TS CI"
+            echo "should_run=true" >> $GITHUB_OUTPUT
+            exit 0
+          }
+
+          if echo "$CHANGED" | grep -qE '^(packages/(typescript-client|react-hooks|y-electric|experimental|start)/|examples/|website/|pnpm-lock\.yaml$|package\.json$|pnpm-workspace\.yaml$|\.tool-versions$|tsconfig\.|eslint\.config|\.prettierrc|\.prettierignore|\.npmrc|\.github/workflows/(ts_|ensure_sync_service|pr\.)|\.github/actions/)'; then
+            echo "should_run=true" >> $GITHUB_OUTPUT
+          else
+            echo "should_run=false" >> $GITHUB_OUTPUT
+          fi
+
   ts_check_formatting:
     name: Check formatting of TS packages, examples and website
+    needs: [check_ts_changes]
+    if: needs.check_ts_changes.outputs.should_run == 'true'
     runs-on: blacksmith-2vcpu-ubuntu-2404
     steps:
       - name: Checkout

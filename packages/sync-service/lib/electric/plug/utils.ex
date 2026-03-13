@@ -1,7 +1,7 @@
 defmodule Electric.Plug.Utils do
   @moduledoc """
   Utility functions for Electric endpoints, e.g. for parsing and validating
-  path and query parameters.
+  request path and query parameters.
   """
 
   @doc """
