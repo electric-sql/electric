@@ -1127,6 +1127,108 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
     end
   end
 
+  describe "FlushTracker advancement when consumer is killed mid-transaction" do
+    setup :setup_log_collector
+
+    setup ctx do
+      parent = self()
+
+      stub_inspector(
+        load_relation_oid: fn {"public", "test_table"}, _ ->
+          {:ok, {1234, {"public", "test_table"}}}
+        end,
+        load_relation_info: fn 1234, _ ->
+          {:ok, %{id: 1234, schema: "public", name: "test_table", parent: nil, children: nil}}
+        end,
+        load_column_info: fn 1234, _ ->
+          {:ok, [%{pk_position: 0, name: "id", is_generated: false}]}
+        end
+      )
+
+      # Two consumers for two shape handles
+      consumer1 =
+        start_link_supervised!(
+          {Support.TransactionConsumer,
+           id: :alive,
+           stack_id: ctx.stack_id,
+           parent: parent,
+           shape: @shape,
+           shape_handle: "shape-alive"},
+          id: {:consumer, :alive}
+        )
+
+      consumer2 =
+        start_link_supervised!(
+          {Support.TransactionConsumer,
+           id: :doomed,
+           stack_id: ctx.stack_id,
+           parent: parent,
+           shape: @shape,
+           shape_handle: "shape-doomed"},
+          id: {:consumer, :doomed}
+        )
+
+      %{consumer_alive: consumer1, consumer_doomed: consumer2}
+    end
+
+    test "FlushTracker advances past undeliverable shapes from killed consumer", ctx do
+      # Register to receive flush boundary updates
+      {:via, Registry, {name, key}} = Electric.Postgres.ReplicationClient.name(ctx.stack_id)
+      Registry.register(name, key, nil)
+
+      # Patch start_consumer_for_handle to return :no_shape for the doomed handle
+      # This simulates the shape being gone from ShapeCache when ConsumerRegistry
+      # tries to restart the consumer.
+      Repatch.patch(
+        Electric.ShapeCache,
+        :start_consumer_for_handle,
+        [mode: :shared],
+        fn
+          "shape-doomed", _stack_id -> {:error, :no_shape}
+          _handle, _stack_id -> {:error, :no_shape}
+        end
+      )
+
+      # Kill the doomed consumer with :kill to bypass terminate/remove_shape.
+      # This leaves the shape in EventRouter but the consumer process is dead.
+      # The ETS entry may or may not be cleaned up depending on OTP internals,
+      # but ConsumerRegistry.publish will detect the dead PID either way.
+      doomed_pid = ctx.consumer_doomed
+      Process.unlink(doomed_pid)
+      ref = Process.monitor(doomed_pid)
+      Process.exit(doomed_pid, :kill)
+      assert_receive {:DOWN, ^ref, :process, ^doomed_pid, :killed}
+
+      # Now send a transaction that affects both shapes.
+      # EventRouter routes to both "shape-alive" and "shape-doomed".
+      # ConsumerRegistry.publish detects "shape-doomed" as undeliverable (dead PID, no restart).
+      # SLC should NOT track "shape-doomed" in FlushTracker.
+      lsn = Lsn.from_integer(42)
+      log_offset = LogOffset.new(lsn, 0)
+
+      txn =
+        transaction(100, lsn, [
+          %Changes.NewRecord{
+            relation: {"public", "test_table"},
+            record: %{"id" => "1"},
+            log_offset: log_offset
+          }
+        ])
+
+      assert :ok = ShapeLogCollector.handle_event(txn, ctx.stack_id)
+
+      # The alive consumer receives the transaction
+      assert_receive {Support.TransactionConsumer, {:alive, _pid}, [_txn]}, 500
+
+      # Flush only the alive consumer — FlushTracker should advance because
+      # the doomed shape was never tracked (excluded as undeliverable).
+      ShapeLogCollector.notify_flushed(ctx.stack_id, "shape-alive", log_offset)
+
+      expected_lsn = Lsn.to_integer(lsn)
+      assert_receive {:flush_boundary_updated, ^expected_lsn}, 500
+    end
+  end
+
   defp transaction(xid, lsn, changes) do
     last_log_offset =
       case Enum.reverse(changes) do
