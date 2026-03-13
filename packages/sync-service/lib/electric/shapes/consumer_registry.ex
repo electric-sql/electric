@@ -149,7 +149,9 @@ defmodule Electric.Shapes.ConsumerRegistry do
           [{handle, event}]
 
         {:DOWN, ^ref, _, _, _reason} ->
-          []
+          # Crashed consumers also need retry — their handles get returned
+          # so publish/2 can start a replacement consumer.
+          [{handle, event}]
       end
     end)
     |> Map.new()
@@ -157,9 +159,9 @@ defmodule Electric.Shapes.ConsumerRegistry do
       map when map == %{} ->
         :ok
 
-      suspended_handles ->
+      retry_handles ->
         Logger.debug(fn ->
-          ["Re-trying suspended shape handles ", inspect(Map.keys(suspended_handles))]
+          ["Re-trying shape handles (suspended or crashed) ", inspect(Map.keys(retry_handles))]
         end)
     end)
   end
