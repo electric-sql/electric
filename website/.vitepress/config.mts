@@ -376,8 +376,9 @@ export default defineConfig({
             {
               text: 'Legal',
               items: [
-                { text: 'Terms', link: '/about/legal/terms' },
-                { text: 'Privacy', link: '/about/legal/privacy' },
+                { text: 'Terms of Service', link: '/about/legal/terms' },
+                { text: 'Privacy Policy', link: '/about/legal/privacy' },
+                { text: 'Data Processing Addendum', link: '/about/legal/dpa' },
                 { text: 'Cookies', link: '/about/legal/cookies' },
               ],
               collapsed: false,
