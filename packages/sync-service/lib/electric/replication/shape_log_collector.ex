@@ -548,20 +548,26 @@ defmodule Electric.Replication.ShapeLogCollector do
     OpenTelemetry.start_interval(:"shape_log_collector.publish.duration_µs")
     context = OpenTelemetry.get_current_context()
 
-    for layer <- DependencyLayers.get_for_handles(state.dependency_layers, affected_shapes) do
-      # Each publish is synchronous, so layers will be processed in order
-      layer_events =
-        Map.new(layer, fn handle ->
-          {handle, {:handle_event, Map.fetch!(events_by_handle, handle), context}}
-        end)
+    undeliverable =
+      for layer <- DependencyLayers.get_for_handles(state.dependency_layers, affected_shapes),
+          reduce: MapSet.new() do
+        acc ->
+          # Each publish is synchronous, so layers will be processed in order
+          layer_events =
+            Map.new(layer, fn handle ->
+              {handle, {:handle_event, Map.fetch!(events_by_handle, handle), context}}
+            end)
 
-      ConsumerRegistry.publish(layer_events, state.registry_state)
-    end
+          layer_undeliverable = ConsumerRegistry.publish(layer_events, state.registry_state)
+          MapSet.union(acc, layer_undeliverable)
+      end
 
     OpenTelemetry.start_interval(:"shape_log_collector.set_last_processed_lsn.duration_µs")
 
     lsn = Lsn.from_integer(state.last_processed_offset.tx_offset)
     LsnTracker.set_last_processed_lsn(state.stack_id, lsn)
+
+    delivered_shapes = MapSet.difference(affected_shapes, undeliverable)
 
     flush_tracker =
       case event do
@@ -569,6 +575,7 @@ defmodule Electric.Replication.ShapeLogCollector do
           shapes_with_changes =
             for {id, frag} <- events_by_handle,
                 frag.change_count > 0,
+                not MapSet.member?(undeliverable, id),
                 do: id,
                 into: MapSet.new()
 
@@ -577,7 +584,7 @@ defmodule Electric.Replication.ShapeLogCollector do
           FlushTracker.handle_txn_fragment(
             state.flush_tracker,
             event,
-            affected_shapes,
+            delivered_shapes,
             shapes_with_changes
           )
 
