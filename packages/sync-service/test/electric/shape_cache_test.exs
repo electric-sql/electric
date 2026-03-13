@@ -1193,6 +1193,7 @@ defmodule Electric.ShapeCacheTest do
       stop_shape_cache(ctx)
 
       with_lsn_tracker(ctx)
+      with_shape_cleaner(ctx)
 
       ctx =
         ctx
@@ -1203,14 +1204,19 @@ defmodule Electric.ShapeCacheTest do
     end
 
     defp stop_shape_cache(ctx) do
+      # Stop the cleanup task supervisor first so that consumer termination
+      # (which now triggers remove_shape_async for :shutdown exits) cannot
+      # fire cleanup tasks that would delete shape data from persistent storage.
+      # This preserves shapes for restoration after restart.
       for name <-
             [
+              {Electric.ShapeCache.ShapeCleaner.CleanupTaskSupervisor, ctx.stack_id},
+              "shape_task_supervisor",
               ctx.shape_cache,
               ctx.consumer_supervisor,
               ctx.shape_log_collector,
               ctx.shape_status_owner,
-              ctx.shape_db,
-              "shape_task_supervisor"
+              ctx.shape_db
             ] do
         :ok = stop_supervised(name)
       end
