@@ -731,20 +731,6 @@ defmodule Electric.Shapes.Shape do
             }
           ]
 
-        {false, false} when old_active_conditions != new_active_conditions ->
-          # Position state changed but neither old nor new is fully included.
-          # The materializer needs to know about position changes even when
-          # the row isn't currently visible, so that future subquery moves
-          # can correctly re-evaluate inclusion.
-          [
-            %{
-              change
-              | move_tags: new_tags,
-                removed_move_tags: old_tags -- new_tags,
-                active_conditions: new_active_conditions
-            }
-          ]
-
         {false, false} ->
           []
       end
