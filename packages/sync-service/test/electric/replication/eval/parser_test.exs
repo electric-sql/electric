@@ -642,6 +642,47 @@ defmodule Electric.Replication.Eval.ParserTest do
       assert {:ok, _} = Parser.parse_and_validate_expression(~S|id = 1|, refs: %{["id"] => :int8})
     end
 
+    test "can compare integers larger than int32 max against bigint columns" do
+      # Integers larger than int32 max (2,147,483,647) are stored by libpg_query as
+      # Float nodes with string values. They should be parsed as int8, not numeric.
+      # See: https://github.com/pganalyze/libpg_query/wiki/Differences-between-JSON-output-formats
+
+      # Just above int32 max
+      assert {:ok, %Expr{eval: result}} =
+               Parser.parse_and_validate_expression(~S|id = 2147483648|, refs: %{["id"] => :int8})
+
+      assert %Func{args: [%Ref{type: :int8}, %Const{type: :int8, value: 2_147_483_648}]} = result
+
+      # Larger value
+      assert {:ok, %Expr{eval: result}} =
+               Parser.parse_and_validate_expression(~S|id = 2793017076|, refs: %{["id"] => :int8})
+
+      assert %Func{args: [%Ref{type: :int8}, %Const{type: :int8, value: 2_793_017_076}]} = result
+
+      # IN clause with large integers
+      assert {:ok, _} =
+               Parser.parse_and_validate_expression(
+                 ~S|id IN (1000000000, 2793017076, 3500000000)|,
+                 refs: %{["id"] => :int8}
+               )
+
+      # Negative large integer
+      assert {:ok, %Expr{eval: result}} =
+               Parser.parse_and_validate_expression(~S|id = -3000000000|,
+                 refs: %{["id"] => :int8}
+               )
+
+      assert %Func{args: [%Ref{type: :int8}, %Const{type: :int8, value: -3_000_000_000}]} = result
+
+      # Actual floats should still be parsed as numeric
+      assert {:ok, %Expr{eval: result}} =
+               Parser.parse_and_validate_expression(~S|value = 2147483648.5|,
+                 refs: %{["value"] => :numeric}
+               )
+
+      assert %Func{args: [%Ref{type: :numeric}, %Const{type: :numeric}]} = result
+    end
+
     test "implements common array operators: @>, <@, &&, ||" do
       assert {:ok, %Expr{eval: result}} =
                Parser.parse_and_validate_expression(~S|'{1,2,3}'::int[] @> '{2,1,2}'|)
