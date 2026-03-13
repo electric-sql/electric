@@ -1287,6 +1287,11 @@ defmodule Electric.Shapes.ConsumerTest do
       assert {_, offset1} = ShapeCache.resolve_shape_handle(shape_handle, @shape1, ctx.stack_id)
       assert offset1 == LogOffset.last_before_real_offsets()
 
+      # Stop the cleanup task supervisor first so that consumer termination
+      # (which now triggers remove_shape_async for :shutdown exits) cannot
+      # fire cleanup tasks that would delete shape data from persistent storage.
+      stop_supervised!({Electric.ShapeCache.ShapeCleaner.CleanupTaskSupervisor, ctx.stack_id})
+
       ref = ctx.consumer_supervisor |> GenServer.whereis() |> Process.monitor()
       # Stop the consumer and the shape cache server to simulate a restart
       stop_supervised!(ctx.consumer_supervisor)

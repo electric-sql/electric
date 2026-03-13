@@ -112,10 +112,16 @@ defmodule Electric.ShapeCache.ShapeCleaner do
     Electric.Shapes.ConsumerRegistry.remove_consumer(shape_handle, stack_id)
   end
 
-  def handle_writer_termination(_stack_id, _shape_handle, reason)
+  def handle_writer_termination(stack_id, shape_handle, reason)
       when reason in [:normal, :killed, :shutdown] or
              (is_tuple(reason) and elem(reason, 0) == :shutdown) do
-    :ok
+    Logger.notice(
+      "Removing shape #{inspect(shape_handle)} after consumer exit with reason: #{inspect(reason)}"
+    )
+
+    remove_shape_async(stack_id, shape_handle)
+
+    :removed
   end
 
   def handle_writer_termination(stack_id, shape_handle, reason) do
