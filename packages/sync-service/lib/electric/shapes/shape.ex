@@ -6,6 +6,7 @@ defmodule Electric.Shapes.Shape do
   alias Electric.Replication.Eval.Expr
   alias Electric.Postgres.Inspector
   alias Electric.Replication.Eval.Parser
+  alias Electric.Replication.Eval.Walker
   alias Electric.Replication.Changes
   alias Electric.Shapes.DnfPlan
   alias Electric.Shapes.WhereClause
@@ -281,16 +282,20 @@ defmodule Electric.Shapes.Shape do
     with {:ok, where} <- Parser.parse_query(where),
          {:ok, subqueries} <- Parser.extract_subqueries(where),
          :ok <- check_feature_flag(subqueries, opts),
-         {:ok, shape_dependencies} <- build_shape_dependencies(subqueries, opts),
+         {:ok, shape_dependencies, sublink_dependency_indexes} <-
+           build_shape_dependencies(subqueries, opts),
          {:ok, dependency_refs} <- build_dependency_refs(shape_dependencies, inspector),
-         all_refs = Map.merge(refs, dependency_refs),
+         all_refs =
+           Map.merge(refs, expand_dependency_refs(dependency_refs, sublink_dependency_indexes)),
          :ok <- Validators.validate_parameters(opts[:params]),
          {:ok, where} <-
            Parser.validate_where_ast(where,
              params: opts[:params],
              refs: all_refs,
-             sublink_queries: extract_sublink_queries(shape_dependencies)
+             sublink_queries:
+               expand_sublink_queries(shape_dependencies, sublink_dependency_indexes)
            ),
+         {:ok, where} <- canonicalize_where_sublink_refs(where, sublink_dependency_indexes),
          {:ok, where} <- Validators.validate_where_return_type(where) do
       {:ok, where, shape_dependencies}
     else
@@ -318,13 +323,42 @@ defmodule Electric.Shapes.Shape do
   defp build_shape_dependencies(subqueries, opts) do
     shared_opts = Map.drop(opts, [:where, :columns, :relation])
 
-    Utils.map_while_ok(subqueries, fn subquery ->
-      shared_opts
-      |> Map.put(:select, subquery)
-      |> Map.put(:autofill_pk_select?, true)
-      |> Map.put(:log_mode, :full)
-      |> new()
+    subqueries
+    |> Enum.with_index()
+    |> Utils.reduce_while_ok({[], %{}, %{}}, fn {subquery, occurrence_idx},
+                                                {shape_dependencies, dependency_index_by_shape,
+                                                 occurrence_to_dependency} ->
+      with {:ok, shape_dependency} <-
+             shared_opts
+             |> Map.put(:select, subquery)
+             |> Map.put(:autofill_pk_select?, true)
+             |> Map.put(:log_mode, :full)
+             |> new() do
+        comparable_shape = comparable(shape_dependency)
+
+        case dependency_index_by_shape do
+          %{^comparable_shape => dependency_idx} ->
+            {:ok,
+             {shape_dependencies, dependency_index_by_shape,
+              Map.put(occurrence_to_dependency, occurrence_idx, dependency_idx)}}
+
+          %{} ->
+            dependency_idx = length(shape_dependencies)
+
+            {:ok,
+             {shape_dependencies ++ [shape_dependency],
+              Map.put(dependency_index_by_shape, comparable_shape, dependency_idx),
+              Map.put(occurrence_to_dependency, occurrence_idx, dependency_idx)}}
+        end
+      end
     end)
+    |> case do
+      {:ok, {shape_dependencies, _dependency_index_by_shape, occurrence_to_dependency}} ->
+        {:ok, shape_dependencies, occurrence_to_dependency}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
   end
 
   defp build_dependency_refs(shape_dependencies, inspector) do
@@ -350,6 +384,46 @@ defmodule Electric.Shapes.Shape do
         {:ok, Map.put(acc, ["$sublink", "#{i}"], {:array, type})}
       end
     end)
+  end
+
+  defp expand_dependency_refs(dependency_refs, sublink_dependency_indexes) do
+    Map.new(sublink_dependency_indexes, fn {occurrence_idx, dependency_idx} ->
+      {["$sublink", "#{occurrence_idx}"],
+       Map.fetch!(dependency_refs, ["$sublink", "#{dependency_idx}"])}
+    end)
+  end
+
+  defp expand_sublink_queries(shape_dependencies, sublink_dependency_indexes) do
+    canonical_queries = extract_sublink_queries(shape_dependencies)
+
+    Map.new(sublink_dependency_indexes, fn {occurrence_idx, dependency_idx} ->
+      {occurrence_idx, Map.fetch!(canonical_queries, dependency_idx)}
+    end)
+  end
+
+  defp canonicalize_where_sublink_refs(%Expr{} = where, sublink_dependency_indexes) do
+    with {:ok, eval} <-
+           Walker.fold(
+             where.eval,
+             fn
+               %Parser.Ref{path: ["$sublink", idx]} = ref, _children, occurrence_to_dependency ->
+                 dependency_idx =
+                   occurrence_to_dependency
+                   |> Map.fetch!(String.to_integer(idx))
+                   |> Integer.to_string()
+
+                 {:ok, %{ref | path: ["$sublink", dependency_idx]}}
+
+               node, children, _occurrence_to_dependency when map_size(children) == 0 ->
+                 {:ok, node}
+
+               node, children, _occurrence_to_dependency ->
+                 {:ok, Map.merge(node, children)}
+             end,
+             sublink_dependency_indexes
+           ) do
+      {:ok, %{where | eval: eval, used_refs: Parser.find_refs(eval)}}
+    end
   end
 
   defp extract_sublink_queries(shapes) do
@@ -559,14 +633,14 @@ defmodule Electric.Shapes.Shape do
   end
 
   defp convert_change_legacy(%__MODULE__{root_table: table}, %{relation: relation}, _)
-      when table != relation,
-      do: []
+       when table != relation,
+       do: []
 
   defp convert_change_legacy(
-        %__MODULE__{where: nil, flags: %{selects_all_columns: true}} = shape,
-        change,
-        opts
-      ) do
+         %__MODULE__{where: nil, flags: %{selects_all_columns: true}} = shape,
+         change,
+         opts
+       ) do
     # If the change actually doesn't change any columns, we can skip it - this is possible on Postgres but we don't care for those.
     if is_struct(change, Changes.UpdatedRecord) and change.changed_columns == MapSet.new() do
       []
@@ -575,15 +649,16 @@ defmodule Electric.Shapes.Shape do
     end
   end
 
-  defp convert_change_legacy(%__MODULE__{}, %Changes.TruncatedRelation{} = change, _), do: [change]
+  defp convert_change_legacy(%__MODULE__{}, %Changes.TruncatedRelation{} = change, _),
+    do: [change]
 
   defp convert_change_legacy(
-        %__MODULE__{where: where, selected_columns: selected_columns} = shape,
-        change,
-        opts
-      )
-      when is_struct(change, Changes.NewRecord)
-      when is_struct(change, Changes.DeletedRecord) do
+         %__MODULE__{where: where, selected_columns: selected_columns} = shape,
+         change,
+         opts
+       )
+       when is_struct(change, Changes.NewRecord)
+       when is_struct(change, Changes.DeletedRecord) do
     record = if is_struct(change, Changes.NewRecord), do: change.record, else: change.old_record
 
     # This is a pre-image and post-image of the value sets for subqueries.
@@ -605,10 +680,10 @@ defmodule Electric.Shapes.Shape do
   end
 
   defp convert_change_legacy(
-        %__MODULE__{where: where, selected_columns: selected_columns} = shape,
-        %Changes.UpdatedRecord{old_record: old_record, record: record} = change,
-        opts
-      ) do
+         %__MODULE__{where: where, selected_columns: selected_columns} = shape,
+         %Changes.UpdatedRecord{old_record: old_record, record: record} = change,
+         opts
+       ) do
     {extra_refs_old, extra_refs_new} = opts[:extra_refs] || {%{}, %{}}
     old_record_in_shape = WhereClause.includes_record?(where, old_record, extra_refs_old)
     new_record_in_shape = WhereClause.includes_record?(where, record, extra_refs_new)
@@ -828,7 +903,11 @@ defmodule Electric.Shapes.Shape do
   defp should_keep_change?(%Changes.UpdatedRecord{removed_move_tags: removed_move_tags})
        when removed_move_tags != [], do: true
 
-  defp should_keep_change?(%Changes.UpdatedRecord{old_record: record, record: record, active_conditions: ac})
+  defp should_keep_change?(%Changes.UpdatedRecord{
+         old_record: record,
+         record: record,
+         active_conditions: ac
+       })
        when ac != nil, do: true
 
   defp should_keep_change?(%Changes.UpdatedRecord{old_record: record, record: record}),

@@ -336,7 +336,8 @@ defmodule Electric.Shapes.ShapeTest do
           },
           stack_id: "test_stack",
           shape_handle: "test_handle",
-          extra_refs: {%{["$sublink", "0"] => MapSet.new()}, %{["$sublink", "0"] => MapSet.new()}},
+          extra_refs:
+            {%{["$sublink", "0"] => MapSet.new()}, %{["$sublink", "0"] => MapSet.new()}},
           dnf_plan: dnf_plan
         )
 
@@ -660,6 +661,37 @@ defmodule Electric.Shapes.ShapeTest do
                    {%{["$sublink", "0"] => MapSet.new([2])},
                     %{["$sublink", "0"] => MapSet.new([2])}}
                )
+    end
+
+    @tag with_sql: [
+           "CREATE TABLE IF NOT EXISTS parent (id INT PRIMARY KEY)",
+           "CREATE TABLE IF NOT EXISTS child (id INT PRIMARY KEY, par_id INT REFERENCES parent(id), active BOOLEAN NOT NULL DEFAULT false)"
+         ]
+    test "deduplicates identical subqueries onto one dependency", %{inspector: inspector} do
+      assert {:ok,
+              %Shape{
+                where: where,
+                shape_dependencies: [
+                  %Shape{
+                    root_table: {"public", "parent"},
+                    where: %{query: "id > 5"}
+                  }
+                ],
+                subquery_comparison_expressions: comparison_expressions
+              }} =
+               Shape.new("child",
+                 inspector: inspector,
+                 where:
+                   "(active = true OR par_id IN (SELECT id FROM parent WHERE id > 5)) AND par_id IN (SELECT id FROM parent WHERE id > 5)"
+               )
+
+      assert where.used_refs == %{
+               ["active"] => :bool,
+               ["par_id"] => :int4,
+               ["$sublink", "0"] => {:array, :int4}
+             }
+
+      assert Map.keys(comparison_expressions) == [["$sublink", "0"]]
     end
 
     @tag with_sql: [
