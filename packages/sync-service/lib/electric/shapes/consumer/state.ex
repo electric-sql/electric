@@ -2,8 +2,6 @@ defmodule Electric.Shapes.Consumer.State do
   @moduledoc false
   alias Electric.Shapes.Consumer.InitialSnapshot
   alias Electric.Shapes.Shape
-  alias Electric.Replication.Eval.Parser
-  alias Electric.Replication.Eval.Walker
   alias Electric.Replication.TransactionBuilder
   alias Electric.Postgres.SnapshotQuery
   alias Electric.Replication.LogOffset
@@ -31,7 +29,6 @@ defmodule Electric.Shapes.Consumer.State do
     materializer_subscribed?: false,
     terminating?: false,
     buffering?: false,
-    not_with_subquery?: false,
     # Based on the write unit value, consumer will either buffer txn fragments in memory until
     # it sees a commit (write_unit=txn) or it will write each received txn fragment to storage
     # immediately (write_unit=txn_fragment).
@@ -103,7 +100,6 @@ defmodule Electric.Shapes.Consumer.State do
     %{
       state
       | shape: shape,
-        not_with_subquery?: has_not_with_subquery?(shape),
         # Enable direct fragment-to-storage streaming for shapes without subquery dependencies
         # and if the current shape itself isn't an inner shape of a shape with subqueries.
         write_unit:
@@ -114,41 +110,6 @@ defmodule Electric.Shapes.Consumer.State do
             @write_unit_txn_fragment
           end
     }
-  end
-
-  defp subtree_has_sublink?(tree) do
-    Walker.reduce!(
-      tree,
-      fn
-        %Parser.Ref{path: ["$sublink", _]}, _acc, _ctx ->
-          {:ok, true}
-
-        _node, acc, _ctx ->
-          {:ok, acc}
-      end,
-      false
-    )
-  end
-
-  defp has_not_with_subquery?(%Shape{shape_dependencies: []}), do: false
-  defp has_not_with_subquery?(%Shape{where: nil}), do: false
-
-  defp has_not_with_subquery?(%Shape{where: where}) do
-    Walker.reduce!(
-      where.eval,
-      fn
-        %Parser.Func{name: "not"} = not_node, acc, _ctx ->
-          if subtree_has_sublink?(not_node) do
-            {:ok, true}
-          else
-            {:ok, acc}
-          end
-
-        _node, acc, _ctx ->
-          {:ok, acc}
-      end,
-      false
-    )
   end
 
   @doc """

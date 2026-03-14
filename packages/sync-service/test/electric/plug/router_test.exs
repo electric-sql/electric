@@ -2336,9 +2336,10 @@ defmodule Electric.Plug.RouterTest do
            "INSERT INTO parent (id, excluded) VALUES (1, false), (2, true)",
            "INSERT INTO child (id, parent_id, value) VALUES (1, 1, 10), (2, 2, 20)"
          ]
-    test "NOT IN subquery should return 409 on move-in to subquery", %{
+    test "NOT IN subquery emits a move-out when a dependency value moves in", %{
       opts: opts,
-      db_conn: db_conn
+      db_conn: db_conn,
+      stack_id: stack_id
     } do
       # Child rows where parent_id is NOT IN the set of excluded parents
       # Initially: parent 1 is not excluded, so child 1 is in the shape
@@ -2360,13 +2361,61 @@ defmodule Electric.Plug.RouterTest do
 
       task = live_shape_req(req, opts)
 
+      tag =
+        :crypto.hash(:md5, stack_id <> req.handle <> "v:1")
+        |> Base.encode16(case: :lower)
+
       # Now set parent 1 to excluded = true
       # This causes parent 1 to move INTO the subquery result
       # Which should cause child 1 to move OUT of the outer shape
-      # Since NOT IN subquery move-out isn't implemented, we expect a 409
       Postgrex.query!(db_conn, "UPDATE parent SET excluded = true WHERE id = 1", [])
 
-      assert {_req, 409, _response} = Task.await(task)
+      assert {_req, 200, [data, up_to_date_ctl()]} = Task.await(task)
+
+      assert %{
+               "headers" => %{
+                 "event" => "move-out",
+                 "patterns" => [%{"pos" => 0, "value" => ^tag}]
+               }
+             } = data
+    end
+
+    @tag with_sql: [
+           "CREATE TABLE parent (id INT PRIMARY KEY, excluded BOOLEAN NOT NULL DEFAULT FALSE)",
+           "CREATE TABLE child (id INT PRIMARY KEY, parent_id INT NOT NULL REFERENCES parent(id), value INT NOT NULL)",
+           "INSERT INTO parent (id, excluded) VALUES (1, true), (2, true)",
+           "INSERT INTO child (id, parent_id, value) VALUES (1, 1, 10), (2, 2, 20)"
+         ]
+    test "NOT IN subquery emits a move-in query when a dependency value moves out", %{
+      opts: opts,
+      db_conn: db_conn,
+      stack_id: stack_id
+    } do
+      req =
+        make_shape_req("child",
+          where: "parent_id NOT IN (SELECT id FROM parent WHERE excluded = true)"
+        )
+
+      assert {req, 200, [%{"headers" => %{"control" => "snapshot-end"}}]} = shape_req(req, opts)
+
+      task = live_shape_req(req, opts)
+
+      Postgrex.query!(db_conn, "UPDATE parent SET excluded = false WHERE id = 1", [])
+
+      tag =
+        :crypto.hash(:md5, stack_id <> req.handle <> "v:1")
+        |> Base.encode16(case: :lower)
+
+      assert {_req, 200,
+              [
+                %{"headers" => %{"event" => "move-in"}},
+                data,
+                %{"headers" => %{"control" => "snapshot-end"}},
+                up_to_date_ctl()
+              ]} = Task.await(task)
+
+      assert %{"id" => "1", "parent_id" => "1", "value" => "10"} = data["value"]
+      assert %{"operation" => "insert", "is_move_in" => true, "tags" => [^tag]} = data["headers"]
     end
 
     @tag with_sql: [

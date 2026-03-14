@@ -286,9 +286,9 @@ defmodule Electric.Shapes.Consumer do
       "Consumer reacting to #{length(move_in)} move ins and #{length(move_out)} move outs from its #{dep_handle} dependency"
     end)
 
-    # Invalidate if subquery runtime was not initialized (e.g. NOT + subquery,
-    # or shapes that failed DNF compilation). With the DNF runtime, OR + subquery
-    # and multiple dependencies are handled correctly.
+    # Invalidate if subquery runtime was not initialized because the DNF plan
+    # failed to compile. All supported subquery shapes, including negated ones,
+    # should have an active subquery runtime.
     should_invalidate? = is_nil(state.subquery_state)
 
     if should_invalidate? do
@@ -1277,13 +1277,8 @@ defmodule Electric.Shapes.Consumer do
        )
        when dep_handles != [] do
     case DnfPlan.compile(state.shape) do
-      {:ok, %DnfPlan{has_negated_subquery: true}} ->
-        # NOT + subquery: keep current invalidation path (subquery_state stays nil)
-        Logger.debug("Shape #{state.shape_handle} has negated subquery, using invalidation path")
-        state
-
       {:ok, dnf_plan} ->
-        # Initialize multi-dep DNF runtime
+        # Initialize the DNF runtime for all supported subquery shapes.
         {views, dep_handle_to_ref} =
           dep_handles
           |> Enum.with_index()

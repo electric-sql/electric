@@ -372,6 +372,41 @@ defmodule Electric.Shapes.QueryingTest do
              ] = result
     end
 
+    test "if shape has a negated subquery, computes DNF tags and active conditions", %{
+      db_conn: conn
+    } do
+      for statement <- [
+            "CREATE TABLE parent (id SERIAL PRIMARY KEY, excluded BOOLEAN NOT NULL DEFAULT FALSE)",
+            "CREATE TABLE child (id SERIAL PRIMARY KEY, value INTEGER, parent_id INTEGER REFERENCES parent(id))",
+            "INSERT INTO parent (excluded) VALUES (false), (true)",
+            "INSERT INTO child (value, parent_id) VALUES (10, 1), (20, 2)"
+          ],
+          do: Postgrex.query!(conn, statement)
+
+      shape =
+        Shape.new!("child",
+          where: "parent_id NOT IN (SELECT id FROM parent WHERE excluded = true)",
+          inspector: {DirectInspector, conn}
+        )
+
+      tag1 =
+        :crypto.hash(:md5, "dummy-stack-id" <> "dummy-shape-handle" <> "v:1")
+        |> Base.encode16(case: :lower)
+
+      assert [
+               %{
+                 value: %{value: "10", parent_id: "1"},
+                 headers: %{
+                   tags: [^tag1],
+                   active_conditions: [true]
+                 }
+               }
+             ] =
+               decode_stream(
+                 Querying.stream_initial_data(conn, "dummy-stack-id", "dummy-shape-handle", shape)
+               )
+    end
+
     test "if shape has a subquery, tags the results (with composite keys)", %{db_conn: conn} do
       tag1 =
         :crypto.hash(

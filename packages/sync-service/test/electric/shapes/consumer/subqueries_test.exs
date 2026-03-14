@@ -33,6 +33,66 @@ defmodule Electric.Shapes.Consumer.SubqueriesTest do
     assert [%Changes.NewRecord{record: %{"id" => "1"}, last?: true}] = changes
   end
 
+  test "negated subquery turns dependency move-in into an outer move-out" do
+    state = new_negated_state()
+    dep_handle = dep_handle(state)
+
+    {changes, state} =
+      Subqueries.handle_event(
+        state,
+        {:materializer_changes, dep_handle, %{move_in: [{1, "1"}], move_out: []}}
+      )
+
+    assert %Steady{views: %{["$sublink", "0"] => view}} = state
+    assert view == MapSet.new([1])
+
+    assert [
+             %{
+               headers: %{
+                 event: "move-out",
+                 patterns: [%{pos: 0, value: _value}]
+               }
+             }
+           ] = changes
+  end
+
+  test "negated subquery turns dependency move-out into a buffered outer move-in" do
+    state = new_negated_state(subquery_view: MapSet.new([1]))
+    dep_handle = dep_handle(state)
+
+    {[], state} =
+      Subqueries.handle_event(
+        state,
+        {:materializer_changes, dep_handle, %{move_in: [], move_out: [{1, "1"}]}}
+      )
+
+    assert %Buffering{
+             views_before_move: %{["$sublink", "0"] => before_view},
+             views_after_move: %{["$sublink", "0"] => after_view}
+           } = state
+
+    assert before_view == MapSet.new([1])
+    assert after_view == MapSet.new()
+
+    {[], state} = Subqueries.handle_event(state, {:pg_snapshot_known, {100, 150, []}})
+
+    {[], state} =
+      Subqueries.handle_event(
+        state,
+        {:query_move_in_complete, [child_insert("99", "1")], lsn(10)}
+      )
+
+    {changes, state} = Subqueries.handle_event(state, %Changes.LsnUpdate{lsn: lsn(10)})
+
+    assert %Steady{views: %{["$sublink", "0"] => view}} = state
+    assert view == MapSet.new()
+
+    assert [
+             %{headers: %{event: "move-in"}},
+             %Changes.NewRecord{record: %{"id" => "99"}}
+           ] = changes
+  end
+
   test "splices buffered transactions around the snapshot visibility boundary" do
     state = new_state()
     dep_handle = dep_handle(state)
@@ -612,7 +672,7 @@ defmodule Electric.Shapes.Consumer.SubqueriesTest do
   end
 
   defp new_state(opts \\ []) do
-    shape = shape()
+    shape = Keyword.get(opts, :shape, shape())
     {:ok, dnf_plan} = DnfPlan.compile(shape)
     dep_handle = hd(shape.shape_dependencies_handles)
 
@@ -626,6 +686,10 @@ defmodule Electric.Shapes.Consumer.SubqueriesTest do
     )
   end
 
+  defp new_negated_state(opts \\ []) do
+    new_state(Keyword.put(opts, :shape, negated_shape()))
+  end
+
   defp dep_handle(state) do
     state.dependency_handle_to_ref |> Map.keys() |> hd()
   end
@@ -633,6 +697,15 @@ defmodule Electric.Shapes.Consumer.SubqueriesTest do
   defp shape do
     Shape.new!("child",
       where: "parent_id IN (SELECT id FROM public.parent WHERE value = 'keep')",
+      inspector: @inspector,
+      feature_flags: ["allow_subqueries"]
+    )
+    |> fill_handles()
+  end
+
+  defp negated_shape do
+    Shape.new!("child",
+      where: "parent_id NOT IN (SELECT id FROM public.parent WHERE value = 'keep')",
       inspector: @inspector,
       feature_flags: ["allow_subqueries"]
     )

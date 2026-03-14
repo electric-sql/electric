@@ -151,28 +151,75 @@ defmodule Electric.Shapes.Consumer.Subqueries do
 
       {{:move_out, dep_index, move_out_values}, queue} ->
         subquery_ref = dep_ref_for_index(state, dep_index)
+        effect = DnfPlan.effect_for_dependency_move(state.dnf_plan, dep_index, :move_out)
 
-        next_state = %{
-          state
-          | queue: queue,
-            views:
-              Map.update!(state.views, subquery_ref, &remove_move_values(&1, move_out_values))
-        }
+        case effect do
+          :move_out ->
+            next_state = %{
+              state
+              | queue: queue,
+                views:
+                  Map.update!(state.views, subquery_ref, &remove_move_values(&1, move_out_values))
+            }
 
-        broadcast =
-          DnfPlan.make_move_out_broadcast(
-            state.dnf_plan,
-            dep_index,
-            move_out_values,
-            state.stack_id,
-            state.shape_handle
-          )
+            broadcast =
+              DnfPlan.make_move_out_broadcast(
+                state.dnf_plan,
+                dep_index,
+                move_out_values,
+                state.stack_id,
+                state.shape_handle
+              )
 
-        drain_queue(next_state, outputs ++ [broadcast])
+            drain_queue(next_state, outputs ++ [broadcast])
+
+          :move_in ->
+            {outputs,
+             Buffering.from_steady(
+               state,
+               dep_index,
+               subquery_ref,
+               move_out_values,
+               queue,
+               :move_out
+             )}
+        end
 
       {{:move_in, dep_index, move_in_values}, queue} ->
         subquery_ref = dep_ref_for_index(state, dep_index)
-        {outputs, Buffering.from_steady(state, dep_index, subquery_ref, move_in_values, queue)}
+        effect = DnfPlan.effect_for_dependency_move(state.dnf_plan, dep_index, :move_in)
+
+        case effect do
+          :move_in ->
+            {outputs,
+             Buffering.from_steady(
+               state,
+               dep_index,
+               subquery_ref,
+               move_in_values,
+               queue,
+               :move_in
+             )}
+
+          :move_out ->
+            next_state = %{
+              state
+              | queue: queue,
+                views:
+                  Map.update!(state.views, subquery_ref, &add_move_values(&1, move_in_values))
+            }
+
+            broadcast =
+              DnfPlan.make_move_out_broadcast(
+                state.dnf_plan,
+                dep_index,
+                move_in_values,
+                state.stack_id,
+                state.shape_handle
+              )
+
+            drain_queue(next_state, outputs ++ [broadcast])
+        end
     end
   end
 
@@ -371,6 +418,12 @@ defmodule Electric.Shapes.Consumer.Subqueries do
   defp remove_move_values(subquery_view, move_values) do
     Enum.reduce(move_values, subquery_view, fn {value, _original_value}, view ->
       MapSet.delete(view, value)
+    end)
+  end
+
+  defp add_move_values(subquery_view, move_values) do
+    Enum.reduce(move_values, subquery_view, fn {value, _original_value}, view ->
+      MapSet.put(view, value)
     end)
   end
 

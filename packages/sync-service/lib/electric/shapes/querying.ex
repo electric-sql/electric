@@ -11,8 +11,12 @@ defmodule Electric.Shapes.Querying do
 
   def query_move_in(conn, stack_id, shape_handle, shape, {where, params}, opts \\ []) do
     table = Utils.relation_to_sql(shape.root_table)
+
     metadata =
-      metadata_sql(shape, stack_id, shape_handle,
+      metadata_sql(
+        shape,
+        stack_id,
+        shape_handle,
         opts |> Keyword.put(:start_param_idx, length(params) + 1)
       )
 
@@ -57,7 +61,9 @@ defmodule Electric.Shapes.Querying do
     offset = if offset = subset.offset, do: " OFFSET #{offset}", else: ""
 
     metadata = metadata_sql(shape, stack_id, shape_handle)
-    {json_like_select, params} = json_like_select(shape, headers, stack_id, shape_handle, metadata)
+
+    {json_like_select, params} =
+      json_like_select(shape, headers, stack_id, shape_handle, metadata)
 
     query =
       Postgrex.prepare!(
@@ -310,21 +316,22 @@ defmodule Electric.Shapes.Querying do
         %{tags_sqls: tags_sqls, active_conditions_sqls: active_conditions_sqls, params: params}
 
       nil ->
-        %{tags_sqls: make_tags(shape, stack_id, shape_handle), active_conditions_sqls: nil, params: []}
+        %{
+          tags_sqls: make_tags(shape, stack_id, shape_handle),
+          active_conditions_sqls: nil,
+          params: []
+        }
     end
   end
 
   defp dnf_plan_for_metadata(shape, opts) do
     case Keyword.get(opts, :dnf_plan) do
-      %DnfPlan{has_negated_subquery: false} = plan ->
+      %DnfPlan{} = plan ->
         plan
-
-      %DnfPlan{} ->
-        nil
 
       nil ->
         case DnfPlan.compile(shape) do
-          {:ok, %DnfPlan{has_negated_subquery: false} = plan} -> plan
+          {:ok, %DnfPlan{} = plan} -> plan
           _ -> nil
         end
     end

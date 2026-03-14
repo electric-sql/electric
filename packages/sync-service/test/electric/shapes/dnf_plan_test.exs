@@ -194,6 +194,7 @@ defmodule Electric.Shapes.DnfPlanTest do
       pos0 = plan.positions[0]
       assert pos0.is_subquery == true
       assert pos0.negated == true
+      assert plan.dependency_polarities == %{0 => :negated}
     end
 
     test "positive subquery does not mark has_negated_subquery" do
@@ -204,6 +205,7 @@ defmodule Electric.Shapes.DnfPlanTest do
       assert {:ok, plan} = DnfPlan.compile(shape)
 
       assert plan.has_negated_subquery == false
+      assert plan.dependency_polarities == %{0 => :positive}
     end
   end
 
@@ -608,6 +610,51 @@ defmodule Electric.Shapes.DnfPlanTest do
       # Exclusion should be sq2's disjunct
       assert sql =~ "AND NOT"
       assert length(params) == 2
+    end
+  end
+
+  describe "move_in_where_clause/5 - negated subqueries" do
+    test "uses positive delta membership for x NOT IN sq1" do
+      {where, deps} =
+        parse_where_with_sublinks(~S"NOT x IN (SELECT id FROM dep1)", 1)
+
+      shape = make_shape(where, deps)
+      {:ok, plan} = DnfPlan.compile(shape)
+
+      {sql, params} =
+        DnfPlan.move_in_where_clause(
+          plan,
+          0,
+          [1, 2],
+          %{["$sublink", "0"] => MapSet.new([1, 2, 3])},
+          where.used_refs
+        )
+
+      assert sql =~ ~s|"x" = ANY ($1::|
+      refute sql =~ ~s|NOT ("x" = ANY ($1::|
+      assert params == [[1, 2]]
+    end
+
+    test "uses delta membership only for the triggering negated subquery position" do
+      {where, deps} =
+        parse_where_with_sublinks(~S"NOT (x = 7 OR y IN (SELECT id FROM dep1))", 1)
+
+      shape = make_shape(where, deps)
+      {:ok, plan} = DnfPlan.compile(shape)
+
+      {sql, params} =
+        DnfPlan.move_in_where_clause(
+          plan,
+          0,
+          [5],
+          %{["$sublink", "0"] => MapSet.new([5, 6])},
+          where.used_refs
+        )
+
+      assert sql =~ ~s|NOT ("x" = 7)|
+      assert sql =~ ~s|"y" = ANY ($1::|
+      refute sql =~ ~s|NOT ("y" = ANY ($1::|
+      assert params == [[5]]
     end
   end
 

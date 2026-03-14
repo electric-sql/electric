@@ -25,6 +25,7 @@ defmodule Electric.Shapes.DnfPlan do
     :positions,
     :dependency_positions,
     :dependency_disjuncts,
+    :dependency_polarities,
     :has_negated_subquery
   ]
 
@@ -47,6 +48,7 @@ defmodule Electric.Shapes.DnfPlan do
           positions: %{Decomposer.position() => position_info()},
           dependency_positions: %{non_neg_integer() => [Decomposer.position()]},
           dependency_disjuncts: %{non_neg_integer() => [non_neg_integer()]},
+          dependency_polarities: %{non_neg_integer() => :positive | :negated},
           has_negated_subquery: boolean()
         }
 
@@ -167,7 +169,8 @@ defmodule Electric.Shapes.DnfPlan do
         move_in_values,
         views,
         used_refs,
-        1
+        1,
+        ignore_trigger_polarity?: true
       )
 
     {exclusion_sql, exclusion_params, _} =
@@ -178,7 +181,8 @@ defmodule Electric.Shapes.DnfPlan do
         nil,
         views,
         used_refs,
-        next_param
+        next_param,
+        ignore_trigger_polarity?: false
       )
 
     where =
@@ -188,6 +192,28 @@ defmodule Electric.Shapes.DnfPlan do
       end
 
     {where, candidate_params ++ exclusion_params}
+  end
+
+  @doc """
+  Maps a dependency-view move event to the corresponding outer-shape effect.
+
+  Materializer `move_in` / `move_out` events describe whether the dependency
+  view added or removed values. Negated subquery positions invert that effect
+  for the outer shape.
+  """
+  @spec effect_for_dependency_move(t(), non_neg_integer(), :move_in | :move_out) ::
+          :move_in | :move_out
+  def effect_for_dependency_move(plan, dep_index, move_kind) do
+    case {Map.fetch!(plan.dependency_polarities, dep_index), move_kind} do
+      {:positive, effect} ->
+        effect
+
+      {:negated, :move_in} ->
+        :move_out
+
+      {:negated, :move_out} ->
+        :move_in
+    end
   end
 
   @doc """
@@ -261,8 +287,8 @@ defmodule Electric.Shapes.DnfPlan do
   def active_conditions_sql_for_views(plan, views, used_refs, start_param_idx \\ 1) do
     {sqls, params, next_param_idx} =
       Enum.reduce(0..(plan.position_count - 1), {[], [], start_param_idx}, fn pos,
-                                                                               {sqls, params,
-                                                                                param_idx} ->
+                                                                              {sqls, params,
+                                                                               param_idx} ->
         info = Map.fetch!(plan.positions, pos)
 
         {base_sql, sql_params, next_param_idx} =
@@ -307,17 +333,44 @@ defmodule Electric.Shapes.DnfPlan do
 
   # -- Private: SQL generation helpers --
 
-  defp build_disjuncts_sql(_plan, [], _trigger_dep, _trigger_vals, _views, _used_refs, pidx) do
+  defp build_disjuncts_sql(
+         _plan,
+         [],
+         _trigger_dep,
+         _trigger_vals,
+         _views,
+         _used_refs,
+         pidx,
+         _opts
+       ) do
     {nil, [], pidx}
   end
 
-  defp build_disjuncts_sql(plan, disjunct_idxs, trigger_dep, trigger_vals, views, used_refs, pidx) do
+  defp build_disjuncts_sql(
+         plan,
+         disjunct_idxs,
+         trigger_dep,
+         trigger_vals,
+         views,
+         used_refs,
+         pidx,
+         opts
+       ) do
     {sqls, params, next_pidx} =
       Enum.reduce(disjunct_idxs, {[], [], pidx}, fn didx, {sqls, params, pi} ->
         conj = Enum.at(plan.disjuncts, didx)
 
         {conj_sql, conj_params, next_pi} =
-          build_conjunction_sql(plan, conj, trigger_dep, trigger_vals, views, used_refs, pi)
+          build_conjunction_sql(
+            plan,
+            conj,
+            trigger_dep,
+            trigger_vals,
+            views,
+            used_refs,
+            pi,
+            opts
+          )
 
         {[conj_sql | sqls], params ++ conj_params, next_pi}
       end)
@@ -331,7 +384,16 @@ defmodule Electric.Shapes.DnfPlan do
     {sql, params, next_pidx}
   end
 
-  defp build_conjunction_sql(plan, conj, trigger_dep, trigger_vals, views, used_refs, pidx) do
+  defp build_conjunction_sql(
+         plan,
+         conj,
+         trigger_dep,
+         trigger_vals,
+         views,
+         used_refs,
+         pidx,
+         opts
+       ) do
     {parts, params, next_pi} =
       Enum.reduce(conj, {[], [], pidx}, fn {pos, polarity}, {parts, params, pi} ->
         info = plan.positions[pos]
@@ -339,7 +401,13 @@ defmodule Electric.Shapes.DnfPlan do
         {sql, ps, next_pi} =
           position_to_sql(info, trigger_dep, trigger_vals, views, used_refs, pi)
 
-        sql = if polarity == :negated, do: "NOT (#{sql})", else: sql
+        sql =
+          if polarity == :negated and not ignore_polarity_for_trigger?(info, trigger_dep, opts) do
+            "NOT (#{sql})"
+          else
+            sql
+          end
+
         {[sql | parts], params ++ ps, next_pi}
       end)
 
@@ -466,6 +534,7 @@ defmodule Electric.Shapes.DnfPlan do
          positions: positions,
          dependency_positions: build_dependency_positions(positions),
          dependency_disjuncts: build_dependency_disjuncts(decomposition.disjuncts, positions),
+         dependency_polarities: build_dependency_polarities(positions),
          has_negated_subquery: has_negated_subquery?(positions)
        }}
     end
@@ -535,8 +604,35 @@ defmodule Electric.Shapes.DnfPlan do
     |> Map.new(fn {idx, set} -> {idx, set |> MapSet.to_list() |> Enum.sort()} end)
   end
 
+  defp build_dependency_polarities(positions) do
+    positions
+    |> Enum.filter(fn {_pos, info} -> info.is_subquery end)
+    |> Enum.group_by(
+      fn {_pos, info} -> info.dependency_index end,
+      fn {_pos, info} -> info.negated end
+    )
+    |> Map.new(fn {dep_index, negated_flags} ->
+      case Enum.uniq(negated_flags) do
+        [false] ->
+          {dep_index, :positive}
+
+        [true] ->
+          {dep_index, :negated}
+
+        mixed ->
+          raise ArgumentError,
+                "dependency #{dep_index} has inconsistent polarity across positions: #{inspect(mixed)}"
+      end
+    end)
+  end
+
   defp has_negated_subquery?(positions) do
     Enum.any?(positions, fn {_pos, info} -> info.is_subquery and info.negated end)
+  end
+
+  defp ignore_polarity_for_trigger?(info, trigger_dep, opts) do
+    Keyword.get(opts, :ignore_trigger_polarity?, false) and info.is_subquery and
+      info.dependency_index == trigger_dep
   end
 
   defp position_sql(ast, false, _shape), do: SqlGenerator.to_sql(ast)

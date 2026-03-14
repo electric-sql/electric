@@ -60,11 +60,23 @@ defmodule Electric.Shapes.Consumer.Subqueries.Buffering do
           non_neg_integer(),
           [String.t()],
           [Electric.Shapes.Consumer.Subqueries.move_value()],
-          MoveQueue.t()
+          MoveQueue.t(),
+          :move_in | :move_out
         ) :: t()
-  def from_steady(%Steady{} = state, dep_index, subquery_ref, move_in_values, queue) do
+  def from_steady(
+        %Steady{} = state,
+        dep_index,
+        subquery_ref,
+        move_in_values,
+        queue,
+        dependency_move_kind
+      ) do
     views_after =
-      Map.update!(state.views, subquery_ref, &add_move_in_values(&1, move_in_values))
+      Map.update!(
+        state.views,
+        subquery_ref,
+        &apply_dependency_move(&1, move_in_values, dependency_move_kind)
+      )
 
     %__MODULE__{
       shape: state.shape,
@@ -81,9 +93,23 @@ defmodule Electric.Shapes.Consumer.Subqueries.Buffering do
     }
   end
 
+  defp apply_dependency_move(subquery_view, move_in_values, :move_in) do
+    add_move_in_values(subquery_view, move_in_values)
+  end
+
+  defp apply_dependency_move(subquery_view, move_in_values, :move_out) do
+    remove_move_values(subquery_view, move_in_values)
+  end
+
   defp add_move_in_values(subquery_view, move_in_values) do
     Enum.reduce(move_in_values, subquery_view, fn {value, _original_value}, view ->
       MapSet.put(view, value)
+    end)
+  end
+
+  defp remove_move_values(subquery_view, move_values) do
+    Enum.reduce(move_values, subquery_view, fn {value, _original_value}, view ->
+      MapSet.delete(view, value)
     end)
   end
 end
