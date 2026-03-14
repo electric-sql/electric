@@ -31,7 +31,6 @@ defmodule Electric.Shapes.Consumer.State do
     materializer_subscribed?: false,
     terminating?: false,
     buffering?: false,
-    or_with_subquery?: false,
     not_with_subquery?: false,
     # Based on the write unit value, consumer will either buffer txn fragments in memory until
     # it sees a commit (write_unit=txn) or it will write each received txn fragment to storage
@@ -104,7 +103,6 @@ defmodule Electric.Shapes.Consumer.State do
     %{
       state
       | shape: shape,
-        or_with_subquery?: has_or_with_subquery?(shape),
         not_with_subquery?: has_not_with_subquery?(shape),
         # Enable direct fragment-to-storage streaming for shapes without subquery dependencies
         # and if the current shape itself isn't an inner shape of a shape with subqueries.
@@ -116,27 +114,6 @@ defmodule Electric.Shapes.Consumer.State do
             @write_unit_txn_fragment
           end
     }
-  end
-
-  defp has_or_with_subquery?(%Shape{shape_dependencies: []}), do: false
-  defp has_or_with_subquery?(%Shape{where: nil}), do: false
-
-  defp has_or_with_subquery?(%Shape{where: where}) do
-    Walker.reduce!(
-      where.eval,
-      fn
-        %Parser.Func{name: "or"} = or_node, acc, _ctx ->
-          if subtree_has_sublink?(or_node) do
-            {:ok, true}
-          else
-            {:ok, acc}
-          end
-
-        _node, acc, _ctx ->
-          {:ok, acc}
-      end,
-      false
-    )
   end
 
   defp subtree_has_sublink?(tree) do
