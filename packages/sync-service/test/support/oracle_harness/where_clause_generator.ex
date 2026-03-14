@@ -297,7 +297,9 @@ defmodule Support.OracleHarness.WhereClauseGenerator do
       # a OR b OR c (multiple ORs)
       {1, multi_or_composition(depth)},
       # Subquery OR simple condition
-      {2, subquery_or_simple(depth)}
+      {2, subquery_or_simple(depth)},
+      # (expr OR expr) AND (expr OR expr)
+      {2, or_branches_and_composition()}
     ])
   end
 
@@ -325,6 +327,25 @@ defmodule Support.OracleHarness.WhereClauseGenerator do
     end)
   end
 
+  # (expr OR expr) AND (expr OR expr) — each expr is a subquery or atomic
+  defp or_branches_and_composition do
+    bind(
+      {subquery_or_atomic(), subquery_or_atomic(),
+       subquery_or_atomic(), subquery_or_atomic()},
+      fn {{s1, _}, {s2, _}, {s3, _}, {s4, _}} ->
+        constant({"(#{s1} OR #{s2}) AND (#{s3} OR #{s4})", true})
+      end
+    )
+  end
+
+  defp subquery_or_atomic do
+    frequency([
+      {2, subquery_1_level_gen()},
+      {1, tag_subquery_gen()},
+      {2, atomic_with_meta()}
+    ])
+  end
+
   defp subquery_or_simple(_depth) do
     bind({subquery_1_level_gen(), atomic_with_meta()}, fn
       {{subq, _}, {simple, _}} ->
@@ -348,9 +369,6 @@ defmodule Support.OracleHarness.WhereClauseGenerator do
       {1, or_composition(depth - 1)}
     ])
   end
-
-  # Helper to detect if expression contains a subquery
-  defp contains_subquery?(expr), do: String.contains?(expr, "SELECT")
 
   # Detect if the same (SELECT ...) subquery expression appears more than once.
   # This filters out cases like (A OR B) AND B where B is a subquery —
