@@ -1,9 +1,9 @@
 ---
-title: "Agent Skills Now Shipping in Our npm Packages"
+title: "Agent skills now shipping in our npm packages"
 description: >-
   Electric, TanStack DB, and Durable Streams now ship agent skills — versioned knowledge that travels with your packages so coding agents actually understand how to use them.
 excerpt: >-
-  We've been collaborating with the TanStack maintainers to ship agent skills directly in our npm packages. Update your dependencies and run one command to give your coding agent deep knowledge of Electric, TanStack DB, and Durable Streams.
+  We've been collaborating with TanStack to ship agent skills in our npm packages. Run one command to give your agent deep knowledge of Electric, TanStack DB and Durable Streams.
 authors: [kyle]
 image: /img/blog/agent-skills-now-shipping/hero.png
 imageWidth: 2752
