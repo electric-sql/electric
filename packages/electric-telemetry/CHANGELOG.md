@@ -1,5 +1,11 @@
 # @core/electric-telemetry
 
+## 0.1.8
+
+### Patch Changes
+
+- 69ba13c: Update all Elixir dependencies to latest versions
+
 ## 0.1.7
 
 ### Patch Changes
