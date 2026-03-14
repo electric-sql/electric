@@ -1,5 +1,11 @@
 # @core/elixir-client
 
+## 0.9.2
+
+### Patch Changes
+
+- 69ba13c: Update all Elixir dependencies to latest versions
+
 ## 0.9.1
 
 ### Patch Changes

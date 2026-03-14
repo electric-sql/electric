@@ -1,5 +1,22 @@
 # @core/sync-service
 
+## 1.4.14
+
+### Patch Changes
+
+- 38b083b: Fix FlushTracker getting stuck when storage flushes non-commit transaction fragments before the commit arrives
+- dc04ff6: Fix `parse_postgresql_uri` to ignore unknown query parameters instead of rejecting them. Previously, unknown params like `uselibpqcompat=true` were silently ignored when `sslmode` was present (due to Elixir map pattern matching) but rejected when alone. Now unknown params are always ignored, and only `sslmode` and `replication` are validated.
+- b9c7ba7: Reduce memory retention in Bandit handler processes by calling `:erlang.garbage_collect()` before entering the long-poll receive block, and add `ELECTRIC_TWEAKS_HANDLER_FULLSWEEP_AFTER` env var to control the `fullsweep_after` GC spawn option for handler processes.
+- 0e376c4: fix: ensure unoptimized queries get the changes from SLC
+- a871a70: Update pg_query_ex to v0.10.0
+- 35c5ff3: Fix Materializer crash that was happening when processing changes with PK updates.
+- 620fcf9: feat: add latest processed/seen LSN broadcasting for future use
+- 40f15e0: Remove additional trivial OTel spans from shape lifecycle
+- 68e5157: Add SQLite connection pool scaling to minimize memory usage in quiet instances and remove SQLite memory and disk statistics
+- 69ba13c: Update all Elixir dependencies to latest versions
+- dd71f09: chore: improve Storage contract to have less coupling on snapshot appends
+- f7f6bc7: Pass Shape directly to Consumer process to eliminate a redundant ShapeDb fetch for every consumer
+
 ## 1.4.13
 
 ### Patch Changes
