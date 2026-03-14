@@ -3,7 +3,6 @@ defmodule Electric.Shapes.Consumer.MoveInsTest do
 
   alias Electric.Shapes.Consumer.MoveIns
   alias Electric.Replication.Changes.Transaction
-  alias Electric.Replication.Changes
 
   describe "new/0" do
     test "creates empty state" do
@@ -26,7 +25,7 @@ defmodule Electric.Shapes.Consumer.MoveInsTest do
       state = MoveIns.add_waiting(state, "move1", moved_values)
 
       assert Map.has_key?(state.waiting_move_ins, "move1")
-      assert state.waiting_move_ins["move1"] == {nil, moved_values}
+      assert state.waiting_move_ins["move1"] == {nil, moved_values, 0, 0, nil}
     end
 
     @tag :move_in
@@ -40,8 +39,8 @@ defmodule Electric.Shapes.Consumer.MoveInsTest do
         |> MoveIns.add_waiting("move2", moved_values2)
 
       assert map_size(state.waiting_move_ins) == 2
-      assert state.waiting_move_ins["move1"] == {nil, moved_values1}
-      assert state.waiting_move_ins["move2"] == {nil, moved_values2}
+      assert state.waiting_move_ins["move1"] == {nil, moved_values1, 0, 0, nil}
+      assert state.waiting_move_ins["move2"] == {nil, moved_values2, 0, 1, nil}
     end
   end
 
@@ -58,7 +57,7 @@ defmodule Electric.Shapes.Consumer.MoveInsTest do
       snapshot = {100, 200, [150]}
       state = MoveIns.set_snapshot(state, "move1", snapshot)
 
-      assert state.waiting_move_ins["move1"] == {snapshot, moved_values}
+      assert state.waiting_move_ins["move1"] == {snapshot, moved_values, 0, 0, nil}
     end
 
     @tag :move_in
@@ -85,10 +84,15 @@ defmodule Electric.Shapes.Consumer.MoveInsTest do
       state = MoveIns.set_snapshot(state, "move1", snapshot)
 
       key_set = MapSet.new(["key1", "key2"])
-      {visibility_boundary, state} = MoveIns.change_to_filtering(state, "move1", key_set)
+
+      {visibility_boundary, _trigger_gen, _move_in_id, state} =
+        MoveIns.change_to_filtering(state, "move1", key_set)
 
       assert state.waiting_move_ins == %{}
-      assert [{^snapshot, ^key_set}] = state.filtering_move_ins
+
+      assert [{^snapshot, ^key_set, _moved_values, _trigger_gen, _move_in_id}] =
+               state.filtering_move_ins
+
       # Single move-in returns its snapshot as visibility boundary
       assert visibility_boundary == snapshot
     end
@@ -105,7 +109,8 @@ defmodule Electric.Shapes.Consumer.MoveInsTest do
         |> MoveIns.add_waiting("move2", moved_values2)
         |> MoveIns.set_snapshot("move2", {150, 250, []})
 
-      {_boundary, state} = MoveIns.change_to_filtering(state, "move1", MapSet.new(["key1"]))
+      {_boundary, _trigger_gen, _move_in_id, state} =
+        MoveIns.change_to_filtering(state, "move1", MapSet.new(["key1"]))
 
       assert Map.has_key?(state.waiting_move_ins, "move2")
       refute Map.has_key?(state.waiting_move_ins, "move1")
@@ -125,7 +130,9 @@ defmodule Electric.Shapes.Consumer.MoveInsTest do
       state = MoveIns.add_waiting(state, "move1", moved_values)
       state = MoveIns.set_snapshot(state, "move1", snapshot)
 
-      {boundary, _state} = MoveIns.change_to_filtering(state, "move1", MapSet.new([]))
+      {boundary, _trigger_gen, _move_in_id, _state} =
+        MoveIns.change_to_filtering(state, "move1", MapSet.new([]))
+
       assert boundary == snapshot
     end
 
@@ -143,7 +150,9 @@ defmodule Electric.Shapes.Consumer.MoveInsTest do
         |> MoveIns.set_snapshot("move2", snapshot2)
 
       # Resolve move1 (minimum)
-      {boundary, _state} = MoveIns.change_to_filtering(state, "move1", MapSet.new([]))
+      {boundary, _trigger_gen, _move_in_id, _state} =
+        MoveIns.change_to_filtering(state, "move1", MapSet.new([]))
+
       assert boundary == snapshot1
     end
 
@@ -161,7 +170,9 @@ defmodule Electric.Shapes.Consumer.MoveInsTest do
         |> MoveIns.set_snapshot("move2", snapshot2)
 
       # Resolve move2 (non-minimum) - should return nil and store snapshot2
-      {boundary, state} = MoveIns.change_to_filtering(state, "move2", MapSet.new([]))
+      {boundary, _trigger_gen, _move_in_id, state} =
+        MoveIns.change_to_filtering(state, "move2", MapSet.new([]))
+
       assert boundary == nil
       assert state.maximum_resolved_snapshot == snapshot2
     end
@@ -180,11 +191,15 @@ defmodule Electric.Shapes.Consumer.MoveInsTest do
         |> MoveIns.set_snapshot("move2", snapshot2)
 
       # Resolve move2 (non-minimum) first
-      {boundary1, state} = MoveIns.change_to_filtering(state, "move2", MapSet.new([]))
+      {boundary1, _trigger_gen, _move_in_id, state} =
+        MoveIns.change_to_filtering(state, "move2", MapSet.new([]))
+
       assert boundary1 == nil
 
       # Resolve move1 (last one) - should return stored maximum (snapshot2)
-      {boundary2, state} = MoveIns.change_to_filtering(state, "move1", MapSet.new([]))
+      {boundary2, _trigger_gen, _move_in_id, state} =
+        MoveIns.change_to_filtering(state, "move1", MapSet.new([]))
+
       assert boundary2 == snapshot2
       assert state.maximum_resolved_snapshot == nil
     end
@@ -203,7 +218,9 @@ defmodule Electric.Shapes.Consumer.MoveInsTest do
 
       state = MoveIns.add_waiting(state, "move1", moved_values)
       state = MoveIns.set_snapshot(state, "move1", {100, 200, []})
-      {_boundary, state} = MoveIns.change_to_filtering(state, "move1", MapSet.new(["key1"]))
+
+      {_boundary, _trigger_gen, _move_in_id, state} =
+        MoveIns.change_to_filtering(state, "move1", MapSet.new(["key1"]))
 
       # Transaction with xid=200 (at xmax boundary - should complete)
       txn = %Transaction{xid: 200, lsn: {0, 1}, changes: []}
@@ -218,7 +235,9 @@ defmodule Electric.Shapes.Consumer.MoveInsTest do
 
       state = MoveIns.add_waiting(state, "move1", moved_values)
       state = MoveIns.set_snapshot(state, "move1", {100, 200, []})
-      {_boundary, state} = MoveIns.change_to_filtering(state, "move1", MapSet.new(["key1"]))
+
+      {_boundary, _trigger_gen, _move_in_id, state} =
+        MoveIns.change_to_filtering(state, "move1", MapSet.new(["key1"]))
 
       txn = %Transaction{xid: 150, lsn: {0, 1}, changes: []}
       state = MoveIns.remove_completed(state, txn)
@@ -238,179 +257,90 @@ defmodule Electric.Shapes.Consumer.MoveInsTest do
         |> MoveIns.add_waiting("move2", moved_values2)
         |> MoveIns.set_snapshot("move2", {100, 300, []})
 
-      {_boundary1, state} = MoveIns.change_to_filtering(state, "move1", MapSet.new(["key1"]))
-      {_boundary2, state} = MoveIns.change_to_filtering(state, "move2", MapSet.new(["key2"]))
+      {_boundary1, _trigger_gen, _move_in_id, state} =
+        MoveIns.change_to_filtering(state, "move1", MapSet.new(["key1"]))
+
+      {_boundary2, _trigger_gen, _move_in_id, state} =
+        MoveIns.change_to_filtering(state, "move2", MapSet.new(["key2"]))
 
       # xid=250 completes move1 (xmax=200) but not move2 (xmax=300)
       txn = %Transaction{xid: 250, lsn: {0, 1}, changes: []}
       state = MoveIns.remove_completed(state, txn)
 
       assert length(state.filtering_move_ins) == 1
-      [{snapshot, key_set}] = state.filtering_move_ins
+      [{snapshot, key_set, _moved_values, _trigger_gen, _move_in_id}] = state.filtering_move_ins
       assert snapshot == {100, 300, []}
       assert key_set == MapSet.new(["key2"])
     end
   end
 
-  describe "track_touch/3" do
+  describe "gc_transient_move_in_state/1" do
     @tag :move_in
-    test "tracks INSERT operations" do
+    test "clears shadows and delegates when no move-ins are active" do
       state = MoveIns.new()
-      change = %Changes.NewRecord{key: "key1", record: %{}}
 
-      state = MoveIns.track_touch(state, 100, change)
+      state = %{
+        state
+        | shadows: %{"key1" => {100, ["mi-1"], ["tag-1"]}},
+          delegates: %{"key2" => {101, ["mi-2"], ["tag-2"]}},
+          move_out_generation: 3
+      }
 
-      assert state.touch_tracker == %{"key1" => 100}
+      state = MoveIns.gc_transient_move_in_state(state)
+
+      assert state.shadows == %{}
+      assert state.delegates == %{}
+      assert state.move_out_generation == 0
     end
 
     @tag :move_in
-    test "tracks UPDATE operations" do
+    test "keeps transient refs while move-ins are still active" do
       state = MoveIns.new()
-      change = %Changes.UpdatedRecord{key: "key1", record: %{}, old_record: %{}}
+      moved_values = {["$sublink", "0"], MapSet.new([1])}
 
-      state = MoveIns.track_touch(state, 100, change)
+      state = %{
+        state
+        | shadows: %{"key1" => {100, ["mi-1"], ["tag-1"]}},
+          delegates: %{"key2" => {101, ["mi-2"], ["tag-2"]}}
+      }
 
-      assert state.touch_tracker == %{"key1" => 100}
-    end
+      state = MoveIns.add_waiting(state, "mi-1", moved_values)
+      state = MoveIns.gc_transient_move_in_state(state)
 
-    @tag :move_in
-    test "does NOT track DELETE operations" do
-      state = MoveIns.new()
-      change = %Changes.DeletedRecord{key: "key1", old_record: %{}}
-
-      state = MoveIns.track_touch(state, 100, change)
-
-      assert state.touch_tracker == %{}
-    end
-
-    @tag :move_in
-    test "updates existing key with newer xid" do
-      state = MoveIns.new()
-      state = %{state | touch_tracker: %{"key1" => 100}}
-      change = %Changes.NewRecord{key: "key1", record: %{}}
-
-      state = MoveIns.track_touch(state, 150, change)
-
-      assert state.touch_tracker == %{"key1" => 150}
+      assert state.shadows == %{"key1" => {100, ["mi-1"], ["tag-1"]}}
+      assert state.delegates == %{"key2" => {101, ["mi-2"], ["tag-2"]}}
     end
   end
 
-  describe "gc_touch_tracker/1" do
-    @tag :move_in
-    test "clears all when no pending queries" do
-      state = MoveIns.new()
-      state = %{state | touch_tracker: %{"key1" => 100, "key2" => 150}}
-
-      state = MoveIns.gc_touch_tracker(state)
-
-      assert state.touch_tracker == %{}
-    end
-
-    @tag :move_in
-    test "keeps all touches when no snapshots known yet" do
-      state = MoveIns.new()
-      state = %{state | touch_tracker: %{"key1" => 100, "key2" => 150}}
-      moved_values = {[], MapSet.new()}
-      state = MoveIns.add_waiting(state, "move1", moved_values)
-
-      state = MoveIns.gc_touch_tracker(state)
-
-      assert state.touch_tracker == %{"key1" => 100, "key2" => 150}
-    end
-
-    @tag :move_in
-    test "removes touches < min_xmin" do
-      state = MoveIns.new()
-      state = %{state | touch_tracker: %{"key1" => 50, "key2" => 100, "key3" => 150}}
-      moved_values = {[], MapSet.new()}
-      state = MoveIns.add_waiting(state, "move1", moved_values)
-      state = MoveIns.set_snapshot(state, "move1", {100, 200, []})
-
-      state = MoveIns.gc_touch_tracker(state)
-
-      assert state.touch_tracker == %{"key2" => 100, "key3" => 150}
-    end
-
-    @tag :move_in
-    test "keeps touches >= min_xmin across multiple snapshots" do
-      state = MoveIns.new()
-      state = %{state | touch_tracker: %{"key1" => 50, "key2" => 100, "key3" => 150}}
-      moved_values1 = {[], MapSet.new()}
-      moved_values2 = {[], MapSet.new()}
-      state = MoveIns.add_waiting(state, "move1", moved_values1)
-      state = MoveIns.set_snapshot(state, "move1", {100, 200, []})
-      state = MoveIns.add_waiting(state, "move2", moved_values2)
-      state = MoveIns.set_snapshot(state, "move2", {120, 250, []})
-
-      state = MoveIns.gc_touch_tracker(state)
-
-      # min_xmin = 100, so keeps keys with xid >= 100
-      assert state.touch_tracker == %{"key2" => 100, "key3" => 150}
-    end
-
-    @tag :move_in
-    test "handles mix of nil and real snapshots" do
-      state = MoveIns.new()
-      state = %{state | touch_tracker: %{"key1" => 50, "key2" => 100, "key3" => 150}}
-      moved_values1 = {[], MapSet.new()}
-      moved_values2 = {[], MapSet.new()}
-      state = MoveIns.add_waiting(state, "move1", moved_values1)
-      state = MoveIns.add_waiting(state, "move2", moved_values2)
-      state = MoveIns.set_snapshot(state, "move2", {120, 250, []})
-
-      state = MoveIns.gc_touch_tracker(state)
-
-      # min_xmin = 120, so only keeps key3
-      assert state.touch_tracker == %{"key3" => 150}
-    end
-  end
-
-  describe "should_skip_query_row?/3" do
+  describe "key_already_shadowed_for_move_in?/3" do
     setup do
       state = MoveIns.new()
       %{state: state}
     end
 
     @tag :move_in
-    test "returns false when key not in tracker", %{state: state} do
-      snapshot = {100, 200, []}
-
-      result = MoveIns.should_skip_query_row?(state.touch_tracker, snapshot, "key1")
+    test "returns false when key is not shadowed", %{state: state} do
+      result = MoveIns.key_already_shadowed_for_move_in?(state, "key1", "mi-1")
 
       assert result == false
     end
 
     @tag :move_in
-    test "returns false when touch is visible in snapshot", %{state: state} do
-      state = %{state | touch_tracker: %{"key1" => 50}}
-      snapshot = {100, 200, []}
+    test "returns true when the key is shadowed for that move-in", %{state: state} do
+      state = %{state | shadows: %{"key1" => {50, ["mi-1"], ["tag-1"]}}}
 
-      result = MoveIns.should_skip_query_row?(state.touch_tracker, snapshot, "key1")
+      result = MoveIns.key_already_shadowed_for_move_in?(state, "key1", "mi-1")
 
-      # xid=50 < xmin=100, so visible
+      assert result == true
+    end
+
+    @tag :move_in
+    test "returns false when the key is shadowed for a different move-in", %{state: state} do
+      state = %{state | shadows: %{"key1" => {50, ["mi-2"], ["tag-1"]}}}
+
+      result = MoveIns.key_already_shadowed_for_move_in?(state, "key1", "mi-1")
+
       assert result == false
-    end
-
-    @tag :move_in
-    test "returns true when touch xid >= xmax", %{state: state} do
-      state = %{state | touch_tracker: %{"key1" => 250}}
-      snapshot = {100, 200, []}
-
-      result = MoveIns.should_skip_query_row?(state.touch_tracker, snapshot, "key1")
-
-      # xid=250 >= xmax=200, so not visible (happened after snapshot)
-      assert result == true
-    end
-
-    @tag :move_in
-    test "returns true when touch xid in xip_list", %{state: state} do
-      state = %{state | touch_tracker: %{"key1" => 150}}
-      snapshot = {100, 200, [150]}
-
-      result = MoveIns.should_skip_query_row?(state.touch_tracker, snapshot, "key1")
-
-      # xid=150 is in xip_list, so not visible (not committed at snapshot time)
-      assert result == true
     end
   end
 
@@ -427,7 +357,9 @@ defmodule Electric.Shapes.Consumer.MoveInsTest do
       state = MoveIns.add_waiting(state, "move1", moved_values)
       state = MoveIns.set_snapshot(state, "move1", snapshot)
 
-      {boundary, _state} = MoveIns.change_to_filtering(state, "move1", MapSet.new([]))
+      {boundary, _trigger_gen, _move_in_id, _state} =
+        MoveIns.change_to_filtering(state, "move1", MapSet.new([]))
+
       assert boundary == snapshot
     end
 
@@ -447,11 +379,15 @@ defmodule Electric.Shapes.Consumer.MoveInsTest do
         |> MoveIns.set_snapshot("move2", snapshot2)
 
       # Resolve move1 (minimum) first - returns snapshot1
-      {boundary1, state} = MoveIns.change_to_filtering(state, "move1", MapSet.new([]))
+      {boundary1, _trigger_gen, _move_in_id, state} =
+        MoveIns.change_to_filtering(state, "move1", MapSet.new([]))
+
       assert boundary1 == snapshot1
 
       # Resolve move2 (last one) - returns snapshot2
-      {boundary2, _state} = MoveIns.change_to_filtering(state, "move2", MapSet.new([]))
+      {boundary2, _trigger_gen, _move_in_id, _state} =
+        MoveIns.change_to_filtering(state, "move2", MapSet.new([]))
+
       assert boundary2 == snapshot2
     end
 
@@ -469,12 +405,16 @@ defmodule Electric.Shapes.Consumer.MoveInsTest do
         |> MoveIns.set_snapshot("move2", snapshot2)
 
       # Resolve move2 (non-minimum) first - returns nil, stores snapshot2
-      {boundary1, state} = MoveIns.change_to_filtering(state, "move2", MapSet.new([]))
+      {boundary1, _trigger_gen, _move_in_id, state} =
+        MoveIns.change_to_filtering(state, "move2", MapSet.new([]))
+
       assert boundary1 == nil
       assert state.maximum_resolved_snapshot == snapshot2
 
       # Resolve move1 (last one) - returns stored maximum (snapshot2)
-      {boundary2, state} = MoveIns.change_to_filtering(state, "move1", MapSet.new([]))
+      {boundary2, _trigger_gen, _move_in_id, state} =
+        MoveIns.change_to_filtering(state, "move1", MapSet.new([]))
+
       assert boundary2 == snapshot2
       assert state.maximum_resolved_snapshot == nil
     end
@@ -496,17 +436,23 @@ defmodule Electric.Shapes.Consumer.MoveInsTest do
         |> MoveIns.set_snapshot("move3", snapshot3)
 
       # Resolve move2 (largest, not minimum) - stores snapshot2
-      {boundary1, state} = MoveIns.change_to_filtering(state, "move2", MapSet.new([]))
+      {boundary1, _trigger_gen, _move_in_id, state} =
+        MoveIns.change_to_filtering(state, "move2", MapSet.new([]))
+
       assert boundary1 == nil
       assert state.maximum_resolved_snapshot == snapshot2
 
       # Resolve move3 (middle, not minimum) - keeps maximum as snapshot2
-      {boundary2, state} = MoveIns.change_to_filtering(state, "move3", MapSet.new([]))
+      {boundary2, _trigger_gen, _move_in_id, state} =
+        MoveIns.change_to_filtering(state, "move3", MapSet.new([]))
+
       assert boundary2 == nil
       assert state.maximum_resolved_snapshot == snapshot2
 
       # Resolve move1 (last one) - returns stored maximum (snapshot2)
-      {boundary3, state} = MoveIns.change_to_filtering(state, "move1", MapSet.new([]))
+      {boundary3, _trigger_gen, _move_in_id, state} =
+        MoveIns.change_to_filtering(state, "move1", MapSet.new([]))
+
       assert boundary3 == snapshot2
       assert state.maximum_resolved_snapshot == nil
     end
@@ -524,11 +470,15 @@ defmodule Electric.Shapes.Consumer.MoveInsTest do
         |> MoveIns.set_snapshot("move2", snapshot)
 
       # Resolve move1 - returns snapshot
-      {boundary1, state} = MoveIns.change_to_filtering(state, "move1", MapSet.new([]))
+      {boundary1, _trigger_gen, _move_in_id, state} =
+        MoveIns.change_to_filtering(state, "move1", MapSet.new([]))
+
       assert boundary1 == snapshot
 
       # Resolve move2 (last one) - also returns snapshot
-      {boundary2, _state} = MoveIns.change_to_filtering(state, "move2", MapSet.new([]))
+      {boundary2, _trigger_gen, _move_in_id, _state} =
+        MoveIns.change_to_filtering(state, "move2", MapSet.new([]))
+
       assert boundary2 == snapshot
     end
 
@@ -552,78 +502,117 @@ defmodule Electric.Shapes.Consumer.MoveInsTest do
         |> MoveIns.set_snapshot("move4", snapshot4)
 
       # Resolve move4 (largest, not minimum) - stores snapshot4
-      {boundary1, state} = MoveIns.change_to_filtering(state, "move4", MapSet.new([]))
+      {boundary1, _trigger_gen, _move_in_id, state} =
+        MoveIns.change_to_filtering(state, "move4", MapSet.new([]))
+
       assert boundary1 == nil
       assert state.maximum_resolved_snapshot == snapshot4
 
       # Resolve move2 (second largest, not minimum) - keeps snapshot4
-      {boundary2, state} = MoveIns.change_to_filtering(state, "move2", MapSet.new([]))
+      {boundary2, _trigger_gen, _move_in_id, state} =
+        MoveIns.change_to_filtering(state, "move2", MapSet.new([]))
+
       assert boundary2 == nil
       assert state.maximum_resolved_snapshot == snapshot4
 
       # Resolve move3 (second smallest, not minimum) - keeps snapshot4
-      {boundary3, state} = MoveIns.change_to_filtering(state, "move3", MapSet.new([]))
+      {boundary3, _trigger_gen, _move_in_id, state} =
+        MoveIns.change_to_filtering(state, "move3", MapSet.new([]))
+
       assert boundary3 == nil
       assert state.maximum_resolved_snapshot == snapshot4
 
       # Resolve move1 (last one) - returns stored maximum (snapshot4)
-      {boundary4, state} = MoveIns.change_to_filtering(state, "move1", MapSet.new([]))
+      {boundary4, _trigger_gen, _move_in_id, state} =
+        MoveIns.change_to_filtering(state, "move1", MapSet.new([]))
+
       assert boundary4 == snapshot4
       assert state.maximum_resolved_snapshot == nil
     end
   end
 
-  describe "change_visible_in_unresolved_move_ins_for_values?/3" do
+  describe "pop_ready_to_splice_by_lsn/2" do
     setup do
-      state = MoveIns.new()
-      %{state: state}
+      %{state: MoveIns.new()}
     end
 
-    test "returns true when value is in unresolved move-in with nil snapshot", %{state: state} do
-      state = MoveIns.add_waiting(state, "move1", {["$sublink", "0"], MapSet.new([1])})
-
-      assert MoveIns.change_visible_in_unresolved_move_ins_for_values?(
-               state,
-               %{["$sublink", "0"] => 1},
-               100
-             )
+    @tag :move_in
+    test "returns empty list when no buffered move-ins", %{state: state} do
+      assert {[], ^state} = MoveIns.pop_ready_to_splice_by_lsn(state, 1000)
     end
 
-    test "returns true when value is in unresolved move-in with known snapshot and xid is visible",
-         %{state: state} do
+    @tag :move_in
+    test "splices buffered move-in when Lsn wal_lsn <= integer global lsn", %{state: state} do
+      # This is the scenario that was broken: wal_lsn is an Lsn struct (as
+      # returned by pg_current_wal_lsn()), and the global LSN from the
+      # broadcast is a plain integer. Erlang term ordering makes
+      # %Lsn{} <= integer always false, so the splice never triggered.
+      wal_lsn = Electric.Postgres.Lsn.from_integer(500)
+      snapshot = {100, 200, []}
+      moved_values = {[], MapSet.new()}
+
       state =
-        MoveIns.add_waiting(state, "move1", {["$sublink", "0"], MapSet.new([1])})
-        |> MoveIns.set_snapshot("move1", {150, 200, []})
+        state
+        |> MoveIns.add_waiting("move1", moved_values)
+        |> MoveIns.set_snapshot("move1", snapshot, wal_lsn)
+        |> MoveIns.buffer_completed_move_in("move1", [{"key1", []}], snapshot)
 
-      assert MoveIns.change_visible_in_unresolved_move_ins_for_values?(
-               state,
-               %{["$sublink", "0"] => 1},
-               100
-             )
+      # Global LSN equal to wal_lsn — should splice
+      {ready, updated_state} = MoveIns.pop_ready_to_splice_by_lsn(state, 500)
+
+      assert [{"move1", [{"key1", []}], ^snapshot, _key_set}] = ready
+      assert updated_state.buffered_move_ins == []
     end
 
-    test "returns false when value is in unresolved move-in with known snapshot and xid is not visible",
-         %{state: state} do
-      state =
-        MoveIns.add_waiting(state, "move1", {["$sublink", "0"], MapSet.new([1])})
-        |> MoveIns.set_snapshot("move1", {150, 200, []})
+    @tag :move_in
+    test "splices when global lsn exceeds wal_lsn", %{state: state} do
+      wal_lsn = Electric.Postgres.Lsn.from_integer(500)
+      snapshot = {100, 200, []}
+      moved_values = {[], MapSet.new()}
 
-      refute MoveIns.change_visible_in_unresolved_move_ins_for_values?(
-               state,
-               %{["$sublink", "0"] => 1},
-               300
-             )
+      state =
+        state
+        |> MoveIns.add_waiting("move1", moved_values)
+        |> MoveIns.set_snapshot("move1", snapshot, wal_lsn)
+        |> MoveIns.buffer_completed_move_in("move1", [{"key1", []}], snapshot)
+
+      {ready, _} = MoveIns.pop_ready_to_splice_by_lsn(state, 600)
+
+      assert [{"move1", _, _, _}] = ready
     end
 
-    test "returns false when value is not in unresolved move-in", %{state: state} do
-      state =
-        MoveIns.add_waiting(state, "move1", {["$sublink", "0"], MapSet.new([1])})
+    @tag :move_in
+    test "does not splice when global lsn is below wal_lsn", %{state: state} do
+      wal_lsn = Electric.Postgres.Lsn.from_integer(500)
+      snapshot = {100, 200, []}
+      moved_values = {[], MapSet.new()}
 
-      refute MoveIns.change_visible_in_unresolved_move_ins_for_values?(
-               state,
-               %{["$sublink", "0"] => 2},
-               100
-             )
+      state =
+        state
+        |> MoveIns.add_waiting("move1", moved_values)
+        |> MoveIns.set_snapshot("move1", snapshot, wal_lsn)
+        |> MoveIns.buffer_completed_move_in("move1", [{"key1", []}], snapshot)
+
+      {ready, _} = MoveIns.pop_ready_to_splice_by_lsn(state, 499)
+
+      assert ready == []
+    end
+
+    @tag :move_in
+    test "splices when wal_lsn is nil (legacy/test path)", %{state: state} do
+      snapshot = {100, 200, []}
+      moved_values = {[], MapSet.new()}
+
+      state =
+        state
+        |> MoveIns.add_waiting("move1", moved_values)
+        |> MoveIns.set_snapshot("move1", snapshot)
+        |> MoveIns.buffer_completed_move_in("move1", [{"key1", []}], snapshot)
+
+      # Any global LSN should trigger splice when wal_lsn is nil
+      {ready, _} = MoveIns.pop_ready_to_splice_by_lsn(state, 1)
+
+      assert [{"move1", _, _, _}] = ready
     end
   end
 end

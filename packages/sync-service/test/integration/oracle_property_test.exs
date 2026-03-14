@@ -55,6 +55,13 @@ defmodule Electric.Integration.OraclePropertyTest do
     ctx
   end
 
+  # Keep only the first mutation per row within a transaction to avoid
+  # multiple mutations to the same row in a single transaction.
+  defp dedup_transaction(mutations) do
+    mutations
+    |> Enum.uniq_by(& &1.row_key)
+  end
+
   test "shapes with generated where clauses and mutations", ctx do
     run_count = env_int("RUN_COUNT") || 1
     shape_count = env_int("SHAPE_COUNT") || @default_shape_count
@@ -67,7 +74,11 @@ defmodule Electric.Integration.OraclePropertyTest do
     check all shapes <- WhereClauseGenerator.shapes_gen(shape_count),
               mutations <- StandardSchema.mutations_gen(total_mutations),
               max_runs: run_count do
-      transactions = Enum.chunk_every(mutations, mutations_per_txn)
+      transactions =
+        mutations
+        |> Enum.chunk_every(mutations_per_txn)
+        |> Enum.map(&dedup_transaction/1)
+
       batches = Enum.chunk_every(transactions, txns_per_batch)
       test_against_oracle(ctx, shapes, batches)
     end

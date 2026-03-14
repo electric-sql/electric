@@ -200,21 +200,33 @@ defmodule Support.OracleHarness.StandardSchema do
   defp toggle_level_1_active_gen do
     member_of(@level_1_ids)
     |> map(fn id ->
-      %{name: "toggle_l1_#{id}", sql: "UPDATE level_1 SET active = NOT active WHERE id = '#{id}'"}
+      %{
+        name: "toggle_l1_#{id}",
+        sql: "UPDATE level_1 SET active = NOT active WHERE id = '#{id}'",
+        row_key: {:level_1, id}
+      }
     end)
   end
 
   defp toggle_level_2_active_gen do
     member_of(@level_2_ids)
     |> map(fn id ->
-      %{name: "toggle_l2_#{id}", sql: "UPDATE level_2 SET active = NOT active WHERE id = '#{id}'"}
+      %{
+        name: "toggle_l2_#{id}",
+        sql: "UPDATE level_2 SET active = NOT active WHERE id = '#{id}'",
+        row_key: {:level_2, id}
+      }
     end)
   end
 
   defp toggle_level_3_active_gen do
     member_of(@level_3_ids)
     |> map(fn id ->
-      %{name: "toggle_l3_#{id}", sql: "UPDATE level_3 SET active = NOT active WHERE id = '#{id}'"}
+      %{
+        name: "toggle_l3_#{id}",
+        sql: "UPDATE level_3 SET active = NOT active WHERE id = '#{id}'",
+        row_key: {:level_3, id}
+      }
     end)
   end
 
@@ -222,7 +234,8 @@ defmodule Support.OracleHarness.StandardSchema do
     bind({member_of(@level_2_ids), member_of(@level_1_ids)}, fn {id, new_parent} ->
       constant(%{
         name: "move_l2_#{id}_to_#{new_parent}",
-        sql: "UPDATE level_2 SET level_1_id = '#{new_parent}' WHERE id = '#{id}'"
+        sql: "UPDATE level_2 SET level_1_id = '#{new_parent}' WHERE id = '#{id}'",
+        row_key: {:level_2, id}
       })
     end)
   end
@@ -231,7 +244,8 @@ defmodule Support.OracleHarness.StandardSchema do
     bind({member_of(@level_3_ids), member_of(@level_2_ids)}, fn {id, new_parent} ->
       constant(%{
         name: "move_l3_#{id}_to_#{new_parent}",
-        sql: "UPDATE level_3 SET level_2_id = '#{new_parent}' WHERE id = '#{id}'"
+        sql: "UPDATE level_3 SET level_2_id = '#{new_parent}' WHERE id = '#{id}'",
+        row_key: {:level_3, id}
       })
     end)
   end
@@ -240,7 +254,8 @@ defmodule Support.OracleHarness.StandardSchema do
     bind({member_of(@level_4_ids), member_of(@level_3_ids)}, fn {id, new_parent} ->
       constant(%{
         name: "move_l4_#{id}_to_#{new_parent}",
-        sql: "UPDATE level_4 SET level_3_id = '#{new_parent}' WHERE id = '#{id}'"
+        sql: "UPDATE level_4 SET level_3_id = '#{new_parent}' WHERE id = '#{id}'",
+        row_key: {:level_4, id}
       })
     end)
   end
@@ -256,12 +271,14 @@ defmodule Support.OracleHarness.StandardSchema do
                 constant(%{
                   name: "add_tag_l1_#{id}_#{tag}",
                   sql:
-                    "INSERT INTO level_1_tags (level_1_id, tag) VALUES ('#{id}', '#{tag}') ON CONFLICT DO NOTHING"
+                    "INSERT INTO level_1_tags (level_1_id, tag) VALUES ('#{id}', '#{tag}') ON CONFLICT DO NOTHING",
+                  row_key: {:level_1_tags, id, tag}
                 })
               else
                 constant(%{
                   name: "remove_tag_l1_#{id}_#{tag}",
-                  sql: "DELETE FROM level_1_tags WHERE level_1_id = '#{id}' AND tag = '#{tag}'"
+                  sql: "DELETE FROM level_1_tags WHERE level_1_id = '#{id}' AND tag = '#{tag}'",
+                  row_key: {:level_1_tags, id, tag}
                 })
               end
             end)
@@ -272,12 +289,14 @@ defmodule Support.OracleHarness.StandardSchema do
                 constant(%{
                   name: "add_tag_l2_#{id}_#{tag}",
                   sql:
-                    "INSERT INTO level_2_tags (level_2_id, tag) VALUES ('#{id}', '#{tag}') ON CONFLICT DO NOTHING"
+                    "INSERT INTO level_2_tags (level_2_id, tag) VALUES ('#{id}', '#{tag}') ON CONFLICT DO NOTHING",
+                  row_key: {:level_2_tags, id, tag}
                 })
               else
                 constant(%{
                   name: "remove_tag_l2_#{id}_#{tag}",
-                  sql: "DELETE FROM level_2_tags WHERE level_2_id = '#{id}' AND tag = '#{tag}'"
+                  sql: "DELETE FROM level_2_tags WHERE level_2_id = '#{id}' AND tag = '#{tag}'",
+                  row_key: {:level_2_tags, id, tag}
                 })
               end
             end)
@@ -288,12 +307,14 @@ defmodule Support.OracleHarness.StandardSchema do
                 constant(%{
                   name: "add_tag_l3_#{id}_#{tag}",
                   sql:
-                    "INSERT INTO level_3_tags (level_3_id, tag) VALUES ('#{id}', '#{tag}') ON CONFLICT DO NOTHING"
+                    "INSERT INTO level_3_tags (level_3_id, tag) VALUES ('#{id}', '#{tag}') ON CONFLICT DO NOTHING",
+                  row_key: {:level_3_tags, id, tag}
                 })
               else
                 constant(%{
                   name: "remove_tag_l3_#{id}_#{tag}",
-                  sql: "DELETE FROM level_3_tags WHERE level_3_id = '#{id}' AND tag = '#{tag}'"
+                  sql: "DELETE FROM level_3_tags WHERE level_3_id = '#{id}' AND tag = '#{tag}'",
+                  row_key: {:level_3_tags, id, tag}
                 })
               end
             end)
@@ -306,7 +327,8 @@ defmodule Support.OracleHarness.StandardSchema do
     bind({member_of(@level_4_ids), integer(1..1000)}, fn {id, val} ->
       constant(%{
         name: "update_l4_#{id}",
-        sql: "UPDATE level_4 SET value = 'v#{val}' WHERE id = '#{id}'"
+        sql: "UPDATE level_4 SET value = 'v#{val}' WHERE id = '#{id}'",
+        row_key: {:level_4, id}
       })
     end)
   end

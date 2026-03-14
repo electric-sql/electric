@@ -12,6 +12,7 @@ defmodule Electric.Shapes.Consumer.State do
 
   require Logger
   require LogOffset
+  require MoveIns
 
   @write_unit_txn :txn
   @write_unit_txn_fragment :txn_fragment
@@ -42,7 +43,12 @@ defmodule Electric.Shapes.Consumer.State do
     # Tracks in-progress transaction, initialized when a txn fragment with has_begin?=true is seen.
     # It is used to check whether the entire txn is visible in the snapshot and to mark it
     # as flushed in order to handle its remaining fragments appropriately.
-    pending_txn: nil
+    pending_txn: nil,
+    # Tracks the highest global LSN seen from tracker broadcasts.
+    # Used to attempt immediate splice when a query_move_in_complete arrives.
+    last_seen_global_lsn: 0,
+    # Debug tracing flag, set during init based on ELECTRIC_DEBUG_TRACE env vars
+    trace_enabled?: false
   ]
 
   @type pg_snapshot() :: SnapshotQuery.pg_snapshot()
@@ -140,6 +146,12 @@ defmodule Electric.Shapes.Consumer.State do
   defguard needs_initial_filtering(state)
            when is_struct(state.initial_snapshot_state, InitialSnapshot) and
                   state.initial_snapshot_state.filtering?
+
+  defguard has_unresolved_move_ins(state)
+           when MoveIns.has_unresolved_move_ins(state.move_handling_state)
+
+  defguard has_move_ins_in_flight(state)
+           when MoveIns.has_move_ins_in_flight(state.move_handling_state)
 
   @spec new(Electric.stack_id(), Shape.handle(), Shape.t()) :: uninitialized_t()
   def new(stack_id, shape_handle, shape) do
@@ -359,21 +371,13 @@ defmodule Electric.Shapes.Consumer.State do
   def initial_snapshot_xmin(%__MODULE__{}), do: nil
 
   @doc """
-  Track a change in the touch tracker.
+  Garbage collect transient move-in state when no move-ins are active.
   """
-  @spec track_change(t(), pos_integer(), Electric.Replication.Changes.change()) :: t()
-  def track_change(%__MODULE__{move_handling_state: move_handling_state} = state, xid, change) do
-    %{state | move_handling_state: MoveIns.track_touch(move_handling_state, xid, change)}
-  end
-
-  @doc """
-  Garbage collect touches that are visible in all pending snapshots.
-  """
-  @spec gc_touch_tracker(t()) :: t()
-  def gc_touch_tracker(%__MODULE__{move_handling_state: move_handling_state} = state) do
+  @spec gc_transient_move_in_state(t()) :: t()
+  def gc_transient_move_in_state(%__MODULE__{move_handling_state: move_handling_state} = state) do
     %{
       state
-      | move_handling_state: MoveIns.gc_touch_tracker(move_handling_state)
+      | move_handling_state: MoveIns.gc_transient_move_in_state(move_handling_state)
     }
   end
 

@@ -70,17 +70,21 @@ defmodule Electric.Shapes.PartialModes do
         SnapshotQuery.execute_for_shape(pool, shape_handle, shape,
           stack_id: opts[:stack_id],
           query_reason: "move_in_query",
-          snapshot_info_fn: fn _, pg_snapshot, _ ->
+          snapshot_info_fn: fn _, pg_snapshot, wal_lsn ->
             # Send snapshot notification immediately instead of blocking
-            send(consumer_pid, {:pg_snapshot_known, opts[:move_in_name], pg_snapshot})
+            send(consumer_pid, {:pg_snapshot_known, opts[:move_in_name], pg_snapshot, wal_lsn})
           end,
-          query_fn: fn conn, pg_snapshot, _ ->
+          query_fn: fn conn, pg_snapshot, wal_lsn ->
             result =
               Querying.query_move_in(conn, opts[:stack_id], shape_handle, shape, where)
               |> results_fn.(pg_snapshot)
 
             {key_set, snapshot} = result
-            send(consumer_pid, {:query_move_in_complete, opts[:move_in_name], key_set, snapshot})
+
+            send(
+              consumer_pid,
+              {:query_move_in_complete, opts[:move_in_name], key_set, snapshot, wal_lsn}
+            )
           end
         )
       rescue
