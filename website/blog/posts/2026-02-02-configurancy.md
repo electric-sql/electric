@@ -1,9 +1,9 @@
 ---
-title: 'Configurancy: Keeping Systems Intelligible When Agents Write All the Code'
+title: 'Configurancy: keeping systems intelligible when agents write all the code'
 description: >-
-  AI makes code cheap; the scarce asset is the system's self-knowledge. Configurancy is the layer that lets bounded agents coherently co-evolve a system.
+  Configurancy is the layer that lets agents coherently co-evolve a system.
 excerpt: >-
-  What changed isn't the principle—it's the economics. Agents can propagate spec changes through implementations at machine speed. Conformance suites verify correctness. The spec becomes the source of truth again.
+  AI makes code cheap. The scarce asset is the system's self-knowledge. Configurancy is the layer that lets agents coherently co-evolve a system.
 authors: [kyle]
 image: /img/blog/configurancy/hero.png
 tags: [agentic, AI, development]

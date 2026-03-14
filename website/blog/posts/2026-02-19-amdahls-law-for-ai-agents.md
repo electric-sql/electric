@@ -1,9 +1,9 @@
 ---
-title: "Amdahl's Law for AI Agents"
+title: "Amdahl's law for AI agents"
 description: >-
   The maximum speedup from AI agents is bounded by the fraction of the workflow that requires human judgment. The highest-leverage investment isn't making agents faster — it's making every human intervention self-liquidating.
 excerpt: >-
-  Multi-agent systems are delivering real throughput gains — but the teams seeing the biggest speedups share a pattern. A law from 1967 explains why, and points to where the leverage actually is.
+  Multi-agent systems are delivering real throughput gains — but the teams seeing the biggest speedups share a pattern. A law from 1967 explains why.
 authors: [kyle]
 image: /img/blog/amdahls-law-for-ai-agents/hero.png
 tags: [agentic, AI, development]
