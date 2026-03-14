@@ -186,40 +186,24 @@ defmodule Electric.Client.TagTracker do
             {deletes, kd_acc, ttk_acc}
 
           %{tags: current_entries, msg: msg} = data ->
-            dnf? = data.active_conditions != nil and disjunct_positions != nil
-            remaining_entries = MapSet.difference(current_entries, removed_entries)
+            deactivated_positions =
+              MapSet.new(removed_entries, fn {pos, _} -> pos end)
 
-            {should_delete, updated_data} =
-              if dnf? do
-                deactivated_positions =
-                  MapSet.new(removed_entries, fn {pos, _} -> pos end)
+            updated_ac =
+              data.active_conditions
+              |> Enum.with_index()
+              |> Enum.map(fn {val, idx} ->
+                if MapSet.member?(deactivated_positions, idx), do: false, else: val
+              end)
 
-                updated_ac =
-                  data.active_conditions
-                  |> Enum.with_index()
-                  |> Enum.map(fn {val, idx} ->
-                    if MapSet.member?(deactivated_positions, idx), do: false, else: val
-                  end)
+            visible = row_visible?(updated_ac, disjunct_positions)
 
-                visible = row_visible?(updated_ac, disjunct_positions)
-                {not visible, %{data | active_conditions: updated_ac}}
-              else
-                {MapSet.size(remaining_entries) == 0, %{data | tags: remaining_entries}}
-              end
-
-            if should_delete do
-              # Remove all of this key's entries from tag_to_keys
+            if not visible do
               ttk_acc = remove_key_from_tags(ttk_acc, current_entries, key)
 
               {[{key, msg} | deletes], Map.delete(kd_acc, key), ttk_acc}
             else
-              # In legacy mode, remove matched entries from tag_to_keys.
-              # In DNF mode, keep them so move-in broadcasts can find the key.
-              ttk_acc =
-                if dnf?,
-                  do: ttk_acc,
-                  else: remove_key_from_tags(ttk_acc, removed_entries, key)
-
+              updated_data = %{data | active_conditions: updated_ac}
               {deletes, Map.put(kd_acc, key, updated_data), ttk_acc}
             end
         end

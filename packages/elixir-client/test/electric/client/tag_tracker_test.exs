@@ -112,14 +112,23 @@ defmodule Electric.Client.TagTrackerTest do
 
   describe "generate_synthetic_deletes/5" do
     test "generates deletes for keys matching pattern" do
-      # Set up: two keys with tag_a
-      msg1 = make_change_msg("key1", :insert, tags: ["tag_a"], value: %{"id" => "1"})
-      msg2 = make_change_msg("key2", :insert, tags: ["tag_a"], value: %{"id" => "2"})
+      msg1 =
+        make_change_msg("key1", :insert,
+          tags: ["tag_a"],
+          active_conditions: [true],
+          value: %{"id" => "1"}
+        )
+
+      msg2 =
+        make_change_msg("key2", :insert,
+          tags: ["tag_a"],
+          active_conditions: [true],
+          value: %{"id" => "2"}
+        )
 
       {tag_to_keys, key_data, dp} = TagTracker.update_tag_index(%{}, %{}, nil, msg1)
       {tag_to_keys, key_data, dp} = TagTracker.update_tag_index(tag_to_keys, key_data, dp, msg2)
 
-      # Move-out for tag_a
       patterns = [%{pos: 0, value: "tag_a"}]
       timestamp = DateTime.utc_now()
 
@@ -140,31 +149,39 @@ defmodule Electric.Client.TagTrackerTest do
       assert new_key_data == %{}
     end
 
-    test "does not delete keys with remaining tags" do
-      # Set up: key1 has tag_a and tag_b
-      msg = make_change_msg("key1", :insert, tags: ["tag_a", "tag_b"], value: %{"id" => "1"})
+    test "does not delete keys still visible via another disjunct" do
+      # key1 has two disjuncts: pos 0 and pos 1
+      msg =
+        make_change_msg("key1", :insert,
+          tags: ["tag_a/", "/tag_b"],
+          active_conditions: [true, true],
+          value: %{"id" => "1"}
+        )
+
       {tag_to_keys, key_data, dp} = TagTracker.update_tag_index(%{}, %{}, nil, msg)
 
-      # Move-out only for tag_a
+      # Move-out only for pos 0
       patterns = [%{pos: 0, value: "tag_a"}]
       timestamp = DateTime.utc_now()
 
       {deletes, new_tag_to_keys, new_key_data} =
         TagTracker.generate_synthetic_deletes(tag_to_keys, key_data, dp, patterns, timestamp)
 
-      # No synthetic deletes - key1 still has tag_b
       assert deletes == []
+      assert new_key_data["key1"].active_conditions == [false, true]
 
-      # tag_a removed, tag_b remains
-      assert new_tag_to_keys == %{
-               {0, "tag_b"} => MapSet.new(["key1"])
-             }
-
-      assert new_key_data["key1"].tags == MapSet.new([{0, "tag_b"}])
+      # tag_to_keys entries preserved for move-in broadcasts
+      assert Map.has_key?(new_tag_to_keys, {0, "tag_a"})
+      assert Map.has_key?(new_tag_to_keys, {1, "tag_b"})
     end
 
     test "handles non-existent tag pattern" do
-      msg = make_change_msg("key1", :insert, tags: ["tag_a"])
+      msg =
+        make_change_msg("key1", :insert,
+          tags: ["tag_a"],
+          active_conditions: [true]
+        )
+
       {tag_to_keys, key_data, dp} = TagTracker.update_tag_index(%{}, %{}, nil, msg)
 
       patterns = [%{pos: 0, value: "nonexistent_tag"}]
@@ -179,8 +196,17 @@ defmodule Electric.Client.TagTrackerTest do
     end
 
     test "handles multiple patterns in one call" do
-      msg1 = make_change_msg("key1", :insert, tags: ["tag_a"])
-      msg2 = make_change_msg("key2", :insert, tags: ["tag_b"])
+      msg1 =
+        make_change_msg("key1", :insert,
+          tags: ["tag_a"],
+          active_conditions: [true]
+        )
+
+      msg2 =
+        make_change_msg("key2", :insert,
+          tags: ["tag_b"],
+          active_conditions: [true]
+        )
 
       {tag_to_keys, key_data, dp} = TagTracker.update_tag_index(%{}, %{}, nil, msg1)
       {tag_to_keys, key_data, dp} = TagTracker.update_tag_index(tag_to_keys, key_data, dp, msg2)
@@ -479,71 +505,6 @@ defmodule Electric.Client.TagTrackerTest do
 
       assert length(deletes) == 1
       assert hd(deletes).key == "key1"
-    end
-
-    test "delete on empty tag set for simple shapes (no active_conditions)" do
-      # Insert row with a single-position tag but NO active_conditions
-      msg =
-        make_change_msg("key1", :insert,
-          tags: ["hash1"],
-          value: %{"id" => "1", "name" => "User 1"}
-        )
-
-      {ttk, kd, dp} = TagTracker.update_tag_index(%{}, %{}, nil, msg)
-      assert kd["key1"].active_conditions == nil
-
-      # Move-out at position 0 — no active_conditions: tag removed, tag set empty → delete
-      patterns = [%{pos: 0, value: "hash1"}]
-      timestamp = DateTime.utc_now()
-
-      {deletes, new_ttk, new_kd} =
-        TagTracker.generate_synthetic_deletes(ttk, kd, dp, patterns, timestamp)
-
-      assert length(deletes) == 1
-      assert hd(deletes).key == "key1"
-      assert new_kd == %{}
-      assert new_ttk == %{}
-    end
-
-    test "mixed rows: some with active_conditions, some without" do
-      # Row 1: DNF shape (with active_conditions)
-      msg1 =
-        make_change_msg("key1", :insert,
-          tags: ["hash_a/", "/hash_b"],
-          active_conditions: [true, true],
-          value: %{"id" => "1", "name" => "DNF User"}
-        )
-
-      # Row 2: simple shape (single-position tag, no active_conditions)
-      msg2 =
-        make_change_msg("key2", :insert,
-          tags: ["hash_a"],
-          value: %{"id" => "2", "name" => "Simple User"}
-        )
-
-      {ttk, kd, dp} = TagTracker.update_tag_index(%{}, %{}, nil, msg1)
-      {ttk, kd, dp} = TagTracker.update_tag_index(ttk, kd, dp, msg2)
-
-      assert Map.has_key?(kd, "key1")
-      assert Map.has_key?(kd, "key2")
-
-      # Move-out at position 0 with value hash_a
-      # DNF row: disjunct 0 ([0]) fails, but disjunct 1 ([1]) still satisfied → stays
-      # Simple row: tag "hash_a" at pos 0 removed, tag set empty → deleted
-      patterns = [%{pos: 0, value: "hash_a"}]
-      timestamp = DateTime.utc_now()
-
-      {deletes, _ttk, new_kd} =
-        TagTracker.generate_synthetic_deletes(ttk, kd, dp, patterns, timestamp)
-
-      # DNF row stays, simple row deleted
-      deleted_keys = Enum.map(deletes, & &1.key) |> MapSet.new()
-      assert MapSet.member?(deleted_keys, "key2")
-      refute MapSet.member?(deleted_keys, "key1")
-
-      assert Map.has_key?(new_kd, "key1")
-      assert new_kd["key1"].active_conditions == [false, true]
-      refute Map.has_key?(new_kd, "key2")
     end
 
     test "disjunct_positions derived once and reused across keys" do
