@@ -159,42 +159,38 @@ defmodule Electric.Client.TagTracker do
         patterns,
         request_timestamp
       ) do
-    # First pass: collect all keys that match any pattern and remove those entries
-    {matched_keys_with_entries, updated_tag_to_keys} =
-      Enum.reduce(patterns, {%{}, tag_to_keys}, fn %{pos: pos, value: value},
-                                                   {keys_acc, ttk_acc} ->
+    # First pass: collect all keys that match any pattern (without modifying tag_to_keys)
+    matched_keys_with_entries =
+      Enum.reduce(patterns, %{}, fn %{pos: pos, value: value}, keys_acc ->
         tag_key = {pos, value}
 
-        case Map.pop(ttk_acc, tag_key) do
-          {nil, ttk_acc} ->
-            {keys_acc, ttk_acc}
+        case Map.get(tag_to_keys, tag_key) do
+          nil ->
+            keys_acc
 
-          {keys_in_tag, ttk_acc} ->
-            updated_keys_acc =
-              Enum.reduce(keys_in_tag, keys_acc, fn key, acc ->
-                removed = Map.get(acc, key, MapSet.new())
-                Map.put(acc, key, MapSet.put(removed, tag_key))
-              end)
-
-            {updated_keys_acc, ttk_acc}
+          keys_in_tag ->
+            Enum.reduce(keys_in_tag, keys_acc, fn key, acc ->
+              Map.update(acc, key, MapSet.new([tag_key]), &MapSet.put(&1, tag_key))
+            end)
         end
       end)
 
-    # Second pass: for each matched key, update state and check visibility
-    {keys_to_delete, updated_key_data, orphaned_entries, surviving_entries} =
-      Enum.reduce(matched_keys_with_entries, {[], key_data, [], []}, fn {key, removed_entries},
-                                                                    {deletes, kd_acc, orphans, survivors} ->
+    # Second pass: evaluate visibility, update key_data and tag_to_keys together
+    {keys_to_delete, updated_key_data, updated_tag_to_keys} =
+      Enum.reduce(matched_keys_with_entries, {[], key_data, tag_to_keys}, fn {key,
+                                                                              removed_entries},
+                                                                             {deletes, kd_acc,
+                                                                              ttk_acc} ->
         case Map.get(kd_acc, key) do
           nil ->
-            {deletes, kd_acc, orphans, survivors}
+            {deletes, kd_acc, ttk_acc}
 
           %{tags: current_entries, msg: msg} = data ->
+            dnf? = data.active_conditions != nil and disjunct_positions != nil
             remaining_entries = MapSet.difference(current_entries, removed_entries)
 
-            # Determine if key should be deleted
             {should_delete, updated_data} =
-              if data.active_conditions != nil and disjunct_positions != nil do
-                # DNF mode: deactivate positions and check visibility
+              if dnf? do
                 deactivated_positions =
                   MapSet.new(removed_entries, fn {pos, _} -> pos end)
 
@@ -206,43 +202,27 @@ defmodule Electric.Client.TagTracker do
                   end)
 
                 visible = row_visible?(updated_ac, disjunct_positions)
-
-                {not visible, %{data | tags: current_entries, active_conditions: updated_ac}}
+                {not visible, %{data | active_conditions: updated_ac}}
               else
-                # Old mode: delete if no remaining entries
                 {MapSet.size(remaining_entries) == 0, %{data | tags: remaining_entries}}
               end
 
             if should_delete do
-              {[{key, msg} | deletes], Map.delete(kd_acc, key),
-               [{key, remaining_entries} | orphans], survivors}
-            else
-              # In DNF mode, track surviving entries so we can restore them
-              # in tag_to_keys for future move-in broadcasts to find.
-              survivors =
-                if data.active_conditions != nil and disjunct_positions != nil do
-                  [{key, removed_entries} | survivors]
-                else
-                  survivors
-                end
+              # Remove all of this key's entries from tag_to_keys
+              ttk_acc = remove_key_from_tags(ttk_acc, current_entries, key)
 
-              {deletes, Map.put(kd_acc, key, updated_data), orphans, survivors}
+              {[{key, msg} | deletes], Map.delete(kd_acc, key), ttk_acc}
+            else
+              # In legacy mode, remove matched entries from tag_to_keys.
+              # In DNF mode, keep them so move-in broadcasts can find the key.
+              ttk_acc =
+                if dnf?,
+                  do: ttk_acc,
+                  else: remove_key_from_tags(ttk_acc, removed_entries, key)
+
+              {deletes, Map.put(kd_acc, key, updated_data), ttk_acc}
             end
         end
-      end)
-
-    # Third pass: clean up remaining entries from tag_to_keys for deleted keys.
-    updated_tag_to_keys =
-      Enum.reduce(orphaned_entries, updated_tag_to_keys, fn {key, remaining}, ttk ->
-        remove_key_from_tags(ttk, remaining, key)
-      end)
-
-    # Fourth pass: restore tag_to_keys entries for keys that survived (DNF mode).
-    # The first pass removed matched entries via Map.pop, but surviving keys
-    # still need those entries so future move-in broadcasts can find them.
-    updated_tag_to_keys =
-      Enum.reduce(surviving_entries, updated_tag_to_keys, fn {key, removed_entries}, ttk ->
-        add_key_to_tags(ttk, removed_entries, key)
       end)
 
     # Generate synthetic delete messages
