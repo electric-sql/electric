@@ -507,6 +507,91 @@ defmodule Electric.Client.TagTrackerTest do
       assert hd(deletes).key == "key1"
     end
 
+    test "move-out preserves tag_to_keys so move-in can re-activate" do
+      # Row with two disjuncts: pos 0 and pos 1
+      msg =
+        make_change_msg("key1", :insert,
+          tags: ["hash_a/", "/hash_b"],
+          active_conditions: [true, true],
+          value: %{"id" => "1", "name" => "User 1"}
+        )
+
+      {ttk, kd, dp} = TagTracker.update_tag_index(%{}, %{}, nil, msg)
+
+      # Move-out at pos 0 — row stays visible via disjunct 1
+      patterns = [%{pos: 0, value: "hash_a"}]
+
+      {deletes, ttk, kd} =
+        TagTracker.generate_synthetic_deletes(ttk, kd, dp, patterns, DateTime.utc_now())
+
+      assert deletes == []
+      assert kd["key1"].active_conditions == [false, true]
+
+      # Move-in at pos 0 — should find key1 via preserved tag_to_keys entry
+      patterns = [%{pos: 0, value: "hash_a"}]
+      {ttk, kd} = TagTracker.handle_move_in(ttk, kd, patterns)
+
+      assert kd["key1"].active_conditions == [true, true]
+
+      # Now both disjuncts active again; move-out at pos 1 alone should not delete
+      patterns = [%{pos: 1, value: "hash_b"}]
+
+      {deletes, _ttk, kd} =
+        TagTracker.generate_synthetic_deletes(ttk, kd, dp, patterns, DateTime.utc_now())
+
+      assert deletes == []
+      assert kd["key1"].active_conditions == [true, false]
+    end
+
+    test "deleted row cleans up all tag_to_keys entries" do
+      # Row with entries at pos 0 and pos 1 in a single disjunct
+      msg =
+        make_change_msg("key1", :insert,
+          tags: ["hash_a/hash_b"],
+          active_conditions: [true, true],
+          value: %{"id" => "1"}
+        )
+
+      {ttk, kd, dp} = TagTracker.update_tag_index(%{}, %{}, nil, msg)
+      assert Map.has_key?(ttk, {0, "hash_a"})
+      assert Map.has_key?(ttk, {1, "hash_b"})
+
+      # Move-out at pos 0 — single disjunct [0,1] fails → row deleted
+      patterns = [%{pos: 0, value: "hash_a"}]
+
+      {deletes, ttk, kd} =
+        TagTracker.generate_synthetic_deletes(ttk, kd, dp, patterns, DateTime.utc_now())
+
+      assert length(deletes) == 1
+      assert kd == %{}
+      # Both entries cleaned, not just the matched {0, "hash_a"}
+      refute Map.has_key?(ttk, {0, "hash_a"})
+      refute Map.has_key?(ttk, {1, "hash_b"})
+    end
+
+    test "multiple patterns deactivating same row in one call" do
+      # Row with single disjunct needing both pos 0 and pos 1
+      msg =
+        make_change_msg("key1", :insert,
+          tags: ["hash_a/hash_b"],
+          active_conditions: [true, true],
+          value: %{"id" => "1"}
+        )
+
+      {ttk, kd, dp} = TagTracker.update_tag_index(%{}, %{}, nil, msg)
+
+      # Both positions deactivated in one call
+      patterns = [%{pos: 0, value: "hash_a"}, %{pos: 1, value: "hash_b"}]
+
+      {deletes, ttk, kd} =
+        TagTracker.generate_synthetic_deletes(ttk, kd, dp, patterns, DateTime.utc_now())
+
+      assert length(deletes) == 1
+      assert hd(deletes).key == "key1"
+      assert kd == %{}
+      assert ttk == %{}
+    end
+
     test "disjunct_positions derived once and reused across keys" do
       msg1 =
         make_change_msg("key1", :insert,
