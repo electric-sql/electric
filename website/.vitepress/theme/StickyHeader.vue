@@ -15,9 +15,6 @@ const headers = ref([]);
 
 onContentUpdated(() => {
 	headers.value = getHeaders(frontmatter.value.outline ?? theme.value.outline);
-	console.log('Headers found:', headers.value.length, headers.value);
-	console.log('Outline config:', frontmatter.value.outline);
-	console.log('DOM headings:', document.querySelectorAll('h1, h2, h3, h4, h5, h6').length);
 });
 </script>
 
@@ -210,7 +207,7 @@ onContentUpdated(() => {
   align-items: center;
   justify-content: space-between !important;
   gap: 16px;
-  padding: 64px 240px;
+  padding: 16px 240px;
   background: var(--vp-c-bg-soft);
   border-bottom: 1px solid var(--vp-c-divider);
   z-index: 20;

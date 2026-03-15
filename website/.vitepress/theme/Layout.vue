@@ -66,8 +66,8 @@ onMounted(() => {
       <template v-if="!hasSidebar">
         <ReleaseBanner
           link="/docs/integrations/vue"
-          subtitle="now available!"
-          description="Build reactive Vue apps with seamless sync!"
+          subtitle=""
+          description="Build reactive Vue apps with seamless sync"
           background="#262626"
         >
           <template #icon>

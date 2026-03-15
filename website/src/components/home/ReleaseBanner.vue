@@ -58,11 +58,10 @@ const { link, subtitle, description, background } = defineProps([
           <slot name="icon"></slot>
           <slot name="title"></slot>
         </a>
-        <span>&ndash;</span>
-        <span class="inline-md">
+        <span v-if="subtitle">
           {{ subtitle }}
         </span>
-        <span class="hidden-md">
+        <span v-if="description">
           {{ description }}
         </span>
       </div>
