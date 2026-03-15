@@ -3,8 +3,8 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Query do
     list_shapes: """
     SELECT handle, shape FROM shapes ORDER BY handle
     """,
-    list_handles: """
-    SELECT handle FROM shapes ORDER BY handle
+    list_shape_meta: """
+    SELECT handle, hash, snapshot_complete FROM shapes ORDER BY handle
     """,
     handle_exists: """
     SELECT 1 FROM shapes WHERE handle = ?1
@@ -15,56 +15,51 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Query do
     shape_lookup: """
     SELECT shape FROM shapes WHERE handle = ?1 LIMIT 1
     """,
-    hash_lookup: """
-    SELECT hash FROM shapes WHERE handle = ?1 LIMIT 1
-    """,
     relation_handle_lookup: """
     SELECT handle FROM relations WHERE oid = ?1 LIMIT 1
     """,
     shape_count: """
     SELECT count FROM shape_count WHERE id = 1 LIMIT 1
-    """,
-    snapshot_state: """
-    SELECT snapshot_state FROM shapes WHERE handle = ?1 LIMIT 1
     """
   ]
-  @write_queries [
-    insert_shape: """
-    INSERT INTO shapes (handle, shape, comparable, hash) VALUES (?1, ?2, ?3, ?4)
-    """,
-    insert_relation: """
-    INSERT INTO relations (handle, oid) VALUES (?1, ?2)
-    """,
-    increment_counter: """
-    UPDATE shape_count SET count = count + ?1 WHERE id = 1
-    """,
-    delete_shape: """
-    DELETE FROM shapes WHERE handle = ?1
-    """,
-    delete_relation: """
-    DELETE FROM relations WHERE handle = ?1
-    """,
-    mark_snapshot_started: """
-    UPDATE shapes SET snapshot_state = snapshot_state | 1 WHERE handle = ?1
-    """,
-    mark_snapshot_complete: """
-    UPDATE shapes SET snapshot_state = 3 WHERE handle = ?1
-    """,
-    # snapshot state is a bitmask to handle the snapshot completion message arriving before the
-    # snapshot start event for small snapshots (since the snapshot start message goes through
-    # more indirection via the consumer process)
-    # snapshot_state &&& 1: snapshot started
-    # snapshot_state &&& 2: snapshot completed
-    select_invalid: """
-    SELECT handle FROM shapes WHERE snapshot_state IN (0, 1) ORDER BY handle
-    """
-  ]
+  @write_queries Keyword.merge(
+                   [
+                     insert_shape: """
+                     INSERT INTO shapes (handle, shape, comparable, hash) VALUES (?1, ?2, ?3, ?4)
+                     """,
+                     insert_relation: """
+                     INSERT INTO relations (handle, oid) VALUES (?1, ?2)
+                     """,
+                     increment_counter: """
+                     UPDATE shape_count SET count = count + ?1 WHERE id = 1
+                     """,
+                     delete_shape: """
+                     DELETE FROM shapes WHERE handle = ?1
+                     """,
+                     delete_relation: """
+                     DELETE FROM relations WHERE handle = ?1
+                     """,
+                     mark_snapshot_complete: """
+                     UPDATE shapes SET snapshot_complete = 1 WHERE handle = ?1
+                     """,
+                     # only shapes that have completed their snapshot are valid
+                     select_invalid: """
+                     SELECT handle FROM shapes WHERE snapshot_complete = 0 ORDER BY handle
+                     """
+                   ],
+                   # need the handle_lookup query in the write connection to
+                   # allow for handle lookup to definitely read all writes
+                   Keyword.take(@read_queries, [:handle_lookup])
+                 )
 
-  defstruct Keyword.keys(@read_queries) ++ Keyword.keys(@write_queries)
+  @stmt_names Enum.uniq(Keyword.keys(@read_queries) ++ Keyword.keys(@write_queries))
+
+  defstruct @stmt_names
 
   alias Electric.ShapeCache.ShapeStatus.ShapeDb.Connection, as: Conn
 
-  alias Exqlite.Sqlite3
+  # alias Exqlite.Sqlite3
+  alias Electric.ShapeCache.ShapeStatus.ShapeDb.Sqlite3
 
   import Conn,
     only: [
@@ -76,8 +71,18 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Query do
       stream_query: 3
     ]
 
-  def prepare!(conn, opts) do
-    case Keyword.get(opts, :mode, :readwrite) do
+  def active_stmts(nil) do
+    []
+  end
+
+  def active_stmts(%__MODULE__{} = query) do
+    @stmt_names
+    |> Enum.map(&{&1, Map.fetch!(query, &1)})
+    |> Enum.reject(&is_nil(elem(&1, 1)))
+  end
+
+  def prepare!(conn, mode) do
+    case mode do
       :readwrite ->
         struct(__MODULE__, prepare_stmts!(conn, @read_queries ++ @write_queries))
 
@@ -121,10 +126,10 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Query do
            modify(conn, insert_shape, [
              {:blob, shape_handle},
              {:blob, term_to_binary(shape)},
-             {:blob, term_to_binary(comparable_shape)},
+             {:blob, comparable_to_binary(comparable_shape)},
              shape_hash
            ]),
-         {:ok, 1} <- modify(conn, increment_counter, [1]),
+         :ok <- increment_counter(conn, increment_counter, 1),
          :ok <-
            Enum.reduce_while(relations, :ok, fn {oid, _name}, :ok ->
              case modify(conn, insert_relation, [{:blob, shape_handle}, oid]) do
@@ -142,14 +147,9 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Query do
     end)
   end
 
-  def shape_hash(%Conn{conn: conn, stmts: %{hash_lookup: stmt}}, shape_handle) do
-    with {:ok, [hash]} <- fetch_one(conn, stmt, [{:blob, shape_handle}]) do
-      {:ok, hash}
-    end
-  end
-
   def handle_for_shape(%Conn{conn: conn, stmts: %{handle_lookup: stmt}}, comparable_shape) do
-    with {:ok, [handle]} <- fetch_one(conn, stmt, [{:blob, term_to_binary(comparable_shape)}]) do
+    with {:ok, [handle]} <-
+           fetch_one(conn, stmt, [{:blob, comparable_to_binary(comparable_shape)}]) do
       {:ok, handle}
     end
   end
@@ -185,29 +185,6 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Query do
     end
   end
 
-  def mark_snapshot_started(
-        %Conn{conn: conn, stmts: %{mark_snapshot_started: stmt}},
-        shape_handle
-      ) do
-    with {:ok, n} <- modify(conn, stmt, [{:blob, shape_handle}]) do
-      if n == 1, do: :ok, else: :error
-    end
-  end
-
-  def snapshot_started?(%Conn{conn: conn, stmts: %{snapshot_state: stmt}}, shape_handle) do
-    case fetch_one(conn, stmt, [{:blob, shape_handle}]) do
-      {:ok, [s]} -> s > 0
-      :error -> false
-    end
-  end
-
-  def snapshot_complete?(%Conn{conn: conn, stmts: %{snapshot_state: stmt}}, shape_handle) do
-    case fetch_one(conn, stmt, [{:blob, shape_handle}]) do
-      {:ok, [s]} -> Bitwise.band(s, 2) == 2
-      :error -> false
-    end
-  end
-
   def mark_snapshot_complete(
         %Conn{conn: conn, stmts: %{mark_snapshot_complete: stmt}},
         shape_handle
@@ -226,13 +203,21 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Query do
 
     case modify(conn, delete_shape, [{:blob, shape_handle}]) do
       {:ok, 0} ->
-        {:error, "No shape matching #{inspect(shape_handle)}"}
+        {:error, {:enoshape, shape_handle}}
 
       {:ok, 1} ->
-        with {:ok, 1} <- modify(conn, increment_counter, [-1]),
-             {:ok, n} when n > 0 <- modify(conn, delete_relation, [{:blob, shape_handle}]) do
+        with :ok <- increment_counter(conn, increment_counter, -1),
+             {:ok, _} <- modify(conn, delete_relation, [{:blob, shape_handle}]) do
           :ok
         end
+    end
+  end
+
+  defp increment_counter(conn, stmt, incr) do
+    case modify(conn, stmt, [incr]) do
+      {:ok, 1} -> :ok
+      {:ok, _} -> {:error, "Failed to increment shape count by #{incr}"}
+      error -> error
     end
   end
 
@@ -246,8 +231,10 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Query do
     end)
   end
 
-  def list_handles_stream(%Conn{conn: conn, stmts: %{list_handles: stmt}}) do
-    stream_query(conn, stmt, fn [handle] -> handle end)
+  def list_shape_meta_stream(%Conn{conn: conn, stmts: %{list_shape_meta: stmt}}) do
+    stream_query(conn, stmt, fn [handle, hash, snapshot_complete] ->
+      {handle, hash, snapshot_complete == 1}
+    end)
   end
 
   def reset(%Conn{conn: conn}) do
@@ -307,4 +294,10 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Query do
   end
 
   defp term_to_binary(term), do: :erlang.term_to_binary(term, [:deterministic])
+
+  defp comparable_to_binary(comparable_shape) do
+    comparable_shape
+    |> term_to_binary()
+    |> then(&:crypto.hash(:sha256, &1))
+  end
 end

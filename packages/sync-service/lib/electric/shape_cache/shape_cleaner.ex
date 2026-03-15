@@ -70,7 +70,7 @@ defmodule Electric.ShapeCache.ShapeCleaner do
     CleanupTaskSupervisor.perform_async(stack_id, fn ->
       affected_shapes = ShapeStatus.list_shape_handles_for_relations(stack_id, relations)
 
-      Logger.info(fn ->
+      Logger.notice(fn ->
         "Cleaning up all shapes for relations #{inspect(relations)}: #{length(affected_shapes)} shapes total"
       end)
 
@@ -128,7 +128,7 @@ defmodule Electric.ShapeCache.ShapeCleaner do
           inspect(other)
       end
 
-    Logger.info(
+    Logger.notice(
       "Removing shape #{inspect(shape_handle)} due to abnormal shutdown: #{reason_message}"
     )
 
@@ -138,19 +138,19 @@ defmodule Electric.ShapeCache.ShapeCleaner do
   end
 
   defp remove_shapes_immediate(stack_id, shape_handles, reason) when is_list(shape_handles) do
-    Enum.flat_map(shape_handles, fn shape_handle ->
-      OpenTelemetry.with_span(
-        "shape_cleaner.remove_shapes.remove_shape_immediate",
-        [shape_handle: shape_handle],
-        stack_id,
-        fn ->
+    OpenTelemetry.with_child_span(
+      "shape_cleaner.remove_shapes.remove_shapes_immediate",
+      [count: length(shape_handles)],
+      stack_id,
+      fn ->
+        Enum.flat_map(shape_handles, fn shape_handle ->
           case remove_shape_immediate(stack_id, shape_handle, reason) do
             :ok -> [shape_handle]
             {:error, :data_removed} -> []
           end
-        end
-      )
-    end)
+        end)
+      end
+    )
   end
 
   defp remove_shape_immediate(stack_id, shape_handle, reason) do

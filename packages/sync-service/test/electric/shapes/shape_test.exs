@@ -210,6 +210,40 @@ defmodule Electric.Shapes.ShapeTest do
       assert Shape.convert_change(shape, non_matching_update) == []
     end
 
+    test "keeps update with tag changes even if filtered columns have not changed" do
+      shape = %Shape{
+        root_table: {"public", "table"},
+        root_table_id: @relation_id,
+        selected_columns: ["id"],
+        # tag_structure means this shape tracks tags based on the "parent_id" column
+        tag_structure: [["parent_id"]]
+      }
+
+      # Update where only parent_id changed (tag change), but id (selected column) didn't
+      update_with_tag_change = %UpdatedRecord{
+        relation: {"public", "table"},
+        old_record: %{"id" => 1, "parent_id" => "old_parent"},
+        record: %{"id" => 1, "parent_id" => "new_parent"}
+      }
+
+      result =
+        Shape.convert_change(shape, update_with_tag_change,
+          stack_id: "test_stack",
+          shape_handle: "test_handle"
+        )
+
+      # The change should be kept (not filtered out) because it has tag changes
+      assert length(result) == 1
+      [converted] = result
+
+      # The converted change should have removed_move_tags set (indicating the old tag)
+      assert converted.removed_move_tags != []
+      # And move_tags for the new tag
+      assert converted.move_tags != []
+      # Tags should be different since parent_id changed
+      assert converted.move_tags != converted.removed_move_tags
+    end
+
     test "correctly keeps updates with subqueries if the referenced set has not changed" do
       shape = %Shape{
         root_table: {"public", "table"},
@@ -695,6 +729,22 @@ defmodule Electric.Shapes.ShapeTest do
                  inspector: inspector,
                  where: "value IN (SELECT value FROM project WHERE value > $0) AND value > $4",
                  params: %{"0" => "10", "4" => "5"}
+               )
+    end
+
+    @tag with_sql: [
+           "CREATE TABLE IF NOT EXISTS item (id INT PRIMARY KEY, value INT NOT NULL)"
+         ]
+    test "sequential parameters with 10+ keys are accepted", %{inspector: inspector} do
+      params = Map.new(1..20, fn i -> {"#{i}", "#{i * 10}"} end)
+
+      where = Enum.map_join(1..20, " OR ", fn i -> "value = $#{i}" end)
+
+      assert {:ok, _} =
+               Shape.new("item",
+                 inspector: inspector,
+                 where: where,
+                 params: params
                )
     end
   end

@@ -10,7 +10,7 @@ defmodule Electric.Application do
       Supervisor.start_link(children_library(), supervisor_opts)
     else
       app_vsn = Application.spec(:electric, :vsn)
-      Logger.info("Starting ElectricSQL #{app_vsn}")
+      Logger.notice("Starting ElectricSQL #{app_vsn}")
 
       Supervisor.start_link(
         children_application(),
@@ -126,6 +126,7 @@ defmodule Electric.Application do
         slot_name: slot_name,
         slot_temporary?: get_env(opts, :replication_slot_temporary?),
         max_txn_size: get_env(opts, :max_txn_size),
+        max_batch_size: get_env(opts, :max_batch_size),
         replication_idle_timeout: replication_idle_timeout
       ],
       pool_opts:
@@ -143,9 +144,19 @@ defmodule Electric.Application do
         shape_hibernate_after: get_env(opts, :shape_hibernate_after),
         shape_enable_suspend?: get_env(opts, :shape_enable_suspend?),
         conn_max_requests: get_env(opts, :conn_max_requests),
+        handler_fullsweep_after: get_env(opts, :handler_fullsweep_after),
         process_spawn_opts: get_env(opts, :process_spawn_opts)
       ],
-      manual_table_publishing?: get_env(opts, :manual_table_publishing?)
+      manual_table_publishing?: get_env(opts, :manual_table_publishing?),
+      shape_db_opts: [
+        exclusive_mode: get_env(opts, :shape_db_exclusive_mode),
+        storage_dir:
+          get_env_lazy(opts, :shape_db_storage_dir, fn ->
+            get_env(opts, :storage_dir)
+          end),
+        synchronous: get_env(opts, :shape_db_synchronous),
+        cache_size: get_env(opts, :shape_db_cache_size)
+      ]
     )
   end
 
@@ -283,6 +294,12 @@ defmodule Electric.Application do
         []
       end
 
+    ti_opts =
+      case Keyword.get(tweaks, :handler_fullsweep_after) do
+        nil -> ti_opts
+        n -> [{:handler_fullsweep_after, n} | ti_opts]
+      end
+
     shared_http_opts =
       if max_requests = Keyword.get(tweaks, :conn_max_requests) do
         [max_requests: max_requests]
@@ -337,7 +354,15 @@ defmodule Electric.Application do
 
     transport_opts = [transport_options: ipv6_opts ++ send_opts]
 
-    acceptor_opts ++ transport_opts
+    # ThousandIsland handler processes are GenServers. We can pass spawn_opt via
+    # genserver_options to control garbage collection behavior.
+    genserver_opts =
+      case Keyword.get(opts, :handler_fullsweep_after) do
+        nil -> []
+        n -> [genserver_options: [spawn_opt: [fullsweep_after: n]]]
+      end
+
+    acceptor_opts ++ transport_opts ++ genserver_opts
   end
 
   defp cowboy_options(opts) do

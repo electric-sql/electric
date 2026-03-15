@@ -66,6 +66,11 @@ export class ExpiredShapesCache {
     this.data = {}
     this.save()
   }
+
+  delete(shapeUrl: string): void {
+    delete this.data[shapeUrl]
+    this.save()
+  }
 }
 
 // Module-level singleton instance

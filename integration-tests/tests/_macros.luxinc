@@ -181,7 +181,7 @@
   [shell $shell_name]
     -$fail_pattern
 
-    ??[info] Starting ElectricSQL
+    ??[notice] Starting ElectricSQL
 
     !if is_nil(System.get_env("DO_NOT_START_CONN_MAN_PING")) do \
       {:ok, _pid} = Electric.TestUtils.ConnectionManagerPing.start_link(manager_name: Electric.Connection.Manager.name("single_stack")) \

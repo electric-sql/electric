@@ -1,7 +1,7 @@
 {
   "name": "@electric-sql/client",
   "description": "Postgres everywhere - your data, in sync, wherever you need it.",
-  "version": "1.4.1",
+  "version": "1.5.12",
   "author": "ElectricSQL team and contributors.",
   "bugs": {
     "url": "https://github.com/electric-sql/electric/issues"
@@ -10,6 +10,7 @@
     "@microsoft/fetch-event-source": "^2.0.1"
   },
   "devDependencies": {
+    "@tanstack/intent": "^0.0.9",
     "@types/pg": "^8.11.6",
     "@types/uuid": "^10.0.0",
     "@typescript-eslint/eslint-plugin": "^7.14.1",
@@ -45,9 +46,15 @@
       }
     }
   },
+  "bin": {
+    "intent": "./bin/intent.mjs"
+  },
   "files": [
     "dist",
-    "src"
+    "src",
+    "skills",
+    "bin",
+    "!skills/_artifacts"
   ],
   "homepage": "https://electric-sql.com",
   "license": "Apache-2.0",

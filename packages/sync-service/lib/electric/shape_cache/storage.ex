@@ -53,13 +53,6 @@ defmodule Electric.ShapeCache.Storage do
   @callback get_all_stored_shape_handles(compiled_opts()) ::
               {:ok, MapSet.t(shape_handle())} | {:error, term()}
 
-  @doc "Retrieve stored shapes for given shape handles"
-  @callback get_stored_shapes(compiled_opts(), Enumerable.t(shape_handle())) ::
-              %{shape_handle() => {:ok, shape_def :: Shape.t()} | {:error, term()}}
-
-  @doc "Get the directory where metadata backups are stored."
-  @callback metadata_backup_dir(compiled_opts()) :: String.t() | nil
-
   @doc "Get the total disk usage for all shapes"
   @callback get_total_disk_usage(compiled_opts()) :: non_neg_integer()
 
@@ -108,24 +101,14 @@ defmodule Electric.ShapeCache.Storage do
   Since snapshot doesn't have an offset associated, the offsets are inferred at splice time, and the range is returned.
   Range is a tuple of {starting_offset, ending_offset}, with starting offset being right before the first item in
   the snapshot to match usage of `get_log_stream/3`
+
+  An optional `skip_row?` predicate can filter rows during splicing: it receives
+  `(key, tags)` and returns `true` if the row should be skipped.
   """
-  @callback append_move_in_snapshot_to_log!(name :: String.t(), writer_state()) ::
-              {inserted_range :: {LogOffset.t(), LogOffset.t()}, writer_state()} | no_return()
-
-  @doc """
-  Splice a move in snapshot into the main log with filtering.
-
-  Rows are filtered using the touch_tracker: if a row's key has been touched by a transaction
-  that is NOT visible in the snapshot, skip that row (stream has fresher data).
-
-  Returns the inserted range (excluding skipped rows) and updated writer state.
-  """
-  @callback append_move_in_snapshot_to_log_filtered!(
+  @callback append_move_in_snapshot_to_log!(
               name :: String.t(),
               writer_state(),
-              touch_tracker :: %{String.t() => pos_integer()},
-              snapshot :: {pos_integer(), pos_integer(), [pos_integer()]},
-              tags_to_skip :: MapSet.t(String.t())
+              skip_row? :: (String.t(), [String.t()] -> boolean())
             ) ::
               {inserted_range :: {LogOffset.t(), LogOffset.t()}, writer_state()} | no_return()
 
@@ -149,6 +132,29 @@ defmodule Electric.ShapeCache.Storage do
   occurs, then this should raise.
   """
   @callback append_to_log!(Enumerable.t(log_item()), writer_state()) ::
+              writer_state() | no_return()
+
+  @doc """
+  Append log items from a transaction fragment.
+
+  Called potentially multiple times per transaction for shapes that stream
+  fragments directly to storage without waiting for the complete transaction.
+  Unlike `append_to_log!/2`, this does not assume transaction completion.
+
+  Transaction commits should be signaled separately via `signal_txn_commit!/2`
+  to allow storage to calculate chunk boundaries at transaction boundaries.
+  """
+  @callback append_fragment_to_log!(Enumerable.t(log_item()), writer_state()) ::
+              writer_state() | no_return()
+
+  @doc """
+  Signal that a transaction has committed.
+
+  Used by storage to calculate chunk boundaries at transaction boundaries.
+  Called after all fragments for a transaction have been written via
+  `append_fragment_to_log!/2`.
+  """
+  @callback signal_txn_commit!(xid :: pos_integer(), writer_state()) ::
               writer_state() | no_return()
 
   @doc "Get stream of the log for a shape since a given offset"
@@ -188,6 +194,15 @@ defmodule Electric.ShapeCache.Storage do
   @callback cleanup_all!(shape_opts()) :: any()
 
   @doc """
+  Whether this storage backend supports streaming transaction fragments
+  directly to storage via `append_fragment_to_log!/2` and `signal_txn_commit!/2`.
+
+  Storage backends that return `false` will only receive complete transactions
+  via `append_to_log!/2`.
+  """
+  @callback supports_txn_fragment_streaming?() :: boolean()
+
+  @doc """
   Compact operations in the log keeping the last N complete chunks intact
   """
   @callback compact(shape_opts(), keep_complete_chunks :: pos_integer()) :: :ok
@@ -209,6 +224,16 @@ defmodule Electric.ShapeCache.Storage do
 
   def for_stack(stack_id) do
     Electric.StackConfig.lookup!(stack_id, Electric.ShapeCache.Storage)
+  end
+
+  def opts_for_stack(stack_id) do
+    {_module, opts} = Electric.StackConfig.lookup!(stack_id, Electric.ShapeCache.Storage)
+    opts
+  end
+
+  def opt_for_stack(stack_id, opt_name) do
+    opts = opts_for_stack(stack_id)
+    Map.fetch!(opts, opt_name)
   end
 
   @spec child_spec(shape_storage()) :: Supervisor.child_spec()
@@ -261,16 +286,6 @@ defmodule Electric.ShapeCache.Storage do
   end
 
   @impl __MODULE__
-  def get_stored_shapes({mod, opts}, shape_handles) do
-    mod.get_stored_shapes(opts, shape_handles)
-  end
-
-  @impl __MODULE__
-  def metadata_backup_dir({mod, opts}) do
-    mod.metadata_backup_dir(opts)
-  end
-
-  @impl __MODULE__
   def get_total_disk_usage({mod, opts}) do
     mod.get_total_disk_usage(opts)
   end
@@ -311,27 +326,13 @@ defmodule Electric.ShapeCache.Storage do
   end
 
   @impl __MODULE__
-  def append_move_in_snapshot_to_log!(name, {mod, writer_state}) do
-    {inserted_range, new_writer_state} = mod.append_move_in_snapshot_to_log!(name, writer_state)
-    {inserted_range, {mod, new_writer_state}}
-  end
-
-  @impl __MODULE__
-  def append_move_in_snapshot_to_log_filtered!(
+  def append_move_in_snapshot_to_log!(
         name,
         {mod, writer_state},
-        touch_tracker,
-        snapshot,
-        tags_to_skip
+        skip_row? \\ fn _, _ -> false end
       ) do
     {inserted_range, new_writer_state} =
-      mod.append_move_in_snapshot_to_log_filtered!(
-        name,
-        writer_state,
-        touch_tracker,
-        snapshot,
-        tags_to_skip
-      )
+      mod.append_move_in_snapshot_to_log!(name, writer_state, skip_row?)
 
     {inserted_range, {mod, new_writer_state}}
   end
@@ -353,6 +354,32 @@ defmodule Electric.ShapeCache.Storage do
   @impl __MODULE__
   def append_to_log!(log_items, {mod, shape_opts}) do
     {mod, mod.append_to_log!(log_items, shape_opts)}
+  end
+
+  @impl __MODULE__
+  def supports_txn_fragment_streaming? do
+    raise "supports_txn_fragment_streaming?/0 should be called on a specific storage module, " <>
+            "or use supports_txn_fragment_streaming?/1 with a storage tuple"
+  end
+
+  @doc """
+  Check if a storage backend supports txn fragment streaming.
+
+  Takes a storage tuple `{module, opts}` and delegates to the module's
+  `supports_txn_fragment_streaming?/0` callback.
+  """
+  def supports_txn_fragment_streaming?({mod, _opts}) do
+    mod.supports_txn_fragment_streaming?()
+  end
+
+  @impl __MODULE__
+  def append_fragment_to_log!(log_items, {mod, shape_opts}) do
+    {mod, mod.append_fragment_to_log!(log_items, shape_opts)}
+  end
+
+  @impl __MODULE__
+  def signal_txn_commit!(xid, {mod, shape_opts}) do
+    {mod, mod.signal_txn_commit!(xid, shape_opts)}
   end
 
   @impl __MODULE__

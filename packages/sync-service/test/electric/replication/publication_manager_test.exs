@@ -501,26 +501,24 @@ defmodule Electric.Replication.PublicationManagerTest do
 
   describe "component restarts" do
     test "handles relation tracker restart", ctx do
-      notify_alter_queries()
       shape = generate_shape(ctx.relation_with_oid, @where_clause_1)
 
+      # Add the shape to ShapeStatus first - this is what allows restoration after restart
       {:ok, shape_handle} = Electric.ShapeCache.ShapeStatus.add_shape(ctx.stack_id, shape)
 
-      run_async(fn ->
-        assert_raise RuntimeError, fn ->
-          PublicationManager.add_shape(ctx.stack_id, shape_handle, shape)
-        end
-      end)
-
-      relation_tracker_name = PublicationManager.RelationTracker.name(ctx.stack_id)
-
-      receive do
-        {:alter_publication, _, _} -> GenServer.stop(relation_tracker_name)
-      end
-
+      # Add the shape to the publication manager
+      assert :ok = PublicationManager.add_shape(ctx.stack_id, shape_handle, shape)
       assert_pub_tables(ctx, [ctx.relation])
 
-      # after restart, the publication manager should repopulate the publication
+      # Stop the RelationTracker - supervisor will restart it
+      relation_tracker_name = PublicationManager.RelationTracker.name(ctx.stack_id)
+      GenServer.stop(relation_tracker_name)
+
+      # After restart, the publication manager should repopulate from ShapeStatus.
+      # The publication should still have the relation.
+      assert_pub_tables(ctx, [ctx.relation], 2_000)
+
+      # Verify we can still remove the shape after the restart
       PublicationManager.remove_shape(ctx.stack_id, shape_handle)
       assert_pub_tables(ctx, [], 2_000)
     end

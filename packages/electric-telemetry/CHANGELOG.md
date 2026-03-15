@@ -1,5 +1,32 @@
 # @core/electric-telemetry
 
+## 0.1.7
+
+### Patch Changes
+
+- fa61cc1: Export number of affected shapes per transaction into the global metrics
+- 7e9791c: Delay first collection of statistics so that shape db system has time to start properly
+
+## 0.1.6
+
+### Patch Changes
+
+- 2bf16e0: Fix call-home reporting of disk usage
+
+## 0.1.5
+
+### Patch Changes
+
+- e63a054: Add transaction stored count in core metrics we export.
+- b17eac8: Ensure storage dir exists before writing cached disk usage information
+
+## 0.1.4
+
+### Patch Changes
+
+- 34a240b: fix: metrics from consumer seem to not be emitted because of a struct
+- dfcfa40: Add disk usage telemetry to stacks.
+
 ## 0.1.3
 
 ### Patch Changes

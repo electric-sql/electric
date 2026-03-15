@@ -147,6 +147,10 @@ defmodule Electric.Replication.Eval.Parser do
     end
   end
 
+  defp check_valid_refs(%PgQuery.ParamRef{number: number, location: location}, _, _) do
+    {:error, {location, "parameter $#{number} is not supported in ORDER BY clauses"}}
+  end
+
   defp check_valid_refs(_, _, _), do: {:ok, :ok}
 
   def extract_subqueries(ast) do
@@ -1497,7 +1501,7 @@ defmodule Electric.Replication.Eval.Parser do
              ctx
            ) do
       %PgQuery.ParseResult{
-        version: 150_001,
+        version: 170_007,
         stmts: [
           %PgQuery.RawStmt{
             stmt: %PgQuery.Node{

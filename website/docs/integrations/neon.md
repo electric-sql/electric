@@ -47,4 +47,4 @@ docker run -it \
 
 ## PGlite
 
-Electric and Neon have also collaborated to develop [PGlite](/product/pglite), which was started as a project by Neon's CTO, [Stas Kelvich](https://github.com/kelvich).
+Electric and Neon have also collaborated to develop [PGlite](/products/pglite), which was started as a project by Neon's CTO, [Stas Kelvich](https://github.com/kelvich).

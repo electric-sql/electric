@@ -38,6 +38,7 @@ defmodule Electric.Replication.ShapeLogCollector do
   require Electric.Postgres.Lsn
   require Electric.Replication.LogOffset
   require Logger
+  require TransactionFragment
 
   @schema NimbleOptions.new!(
             stack_id: [type: :string, required: true],
@@ -230,7 +231,6 @@ defmodule Electric.Replication.ShapeLogCollector do
               end
             end
           ),
-        lsn_tracker_ref: LsnTracker.stack_ref(stack_id),
         registry_state: registry_state
       })
 
@@ -251,18 +251,30 @@ defmodule Electric.Replication.ShapeLogCollector do
           |> Enum.reduce(
             {state.partitions, state.event_router, state.dependency_layers, 0},
             fn {shape_handle, shape}, {partitions, event_router, layers, count} ->
-              {:ok, partitions} = Partitions.add_shape(partitions, shape_handle, shape)
+              # Check dependencies first - if a parent shape failed to restore,
+              # we should skip this shape (and its children will also be skipped)
+              case DependencyLayers.add_dependency(layers, shape, shape_handle) do
+                {:ok, layers} ->
+                  {:ok, partitions} = Partitions.add_shape(partitions, shape_handle, shape)
 
-              {
-                partitions,
-                EventRouter.add_shape(event_router, shape_handle, shape),
-                DependencyLayers.add_dependency(layers, shape, shape_handle),
-                count + 1
-              }
+                  {
+                    partitions,
+                    EventRouter.add_shape(event_router, shape_handle, shape),
+                    layers,
+                    count + 1
+                  }
+
+                {:error, {:missing_dependencies, missing_deps}} ->
+                  Logger.warning(
+                    "Skipping shape #{shape_handle} during restore: missing dependencies #{inspect(MapSet.to_list(missing_deps))}"
+                  )
+
+                  {partitions, event_router, layers, count}
+              end
             end
           )
 
-        Logger.info(
+        Logger.notice(
           "Restored filters for #{count} shapes in #{System.convert_time_unit(System.monotonic_time() - start, :native, :millisecond)}ms"
         )
 
@@ -279,7 +291,7 @@ defmodule Electric.Replication.ShapeLogCollector do
   end
 
   def handle_call(:mark_as_ready, _from, state) do
-    lsn = LsnTracker.get_last_processed_lsn(state.lsn_tracker_ref)
+    lsn = LsnTracker.get_last_processed_lsn(state.stack_id)
     offset = LogOffset.new(Lsn.to_integer(lsn), :infinity)
     Electric.StatusMonitor.mark_shape_log_collector_ready(state.stack_id, self())
     {:reply, :ok, Map.put(state, :last_processed_offset, offset)}
@@ -328,58 +340,56 @@ defmodule Electric.Replication.ShapeLogCollector do
       ) do
     OpenTelemetry.with_span(
       "shape_log_collector.handle_shape_registration_updates",
-      [],
+      [
+        shapes_to_add_count: Enum.count(shapes_to_add),
+        shapes_to_remove_count: Enum.count(shapes_to_remove)
+      ],
       state.stack_id,
       fn ->
         {state, results} =
           shapes_to_remove
           |> Enum.reduce({state, %{}}, fn shape_handle, {state, results} ->
-            OpenTelemetry.with_span(
-              "shape_log_collector.unsubscribe",
-              [shape_handle: shape_handle],
-              state.stack_id,
-              fn ->
-                case remove_subscription(state, shape_handle) do
-                  {:ok, state} -> {state, Map.put(results, shape_handle, :ok)}
-                  {:error, reason} -> {state, Map.put(results, shape_handle, {:error, reason})}
-                end
-              end
-            )
+            case remove_subscription(state, shape_handle) do
+              {:ok, state} -> {state, Map.put(results, shape_handle, :ok)}
+              {:error, reason} -> {state, Map.put(results, shape_handle, {:error, reason})}
+            end
           end)
 
         {state, results} =
           shapes_to_add
           |> Enum.reduce({state, results}, fn {shape_handle, shape}, {state, results} ->
-            OpenTelemetry.with_span(
-              "shape_log_collector.subscribe",
-              [shape_handle: shape_handle],
-              state.stack_id,
-              fn ->
-                case Partitions.add_shape(state.partitions, shape_handle, shape) do
-                  {:ok, partitions} ->
+            case Partitions.add_shape(state.partitions, shape_handle, shape) do
+              {:ok, partitions} ->
+                case DependencyLayers.add_dependency(
+                       state.dependency_layers,
+                       shape,
+                       shape_handle
+                     ) do
+                  {:ok, dependency_layers} ->
                     state =
                       %{
                         state
                         | partitions: partitions,
                           event_router:
                             EventRouter.add_shape(state.event_router, shape_handle, shape),
-                          dependency_layers:
-                            DependencyLayers.add_dependency(
-                              state.dependency_layers,
-                              shape,
-                              shape_handle
-                            )
+                          dependency_layers: dependency_layers
                       }
                       |> Map.update!(:subscriptions, &(&1 + 1))
                       |> log_subscription_status()
 
                     {state, Map.put(results, shape_handle, :ok)}
 
-                  {:error, :connection_not_available} ->
-                    {state, Map.put(results, shape_handle, {:error, :connection_not_available})}
+                  {:error, {:missing_dependencies, missing_deps}} ->
+                    Logger.warning(
+                      "Shape #{shape_handle} cannot be added: missing dependencies #{inspect(MapSet.to_list(missing_deps))}"
+                    )
+
+                    {state, Map.put(results, shape_handle, {:error, :missing_dependencies})}
                 end
-              end
-            )
+
+              {:error, :connection_not_available} ->
+                {state, Map.put(results, shape_handle, {:error, :connection_not_available})}
+            end
           end)
 
         __MODULE__.RequestBatcher.handle_processor_update_response(
@@ -458,7 +468,13 @@ defmodule Electric.Replication.ShapeLogCollector do
     {:ok,
      %{
        state
-       | flush_tracker: FlushTracker.handle_txn_fragment(state.flush_tracker, txn_fragment, [])
+       | flush_tracker:
+           FlushTracker.handle_txn_fragment(
+             state.flush_tracker,
+             txn_fragment,
+             [],
+             MapSet.new()
+           )
      }}
   end
 
@@ -523,6 +539,12 @@ defmodule Electric.Replication.ShapeLogCollector do
       "shape_log_collector.affected_shape_count": affected_shape_count
     )
 
+    OpenTelemetry.execute(
+      [:electric, :shape_log_collector, :transaction],
+      %{affected_shape_count: affected_shape_count},
+      %{stack_id: state.stack_id}
+    )
+
     OpenTelemetry.start_interval(:"shape_log_collector.publish.duration_µs")
     context = OpenTelemetry.get_current_context()
 
@@ -539,13 +561,28 @@ defmodule Electric.Replication.ShapeLogCollector do
     OpenTelemetry.start_interval(:"shape_log_collector.set_last_processed_lsn.duration_µs")
 
     lsn = Lsn.from_integer(state.last_processed_offset.tx_offset)
-    LsnTracker.set_last_processed_lsn(state.lsn_tracker_ref, lsn)
+    LsnTracker.set_last_processed_lsn(state.stack_id, lsn)
 
     flush_tracker =
-      if is_struct(event, TransactionFragment) do
-        FlushTracker.handle_txn_fragment(state.flush_tracker, event, affected_shapes)
-      else
-        state.flush_tracker
+      case event do
+        %TransactionFragment{} ->
+          shapes_with_changes =
+            for {id, frag} <- events_by_handle,
+                frag.change_count > 0,
+                do: id,
+                into: MapSet.new()
+
+          if event.commit, do: LsnTracker.broadcast_last_seen_lsn(state.stack_id, lsn)
+
+          FlushTracker.handle_txn_fragment(
+            state.flush_tracker,
+            event,
+            affected_shapes,
+            shapes_with_changes
+          )
+
+        _ ->
+          state.flush_tracker
       end
 
     %{state | flush_tracker: flush_tracker}

@@ -35,6 +35,9 @@ defmodule Electric.ShapeCache do
   # unnecessary noise let's just cover those tail timings with our timeout.
   @call_timeout 30_000
 
+  @max_snapshot_start_attempts 10
+  @snapshot_start_retry_sleep_ms 50
+
   def name(stack_ref) do
     Electric.ProcessRegistry.name(stack_ref, __MODULE__)
   end
@@ -114,13 +117,20 @@ defmodule Electric.ShapeCache do
     ShapeCleaner.remove_shape(stack_id, shape_handle)
   end
 
-  @spec await_snapshot_start(shape_handle(), stack_id()) :: :started | {:error, term()}
-  def await_snapshot_start(shape_handle, stack_id)
+  @spec await_snapshot_start(shape_handle(), stack_id(), non_neg_integer()) ::
+          :started | {:error, term()}
+  def await_snapshot_start(
+        shape_handle,
+        stack_id,
+        attempts_remaining \\ @max_snapshot_start_attempts
+      )
       when is_shape_handle(shape_handle) and is_stack_id(stack_id) do
-    ShapeStatus.update_last_read_time_to_now(stack_id, shape_handle)
-
     cond do
       ShapeStatus.snapshot_started?(stack_id, shape_handle) ->
+        # Must only update the last_read_time after confirming that the shape has a snapshot,
+        # so as not to interfere with the invariant that a shape that has just been created
+        # does not have a last_read_time until its consumer process starts.
+        ShapeStatus.update_last_read_time_to_now(stack_id, shape_handle)
         :started
 
       not ShapeStatus.has_shape_handle?(stack_id, shape_handle) ->
@@ -139,10 +149,63 @@ defmodule Electric.ShapeCache do
 
           :exit, {:noproc, _} ->
             # The fact that we got the shape handle means we know the shape exists, and the process should
-            # exist too. We can get here if registry didn't propagate registration across partitions yet, so
-            # we'll just retry after waiting for a short time to avoid busy waiting.
-            Process.sleep(50)
-            await_snapshot_start(shape_handle, stack_id)
+            # exist too. We can get here if multiple concurrent requests are racing for the same shape handle:
+            #   1. The 1st request adds the handle to ShapeStatus and starts the consumer process.
+            #   2. Subsequent requests might already see the handle in ShapeStatus before the consumer process has started.
+
+            cond do
+              ShapeStatus.shape_has_been_activated?(stack_id, shape_handle) ->
+                # This branch can only be reached when the consumer process for the shape had
+                # already been started but then died without requesting shape cleanup. We've seen
+                # this happen in prod for shapes with subqueries.
+                #
+                # A shape with subqueries is actually a hierarchy of multiple shapes where
+                # non-root consumers have matching materializer processes started for them.
+                # We've seen in prod logs that occasionally a materializer process dies with
+                # reason :shutdown which is a likely cause for the consumer process to stop with
+                # the same reason. Consumer processes aren't restarted automatically, so as a
+                # result, the shape handle remains in the ShapeStatus table but there's no longer
+                # a consumer process for it.
+                #
+                # The root cause for materializer process shutdown before snapshot creation even starts
+                # is yet to be determined.
+                #
+                # For now we just invalidate the shape with subqueries and expect that the client
+                # will re-request it.
+                case fetch_shape_by_handle(shape_handle, stack_id) do
+                  {:ok, shape} ->
+                    ShapeCleaner.remove_shapes(stack_id, [
+                      shape_handle | shape.shape_dependencies_handles
+                    ])
+
+                    Logger.error(
+                      "No consumer process when waiting on initial snapshot creation for #{shape_handle}"
+                    )
+
+                    {:error, :unknown}
+
+                  :error ->
+                    # Shape was already cleaned up by a concurrent process
+                    {:error, :unknown}
+                end
+
+              attempts_remaining > 0 ->
+                # The record in ShapeStatus has just been inserted and the consumer process for it is about to be started.
+                # Just idle for a while waiting for it to come up.
+                Process.sleep(@snapshot_start_retry_sleep_ms)
+                await_snapshot_start(shape_handle, stack_id, attempts_remaining - 1)
+
+              true ->
+                # Nothing else to do here but to bail. The API response to the client will ask
+                # politely to wait a bit before initiating a new request, lest we get DoSed by
+                # clients that all want to fetch this shape.
+
+                Logger.warning(
+                  "Exhausted retry attempts while waiting for a shape consumer to start initial snapshot creation for #{shape_handle}"
+                )
+
+                {:error, Electric.SnapshotError.slow_snapshot_start()}
+            end
         end
     end
   rescue
@@ -179,7 +242,8 @@ defmodule Electric.ShapeCache do
     state = %{
       name: opts.name,
       stack_id: stack_id,
-      subscription: nil
+      subscription: nil,
+      feature_flags: Electric.StackConfig.lookup(stack_id, :feature_flags, [])
     }
 
     {:ok, state, {:continue, :wait_for_restore}}
@@ -214,7 +278,13 @@ defmodule Electric.ShapeCache do
 
   @impl GenServer
   def handle_call({:create_or_wait_shape_handle, shape, otel_ctx}, _from, state) do
-    {shape_handle, latest_offset} = maybe_create_shape(shape, otel_ctx, state)
+    {shape_handle, latest_offset} =
+      maybe_create_shape(shape, %{
+        stack_id: state.stack_id,
+        otel_ctx: otel_ctx,
+        feature_flags: state.feature_flags
+      })
+
     Logger.debug("Returning shape id #{shape_handle} for shape #{inspect(shape)}")
     {:reply, {shape_handle, latest_offset}, state}
   end
@@ -234,7 +304,12 @@ defmodule Electric.ShapeCache do
         # TODO: otel ctx from shape log collector?
         {
           :reply,
-          restore_shape_and_dependencies(shape_handle, shape, state, nil),
+          restore_shape_and_dependencies(shape_handle, shape, %{
+            stack_id: state.stack_id,
+            action: :restore,
+            otel_ctx: nil,
+            feature_flags: state.feature_flags
+          }),
           state
         }
 
@@ -243,15 +318,17 @@ defmodule Electric.ShapeCache do
     end
   end
 
-  defp maybe_create_shape(shape, otel_ctx, %{stack_id: stack_id} = state) do
-    with {:ok, shape_handle} <- ShapeStatus.fetch_handle_by_shape(stack_id, shape),
+  defp maybe_create_shape(shape, %{stack_id: stack_id} = opts) do
+    # fetch_handle_by_shape_critical is a slower but guaranteed consistent
+    # shape lookup
+    with {:ok, shape_handle} <- ShapeStatus.fetch_handle_by_shape_critical(stack_id, shape),
          {:ok, offset} <- fetch_latest_offset(stack_id, shape_handle) do
       {shape_handle, offset}
     else
       :error ->
         shape_handles =
           shape.shape_dependencies
-          |> Enum.map(&maybe_create_shape(&1, otel_ctx, state))
+          |> Enum.map(&maybe_create_shape(&1, Map.put(opts, :is_subquery_shape?, true)))
           |> Enum.map(&elem(&1, 0))
 
         shape = %{shape | shape_dependencies_handles: shape_handles}
@@ -260,7 +337,7 @@ defmodule Electric.ShapeCache do
 
         Logger.info("Creating new shape for #{inspect(shape)} with handle #{shape_handle}")
 
-        {:ok, _pid} = start_shape(shape_handle, shape, state, otel_ctx, :create)
+        {:ok, _pid} = start_shape(shape_handle, shape, Map.put(opts, :action, :create))
 
         # In this branch of `if`, we're guaranteed to have a newly started shape, so we can be sure about it's
         # "latest offset" because it'll be in the snapshotting stage
@@ -268,9 +345,7 @@ defmodule Electric.ShapeCache do
     end
   end
 
-  defp start_shape(shape_handle, shape, state, otel_ctx, action) do
-    %{stack_id: stack_id} = state
-
+  defp start_shape(shape_handle, shape, %{stack_id: stack_id} = opts) do
     Enum.zip(shape.shape_dependencies_handles, shape.shape_dependencies)
     |> Enum.with_index(fn {shape_handle, inner_shape}, index ->
       materialized_type =
@@ -286,17 +361,21 @@ defmodule Electric.ShapeCache do
 
     case Shapes.DynamicConsumerSupervisor.start_shape_consumer(stack_id, %{
            stack_id: stack_id,
-           shape_handle: shape_handle,
-           otel_ctx: otel_ctx,
-           action: action
+           shape_handle: shape_handle
          }) do
       {:ok, consumer_pid} ->
+        Shapes.Consumer.initialize_shape(consumer_pid, shape, opts)
+
+        # Now that the consumer process for this shape is running, we can finish initializing
+        # the ShapeStatus record by recording a "last_read" timestamp on it.
+        ShapeStatus.update_last_read_time_to_now(stack_id, shape_handle)
+
         {:ok, consumer_pid}
 
       {:error, _reason} = error ->
         Logger.error("Failed to start shape #{shape_handle}: #{inspect(error)}")
         # purge because we know the consumer isn't running
-        ShapeCleaner.remove_shape(stack_id, shape_handle)
+        clean_shape(shape_handle, stack_id)
         :error
     end
   end
@@ -304,14 +383,14 @@ defmodule Electric.ShapeCache do
   # start_shape assumes that any dependent shapes already have running consumers
   # so we need to start those. this may be something we can do lazily: i.e.
   # only starting dependent shapes when they receive a write
-  defp restore_shape_and_dependencies(shape_handle, shape, state, otel_ctx) do
+  defp restore_shape_and_dependencies(shape_handle, shape, opts) do
     [{shape_handle, shape}]
-    |> build_shape_dependencies(MapSet.new())
+    |> build_shape_dependencies(true, MapSet.new())
     |> elem(0)
-    |> Enum.reduce_while({:ok, %{}}, fn {handle, shape}, {:ok, acc} ->
-      case Electric.Shapes.ConsumerRegistry.whereis(state.stack_id, handle) do
+    |> Enum.reduce_while({:ok, %{}}, fn {handle, shape, start_shape_opts}, {:ok, acc} ->
+      case Electric.Shapes.ConsumerRegistry.whereis(opts.stack_id, handle) do
         nil ->
-          case start_shape(handle, shape, state, otel_ctx, :restore) do
+          case start_shape(handle, shape, Map.merge(opts, start_shape_opts)) do
             {:ok, pid} ->
               {:cont, {:ok, Map.put(acc, handle, pid)}}
 
@@ -335,28 +414,37 @@ defmodule Electric.ShapeCache do
 
           # If we got an error starting any of the dependent shapes then we
           # remove the outer shape too
-          ShapeCleaner.remove_shape(state.stack_id, shape_handle)
+          clean_shape(shape_handle, opts.stack_id)
         end
 
         {:error, "Failed to start consumer for #{shape_handle}"}
     end
   end
 
-  @spec build_shape_dependencies([{shape_handle(), shape_def()}], MapSet.t()) ::
-          {[{shape_handle(), shape_def()}], MapSet.t()}
-  defp build_shape_dependencies([], known) do
+  @spec build_shape_dependencies([{shape_handle(), shape_def()}], boolean(), MapSet.t()) ::
+          {[{shape_handle(), shape_def(), map()}], MapSet.t()}
+  defp build_shape_dependencies([], _root?, known) do
     {[], known}
   end
 
-  defp build_shape_dependencies([{handle, shape} | rest], known) do
-    {siblings, known} = build_shape_dependencies(rest, MapSet.put(known, handle))
+  defp build_shape_dependencies([{handle, shape} | rest], root?, known) do
+    {siblings, known} = build_shape_dependencies(rest, false, MapSet.put(known, handle))
 
     {descendents, known} =
       Enum.zip(shape.shape_dependencies_handles, shape.shape_dependencies)
       |> Enum.reject(fn {handle, _shape} -> MapSet.member?(known, handle) end)
-      |> build_shape_dependencies(known)
+      |> build_shape_dependencies(false, known)
 
-    {descendents ++ [{handle, shape} | siblings], known}
+    # Any inner shape of a root shape with subqueries must pass the is_subquery_shape? option
+    # to the consumer start function
+    start_shape_opts =
+      if root? do
+        %{}
+      else
+        %{is_subquery_shape?: true}
+      end
+
+    {descendents ++ [{handle, shape, start_shape_opts} | siblings], known}
   end
 
   @spec fetch_latest_offset(stack_id(), shape_handle()) :: {:ok, LogOffset.t()} | :error

@@ -35,7 +35,7 @@
 [invoke setup_secure_electric "test-secret"]
 
 [shell electric]
-  ??[info] Starting replication from postgres
+  ??[notice] Starting replication from postgres
 
 [shell client]
   !curl -v -X GET "http://localhost:3000/v1/health"

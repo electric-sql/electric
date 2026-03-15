@@ -1,5 +1,112 @@
 # @electric-sql/y-electric
 
+## 0.1.38
+
+### Patch Changes
+
+- d1e08b8: Add TanStack Intent skills for AI agent guidance. Ships 9 skills covering shapes, proxy auth, schema design, debugging, deployment, new feature setup, ORM integration, Postgres security, and Yjs collaboration.
+- Updated dependencies [d1e08b8]
+  - @electric-sql/client@1.5.12
+
+## 0.1.37
+
+### Patch Changes
+
+- Updated dependencies [0031e81]
+  - @electric-sql/client@1.5.11
+
+## 0.1.36
+
+### Patch Changes
+
+- Updated dependencies [243c7d7]
+  - @electric-sql/client@1.5.10
+
+## 0.1.35
+
+### Patch Changes
+
+- Updated dependencies [24b140f]
+  - @electric-sql/client@1.5.9
+
+## 0.1.34
+
+### Patch Changes
+
+- Updated dependencies [8600d25]
+- Updated dependencies [1e1123b]
+- Updated dependencies [e172d4b]
+  - @electric-sql/client@1.5.8
+
+## 0.1.33
+
+### Patch Changes
+
+- Updated dependencies [ca931d9]
+- Updated dependencies [858e13d]
+  - @electric-sql/client@1.5.7
+
+## 0.1.32
+
+### Patch Changes
+
+- Updated dependencies [4c7855b]
+- Updated dependencies [c84d985]
+  - @electric-sql/client@1.5.6
+
+## 0.1.31
+
+### Patch Changes
+
+- Updated dependencies [e9bc504]
+  - @electric-sql/client@1.5.5
+
+## 0.1.30
+
+### Patch Changes
+
+- Updated dependencies [186b8f8]
+  - @electric-sql/client@1.5.4
+
+## 0.1.29
+
+### Patch Changes
+
+- Updated dependencies [9698b03]
+- Updated dependencies [b0cbe75]
+- Updated dependencies [b0cbe75]
+- Updated dependencies [b0cbe75]
+  - @electric-sql/client@1.5.3
+
+## 0.1.28
+
+### Patch Changes
+
+- Updated dependencies [091a232]
+  - @electric-sql/client@1.5.2
+
+## 0.1.27
+
+### Patch Changes
+
+- Updated dependencies [42aee8a]
+- Updated dependencies [fef494e]
+  - @electric-sql/client@1.5.1
+
+## 0.1.26
+
+### Patch Changes
+
+- Updated dependencies [3f257aa]
+  - @electric-sql/client@1.5.0
+
+## 0.1.25
+
+### Patch Changes
+
+- Updated dependencies [a428324]
+  - @electric-sql/client@1.4.2
+
 ## 0.1.24
 
 ### Patch Changes

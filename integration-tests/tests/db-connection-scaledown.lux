@@ -122,8 +122,8 @@
   ??[debug] Query String: table=items&handle=$handle&offset=0_0&live
 
 
-  ??[info] Acquiring lock from postgres
-  ??[info] Starting replication from postgres
+  ??[notice] Acquiring lock from postgres
+  ??[notice] Starting replication from postgres
 
   ??[debug] Chunked 200 in
 

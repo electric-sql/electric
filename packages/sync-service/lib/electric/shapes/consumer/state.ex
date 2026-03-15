@@ -3,7 +3,6 @@ defmodule Electric.Shapes.Consumer.State do
   alias Electric.Shapes.Consumer.MoveIns
   alias Electric.Shapes.Consumer.InitialSnapshot
   alias Electric.Shapes.Shape
-  alias Electric.Replication.Changes.Transaction
   alias Electric.Replication.Eval.Parser
   alias Electric.Replication.Eval.Walker
   alias Electric.Replication.TransactionBuilder
@@ -11,7 +10,11 @@ defmodule Electric.Shapes.Consumer.State do
   alias Electric.Replication.LogOffset
   alias Electric.ShapeCache.Storage
 
+  require Logger
   require LogOffset
+
+  @write_unit_txn :txn
+  @write_unit_txn_fragment :txn_fragment
 
   defstruct [
     :stack_id,
@@ -30,7 +33,16 @@ defmodule Electric.Shapes.Consumer.State do
     terminating?: false,
     buffering?: false,
     or_with_subquery?: false,
-    not_with_subquery?: false
+    not_with_subquery?: false,
+    # Based on the write unit value, consumer will either buffer txn fragments in memory until
+    # it sees a commit (write_unit=txn) or it will write each received txn fragment to storage
+    # immediately (write_unit=txn_fragment).
+    # When true, stream fragments directly to storage without buffering
+    write_unit: @write_unit_txn,
+    # Tracks in-progress transaction, initialized when a txn fragment with has_begin?=true is seen.
+    # It is used to check whether the entire txn is visible in the snapshot and to mark it
+    # as flushed in order to handle its remaining fragments appropriately.
+    pending_txn: nil
   ]
 
   @type pg_snapshot() :: SnapshotQuery.pg_snapshot()
@@ -131,19 +143,45 @@ defmodule Electric.Shapes.Consumer.State do
 
   @spec new(Electric.stack_id(), Shape.handle(), Shape.t()) :: uninitialized_t()
   def new(stack_id, shape_handle, shape) do
+    stack_id
+    |> new(shape_handle)
+    |> initialize_shape(shape, %{})
+  end
+
+  @spec new(Electric.stack_id(), Shape.handle()) :: uninitialized_t()
+  def new(stack_id, shape_handle) do
     %__MODULE__{
       stack_id: stack_id,
       shape_handle: shape_handle,
-      shape: shape,
       hibernate_after:
         Electric.StackConfig.lookup(
           stack_id,
           :shape_hibernate_after,
           Electric.Config.default(:shape_hibernate_after)
         ),
-      buffering?: true,
-      or_with_subquery?: has_or_with_subquery?(shape),
-      not_with_subquery?: has_not_with_subquery?(shape)
+      buffering?: true
+    }
+  end
+
+  @spec initialize_shape(uninitialized_t(), Shape.t(), map()) :: uninitialized_t()
+  def initialize_shape(%__MODULE__{} = state, shape, opts) do
+    feature_flags = Map.get(opts, :feature_flags, [])
+    is_subquery_shape? = Map.get(opts, :is_subquery_shape?, false)
+
+    %{
+      state
+      | shape: shape,
+        or_with_subquery?: has_or_with_subquery?(shape),
+        not_with_subquery?: has_not_with_subquery?(shape),
+        # Enable direct fragment-to-storage streaming for shapes without subquery dependencies
+        # and if the current shape itself isn't an inner shape of a shape with subqueries.
+        write_unit:
+          if "allow_subqueries" in feature_flags or shape.shape_dependencies != [] or
+               is_subquery_shape? do
+            @write_unit_txn
+          else
+            @write_unit_txn_fragment
+          end
     }
   end
 
@@ -208,6 +246,8 @@ defmodule Electric.Shapes.Consumer.State do
   """
   @spec initialize(uninitialized_t(), Storage.shape_storage(), Storage.writer_state()) :: t()
   def initialize(%__MODULE__{} = state, storage, writer) do
+    %__MODULE__{} = state = validate_storage_capabilities(state, storage)
+
     {:ok, latest_offset} = Storage.fetch_latest_offset(storage)
     {:ok, pg_snapshot} = Storage.fetch_pg_snapshot(storage)
 
@@ -222,6 +262,27 @@ defmodule Electric.Shapes.Consumer.State do
         buffering?: InitialSnapshot.needs_buffering?(initial_snapshot_state)
     }
   end
+
+  defp validate_storage_capabilities(
+         %__MODULE__{write_unit: @write_unit_txn_fragment} = state,
+         storage
+       ) do
+    if Storage.supports_txn_fragment_streaming?(storage) do
+      state
+    else
+      {mod, _opts} = storage
+
+      Logger.warning(
+        "Storage backend #{inspect(mod)} does not support txn fragment streaming. " <>
+          "Falling back to full-transaction buffering for shape #{state.shape_handle}. " <>
+          "Use PureFileStorage for optimal performance with fragment streaming."
+      )
+
+      %{state | write_unit: @write_unit_txn}
+    end
+  end
+
+  defp validate_storage_capabilities(state, _storage), do: state
 
   @doc """
   For the given offset, find the appropriate transaction boundary and
@@ -241,9 +302,14 @@ defmodule Electric.Shapes.Consumer.State do
     end
   end
 
-  @spec add_to_buffer(t(), Transaction.t()) :: t()
+  @spec add_to_buffer(t(), TransactionFragment.t()) :: t()
   def add_to_buffer(%__MODULE__{buffer: buffer} = state, txn) do
     %{state | buffer: [txn | buffer]}
+  end
+
+  @spec pop_buffered(t()) :: {[TransactionFragment.t()], t()}
+  def pop_buffered(%__MODULE__{buffer: buffer} = state) do
+    {Enum.reverse(buffer), %{state | buffer: [], buffering?: false}}
   end
 
   @spec add_waiter(t(), GenServer.from()) :: t()
@@ -317,4 +383,16 @@ defmodule Electric.Shapes.Consumer.State do
       ) do
     %{state | move_handling_state: MoveIns.remove_completed(move_handling_state, xid)}
   end
+
+  def telemetry_attrs(%__MODULE__{stack_id: stack_id, shape_handle: shape_handle, shape: shape}) do
+    [
+      "shape.handle": shape_handle,
+      "shape.root_table": shape.root_table,
+      "shape.where": if(not is_nil(shape.where), do: shape.where.query, else: nil),
+      stack_id: stack_id
+    ]
+  end
+
+  def write_unit_txn, do: @write_unit_txn
+  def write_unit_txn_fragment, do: @write_unit_txn_fragment
 end

@@ -35,6 +35,10 @@ defmodule Electric.Plug.Router do
     to: PassAssignToOptsPlug,
     init_opts: [plug: Electric.Plug.ServeShapePlug, assign_key: :config]
 
+  post "/v1/shape",
+    to: PassAssignToOptsPlug,
+    init_opts: [plug: Electric.Plug.ServeShapePlug, assign_key: :config]
+
   delete "/v1/shape",
     to: PassAssignToOptsPlug,
     init_opts: [plug: Electric.Plug.DeleteShapePlug, assign_key: :config]
@@ -78,7 +82,7 @@ defmodule Electric.Plug.Router do
   def authenticate(conn, _opts), do: conn
 
   def put_cors_headers(%Plug.Conn{path_info: ["v1", "shape" | _]} = conn, _opts),
-    do: CORSHeaderPlug.call(conn, %{methods: ["GET", "HEAD", "DELETE", "OPTIONS"]})
+    do: CORSHeaderPlug.call(conn, %{methods: ["GET", "POST", "HEAD", "DELETE", "OPTIONS"]})
 
   def put_cors_headers(conn, _opts),
     do: CORSHeaderPlug.call(conn, %{methods: ["GET", "HEAD"]})

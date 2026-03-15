@@ -1,6 +1,6 @@
 {
   "name": "@electric-sql/y-electric",
-  "version": "0.1.24",
+  "version": "0.1.38",
   "description": "YJS network provider for ElectricSQL",
   "author": "ElectricSQL team and contributors.",
   "bugs": {
@@ -14,6 +14,7 @@
     "yjs": "^13.6.6"
   },
   "devDependencies": {
+    "@tanstack/intent": "^0.0.9",
     "@types/node": "^22.0.0",
     "@typescript-eslint/eslint-plugin": "^7.14.1",
     "@typescript-eslint/parser": "^7.14.1",
@@ -56,9 +57,15 @@
       }
     }
   },
+  "bin": {
+    "intent": "./bin/intent.mjs"
+  },
   "files": [
     "dist",
-    "src"
+    "src",
+    "skills",
+    "bin",
+    "!skills/_artifacts"
   ],
   "homepage": "https://electric-sql.com",
   "license": "Apache-2.0",

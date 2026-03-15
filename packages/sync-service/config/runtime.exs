@@ -129,13 +129,6 @@ storage_spec =
         "fast_file" ->
           {Electric.ShapeCache.PureFileStorage, storage_dir: shape_path}
 
-        "crashing_file" ->
-          num_calls_until_crash =
-            env!("CRASHING_FILE_ELECTRIC_STORAGE__NUM_CALLS_UNTIL_CRASH", :integer)
-
-          {Electric.ShapeCache.CrashingFileStorage,
-           storage_dir: shape_path, num_calls_until_crash: num_calls_until_crash}
-
         _ ->
           raise Dotenvy.Error, message: "storage must be one of: MEMORY, FAST_FILE, LEGACY_FILE"
       end
@@ -196,6 +189,15 @@ if config_env() != :test do
   Electric.Config.validate_security_config!(secret, insecure)
 end
 
+max_concurrent_requests =
+  case env!("ELECTRIC_MAX_CONCURRENT_REQUESTS", :string, nil) do
+    nil ->
+      nil
+
+    json when is_binary(json) ->
+      Jason.decode!(json, keys: :atoms)
+  end
+
 config :electric,
   provided_database_id: provided_database_id,
   allow_shape_deletion?: enable_integration_testing?,
@@ -204,6 +206,7 @@ config :electric,
   chunk_bytes_threshold: chunk_bytes_threshold,
   # The ELECTRIC_EXPERIMENTAL_MAX_SHAPES is undocumented and will be removed in future versions.
   max_shapes: env!("ELECTRIC_EXPERIMENTAL_MAX_SHAPES", :integer, nil),
+  max_concurrent_requests: max_concurrent_requests,
   # Used in telemetry
   instance_id: instance_id,
   call_home_telemetry?: env!("ELECTRIC_USAGE_REPORTING", :boolean, config_env() == :prod),
@@ -229,6 +232,8 @@ config :electric,
     env!("ELECTRIC_TEMPORARY_REPLICATION_SLOT_USE_RANDOM_NAME", :boolean, nil),
   # The ELECTRIC_EXPERIMENTAL_MAX_TXN_SIZE is undocumented and will be removed in future versions.
   max_txn_size: env!("ELECTRIC_EXPERIMENTAL_MAX_TXN_SIZE", :integer, nil),
+  # The ELECTRIC_EXPERIMENTAL_MAX_BATCH_SIZE is undocumented and used for testing only.
+  max_batch_size: env!("ELECTRIC_EXPERIMENTAL_MAX_BATCH_SIZE", :integer, nil),
   service_port: env!("ELECTRIC_PORT", :integer, nil),
   shape_hibernate_after: shape_hibernate_after,
   shape_enable_suspend?: shape_enable_suspend?,
@@ -251,6 +256,7 @@ config :electric,
     env!("ELECTRIC_PROCESS_SPAWN_OPTS", &Electric.Config.parse_spawn_opts!/1, %{}),
   http_api_num_acceptors: env!("ELECTRIC_TWEAKS_HTTP_API_NUM_ACCEPTORS", :integer, 100),
   conn_max_requests: env!("ELECTRIC_TWEAKS_CONN_MAX_REQUESTS", :integer, nil),
+  handler_fullsweep_after: env!("ELECTRIC_TWEAKS_HANDLER_FULLSWEEP_AFTER", :integer, nil),
   tcp_send_timeout:
     env!("ELECTRIC_TCP_SEND_TIMEOUT", &Electric.Config.parse_human_readable_time!/1, nil),
   feature_flags: env!("ELECTRIC_FEATURE_FLAGS", &Electric.Config.parse_feature_flags/1, nil),
@@ -272,7 +278,14 @@ config :electric,
       "ELECTRIC_REPLICATION_IDLE_TIMEOUT",
       &Electric.Config.parse_human_readable_time!/1,
       nil
-    )
+    ),
+  shape_db_exclusive_mode: env!("ELECTRIC_SHAPE_DB_EXCLUSIVE_MODE", :boolean, false),
+  shape_db_storage_dir: env!("ELECTRIC_SHAPE_DB_STORAGE_DIR", :string, nil),
+  shape_db_synchronous: env!("ELECTRIC_SHAPE_DB_SYNCHRONOUS", :string, nil),
+  shape_db_cache_size:
+    env!("ELECTRIC_SHAPE_DB_CACHE_SIZE", &Electric.Config.parse_human_readable_size!/1, nil),
+  exclude_spans:
+    env!("ELECTRIC_EXCLUDE_SPANS", &Electric.Config.parse_comma_separated_set!/1, nil)
 
 if Electric.telemetry_enabled?() do
   # Disable the default telemetry_poller process since we start our own in

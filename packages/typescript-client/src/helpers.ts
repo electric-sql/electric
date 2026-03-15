@@ -28,7 +28,7 @@ import {
 export function isChangeMessage<T extends Row<unknown> = Row>(
   message: Message<T>
 ): message is ChangeMessage<T> {
-  return `key` in message
+  return message != null && `key` in message
 }
 
 /**
@@ -51,7 +51,7 @@ export function isChangeMessage<T extends Row<unknown> = Row>(
 export function isControlMessage<T extends Row<unknown> = Row>(
   message: Message<T>
 ): message is ControlMessage {
-  return !isChangeMessage(message)
+  return message != null && `headers` in message && `control` in message.headers
 }
 
 export function isUpToDateMessage<T extends Row<unknown> = Row>(
@@ -69,6 +69,21 @@ export function getOffset(message: ControlMessage): Offset | undefined {
   if (message.headers.control != `up-to-date`) return
   const lsn = message.headers.global_last_seen_lsn
   return lsn ? (`${lsn}_0` as Offset) : undefined
+}
+
+function bigintReplacer(_key: string, value: unknown): unknown {
+  return typeof value === `bigint` ? value.toString() : value
+}
+
+/**
+ * BigInt-safe version of JSON.stringify.
+ * Converts BigInt values to their string representation (as JSON strings,
+ * e.g. `{ id: 42n }` becomes `{"id":"42"}`) instead of throwing.
+ * Assumes input is a JSON-serializable value — passing `undefined` at the
+ * top level will return `undefined` (matching `JSON.stringify` behavior).
+ */
+export function bigintSafeStringify(value: unknown): string {
+  return JSON.stringify(value, bigintReplacer)
 }
 
 /**

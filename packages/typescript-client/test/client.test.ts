@@ -1,7 +1,10 @@
 import { describe, expect, inject, vi } from 'vitest'
 import { v4 as uuidv4 } from 'uuid'
 import { setTimeout as sleep } from 'node:timers/promises'
-import { testWithIssuesTable as it } from './support/test-context'
+import {
+  testWithIssuesTable as it,
+  testWithBigintTable,
+} from './support/test-context'
 import {
   ShapeStream,
   Shape,
@@ -14,43 +17,11 @@ import { MissingHeadersError } from '../src/error'
 import { resolveValue } from '../src'
 import { TransformFunction } from '../src/parser'
 import { SHAPE_HANDLE_HEADER } from '../src/constants'
+import { mockVisibilityApi } from './support/mock-fetch-harness'
 
 const BASE_URL = inject(`baseUrl`)
 
 const fetchAndSse = [{ liveSse: false }, { liveSse: true }]
-
-/**
- * Mocks the browser's visibility API
- * and returns `pause` and `resume` functions
- * that simulate visibility changes which should trigger pausing and resuming the shape stream.
- */
-function mockVisibilityApi() {
-  const doc = {
-    hidden: false,
-    addEventListener: vi.fn(),
-    removeEventListener: vi.fn(),
-  }
-
-  global.document = doc as unknown as Document
-
-  const invokeHandlers = () => {
-    const visibilityHandlers = doc.addEventListener.mock.calls.map(
-      ([_, handler]) => handler
-    )
-    visibilityHandlers.forEach((handler) => handler())
-  }
-
-  return {
-    pause: () => {
-      doc.hidden = true
-      invokeHandlers()
-    },
-    resume: () => {
-      doc.hidden = false
-      invokeHandlers()
-    },
-  }
-}
 
 describe.for(fetchAndSse)(`Shape  (liveSSE=$liveSse)`, ({ liveSse }) => {
   it(`should sync an empty shape`, async ({ issuesTableUrl, aborter }) => {
@@ -396,6 +367,7 @@ describe.for(fetchAndSse)(`Shape  (liveSSE=$liveSse)`, ({ liveSse }) => {
         table: issuesTableUrl,
       },
       signal: aborter.signal,
+      backoffOptions: { initialDelay: 5, maxDelay: 20, multiplier: 1.2 },
       fetchClient: async (_input, _init) => {
         if (fetchShouldFail)
           throw new FetchError(
@@ -432,7 +404,9 @@ describe.for(fetchAndSse)(`Shape  (liveSSE=$liveSse)`, ({ liveSse }) => {
     await vi.waitFor(() => expect(shapeStream.isConnected()).false)
 
     fetchShouldFail = false
-    await vi.waitFor(() => expect(shapeStream.isConnected()).true)
+    await vi.waitFor(() => expect(shapeStream.isConnected()).true, {
+      timeout: 5_000,
+    })
   })
 
   it(`should set isConnected to false when the stream is paused an back on true when the fetch succeeds again`, async ({
@@ -1610,6 +1584,83 @@ describe.for(fetchAndSse)(
       unsubscribe()
     })
 
+    it(`requestSnapshot completes without waiting for initial sync`, async ({
+      issuesTableUrl,
+      insertIssues,
+      aborter,
+    }) => {
+      await insertIssues({ title: `alpha` }, { title: `beta` })
+
+      const shapeStream = new ShapeStream({
+        url: `${BASE_URL}/v1/shape`,
+        params: { table: issuesTableUrl },
+        log: `changes_only`,
+        liveSse,
+        signal: aborter.signal,
+      })
+
+      // Call requestSnapshot immediately — do NOT wait for initial sync.
+      // This must complete quickly; a deadlock or stream-dependent await
+      // would cause this 5s timeout to fire.
+      const { data } = await shapeStream.requestSnapshot({
+        orderBy: `title ASC`,
+        limit: 100,
+      })
+      const titles = data.map((m) => m.value.title)
+      expect(titles).toEqual([`alpha`, `beta`])
+    }, 5_000)
+
+    it(`should not miss updates between cold-start snapshot and stream resume`, async ({
+      issuesTableUrl,
+      insertIssues,
+      updateIssue,
+      aborter,
+    }) => {
+      const [id] = await insertIssues({ title: `original` })
+
+      // Use offset: "now" to match real on-demand behavior. With "now",
+      // the stream connects first (creating the shape on the server and
+      // activating change tracking), then requestSnapshot() fetches subset
+      // data. The offset advancement code must update the stream's position
+      // to the snapshot's offset so no updates are missed in between.
+      const shapeStream = new ShapeStream({
+        url: `${BASE_URL}/v1/shape`,
+        params: { table: issuesTableUrl },
+        log: `changes_only`,
+        offset: `now`,
+        liveSse,
+        signal: aborter.signal,
+      })
+      const shape = new Shape(shapeStream)
+
+      // Wait for stream to be up-to-date (shape created on server)
+      await vi.waitFor(() => {
+        expect(shapeStream.isUpToDate).toBe(true)
+      })
+
+      await shape.requestSnapshot({
+        orderBy: `title ASC`,
+        limit: 100,
+      })
+
+      await vi.waitFor(() => {
+        expect(shape.currentRows.length).toBe(1)
+        expect(shape.currentRows[0].title).toBe(`original`)
+      })
+
+      // Update after snapshot — the stream must pick this up when it
+      // resumes from the snapshot's offset, not skip it.
+      await updateIssue({ id, title: `updated-after-snapshot` })
+
+      await vi.waitFor(
+        () => {
+          const row = shape.currentRows.find((r) => r.id === id)
+          expect(row?.title).toBe(`updated-after-snapshot`)
+        },
+        { timeout: 10000 }
+      )
+    })
+
     it(`requestSnapshot should populate stream and match returned data`, async ({
       issuesTableUrl,
       insertIssues,
@@ -2324,8 +2375,421 @@ describe.for(fetchAndSse)(
         expect(snapshotRequestCount).toBeGreaterThan(0)
       }
     )
+
+    it(
+      `fetchSnapshot handles 409 must-refetch errors gracefully`,
+      { timeout: 10000 },
+      async ({ issuesTableUrl, aborter }) => {
+        let snapshotRequestCount = 0
+        const schema = JSON.stringify({
+          id: { type: `text` },
+          title: { type: `text` },
+        })
+        const snapshotData = [
+          {
+            key: `test-key-1`,
+            value: { id: `1`, title: `Test Item` },
+            headers: { operation: `insert` },
+          },
+        ]
+        const snapshotMetadata = { offset: `0_0` }
+
+        const fetchClient = vi.fn(async (input: string | URL | Request) => {
+          const url = input instanceof Request ? input.url : input.toString()
+          const urlObj = new URL(url)
+
+          const isSnapshotRequest =
+            urlObj.searchParams.has(`subset__limit`) ||
+            urlObj.searchParams.has(`subset__order_by`)
+
+          if (isSnapshotRequest) {
+            snapshotRequestCount++
+            if (snapshotRequestCount === 1) {
+              // The fetch wrapper throws FetchError for non-OK responses
+              throw new FetchError(
+                409,
+                JSON.stringify([{ headers: { control: `must-refetch` } }]),
+                [{ headers: { control: `must-refetch` } }],
+                { [SHAPE_HANDLE_HEADER]: `new-handle-after-409` },
+                url
+              )
+            }
+            return new Response(
+              JSON.stringify({
+                metadata: snapshotMetadata,
+                data: snapshotData,
+              }),
+              {
+                status: 200,
+                headers: new Headers({
+                  'Content-Type': `application/json`,
+                  'electric-schema': schema,
+                  'electric-handle': `new-handle-after-409`,
+                  'electric-offset': `0_0`,
+                  'electric-up-to-date': `true`,
+                }),
+              }
+            )
+          }
+
+          return new Response(`[]`, {
+            status: 200,
+            headers: new Headers({
+              'electric-schema': schema,
+              'electric-offset': `0_0`,
+              'electric-handle': `initial-handle`,
+            }),
+          })
+        })
+
+        const shapeStream = new ShapeStream({
+          url: `${BASE_URL}/v1/shape`,
+          params: { table: issuesTableUrl },
+          log: `changes_only`,
+          liveSse,
+          signal: aborter.signal,
+          fetchClient,
+        })
+
+        const result = await shapeStream.fetchSnapshot({
+          orderBy: `title ASC`,
+          limit: 100,
+        })
+
+        expect(snapshotRequestCount).toBe(2)
+        expect(result.data).toHaveLength(1)
+        expect(result.metadata).toEqual(snapshotMetadata)
+      }
+    )
+
+    it(
+      `fetchSnapshot with POST method sends subset params in request body`,
+      { timeout: 10000 },
+      async ({ issuesTableUrl, insertIssues, aborter }) => {
+        await insertIssues({ title: `A` }, { title: `B` }, { title: `C` })
+
+        let capturedRequest: { method: string; body: string | null } | undefined
+
+        const fetchWrapper = async (...args: Parameters<typeof fetch>) => {
+          const [, init] = args
+          if (init?.method === `POST`) {
+            capturedRequest = {
+              method: init.method,
+              body: init.body as string | null,
+            }
+          }
+          return fetch(...args)
+        }
+
+        const shapeStream = new ShapeStream({
+          url: `${BASE_URL}/v1/shape`,
+          params: { table: issuesTableUrl },
+          log: `changes_only`,
+          liveSse,
+          signal: aborter.signal,
+          fetchClient: fetchWrapper,
+        })
+        new Shape(shapeStream)
+
+        // Wait for stream to be up-to-date
+        await vi.waitFor(
+          () => {
+            expect(shapeStream.isUpToDate).toBe(true)
+          },
+          { timeout: 5000 }
+        )
+
+        const { data } = await shapeStream.fetchSnapshot({
+          where: `title = 'B'`,
+          orderBy: `title ASC`,
+          limit: 100,
+          method: `POST`,
+        })
+
+        expect(capturedRequest).toBeDefined()
+        expect(capturedRequest!.method).toBe(`POST`)
+
+        const body = JSON.parse(capturedRequest!.body!)
+        expect(body.where).toBe(`title = 'B'`)
+        expect(body.order_by).toBe(`title ASC`)
+        expect(body.limit).toBe(100)
+
+        expect(data.length).toBe(1)
+        expect(data[0].value.title).toBe(`B`)
+      }
+    )
+
+    it(
+      `fetchSnapshot with subsetMethod POST uses POST by default`,
+      { timeout: 10000 },
+      async ({ issuesTableUrl, insertIssues, aborter }) => {
+        await insertIssues({ title: `X` }, { title: `Y` }, { title: `Z` })
+
+        const requestMethods: string[] = []
+
+        const fetchWrapper = async (...args: Parameters<typeof fetch>) => {
+          const [input, init] = args
+          const url = input instanceof Request ? input.url : input.toString()
+          const urlObj = new URL(url)
+
+          const isSubsetRequest =
+            init?.method === `POST` ||
+            urlObj.searchParams.has(`subset__where`) ||
+            urlObj.searchParams.has(`subset__limit`) ||
+            urlObj.searchParams.has(`subset__order_by`)
+
+          if (isSubsetRequest) {
+            requestMethods.push(init?.method ?? `GET`)
+          }
+
+          return fetch(...args)
+        }
+
+        const shapeStream = new ShapeStream({
+          url: `${BASE_URL}/v1/shape`,
+          params: { table: issuesTableUrl },
+          log: `changes_only`,
+          liveSse,
+          signal: aborter.signal,
+          fetchClient: fetchWrapper,
+          subsetMethod: `POST`,
+        })
+        new Shape(shapeStream)
+
+        // Wait for stream to be up-to-date
+        await vi.waitFor(
+          () => {
+            expect(shapeStream.isUpToDate).toBe(true)
+          },
+          { timeout: 5000 }
+        )
+
+        const { data } = await shapeStream.fetchSnapshot({
+          orderBy: `title ASC`,
+          limit: 100,
+        })
+
+        expect(requestMethods).toContain(`POST`)
+        expect(requestMethods.filter((m) => m === `GET`)).toHaveLength(0)
+
+        expect(data.length).toBe(3)
+        const titles = data.map((m) => m.value.title)
+        expect(titles).toEqual([`X`, `Y`, `Z`])
+      }
+    )
+
+    it(
+      `fetchSnapshot method option overrides subsetMethod`,
+      { timeout: 10000 },
+      async ({ issuesTableUrl, insertIssues, aborter }) => {
+        await insertIssues({ title: `One` }, { title: `Two` })
+
+        const requestMethods: string[] = []
+
+        const fetchWrapper = async (...args: Parameters<typeof fetch>) => {
+          const [input, init] = args
+          const url = input instanceof Request ? input.url : input.toString()
+          const urlObj = new URL(url)
+
+          const isSubsetRequest =
+            init?.method === `POST` ||
+            urlObj.searchParams.has(`subset__where`) ||
+            urlObj.searchParams.has(`subset__limit`) ||
+            urlObj.searchParams.has(`subset__order_by`)
+
+          if (isSubsetRequest) {
+            requestMethods.push(init?.method ?? `GET`)
+          }
+
+          return fetch(...args)
+        }
+
+        const shapeStream = new ShapeStream({
+          url: `${BASE_URL}/v1/shape`,
+          params: { table: issuesTableUrl },
+          log: `changes_only`,
+          liveSse,
+          signal: aborter.signal,
+          fetchClient: fetchWrapper,
+          subsetMethod: `POST`,
+        })
+        new Shape(shapeStream)
+
+        // Wait for stream to be up-to-date
+        await vi.waitFor(
+          () => {
+            expect(shapeStream.isUpToDate).toBe(true)
+          },
+          { timeout: 5000 }
+        )
+
+        const { data } = await shapeStream.fetchSnapshot({
+          orderBy: `title ASC`,
+          limit: 100,
+          method: `GET`,
+        })
+
+        expect(requestMethods).toContain(`GET`)
+        expect(requestMethods.filter((m) => m === `POST`)).toHaveLength(0)
+
+        expect(data.length).toBe(2)
+      }
+    )
+
+    it(
+      `fetchSnapshot POST with params sends params in body`,
+      { timeout: 10000 },
+      async ({ issuesTableUrl, insertIssues, aborter }) => {
+        await insertIssues(
+          { title: `alpha` },
+          { title: `beta` },
+          { title: `gamma` }
+        )
+
+        let capturedBody: Record<string, unknown> | undefined
+
+        const fetchWrapper = async (...args: Parameters<typeof fetch>) => {
+          const [, init] = args
+          if (init?.method === `POST` && init.body) {
+            capturedBody = JSON.parse(init.body as string)
+          }
+          return fetch(...args)
+        }
+
+        const shapeStream = new ShapeStream({
+          url: `${BASE_URL}/v1/shape`,
+          params: { table: issuesTableUrl },
+          log: `changes_only`,
+          liveSse,
+          signal: aborter.signal,
+          fetchClient: fetchWrapper,
+        })
+        new Shape(shapeStream)
+
+        // Wait for stream to be up-to-date
+        await vi.waitFor(
+          () => {
+            expect(shapeStream.isUpToDate).toBe(true)
+          },
+          { timeout: 5000 }
+        )
+
+        const { data } = await shapeStream.fetchSnapshot({
+          where: `title = $1 OR title = $2`,
+          params: { '1': `alpha`, '2': `gamma` },
+          orderBy: `title ASC`,
+          limit: 100,
+          method: `POST`,
+        })
+
+        expect(capturedBody).toBeDefined()
+        expect(capturedBody!.where).toBe(`title = $1 OR title = $2`)
+        expect(capturedBody!.params).toEqual({ '1': `alpha`, '2': `gamma` })
+        expect(capturedBody!.order_by).toBe(`title ASC`)
+        expect(capturedBody!.limit).toBe(100)
+
+        expect(data.length).toBe(2)
+        const titles = data.map((m) => m.value.title).sort()
+        expect(titles).toEqual([`alpha`, `gamma`])
+      }
+    )
   }
 )
+
+describe(`BigInt support in subset loading`, () => {
+  testWithBigintTable(
+    `requestSnapshot should handle BigInt values in params`,
+    async ({ bigintTableUrl, insertBigintRows, aborter }) => {
+      await insertBigintRows(
+        { id: BigInt(`9223372036854775801`), label: `alpha` },
+        { id: BigInt(`9223372036854775802`), label: `beta` },
+        { id: BigInt(`9223372036854775803`), label: `gamma` }
+      )
+
+      const shapeStream = new ShapeStream({
+        url: `${BASE_URL}/v1/shape`,
+        params: { table: bigintTableUrl },
+        log: `changes_only`,
+        signal: aborter.signal,
+      })
+      const _shape = new Shape(shapeStream)
+      await waitForFetch(shapeStream)
+
+      const { data } = await shapeStream.requestSnapshot({
+        where: `id = $1`,
+        params: { '1': BigInt(`9223372036854775802`) },
+        orderBy: `id ASC`,
+        limit: 100,
+      })
+
+      expect(data.length).toBe(1)
+      expect(data[0].value.label).toBe(`beta`)
+      expect(data[0].value.id).toBe(BigInt(`9223372036854775802`))
+    }
+  )
+
+  testWithBigintTable(
+    `requestSnapshot should return properly parsed BigInt values from int8 columns`,
+    async ({ bigintTableUrl, insertBigintRows, aborter }) => {
+      await insertBigintRows(
+        { id: BigInt(`9223372036854775801`), label: `first` },
+        { id: BigInt(`9223372036854775802`), label: `second` }
+      )
+
+      const shapeStream = new ShapeStream({
+        url: `${BASE_URL}/v1/shape`,
+        params: { table: bigintTableUrl },
+        log: `changes_only`,
+        signal: aborter.signal,
+      })
+      const _shape = new Shape(shapeStream)
+      await waitForFetch(shapeStream)
+
+      const { data } = await shapeStream.requestSnapshot({
+        orderBy: `id ASC`,
+        limit: 100,
+      })
+
+      expect(data.length).toBe(2)
+      expect(data[0].value.id).toBe(BigInt(`9223372036854775801`))
+      expect(data[1].value.id).toBe(BigInt(`9223372036854775802`))
+      expect(data[0].value.label).toBe(`first`)
+      expect(data[1].value.label).toBe(`second`)
+    }
+  )
+
+  testWithBigintTable(
+    `fetchSnapshot POST should handle BigInt values in params`,
+    async ({ bigintTableUrl, insertBigintRows, aborter }) => {
+      await insertBigintRows(
+        { id: BigInt(`9223372036854775801`), label: `one` },
+        { id: BigInt(`9223372036854775802`), label: `two` },
+        { id: BigInt(`9223372036854775803`), label: `three` }
+      )
+
+      const shapeStream = new ShapeStream({
+        url: `${BASE_URL}/v1/shape`,
+        params: { table: bigintTableUrl },
+        log: `changes_only`,
+        signal: aborter.signal,
+      })
+      const _shape = new Shape(shapeStream)
+      await waitForFetch(shapeStream)
+
+      const { data } = await shapeStream.fetchSnapshot({
+        where: `id = $1`,
+        params: { '1': BigInt(`9223372036854775802`) },
+        orderBy: `id ASC`,
+        limit: 100,
+        method: `POST`,
+      })
+
+      expect(data.length).toBe(1)
+      expect(data[0].value.label).toBe(`two`)
+      expect(data[0].value.id).toBe(BigInt(`9223372036854775802`))
+    }
+  )
+})
 
 it(
   `should fall back to long polling after 3 consecutive short SSE connections`,

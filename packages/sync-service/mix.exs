@@ -92,13 +92,13 @@ defmodule Electric.MixProject do
         {:bandit, "~> 1.6"},
         {:dotenvy, "~> 1.1"},
         {:ecto, "~> 3.12"},
-        {:exqlite, "~> 0.33"},
+        {:esqlite, "~> 0.9.0"},
         {:jason, "~> 1.4"},
         {:nimble_options, "~> 1.1"},
         {:nimble_pool, "~> 1.1"},
         {:opentelemetry_telemetry, "~> 1.1"},
         {:opentelemetry_semantic_conventions, "~> 1.27"},
-        {:pg_query_ex, "0.9.0"},
+        {:pg_query_ex, "0.10.0"},
         {:plug, "~> 1.17"},
         {:postgrex, "~> 0.20"},
         {:retry, "~> 0.19"},
@@ -135,7 +135,7 @@ defmodule Electric.MixProject do
       # Pin protobuf to v0.13.x because starting with v0.14.0 it includes modules that conflict
       # with those of Protox (which itself is brought in by pg_query_ex).
       {:protobuf, "~> 0.13.0", override: true},
-      {:sentry, "~> 11.0"}
+      {:sentry, "~> 12.0"}
     ]
   end
 

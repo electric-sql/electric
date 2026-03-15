@@ -78,18 +78,6 @@ defmodule Support.TestStorage do
   end
 
   @impl Electric.ShapeCache.Storage
-  def get_stored_shapes({parent, _init, storage}, shape_handles) do
-    send(parent, {__MODULE__, :get_stored_shapes, shape_handles})
-    Storage.get_stored_shapes(storage, shape_handles)
-  end
-
-  @impl Electric.ShapeCache.Storage
-  def metadata_backup_dir({parent, _init, storage}) do
-    send(parent, {__MODULE__, :metadata_backup_dir})
-    Storage.metadata_backup_dir(storage)
-  end
-
-  @impl Electric.ShapeCache.Storage
   def get_total_disk_usage({parent, _init, storage}) do
     send(parent, {__MODULE__, :get_total_disk_usage})
     Storage.get_total_disk_usage(storage)
@@ -151,35 +139,22 @@ defmodule Support.TestStorage do
   end
 
   @impl Electric.ShapeCache.Storage
-  def append_move_in_snapshot_to_log!(name, {parent, shape_handle, data, storage}) do
-    send(parent, {__MODULE__, :append_move_in_snapshot_to_log!, shape_handle, name})
-    {range, storage} = Storage.append_move_in_snapshot_to_log!(name, storage)
-    {range, {parent, shape_handle, data, storage}}
+  def supports_txn_fragment_streaming?, do: false
+
+  @impl Electric.ShapeCache.Storage
+  def append_fragment_to_log!(_, _) do
+    raise "Intentionally not implemented. Use Support.Trace.trace_storage_calls() instead"
   end
 
   @impl Electric.ShapeCache.Storage
-  def append_move_in_snapshot_to_log_filtered!(
-        name,
-        {parent, shape_handle, data, storage},
-        touch_tracker,
-        snapshot,
-        tags_to_skip
-      ) do
-    send(
-      parent,
-      {__MODULE__, :append_move_in_snapshot_to_log_filtered!, shape_handle, name, touch_tracker,
-       snapshot, tags_to_skip}
-    )
+  def signal_txn_commit!(_, _) do
+    raise "Intentionally not implemented. Use Support.Trace.trace_storage_calls() instead"
+  end
 
-    {range, storage} =
-      Storage.append_move_in_snapshot_to_log_filtered!(
-        name,
-        storage,
-        touch_tracker,
-        snapshot,
-        tags_to_skip
-      )
-
+  @impl Electric.ShapeCache.Storage
+  def append_move_in_snapshot_to_log!(name, {parent, shape_handle, data, storage}, skip_row?) do
+    send(parent, {__MODULE__, :append_move_in_snapshot_to_log!, shape_handle, name})
+    {range, storage} = Storage.append_move_in_snapshot_to_log!(name, storage, skip_row?)
     {range, {parent, shape_handle, data, storage}}
   end
 

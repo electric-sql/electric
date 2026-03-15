@@ -11,10 +11,10 @@ import EnvVarConfig from '../../src/components/EnvVarConfig.vue'
 
 # Sync service configuration
 
-This page documents the config options for [self-hosting](/docs/guides/deployment) the [Electric sync engine](/product/electric).
+This page documents the config options for [self-hosting](/docs/guides/deployment) the [Electric sync engine](/products/postgres-sync).
 
 > [!Warning] Advanced only
-> You don't need to worry about this if you're using [Electric Cloud](/product/cloud).
+> You don't need to worry about this if you're using [Electric Cloud](/cloud).
 >
 > Also, the only required configuration options are `DATABASE_URL` and `ELECTRIC_SECRET`.
 
@@ -307,6 +307,93 @@ The amount of time a consumer process remains active without receiving transacti
 
 </EnvVarConfig>
 
+### ELECTRIC_SHAPE_DB_EXCLUSIVE_MODE
+
+<EnvVarConfig
+    name="ELECTRIC_SHAPE_DB_EXCLUSIVE_MODE"
+    defaultValue="false"
+    example="true">
+
+Run the SQLite database holding active shape data over a single read-write connection, rather than a single writer and multiple reader connections. This avoids corruption issues when holding shape data on an NFS share (such as [AWS EFS](https://aws.amazon.com/efs/)). Set this to `true` and `ELECTRIC_SHAPE_DB_STORAGE_DIR=:memory:` to use an in-memory database.
+
+</EnvVarConfig>
+
+### ELECTRIC_SHAPE_DB_STORAGE_DIR
+
+<EnvVarConfig
+    name="ELECTRIC_SHAPE_DB_STORAGE_DIR"
+    defaultValue="$ELECTRIC_STORAGE_DIR"
+    example="/var/db/electric">
+
+The base path for the shapes SQLite database. Set this to a local, non-networked drive, for consistency and performance reasons when hosting shape data on a network volume, such as [AWS EFS](https://aws.amazon.com/efs/). This is an alternative to `ELECTRIC_SHAPE_DB_EXCLUSIVE_MODE` when a single read-write connection does not provide enough performance. Note that if the `ELECTRIC_SHAPE_DB_STORAGE_DIR` is ephemeral, e.g. instance specific, then on a re-deployment the shape log data in `$ELECTRIC_STORAGE_DIR` (hosted on EFS) will be ignored by the system, which will start empty.
+
+Enable `ELECTRIC_SHAPE_DB_EXCLUSIVE_MODE` and set `ELECTRIC_SHAPE_DB_EXCLUSIVE_MODE=:memory:` to use an ephemeral in-memory shape database.
+
+</EnvVarConfig>
+
+### ELECTRIC_SHAPE_DB_SYNCHRONOUS
+
+<EnvVarConfig
+    name="ELECTRIC_SHAPE_DB_SYNCHRONOUS"
+    defaultValue="OFF"
+    example="NORMAL">
+
+The value of the [`synchronous` PRAGMA](https://sqlite.org/pragma.html#pragma_synchronous) set on every connection to the shape db.
+
+
+</EnvVarConfig>
+
+### ELECTRIC_SHAPE_DB_CACHE_SIZE
+
+<EnvVarConfig
+    name="ELECTRIC_SHAPE_DB_CACHE_SIZE"
+    defaultValue="4096KiB"
+    example="8MiB">
+
+The value of the [`cache_size` PRAGMA](https://sqlite.org/pragma.html#pragma_cache_size) set on every connection to the shape db. Higher values will result in more memory usage but improved performance. Accepts values in bytes, or with a suffix such as "1024KB", "500KiB", "5MB", "8MiB", etc.
+
+</EnvVarConfig>
+
+### ELECTRIC_SHAPE_DB_ENABLE_STATS
+
+<EnvVarConfig
+    name="ELECTRIC_SHAPE_DB_ENABLE_STATS"
+    defaultValue="false"
+    example="true">
+
+Set `ELECTRIC_SHAPE_DB_ENABLE_STATS=true` to enable collection of statistics for the SQLite shape db system.
+
+</EnvVarConfig>
+
+### ELECTRIC_SHAPE_DB_ENABLE_MEMORY_STATS
+
+<EnvVarConfig
+    name="ELECTRIC_SHAPE_DB_ENABLE_MEMORY_STATS"
+    defaultValue="false"
+    example="true">
+
+Set `ELECTRIC_SHAPE_DB_ENABLE_STATS=true` and `ELECTRIC_SHAPE_DB_ENABLE_MEMORY_STATS=true` to enable collection of memory usage statistics for the SQLite shape db system. Requires the loading of a pre-compiled extension so may cause issues on some architectures and is disabled by default for stability reasons.
+
+</EnvVarConfig>
+
+### ELECTRIC_MAX_CONCURRENT_REQUESTS
+
+<EnvVarConfig
+    name="ELECTRIC_MAX_CONCURRENT_REQUESTS"
+    defaultValue='{"initial": 300, "existing": 10000}'
+    example='{"initial": 500, "existing": 30000}'>
+
+Maximum number of concurrent HTTP requests Electric will serve, as a JSON object with two keys:
+
+- `initial` &mdash; limit for initial sync requests (requests with `offset=-1`). Default: **300**.
+- `existing` &mdash; limit for ongoing requests (live long-polls and catch-up requests). Default: **10000**.
+
+When the limit is exceeded, Electric responds with `503` and a `Retry-After` header. See the [troubleshooting guide](/docs/guides/troubleshooting#_503-mdash-concurrent-request-limit-exceeded) for details.
+
+Each `live=true` long-poll request holds the connection open for up to 20 seconds, so the effective limit is determined by the number of concurrent shape subscriptions across all connected clients. Putting a [CDN with request collapsing](/docs/api/http#collapsing-live-requests) in front of Electric is the recommended way to handle high connection counts.
+
+</EnvVarConfig>
+
 ## Feature Flags
 
 Feature flags enable experimental or advanced features that are not yet enabled by default in production.
@@ -475,6 +562,19 @@ Expose a prometheus reporter for telemetry data on the specified port.
     example="https://example.com">
 
 Enable sending telemetry data to a StatsD reporting endpoint.
+
+</EnvVarConfig>
+
+### SENTRY_DSN
+
+<EnvVarConfig
+    name="SENTRY_DSN"
+    optional="true"
+    example="https://key@o0.ingest.sentry.io/0">
+
+Set a [Sentry](https://sentry.io) DSN to enable error tracking via the Sentry Elixir SDK. When configured, Electric will automatically capture errors and report them to your Sentry project.
+
+This requires Electric to be built with telemetry enabled (which is the case for the official Docker images).
 
 </EnvVarConfig>
 

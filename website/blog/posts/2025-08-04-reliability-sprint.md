@@ -6,7 +6,7 @@ excerpt: >-
   Our last quarter was a reliability sprint. We set one goal: make ElectricSQL so boring‑reliable that you stop thinking about it and just build.
 authors: [kyle]
 image: /img/blog/reliability-sprint/header.png
-tags: [product, engineering]
+tags: [product, engineering, postgres-sync]
 outline: deep
 post: true
 ---
@@ -48,11 +48,11 @@ Electric captures changes from Postgres via logical replication and streams them
 ### The reliability stack
 
 1. **Replication resilience**: Connection pooling, automatic reconnection, and WAL position tracking ensure we never lose data
-2. **Backpressure handling**: High-traffic [shapes](https://electric-sql.com/docs/guides/shapes) requests don't block DB operations; the system degrades gracefully under load
+2. **Backpressure handling**: High-traffic [shapes](/docs/guides/shapes) requests don't block DB operations; the system degrades gracefully under load
 3. **Caching layers**: Multi-tier caching (CDN, Nginx, disk) reduces database load
 4. **Observability**: Deep instrumentation exposes exactly what's happening when things go wrong
 
-The result is a system that handles 500GB+ of daily Postgres traffic while maintaining sub-100ms update latency. Our [Electric Cloud](https://electric-sql.com/product/cloud) syncs data to devices in over 100 countries every month.
+The result is a system that handles 500GB+ of daily Postgres traffic while maintaining sub-100ms update latency. Our [Electric Cloud](/cloud) syncs data to devices in over 100 countries every month.
 
 ---
 

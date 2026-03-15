@@ -25,15 +25,15 @@ defmodule Electric.Replication.ShapeLogCollector.FlushTracker do
   @doc """
   Create a new flush tracker to figure out when flush boundary moves up across all writers
 
-  When doing a flush across N shapes, it might be delayed on different cadences depending on the amount of data we’re writing.
-  It also might be worth it eventually to break lock-step writes. We need to tell Postgres accurately (enough) when we’ve actually flushed the data it sent us.
+  When doing a flush across N shapes, it might be delayed on different cadences depending on the amount of data we're writing.
+  It also might be worth it eventually to break lock-step writes. We need to tell Postgres accurately (enough) when we've actually flushed the data it sent us.
 
-  Main problem is that we’re not only flushing on different cadences, but also each shape might not see every operation, so our flush acknowledgement
-  should take a complicated minimum across all shapes depending on what they are seeing. What’s more is that we want to align the acknowledged WALs
-  to transaction boundaries, because that’s how PG is sending the data.
+  Main problem is that we're not only flushing on different cadences, but also each shape might not see every operation, so our flush acknowledgement
+  should take a complicated minimum across all shapes depending on what they are seeing. What's more is that we want to align the acknowledged WALs
+  to transaction boundaries, because that's how PG is sending the data.
 
-  It’s important to note that because shapes are not seeing all operations, they don’t necessarily see the last-in-transaction operation, while the
-  sender doesn’t know how many operations will be sent upfront. Because of that it’s up to the writer to acknowledge the intermediate flushes but also
+  It's important to note that because shapes are not seeing all operations, they don't necessarily see the last-in-transaction operation, while the
+  sender doesn't know how many operations will be sent upfront. Because of that it's up to the writer to acknowledge the intermediate flushes but also
   to align the last-seen operation to the transaction offset so that the sender can be sure the writer has caught up.
 
   ### Tracked state:
@@ -52,19 +52,19 @@ defmodule Electric.Replication.ShapeLogCollector.FlushTracker do
   2. Determine affected shapes
   3. For each shape,
     1. If Mapping already has the shape, update `last_sent` to the max offset of the transaction
-    2. If Mapping doesn’t have the shape, add it with `{last_sent, prev_log_offset}` where `prev_log_offset` is an
+    2. If Mapping doesn't have the shape, add it with `{last_sent, prev_log_offset}` where `prev_log_offset` is an
        artificial offset with its `tx_offset` set to one less than the incoming transaction. This is a safe upper bound
        to use, as the shape must have flushed all relevant data before this transaction, and thus even if the previous
        transaction did not affect this shape we can consider it "flushed" by the shape.
-  4. If Mapping is empty after this update, then we’re up-to-date and should consider this transaction immediately flushed.
+  4. If Mapping is empty after this update, then we're up-to-date and should consider this transaction immediately flushed.
      Set `last_global_flushed_offset` to equal `last_seen_offset` and notify appropriately. See step 2 of writer flush process.
   5. Wait for the writers to send the flushed offset
 
   On writer flush (i.e. when writer notifies the central process of a flushed write) notifying with `newlast_flushed` expressed via `handle_flush_notification/3`
   1. Update the mapping for the shape:
-    1. If `last_sent` equals to the new flush position, then we’re caught up. Delete this shape from the mapping
+    1. If `last_sent` equals to the new flush position, then we're caught up. Delete this shape from the mapping
     2. Otherwise, replace `last_flushed` with this new value
-  2. If Mapping is empty after the update, we’re globally caught up - set `last_global_flushed_offset` to equal `last_seen_offset`
+  2. If Mapping is empty after the update, we're globally caught up - set `last_global_flushed_offset` to equal `last_seen_offset`
   3. Otherwise:
     1. Determine the new global flushed offset:
        `last_global_flushed_offset = max(last_global_flushed_offset, min(for {_, {_, last_flushed}} <- Mapping, do: last_flushed))`
@@ -72,11 +72,11 @@ defmodule Electric.Replication.ShapeLogCollector.FlushTracker do
        had not caught up. Because this `min` is expected to be called very often, we use a lookup structure to get this `min` in a fast manner
   4. On last_global_flushed_offset update - notify the replication client with actual transaction LSN:
     1. If flushes are caught up (i.e. Mapping is empty), then notify with LSN = tx_offset of the last flushed offset
-    2. Otherwise, it’s complicated to determine which transactions have been flushed completely without keeping track of
+    2. Otherwise, it's complicated to determine which transactions have been flushed completely without keeping track of
        all intermediate points, so notify with LSN = tx_offset - 1, essentially lagging the flush by one transaction just in case.
 
   Aligning the writers flushed offset with the transaction boundary:
-  1. On incoming transaction, store a mapping of last offset that’s meant to be written by this writer to the last offset for the txn
+  1. On incoming transaction, store a mapping of last offset that's meant to be written by this writer to the last offset for the txn
   2. On a flush, the writer should remove from the mapping all elements that are less-then-or-equal to last flushed offset, and then
     1. If last removed element from the mapping is equal to the flushed, then use the transaction last offset instead to notify the sender
     2. Otherwise, use actual last flushed offset to notify the sender.
@@ -95,17 +95,61 @@ defmodule Electric.Replication.ShapeLogCollector.FlushTracker do
     last_flushed == %{} and :gb_trees.is_empty(tree)
   end
 
-  @spec handle_txn_fragment(t(), TransactionFragment.t(), Enumerable.t(shape_id())) :: t()
+  @spec handle_txn_fragment(
+          t(),
+          TransactionFragment.t(),
+          Enumerable.t(shape_id()),
+          MapSet.t(shape_id())
+        ) :: t()
+
+  # Non-commit fragment: track affected shapes but don't update last_seen_offset
+  # or notify. This ensures shapes are registered early so flush notifications
+  # from Consumers aren't lost when storage flushes before the commit arrives.
   def handle_txn_fragment(
-        %__MODULE__{
-          min_incomplete_flush_tree: min_incomplete_flush_tree,
-          last_flushed: last_flushed
-        } = state,
-        %TransactionFragment{commit: %Commit{}, last_log_offset: last_log_offset},
-        affected_shapes
+        %__MODULE__{} = state,
+        %TransactionFragment{commit: nil, last_log_offset: last_log_offset},
+        affected_shapes,
+        _shapes_with_changes
       ) do
-    # for affected shapes that are not currently tracked, assume their last flushed offset
-    # is the transaction before this one, which is a safe upper bound
+    track_shapes(state, last_log_offset, affected_shapes)
+  end
+
+  # Commit fragment: track shapes that have actual changes in this fragment
+  # or are already being tracked (need last_sent updated to commit offset).
+  # Skip shapes that only have a commit marker and already flushed from
+  # earlier non-commit fragments — there's nothing new to flush for them.
+  def handle_txn_fragment(
+        %__MODULE__{} = state,
+        %TransactionFragment{commit: %Commit{}, last_log_offset: last_log_offset},
+        affected_shapes,
+        shapes_with_changes
+      ) do
+    shapes_to_track =
+      Enum.filter(affected_shapes, fn shape ->
+        shape in shapes_with_changes or is_map_key(state.last_flushed, shape)
+      end)
+
+    state = track_shapes(state, last_log_offset, shapes_to_track)
+
+    state = %{state | last_seen_offset: last_log_offset}
+
+    if state.last_flushed == %{} do
+      update_global_offset(state)
+    else
+      state
+    end
+  end
+
+  defp track_shapes(state, _last_log_offset, []), do: state
+
+  defp track_shapes(
+         %__MODULE__{
+           min_incomplete_flush_tree: min_incomplete_flush_tree,
+           last_flushed: last_flushed
+         } = state,
+         last_log_offset,
+         affected_shapes
+       ) do
     prev_log_offset = %LogOffset{tx_offset: last_log_offset.tx_offset - 1}
 
     {last_flushed, new_shape_ids} =
@@ -130,28 +174,11 @@ defmodule Electric.Replication.ShapeLogCollector.FlushTracker do
         do: min_incomplete_flush_tree,
         else: add_to_tree(min_incomplete_flush_tree, prev_log_offset, new_shape_ids)
 
-    state =
-      %__MODULE__{
-        state
-        | last_flushed: last_flushed,
-          last_seen_offset: last_log_offset,
-          min_incomplete_flush_tree: min_incomplete_flush_tree
-      }
-
-    if last_flushed == %{} do
-      # We're caught up
-      update_global_offset(state)
-    else
+    %{
       state
-    end
-  end
-
-  def handle_txn_fragment(
-        %__MODULE__{} = state,
-        %TransactionFragment{commit: nil},
-        _affected_shapes
-      ) do
-    state
+      | last_flushed: last_flushed,
+        min_incomplete_flush_tree: min_incomplete_flush_tree
+    }
   end
 
   @spec handle_flush_notification(t(), shape_id(), LogOffset.t()) :: t()
@@ -178,12 +205,20 @@ defmodule Electric.Replication.ShapeLogCollector.FlushTracker do
            |> add_to_tree(last_flushed_offset, shape_id)}
       end
 
-    %__MODULE__{
+    state = %{
       state
       | last_flushed: last_flushed,
         min_incomplete_flush_tree: min_incomplete_flush_tree
     }
-    |> update_global_offset()
+
+    # Only update global offset if we've seen at least one commit.
+    # Before any commit, last_seen_offset is before_all and there's
+    # nothing meaningful to report.
+    if state.last_seen_offset == LogOffset.before_all() do
+      state
+    else
+      update_global_offset(state)
+    end
   end
 
   # If the shape is not in the mapping, then we're processing a flush notification for a shape that was removed
@@ -194,7 +229,7 @@ defmodule Electric.Replication.ShapeLogCollector.FlushTracker do
   def handle_shape_removed(%__MODULE__{last_flushed: last_flushed} = state, shape_id) do
     case Map.fetch(last_flushed, shape_id) do
       {:ok, {_, last_flushed_offset}} ->
-        %__MODULE__{
+        %{
           state
           | last_flushed: Map.delete(last_flushed, shape_id),
             min_incomplete_flush_tree:
@@ -211,7 +246,7 @@ defmodule Electric.Replication.ShapeLogCollector.FlushTracker do
          %__MODULE__{last_flushed: last_flushed, last_seen_offset: last_seen} = state
        )
        when last_flushed == %{} do
-    %__MODULE__{
+    %{
       state
       | last_global_flushed_offset: last_seen,
         min_incomplete_flush_tree: :gb_trees.empty()
@@ -231,7 +266,7 @@ defmodule Electric.Replication.ShapeLogCollector.FlushTracker do
       LogOffset.max(prev_last_global_flushed_offset, LogOffset.new(offset))
 
     if prev_last_global_flushed_offset != last_global_flushed_offset do
-      %__MODULE__{state | last_global_flushed_offset: last_global_flushed_offset}
+      %{state | last_global_flushed_offset: last_global_flushed_offset}
       |> notify_global_offset_updated()
     else
       state

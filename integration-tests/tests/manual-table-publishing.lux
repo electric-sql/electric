@@ -99,7 +99,7 @@
   ??ALTER TABLE
 
 [shell electric]
-  ??[info] Verified publication electric_publication_integration to include ["public.items"] tables with REPLICA IDENTITY FULL
+  ??[notice] Verified publication electric_publication_integration to include ["public.items"] tables with REPLICA IDENTITY FULL
 
 [shell psql]
   !SELECT * FROM pg_publication_tables;

@@ -118,11 +118,16 @@ defmodule Electric.Shapes.ConsumerRegistry do
   There is no timeout so if the GenServers do not respond or die, this
   function will block indefinitely.
   """
-  @spec broadcast([{shape_handle(), term(), pid()}]) :: %{shape_handle() => term()}
+  @spec broadcast([{shape_handle(), term(), pid() | nil}]) :: %{shape_handle() => term()}
   def broadcast(handle_event_pids) do
     # Based on OTP GenServer.call, see:
     # https://github.com/erlang/otp/blob/090c308d7c925e154240685174addaa516ea2f69/lib/stdlib/src/gen.erl#L243
+    #
+    # Filter out nil pids to handle the race condition where a shape is removed
+    # from ShapeStatus but events still arrive for it (EventRouter removal is async).
+    # When start_consumer_for_handle returns {:error, :no_shape}, the pid is nil.
     handle_event_pids
+    |> Enum.reject(fn {_handle, _event, pid} -> is_nil(pid) end)
     |> Enum.map(fn {handle, event, pid} ->
       ref = Process.monitor(pid)
       send(pid, {:"$gen_call", {self(), ref}, event})
@@ -240,6 +245,7 @@ defmodule Electric.Shapes.ConsumerRegistry do
 
   def new(stack_id, opts \\ []) when is_binary(stack_id) do
     table = registry_table(stack_id)
+    Electric.Shapes.Consumer.Materializer.init_link_values_table(stack_id)
 
     state = struct(__MODULE__, Keyword.merge(opts, stack_id: stack_id, table: table))
 

@@ -28,8 +28,8 @@
   -Starting replication from postgres|$fail_pattern
 
   ??[debug] Starting replication client for stack single_stack
-  ??[info] Acquiring lock from postgres with name electric_slot_integration
-  ??[info] Lock acquired from postgres with name electric_slot_integration
+  ??[notice] Acquiring lock from postgres with name electric_slot_integration
+  ??[notice] Lock acquired from postgres with name electric_slot_integration
   ??[debug] ReplicationClient step: create_slot
 
 ## Verify that Electric's health check can report that the service is starting
@@ -54,7 +54,7 @@
 ## in the second Electric
 [shell electric_2]
   -Lock acquired from postgres|Starting replication from postgres|$fail_pattern
-  ??[info] Acquiring lock from postgres with name electric_slot_integration
+  ??[notice] Acquiring lock from postgres with name electric_slot_integration
 
 # The 2nd service should be in waiting state, ready to take over
 [shell client]
@@ -82,7 +82,7 @@
   # Reset the failure pattern before the next match
   -$fail_pattern
 
-  ??[info] Starting replication from postgres
+  ??[notice] Starting replication from postgres
 
 ## The 2nd Electric is still waiting
 [shell client]
@@ -102,8 +102,8 @@
 [shell electric_2]
   -$fail_pattern
 
-  ??[info] Lock acquired from postgres with name electric_slot_integration
-  ??[info] Starting replication from postgres
+  ??[notice] Lock acquired from postgres with name electric_slot_integration
+  ??[notice] Starting replication from postgres
 
 # The 2nd Electric is now healthy and active
 [shell client]

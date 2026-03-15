@@ -74,7 +74,7 @@ defmodule Electric.ShapeCache.ExpiryManager do
     number_to_expire = shape_count - state.max_shapes
     {handles_to_expire, min_age} = least_recently_used(state, number_to_expire)
 
-    Logger.info(
+    Logger.notice(
       "Expiring #{number_to_expire} shapes as the number of shapes " <>
         "has exceeded the limit (#{state.max_shapes})"
     )
@@ -94,14 +94,10 @@ defmodule Electric.ShapeCache.ExpiryManager do
   end
 
   defp least_recently_used(%{stack_id: stack_id}, number_to_expire) do
-    OpenTelemetry.with_span("expiry_manager.get_least_recently_used", [], fn ->
-      ShapeStatus.least_recently_used(stack_id, number_to_expire)
-    end)
+    ShapeStatus.least_recently_used(stack_id, number_to_expire)
   end
 
   defp shape_count(%{stack_id: stack_id}) do
-    OpenTelemetry.with_span("expiry_manager.get_shape_count", [], fn ->
-      ShapeStatus.count_shapes(stack_id)
-    end)
+    ShapeStatus.count_shapes(stack_id)
   end
 end

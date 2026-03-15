@@ -1033,6 +1033,100 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
     end
   end
 
+  describe "global LSN broadcast on transaction commit" do
+    setup [:with_registry, :setup_log_collector]
+
+    setup ctx do
+      parent = self()
+
+      stub_inspector(
+        load_relation_oid: fn {"public", "test_table"}, _ ->
+          {:ok, {1234, {"public", "test_table"}}}
+        end,
+        load_relation_info: fn 1234, _ ->
+          {:ok, %{id: 1234, schema: "public", name: "test_table", parent: nil, children: nil}}
+        end,
+        load_column_info: fn 1234, _ ->
+          {:ok, [%{pk_position: 0, name: "id", is_generated: false}]}
+        end
+      )
+
+      consumers =
+        Enum.map(1..1, fn id ->
+          consumer =
+            start_link_supervised!(%{
+              id: {:consumer, id},
+              start:
+                {Support.TransactionConsumer, :start_link,
+                 [
+                   [
+                     id: id,
+                     stack_id: ctx.stack_id,
+                     parent: parent,
+                     shape: @shape,
+                     shape_handle: "#{@shape_handle}-#{id}"
+                   ]
+                 ]},
+              restart: :temporary
+            })
+
+          {id, consumer}
+        end)
+
+      %{consumers: consumers}
+    end
+
+    test "broadcasts global LSN to registered processes on committed transaction", ctx do
+      stack_registry = Electric.StackSupervisor.registry_name(ctx.stack_id)
+      Registry.register(stack_registry, :global_lsn_updates, [])
+
+      lsn = Lsn.from_string("0/10")
+      log_offset = LogOffset.new(lsn, 0)
+
+      txn =
+        transaction(100, lsn, [
+          %Changes.NewRecord{
+            relation: {"public", "test_table"},
+            record: %{"id" => "2", "name" => "foo"},
+            log_offset: log_offset
+          }
+        ])
+
+      assert :ok = ShapeLogCollector.handle_event(txn, ctx.stack_id)
+
+      expected_lsn = Lsn.to_integer(lsn)
+      assert_receive {:global_last_seen_lsn, ^expected_lsn}
+    end
+
+    test "does not broadcast global LSN for non-commit fragments", ctx do
+      stack_registry = Electric.StackSupervisor.registry_name(ctx.stack_id)
+      Registry.register(stack_registry, :global_lsn_updates, [])
+
+      lsn = Lsn.from_string("0/10")
+      log_offset = LogOffset.new(lsn, 0)
+
+      fragment = %TransactionFragment{
+        xid: 100,
+        lsn: lsn,
+        last_log_offset: log_offset,
+        has_begin?: true,
+        commit: nil,
+        changes: [
+          %Changes.NewRecord{
+            relation: {"public", "test_table"},
+            record: %{"id" => "2", "name" => "foo"},
+            log_offset: log_offset
+          }
+        ],
+        affected_relations: MapSet.new([{"public", "test_table"}])
+      }
+
+      assert :ok = ShapeLogCollector.handle_event(fragment, ctx.stack_id)
+
+      refute_receive {:global_last_seen_lsn, _}, 50
+    end
+  end
+
   defp transaction(xid, lsn, changes) do
     last_log_offset =
       case Enum.reverse(changes) do

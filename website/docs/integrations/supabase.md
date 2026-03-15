@@ -119,7 +119,7 @@ $ curl -i --location --request POST 'http://127.0.0.1:54321/functions/v1/hello-e
 
 ## PGlite
 
-Electric and Supabase are also collaborating to develop [PGlite](/product/pglite), which Supabase sponsor, contribute to and have developed [database.build](https://database.build) on.
+Electric and Supabase are also collaborating to develop [PGlite](/products/pglite), which Supabase sponsor, contribute to and have developed [database.build](https://database.build) on.
 
 <div style="max-width: 512px; margin: 24px 0">
   <div class="embed-container">

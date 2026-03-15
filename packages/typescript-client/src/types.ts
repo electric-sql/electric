@@ -91,7 +91,7 @@ export type SubsetParams = {
   /** Legacy string format WHERE clause */
   where?: string
   /** Positional parameter values for WHERE clause */
-  params?: Record<string, string>
+  params?: Record<string, string | bigint | number>
   /** Maximum number of rows to return */
   limit?: number
   /** Number of rows to skip */
@@ -102,6 +102,16 @@ export type SubsetParams = {
   whereExpr?: SerializedExpression
   /** Structured ORDER BY clauses (preferred when available) */
   orderByExpr?: SerializedOrderByClause[]
+  /**
+   * HTTP method to use for the request. Overrides `subsetMethod` from ShapeStreamOptions.
+   * - `GET` (default): Sends subset params as query parameters. May fail with 414 errors
+   *   for large queries.
+   * - `POST`: Sends subset params in request body as JSON. Recommended to avoid URL
+   *   length limits with large WHERE clauses or many parameters.
+   *
+   * In Electric 2.0, GET will be deprecated and only POST will be supported.
+   */
+  method?: `GET` | `POST`
 }
 
 export type ControlMessage = {

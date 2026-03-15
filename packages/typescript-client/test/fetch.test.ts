@@ -318,6 +318,126 @@ describe(`createFetchWithChunkBuffer`, () => {
     expect(mockFetch).toHaveBeenCalledWith(nextUrl, expect.anything())
   })
 
+  it(`should not consume prefetched GET responses for POST requests with same URL`, async () => {
+    const fetchWrapper = createFetchWithChunkBuffer(mockFetch)
+    const initialResponse = new Response(`initial chunk`, {
+      status: 200,
+      headers: responseHeaders({
+        [SHAPE_HANDLE_HEADER]: `123`,
+        [CHUNK_LAST_OFFSET_HEADER]: `456`,
+      }),
+    })
+    const prefetchedGetResponse = new Response(`prefetched GET chunk`, {
+      status: 200,
+    })
+    const postResponse = new Response(`fresh POST response`, { status: 200 })
+
+    mockFetch
+      .mockResolvedValueOnce(initialResponse)
+      .mockResolvedValueOnce(prefetchedGetResponse)
+      .mockResolvedValueOnce(postResponse)
+
+    await fetchWrapper(baseUrl)
+    await sleep()
+
+    const nextUrl = sortUrlParams(`${baseUrl}&handle=123&offset=456`)
+    const result = await fetchWrapper(nextUrl, { method: `POST` })
+
+    expect(await result.text()).toBe(`fresh POST response`)
+    expect(mockFetch).toHaveBeenCalledTimes(3)
+    expect(mockFetch).toHaveBeenNthCalledWith(
+      3,
+      nextUrl,
+      expect.objectContaining({ method: `POST` })
+    )
+  })
+
+  it(`should not prefetch for non-GET requests`, async () => {
+    const fetchWrapper = createFetchWithChunkBuffer(mockFetch)
+    const postResponse = new Response(`snapshot chunk`, {
+      status: 200,
+      headers: responseHeaders({
+        [SHAPE_HANDLE_HEADER]: `123`,
+        [CHUNK_LAST_OFFSET_HEADER]: `456`,
+      }),
+    })
+
+    mockFetch.mockResolvedValueOnce(postResponse)
+
+    const result = await fetchWrapper(baseUrl, { method: `POST` })
+    await sleep()
+
+    expect(result).toBe(postResponse)
+    expect(mockFetch).toHaveBeenCalledTimes(1)
+    expect(mockFetch).toHaveBeenCalledWith(
+      baseUrl,
+      expect.objectContaining({ method: `POST` })
+    )
+  })
+
+  it(`should abort prefetch queue when POST arrives and let subsequent GET start fresh`, async () => {
+    const fetchWrapper = createFetchWithChunkBuffer(mockFetch)
+    const initialResponse = new Response(`initial`, {
+      status: 200,
+      headers: responseHeaders({
+        [SHAPE_HANDLE_HEADER]: `123`,
+        [CHUNK_LAST_OFFSET_HEADER]: `456`,
+      }),
+    })
+    const prefetchedResponse = new Response(`prefetched`, { status: 200 })
+    const postResponse = new Response(`post`, { status: 200 })
+    const freshGetResponse = new Response(`fresh get`, {
+      status: 200,
+      headers: responseHeaders({
+        [SHAPE_HANDLE_HEADER]: `123`,
+        [CHUNK_LAST_OFFSET_HEADER]: `789`,
+      }),
+    })
+
+    mockFetch
+      .mockResolvedValueOnce(initialResponse)
+      .mockResolvedValueOnce(prefetchedResponse)
+      .mockResolvedValueOnce(postResponse)
+      .mockResolvedValueOnce(freshGetResponse)
+
+    // GET triggers prefetch of nextUrl
+    await fetchWrapper(baseUrl)
+    await sleep()
+
+    // POST clears the queue
+    await fetchWrapper(baseUrl, { method: `POST` })
+
+    // Subsequent GET should make a fresh request, not consume stale prefetch
+    const nextUrl = sortUrlParams(`${baseUrl}&handle=123&offset=456`)
+    const result = await fetchWrapper(nextUrl)
+    expect(await result.text()).toBe(`fresh get`)
+  })
+
+  it(`should detect method from Request object input`, async () => {
+    const fetchWrapper = createFetchWithChunkBuffer(mockFetch)
+    const postResponse = new Response(`post response`, { status: 200 })
+    mockFetch.mockResolvedValueOnce(postResponse)
+
+    const request = new Request(baseUrl, { method: `POST` })
+    const result = await fetchWrapper(request)
+    await sleep()
+
+    expect(result).toBe(postResponse)
+    expect(mockFetch).toHaveBeenCalledTimes(1)
+  })
+
+  it(`should handle lowercase method in init`, async () => {
+    const fetchWrapper = createFetchWithChunkBuffer(mockFetch)
+    const response = new Response(`ok`, { status: 200 })
+    mockFetch.mockResolvedValueOnce(response)
+
+    const result = await fetchWrapper(baseUrl, { method: `post` })
+    await sleep()
+
+    expect(result).toBe(response)
+    expect(mockFetch).toHaveBeenCalledTimes(1)
+  })
+
   it(`should stop and resume prefetching after reaching maxChunksToPrefetch`, async () => {
     const maxPrefetchNum = 2
     const fetchWrapper = createFetchWithChunkBuffer(mockFetch, {

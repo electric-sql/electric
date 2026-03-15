@@ -613,7 +613,7 @@ defmodule Electric.Shapes.Shape do
     converted_changes
     |> Enum.map(&fill_move_tags(&1, shape, opts[:stack_id], opts[:shape_handle]))
     |> Enum.map(&filter_change_columns(&1, selected_columns))
-    |> Enum.filter(&filtered_columns_changed?/1)
+    |> Enum.filter(&should_keep_change?/1)
   end
 
   defp filter_change_columns(change, nil), do: change
@@ -673,17 +673,24 @@ defmodule Electric.Shapes.Shape do
           SubqueryMoves.make_value_hash(stack_id, shape_handle, Map.get(record, column_name))
 
         {:hash_together, columns} ->
-          column_parts = Enum.map(columns, &(&1 <> ":" <> Map.get(record, &1)))
-          SubqueryMoves.make_value_hash(stack_id, shape_handle, Enum.join(column_parts, ":"))
+          column_parts =
+            Enum.map(columns, fn col ->
+              col <> ":" <> SubqueryMoves.namespace_value(Map.get(record, col))
+            end)
+
+          SubqueryMoves.make_value_hash_raw(stack_id, shape_handle, Enum.join(column_parts))
       end)
       |> Enum.join("/")
     end)
   end
 
-  defp filtered_columns_changed?(%Changes.UpdatedRecord{old_record: record, record: record}),
+  defp should_keep_change?(%Changes.UpdatedRecord{removed_move_tags: removed_move_tags})
+       when removed_move_tags != [], do: true
+
+  defp should_keep_change?(%Changes.UpdatedRecord{old_record: record, record: record}),
     do: false
 
-  defp filtered_columns_changed?(_), do: true
+  defp should_keep_change?(_), do: true
 
   # If neither oid nor schema/table name matches, then shape is not affected
   def is_affected_by_relation_change?(

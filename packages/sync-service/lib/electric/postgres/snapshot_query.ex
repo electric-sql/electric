@@ -82,7 +82,7 @@ defmodule Electric.Postgres.SnapshotQuery do
     [
       "shape.handle": shape_handle,
       "shape.root_table": shape.root_table,
-      "shape.where": shape.where
+      "shape.where": if(not is_nil(shape.where), do: shape.where.query, else: nil)
     ]
   end
 
@@ -92,7 +92,7 @@ defmodule Electric.Postgres.SnapshotQuery do
          query_or_queries,
          opts
        ) do
-    OpenTelemetry.with_span(
+    OpenTelemetry.with_child_span(
       Keyword.fetch!(opts, :span_name),
       span_attrs,
       stack_id,

@@ -74,7 +74,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
         sse_timeout: sse_timeout(ctx),
         max_age: max_age(ctx),
         stale_age: stale_age(ctx),
-        max_concurrent_requests: %{initial: 300, existing: 1000}
+        max_concurrent_requests: %{initial: 300, existing: 10_000}
       )
 
     ServeShapePlug.call(conn, opts)
@@ -111,6 +111,8 @@ defmodule Electric.Plug.ServeShapePlugTest do
                  ]
                }
              }
+
+      assert get_resp_header(conn, "electric-has-data") == []
     end
 
     test "returns 400 for invalid offset", ctx do
@@ -451,6 +453,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
              ]
 
       assert get_resp_header(conn, "electric-up-to-date") == []
+      assert get_resp_header(conn, "electric-has-data") == ["true"]
     end
 
     test "returns 304 Not Modified when If-None-Match matches ETag",
@@ -576,6 +579,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
       assert get_resp_header(conn, "electric-offset") == [next_offset_str]
       assert get_resp_header(conn, "electric-up-to-date") == [""]
+      assert get_resp_header(conn, "electric-has-data") == ["true"]
       assert get_resp_header(conn, "electric-schema") == []
 
       expected_cursor =
@@ -626,9 +630,6 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
       conn = Task.await(task)
 
-      # The conn process should exit after sending the response
-      refute Process.alive?(conn.owner)
-
       assert conn.status == 409
       assert [%{"headers" => %{"control" => "must-refetch"}}] = Jason.decode!(conn.resp_body)
     end
@@ -670,6 +671,28 @@ defmodule Electric.Plug.ServeShapePlugTest do
       expected_etag_part = "\"#{@test_shape_handle}:#{@test_offset}:#{@test_offset}:"
       assert [^expected_etag_part <> _rest] = get_resp_header(conn, "etag")
 
+      assert get_resp_header(conn, "electric-up-to-date") == [""]
+      assert get_resp_header(conn, "electric-has-data") == ["false"]
+    end
+
+    test "returns electric-has-data: false for offset=now requests", ctx do
+      patch_shape_cache(
+        get_or_create_shape_handle: fn @test_shape, _stack_id, _opts ->
+          {@test_shape_handle, @test_offset}
+        end
+      )
+
+      conn =
+        ctx
+        |> conn(
+          :get,
+          %{"table" => "public.users"},
+          "?offset=now&handle=#{@test_shape_handle}"
+        )
+        |> call_serve_shape_plug(ctx)
+
+      assert conn.status == 200
+      assert get_resp_header(conn, "electric-has-data") == ["false"]
       assert get_resp_header(conn, "electric-up-to-date") == [""]
     end
 
@@ -999,6 +1022,66 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
       assert conn.status == 200
       assert conn.state == :chunked
+    end
+  end
+
+  describe "parse_body error handling" do
+    setup :with_lsn_tracker
+
+    setup ctx do
+      {:via, _, {registry_name, registry_key}} =
+        Electric.Shapes.Supervisor.name(ctx.stack_id)
+
+      {:ok, _} = Registry.register(registry_name, registry_key, nil)
+      set_status_to_active(ctx)
+
+      patch_storage(for_shape: fn @test_shape_handle, _opts -> @test_opts end)
+
+      :ok
+    end
+
+    test "returns 400 for invalid JSON body without crashing", ctx do
+      conn =
+        Plug.Test.conn(:post, "/?offset=-1", "not valid json")
+        |> put_req_header("content-type", "application/json")
+        |> call_serve_shape_plug(ctx)
+
+      assert conn.status == 400
+      assert %{"error" => "Invalid JSON in request body"} = Jason.decode!(conn.resp_body)
+    end
+
+    test "returns 400 for non-object JSON body without crashing", ctx do
+      conn =
+        Plug.Test.conn(:post, "/?offset=-1", Jason.encode!(["an", "array"]))
+        |> put_req_header("content-type", "application/json")
+        |> call_serve_shape_plug(ctx)
+
+      assert conn.status == 400
+      assert %{"error" => "Request body must be a JSON object"} = Jason.decode!(conn.resp_body)
+    end
+
+    test "returns 413 for oversized body without crashing", ctx do
+      Repatch.patch(Plug.Conn, :read_body, fn conn, _opts -> {:more, "partial", conn} end)
+
+      conn =
+        Plug.Test.conn(:post, "/?offset=-1", "body")
+        |> put_req_header("content-type", "application/json")
+        |> call_serve_shape_plug(ctx)
+
+      assert conn.status == 413
+      assert %{"error" => "Request body too large"} = Jason.decode!(conn.resp_body)
+    end
+
+    test "returns 400 for body read failure without crashing", ctx do
+      Repatch.patch(Plug.Conn, :read_body, fn _conn, _opts -> {:error, :timeout} end)
+
+      conn =
+        Plug.Test.conn(:post, "/?offset=-1", "body")
+        |> put_req_header("content-type", "application/json")
+        |> call_serve_shape_plug(ctx)
+
+      assert conn.status == 400
+      assert %{"error" => "Failed to read request body"} = Jason.decode!(conn.resp_body)
     end
   end
 

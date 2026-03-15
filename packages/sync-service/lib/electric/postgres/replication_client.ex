@@ -6,6 +6,7 @@ defmodule Electric.Postgres.ReplicationClient do
 
   alias Electric.Postgres.LogicalReplication.Decoder
   alias Electric.Postgres.Lsn
+  alias Electric.LsnTracker
   alias Electric.Postgres.ReplicationClient.MessageConverter
   alias Electric.Postgres.ReplicationClient.ConnectionSetup
   alias Electric.Replication.Changes.TransactionFragment
@@ -103,17 +104,12 @@ defmodule Electric.Postgres.ReplicationClient do
                    # we can handle, above which we would exit as we run the risk of running
                    # out of memmory.
                    # TODO: stream out transactions and collect on disk to avoid this
-                   max_txn_size: [type: {:or, [:non_neg_integer, nil]}, default: nil]
+                   max_txn_size: [type: {:or, [:non_neg_integer, nil]}, default: nil],
+                   # Maximum number of changes to buffer before flushing a transaction fragment.
+                   # Smaller values result in more message passing overhead but lower memory usage.
+                   # The minimum allowed value is 2.
+                   max_batch_size: [type: :non_neg_integer, default: 100]
                  )
-
-    # Making the batch size small results in more message passing which
-    # can have a performance impact. The larger the batch size the more memory
-    # is used to hold the operations in memory before sending them off to be processed.
-    # For local testing batch sizes of 3 and above overcome the performance hit of message
-    # passing, but as we're not currently worried about the memory consumption of the
-    # replication client and don't want to risk any performance degradation in production
-    # it has been set arbitrarily high to 100. We can tune this figure later if needed.
-    @max_change_batch_size 100
 
     @spec new(Access.t()) :: t()
     def new(opts) do
@@ -122,6 +118,10 @@ defmodule Electric.Postgres.ReplicationClient do
       opts = settings ++ opts
 
       {max_txn_size, opts} = Keyword.pop!(opts, :max_txn_size)
+      {max_batch_size, opts} = Keyword.pop!(opts, :max_batch_size)
+
+      # Assert the implicit requirement
+      true = max_batch_size >= 2
 
       struct!(
         __MODULE__,
@@ -130,7 +130,7 @@ defmodule Electric.Postgres.ReplicationClient do
             message_converter:
               MessageConverter.new(
                 max_tx_size: max_txn_size,
-                max_batch_size: @max_change_batch_size
+                max_batch_size: max_batch_size
               )
           ]
       )
@@ -351,8 +351,17 @@ defmodule Electric.Postgres.ReplicationClient do
       "Primary Keepalive: wal_end=#{wal_end} (#{Lsn.from_integer(wal_end)}) reply=#{reply}"
     end)
 
+    in_transaction? = MessageConverter.in_transaction?(state.message_converter)
+
+    # Broadcast the server's latest WAL position to consumers with materializer
+    # dependencies. This covers silent-postgres periods where no transactions
+    # arrive but buffered move-in results may be ready to splice.
+    unless in_transaction? do
+      LsnTracker.broadcast_last_seen_lsn(state.stack_id, wal_end)
+    end
+
     case reply do
-      1 when MessageConverter.in_transaction?(state.message_converter) ->
+      1 when in_transaction? ->
         {:noreply, [encode_standby_status_update(state)], state}
 
       # if we are not in a transaction, advance the replication slot
@@ -362,7 +371,7 @@ defmodule Electric.Postgres.ReplicationClient do
         state = update_stored_wals(state, wal_end)
         {:noreply, [encode_standby_status_update(state)], state}
 
-      0 when MessageConverter.in_transaction?(state.message_converter) ->
+      0 when in_transaction? ->
         {:noreply, [], state}
 
       0 ->
@@ -417,11 +426,13 @@ defmodule Electric.Postgres.ReplicationClient do
 
   defp acknowledge_transaction(%TransactionFragment{lsn: lsn, commit: commit}, state) do
     if Sampler.sample_metrics?() do
+      alias Electric.Replication.Changes.Commit
+
       OpenTelemetry.execute(
         [:electric, :postgres, :replication, :transaction_received],
         %{
           monotonic_time: System.monotonic_time(),
-          receive_lag: DateTime.diff(DateTime.utc_now(), commit.commit_timestamp, :millisecond),
+          receive_lag: Commit.calculate_final_receive_lag(commit, System.monotonic_time()),
           bytes: commit.transaction_size,
           count: 1,
           operations: commit.txn_change_count

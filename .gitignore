@@ -21,8 +21,12 @@ tsconfig.tsbuildinfo
 wal
 /shapes
 .sst
+sst-*.log
 **/deps/*
 **/junit
 **/coverage
 response.tmp
 .claude
+!website/.claude/commands
+!website/.claude/skills
+_artifacts

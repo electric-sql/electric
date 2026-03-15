@@ -27,9 +27,11 @@ defmodule Electric.ShapeCache.ShapeStatus do
   @type shape_handle() :: Electric.shape_handle()
 
   # MUST be updated when Shape.comparable/1 changes.
-  @version 7
+  @version 8
 
-  @shape_last_used_time_pos 2
+  # Position of last_read_time in the shape_meta_table tuple:
+  # {handle, hash, snapshot_started, last_read_time}
+  @shape_last_used_time_pos 4
 
   @spec version() :: pos_integer()
   def version, do: @version
@@ -45,40 +47,55 @@ defmodule Electric.ShapeCache.ShapeStatus do
   """
   @spec initialize(stack_id()) :: :ok | {:error, term()}
   def initialize(stack_id) when is_stack_id(stack_id) do
-    create_last_used_table(stack_id)
+    create_shape_meta_table(stack_id)
 
     {:ok, invalid_handles, valid_shape_count} = ShapeDb.validate_existing_shapes(stack_id)
 
-    Logger.info(
+    Logger.notice(
       "Found #{valid_shape_count} existing valid shapes and #{length(invalid_handles)} shapes in an invalid state"
     )
 
-    :ok = Electric.ShapeCache.ShapeCleaner.remove_shape_storage_async(stack_id, invalid_handles)
+    if valid_shape_count == 0 do
+      # delete any orphaned shape data
+      stack_id
+      |> Electric.ShapeCache.Storage.for_stack()
+      |> Electric.ShapeCache.Storage.cleanup_all!()
 
-    populate_last_used_table(stack_id)
+      :ok
+    else
+      with :ok <-
+             Electric.ShapeCache.ShapeCleaner.remove_shape_storage_async(
+               stack_id,
+               invalid_handles
+             ) do
+        populate_shape_meta_table(stack_id)
+      end
+    end
   end
 
   @spec add_shape(stack_id(), Shape.t()) :: {:ok, shape_handle()} | {:error, term()}
   def add_shape(stack_id, shape) when is_stack_id(stack_id) do
-    OpenTelemetry.with_span("shape_status.add_shape", [], stack_id, fn ->
+    OpenTelemetry.with_child_span("shape_status.add_shape", [], stack_id, fn ->
       {_, shape_handle} = Shape.generate_id(shape)
 
       # Add the lookup last as it is the one that enables clients to find the shape
-      with {:ok, _shape_hash} <- ShapeDb.add_shape(stack_id, shape, shape_handle) do
-        true =
-          :ets.insert_new(
-            shape_last_used_table(stack_id),
-            {shape_handle, System.monotonic_time()}
-          )
-
-        {:ok, shape_handle}
+      with {:ok, shape_hash} <- ShapeDb.add_shape(stack_id, shape, shape_handle) do
+        # Cache shape metadata: {handle, hash, snapshot_started, last_read_time}
+        if :ets.insert_new(
+             shape_meta_table(stack_id),
+             {shape_handle, shape_hash, false, nil}
+           ) do
+          {:ok, shape_handle}
+        else
+          {:error, "duplicate shape #{inspect(shape_handle)}: #{inspect(shape)}"}
+        end
       end
     end)
   end
 
   @spec list_shapes(stack_id()) :: [{shape_handle(), Shape.t()}]
   def list_shapes(stack_id) when is_stack_id(stack_id) do
-    OpenTelemetry.with_span("shape_status.list_shapes", [], stack_id, fn ->
+    OpenTelemetry.with_child_span("shape_status.list_shapes", [], stack_id, fn ->
       stack_id
       |> ShapeDb.list_shapes!()
       |> topological_sort()
@@ -114,47 +131,84 @@ defmodule Electric.ShapeCache.ShapeStatus do
           shape_handle()
         ]
   def list_shape_handles_for_relations(stack_id, relations) when is_stack_id(stack_id) do
-    OpenTelemetry.with_span("shape_status.list_shape_handles_for_relations", [], stack_id, fn ->
-      ShapeDb.shape_handles_for_relations!(stack_id, relations)
-    end)
+    OpenTelemetry.with_child_span(
+      "shape_status.list_shape_handles_for_relations",
+      [],
+      stack_id,
+      fn ->
+        ShapeDb.shape_handles_for_relations!(stack_id, relations)
+      end
+    )
   end
 
   @spec remove_shape(stack_id(), shape_handle()) :: :ok | {:error, term()}
   def remove_shape(stack_id, shape_handle) when is_stack_id(stack_id) do
-    OpenTelemetry.with_span("shape_status.remove_shape", [], stack_id, fn ->
-      with :ok <- ShapeDb.remove_shape(stack_id, shape_handle) do
-        :ets.delete(shape_last_used_table(stack_id), shape_handle)
-        :ok
-      end
-    end)
+    with :ok <- ShapeDb.remove_shape(stack_id, shape_handle) do
+      :ets.delete(shape_meta_table(stack_id), shape_handle)
+      :ok
+    end
   end
 
   @spec reset(stack_id()) :: :ok
   def reset(stack_id) when is_stack_id(stack_id) do
     :ok = ShapeDb.reset(stack_id)
-    :ets.delete_all_objects(shape_last_used_table(stack_id))
+    :ets.delete_all_objects(shape_meta_table(stack_id))
     :ok
   end
 
   @spec fetch_handle_by_shape(stack_id(), Shape.t()) :: {:ok, shape_handle()} | :error
   def fetch_handle_by_shape(stack_id, %Shape{} = shape) when is_stack_id(stack_id) do
-    OpenTelemetry.with_span("shape_status.fetch_handle_by_shape", [], stack_id, fn ->
+    OpenTelemetry.with_child_span("shape_status.fetch_handle_by_shape", [], stack_id, fn ->
       ShapeDb.handle_for_shape(stack_id, shape)
     end)
+  end
+
+  @doc """
+  Where as `fetch_handle_by_shape/2` *may* under high-write load return stale
+  data -- not finding a shape that has been written -- due to SQLite's
+  cross-connection durability when in WAL mode, where a connection reads
+  against a snapshot of the data, this version does the lookup via the write
+  connection, which is guaranteed to see all writes (SQLite connections can
+  always see their own writes).
+
+  This guarantees that will will return consistent restults at the cost of slower
+  lookups as we're contending with access to the single write connection.
+  """
+  @spec fetch_handle_by_shape_critical(stack_id(), Shape.t()) :: {:ok, shape_handle()} | :error
+  def fetch_handle_by_shape_critical(stack_id, %Shape{} = shape) when is_stack_id(stack_id) do
+    OpenTelemetry.with_child_span(
+      "shape_status.fetch_handle_by_shape_critical",
+      [],
+      stack_id,
+      fn ->
+        ShapeDb.handle_for_shape_critical(stack_id, shape)
+      end
+    )
   end
 
   @spec fetch_shape_by_handle(stack_id(), shape_handle()) :: {:ok, Shape.t()} | :error
   def fetch_shape_by_handle(stack_id, shape_handle)
       when is_stack_id(stack_id) and is_shape_handle(shape_handle) do
-    OpenTelemetry.with_span("shape_status.fetch_shape_by_handle", [], stack_id, fn ->
+    OpenTelemetry.with_child_span("shape_status.fetch_shape_by_handle", [], stack_id, fn ->
       ShapeDb.shape_for_handle(stack_id, shape_handle)
     end)
   end
 
   def has_shape_handle?(stack_id, shape_handle) do
-    OpenTelemetry.with_span("shape_status.has_shape_handle?", [], stack_id, fn ->
-      ShapeDb.handle_exists?(stack_id, shape_handle)
-    end)
+    :ets.member(shape_meta_table(stack_id), shape_handle)
+  end
+
+  @spec shape_has_been_activated?(stack_id(), shape_handle()) :: boolean()
+  def shape_has_been_activated?(stack_id, shape_handle) do
+    last_used_timestamp =
+      :ets.lookup_element(
+        shape_meta_table(stack_id),
+        shape_handle,
+        @shape_last_used_time_pos,
+        nil
+      )
+
+    not is_nil(last_used_timestamp)
   end
 
   @doc """
@@ -164,36 +218,36 @@ defmodule Electric.ShapeCache.ShapeStatus do
   @spec validate_shape_handle(stack_id(), shape_handle(), Shape.t()) :: :ok | :error
   def validate_shape_handle(stack_id, shape_handle, %Shape{} = shape)
       when is_stack_id(stack_id) do
-    OpenTelemetry.with_span("shape_status.validate_shape_handle", [], stack_id, fn ->
-      with {:ok, valid_hash} <- ShapeDb.shape_hash(stack_id, shape_handle) do
-        case Shape.hash(shape) do
-          ^valid_hash -> :ok
-          _ -> :error
-        end
-      end
-    end)
+    case :ets.lookup(shape_meta_table(stack_id), shape_handle) do
+      [{^shape_handle, hash, _snapshot_started, _last_read}] ->
+        if Shape.hash(shape) == hash, do: :ok, else: :error
+
+      [] ->
+        :error
+    end
   end
 
   @spec mark_snapshot_started(stack_id(), shape_handle()) :: :ok | :error
   def mark_snapshot_started(stack_id, shape_handle) when is_stack_id(stack_id) do
-    OpenTelemetry.with_span("shape_status.mark_snapshot_started", [], stack_id, fn ->
-      ShapeDb.mark_snapshot_started(stack_id, shape_handle)
-    end)
+    with true <- :ets.update_element(shape_meta_table(stack_id), shape_handle, {3, true}) do
+      :ok
+    else
+      _ -> :error
+    end
   end
 
   def snapshot_started?(stack_id, shape_handle) do
-    ShapeDb.snapshot_started?(stack_id, shape_handle)
+    case :ets.lookup(shape_meta_table(stack_id), shape_handle) do
+      [{^shape_handle, _hash, snapshot_started, _last_read}] -> snapshot_started
+      [] -> false
+    end
   end
 
   @spec mark_snapshot_complete(stack_id(), shape_handle()) :: :ok | :error
   def mark_snapshot_complete(stack_id, shape_handle) when is_stack_id(stack_id) do
-    OpenTelemetry.with_span("shape_status.mark_snapshot_complete", [], stack_id, fn ->
+    OpenTelemetry.with_child_span("shape_status.mark_snapshot_complete", [], stack_id, fn ->
       ShapeDb.mark_snapshot_complete(stack_id, shape_handle)
     end)
-  end
-
-  def snapshot_complete?(stack_id, shape_handle) do
-    ShapeDb.snapshot_complete?(stack_id, shape_handle)
   end
 
   @doc """
@@ -210,10 +264,9 @@ defmodule Electric.ShapeCache.ShapeStatus do
   """
   def update_last_read_time(stack_id, shape_handle, time) when is_stack_id(stack_id) do
     :ets.update_element(
-      shape_last_used_table(stack_id),
+      shape_meta_table(stack_id),
       shape_handle,
-      {@shape_last_used_time_pos, time},
-      {shape_handle, time}
+      {@shape_last_used_time_pos, time}
     )
   end
 
@@ -223,30 +276,36 @@ defmodule Electric.ShapeCache.ShapeStatus do
 
   def least_recently_used(stack_id, shape_count) when is_stack_id(stack_id) do
     now = System.monotonic_time()
-    table = shape_last_used_table(stack_id)
+    table = shape_meta_table(stack_id)
 
     # Use :ets.foldl with gb_trees to efficiently maintain top N without copying
     # entire table into memory and without sorting on every iteration
     tree =
       :ets.foldl(
-        fn {handle, last_read}, tree ->
-          last_read_tuple = {last_read, handle}
+        fn
+          # This shape has only just been created, so it's too young to be considered for
+          # expiration.
+          {_handle, _hash, _snapshot_started, nil}, tree ->
+            tree
 
-          if :gb_trees.size(tree) < shape_count do
-            # Insert into the tree until we reach the desired size
-            :gb_trees.insert(last_read_tuple, true, tree)
-          else
-            # If entry being examined was used less recently than the
-            # most recently used tracked entry in the tree so far, replace it
-            {most_recent_tuple, _} = :gb_trees.largest(tree)
+          {handle, _hash, _snapshot_started, last_read}, tree ->
+            last_read_tuple = {last_read, handle}
 
-            if last_read_tuple < most_recent_tuple do
-              tree = :gb_trees.delete(most_recent_tuple, tree)
+            if :gb_trees.size(tree) < shape_count do
+              # Insert into the tree until we reach the desired size
               :gb_trees.insert(last_read_tuple, true, tree)
             else
-              tree
+              # If entry being examined was used less recently than the
+              # most recently used tracked entry in the tree so far, replace it
+              {most_recent_tuple, _} = :gb_trees.largest(tree)
+
+              if last_read_tuple < most_recent_tuple do
+                tree = :gb_trees.delete(most_recent_tuple, tree)
+                :gb_trees.insert(last_read_tuple, true, tree)
+              else
+                tree
+              end
             end
-          end
         end,
         :gb_trees.empty(),
         table
@@ -269,31 +328,35 @@ defmodule Electric.ShapeCache.ShapeStatus do
     end
   end
 
-  @spec shape_last_used_table(stack_id()) :: atom()
-  defp shape_last_used_table(stack_id),
-    do: :"shape_last_used_table:#{stack_id}"
+  @spec shape_meta_table(stack_id()) :: atom()
+  defp shape_meta_table(stack_id),
+    do: :"shape_meta_table:#{stack_id}"
 
-  defp create_last_used_table(stack_id) do
-    last_used_table = shape_last_used_table(stack_id)
+  defp create_shape_meta_table(stack_id) do
+    table = shape_meta_table(stack_id)
 
-    :ets.new(last_used_table, [
+    :ets.new(table, [
       :named_table,
       :public,
       :set,
+      read_concurrency: true,
       write_concurrency: :auto
     ])
 
-    last_used_table
+    table
   end
 
-  defp populate_last_used_table(stack_id) do
+  defp populate_shape_meta_table(stack_id) do
     start_time = System.monotonic_time()
 
-    ShapeDb.reduce_shape_handles(
+    ShapeDb.reduce_shape_meta(
       stack_id,
-      :ets.whereis(shape_last_used_table(stack_id)),
-      fn handle, table ->
-        true = :ets.insert(table, {handle, start_time})
+      :ets.whereis(shape_meta_table(stack_id)),
+      fn {handle, hash, snapshot_complete?}, table ->
+        # any shapes where the snapshot didn't complete have been deleted
+        # so there is no intermediate started-but-not-complete state
+        # and completed implies started
+        true = :ets.insert(table, {handle, hash, snapshot_complete?, start_time})
         table
       end
     )

@@ -38,7 +38,6 @@ defmodule Electric.ShapeCache.PureFileStorage do
   alias Electric.ShapeCache.PureFileStorage.Snapshot
   alias Electric.ShapeCache.PureFileStorage.WriteLoop
   alias Electric.ShapeCache.Storage
-  alias Electric.Shapes.Shape
 
   import LogOffset
   import Electric.ShapeCache.PureFileStorage.SharedRecords
@@ -94,9 +93,6 @@ defmodule Electric.ShapeCache.PureFileStorage do
 
   @clean_cache_keys storage_meta_keys() -- @read_path_keys
 
-  # Directory for storing metadata
-  @metadata_storage_dir ".meta"
-
   def shared_opts(opts) do
     stack_id = Keyword.fetch!(opts, :stack_id)
     storage_dir = Keyword.get(opts, :storage_dir, "./shapes")
@@ -148,14 +144,17 @@ defmodule Electric.ShapeCache.PureFileStorage do
     shape_data_dir(shape_opts, [])
   end
 
-  defp shape_data_dir(%__MODULE__{stack_id: stack_id, shape_handle: shape_handle}, suffix) do
-    {__MODULE__, stack_opts} = Storage.for_stack(stack_id)
-    shape_data_dir(stack_opts.base_path, shape_handle, suffix)
+  def shape_data_dir(%__MODULE__{stack_id: stack_id, shape_handle: shape_handle}, suffix) do
+    base_path = Storage.opt_for_stack(stack_id, :base_path)
+    shape_data_dir(base_path, shape_handle, suffix)
   end
 
-  defp shape_data_dir(base_path, shape_handle, suffix \\ [])
-       when is_binary(base_path) and is_binary(shape_handle) do
-    Path.join([base_path, shape_handle | suffix])
+  @doc false
+  def shape_data_dir(base_path, shape_handle, suffix \\ [])
+      when is_binary(base_path) and is_binary(shape_handle) do
+    # nest storage to limit number of files per directory
+    <<p1::binary-2, p2::binary-2, _::binary>> = shape_handle
+    Path.join([base_path, p1, p2, shape_handle | suffix])
   end
 
   defp shape_log_dir(opts), do: shape_data_dir(opts, [@log_dir])
@@ -167,10 +166,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
   defp shape_snapshot_dir(opts), do: shape_data_dir(opts, [@snapshot_dir])
   defp shape_snapshot_path(opts, filename), do: shape_data_dir(opts, [@snapshot_dir, filename])
 
-  defp tmp_dir(%__MODULE__{} = opts) do
-    {__MODULE__, stack_opts} = Storage.for_stack(opts.stack_id)
-    stack_opts.tmp_dir
-  end
+  defp tmp_dir(%__MODULE__{} = opts), do: Storage.opt_for_stack(opts.stack_id, :tmp_dir)
 
   def stack_start_link(opts) do
     Supervisor.start_link(
@@ -186,56 +182,20 @@ defmodule Electric.ShapeCache.PureFileStorage do
              write_concurrency: :auto
            ])
          end},
-        {Task.Supervisor, name: stack_task_supervisor(opts.stack_id)}
+        {Task.Supervisor, name: stack_task_supervisor(opts.stack_id)},
+        # TODO: remove once we're sure that no install has un-nested storage
+        # directories
+        {Task, fn -> remove_unnested_storage(opts.base_path) end}
       ],
       strategy: :one_for_one
     )
   end
 
   def get_all_stored_shape_handles(%{base_path: base_path}) do
-    case ls(base_path) do
-      {:ok, shape_handles} ->
-        shape_handles
-        |> Enum.reject(&String.starts_with?(&1, "."))
-        |> then(&{:ok, MapSet.new(&1)})
-
-      {:error, :enoent} ->
-        {:ok, MapSet.new()}
-
-      {:error, reason} ->
-        {:error, reason}
-    end
-  end
-
-  def get_stored_shapes(stack_opts, shape_handles) do
-    Task.Supervisor.async_stream(
-      stack_task_supervisor(stack_opts.stack_id),
-      shape_handles,
-      fn handle ->
-        shape_opts = for_shape(handle, stack_opts)
-
-        case read_shape_definition(shape_opts) do
-          {:ok, shape} ->
-            {handle, {:ok, shape}}
-
-          _ ->
-            Logger.warning(
-              "Failed to read shape definition for shape #{handle}, removing it from disk"
-            )
-
-            cleanup!(shape_opts)
-            {handle, {:error, :failed_to_recover_shape}}
-        end
-      end,
-      timeout: :infinity,
-      ordered: false
-    )
-    |> Enum.map(fn {:ok, res} -> res end)
-    |> Map.new()
-  end
-
-  def metadata_backup_dir(%{base_path: base_path}) do
-    Path.join([base_path, @metadata_storage_dir, "backups"])
+    {:ok,
+     Path.wildcard("#{base_path}/*/*/*")
+     |> Stream.map(&Path.basename/1)
+     |> Enum.into(MapSet.new())}
   end
 
   def drop_all_ets_entries(stack_id) do
@@ -266,8 +226,9 @@ defmodule Electric.ShapeCache.PureFileStorage do
     end
   end
 
-  def cleanup_all!(%{stack_id: stack_id, base_path: base_path}) do
-    with :ok <- Electric.AsyncDeleter.delete(stack_id, base_path) do
+  def cleanup_all!(%{stack_id: stack_id, base_path: base_path, tmp_dir: tmp_dir}) do
+    with :ok <- Electric.AsyncDeleter.delete(stack_id, base_path),
+         :ok <- Electric.AsyncDeleter.delete(stack_id, tmp_dir) do
       drop_all_ets_entries(stack_id)
     end
   end
@@ -525,7 +486,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
   def init_writer!(shape_opts, shape_definition) do
     table = :ets.new(:in_memory_storage, [:ordered_set, :protected])
 
-    {initial_acc, suffix} = initialise_filesystem!(shape_opts, shape_definition)
+    {initial_acc, suffix} = initialise_filesystem!(shape_opts)
 
     register_with_stack(
       shape_opts,
@@ -537,8 +498,9 @@ defmodule Electric.ShapeCache.PureFileStorage do
     )
 
     if shape_definition.storage.compaction == :enabled do
-      {__MODULE__, stack_opts} = Storage.for_stack(shape_opts.stack_id)
-      schedule_compaction(stack_opts.compaction_config)
+      shape_opts.stack_id
+      |> Storage.opt_for_stack(:compaction_config)
+      |> schedule_compaction()
     end
 
     writer_state(
@@ -571,7 +533,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
     writer_state(state, writer_acc: WriteLoop.flush_and_close_all(acc, state))
   end
 
-  defp initialise_filesystem!(%__MODULE__{} = opts, shape_definition) do
+  def initialise_filesystem!(%__MODULE__{} = opts) do
     on_disk_version = read_metadata!(opts, :version)
     new? = is_nil(on_disk_version)
 
@@ -587,7 +549,6 @@ defmodule Electric.ShapeCache.PureFileStorage do
 
     if initialize? do
       create_directories!(opts)
-      write_shape_definition!(opts, shape_definition)
     end
 
     suffix =
@@ -749,24 +710,6 @@ defmodule Electric.ShapeCache.PureFileStorage do
     :ets.update_element(stack_ets, handle, updates)
   end
 
-  defp write_shape_definition!(%__MODULE__{} = opts, shape_definition) do
-    write!(
-      shape_metadata_path(opts, "shape_definition.json"),
-      Jason.encode!(shape_definition),
-      [:raw]
-    )
-  end
-
-  defp read_shape_definition(%__MODULE__{} = opts) do
-    path = shape_metadata_path(opts, "shape_definition.json")
-
-    with {:ok, contents} <- File.open(path, [:read, :raw, :read_ahead], &IO.binread(&1, :eof)),
-         {:ok, decoded} <- Jason.decode(if(is_binary(contents), do: contents, else: "")),
-         {:ok, rebuilt} <- Shape.from_json_safe(decoded) do
-      {:ok, rebuilt}
-    end
-  end
-
   defp last_snapshot_chunk(%__MODULE__{} = opts),
     do: read_cached_metadata(opts, :last_snapshot_chunk)
 
@@ -775,7 +718,6 @@ defmodule Electric.ShapeCache.PureFileStorage do
   end
 
   defp create_directories!(%__MODULE__{} = opts) do
-    mkdir_p!(shape_data_dir(opts))
     mkdir_p!(shape_log_dir(opts))
     mkdir_p!(shape_metadata_dir(opts))
   end
@@ -953,7 +895,11 @@ defmodule Electric.ShapeCache.PureFileStorage do
     :ok
   end
 
-  def append_move_in_snapshot_to_log!(name, writer_state(opts: opts, writer_acc: acc) = state) do
+  def append_move_in_snapshot_to_log!(
+        name,
+        writer_state(opts: opts, writer_acc: acc) = state,
+        skip_row?
+      ) do
     starting_offset = WriteLoop.last_seen_offset(acc)
 
     writer_state(writer_acc: acc) =
@@ -966,11 +912,15 @@ defmodule Electric.ShapeCache.PureFileStorage do
         fn {file, offset} ->
           with {:meta, <<key_size::32, json_size::64, op_type::8, tag_count::16>>} <-
                  {:meta, IO.binread(file, 15)},
-               _tags = read_tags(file, tag_count),
+               tags = read_tags(file, tag_count),
                <<key::binary-size(key_size)>> <- IO.binread(file, key_size),
                <<json::binary-size(json_size)>> <- IO.binread(file, json_size) do
-            {[{offset, key_size, key, op_type, 0, json_size, json}],
-             {file, LogOffset.increment(offset)}}
+            if skip_row?.(key, tags) do
+              {[], {file, offset}}
+            else
+              {[{offset, key_size, key, op_type, 0, json_size, json}],
+               {file, LogOffset.increment(offset)}}
+            end
           else
             {:meta, :eof} ->
               {:halt, {file, offset}}
@@ -998,67 +948,6 @@ defmodule Electric.ShapeCache.PureFileStorage do
       <<tag::binary-size(tag_size)>> = IO.binread(file, tag_size)
       tag
     end
-  end
-
-  def append_move_in_snapshot_to_log_filtered!(
-        name,
-        writer_state(opts: opts, writer_acc: acc) = state,
-        touch_tracker,
-        snapshot,
-        tags_to_skip
-      ) do
-    starting_offset = WriteLoop.last_seen_offset(acc)
-
-    writer_state(writer_acc: acc) =
-      state =
-      Stream.resource(
-        fn ->
-          {File.open!(shape_snapshot_path(opts, name), [:read, :raw, :read_ahead]),
-           LogOffset.increment(starting_offset)}
-        end,
-        fn {file, offset} ->
-          with {:meta, <<key_size::32, json_size::64, op_type::8, tag_count::16>>} <-
-                 {:meta, IO.binread(file, 15)},
-               tags = read_tags(file, tag_count),
-               <<key::binary-size(key_size)>> <- IO.binread(file, key_size),
-               <<json::binary-size(json_size)>> <- IO.binread(file, json_size) do
-            # Check if this row should be skipped
-            if all_parents_moved_out?(tags, tags_to_skip) or
-                 Electric.Shapes.Consumer.MoveIns.should_skip_query_row?(
-                   touch_tracker,
-                   snapshot,
-                   key
-                 ) do
-              # Skip this row - don't increment offset
-              {[], {file, offset}}
-            else
-              # Include this row
-              {[{offset, key_size, key, op_type, 0, json_size, json}],
-               {file, LogOffset.increment(offset)}}
-            end
-          else
-            {:meta, :eof} ->
-              {:halt, {file, offset}}
-
-            _ ->
-              raise Storage.Error,
-                message: "Incomplete move-in snapshot file at #{shape_snapshot_path(opts, name)}"
-          end
-        end,
-        fn {file, _} ->
-          File.close(file)
-          FileInfo.delete(shape_snapshot_path(opts, name))
-        end
-      )
-      |> append_to_log!(state)
-
-    inserted_range = {starting_offset, WriteLoop.last_seen_offset(acc)}
-
-    {inserted_range, state}
-  end
-
-  defp all_parents_moved_out?(tags, tags_to_skip) do
-    tags != [] and Enum.all?(tags, &MapSet.member?(tags_to_skip, &1))
   end
 
   def append_control_message!(control_message, writer_state(writer_acc: acc) = state)
@@ -1104,7 +993,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
 
       {nil, _offset} ->
         # Try streaming the next chunk if the file already exists, otherwise wait for the file or end of snapshot to be announced
-        # where either event should happen shortly, we just either hit a file switch or just before CubDB was updatred
+        # where either event should happen shortly, we just either hit a file switch or just before the storage was updated
         wait_for_chunk_file_or_snapshot_end(opts, op_offset + 1)
 
       {%LogOffset{}, offset} ->
@@ -1135,23 +1024,45 @@ defmodule Electric.ShapeCache.PureFileStorage do
 
     upper_read_bound = LogOffset.min(max_offset, last_seen)
 
+    # Convert upper_read_bound to tuple for comparison with ETS offsets
+    upper_read_bound_tuple = LogOffset.to_tuple(upper_read_bound)
+
     cond do
       is_log_offset_lte(last_persisted, min_offset) and is_nil(ets) ->
         []
 
       is_log_offset_lte(last_persisted, min_offset) ->
-        read_range_from_ets_cache(ets, min_offset, upper_read_bound)
+        # Pure ETS read case
+        case read_range_from_ets_cache(ets, min_offset, upper_read_bound) do
+          {_data, last_offset}
+          when is_nil(last_offset) or last_offset < upper_read_bound_tuple ->
+            # Empty or partial read - ETS was cleared by a concurrent flush.
+            # Data is now on disk (flush writes to disk before clearing ETS),
+            # so read directly from there using existing boundary info.
+            stream_from_disk(opts, min_offset, upper_read_bound, boundary_info)
+
+          {data, _last_offset} ->
+            data
+        end
 
       is_log_offset_lte(upper_read_bound, last_persisted) ->
         stream_from_disk(opts, min_offset, upper_read_bound, boundary_info)
 
       true ->
+        # Mixed disk + ETS case
         # Because ETS may be cleared by a flush in a parallel process, we're reading it out into memory.
         # It's expected to be fairly small in the worst case, up 64KB
-        upper_range = read_range_from_ets_cache(ets, last_persisted, upper_read_bound)
+        case read_range_from_ets_cache(ets, last_persisted, upper_read_bound) do
+          {_upper_range, last_offset}
+          when is_nil(last_offset) or last_offset < upper_read_bound_tuple ->
+            # Empty or partial read - ETS was cleared by a concurrent flush.
+            # Data is now on disk, so read the full range from there.
+            stream_from_disk(opts, min_offset, upper_read_bound, boundary_info)
 
-        stream_from_disk(opts, min_offset, last_persisted, boundary_info)
-        |> Stream.concat(upper_range)
+          {upper_range, _last_offset} ->
+            stream_from_disk(opts, min_offset, last_persisted, boundary_info)
+            |> Stream.concat(upper_range)
+        end
     end
   end
 
@@ -1194,23 +1105,34 @@ defmodule Electric.ShapeCache.PureFileStorage do
     end
   end
 
-  defp read_range_from_ets_cache(ets, %LogOffset{} = min, %LogOffset{} = max)
-       when is_reference(ets) do
-    read_range_from_ets_cache(ets, LogOffset.to_tuple(min), LogOffset.to_tuple(max), [])
+  # Returns {data, last_offset_read} where last_offset_read is the offset tuple of the
+  # last entry read, or nil if no entries were read. This allows callers to detect
+  # partial reads due to concurrent ETS clearing.
+  @spec read_range_from_ets_cache(:ets.tid() | nil, LogOffset.t(), LogOffset.t()) ::
+          {list(), LogOffset.t_tuple() | nil}
+  defp read_range_from_ets_cache(nil, _min, _max), do: {[], nil}
+
+  defp read_range_from_ets_cache(ets, %LogOffset{} = min, %LogOffset{} = max) do
+    read_range_from_ets_cache(ets, LogOffset.to_tuple(min), LogOffset.to_tuple(max), [], nil)
   end
 
-  defp read_range_from_ets_cache(nil, _min, _max), do: []
-
-  defp read_range_from_ets_cache(ets, min, {max_tx, max_op} = max, acc) when is_reference(ets) do
+  @spec read_range_from_ets_cache(
+          :ets.tid(),
+          LogOffset.t_tuple(),
+          LogOffset.t_tuple(),
+          list(),
+          LogOffset.t_tuple() | nil
+        ) :: {list(), LogOffset.t_tuple() | nil}
+  defp read_range_from_ets_cache(ets, min, {max_tx, max_op} = max, acc, last_offset) do
     case :ets.next_lookup(ets, min) do
       :"$end_of_table" ->
-        Enum.reverse(acc)
+        {Enum.reverse(acc), last_offset}
 
       {{min_tx, min_op}, _} when min_tx > max_tx or (min_tx == max_tx and min_op > max_op) ->
-        Enum.reverse(acc)
+        {Enum.reverse(acc), last_offset}
 
       {new_min, [{_, item}]} ->
-        read_range_from_ets_cache(ets, new_min, max, [item | acc])
+        read_range_from_ets_cache(ets, new_min, max, [item | acc], new_min)
     end
   end
 
@@ -1257,10 +1179,30 @@ defmodule Electric.ShapeCache.PureFileStorage do
 
   defp get_suffix(_, {latest_name, _, _}), do: latest_name
 
-  def append_to_log!(txn_lines, writer_state(writer_acc: acc) = state) do
-    txn_lines
+  def append_to_log!(txn_lines, state) do
+    write_log_items(txn_lines, state, with: &WriteLoop.append_to_log!/3)
+  end
+
+  @doc """
+  Append log items from a transaction fragment.
+
+  Unlike `append_to_log!/2`, this does NOT advance `last_seen_txn_offset` or
+  call `register_complete_txn`. Transaction completion should be signaled
+  separately via `signal_txn_commit!/2`.
+
+  This ensures that on crash/recovery, `fetch_latest_offset` returns the
+  last committed transaction offset, not a mid-transaction offset.
+  """
+  def supports_txn_fragment_streaming?, do: true
+
+  def append_fragment_to_log!(txn_fragment_lines, state) do
+    write_log_items(txn_fragment_lines, state, with: &WriteLoop.append_fragment_to_log!/3)
+  end
+
+  defp write_log_items(log_items, writer_state(writer_acc: acc) = state, with: write_loop_fn) do
+    log_items
     |> normalize_log_stream()
-    |> WriteLoop.append_to_log!(acc, state)
+    |> write_loop_fn.(acc, state)
     |> case do
       {acc, cancel_flush_timer: true} ->
         timer_ref = writer_state(state, :write_timer)
@@ -1271,6 +1213,20 @@ defmodule Electric.ShapeCache.PureFileStorage do
         writer_state(state, writer_acc: acc)
         |> schedule_flush(times_flushed)
     end
+  end
+
+  @doc """
+  Signal that a transaction has committed.
+
+  Updates `last_seen_txn_offset` and persists metadata to mark the transaction
+  as complete. Should be called after all fragments have been written via
+  `append_fragment_to_log!/2`.
+  """
+  # xid is not actually used here since it's not possible for transaction writes to interleave.
+  # It's part of the function signature for testing.
+  def signal_txn_commit!(_xid, writer_state(writer_acc: acc) = state) do
+    acc = WriteLoop.signal_txn_commit(acc, state)
+    writer_state(state, writer_acc: acc)
   end
 
   def update_chunk_boundaries_cache(opts, boundaries) do
@@ -1287,13 +1243,13 @@ defmodule Electric.ShapeCache.PureFileStorage do
     if WriteLoop.has_flushed_since?(acc, old) or is_nil(timer) do
       if not is_nil(timer), do: Process.cancel_timer(timer)
 
-      {__MODULE__, stack_opts} = Storage.for_stack(opts.stack_id)
+      flush_period = Storage.opt_for_stack(opts.stack_id, :flush_period)
 
       ref =
         Process.send_after(
           self(),
           {Storage, {__MODULE__, :perform_scheduled_flush, [WriteLoop.times_flushed(acc)]}},
-          stack_opts.flush_period
+          flush_period
         )
 
       writer_state(state, write_timer: ref)
@@ -1359,10 +1315,6 @@ defmodule Electric.ShapeCache.PureFileStorage do
     File.rm_rf!(path)
   end
 
-  defp ls(path) do
-    FileInfo.ls(path)
-  end
-
   defp rename!(path1, path2) do
     case FileInfo.rename(path1, path2) do
       :ok ->
@@ -1423,5 +1375,22 @@ defmodule Electric.ShapeCache.PureFileStorage do
 
   defp shape_gone?(%__MODULE__{} = opts) do
     !FileInfo.exists?(shape_data_dir(opts))
+  end
+
+  defp remove_unnested_storage(base_dir) do
+    "#{base_dir}/*"
+    |> Path.wildcard()
+    |> Enum.filter(fn path ->
+      name = Path.basename(path)
+      Regex.match?(~r/\d{6,}-\d{8,}/, name)
+    end)
+    |> tap(fn dirs ->
+      Logger.notice("Removing #{length(dirs)} old storage directories")
+    end)
+    |> Enum.each(fn path ->
+      # remove with a delay - don't want this task to interfere with critical processes
+      File.rm_rf(path)
+      Process.sleep(20)
+    end)
   end
 end

@@ -400,6 +400,21 @@ defmodule Electric.Shapes.Api do
     end
   end
 
+  # Ensure the request process is subscribed to shape events. This is needed
+  # for the out-of-bounds handler which calls handle_live_request() regardless
+  # of the `live` param. Without a subscription, the process would never receive
+  # :new_changes from the consumer and would be stuck until the timeout.
+  defp ensure_subscribed(%Request{new_changes_ref: ref} = request) when not is_nil(ref) do
+    request
+  end
+
+  defp ensure_subscribed(%Request{} = request) do
+    %{handle: handle, api: %{stack_id: stack_id}} = request
+    ref = Electric.StackSupervisor.subscribe_to_shape_events(stack_id, handle)
+    Logger.debug("Client #{inspect(self())} is registered for changes to #{handle}")
+    %{request | new_changes_pid: self(), new_changes_ref: ref}
+  end
+
   defp determine_global_last_seen_lsn(%Request{} = request) do
     offset =
       request.api.stack_id
@@ -592,18 +607,22 @@ defmodule Electric.Shapes.Api do
     %{
       response
       | status: 200,
+        no_changes: true,
         body: encode_log(request, [up_to_date_ctl(global_last_seen_lsn)]),
         finalized?: true
     }
   end
 
-  defp do_serve_shape_log(%Request{new_changes_ref: ref} = request)
+  defp do_serve_shape_log(%Request{} = request)
        when is_out_of_bounds(request) do
     # treat out of bounds requests like live requests with a
     # shorter timeout before failing them, as if the client happened
     # to be slightly ahead because of a restart or handover the
     # offset they have seen should show up shortly, otherwise we
     # assume it is an actually invalid out of bounds request
+    request = ensure_subscribed(request)
+    %{new_changes_ref: ref} = request
+
     Process.send_after(
       self(),
       {ref, :out_of_bounds_timeout},
@@ -734,6 +753,22 @@ defmodule Electric.Shapes.Api do
       {^shape_handle, latest_log_offset} when is_log_offset_lt(last_offset, latest_log_offset) ->
         send(self(), {ref, :new_changes, latest_log_offset})
 
+      {^shape_handle, _latest_log_offset} ->
+        # Fix for issue #3760: Handle offset regression during shape invalidation.
+        #
+        # This case handles a race condition where:
+        # 1. Shape invalidation spawns an async cleanup task
+        # 2. Between consumer termination and async cleanup completion, the writer
+        #    ETS gets deleted while ShapeStatus retains the shape entry
+        # 3. A pending API request queries the shape
+        # 4. Validation succeeds (shape exists in ShapeStatus), but metadata reading
+        #    fails, causing resolve_shape_handle to return LogOffset.last_before_real_offsets()
+        # 5. This offset is less than the client's stored offset (offset regression)
+        #
+        # When the offset goes backwards, the shape has effectively been invalidated
+        # and the client should refetch from the beginning.
+        send(self(), {ref, :shape_rotation})
+
       {other_shape_handle, _} when other_shape_handle != shape_handle ->
         send(self(), {ref, :shape_rotation, other_shape_handle})
 
@@ -752,6 +787,13 @@ defmodule Electric.Shapes.Api do
     } = request
 
     Logger.debug("Client #{inspect(self())} is waiting for changes to #{shape_handle}")
+
+    # Bandit reuses handler processes across requests. This process may have accumulated
+    # garbage from previous requests or from building the response for this request.
+    # Before blocking in receive (potentially for up to long_poll_timeout seconds),
+    # run garbage collection so we don't hold onto memory while idle.
+    # Combined with handler_fullsweep_after config, this helps keep handler memory usage low.
+    :erlang.garbage_collect()
 
     receive do
       {^ref, :new_changes, latest_log_offset} ->

@@ -96,14 +96,18 @@ defmodule Electric.Shapes.Consumer.MoveHandling do
   end
 
   def query_complete(%State{} = state, name, key_set, snapshot) do
+    touch_tracker = state.move_handling_state.touch_tracker
+    tags_to_skip = state.move_handling_state.moved_out_tags[name] || MapSet.new()
+
     # 1. Splice stored snapshot into main log with filtering
     {{lower_bound, upper_bound}, writer} =
-      Storage.append_move_in_snapshot_to_log_filtered!(
+      Storage.append_move_in_snapshot_to_log!(
         name,
         state.writer,
-        state.move_handling_state.touch_tracker,
-        snapshot,
-        state.move_handling_state.moved_out_tags[name] || MapSet.new()
+        fn key, tags ->
+          (tags != [] and Enum.all?(tags, &MapSet.member?(tags_to_skip, &1))) or
+            MoveIns.should_skip_query_row?(touch_tracker, snapshot, key)
+        end
       )
 
     # 2. Move from "waiting" to "filtering"

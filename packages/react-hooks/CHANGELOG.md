@@ -1,5 +1,111 @@
 # @electric-sql/react
 
+## 1.0.41
+
+### Patch Changes
+
+- Updated dependencies [d1e08b8]
+  - @electric-sql/client@1.5.12
+
+## 1.0.40
+
+### Patch Changes
+
+- Updated dependencies [0031e81]
+  - @electric-sql/client@1.5.11
+
+## 1.0.39
+
+### Patch Changes
+
+- Updated dependencies [243c7d7]
+  - @electric-sql/client@1.5.10
+
+## 1.0.38
+
+### Patch Changes
+
+- Updated dependencies [24b140f]
+  - @electric-sql/client@1.5.9
+
+## 1.0.37
+
+### Patch Changes
+
+- Updated dependencies [8600d25]
+- Updated dependencies [1e1123b]
+- Updated dependencies [e172d4b]
+  - @electric-sql/client@1.5.8
+
+## 1.0.36
+
+### Patch Changes
+
+- Updated dependencies [ca931d9]
+- Updated dependencies [858e13d]
+  - @electric-sql/client@1.5.7
+
+## 1.0.35
+
+### Patch Changes
+
+- Updated dependencies [4c7855b]
+- Updated dependencies [c84d985]
+  - @electric-sql/client@1.5.6
+
+## 1.0.34
+
+### Patch Changes
+
+- Updated dependencies [e9bc504]
+  - @electric-sql/client@1.5.5
+
+## 1.0.33
+
+### Patch Changes
+
+- Updated dependencies [186b8f8]
+  - @electric-sql/client@1.5.4
+
+## 1.0.32
+
+### Patch Changes
+
+- Updated dependencies [9698b03]
+- Updated dependencies [b0cbe75]
+- Updated dependencies [b0cbe75]
+- Updated dependencies [b0cbe75]
+  - @electric-sql/client@1.5.3
+
+## 1.0.31
+
+### Patch Changes
+
+- Updated dependencies [091a232]
+  - @electric-sql/client@1.5.2
+
+## 1.0.30
+
+### Patch Changes
+
+- Updated dependencies [42aee8a]
+- Updated dependencies [fef494e]
+  - @electric-sql/client@1.5.1
+
+## 1.0.29
+
+### Patch Changes
+
+- Updated dependencies [3f257aa]
+  - @electric-sql/client@1.5.0
+
+## 1.0.28
+
+### Patch Changes
+
+- Updated dependencies [a428324]
+  - @electric-sql/client@1.4.2
+
 ## 1.0.27
 
 ### Patch Changes

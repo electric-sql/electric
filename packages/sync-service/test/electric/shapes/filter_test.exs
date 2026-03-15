@@ -386,6 +386,65 @@ defmodule Electric.Shapes.FilterTest do
           {%{"id" => "8", "an_array" => "{1}"}, false},
           {%{"id" => "7", "an_array" => nil}, false}
         ]
+      },
+      %{
+        where: "1 = ANY(an_array)",
+        records: [
+          {%{"an_array" => "{1}"}, true},
+          {%{"an_array" => "{1,2}"}, true},
+          {%{"an_array" => "{3,2,1}"}, true},
+          {%{"an_array" => "{2}"}, false},
+          {%{"an_array" => "{2,3,4}"}, false},
+          {%{"an_array" => nil}, false}
+        ]
+      },
+      %{
+        where: "1 = ANY(an_array) AND id = 7",
+        records: [
+          {%{"id" => "7", "an_array" => "{1}"}, true},
+          {%{"id" => "7", "an_array" => "{1,2}"}, true},
+          {%{"id" => "7", "an_array" => "{2}"}, false},
+          {%{"id" => "8", "an_array" => "{1}"}, false},
+          {%{"id" => "7", "an_array" => nil}, false}
+        ]
+      },
+      %{
+        where: "id = 7 AND 1 = ANY(an_array)",
+        records: [
+          {%{"id" => "7", "an_array" => "{1}"}, true},
+          {%{"id" => "7", "an_array" => "{1,2}"}, true},
+          {%{"id" => "7", "an_array" => "{2}"}, false},
+          {%{"id" => "8", "an_array" => "{1}"}, false},
+          {%{"id" => "7", "an_array" => nil}, false}
+        ]
+      },
+      %{
+        where: "id IN (1, 2, 3)",
+        records: [
+          {%{"id" => "1"}, true},
+          {%{"id" => "2"}, true},
+          {%{"id" => "3"}, true},
+          {%{"id" => "4"}, false},
+          {%{"id" => "0"}, false}
+        ]
+      },
+      %{
+        where: "id IN (1, 2) AND number > 5",
+        records: [
+          {%{"id" => "1", "number" => "6"}, true},
+          {%{"id" => "2", "number" => "10"}, true},
+          {%{"id" => "1", "number" => "3"}, false},
+          {%{"id" => "3", "number" => "6"}, false}
+        ]
+      },
+      %{
+        where: "number > 5 AND id IN (1, 2)",
+        records: [
+          {%{"id" => "1", "number" => "6"}, true},
+          {%{"id" => "2", "number" => "10"}, true},
+          {%{"id" => "1", "number" => "3"}, false},
+          {%{"id" => "3", "number" => "6"}, false}
+        ]
       }
     ]
 
@@ -420,7 +479,13 @@ defmodule Electric.Shapes.FilterTest do
       Shape.new!("table", where: "an_array @> '{1,2}'", inspector: @inspector),
       Shape.new!("table", where: "an_array @> '{1,3}'", inspector: @inspector),
       Shape.new!("table", where: "id = 1 AND an_array @> '{1}'", inspector: @inspector),
-      Shape.new!("table", where: "id = 1 AND an_array @> '{1,2}'", inspector: @inspector)
+      Shape.new!("table", where: "id = 1 AND an_array @> '{1,2}'", inspector: @inspector),
+      Shape.new!("table", where: "1 = ANY(an_array)", inspector: @inspector),
+      Shape.new!("table", where: "2 = ANY(an_array)", inspector: @inspector),
+      Shape.new!("table", where: "id = 1 AND 1 = ANY(an_array)", inspector: @inspector),
+      Shape.new!("table", where: "id IN (1, 2, 3)", inspector: @inspector),
+      Shape.new!("table", where: "id IN (4, 5)", inspector: @inspector),
+      Shape.new!("table", where: "id IN (1, 2) AND number > 5", inspector: @inspector)
     ]
 
     filter = Filter.new()
@@ -455,7 +520,9 @@ defmodule Electric.Shapes.FilterTest do
       tables: :ets.tab2list(filter.tables_table) |> Enum.sort(),
       where_cond: :ets.tab2list(filter.where_cond_table) |> Enum.sort(),
       eq_index: :ets.tab2list(filter.eq_index_table) |> Enum.sort(),
-      incl_index: :ets.tab2list(filter.incl_index_table) |> Enum.sort()
+      incl_index: :ets.tab2list(filter.incl_index_table) |> Enum.sort(),
+      sublink_field: :ets.tab2list(filter.sublink_field_table) |> Enum.sort(),
+      sublink_dep: :ets.tab2list(filter.sublink_dep_table) |> Enum.sort()
     }
   end
 
@@ -642,6 +709,57 @@ defmodule Electric.Shapes.FilterTest do
       Enum.each(arrays, fn array ->
         remove_reductions = reductions(fn -> Filter.remove_shape(filter, array) end)
         assert remove_reductions < max_reductions
+      end)
+    end
+
+    test "where clause in the form `const = ANY(array_field)` is optimised" do
+      # Same shape count as @> but higher budget per shape because the ANY
+      # AST is deeper to pattern-match through optimise_where
+      shape_count = @shape_count * 5
+      max_reductions = @max_reductions * 10
+
+      filter = Filter.new()
+
+      Enum.each(1..shape_count, fn i ->
+        shape = Shape.new!("t1", where: "#{i} = ANY(an_array)", inspector: @inspector)
+        add_reductions = reductions(fn -> Filter.add_shape(filter, i, shape) end)
+        assert add_reductions < max_reductions
+      end)
+
+      change = change("t1", %{"an_array" => "{7}"})
+      assert Filter.affected_shapes(filter, change) == MapSet.new([7])
+
+      affected_reductions = reductions(fn -> Filter.affected_shapes(filter, change) end)
+
+      assert affected_reductions < max_reductions
+
+      Enum.each(1..shape_count, fn i ->
+        remove_reductions = reductions(fn -> Filter.remove_shape(filter, i) end)
+        assert remove_reductions < max_reductions
+      end)
+    end
+
+    test "where clause in the form `field IN (const1, const2, ...)` is optimised" do
+      filter = Filter.new()
+
+      Enum.each(1..@shape_count, fn i ->
+        shape =
+          Shape.new!("t1", where: "id IN (#{i}, #{i + @shape_count})", inspector: @inspector)
+
+        add_reductions = reductions(fn -> Filter.add_shape(filter, i, shape) end)
+        assert add_reductions < @max_reductions
+      end)
+
+      change = change("t1", %{"id" => "7"})
+      assert Filter.affected_shapes(filter, change) == MapSet.new([7])
+
+      affected_reductions = reductions(fn -> Filter.affected_shapes(filter, change) end)
+
+      assert affected_reductions < @max_reductions
+
+      Enum.each(1..@shape_count, fn i ->
+        remove_reductions = reductions(fn -> Filter.remove_shape(filter, i) end)
+        assert remove_reductions < @max_reductions
       end)
     end
 
@@ -869,6 +987,65 @@ defmodule Electric.Shapes.FilterTest do
       }
 
       assert Filter.affected_shapes(filter, insert_not_in_subquery) == MapSet.new([])
+    end
+
+    @tag with_sql: [
+           "CREATE TABLE IF NOT EXISTS or_parent (id INT PRIMARY KEY)",
+           "CREATE TABLE IF NOT EXISTS or_child (id INT PRIMARY KEY, par_id INT REFERENCES or_parent(id), value TEXT NOT NULL)"
+         ]
+    test "non-optimisable OR+subquery shape is affected by root table changes", %{
+      inspector: inspector
+    } do
+      # Shape with OR combining a subquery and a simple condition.
+      # OR is not optimisable, so the shape lands in other_shapes AND
+      # gets registered in the sublink inverted index. Root table changes
+      # must still be routed to this shape.
+      {:ok, shape} =
+        Shape.new("or_child",
+          inspector: inspector,
+          where: "par_id IN (SELECT id FROM or_parent) OR value = 'target'"
+        )
+
+      refs_fun = fn _shape ->
+        %{["$sublink", "0"] => MapSet.new([1, 2, 3])}
+      end
+
+      filter =
+        Filter.new(refs_fun: refs_fun)
+        |> Filter.add_shape("shape1", shape)
+
+      # Record matching the OR's simple condition (value = 'target')
+      insert_matching_value = %NewRecord{
+        relation: {"public", "or_child"},
+        record: %{"id" => "99", "par_id" => "99", "value" => "target"}
+      }
+
+      assert Filter.affected_shapes(filter, insert_matching_value) == MapSet.new(["shape1"])
+
+      # Record matching the OR's subquery condition (par_id in refs)
+      insert_matching_subquery = %NewRecord{
+        relation: {"public", "or_child"},
+        record: %{"id" => "10", "par_id" => "2", "value" => "other"}
+      }
+
+      assert Filter.affected_shapes(filter, insert_matching_subquery) == MapSet.new(["shape1"])
+
+      # Record matching neither condition
+      insert_no_match = %NewRecord{
+        relation: {"public", "or_child"},
+        record: %{"id" => "50", "par_id" => "99", "value" => "other"}
+      }
+
+      assert Filter.affected_shapes(filter, insert_no_match) == MapSet.new([])
+
+      # Update where new record matches but old doesn't
+      update_into_shape = %UpdatedRecord{
+        relation: {"public", "or_child"},
+        record: %{"id" => "50", "par_id" => "99", "value" => "target"},
+        old_record: %{"id" => "50", "par_id" => "99", "value" => "other"}
+      }
+
+      assert Filter.affected_shapes(filter, update_into_shape) == MapSet.new(["shape1"])
     end
   end
 end

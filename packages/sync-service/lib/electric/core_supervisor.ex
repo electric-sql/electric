@@ -47,10 +47,6 @@ defmodule Electric.CoreSupervisor do
 
     consumer_supervisor_spec = {Electric.Shapes.DynamicConsumerSupervisor, [stack_id: stack_id]}
 
-    shape_cleaner_spec =
-      {Electric.ShapeCache.ShapeCleaner.CleanupTaskSupervisor,
-       [stack_id: stack_id] ++ Keyword.get(tweaks, :shape_cleaner_opts, [])}
-
     shape_cache_spec = {Electric.ShapeCache, shape_cache_opts}
 
     publication_manager_spec =
@@ -82,7 +78,6 @@ defmodule Electric.CoreSupervisor do
           Electric.Shapes.Supervisor,
           stack_id: stack_id,
           consumer_supervisor: consumer_supervisor_spec,
-          shape_cleaner: shape_cleaner_spec,
           shape_cache: shape_cache_spec,
           publication_manager: publication_manager_spec,
           log_collector: shape_log_collector_spec,

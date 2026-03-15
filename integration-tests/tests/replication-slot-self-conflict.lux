@@ -36,8 +36,8 @@
   -Starting replication from postgres|$fail_pattern
 
   ??[debug] Starting replication client for stack single_stack
-  ??[info] Acquiring lock from postgres with name electric_slot_integration
-  ??[info] Lock acquired from postgres with name electric_slot_integration
+  ??[notice] Acquiring lock from postgres with name electric_slot_integration
+  ??[notice] Lock acquired from postgres with name electric_slot_integration
   ??[debug] ReplicationClient step: create_slot
   ??[warning] Waiting for the replication connection setup to complete...
 
@@ -52,7 +52,7 @@
 
   -Lock acquired from postgres|$fail_pattern
 
-  ??[info] Acquiring lock from postgres with name electric_slot_integration
+  ??[notice] Acquiring lock from postgres with name electric_slot_integration
 
 # Rollback the pending transaction to unblock Electric and verify that it completes its initialization.
 [shell psql]
@@ -61,11 +61,11 @@
 [shell electric]
   -$fail_pattern
 
-  ??[info] Lock acquired from postgres with name electric_slot_integration
+  ??[notice] Lock acquired from postgres with name electric_slot_integration
   ??[debug] ReplicationClient step: create_slot
   ??[debug] Created new slot at lsn=
 
-  ??[info] Starting replication from postgres
+  ??[notice] Starting replication from postgres
   ??[debug] ReplicationClient step: start_streaming
   ??[debug] ReplicationClient step: start_replication_slot
   ??[debug] Primary Keepalive

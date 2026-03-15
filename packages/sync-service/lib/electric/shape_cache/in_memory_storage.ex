@@ -131,12 +131,6 @@ defmodule Electric.ShapeCache.InMemoryStorage do
   def get_all_stored_shape_handles(_opts), do: {:ok, MapSet.new()}
 
   @impl Electric.ShapeCache.Storage
-  def get_stored_shapes(_opts, _shape_handles), do: %{}
-
-  @impl Electric.ShapeCache.Storage
-  def metadata_backup_dir(_opts), do: nil
-
-  @impl Electric.ShapeCache.Storage
   def get_total_disk_usage(_opts), do: 0
 
   @impl Electric.ShapeCache.Storage
@@ -319,6 +313,19 @@ defmodule Electric.ShapeCache.InMemoryStorage do
   end
 
   @impl Electric.ShapeCache.Storage
+  def supports_txn_fragment_streaming?, do: false
+
+  @impl Electric.ShapeCache.Storage
+  def append_fragment_to_log!(_log_items, %MS{} = _opts) do
+    raise "Not implemented; InMemoryStorage does not support txn fragment streaming. Use PureFileStorage instead."
+  end
+
+  @impl Electric.ShapeCache.Storage
+  def signal_txn_commit!(_xid, %MS{} = _opts) do
+    raise "Not implemented; InMemoryStorage does not support txn fragment streaming. Use PureFileStorage instead."
+  end
+
+  @impl Electric.ShapeCache.Storage
   def write_move_in_snapshot!(stream, name, %MS{log_table: log_table}) do
     stream
     |> Stream.map(fn [key, tags, json] -> {{:movein, {name, key}}, {tags, json}} end)
@@ -341,54 +348,14 @@ defmodule Electric.ShapeCache.InMemoryStorage do
   end
 
   @impl Electric.ShapeCache.Storage
-  def append_move_in_snapshot_to_log!(name, %MS{log_table: log_table} = opts) do
-    initial_offset = current_offset(opts)
-    ref = make_ref()
-
-    Stream.unfold({initial_offset, {:movein, {name, nil}}}, fn {offset, last_key} ->
-      case :ets.next_lookup(log_table, last_key) do
-        {{:movein, {^name, _}} = key, [{_, {_tags, json}}]} ->
-          offset = LogOffset.increment(offset)
-          {{{:offset, storage_offset(offset)}, json}, {offset, key}}
-
-        _ ->
-          send(self(), {ref, offset})
-          nil
-      end
-    end)
-    |> Stream.chunk_every(500)
-    |> Stream.each(&:ets.insert(log_table, &1))
-    |> Stream.run()
-
-    :ets.match_delete(log_table, {{:movein, {name, :_}}, :_})
-
-    resulting_offset = receive(do: ({^ref, offset} -> offset))
-
-    {{initial_offset, resulting_offset}, opts}
-  end
-
-  @impl Electric.ShapeCache.Storage
-  def append_move_in_snapshot_to_log_filtered!(
-        name,
-        %MS{log_table: log_table} = opts,
-        touch_tracker,
-        snapshot,
-        tags_to_skip
-      ) do
+  def append_move_in_snapshot_to_log!(name, %MS{log_table: log_table} = opts, skip_row?) do
     initial_offset = current_offset(opts)
     ref = make_ref()
 
     Stream.unfold({initial_offset, {:movein, {name, nil}}}, fn {offset, last_key} ->
       case :ets.next_lookup(log_table, last_key) do
         {{:movein, {^name, _}} = ets_key, [{{:movein, {^name, key}}, {tags, json}}]} ->
-          # Check if this row should be skipped
-          if (tags != [] and Enum.all?(tags, &MapSet.member?(tags_to_skip, &1))) or
-               Electric.Shapes.Consumer.MoveIns.should_skip_query_row?(
-                 touch_tracker,
-                 snapshot,
-                 key
-               ) do
-            # Skip this row - don't increment offset, but advance to next key
+          if skip_row?.(key, tags) do
             {[], {offset, ets_key}}
           else
             offset = LogOffset.increment(offset)
