@@ -1,15 +1,11 @@
-<template>
-  <div class="banner">
-    <div class="container">
-      <div>
-        <a href="/blog/2026/01/22/announcing-hosted-durable-streams"
-          >✨ Durable Streams <span class="hidden-xs">are</span> now
-          <span class="hidden-sm">available</span> on Electric&nbsp;Cloud</a
-        >
-      </div>
-    </div>
-  </div>
-</template>
+<script setup>
+const { link, subtitle, description, background } = defineProps([
+  'link',
+  'subtitle',
+  'description',
+  'background',
+])
+</script>
 
 <style scoped>
 .banner {
@@ -46,6 +42,33 @@
   }
 }
 </style>
+
+<template>
+  <div class="banner" :style="{ background: background }">
+    <div class="container">
+      <div
+        style="
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+        "
+      >
+        <a :href="link" style="display: inline-flex; align-items: center">
+          <slot name="icon"></slot>
+          <slot name="title"></slot>
+        </a>
+        <span v-if="subtitle">
+          {{ subtitle }}
+        </span>
+        <span v-if="description">
+          {{ description }}
+        </span>
+      </div>
+    </div>
+  </div>
+</template>
+
 <style>
 .nav-relative .VPNav {
   position: relative !important;

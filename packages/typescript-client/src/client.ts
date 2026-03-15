@@ -562,9 +562,9 @@ function canonicalShapeKey(url: URL): string {
  * ```
  */
 
-export class ShapeStream<T extends Row<unknown> = Row>
-  implements ShapeStreamInterface<T>
-{
+export class ShapeStream<
+  T extends Row<unknown> = Row,
+> implements ShapeStreamInterface<T> {
   static readonly Replica = {
     FULL: `full` as Replica,
     DEFAULT: `default` as Replica,
