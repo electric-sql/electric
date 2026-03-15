@@ -637,7 +637,8 @@ defmodule Electric.Shapes.Shape do
         shape_handle
       ) do
     move_tags = make_tags_from_pattern(tag_structure, record, stack_id, shape_handle)
-    %{change | move_tags: move_tags}
+    active_conditions = make_active_conditions(tag_structure)
+    %{change | move_tags: move_tags, active_conditions: active_conditions}
   end
 
   def fill_move_tags(
@@ -652,7 +653,14 @@ defmodule Electric.Shapes.Shape do
       make_tags_from_pattern(tag_structure, old_record, stack_id, shape_handle) --
         move_tags
 
-    %{change | move_tags: move_tags, removed_move_tags: old_move_tags}
+    active_conditions = make_active_conditions(tag_structure)
+
+    %{
+      change
+      | move_tags: move_tags,
+        removed_move_tags: old_move_tags,
+        active_conditions: active_conditions
+    }
   end
 
   def fill_move_tags(
@@ -663,8 +671,17 @@ defmodule Electric.Shapes.Shape do
         stack_id,
         shape_handle
       ) do
-    %{change | move_tags: make_tags_from_pattern(tag_structure, record, stack_id, shape_handle)}
+    active_conditions = make_active_conditions(tag_structure)
+
+    %{
+      change
+      | move_tags: make_tags_from_pattern(tag_structure, record, stack_id, shape_handle),
+        active_conditions: active_conditions
+    }
   end
+
+  defp make_active_conditions([]), do: nil
+  defp make_active_conditions(tag_structure), do: List.duplicate(true, length(tag_structure))
 
   defp make_tags_from_pattern(patterns, record, stack_id, shape_handle) do
     Enum.map(patterns, fn pattern ->
