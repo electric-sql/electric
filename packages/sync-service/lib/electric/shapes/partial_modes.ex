@@ -4,9 +4,11 @@ defmodule Electric.Shapes.PartialModes do
   alias Electric.Shapes.Querying
   alias Electric.Connection.Manager
   alias Electric.Postgres.SnapshotQuery
+  alias Electric.Telemetry.OpenTelemetry
 
-  def query_subset(shape_handle, %Shape{} = shape, subset, opts) do
-    pool = Manager.pool_name(opts[:stack_id], :snapshot)
+  def query_subset(shape_handle, %Shape{} = shape, subset, opts) when is_map(opts) do
+    stack_id = Map.fetch!(opts, :stack_id)
+    pool = Manager.pool_name(stack_id, :snapshot)
     mark = Enum.random(0..(2 ** 31 - 1))
     headers = %{snapshot_mark: mark}
 
@@ -15,7 +17,9 @@ defmodule Electric.Shapes.PartialModes do
         send(self(), {:pg_snapshot_info, pg_snapshot, lsn})
       end,
       query_fn: fn conn, _, _ ->
-        Querying.query_subset(conn, opts[:stack_id], shape_handle, shape, subset, headers)
+        conn
+        |> Querying.query_subset(stack_id, shape_handle, shape, subset, headers)
+        |> record_subset_metrics(stack_id, shape_handle, shape)
         |> Enum.to_list()
       end,
       stack_id: opts[:stack_id],
@@ -49,6 +53,32 @@ defmodule Electric.Shapes.PartialModes do
       database_lsn: to_string(Lsn.to_integer(lsn)),
       snapshot_mark: mark
     }
+  end
+
+  defp record_subset_metrics(stream, stack_id, shape_handle, shape) do
+    Stream.transform(
+      stream,
+      fn -> {System.monotonic_time(:microsecond), 0, 0} end,
+      fn row, {start_time, bytes, rows} ->
+        {[row], {start_time, bytes + IO.iodata_length(row), rows + 1}}
+      end,
+      fn {start_time, bytes, rows} ->
+        OpenTelemetry.execute(
+          [:electric, :subqueries, :subset_result],
+          %{
+            duration: System.monotonic_time(:microsecond) - start_time,
+            bytes: bytes,
+            count: 1,
+            rows: rows
+          },
+          %{
+            stack_id: stack_id,
+            "shape.handle": shape_handle,
+            "shape.root_table": shape.root_table
+          }
+        )
+      end
+    )
   end
 
   @doc """

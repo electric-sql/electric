@@ -107,6 +107,8 @@ defmodule ElectricTelemetry.StackTelemetry do
       sum("electric.storage.transaction_stored.count"),
       sum("electric.storage.snapshot_stored.bytes", unit: :byte),
       sum("electric.storage.snapshot_stored.count"),
+      sum("electric.subqueries.subset_result.bytes", unit: :byte),
+      sum("electric.subqueries.subset_result.count"),
       last_value("electric.shape_monitor.active_reader_count"),
       last_value("electric.connection.consumers_ready.duration",
         unit: {:native, :millisecond}
