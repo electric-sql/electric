@@ -61,7 +61,9 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
   describe "publish/2" do
     test "starts consumer when receiving a message", ctx do
       assert ConsumerRegistry.active_consumer_count(ctx.stack_id) == 0
-      assert %{} == ConsumerRegistry.publish(%{"handle-1" => {:txn, %{lsn: 1}}}, ctx.registry_state)
+
+      assert %{} ==
+               ConsumerRegistry.publish(%{"handle-1" => {:txn, %{lsn: 1}}}, ctx.registry_state)
 
       assert_receive {:start_consumer, "handle-1"}
       assert_receive {:broadcast, "handle-1", {:txn, %{lsn: 1}}}
@@ -70,13 +72,16 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
 
     test "uses existing consumer when already active", ctx do
       assert ConsumerRegistry.active_consumer_count(ctx.stack_id) == 0
-      assert %{} == ConsumerRegistry.publish(%{"handle-1" => {:txn, %{lsn: 1}}}, ctx.registry_state)
+
+      assert %{} ==
+               ConsumerRegistry.publish(%{"handle-1" => {:txn, %{lsn: 1}}}, ctx.registry_state)
 
       assert_receive {:start_consumer, "handle-1"}
       assert_receive {:broadcast, "handle-1", {:txn, %{lsn: 1}}}
       assert ConsumerRegistry.active_consumer_count(ctx.stack_id) == 1
 
-      assert %{} == ConsumerRegistry.publish(%{"handle-1" => {:txn, %{lsn: 2}}}, ctx.registry_state)
+      assert %{} ==
+               ConsumerRegistry.publish(%{"handle-1" => {:txn, %{lsn: 2}}}, ctx.registry_state)
 
       assert ConsumerRegistry.active_consumer_count(ctx.stack_id) == 1
       assert_receive {:broadcast, "handle-1", {:txn, %{lsn: 2}}}
@@ -85,7 +90,9 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
 
     test "starts any missing consumers", ctx do
       assert ConsumerRegistry.active_consumer_count(ctx.stack_id) == 0
-      assert %{} == ConsumerRegistry.publish(%{"handle-1" => {:txn, %{lsn: 1}}}, ctx.registry_state)
+
+      assert %{} ==
+               ConsumerRegistry.publish(%{"handle-1" => {:txn, %{lsn: 1}}}, ctx.registry_state)
 
       assert_receive {:start_consumer, "handle-1"}
       assert_receive {:broadcast, "handle-1", {:txn, %{lsn: 1}}}
@@ -448,7 +455,8 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
 
       assert ConsumerRegistry.active_consumer_count(ctx.stack_id) == 0
 
-      assert %{} == ConsumerRegistry.publish(%{"handle-1" => {:txn, %{lsn: 1}}}, ctx.registry_state)
+      assert %{} ==
+               ConsumerRegistry.publish(%{"handle-1" => {:txn, %{lsn: 1}}}, ctx.registry_state)
 
       assert_receive {:start_consumer, "handle-1"}
       assert_receive {:broadcast, "handle-1", {:txn, %{lsn: 1}}}
