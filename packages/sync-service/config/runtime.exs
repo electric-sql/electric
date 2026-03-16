@@ -204,8 +204,7 @@ config :electric,
   cache_max_age: cache_max_age,
   cache_stale_age: cache_stale_age,
   chunk_bytes_threshold: chunk_bytes_threshold,
-  # The ELECTRIC_EXPERIMENTAL_MAX_SHAPES is undocumented and will be removed in future versions.
-  max_shapes: env!("ELECTRIC_EXPERIMENTAL_MAX_SHAPES", :integer, nil),
+  max_shapes: env!("ELECTRIC_MAX_SHAPES", :integer, nil),
   max_concurrent_requests: max_concurrent_requests,
   # Used in telemetry
   instance_id: instance_id,

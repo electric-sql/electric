@@ -394,6 +394,23 @@ Each `live=true` long-poll request holds the connection open for up to 20 second
 
 </EnvVarConfig>
 
+### ELECTRIC_MAX_SHAPES
+
+<EnvVarConfig
+    name="ELECTRIC_MAX_SHAPES"
+    optional="true"
+    example="10000">
+
+Maximum number of shapes that Electric will serve concurrently. When unset (the default), there is no limit on the number of shapes.
+
+When set, Electric uses a **Least Recently Used (LRU)** eviction policy to stay within the limit. Every 60 seconds, Electric checks if the number of active shapes exceeds the configured maximum. If it does, the excess shapes that have gone the longest without being accessed are expired and cleaned up. For example, if `ELECTRIC_MAX_SHAPES=500` and there are 520 active shapes, the 20 least recently used shapes will be expired on the next check.
+
+Clients subscribed to an expired shape will receive a `409 Conflict` response, prompting them to create a new shape subscription with a fresh initial sync.
+
+This is useful for controlling resource usage on the server, especially in multi-tenant deployments or environments where many distinct shapes may be created over time.
+
+</EnvVarConfig>
+
 ## Feature Flags
 
 Feature flags enable experimental or advanced features that are not yet enabled by default in production.
