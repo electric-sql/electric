@@ -3238,7 +3238,7 @@ defmodule Electric.Plug.RouterTest do
       req = make_shape_req("items", log: "changes_only")
       large_where = "value = '" <> String.duplicate("a", 70_000) <> "'"
 
-      assert {_, 400, %{"errors" => %{"subset" => %{"where" => message}}}} =
+      assert {_, 400, %{"errors" => %{"subset" => %{"where" => [message]}}}} =
                shape_req(req, ctx.opts, subset: %{where: large_where})
 
       assert message =~ "bigger than maximum size"
