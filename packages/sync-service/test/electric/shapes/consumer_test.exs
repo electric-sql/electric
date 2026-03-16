@@ -1841,13 +1841,19 @@ defmodule Electric.Shapes.ConsumerTest do
           }
         ])
 
-      assert :ok = ShapeLogCollector.handle_event(txn2, ctx.stack_id)
-      assert_receive {^ref1, :new_changes, _}, @receive_timeout
+      log =
+        ExUnit.CaptureLog.capture_log(fn ->
+          # By the time this call to handle_event() returns, the dead consumer will have been
+          # removed from FlushTracker's state, so it can advance its confirmed flushed offset to
+          # the last processed transaction.
+          assert :ok = ShapeLogCollector.handle_event(txn2, ctx.stack_id)
+        end)
 
-      # shape1 flushes, so the FlushTracker advances to one behind shape2's
-      # stuck position (prev_log_offset.tx_offset - 1 = 19 - 1 = 18), but
-      # cannot advance to the full lsn of 20.
-      assert_receive {:flush_boundary_updated, 18}, @receive_timeout
+      assert log =~
+               ~s'Consumer processes crashed or missing during broadcast: %{#{inspect(shape_handle2)} => :noproc}'
+
+      assert_receive {^ref1, :new_changes, _}, @receive_timeout
+      assert_receive {:flush_boundary_updated, 20}, @receive_timeout
 
       lsn3 = Lsn.from_integer(30)
 
@@ -1864,10 +1870,9 @@ defmodule Electric.Shapes.ConsumerTest do
       assert :ok = ShapeLogCollector.handle_event(txn3, ctx.stack_id)
       assert_receive {^ref1, :new_changes, _}, @receive_timeout
 
-      # Still stuck at 18 — dead consumer holds the global flush offset.
-      # shape1 has flushed all the way through lsn 30, but the dead consumer's
-      # unflushed entry for lsn 20 blocks further advancement.
-      refute_receive {:flush_boundary_updated, _}, @receive_timeout
+      # shape1 has flushed all the way through lsn 30 so that's what we expect FlushTracker to
+      # advance its confirmed offset to.
+      assert_receive {:flush_boundary_updated, 30}, @receive_timeout
     end
 
     test "UPDATE during pending move-in is converted to INSERT and query result skips duplicate key",
