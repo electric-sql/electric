@@ -221,7 +221,16 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb do
   end
 
   def count_shapes!(stack_id) do
-    stack_id |> count_shapes() |> raise_on_error!(:count_shapes)
+    try do
+      stack_id |> count_shapes() |> raise_on_error!(:count_shapes)
+    rescue
+      # the connection pool has its own registry, so attempting to checkout a
+      # connection will raise an ArgumentError if that registry isn't running
+      ArgumentError -> :error
+    catch
+      # connection pool has not started
+      :exit, {:noproc, {NimblePool, :checkout, _args}} -> :error
+    end
   end
 
   @doc false
