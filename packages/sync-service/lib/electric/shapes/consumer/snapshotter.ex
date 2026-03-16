@@ -259,12 +259,39 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
           end,
           fn acc ->
             # noop after fun just to be able to specify the last fun which is only
-            # available in `Stream.transoform/5`.
+            # available in `Stream.transform/5`.
             acc
           end
         )
         |> Stream.concat([finishing_control_message])
+        |> record_snapshot_metrics(stack_id, shape_handle, shape)
         |> Electric.Shapes.make_new_snapshot!(storage, stack_id, shape_handle)
+      end
+    )
+  end
+
+  defp record_snapshot_metrics(stream, stack_id, shape_handle, shape) do
+    Stream.transform(
+      stream,
+      fn -> {System.monotonic_time(:microsecond), 0, 0} end,
+      fn
+        :chunk_boundary, acc ->
+          {[:chunk_boundary], acc}
+
+        item, {start_time, bytes, ops} ->
+          {[item], {start_time, bytes + IO.iodata_length(item), ops + 1}}
+      end,
+      fn {start_time, bytes, ops} ->
+        OpenTelemetry.execute(
+          [:electric, :storage, :snapshot_stored],
+          %{
+            duration: System.monotonic_time(:microsecond) - start_time,
+            bytes: bytes,
+            count: 1,
+            operations: ops
+          },
+          Map.merge(Map.new(telemetry_shape_attrs(shape_handle, shape)), %{stack_id: stack_id})
+        )
       end
     )
   end

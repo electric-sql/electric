@@ -105,6 +105,8 @@ defmodule ElectricTelemetry.StackTelemetry do
       sum("electric.postgres.replication.transaction_received.bytes", unit: :byte),
       sum("electric.storage.transaction_stored.bytes", unit: :byte),
       sum("electric.storage.transaction_stored.count"),
+      sum("electric.storage.snapshot_stored.bytes", unit: :byte),
+      sum("electric.storage.snapshot_stored.count"),
       last_value("electric.shape_monitor.active_reader_count"),
       last_value("electric.connection.consumers_ready.duration",
         unit: {:native, :millisecond}
