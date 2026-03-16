@@ -28,7 +28,21 @@ defmodule Electric.Shapes.ConsumerRegistry do
     if register_consumer!(pid, shape_handle, ets_name(stack_id)), do: :yes, else: :no
   end
 
-  # don't unregister when the pid exits -- we have mechanisms to ensure that happens cleanly
+  # This is intentionally a no-op. The ETS entry is removed explicitly via
+  # remove_consumer/2 as part of shape cleanup in ShapeCleaner, not
+  # automatically when the consumer process exits.
+  #
+  # If we removed the ETS entry here on process exit, there's a race: the SLC
+  # could receive an operation for the shape, see no consumer registered, start
+  # a new one, and _then_ get the "remove shape" call for the old handle —
+  # leaving an orphan consumer process.
+  #
+  # A crashed consumer is never restarted by a supervisor. Its shape handle is
+  # invalidated and a fresh shape (with a new handle and new consumer) is
+  # created on the next client request. But since shape invalidation is async,
+  # we keep the entry in the registry in the meantime to avoid accidentally
+  # restarting the consumer for it to process new transactions when the shape
+  # is already on the way out.
   def unregister_name({_stack_id, _shape_handle}) do
     :ok
   end
