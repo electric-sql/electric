@@ -1227,6 +1227,90 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       expected_lsn = Lsn.to_integer(lsn)
       assert_receive {:flush_boundary_updated, ^expected_lsn}, 500
     end
+
+    test "FlushTracker advances when consumer crashes on later fragment of multi-fragment txn",
+         ctx do
+      # Register to receive flush boundary updates
+      {:via, Registry, {name, key}} = Electric.Postgres.ReplicationClient.name(ctx.stack_id)
+      Registry.register(name, key, nil)
+
+      lsn = Lsn.from_integer(42)
+
+      # Fragment 1 (non-commit): both consumers are alive and process it.
+      # FlushTracker starts tracking both shapes.
+      frag1 = %TransactionFragment{
+        xid: 100,
+        lsn: lsn,
+        last_log_offset: LogOffset.new(lsn, 0),
+        has_begin?: true,
+        commit: nil,
+        changes: [
+          %Changes.NewRecord{
+            relation: {"public", "test_table"},
+            record: %{"id" => "1"},
+            log_offset: LogOffset.new(lsn, 0)
+          }
+        ],
+        affected_relations: MapSet.new([{"public", "test_table"}])
+      }
+
+      assert :ok = ShapeLogCollector.handle_event(frag1, ctx.stack_id)
+
+      # Both consumers receive fragment 1
+      assert_receive {Support.TransactionConsumer, {:alive, _}, [_]}, 500
+      assert_receive {Support.TransactionConsumer, {:doomed, _}, [_]}, 500
+
+      # Kill the doomed consumer between fragments. This simulates a crash
+      # that happens after fragment 1 was processed but before fragment 2.
+      doomed_pid = ctx.consumer_doomed
+      Process.unlink(doomed_pid)
+      ref = Process.monitor(doomed_pid)
+      Process.exit(doomed_pid, :kill)
+      assert_receive {:DOWN, ^ref, :process, ^doomed_pid, :killed}
+
+      # Patch start_consumer_for_handle so no replacement is started
+      Repatch.patch(
+        Electric.ShapeCache,
+        :start_consumer_for_handle,
+        [mode: :shared],
+        fn
+          "shape-doomed", _stack_id -> {:error, :no_shape}
+          _handle, _stack_id -> {:error, :no_shape}
+        end
+      )
+
+      # Fragment 2 (commit): the doomed consumer is dead.
+      # ConsumerRegistry.broadcast detects the dead PID → crashed.
+      # SLC must remove "shape-doomed" from FlushTracker (it was tracked
+      # in fragment 1) and exclude it from the commit fragment tracking.
+      frag2 = %TransactionFragment{
+        xid: 100,
+        lsn: lsn,
+        last_log_offset: LogOffset.new(lsn, 5),
+        has_begin?: false,
+        commit: %Changes.Commit{},
+        changes: [
+          %Changes.NewRecord{
+            relation: {"public", "test_table"},
+            record: %{"id" => "2"},
+            log_offset: LogOffset.new(lsn, 5)
+          }
+        ],
+        affected_relations: MapSet.new([{"public", "test_table"}])
+      }
+
+      assert :ok = ShapeLogCollector.handle_event(frag2, ctx.stack_id)
+
+      # The alive consumer receives fragment 2
+      assert_receive {Support.TransactionConsumer, {:alive, _}, [_]}, 500
+
+      # Flush both fragments for the alive consumer — FlushTracker should advance
+      # because the doomed shape was removed from tracking when its crash was detected.
+      ShapeLogCollector.notify_flushed(ctx.stack_id, "shape-alive", LogOffset.new(lsn, 5))
+
+      expected_lsn = Lsn.to_integer(lsn)
+      assert_receive {:flush_boundary_updated, ^expected_lsn}, 500
+    end
   end
 
   defp transaction(xid, lsn, changes) do

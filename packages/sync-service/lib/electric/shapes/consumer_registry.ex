@@ -73,11 +73,12 @@ defmodule Electric.Shapes.ConsumerRegistry do
     :ets.insert_new(table, [{shape_handle, pid}])
   end
 
-  @spec publish(%{shape_handle() => term()}, t(), non_neg_integer()) :: MapSet.t(shape_handle())
+  @spec publish(%{shape_handle() => term()}, t(), non_neg_integer()) ::
+          %{shape_handle() => term()}
   def publish(events_by_handle, registry_state, max_retries \\ 3)
 
   def publish(events_by_handle, _registry_state, _max_retries) when events_by_handle == %{} do
-    MapSet.new()
+    %{}
   end
 
   def publish(events_by_handle, _registry_state, 0) do
@@ -85,7 +86,7 @@ defmodule Electric.Shapes.ConsumerRegistry do
       "Max publish retries exceeded, marking remaining handles as undeliverable: #{inspect(Map.keys(events_by_handle))}"
     )
 
-    MapSet.new(Map.keys(events_by_handle))
+    Map.new(events_by_handle, fn {handle, _event} -> {handle, :max_retries_exceeded} end)
   end
 
   def publish(events_by_handle, registry_state, max_retries) do
@@ -93,26 +94,37 @@ defmodule Electric.Shapes.ConsumerRegistry do
 
     {to_broadcast, undeliverable} =
       events_by_handle
-      |> Enum.reduce({[], MapSet.new()}, fn {handle, event}, {acc, undeliverable} ->
+      |> Enum.reduce({[], %{}}, fn {handle, event}, {acc, undeliverable} ->
         case consumer_pid(handle, table) || start_consumer!(handle, registry_state) do
           nil ->
-            {acc, MapSet.put(undeliverable, handle)}
+            {acc, Map.put(undeliverable, handle, :no_shape)}
 
           pid ->
             {[{handle, event, pid} | acc], undeliverable}
         end
       end)
 
-    retries = broadcast(to_broadcast)
+    {suspended, crashed} = broadcast(to_broadcast)
 
-    # Remove stale ETS entries for handles that need retry (crashed or suspended
-    # consumers) so that start_consumer! can register fresh replacements.
-    Enum.each(retries, fn {handle, _event} ->
+    # Remove stale ETS entries for suspended handles so that start_consumer!
+    # can register fresh replacements on retry.
+    Enum.each(suspended, fn {handle, _event} ->
       :ets.delete(table, handle)
     end)
 
-    retry_undeliverable = publish(retries, registry_state, max_retries - 1)
-    MapSet.union(undeliverable, retry_undeliverable)
+    # Clean up ETS entries for crashed consumers
+    Enum.each(crashed, fn {handle, _reason} ->
+      :ets.delete(table, handle)
+    end)
+
+    # Only retry suspended consumers, not crashed ones
+    retry_undeliverable = publish(suspended, registry_state, max_retries - 1)
+
+    crashed_tagged = Map.new(crashed, fn {handle, reason} -> {handle, {:crashed, reason}} end)
+
+    undeliverable
+    |> Map.merge(crashed_tagged)
+    |> Map.merge(retry_undeliverable)
   end
 
   @spec remove_consumer(shape_handle(), t()) :: :ok
@@ -138,13 +150,17 @@ defmodule Electric.Shapes.ConsumerRegistry do
   Calls many GenServers asynchronously with per-handle messages and waits
   for their responses before returning.
 
-  Returns a map of `shape_handle => event` for handles that need to be retried
-  (because their consumers suspended).
+  Returns a tuple `{suspended, crashed}` where:
+  - `suspended` is a map of `shape_handle => event` for handles whose consumers
+    suspended (these should be retried by the caller)
+  - `crashed` is a map of `shape_handle => exit_reason` for handles whose consumers
+    crashed (these should NOT be retried)
 
   There is no timeout so if the GenServers do not respond or die, this
   function will block indefinitely.
   """
-  @spec broadcast([{shape_handle(), term(), pid() | nil}]) :: %{shape_handle() => term()}
+  @spec broadcast([{shape_handle(), term(), pid() | nil}]) ::
+          {%{shape_handle() => term()}, %{shape_handle() => term()}}
   def broadcast(handle_event_pids) do
     # Based on OTP GenServer.call, see:
     # https://github.com/erlang/otp/blob/090c308d7c925e154240685174addaa516ea2f69/lib/stdlib/src/gen.erl#L243
@@ -159,33 +175,38 @@ defmodule Electric.Shapes.ConsumerRegistry do
       send(pid, {:"$gen_call", {self(), ref}, event})
       {handle, event, ref}
     end)
-    |> Enum.flat_map(fn {handle, event, ref} ->
+    |> Enum.reduce({%{}, %{}}, fn {handle, event, ref}, {suspended, crashed} ->
       receive do
         {^ref, _reply} ->
           Process.demonitor(ref, [:flush])
-          []
+          {suspended, crashed}
 
         {:DOWN, ^ref, _, _, @consumer_suspend_reason} ->
-          # Catch the race condition where a consumer is in the act of
-          # suspending as the txn arrives by retrying those handles (which will
-          # start a new consumer instance).
-          [{handle, event}]
+          # Consumer is in the act of suspending as the txn arrives.
+          # Return for retry (publish/2 will start a new consumer instance).
+          {Map.put(suspended, handle, event), crashed}
 
-        {:DOWN, ^ref, _, _, _reason} ->
-          # Crashed consumers also need retry — their handles get returned
-          # so publish/2 can start a replacement consumer.
-          [{handle, event}]
+        {:DOWN, ^ref, _, _, reason} ->
+          # Consumer crashed — do not retry, return the crash reason.
+          {suspended, Map.put(crashed, handle, reason)}
       end
     end)
-    |> Map.new()
     |> tap(fn
-      map when map == %{} ->
+      {suspended, crashed} when suspended == %{} and crashed == %{} ->
         :ok
 
-      retry_handles ->
-        Logger.debug(fn ->
-          ["Re-trying shape handles (suspended or crashed) ", inspect(Map.keys(retry_handles))]
-        end)
+      {suspended, crashed} ->
+        if suspended != %{} do
+          Logger.debug(fn ->
+            ["Re-trying suspended shape handles ", inspect(Map.keys(suspended))]
+          end)
+        end
+
+        if crashed != %{} do
+          Logger.warning(fn ->
+            ["Consumer processes crashed or missing during broadcast: ", inspect(crashed)]
+          end)
+        end
     end)
   end
 
