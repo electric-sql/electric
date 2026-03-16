@@ -89,7 +89,7 @@ defmodule Electric.Shapes.ConsumerRegistry do
 
   @spec publish(%{shape_handle() => term()}, t(), non_neg_integer()) ::
           %{shape_handle() => term()}
-  def publish(events_by_handle, registry_state, max_retries \\ 3)
+  def publish(events_by_handle, registry_state, max_retries \\ 1)
 
   def publish(events_by_handle, _registry_state, _max_retries) when events_by_handle == %{} do
     %{}
