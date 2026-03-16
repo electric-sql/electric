@@ -43,6 +43,14 @@ defmodule Electric.Replication.Eval.ParserTest do
       assert %Const{value: "test", type: :text} = result
     end
 
+    test "should return an error for oversized queries" do
+      # Generate a where clause that exceeds pg_query's maximum query size of 65536 bytes
+      large_where = "id = '" <> String.duplicate("a", 70_000) <> "'"
+
+      assert {:error, message} = Parser.parse_and_validate_expression(large_where)
+      assert message =~ "bigger than maximum size"
+    end
+
     test "should correctly parse type casts on constants" do
       assert {:error, "At location 0: unknown cast from type int4 to type bool"} =
                Parser.parse_and_validate_expression("1::boolean", env: Env.empty())
