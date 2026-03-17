@@ -357,7 +357,7 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
       refute Map.has_key?(result, "handle-suspend")
     end
 
-    test "max_retries exhausted returns :max_retries_exceeded for persistently suspending consumers",
+    test "persistently suspending consumer results in shape removal after retry",
          %{stack_id: stack_id} = ctx do
       test_pid = self()
 
@@ -369,7 +369,7 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
         end
       end
 
-      # Patch start_consumer_for_handle to start a consumer that always suspends in response to a genserver call.
+      # Patch start_consumer_for_handle to start a consumer that always suspends
       Repatch.patch(
         Electric.ShapeCache,
         :start_consumer_for_handle,
@@ -388,15 +388,18 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
         end
       )
 
-      # max_retries=1: first attempt suspends → retry → replacement also suspends → exhausted
-      result =
-        ConsumerRegistry.publish(
-          %{"handle-stubborn" => {:txn, %{lsn: 1}}},
-          ctx.registry_state,
-          1
-        )
+      # Patch shape cleaner to avoid having to start its dependencies
+      Repatch.patch(Electric.ShapeCache.ShapeCleaner, :remove_shapes, [], fn _stack_id, handles ->
+        send(test_pid, {ShapeCleaner, :remove_shapes, handles})
+      end)
 
-      assert %{"handle-stubborn" => {:publish, :max_retries_exceeded}} == result
+      # First broadcast: suspended → retry broadcast: also suspended → remove shape
+      result =
+        ConsumerRegistry.publish(%{"handle-stubborn" => {:txn, %{lsn: 1}}}, ctx.registry_state)
+
+      assert_receive {ShapeCleaner, :remove_shapes, ["handle-stubborn"]}
+
+      assert %{"handle-stubborn" => {:publish, :shape_removed}} == result
 
       # A new consumer has been started and suspended twice during the test
       assert_receive {:consumer_pid, pid}

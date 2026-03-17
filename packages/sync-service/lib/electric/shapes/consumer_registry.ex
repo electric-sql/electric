@@ -87,48 +87,47 @@ defmodule Electric.Shapes.ConsumerRegistry do
     :ets.insert_new(table, [{shape_handle, pid}])
   end
 
-  @spec publish(%{shape_handle() => term()}, t(), non_neg_integer()) ::
-          %{shape_handle() => term()}
-  def publish(events_by_handle, registry_state, max_retries \\ 1)
+  @spec publish(%{shape_handle() => term()}, t()) :: %{shape_handle() => term()}
+  def publish(events_by_handle, _registry_state) when events_by_handle == %{}, do: %{}
 
-  def publish(events_by_handle, _registry_state, _max_retries) when events_by_handle == %{} do
-    %{}
-  end
-
-  def publish(events_by_handle, %{table: table} = registry_state, max_retries) do
-    {to_broadcast, undeliverable} =
-      events_by_handle
-      |> Enum.reduce({[], %{}}, fn {handle, event}, {acc, undeliverable} ->
-        case consumer_pid(handle, table) || start_consumer!(handle, registry_state) do
-          nil ->
-            {acc, Map.put(undeliverable, handle, {:publish, :no_shape})}
-
-          pid ->
-            {[{handle, event, pid} | acc], undeliverable}
-        end
-      end)
-
+  def publish(events_by_handle, registry_state) do
+    {to_broadcast, unresolved_consumers} = resolve_pids(events_by_handle, registry_state)
     {suspended, crashed_or_missing} = broadcast(to_broadcast)
 
     # Remove stale ETS entries for suspended handles so that start_consumer!
     # can register fresh replacements on retry.
-    Enum.each(suspended, fn {handle, _event} -> do_remove_consumer(handle, table) end)
+    Enum.each(suspended, fn {handle, _event} -> remove_consumer(handle, registry_state) end)
 
-    # Only retry suspended consumers, not crashed ones
-    retry_undeliverable =
-      if max_retries > 0 do
-        publish(suspended, registry_state, max_retries - 1)
+    # Retry suspended consumers once with fresh consumer processes.
+    # We don't expect new suspensions here since we're targeting previously
+    # suspended consumers explicitly.
+    {retry_broadcast, unresolved_consumers_after_retry} = resolve_pids(suspended, registry_state)
+    {still_suspended, crashed_or_missing_after_retry} = broadcast(retry_broadcast)
+
+    removed_suspended =
+      if still_suspended != %{} do
+        handles = Map.keys(still_suspended)
+        Logger.warning(["Consumers still suspended after retry: ", inspect(handles)])
+        Electric.ShapeCache.ShapeCleaner.remove_shapes(registry_state.stack_id, handles)
+        Map.new(still_suspended, fn {handle, _} -> {handle, {:publish, :shape_removed}} end)
       else
-        Logger.warning(
-          "Max publish retries exceeded, marking remaining handles as undeliverable: #{inspect(Map.keys(suspended))}"
-        )
-
-        Map.new(suspended, fn {handle, _event} -> {handle, {:publish, :max_retries_exceeded}} end)
+        %{}
       end
 
-    undeliverable
+    unresolved_consumers
+    |> Map.merge(unresolved_consumers_after_retry)
     |> Map.merge(crashed_or_missing)
-    |> Map.merge(retry_undeliverable)
+    |> Map.merge(crashed_or_missing_after_retry)
+    |> Map.merge(removed_suspended)
+  end
+
+  defp resolve_pids(events_by_handle, %{table: table} = registry_state) do
+    Enum.reduce(events_by_handle, {[], %{}}, fn {handle, event}, {acc, unresolved} ->
+      case consumer_pid(handle, table) || start_consumer!(handle, registry_state) do
+        nil -> {acc, Map.put(unresolved, handle, {:publish, :no_shape})}
+        pid -> {[{handle, event, pid} | acc], unresolved}
+      end
+    end)
   end
 
   @spec remove_consumer(shape_handle(), t()) :: :ok
