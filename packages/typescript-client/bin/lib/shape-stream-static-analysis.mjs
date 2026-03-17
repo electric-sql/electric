@@ -1,0 +1,736 @@
+import fs from 'node:fs'
+import path from 'node:path'
+import { execFileSync } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
+import ts from 'typescript'
+
+const PACKAGE_DIR = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  `..`,
+  `..`
+)
+const GIT_ROOT = resolveGitRoot()
+
+const CLIENT_FILE = path.join(PACKAGE_DIR, `src`, `client.ts`)
+const STATE_MACHINE_FILE = path.join(
+  PACKAGE_DIR,
+  `src`,
+  `shape-stream-state.ts`
+)
+
+const SHARED_FIELD_IGNORE = new Set([
+  `#syncState`,
+  `#started`,
+  `#connected`,
+  `#error`,
+  `#messageChain`,
+  `#onError`,
+  `#mode`,
+  `#pauseLock`,
+  `#subscribers`,
+  `#snapshotTracker`,
+  `#snapshotCounter`,
+  `#unsubscribeFromVisibilityChanges`,
+  `#unsubscribeFromWakeDetection`,
+  `#transformer`,
+  `#currentFetchUrl`,
+  `#tickPromise`,
+])
+
+const ALLOWED_IGNORED_ACTION_CLASSES = new Set([`ErrorState`, `PausedState`])
+
+export function analyzeTypeScriptClient(options = {}) {
+  const packageDir = options.packageDir ?? PACKAGE_DIR
+  const clientFile = path.join(packageDir, `src`, `client.ts`)
+  const stateMachineFile = path.join(packageDir, `src`, `shape-stream-state.ts`)
+
+  const clientAnalysis = analyzeShapeStreamClient(clientFile)
+  const stateMachineAnalysis = analyzeStateMachine(stateMachineFile)
+
+  const findings = clientAnalysis.findings
+    .concat(stateMachineAnalysis.findings)
+    .sort(compareFindings)
+
+  return {
+    packageDir,
+    clientFile,
+    stateMachineFile,
+    findings,
+    reports: {
+      recursiveMethods: clientAnalysis.recursiveMethods,
+      sharedFieldReport: clientAnalysis.sharedFieldReport,
+      ignoredActionReport: stateMachineAnalysis.ignoredActionReport,
+    },
+  }
+}
+
+export function analyzeShapeStreamClient(filePath = CLIENT_FILE) {
+  const sourceFile = readSourceFile(filePath)
+  const classDecl = sourceFile.statements.find(
+    (statement) =>
+      ts.isClassDeclaration(statement) && statement.name?.text === `ShapeStream`
+  )
+
+  if (!classDecl) {
+    throw new Error(`Could not find ShapeStream class in ${filePath}`)
+  }
+
+  const classInfo = buildClassInfo(sourceFile, classDecl)
+  const recursiveMethods = buildRecursiveMethodReport(classInfo)
+  const sharedFieldReport = buildSharedFieldReport(classInfo)
+  const findings = sharedFieldReport
+    .filter((report) => report.risky)
+    .map((report) => ({
+      kind: `shared-instance-field`,
+      severity: `warning`,
+      title: `Shared mutable field spans async boundaries: ${report.field}`,
+      message:
+        `${report.field} is written before an await or async internal call and ` +
+        `is also consumed by other methods. This can leak retry/cache-buster state ` +
+        `across concurrent call chains.`,
+      file: filePath,
+      line: report.primaryLine,
+      locations: uniqueLocations([
+        { file: filePath, line: report.primaryLine, label: `first async write` },
+        ...report.writerLines.map((line) => ({
+          file: filePath,
+          line,
+          label: `writer`,
+        })),
+        ...report.readerLines.map((line) => ({
+          file: filePath,
+          line,
+          label: `reader/reset`,
+        })),
+      ]),
+      details: {
+        field: report.field,
+        writerMethods: report.writerMethods,
+        readerMethods: report.readerMethods,
+        reasons: report.reasons,
+      },
+    }))
+
+  return {
+    sourceFile,
+    classInfo,
+    recursiveMethods,
+    sharedFieldReport,
+    findings,
+  }
+}
+
+export function analyzeStateMachine(filePath = STATE_MACHINE_FILE) {
+  const sourceFile = readSourceFile(filePath)
+  const findings = []
+  const ignoredActionReport = []
+
+  for (const statement of sourceFile.statements) {
+    if (!ts.isClassDeclaration(statement) || !statement.name) continue
+
+    const className = statement.name.text
+    for (const member of statement.members) {
+      if (!ts.isMethodDeclaration(member) || !member.body || !member.name) {
+        continue
+      }
+
+      const methodName = formatMemberName(member.name)
+      const returnsIgnored = []
+
+      walk(member.body, (node) => {
+        if (!ts.isReturnStatement(node) || !node.expression) return
+        if (!ts.isObjectLiteralExpression(node.expression)) return
+
+        const actionProperty = getObjectLiteralPropertyValue(
+          node.expression,
+          `action`
+        )
+        if (actionProperty !== `ignored`) return
+
+        const statePropertyNode = getObjectLiteralPropertyNode(
+          node.expression,
+          `state`
+        )
+        const stateIsThis =
+          statePropertyNode != null &&
+          ts.isPropertyAssignment(statePropertyNode) &&
+          statePropertyNode.initializer.kind === ts.SyntaxKind.ThisKeyword
+
+        returnsIgnored.push({
+          line: getLine(sourceFile, node),
+          stateIsThis,
+        })
+      })
+
+      if (returnsIgnored.length === 0) continue
+
+      ignoredActionReport.push({
+        className,
+        methodName,
+        lines: returnsIgnored.map((entry) => entry.line),
+      })
+
+      if (ALLOWED_IGNORED_ACTION_CLASSES.has(className)) continue
+
+      for (const entry of returnsIgnored) {
+        findings.push({
+          kind: `ignored-response-transition`,
+          severity: `warning`,
+          title: `Non-delegating state returns ignored action`,
+          message:
+            `${className}.${methodName} returns { action: 'ignored' } outside ` +
+            `the delegate/error states. This is a high-risk pattern for retry loops ` +
+            `when the caller keeps requesting with unchanged URL state.`,
+          file: filePath,
+          line: entry.line,
+          locations: [
+            {
+              file: filePath,
+              line: entry.line,
+              label: `${className}.${methodName}`,
+            },
+          ],
+          details: {
+            className,
+            methodName,
+            stateIsThis: entry.stateIsThis,
+          },
+        })
+      }
+    }
+  }
+
+  return {
+    sourceFile,
+    findings,
+    ignoredActionReport,
+  }
+}
+
+export function loadChangedLines(range, files) {
+  const relativeFiles = files.map((file) => path.relative(GIT_ROOT, file))
+  const diffOutput = execFileSync(
+    `git`,
+    [`diff`, `--unified=0`, `--no-color`, range, `--`, ...relativeFiles],
+    {
+      cwd: GIT_ROOT,
+      encoding: `utf8`,
+      stdio: [`ignore`, `pipe`, `pipe`],
+    }
+  )
+
+  return parseChangedLines(diffOutput)
+}
+
+export function filterFindingsToChangedLines(findings, changedLines) {
+  return findings.filter((finding) => {
+    const locations = finding.locations?.length
+      ? finding.locations
+      : [{ file: finding.file, line: finding.line }]
+
+    return locations.some((location) =>
+      lineIsChanged(changedLines, location.file, location.line)
+    )
+  })
+}
+
+export function filterFindingsToChangedFiles(findings, changedLines) {
+  const changedFiles = new Set(changedLines.keys())
+  return findings.filter((finding) => changedFiles.has(finding.file))
+}
+
+export function formatAnalysisResult(result, options = {}) {
+  const changedLines = options.changedLines
+  const findings = changedLines
+    ? filterFindingsToChangedLines(result.findings, changedLines)
+    : result.findings
+
+  const lines = []
+  lines.push(`Findings: ${findings.length}`)
+
+  if (findings.length === 0) {
+    lines.push(`No findings.`)
+  } else {
+    for (const finding of findings) {
+      lines.push(
+        `${finding.severity.toUpperCase()} ${finding.kind} ` +
+          `${path.relative(result.packageDir, finding.file)}:${finding.line}`
+      )
+      lines.push(`  ${finding.title}`)
+      lines.push(`  ${finding.message}`)
+    }
+  }
+
+  if (!changedLines) {
+    lines.push(``)
+    lines.push(`Recursive Methods:`)
+    for (const report of result.reports.recursiveMethods) {
+      const cycles =
+        report.callees.length === 0 ? `no internal calls` : report.callees.join(`, `)
+      lines.push(
+        `  ${report.name} (${path.relative(result.packageDir, report.file)}:${report.line}) -> ${cycles}`
+      )
+    }
+
+    lines.push(``)
+    lines.push(`Shared Field Candidates:`)
+    for (const report of result.reports.sharedFieldReport) {
+      const flag = report.risky ? `!` : `-`
+      lines.push(
+        `  ${flag} ${report.field}: writers=${report.writerMethods.join(`, `) || `none`} ` +
+          `readers=${report.readerMethods.join(`, `) || `none`}`
+      )
+    }
+
+    lines.push(``)
+    lines.push(`Ignored Action Sites:`)
+    for (const report of result.reports.ignoredActionReport) {
+      lines.push(
+        `  ${report.className}.${report.methodName} lines ${report.lines.join(`, `)}`
+      )
+    }
+  }
+
+  return lines.join(`\n`)
+}
+
+function analyzeMethod(sourceFile, methodNames, fieldNames, methodNode) {
+  const name = formatMemberName(methodNode.name)
+  const summary = {
+    name,
+    file: sourceFile.fileName,
+    line: getLine(sourceFile, methodNode.name),
+    async: methodNode.modifiers?.some(
+      (modifier) => modifier.kind === ts.SyntaxKind.AsyncKeyword
+    )
+      ? true
+      : false,
+    public: !name.startsWith(`#`) && name !== `constructor`,
+    calls: [],
+    fieldReads: new Map(),
+    fieldWrites: new Map(),
+    awaits: [],
+  }
+
+  walk(methodNode.body, (node) => {
+    if (ts.isAwaitExpression(node)) {
+      summary.awaits.push(getLine(sourceFile, node))
+      return
+    }
+
+    if (ts.isCallExpression(node)) {
+      const callee = getThisMemberName(node.expression)
+      if (callee && methodNames.has(callee)) {
+        summary.calls.push({
+          callee,
+          line: getLine(sourceFile, node),
+        })
+      }
+      return
+    }
+
+    if (!ts.isPropertyAccessExpression(node)) return
+
+    const member = getThisMemberName(node)
+    if (!member || methodNames.has(member) || !fieldNames.has(member)) return
+
+    if (
+      ts.isCallExpression(node.parent) &&
+      node.parent.expression === node
+    ) {
+      return
+    }
+
+    const line = getLine(sourceFile, node)
+    if (isWritePosition(node)) {
+      pushMapArray(summary.fieldWrites, member, line)
+    } else {
+      pushMapArray(summary.fieldReads, member, line)
+    }
+  })
+
+  return summary
+}
+
+function buildClassInfo(sourceFile, classDecl) {
+  const fieldNames = new Set()
+  const methodNames = new Set()
+  const methods = new Map()
+
+  for (const member of classDecl.members) {
+    if (
+      ts.isPropertyDeclaration(member) &&
+      member.name &&
+      (ts.isIdentifier(member.name) || ts.isPrivateIdentifier(member.name))
+    ) {
+      fieldNames.add(formatMemberName(member.name))
+      continue
+    }
+
+    if (
+      ts.isGetAccessorDeclaration(member) &&
+      member.name &&
+      (ts.isIdentifier(member.name) || ts.isPrivateIdentifier(member.name))
+    ) {
+      fieldNames.add(formatMemberName(member.name))
+      continue
+    }
+
+    if (
+      ts.isMethodDeclaration(member) &&
+      member.name &&
+      (ts.isIdentifier(member.name) || ts.isPrivateIdentifier(member.name))
+    ) {
+      methodNames.add(formatMemberName(member.name))
+      continue
+    }
+
+  }
+
+  for (const member of classDecl.members) {
+    if (!ts.isMethodDeclaration(member) || !member.body || !member.name) continue
+    methods.set(
+      formatMemberName(member.name),
+      analyzeMethod(sourceFile, methodNames, fieldNames, member)
+    )
+  }
+
+  return {
+    sourceFile,
+    fieldNames,
+    methodNames,
+    methods,
+  }
+}
+
+function buildRecursiveMethodReport(classInfo) {
+  const graph = new Map()
+  for (const [name, method] of classInfo.methods) {
+    graph.set(
+      name,
+      [...new Set(method.calls.map((call) => call.callee).filter((callee) => callee !== name))]
+    )
+  }
+
+  const recursiveSet = new Set()
+  for (const component of stronglyConnectedComponents(graph)) {
+    if (component.length > 1) {
+      component.forEach((name) => recursiveSet.add(name))
+      continue
+    }
+
+    const [single] = component
+    const method = classInfo.methods.get(single)
+    if (method?.calls.some((call) => call.callee === single)) {
+      recursiveSet.add(single)
+    }
+  }
+
+  return [...classInfo.methods.values()]
+    .filter((method) => recursiveSet.has(method.name))
+    .map((method) => ({
+      name: method.name,
+      file: method.file,
+      line: method.line,
+      callees: [...new Set(method.calls.map((call) => call.callee))].sort(),
+    }))
+    .sort(compareReports)
+}
+
+function buildSharedFieldReport(classInfo) {
+  const reports = []
+
+  for (const field of [...classInfo.fieldNames].sort()) {
+    if (SHARED_FIELD_IGNORE.has(field)) continue
+    if (!isCandidateEphemeralField(field)) continue
+
+    const writers = []
+    const readers = []
+    const reasons = []
+
+    for (const method of classInfo.methods.values()) {
+      const writeLines = method.fieldWrites.get(field) ?? []
+      const readLines = method.fieldReads.get(field) ?? []
+
+      if (writeLines.length > 0) {
+        const hasAsyncBoundary = writeLines.some((line) =>
+          hasAsyncBoundaryAfterLine(method, classInfo.methods, line)
+        )
+
+        writers.push({
+          method: method.name,
+          lines: writeLines,
+          hasAsyncBoundary,
+        })
+
+        if (hasAsyncBoundary) {
+          reasons.push(
+            `${field} is written in ${method.name} before a later await/async internal call`
+          )
+        }
+      }
+
+      if (readLines.length > 0) {
+        readers.push({
+          method: method.name,
+          lines: readLines,
+        })
+      }
+    }
+
+    if (writers.length === 0 && readers.length === 0) continue
+
+    const writerMethods = writers.map((writer) => writer.method)
+    const readerMethods = readers.map((reader) => reader.method)
+    const writerLines = writers.flatMap((writer) => writer.lines)
+    const readerLines = readers.flatMap((reader) => reader.lines)
+    const crossMethodUse = new Set(writerMethods.concat(readerMethods)).size > 1
+    const hasRiskyWriter = writers.some((writer) => writer.hasAsyncBoundary)
+    const constructUrlConsumes = readers.some(
+      (reader) => reader.method === `#constructUrl`
+    )
+    const publicMethodTouches = readers
+      .concat(writers)
+      .some((entry) => !entry.method.startsWith(`#`))
+    const highRiskField = /(?:Buster|Retry)/.test(field)
+
+    if (constructUrlConsumes) {
+      reasons.push(`${field} is consumed by #constructUrl, which multiple paths call`)
+    }
+    if (publicMethodTouches) {
+      reasons.push(`${field} is reachable from a public API surface`)
+    }
+
+    reports.push({
+      field,
+      risky:
+        crossMethodUse &&
+        hasRiskyWriter &&
+        (constructUrlConsumes || highRiskField),
+      primaryLine: writerLines[0] ?? readerLines[0],
+      writerMethods,
+      readerMethods,
+      writerLines,
+      readerLines,
+      reasons: [...new Set(reasons)].sort(),
+    })
+  }
+
+  return reports.sort(compareReports)
+}
+
+function stronglyConnectedComponents(graph) {
+  let index = 0
+  const stack = []
+  const indices = new Map()
+  const lowLinks = new Map()
+  const onStack = new Set()
+  const components = []
+
+  const visit = (node) => {
+    indices.set(node, index)
+    lowLinks.set(node, index)
+    index += 1
+    stack.push(node)
+    onStack.add(node)
+
+    for (const neighbor of graph.get(node) ?? []) {
+      if (!indices.has(neighbor)) {
+        visit(neighbor)
+        lowLinks.set(
+          node,
+          Math.min(lowLinks.get(node), lowLinks.get(neighbor))
+        )
+      } else if (onStack.has(neighbor)) {
+        lowLinks.set(
+          node,
+          Math.min(lowLinks.get(node), indices.get(neighbor))
+        )
+      }
+    }
+
+    if (lowLinks.get(node) !== indices.get(node)) return
+
+    const component = []
+    while (stack.length > 0) {
+      const current = stack.pop()
+      onStack.delete(current)
+      component.push(current)
+      if (current === node) break
+    }
+    components.push(component.sort())
+  }
+
+  for (const node of graph.keys()) {
+    if (!indices.has(node)) visit(node)
+  }
+
+  return components
+}
+
+function parseChangedLines(diffOutput) {
+  const changedLines = new Map()
+  let currentFile
+
+  for (const line of diffOutput.split(`\n`)) {
+    if (line.startsWith(`+++ b/`)) {
+      currentFile = path.join(GIT_ROOT, line.slice(6))
+      continue
+    }
+
+    if (!line.startsWith(`@@`) || !currentFile) continue
+
+    const match = /@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/.exec(line)
+    if (!match) continue
+
+    const start = Number(match[1])
+    const count = Number(match[2] ?? `1`)
+    const lines = changedLines.get(currentFile) ?? new Set()
+    const end = count === 0 ? start : start + count - 1
+
+    for (let lineNumber = start; lineNumber <= end; lineNumber += 1) {
+      lines.add(lineNumber)
+    }
+    changedLines.set(currentFile, lines)
+  }
+
+  return changedLines
+}
+
+function lineIsChanged(changedLines, file, line) {
+  return changedLines.get(file)?.has(line) ?? false
+}
+
+function readSourceFile(filePath) {
+  const text = fs.readFileSync(filePath, `utf8`)
+  return ts.createSourceFile(filePath, text, ts.ScriptTarget.Latest, true)
+}
+
+function walk(node, visit) {
+  visit(node)
+  ts.forEachChild(node, (child) => walk(child, visit))
+}
+
+function getThisMemberName(node) {
+  if (!ts.isPropertyAccessExpression(node)) return null
+  if (node.expression.kind !== ts.SyntaxKind.ThisKeyword) return null
+  return formatMemberName(node.name)
+}
+
+function isWritePosition(node) {
+  const parent = node.parent
+  if (!parent) return false
+
+  if (
+    ts.isBinaryExpression(parent) &&
+    parent.left === node &&
+    parent.operatorToken.kind >= ts.SyntaxKind.FirstAssignment &&
+    parent.operatorToken.kind <= ts.SyntaxKind.LastAssignment
+  ) {
+    return true
+  }
+
+  if (
+    (ts.isPrefixUnaryExpression(parent) || ts.isPostfixUnaryExpression(parent)) &&
+    (parent.operator === ts.SyntaxKind.PlusPlusToken ||
+      parent.operator === ts.SyntaxKind.MinusMinusToken)
+  ) {
+    return true
+  }
+
+  return false
+}
+
+function getLine(sourceFile, node) {
+  return sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line + 1
+}
+
+function formatMemberName(nameNode) {
+  if (ts.isPrivateIdentifier(nameNode)) {
+    return nameNode.text.startsWith(`#`) ? nameNode.text : `#${nameNode.text}`
+  }
+  if (
+    ts.isIdentifier(nameNode) ||
+    ts.isStringLiteral(nameNode) ||
+    ts.isNumericLiteral(nameNode)
+  ) {
+    return `${nameNode.text}`
+  }
+  return nameNode.getText()
+}
+
+function hasAsyncBoundaryAfterLine(method, methods, line) {
+  if (method.awaits.some((awaitLine) => awaitLine > line)) return true
+
+  return method.calls.some((call) => {
+    if (call.line <= line) return false
+    return methods.get(call.callee)?.async ?? false
+  })
+}
+
+function isCandidateEphemeralField(field) {
+  return /(?:Buster|Retry|Count|Counter|Recent|AbortController|Promise|Refresh|Duplicate)/.test(
+    field
+  )
+}
+
+function pushMapArray(map, key, value) {
+  const values = map.get(key)
+  if (values) {
+    values.push(value)
+    return
+  }
+  map.set(key, [value])
+}
+
+function uniqueLocations(locations) {
+  const seen = new Set()
+  const result = []
+
+  for (const location of locations) {
+    const key = `${location.file}:${location.line}:${location.label ?? ``}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    result.push(location)
+  }
+
+  return result
+}
+
+function getObjectLiteralPropertyNode(objectLiteral, propertyName) {
+  return objectLiteral.properties.find((property) => {
+    if (!ts.isPropertyAssignment(property) || !property.name) return false
+    return formatMemberName(property.name) === propertyName
+  })
+}
+
+function getObjectLiteralPropertyValue(objectLiteral, propertyName) {
+  const property = getObjectLiteralPropertyNode(objectLiteral, propertyName)
+  if (!property || !ts.isPropertyAssignment(property)) return undefined
+  if (ts.isStringLiteral(property.initializer)) return property.initializer.text
+  return undefined
+}
+
+function compareFindings(left, right) {
+  const fileCompare = left.file.localeCompare(right.file)
+  if (fileCompare !== 0) return fileCompare
+  return left.line - right.line
+}
+
+function compareReports(left, right) {
+  const leftLine = left.line ?? left.primaryLine ?? 0
+  const rightLine = right.line ?? right.primaryLine ?? 0
+  return leftLine - rightLine
+}
+
+function resolveGitRoot() {
+  try {
+    return execFileSync(`git`, [`rev-parse`, `--show-toplevel`], {
+      cwd: PACKAGE_DIR,
+      encoding: `utf8`,
+      stdio: [`ignore`, `pipe`, `ignore`],
+    }).trim()
+  } catch {
+    return PACKAGE_DIR
+  }
+}

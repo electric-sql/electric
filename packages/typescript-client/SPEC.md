@@ -335,24 +335,25 @@ back to Live, SSE state resets to defaults.
 Exhaustive enumeration of every code path in `client.ts` that loops back to make
 another HTTP request. Each path must change the URL to avoid infinite loops.
 
-### Invariant: URL uniqueness
+### Invariant: loop-back URL progression
 
-Every non-live GET request must produce a URL different from the previous request.
-This is enforced by `#checkDuplicateUrl()` in `#requestShape()` and by the guards
-listed below. Live requests (long-poll with `live=true`) legitimately reuse URLs.
+Any loop-back path that would otherwise resend a stuck non-live request must
+change the next request URL via state advancement or an explicit cache buster.
+This is enforced by the path-specific guards listed below. Live requests
+(`live=true`) legitimately reuse URLs.
 
 ### Loop-back sites
 
 Six sites in `client.ts` recurse or loop to issue a new fetch:
 
-| #   | Site                                    | Line | Trigger                                                    | URL changes because                                                           | Guard                                                   |
-| --- | --------------------------------------- | ---- | ---------------------------------------------------------- | ----------------------------------------------------------------------------- | ------------------------------------------------------- |
-| L1  | `#requestShape` → `#requestShape`       | 940  | Normal completion after `#fetchShape()`                    | Offset advances from response headers                                         | `#checkFastLoop` (non-live)                             |
-| L2  | `#requestShape` catch → `#requestShape` | 874  | Abort with `FORCE_DISCONNECT_AND_REFRESH` or `SYSTEM_WAKE` | `isRefreshing` flag changes `canLongPoll`, affecting `live` param             | Abort signals are discrete events                       |
-| L3  | `#requestShape` catch → `#requestShape` | 886  | `StaleCacheError` thrown by `#onInitialResponse`           | `StaleRetryState` adds `cache_buster` param                                   | `maxStaleCacheRetries` counter in state machine         |
-| L4  | `#requestShape` catch → `#requestShape` | 924  | HTTP 409 (shape rotation)                                  | `#reset()` sets offset=-1 + new handle; or `#refetchCacheBuster` if no handle | New handle from 409 response                            |
-| L5  | `#start` catch → `#start`               | 782  | Exception + `onError` returns retry opts                   | Params/headers merged from `retryOpts`                                        | User-controlled; `#checkFastLoop` on next iteration     |
-| L6  | `fetchSnapshot` catch → `fetchSnapshot` | 1975 | HTTP 409 on snapshot fetch                                 | New handle via `withHandle()`; or `#refetchCacheBuster` if same/no handle     | `#maxSnapshotRetries` (5) + cache buster on same handle |
+| #   | Site                                    | Line | Trigger                                                    | URL changes because                                                                 | Guard                                                   |
+| --- | --------------------------------------- | ---- | ---------------------------------------------------------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| L1  | `#requestShape` → `#requestShape`       | 940  | Normal completion after `#fetchShape()`                    | Offset advances from response headers                                               | `#checkFastLoop` (non-live)                             |
+| L2  | `#requestShape` catch → `#requestShape` | 874  | Abort with `FORCE_DISCONNECT_AND_REFRESH` or `SYSTEM_WAKE` | `isRefreshing` flag changes `canLongPoll`, affecting `live` param                   | Abort signals are discrete events                       |
+| L3  | `#requestShape` catch → `#requestShape` | 886  | `StaleCacheError` thrown by `#onInitialResponse`           | `StaleRetryState` adds `cache_buster` param                                         | `maxStaleCacheRetries` counter in state machine         |
+| L4  | `#requestShape` catch → `#requestShape` | 924  | HTTP 409 (shape rotation)                                  | `#reset()` sets offset=-1 + new handle; or request-scoped cache buster if no handle | New handle from 409 response or unique retry URL        |
+| L5  | `#start` catch → `#start`               | 782  | Exception + `onError` returns retry opts                   | Params/headers merged from `retryOpts`                                              | User-controlled; `#checkFastLoop` on next iteration     |
+| L6  | `fetchSnapshot` catch → `fetchSnapshot` | 1975 | HTTP 409 on snapshot fetch                                 | New handle via `withHandle()`; or local retry cache buster if same/no handle        | `#maxSnapshotRetries` (5) + cache buster on same handle |
 
 ### Guard mechanisms
 

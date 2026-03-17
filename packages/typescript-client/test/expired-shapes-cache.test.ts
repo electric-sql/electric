@@ -856,4 +856,123 @@ describe(`ExpiredShapesCache`, () => {
       `Expected ${capturedUrls.length} unique URLs but got ${uniqueUrls.size}`
     ).toBe(capturedUrls.length)
   })
+
+  it(`should preserve stream retry cache buster when fetchSnapshot runs before the retry`, async () => {
+    const streamUrls: string[] = []
+    const snapshotUrls: string[] = []
+    let streamRequestCount = 0
+    let snapshotStarted = false
+
+    fetchMock.mockImplementation((input: RequestInfo | URL) => {
+      const url = input.toString()
+      const parsedUrl = new URL(url)
+      const isSnapshotRequest =
+        parsedUrl.searchParams.has(`subset__limit`) ||
+        parsedUrl.searchParams.has(`subset__order_by`)
+
+      if (isSnapshotRequest) {
+        snapshotUrls.push(url)
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              metadata: {},
+              data: [],
+            }),
+            {
+              status: 200,
+              headers: {
+                'content-type': `application/json`,
+                'electric-schema': `{}`,
+                'electric-handle': `snapshot-handle`,
+                'electric-offset': `0_0`,
+              },
+            }
+          )
+        )
+      }
+
+      streamRequestCount++
+      streamUrls.push(url)
+
+      if (streamRequestCount === 1) {
+        return Promise.resolve(
+          new Response(`[]`, {
+            status: 409,
+          })
+        )
+      }
+
+      return Promise.resolve(
+        new Response(
+          JSON.stringify([
+            {
+              headers: { control: `up-to-date` },
+              offset: `0_0`,
+            },
+          ]),
+          {
+            status: 200,
+            headers: {
+              'electric-handle': `final-handle`,
+              'electric-offset': `0_0`,
+              'electric-schema': `{}`,
+              'electric-cursor': `cursor-1`,
+            },
+          }
+        )
+      )
+    })
+
+    const stream = new ShapeStream({
+      url: shapeUrl,
+      params: { table: `test` },
+      signal: aborter.signal,
+      fetchClient: fetchMock,
+      subscribe: false,
+      log: `changes_only`,
+    })
+
+    const snapshotFinished = new Promise<void>((resolve, reject) => {
+      stream.subscribe(async () => {
+        if (snapshotStarted) return
+        snapshotStarted = true
+
+        try {
+          await stream.fetchSnapshot({
+            orderBy: `id ASC`,
+            limit: 1,
+          })
+          resolve()
+        } catch (error) {
+          reject(error)
+        }
+      })
+    })
+
+    await snapshotFinished
+
+    await vi.waitFor(() => {
+      expect(
+        streamUrls
+          .slice(1)
+          .some((url) =>
+            new URL(url).searchParams.has(CACHE_BUSTER_QUERY_PARAM)
+          )
+      ).toBe(true)
+    })
+
+    expect(snapshotUrls.length).toBeGreaterThan(0)
+
+    const streamRetryUrl = new URL(
+      streamUrls.find((url) =>
+        new URL(url).searchParams.has(CACHE_BUSTER_QUERY_PARAM)
+      )!
+    )
+    const snapshotHasCacheBuster = snapshotUrls.some((url) =>
+      new URL(url).searchParams.has(CACHE_BUSTER_QUERY_PARAM)
+    )
+
+    expect(streamRetryUrl.searchParams.has(CACHE_BUSTER_QUERY_PARAM)).toBe(true)
+    expect(snapshotHasCacheBuster).toBe(false)
+  })
 })

@@ -621,7 +621,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
   #fastLoopBackoffMaxMs = 5_000
   #fastLoopConsecutiveCount = 0
   #fastLoopMaxCount = 5
-  #refetchCacheBuster?: string
+  #pendingRequestShapeCacheBuster?: string
   #maxSnapshotRetries = 5
 
   constructor(options: ShapeStreamOptions<GetExtensions<T>>) {
@@ -802,8 +802,16 @@ export class ShapeStream<T extends Row<unknown> = Row>
     this.#unsubscribeFromWakeDetection?.()
   }
 
-  async #requestShape(): Promise<void> {
-    if (this.#pauseLock.isPaused) return
+  async #requestShape(requestShapeCacheBuster?: string): Promise<void> {
+    const activeCacheBuster =
+      requestShapeCacheBuster ?? this.#pendingRequestShapeCacheBuster
+
+    if (this.#pauseLock.isPaused) {
+      if (activeCacheBuster) {
+        this.#pendingRequestShapeCacheBuster = activeCacheBuster
+      }
+      return
+    }
 
     if (
       !this.options.subscribe &&
@@ -831,6 +839,11 @@ export class ShapeStream<T extends Row<unknown> = Row>
       url,
       resumingFromPause
     )
+
+    if (activeCacheBuster) {
+      fetchUrl.searchParams.set(CACHE_BUSTER_QUERY_PARAM, activeCacheBuster)
+      fetchUrl.searchParams.sort()
+    }
     const abortListener = await this.#createAbortListener(signal)
     const requestAbortController = this.#requestAbortController! // we know that it is not undefined because it is set by `this.#createAbortListener`
 
@@ -841,9 +854,14 @@ export class ShapeStream<T extends Row<unknown> = Row>
       if (abortListener && signal) {
         signal.removeEventListener(`abort`, abortListener)
       }
+      if (activeCacheBuster) {
+        this.#pendingRequestShapeCacheBuster = activeCacheBuster
+      }
       this.#requestAbortController = undefined
       return
     }
+
+    this.#pendingRequestShapeCacheBuster = undefined
 
     try {
       await this.#fetchShape({
@@ -893,13 +911,14 @@ export class ShapeStream<T extends Row<unknown> = Row>
         }
 
         const newShapeHandle = e.headers[SHAPE_HANDLE_HEADER]
+        let nextRequestShapeCacheBuster: string | undefined
         if (!newShapeHandle) {
           console.warn(
             `[Electric] Received 409 response without a shape handle header. ` +
               `This likely indicates a proxy or CDN stripping required headers.`,
             new Error(`stack trace`)
           )
-          this.#refetchCacheBuster = createCacheBuster()
+          nextRequestShapeCacheBuster = createCacheBuster()
         }
         this.#reset(newShapeHandle)
 
@@ -913,7 +932,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
             ? [e.json]
             : []
         await this.#publish(messages409 as Message<T>[])
-        return this.#requestShape()
+        return this.#requestShape(nextRequestShapeCacheBuster)
       } else {
         // errors that have reached this point are not actionable without
         // additional user input, such as 400s or failures to read the
@@ -1156,16 +1175,6 @@ export class ShapeStream<T extends Row<unknown> = Row>
     const expiredHandle = expiredShapesCache.getExpiredHandle(shapeKey)
     if (expiredHandle) {
       fetchUrl.searchParams.set(EXPIRED_HANDLE_QUERY_PARAM, expiredHandle)
-    }
-
-    // Add one-shot cache buster when a 409 response lacked a handle header
-    // (e.g. proxy stripped it). Ensures each retry has a unique URL.
-    if (this.#refetchCacheBuster) {
-      fetchUrl.searchParams.set(
-        CACHE_BUSTER_QUERY_PARAM,
-        this.#refetchCacheBuster
-      )
-      this.#refetchCacheBuster = undefined
     }
 
     // sort query params in-place for stable URLs and improved cache hits
