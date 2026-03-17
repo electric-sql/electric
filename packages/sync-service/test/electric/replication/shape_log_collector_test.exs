@@ -1142,7 +1142,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
 
       # Two consumers for two shape handles
       consumer1 =
-        start_link_supervised!(
+        start_supervised!(
           {Support.TransactionConsumer,
            id: :alive,
            stack_id: ctx.stack_id,
@@ -1153,7 +1153,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
         )
 
       consumer2 =
-        start_link_supervised!(
+        start_supervised!(
           {Support.TransactionConsumer,
            id: :doomed,
            stack_id: ctx.stack_id,
@@ -1166,36 +1166,11 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       %{consumer_alive: consumer1, consumer_doomed: consumer2}
     end
 
-    test "FlushTracker advances past undeliverable shapes from killed consumer", ctx do
+    test "FlushTracker advances past undeliverable shapes from crashed consumer", ctx do
       register_as_replication_client(ctx.stack_id)
 
-      # Patch start_consumer_for_handle to return :no_shape for the doomed handle
-      # This simulates the shape being gone from ShapeCache when ConsumerRegistry
-      # tries to restart the consumer.
-      Repatch.patch(
-        Electric.ShapeCache,
-        :start_consumer_for_handle,
-        [mode: :shared],
-        fn
-          "shape-doomed", _stack_id -> {:error, :no_shape}
-          _handle, _stack_id -> {:error, :no_shape}
-        end
-      )
-
-      # Kill the doomed consumer with :kill to bypass terminate/remove_shape.
-      # This leaves the shape in EventRouter but the consumer process is dead.
-      # The ETS entry may or may not be cleaned up depending on OTP internals,
-      # but ConsumerRegistry.publish will detect the dead PID either way.
-      doomed_pid = ctx.consumer_doomed
-      Process.unlink(doomed_pid)
-      ref = Process.monitor(doomed_pid)
-      Process.exit(doomed_pid, :kill)
-      assert_receive {:DOWN, ^ref, :process, ^doomed_pid, :killed}
-
-      # Now send a transaction that affects both shapes.
-      # EventRouter routes to both "shape-alive" and "shape-doomed".
-      # ConsumerRegistry.publish detects "shape-doomed" as undeliverable (dead PID, no restart).
-      # SLC should NOT track "shape-doomed" in FlushTracker.
+      # Send a transaction that affects both shapes and causes the consumer for "shape-dommed"
+      # to terminate. As a consequence, SLC should NOT track "shape-doomed" in FlushTracker.
       lsn = Lsn.from_integer(42)
       log_offset = LogOffset.new(lsn, 0)
 
@@ -1203,12 +1178,22 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
         transaction(100, lsn, [
           %Changes.NewRecord{
             relation: {"public", "test_table"},
-            record: %{"id" => "1"},
+            record: %{
+              "id" => "stop-with-reason",
+              "handle" => "shape-doomed",
+              "reason" => {:shutdown, :test}
+            },
             log_offset: log_offset
           }
         ])
 
-      assert :ok = ShapeLogCollector.handle_event(txn, ctx.stack_id)
+      log =
+        ExUnit.CaptureLog.capture_log(fn ->
+          assert :ok = ShapeLogCollector.handle_event(txn, ctx.stack_id)
+        end)
+
+      assert log =~
+               ~s'Consumer processes crashed or missing during broadcast: %{"shape-doomed" => {:shutdown, :test}}'
 
       # The alive consumer receives the transaction
       assert_receive {Support.TransactionConsumer, {:alive, _pid}, [_txn]}
@@ -1253,22 +1238,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
 
       # Kill the doomed consumer between fragments. This simulates a crash
       # that happens after fragment 1 was processed but before fragment 2.
-      doomed_pid = ctx.consumer_doomed
-      Process.unlink(doomed_pid)
-      ref = Process.monitor(doomed_pid)
-      Process.exit(doomed_pid, :kill)
-      assert_receive {:DOWN, ^ref, :process, ^doomed_pid, :killed}
-
-      # Patch start_consumer_for_handle so no replacement is started
-      Repatch.patch(
-        Electric.ShapeCache,
-        :start_consumer_for_handle,
-        [mode: :shared],
-        fn
-          "shape-doomed", _stack_id -> {:error, :no_shape}
-          _handle, _stack_id -> {:error, :no_shape}
-        end
-      )
+      kill_consumer(ctx.consumer_doomed, :kill)
 
       # Fragment 2 (commit): the doomed consumer is dead.
       # ConsumerRegistry.broadcast detects the dead PID → crashed.
@@ -1290,7 +1260,13 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
         affected_relations: MapSet.new([{"public", "test_table"}])
       }
 
-      assert :ok = ShapeLogCollector.handle_event(frag2, ctx.stack_id)
+      log =
+        ExUnit.CaptureLog.capture_log(fn ->
+          assert :ok = ShapeLogCollector.handle_event(frag2, ctx.stack_id)
+        end)
+
+      assert log =~
+               ~s'Consumer processes crashed or missing during broadcast: %{"shape-doomed" => :noproc}'
 
       # The alive consumer receives fragment 2
       assert_receive {Support.TransactionConsumer, {:alive, _}, [_]}
@@ -1320,5 +1296,12 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       changes: changes,
       affected_relations: MapSet.new(changes, & &1.relation)
     }
+  end
+
+  defp kill_consumer(pid, reason) do
+    ref = Process.monitor(pid)
+    Process.exit(pid, reason)
+    expected_reason = with :kill <- reason, do: :killed
+    assert_receive {:DOWN, ^ref, :process, ^pid, ^expected_reason}
   end
 end
