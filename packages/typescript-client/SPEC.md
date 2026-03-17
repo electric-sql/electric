@@ -252,12 +252,14 @@ responses cannot overwrite it.
 **Enforcement**: Dedicated tests (`SSE up-to-date message updates offset`,
 `non-SSE up-to-date message preserves existing offset`).
 
-### C7: Stale response with valid local handle is ignored
+### C7: Stale response always enters stale-retry
 
-When a stale response arrives but the state already has a different valid handle,
-the response is ignored (action: `ignored`, state unchanged).
+When a stale response arrives (responseHandle === expiredHandle), the state always
+enters `stale-retry` regardless of whether the state has a valid local handle.
+The `currentFields` (including any valid local handle) are preserved in the new
+`StaleRetryState`, and a cache buster is added to ensure the retry URL is unique.
 
-**Enforcement**: Truth table + dedicated stale-handle tests.
+**Enforcement**: Dedicated stale-handle tests.
 
 ### C8: SSE state is private to LiveState
 

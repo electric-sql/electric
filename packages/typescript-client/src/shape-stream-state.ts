@@ -303,26 +303,20 @@ abstract class ActiveState extends ShapeStreamState {
       return null // not stale
     }
 
-    // Stale response detected
-    if (
-      this.#shared.handle === undefined ||
-      this.#shared.handle === expiredHandle
-    ) {
-      // No local handle, or local handle is itself the expired one — enter stale retry
-      const retryCount = this.staleCacheRetryCount + 1
-      return {
-        action: `stale-retry`,
-        state: new StaleRetryState({
-          ...this.currentFields,
-          staleCacheBuster: input.createCacheBuster(),
-          staleCacheRetryCount: retryCount,
-        }),
-        exceededMaxRetries: retryCount > input.maxStaleCacheRetries,
-      }
+    // Stale response detected — always enter stale-retry to get a cache buster.
+    // Without a cache buster, the CDN will keep serving the same stale response
+    // and the client loops infinitely (the URL never changes).
+    // currentFields preserves the valid local handle when we already have one.
+    const retryCount = this.staleCacheRetryCount + 1
+    return {
+      action: `stale-retry`,
+      state: new StaleRetryState({
+        ...this.currentFields,
+        staleCacheBuster: input.createCacheBuster(),
+        staleCacheRetryCount: retryCount,
+      }),
+      exceededMaxRetries: retryCount > input.maxStaleCacheRetries,
     }
-
-    // We have a different valid local handle — ignore this stale response
-    return { action: `ignored`, state: this }
   }
 
   // --- handleMessageBatch: template method with onUpToDate override point ---

@@ -456,7 +456,8 @@ describe(`ShapeStream`, () => {
     expect(caughtError!.message).toContain(`troubleshooting`)
 
     expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining(`Clearing client-side caches`)
+      expect.stringContaining(`Clearing client-side caches`),
+      expect.any(Error)
     )
 
     warnSpy.mockRestore()
