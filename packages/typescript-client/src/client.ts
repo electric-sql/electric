@@ -632,6 +632,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
   #maxDuplicateUrlRetries = 5
   #snapshotRetryCount = 0
   #maxSnapshotRetries = 5
+  #snapshotCacheBuster?: string
 
   constructor(options: ShapeStreamOptions<GetExtensions<T>>) {
     this.options = { subscribe: true, ...options }
@@ -1943,6 +1944,16 @@ export class ShapeStream<T extends Row<unknown> = Row>
       fetchOptions = { headers: result.requestHeaders }
     }
 
+    // Apply snapshot-local cache buster (set by same-handle 409 retry)
+    if (this.#snapshotCacheBuster) {
+      fetchUrl.searchParams.set(
+        CACHE_BUSTER_QUERY_PARAM,
+        this.#snapshotCacheBuster
+      )
+      fetchUrl.searchParams.sort()
+      this.#snapshotCacheBuster = undefined
+    }
+
     // Capture handle before fetch to avoid race conditions if it changes during the request
     const usedHandle = this.#syncState.handle
 
@@ -1981,9 +1992,11 @@ export class ShapeStream<T extends Row<unknown> = Row>
         if (nextHandle) {
           this.#syncState = this.#syncState.withHandle(nextHandle)
           // If 409 returned the same handle, the URL won't change —
-          // add a cache buster to prevent an infinite loop.
+          // add a snapshot-local cache buster to prevent an infinite loop.
+          // Uses a dedicated field instead of #refetchCacheBuster because the
+          // main stream can consume the shared field before the recursive call.
           if (nextHandle === usedHandle) {
-            this.#refetchCacheBuster = createCacheBuster()
+            this.#snapshotCacheBuster = createCacheBuster()
           }
         } else {
           console.warn(
@@ -1991,7 +2004,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
               `This likely indicates a proxy or CDN stripping required headers.`,
             new Error(`stack trace`)
           )
-          this.#refetchCacheBuster = createCacheBuster()
+          this.#snapshotCacheBuster = createCacheBuster()
         }
 
         return this.fetchSnapshot(opts)

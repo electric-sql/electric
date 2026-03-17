@@ -2951,7 +2951,8 @@ it(
       expect(warnMock).toHaveBeenCalledWith(
         expect.stringContaining(
           `[Electric] SSE connections are closing immediately`
-        )
+        ),
+        expect.any(Error)
       )
       expect(warnMock).toHaveBeenCalledWith(
         expect.stringContaining(`Falling back to long polling`)
@@ -3098,7 +3099,8 @@ it(
       expect(warnMock).toHaveBeenCalledWith(
         expect.stringContaining(
           `[Electric] SSE connections are closing immediately`
-        )
+        ),
+        expect.any(Error)
       )
 
       // Count SSE requests before 409
