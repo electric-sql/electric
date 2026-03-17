@@ -664,7 +664,7 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
       assert_receive {:healthy, :test_event}
 
       # Crashed handle appears in the crashed map with exit reason, NOT in suspended
-      assert Map.fetch!(crashed, "crash-handle") == :boom
+      assert Map.fetch!(crashed, "crash-handle") == {:crashed, :boom}
       assert suspended == %{}
       # The healthy handle should NOT appear in either map
       refute Map.has_key?(crashed, "healthy-handle")

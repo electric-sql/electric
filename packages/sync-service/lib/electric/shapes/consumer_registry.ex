@@ -95,17 +95,7 @@ defmodule Electric.Shapes.ConsumerRegistry do
     %{}
   end
 
-  def publish(events_by_handle, _registry_state, 0) do
-    Logger.warning(
-      "Max publish retries exceeded, marking remaining handles as undeliverable: #{inspect(Map.keys(events_by_handle))}"
-    )
-
-    Map.new(events_by_handle, fn {handle, _event} -> {handle, :max_retries_exceeded} end)
-  end
-
-  def publish(events_by_handle, registry_state, max_retries) do
-    %{table: table} = registry_state
-
+  def publish(events_by_handle, %{table: table} = registry_state, max_retries) do
     {to_broadcast, undeliverable} =
       events_by_handle
       |> Enum.reduce({[], %{}}, fn {handle, event}, {acc, undeliverable} ->
@@ -125,12 +115,19 @@ defmodule Electric.Shapes.ConsumerRegistry do
     Enum.each(suspended, fn {handle, _event} -> do_remove_consumer(handle, table) end)
 
     # Only retry suspended consumers, not crashed ones
-    retry_undeliverable = publish(suspended, registry_state, max_retries - 1)
+    retry_undeliverable =
+      if max_retries > 0 do
+        publish(suspended, registry_state, max_retries - 1)
+      else
+        Logger.warning(
+          "Max publish retries exceeded, marking remaining handles as undeliverable: #{inspect(Map.keys(suspended))}"
+        )
 
-    crashed_tagged = Map.new(crashed, fn {handle, reason} -> {handle, {:crashed, reason}} end)
+        Map.new(suspended, fn {handle, _event} -> {handle, :max_retries_exceeded} end)
+      end
 
     undeliverable
-    |> Map.merge(crashed_tagged)
+    |> Map.merge(crashed)
     |> Map.merge(retry_undeliverable)
   end
 
@@ -192,7 +189,7 @@ defmodule Electric.Shapes.ConsumerRegistry do
 
         {:DOWN, ^ref, _, _, reason} ->
           # Consumer crashed — do not retry, return the crash reason.
-          {suspended, Map.put(crashed, handle, reason)}
+          {suspended, Map.put(crashed, handle, {:crashed, reason})}
       end
     end)
     |> tap(fn
