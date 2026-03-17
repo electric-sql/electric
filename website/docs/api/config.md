@@ -407,6 +407,8 @@ When set, Electric periodically evicts the least recently used shapes to stay wi
 
 Clients subscribed to an expired shape will receive a `409 Conflict` response, prompting them to create a new shape subscription with a fresh initial sync.
 
+This replaces the previous `ELECTRIC_EXPERIMENTAL_MAX_SHAPES` environment variable, which is deprecated and will be removed in a future release.
+
 </EnvVarConfig>
 
 ## Feature Flags
