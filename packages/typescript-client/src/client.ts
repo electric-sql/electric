@@ -1024,22 +1024,21 @@ export class ShapeStream<T extends Row<unknown> = Row>
   }
 
   /**
-   * Detects when #constructUrl produces the same URL as the previous request.
-   * For non-live GET requests, this is an invariant violation — state should
-   * change between requests to produce a unique URL. When detected, a cache
-   * buster is added to ensure the request goes out with a unique URL.
+   * Detects when #constructUrl produces the same URL as the previous request
+   * in the internal #requestShape loop. This is an invariant violation — state
+   * should change between requests to produce a unique URL. When detected, a
+   * cache buster is added to ensure the request goes out with a unique URL.
    * After maxDuplicateUrlRetries consecutive duplicates, throws.
    *
-   * Skipped for:
-   * - Live requests: legitimate same-URL (server long-polls, cursor may not change)
-   * - POST requests: subset params are in the body, not the URL
+   * Only called from #requestShape — not from fetchSnapshot (public API where
+   * callers legitimately issue the same query multiple times).
+   *
+   * Skipped for live requests where same-URL is normal (server long-polls,
+   * cursor may not change between responses).
    */
-  #checkDuplicateUrl(fetchUrl: URL, method: string = `GET`): void {
-    // Live polling and POST snapshots legitimately reuse the same URL
-    if (
-      fetchUrl.searchParams.get(LIVE_QUERY_PARAM) === `true` ||
-      method !== `GET`
-    ) {
+  #checkDuplicateUrl(fetchUrl: URL): void {
+    // Live polling legitimately reuses the same URL
+    if (fetchUrl.searchParams.get(LIVE_QUERY_PARAM) === `true`) {
       this.#lastConstructedUrl = undefined
       this.#consecutiveDuplicateUrlCount = 0
       return
@@ -1941,8 +1940,6 @@ export class ShapeStream<T extends Row<unknown> = Row>
       fetchUrl = result.fetchUrl
       fetchOptions = { headers: result.requestHeaders }
     }
-
-    this.#checkDuplicateUrl(fetchUrl, method)
 
     // Capture handle before fetch to avoid race conditions if it changes during the request
     const usedHandle = this.#syncState.handle
