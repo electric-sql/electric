@@ -402,7 +402,7 @@ defmodule Electric.ShapeCache do
           if Process.alive?(pid) do
             {:cont, {:ok, Map.put(acc, handle, pid)}}
           else
-            Logger.warning("Stale consumer PID for shape #{handle}, removing and restarting")
+            Logger.warning("Stale consumer PID for shape #{handle} in stack #{opts.stack_id}, removing and restarting")
             Electric.Shapes.ConsumerRegistry.remove_consumer(handle, opts.stack_id)
 
             case start_shape(handle, shape, Map.merge(opts, start_shape_opts)) do

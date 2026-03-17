@@ -1301,6 +1301,7 @@ defmodule Electric.ShapeCacheTest do
       assert {:ok, new_pid} = ShapeCache.start_consumer_for_handle(shape_handle, stack_id)
       assert Process.alive?(new_pid)
       assert new_pid != stale_pid
+      assert Shapes.ConsumerRegistry.whereis(stack_id, shape_handle) == new_pid
     end
   end
 
