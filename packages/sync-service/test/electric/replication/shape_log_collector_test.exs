@@ -1169,7 +1169,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
     test "FlushTracker advances past undeliverable shapes from crashed consumer", ctx do
       register_as_replication_client(ctx.stack_id)
 
-      # Send a transaction that affects both shapes and causes the consumer for "shape-dommed"
+      # Send a transaction that affects both shapes and causes the consumer for "shape-doomed"
       # to terminate. As a consequence, SLC should NOT track "shape-doomed" in FlushTracker.
       lsn = Lsn.from_integer(42)
       log_offset = LogOffset.new(lsn, 0)

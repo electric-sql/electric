@@ -339,7 +339,7 @@ defmodule Electric.Replication.ShapeLogCollector.FlushTrackerTest do
         |> FlushTracker.handle_flush_notification("shape2", LogOffset.new(12, 10))
 
       # There's no notification for lsn=11 because by the time that txn fragment is
-      # processed, flush tracker's last_flushed is non-emptry: it was populated with
+      # processed, flush tracker's last_flushed is non-empty: it was populated with
       # prev_log_offset=(10-1, 0) after processing the first txn fragment for shape1.
 
       assert_receive {:flush_confirmed, 12}

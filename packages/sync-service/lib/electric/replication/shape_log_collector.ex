@@ -548,9 +548,9 @@ defmodule Electric.Replication.ShapeLogCollector do
     OpenTelemetry.start_interval(:"shape_log_collector.publish.duration_µs")
     context = OpenTelemetry.get_current_context()
 
-    undeliverable =
+    undeliverable_set =
       for layer <- DependencyLayers.get_for_handles(state.dependency_layers, affected_shapes),
-          reduce: %{} do
+          reduce: MapSet.new() do
         acc ->
           # Each publish is synchronous, so layers will be processed in order
           layer_events =
@@ -559,15 +559,13 @@ defmodule Electric.Replication.ShapeLogCollector do
             end)
 
           layer_undeliverable = ConsumerRegistry.publish(layer_events, state.registry_state)
-          Map.merge(acc, layer_undeliverable)
+          layer_undeliverable |> Map.keys() |> Enum.into(acc)
       end
 
     OpenTelemetry.start_interval(:"shape_log_collector.set_last_processed_lsn.duration_µs")
 
     lsn = Lsn.from_integer(state.last_processed_offset.tx_offset)
     LsnTracker.set_last_processed_lsn(state.stack_id, lsn)
-
-    undeliverable_set = MapSet.new(Map.keys(undeliverable))
     delivered_shapes = MapSet.difference(affected_shapes, undeliverable_set)
 
     # Remove shapes from FlushTracker that were already tracked in earlier
