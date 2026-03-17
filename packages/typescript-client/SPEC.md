@@ -329,3 +329,45 @@ back to Live, SSE state resets to defaults.
 | ReplayingState suppressBatch   | Tested | Direct construction only (DSL doesn't expose) |
 | ErrorState.reset()             | Tested | Direct construction (DSL doesn't have reset)  |
 | handleMessageBatch no-messages | Tested | Direct construction (edge case)               |
+
+## Client Fetch Loop Paths
+
+Exhaustive enumeration of every code path in `client.ts` that loops back to make
+another HTTP request. Each path must change the URL to avoid infinite loops.
+
+### Invariant: URL uniqueness
+
+Every non-live GET request must produce a URL different from the previous request.
+This is enforced by `#checkDuplicateUrl()` in `#requestShape()` and by the guards
+listed below. Live requests (long-poll with `live=true`) legitimately reuse URLs.
+
+### Loop-back sites
+
+Six sites in `client.ts` recurse or loop to issue a new fetch:
+
+| #   | Site                                    | Line | Trigger                                                    | URL changes because                                                           | Guard                                               |
+| --- | --------------------------------------- | ---- | ---------------------------------------------------------- | ----------------------------------------------------------------------------- | --------------------------------------------------- |
+| L1  | `#requestShape` → `#requestShape`       | 940  | Normal completion after `#fetchShape()`                    | Offset advances from response headers                                         | `#checkFastLoop` (non-live), `#checkDuplicateUrl`   |
+| L2  | `#requestShape` catch → `#requestShape` | 874  | Abort with `FORCE_DISCONNECT_AND_REFRESH` or `SYSTEM_WAKE` | `isRefreshing` flag changes `canLongPoll`, affecting `live` param             | Abort signals are discrete events                   |
+| L3  | `#requestShape` catch → `#requestShape` | 886  | `StaleCacheError` thrown by `#onInitialResponse`           | `StaleRetryState` adds `cache_buster` param                                   | `maxStaleCacheRetries` counter in state machine     |
+| L4  | `#requestShape` catch → `#requestShape` | 924  | HTTP 409 (shape rotation)                                  | `#reset()` sets offset=-1 + new handle; or `#refetchCacheBuster` if no handle | New handle from 409 response                        |
+| L5  | `#start` catch → `#start`               | 782  | Exception + `onError` returns retry opts                   | Params/headers merged from `retryOpts`                                        | User-controlled; `#checkFastLoop` on next iteration |
+| L6  | `fetchSnapshot` catch → `fetchSnapshot` | 1975 | HTTP 409 on snapshot fetch                                 | New handle via `withHandle()`; or `#refetchCacheBuster` if no handle          | New handle from 409 response                        |
+
+### Guard mechanisms
+
+| Guard                  | Scope                             | How it works                                                                                                                                     |
+| ---------------------- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `#checkFastLoop`       | Non-live `#requestShape` only     | Detects N requests at same offset within a time window. First: clears caches + resets. Persistent: exponential backoff → throws FetchError(502). |
+| `#checkDuplicateUrl`   | Non-live GET `#requestShape` only | Detects identical consecutive URLs. Adds cache buster per duplicate. Throws after `maxDuplicateUrlRetries` (5).                                  |
+| `maxStaleCacheRetries` | Stale response path (L3)          | State machine counts stale retries. Throws FetchError(502) after 3 consecutive stale responses.                                                  |
+| Pause lock             | `#requestShape` entry             | Returns immediately if paused. Prevents fetches during snapshots.                                                                                |
+| Up-to-date exit        | `#requestShape` entry             | Returns if `!subscribe` and `isUpToDate`. Breaks loop for one-shot syncs.                                                                        |
+
+### Coverage gaps
+
+| Gap                              | Risk | Notes                                                                                    |
+| -------------------------------- | ---- | ---------------------------------------------------------------------------------------- |
+| L5 user `onError` infinite retry | Low  | User callback controls retry; `#checkFastLoop` provides secondary guard                  |
+| L6 snapshot 409 same handle      | Low  | 409 response should include new handle; if not, `#refetchCacheBuster` ensures unique URL |
+| Live polling same URL            | None | Intentionally allowed — server long-polls, cursor may not change between responses       |
