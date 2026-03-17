@@ -2955,12 +2955,14 @@ it(
         expect.any(Error)
       )
       expect(warnMock).toHaveBeenCalledWith(
-        expect.stringContaining(`Falling back to long polling`)
+        expect.stringContaining(`Falling back to long polling`),
+        expect.any(Error)
       )
       expect(warnMock).toHaveBeenCalledWith(
         expect.stringContaining(
           `Do NOT disable caching entirely - Electric uses cache headers to enable request collapsing`
-        )
+        ),
+        expect.any(Error)
       )
 
       // Wait a bit more to ensure we have some requests after fallback

@@ -622,14 +622,6 @@ export class ShapeStream<T extends Row<unknown> = Row>
   #fastLoopConsecutiveCount = 0
   #fastLoopMaxCount = 5
   #refetchCacheBuster?: string
-  // Duplicate-URL guard: detects when #constructUrl produces the same URL
-  // as the previous request, which indicates a state machine bug where
-  // state did not change between iterations. Applies to all request paths
-  // (including live polling and snapshots) — unlike #checkFastLoop which
-  // only runs for non-live requests.
-  #lastConstructedUrl?: string
-  #consecutiveDuplicateUrlCount = 0
-  #maxDuplicateUrlRetries = 5
   #maxSnapshotRetries = 5
 
   constructor(options: ShapeStreamOptions<GetExtensions<T>>) {
@@ -839,7 +831,6 @@ export class ShapeStream<T extends Row<unknown> = Row>
       url,
       resumingFromPause
     )
-    this.#checkDuplicateUrl(fetchUrl)
     const abortListener = await this.#createAbortListener(signal)
     const requestAbortController = this.#requestAbortController! // we know that it is not undefined because it is set by `this.#createAbortListener`
 
@@ -1022,66 +1013,6 @@ export class ShapeStream<T extends Row<unknown> = Row>
     await new Promise((resolve) => setTimeout(resolve, delayMs))
 
     this.#recentRequestEntries = []
-  }
-
-  /**
-   * Detects when #constructUrl produces the same URL as the previous request
-   * in the internal #requestShape loop. This is an invariant violation — state
-   * should change between requests to produce a unique URL. When detected, a
-   * cache buster is added to ensure the request goes out with a unique URL.
-   * After maxDuplicateUrlRetries consecutive duplicates, throws.
-   *
-   * Only called from #requestShape — not from fetchSnapshot (public API where
-   * callers legitimately issue the same query multiple times).
-   *
-   * Skipped for live requests where same-URL is normal (server long-polls,
-   * cursor may not change between responses).
-   */
-  #checkDuplicateUrl(fetchUrl: URL): void {
-    // Live polling legitimately reuses the same URL
-    if (fetchUrl.searchParams.get(LIVE_QUERY_PARAM) === `true`) {
-      this.#lastConstructedUrl = undefined
-      this.#consecutiveDuplicateUrlCount = 0
-      return
-    }
-
-    const urlString = fetchUrl.toString()
-
-    if (urlString === this.#lastConstructedUrl) {
-      this.#consecutiveDuplicateUrlCount++
-
-      // Add cache buster so the actual network request is unique
-      fetchUrl.searchParams.set(CACHE_BUSTER_QUERY_PARAM, createCacheBuster())
-      fetchUrl.searchParams.sort()
-
-      if (this.#consecutiveDuplicateUrlCount >= this.#maxDuplicateUrlRetries) {
-        throw new FetchError(
-          502,
-          undefined,
-          undefined,
-          {},
-          urlString,
-          `Client is stuck sending the same URL repeatedly ` +
-            `(${this.#maxDuplicateUrlRetries} consecutive duplicate URLs). ` +
-            `This indicates a state machine bug or CDN misconfiguration where ` +
-            `state does not change between requests. ` +
-            `For more information visit the troubleshooting guide: ${TROUBLESHOOTING_URL}`
-        )
-      }
-
-      console.warn(
-        `[Electric] Duplicate request URL detected ` +
-          `(${this.#consecutiveDuplicateUrlCount}/${this.#maxDuplicateUrlRetries}). ` +
-          `State did not change between requests, producing the same URL. ` +
-          `Adding cache buster to force unique request.`,
-        new Error(`stack trace`)
-      )
-    } else {
-      this.#consecutiveDuplicateUrlCount = 0
-    }
-
-    // Always store the original URL (before cache buster) for comparison
-    this.#lastConstructedUrl = urlString
   }
 
   async #constructUrl(
