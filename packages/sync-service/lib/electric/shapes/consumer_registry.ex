@@ -154,9 +154,6 @@ defmodule Electric.Shapes.ConsumerRegistry do
   @spec do_remove_consumer(shape_handle(), :ets.table()) :: :ok
   defp do_remove_consumer(shape_handle, table) when is_atom(table) or is_reference(table) do
     :ets.delete(table, shape_handle)
-
-    Logger.debug(fn -> "Removed consumer #{shape_handle}" end)
-
     :ok
   end
 
