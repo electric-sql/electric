@@ -358,24 +358,35 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
     end
 
     test "max_retries exhausted returns :max_retries_exceeded for persistently suspending consumers",
-         ctx do
-      %{stack_id: stack_id} = ctx
+         %{stack_id: stack_id} = ctx do
+      test_pid = self()
 
-      # A consumer that always suspends — every start produces a process that suspends
       always_suspend = fn handle ->
-        {stack_id, handle,
-         fn _msg, state ->
-           ConsumerRegistry.remove_consumer(handle, stack_id)
-           {:stop, Electric.ShapeCache.ShapeCleaner.consumer_suspend_reason(), state}
-         end}
+        fn _msg, state ->
+          send(test_pid, {:suspended, self()})
+          ConsumerRegistry.remove_consumer(handle, stack_id)
+          {:stop, Electric.ShapeCache.ShapeCleaner.consumer_suspend_reason(), state}
+        end
       end
 
-      {:ok, _sub} =
-        start_supervised(
-          {TestSubscriber, always_suspend.("handle-stubborn")},
-          id: :stubborn_subscriber,
-          restart: :transient
-        )
+      # Patch start_consumer_for_handle to start a consumer that always suspends in response to a genserver call.
+      Repatch.patch(
+        Electric.ShapeCache,
+        :start_consumer_for_handle,
+        [force: true],
+        fn handle, stack_id ->
+          {:ok, pid} =
+            start_supervised(
+              {TestSubscriber, {stack_id, handle, always_suspend.(handle)}},
+              id: :stubborn_subscriber,
+              restart: :temporary
+            )
+
+          send(test_pid, {:consumer_pid, pid})
+
+          {:ok, pid}
+        end
+      )
 
       # max_retries=1: first attempt suspends → retry → replacement also suspends → exhausted
       result =
@@ -385,7 +396,13 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
           1
         )
 
-      assert :max_retries_exceeded = Map.fetch!(result, "handle-stubborn")
+      assert %{"handle-stubborn" => :max_retries_exceeded} == result
+
+      # A new consumer has been started and suspended twice during the test
+      assert_receive {:consumer_pid, pid}
+      assert_receive {:suspended, ^pid}
+      assert_receive {:consumer_pid, pid}
+      assert_receive {:suspended, ^pid}
     end
   end
 
