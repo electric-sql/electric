@@ -17,6 +17,55 @@ const STATE_MACHINE_FILE = path.join(
   `src`,
   `shape-stream-state.ts`
 )
+const ANALYSIS_DIRS = [`src`, `test`, `bin`]
+const ANALYSIS_EXTENSIONS = new Set([`.ts`, `.tsx`, `.js`, `.mjs`])
+const ANALYSIS_EXCLUDED_DIRS = new Set([
+  `dist`,
+  `node_modules`,
+  `junit`,
+  `coverage`,
+  `fixtures`,
+])
+const PROTOCOL_LITERAL_METHODS = new Set([
+  `get`,
+  `set`,
+  `has`,
+  `append`,
+  `delete`,
+])
+const PROTOCOL_LITERAL_CANONICAL_VALUES = [
+  `electric-cursor`,
+  `electric-handle`,
+  `electric-offset`,
+  `electric-schema`,
+  `electric-up-to-date`,
+  `cursor`,
+  `expired_handle`,
+  `handle`,
+  `live`,
+  `offset`,
+  `table`,
+  `where`,
+  `replica`,
+  `params`,
+  `experimental_live_sse`,
+  `live_sse`,
+  `log`,
+  `subset__where`,
+  `subset__limit`,
+  `subset__offset`,
+  `subset__order_by`,
+  `subset__params`,
+  `subset__where_expr`,
+  `subset__order_by_expr`,
+  `cache-buster`,
+]
+const PROTOCOL_LITERAL_BY_NORMALIZED = new Map(
+  PROTOCOL_LITERAL_CANONICAL_VALUES.map((value) => [
+    normalizeLiteral(value),
+    value,
+  ])
+)
 
 const SHARED_FIELD_IGNORE = new Set([
   `#syncState`,
@@ -46,9 +95,17 @@ export function analyzeTypeScriptClient(options = {}) {
 
   const clientAnalysis = analyzeShapeStreamClient(clientFile)
   const stateMachineAnalysis = analyzeStateMachine(stateMachineFile)
+  const protocolLiteralAnalysis = analyzeProtocolLiterals(
+    listAnalysisFiles(packageDir),
+    {
+      requireConstantsInFiles: (filePath) =>
+        filePath.includes(`${path.sep}src${path.sep}`),
+    }
+  )
 
   const findings = clientAnalysis.findings
     .concat(stateMachineAnalysis.findings)
+    .concat(protocolLiteralAnalysis.findings)
     .sort(compareFindings)
 
   return {
@@ -60,6 +117,7 @@ export function analyzeTypeScriptClient(options = {}) {
       recursiveMethods: clientAnalysis.recursiveMethods,
       sharedFieldReport: clientAnalysis.sharedFieldReport,
       ignoredActionReport: stateMachineAnalysis.ignoredActionReport,
+      protocolLiteralReport: protocolLiteralAnalysis.report,
     },
   }
 }
@@ -211,6 +269,73 @@ export function analyzeStateMachine(filePath = STATE_MACHINE_FILE) {
   }
 }
 
+export function analyzeProtocolLiterals(filePaths, options = {}) {
+  const findings = []
+  const report = []
+  const requireConstantsInFiles =
+    options.requireConstantsInFiles ?? (() => false)
+
+  for (const filePath of filePaths) {
+    const sourceFile = readSourceFile(filePath)
+
+    walk(sourceFile, (node) => {
+      const candidate = getProtocolLiteralCandidate(sourceFile, node)
+      if (!candidate) return
+
+      const requireConstants = requireConstantsInFiles(filePath)
+      const kind =
+        candidate.literal === candidate.canonical
+          ? requireConstants
+            ? `raw-protocol-literal`
+            : null
+          : `protocol-literal-drift`
+
+      if (!kind) return
+
+      report.push({
+        ...candidate,
+        kind,
+      })
+
+      findings.push({
+        kind,
+        severity: `warning`,
+        title:
+          kind === `raw-protocol-literal`
+            ? `Raw Electric protocol literal should use shared constant`
+            : `Near-miss Electric protocol literal: ${candidate.literal}`,
+        message:
+          kind === `raw-protocol-literal`
+            ? `${candidate.literal} is a canonical Electric protocol literal ` +
+              `used directly in implementation code. Import the shared constant ` +
+              `instead to avoid drift between call sites.`
+            : `${candidate.literal} is a near-miss for the canonical Electric ` +
+              `protocol literal ${candidate.canonical}. Use the shared constant ` +
+              `or canonical string to avoid URL/header drift.`,
+        file: filePath,
+        line: candidate.line,
+        locations: [
+          {
+            file: filePath,
+            line: candidate.line,
+            label: candidate.context,
+          },
+        ],
+        details: {
+          literal: candidate.literal,
+          canonical: candidate.canonical,
+          context: candidate.context,
+        },
+      })
+    })
+  }
+
+  return {
+    findings: findings.sort(compareFindings),
+    report: report.sort(compareReports),
+  }
+}
+
 export function loadChangedLines(range, files) {
   const relativeFiles = files.map((file) => path.relative(GIT_ROOT, file))
   const diffOutput = execFileSync(
@@ -294,6 +419,19 @@ export function formatAnalysisResult(result, options = {}) {
       lines.push(
         `  ${report.className}.${report.methodName} lines ${report.lines.join(`, `)}`
       )
+    }
+
+    lines.push(``)
+    lines.push(`Protocol Literal Sites:`)
+    if (result.reports.protocolLiteralReport.length === 0) {
+      lines.push(`  none`)
+    } else {
+      for (const report of result.reports.protocolLiteralReport) {
+        lines.push(
+          `  ${report.kind} ${path.relative(result.packageDir, report.file)}:${report.line} ` +
+            `${report.literal} -> ${report.canonical} (${report.context})`
+        )
+      }
     }
   }
 
@@ -599,6 +737,36 @@ function parseChangedLines(diffOutput) {
   return changedLines
 }
 
+function listAnalysisFiles(packageDir) {
+  const filePaths = []
+
+  for (const relativeDir of ANALYSIS_DIRS) {
+    const absoluteDir = path.join(packageDir, relativeDir)
+    if (!fs.existsSync(absoluteDir)) continue
+    walkDirectory(absoluteDir, filePaths)
+  }
+
+  return filePaths.sort()
+}
+
+function walkDirectory(directory, filePaths) {
+  for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+    if (entry.name.startsWith(`.`)) continue
+    if (ANALYSIS_EXCLUDED_DIRS.has(entry.name)) continue
+
+    const absolutePath = path.join(directory, entry.name)
+
+    if (entry.isDirectory()) {
+      walkDirectory(absolutePath, filePaths)
+      continue
+    }
+
+    if (!ANALYSIS_EXTENSIONS.has(path.extname(entry.name))) continue
+    if (absolutePath === path.join(PACKAGE_DIR, `src`, `constants.ts`)) continue
+    filePaths.push(absolutePath)
+  }
+}
+
 function lineIsChanged(changedLines, file, line) {
   return changedLines.get(file)?.has(line) ?? false
 }
@@ -606,6 +774,139 @@ function lineIsChanged(changedLines, file, line) {
 function readSourceFile(filePath) {
   const text = fs.readFileSync(filePath, `utf8`)
   return ts.createSourceFile(filePath, text, ts.ScriptTarget.Latest, true)
+}
+
+function getProtocolLiteralCandidate(sourceFile, node) {
+  if (ts.isCallExpression(node)) {
+    return getProtocolLiteralCandidateFromCall(sourceFile, node)
+  }
+
+  if (isProtocolHeaderProperty(node)) {
+    return getProtocolLiteralCandidateFromHeaderProperty(sourceFile, node)
+  }
+
+  if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) {
+    return getProtocolLiteralCandidateFromLiteral(sourceFile, node)
+  }
+
+  return null
+}
+
+function getProtocolLiteralCandidateFromCall(sourceFile, callExpression) {
+  if (!ts.isPropertyAccessExpression(callExpression.expression)) return null
+  if (!PROTOCOL_LITERAL_METHODS.has(callExpression.expression.name.text)) {
+    return null
+  }
+
+  const [firstArg] = callExpression.arguments
+  const literal = getStringLiteralValue(firstArg)
+  if (!literal) return null
+
+  const receiver = callExpression.expression.expression
+  const receiverContext = getProtocolReceiverContext(receiver)
+  if (!receiverContext) return null
+
+  return createProtocolLiteralCandidate(
+    sourceFile,
+    firstArg,
+    literal,
+    `${receiverContext}.${callExpression.expression.name.text}`
+  )
+}
+
+function getProtocolLiteralCandidateFromHeaderProperty(
+  sourceFile,
+  propertyNode
+) {
+  const literal = getPropertyNameValue(propertyNode.name)
+  if (!literal) return null
+
+  return createProtocolLiteralCandidate(
+    sourceFile,
+    propertyNode.name,
+    literal,
+    `headers object property`
+  )
+}
+
+function getProtocolLiteralCandidateFromLiteral(sourceFile, node) {
+  const literal = node.text
+  if (!PROTOCOL_LITERAL_CANONICAL_VALUES.includes(literal)) return null
+
+  const parent = node.parent
+  if (!ts.isArrayLiteralExpression(parent)) return null
+  if (!isProtocolLiteralArray(parent)) return null
+
+  return createProtocolLiteralCandidate(
+    sourceFile,
+    node,
+    literal,
+    `protocol literal array`
+  )
+}
+
+function createProtocolLiteralCandidate(sourceFile, node, literal, context) {
+  const canonical = PROTOCOL_LITERAL_BY_NORMALIZED.get(
+    normalizeLiteral(literal)
+  )
+  if (!canonical) return null
+
+  return {
+    file: sourceFile.fileName,
+    line: getLine(sourceFile, node),
+    literal,
+    canonical,
+    context,
+  }
+}
+
+function getProtocolReceiverContext(receiver) {
+  if (ts.isPropertyAccessExpression(receiver)) {
+    if (receiver.name.text === `searchParams`) return `searchParams`
+    if (receiver.name.text === `headers`) return `headers`
+  }
+
+  if (ts.isIdentifier(receiver) && receiver.text === `headers`) {
+    return `headers`
+  }
+
+  return null
+}
+
+function isHeadersObjectLiteral(node) {
+  const parent = node.parent
+
+  if (
+    ts.isPropertyAssignment(parent) &&
+    getPropertyNameValue(parent.name) === `headers`
+  ) {
+    return true
+  }
+
+  if (
+    ts.isNewExpression(parent) &&
+    ts.isIdentifier(parent.expression) &&
+    parent.expression.text === `Headers`
+  ) {
+    return true
+  }
+
+  return false
+}
+
+function isProtocolHeaderProperty(node) {
+  if (!ts.isPropertyAssignment(node) || !node.name) return false
+  if (!ts.isObjectLiteralExpression(node.parent)) return false
+  return isHeadersObjectLiteral(node.parent)
+}
+
+function isProtocolLiteralArray(node) {
+  const parent = node.parent
+  if (!ts.isVariableDeclaration(parent) || !ts.isIdentifier(parent.name)) {
+    return false
+  }
+
+  return /(?:Header|Param)s$/.test(parent.name.text)
 }
 
 function walk(node, visit) {
@@ -662,6 +963,26 @@ function formatMemberName(nameNode) {
     return `${nameNode.text}`
   }
   return nameNode.getText()
+}
+
+function getPropertyNameValue(nameNode) {
+  if (
+    ts.isIdentifier(nameNode) ||
+    ts.isStringLiteral(nameNode) ||
+    ts.isNoSubstitutionTemplateLiteral(nameNode)
+  ) {
+    return nameNode.text
+  }
+
+  return null
+}
+
+function getStringLiteralValue(node) {
+  if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) {
+    return node.text
+  }
+
+  return null
 }
 
 function hasAsyncBoundaryAfterLine(method, methods, line) {
@@ -725,7 +1046,8 @@ function compareFindings(left, right) {
 function compareReports(left, right) {
   const leftLine = left.line ?? left.primaryLine ?? 0
   const rightLine = right.line ?? right.primaryLine ?? 0
-  return leftLine - rightLine
+  if (leftLine !== rightLine) return leftLine - rightLine
+  return (left.file ?? ``).localeCompare(right.file ?? ``)
 }
 
 function resolveGitRoot() {
@@ -738,4 +1060,8 @@ function resolveGitRoot() {
   } catch {
     return PACKAGE_DIR
   }
+}
+
+function normalizeLiteral(value) {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, ``)
 }

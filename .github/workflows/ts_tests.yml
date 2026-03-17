@@ -54,6 +54,9 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm -r --filter "$(jq '.name' -r package.json)^..." build
       - run: pnpm run typecheck
+      - name: Run shape stream static analysis
+        if: ${{ matrix.package_dir == 'packages/typescript-client' }}
+        run: pnpm run analyze:shape-stream -- --fail-on-findings
 
   ensure_sync_service_image:
     uses: ./.github/workflows/ensure_sync_service_image.yml

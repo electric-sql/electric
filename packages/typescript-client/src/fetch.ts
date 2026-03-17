@@ -2,8 +2,10 @@ import {
   CHUNK_LAST_OFFSET_HEADER,
   CHUNK_UP_TO_DATE_HEADER,
   EXPIRED_HANDLE_QUERY_PARAM,
+  LIVE_CACHE_BUSTER_HEADER,
   LIVE_QUERY_PARAM,
   OFFSET_QUERY_PARAM,
+  SHAPE_SCHEMA_HEADER,
   SHAPE_HANDLE_HEADER,
   SHAPE_HANDLE_QUERY_PARAM,
   SUBSET_PARAM_LIMIT,
@@ -269,13 +271,13 @@ export function createFetchWithChunkBuffer(
 }
 
 export const requiredElectricResponseHeaders = [
-  `electric-offset`,
-  `electric-handle`,
+  CHUNK_LAST_OFFSET_HEADER,
+  SHAPE_HANDLE_HEADER,
 ]
 
-export const requiredLiveResponseHeaders = [`electric-cursor`]
+export const requiredLiveResponseHeaders = [LIVE_CACHE_BUSTER_HEADER]
 
-export const requiredNonLiveResponseHeaders = [`electric-schema`]
+export const requiredNonLiveResponseHeaders = [SHAPE_SCHEMA_HEADER]
 
 export function createFetchWithResponseHeadersCheck(
   fetchClient: typeof fetch
