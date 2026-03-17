@@ -2512,6 +2512,7 @@ describe.for(fetchAndSse)(
           liveSse,
           signal: aborter.signal,
           fetchClient,
+          handle: `stuck-handle`,
         })
 
         await expect(
