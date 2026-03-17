@@ -199,9 +199,6 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
 
       # No replacement consumer should have been started
       refute_receive {:start_consumer, "handle-crash"}
-
-      # ETS entry should have been cleaned up
-      assert ConsumerRegistry.active_consumer_count(ctx.stack_id) == 0
     end
 
     test "returns undeliverable handles when shape was removed", ctx do
