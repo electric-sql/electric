@@ -16,7 +16,8 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
   alias Support.Fixtures
   alias Support.RepatchExt
 
-  import Support.TestUtils, only: [patch_calls: 3, expect_calls: 2]
+  import Support.TestUtils,
+    only: [patch_calls: 3, expect_calls: 2, register_as_replication_client: 1]
 
   import Support.ComponentSetup
 
@@ -530,9 +531,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       prev_lsn = Lsn.increment(lsn, -1)
       last_log_offset = LogOffset.new(lsn, 0)
 
-      {:via, Registry, {name, key}} = Electric.Postgres.ReplicationClient.name(ctx.stack_id)
-
-      Registry.register(name, key, nil)
+      register_as_replication_client(ctx.stack_id)
 
       irrelevant_txn = transaction(99, prev_lsn, [])
 
@@ -577,9 +576,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
         end
       )
 
-      {:via, Registry, {name, key}} = Electric.Postgres.ReplicationClient.name(ctx.stack_id)
-
-      Registry.register(name, key, nil)
+      register_as_replication_client(ctx.stack_id)
 
       lsn = Lsn.from_integer(55)
       log_offset = LogOffset.new(lsn, 0)
@@ -598,8 +595,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
     end
 
     test "correctly broadcasts flush when transaction has already been processed before", ctx do
-      {:via, Registry, {name, key}} = Electric.Postgres.ReplicationClient.name(ctx.stack_id)
-      Registry.register(name, key, nil)
+      register_as_replication_client(ctx.stack_id)
 
       LsnTracker.set_last_processed_lsn(ctx.stack_id, Lsn.from_integer(50))
       assert :ok = ShapeLogCollector.mark_as_ready(ctx.stack_id)
@@ -621,8 +617,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
     end
 
     test "correctly broadcasts flush when consumers die", ctx do
-      {:via, Registry, {name, key}} = Electric.Postgres.ReplicationClient.name(ctx.stack_id)
-      Registry.register(name, key, nil)
+      register_as_replication_client(ctx.stack_id)
 
       lsn = Lsn.from_integer(20)
       log_offset = LogOffset.new(lsn, 0)
@@ -1123,7 +1118,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
 
       assert :ok = ShapeLogCollector.handle_event(fragment, ctx.stack_id)
 
-      refute_receive {:global_last_seen_lsn, _}, 50
+      refute_receive {:global_last_seen_lsn, _}
     end
   end
 
@@ -1172,9 +1167,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
     end
 
     test "FlushTracker advances past undeliverable shapes from killed consumer", ctx do
-      # Register to receive flush boundary updates
-      {:via, Registry, {name, key}} = Electric.Postgres.ReplicationClient.name(ctx.stack_id)
-      Registry.register(name, key, nil)
+      register_as_replication_client(ctx.stack_id)
 
       # Patch start_consumer_for_handle to return :no_shape for the doomed handle
       # This simulates the shape being gone from ShapeCache when ConsumerRegistry
@@ -1218,21 +1211,19 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       assert :ok = ShapeLogCollector.handle_event(txn, ctx.stack_id)
 
       # The alive consumer receives the transaction
-      assert_receive {Support.TransactionConsumer, {:alive, _pid}, [_txn]}, 500
+      assert_receive {Support.TransactionConsumer, {:alive, _pid}, [_txn]}
 
       # Flush only the alive consumer — FlushTracker should advance because
       # the doomed shape was never tracked (excluded as undeliverable).
       ShapeLogCollector.notify_flushed(ctx.stack_id, "shape-alive", log_offset)
 
       expected_lsn = Lsn.to_integer(lsn)
-      assert_receive {:flush_boundary_updated, ^expected_lsn}, 500
+      assert_receive {:flush_boundary_updated, ^expected_lsn}
     end
 
     test "FlushTracker advances when consumer crashes on later fragment of multi-fragment txn",
          ctx do
-      # Register to receive flush boundary updates
-      {:via, Registry, {name, key}} = Electric.Postgres.ReplicationClient.name(ctx.stack_id)
-      Registry.register(name, key, nil)
+      register_as_replication_client(ctx.stack_id)
 
       lsn = Lsn.from_integer(42)
 
@@ -1257,8 +1248,8 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       assert :ok = ShapeLogCollector.handle_event(frag1, ctx.stack_id)
 
       # Both consumers receive fragment 1
-      assert_receive {Support.TransactionConsumer, {:alive, _}, [_]}, 500
-      assert_receive {Support.TransactionConsumer, {:doomed, _}, [_]}, 500
+      assert_receive {Support.TransactionConsumer, {:alive, _}, [_]}
+      assert_receive {Support.TransactionConsumer, {:doomed, _}, [_]}
 
       # Kill the doomed consumer between fragments. This simulates a crash
       # that happens after fragment 1 was processed but before fragment 2.
@@ -1302,14 +1293,14 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       assert :ok = ShapeLogCollector.handle_event(frag2, ctx.stack_id)
 
       # The alive consumer receives fragment 2
-      assert_receive {Support.TransactionConsumer, {:alive, _}, [_]}, 500
+      assert_receive {Support.TransactionConsumer, {:alive, _}, [_]}
 
       # Flush both fragments for the alive consumer — FlushTracker should advance
       # because the doomed shape was removed from tracking when its crash was detected.
       ShapeLogCollector.notify_flushed(ctx.stack_id, "shape-alive", LogOffset.new(lsn, 5))
 
       expected_lsn = Lsn.to_integer(lsn)
-      assert_receive {:flush_boundary_updated, ^expected_lsn}, 500
+      assert_receive {:flush_boundary_updated, ^expected_lsn}
     end
   end
 

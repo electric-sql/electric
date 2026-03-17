@@ -24,6 +24,7 @@ defmodule Electric.Shapes.ConsumerTest do
       expect_shape_status: 1,
       patch_snapshotter: 1,
       assert_shape_cleanup: 1,
+      register_as_replication_client: 1,
       complete_txn_fragment: 3,
       txn_fragments: 3,
       txn_fragment: 4
@@ -2019,12 +2020,6 @@ defmodule Electric.Shapes.ConsumerTest do
       pid: consumer_pid,
       functions: [:append_to_log!, :append_fragment_to_log!, :signal_txn_commit!]
     )
-  end
-
-  # Make the test process pose as a replication client to receive flush notifications from ShapeLogCollector
-  defp register_as_replication_client(stack_id) do
-    {:via, Registry, {reg_name, key}} = Electric.Postgres.ReplicationClient.name(stack_id)
-    Registry.register(reg_name, key, nil)
   end
 
   defp get_log_items_from_storage(offset, shape_storage) do

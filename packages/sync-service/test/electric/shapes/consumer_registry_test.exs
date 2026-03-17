@@ -182,9 +182,8 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
 
       # Manually insert a dead PID into the ETS table to simulate a crashed consumer
       # whose entry wasn't cleaned up
-      dead_pid = spawn(fn -> :ok end)
-      Process.sleep(10)
-      refute Process.alive?(dead_pid)
+      {dead_pid, ref} = spawn_monitor(fn -> :ok end)
+      assert_receive {:DOWN, ^ref, :process, ^dead_pid, :normal}
 
       :ets.insert(table, {"handle-crash", dead_pid})
       assert ConsumerRegistry.active_consumer_count(ctx.stack_id) == 1
@@ -199,7 +198,7 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
       assert {:crashed, :noproc} = Map.fetch!(result, "handle-crash")
 
       # No replacement consumer should have been started
-      refute_receive {:start_consumer, "handle-crash"}, 10
+      refute_receive {:start_consumer, "handle-crash"}
 
       # ETS entry should have been cleaned up
       assert ConsumerRegistry.active_consumer_count(ctx.stack_id) == 0
@@ -210,9 +209,8 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
       parent = self()
 
       # Manually insert a dead PID to simulate a crashed consumer
-      dead_pid = spawn(fn -> :ok end)
-      Process.sleep(10)
-      refute Process.alive?(dead_pid)
+      {dead_pid, ref} = spawn_monitor(fn -> :ok end)
+      assert_receive {:DOWN, ^ref, :process, ^dead_pid, :normal}
 
       :ets.insert(table, {"handle-removed", dead_pid})
       assert ConsumerRegistry.active_consumer_count(ctx.stack_id) == 1
@@ -355,7 +353,7 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
 
       # Crashed handle is undeliverable — NOT retried
       assert {:crashed, :boom} = Map.fetch!(result, "handle-crash")
-      refute_receive {:start_consumer, "handle-crash"}, 10
+      refute_receive {:start_consumer, "handle-crash"}
 
       # Healthy and retried-suspended handles delivered successfully
       refute Map.has_key?(result, "handle-ok")

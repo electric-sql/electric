@@ -305,4 +305,12 @@ defmodule Support.TestUtils do
       fun.(self())
     end
   end
+
+  @doc """
+  Register the calling process as a replication client to receive flush notifications.
+  """
+  def register_as_replication_client(stack_id) do
+    {:via, Registry, {reg_name, key}} = Electric.Postgres.ReplicationClient.name(stack_id)
+    Registry.register(reg_name, key, nil)
+  end
 end
