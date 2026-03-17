@@ -394,6 +394,23 @@ Each `live=true` long-poll request holds the connection open for up to 20 second
 
 </EnvVarConfig>
 
+### ELECTRIC_MAX_SHAPES
+
+<EnvVarConfig
+    name="ELECTRIC_MAX_SHAPES"
+    optional="true"
+    example="10000">
+
+Maximum number of shapes that Electric will serve concurrently. When unset (the default), there is no limit on the number of shapes.
+
+When set, Electric periodically evicts the least recently used shapes to stay within the limit.
+
+Clients subscribed to an expired shape will receive a `409 Conflict` response, prompting them to create a new shape subscription with a fresh initial sync.
+
+This replaces the previous `ELECTRIC_EXPERIMENTAL_MAX_SHAPES` environment variable, which is deprecated and will be removed in a future release.
+
+</EnvVarConfig>
+
 ## Feature Flags
 
 Feature flags enable experimental or advanced features that are not yet enabled by default in production.
