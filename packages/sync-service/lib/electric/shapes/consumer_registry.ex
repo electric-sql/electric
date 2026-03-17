@@ -101,14 +101,14 @@ defmodule Electric.Shapes.ConsumerRegistry do
       |> Enum.reduce({[], %{}}, fn {handle, event}, {acc, undeliverable} ->
         case consumer_pid(handle, table) || start_consumer!(handle, registry_state) do
           nil ->
-            {acc, Map.put(undeliverable, handle, :no_shape)}
+            {acc, Map.put(undeliverable, handle, {:publish, :no_shape})}
 
           pid ->
             {[{handle, event, pid} | acc], undeliverable}
         end
       end)
 
-    {suspended, crashed} = broadcast(to_broadcast)
+    {suspended, crashed_or_missing} = broadcast(to_broadcast)
 
     # Remove stale ETS entries for suspended handles so that start_consumer!
     # can register fresh replacements on retry.
@@ -123,11 +123,11 @@ defmodule Electric.Shapes.ConsumerRegistry do
           "Max publish retries exceeded, marking remaining handles as undeliverable: #{inspect(Map.keys(suspended))}"
         )
 
-        Map.new(suspended, fn {handle, _event} -> {handle, :max_retries_exceeded} end)
+        Map.new(suspended, fn {handle, _event} -> {handle, {:publish, :max_retries_exceeded}} end)
       end
 
     undeliverable
-    |> Map.merge(crashed)
+    |> Map.merge(crashed_or_missing)
     |> Map.merge(retry_undeliverable)
   end
 
@@ -189,7 +189,7 @@ defmodule Electric.Shapes.ConsumerRegistry do
 
         {:DOWN, ^ref, _, _, reason} ->
           # Consumer crashed — do not retry, return the crash reason.
-          {suspended, Map.put(crashed, handle, {:crashed, reason})}
+          {suspended, Map.put(crashed, handle, reason)}
       end
     end)
     |> tap(fn

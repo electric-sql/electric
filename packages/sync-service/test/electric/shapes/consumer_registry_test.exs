@@ -195,7 +195,7 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
           ctx.registry_state
         )
 
-      assert {:crashed, :noproc} = Map.fetch!(result, "handle-crash")
+      assert :noproc == Map.fetch!(result, "handle-crash")
 
       # No replacement consumer should have been started
       refute_receive {:start_consumer, "handle-crash"}
@@ -242,7 +242,7 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
           ctx.registry_state
         )
 
-      assert {:crashed, :noproc} = Map.fetch!(result, "handle-removed")
+      assert :noproc == Map.fetch!(result, "handle-removed")
     end
 
     test "consumer that crashes during event processing is returned as undeliverable", ctx do
@@ -285,7 +285,7 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
       assert_receive {:broadcast, "handle-ok", {:txn, %{lsn: 1}}}
 
       # Crashed handle is undeliverable with the crash reason
-      assert {:crashed, :processing_error} = Map.fetch!(result, "handle-crash")
+      assert :processing_error == Map.fetch!(result, "handle-crash")
       # Healthy handle delivered successfully
       refute Map.has_key?(result, "handle-ok")
     end
@@ -349,7 +349,7 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
       assert_receive {:broadcast, "handle-suspend", {:txn, %{lsn: 1}}}
 
       # Crashed handle is undeliverable — NOT retried
-      assert {:crashed, :boom} = Map.fetch!(result, "handle-crash")
+      assert :boom == Map.fetch!(result, "handle-crash")
       refute_receive {:start_consumer, "handle-crash"}
 
       # Healthy and retried-suspended handles delivered successfully
@@ -396,7 +396,7 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
           1
         )
 
-      assert %{"handle-stubborn" => :max_retries_exceeded} == result
+      assert %{"handle-stubborn" => {:publish, :max_retries_exceeded}} == result
 
       # A new consumer has been started and suspended twice during the test
       assert_receive {:consumer_pid, pid}
@@ -681,7 +681,7 @@ defmodule Electric.Shapes.ConsumerRegistryTest do
       assert_receive {:healthy, :test_event}
 
       # Crashed handle appears in the crashed map with exit reason, NOT in suspended
-      assert Map.fetch!(crashed, "crash-handle") == {:crashed, :boom}
+      assert Map.fetch!(crashed, "crash-handle") == :boom
       assert suspended == %{}
       # The healthy handle should NOT appear in either map
       refute Map.has_key?(crashed, "healthy-handle")
