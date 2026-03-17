@@ -630,6 +630,8 @@ export class ShapeStream<T extends Row<unknown> = Row>
   #lastConstructedUrl?: string
   #consecutiveDuplicateUrlCount = 0
   #maxDuplicateUrlRetries = 5
+  #snapshotRetryCount = 0
+  #maxSnapshotRetries = 5
 
   constructor(options: ShapeStreamOptions<GetExtensions<T>>) {
     this.options = { subscribe: true, ...options }
@@ -1953,6 +1955,21 @@ export class ShapeStream<T extends Row<unknown> = Row>
       // Unlike #requestShape, we don't call #reset() here as that would
       // clear the pause lock and break requestSnapshot's pause/resume logic.
       if (e instanceof FetchError && e.status === 409) {
+        this.#snapshotRetryCount++
+        if (this.#snapshotRetryCount > this.#maxSnapshotRetries) {
+          this.#snapshotRetryCount = 0
+          throw new FetchError(
+            502,
+            undefined,
+            undefined,
+            {},
+            fetchUrl.toString(),
+            `Snapshot request stuck in 409 retry loop after ${this.#maxSnapshotRetries} attempts. ` +
+              `This indicates a proxy/CDN misconfiguration. ` +
+              `For more information visit the troubleshooting guide: ${TROUBLESHOOTING_URL}`
+          )
+        }
+
         if (usedHandle) {
           const shapeKey = canonicalShapeKey(fetchUrl)
           expiredShapesCache.markExpired(shapeKey, usedHandle)
@@ -1963,6 +1980,11 @@ export class ShapeStream<T extends Row<unknown> = Row>
         const nextHandle = e.headers[SHAPE_HANDLE_HEADER]
         if (nextHandle) {
           this.#syncState = this.#syncState.withHandle(nextHandle)
+          // If 409 returned the same handle, the URL won't change —
+          // add a cache buster to prevent an infinite loop.
+          if (nextHandle === usedHandle) {
+            this.#refetchCacheBuster = createCacheBuster()
+          }
         } else {
           console.warn(
             `[Electric] Received 409 response without a shape handle header. ` +
@@ -1976,6 +1998,9 @@ export class ShapeStream<T extends Row<unknown> = Row>
       }
       throw e
     }
+
+    // Successful fetch — reset snapshot retry counter
+    this.#snapshotRetryCount = 0
 
     // Handle non-OK responses from custom fetch clients that bypass the wrapper chain
     if (!response.ok) {

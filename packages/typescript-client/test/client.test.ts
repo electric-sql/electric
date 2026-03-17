@@ -2463,6 +2463,77 @@ describe.for(fetchAndSse)(
     )
 
     it(
+      `fetchSnapshot throws after repeated 409s with same handle`,
+      { timeout: 10000 },
+      async ({ issuesTableUrl, aborter }) => {
+        let snapshotRequestCount = 0
+        const capturedUrls: string[] = []
+        const schema = JSON.stringify({
+          id: { type: `text` },
+          title: { type: `text` },
+        })
+
+        const fetchClient = vi.fn(async (input: string | URL | Request) => {
+          const url = input instanceof Request ? input.url : input.toString()
+          const urlObj = new URL(url)
+          capturedUrls.push(url)
+
+          const isSnapshotRequest =
+            urlObj.searchParams.has(`subset__limit`) ||
+            urlObj.searchParams.has(`subset__order_by`)
+
+          if (isSnapshotRequest) {
+            snapshotRequestCount++
+            // Always return 409 with the SAME handle — simulates a CDN
+            // serving a cached 409 that never rotates the handle
+            throw new FetchError(
+              409,
+              JSON.stringify([{ headers: { control: `must-refetch` } }]),
+              [{ headers: { control: `must-refetch` } }],
+              { [SHAPE_HANDLE_HEADER]: `stuck-handle` },
+              url
+            )
+          }
+
+          return new Response(`[]`, {
+            status: 200,
+            headers: new Headers({
+              'electric-schema': schema,
+              'electric-offset': `0_0`,
+              'electric-handle': `stuck-handle`,
+            }),
+          })
+        })
+
+        const shapeStream = new ShapeStream({
+          url: `${BASE_URL}/v1/shape`,
+          params: { table: issuesTableUrl },
+          log: `changes_only`,
+          liveSse,
+          signal: aborter.signal,
+          fetchClient,
+        })
+
+        await expect(
+          shapeStream.fetchSnapshot({
+            orderBy: `title ASC`,
+            limit: 100,
+          })
+        ).rejects.toThrow(/retry loop/)
+
+        // Should have used cache busters on retries (same handle detected)
+        const snapshotUrls = capturedUrls.filter((u) =>
+          new URL(u).searchParams.has(`subset__order_by`)
+        )
+        const usedCacheBuster = snapshotUrls.some((u) =>
+          new URL(u).searchParams.has(`cache_buster`)
+        )
+        expect(usedCacheBuster).toBe(true)
+        expect(snapshotRequestCount).toBeGreaterThan(1)
+      }
+    )
+
+    it(
       `fetchSnapshot with POST method sends subset params in request body`,
       { timeout: 10000 },
       async ({ issuesTableUrl, insertIssues, aborter }) => {
