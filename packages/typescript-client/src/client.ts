@@ -1996,10 +1996,11 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
         return this.fetchSnapshot(opts)
       }
+      // Non-409 error — reset retry counter so next call gets full budget
+      this.#snapshotRetryCount = 0
       throw e
     }
 
-    // Successful fetch — reset snapshot retry counter
     this.#snapshotRetryCount = 0
 
     // Handle non-OK responses from custom fetch clients that bypass the wrapper chain
