@@ -409,6 +409,9 @@ Clients subscribed to an expired shape will receive a `409 Conflict` response, p
 
 This is useful for controlling resource usage on the server, especially in multi-tenant deployments or environments where many distinct shapes may be created over time.
 
+> [!Note] Deprecated alias
+> The previous environment variable `ELECTRIC_EXPERIMENTAL_MAX_SHAPES` is still supported as a fallback. If `ELECTRIC_MAX_SHAPES` is set, it takes precedence. The deprecated name will be removed in a future release.
+
 </EnvVarConfig>
 
 ## Feature Flags
