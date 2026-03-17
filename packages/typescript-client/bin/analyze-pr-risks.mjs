@@ -63,10 +63,14 @@ if (failOnFindings && findings.length > 0) {
 
 function getDefaultRange() {
   try {
-    const mergeBase = execFileSync(`git`, [`merge-base`, `origin/main`, `HEAD`], {
-      encoding: `utf8`,
-      stdio: [`ignore`, `pipe`, `ignore`],
-    }).trim()
+    const mergeBase = execFileSync(
+      `git`,
+      [`merge-base`, `origin/main`, `HEAD`],
+      {
+        encoding: `utf8`,
+        stdio: [`ignore`, `pipe`, `ignore`],
+      }
+    ).trim()
 
     if (mergeBase.length > 0) {
       return `${mergeBase}...HEAD`

@@ -16,7 +16,7 @@ import { Message, Row, ChangeMessage } from '../src/types'
 import { MissingHeadersError } from '../src/error'
 import { resolveValue } from '../src'
 import { TransformFunction } from '../src/parser'
-import { SHAPE_HANDLE_HEADER } from '../src/constants'
+import { CACHE_BUSTER_QUERY_PARAM, SHAPE_HANDLE_HEADER } from '../src/constants'
 import { mockVisibilityApi } from './support/mock-fetch-harness'
 
 const BASE_URL = inject(`baseUrl`)
@@ -2527,7 +2527,7 @@ describe.for(fetchAndSse)(
           new URL(u).searchParams.has(`subset__order_by`)
         )
         const usedCacheBuster = snapshotUrls.some((u) =>
-          new URL(u).searchParams.has(`cache_buster`)
+          new URL(u).searchParams.has(CACHE_BUSTER_QUERY_PARAM)
         )
         expect(usedCacheBuster).toBe(true)
         expect(snapshotRequestCount).toBeGreaterThan(1)

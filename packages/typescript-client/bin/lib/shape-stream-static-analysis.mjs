@@ -91,7 +91,11 @@ export function analyzeShapeStreamClient(filePath = CLIENT_FILE) {
       file: filePath,
       line: report.primaryLine,
       locations: uniqueLocations([
-        { file: filePath, line: report.primaryLine, label: `first async write` },
+        {
+          file: filePath,
+          line: report.primaryLine,
+          label: `first async write`,
+        },
         ...report.writerLines.map((line) => ({
           file: filePath,
           line,
@@ -266,7 +270,9 @@ export function formatAnalysisResult(result, options = {}) {
     lines.push(`Recursive Methods:`)
     for (const report of result.reports.recursiveMethods) {
       const cycles =
-        report.callees.length === 0 ? `no internal calls` : report.callees.join(`, `)
+        report.callees.length === 0
+          ? `no internal calls`
+          : report.callees.join(`, `)
       lines.push(
         `  ${report.name} (${path.relative(result.packageDir, report.file)}:${report.line}) -> ${cycles}`
       )
@@ -334,10 +340,7 @@ function analyzeMethod(sourceFile, methodNames, fieldNames, methodNode) {
     const member = getThisMemberName(node)
     if (!member || methodNames.has(member) || !fieldNames.has(member)) return
 
-    if (
-      ts.isCallExpression(node.parent) &&
-      node.parent.expression === node
-    ) {
+    if (ts.isCallExpression(node.parent) && node.parent.expression === node) {
       return
     }
 
@@ -384,11 +387,11 @@ function buildClassInfo(sourceFile, classDecl) {
       methodNames.add(formatMemberName(member.name))
       continue
     }
-
   }
 
   for (const member of classDecl.members) {
-    if (!ts.isMethodDeclaration(member) || !member.body || !member.name) continue
+    if (!ts.isMethodDeclaration(member) || !member.body || !member.name)
+      continue
     methods.set(
       formatMemberName(member.name),
       analyzeMethod(sourceFile, methodNames, fieldNames, member)
@@ -406,10 +409,13 @@ function buildClassInfo(sourceFile, classDecl) {
 function buildRecursiveMethodReport(classInfo) {
   const graph = new Map()
   for (const [name, method] of classInfo.methods) {
-    graph.set(
-      name,
-      [...new Set(method.calls.map((call) => call.callee).filter((callee) => callee !== name))]
-    )
+    graph.set(name, [
+      ...new Set(
+        method.calls
+          .map((call) => call.callee)
+          .filter((callee) => callee !== name)
+      ),
+    ])
   }
 
   const recursiveSet = new Set()
@@ -495,7 +501,9 @@ function buildSharedFieldReport(classInfo) {
     const highRiskField = /(?:Buster|Retry)/.test(field)
 
     if (constructUrlConsumes) {
-      reasons.push(`${field} is consumed by #constructUrl, which multiple paths call`)
+      reasons.push(
+        `${field} is consumed by #constructUrl, which multiple paths call`
+      )
     }
     if (publicMethodTouches) {
       reasons.push(`${field} is reachable from a public API surface`)
@@ -537,15 +545,9 @@ function stronglyConnectedComponents(graph) {
     for (const neighbor of graph.get(node) ?? []) {
       if (!indices.has(neighbor)) {
         visit(neighbor)
-        lowLinks.set(
-          node,
-          Math.min(lowLinks.get(node), lowLinks.get(neighbor))
-        )
+        lowLinks.set(node, Math.min(lowLinks.get(node), lowLinks.get(neighbor)))
       } else if (onStack.has(neighbor)) {
-        lowLinks.set(
-          node,
-          Math.min(lowLinks.get(node), indices.get(neighbor))
-        )
+        lowLinks.set(node, Math.min(lowLinks.get(node), indices.get(neighbor)))
       }
     }
 
@@ -631,7 +633,8 @@ function isWritePosition(node) {
   }
 
   if (
-    (ts.isPrefixUnaryExpression(parent) || ts.isPostfixUnaryExpression(parent)) &&
+    (ts.isPrefixUnaryExpression(parent) ||
+      ts.isPostfixUnaryExpression(parent)) &&
     (parent.operator === ts.SyntaxKind.PlusPlusToken ||
       parent.operator === ts.SyntaxKind.MinusMinusToken)
   ) {
@@ -642,7 +645,9 @@ function isWritePosition(node) {
 }
 
 function getLine(sourceFile, node) {
-  return sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line + 1
+  return (
+    sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line + 1
+  )
 }
 
 function formatMemberName(nameNode) {
