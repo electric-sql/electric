@@ -630,9 +630,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
   #lastConstructedUrl?: string
   #consecutiveDuplicateUrlCount = 0
   #maxDuplicateUrlRetries = 5
-  #snapshotRetryCount = 0
   #maxSnapshotRetries = 5
-  #snapshotCacheBuster?: string
 
   constructor(options: ShapeStreamOptions<GetExtensions<T>>) {
     this.options = { subscribe: true, ...options }
@@ -1921,6 +1919,19 @@ export class ShapeStream<T extends Row<unknown> = Row>
     responseOffset: Offset | null
     responseHandle: string | null
   }> {
+    return this.#fetchSnapshotWithRetry(opts, 0)
+  }
+
+  async #fetchSnapshotWithRetry(
+    opts: SubsetParams,
+    retryCount: number,
+    cacheBuster?: string
+  ): Promise<{
+    metadata: SnapshotMetadata
+    data: Array<ChangeMessage<T>>
+    responseOffset: Offset | null
+    responseHandle: string | null
+  }> {
     const method = opts.method ?? this.options.subsetMethod ?? `GET`
     const usePost = method === `POST`
 
@@ -1944,14 +1955,10 @@ export class ShapeStream<T extends Row<unknown> = Row>
       fetchOptions = { headers: result.requestHeaders }
     }
 
-    // Apply snapshot-local cache buster (set by same-handle 409 retry)
-    if (this.#snapshotCacheBuster) {
-      fetchUrl.searchParams.set(
-        CACHE_BUSTER_QUERY_PARAM,
-        this.#snapshotCacheBuster
-      )
+    // Apply cache buster from same-handle 409 retry
+    if (cacheBuster) {
+      fetchUrl.searchParams.set(CACHE_BUSTER_QUERY_PARAM, cacheBuster)
       fetchUrl.searchParams.sort()
-      this.#snapshotCacheBuster = undefined
     }
 
     // Capture handle before fetch to avoid race conditions if it changes during the request
@@ -1966,9 +1973,8 @@ export class ShapeStream<T extends Row<unknown> = Row>
       // Unlike #requestShape, we don't call #reset() here as that would
       // clear the pause lock and break requestSnapshot's pause/resume logic.
       if (e instanceof FetchError && e.status === 409) {
-        this.#snapshotRetryCount++
-        if (this.#snapshotRetryCount > this.#maxSnapshotRetries) {
-          this.#snapshotRetryCount = 0
+        const nextRetryCount = retryCount + 1
+        if (nextRetryCount > this.#maxSnapshotRetries) {
           throw new FetchError(
             502,
             undefined,
@@ -1989,14 +1995,13 @@ export class ShapeStream<T extends Row<unknown> = Row>
         // For snapshot 409s, only update the handle — don't reset offset/schema/etc.
         // The main stream is paused and should not be disturbed.
         const nextHandle = e.headers[SHAPE_HANDLE_HEADER]
+        let nextCacheBuster: string | undefined
         if (nextHandle) {
           this.#syncState = this.#syncState.withHandle(nextHandle)
           // If 409 returned the same handle, the URL won't change —
-          // add a snapshot-local cache buster to prevent an infinite loop.
-          // Uses a dedicated field instead of #refetchCacheBuster because the
-          // main stream can consume the shared field before the recursive call.
+          // pass a cache buster to the next retry to force a unique URL.
           if (nextHandle === usedHandle) {
-            this.#snapshotCacheBuster = createCacheBuster()
+            nextCacheBuster = createCacheBuster()
           }
         } else {
           console.warn(
@@ -2004,17 +2009,17 @@ export class ShapeStream<T extends Row<unknown> = Row>
               `This likely indicates a proxy or CDN stripping required headers.`,
             new Error(`stack trace`)
           )
-          this.#snapshotCacheBuster = createCacheBuster()
+          nextCacheBuster = createCacheBuster()
         }
 
-        return this.fetchSnapshot(opts)
+        return this.#fetchSnapshotWithRetry(
+          opts,
+          nextRetryCount,
+          nextCacheBuster
+        )
       }
-      // Non-409 error — reset retry counter so next call gets full budget
-      this.#snapshotRetryCount = 0
       throw e
     }
-
-    this.#snapshotRetryCount = 0
 
     // Handle non-OK responses from custom fetch clients that bypass the wrapper chain
     if (!response.ok) {
