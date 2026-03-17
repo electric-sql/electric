@@ -122,14 +122,10 @@ defmodule Electric.Shapes.ConsumerRegistry do
 
     # Remove stale ETS entries for suspended handles so that start_consumer!
     # can register fresh replacements on retry.
-    Enum.each(suspended, fn {handle, _event} ->
-      :ets.delete(table, handle)
-    end)
+    Enum.each(suspended, fn {handle, _event} -> do_remove_consumer(handle, table) end)
 
     # Clean up ETS entries for crashed consumers
-    Enum.each(crashed, fn {handle, _reason} ->
-      :ets.delete(table, handle)
-    end)
+    Enum.each(crashed, fn {handle, _reason} -> do_remove_consumer(handle, table) end)
 
     # Only retry suspended consumers, not crashed ones
     retry_undeliverable = publish(suspended, registry_state, max_retries - 1)
