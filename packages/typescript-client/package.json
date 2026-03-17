@@ -69,6 +69,8 @@
     "url": "git+https://github.com/electric-sql/electric.git"
   },
   "scripts": {
+    "analyze:pr": "node ./bin/analyze-pr-risks.mjs",
+    "analyze:shape-stream": "node ./bin/analyze-shape-stream-risks.mjs",
     "build": "shx rm -rf dist && tsup && tsc -p tsconfig.build.json",
     "format": "eslint . --fix",
     "prepack": "pnpm build",

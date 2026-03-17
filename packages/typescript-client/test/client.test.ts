@@ -16,7 +16,7 @@ import { Message, Row, ChangeMessage } from '../src/types'
 import { MissingHeadersError } from '../src/error'
 import { resolveValue } from '../src'
 import { TransformFunction } from '../src/parser'
-import { SHAPE_HANDLE_HEADER } from '../src/constants'
+import { CACHE_BUSTER_QUERY_PARAM, SHAPE_HANDLE_HEADER } from '../src/constants'
 import { mockVisibilityApi } from './support/mock-fetch-harness'
 
 const BASE_URL = inject(`baseUrl`)
@@ -2463,6 +2463,78 @@ describe.for(fetchAndSse)(
     )
 
     it(
+      `fetchSnapshot throws after repeated 409s with same handle`,
+      { timeout: 10000 },
+      async ({ issuesTableUrl, aborter }) => {
+        let snapshotRequestCount = 0
+        const capturedUrls: string[] = []
+        const schema = JSON.stringify({
+          id: { type: `text` },
+          title: { type: `text` },
+        })
+
+        const fetchClient = vi.fn(async (input: string | URL | Request) => {
+          const url = input instanceof Request ? input.url : input.toString()
+          const urlObj = new URL(url)
+          capturedUrls.push(url)
+
+          const isSnapshotRequest =
+            urlObj.searchParams.has(`subset__limit`) ||
+            urlObj.searchParams.has(`subset__order_by`)
+
+          if (isSnapshotRequest) {
+            snapshotRequestCount++
+            // Always return 409 with the SAME handle — simulates a CDN
+            // serving a cached 409 that never rotates the handle
+            throw new FetchError(
+              409,
+              JSON.stringify([{ headers: { control: `must-refetch` } }]),
+              [{ headers: { control: `must-refetch` } }],
+              { [SHAPE_HANDLE_HEADER]: `stuck-handle` },
+              url
+            )
+          }
+
+          return new Response(`[]`, {
+            status: 200,
+            headers: new Headers({
+              'electric-schema': schema,
+              'electric-offset': `0_0`,
+              'electric-handle': `stuck-handle`,
+            }),
+          })
+        })
+
+        const shapeStream = new ShapeStream({
+          url: `${BASE_URL}/v1/shape`,
+          params: { table: issuesTableUrl },
+          log: `changes_only`,
+          liveSse,
+          signal: aborter.signal,
+          fetchClient,
+          handle: `stuck-handle`,
+        })
+
+        await expect(
+          shapeStream.fetchSnapshot({
+            orderBy: `title ASC`,
+            limit: 100,
+          })
+        ).rejects.toThrow(/retry loop/)
+
+        // Should have used cache busters on retries (same handle detected)
+        const snapshotUrls = capturedUrls.filter((u) =>
+          new URL(u).searchParams.has(`subset__order_by`)
+        )
+        const usedCacheBuster = snapshotUrls.some((u) =>
+          new URL(u).searchParams.has(CACHE_BUSTER_QUERY_PARAM)
+        )
+        expect(usedCacheBuster).toBe(true)
+        expect(snapshotRequestCount).toBeGreaterThan(1)
+      }
+    )
+
+    it(
       `fetchSnapshot with POST method sends subset params in request body`,
       { timeout: 10000 },
       async ({ issuesTableUrl, insertIssues, aborter }) => {
@@ -2880,15 +2952,18 @@ it(
       expect(warnMock).toHaveBeenCalledWith(
         expect.stringContaining(
           `[Electric] SSE connections are closing immediately`
-        )
+        ),
+        expect.any(Error)
       )
       expect(warnMock).toHaveBeenCalledWith(
-        expect.stringContaining(`Falling back to long polling`)
+        expect.stringContaining(`Falling back to long polling`),
+        expect.any(Error)
       )
       expect(warnMock).toHaveBeenCalledWith(
         expect.stringContaining(
           `Do NOT disable caching entirely - Electric uses cache headers to enable request collapsing`
-        )
+        ),
+        expect.any(Error)
       )
 
       // Wait a bit more to ensure we have some requests after fallback
@@ -3027,7 +3102,8 @@ it(
       expect(warnMock).toHaveBeenCalledWith(
         expect.stringContaining(
           `[Electric] SSE connections are closing immediately`
-        )
+        ),
+        expect.any(Error)
       )
 
       // Count SSE requests before 409

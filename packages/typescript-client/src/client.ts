@@ -621,7 +621,8 @@ export class ShapeStream<T extends Row<unknown> = Row>
   #fastLoopBackoffMaxMs = 5_000
   #fastLoopConsecutiveCount = 0
   #fastLoopMaxCount = 5
-  #refetchCacheBuster?: string
+  #pendingRequestShapeCacheBuster?: string
+  #maxSnapshotRetries = 5
 
   constructor(options: ShapeStreamOptions<GetExtensions<T>>) {
     this.options = { subscribe: true, ...options }
@@ -801,8 +802,16 @@ export class ShapeStream<T extends Row<unknown> = Row>
     this.#unsubscribeFromWakeDetection?.()
   }
 
-  async #requestShape(): Promise<void> {
-    if (this.#pauseLock.isPaused) return
+  async #requestShape(requestShapeCacheBuster?: string): Promise<void> {
+    const activeCacheBuster =
+      requestShapeCacheBuster ?? this.#pendingRequestShapeCacheBuster
+
+    if (this.#pauseLock.isPaused) {
+      if (activeCacheBuster) {
+        this.#pendingRequestShapeCacheBuster = activeCacheBuster
+      }
+      return
+    }
 
     if (
       !this.options.subscribe &&
@@ -830,6 +839,11 @@ export class ShapeStream<T extends Row<unknown> = Row>
       url,
       resumingFromPause
     )
+
+    if (activeCacheBuster) {
+      fetchUrl.searchParams.set(CACHE_BUSTER_QUERY_PARAM, activeCacheBuster)
+      fetchUrl.searchParams.sort()
+    }
     const abortListener = await this.#createAbortListener(signal)
     const requestAbortController = this.#requestAbortController! // we know that it is not undefined because it is set by `this.#createAbortListener`
 
@@ -840,9 +854,14 @@ export class ShapeStream<T extends Row<unknown> = Row>
       if (abortListener && signal) {
         signal.removeEventListener(`abort`, abortListener)
       }
+      if (activeCacheBuster) {
+        this.#pendingRequestShapeCacheBuster = activeCacheBuster
+      }
       this.#requestAbortController = undefined
       return
     }
+
+    this.#pendingRequestShapeCacheBuster = undefined
 
     try {
       await this.#fetchShape({
@@ -892,12 +911,14 @@ export class ShapeStream<T extends Row<unknown> = Row>
         }
 
         const newShapeHandle = e.headers[SHAPE_HANDLE_HEADER]
+        let nextRequestShapeCacheBuster: string | undefined
         if (!newShapeHandle) {
           console.warn(
             `[Electric] Received 409 response without a shape handle header. ` +
-              `This likely indicates a proxy or CDN stripping required headers.`
+              `This likely indicates a proxy or CDN stripping required headers.`,
+            new Error(`stack trace`)
           )
-          this.#refetchCacheBuster = createCacheBuster()
+          nextRequestShapeCacheBuster = createCacheBuster()
         }
         this.#reset(newShapeHandle)
 
@@ -911,7 +932,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
             ? [e.json]
             : []
         await this.#publish(messages409 as Message<T>[])
-        return this.#requestShape()
+        return this.#requestShape(nextRequestShapeCacheBuster)
       } else {
         // errors that have reached this point are not actionable without
         // additional user input, such as 400s or failures to read the
@@ -984,7 +1005,8 @@ export class ShapeStream<T extends Row<unknown> = Row>
           `If this persists, check that your proxy includes all query parameters ` +
           `(especially 'handle' and 'offset') in its cache key, ` +
           `and that required Electric headers are forwarded to the client. ` +
-          `For more information visit the troubleshooting guide: ${TROUBLESHOOTING_URL}`
+          `For more information visit the troubleshooting guide: ${TROUBLESHOOTING_URL}`,
+        new Error(`stack trace`)
       )
 
       if (this.#currentFetchUrl) {
@@ -1155,16 +1177,6 @@ export class ShapeStream<T extends Row<unknown> = Row>
       fetchUrl.searchParams.set(EXPIRED_HANDLE_QUERY_PARAM, expiredHandle)
     }
 
-    // Add one-shot cache buster when a 409 response lacked a handle header
-    // (e.g. proxy stripped it). Ensures each retry has a unique URL.
-    if (this.#refetchCacheBuster) {
-      fetchUrl.searchParams.set(
-        CACHE_BUSTER_QUERY_PARAM,
-        this.#refetchCacheBuster
-      )
-      this.#refetchCacheBuster = undefined
-    }
-
     // sort query params in-place for stable URLs and improved cache hits
     fetchUrl.searchParams.sort()
 
@@ -1247,7 +1259,8 @@ export class ShapeStream<T extends Row<unknown> = Row>
           `The response contained handle "${shapeHandle}" which was previously marked as expired. ` +
           `Check that your proxy includes all query parameters (especially 'handle' and 'offset') in its cache key. ` +
           `For more information visit the troubleshooting guide: ${TROUBLESHOOTING_URL} ` +
-          `Retrying with a random cache buster to bypass the stale cache (attempt ${this.#syncState.staleCacheRetryCount}/${this.#maxStaleCacheRetries}).`
+          `Retrying with a random cache buster to bypass the stale cache (attempt ${this.#syncState.staleCacheRetryCount}/${this.#maxStaleCacheRetries}).`,
+        new Error(`stack trace`)
       )
       throw new StaleCacheError(
         `Received stale cached response with expired handle "${shapeHandle}". ` +
@@ -1257,15 +1270,11 @@ export class ShapeStream<T extends Row<unknown> = Row>
     }
 
     if (transition.action === `ignored`) {
-      // We already have a valid handle, so ignore the entire stale response
-      // (both metadata and body) to prevent a mismatch between our current
-      // handle and the stale data.
       console.warn(
-        `[Electric] Received stale cached response with expired shape handle. ` +
-          `This should not happen and indicates a proxy/CDN caching misconfiguration. ` +
-          `The response contained handle "${shapeHandle}" which was previously marked as expired. ` +
-          `Check that your proxy includes all query parameters (especially 'handle' and 'offset') in its cache key. ` +
-          `Ignoring the stale response and continuing with handle "${this.#syncState.handle}".`
+        `[Electric] Response was ignored by state "${this.#syncState.kind}". ` +
+          `The response body will be skipped. ` +
+          `This may indicate a proxy/CDN caching issue or a client state machine bug.`,
+        new Error(`stack trace`)
       )
       return false
     }
@@ -1277,7 +1286,8 @@ export class ShapeStream<T extends Row<unknown> = Row>
     if (!Array.isArray(batch)) {
       console.warn(
         `[Electric] #onMessages called with non-array argument (${typeof batch}). ` +
-          `This is a client bug — please report it.`
+          `This is a client bug — please report it.`,
+        new Error(`stack trace`)
       )
       return
     }
@@ -1503,7 +1513,8 @@ export class ShapeStream<T extends Row<unknown> = Row>
             `Falling back to long polling. ` +
             `Your proxy must support streaming SSE responses (not buffer the complete response). ` +
             `Configuration: Nginx add 'X-Accel-Buffering: no', Caddy add 'flush_interval -1' to reverse_proxy. ` +
-            `Note: Do NOT disable caching entirely - Electric uses cache headers to enable request collapsing for efficiency.`
+            `Note: Do NOT disable caching entirely - Electric uses cache headers to enable request collapsing for efficiency.`,
+          new Error(`stack trace`)
         )
       } else if (transition.wasShortConnection) {
         // Exponential backoff with full jitter: random(0, min(cap, base * 2^attempt))
@@ -1776,7 +1787,8 @@ export class ShapeStream<T extends Row<unknown> = Row>
       console.warn(
         `[Electric] Snapshot "${snapshotReason}" has held the pause lock for 30s — ` +
           `possible hung request or leaked lock. ` +
-          `Current holders: ${[...new Set([snapshotReason])].join(`, `)}`
+          `Current holders: ${[...new Set([snapshotReason])].join(`, `)}`,
+        new Error(`stack trace`)
       )
     }, 30_000)
 
@@ -1814,7 +1826,8 @@ export class ShapeStream<T extends Row<unknown> = Row>
           console.warn(
             `[Electric] Snapshot response metadata was not accepted ` +
               `by state "${this.#syncState.kind}" (action: ${transition.action}). ` +
-              `Stream offset was not advanced from snapshot.`
+              `Stream offset was not advanced from snapshot.`,
+            new Error(`stack trace`)
           )
         }
       }
@@ -1846,6 +1859,19 @@ export class ShapeStream<T extends Row<unknown> = Row>
     responseOffset: Offset | null
     responseHandle: string | null
   }> {
+    return this.#fetchSnapshotWithRetry(opts, 0)
+  }
+
+  async #fetchSnapshotWithRetry(
+    opts: SubsetParams,
+    retryCount: number,
+    cacheBuster?: string
+  ): Promise<{
+    metadata: SnapshotMetadata
+    data: Array<ChangeMessage<T>>
+    responseOffset: Offset | null
+    responseHandle: string | null
+  }> {
     const method = opts.method ?? this.options.subsetMethod ?? `GET`
     const usePost = method === `POST`
 
@@ -1869,6 +1895,12 @@ export class ShapeStream<T extends Row<unknown> = Row>
       fetchOptions = { headers: result.requestHeaders }
     }
 
+    // Apply cache buster from same-handle 409 retry
+    if (cacheBuster) {
+      fetchUrl.searchParams.set(CACHE_BUSTER_QUERY_PARAM, cacheBuster)
+      fetchUrl.searchParams.sort()
+    }
+
     // Capture handle before fetch to avoid race conditions if it changes during the request
     const usedHandle = this.#syncState.handle
 
@@ -1881,6 +1913,20 @@ export class ShapeStream<T extends Row<unknown> = Row>
       // Unlike #requestShape, we don't call #reset() here as that would
       // clear the pause lock and break requestSnapshot's pause/resume logic.
       if (e instanceof FetchError && e.status === 409) {
+        const nextRetryCount = retryCount + 1
+        if (nextRetryCount > this.#maxSnapshotRetries) {
+          throw new FetchError(
+            502,
+            undefined,
+            undefined,
+            {},
+            fetchUrl.toString(),
+            `Snapshot request stuck in 409 retry loop after ${this.#maxSnapshotRetries} attempts. ` +
+              `This indicates a proxy/CDN misconfiguration. ` +
+              `For more information visit the troubleshooting guide: ${TROUBLESHOOTING_URL}`
+          )
+        }
+
         if (usedHandle) {
           const shapeKey = canonicalShapeKey(fetchUrl)
           expiredShapesCache.markExpired(shapeKey, usedHandle)
@@ -1889,17 +1935,28 @@ export class ShapeStream<T extends Row<unknown> = Row>
         // For snapshot 409s, only update the handle — don't reset offset/schema/etc.
         // The main stream is paused and should not be disturbed.
         const nextHandle = e.headers[SHAPE_HANDLE_HEADER]
+        let nextCacheBuster: string | undefined
         if (nextHandle) {
           this.#syncState = this.#syncState.withHandle(nextHandle)
+          // If 409 returned the same handle, the URL won't change —
+          // pass a cache buster to the next retry to force a unique URL.
+          if (nextHandle === usedHandle) {
+            nextCacheBuster = createCacheBuster()
+          }
         } else {
           console.warn(
             `[Electric] Received 409 response without a shape handle header. ` +
-              `This likely indicates a proxy or CDN stripping required headers.`
+              `This likely indicates a proxy or CDN stripping required headers.`,
+            new Error(`stack trace`)
           )
-          this.#refetchCacheBuster = createCacheBuster()
+          nextCacheBuster = createCacheBuster()
         }
 
-        return this.fetchSnapshot(opts)
+        return this.#fetchSnapshotWithRetry(
+          opts,
+          nextRetryCount,
+          nextCacheBuster
+        )
       }
       throw e
     }

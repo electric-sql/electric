@@ -69,9 +69,9 @@ describe(`shape stream state machine`, () => {
     expect(state.staleCacheBuster).toBe(`cb-1`)
   })
 
-  // 3. SyncingState ignores stale response when it has a valid handle
-  it(`ignores stale response metadata when local handle exists`, () => {
-    scenario({ handle: `good-handle` })
+  // 3. SyncingState enters stale-retry on stale response even when it has a valid handle
+  it(`enters stale-retry on stale response even when local handle exists`, () => {
+    const { state } = scenario({ handle: `good-handle` })
       .response({ responseHandle: `good-handle` })
       .expectKind(`syncing`)
       .expectHandle(`good-handle`)
@@ -81,10 +81,33 @@ describe(`shape stream state machine`, () => {
         responseCursor: `cursor-stale`,
         expiredHandle: `expired-handle`,
       })
-      .expectAction(`ignored`)
-      .expectKind(`syncing`)
+      .expectAction(`stale-retry`)
+      .expectKind(`stale-retry`)
       .expectHandle(`good-handle`)
       .done()
+
+    expect(state.staleCacheRetryCount).toBe(1)
+    expect(state.staleCacheBuster).toBe(`cb-1`)
+  })
+
+  // 3b. LiveState enters stale-retry on stale response (LiveState has its own handleResponseMetadata)
+  it(`LiveState enters stale-retry on stale response`, () => {
+    const { state } = scenario()
+      .response({ responseHandle: `good-handle` })
+      .expectKind(`syncing`)
+      .messages({ hasUpToDateMessage: true })
+      .expectKind(`live`)
+      .response({
+        responseHandle: `expired-handle`,
+        expiredHandle: `expired-handle`,
+      })
+      .expectAction(`stale-retry`)
+      .expectKind(`stale-retry`)
+      .expectHandle(`good-handle`)
+      .done()
+
+    expect(state.staleCacheRetryCount).toBe(1)
+    expect(state.staleCacheBuster).toBe(`cb-1`)
   })
 
   // 4. SyncingState → LiveState on up-to-date message
@@ -843,7 +866,7 @@ describe(`shape stream state machine`, () => {
     expect(state.offset).toBe(`10_1`)
   })
 
-  it(`PausedState ignores stale metadata without unpausing`, () => {
+  it(`PausedState enters stale-retry on stale metadata without unpausing`, () => {
     const { state } = scenario({ handle: `good-handle` })
       .response({ responseHandle: `good-handle` })
       .expectKind(`syncing`)
@@ -855,7 +878,7 @@ describe(`shape stream state machine`, () => {
         responseCursor: `cursor-stale`,
         expiredHandle: `expired-handle`,
       })
-      .expectAction(`ignored`)
+      .expectAction(`stale-retry`)
       .expectKind(`paused`)
       .done()
 
@@ -930,13 +953,12 @@ describe(`shape stream state machine`, () => {
   })
 })
 
-describe(`schema undefined + ignored stale response`, () => {
-  it(`ignored stale response should return state unchanged (schema remains undefined)`, () => {
+describe(`schema undefined + stale response`, () => {
+  it(`stale response should not adopt schema (enters stale-retry preserving current fields)`, () => {
     // Scenario: client resumes from persisted handle/offset but has no schema yet.
     // First response is stale (responseHandle matches expiredHandle).
-    // checkStaleResponse sees we have a local handle → returns 'ignored'.
-    // The state machine correctly returns 'ignored' without updating any fields.
-    // client.ts is responsible for skipping body parsing when it sees 'ignored'.
+    // checkStaleResponse enters stale-retry with currentFields (schema stays undefined).
+    // client.ts throws StaleCacheError and retries with a cache buster.
     const { state } = scenario({ handle: `my-handle` })
       .response({ responseHandle: `my-handle` })
       .expectAction(`accepted`)
@@ -946,7 +968,7 @@ describe(`schema undefined + ignored stale response`, () => {
         expiredHandle: `stale-handle`,
         responseSchema: { id: { type: `text` } },
       })
-      .expectAction(`ignored`)
+      .expectAction(`stale-retry`)
       .done()
 
     expect(state.schema).toBeUndefined()
