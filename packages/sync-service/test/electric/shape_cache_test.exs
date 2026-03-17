@@ -1272,6 +1272,36 @@ defmodule Electric.ShapeCacheTest do
                GenServer.whereis(Electric.Shapes.Consumer.Materializer.name(stack_id, dep_handle))
              )
     end
+
+    test "replaces stale PID in registry with a new consumer", ctx do
+      %{stack_id: stack_id} = ctx
+
+      {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape, stack_id)
+      :started = ShapeCache.await_snapshot_start(shape_handle, stack_id)
+
+      original_pid = Shapes.ConsumerRegistry.whereis(stack_id, shape_handle)
+      assert is_pid(original_pid)
+      assert Process.alive?(original_pid)
+
+      # Restart shape cache to clear all running consumers but preserve shape status
+      restart_shape_cache(ctx)
+
+      refute Shapes.ConsumerRegistry.whereis(stack_id, shape_handle)
+
+      # Insert a stale (dead) PID into the registry to simulate the bug scenario
+      stale_pid = spawn(fn -> :ok end)
+      ref = Process.monitor(stale_pid)
+      assert_receive {:DOWN, ^ref, :process, ^stale_pid, _reason}
+      refute Process.alive?(stale_pid)
+
+      Shapes.ConsumerRegistry.register_consumer(stale_pid, shape_handle, stack_id)
+      assert Shapes.ConsumerRegistry.whereis(stack_id, shape_handle) == stale_pid
+
+      # start_consumer_for_handle should detect the stale PID and start a new consumer
+      assert {:ok, new_pid} = ShapeCache.start_consumer_for_handle(shape_handle, stack_id)
+      assert Process.alive?(new_pid)
+      assert new_pid != stale_pid
+    end
   end
 
   defp stream_to_list(stream, sort_col \\ "value") do
