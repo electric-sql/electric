@@ -49,7 +49,7 @@ defmodule ElectricTelemetry.ApplicationTelemetry do
       ),
       Reporters.Otel.child_spec(opts, metrics: metrics),
       Reporters.Prometheus.child_spec(opts, metrics: metrics),
-      Reporters.Statsd.child_spec(opts, metrics: Reporters.Statsd.application_metrics())
+      Reporters.Statsd.child_spec(opts, metrics: metrics)
     ]
   end
 

@@ -67,7 +67,9 @@ defmodule ElectricTelemetry.StackTelemetry do
         name: :"stack_prometheus_telemetry_#{stack_id}",
         metrics: metrics
       ),
-      Reporters.Statsd.child_spec(opts, metrics: Reporters.Statsd.stack_metrics(opts.stack_id))
+      Reporters.Statsd.child_spec(opts,
+        metrics: metrics ++ Reporters.Statsd.router_dispatch_metrics()
+      )
     ]
   end
 
