@@ -20,11 +20,11 @@ defmodule Electric.Replication.ShapeLogCollector.FlushTrackerTest do
       assert_receive {:flush_confirmed, 1}
     end
 
-    test "should not notify if there are flushes are unconfirmed", %{
+    test "should not notify if there are shapes with unconfirmed flushes", %{
       tracker: tracker
     } do
       _ = handle_txn(tracker, batch(lsn: 1), ["shape1"])
-      refute_receive {:flush_confirmed, _}, 50
+      refute_receive {:flush_confirmed, _}
     end
 
     test "non-commit fragment tracks shapes but does not notify or update last_seen", %{
@@ -38,7 +38,7 @@ defmodule Electric.Replication.ShapeLogCollector.FlushTrackerTest do
       }
 
       tracker = handle_txn(tracker, fragment, ["shape1"])
-      refute_receive {:flush_confirmed, _}, 50
+      refute_receive {:flush_confirmed, _}
       # Shape is tracked in last_flushed
       refute FlushTracker.empty?(tracker)
     end
@@ -52,7 +52,7 @@ defmodule Electric.Replication.ShapeLogCollector.FlushTrackerTest do
       }
 
       tracker = handle_txn(tracker, fragment, [])
-      refute_receive {:flush_confirmed, _}, 50
+      refute_receive {:flush_confirmed, _}
       assert FlushTracker.empty?(tracker)
     end
 
@@ -73,7 +73,7 @@ defmodule Electric.Replication.ShapeLogCollector.FlushTrackerTest do
       tracker = FlushTracker.handle_flush_notification(tracker, "shape1", LogOffset.new(5, 4))
 
       # No notification yet — no commit seen
-      refute_receive {:flush_confirmed, _}, 50
+      refute_receive {:flush_confirmed, _}
       assert FlushTracker.empty?(tracker)
 
       # Commit arrives with shape1 in affected_shapes (via EventRouter's shapes_in_txn)
@@ -223,7 +223,7 @@ defmodule Electric.Replication.ShapeLogCollector.FlushTrackerTest do
         FlushTracker.handle_flush_notification(tracker, "shape1", LogOffset.new(5, 5))
 
       # No notification — no commit seen
-      refute_receive {:flush_confirmed, _}, 50
+      refute_receive {:flush_confirmed, _}
       assert FlushTracker.empty?(tracker)
 
       # Commit with no new changes — shape was flushed, skipped
@@ -296,28 +296,52 @@ defmodule Electric.Replication.ShapeLogCollector.FlushTrackerTest do
         |> handle_txn(batch(lsn: 5, last_offset: 10), ["shape1", "shape2"])
         |> handle_txn(batch(lsn: 6, last_offset: 10), ["shape1", "shape2"])
         |> FlushTracker.handle_flush_notification("shape1", LogOffset.new(5, 10))
-        |> FlushTracker.handle_flush_notification("shape2", LogOffset.new(5, 10))
 
       assert_receive {:flush_confirmed, 3}
+
+      tracker = tracker |> FlushTracker.handle_flush_notification("shape2", LogOffset.new(5, 10))
       assert_receive {:flush_confirmed, 4}
-      refute_receive {:flush_confirmed, _}, 50
+      refute_receive {:flush_confirmed, _}
 
-      FlushTracker.handle_flush_notification(tracker, "shape1", LogOffset.new(6, 3))
+      tracker = tracker |> FlushTracker.handle_flush_notification("shape1", LogOffset.new(6, 3))
+      refute_receive {:flush_confirmed, _}
 
-      refute_receive {:flush_confirmed, _}, 50
+      tracker = tracker |> FlushTracker.handle_flush_notification("shape2", LogOffset.new(6, 3))
+      assert_receive {:flush_confirmed, 5}
+
+      tracker = tracker |> FlushTracker.handle_flush_notification("shape2", LogOffset.new(6, 10))
+      refute_receive {:flush_confirmed, _}
+
+      FlushTracker.handle_flush_notification(tracker, "shape1", LogOffset.new(6, 10))
+      assert_receive {:flush_confirmed, 6}
     end
 
     test "should correctly handle no affected shapes", %{tracker: tracker} do
       tracker =
         tracker
         |> handle_txn(batch(lsn: 7, last_offset: 10), [])
+
+      # No shapes in the txn fragment, last_seen_offset becomes (7, 10)
+      # last_flushed is empty → caught up → notify
+      assert_receive {:flush_confirmed, 7}
+
+      tracker =
+        tracker
         |> handle_txn(batch(lsn: 10, last_offset: 10), ["shape1"])
         |> handle_txn(batch(lsn: 11, last_offset: 10), [])
         |> handle_txn(batch(lsn: 12, last_offset: 10), ["shape2"])
         |> FlushTracker.handle_flush_notification("shape1", LogOffset.new(10, 10))
+
+      assert_receive {:flush_confirmed, 10}
+
+      tracker =
+        tracker
         |> FlushTracker.handle_flush_notification("shape2", LogOffset.new(12, 10))
 
-      assert_receive {:flush_confirmed, 7}
+      # There's no notification for lsn=11 because by the time that txn fragment is
+      # processed, flush tracker's last_flushed is non-empty: it was populated with
+      # prev_log_offset=(10-1, 0) after processing the first txn fragment for shape1.
+
       assert_receive {:flush_confirmed, 12}
 
       assert FlushTracker.empty?(tracker)
@@ -345,6 +369,91 @@ defmodule Electric.Replication.ShapeLogCollector.FlushTrackerTest do
 
       _ = FlushTracker.handle_shape_removed(tracker, "shape1")
       assert_receive {:flush_confirmed, 1}
+    end
+  end
+
+  describe "dead consumer blocks flush advancement" do
+    test "a single unflushed shape permanently blocks last_global_flushed_offset", %{
+      tracker: tracker
+    } do
+      # Two shapes receive txn at lsn 5
+      tracker =
+        handle_txn(tracker, batch(lsn: 5, last_offset: 10), ["alive_shape", "dead_shape"])
+
+      # alive_shape flushes completely — global offset advances to one behind
+      # the minimum incomplete (dead_shape is stuck at prev_log_offset with tx_offset=4)
+      tracker =
+        FlushTracker.handle_flush_notification(tracker, "alive_shape", LogOffset.new(5, 10))
+
+      assert_receive {:flush_confirmed, 3}
+
+      # dead_shape never flushes. A new txn at lsn 6 affects only alive_shape.
+      tracker = handle_txn(tracker, batch(lsn: 6, last_offset: 10), ["alive_shape"])
+
+      # alive_shape flushes again
+      tracker =
+        FlushTracker.handle_flush_notification(tracker, "alive_shape", LogOffset.new(6, 10))
+
+      # Still stuck — dead_shape holds the global offset at 3 (tx_offset 4 minus 1)
+      refute_receive {:flush_confirmed, _}
+
+      # Tracker is not empty because dead_shape is still pending
+      refute FlushTracker.empty?(tracker)
+    end
+
+    test "handle_shape_removed unblocks stuck flush advancement", %{tracker: tracker} do
+      # Two shapes receive txn at lsn 5
+      tracker =
+        handle_txn(tracker, batch(lsn: 5, last_offset: 10), ["alive_shape", "dead_shape"])
+
+      # alive_shape flushes completely
+      tracker =
+        FlushTracker.handle_flush_notification(tracker, "alive_shape", LogOffset.new(5, 10))
+
+      assert_receive {:flush_confirmed, 3}
+
+      # Remove dead_shape — this is the escape hatch
+      tracker = FlushTracker.handle_shape_removed(tracker, "dead_shape")
+
+      # Now fully caught up: last_seen was lsn 5, so notification is 5
+      assert_receive {:flush_confirmed, 5}
+
+      # Tracker is now empty
+      assert FlushTracker.empty?(tracker)
+    end
+
+    test "multiple dead shapes at different offsets: removing earliest unblocks to next stuck point",
+         %{tracker: tracker} do
+      # dead_shape_1 and alive_shape participate in txn 5
+      tracker =
+        handle_txn(tracker, batch(lsn: 5, last_offset: 10), ["dead_shape_1", "alive_shape"])
+
+      # dead_shape_2 and alive_shape participate in txn 6
+      tracker =
+        handle_txn(tracker, batch(lsn: 6, last_offset: 10), ["dead_shape_2", "alive_shape"])
+
+      # alive_shape flushes both txns
+      tracker =
+        FlushTracker.handle_flush_notification(tracker, "alive_shape", LogOffset.new(5, 10))
+
+      # First flush notification: dead_shape_1 is stuck at prev_log_offset tx_offset=4
+      assert_receive {:flush_confirmed, 3}
+
+      tracker =
+        FlushTracker.handle_flush_notification(tracker, "alive_shape", LogOffset.new(6, 10))
+
+      # No additional notification — global offset is still stuck at dead_shape_1's position
+      refute_receive {:flush_confirmed, _}
+
+      # Remove dead_shape_1 — advances to dead_shape_2's stuck point (tx_offset=5, minus 1 = 4)
+      tracker = FlushTracker.handle_shape_removed(tracker, "dead_shape_1")
+      assert_receive {:flush_confirmed, 4}
+
+      # Remove dead_shape_2 — now fully caught up, last_seen is lsn 6
+      tracker = FlushTracker.handle_shape_removed(tracker, "dead_shape_2")
+      assert_receive {:flush_confirmed, 6}
+
+      assert FlushTracker.empty?(tracker)
     end
   end
 

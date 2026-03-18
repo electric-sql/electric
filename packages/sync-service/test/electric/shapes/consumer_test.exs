@@ -24,6 +24,7 @@ defmodule Electric.Shapes.ConsumerTest do
       expect_shape_status: 1,
       patch_snapshotter: 1,
       assert_shape_cleanup: 1,
+      register_as_replication_client: 1,
       complete_txn_fragment: 3,
       txn_fragments: 3,
       txn_fragment: 4
@@ -1773,6 +1774,108 @@ defmodule Electric.Shapes.ConsumerTest do
       assert_receive {:flush_boundary_updated, ^tx_offset}, @receive_timeout
     end
 
+    @tag allow_subqueries: false, with_pure_file_storage_opts: [flush_period: 1]
+    test "dead consumer doesn't block flush notifications from advancing as live consumers flush to storage",
+         ctx do
+      {shape_handle1, _} = ShapeCache.get_or_create_shape_handle(@shape1, ctx.stack_id)
+      {shape_handle2, _} = ShapeCache.get_or_create_shape_handle(@shape2, ctx.stack_id)
+      ref1 = Shapes.Consumer.register_for_changes(ctx.stack_id, shape_handle1)
+      ref2 = Shapes.Consumer.register_for_changes(ctx.stack_id, shape_handle2)
+
+      :started = ShapeCache.await_snapshot_start(shape_handle1, ctx.stack_id)
+      :started = ShapeCache.await_snapshot_start(shape_handle2, ctx.stack_id)
+
+      register_as_replication_client(ctx.stack_id)
+
+      lsn1 = Lsn.from_integer(10)
+
+      # First txn affects both shapes
+      txn1 =
+        complete_txn_fragment(11, lsn1, [
+          %Changes.NewRecord{
+            relation: {"public", "test_table"},
+            record: %{"id" => "1"},
+            log_offset: LogOffset.new(lsn1, 0)
+          },
+          %Changes.NewRecord{
+            relation: {"public", "other_table"},
+            record: %{"id" => "1"},
+            log_offset: LogOffset.new(lsn1, 2)
+          }
+        ])
+
+      assert :ok = ShapeLogCollector.handle_event(txn1, ctx.stack_id)
+      assert_receive {^ref1, :new_changes, _}, @receive_timeout
+      assert_receive {^ref2, :new_changes, _}, @receive_timeout
+
+      # Both consumers flush. We get two flush boundary notifications because
+      # at the time of the first consumer flush FlushTracker didn't yet have a real
+      # last_global_flushed_offset, so it eagerly confirms that a "virtual previous txn" with
+      # offset (10 - 1) - 1 has definitely been flushed.
+      # When the second consumer's flush arrives at it, it can see that there are no more
+      # pending flushes for lsn=10 and so it has definitely been flushed now.
+      assert_receive {:flush_boundary_updated, 8}, @receive_timeout
+      assert_receive {:flush_boundary_updated, 10}, @receive_timeout
+
+      # Terminate the consumer for shape2. Using :shutdown as the exit reason
+      # means ShapeCleaner.handle_writer_termination/3 does NOT remove the shape
+      # from ShapeLogCollector, so it stays in the FlushTracker indefinitely.
+      dead_consumer_pid = Consumer.whereis(ctx.stack_id, shape_handle2)
+      dead_ref = Process.monitor(dead_consumer_pid)
+      Process.exit(dead_consumer_pid, :shutdown)
+      assert_receive {:DOWN, ^dead_ref, :process, ^dead_consumer_pid, :shutdown}
+
+      lsn2 = Lsn.from_integer(20)
+
+      # Second txn affects both shapes, but the dead consumer won't flush
+      txn2 =
+        complete_txn_fragment(12, lsn2, [
+          %Changes.NewRecord{
+            relation: {"public", "test_table"},
+            record: %{"id" => "2"},
+            log_offset: LogOffset.new(lsn2, 0)
+          },
+          %Changes.NewRecord{
+            relation: {"public", "other_table"},
+            record: %{"id" => "2"},
+            log_offset: LogOffset.new(lsn2, 2)
+          }
+        ])
+
+      log =
+        ExUnit.CaptureLog.capture_log(fn ->
+          # By the time this call to handle_event() returns, the dead consumer will have been
+          # removed from FlushTracker's state, so it can advance its confirmed flushed offset to
+          # the last processed transaction.
+          assert :ok = ShapeLogCollector.handle_event(txn2, ctx.stack_id)
+        end)
+
+      assert log =~
+               ~s'Consumer processes crashed or missing during broadcast: %{#{inspect(shape_handle2)} => :noproc}'
+
+      assert_receive {^ref1, :new_changes, _}, @receive_timeout
+      assert_receive {:flush_boundary_updated, 20}, @receive_timeout
+
+      lsn3 = Lsn.from_integer(30)
+
+      # Third txn affects only the live shape
+      txn3 =
+        complete_txn_fragment(13, lsn3, [
+          %Changes.NewRecord{
+            relation: {"public", "test_table"},
+            record: %{"id" => "3"},
+            log_offset: LogOffset.new(lsn3, 0)
+          }
+        ])
+
+      assert :ok = ShapeLogCollector.handle_event(txn3, ctx.stack_id)
+      assert_receive {^ref1, :new_changes, _}, @receive_timeout
+
+      # shape1 has flushed all the way through lsn 30 so that's what we expect FlushTracker to
+      # advance its confirmed offset to.
+      assert_receive {:flush_boundary_updated, 30}, @receive_timeout
+    end
+
     test "UPDATE during pending move-in is converted to INSERT and query result skips duplicate key",
          ctx do
       # This test exposes an edge case where:
@@ -1917,12 +2020,6 @@ defmodule Electric.Shapes.ConsumerTest do
       pid: consumer_pid,
       functions: [:append_to_log!, :append_fragment_to_log!, :signal_txn_commit!]
     )
-  end
-
-  # Make the test process pose as a replication client to receive flush notifications from ShapeLogCollector
-  defp register_as_replication_client(stack_id) do
-    {:via, Registry, {reg_name, key}} = Electric.Postgres.ReplicationClient.name(stack_id)
-    Registry.register(reg_name, key, nil)
   end
 
   defp get_log_items_from_storage(offset, shape_storage) do

@@ -16,7 +16,8 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
   alias Support.Fixtures
   alias Support.RepatchExt
 
-  import Support.TestUtils, only: [patch_calls: 3, expect_calls: 2]
+  import Support.TestUtils,
+    only: [patch_calls: 3, expect_calls: 2, register_as_replication_client: 1]
 
   import Support.ComponentSetup
 
@@ -530,9 +531,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       prev_lsn = Lsn.increment(lsn, -1)
       last_log_offset = LogOffset.new(lsn, 0)
 
-      {:via, Registry, {name, key}} = Electric.Postgres.ReplicationClient.name(ctx.stack_id)
-
-      Registry.register(name, key, nil)
+      register_as_replication_client(ctx.stack_id)
 
       irrelevant_txn = transaction(99, prev_lsn, [])
 
@@ -577,9 +576,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
         end
       )
 
-      {:via, Registry, {name, key}} = Electric.Postgres.ReplicationClient.name(ctx.stack_id)
-
-      Registry.register(name, key, nil)
+      register_as_replication_client(ctx.stack_id)
 
       lsn = Lsn.from_integer(55)
       log_offset = LogOffset.new(lsn, 0)
@@ -598,8 +595,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
     end
 
     test "correctly broadcasts flush when transaction has already been processed before", ctx do
-      {:via, Registry, {name, key}} = Electric.Postgres.ReplicationClient.name(ctx.stack_id)
-      Registry.register(name, key, nil)
+      register_as_replication_client(ctx.stack_id)
 
       LsnTracker.set_last_processed_lsn(ctx.stack_id, Lsn.from_integer(50))
       assert :ok = ShapeLogCollector.mark_as_ready(ctx.stack_id)
@@ -621,8 +617,7 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
     end
 
     test "correctly broadcasts flush when consumers die", ctx do
-      {:via, Registry, {name, key}} = Electric.Postgres.ReplicationClient.name(ctx.stack_id)
-      Registry.register(name, key, nil)
+      register_as_replication_client(ctx.stack_id)
 
       lsn = Lsn.from_integer(20)
       log_offset = LogOffset.new(lsn, 0)
@@ -1123,7 +1118,165 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
 
       assert :ok = ShapeLogCollector.handle_event(fragment, ctx.stack_id)
 
-      refute_receive {:global_last_seen_lsn, _}, 50
+      refute_receive {:global_last_seen_lsn, _}
+    end
+  end
+
+  describe "FlushTracker advancement when consumer is killed mid-transaction" do
+    setup :setup_log_collector
+
+    setup ctx do
+      parent = self()
+
+      stub_inspector(
+        load_relation_oid: fn {"public", "test_table"}, _ ->
+          {:ok, {1234, {"public", "test_table"}}}
+        end,
+        load_relation_info: fn 1234, _ ->
+          {:ok, %{id: 1234, schema: "public", name: "test_table", parent: nil, children: nil}}
+        end,
+        load_column_info: fn 1234, _ ->
+          {:ok, [%{pk_position: 0, name: "id", is_generated: false}]}
+        end
+      )
+
+      # Two consumers for two shape handles
+      consumer1 =
+        start_supervised!(
+          {Support.TransactionConsumer,
+           id: :alive,
+           stack_id: ctx.stack_id,
+           parent: parent,
+           shape: @shape,
+           shape_handle: "shape-alive"},
+          id: {:consumer, :alive}
+        )
+
+      consumer2 =
+        start_supervised!(
+          {Support.TransactionConsumer,
+           id: :doomed,
+           stack_id: ctx.stack_id,
+           parent: parent,
+           shape: @shape,
+           shape_handle: "shape-doomed"},
+          id: {:consumer, :doomed}
+        )
+
+      %{consumer_alive: consumer1, consumer_doomed: consumer2}
+    end
+
+    test "FlushTracker advances past undeliverable shapes from crashed consumer", ctx do
+      register_as_replication_client(ctx.stack_id)
+
+      # Send a transaction that affects both shapes and causes the consumer for "shape-doomed"
+      # to terminate. As a consequence, SLC should NOT track "shape-doomed" in FlushTracker.
+      lsn = Lsn.from_integer(42)
+      log_offset = LogOffset.new(lsn, 0)
+
+      txn =
+        transaction(100, lsn, [
+          %Changes.NewRecord{
+            relation: {"public", "test_table"},
+            record: %{
+              "id" => "stop-with-reason",
+              "handle" => "shape-doomed",
+              "reason" => {:shutdown, :test}
+            },
+            log_offset: log_offset
+          }
+        ])
+
+      log =
+        ExUnit.CaptureLog.capture_log(fn ->
+          assert :ok = ShapeLogCollector.handle_event(txn, ctx.stack_id)
+        end)
+
+      assert log =~
+               ~s'Consumer processes crashed or missing during broadcast: %{"shape-doomed" => {:shutdown, :test}}'
+
+      # The alive consumer receives the transaction
+      assert_receive {Support.TransactionConsumer, {:alive, _pid}, [_txn]}
+
+      # Flush only the alive consumer — FlushTracker should advance because
+      # the doomed shape was never tracked (excluded as undeliverable).
+      ShapeLogCollector.notify_flushed(ctx.stack_id, "shape-alive", log_offset)
+
+      expected_lsn = Lsn.to_integer(lsn)
+      assert_receive {:flush_boundary_updated, ^expected_lsn}
+    end
+
+    test "FlushTracker advances when consumer crashes on later fragment of multi-fragment txn",
+         ctx do
+      register_as_replication_client(ctx.stack_id)
+
+      lsn = Lsn.from_integer(42)
+
+      # Fragment 1 (non-commit): both consumers are alive and process it.
+      # FlushTracker starts tracking both shapes.
+      frag1 = %TransactionFragment{
+        xid: 100,
+        lsn: lsn,
+        last_log_offset: LogOffset.new(lsn, 0),
+        has_begin?: true,
+        commit: nil,
+        changes: [
+          %Changes.NewRecord{
+            relation: {"public", "test_table"},
+            record: %{"id" => "1"},
+            log_offset: LogOffset.new(lsn, 0)
+          }
+        ],
+        affected_relations: MapSet.new([{"public", "test_table"}])
+      }
+
+      assert :ok = ShapeLogCollector.handle_event(frag1, ctx.stack_id)
+
+      # Both consumers receive fragment 1
+      assert_receive {Support.TransactionConsumer, {:alive, _}, [_]}
+      assert_receive {Support.TransactionConsumer, {:doomed, _}, [_]}
+
+      # Kill the doomed consumer between fragments. This simulates a crash
+      # that happens after fragment 1 was processed but before fragment 2.
+      kill_consumer(ctx.consumer_doomed, :kill)
+
+      # Fragment 2 (commit): the doomed consumer is dead.
+      # ConsumerRegistry.broadcast detects the dead PID → crashed.
+      # SLC must remove "shape-doomed" from FlushTracker (it was tracked
+      # in fragment 1) and exclude it from the commit fragment tracking.
+      frag2 = %TransactionFragment{
+        xid: 100,
+        lsn: lsn,
+        last_log_offset: LogOffset.new(lsn, 5),
+        has_begin?: false,
+        commit: %Changes.Commit{},
+        changes: [
+          %Changes.NewRecord{
+            relation: {"public", "test_table"},
+            record: %{"id" => "2"},
+            log_offset: LogOffset.new(lsn, 5)
+          }
+        ],
+        affected_relations: MapSet.new([{"public", "test_table"}])
+      }
+
+      log =
+        ExUnit.CaptureLog.capture_log(fn ->
+          assert :ok = ShapeLogCollector.handle_event(frag2, ctx.stack_id)
+        end)
+
+      assert log =~
+               ~s'Consumer processes crashed or missing during broadcast: %{"shape-doomed" => :noproc}'
+
+      # The alive consumer receives fragment 2
+      assert_receive {Support.TransactionConsumer, {:alive, _}, [_]}
+
+      # Flush both fragments for the alive consumer — FlushTracker should advance
+      # because the doomed shape was removed from tracking when its crash was detected.
+      ShapeLogCollector.notify_flushed(ctx.stack_id, "shape-alive", LogOffset.new(lsn, 5))
+
+      expected_lsn = Lsn.to_integer(lsn)
+      assert_receive {:flush_boundary_updated, ^expected_lsn}
     end
   end
 
@@ -1143,5 +1296,12 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       changes: changes,
       affected_relations: MapSet.new(changes, & &1.relation)
     }
+  end
+
+  defp kill_consumer(pid, reason) do
+    ref = Process.monitor(pid)
+    Process.exit(pid, reason)
+    expected_reason = with :kill <- reason, do: :killed
+    assert_receive {:DOWN, ^ref, :process, ^pid, ^expected_reason}
   end
 end

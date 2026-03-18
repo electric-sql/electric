@@ -548,20 +548,33 @@ defmodule Electric.Replication.ShapeLogCollector do
     OpenTelemetry.start_interval(:"shape_log_collector.publish.duration_µs")
     context = OpenTelemetry.get_current_context()
 
-    for layer <- DependencyLayers.get_for_handles(state.dependency_layers, affected_shapes) do
-      # Each publish is synchronous, so layers will be processed in order
-      layer_events =
-        Map.new(layer, fn handle ->
-          {handle, {:handle_event, Map.fetch!(events_by_handle, handle), context}}
-        end)
+    undeliverable_set =
+      for layer <- DependencyLayers.get_for_handles(state.dependency_layers, affected_shapes),
+          reduce: MapSet.new() do
+        acc ->
+          # Each publish is synchronous, so layers will be processed in order
+          layer_events =
+            Map.new(layer, fn handle ->
+              {handle, {:handle_event, Map.fetch!(events_by_handle, handle), context}}
+            end)
 
-      ConsumerRegistry.publish(layer_events, state.registry_state)
-    end
+          layer_undeliverable = ConsumerRegistry.publish(layer_events, state.registry_state)
+          layer_undeliverable |> Map.keys() |> Enum.into(acc)
+      end
 
     OpenTelemetry.start_interval(:"shape_log_collector.set_last_processed_lsn.duration_µs")
 
     lsn = Lsn.from_integer(state.last_processed_offset.tx_offset)
     LsnTracker.set_last_processed_lsn(state.stack_id, lsn)
+    delivered_shapes = MapSet.difference(affected_shapes, undeliverable_set)
+
+    # Remove shapes from FlushTracker that were already tracked in earlier
+    # fragments but are now undeliverable. This prevents stuck flush when
+    # a consumer processes fragment 1 but crashes on fragment 2.
+    flush_tracker =
+      Enum.reduce(undeliverable_set, state.flush_tracker, fn shape_handle, tracker ->
+        FlushTracker.handle_shape_removed(tracker, shape_handle)
+      end)
 
     flush_tracker =
       case event do
@@ -569,20 +582,21 @@ defmodule Electric.Replication.ShapeLogCollector do
           shapes_with_changes =
             for {id, frag} <- events_by_handle,
                 frag.change_count > 0,
+                not MapSet.member?(undeliverable_set, id),
                 do: id,
                 into: MapSet.new()
 
           if event.commit, do: LsnTracker.broadcast_last_seen_lsn(state.stack_id, lsn)
 
           FlushTracker.handle_txn_fragment(
-            state.flush_tracker,
+            flush_tracker,
             event,
-            affected_shapes,
+            delivered_shapes,
             shapes_with_changes
           )
 
         _ ->
-          state.flush_tracker
+          flush_tracker
       end
 
     %{state | flush_tracker: flush_tracker}

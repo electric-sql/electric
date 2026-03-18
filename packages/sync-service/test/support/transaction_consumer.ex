@@ -1,8 +1,7 @@
 defmodule Support.TransactionConsumer do
   use GenServer, restart: :temporary
 
-  alias Electric.Replication.Changes.Relation
-  alias Electric.Replication.Changes.TransactionFragment
+  alias Electric.Replication.Changes
 
   import ExUnit.Assertions
 
@@ -26,8 +25,8 @@ defmodule Support.TransactionConsumer do
       |> Enum.zip(received_evts)
       |> Enum.map(fn {expected, received} ->
         case expected do
-          %TransactionFragment{} = txn_fragment ->
-            assert %TransactionFragment{} = received
+          %Changes.TransactionFragment{} = txn_fragment ->
+            assert %Changes.TransactionFragment{} = received
 
             assert Map.drop(received, [:changes, :affected_relations, :change_count]) ==
                      Map.drop(txn_fragment, [:changes, :affected_relations, :change_count])
@@ -42,8 +41,8 @@ defmodule Support.TransactionConsumer do
 
             txn_fragment.xid
 
-          %Relation{id: id} ->
-            assert %Relation{id: ^id} = received
+          %Changes.Relation{id: id} ->
+            assert %Changes.Relation{id: ^id} = received
             id
         end
       end)
@@ -76,12 +75,29 @@ defmodule Support.TransactionConsumer do
     {:ok, %{id: id, stack_id: stack_id, parent: parent, shape_handle: shape_handle}}
   end
 
-  def handle_call({:handle_event, %TransactionFragment{} = txn_fragment, _ctx}, _from, state) do
+  def handle_call(
+        {:handle_event, %Changes.TransactionFragment{} = txn_fragment, _ctx},
+        _from,
+        state
+      ) do
     send(state.parent, {__MODULE__, {state.id, self()}, [txn_fragment]})
-    {:reply, :ok, state}
+
+    handle = state.shape_handle
+
+    case txn_fragment.changes do
+      [
+        %Changes.NewRecord{
+          record: %{"id" => "stop-with-reason", "handle" => ^handle, "reason" => reason}
+        }
+      ] ->
+        exit(reason)
+
+      _ ->
+        {:reply, :ok, state}
+    end
   end
 
-  def handle_call({:handle_event, %Relation{} = relation, _ctx}, _from, state) do
+  def handle_call({:handle_event, %Changes.Relation{} = relation, _ctx}, _from, state) do
     send(state.parent, {__MODULE__, {state.id, self()}, [relation]})
     {:reply, :ok, state}
   end
