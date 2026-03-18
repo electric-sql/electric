@@ -8,13 +8,13 @@ outline: deep
 
 # Privacy Policy
 
-Last Updated: March 5, 2026
+Last Updated: March 17, 2026
 
 This Privacy Policy describes the personal information that Electric DB Inc. ("Electric," "we," or "us") collect when you visit our websites, communicate with us, or use our services (collectively, the "Services"). Electric is the "controller" of your personal information, meaning we determine how and why it is processed.
 
 This Privacy Policy does not apply to any information we collect pursuant to agreements to provide Services to our enterprise customers. That information is governed by our enterprise agreements and [Data Processing Agreement](/about/legal/dpa).
 
-## Personal information we collect
+## Personal Information We Collect
 
 **Information you provide to us** may include:
 
@@ -32,16 +32,16 @@ We may collect this information using cookies, pixels, tags, and other similar t
 
 **Information we collect from third parties.** We may maintain pages on other platforms, such as pages on GitHub, X, Discord, and others. If you interact with us via these pages, we may receive your communications and other information about your interactions with us. Any information collected by the social media companies that maintain our pages is governed by the privacy policies of the providers and is not within our control.
 
-## How we use personal information
+## How We Use Personal Information
 
 We use your personal information for the following purposes:
 
 - **To provide the Services and respond to your inquiries.** Collection and use of your personal information may be necessary to provide the Services to you. This includes administering, hosting, and operating the Services, and communicating with you and responding to any inquiries you may have.
-- **To improve, monitor and personalise the Services.** It is in our legitimate business interests to analyse your use of the Services to allow us to evaluate and improve the Services and its features, and to create aggregated, de-identified or anonymous statistics, which we may use for lawful business purposes, including for Services analytics and strategic planning.
+- **To improve, monitor and personalize the Services.** It is in our legitimate business interests to analyze your use of the Services to allow us to evaluate and improve the Services and its features, and to create aggregated, de-identified or anonymous statistics, which we may use for lawful business purposes, including for Services analytics and strategic planning.
 - **Business promotion.** We may use personal information to promote our business, including to send you marketing communications as permitted by law. Such communications may include newsletters and notifications about special promotions, offers, and events that we think may be of interest to you, including by email and SMS. Except where consent is required, we undertake such marketing on the basis of our legitimate business interests to use your personal information for the purposes described above. Where we rely on your consent, you may withdraw your consent at any time, including by following the opt-out instructions in the Your Choices section below.
-- **For compliance and protection.** We use personal information to comply with our legal obligations and where it is in our legitimate interests to enforce any applicable terms and conditions, comply with legal obligations, defend against legal claims or disputes, protect the security and integrity of the Services, and identify and investigate fraudulent, harmful, unauthorised, unethical or illegal activity.
+- **For compliance and protection.** We use personal information to comply with our legal obligations and where it is in our legitimate interests to enforce any applicable terms and conditions, comply with legal obligations, defend against legal claims or disputes, protect the security and integrity of the Services, and identify and investigate fraudulent, harmful, unauthorized, unethical or illegal activity.
 
-## How we share personal information
+## How We Share Personal Information
 
 We may share your personal information with:
 
@@ -49,9 +49,9 @@ We may share your personal information with:
 - **Service providers**, including companies and individuals that provide services on our behalf or help us operate our Services or our business. These services include hosting, information technology, support, email delivery, advertising and marketing, and website analytics. We may also engage third-party artificial intelligence service providers to assist us with the operation of our business.
 - **Professional advisors**, such as lawyers, auditors, bankers and insurers, where necessary in the course of the professional services that they render to us.
 - **Authorities and others**, such as law enforcement, government authorities, and private parties, as we believe in good faith to be necessary or appropriate to comply with applicable laws or protect our rights and interests.
-- **Business transferees**, including acquirers and other relevant participants in business transactions (or negotiations for such transactions) involving a corporate divestiture, merger, consolidation, acquisition, reorganisation, sale or other disposition of all or any portion of the business or assets of, or equity interests in, us or our affiliates (including, in connection with a bankruptcy or similar proceedings).
+- **Business transferees**, including acquirers and other relevant participants in business transactions (or negotiations for such transactions) involving a corporate divestiture, merger, consolidation, acquisition, reorganization, sale or other disposition of all or any portion of the business or assets of, or equity interests in, us or our affiliates (including, in connection with a bankruptcy or similar proceedings).
 
-## Your choices
+## Your Choices
 
 **Unsubscribe from marketing communications.** You may opt out of our marketing-related communications by following the opt out or unsubscribe instructions contained in the marketing communication we send you. We may continue to send you administrative communications that are necessary for our relationship with you, such as relevant updates to our policies.
 
@@ -69,11 +69,11 @@ Where applicable, you can exercise privacy rights by contacting us as provided i
 
 In some instances, your choices may be limited, such as where fulfilling your request would impair the rights of others, our ability to provide a service you have requested, or our ability to comply with our legal obligations and enforce our legal rights. If you are not satisfied with how we address your request, you may submit a complaint by contacting us as provided in the [How to Contact Us](#how-to-contact-us) section below. Depending where you reside, you may also have the right to lodge a complaint with your local privacy or data protection regulator.
 
-## Data security
+## Data Security
 
-We employ a number of technical, organisational and physical safeguards designed to protect the personal information we collect. However, no security measures are failsafe and we cannot guarantee the security of your personal information.
+We employ a number of technical, organizational and physical safeguards designed to protect the personal information we collect. However, no security measures are failsafe and we cannot guarantee the security of your personal information.
 
-## Data retention
+## Data Retention
 
 The length of time we retain personal information will be determined based upon the following criteria: the length of time your personal information remains relevant; the length of time it is reasonable to keep records to demonstrate that we have fulfilled our duties and obligations; any limitation periods within which claims might be made; any retention periods prescribed by law or recommended by regulators, professional bodies or associations; the type of contract we have with you, and our business interest in keeping such information as stated in this Privacy Policy.
 
@@ -81,7 +81,7 @@ The length of time we retain personal information will be determined based upon 
 
 The Services are not intended for use by children. If we learn that we have collected personal information through our Services without the consent of the child's parent or guardian as required by law, we will delete it. If you believe that we might have any information from or about a child under 13, please contact us as provided below.
 
-## International data transfers
+## International Data Transfers
 
 In the context of providing you with our Services, we process personal information in the United States. By using our Services, you acknowledge that you are providing your information directly to us in the United States. We may also transfer your personal information to our affiliates and service providers in other jurisdictions. Please note that such jurisdictions may not provide the same protections as the data protection laws in your home country. We put in place safeguards to protect personal information that we transfer in accordance with applicable laws. For more information, please contact us as set out in the [How to Contact Us](#how-to-contact-us) section below.
 
@@ -89,6 +89,6 @@ In the context of providing you with our Services, we process personal informati
 
 We reserve the right to modify this Privacy Policy at any time. If we make material changes to this Privacy Policy, we will notify you by updating the date of this Privacy Policy and posting it on the Services.
 
-## How to contact us
+## How to Contact Us
 
 For more information or to exercise your rights, please contact us at: [support@electric-sql.com](mailto:support@electric-sql.com).

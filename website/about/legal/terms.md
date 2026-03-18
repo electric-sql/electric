@@ -1,14 +1,14 @@
 ---
-title: Terms of service
+title: Terms of Service
 description: >-
   Terms of Service for Electric DB Inc. governing access to
   and use of the Electric Services.
 outline: deep
 ---
 
-# Terms of service
+# Terms of Service
 
-Last Updated: March 12, 2026
+Last Updated: March 17, 2026
 
 These Electric Terms of Service ("Terms") govern access to and use of Electric and related products and services that link to these Terms (collectively, the "Services"). These Terms form a legally binding agreement between you and Electric (defined in Section 26).
 
@@ -91,7 +91,7 @@ You are responsible for monitoring communications from Electric regarding the Se
 
 The Services are designed and offered primarily for business and professional use, including by companies, organizations, developers, and individuals acting in a professional capacity (such as freelancers, contractors, and sole traders).
 
-## 4. Account registration and security
+## 4. Account Registration and Security
 
 ### 4.1 Registration and accuracy
 
@@ -99,7 +99,7 @@ To access the Services, you may be required to create an Account and provide reg
 
 You are responsible for all activity that occurs under your Account, including activity by Authorized Users, and for ensuring your use of the Services complies with these Terms and applicable law. Electric may rely on your Account information (including Workspace settings, user roles, and permissions) as authoritative for access control and billing.
 
-### 4.2 Account Credentials Security
+### 4.2 Account credentials security
 
 You are responsible for maintaining the confidentiality and security of your Account credentials, access tokens, API keys, and any authentication mechanisms used to access the Services. You must not share credentials except with Authorized Users who require access for permitted use of the Services. All usage initiated through your credentials (including API calls, Writes, Retention configuration, and Workspace activity) will be deemed authorized by you, and you are responsible for all associated usage and Fees, whether or not the activity was specifically authorized by you, except to the extent caused by Electric's breach of these Terms.
 
@@ -111,7 +111,7 @@ You must notify Electric without undue delay (and in any event within 24 hours, 
 
 ### 5.1 Tier selection and limits
 
-Electric does not charge for egress, reads, fan-out, or the number of connections. For clarity, any references to "unlimited egress" or "unlimited fan-out" refer to pricing, not a guarantee of unbounded capacity, and remain subject to (i) Tier limits, (ii) fair use protections, and (iii) Electric's right to protect the Services, including under Section 7 (Acceptable Use) and Section 5.8 (Fair Use and Protections).
+Electric does not charge for egress, reads, fan-out, or the number of connections. For clarity, any references to "unlimited egress" or "unlimited fan-out" refer to pricing, not a guarantee of unbounded capacity, and remain subject to (i) Tier limits, (ii) fair use protections, and (iii) Electric's right to protect the Services, including under Section 7 (Acceptable Use) and Section 7.5 (Fair Use and Protections).
 
 You must select a Tier through the dashboard, checkout flow, or any customer portal we make available (including via our payment processor). Each Tier may include different features, pricing, usage entitlements, limits, and support levels, as described in the Services, Documentation, and/or your Order. Tier details may vary by region and may change over time in accordance with these Terms.
 
@@ -280,7 +280,7 @@ You must not:
 
 For the avoidance of doubt, this Section 7.6 does not restrict the use of Electric's open source software in accordance with its applicable open source license terms.
 
-## 8. Customer Content and data rights
+## 8. Customer Content and Data Rights
 
 ### 8.1 Ownership
 
@@ -303,7 +303,7 @@ You are solely responsible for Customer Content and all consequences of transmit
 
 Electric does not routinely review, monitor, or moderate Customer Content, and Electric is not responsible for the accuracy, legality, or appropriateness of Customer Content. You acknowledge that Customer Content may be processed automatically by the Services (including caching, distribution, and delivery mechanisms), and Electric's provision of the Services does not constitute approval of Customer Content. While Customer Content is processed primarily by automated systems, Electric may access Customer Content where reasonably necessary to provide support requested by you, address security or abuse, comply with law, or enforce these Terms.
 
-## 9. Retention, deletion, and backups
+## 9. Retention, Deletion, and Backups
 
 ### 9.1 TTL and automatic expiry
 
@@ -352,17 +352,17 @@ Security is a shared responsibility between Electric and you. You are responsibl
 - implementing appropriate authentication and authorization controls for your end users;
 - maintaining secure credential handling practices, including protecting API keys and tokens and rotating them when necessary;
 - configuring the Services appropriately for your use case, including retention/TTL settings and access permissions;
-- securing access to your HTTP streams and any stream URLs, endpoints, credentials, tokens, or keys used to access the Services. Electric data streams are secured by credentials and these credentials must not be leaked in client-side systems and client access must be guarded by a secure worker or API endpoint. If customers do not do this, you may enable unauthorised access to Customer Content, resulting in data disclosure or misuse;
+- securing access to your HTTP streams and any stream URLs, endpoints, credentials, tokens, or keys used to access the Services. Electric data streams are secured by credentials and these credentials must not be leaked in client-side systems and client access must be guarded by a secure worker or API endpoint. If customers do not do this, you may enable unauthorized access to Customer Content, resulting in data disclosure or misuse;
 - ensuring your application code, infrastructure, and client environments are not vulnerable to common security issues (including injection, insecure deserialization, credential leakage, and client-side compromise); and
 - maintaining any required security and compliance controls applicable to your business, including for regulated data and sensitive workloads.
 
 Electric is not responsible for security incidents or breaches caused by your misconfiguration, insecure code, your systems, your third-party services, or compromised credentials.
 
-## 11. Third-party services and dependencies
+## 11. Third-party Services and Dependencies
 
 The Services may depend on, interoperate with, or be delivered using third-party systems, networks, and service providers ("Third-Party Services"). Third-Party Services may include infrastructure providers, content delivery networks, payment processors, identity providers, and other operational dependencies used to operate and support the Services.
 
-### 11.1 Core Infrastructure Sub-processors
+### 11.1 Core infrastructure sub-processors
 
 For transparency, Electric's core sub-processors typically include:
 
@@ -373,11 +373,11 @@ For transparency, Electric's core sub-processors typically include:
 
 Electric may use additional vendors and sub-processors from time to time in connection with the Services (including logging, monitoring, analytics, customer support tooling, and incident response), and may add, replace, or discontinue Third-Party Services as operational needs evolve. A current list of sub-processors may be made available on request to support@electric-sql.com.
 
-### 11.2 Sub-processor Changes
+### 11.2 Sub-processor changes
 
 Electric may add or replace sub-processors in the ordinary course of business. Where required by applicable law (including certain data protection laws), Electric will provide notice through reasonable means (such as the dashboard, email, or published sub-processor list) and will maintain commercially reasonable vendor selection and oversight practices consistent with the nature of the Services.
 
-### 11.3 Customer-Enabled Third-Party Integrations
+### 11.3 Customer-enabled third-party integrations
 
 Some features may allow you to connect the Services with third-party products or services that you choose (for example, databases, hosting environments, observability tools, authentication providers, or application frameworks). If you enable or use such integrations:
 
@@ -387,15 +387,15 @@ Some features may allow you to connect the Services with third-party products or
 
 You are responsible for ensuring that your use of any third-party integration complies with your obligations under these Terms and applicable law.
 
-### 11.4 Availability and Third-Party Failures
+### 11.4 Availability and third-party failures
 
 You acknowledge that Third-Party Services may experience outages, degradation, or failures that may affect the availability, latency, delivery, caching behavior, or performance of the Services. Electric will use commercially reasonable efforts to mitigate the impact of third-party incidents where practicable, but Electric does not control Third-Party Services and is not responsible for unavailability or performance issues caused by Third-Party Services, network conditions, or events outside Electric's reasonable control.
 
-### 11.5 No Implied Warranties for Third-Party Services
+### 11.5 No implied warranties for third-party services
 
 Third-Party Services are provided by their respective providers and are not warranted by Electric. Electric makes no representations or warranties regarding Third-Party Services and disclaims all liability arising from or related to Third-Party Services except to the extent caused by Electric's breach of these Terms.
 
-## 12. Intellectual property and open source
+## 12. Intellectual Property and Open Source
 
 ### 12.1 Electric IP
 
@@ -453,7 +453,7 @@ Confidential Information does not include information that the receiving party c
 
 These confidentiality obligations under this Section apply during the Term and for three (3) years thereafter, except for trade secrets, which remain protected for so long as they qualify as trade secrets under applicable law.
 
-## 15. Suspension and termination
+## 15. Suspension and Termination
 
 ### 15.1 Suspension
 
@@ -511,13 +511,13 @@ Electric may offer certain features, products, or functionality in alpha, beta, 
 
 To the fullest extent permitted by law, Electric will not be liable for any modification, suspension, discontinuance, interruption, or unavailability of the Services (including any Beta Features), including any resulting loss of data, loss of revenue, loss of profits, loss of goodwill, or business interruption, except to the extent caused by Electric's breach of these Terms and not otherwise disclaimed or limited herein.
 
-## 17. Data protection
+## 17. Data Protection
 
-To the extent Customer Content includes "Personal Data" or "Personal Information" (as defined under applicable privacy and data protection laws, including GDPR, UK GDPR, and CCPA/CPRA), you are responsible for determining the purposes and means of processing and for complying with applicable Data Protection Laws (including providing required notices, obtaining lawful bases or consents, honoring end-user rights, and implementing appropriate security controls in your applications). Electric processes such data solely to provide, secure, and support the Services, prevent abuse, and comply with law. Electric also processes account and administrative data relating to its relationship with you and your Authorised Users (such as contact details, authentication identifiers, billing information, support communications, and security logs) in accordance with its Privacy Policy.
+To the extent Customer Content includes "Personal Data" or "Personal Information" (as defined under applicable privacy and data protection laws, including GDPR, UK GDPR, and CCPA/CPRA), you are responsible for determining the purposes and means of processing and for complying with applicable Data Protection Laws (including providing required notices, obtaining lawful bases or consents, honoring end-user rights, and implementing appropriate security controls in your applications). Electric processes such data solely to provide, secure, and support the Services, prevent abuse, and comply with law. Electric also processes account and administrative data relating to its relationship with you and your Authorized Users (such as contact details, authentication identifiers, billing information, support communications, and security logs) in accordance with its Privacy Policy.
 
 Where required by Data Protection Laws, Electric will make available a Data Processing Addendum ("DPA") that governs Electric's processing of Personal Data within Customer Content as a processor/service provider (including sub-processing and international transfers where applicable). If a DPA is required for your use of the Services, the DPA is incorporated by reference and becomes part of these Terms upon acceptance in-product or execution by the parties. If there is a conflict between the DPA and these Terms regarding the processing of Customer Content Personal Data, the DPA will control to the extent of the conflict.
 
-## 18. IP infringement
+## 18. IP Infringement
 
 Because Electric provides infrastructure and does not control Customer Content, Electric does not adjudicate disputes, but may take action as required by law or to protect the Services.
 
@@ -529,27 +529,27 @@ Electric may, in its discretion, remove or disable access to the identified mate
 
 TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, THE SERVICES (INCLUDING ALL SOFTWARE, APIs, SDKs, DOCUMENTATION, CONTENT, AND ANY BETA FEATURES) ARE PROVIDED ON AN "AS IS" AND "AS AVAILABLE" BASIS, AND YOUR USE OF THE SERVICES IS AT YOUR SOLE RISK.
 
-### 19.1 No Warranties
+### 19.1 No warranties
 
 ELECTRIC DISCLAIMS ALL WARRANTIES, WHETHER EXPRESS, IMPLIED, STATUTORY, OR OTHERWISE, INCLUDING WITHOUT LIMITATION ANY IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, NON-INFRINGEMENT, TITLE, ACCURACY, RELIABILITY, OR COMPLETENESS, AND ANY WARRANTIES ARISING OUT OF COURSE OF DEALING OR USAGE OF TRADE. ELECTRIC DOES NOT WARRANT THAT THE SERVICES WILL MEET YOUR REQUIREMENTS OR BE UNINTERRUPTED, ERROR-FREE, SECURE, OR FREE OF HARMFUL COMPONENTS.
 
-### 19.2 No Guarantee of Continuous Availability or Delivery
+### 19.2 No guarantee of continuous availability or delivery
 
 Electric does not guarantee uninterrupted, timely, or lossless delivery under all real-world conditions, including without limitation network failures, client disconnections, browser/device sleep, DNS routing issues, service provider outages, cache behavior, regional failures, traffic spikes, scheduled or emergency maintenance, or your misconfiguration and implementation choices. Features such as durability, ordering, and resumability depend on correct configuration and may be affected by factors outside Electric's control.
 
-### 19.3 Customer Content and Third Parties
+### 19.3 Customer content and third parties
 
 Electric does not control, review, or monitor Customer Content and makes no representations or warranties regarding Customer Content. You are solely responsible for your Customer Content, applications, and how you use or rely on data delivered through the Services. The Services may depend on Third-Party Services and Electric is not responsible for failures caused by third parties or events outside Electric's reasonable control.
 
-### 19.4 Beta Features
+### 19.4 Beta features
 
 BETA FEATURES ARE PROVIDED "AS IS" AND MAY BE EXPERIMENTAL OR UNSTABLE, AND MAY BE CHANGED OR DISCONTINUED AT ANY TIME. ELECTRIC DISCLAIMS ALL WARRANTIES AND SUPPORT OBLIGATIONS FOR BETA FEATURES TO THE MAXIMUM EXTENT PERMITTED BY LAW, UNLESS EXPRESSLY STATED IN A WRITTEN ORDER.
 
-### 19.5 No Compliance or Legal Advice
+### 19.5 No compliance or legal advice
 
 Electric does not provide legal, regulatory, or compliance advice. You are solely responsible for determining whether your use of the Services complies with applicable laws, regulations, and industry requirements.
 
-## 20. Limitation of liability
+## 20. Limitation of Liability
 
 ### 20.1 Excluded damages
 
@@ -561,7 +561,7 @@ To the maximum extent permitted by applicable law, Electric's total aggregate li
 
 This limitation applies in the aggregate across all claims and causes of action, including claims relating to Customer Content, loss of data, security incidents, downtime, service interruptions, and delays.
 
-### 20.3 Special cap for PAYG Customers benefiting from the waived Fees
+### 20.3 Special cap for PAYG customers benefiting from the waived fees
 
 If you use the Services on a PAYG Tier or trial where your Fees to Electric for the Services during the applicable period were waived, Electric's total liability for all claims will not exceed US$100 (or the equivalent in local currency), to the maximum extent permitted by law.
 
@@ -575,7 +575,7 @@ You acknowledge that the Fees reflect the allocation of risk in these Terms and 
 
 ## 21. Indemnification
 
-### 21.1 Business Customers
+### 21.1 Business customers
 
 If you are a Business Customer, you will defend, indemnify, and hold harmless Electric, its affiliates, and their respective officers, directors, employees, contractors, and agents (collectively, the "Electric Parties") from and against any third-party claims, demands, investigations, liabilities, damages, losses, judgments, settlements, penalties, fines, and expenses (including reasonable attorneys' fees) arising out of or relating to: (a) your Customer Content, including any allegation that it infringes, misappropriates, or violates intellectual property, privacy, publicity, confidentiality, or other rights; (b) your collection, use, retention, disclosure, or processing of Personal Data through the Services and any instructions you provide to Electric regarding such processing; (c) your applications, products, systems, and end-user relationships, including any representations, warranties, service levels, or commitments you make to others; (d) your breach of these Terms (including Acceptable Use) or your violation of applicable law or regulation; or (e) any unauthorized access to or misuse of the Services through your Account, credentials, or API keys, including resulting from your failure to implement reasonable security controls.
 
@@ -594,7 +594,7 @@ You may not settle any indemnified claim in a manner that imposes liability, res
 
 If you are a Consumer, this Section 21 applies only to the extent permitted by mandatory law. Nothing in these Terms requires a Consumer to indemnify Electric for Electric's own negligence, breach of contract, or unlawful conduct where such indemnity would be unenforceable under applicable consumer protection laws.
 
-## 22. Governing law and jurisdiction
+## 22. Governing Law and Jurisdiction
 
 Nothing in these Terms limits any rights or remedies you may have under mandatory laws in your jurisdiction that cannot be excluded by contract. If any provision of these Terms conflicts with mandatory law, that mandatory law controls to the extent of the conflict.
 
@@ -604,7 +604,7 @@ You agree that any dispute arising out of or relating to these Terms or the Serv
 
 Nothing in this Section 22 prevents either party from seeking urgent injunctive or equitable relief in any court of competent jurisdiction.
 
-## 23. Export controls and sanctions
+## 23. Export Controls and Sanctions
 
 You will comply with all applicable export control, trade compliance, and economic sanctions laws and regulations in connection with your access to and use of the Services, including as applicable the laws of the United States, the United Kingdom, the European Union, and any other relevant jurisdictions ("Export and Sanctions Laws"). Electric may suspend or terminate access to the Services (in whole or in part) immediately if Electric reasonably determines that continued provision of the Services could violate Export and Sanctions Laws or create sanctions-related risk for Electric, its affiliates, or its service providers.
 

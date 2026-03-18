@@ -8,7 +8,7 @@ outline: deep
 
 # Subprocessor List
 
-Last Updated: March 12, 2026
+Last Updated: March 17, 2026
 
 Electric DB Inc. ("Electric") uses the following third-party subprocessors to provide the Electric Services. This list is maintained in accordance with our [Data Processing Addendum](/about/legal/dpa).
 

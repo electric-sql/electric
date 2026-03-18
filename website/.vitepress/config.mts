@@ -376,10 +376,11 @@ export default defineConfig({
             {
               text: 'Legal',
               items: [
-                { text: 'Terms of service', link: '/about/legal/terms' },
-                { text: 'Privacy Policy', link: '/about/legal/privacy' },
-                { text: 'Cookie Policy', link: '/about/legal/cookies' },
-                { text: 'DPA', link: '/about/legal/dpa' },
+                { text: 'Terms', link: '/about/legal/terms' },
+                { text: 'Privacy', link: '/about/legal/privacy' },
+                { text: 'Cookies', link: '/about/legal/cookies' },
+                { text: 'Data Processing', link: '/about/legal/dpa' },
+                { text: 'Subprocessor List', link: '/about/legal/subprocessors' },
               ],
               collapsed: false,
             },

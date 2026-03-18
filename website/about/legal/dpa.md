@@ -8,7 +8,7 @@ outline: deep
 
 # Data Processing Addendum
 
-Last Updated: March 12, 2026
+Last Updated: March 17, 2026
 
 When you use Electric's services, you may send us data that includes personal information about your users or other individuals. Data protection laws (including GDPR) require us to have a written agreement about how we process that data on your behalf. This Data Processing Addendum ("DPA") is that agreement.
 
@@ -72,7 +72,7 @@ The Standard Contractual Clauses are further completed as follows: the optional 
 
 ## Assistance and Notifications
 
-Upon Customer's request, Company will provide Customer with reasonable cooperation and assistance to the extent required to fulfil Customer's obligation under European Data Protection Law to:
+Upon Customer's request, Company will provide Customer with reasonable cooperation and assistance to the extent required to fulfill Customer's obligation under European Data Protection Law to:
 
 1. reply to investigations and inquiries from data protection regulators; and
 2. carry out a data protection impact assessment related to the services, where Customer does not otherwise have access to the relevant information necessary to perform such assessment.
@@ -84,7 +84,7 @@ Unless prohibited by Data Protection Law, Company must inform Customer without u
 3. is subject to a legal obligation that requires Company to Process Personal Data in contravention of Customer's instructions; or
 4. is otherwise unable to comply with Data Protection Law or this DPA.
 
-Upon becoming aware of a Security Incident, Company will inform Customer without undue delay and will provide timely information relating to the Security Incident as it becomes known or as is reasonably requested by Customer to allow Customer to fulfil its data breach reporting obligations under applicable Data Protection Law.
+Upon becoming aware of a Security Incident, Company will inform Customer without undue delay and will provide timely information relating to the Security Incident as it becomes known or as is reasonably requested by Customer to allow Customer to fulfill its data breach reporting obligations under applicable Data Protection Law.
 
 ## Audit
 
@@ -106,13 +106,13 @@ This DPA will be governed by and construed in accordance with governing law and 
 
 ## Annex I
 
-### A. List of Parties
+### A. List of parties
 
 **Data exporter (Controller):** The customer, as identified in the Electric [Terms of Service](/about/legal/terms).
 
 **Data importer (Processor):** Electric DB Inc., a Delaware corporation.
 
-### B. Description of Transfer
+### B. Description of transfer
 
 **Categories of data subjects whose personal data is transferred:**
 
@@ -158,7 +158,7 @@ Electric processes personal data within Customer Content solely to provide the E
 
 For the duration of the Services, plus any retention period required for deletion propagation, legal compliance, or as described in the Agreement.
 
-### C. Competent Supervisory Authority
+### C. Competent supervisory authority
 
 The competent supervisory authority shall be determined in accordance with the establishment or the location where the data subjects whose personal data is being transferred are located, as applicable under the GDPR.
 
