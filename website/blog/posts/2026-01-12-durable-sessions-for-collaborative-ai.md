@@ -208,7 +208,7 @@ A Durable Session is a state management pattern that makes AI and agentic apps c
 
 ### Layered protocols
 
-The key insight behind the [generalization of Electric into Durable&nbsp;Streams](/blog/2025/12/09/announcing-durable-streams) was not ***just*** that apps needed persistent, addressable, binary streams for presence and token streaming. (Although, of course, [they do](https://github.com/durable-streams/durable-streams?tab=readme-ov-file#the-missing-primitive)).
+The key insight behind the [generalization of Electric into Durable&nbsp;Streams](/blog/2025/12/09/announcing-durable-streams) was not ***just*** that apps needed persistent, addressable, binary streams for presence and token streaming. (Although, of course, [they do](https://durablestreams.com)).
 
 It was ***also*** to decouple the payload format from the delivery protocol. So the resilient, scalable, HTTP-based delivery protocol could sync any data format. That way, the Electric sync protocol (originally modelled on the change events emitted by Postgres logical replication) becomes just one of many structured state synchronization protocols layered on top of the core binary streams.
 
@@ -355,7 +355,7 @@ export const sessionSchema = createStateSchema({
 })
 ```
 
-This is then passed to the durable state layer [`StreamDB`](https://github.com/durable-streams/durable-streams/blob/main/packages/state/src/stream-db.ts), which streams the data over a Durable Stream and routes the message streams and session state into TanStack&nbsp;DB collections for you. The schema provides end-to-end type-safety and the transport and reactivity is delegated to the sync machinery.
+This is then passed to the durable state layer [`StreamDB`](https://durablestreams.com/stream-db), which streams the data over a Durable Stream and routes the message streams and session state into TanStack&nbsp;DB collections for you. The schema provides end-to-end type-safety and the transport and reactivity is delegated to the sync machinery.
 
 #### Derived collections
 

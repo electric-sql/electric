@@ -62,7 +62,7 @@ const result = await streamText({
 
 ### Learn more
 
-- [Durable&nbsp;Streams documentation](/primitives/durable-streams)
+- [Durable&nbsp;Streams documentation](https://durablestreams.com)
 - [Vercel AI SDK documentation](https://sdk.vercel.ai)
 - [Durable&nbsp;Streams GitHub](https://github.com/durable-streams/durable-streams)
 

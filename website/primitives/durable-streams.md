@@ -81,7 +81,7 @@ Durable&nbsp;Streams addresses this gap for apps and agents across all platforms
 
 ## How do they work?
 
-The core primitive is a byte stream that can be written to and consumed via an [open&nbsp;protocol](https://github.com/durable-streams/durable-streams/blob/main/PROTOCOL.md) using a wide range of [client&nbsp;libraries](https://github.com/durable-streams/durable-streams/tree/main/packages).
+The core primitive is a byte stream that can be written to and consumed via an [open&nbsp;protocol](https://github.com/durable-streams/durable-streams/blob/main/PROTOCOL.md) using a wide range of [client&nbsp;libraries](https://durablestreams.com/clients).
 
 ### Resilient, scalable data delivery
 
@@ -119,13 +119,22 @@ Durable&nbsp;Streams support multiple wrapper protocols for different use cases:
 
 ## More information
 
-See the [project on GitHub](https://github.com/durable-streams/durable-streams) for more info.
+See the [project website](https://durablestreams.com) for more info.
 
 <div class="actions cta-actions page-footer-actions left">
-  <div class="action">
+  <div class="action hidden-sm">
     <VPButton
-        href="https://github.com/durable-streams/durable-streams/blob/main/README.md"
-        text="README ↗"
+        href="https://durablestreams.com"
+        text="DurableStreams.com ↗"
+        target="_blank"
+        theme="durable-streams"
+    />
+  </div>
+  <div class="action inline-sm">
+    <VPButton
+        href="https://durablestreams.com"
+        text="Docs ↗"
+        target="_blank"
         theme="durable-streams"
     />
   </div>

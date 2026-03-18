@@ -64,7 +64,7 @@ See the [building super-fast apps on sync](/blog/2025/07/29/super-fast-apps-on-s
 
 - simple apps can use the [TypeScript&nbsp;client](/docs/api/clients/typescript) directly
 - TanStack&nbsp;DB apps can load data [from your API](https://tanstack.com/db/latest/docs/overview#1-tanstack-query) instead of using a sync&nbsp;engine
-- apps can sync data [through Durable&nbsp;Streams](/primitives/durable-streams#wrapper-protocols) when it doesn't make sense to go through Postgres, including using [Durable State](https://github.com/durable-streams/durable-streams/tree/main/packages/state) for structured state sync alongside <span class="no-wrap">real-time streams</span>
+- apps can sync data [through Durable&nbsp;Streams](https://durablestreams.com) when it doesn't make sense to go through Postgres, including using [Durable State](https://durablestreams.com/durable-state) for structured state sync alongside <span class="no-wrap">real-time streams</span>
 - web and desktop apps can use [PGlite](/primitives/pglite) in the client to access the Postgres query engine, data types and extensions like `pgvector` (if they can tolerate a slightly heavier WASM dependency)
 - Elixir apps can use [Phoenix.Sync](https://hexdocs.pm/phoenix_sync/readme.html) with both LiveView and TanStack&nbsp;DB
 
@@ -82,7 +82,7 @@ You can also use [Postgres&nbsp;Sync](/primitives/postgres-sync) to sync message
 
 ### Building your own database or sync protocol?
 
-You can use the lower-level [protocol layers](/primitives/durable-streams#wrapper-protocols) of [Durable&nbsp;Streams](/primitives/durable-streams) to craft your own sync protocol. Including passing a [Standard Schema](https://standardschema.dev/) to the [Durable State](https://github.com/durable-streams/durable-streams/tree/main/packages/state) layer for an instant, type-safe sync protocol tailored to your data schema.
+You can use the lower-level [protocol layers](/primitives/durable-streams#wrapper-protocols) of [Durable&nbsp;Streams](/primitives/durable-streams) to craft your own sync protocol. Including passing a [Standard Schema](https://standardschema.dev/) to the [Durable State](https://durablestreams.com/durable-state) layer for an [instant, type-safe sync protocol](https://durablestreams.com/stream-db) tailored to your data schema.
 
 You can also integrate [your own sync engine or data source](https://tanstack.com/db/latest/docs/guides/collection-options-creator) into TanStack&nbsp;DB.
 
