@@ -120,8 +120,11 @@ defmodule Electric.Replication.Eval.Parser do
       {:ok, _} ->
         {:error, "Unexpected `;` in order by"}
 
-      {:error, %{cursorpos: loc, message: reason}} ->
+      {:error, %{cursorpos: loc, message: reason}} when is_integer(loc) ->
         {:error, "At location #{loc}: #{reason}"}
+
+      {:error, %{message: reason}} ->
+        {:error, reason}
     end
   end
 
@@ -179,8 +182,11 @@ defmodule Electric.Replication.Eval.Parser do
       {:ok, _} ->
         {:error, "Expected exactly one SELECT statement"}
 
-      {:error, %{cursorpos: loc, message: reason}} ->
+      {:error, %{cursorpos: loc, message: reason}} when is_integer(loc) ->
         {:error, "At location #{loc}: #{reason}"}
+
+      {:error, %{message: reason}} ->
+        {:error, reason}
     end
   end
 
@@ -328,8 +334,11 @@ defmodule Electric.Replication.Eval.Parser do
       {:ok, %{stmts: _}} ->
         {:error, ~s'unescaped ";" causing statement split'}
 
-      {:error, %{cursorpos: loc, message: reason}} ->
+      {:error, %{cursorpos: loc, message: reason}} when is_integer(loc) ->
         {:error, "At location #{loc}: #{reason}"}
+
+      {:error, %{message: reason}} ->
+        {:error, reason}
     end
   end
 
