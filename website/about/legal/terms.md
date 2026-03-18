@@ -1,12 +1,12 @@
 ---
-title: Terms of Service
+title: Terms of service
 description: >-
   Terms of Service for Electric DB Inc. governing access to
   and use of the Electric Services.
 outline: deep
 ---
 
-# Electric Terms of Service
+# Terms of service
 
 Last Updated: March 12, 2026
 
