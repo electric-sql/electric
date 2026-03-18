@@ -14,7 +14,7 @@ This Cookie Policy explains how Electric DB Inc. ("Electric," "we," or "us") use
 
 For more information about how we use your personal information, please see our [Privacy Policy](/about/legal/privacy).
 
-## What Are Cookies and Similar Technologies?
+## What are cookies and similar technologies?
 
 **Cookies.** A cookie is a text file containing a string of characters that is sent to your device when you visit a website. When you visit the site again, the cookie allows that site to recognize your browser. Cookies may store user preferences and other information. Cookies set by the website owner are called "first party cookies." Cookies set by parties other than the website owner are called "third-party cookies." Third-party cookies enable third-party features or functionality to be provided on or through the website (e.g., interactive content and analytics). The parties that set these third-party cookies can recognize your computer both when it visits the website in question and also when it visits certain other websites.
 
@@ -26,13 +26,13 @@ For more information about how we use your personal information, please see our 
 
 This Cookie Policy refers to all these technologies collectively as "cookies."
 
-## Why Do We Use Cookies?
+## Why do we use cookies?
 
 We use cookies for several reasons. Some cookies are required for technical reasons in order for our website to operate, and we refer to these as "strictly necessary" cookies. Other cookies also enable us to track and target the interests of our users to enhance the experience on our website and services more broadly. For example, our cookies may help to distinguish you from other users of our services for the purposes of helping you navigate between pages efficiently, remembering your preferences, enabling functionality, and helping us understand activity and patterns.
 
 Third parties set cookies on our website for analytics and other purposes. This is described in more detail below.
 
-## How Do We Use Cookies?
+## How do we use cookies?
 
 We and our service providers automatically log information about an individual's interactions with our website and services, such as:
 
@@ -41,7 +41,7 @@ We and our service providers automatically log information about an individual's
 
 We use both persistent cookies and session cookies. Persistent cookies stay on your device for a set period of time or until you delete them, while session cookies are deleted once you close your web browser. We use persistent cookies, for example, to remember any preferences you have or choices you make when you use our website.
 
-## What Types of Cookies Do We Use?
+## What types of cookies do we use?
 
 In this section, we outline the specific types of cookies served through our website and the purposes they serve.
 
@@ -51,7 +51,7 @@ These cookies include:
 - **Functionality cookies**: These cookies enhance the performance of our website (e.g., they allow us to remember your preferences and settings). Without these cookies, certain functionality may become unavailable.
 - **Performance cookies**: These cookies are used to enhance the performance and functionality of our website but are non-essential to their use. This website uses analytics cookies for these purposes and to measure, monitor and analyze use of our website.
 
-## How Can You Control Cookies?
+## How can you control cookies?
 
 Depending on where you access our website from, you may be presented with a cookie banner or other tool to provide permissions before we or our service providers set non-essential cookies.
 

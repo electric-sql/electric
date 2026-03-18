@@ -32,13 +32,13 @@ In this DPA:
 
 Capitalized terms used but not defined herein have the meaning given to them in the Agreement.
 
-## Scope and Roles
+## Scope and roles
 
 The subject matter, nature and purpose of the Processing, the types of Personal Data and categories of Data Subjects are set out in [Annex I](#annex-i).
 
 Company agrees that it will Process Personal Data only in accordance with the Agreement and this DPA. To the extent applicable, Company will Process Personal Data as a "processor" or "service provider" as such terms are defined under applicable Data Protection Law.
 
-## Data Protection
+## Data protection
 
 When Company Processes Personal Data, it will:
 
@@ -50,7 +50,7 @@ When Company Processes Personal Data, it will:
 
 Company certifies that it will not (a) "sell" (as defined in Data Protection Law) the Personal Data; (b) share the Personal Data for "cross-context behavioral advertising" (as defined in Data Protection Law); (c) retain, use, combine or disclose the Personal Data for any purpose other than as permitted under this DPA and in accordance with the Agreement; or (d) retain, use, or disclose the Personal Data other than in the context of the direct relationship with Customer in accordance with the Agreement.
 
-## Customer Responsibilities
+## Customer responsibilities
 
 Customer is responsible for the lawfulness of Personal Data processing under or in connection with the services. Customer will (i) provide all required notices and obtain all required consents, permissions and rights necessary under applicable Data Protection Law for Company to lawfully Process Personal Data for the purposes contemplated by the Agreement; (ii) make appropriate use of the services to ensure a level of security appropriate to the particular content of the Personal Data; (iii) comply with all Data Protection Law applicable to the collection of Personal Data and the transfer of such Personal Data to Company; and (iv) ensure its processing instructions comply with applicable laws (including applicable Data Protection Law).
 
@@ -64,13 +64,13 @@ Company will ensure that any Subprocessors to which it transfers Personal Data e
 
 Company will remain liable for any breaches of this DPA caused by its Subprocessors.
 
-## Restricted Data Transfers
+## Restricted data transfers
 
 In the event that Customer is subject to European Data Protection Law and the transfer of Personal Data to Company would be restricted in the absence of the Standard Contractual Clauses, the Parties agree that the Standard Contractual Clauses shall be incorporated into this DPA with Customer as the "data exporter" and Company as the "data importer."
 
 The Standard Contractual Clauses are further completed as follows: the optional docking clause in Clause 7 is implemented; Clause 9(a) option 2 is implemented and the time period therein is specified as thirty (30) days; the optional redress clause in Clause 11(a) is struck; the governing law in Clause 17 is the law of Ireland; the court in Clause 18(b) are the Courts of Ireland; and Annex 1, 2 and 3 to the Standard Contractual Clauses are [Annex I](#annex-i) and [Annex II](#annex-ii) and the [Subprocessing](#subprocessing) section of this DPA respectively. To the extent required by Data Protection Law in the UK, Part 1, tables 1, 2 and 3 of the UK SCCs will be deemed to be completed like its equivalent provisions in the EU SCCs. For the purpose of Part 1, Table 4, the party that may end the UK SCCs in accordance with Section 19 of the UK Addendum is the importer.
 
-## Assistance and Notifications
+## Assistance and notifications
 
 Upon Customer's request, Company will provide Customer with reasonable cooperation and assistance to the extent required to fulfill Customer's obligation under European Data Protection Law to:
 

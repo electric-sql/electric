@@ -14,7 +14,7 @@ Electric DB Inc. ("Electric") uses the following third-party subprocessors to pr
 
 If you have questions, contact us at [support@electric-sql.com](mailto:support@electric-sql.com).
 
-## Infrastructure & Hosting
+## Infrastructure & hosting
 
 | Subprocessor | Purpose | Data Processed | Location |
 | --- | --- | --- | --- |
@@ -23,19 +23,19 @@ If you have questions, contact us at [support@electric-sql.com](mailto:support@e
 | Neon, Inc. | Managed database hosting and database connectivity services | Account metadata, workspace metadata, user profile data | United States |
 | ClickHouse, Inc. (ClickHouse Cloud) | Usage analytics and data processing | Usage event data, account identifiers, service metadata | United States |
 
-## Billing & Payments
+## Billing & payments
 
 | Subprocessor | Purpose | Data Processed | Location |
 | --- | --- | --- | --- |
 | Stripe, Inc. | Billing and payment processing services | Billing details, payment information, account identifiers | United States |
 
-## Workflow Orchestration
+## Workflow orchestration
 
 | Subprocessor | Purpose | Data Processed | Location |
 | --- | --- | --- | --- |
 | Inngest, Inc. | Background task orchestration and workflow processing | User identifiers, account metadata, service event data | United States |
 
-## Error Monitoring & Observability
+## Error monitoring & observability
 
 | Subprocessor | Purpose | Data Processed | Location |
 | --- | --- | --- | --- |
@@ -43,13 +43,13 @@ If you have questions, contact us at [support@electric-sql.com](mailto:support@e
 | Sentry (Functional Software, Inc.) | Error monitoring and exception tracking | Error reports, diagnostic data, request metadata | United States |
 | Rootly, Inc. | Incident management and response coordination | Incident metadata, team member contact details | United States |
 
-## Support Tooling
+## Support tooling
 
 | Subprocessor | Purpose | Data Processed | Location |
 | --- | --- | --- | --- |
 | Fernand (app.getfernand.com) | Customer support helpdesk | Customer contact details, support interaction data | France |
 
-## Customer Relationship Management
+## Customer relationship management
 
 | Subprocessor | Purpose | Data Processed | Location |
 | --- | --- | --- | --- |
@@ -59,7 +59,7 @@ If you have questions, contact us at [support@electric-sql.com](mailto:support@e
 
 | Subprocessor | Purpose | Data Processed | Location |
 | --- | --- | --- | --- |
-| PostHog, Inc. (PostHog Cloud — US) | Website and product analytics | User identifiers, device data, usage data, online identifiers (see [Cookie Policy](/about/legal/cookies)) | United States |
+| PostHog, Inc. (PostHog Cloud — US) | Website and product analytics | User identifiers, device data, usage data, online identifiers (see [Cookie Policy](/about/legal/privacy#cookie-policy)) | United States |
 
 ## Authentication
 
