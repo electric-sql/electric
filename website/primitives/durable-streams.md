@@ -15,17 +15,23 @@ import GitHubButton from '../src/components/GitHubButton.vue'
 
 # Durable&nbsp;Streams
 
-Persistent, addressable, real-time streams that power resilient,
-<span class="no-wrap-sm">
-  collaborative
-  <span class="no-wrap">
-    AI applications.</span></span>
+The data primitive for the agent loop. For building resilient, collaborative,
+<span class="no-wrap">multi-agent systems</span>.
 
 <div class="actions cta-actions page-footer-actions left">
-  <div class="action">
+  <div class="action hidden-sm">
     <VPButton
-        href="https://github.com/durable-streams/durable-streams/blob/main/README.md"
-        text="README ↗"
+        href="https://durablestreams.com"
+        text="DurableStreams.com ↗"
+        target="_blank"
+        theme="durable-streams"
+    />
+  </div>
+  <div class="action inline-sm">
+    <VPButton
+        href="https://durablestreams.com"
+        text="Docs ↗"
+        target="_blank"
         theme="durable-streams"
     />
   </div>

@@ -97,3 +97,8 @@ https://next.electric-sql.com/* https://electric-sql.com/:splat 301!
 /product/cloud/usage                                /cloud/usage
 /docs/guides/llms                                   /docs/agents
 /blog/2025/07/29/local-first-sync-with-tanstack-db  /blog/2025/07/29/super-fast-apps-on-sync-with-tanstack-db
+
+# Products are primitives, products are something else
+/products                       /primitives
+/products/                      /primitives/
+/products/*                     /primitives/:splat

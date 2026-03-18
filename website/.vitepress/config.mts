@@ -161,7 +161,7 @@ export default defineConfig({
     logo: '/img/brand/logo.svg',
     nav: [
       { text: 'Sync', link: '/sync', activeMatch: '/sync' },
-      { text: 'Products', link: '/products', activeMatch: '/products' },
+      { text: 'Primitives', link: '/primitives', activeMatch: '/primitives' },
       { text: 'Cloud', link: '/cloud', activeMatch: '/cloud' },
       { text: 'Docs', link: '/docs/intro', activeMatch: '/docs/' },
       { text: 'Demos', link: '/demos', activeMatch: '/demos' },
@@ -173,15 +173,15 @@ export default defineConfig({
       provider: 'local',
     },
     sidebar: {
-      '/products': [
+      '/primitives': [
         {
-          text: 'Products',
+          text: 'Primitives',
           items: [
-            { text: 'Overview', link: '/products/' },
-            { text: 'Postgres Sync', link: '/products/postgres-sync' },
-            { text: 'Durable Streams', link: '/products/durable-streams' },
-            { text: 'TanStack DB', link: '/products/tanstack-db' },
-            { text: 'PGlite', link: '/products/pglite' },
+            { text: 'Overview', link: '/primitives/' },
+            { text: 'Postgres Sync', link: '/primitives/postgres-sync' },
+            { text: 'Durable Streams', link: '/primitives/durable-streams' },
+            { text: 'TanStack DB', link: '/primitives/tanstack-db' },
+            { text: 'PGlite', link: '/primitives/pglite' },
           ],
         },
       ],
