@@ -14,8 +14,10 @@ outline: [2, 3]
 post: true
 ---
 
-[PGlite](https://pglite.dev/) is a WASM port of the Postgres database that runs inside your JS environment, including your favorite browser. This means that you can benefit from the full power of PostgreSQL without ever leaving the V8 engine. 
-We have seen an [impressive growth](https://www.npmjs.com/package/@electric-sql/pglite) over the last year, from about 500k to over 5 Million weekly downloads! PGlite is making its way in every corner of the software world, with usage varying from CICD  testing to [vibe coding with a database in the sandbox](https://electric-sql.com/blog/2025/06/05/database-in-the-sandbox). Our friends at [Prisma](https://www.prisma.io/) are [bundling PGlite](https://www.prisma.io/docs/postgres/database/local-development) within their CLI to give you a full dev env for rapid iteration and isolated testing within a single package. Try it with 
+We’ve just released version 0.4 of [PGlite](https://pglite.dev/) — a WASM port of Postgres that runs directly inside your JavaScript environment.
+Under the hood, this is a big one. It includes a substantial architectural refactor that sets us up for what’s coming next, along with new extensions — including the long-awaited PostGIS.
+
+PGlite has seen an [impressive growth](https://www.npmjs.com/package/@electric-sql/pglite) over the last year, from about 500k to over 5 Million weekly downloads! PGlite is making its way in every corner of the software world, with usage varying from CICD testing to [vibe coding with a database in the sandbox](https://electric-sql.com/blog/2025/06/05/database-in-the-sandbox). Our friends at [Prisma](https://www.prisma.io/) are [bundling PGlite](https://www.prisma.io/docs/postgres/database/local-development) within their CLI to give you a full dev env for rapid iteration and isolated testing within a single package. Try it with 
 
 ```bash
 $ npx prisma dev
@@ -30,30 +32,35 @@ Unsurprisingly for an open source project, we're resource constrained. To make o
 ## Enter new PGlite
 
 A major undertaking was refactoring our own changes to Postgres. We want to rely as much as possible on the upstream code and way of doing things. Minimizing our intervention on the upstream code is a high priority, allowing us to focus on what makes PGlite special.
+
 As an example, consider the `initdb` workflow and code, which previously was embedded inside the final WASM executable. This lead to some hacks that needed to be accounted for whenever we updated our fork. With the new approach, initdb is a separate process that we instantiate and "connect" to PGlite, analogous to a regular Postgres deployment. We intercept the system calls that initdb is using to spawn a new Postgres instance and provide the necessary "plumbing" between the  two separate WASM processes, like stdin<->stdout redirection and sharing of the filesystem (see emscripten's [PROXYFS](https://emscripten.org/docs/api_reference/Filesystem-API.html#filesystem-api-proxyfs)). No `initdb` code changes are needed for this process! Moreover, this is very similar to what happens in a native PostgreSQL deployment, making the workflow easier to understand for any new contributor.
 
 <figure>
-  <img src="/img/blog/state-of-pglite-q1-2026/initdbpostgres.png" alt="initdb PostgreSQL plumbing in PGlite" />
+  <img src="/img/blog/state-of-pglite-q1-2026/initdbpostgres.svg" alt="initdb PostgreSQL plumbing in PGlite" />
   <figcaption class="figure-caption text-end text-small mb-3 mb-9 max-w-lg ml-auto">initdb and Postgres are separate WASM processes, PGlite provides the communication plumbing by intercepting the necessary system calls</figcaption>
 </figure>
 
 What's even better is that the same process could be imagined for other Postgres client tools, without much or any changes to their own code.
 
-## Going multi-connection*
+## Going multi-connection
 
-A usual Postgres deployment forks a new process for each new connection. This is not supported with emscripten and therefore PGlite is relying on PostgreSQL's single user mode. This limitation is further emphasised by our [pglite-socket](https://www.npmjs.com/package/@electric-sql/pglite-socket) package, which is  a simple wrapper around the net module to allow PGlite to be used as a PostgreSQL server. This doesn't play well with all client tools which expect to be able to open multiple connections. The community stepped in with a PR that is able to multiplex concurrent connections over the single one provider by PGlite, among other improvements. Many thanks to @nickfujita for this!
-* multiplexed over the single instance
+PGlite's single-user mode implies single connection, which doesn't play well with all the client tools which expect to be able to open multiple connections. The community stepped in with a PR that is able to multiplex concurrent connections over the single one provider by PGlite, among other improvements. Many thanks to [@nickfujita](https://github.com/nickfujita) for this!
+
+In the future, we want to offer true multi-connection capabilities (see further down below).
 
 ## Call for extensions
 
-Users have taken our [building PGlite extensions](https://pglite.dev/extensions/development#building-postgres-extensions) docs to the heart, with the likes of [pg_uuidv7](https://github.com/fboulnois/pg_uuidv7), [pgTAP](https://pgtap.org/), [pg_hashids](https://github.com/iCyberon/pg_hashids) and [Apache's AGE](https://github.com/electric-sql/pglite/pull/860) already part of the prod release. We are very grateful for these contributions, as well as the help we've received in bringing [pgcrypto](https://www.postgresql.org/docs/current/pgcrypto.html) and in particular the long-awaited [PostGIS](https://postgis.net/) extension to PGlite. See more below!
+Users have taken our [building PGlite extensions](https://pglite.dev/extensions/development#building-postgres-extensions) docs to the heart, with the likes of [pg_uuidv7](https://github.com/fboulnois/pg_uuidv7), [pgTAP](https://pgtap.org/), [pg_hashids](https://github.com/iCyberon/pg_hashids) and [Apache's AGE](https://github.com/electric-sql/pglite/pull/860) already part of the prod release. We are very grateful for these contributions, as well as the help we've received in bringing [pgcrypto](https://www.postgresql.org/docs/current/pgcrypto.html) (🙏 @[loredanacirstea](https://github.com/loredanacirstea)) and in particular the long-awaited [PostGIS](https://postgis.net/) extension to PGlite. See more below!
 
 This comes on top of most other contrib extensions that we're bundling in our package. Check out the full extension catalog [here](https://pglite.dev/extensions/).
 
 ## PostGIS
 
 [PostGIS](https://postgis.net/) is a Postgres extension which adds support for storing, indexing, and querying geospatial data. For some users, it is the main reason for choosing PostgreSQL as their database. It is also one of the most requested extensions for PGlite! With the help of our community, we have managed to make it a reality!
+
 Among the challenges that we encountered when bringing PostGIS to PGlite are its many dependencies, all of which needed to be built for WASM. Moreover, Chrome, with its [8MB limit on sync loading dynamic libraries](https://chromestatus.com/feature/5099433642950656), made it more difficult for us to keep the extension as a single binary. In the end, the community stepped in and helped us deliver it!
+
+Big shoutout to [@StachowiakDawid](https://github.com/StachowiakDawid) and [larsmennen](https://github.com/larsmennen) for their help!
 
 ## Faster CI
 
@@ -89,15 +96,15 @@ The opionions are split here on which way is the best, we'd love to hear what is
 
 Our users love PGlite so much that they want to use it everywhere, including in non JS environments like mobile (and desktop) apps! This would be possible with a native built library with bindings for multiple languages. Although not real yet, this library already has a name: **libpglite**.
 
-A crazy and beautiful idea proposed by our [Sam Willis](https://samwillis.uk/), the inventor of PGlite, is to decompile the WASM build to C, using something like [wasm2c](https://github.com/WebAssembly/wabt/tree/main/wasm2c). Then use the output to recompile it as a native library. Although this is still in the back of our minds, most probably we will NOT go this route and instead build a shared lib directly from source. Most of the WASM dependent instructions are restricted to a few files and by keeping Postgres changes to a minimum, it should be easier to build this new library.
+We're working on porting the current PGlite functionality to a native library, meaning we're aiming for single-user mode as an initial release. Further down the road, we'll bring multi-connection capabilities to `libpglite`.
 
-There are so many use cases where PGlite could improve developers life that we're bound to make libpglite a reality!
+There are so many use cases where PGlite could improve developers life that we're bound to make this native library a reality!
 
 ### React native
 
 Obviously one area where PGlite will make a splash is in the mobile space. People have been asking for a React native port for ages, we even got a [draft PR](https://github.com/electric-sql/pglite/pull/774) from the community exploring exactly this. 
 
-We're thinking that having `libpglite` will make it straightforward to bring it to React native!
+Having `libpglite` will make it straightforward to bring PGlite to React native!
 
 ### There's more!
 
