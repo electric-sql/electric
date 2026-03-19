@@ -4,7 +4,7 @@ description: >-
   An overview of what has been keeping us busy lately and what are PGlite's plans for the future.
 excerpt: >-
   Lots of exciting new features have been released, with big plans ahead.
-authors: [tudor, sam]
+authors: [tdrz, samwillis]
 image: /img/blog/agent-skills-now-shipping/hero.png
 imageWidth: 2752
 imageHeight: 1536
