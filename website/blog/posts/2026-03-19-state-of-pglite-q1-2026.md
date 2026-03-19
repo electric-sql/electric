@@ -3,7 +3,8 @@ title: "State of PGlite Q1 2026"
 description: >-
   An overview of what has been keeping us busy lately and what are PGlite's plans for the future.
 excerpt: >-
-  Lots of exciting new features have been released, with big plans ahead.
+  PGlite has seen amazing growth in the last year. This is an overview of PGlite's most important developments 
+  and what's ahead for embedded Postgres.
 authors: [tdrz, samwillis]
 image: /img/blog/agent-skills-now-shipping/hero.png
 imageWidth: 2752
