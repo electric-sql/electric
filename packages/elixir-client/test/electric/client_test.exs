@@ -2893,11 +2893,7 @@ defmodule Electric.ClientTest do
       # "my-shape-next", "my-shape-next-next", "my-shape-next-next-next".
       # The fix: at most one "-next" suffix.
       for handle <- handles do
-        suffix_count =
-          handle
-          |> String.split("-next")
-          |> length()
-          |> Kernel.-(1)
+        suffix_count = String.count(handle, "-next")
 
         assert suffix_count <= 1,
                "Handle has accumulated #{suffix_count} '-next' suffixes: #{inspect(handle)}. " <>
