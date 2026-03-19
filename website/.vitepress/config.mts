@@ -378,7 +378,6 @@ export default defineConfig({
               items: [
                 { text: 'Terms', link: '/about/legal/terms' },
                 { text: 'Privacy', link: '/about/legal/privacy' },
-                { text: 'Cookies', link: '/about/legal/cookies' },
               ],
               collapsed: false,
             },
