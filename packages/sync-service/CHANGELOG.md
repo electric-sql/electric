@@ -1,5 +1,11 @@
 # @core/sync-service
 
+## 1.4.15
+
+### Patch Changes
+
+- 98b10d3: Fix a failure scenario where a shape is tracked by FlushTracker even though its consumer process dies. This resulted in FlushTracker stalling and not advancing forward, leading to unbounded WAL growth in Postgres.
+
 ## 1.4.14
 
 ### Patch Changes

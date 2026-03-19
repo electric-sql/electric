@@ -1,5 +1,11 @@
 # @core/electric-telemetry
 
+## 0.1.9
+
+### Patch Changes
+
+- 2659598: chore: ensure more metrics are pushed via statsd
+
 ## 0.1.8
 
 ### Patch Changes

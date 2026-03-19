@@ -1,5 +1,22 @@
 # @core/elixir-client
 
+## 0.9.3
+
+### Patch Changes
+
+- 19d6508: Switch retry backoff to full jitter strategy, matching the TypeScript client
+  and providing better spread to avoid thundering herd.
+- 4f55cef: Fix `-next` suffix accumulation on shape handles when repeated 409 responses lack a server-provided handle.
+- 19d6508: Add response header validation matching the TypeScript client. Missing Electric
+  headers now raise a clear error pointing to proxy/CDN misconfiguration instead
+  of silently producing incorrect behaviour.
+- e3b3134: Fix infinite loop when CDN serves stale cached responses to a client with a
+  valid local handle. The client now always retries with a cache-buster parameter
+  to bypass stale CDN caches.
+- 9335ae6: Add fast-loop detection to prevent the client from hammering the server when
+  responses don't advance the offset. Matches the TypeScript client's behaviour
+  of detecting, backing off, and eventually erroring on stuck retry loops.
+
 ## 0.9.2
 
 ### Patch Changes
