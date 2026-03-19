@@ -1,9 +1,9 @@
 ---
 title: "State of PGlite Q1 2026"
 description: >-
-  Electric, TanStack DB, and Durable Streams now ship agent skills — versioned knowledge that travels with your packages so coding agents actually understand how to use them.
+  An overview of what has been keeping us busy lately and what are PGlite's plans for the future.
 excerpt: >-
-  We've been collaborating with TanStack to ship agent skills in our npm packages. Run one command to give your agent deep knowledge of Electric, TanStack DB and Durable Streams.
+  Lots of exciting new features have been released, with big plans ahead.
 authors: [tudor, sam]
 image: /img/blog/agent-skills-now-shipping/hero.png
 imageWidth: 2752
