@@ -189,7 +189,9 @@ defmodule Electric.Client.Poll do
       ExpiredShapesCache.mark_expired(shape_key, state.shape_handle)
     end
 
-    handle = shape_handle(resp) || "#{state.shape_handle}-next"
+    handle =
+      shape_handle(resp) ||
+        "#{String.trim_trailing(state.shape_handle || "", "-next")}-next"
 
     new_state = ShapeState.reset(state, handle)
     new_state = handle_schema(resp, client, new_state)

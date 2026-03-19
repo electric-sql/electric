@@ -2804,6 +2804,107 @@ defmodule Electric.ClientTest do
                "Without cache-buster, CDN will keep serving stale response causing infinite loop."
     end
 
+    test "repeated 409s without server handle do not accumulate -next suffix", ctx do
+      # When the server returns 409 without a new handle, the client falls back
+      # to appending "-next" to the current handle. If this happens repeatedly
+      # (sync → 409 → sync with -next handle → 409 → sync with -next-next...),
+      # the suffix accumulates.
+      #
+      # The handle should only ever have a single "-next" suffix regardless of
+      # how many 409 cycles occur without a server-provided handle.
+
+      parent = self()
+
+      schema = Jason.encode!(%{"id" => %{type: "text"}})
+
+      body409 = Jason.encode!([%{"headers" => %{"control" => "must-refetch"}}])
+
+      {:ok, request_count} = Agent.start_link(fn -> 0 end)
+
+      # Simulate repeated cycles of: sync (using -next handle) → 409 (no handle)
+      # Each 409 without a server handle triggers the "-next" fallback on the
+      # current handle, so the suffix should accumulate across cycles.
+      Bypass.stub(ctx.bypass, "GET", "/v1/shape", fn conn ->
+        count = Agent.get_and_update(request_count, fn c -> {c + 1, c + 1} end)
+        offset = conn.query_params["offset"]
+        send(parent, {:request, count, conn.query_params})
+
+        cond do
+          offset == "-1" ->
+            # Each sync from offset -1: return data with a fresh handle derived
+            # from the request count (not echoing the client's -next handle,
+            # which would trigger stale detection)
+            body =
+              Jason.encode!([
+                %{
+                  "headers" => %{"operation" => "insert"},
+                  "offset" => "1_0",
+                  "value" => %{"id" => "#{count}"}
+                },
+                %{"headers" => %{"control" => "up-to-date", "global_last_seen_lsn" => count}}
+              ])
+
+            bypass_resp(conn, body,
+              shape_handle: "my-shape-v#{count}",
+              last_offset: "1_0",
+              schema: schema
+            )
+
+          count <= 8 ->
+            # Return 409 without a handle — forces the "-next" fallback
+            bypass_resp(conn, body409, status: 409)
+
+          true ->
+            # Final recovery
+            body =
+              Jason.encode!([
+                %{
+                  "headers" => %{"operation" => "insert"},
+                  "offset" => "1_0",
+                  "value" => %{"id" => "final"}
+                },
+                %{"headers" => %{"control" => "up-to-date", "global_last_seen_lsn" => 9999}}
+              ])
+
+            bypass_resp(conn, body,
+              shape_handle: "my-shape-v2",
+              last_offset: "1_0",
+              schema: schema
+            )
+        end
+      end)
+
+      stream(ctx, 8)
+
+      # Drain all request messages and collect the handles used
+      handles =
+        Stream.repeatedly(fn ->
+          receive do
+            {:request, _n, params} -> params["handle"]
+          after
+            1_000 -> :done
+          end
+        end)
+        |> Enum.take_while(&(&1 != :done))
+        |> Enum.reject(&is_nil/1)
+
+      # After each 409 → sync cycle without a server-provided handle, the
+      # client appends "-next". The bug: suffix accumulates across cycles →
+      # "my-shape-next", "my-shape-next-next", "my-shape-next-next-next".
+      # The fix: at most one "-next" suffix.
+      for handle <- handles do
+        suffix_count =
+          handle
+          |> String.split("-next")
+          |> length()
+          |> Kernel.-(1)
+
+        assert suffix_count <= 1,
+               "Handle has accumulated #{suffix_count} '-next' suffixes: #{inspect(handle)}. " <>
+                 "Repeated 409s should not cause '-next' to accumulate."
+      end
+    end
+
     test "does not mark handle as expired for normal success responses", ctx do
       alias Electric.Client.ShapeKey
       alias Electric.Client.ExpiredShapesCache
