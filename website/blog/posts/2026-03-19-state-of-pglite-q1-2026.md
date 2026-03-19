@@ -59,11 +59,11 @@ Among the challenges that we encountered when bringing PostGIS to PGlite are its
 
 Like any modern project, we rely on CI pipelines to make sure our code builds and the automated tests are green. And as any developers, we love when we get fast feedback! That's why we're happy that [Blacksmith](https://www.blacksmith.sh/) is offering us free credits through their OSS program to run our pipelines on their infra.
 
-# What's brewing
+## What's brewing
 
 Time to talk about the future! We have many, many ideas on how to improve and extend PGlite. Here are some of the major undertakings we're planing.
 
-## Multi-instance
+### Multi-instance
 
 At the moment, PGlite is running in [single-user mode](https://www.postgresql.org/docs/current/app-postgres.html), which is single-instance. To bring more of Postgres' power, we are looking into removing this restriction and provide a true multi-user, multi-instance experience.
 
@@ -76,7 +76,7 @@ Note that these two are not mutually exclusive! We can image a situation where y
 
 Additionally, we are monitoring the work on [threading in Postgres](https://wiki.postgresql.org/wiki/Multithreading) as a potential route to a true, multiconnection PGlite.
 
-## Replication
+### Replication
 
 To further expand PGlite's impact in the world, we're looking into enabling Postgres' logical replication stream. There are multiple options here: 
 
@@ -85,7 +85,7 @@ To further expand PGlite's impact in the world, we're looking into enabling Post
 
 The opionions are split here on which way is the best, we'd love to hear what is your favorite!
 
-## libpglite
+### libpglite
 
 Our users love PGlite so much that they want to use it everywhere, including in non JS environments like mobile (and desktop) apps! This would be possible with a native built library with bindings for multiple languages. Although not real yet, this library already has a name: **libpglite**.
 
@@ -93,13 +93,13 @@ A crazy and beautiful idea proposed by our [Sam Willis](https://samwillis.uk/), 
 
 There are so many use cases where PGlite could improve developers life that we're bound to make libpglite a reality!
 
-## React native
+### React native
 
 Obviously one area where PGlite will make a splash is in the mobile space. People have been asking for a React native port for ages, we even got a [draft PR](https://github.com/electric-sql/pglite/pull/774) from the community exploring exactly this. 
 
 We're thinking that having `libpglite` will make it straightforward to bring it to React native!
 
-## There's more!
+### There's more!
 
 We have plenty of other ideas, like providing a pre-populated FS as a package - such that you can skip `initdb` altogether; extend the API with a "streaming results" callback that gives you the results as soon as they are parsed; and many more.
 
