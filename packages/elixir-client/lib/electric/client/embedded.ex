@@ -49,7 +49,9 @@ if Code.ensure_loaded?(Electric.Shapes.Api) do
         last_offset: convert_offset(response.offset),
         shape_handle: response.handle,
         schema: Api.schema(response),
-        next_cursor: nil,
+        # Embedded mode has no CDN, so cursor isn't needed for cache busting,
+        # but we set a dummy value to satisfy header validation.
+        next_cursor: 0,
         request_timestamp: timestamp,
         # Ensure we enumerate the response body in the same process that made the
         # original api request so the cleanup shape process cleanup works

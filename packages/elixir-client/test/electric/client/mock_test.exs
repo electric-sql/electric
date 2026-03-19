@@ -44,6 +44,7 @@ defmodule Electric.Client.MockTest do
         schema: %{id: %{type: "int8"}},
         last_offset: Offset.new(0, 1),
         shape_handle: "my-shape",
+        next_cursor: 1,
         body: [
           Client.Mock.change(value: %{id: "4444"}),
           Client.Mock.up_to_date(lsn: 1234)
