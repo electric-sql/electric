@@ -211,6 +211,10 @@ defimpl Electric.Walkable, for: PgQuery.FuncCall do
   def children(%PgQuery.FuncCall{args: args}), do: [args: args]
 end
 
+defimpl Electric.Walkable, for: PgQuery.CoalesceExpr do
+  def children(%PgQuery.CoalesceExpr{args: args}), do: [args: args]
+end
+
 defimpl Electric.Walkable, for: PgQuery.A_Expr do
   def children(%PgQuery.A_Expr{lexpr: lexpr, rexpr: rexpr, name: name}),
     do: [lexpr: lexpr, rexpr: rexpr, name: name]

@@ -99,6 +99,57 @@ defmodule Electric.Replication.Eval.Env.KnownFunctions do
   defpostgres("like(text, text) -> bool", delegate: &Casting.like?/2)
   defpostgres("ilike(text, text) -> bool", delegate: &Casting.ilike?/2)
 
+  # COALESCE is non-strict: it should return the first non-NULL argument.
+  # We register arities 2..10 to support subset filters compiled by clients.
+  defp first_non_nil([head | rest]) when is_nil(head), do: first_non_nil(rest)
+  defp first_non_nil([head | _rest]), do: head
+  defp first_non_nil([]), do: nil
+
+  defpostgres "coalesce(anycompatible, anycompatible) -> anycompatible", strict?: false do
+    def coalesce2(a, b), do: first_non_nil([a, b])
+  end
+
+  defpostgres "coalesce(anycompatible, anycompatible, anycompatible) -> anycompatible",
+              strict?: false do
+    def coalesce3(a, b, c), do: first_non_nil([a, b, c])
+  end
+
+  defpostgres "coalesce(anycompatible, anycompatible, anycompatible, anycompatible) -> anycompatible",
+              strict?: false do
+    def coalesce4(a, b, c, d), do: first_non_nil([a, b, c, d])
+  end
+
+  defpostgres "coalesce(anycompatible, anycompatible, anycompatible, anycompatible, anycompatible) -> anycompatible",
+              strict?: false do
+    def coalesce5(a, b, c, d, e), do: first_non_nil([a, b, c, d, e])
+  end
+
+  defpostgres "coalesce(anycompatible, anycompatible, anycompatible, anycompatible, anycompatible, anycompatible) -> anycompatible",
+              strict?: false do
+    def coalesce6(a, b, c, d, e, f), do: first_non_nil([a, b, c, d, e, f])
+  end
+
+  defpostgres "coalesce(anycompatible, anycompatible, anycompatible, anycompatible, anycompatible, anycompatible, anycompatible) -> anycompatible",
+              strict?: false do
+    def coalesce7(a, b, c, d, e, f, g), do: first_non_nil([a, b, c, d, e, f, g])
+  end
+
+  defpostgres "coalesce(anycompatible, anycompatible, anycompatible, anycompatible, anycompatible, anycompatible, anycompatible, anycompatible) -> anycompatible",
+              strict?: false do
+    def coalesce8(a, b, c, d, e, f, g, h), do: first_non_nil([a, b, c, d, e, f, g, h])
+  end
+
+  defpostgres "coalesce(anycompatible, anycompatible, anycompatible, anycompatible, anycompatible, anycompatible, anycompatible, anycompatible, anycompatible) -> anycompatible",
+              strict?: false do
+    def coalesce9(a, b, c, d, e, f, g, h, i), do: first_non_nil([a, b, c, d, e, f, g, h, i])
+  end
+
+  defpostgres "coalesce(anycompatible, anycompatible, anycompatible, anycompatible, anycompatible, anycompatible, anycompatible, anycompatible, anycompatible, anycompatible) -> anycompatible",
+              strict?: false do
+    def coalesce10(a, b, c, d, e, f, g, h, i, j),
+      do: first_non_nil([a, b, c, d, e, f, g, h, i, j])
+  end
+
   ## Date functions
   defpostgres("date + int8 -> date", commutative?: true, delegate: &Date.add/2)
   defpostgres("date - date -> int8", delegate: &Date.diff/2)

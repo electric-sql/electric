@@ -258,6 +258,32 @@ defmodule Electric.Replication.Eval.ParserTest do
       assert %Func{name: "-", args: [%Ref{path: ["test"], type: :int4}]} = result
     end
 
+    test "should correctly parse a coalesce call with arity 10" do
+      assert {:ok, %Expr{eval: %Func{strict?: false, type: :text, args: args}}} =
+               Parser.parse_and_validate_expression(
+                 ~S|coalesce("value", NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'fallback')|,
+                 refs: %{["value"] => :text}
+               )
+
+      assert length(args) == 10
+      assert [%Ref{path: ["value"], type: :text} | _] = args
+      assert %Const{value: "fallback", type: :text} = List.last(args)
+    end
+
+    test "should reduce a constant coalesce call at parse time" do
+      assert {:ok, %Expr{eval: %Const{value: "fallback", type: :text}}} =
+               Parser.parse_and_validate_expression(~S|coalesce(NULL, 'fallback')|)
+    end
+
+    test "should return helpful error for coalesce with more than 10 arguments" do
+      assert {:error, message} =
+               Parser.parse_and_validate_expression(
+                 ~S|coalesce(NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'fallback')|
+               )
+
+      assert message =~ "unknown or unsupported function coalesce/11"
+    end
+
     test "should reduce down immutable function calls that have only constants" do
       env =
         Env.empty(

@@ -52,6 +52,22 @@ defmodule Electric.Replication.Eval.RunnerTest do
                |> Runner.execute(%{["test"] => 1})
     end
 
+    test "should evaluate coalesce with arity 10" do
+      expr =
+        ~S|coalesce("v1", NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'fallback')|
+        |> Parser.parse_and_validate_expression!(refs: %{["v1"] => :text})
+
+      assert {:ok, "fallback"} = Runner.execute(expr, %{["v1"] => nil})
+      assert {:ok, "value"} = Runner.execute(expr, %{["v1"] => "value"})
+    end
+
+    test "should return nil for coalesce when all 10 arguments are NULL" do
+      assert {:ok, nil} =
+               ~S|coalesce(NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL)|
+               |> Parser.parse_and_validate_expression!()
+               |> Runner.execute(%{})
+    end
+
     test "should not apply strict functions to nil values" do
       assert {:ok, nil} =
                ~S|"test" + 1|

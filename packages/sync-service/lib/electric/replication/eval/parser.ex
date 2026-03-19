@@ -667,26 +667,17 @@ defmodule Electric.Replication.Eval.Parser do
          _,
          %{env: env}
        ) do
-    with {:ok, choices} <- find_available_functions(call, env),
-         {:ok, concrete} <- Lookups.pick_concrete_function_overload(choices, args, env),
-         {:ok, args} <- cast_unknowns(args, concrete.args, env),
-         {:ok, args} <- cast_implicit(args, concrete.args, env) do
-      {:ok, from_concrete(concrete, args)}
-    else
-      {:error, {_loc, _msg}} = error ->
-        error
+    resolve_function_call(identifier(call.funcname), args, call.location, env)
+  end
 
-      :error ->
-        arg_list =
-          Enum.map_join(args, ", ", fn
-            %UnknownConst{} -> "unknown"
-            %{type: type} -> to_string(type)
-          end)
-
-        {:error,
-         {call.location,
-          "Could not select a function overload for #{identifier(call.funcname)}(#{arg_list})"}}
-    end
+  defp node_to_ast(
+         %PgQuery.CoalesceExpr{args: raw_args, location: location},
+         children,
+         _,
+         %{env: env}
+       ) do
+    args = Map.get(children, :args, raw_args)
+    resolve_function_call("coalesce", args, location, env)
   end
 
   # Next block of overloads matches on `A_Expr`, which is any operator call, as well as special syntax calls (e.g. `BETWEEN` or `ANY`).
@@ -1079,13 +1070,33 @@ defmodule Electric.Replication.Eval.Parser do
     end
   end
 
-  defp find_available_functions(%PgQuery.FuncCall{} = call, %{funcs: funcs}) do
-    name = identifier(call.funcname)
-    arity = length(call.args)
-
+  defp find_available_functions(name, arity, funcs, location)
+       when is_binary(name) and is_integer(arity) and is_map(funcs) do
     case Map.fetch(funcs, {name, arity}) do
       {:ok, options} -> {:ok, options}
-      :error -> {:error, {call.location, "unknown or unsupported function #{name}/#{arity}"}}
+      :error -> {:error, {location, "unknown or unsupported function #{name}/#{arity}"}}
+    end
+  end
+
+  defp resolve_function_call(name, args, location, %{funcs: funcs} = env)
+       when is_binary(name) and is_list(args) do
+    with {:ok, choices} <- find_available_functions(name, length(args), funcs, location),
+         {:ok, concrete} <- Lookups.pick_concrete_function_overload(choices, args, env),
+         {:ok, args} <- cast_unknowns(args, concrete.args, env),
+         {:ok, args} <- cast_implicit(args, concrete.args, env) do
+      {:ok, from_concrete(concrete, args)}
+    else
+      {:error, {_loc, _msg}} = error ->
+        error
+
+      :error ->
+        arg_list =
+          Enum.map_join(args, ", ", fn
+            %UnknownConst{} -> "unknown"
+            %{type: type} -> to_string(type)
+          end)
+
+        {:error, {location, "Could not select a function overload for #{name}(#{arg_list})"}}
     end
   end
 

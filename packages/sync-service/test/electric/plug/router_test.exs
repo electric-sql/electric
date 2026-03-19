@@ -3127,6 +3127,78 @@ defmodule Electric.Plug.RouterTest do
                )
     end
 
+   @tag with_sql: [
+           "CREATE TABLE nullable_items (id uuid primary key, value text)",
+           "INSERT INTO nullable_items VALUES (gen_random_uuid(), null)",
+           "INSERT INTO nullable_items VALUES (gen_random_uuid(), 'test value')"
+         ]
+    test "subsets can filter with coalesce", ctx do
+      req = make_shape_req("nullable_items", log: "changes_only")
+
+      assert {_, 200,
+              %{
+                "metadata" => _,
+                "data" => [
+                  %{
+                    "value" => %{"id" => _, "value" => nil}
+                  }
+                ]
+              }} =
+               shape_req(req, ctx.opts,
+                 subset: %{where: "coalesce(value, 'missing') = $1", params: %{"1" => "missing"}}
+               )
+    end
+
+    @tag with_sql: [
+           "CREATE TABLE nullable_items_arity_10 (id uuid primary key, value text)",
+           "INSERT INTO nullable_items_arity_10 VALUES (gen_random_uuid(), null)",
+           "INSERT INTO nullable_items_arity_10 VALUES (gen_random_uuid(), 'present')"
+         ]
+    test "subsets can filter with coalesce arity 10", ctx do
+      req = make_shape_req("nullable_items_arity_10", log: "changes_only")
+
+      assert {_, 200,
+              %{
+                "metadata" => _,
+                "data" => [
+                  %{
+                    "value" => %{"id" => _, "value" => nil}
+                  }
+                ]
+              }} =
+               shape_req(req, ctx.opts,
+                 subset: %{
+                   where:
+                     "coalesce(value, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'missing') = $1",
+                   params: %{"1" => "missing"}
+                 }
+               )
+    end
+
+    @tag with_sql: [
+           "CREATE TABLE nullable_items_arity_11 (id uuid primary key, value text)",
+           "INSERT INTO nullable_items_arity_11 VALUES (gen_random_uuid(), null)"
+         ]
+    test "subsets return 400 for coalesce with more than 10 arguments", ctx do
+      req = make_shape_req("nullable_items_arity_11", log: "changes_only")
+
+      assert {_, 400, %{"errors" => %{"subset" => %{"where" => where_error}}}} =
+               shape_req(req, ctx.opts,
+                 subset: %{
+                   where:
+                     "coalesce(value, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'missing') = 'missing'"
+                 }
+               )
+
+      message =
+        case where_error do
+          msg when is_binary(msg) -> msg
+          msgs when is_list(msgs) -> Enum.join(msgs, " ")
+        end
+
+      assert message =~ "unknown or unsupported function coalesce/11"
+    end
+
     @tag with_sql: [
            "INSERT INTO items VALUES (gen_random_uuid(), 'test value 1')",
            "INSERT INTO items VALUES (gen_random_uuid(), 'test value 2')"
