@@ -41,7 +41,7 @@ What's even better is that the same process could be imagined for other Postgres
 
 ## Going multi-connection*
 
-A usual Postgres deployment forks a new process for each new connection. This is not supported with emscripten and therefore PGlite is relying on PostgreSQL's single user mode. This limitation is further emphasised by our pglite-socket package, which is  a simple wrapper around the net module to allow PGlite to be used as a PostgreSQL server. This doesn't play well with all client tools which expect to be able to open multiple connections. The community stepped in with a PR that is able to multiplex concurrent connections over the single one provider by PGlite, among other improvements. Many thanks to @nickfujita for this!
+A usual Postgres deployment forks a new process for each new connection. This is not supported with emscripten and therefore PGlite is relying on PostgreSQL's single user mode. This limitation is further emphasised by our [pglite-socket](https://www.npmjs.com/package/@electric-sql/pglite-socket) package, which is  a simple wrapper around the net module to allow PGlite to be used as a PostgreSQL server. This doesn't play well with all client tools which expect to be able to open multiple connections. The community stepped in with a PR that is able to multiplex concurrent connections over the single one provider by PGlite, among other improvements. Many thanks to @nickfujita for this!
 * multiplexed over the single instance
 
 ## Call for extensions
