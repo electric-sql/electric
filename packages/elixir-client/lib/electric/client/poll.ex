@@ -138,16 +138,12 @@ defmodule Electric.Client.Poll do
     response_handle = shape_handle!(resp)
     expired_handle = ExpiredShapesCache.get_expired_handle(shape_key)
 
-    # Check for stale CDN response
+    # Check for stale CDN response — always enter stale-retry to add a cache
+    # buster. Without this, the CDN keeps serving the same stale response and
+    # the client loops infinitely (the URL never changes).
     cond do
-      # Stale: response matches expired AND no valid local handle
-      response_handle == expired_handle and
-          (is_nil(state.shape_handle) or state.shape_handle == expired_handle) ->
-        handle_stale_response(state)
-
-      # Stale but have valid local handle: ignore response
       response_handle == expired_handle ->
-        {:stale_ignored, ShapeState.clear_stale_retry(state)}
+        handle_stale_response(state)
 
       # Normal: process response
       true ->

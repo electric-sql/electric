@@ -171,11 +171,6 @@ defmodule Electric.Client.Stream do
         %{stream | poll_state: new_poll_state}
         |> fetch()
 
-      {:stale_ignored, new_poll_state} ->
-        # Stale response ignored, continue polling
-        %{stream | poll_state: new_poll_state}
-        |> fetch()
-
       {:error, error} ->
         handle_error(error, stream)
     end
