@@ -34,7 +34,7 @@ As an example, consider the `initdb` workflow and code, which previously was emb
 
 <figure>
   <img src="/img/blog/state-of-pglite-q1-2026/initdbpostgres.png" alt="initdb PostgreSQL plumbing in PGlite" />
-  <figcaption>initdb and Postgres are separate WASM processes, PGlite provides the communication plumbing by intercepting the necessary system calls</figcaption>
+  <figcaption style="text-align: center">initdb and Postgres are separate WASM processes, PGlite provides the communication plumbing by intercepting the necessary system calls</figcaption>
 </figure>
 
 What's even better is that the same process could be imagined for other Postgres client tools, without much or any changes to their own code.
