@@ -239,13 +239,11 @@ defmodule Electric.Client.Fetch.HTTP do
   end
 
   defp retry_delay(n) do
-    (Integer.pow(2, n) * 1000 * jitter())
-    |> min(30_000 * jitter())
-    |> trunc()
-  end
-
-  defp jitter() do
-    1 - 0.1 * :rand.uniform()
+    # Full jitter strategy (AWS recommended):
+    #   random_between(0, min(cap, base * 2^n))
+    # See: https://aws.amazon.com/blogs/architecture/exponential-backoff-and-jitter/
+    delay = min(32_000, Integer.pow(2, n) * 1000)
+    :rand.uniform(delay)
   end
 
   defp now, do: System.monotonic_time(:second)
