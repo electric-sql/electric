@@ -52,8 +52,8 @@ This comes on top of most other contrib extensions that we're bundling in our pa
 
 ## PostGIS
 
-[PostGIS](https://postgis.net/) is a Postgres extension which adds support for storing, indexing, and querying geospatial data. For some users, it is the main reason for choosing PostgreSQL as their database. It is also one of the most requested extensions for PGlite. With the help of our community, we have managed to make it a reality! 
-Among the challenges that we encountered when bringing PostGIS to PGlite are its many dependencies, all of which needed to be built for WASM. Moreover, Chrome, with its [8MB limit on sync loading dynamic libraries](https://chromestatus.com/feature/5099433642950656), made it more difficult for us to keep the extension as a single binary. In the end, the community stepped in and helped us make it a reality!
+[PostGIS](https://postgis.net/) is a Postgres extension which adds support for storing, indexing, and querying geospatial data. For some users, it is the main reason for choosing PostgreSQL as their database. It is also one of the most requested extensions for PGlite! With the help of our community, we have managed to make it a reality!
+Among the challenges that we encountered when bringing PostGIS to PGlite are its many dependencies, all of which needed to be built for WASM. Moreover, Chrome, with its [8MB limit on sync loading dynamic libraries](https://chromestatus.com/feature/5099433642950656), made it more difficult for us to keep the extension as a single binary. In the end, the community stepped in and helped us deliver it!
 
 ## Faster CI
 
@@ -78,18 +78,26 @@ Additionally, we are monitoring the work on [threading in Postgres](https://wiki
 
 ## Replication
 
-To further expand PGlite's impact in the world, we're looking into enabling Postgres' logical replication stream. There are multiple options here: enable replication on the single-user mode or build on the above multi-instance work. We already have a preference but we'll let you guess which one it is ;)
+To further expand PGlite's impact in the world, we're looking into enabling Postgres' logical replication stream. There are multiple options here: 
+
+- enable replication on the single-user mode 
+- build on the above multi-instance work. 
+
+The opionions are split here on which way is the best, we'd love to hear what is your favorite!
 
 ## libpglite
 
 Our users love PGlite so much that they want to use it everywhere, including in non JS environments like mobile (and desktop) apps! This would be possible with a native built library with bindings for multiple languages. Although not real yet, this library already has a name: **libpglite**.
+
 A crazy and beautiful idea proposed by our [Sam Willis](https://samwillis.uk/), the inventor of PGlite, is to decompile the WASM build to C, using something like [wasm2c](https://github.com/WebAssembly/wabt/tree/main/wasm2c). Then use the output to recompile it as a native library. Although this is still in the back of our minds, most probably we will NOT go this route and instead build a shared lib directly from source. Most of the WASM dependent instructions are restricted to a few files and by keeping Postgres changes to a minimum, it should be easier to build this new library.
 
 There are so many use cases where PGlite could improve developers life that we're bound to make libpglite a reality!
 
 ## React native
 
-Obviously one such area where PGlite will make a splash is in the mobile space. People have been asking for a React native port for ages, we even got a [draft PR](https://github.com/electric-sql/pglite/pull/774) from the community exploring exactly this. We're thinking that having `libpglite` will make it straightforward to bring it to React native!
+Obviously one area where PGlite will make a splash is in the mobile space. People have been asking for a React native port for ages, we even got a [draft PR](https://github.com/electric-sql/pglite/pull/774) from the community exploring exactly this. 
+
+We're thinking that having `libpglite` will make it straightforward to bring it to React native!
 
 ## There's more!
 
