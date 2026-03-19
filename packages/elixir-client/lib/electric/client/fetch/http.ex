@@ -239,8 +239,8 @@ defmodule Electric.Client.Fetch.HTTP do
   end
 
   defp retry_delay(n) do
-    # Full jitter strategy (AWS recommended):
-    #   random_between(0, min(cap, base * 2^n))
+    # Full jitter strategy (AWS recommended), minimum 1ms:
+    #   random_between(1, min(cap, base * 2^n))
     # See: https://aws.amazon.com/blogs/architecture/exponential-backoff-and-jitter/
     delay = min(32_000, Integer.pow(2, n) * 1000)
     :rand.uniform(delay)

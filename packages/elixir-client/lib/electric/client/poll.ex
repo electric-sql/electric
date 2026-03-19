@@ -136,7 +136,7 @@ defmodule Electric.Client.Poll do
   defp maybe_add_cache_buster(params, buster), do: Map.put(params, "cache-buster", buster)
 
   defp handle_success(resp, client, state, shape_key) do
-    response_handle = shape_handle!(resp)
+    response_handle = resp.shape_handle
     expired_handle = ExpiredShapesCache.get_expired_handle(shape_key)
 
     # Check for stale CDN response — always enter stale-retry to add a cache
@@ -313,11 +313,6 @@ defmodule Electric.Client.Poll do
             "check that your proxy forwards all Electric headers " <>
             "(electric-handle, electric-offset, electric-schema, electric-cursor) to the client."
     end
-  end
-
-  defp shape_handle!(resp) do
-    shape_handle(resp) ||
-      raise Client.Error, message: "Missing electric-handle header", resp: resp
   end
 
   defp shape_handle(%Fetch.Response{shape_handle: shape_handle}) do
