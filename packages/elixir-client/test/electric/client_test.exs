@@ -2888,6 +2888,8 @@ defmodule Electric.ClientTest do
         |> Enum.take_while(&(&1 != :done))
         |> Enum.reject(&is_nil/1)
 
+      assert length(handles) > 0
+
       # After each 409 → sync cycle without a server-provided handle, the
       # client appends "-next". The bug: suffix accumulates across cycles →
       # "my-shape-next", "my-shape-next-next", "my-shape-next-next-next".
