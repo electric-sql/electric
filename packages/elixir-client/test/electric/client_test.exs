@@ -608,6 +608,9 @@ defmodule Electric.ClientTest do
 
   defp bypass_resp(conn, body, opts) do
     status = Keyword.get(opts, :status, 200)
+    # Default cursor to a value matching Electric server behaviour — every
+    # successful response includes a cursor for CDN cache busting.
+    cursor = Keyword.get(opts, :cursor, if(opts[:last_offset], do: "1"))
 
     # the quick-responding tests are less flaky with a small delay --
     # think this is an issue with bypass. for very fast responses
@@ -620,7 +623,7 @@ defmodule Electric.ClientTest do
     |> put_optional_header("electric-handle", opts[:shape_handle])
     |> put_optional_header("electric-offset", opts[:last_offset])
     |> put_optional_header("electric-schema", opts[:schema])
-    |> put_optional_header("electric-cursor", opts[:cursor])
+    |> put_optional_header("electric-cursor", cursor)
     |> Plug.Conn.resp(status, body)
   end
 
@@ -1012,6 +1015,171 @@ defmodule Electric.ClientTest do
       assert_raise(Client.Error, fn ->
         stream(ctx) |> Stream.run()
       end)
+    end
+
+    test "raises a clear error when required Electric headers are missing from response", ctx do
+      # When a proxy or CDN strips Electric headers from responses, the client
+      # should raise a clear error listing ALL missing headers and suggesting
+      # proxy/CORS misconfiguration as the likely cause.
+      #
+      # Currently:
+      # - electric-handle: raises with unhelpful "Missing electric-handle header"
+      # - electric-offset: silently falls back to previous offset (no error)
+      # - electric-schema: silently skipped, values returned as raw strings
+
+      body =
+        Jason.encode!([
+          %{
+            "headers" => %{"operation" => "insert"},
+            "offset" => "1_0",
+            "value" => %{"id" => "1"}
+          },
+          %{"headers" => %{"control" => "up-to-date", "global_last_seen_lsn" => 9999}}
+        ])
+
+      # Return a 200 response with valid body but NO Electric headers at all —
+      # simulating a proxy that strips custom headers.
+      Bypass.expect_once(ctx.bypass, fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, body)
+      end)
+
+      error =
+        assert_raise Client.Error, fn ->
+          stream(ctx) |> Enum.take(1)
+        end
+
+      # The error message should mention proxy/CDN misconfiguration and list
+      # the missing headers, not just say "Missing electric-handle header".
+      assert error.message =~ ~r/proxy|CDN/i,
+             "Expected error message to mention proxy/CDN misconfiguration for easier " <>
+               "debugging, but got: #{inspect(error.message)}"
+
+      assert error.message =~ "electric-handle",
+             "Error should list electric-handle as missing"
+
+      assert error.message =~ "electric-offset",
+             "Error should list electric-offset as missing"
+
+      assert error.message =~ "electric-schema",
+             "Error should list electric-schema as missing"
+    end
+
+    test "missing electric-offset header is detected, not silently ignored", ctx do
+      # When electric-offset is missing, the client silently falls back to
+      # the previous offset. This can cause the client to re-request the
+      # same data or get stuck without any indication of the problem.
+
+      body =
+        Jason.encode!([
+          %{
+            "headers" => %{"operation" => "insert"},
+            "offset" => "1_0",
+            "value" => %{"id" => "1"}
+          },
+          %{"headers" => %{"control" => "up-to-date", "global_last_seen_lsn" => 9999}}
+        ])
+
+      # Response has handle and schema but no offset header
+      Bypass.expect_once(ctx.bypass, fn conn ->
+        schema = Jason.encode!(%{"id" => %{type: "text"}})
+
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.put_resp_header("electric-handle", "my-shape")
+        |> Plug.Conn.put_resp_header("electric-schema", schema)
+        |> Plug.Conn.resp(200, body)
+      end)
+
+      assert_raise Client.Error, ~r/electric-offset/i, fn ->
+        stream(ctx) |> Enum.take(1)
+      end
+    end
+
+    test "missing electric-schema header on non-live request is detected, not silently ignored",
+         ctx do
+      # The TypeScript client requires electric-schema on non-live responses.
+      # When it's missing, the value mapper is never built and values are
+      # returned as raw strings with no type conversion — silently producing
+      # wrong types.
+
+      body =
+        Jason.encode!([
+          %{
+            "headers" => %{"operation" => "insert"},
+            "offset" => "1_0",
+            "value" => %{"id" => "1"}
+          },
+          %{"headers" => %{"control" => "up-to-date", "global_last_seen_lsn" => 9999}}
+        ])
+
+      # Response has handle and offset but no schema header
+      Bypass.expect_once(ctx.bypass, fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.put_resp_header("electric-handle", "my-shape")
+        |> Plug.Conn.put_resp_header("electric-offset", "1_0")
+        |> Plug.Conn.resp(200, body)
+      end)
+
+      assert_raise Client.Error, ~r/electric-schema/i, fn ->
+        stream(ctx) |> Enum.take(1)
+      end
+    end
+
+    test "missing electric-cursor header on live response is detected, not silently ignored",
+         ctx do
+      # electric-cursor is the cache buster for the next live request. Without
+      # it, CDNs can serve stale data on live polls.
+
+      schema = Jason.encode!(%{"id" => %{type: "text"}})
+
+      body1 =
+        Jason.encode!([
+          %{
+            "headers" => %{"operation" => "insert"},
+            "offset" => "1_0",
+            "value" => %{"id" => "1"}
+          },
+          %{"headers" => %{"control" => "up-to-date", "global_last_seen_lsn" => 9998}}
+        ])
+
+      body_live =
+        Jason.encode!([
+          %{
+            "headers" => %{"operation" => "insert"},
+            "offset" => "2_0",
+            "value" => %{"id" => "2"}
+          },
+          %{"headers" => %{"control" => "up-to-date", "global_last_seen_lsn" => 9999}}
+        ])
+
+      {:ok, request_count} = Agent.start_link(fn -> 0 end)
+
+      Bypass.stub(ctx.bypass, "GET", "/v1/shape", fn conn ->
+        count = Agent.get_and_update(request_count, fn c -> {c + 1, c + 1} end)
+
+        if count == 1 do
+          # Initial non-live response with all required headers
+          bypass_resp(conn, body1,
+            shape_handle: "my-shape",
+            last_offset: "1_0",
+            schema: schema
+          )
+        else
+          # Live response with handle and offset but missing cursor
+          conn
+          |> Plug.Conn.put_resp_content_type("application/json")
+          |> Plug.Conn.put_resp_header("electric-handle", "my-shape")
+          |> Plug.Conn.put_resp_header("electric-offset", "2_0")
+          |> Plug.Conn.resp(200, body_live)
+        end
+      end)
+
+      assert_raise Client.Error, ~r/electric-cursor/i, fn ->
+        stream(ctx) |> Enum.take(4)
+      end
     end
   end
 

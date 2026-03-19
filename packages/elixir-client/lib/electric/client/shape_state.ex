@@ -42,7 +42,7 @@ defmodule Electric.Client.ShapeState do
           offset: Offset.t(),
           schema: Client.schema() | nil,
           value_mapper_fun: Client.ValueMapper.mapper_fun() | nil,
-          next_cursor: binary() | nil,
+          next_cursor: Client.cursor() | nil,
           up_to_date?: boolean(),
           tag_to_keys: %{optional(term()) => MapSet.t()},
           key_data: %{optional(term()) => %{tags: MapSet.t(), msg: term()}},

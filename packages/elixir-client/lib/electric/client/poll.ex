@@ -84,6 +84,7 @@ defmodule Electric.Client.Poll do
 
     case Fetch.request(client, request) do
       %Fetch.Response{status: status} = resp when status in 200..299 ->
+        validate_headers!(resp, state)
         handle_success(resp, client, state, shape_key)
 
       {:error, %Fetch.Response{status: 409} = resp} ->
@@ -135,7 +136,7 @@ defmodule Electric.Client.Poll do
   defp maybe_add_cache_buster(params, buster), do: Map.put(params, "cache-buster", buster)
 
   defp handle_success(resp, client, state, shape_key) do
-    response_handle = shape_handle!(resp)
+    response_handle = resp.shape_handle
     expired_handle = ExpiredShapesCache.get_expired_handle(shape_key)
 
     # Check for stale CDN response — always enter stale-retry to add a cache
@@ -272,9 +273,46 @@ defmodule Electric.Client.Poll do
     end
   end
 
-  defp shape_handle!(resp) do
-    shape_handle(resp) ||
-      raise Client.Error, message: "Missing electric-handle header", resp: resp
+  defp validate_headers!(%Fetch.Response{} = resp, %ShapeState{} = state) do
+    # Validate required Electric response fields, matching the TypeScript
+    # client's createFetchWithResponseHeadersCheck middleware.
+    #
+    # We check parsed struct fields (not raw HTTP headers) so this works
+    # for both real HTTP responses and the Mock fetch implementation.
+    #
+    # Rules (based on TypeScript's createFetchWithResponseHeadersCheck):
+    # - All responses: electric-handle, electric-offset
+    # - Non-live responses: electric-schema (server always sends it, but we
+    #   only validate when we don't have one yet since it's first-write-wins)
+    # - Live responses: electric-cursor (CDN cache buster)
+    is_live? = state.up_to_date?
+
+    missing = []
+
+    missing =
+      if is_nil(resp.shape_handle), do: ["electric-handle" | missing], else: missing
+
+    missing =
+      if is_nil(resp.last_offset), do: ["electric-offset" | missing], else: missing
+
+    missing =
+      if not is_live? and is_nil(state.schema) and is_nil(resp.schema),
+        do: ["electric-schema" | missing],
+        else: missing
+
+    missing =
+      if is_live? and is_nil(resp.next_cursor),
+        do: ["electric-cursor" | missing],
+        else: missing
+
+    if missing != [] do
+      raise Client.Error,
+        message:
+          "Response is missing required Electric header(s): #{Enum.join(missing, ", ")}. " <>
+            "This usually indicates a proxy or CDN misconfiguration — " <>
+            "check that your proxy forwards all Electric headers " <>
+            "(electric-handle, electric-offset, electric-schema, electric-cursor) to the client."
+    end
   end
 
   defp shape_handle(%Fetch.Response{shape_handle: shape_handle}) do

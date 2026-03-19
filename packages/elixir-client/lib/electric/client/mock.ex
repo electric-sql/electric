@@ -204,7 +204,8 @@ defmodule Electric.Client.Mock do
       body: jsonify(opts[:body] || []),
       schema: Keyword.get(opts, :schema, nil),
       shape_handle: Keyword.get(opts, :shape_handle, nil),
-      last_offset: Keyword.get(opts, :last_offset, nil)
+      last_offset: Keyword.get(opts, :last_offset, nil),
+      next_cursor: Keyword.get(opts, :next_cursor, nil)
     }
   end
 
