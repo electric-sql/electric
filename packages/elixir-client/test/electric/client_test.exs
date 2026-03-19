@@ -2903,6 +2903,79 @@ defmodule Electric.ClientTest do
       end
     end
 
+    test "detects fast-loop when server returns same offset repeatedly during sync", ctx do
+      # When the server keeps returning 200 with the same offset and no
+      # up-to-date control message, the client should detect it is not making
+      # progress and raise an error rather than hammering the server.
+      #
+      # The TypeScript client detects 5+ requests at the same offset within
+      # 500ms, clears caches, and after 5 consecutive detections raises an
+      # error.
+
+      {:ok, request_count} = Agent.start_link(fn -> 0 end)
+
+      schema = Jason.encode!(%{"id" => %{type: "text"}})
+
+      body_no_progress = Jason.encode!([])
+
+      Bypass.stub(ctx.bypass, "GET", "/v1/shape", fn conn ->
+        count = Agent.get_and_update(request_count, fn c -> {c + 1, c + 1} end)
+
+        if count == 1 do
+          bypass_resp(conn, body_no_progress,
+            shape_handle: "my-shape",
+            last_offset: "1_0",
+            schema: schema
+          )
+        else
+          bypass_resp(conn, body_no_progress,
+            shape_handle: "my-shape",
+            last_offset: "1_0"
+          )
+        end
+      end)
+
+      # Run the stream in a task so we can enforce a timeout.
+      # With fast-loop detection the client should error out quickly.
+      # Without it, it loops until the task is killed.
+      task =
+        Task.async(fn ->
+          try do
+            stream(ctx) |> Enum.take(3)
+            :completed
+          rescue
+            e in Client.Error -> {:error_raised, e}
+          end
+        end)
+
+      result =
+        case Task.yield(task, 3_000) || Task.shutdown(task) do
+          {:ok, value} -> value
+          nil -> :timeout
+        end
+
+      final_count = Agent.get(request_count, & &1)
+
+      case result do
+        {:error_raised, _error} ->
+          # Client detected the fast-loop and raised — this is the desired behaviour.
+          assert true
+
+        :timeout ->
+          flunk(
+            "Client made #{final_count} requests at the same offset and timed out after 3s. " <>
+              "Expected the client to detect repeated non-live requests at offset \"1_0\" " <>
+              "and raise an error, but it looped indefinitely without any progress detection."
+          )
+
+        :completed ->
+          flunk(
+            "Client made #{final_count} requests at the same offset without detecting a fast-loop. " <>
+              "Expected the client to raise an error, but it returned normally."
+          )
+      end
+    end
+
     test "does not mark handle as expired for normal success responses", ctx do
       alias Electric.Client.ShapeKey
       alias Electric.Client.ExpiredShapesCache

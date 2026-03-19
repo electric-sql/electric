@@ -148,6 +148,14 @@ defmodule Electric.Client.Stream do
   end
 
   defp fetch(%S{} = stream) do
+    # Check for fast-loop on non-live requests
+    case check_fast_loop(stream) do
+      {:ok, stream} -> do_fetch(stream)
+      {:error, error, stream} -> handle_error(error, stream)
+    end
+  end
+
+  defp do_fetch(%S{} = stream) do
     # Use the parser from stream config or fall back to client's parser
     parser = stream.parser || stream.client.parser
     client_with_parser = %{stream.client | parser: parser}
@@ -206,7 +214,8 @@ defmodule Electric.Client.Stream do
   end
 
   defp handle_up_to_date(%{opts: %{live: true}} = stream) do
-    {:cont, stream}
+    # Clear fast-loop tracking — rapid polling is expected in live mode
+    {:cont, %{stream | poll_state: ShapeState.clear_fast_loop(stream.poll_state)}}
   end
 
   defp handle_up_to_date(%{opts: %{live: false}} = stream) do
@@ -227,6 +236,22 @@ defmodule Electric.Client.Stream do
     case :queue.out(buffer) do
       {{:value, elem}, buffer} -> {[elem], %{stream | buffer: buffer}}
       {:empty, buffer} -> {[], %{stream | buffer: buffer}}
+    end
+  end
+
+  defp check_fast_loop(%{poll_state: %{up_to_date?: true}} = stream), do: {:ok, stream}
+
+  defp check_fast_loop(%{poll_state: poll_state} = stream) do
+    case ShapeState.check_fast_loop(poll_state) do
+      {:ok, new_poll_state} ->
+        {:ok, %{stream | poll_state: new_poll_state}}
+
+      {:backoff, delay_ms, new_poll_state} ->
+        if delay_ms > 0, do: Process.sleep(delay_ms)
+        {:ok, %{stream | poll_state: new_poll_state}}
+
+      {:error, message} ->
+        {:error, %Client.Error{message: message}, %{stream | poll_state: poll_state}}
     end
   end
 
