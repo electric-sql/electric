@@ -2521,6 +2521,121 @@ defmodule Electric.ClientTest do
       assert length(insert_msgs) == 2
     end
 
+    test "stale response with valid local handle retries with cache-buster instead of looping infinitely",
+         ctx do
+      alias Electric.Client.ShapeKey
+      alias Electric.Client.ExpiredShapesCache
+
+      parent = self()
+      {:ok, request_count} = Agent.start_link(fn -> 0 end)
+
+      schema = Jason.encode!(%{"id" => %{type: "text"}})
+
+      # First request succeeds with "good-handle"
+      body1 =
+        Jason.encode!([
+          %{
+            "headers" => %{"operation" => "insert"},
+            "offset" => "1_0",
+            "value" => %{"id" => "1"}
+          },
+          %{"headers" => %{"control" => "up-to-date", "global_last_seen_lsn" => 9998}}
+        ])
+
+      # Fresh data returned when CDN cache is busted
+      body_fresh =
+        Jason.encode!([
+          %{
+            "headers" => %{"operation" => "insert"},
+            "offset" => "2_0",
+            "value" => %{"id" => "2"}
+          },
+          %{"headers" => %{"control" => "up-to-date", "global_last_seen_lsn" => 9999}}
+        ])
+
+      # Mark a handle as expired (simulating a previous 409)
+      shape_params = ShapeDefinition.params(ctx.shape)
+      shape_key = ShapeKey.canonical(ctx.client.endpoint, shape_params)
+      ExpiredShapesCache.mark_expired(shape_key, "old-expired-handle")
+
+      Bypass.expect(ctx.bypass, fn conn ->
+        count = Agent.get_and_update(request_count, fn c -> {c + 1, c + 1} end)
+        send(parent, {:request, count, conn.query_params})
+
+        case count do
+          1 ->
+            # First request: return good data with a valid handle
+            bypass_resp(conn, body1,
+              shape_handle: "good-handle",
+              last_offset: "1_0",
+              schema: schema
+            )
+
+          n when n <= 10 ->
+            if Map.has_key?(conn.query_params, "cache-buster") do
+              # If cache-buster is present, CDN is busted - return fresh data
+              bypass_resp(conn, body_fresh,
+                shape_handle: "good-handle",
+                last_offset: "2_0"
+              )
+            else
+              # No cache-buster: CDN keeps serving stale cached response
+              bypass_resp(conn, "[]",
+                shape_handle: "old-expired-handle",
+                last_offset: "1_0"
+              )
+            end
+
+          _ ->
+            # Safety valve after 10 requests: return fresh data to prevent test hanging
+            bypass_resp(conn, body_fresh,
+              shape_handle: "good-handle",
+              last_offset: "2_0"
+            )
+        end
+      end)
+
+      # Stream enough messages to get past initial sync and hit the stale CDN
+      # With the bug: stale_ignored loops without cache-buster, hitting the safety
+      # valve at request 11. Without the bug: cache-buster is added on request 2,
+      # CDN returns fresh data.
+      task =
+        Task.async(fn ->
+          stream(ctx, 4)
+        end)
+
+      msgs = Task.await(task, 10_000)
+
+      # Verify we got both inserts
+      insert_msgs =
+        Enum.filter(msgs, &match?(%ChangeMessage{headers: %{operation: :insert}}, &1))
+
+      assert length(insert_msgs) == 2
+
+      # The critical assertion: when a stale response is received and we have a
+      # valid local handle, the client should retry with a cache-buster to bypass
+      # the CDN cache. Without this, the client loops infinitely on stale_ignored.
+      final_count = Agent.get(request_count, & &1)
+
+      assert final_count <= 4,
+             "Client made #{final_count} requests. Expected at most 4 (initial + live poll + " <>
+               "stale retry with cache-buster + fresh response). " <>
+               "This indicates the stale_ignored path is looping without adding a cache-buster."
+
+      # Verify that a cache-buster was sent on the retry after the stale response
+      assert_receive {:request, 1, _params1}
+      assert_receive {:request, 2, _params2}
+
+      # Request 2 is the live poll that gets a stale response.
+      # Request 3 should include a cache-buster to bypass the stale CDN cache.
+      assert_receive {:request, 3, params3}
+
+      assert Map.has_key?(params3, "cache-buster"),
+             "Expected cache-buster on retry after stale response with valid local handle, " <>
+               "but request params were: #{inspect(params3)}. " <>
+               "Without cache-buster, CDN will keep serving stale response causing infinite loop."
+    end
+
     test "does not mark handle as expired for normal success responses", ctx do
       alias Electric.Client.ShapeKey
       alias Electric.Client.ExpiredShapesCache
