@@ -214,7 +214,7 @@ defmodule Electric.DbConnectionError do
           message: error.postgres.message,
           type: :branch_does_not_exist,
           original_error: error,
-          retry_may_fix?: false
+          retry_may_fix?: true
         }
 
       # https://github.com/postgres/postgres/blob/93b76db0ace674a29a5d2146a139d6dd87b99659/src/backend/libpq/auth.c#L530

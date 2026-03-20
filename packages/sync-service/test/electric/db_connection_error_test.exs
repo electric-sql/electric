@@ -603,7 +603,7 @@ defmodule Electric.DbConnectionErrorTest do
                message: "branch 3ibd4pbmos9p does not exist",
                type: :branch_does_not_exist,
                original_error: error,
-               retry_may_fix?: false
+               retry_may_fix?: true
              } == DbConnectionError.from_error(error)
     end
 
