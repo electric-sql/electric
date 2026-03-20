@@ -1325,6 +1325,11 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       %{consumers: consumers}
     end
 
+    # This test documents a known bug (electric-sql/electric#3980):
+    # when a consumer dies without calling remove_shape (e.g. via handle_materializer_down
+    # with :shutdown reason), and no subsequent transactions touch that shape's table,
+    # FlushTracker stays stuck indefinitely. When a fix is implemented (e.g. PID monitoring
+    # or periodic liveness sweep), this test should be updated to assert the fix instead.
     test "consumer killed out-of-band after delivery permanently blocks flush advancement", ctx do
       register_as_replication_client(ctx.stack_id)
 
@@ -1390,7 +1395,12 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
       refute_receive {:flush_boundary_updated, _}, 100
     end
 
-    test "graceful consumer termination (with remove_shape) allows flush to advance", ctx do
+    # NOTE: This test uses Support.TransactionConsumer whose terminate/2 always
+    # calls ShapeLogCollector.remove_shape. The real Consumer does NOT do this
+    # when dying with :shutdown (handle_writer_termination clause 3 returns :ok).
+    # This test demonstrates that the cleanup mechanism works when invoked,
+    # serving as a contrast to the "killed out-of-band" test above where it isn't.
+    test "consumer that calls remove_shape on termination allows flush to advance", ctx do
       register_as_replication_client(ctx.stack_id)
 
       lsn = Lsn.from_integer(10)
