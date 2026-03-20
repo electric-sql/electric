@@ -168,7 +168,7 @@ defmodule ElectricTelemetry.Processes do
         }
 
       _ ->
-        %{proc_mem: memory}
+        %{proc_mem: memory, binary_mem: 0, ref_count_sum: 0, num_binaries: 0}
     end
   end
 
