@@ -9,8 +9,23 @@
 - Existing tests cover: consumer crash during broadcast (detected by ConsumerRegistry), multi-fragment crash between fragments
 - Missing: consumer dying out-of-band AFTER successful broadcast delivery, with no subsequent transactions to that shape
 
-### Implementation plan
-- Write tests at SLC level using the existing test infrastructure (Support.TransactionConsumer)
-- Test 1: Consumer receives txn, dies out-of-band with :shutdown, no more txns for that shape → FlushTracker stuck
-- Test 2: Similar but consumer dies between fragments of a multi-fragment txn, with the death reason being :shutdown (not :kill)
-- Test 3: Higher-level test showing that handle_materializer_down path produces the stale condition
+### Implementation
+- Wrote 3 FlushTracker unit tests showing stale entries blocking advancement indefinitely
+- Wrote 3 SLC integration tests:
+  - Main bug test: kill consumer with :kill (skips terminate/remove_shape), send txns only to other shapes, verify flush stuck
+  - Contrast test: graceful termination (runs terminate → remove_shape) allows flush to advance
+  - Recovery test: when a txn finally touches the dead shape's table, undeliverable detection cleans up
+- Key design decisions:
+  - Used two separate tables (table_a, table_b) so transactions can selectively target one shape
+  - Used :kill to simulate the end state of handle_materializer_down path (dead process, no cleanup)
+  - The @describetag is needed (not @tag) to propagate inspector config to setup functions
+
+### Operational issues
+- Initially edited files in ~/code/electric-sql/electric instead of ~/agents/github/erik/repos/electric
+  - Had to create a patch and git apply it to the correct repo
+- Used @tag instead of @describetag, which doesn't propagate to setup functions
+- First version of tests used `refute_receive` for the initial flush notification, but FlushTracker does partially advance when one shape catches up (to one below the stuck shape's offset). Fixed to `assert_receive` the partial advance, then `refute_receive` further advances.
+
+### PR
+- Created PR #4035: https://github.com/electric-sql/electric/pull/4035
+- Added "claude" label for automated review
