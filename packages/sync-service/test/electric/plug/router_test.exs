@@ -753,32 +753,26 @@ defmodule Electric.Plug.RouterTest do
     @tag with_sql: [
            "CREATE TABLE #{@generated_pk_table} (val JSONB NOT NULL, id uuid PRIMARY KEY GENERATED ALWAYS AS ((val->>'id')::uuid) STORED)"
          ]
-    test "returns an error when trying to select a generated column if not configured",
+    test "auto-upgrades publication to publish generated columns when misconfigured",
          %{opts: opts} = ctx do
       %{supports_generated_column_replication: supports_generated_column_replication} =
         Support.TestUtils.fetch_supported_features(ctx.pool)
 
       if supports_generated_column_replication do
-        # disable generated column replication
+        # disable generated column replication to simulate a publication
+        # created before PG18 support was added
         Postgrex.query!(
           ctx.pool,
           "ALTER PUBLICATION #{ctx.publication_name} SET (publish_generated_columns = 'none')",
           []
         )
 
+        # The configurator should auto-upgrade the publication, so the
+        # shape request should succeed
         conn =
           conn("GET", "/v1/shape?table=#{@generated_pk_table}&offset=-1") |> Router.call(opts)
 
-        assert %{status: 503} = conn
-
-        assert Jason.decode!(conn.resp_body) ==
-                 %{
-                   "message" =>
-                     "Publication \"#{ctx.publication_name}\" does not publish generated columns." <>
-                       " This is a feature introduced in PostgreSQL 18 and requires setting the publication" <>
-                       " parameter 'publish_generated_columns' to 'stored'. Alternatively, you can exclude them" <>
-                       " from the shape by explicitly listing which columns to fetch in the 'columns' query param."
-                 }
+        assert %{status: 200} = conn
       end
     end
 
