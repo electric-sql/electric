@@ -282,6 +282,7 @@ defmodule Electric.Shapes.Querying do
     # concat() converts its argument to text without trimming.
     ~s[CASE WHEN #{col} IS NULL THEN NULL::text WHEN pg_typeof(#{col}) = 'character'::regtype THEN concat(#{col}, '') ELSE #{col}::text END]
   end
+
   defp pg_escape_string_for_json(str), do: ~s[to_json(#{str})::text]
   defp pg_coalesce_json_string(str), do: ~s[coalesce(#{str} , 'null')]
 
