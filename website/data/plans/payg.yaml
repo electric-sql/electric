@@ -18,12 +18,15 @@ featureGates:
 commitment: 'None'
 support: 'Community (Discord)'
 
-who: 'Lorem ipsum dolor sit amet'
+who: 'Developers getting started or projects with low usage'
 featuresTitle: 'Features'
 features:
-  - 'Lorem ipsum'
-  - 'Lorem ipsum'
-  - 'Lorem ipsum'
+  - 'Up to 10 databases'
+  - '100 concurrent readers per stream'
+  - 'Usage under $5/mo is waived'
+  - 'No payment method required under $10/mo'
+  - '$1 per 1M writes, $0.10 per GB-month'
+  - 'Community support (Discord)'
 
 ctaText: 'Sign up now'
 ctaTextSmall: 'Sign up'

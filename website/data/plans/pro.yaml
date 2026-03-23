@@ -18,12 +18,16 @@ featureGates:
 commitment: '6 months'
 support: 'Priority email'
 
-who: 'Lorem ipsum dolor sit amet'
+who: 'Growing teams that need higher limits and priority support'
 featuresTitle: 'Includes'
 features:
-  - 'Lorem ipsum'
-  - 'Lorem ipsum'
-  - 'Lorem ipsum'
+  - 'Up to 50 databases'
+  - '1,000 concurrent readers per stream'
+  - '10% discount on metered usage'
+  - 'User-defined stream TTL'
+  - 'Postgres subqueries'
+  - '6-month commitment, auto-renew'
+  - 'Priority email support'
 
 ctaText: 'Sign up now'
 ctaTextSmall: 'Sign up'
