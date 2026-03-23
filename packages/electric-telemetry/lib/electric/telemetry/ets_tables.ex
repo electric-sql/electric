@@ -241,16 +241,13 @@ defmodule ElectricTelemetry.EtsTables do
     name
     |> Atom.to_string()
     |> extract_type_from_name()
-    |> String.to_atom()
   end
 
   defp table_type(name) when is_binary(name) do
-    name
-    |> extract_type_from_name()
-    |> String.to_atom()
+    extract_type_from_name(name)
   end
 
-  defp table_type(name), do: name
+  defp table_type(name), do: inspect(name)
 
   # UUID pattern: 8 hex digits, optionally followed by -4hex-4hex-4hex-12hex
   # We're looking for this pattern after a colon or underscore
