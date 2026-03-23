@@ -9,7 +9,6 @@ priceQualifier: '/ month'
 limits:
   maxDatabases: 50
   streamTTL: 'User-defined'
-
   maxShapes: 100000
   maxUsersPerWorkspace: 50
 
@@ -23,11 +22,9 @@ who: 'Growing teams that need higher limits and priority support'
 featuresTitle: 'Includes'
 features:
   - 'Up to 50 databases'
-
   - 'Up to 100K shapes'
   - '10% discount on metered usage'
-  - 'User-defined stream TTL'
-  - 'Postgres subqueries'
+  - 'Early access to features'
   - '6-month commitment, auto-renew'
   - 'Priority email support'
 

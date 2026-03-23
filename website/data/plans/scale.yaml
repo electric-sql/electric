@@ -9,7 +9,6 @@ priceQualifier: '/ month'
 limits:
   maxDatabases: 200
   streamTTL: 'User-defined'
-
   maxShapes: 'Unlimited'
   maxUsersPerWorkspace: 50
 
@@ -23,11 +22,9 @@ who: 'High-traffic products that need maximum capacity and hands-on support'
 featuresTitle: 'Includes'
 features:
   - 'Up to 200 databases'
-
   - 'Unlimited shapes'
   - '20% discount on metered usage'
-  - 'User-defined stream TTL'
-  - 'Postgres subqueries'
+  - 'Early access to features'
   - '12-month commitment, auto-renew'
   - 'Direct access to founders'
 

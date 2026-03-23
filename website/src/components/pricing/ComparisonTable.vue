@@ -197,19 +197,13 @@ function computeScenarioCost(plan, scenario) {
         </div>
       </div>
       <div class="metric-row">
-        <div class="metric-column metric-label">Stream TTL</div>
-        <div class="plan-column">
-          <div v-for="plan in comparisonPlans" :key="plan.slug" class="metric-value" :data-plan="plan.name">{{ getLimitValue(plan, 'streamTTL') }}</div>
-        </div>
-      </div>
-      <div class="metric-row">
         <div class="metric-column metric-label">Max shapes</div>
         <div class="plan-column">
           <div v-for="plan in comparisonPlans" :key="plan.slug" class="metric-value" :data-plan="plan.name">{{ getLimitValue(plan, 'maxShapes') }}</div>
         </div>
       </div>
       <div class="metric-row">
-        <div class="metric-column metric-label">Postgres subqueries</div>
+        <div class="metric-column metric-label">Early access to features</div>
         <div class="plan-column">
           <div v-for="plan in comparisonPlans" :key="plan.slug" class="metric-value" :data-plan="plan.name">{{ getFeatureGate(plan, 'postgresSubqueries') }}</div>
         </div>

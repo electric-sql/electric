@@ -9,7 +9,6 @@ priceQualifier: '/ month'
 limits:
   maxDatabases: 10
   streamTTL: 'Up to 7 days'
-
   maxShapes: 10000
   maxUsersPerWorkspace: 50
 
