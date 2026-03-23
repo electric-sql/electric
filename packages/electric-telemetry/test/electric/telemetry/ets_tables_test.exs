@@ -7,8 +7,11 @@ defmodule ElectricTelemetry.EtsTablesTest do
     test "returns top N tables by memory usage" do
       # Create some test tables
       table1 = :ets.new(:test_table_1, [:public, :named_table])
+      on_exit(fn -> if :ets.info(table1) != :undefined, do: :ets.delete(table1) end)
       table2 = :ets.new(:test_table_2, [:public, :named_table])
+      on_exit(fn -> if :ets.info(table2) != :undefined, do: :ets.delete(table2) end)
       table3 = :ets.new(:test_table_3, [:public, :named_table])
+      on_exit(fn -> if :ets.info(table3) != :undefined, do: :ets.delete(table3) end)
 
       # Insert data to create memory usage differences
       for i <- 1..100, do: :ets.insert(table1, {i, :binary.copy(<<0>>, 1000)})
@@ -42,11 +45,6 @@ defmodule ElectricTelemetry.EtsTablesTest do
       # Check that results are sorted by memory (descending)
       memories = Enum.map(results, & &1.memory)
       assert memories == Enum.sort(memories, :desc)
-
-      # Cleanup
-      :ets.delete(table1)
-      :ets.delete(table2)
-      :ets.delete(table3)
     end
 
     test "handles different table counts" do
@@ -62,9 +60,13 @@ defmodule ElectricTelemetry.EtsTablesTest do
 
     test "correctly calculates type statistics" do
       # Create tables with same type but different sizes
-      table1 = :ets.new(:"TestType:stack_aaa", [:public])
-      table2 = :ets.new(:"TestType:stack_bbb", [:public])
-      table3 = :ets.new(:"TestType:stack_ccc", [:public])
+      # Use UUID-like suffixes so type extraction groups them under "TestType"
+      table1 = :ets.new(:"TestType:aaa11111-1111", [:public])
+      on_exit(fn -> if :ets.info(table1) != :undefined, do: :ets.delete(table1) end)
+      table2 = :ets.new(:"TestType:bbb22222-2222", [:public])
+      on_exit(fn -> if :ets.info(table2) != :undefined, do: :ets.delete(table2) end)
+      table3 = :ets.new(:"TestType:ccc33333-3333", [:public])
+      on_exit(fn -> if :ets.info(table3) != :undefined, do: :ets.delete(table3) end)
 
       # Insert different amounts of data to get different sizes
       # Using more data to ensure these tables appear in top results
@@ -90,11 +92,6 @@ defmodule ElectricTelemetry.EtsTablesTest do
       # Verify individual sizes
       sizes = Enum.map(test_tables, & &1.size) |> Enum.sort()
       assert sizes == [1000, 2000, 3000]
-
-      # Cleanup
-      :ets.delete(table1)
-      :ets.delete(table2)
-      :ets.delete(table3)
     end
   end
 
@@ -102,8 +99,11 @@ defmodule ElectricTelemetry.EtsTablesTest do
     test "groups tables by type and sums memory" do
       # Create tables with patterns that should be grouped
       table1 = :ets.new(:"Electric.Test:6dd7c00b-8e31-4cfa", [:public])
+      on_exit(fn -> if :ets.info(table1) != :undefined, do: :ets.delete(table1) end)
       table2 = :ets.new(:"Electric.Test:61fec704-7dbf-49a5", [:public])
+      on_exit(fn -> if :ets.info(table2) != :undefined, do: :ets.delete(table2) end)
       table3 = :ets.new(:"Another.Module:abcd1234-5678-9abc", [:public])
+      on_exit(fn -> if :ets.info(table3) != :undefined, do: :ets.delete(table3) end)
 
       # Insert some data
       for i <- 1..10, do: :ets.insert(table1, {i, :binary.copy(<<0>>, 100)})
@@ -135,17 +135,14 @@ defmodule ElectricTelemetry.EtsTablesTest do
       # Check that results are sorted by memory (descending)
       memories = Enum.map(results, & &1.memory)
       assert memories == Enum.sort(memories, :desc)
-
-      # Cleanup
-      :ets.delete(table1)
-      :ets.delete(table2)
-      :ets.delete(table3)
     end
 
     test "handles unnamed tables with same name" do
       # Create multiple unnamed tables
       table1 = :ets.new(:unnamed_test, [:public, :named_table])
+      on_exit(fn -> if :ets.info(table1) != :undefined, do: :ets.delete(table1) end)
       table2 = :ets.new(:unnamed_test_2, [:public])
+      on_exit(fn -> if :ets.info(table2) != :undefined, do: :ets.delete(table2) end)
 
       # Insert data
       for i <- 1..5, do: :ets.insert(table1, {i, :data})
@@ -158,10 +155,6 @@ defmodule ElectricTelemetry.EtsTablesTest do
       assert unnamed_type != nil, "Expected to find unnamed_test type in results"
       assert unnamed_type.table_count >= 1
       assert is_integer(unnamed_type.memory)
-
-      # Cleanup
-      :ets.delete(table1)
-      :ets.delete(table2)
     end
 
     test "respects the count parameter" do
@@ -172,9 +165,13 @@ defmodule ElectricTelemetry.EtsTablesTest do
 
     test "correctly calculates average size for grouped types" do
       # Create tables with same type but different sizes
-      table1 = :ets.new(:"GroupTest:id_111", [:public])
-      table2 = :ets.new(:"GroupTest:id_222", [:public])
-      table3 = :ets.new(:"GroupTest:id_333", [:public])
+      # Use UUID-like suffixes so type extraction groups them under "GroupTest"
+      table1 = :ets.new(:"GroupTest:11111111-1111", [:public])
+      on_exit(fn -> if :ets.info(table1) != :undefined, do: :ets.delete(table1) end)
+      table2 = :ets.new(:"GroupTest:22222222-2222", [:public])
+      on_exit(fn -> if :ets.info(table2) != :undefined, do: :ets.delete(table2) end)
+      table3 = :ets.new(:"GroupTest:33333333-3333", [:public])
+      on_exit(fn -> if :ets.info(table3) != :undefined, do: :ets.delete(table3) end)
 
       # Insert different amounts of data
       for i <- 1..1500, do: :ets.insert(table1, {i, :binary.copy(<<0>>, 100)})
@@ -192,11 +189,6 @@ defmodule ElectricTelemetry.EtsTablesTest do
       assert group_test_type.avg_size == 2500.0
       # Memory should be the sum of all 3 tables
       assert group_test_type.memory > 0
-
-      # Cleanup
-      :ets.delete(table1)
-      :ets.delete(table2)
-      :ets.delete(table3)
     end
   end
 
@@ -236,7 +228,9 @@ defmodule ElectricTelemetry.EtsTablesTest do
   describe "table type extraction" do
     test "extracts type from colon-separated stack_id pattern" do
       table1 = :ets.new(:"Electric.StatusMonitor:6dd7c00b-8e31", [:public])
+      on_exit(fn -> if :ets.info(table1) != :undefined, do: :ets.delete(table1) end)
       table2 = :ets.new(:"shapedb:shape_lookup:61fec704-7dbf-49a5", [:public])
+      on_exit(fn -> if :ets.info(table2) != :undefined, do: :ets.delete(table2) end)
 
       results = EtsTables.top_tables(100)
 
@@ -255,14 +249,11 @@ defmodule ElectricTelemetry.EtsTablesTest do
 
       assert shapedb_result != nil, "Expected to find shapedb:shape_lookup table in results"
       assert shapedb_result.type == "shapedb:shape_lookup"
-
-      # Cleanup
-      :ets.delete(table1)
-      :ets.delete(table2)
     end
 
     test "extracts type from underscore-separated stack_id pattern" do
       table1 = :ets.new(:stack_call_home_telemetry_6dd7c00b, [:public])
+      on_exit(fn -> if :ets.info(table1) != :undefined, do: :ets.delete(table1) end)
 
       results = EtsTables.top_tables(100)
 
@@ -273,13 +264,11 @@ defmodule ElectricTelemetry.EtsTablesTest do
 
       assert result != nil, "Expected to find stack_call_home_telemetry table in results"
       assert result.type == "stack_call_home_telemetry"
-
-      # Cleanup
-      :ets.delete(table1)
     end
 
     test "uses full name when no pattern is detected" do
       table1 = :ets.new(:simple_table_name, [:public, :named_table])
+      on_exit(fn -> if :ets.info(table1) != :undefined, do: :ets.delete(table1) end)
 
       results = EtsTables.top_tables(100)
 
@@ -287,15 +276,14 @@ defmodule ElectricTelemetry.EtsTablesTest do
 
       assert result != nil, "Expected to find simple_table_name table in results"
       assert result.type == "simple_table_name"
-
-      # Cleanup
-      :ets.delete(table1)
     end
 
     test "handles partial UUID patterns correctly" do
       # Some production tables have truncated UUIDs
       table1 = :ets.new(:"Electric.Test:6dd7c00b", [:public])
+      on_exit(fn -> if :ets.info(table1) != :undefined, do: :ets.delete(table1) end)
       table2 = :ets.new(:"Electric.Test:61fec704-7dbf", [:public])
+      on_exit(fn -> if :ets.info(table2) != :undefined, do: :ets.delete(table2) end)
 
       results = EtsTables.top_tables(100)
 
@@ -307,10 +295,6 @@ defmodule ElectricTelemetry.EtsTablesTest do
 
       assert result2 != nil, "Expected to find Electric.Test:61fec704-7dbf table in results"
       assert result2.type == "Electric.Test"
-
-      # Cleanup
-      :ets.delete(table1)
-      :ets.delete(table2)
     end
   end
 end
