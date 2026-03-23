@@ -19,7 +19,7 @@ defmodule ElectricTelemetry.EtsTablesTest do
 
       # Check that we get results
       assert is_list(results)
-      assert length(results) >= 3
+      assert length(results) <= 3
 
       # Check that results have the right structure
       for result <- results do
@@ -76,20 +76,20 @@ defmodule ElectricTelemetry.EtsTablesTest do
 
       test_tables =
         results
-        |> Enum.filter(fn %{type: type} -> type == :TestType end)
+        |> Enum.filter(fn %{type: type} -> type == "TestType" end)
 
       # Should find all 3 tables if they made it to the top 100
-      if length(test_tables) > 0 do
-        # All should report type_table_count as 3
-        assert Enum.all?(test_tables, fn table -> table.type_table_count == 3 end)
+      assert length(test_tables) > 0, "Expected to find TestType tables in results"
 
-        # Average size should be (1000 + 2000 + 3000) / 3 = 2000.0
-        assert Enum.all?(test_tables, fn table -> table.avg_size_per_type == 2000.0 end)
+      # All should report type_table_count as 3
+      assert Enum.all?(test_tables, fn table -> table.type_table_count == 3 end)
 
-        # Verify individual sizes
-        sizes = Enum.map(test_tables, & &1.size) |> Enum.sort()
-        assert sizes == [1000, 2000, 3000]
-      end
+      # Average size should be (1000 + 2000 + 3000) / 3 = 2000.0
+      assert Enum.all?(test_tables, fn table -> table.avg_size_per_type == 2000.0 end)
+
+      # Verify individual sizes
+      sizes = Enum.map(test_tables, & &1.size) |> Enum.sort()
+      assert sizes == [1000, 2000, 3000]
 
       # Cleanup
       :ets.delete(table1)
@@ -113,26 +113,24 @@ defmodule ElectricTelemetry.EtsTablesTest do
       results = EtsTables.top_by_type(50)
 
       # Find our test types
-      electric_test_type = Enum.find(results, fn %{type: type} -> type == :"Electric.Test" end)
-      another_module_type = Enum.find(results, fn %{type: type} -> type == :"Another.Module" end)
+      electric_test_type = Enum.find(results, fn %{type: type} -> type == "Electric.Test" end)
+      another_module_type = Enum.find(results, fn %{type: type} -> type == "Another.Module" end)
 
       # Electric.Test should have 2 tables grouped together
-      if electric_test_type do
-        assert electric_test_type.table_count == 2
-        assert is_integer(electric_test_type.memory)
-        assert electric_test_type.memory > 0
-        assert is_float(electric_test_type.avg_size)
-        assert electric_test_type.avg_size > 0.0
-      end
+      assert electric_test_type != nil, "Expected to find Electric.Test type in results"
+      assert electric_test_type.table_count == 2
+      assert is_integer(electric_test_type.memory)
+      assert electric_test_type.memory > 0
+      assert is_float(electric_test_type.avg_size)
+      assert electric_test_type.avg_size > 0.0
 
       # Another.Module should have 1 table
-      if another_module_type do
-        assert another_module_type.table_count == 1
-        assert is_integer(another_module_type.memory)
-        assert another_module_type.memory > 0
-        assert is_float(another_module_type.avg_size)
-        assert another_module_type.avg_size > 0.0
-      end
+      assert another_module_type != nil, "Expected to find Another.Module type in results"
+      assert another_module_type.table_count == 1
+      assert is_integer(another_module_type.memory)
+      assert another_module_type.memory > 0
+      assert is_float(another_module_type.avg_size)
+      assert another_module_type.avg_size > 0.0
 
       # Check that results are sorted by memory (descending)
       memories = Enum.map(results, & &1.memory)
@@ -155,12 +153,11 @@ defmodule ElectricTelemetry.EtsTablesTest do
       results = EtsTables.top_by_type(50)
 
       # Find our test type
-      unnamed_type = Enum.find(results, fn %{type: type} -> type == :unnamed_test end)
+      unnamed_type = Enum.find(results, fn %{type: type} -> type == "unnamed_test" end)
 
-      if unnamed_type do
-        assert unnamed_type.table_count >= 1
-        assert is_integer(unnamed_type.memory)
-      end
+      assert unnamed_type != nil, "Expected to find unnamed_test type in results"
+      assert unnamed_type.table_count >= 1
+      assert is_integer(unnamed_type.memory)
 
       # Cleanup
       :ets.delete(table1)
@@ -186,16 +183,15 @@ defmodule ElectricTelemetry.EtsTablesTest do
 
       results = EtsTables.top_by_type(50)
 
-      group_test_type = Enum.find(results, fn %{type: type} -> type == :GroupTest end)
+      group_test_type = Enum.find(results, fn %{type: type} -> type == "GroupTest" end)
 
-      if group_test_type do
-        # Should have 3 tables grouped together
-        assert group_test_type.table_count == 3
-        # Average size should be (1500 + 2500 + 3500) / 3 = 2500.0
-        assert group_test_type.avg_size == 2500.0
-        # Memory should be the sum of all 3 tables
-        assert group_test_type.memory > 0
-      end
+      assert group_test_type != nil, "Expected to find GroupTest type in results"
+      # Should have 3 tables grouped together
+      assert group_test_type.table_count == 3
+      # Average size should be (1500 + 2500 + 3500) / 3 = 2500.0
+      assert group_test_type.avg_size == 2500.0
+      # Memory should be the sum of all 3 tables
+      assert group_test_type.memory > 0
 
       # Cleanup
       :ets.delete(table1)
@@ -254,13 +250,11 @@ defmodule ElectricTelemetry.EtsTablesTest do
           name == :"shapedb:shape_lookup:61fec704-7dbf-49a5"
         end)
 
-      if monitor_result do
-        assert monitor_result.type == :"Electric.StatusMonitor"
-      end
+      assert monitor_result != nil, "Expected to find Electric.StatusMonitor table in results"
+      assert monitor_result.type == "Electric.StatusMonitor"
 
-      if shapedb_result do
-        assert shapedb_result.type == :"shapedb:shape_lookup"
-      end
+      assert shapedb_result != nil, "Expected to find shapedb:shape_lookup table in results"
+      assert shapedb_result.type == "shapedb:shape_lookup"
 
       # Cleanup
       :ets.delete(table1)
@@ -277,9 +271,8 @@ defmodule ElectricTelemetry.EtsTablesTest do
           name == :stack_call_home_telemetry_6dd7c00b
         end)
 
-      if result do
-        assert result.type == :stack_call_home_telemetry
-      end
+      assert result != nil, "Expected to find stack_call_home_telemetry table in results"
+      assert result.type == "stack_call_home_telemetry"
 
       # Cleanup
       :ets.delete(table1)
@@ -292,9 +285,8 @@ defmodule ElectricTelemetry.EtsTablesTest do
 
       result = Enum.find(results, fn %{name: name} -> name == :simple_table_name end)
 
-      if result do
-        assert result.type == :simple_table_name
-      end
+      assert result != nil, "Expected to find simple_table_name table in results"
+      assert result.type == "simple_table_name"
 
       # Cleanup
       :ets.delete(table1)
@@ -310,13 +302,11 @@ defmodule ElectricTelemetry.EtsTablesTest do
       result1 = Enum.find(results, fn %{name: name} -> name == :"Electric.Test:6dd7c00b" end)
       result2 = Enum.find(results, fn %{name: name} -> name == :"Electric.Test:61fec704-7dbf" end)
 
-      if result1 do
-        assert result1.type == :"Electric.Test"
-      end
+      assert result1 != nil, "Expected to find Electric.Test:6dd7c00b table in results"
+      assert result1.type == "Electric.Test"
 
-      if result2 do
-        assert result2.type == :"Electric.Test"
-      end
+      assert result2 != nil, "Expected to find Electric.Test:61fec704-7dbf table in results"
+      assert result2.type == "Electric.Test"
 
       # Cleanup
       :ets.delete(table1)
