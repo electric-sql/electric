@@ -1,6 +1,6 @@
 # Base rates (PAYG, before any discount)
 baseRates:
-  writesPerMillion: 1 # $1 per 1M writes
+  writesPerMillion: 3 # $3 per 1M writes (filtering in Electric is significantly more compute-intensive than a stream append)
   retentionPerGBMonth: 0.10 # $0.10 per GB-month
 
 # Write unit definition
