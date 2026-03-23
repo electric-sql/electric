@@ -27,7 +27,7 @@ We have been receiving a lot of attention from the community [on various channel
 
 ## KISS
 
-Unsurprisingly for an open source project, we're resource constrained. To make our life easier, we're always looking into simplifying everything that we're doing. As an example, we're relying on [vanilla emscripten](https://emscripten.org/) to build our [own fork of PostgreSQL](https://github.com/electric-sql/postgres-pglite). Another one is keeping external build dependencies in a [Docker builder](https://hub.docker.com/r/electricsql/pglite-builder) also lets us have a single entry point whenever these change and to use the same build environment on any host. But the biggest overhead and obstacle around moving faster and making simplifying maintenance is in supporting the aforementioned Postgres fork.
+As developers, keeping things simple is always a good idea and a long-term investment that noone regrets. Here are some less than obvious things that we do for this: we're relying on [vanilla emscripten](https://emscripten.org/) to build our [own fork of PostgreSQL](https://github.com/electric-sql/postgres-pglite). Another one is keeping external build dependencies in a [Docker builder](https://hub.docker.com/r/electricsql/pglite-builder) also lets us have a single entry point whenever these change and to use the same build environment on any host. But the biggest overhead and obstacle around moving faster and making simplifying maintenance is in supporting the aforementioned Postgres fork.
 
 ## Enter new PGlite
 
