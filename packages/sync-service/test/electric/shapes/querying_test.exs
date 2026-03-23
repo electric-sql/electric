@@ -450,7 +450,11 @@ defmodule Electric.Shapes.QueryingTest do
         []
       )
 
-      Postgrex.query!(conn, "INSERT INTO padded VALUES ('ab', 'hello', 'world'), ('cd', NULL, 'test')", [])
+      Postgrex.query!(
+        conn,
+        "INSERT INTO padded VALUES ('ab', 'hello', 'world'), ('cd', NULL, 'test')",
+        []
+      )
       shape = Shape.new!("padded", inspector: {DirectInspector, conn})
 
       assert [
