@@ -180,17 +180,23 @@ defmodule ElectricTelemetry.EtsTables do
   # Private functions
 
   defp table_info(table_ref) do
-    name = table_name(table_ref)
-    type = table_type(name)
-    memory = table_memory(table_ref)
-    size = table_size(table_ref)
+    case :ets.info(table_ref, :name) do
+      :undefined ->
+        # Table was deleted between :ets.all() and this call
+        %{name: inspect(table_ref), type: "deleted", memory: 0, size: 0}
 
-    %{
-      name: name,
-      type: type,
-      memory: memory,
-      size: size
-    }
+      name ->
+        type = table_type(name)
+        memory = table_memory(table_ref)
+        size = table_size(table_ref)
+
+        %{
+          name: name,
+          type: type,
+          memory: memory,
+          size: size
+        }
+    end
   end
 
   defp calculate_type_stats(all_table_info) do
@@ -210,13 +216,6 @@ defmodule ElectricTelemetry.EtsTables do
        }}
     end)
     |> Map.new()
-  end
-
-  defp table_name(table_ref) do
-    case :ets.info(table_ref, :name) do
-      :undefined -> table_ref
-      name -> name
-    end
   end
 
   defp table_memory(table_ref) do
