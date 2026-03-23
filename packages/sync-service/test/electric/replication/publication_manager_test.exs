@@ -372,6 +372,47 @@ defmodule Electric.Replication.PublicationManagerTest do
     end
   end
 
+  describe "publication generated columns upgrade" do
+    test "upgrades publication to publish generated columns on PG18+", ctx do
+      pg_version = Support.TestUtils.fetch_pg_version(ctx.pool)
+
+      if pg_version >= 180_000 do
+        # Remove publish_generated_columns from the publication to simulate
+        # a publication created by an older Electric version
+        Postgrex.query!(
+          ctx.pool,
+          "ALTER PUBLICATION #{ctx.publication_name} SET (publish_generated_columns = 'none')",
+          []
+        )
+
+        # Verify it's not publishing generated columns
+        status =
+          Electric.Postgres.Configuration.check_publication_status!(
+            ctx.pool,
+            ctx.publication_name
+          )
+
+        assert %{publishes_generated_columns?: false, pg_supports_generated_columns?: true} =
+                 status
+
+        # Adding a shape should trigger the configurator, which should
+        # automatically upgrade the publication
+        shape = generate_shape(ctx.relation_with_oid, @where_clause_1)
+        assert :ok == PublicationManager.add_shape(ctx.stack_id, @shape_handle_1, shape)
+        assert_pub_tables(ctx, [ctx.relation])
+
+        # Verify the publication now publishes generated columns
+        status =
+          Electric.Postgres.Configuration.check_publication_status!(
+            ctx.pool,
+            ctx.publication_name
+          )
+
+        assert %{publishes_generated_columns?: true} = status
+      end
+    end
+  end
+
   describe "publication misonfiguration" do
     setup do
       test_pid = self()

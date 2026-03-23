@@ -12,7 +12,8 @@ defmodule Electric.Postgres.Configuration do
   @type publication_status :: %{
           can_alter_publication?: boolean(),
           publishes_all_operations?: boolean(),
-          publishes_generated_columns?: boolean()
+          publishes_generated_columns?: boolean(),
+          pg_supports_generated_columns?: boolean()
         }
 
   @type relation_actions :: %{
@@ -54,24 +55,42 @@ defmodule Electric.Postgres.Configuration do
         CASE WHEN current_setting('server_version_num')::int >= 180000
             THEN (to_jsonb(p) ->> 'pubgencols') = 's'
             ELSE FALSE
-        END AS publishes_generated_columns
+        END AS publishes_generated_columns,
+        current_setting('server_version_num')::int >= 180000 AS pg_supports_generated_columns
       FROM pg_publication as p WHERE pubname = $1;
       """
 
     Postgrex.query!(conn, query, [publication_name])
     |> case do
       %Postgrex.Result{
-        rows: [[can_alter_publication, publishes_all_operations, publishes_generated_columns]]
+        rows: [
+          [
+            can_alter_publication,
+            publishes_all_operations,
+            publishes_generated_columns,
+            pg_supports_generated_columns
+          ]
+        ]
       } ->
         %{
           can_alter_publication?: can_alter_publication,
           publishes_all_operations?: publishes_all_operations,
-          publishes_generated_columns?: publishes_generated_columns
+          publishes_generated_columns?: publishes_generated_columns,
+          pg_supports_generated_columns?: pg_supports_generated_columns
         }
 
       %Postgrex.Result{num_rows: 0} ->
         :not_found
     end
+  end
+
+  @spec alter_publication_set_generated_columns(Postgrex.conn(), String.t()) :: :ok
+  def alter_publication_set_generated_columns(conn, publication_name) do
+    query =
+      "ALTER PUBLICATION #{Utils.quote_name(publication_name)} SET (publish_generated_columns = stored)"
+
+    Postgrex.query!(conn, query, [])
+    :ok
   end
 
   @spec add_table_to_publication(Postgrex.conn(), String.t(), Electric.oid_relation(), timeout()) ::

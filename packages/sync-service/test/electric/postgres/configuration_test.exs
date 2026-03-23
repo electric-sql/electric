@@ -308,6 +308,49 @@ defmodule Electric.Postgres.ConfigurationTest do
                publishes_all_operations?: true
              } = Configuration.check_publication_status!(conn, publication)
     end
+
+    test "returns pg_supports_generated_columns? based on PG version", %{
+      pool: conn,
+      publication_name: publication
+    } do
+      pg_version = Support.TestUtils.fetch_pg_version(conn)
+
+      status = Configuration.check_publication_status!(conn, publication)
+
+      if pg_version >= 180_000 do
+        assert %{pg_supports_generated_columns?: true} = status
+      else
+        assert %{pg_supports_generated_columns?: false} = status
+      end
+    end
+  end
+
+  describe "alter_publication_set_generated_columns/2" do
+    test "sets publish_generated_columns to stored on PG18+", %{
+      pool: conn,
+      publication_name: publication
+    } do
+      pg_version = Support.TestUtils.fetch_pg_version(conn)
+
+      if pg_version >= 180_000 do
+        # First ensure the publication doesn't publish generated columns
+        Postgrex.query!(
+          conn,
+          "ALTER PUBLICATION \"#{publication}\" SET (publish_generated_columns = 'none')",
+          []
+        )
+
+        assert %{publishes_generated_columns?: false} =
+                 Configuration.check_publication_status!(conn, publication)
+
+        # Now alter it
+        assert :ok =
+                 Configuration.alter_publication_set_generated_columns(conn, publication)
+
+        assert %{publishes_generated_columns?: true} =
+                 Configuration.check_publication_status!(conn, publication)
+      end
+    end
   end
 
   describe "concurrent publication updates" do

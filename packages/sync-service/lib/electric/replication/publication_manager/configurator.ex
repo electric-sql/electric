@@ -247,10 +247,31 @@ defmodule Electric.Replication.PublicationManager.Configurator do
           {:error, err}
 
         status ->
+          # If PG supports generated columns but publication doesn't publish them,
+          # and we can alter the publication, upgrade it
+          status = maybe_upgrade_generated_columns(status, state)
           {:ok, status}
       end
     end)
   end
+
+  defp maybe_upgrade_generated_columns(
+         %{
+           pg_supports_generated_columns?: true,
+           publishes_generated_columns?: false,
+           can_alter_publication?: true
+         } = status,
+         state
+       ) do
+    Logger.notice(
+      "Upgrading publication #{state.publication_name} to publish generated columns (PostgreSQL 18+ detected)"
+    )
+
+    Configuration.alter_publication_set_generated_columns(state.db_pool, state.publication_name)
+    %{status | publishes_generated_columns?: true}
+  end
+
+  defp maybe_upgrade_generated_columns(status, _state), do: status
 
   @spec determine_publication_relation_actions(state(), RelationTracker.relation_filters()) ::
           {:ok, Configuration.relation_actions()} | {:error, any()}
