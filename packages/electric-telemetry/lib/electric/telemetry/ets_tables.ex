@@ -15,6 +15,7 @@ defmodule ElectricTelemetry.EtsTables do
 
   @default_individual_count 10
   @default_type_count 10
+  @word_size :erlang.system_info(:wordsize)
 
   @doc """
   Returns the top N individual ETS tables by memory usage.
@@ -30,9 +31,9 @@ defmodule ElectricTelemetry.EtsTables do
 
       iex> ElectricTelemetry.EtsTables.top_tables(5)
       [
-        %{name: :filter_shapes, type: :filter_shapes, memory: 605630464, size: 200122,
+        %{name: :filter_shapes, type: "filter_shapes", memory: 605630464, size: 200122,
           type_table_count: 1, avg_size_per_type: 200122.0},
-        %{name: :"shapedb:shape_lookup:6dd7c00b-...", type: :"shapedb:shape_lookup", memory: 605625344,
+        %{name: :"shapedb:shape_lookup:6dd7c00b-...", type: "shapedb:shape_lookup", memory: 605625344,
           size: 200122, type_table_count: 2, avg_size_per_type: 200122.0},
         ...
       ]
@@ -81,8 +82,8 @@ defmodule ElectricTelemetry.EtsTables do
 
       iex> ElectricTelemetry.EtsTables.top_by_type(5)
       [
-        %{type: :"Elixir.Electric.Registry.ShapeChange", memory: 6815744, table_count: 29, avg_size: 785.5},
-        %{type: :tls_socket, memory: 60928, table_count: 24, avg_size: 1.0},
+        %{type: "Elixir.Electric.Registry.ShapeChange", memory: 6815744, table_count: 29, avg_size: 785.5},
+        %{type: "tls_socket", memory: 60928, table_count: 24, avg_size: 1.0},
         ...
       ]
   """
@@ -224,8 +225,7 @@ defmodule ElectricTelemetry.EtsTables do
         0
 
       words when is_integer(words) ->
-        word_size = :erlang.system_info(:wordsize)
-        words * word_size
+        words * @word_size
     end
   end
 
