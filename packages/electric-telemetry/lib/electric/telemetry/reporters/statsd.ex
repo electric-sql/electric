@@ -22,13 +22,22 @@ defmodule ElectricTelemetry.Reporters.Statsd do
   end
 
   def router_dispatch_metrics do
+    tag_values = fn metadata ->
+      %{
+        route: metadata[:route],
+        status: (metadata[:conn] || %{}) |> Map.get(:status, "")
+      }
+    end
+
     [
       distribution("plug.router_dispatch.stop.duration",
         tags: [:route, :status],
+        tag_values: tag_values,
         unit: {:native, :millisecond}
       ),
       distribution("plug.router_dispatch.exception.duration",
         tags: [:route, :status],
+        tag_values: tag_values,
         unit: {:native, :millisecond}
       )
     ]
