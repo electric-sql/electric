@@ -13,7 +13,7 @@ image: /img/blog/tanstack-db-0.6-app-ready-with-persistence-and-includes/header.
 tags: [tanstack-db, local-first, release]
 outline: [2, 3]
 post: true
-published: false
+published: true
 ---
 
 TanStack DB 0.6 lands two features many teams were waiting for: persistence and includes.
@@ -21,7 +21,6 @@ TanStack DB 0.6 lands two features many teams were waiting for: persistence and 
 For Electric users, this is more than a point release. With persisted local state, app restarts can stay warm instead of cold. With includes, query results can match UI shape without custom projection layers. Together with Electric sync, this gives you a fuller local-first stack that is still optional, composable, and incrementally adoptable.
 
 > [!TIP]
-> **Key links**
 > - TanStack release post: [TanStack DB 0.6 now includes persistence, offline support, and hierarchical data](https://tanstack.com/blog/tanstack-db-0-6-now-includes-persistence-offline-support-and-hierarchical-data)
 > - Electric + TanStack DB guide: [Build super-fast apps on sync with TanStack DB](/blog/2025/07/29/super-fast-apps-on-sync-with-tanstack-db)
 > - Incremental adoption guide: [Local-first with your existing API](/blog/2024/11/21/local-first-with-your-existing-api)
