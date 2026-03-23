@@ -10,7 +10,7 @@ limits:
   maxDatabases: 200
   streamTTL: 'User-defined'
   concurrentReadersPerStream: 10000
-  maxShapes: 'Contact sales'
+  maxShapes: 'Unlimited'
   maxUsersPerWorkspace: 50
 
 featureGates:
@@ -24,7 +24,7 @@ featuresTitle: 'Includes'
 features:
   - 'Up to 200 databases'
   - '10,000 concurrent readers per stream'
-  - 'Custom shapes limit (contact sales)'
+  - 'Unlimited shapes'
   - '20% discount on metered usage'
   - 'User-defined stream TTL'
   - 'Postgres subqueries'
