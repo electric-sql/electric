@@ -194,6 +194,7 @@ export default defineConfig({
             { text: 'Usage', link: '/cloud/usage' },
             { text: 'Protocols', link: '/cloud/protocols' },
             { text: 'Pricing', link: '/pricing' },
+            { text: 'CLI', link: '/cloud/cli' },
           ],
         },
       ],
