@@ -6,7 +6,7 @@ excerpt: >-
   PGlite has seen amazing growth in the last year. This is an overview of PGlite's most important developments 
   and what's ahead for embedded Postgres.
 authors: [tdrz, samwillis]
-image: /img/blog/agent-skills-now-shipping/hero.png
+image: /img/blog/state-of-pglite-q1-2026/hero.jpg
 imageWidth: 2752
 imageHeight: 1536
 tags: [PGlite, PostGIS, Postgres]
