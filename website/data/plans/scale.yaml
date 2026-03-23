@@ -21,6 +21,9 @@ support: 'Direct access to founders'
 who: 'High-traffic products that need maximum capacity and hands-on support'
 pricingTitle: 'Usage-based pricing'
 pricing:
+  - '$1 per 1M writes (Durable Streams)'
+  - '$3 per 1M writes (Postgres Sync)'
+  - '$0.10 per GB-month storage'
   - '20% discount on metered usage'
 
 featuresTitle: 'Includes'
