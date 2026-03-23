@@ -15,6 +15,10 @@ function formatPrice(p) {
   }
   return ''
 }
+
+function renderBold(text) {
+  return text.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+}
 </script>
 
 <template>
@@ -30,13 +34,21 @@ function formatPrice(p) {
       <div v-if="plan.who" class="card-who">
         <slot name="who">For {{ plan.who }}</slot>
       </div>
+      <div v-if="plan.pricing && plan.pricing.length" class="card-features">
+        <div v-if="plan.pricingTitle" class="features-title">
+          {{ plan.pricingTitle }}
+        </div>
+        <div v-for="item in plan.pricing" :key="item" class="feature-item">
+          <span v-html="renderBold(item)"></span>
+        </div>
+      </div>
       <div v-if="plan.features && plan.features.length" class="card-features">
         <div v-if="plan.featuresTitle" class="features-title">
           {{ plan.featuresTitle }}
         </div>
         <div v-for="feature in plan.features" :key="feature" class="feature-item">
           <a v-if="feature === 'Higher usage limits'" href="#details">{{ feature }}</a>
-          <span v-else>{{ feature }}</span>
+          <span v-else v-html="renderBold(feature)"></span>
         </div>
       </div>
     </div>

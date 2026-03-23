@@ -19,14 +19,17 @@ commitment: 'None'
 support: 'Community (Discord)'
 
 who: 'Developers getting started or projects with low usage'
-featuresTitle: 'Features'
-features:
-  - 'Up to 10 databases'
-  - 'Unlimited Durable Streams'
-  - 'Up to 10K shapes'
+pricingTitle: 'Usage-based pricing'
+pricing:
   - '$1 per 1M writes (Durable Streams)'
   - '$3 per 1M writes (Postgres Sync)'
   - '$0.10 per GB-month storage'
+
+featuresTitle: 'Includes'
+features:
+  - 'Up to 10 databases'
+  - '**Unlimited** Durable Streams'
+  - 'Up to 10K shapes'
   - 'Community support (Discord)'
 
 ctaText: 'Sign up now'

@@ -7,7 +7,7 @@ discountPercent: 20
 priceQualifier: '/ month'
 
 limits:
-  maxDatabases: 200
+  maxDatabases: 'Unlimited'
   streamTTL: 'User-defined'
   maxShapes: 'Unlimited'
   maxUsersPerWorkspace: 50
@@ -19,12 +19,15 @@ commitment: '12 months'
 support: 'Direct access to founders'
 
 who: 'High-traffic products that need maximum capacity and hands-on support'
+pricingTitle: 'Usage-based pricing'
+pricing:
+  - '20% discount on metered usage'
+
 featuresTitle: 'Includes'
 features:
-  - 'Up to 200 databases'
-  - 'Unlimited Durable Streams'
-  - 'Unlimited shapes'
-  - '20% discount on metered usage'
+  - '**Unlimited** databases'
+  - '**Unlimited** Durable Streams'
+  - '**Unlimited** shapes'
   - '12-month commitment, auto-renew'
   - 'Early access to features'
   - 'Direct access to founders'

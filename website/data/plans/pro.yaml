@@ -19,12 +19,15 @@ commitment: '6 months'
 support: 'Priority email'
 
 who: 'Growing teams that need higher limits and priority support'
+pricingTitle: 'Usage-based pricing'
+pricing:
+  - '10% discount on metered usage'
+
 featuresTitle: 'Includes'
 features:
   - 'Up to 50 databases'
-  - 'Unlimited Durable Streams'
+  - '**Unlimited** Durable Streams'
   - 'Up to 100K shapes'
-  - '10% discount on metered usage'
   - '6-month commitment, auto-renew'
   - 'Early access to features'
   - 'Priority email support'
