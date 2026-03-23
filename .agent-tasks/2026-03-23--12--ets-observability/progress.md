@@ -24,7 +24,7 @@
 - Rebased on origin/main successfully
 - Implemented integration (opts, periodic measurement, metrics)
 - Ran internal code review (review-round-1.md)
-- Addressed review findings:
+- Addressed internal review findings:
   - Removed `String.to_atom/1` from `table_type/1` to prevent atom exhaustion
   - Handled race condition when table deleted between `:ets.all()` and `:ets.info/2`
   - Fixed test assertions: replaced silent `if` guards with proper `assert` calls
@@ -32,13 +32,24 @@
   - Fixed test table names to use UUID-like suffixes for correct type grouping
 - All 13 tests passing, compilation clean with --warnings-as-errors
 - Force-pushed rebased branch, updated PR description, added `claude` label
+- CI: electric-telemetry build passes, formatting passes
+- CI: `CallHomeReporterTest` has pre-existing flaky failures (unrelated to our changes)
+- Claude Code Review bot (round 1): passed, feedback addressed
+  - Fixed docstring examples to show string types instead of atoms
+  - Hoisted `:erlang.system_info(:wordsize)` to module attribute
+  - Dismissed `.agent-tasks` feedback (intentional per project convention)
+- Claude Code Review bot (round 2): timed out (infrastructure issue), no new feedback posted
 
 ### Dismissed review items
 - UUID regex too greedy for underscores: Edge case for Electric's specific naming patterns, acceptable
 - Inconsistent field naming (type_table_count vs table_count): Different data structures with different semantics
 - `top_memory_stats` unused in integration: Intended for IEx debugging
 - Performance concern about polling: Same trade-off as existing process_memory, acceptable
+- Two sequential reduce passes: Not worth the complexity for a minor optimization
+- Dead code branch (`if count > 0`): Harmless defensive guard
 
 ### Operational issues
 - Old worktree existed at `/home/alco/code/workspaces/electric/ets-observability`, had to remove it first
 - Husky pre-commit hook not executable (warning only, doesn't block)
+- Named ETS tables in tests auto-deleted when test process exits; `on_exit` callbacks need try/rescue not `:ets.info` checks
+- `mix format` required for try/rescue blocks in `on_exit` (one-liners not allowed)
