@@ -436,6 +436,38 @@ defmodule Electric.Shapes.QueryingTest do
                  Querying.stream_initial_data(conn, "dummy-stack-id", "dummy-shape-handle", shape)
                )
     end
+
+    test "preserves space padding for char(n) columns", %{db_conn: conn} do
+      Postgrex.query!(
+        conn,
+        """
+        CREATE TABLE padded (
+          id CHAR(8) PRIMARY KEY,
+          name CHAR(10),
+          label TEXT
+        )
+        """,
+        []
+      )
+
+      Postgrex.query!(conn, "INSERT INTO padded VALUES ('ab', 'hello', 'world')", [])
+      shape = Shape.new!("padded", inspector: {DirectInspector, conn})
+
+      assert [
+               %{
+                 key: ~S["public"."padded"/"ab      "],
+                 value: %{
+                   id: "ab      ",
+                   name: "hello     ",
+                   label: "world"
+                 },
+                 headers: %{operation: "insert", relation: ["public", "padded"]}
+               }
+             ] =
+               decode_stream(
+                 Querying.stream_initial_data(conn, "dummy-stack-id", "dummy-shape-handle", shape)
+               )
+    end
   end
 
   describe "query_move_in/5 with SubqueryMoves.move_in_where_clause/3" do
