@@ -267,8 +267,20 @@ defmodule Electric.Replication.PublicationManager.Configurator do
       "Upgrading publication #{state.publication_name} to publish generated columns (PostgreSQL 18+ detected)"
     )
 
-    Configuration.alter_publication_set_generated_columns(state.db_pool, state.publication_name)
-    %{status | publishes_generated_columns?: true}
+    case Configuration.alter_publication_set_generated_columns(
+           state.db_pool,
+           state.publication_name
+         ) do
+      :ok ->
+        %{status | publishes_generated_columns?: true}
+
+      {:error, reason} ->
+        Logger.warning(
+          "Failed to upgrade publication #{state.publication_name} to publish generated columns: #{inspect(reason)}"
+        )
+
+        status
+    end
   end
 
   defp maybe_upgrade_generated_columns(status, _state), do: status

@@ -84,13 +84,16 @@ defmodule Electric.Postgres.Configuration do
     end
   end
 
-  @spec alter_publication_set_generated_columns(Postgrex.conn(), String.t()) :: :ok
+  @spec alter_publication_set_generated_columns(Postgrex.conn(), String.t()) ::
+          :ok | {:error, term()}
   def alter_publication_set_generated_columns(conn, publication_name) do
     query =
       "ALTER PUBLICATION #{Utils.quote_name(publication_name)} SET (publish_generated_columns = stored)"
 
-    Postgrex.query!(conn, query, [])
-    :ok
+    case Postgrex.query(conn, query, []) do
+      {:ok, _} -> :ok
+      {:error, reason} -> {:error, reason}
+    end
   end
 
   @spec add_table_to_publication(Postgrex.conn(), String.t(), Electric.oid_relation(), timeout()) ::
