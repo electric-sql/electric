@@ -455,6 +455,7 @@ defmodule Electric.Shapes.QueryingTest do
         "INSERT INTO padded VALUES ('ab', 'hello', 'world'), ('cd', NULL, 'test')",
         []
       )
+
       shape = Shape.new!("padded", inspector: {DirectInspector, conn})
 
       assert [
