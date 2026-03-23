@@ -25,7 +25,9 @@ features:
   - '100 concurrent readers per stream'
   - 'Usage under $5/mo is waived'
   - 'No payment method required under $10/mo'
-  - '$3 per 1M writes, $0.10 per GB-month'
+  - '$1 per 1M writes (Durable Streams)'
+  - '$3 per 1M writes (Postgres Sync)'
+  - '$0.10 per GB-month storage'
   - 'Community support (Discord)'
 
 ctaText: 'Sign up now'

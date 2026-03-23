@@ -19,11 +19,15 @@ export default {
         const slug = path.basename(file, `.yaml`)
         const data = parse(fs.readFileSync(file, `utf-8`))
 
-        // Derive effective rates for tier plans
+        // Derive effective rates for tier plans (per-service write rates)
         if (data.type === `tier` && data.discountPercent !== undefined) {
           const discount = data.discountPercent / 100
-          data.effectiveWriteRate = +(
-            config.baseRates.writesPerMillion *
+          data.effectiveDurableStreamsWriteRate = +(
+            config.baseRates.durableStreamsWritesPerMillion *
+            (1 - discount)
+          ).toFixed(4)
+          data.effectivePostgresSyncWriteRate = +(
+            config.baseRates.postgresSyncWritesPerMillion *
             (1 - discount)
           ).toFixed(4)
           data.effectiveRetentionRate = +(

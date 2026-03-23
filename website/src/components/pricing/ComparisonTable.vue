@@ -53,9 +53,14 @@ function formatDiscount(plan) {
   return plan.discountPercent + '%'
 }
 
-function formatWriteRate(plan) {
+function formatDurableStreamsWriteRate(plan) {
   if (plan.type === 'enterprise') return 'Custom'
-  return formatCurrency(plan.effectiveWriteRate, '/1M')
+  return formatCurrency(plan.effectiveDurableStreamsWriteRate, '/1M')
+}
+
+function formatPostgresSyncWriteRate(plan) {
+  if (plan.type === 'enterprise') return 'Custom'
+  return formatCurrency(plan.effectivePostgresSyncWriteRate, '/1M')
 }
 
 function formatRetentionRate(plan) {
@@ -86,7 +91,11 @@ function getFeatureGate(plan, key) {
 function computeScenarioCost(plan, scenario) {
   if (scenario.writesPerMonth === null || scenario.retentionGB === null) return '...'
   if (plan.type === 'enterprise') return 'Custom'
-  const writeCost = (scenario.writesPerMonth / 1000000) * plan.effectiveWriteRate
+  const dsWrites = scenario.durableStreamsWritesPerMonth || 0
+  const pgWrites = scenario.postgresSyncWritesPerMonth || 0
+  const writeCost =
+    (dsWrites / 1000000) * plan.effectiveDurableStreamsWriteRate +
+    (pgWrites / 1000000) * plan.effectivePostgresSyncWriteRate
   const retentionCost = scenario.retentionGB * plan.effectiveRetentionRate
   const total = writeCost + retentionCost
   return new Intl.NumberFormat('en-US', {
@@ -145,9 +154,15 @@ function computeScenarioCost(plan, scenario) {
         </div>
       </div>
       <div class="metric-row">
-        <div class="metric-column metric-label">Writes</div>
+        <div class="metric-column metric-label">Durable Streams writes</div>
         <div class="plan-column">
-          <div v-for="plan in comparisonPlans" :key="plan.slug" class="metric-value" :data-plan="plan.name">{{ formatWriteRate(plan) }}</div>
+          <div v-for="plan in comparisonPlans" :key="plan.slug" class="metric-value" :data-plan="plan.name">{{ formatDurableStreamsWriteRate(plan) }}</div>
+        </div>
+      </div>
+      <div class="metric-row">
+        <div class="metric-column metric-label">Postgres Sync writes</div>
+        <div class="plan-column">
+          <div v-for="plan in comparisonPlans" :key="plan.slug" class="metric-value" :data-plan="plan.name">{{ formatPostgresSyncWriteRate(plan) }}</div>
         </div>
       </div>
       <div class="metric-row">

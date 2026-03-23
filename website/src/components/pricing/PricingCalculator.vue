@@ -19,8 +19,9 @@ onMounted(() => {
   }
 })
 
-// Inputs
-const writesPerMonth = ref(5000000)
+// Inputs (per-service write volumes)
+const dsWritesPerMonth = ref(5000000)
+const pgWritesPerMonth = ref(5000000)
 const retentionGB = ref(50)
 
 // Feature checkbox state: { [featureId]: boolean }
@@ -43,11 +44,14 @@ function safeVal(v) {
 
 // Compute costs for all tiers
 const tierCosts = computed(() => {
-  const w = safeVal(writesPerMonth.value)
+  const dsW = safeVal(dsWritesPerMonth.value)
+  const pgW = safeVal(pgWritesPerMonth.value)
   const r = safeVal(retentionGB.value)
 
   return tiers.map(tier => {
-    const writeCost = (w / 1000000) * tier.effectiveWriteRate
+    const dsWriteCost = (dsW / 1000000) * tier.effectiveDurableStreamsWriteRate
+    const pgWriteCost = (pgW / 1000000) * tier.effectivePostgresSyncWriteRate
+    const writeCost = dsWriteCost + pgWriteCost
     const retentionCost = r * tier.effectiveRetentionRate
     const usageCost = writeCost + retentionCost
 
@@ -66,6 +70,8 @@ const tierCosts = computed(() => {
 
     return {
       tier,
+      dsWriteCost,
+      pgWriteCost,
       writeCost,
       retentionCost,
       usageCost,
@@ -120,6 +126,14 @@ const breakdownText = computed(() => {
   return `Writes: ${w} + Retention: ${ret} = ${total}`
 })
 
+const writeBreakdownText = computed(() => {
+  const r = recommendation.value
+  if (r.waived) return ''
+  const ds = currencyFmt.format(r.dsWriteCost)
+  const pg = currencyFmt.format(r.pgWriteCost)
+  return `Streams: ${ds} + Postgres Sync: ${pg}`
+})
+
 const planNote = computed(() => {
   const r = recommendation.value
   if (r.tier.slug === 'payg') return ''
@@ -137,9 +151,21 @@ const planNote = computed(() => {
     <div class="calculator-inputs">
       <div class="input-group">
         <label class="input-label">
-          Writes per month
+          Durable Streams writes / month
           <input
-            v-model.number="writesPerMonth"
+            v-model.number="dsWritesPerMonth"
+            type="number"
+            class="input-field"
+            min="0"
+            step="1000000"
+          />
+        </label>
+      </div>
+      <div class="input-group">
+        <label class="input-label">
+          Postgres Sync writes / month
+          <input
+            v-model.number="pgWritesPerMonth"
             type="number"
             class="input-field"
             min="0"
@@ -181,6 +207,7 @@ const planNote = computed(() => {
           <div class="result-period">/ month</div>
         </div>
         <div v-if="breakdownText" class="result-breakdown">{{ breakdownText }}</div>
+        <div v-if="writeBreakdownText" class="result-breakdown">{{ writeBreakdownText }}</div>
         <div v-if="planNote" class="result-note">{{ planNote }}</div>
         <div class="result-cta">
           <VPButton

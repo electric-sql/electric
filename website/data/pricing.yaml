@@ -1,7 +1,10 @@
 # Base rates (PAYG, before any discount)
+# Postgres Sync writes carry a premium because filtering shapes is
+# significantly more compute-intensive than appending to a durable stream.
 baseRates:
-  writesPerMillion: 3 # $3 per 1M writes (filtering in Electric is significantly more compute-intensive than a stream append)
-  retentionPerGBMonth: 0.10 # $0.10 per GB-month
+  durableStreamsWritesPerMillion: 1   # $1 per 1M durable-stream writes (baseline)
+  postgresSyncWritesPerMillion: 3     # $3 per 1M Postgres-sync writes (premium)
+  retentionPerGBMonth: 0.10           # $0.10 per GB-month (same for both services)
 
 # Write unit definition
 writeUnitSizeKB: 10 # Each write is up to 10KB; larger messages auto-chunk
@@ -35,10 +38,12 @@ workloadScenarios:
   - id: appDev
     label: 'Typical app development'
     description: 'Lorem ipsum dolor sit amet'
-    writesPerMonth: null # Human fills in
-    retentionGB: null # Human fills in
+    durableStreamsWritesPerMonth: null  # Human fills in
+    postgresSyncWritesPerMonth: null    # Human fills in
+    retentionGB: null                   # Human fills in
   - id: aiStreaming
     label: 'AI token streaming'
     description: 'Lorem ipsum dolor sit amet'
-    writesPerMonth: null # Human fills in
-    retentionGB: null # Human fills in
+    durableStreamsWritesPerMonth: null  # Human fills in
+    postgresSyncWritesPerMonth: null    # Human fills in
+    retentionGB: null                   # Human fills in
