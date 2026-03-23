@@ -64,7 +64,19 @@ onMounted(() => {
   <Layout :class="!hasSidebar ? 'nav-relative' : ''">
     <template #layout-top>
       <template v-if="!hasSidebar">
-        <ReleaseBanner />
+        <ReleaseBanner
+          link="/docs/integrations/vue"
+          subtitle=""
+          description="Build reactive Vue apps with seamless sync"
+          background="#262626"
+        >
+          <template #icon>
+            <img src="https://vuejs.org/logo.svg" alt="Vue.js logo" style="width: 20px; height: 20px; vertical-align: middle; margin-right: 8px;" />
+          </template>
+          <template #title>
+            <span class="vue-text-gradient">Introducing Vue Composables</span>
+          </template>
+        </ReleaseBanner>
       </template>
     </template>
     <template #nav-bar-content-after>

@@ -6,7 +6,7 @@
   # Environment variables are set here
 
   # Node version here should match the one in .tool-versions - that's the authoritative source
-  NODE_VERSION = "22.12.0"
+  NODE_VERSION = "24.11.1"
 
 [[edge_functions]]
   function = "serve-markdown"

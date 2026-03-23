@@ -23,6 +23,10 @@ How to build [fast,&nbsp;modern&nbsp;apps](/blog/2025/07/29/super-fast-apps-on-s
 
 ## Getting started
 
+> [!Tip] 🟢 Vue is here!
+> <img src="https://vuejs.org/logo.svg" alt="Vue.js logo" style="width: 48px; height: 48px; vertical-align: middle; margin-right: 8px;" />
+> Introducing Vue composables for ElectricSQL - build reactive Vue apps with seamless sync!
+
 Start with the [Quickstart](/docs/quickstart) for the fastest way to get up-and-running.
 
 The easiest way to use Electric in production is the [Electric Cloud](/cloud). Alternatively, the [Deployment](/docs/guides/deployment) guide covers how to self host.

@@ -1170,6 +1170,16 @@ ul.demo-actions li .VPButton {
   padding: 16px 0 !important;
 }
 
+.vue-text-gradient {
+  font-weight: bold;
+  text-decoration: none;
+  background: -webkit-linear-gradient(315deg, #42d392 25%, #647eff);
+  background-clip: border-box;
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
 /* Markdown Link Styles */
 
 /* Local nav container: hidden by default */

@@ -1,0 +1,8 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "paths": {
+      "@electric-sql/client": ["../typescript-client/src"]
+    }
+  }
+}
