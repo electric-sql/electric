@@ -27,7 +27,7 @@ For Electric users, this is more than a point release. With persisted local stat
 > - Electric docs: [Introduction](/docs/intro), [Quickstart](/docs/quickstart)
 > - Shape docs: [Shapes](/docs/guides/shapes)
 
-## Context
+## How this fits the Electric stack
 
 Electric and TanStack DB pair naturally: Electric syncs normalized shapes from Postgres to clients using incremental sync, and TanStack DB handles local query execution, optimistic state, and reactive UI updates.
 
@@ -54,16 +54,22 @@ This gives teams a complete app data model they can adopt in practice: fully opt
 
 ## Get started
 
-Read the full TanStack announcement first for API details and migration notes, then apply the Electric angle in a small slice of your app.
+A practical way to start is with one focused app slice, then expand as you go.
 
-1. Start from an Electric + TanStack DB setup:
-   - [Electric + TanStack DB guide](/blog/2025/07/29/super-fast-apps-on-sync-with-tanstack-db)
-   - [Electric quickstart](/docs/quickstart)
-2. Add persistence to one high-value collection first (for example inbox, tasks, drafts, or threads).
-3. Add includes to one UI surface where projection code is currently noisy.
-4. Expand gradually, based on product value, not ideology.
+### 1) Start with the baseline stack
+
+Begin from an Electric + TanStack DB setup:
+
+- [Electric + TanStack DB guide](/blog/2025/07/29/super-fast-apps-on-sync-with-tanstack-db)
+- [Electric quickstart](/docs/quickstart)
+
+### 2) Add persistence where it pays off first
+
+Pick one high-value collection (for example inbox, tasks, drafts, or threads) and make it durable across restarts.
 
 Persistence example:
+
+This example uses the React Native/Expo SQLite adapter; browser and Node use equivalent persistence adapters with the same pattern.
 
 ```ts
 import { open } from '@op-engineering/op-sqlite'
@@ -100,6 +106,10 @@ const items = createCollection(
 )
 ```
 
+### 3) Add includes where projection code is noisy
+
+Pick one UI surface with manual shaping logic and replace it with an includes-based live query over normalized synced data.
+
 Includes example:
 
 ```ts
@@ -124,6 +134,10 @@ const projectsWithIssues = createLiveQueryCollection((q) =>
 
 This pattern keeps sync normalized and declarative while giving your UI a GraphQL-like hierarchical projection from one reactive live query.
 
+### 4) Expand incrementally
+
+Once one slice is working well, extend the same pattern to the next collections and screens.
+
 ## Coming next
 
 - More production examples of Electric + TanStack DB with persistence enabled.
@@ -132,31 +146,10 @@ This pattern keeps sync normalized and declarative while giving your UI a GraphQ
 
 ## Next steps
 
-If you are starting a new app, this is a good time to start with Electric + TanStack DB and adopt persistence and includes where they provide immediate product value.
+If you are starting a new app, this is a good time to start with Electric + TanStack DB and adopt persistence and includes step by step where they help most.
 
 - [Read the TanStack DB 0.6 post](https://tanstack.com/blog/tanstack-db-0-6-now-includes-persistence-offline-support-and-hierarchical-data)
 - [Build with Electric + TanStack DB](/blog/2025/07/29/super-fast-apps-on-sync-with-tanstack-db)
 - [Try the Electric quickstart](/docs/quickstart)
 - [Join Discord](https://discord.electric-sql.com)
-
-***
-
-<!--
-DELETE THIS FOOTER BEFORE PUBLISHING
-
-Asset checklist
-- [ ] Verify exact TanStack post URL slug
-- [ ] Add header image at `/img/blog/tanstack-db-0.6-app-ready-with-persistence-and-includes/header.jpg`
-- [ ] Swap sample snippet for production snippet (optional)
-- [ ] Add optional diagram or warm-restart screenshot/GIF
-
-Open questions
-- Keep as text-first, or add a short demo embed?
-
-Typesetting checklist
-- [ ] Use sentence case for title
-- [ ] Check for widows/orphans and add non-breaking spaces/hyphens where needed
-- [ ] Verify title, header image, and body layout on mobile and desktop widths
-- [ ] Remove generic/LLM filler phrasing during prose pass
--->
 
