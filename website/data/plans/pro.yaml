@@ -9,7 +9,7 @@ priceQualifier: '/ month'
 limits:
   maxDatabases: 50
   streamTTL: 'User-defined'
-  concurrentReadersPerStream: 1000
+
   maxShapes: 100000
   maxUsersPerWorkspace: 50
 
@@ -23,7 +23,7 @@ who: 'Growing teams that need higher limits and priority support'
 featuresTitle: 'Includes'
 features:
   - 'Up to 50 databases'
-  - '1,000 concurrent readers per stream'
+
   - 'Up to 100K shapes'
   - '10% discount on metered usage'
   - 'User-defined stream TTL'

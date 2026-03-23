@@ -12,7 +12,7 @@ features:
 limits:
   maxDatabases: 'Unlimited'
   streamTTL: 'Unlimited'
-  concurrentReadersPerStream: 'Unlimited'
+
   maxShapes: 'Unlimited'
   maxUsersPerWorkspace: 'Unlimited'
 
