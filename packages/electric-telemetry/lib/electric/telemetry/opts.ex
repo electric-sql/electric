@@ -35,6 +35,7 @@ defmodule ElectricTelemetry.Opts do
                ]},
             default: {:count, 5}
           ],
+          top_ets_table_count: [type: :integer, default: 10],
           # Garbage collection should run almost instantly since each process has its own heap that
           # is garbage collected independently of others. 50ms might be too generous.
           long_gc_threshold: [type: :integer, default: 50],

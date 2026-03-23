@@ -76,6 +76,7 @@ defmodule ElectricTelemetry.ApplicationTelemetry do
           :garbage_collection,
           :reductions,
           :process_memory,
+          :ets_table_memory,
           :get_system_load_average,
           :get_system_memory_usage
         ],
@@ -86,6 +87,7 @@ defmodule ElectricTelemetry.ApplicationTelemetry do
   def metrics(telemetry_opts) do
     [
       last_value("process.memory.total", tags: [:process_type], unit: :byte),
+      last_value("ets_table.memory.total", tags: [:table_type], unit: :byte),
       last_value("system.cpu.core_count"),
       last_value("system.cpu.utilization.total"),
       last_value("system.load_percent.avg1"),
@@ -173,6 +175,13 @@ defmodule ElectricTelemetry.ApplicationTelemetry do
     for %{type: type, memory: memory} <-
           ElectricTelemetry.Processes.top_memory_by_type(process_limit) do
       :telemetry.execute([:process, :memory], %{total: memory}, %{process_type: to_string(type)})
+    end
+  end
+
+  def ets_table_memory(%{intervals_and_thresholds: %{top_ets_table_count: ets_table_count}}) do
+    for %{type: type, memory: memory} <-
+          ElectricTelemetry.EtsTables.top_by_type(ets_table_count) do
+      :telemetry.execute([:ets_table, :memory], %{total: memory}, %{table_type: to_string(type)})
     end
   end
 
