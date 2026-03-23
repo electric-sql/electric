@@ -22,7 +22,7 @@ who: 'Developers getting started or projects with low usage'
 featuresTitle: 'Features'
 features:
   - 'Up to 10 databases'
-  - 'Unlimited streams'
+  - 'Unlimited Durable Streams'
   - 'Up to 10K shapes'
   - '$1 per 1M writes (Durable Streams)'
   - '$3 per 1M writes (Postgres Sync)'

@@ -22,7 +22,7 @@ who: 'High-traffic products that need maximum capacity and hands-on support'
 featuresTitle: 'Includes'
 features:
   - 'Up to 200 databases'
-  - 'Unlimited streams'
+  - 'Unlimited Durable Streams'
   - 'Unlimited shapes'
   - '20% discount on metered usage'
   - '12-month commitment, auto-renew'

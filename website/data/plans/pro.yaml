@@ -22,7 +22,7 @@ who: 'Growing teams that need higher limits and priority support'
 featuresTitle: 'Includes'
 features:
   - 'Up to 50 databases'
-  - 'Unlimited streams'
+  - 'Unlimited Durable Streams'
   - 'Up to 100K shapes'
   - '10% discount on metered usage'
   - '6-month commitment, auto-renew'
