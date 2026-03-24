@@ -5,7 +5,7 @@ description: >-
 excerpt: >-
   ...
 authors: []
-image: /img/blog/state-of-pglite-q1-2026/hero.jpg
+image: /img/blog/announcing-pglite-v04/hero.jpg
 imageWidth: 2752
 imageHeight: 1536
 tags: [PGlite, PostGIS, Postgres]
@@ -146,7 +146,7 @@ Reuse the existing hero image from the state-of-pglite post, or create a new one
 
 ### Asset checklist
 - [x] initdb/postgres plumbing SVG (exists: /img/blog/announcing-pglite-v04/initdbpostgres.svg)
-- [x] Hero image (exists: /img/blog/state-of-pglite-q1-2026/hero.jpg)
+- [x] Hero image (exists: /img/blog/announcing-pglite-v04/hero.jpg)
 - [ ] Fill in title, description, excerpt in frontmatter
 - [ ] Decide on hero image: reuse or new?
 - [ ] Verify 13M downloads figure and qualifier wording with thruflo
