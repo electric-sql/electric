@@ -47,7 +47,7 @@ defmodule ElectricTelemetry.Processes do
       {name, _} -> name
       {name, _, _} -> name
       name when is_atom(name) -> name
-      name when is_binary(name) -> name
+      name when is_binary(name) -> parse_binary_label(name)
       _ -> nil
     end
   end
@@ -69,6 +69,28 @@ defmodule ElectricTelemetry.Processes do
     case info[:memory] do
       bytes when is_integer(bytes) -> bytes
       _ -> 0
+    end
+  end
+
+  defp parse_binary_label(label) do
+    case label do
+      "Request " <> <<_req_id::binary-20, " - ", rest::binary>> ->
+        # This is a request process with the label assigned by Electric.Plug.LabelProcessPlug.
+        # We group all requests together to be able to see their aggregated mem footprint.
+
+        # Cut off the URL query part, leaving only the `<method> <path>` prefix.
+        part_len =
+          case :binary.match(rest, "?") do
+            {pos, _} -> pos
+            :nomatch -> min(20, byte_size(rest))
+          end
+
+        :binary.part(rest, 0, part_len)
+
+      _ ->
+        # Opportunistic grouping by truncating long labels.
+        part_len = min(20, byte_size(label))
+        :binary.part(label, 0, part_len)
     end
   end
 end
