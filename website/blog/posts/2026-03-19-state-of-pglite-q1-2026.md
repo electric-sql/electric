@@ -14,7 +14,7 @@ outline: [2, 3]
 post: true
 ---
 
-We’ve just released version 0.4 of [PGlite](https://pglite.dev/) — a WASM port of Postgres that runs directly inside your JavaScript environment.
+[PGlite](https://pglite.dev/) is a WASM port of Postgres that runs directly inside your JavaScript environment. Version 0.4 is out now! 🚀
 Under the hood, this is a big one. It includes a substantial architectural refactor that sets us up for what’s coming next, along with new extensions — including the long-awaited PostGIS.
 
 PGlite has seen an [impressive growth](https://www.npmjs.com/package/@electric-sql/pglite) over the last year, from about 500k to over 5 Million weekly downloads! PGlite is making its way in every corner of the software world, with usage varying from CICD testing to [vibe coding with a database in the sandbox](https://electric-sql.com/blog/2025/06/05/database-in-the-sandbox). Our friends at [Prisma](https://www.prisma.io/) are [bundling PGlite](https://www.prisma.io/docs/postgres/database/local-development) within their CLI to give you a full dev env for rapid iteration and isolated testing within a single package. Try it with 
