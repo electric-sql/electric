@@ -45,7 +45,7 @@ As the world moves to getting things done through agents, the winners are going 
 
 A Durable Session is a state management pattern that naturally makes AI and agentic apps collaborative.
 
-This post introduces the [Durable Session pattern](#durable-session-pattern) and shows how you can implement it using [Durable&nbsp;Streams](/products/durable-streams) and [TanStack&nbsp;DB](/products/tanstack-db).
+This post introduces the [Durable Session pattern](#durable-session-pattern) and shows how you can implement it using [Durable&nbsp;Streams](/primitives/durable-streams) and [TanStack&nbsp;DB](/primitives/tanstack-db).
 
 > [!Warning] 🤝 ✨ Durable Sessions demo
 > See the TanStack AI - Durable Sessions [demo video](https://youtu.be/81KXwxld7dw) and [source code](https://github.com/electric-sql/transport).
@@ -174,7 +174,7 @@ Whereas what's needed is a ***standard protocol*** for persistence and addressab
 
 ## Composable sync primitives
 
-That's what we've been building at Electric. A suite of [composable sync primitives](/products/) that give you durable state that's persistent, addressable and subscribable, including:
+That's what we've been building at Electric. A suite of [composable sync primitives](/primitives/) that give you durable state that's persistent, addressable and subscribable, including:
 
 - [Postgres&nbsp;Sync](#postgres-sync)
 - [Durable&nbsp;Streams](#durable-streams)
@@ -182,19 +182,19 @@ That's what we've been building at Electric. A suite of [composable sync primiti
 
 ### Postgres&nbsp;Sync
 
-[Postgres Sync](/products/postgres-sync) syncs data out of Postgres into client apps.
+[Postgres Sync](/primitives/postgres-sync) syncs data out of Postgres into client apps.
 
 It handles partial replication and fan out. Using an [HTTP-based sync protocol](/docs/api/http) that scales out data delivery through existing CDN infrastructure.
 
 ### Durable&nbsp;Streams
 
-We've now generalized the Electric sync protocol into [Durable&nbsp;Streams](/products/durable-streams).
+We've now generalized the Electric sync protocol into [Durable&nbsp;Streams](/primitives/durable-streams).
 
 This is a lower-level binary streaming protocol that supports more use cases, like token streaming, real-time presence and multi-modal binary data frames.
 
 ### TanStack&nbsp;DB
 
-[TanStack&nbsp;DB](/products/tanstack-db) is a lightweight, reactive client store with:
+[TanStack&nbsp;DB](/primitives/tanstack-db) is a lightweight, reactive client store with:
 
 1. [collections](https://tanstack.com/db/latest/docs/overview#defining-collections) a unified data layer to load data into
 1. [live queries](https://tanstack.com/db/latest/docs/guides/live-queries) super-fast reactivity using differential dataflow
@@ -208,7 +208,7 @@ A Durable Session is a state management pattern that makes AI and agentic apps c
 
 ### Layered protocols
 
-The key insight behind the [generalization of Electric into Durable&nbsp;Streams](/blog/2025/12/09/announcing-durable-streams) was not ***just*** that apps needed persistent, addressable, binary streams for presence and token streaming. (Although, of course, [they do](https://github.com/durable-streams/durable-streams?tab=readme-ov-file#the-missing-primitive)).
+The key insight behind the [generalization of Electric into Durable&nbsp;Streams](/blog/2025/12/09/announcing-durable-streams) was not ***just*** that apps needed persistent, addressable, binary streams for presence and token streaming. (Although, of course, [they do](https://durablestreams.com)).
 
 It was ***also*** to decouple the payload format from the delivery protocol. So the resilient, scalable, HTTP-based delivery protocol could sync any data format. That way, the Electric sync protocol (originally modelled on the change events emitted by Postgres logical replication) becomes just one of many structured state synchronization protocols layered on top of the core binary streams.
 
@@ -355,7 +355,7 @@ export const sessionSchema = createStateSchema({
 })
 ```
 
-This is then passed to the durable state layer [`StreamDB`](https://github.com/durable-streams/durable-streams/blob/main/packages/state/src/stream-db.ts), which streams the data over a Durable Stream and routes the message streams and session state into TanStack&nbsp;DB collections for you. The schema provides end-to-end type-safety and the transport and reactivity is delegated to the sync machinery.
+This is then passed to the durable state layer [`StreamDB`](https://durablestreams.com/stream-db), which streams the data over a Durable Stream and routes the message streams and session state into TanStack&nbsp;DB collections for you. The schema provides end-to-end type-safety and the transport and reactivity is delegated to the sync machinery.
 
 #### Derived collections
 
@@ -631,15 +631,15 @@ With minimal changes to your component code and zero changes to your real AI eng
 
 As the world moves to getting things done through agents, the winners are going to be the products that combine AI with team-based collaboration. Building AI apps on the Durable Session pattern is the best way to do that.
 
-[Durable&nbsp;Streams](/products/durable-streams) and [TanStack&nbsp;DB](/products/tanstack-db) allow you to build Durable Sessions with your existing stack, schema and AI SDK.
+[Durable&nbsp;Streams](/primitives/durable-streams) and [TanStack&nbsp;DB](/primitives/tanstack-db) allow you to build Durable Sessions with your existing stack, schema and AI SDK.
 
 ### Next steps
 
 Dive into the projects and docs for more information:
 
-- [Postgres&nbsp;Sync](/products/postgres-sync)
-- [Durable&nbsp;Streams](/products/durable-streams)
-- [TanStack&nbsp;DB](/products/tanstack-db)
+- [Postgres&nbsp;Sync](/primitives/postgres-sync)
+- [Durable&nbsp;Streams](/primitives/durable-streams)
+- [TanStack&nbsp;DB](/primitives/tanstack-db)
 - [TanStack&nbsp;AI](https://tanstack.com/ai)
 
 Check out the reference implementations in the [electric-sql/transport](https://github.com/electric-sql/transport) repo:

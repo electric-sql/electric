@@ -382,6 +382,10 @@ span.no-visual {
   }
 }
 
+.is-home .hide-home {
+  display: none;
+}
+
 .VPNavBar.home,
 .VPNavBar.home .content-body,
 .VPNavBar.home .divider,

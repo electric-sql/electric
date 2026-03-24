@@ -176,7 +176,7 @@ state.apply({
 const user = state.get("user", "1")  // { name: "Kyle" }
 ```
 
-For applications that need reactive queries, filtering, joins, and optimistic updates, `@durable-streams/state` integrates with [TanStack&nbsp;DB](/products/tanstack-db):
+For applications that need reactive queries, filtering, joins, and optimistic updates, `@durable-streams/state` integrates with [TanStack&nbsp;DB](/primitives/tanstack-db):
 
 ```typescript
 import { createStateSchema, createStreamDB } from "@durable-streams/state"
