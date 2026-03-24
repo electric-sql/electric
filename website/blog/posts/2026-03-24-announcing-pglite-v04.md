@@ -1,10 +1,11 @@
 ---
 title: 'Announcing PGlite v0.4: PostGIS, connection multiplexing, and a new architecture'
 description: >-
-  ...
+  An overview of what has been keeping us busy lately and what are PGlite's plans for the future.
 excerpt: >-
-  ...
-authors: []
+  PGlite has seen amazing growth in the last year. This is an overview of PGlite's most important developments 
+  and what's ahead for embedded Postgres.  
+authors: [samwillis]
 image: /img/blog/announcing-pglite-v04/hero.jpg
 imageWidth: 2752
 imageHeight: 1536
