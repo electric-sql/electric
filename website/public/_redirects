@@ -102,3 +102,5 @@ https://next.electric-sql.com/* https://electric-sql.com/:splat 301!
 /products                       /primitives
 /products/                      /primitives/
 /products/*                     /primitives/:splat
+
+/blog/2026/03/18/*            /blog/2026/03/24/:splat
