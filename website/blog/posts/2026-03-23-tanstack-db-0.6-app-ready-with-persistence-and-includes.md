@@ -2,10 +2,10 @@
 title: 'Electric apps get persistence and includes with TanStack DB 0.6'
 description: >-
   TanStack DB 0.6 adds persistence and includes. For Electric users, that means
-  a more complete app data stack with durable local state and
-  application-shaped queries, adopted incrementally and fully opt-in.
+  a more complete app data stack with persistence and
+  app-ready queries, adopted incrementally and fully opt-in.
 excerpt: >-
-  TanStack DB 0.6 is a big unlock for Electric users. Persistence plus includes
+  TanStack DB 0.6 is a major update for Electric users. Persistence and includes
   makes the Electric + TanStack DB stack more app-ready while staying optional,
   composable, and incrementally adoptable.
 authors: [samwillis, kevindeporre]
@@ -18,7 +18,7 @@ published: true
 
 TanStack DB 0.6 lands two features many teams were waiting for: persistence and includes.
 
-For Electric users, this is more than a point release. With persisted local state, app restarts can stay warm instead of cold. With includes, query results can match UI shape without custom projection layers. Together with Electric sync, this gives you a fuller local-first stack that is still optional, composable, and incrementally adoptable.
+For Electric users, this is more than a point release. With persisted local state, app restarts are fast since data can be loaded locally from disk. With includes, query results can match UI shape without custom projection layers. Together with Electric sync, this gives you a more complete local-first stack that is still optional, composable, and incrementally adoptable.
 
 > [!TIP]
 > - TanStack release post: [TanStack DB 0.6 now includes persistence, offline support, and hierarchical data](https://tanstack.com/blog/tanstack-db-0-6-now-includes-persistence-offline-support-and-hierarchical-data)
@@ -31,26 +31,26 @@ For Electric users, this is more than a point release. With persisted local stat
 
 Electric and TanStack DB pair naturally: Electric syncs normalized shapes from Postgres to clients using incremental sync, and TanStack DB handles local query execution, optimistic state, and reactive UI updates.
 
-That stack already delivered fast, sync-powered apps. The missing piece for many teams was durable local state across reloads and restarts. TanStack DB 0.6 closes that gap with SQLite-backed persistence across browser, Node, React Native, Expo, Capacitor, and edge runtimes like Cloudflare Durable Objects.
+That stack already delivered fast, sync-powered apps. The missing piece for many teams was persistence across reloads and restarts. TanStack DB 0.6 closes that gap with SQLite-backed persistence across browser, Node, React Native, Expo, Capacitor, and edge runtimes like Cloudflare Durable Objects.
 
-0.6 also adds includes, which let you compose subqueries in `select` and project that normalized synced data into hierarchical UI-shaped results. In practice, this gives you a GraphQL-like projection model from a single declarative live query, but powered by Electric sync plus TanStack DB's reactive query engine.
+TanStack DB 0.6 also introduces includes, which let you nest subqueries in `select` and project normalized synced data into hierarchical UI-shaped results. In practice, this gives you a GraphQL-like projection model from a single declarative live query, but powered by Electric sync and TanStack DB's reactive query engine.
 
 ## What's shipping
 
 - **Persistence across runtimes.** Local state can survive app restarts, not just tab lifetime, and works across browser, Node, mobile runtimes, and edge environments.
 - **Includes for hierarchical projections.** Electric keeps sync normalized; includes let you project that into GraphQL-like UI shapes from one declarative reactive live query instead of hand-rolled per-screen projection code.
-- **A more complete app data stack.** Electric sync + TanStack DB query engine + optimistic updates + durable local state is now practical in one composable architecture.
+- **A more complete app data stack.** Electric sync + TanStack DB query engine + optimistic updates + persistence compose seamlessly for your apps.
 - **No all-or-nothing migration.** These capabilities are opt-in and incremental. You can add persistence and includes collection-by-collection where they matter.
 
 ## Why this matters for Electric users
 
-Over the last four years, one lesson has repeated across teams: local-first needs to be practical, not doctrinal. Teams want server authority where it matters, optimistic UX where it helps, and durable local behavior where product requirements demand it.
+Over the last four years, one lesson has repeated across teams: local-first needs to be practical, not doctrinal. Teams want server authority where it matters, optimistic UX where it helps, and offline availability where product requirements demand it.
 
 TanStack DB 0.6 fits that reality.
 
-You can start with Electric sync and live queries. Add persistence to high-value collections that need warm restarts and offline durability. Add includes where your UI needs nested, application-shaped results from normalized synced data. Keep writes explicit through your existing API and transaction contracts.
+You can start with Electric sync and live queries. Add persistence to high-value collections that need fast restarts and offline availability. Add includes where your UI needs nested, app-ready results from normalized synced data. Keep writes explicit through your existing API and transaction contracts.
 
-This gives teams a complete app data model they can adopt in practice: fully opt-in, fully composable, and fully incremental.
+This gives teams a complete app data model: fully opt-in, fully composable, and fully incremental.
 
 ## Get started
 
@@ -65,7 +65,7 @@ Begin from an Electric + TanStack DB setup:
 
 ### 2) Add persistence where it pays off first
 
-Pick one high-value collection (for example inbox, tasks, drafts, or threads) and make it durable across restarts.
+Pick one high-value collection and persist it across restarts.
 
 Persistence example:
 
