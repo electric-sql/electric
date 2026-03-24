@@ -5,6 +5,9 @@ description: >-
 excerpt: >-
   Sometimes the problem is not bad output, but output that is too finished too soon. When artifacts become more resolved than the collaboration around them, teams lose the negative space needed to think together.
 authors: [samwillis]
+image: /img/blog/ai-overcooks-artifacts-and-undercooks-collaboration/hero.jpg
+imageWidth: 1536
+imageHeight: 1024
 tags: [agentic, AI, collaboration]
 outline: [2, 3]
 post: true
