@@ -12,7 +12,6 @@ imageHeight: 1536
 tags: [PGlite, PostGIS, Postgres]
 outline: [2, 3]
 post: true
-published: false
 ---
 
 <!-- TLDR opener: this IS the pitch. No setup. State what shipped and why it matters. -->
