@@ -52,6 +52,16 @@ You can start with Electric sync and live queries. Add persistence to high-value
 
 This gives teams a complete app data model: fully opt-in, fully composable, and fully incremental.
 
+## Shopping list demo app
+
+The React Native shopping list demo shows this stack end to end: an Electric collection syncing in real time, with state persisted locally through SQLite for offline support.
+
+<div class="embed-container">
+  <YoutubeEmbed video-id="EBXOjQds8hU" />
+</div>
+
+It starts from persisted SQLite state through `op-sqlite`, projects normalized data into a hierarchical UI shape with includes, and keeps TanStack DB's fine-grained reactivity underneath. Paired with [`@tanstack/offline-transactions`](https://github.com/TanStack/db/tree/main/packages/offline-transactions), this is what turns "fast while open" into practical local-first behavior across restarts and offline sessions.
+
 ## Get started
 
 A practical way to start is with one focused app slice, then expand as you go.
