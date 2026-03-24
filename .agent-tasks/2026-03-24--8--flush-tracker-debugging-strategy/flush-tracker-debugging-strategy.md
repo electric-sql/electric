@@ -73,30 +73,51 @@ in `last_flushed` forever.
 
 ## Analysis of Production State Dumps
 
-### Edison Customer
+### Edison Customer (stack: `svc-resulting-mongoose-fm3kdtxqth`)
 
 - **33 shapes** stuck in `last_flushed`, all at the same `last_sent` offset `(8458315976, 1066)`
 - `last_global_flushed_offset`: `(8458315976, 0)` — stuck at the lowest pending flush
 - `last_seen_offset`: `(9294634792, 2)` — significantly ahead
-- **Gap**: ~836 MB of WAL retained (`9294634792 - 8458315976 = 836,318,816 bytes`)
-- All 33 shapes have different `last_flushed` offsets within the same transaction
-- The `min_incomplete_flush_tree` has 25 entries, confirming many shapes are stuck at different flush points within the same base transaction
+- Replication client: `received_wal` = 10,032,775,168, `flushed_wal` = 8,458,315,975
+- **WAL gap**: ~1.5 GB and growing
+- All 33 shapes have different `last_flushed` offsets within the same transaction (range 0-494 out of 1066)
+- 2 shapes flushed **nothing at all** (op 0): `94359551-1773923988150221`, `86559626-1773922634786024`
+- Shape creation timestamps span 2026-03-19 12:09 to 2026-03-20 02:07 UTC
+- App type: fitness/training (user_profile, workout_log, exercise_library, chat_message tables)
 
-### Faraday Customer
+### Faraday Customer (stack: `bb775c81-cfde-4f5a-85de-cacc372c5816`, has `suspend_consumers` enabled)
 
-- Much larger number of shapes stuck (100+)
-- Two snapshots taken at different times show the same shapes stuck at the same offsets
-- Two distinct base offsets visible: `(3471528106048, 880)` and `(3487230289368, 9760)`
-- `last_global_flushed_offset`: `(3471528106048, 0)` — stuck at the oldest pending flush
-- Gap of ~15.7 GB of WAL retained
+- **518 shapes tracked total** in snapshot 1:
+  - **402 shapes STUCK** at `last_sent` = `(3471528106048, 880)`, flushed ops range 0-790
+  - **115 shapes ACTIVE** at `last_sent` = `(3487230289368, 9760)`, making progress
+  - 1 shape at latest offset
+- `last_global_flushed_offset`: `(3471528106048, 0)` — pinned by oldest stuck entry
+
+- **Snapshot comparison** (two captures at different times):
+
+  | Metric | Snapshot 1 | Snapshot 2 | Delta |
+  |--------|-----------|-----------|-------|
+  | `received_wal` | 3,487,446,326,072 | 3,488,740,456,624 | +1.2 GB |
+  | `flushed_wal` | 3,471,528,106,047 | 3,471,528,106,047 | **0 (stuck)** |
+  | WAL gap | ~15.2 GB | ~16.4 GB | **growing** |
+  | Stuck shapes | 402 | 402 | **zero change in any flushed position** |
+  | Active shapes | 115 | 113 | progressed to new offsets |
+
+- 7 shapes removed between snapshots — all ACTIVE, none from the stuck set. Confirms shape lifecycle events work for active shapes but the 402 stuck shapes' consumers are gone permanently.
+- Stuck shape timestamps: created 2026-03-20 08:06 to 2026-03-23 18:28 UTC (3.4-day span)
+- Some active shapes **predate** the stuck shapes, meaning the stalling is not age-dependent
+- App type: crypto/DeFi (swaps, ohlcv_*, token_metrics, top_holders tables)
 
 ### Common Pattern
 
 In both cases:
 1. All stuck shapes have been sent data (non-zero `last_sent`) but their `last_flushed` hasn't advanced to match
 2. The shapes are stuck at different sub-offsets within the same transaction(s)
-3. No new transactions for these shapes have arrived to trigger the "undeliverable" cleanup path
+3. No new transactions for these shapes have arrived to trigger the "undeliverable" cleanup path (PR #4011 fix)
 4. The `last_global_flushed_offset` is blocked by the minimum of these stale entries
+5. Active shapes continue to receive and flush new transactions normally — only the stuck shapes are affected
+6. The stuck entries are **zombie entries** — their consumer processes are gone, no one will ever send `notify_flushed` for them
+7. The WAL gap grows unboundedly over time
 
 ---
 
@@ -156,6 +177,20 @@ In both cases:
 9. BUT: FlushTracker may now have duplicate or stale tracking state
 
 **Likelihood:** MEDIUM — depends on exact timing.
+
+### Hypothesis 5: Stale PID in ConsumerRegistry (Issue #4013)
+
+**Mechanism:**
+1. Consumer dies with `:shutdown` or `{:shutdown, _}` reason
+2. `ShapeCleaner.handle_writer_termination` (lines 115-119) does nothing — ETS entry NOT removed
+3. ConsumerRegistry still has the dead PID
+4. New transaction arrives → `ConsumerRegistry.publish` finds the dead PID
+5. `broadcast` monitors it, immediately gets `:DOWN` → shape goes to `crashed` (undeliverable)
+6. SLC removes from FlushTracker via the PR #4011 path
+7. **BUT**: if no new transaction arrives for this shape, the stale PID sits in ETS forever
+8. `ShapeCache.restore_shape_and_dependencies` can hand out the dead PID to callers
+
+**Likelihood:** This explains why the PR #4011 fix doesn't help for shapes where no new transactions arrive.
 
 ---
 
