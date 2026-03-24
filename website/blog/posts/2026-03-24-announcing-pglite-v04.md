@@ -41,7 +41,7 @@ A guiding principle for PGlite is keeping our [Postgres fork](https://github.com
 The biggest win in v0.4 is refactoring how `initdb` works. Previously, `initdb` was embedded inside the final WASM executable, requiring hacks that had to be maintained across fork updates. Now, `initdb` runs as a separate WASM process. PGlite intercepts its system calls to provide the necessary plumbing — stdin/stdout redirection and filesystem sharing via Emscripten's [PROXYFS](https://emscripten.org/docs/api_reference/Filesystem-API.html#filesystem-api-proxyfs) — without changing any `initdb` code.
 
 <figure>
-  <img src="/img/blog/state-of-pglite-q1-2026/initdbpostgres.svg" alt="initdb PostgreSQL plumbing in PGlite" />
+  <img src="/img/blog/announcing-pglite-v04/initdbpostgres.svg" alt="initdb PostgreSQL plumbing in PGlite" />
   <figcaption class="figure-caption text-end text-small mb-3 mb-9 max-w-lg ml-auto">initdb and Postgres are separate WASM processes — PGlite provides the communication plumbing by intercepting system calls</figcaption>
 </figure>
 
@@ -145,7 +145,7 @@ Reuse the existing hero image from the state-of-pglite post, or create a new one
 - Center-center composition
 
 ### Asset checklist
-- [x] initdb/postgres plumbing SVG (exists: /img/blog/state-of-pglite-q1-2026/initdbpostgres.svg)
+- [x] initdb/postgres plumbing SVG (exists: /img/blog/announcing-pglite-v04/initdbpostgres.svg)
 - [x] Hero image (exists: /img/blog/state-of-pglite-q1-2026/hero.jpg)
 - [ ] Fill in title, description, excerpt in frontmatter
 - [ ] Decide on hero image: reuse or new?
