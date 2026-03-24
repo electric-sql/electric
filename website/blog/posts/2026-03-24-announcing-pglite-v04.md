@@ -4,7 +4,7 @@ description: >-
   ...
 excerpt: >-
   ...
-authors: [tdrz, samwillis]
+authors: []
 image: /img/blog/state-of-pglite-q1-2026/hero.jpg
 imageWidth: 2752
 imageHeight: 1536
