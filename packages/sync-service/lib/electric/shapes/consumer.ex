@@ -247,7 +247,7 @@ defmodule Electric.Shapes.Consumer do
     state = State.initialize(state, storage, writer)
 
     if all_materializers_alive?(state) && subscribe(state, opts.action) do
-      Logger.debug("Writer for #{shape_handle} initialized")
+      Logger.debug("Writer initialized", shape_handle: shape_handle)
 
       # We start the snapshotter even if there's a snapshot because it also performs the call
       # to PublicationManager.add_shape/3. We *could* do that call here and avoid spawning a

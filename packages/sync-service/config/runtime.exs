@@ -97,6 +97,8 @@ config :logger, :default_formatter,
     :client_count,
     :from,
     :shape,
+    # :txn and :txn_fragment are intentionally excluded from OTEL metadata_map below:
+    # they are large structs only useful for local debug output, not for shipping to OTEL.
     :txn,
     :txn_fragment,
     :total_changes,
