@@ -585,18 +585,8 @@ defmodule Electric.Config do
           {:ok, {:count, pos_integer()} | {:mem_percent, 1..100}} | {:error, binary}
   def parse_top_process_limit(str) do
     case String.split(str, ":", parts: 2) do
-      ["count", n] ->
-        case Integer.parse(n) do
-          {val, ""} when val > 0 -> {:ok, {:count, val}}
-          _ -> {:error, "count value must be a positive integer, got: #{n}"}
-        end
-
-      ["mem_percent", n] ->
-        case Integer.parse(n) do
-          {val, ""} when val >= 1 and val <= 100 -> {:ok, {:mem_percent, val}}
-          _ -> {:error, "mem_percent value must be between 1 and 100, got: #{n}"}
-        end
-
+      ["count", n] -> parse_process_count(n)
+      ["mem_percent", n] -> parse_mem_percent(n)
       _ ->
         {:error,
          "invalid top process limit: #{inspect(str)}. Expected format: count:<N> or mem_percent:<N>"}
@@ -623,17 +613,26 @@ defmodule Electric.Config do
     {:error, "count value must be a positive integer, got: 0"}
   """
   @spec parse_legacy_top_process_count(binary) :: {:ok, {:count, pos_integer()}} | {:error, binary}
-  def parse_legacy_top_process_count(str) do
+  def parse_legacy_top_process_count(str), do: parse_process_count(str)
+
+  def parse_legacy_top_process_count!(str) do
+    case parse_legacy_top_process_count(str) do
+      {:ok, result} -> result
+      {:error, message} -> raise Dotenvy.Error, message: message
+    end
+  end
+
+  defp parse_process_count(str) do
     case Integer.parse(str) do
       {val, ""} when val > 0 -> {:ok, {:count, val}}
       _ -> {:error, "count value must be a positive integer, got: #{str}"}
     end
   end
 
-  def parse_legacy_top_process_count!(str) do
-    case parse_legacy_top_process_count(str) do
-      {:ok, result} -> result
-      {:error, message} -> raise Dotenvy.Error, message: message
+  defp parse_mem_percent(str) do
+    case Integer.parse(str) do
+      {val, ""} when val >= 1 and val <= 100 -> {:ok, {:mem_percent, val}}
+      _ -> {:error, "mem_percent value must be between 1 and 100, got: #{str}"}
     end
   end
 
