@@ -610,6 +610,33 @@ defmodule Electric.Config do
     end
   end
 
+  @doc """
+  Parse the deprecated ELECTRIC_TELEMETRY_TOP_PROCESS_COUNT value (a plain integer)
+  into a `{:count, N}` tuple.
+
+  ## Examples
+
+    iex> parse_legacy_top_process_count("10")
+    {:ok, {:count, 10}}
+
+    iex> parse_legacy_top_process_count("0")
+    {:error, "count value must be a positive integer, got: 0"}
+  """
+  @spec parse_legacy_top_process_count(binary) :: {:ok, {:count, pos_integer()}} | {:error, binary}
+  def parse_legacy_top_process_count(str) do
+    case Integer.parse(str) do
+      {val, ""} when val > 0 -> {:ok, {:count, val}}
+      _ -> {:error, "count value must be a positive integer, got: #{str}"}
+    end
+  end
+
+  def parse_legacy_top_process_count!(str) do
+    case parse_legacy_top_process_count(str) do
+      {:ok, result} -> result
+      {:error, message} -> raise Dotenvy.Error, message: message
+    end
+  end
+
   def validate_security_config!(secret, insecure) do
     cond do
       insecure && secret != nil ->
