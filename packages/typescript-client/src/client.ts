@@ -863,7 +863,6 @@ export class ShapeStream<T extends Row<unknown> = Row>
     } else {
       this.#fastLoopConsecutiveCount = 0
       this.#recentRequestEntries = []
-      this.#onErrorRetryCount = 0
     }
 
     let resumingFromPause = false
