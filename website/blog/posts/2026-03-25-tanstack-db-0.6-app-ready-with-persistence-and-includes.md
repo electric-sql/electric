@@ -63,6 +63,8 @@ The React Native shopping list demo shows this stack end to end: an Electric col
   <YoutubeEmbed video-id="EBXOjQds8hU" />
 </div>
 
+Source code: [react-native/shopping-list example on GitHub](https://github.com/TanStack/db/tree/main/examples/react-native/shopping-list).
+
 It starts from persisted SQLite state through `op-sqlite`, projects normalized data into nested UI structures with includes, and keeps TanStack DB's fine-grained reactivity underneath. Paired with [`@tanstack/offline-transactions`](https://github.com/TanStack/db/tree/main/packages/offline-transactions), this turns "fast while open" into practical local-first behavior across restarts and offline sessions.
 
 ## Get started
