@@ -18,9 +18,11 @@ published: true
 
 TanStack DB 0.6 adds two core features: persistence and includes.
 
-For Electric users, this is more than a point release. With persisted local state, app restarts are fast since data can be loaded locally from disk. With includes, query results can match UI shape without custom projection layers. Together with Electric sync, this gives you a more complete local-first stack that is still optional, composable, and incrementally adoptable.
+For Electric users, this is more than a point release. With persisted local state, app restarts are fast since data can be loaded locally from disk. With includes, query results can match UI shape without custom projection layers.
 
-> [!TIP]
+Together with [Postgres&nbsp;Sync](/products/postgres-sync) and [Durable&nbsp;Streams](/products/durable-streams), this gives you a more complete local-first stack that is still optional, composable, and incrementally adoptable.
+
+> [!WARNING] 🪧&nbsp; Quicklinks
 > - TanStack release post: [TanStack DB 0.6 now includes persistence, offline support, and hierarchical data](https://tanstack.com/blog/tanstack-db-0-6-now-includes-persistence-offline-support-and-hierarchical-data)
 > - Electric + TanStack DB guide: [Build super-fast apps on sync with TanStack DB](/blog/2025/07/29/super-fast-apps-on-sync-with-tanstack-db)
 > - Incremental adoption guide: [Local-first with your existing API](/blog/2024/11/21/local-first-with-your-existing-api)
@@ -29,11 +31,13 @@ For Electric users, this is more than a point release. With persisted local stat
 
 ## How this fits the Electric stack
 
-Electric and TanStack DB pair naturally: Electric syncs normalized shapes from Postgres to clients using incremental sync, and TanStack DB handles local query execution, optimistic state, and reactive UI updates.
+Electric and TanStack&nbsp;DB pair naturally: [Postgres&nbsp;Sync](/products/postgres-sync) syncs normalized shapes from Postgres to clients using incremental sync, and TanStack&nbsp;DB handles local query execution, optimistic state, and reactive UI updates. [Durable&nbsp;Streams](/products/durable-streams) extends the same model beyond Postgres — real-time event data, AI sessions, and collaborative state all flow through TanStack&nbsp;DB collections via [StreamDB](https://durablestreams.com/stream-db).
 
-That stack already delivered fast, sync-powered apps. What was missing was local state that survives reloads and restarts. TanStack DB 0.6 closes that gap with SQLite-backed persistence across browser, Node, React Native, Expo, Capacitor, and edge runtimes like Cloudflare Durable Objects.
+That stack already delivered fast, sync-powered apps. What was missing was local state that survives reloads and restarts. TanStack&nbsp;DB 0.6 closes that gap with SQLite-backed persistence across browser, Node, React&nbsp;Native, Expo, Capacitor, and edge runtimes like Cloudflare Durable Objects.
 
-TanStack DB 0.6 also introduces includes, which let you nest subqueries in `select` and project normalized synced data into hierarchical UI-shaped results. In practice, this gives you a GraphQL-like projection model from a single declarative live query, but powered by Electric sync and TanStack DB's reactive query engine.
+TanStack&nbsp;DB 0.6 also introduces includes, which let you nest subqueries in `select` and project normalized synced data into hierarchical UI-shaped results. In practice, this gives you a GraphQL-like projection model from a single declarative live query, powered by Electric's sync primitives and TanStack&nbsp;DB's reactive query engine.
+
+If you've been following Electric's evolution, this is worth pausing on. When we [rewrote Electric](/blog/2024/07/17/electric-next) we deliberately narrowed scope to the sync engine and let go of the full client-side database layer. TanStack&nbsp;DB 0.6 builds that layer back — persistence, rich queries, offline support — but this time as a standalone, framework-native library that composes with Electric rather than being locked into it.
 
 ## What's shipping
 
