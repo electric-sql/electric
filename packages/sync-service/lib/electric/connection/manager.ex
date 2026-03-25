@@ -614,7 +614,7 @@ defmodule Electric.Connection.Manager do
         } = state
       ) do
     Logger.warning(
-      "Waiting for the replication connection setup to complete. " <>
+      "Waiting for the replication connection setup to complete... " <>
         "Check that you don't have pending transactions in the database. " <>
         "Electric has to wait for all pending transactions to commit or rollback " <>
         "before it can create the replication slot."

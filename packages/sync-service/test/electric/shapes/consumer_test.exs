@@ -1850,8 +1850,8 @@ defmodule Electric.Shapes.ConsumerTest do
           assert :ok = ShapeLogCollector.handle_event(txn2, ctx.stack_id)
         end)
 
-      assert log =~
-               ~s'Consumer processes crashed or missing during broadcast: %{#{inspect(shape_handle2)} => :noproc}'
+      assert log =~ "Consumer processes crashed or missing during broadcast"
+      assert log =~ inspect(shape_handle2)
 
       assert_receive {^ref1, :new_changes, _}, @receive_timeout
       assert_receive {:flush_boundary_updated, 20}, @receive_timeout

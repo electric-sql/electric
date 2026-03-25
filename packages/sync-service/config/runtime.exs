@@ -105,7 +105,8 @@ config :logger, :default_formatter,
     :root_table,
     :new_pg_id,
     :old_pg_id,
-    :file_path
+    :file_path,
+    :crashed
   ],
   colors: [enabled: env!("ELECTRIC_LOG_COLORS", :boolean!, true)]
 
