@@ -132,8 +132,12 @@ defmodule ElectricTelemetry.Processes do
         # Cut off the URL query part, leaving only the `<method> <path>` prefix.
         part_len =
           case :binary.match(rest, "?") do
-            {pos, _} -> pos
-            :nomatch -> min(20, byte_size(rest))
+            {pos, _} ->
+              pos
+
+            :nomatch ->
+              # No query string means only path is present. It is either a request to the health endpoint or something unexpected.
+              byte_size(rest)
           end
 
         :binary.part(rest, 0, part_len)
