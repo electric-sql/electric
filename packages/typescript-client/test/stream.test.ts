@@ -839,4 +839,76 @@ describe(`ShapeStream`, () => {
 
     warnSpy.mockRestore()
   })
+
+  it(`should clean up abort listeners after onError backoff timer expires`, async () => {
+    // When the backoff timer expires normally (not via abort), the abort
+    // listener must be removed to prevent closure accumulation on
+    // long-lived streams with many recoverable errors.
+    let requestCount = 0
+    const warnSpy = vi.spyOn(console, `warn`).mockImplementation(() => {})
+    const addSpy = vi.fn()
+    const removeSpy = vi.fn()
+
+    const localAborter = new AbortController()
+    const originalAdd = localAborter.signal.addEventListener.bind(
+      localAborter.signal
+    )
+    const originalRemove = localAborter.signal.removeEventListener.bind(
+      localAborter.signal
+    )
+    localAborter.signal.addEventListener = (
+      ...args: Parameters<typeof localAborter.signal.addEventListener>
+    ) => {
+      addSpy(...args)
+      return originalAdd(...args)
+    }
+    localAborter.signal.removeEventListener = (
+      ...args: Parameters<typeof localAborter.signal.removeEventListener>
+    ) => {
+      removeSpy(...args)
+      return originalRemove(...args)
+    }
+
+    const fetchMock = (
+      ..._args: Parameters<typeof fetch>
+    ): Promise<Response> => {
+      requestCount++
+      return Promise.resolve(new Response(`Forbidden`, { status: 403 }))
+    }
+
+    const stream = new ShapeStream({
+      url: shapeUrl,
+      params: { table: `test` },
+      signal: localAborter.signal,
+      fetchClient: fetchMock,
+      subscribe: false,
+      onError: () => ({}),
+    })
+
+    stream.subscribe(() => {})
+
+    // Wait for several retries so multiple backoff timers expire normally
+    await vi.waitFor(
+      () => {
+        expect(requestCount).toBeGreaterThanOrEqual(4)
+      },
+      { timeout: 15_000 }
+    )
+
+    localAborter.abort()
+
+    // Each backoff cycle should have added AND removed an abort listener.
+    // The remove count should match the add count (minus 1 for the final
+    // cycle that was interrupted by abort, where { once: true } handles cleanup).
+    const abortAdds = addSpy.mock.calls.filter(
+      (args: unknown[]) => args[0] === `abort`
+    ).length
+    const abortRemoves = removeSpy.mock.calls.filter(
+      (args: unknown[]) => args[0] === `abort`
+    ).length
+    expect(abortAdds).toBeGreaterThanOrEqual(3)
+    expect(abortRemoves).toBeGreaterThanOrEqual(abortAdds - 1)
+
+    warnSpy.mockRestore()
+  })
 })
