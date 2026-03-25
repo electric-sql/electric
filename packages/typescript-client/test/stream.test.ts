@@ -706,4 +706,135 @@ describe(`ShapeStream`, () => {
 
     warnSpy.mockRestore()
   })
+
+  it(`should apply exponential backoff on onError retries for persistent 4xx errors`, async () => {
+    // When onError always returns {} on a persistent 4xx error, the retry
+    // delay should increase exponentially rather than retrying immediately.
+    const requestTimestamps: number[] = []
+    const warnSpy = vi.spyOn(console, `warn`).mockImplementation(() => {})
+
+    const fetchMock = (
+      ..._args: Parameters<typeof fetch>
+    ): Promise<Response> => {
+      requestTimestamps.push(Date.now())
+      return Promise.resolve(new Response(`Forbidden`, { status: 403 }))
+    }
+
+    const stream = new ShapeStream({
+      url: shapeUrl,
+      params: { table: `test` },
+      signal: aborter.signal,
+      fetchClient: fetchMock,
+      subscribe: false,
+      onError: () => ({}),
+    })
+
+    stream.subscribe(() => {})
+
+    // Wait for several retries to accumulate
+    await vi.waitFor(
+      () => {
+        expect(requestTimestamps.length).toBeGreaterThanOrEqual(4)
+      },
+      { timeout: 15_000 }
+    )
+
+    // Verify gaps between requests grow over time (exponential backoff)
+    const gaps = requestTimestamps
+      .slice(1)
+      .map((t, i) => t - requestTimestamps[i]!)
+
+    // Later gaps should be larger than earlier ones on average
+    const earlyGap = gaps[0]!
+    const lateGap = gaps[gaps.length - 1]!
+    expect(lateGap).toBeGreaterThan(earlyGap)
+
+    warnSpy.mockRestore()
+  })
+
+  it(`should tear down immediately when aborted during onError backoff`, async () => {
+    // When the stream is in the middle of a backoff delay and the user
+    // aborts, it should tear down promptly rather than waiting for the timer.
+    let requestCount = 0
+    const warnSpy = vi.spyOn(console, `warn`).mockImplementation(() => {})
+
+    const fetchMock = (
+      ..._args: Parameters<typeof fetch>
+    ): Promise<Response> => {
+      requestCount++
+      return Promise.resolve(new Response(`Forbidden`, { status: 403 }))
+    }
+
+    const localAborter = new AbortController()
+    const stream = new ShapeStream({
+      url: shapeUrl,
+      params: { table: `test` },
+      signal: localAborter.signal,
+      fetchClient: fetchMock,
+      subscribe: false,
+      onError: () => ({}),
+    })
+
+    stream.subscribe(() => {})
+
+    // Wait for at least one retry so we know backoff is active
+    await vi.waitFor(
+      () => {
+        expect(requestCount).toBeGreaterThanOrEqual(2)
+      },
+      { timeout: 5_000 }
+    )
+
+    const countBeforeAbort = requestCount
+
+    // Abort the stream
+    localAborter.abort()
+
+    // Give a tick for teardown
+    await resolveInMacrotask(undefined)
+
+    // No more requests should have been made after abort
+    expect(requestCount).toBe(countBeforeAbort)
+
+    warnSpy.mockRestore()
+  })
+
+  it(`should warn on 2nd+ onError retry attempt`, async () => {
+    // The stream should log a console.warn starting from the 2nd retry
+    // to help developers diagnose persistent error loops.
+    const warnSpy = vi.spyOn(console, `warn`).mockImplementation(() => {})
+    let requestCount = 0
+
+    const fetchMock = (
+      ..._args: Parameters<typeof fetch>
+    ): Promise<Response> => {
+      requestCount++
+      return Promise.resolve(new Response(`Forbidden`, { status: 403 }))
+    }
+
+    const stream = new ShapeStream({
+      url: shapeUrl,
+      params: { table: `test` },
+      signal: aborter.signal,
+      fetchClient: fetchMock,
+      subscribe: false,
+      onError: () => ({}),
+    })
+
+    stream.subscribe(() => {})
+
+    // Wait for enough retries to trigger the warning
+    await vi.waitFor(
+      () => {
+        expect(requestCount).toBeGreaterThanOrEqual(3)
+      },
+      { timeout: 15_000 }
+    )
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining(`onError retry backoff`)
+    )
+
+    warnSpy.mockRestore()
+  })
 })
