@@ -72,6 +72,10 @@ defmodule ElectricTelemetry.CallHomeReporterTest do
     start_supervised!({ElectricTelemetry.ApplicationTelemetry, ctx.telemetry_opts})
 
     assert_receive :bypass_done, 500
+    # Bypass.pass prevents a race condition where CallHomeReporter.terminate/2 sends
+    # an extra HTTP request to Bypass during test cleanup, whose Cowboy handler can get
+    # killed by the shutdown cascade, causing Bypass to record a {:exit, :shutdown} error.
+    Bypass.pass(ctx.bypass)
   end
 
   test "reports all expected info when started under StackTelemetry", ctx do
@@ -117,6 +121,7 @@ defmodule ElectricTelemetry.CallHomeReporterTest do
     start_supervised!({ElectricTelemetry.StackTelemetry, ctx.telemetry_opts})
 
     assert_receive :bypass_done, 500
+    Bypass.pass(ctx.bypass)
   end
 
   test "StackTelemetry report data conforms to remote server schema", ctx do
@@ -143,6 +148,7 @@ defmodule ElectricTelemetry.CallHomeReporterTest do
     start_supervised!({ElectricTelemetry.StackTelemetry, ctx.telemetry_opts})
 
     assert_receive :bypass_done, 500
+    Bypass.pass(ctx.bypass)
   end
 
   defp add_bypass_expectation(%{bypass: bypass, telemetry_opts: telemetry_opts}, test_specific_fn) do
