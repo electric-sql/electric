@@ -65,6 +65,9 @@ defmodule ElectricTelemetry.Processes do
           {:halt, {running_total, acc}}
 
         proc_group, {running_total, acc} when proc_group.memory < @min_group_memory ->
+          # Include this last process gruop in the result so it's clear to the caller that the
+          # minimum group memory threshold has been reached earlier than the target total mem
+          # one.
           {:halt, {running_total, [proc_group | acc]}}
 
         proc_group, {running_total, acc} ->
