@@ -18,13 +18,12 @@ PGlite v0.4 is out. This release brings PostGIS support, connection multiplexing
 
 PGlite now sees over 13&nbsp;million weekly downloads across all packages. From CI&nbsp;testing to [vibe coding with a database in the sandbox](https://electric-sql.com/blog/2025/06/05/database-in-the-sandbox), PGlite is showing up everywhere. Here's what's new.
 
-:::info
-[PGlite](https://pglite.dev/) is a WASM build of Postgres that runs inside your JavaScript environment — in the browser, Node.js, Bun, and Deno.
-
-- [v0.4 release on GitHub](https://github.com/electric-sql/pglite/releases)
-- [Extension catalog](https://pglite.dev/extensions/)
-- [Discord](https://discord.gg/pVASdMED) · [GitHub](https://github.com/electric-sql/pglite/)
-:::
+> [!WARNING] 🪧&nbsp; Quicklinks
+> [PGlite](https://pglite.dev/) is a WASM build of Postgres that runs inside your JavaScript environment — in the browser, Node.js, Bun, and Deno.
+>
+> - [v0.4 release on GitHub](https://github.com/electric-sql/pglite/releases)
+> - [Extension catalog](https://pglite.dev/extensions/)
+> - [Discord](https://discord.gg/pVASdMED) · [GitHub](https://github.com/electric-sql/pglite/)
 
 ## What's new in v0.4
 
@@ -35,8 +34,10 @@ A guiding principle for PGlite is keeping our [Postgres fork](https://github.com
 The biggest win in v0.4 is refactoring how `initdb` works. Previously, `initdb` was embedded inside the final WASM executable, requiring hacks that had to be maintained across fork updates. Now, `initdb` runs as a separate WASM process. PGlite intercepts its system calls to provide the necessary plumbing — stdin/stdout redirection and filesystem sharing via Emscripten's [PROXYFS](https://emscripten.org/docs/api_reference/Filesystem-API.html#filesystem-api-proxyfs) — without changing any `initdb` code.
 
 <figure>
-  <img src="/img/blog/announcing-pglite-v04/initdbpostgres.svg" alt="initdb PostgreSQL plumbing in PGlite" />
-  <figcaption class="figure-caption text-end text-small mb-3 mb-9 max-w-lg ml-auto">initdb and Postgres are separate WASM processes — PGlite provides the communication plumbing by intercepting system calls</figcaption>
+  <a href="/img/blog/announcing-pglite-v04/initdbpostgres.png">
+    <img src="/img/blog/announcing-pglite-v04/initdbpostgres.svg" alt="initdb PostgreSQL plumbing in PGlite" />
+  </a>
+  <figcaption class="figure-caption text-end text-small mb-3 mb-9 max-w-lg ml-auto">initdb and Postgres are separate WASM processes — PGlite provides the communication plumbing by intercepting system&nbsp;calls</figcaption>
 </figure>
 
 This mirrors how a native PostgreSQL deployment works, making the codebase easier to understand for new contributors. The same pattern extends to other Postgres client tools without needing changes to their code.
