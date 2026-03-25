@@ -585,8 +585,12 @@ defmodule Electric.Config do
           {:ok, {:count, pos_integer()} | {:mem_percent, 1..100}} | {:error, binary}
   def parse_top_process_limit(str) do
     case String.split(str, ":", parts: 2) do
-      ["count", n] -> parse_process_count(n)
-      ["mem_percent", n] -> parse_mem_percent(n)
+      ["count", n] ->
+        parse_process_count(n)
+
+      ["mem_percent", n] ->
+        parse_mem_percent(n)
+
       _ ->
         {:error,
          "invalid top process limit: #{inspect(str)}. Expected format: count:<N> or mem_percent:<N>"}
@@ -612,7 +616,8 @@ defmodule Electric.Config do
     iex> parse_legacy_top_process_count("0")
     {:error, "count value must be a positive integer, got: 0"}
   """
-  @spec parse_legacy_top_process_count(binary) :: {:ok, {:count, pos_integer()}} | {:error, binary}
+  @spec parse_legacy_top_process_count(binary) ::
+          {:ok, {:count, pos_integer()}} | {:error, binary}
   def parse_legacy_top_process_count(str), do: parse_process_count(str)
 
   def parse_legacy_top_process_count!(str) do
