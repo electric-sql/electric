@@ -198,13 +198,13 @@ defmodule Electric.Shapes.ConsumerRegistry do
       {suspended, crashed} ->
         if suspended != %{} do
           Logger.debug("Re-trying suspended shape handles",
-            shape_handles: Map.keys(suspended)
+            shape_handles: inspect(Map.keys(suspended))
           )
         end
 
         if crashed != %{} do
           Logger.warning("Consumer processes crashed or missing during broadcast",
-            crashed: crashed
+            crashed: inspect(crashed)
           )
         end
     end)
