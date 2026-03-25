@@ -23,7 +23,7 @@ For Electric users, this is more than a point release. With persisted local stat
 Together with [Postgres&nbsp;Sync](/primitives/postgres-sync) and [Durable&nbsp;Streams](/primitives/durable-streams), this gives you a more complete local-first stack that is still optional, composable, and incrementally adoptable.
 
 > [!WARNING] 🪧&nbsp; Quicklinks
-> - TanStack release post: [TanStack DB 0.6 now includes persistence, offline support, and hierarchical data](https://tanstack.com/blog/tanstack-db-0-6-now-includes-persistence-offline-support-and-hierarchical-data)
+> - TanStack release post: [TanStack DB 0.6 now includes persistence, offline support, and hierarchical data](https://tanstack.com/blog/tanstack-db-0.6-app-ready-with-persistence-and-includes)
 > - Electric + TanStack DB guide: [Build super-fast apps on sync with TanStack DB](/blog/2025/07/29/super-fast-apps-on-sync-with-tanstack-db)
 > - Incremental adoption guide: [Local-first with your existing API](/blog/2024/11/21/local-first-with-your-existing-api)
 > - Electric docs: [Introduction](/docs/intro), [Quickstart](/docs/quickstart)
@@ -157,7 +157,7 @@ Once one slice is working well, extend the same pattern to the next collections 
 
 If you're starting a new app, begin with Electric + TanStack DB and add persistence and includes where they help.
 
-- [Read the TanStack DB 0.6 post](https://tanstack.com/blog/tanstack-db-0-6-now-includes-persistence-offline-support-and-hierarchical-data)
+- [Read the TanStack DB 0.6 post](https://tanstack.com/blog/tanstack-db-0.6-app-ready-with-persistence-and-includes)
 - [Build with Electric + TanStack DB](/blog/2025/07/29/super-fast-apps-on-sync-with-tanstack-db)
 - [Try the Electric quickstart](/docs/quickstart)
 - [Join Discord](https://discord.electric-sql.com)
