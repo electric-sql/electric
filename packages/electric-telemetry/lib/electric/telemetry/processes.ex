@@ -31,11 +31,11 @@ defmodule ElectricTelemetry.Processes do
     # :processes_used excludes memory allocated but not yet used by process heaps,
     # giving a more accurate baseline for the percentage calculation.
     total_process_memory = :erlang.memory(:processes_used)
-    target = div(total_process_memory * percent, 100)
+    target = total_process_memory * percent / 100
 
     process_list
     |> sorted_groups()
-    |> take_until_target(target, 0, [])
+    |> take_until_target(target)
   end
 
   defp sorted_groups(process_list) do
@@ -47,21 +47,18 @@ defmodule ElectricTelemetry.Processes do
     |> Enum.sort_by(&(-&1.memory))
   end
 
-  defp take_until_target([], _target, _running_total, acc), do: Enum.reverse(acc)
+  defp take_until_target(proc_groups, target) do
+    {_running_total, selected_groups} =
+      Enum.reduce_while(proc_groups, {0, []}, fn
+        proc_group, {running_total, acc}
+        when running_total >= target or proc_group.memory < @min_group_memory ->
+          {:halt, {running_total, [proc_group | acc]}}
 
-  defp take_until_target([group | rest], target, running_total, acc) do
-    if group.memory < @min_group_memory do
-      Enum.reverse(acc)
-    else
-      new_total = running_total + group.memory
-      new_acc = [group | acc]
+        proc_group, {running_total, acc} ->
+          {:cont, {running_total + proc_group.memory, [proc_group | acc]}}
+      end)
 
-      if new_total >= target do
-        Enum.reverse(new_acc)
-      else
-        take_until_target(rest, target, new_total, new_acc)
-      end
-    end
+    Enum.reverse(selected_groups)
   end
 
   defp type_and_memory(pid) do

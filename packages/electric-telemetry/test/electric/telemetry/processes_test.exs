@@ -56,9 +56,9 @@ defmodule ElectricTelemetry.ProcessesTest do
       total_process_memory = :erlang.memory(:processes_used)
       returned_memory = results |> Enum.map(& &1.memory) |> Enum.sum()
 
-      # Either we hit the 50% target or we ran out of groups above 1MB
-      assert returned_memory >= div(total_process_memory * 50, 100) or
-               length(results) < length(top_memory_by_type({:count, 1000}))
+      # Either we hit the 50% target or we ran out of groups above 1MiB
+      assert returned_memory >= total_process_memory * 0.5 or
+               List.last(results).memory < 1024 * 1024
     end
   end
 end
