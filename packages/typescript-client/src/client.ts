@@ -779,7 +779,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
           const retryCount = ++this.#onErrorRetryCount
           const maxDelay = Math.min(
             this.#onErrorBackoffMaxMs,
-            this.#onErrorBackoffBaseMs * Math.pow(2, retryCount)
+            this.#onErrorBackoffBaseMs * Math.pow(2, retryCount - 1)
           )
           const delayMs = Math.floor(Math.random() * maxDelay)
           if (retryCount > 1) {
