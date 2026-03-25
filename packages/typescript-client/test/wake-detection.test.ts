@@ -257,10 +257,10 @@ describe(`Wake detection`, () => {
     const unsub = stream.subscribe(() => {})
 
     // Let the stream start, hit the 400 error, and retry via onError.
-    // The error retry path (#start lines 767-769) calls #start() recursively
-    // WITHOUT calling #teardown() first, so the timer is still alive.
+    // The error retry path calls #start() recursively after an exponential
+    // backoff delay, so we need to advance time enough to cover it.
     await vi.advanceTimersByTimeAsync(0)
-    await vi.advanceTimersByTimeAsync(0)
+    await vi.advanceTimersByTimeAsync(200)
     await vi.advanceTimersByTimeAsync(0)
 
     expect(fetchCallCount).toBeGreaterThanOrEqual(2)
