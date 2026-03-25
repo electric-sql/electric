@@ -28,6 +28,8 @@ defmodule ElectricTelemetry.Processes do
 
   def top_memory_by_type(process_list, {:mem_percent, percent})
       when is_list(process_list) and is_integer(percent) and percent >= 1 and percent <= 100 do
+    # :processes_used excludes memory allocated but not yet used by process heaps,
+    # giving a more accurate baseline for the percentage calculation.
     total_process_memory = :erlang.memory(:processes_used)
     target = div(total_process_memory * percent, 100)
 
