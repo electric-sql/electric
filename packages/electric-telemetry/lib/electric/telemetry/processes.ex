@@ -1,29 +1,65 @@
 defmodule ElectricTelemetry.Processes do
   @default_count 5
+  # Minimum memory threshold for a process group when using :mem_percent mode.
+  @min_group_memory 1024 * 1024
+
+  @type limit :: {:count, pos_integer()} | {:mem_percent, 1..100}
 
   def proc_type(pid), do: proc_type(pid, info(pid))
 
   def top_memory_by_type do
-    top_memory_by_type(Process.list(), @default_count)
+    top_memory_by_type(Process.list(), {:count, @default_count})
   end
 
-  def top_memory_by_type(count) when is_integer(count) do
-    top_memory_by_type(Process.list(), count)
+  def top_memory_by_type({_, _} = limit) do
+    top_memory_by_type(Process.list(), limit)
   end
 
   def top_memory_by_type(process_list) when is_list(process_list) do
-    top_memory_by_type(process_list, @default_count)
+    top_memory_by_type(process_list, {:count, @default_count})
   end
 
-  def top_memory_by_type(process_list, count)
+  def top_memory_by_type(process_list, {:count, count})
       when is_list(process_list) and is_integer(count) and count > 0 do
+    process_list
+    |> sorted_groups()
+    |> Enum.take(count)
+  end
+
+  def top_memory_by_type(process_list, {:mem_percent, percent})
+      when is_list(process_list) and is_integer(percent) and percent >= 1 and percent <= 100 do
+    total_process_memory = :erlang.memory(:processes_used)
+    target = div(total_process_memory * percent, 100)
+
+    process_list
+    |> sorted_groups()
+    |> take_until_target(target, 0, [])
+  end
+
+  defp sorted_groups(process_list) do
     process_list
     |> Enum.map(&type_and_memory/1)
     |> Enum.reject(&(&1.type == :dead))
     |> Enum.group_by(& &1.type, & &1.memory)
     |> Enum.map(fn {type, memory} -> %{type: type, memory: Enum.sum(memory)} end)
     |> Enum.sort_by(&(-&1.memory))
-    |> Enum.take(count)
+  end
+
+  defp take_until_target([], _target, _running_total, acc), do: Enum.reverse(acc)
+
+  defp take_until_target([group | rest], target, running_total, acc) do
+    if group.memory < @min_group_memory do
+      Enum.reverse(acc)
+    else
+      new_total = running_total + group.memory
+      new_acc = [group | acc]
+
+      if new_total >= target do
+        Enum.reverse(new_acc)
+      else
+        take_until_target(rest, target, new_total, new_acc)
+      end
+    end
   end
 
   defp type_and_memory(pid) do

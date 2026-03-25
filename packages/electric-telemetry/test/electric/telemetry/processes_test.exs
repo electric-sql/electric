@@ -42,11 +42,23 @@ defmodule ElectricTelemetry.ProcessesTest do
              ] = top_memory_by_type()
     end
 
-    test "allows for setting limit" do
+    test "allows for setting count limit" do
       assert [
                %{memory: _, type: _},
                %{memory: _, type: _}
-             ] = top_memory_by_type(2)
+             ] = top_memory_by_type({:count, 2})
+    end
+
+    test "mem_percent returns groups until target is reached" do
+      results = top_memory_by_type({:mem_percent, 50})
+      assert length(results) >= 1
+
+      total_process_memory = :erlang.memory(:processes_used)
+      returned_memory = results |> Enum.map(& &1.memory) |> Enum.sum()
+
+      # Either we hit the 50% target or we ran out of groups above 1MB
+      assert returned_memory >= div(total_process_memory * 50, 100) or
+               length(results) < length(top_memory_by_type({:count, 1000}))
     end
   end
 end

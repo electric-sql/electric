@@ -22,7 +22,15 @@ defmodule ElectricTelemetry.Opts do
         default: [],
         keys: [
           system_metrics_poll_interval: [type: :integer, default: :timer.seconds(5)],
-          top_process_count: [type: :integer, default: 5],
+          top_process_limit: [
+            type:
+              {:or,
+               [
+                 {:tuple, [{:in, [:count]}, :pos_integer]},
+                 {:tuple, [{:in, [:mem_percent]}, :pos_integer]}
+               ]},
+            default: {:count, 5}
+          ],
           # Garbage collection should run almost instantly since each process has its own heap that
           # is garbage collected independently of others. 50ms might be too generous.
           long_gc_threshold: [type: :integer, default: 50],
