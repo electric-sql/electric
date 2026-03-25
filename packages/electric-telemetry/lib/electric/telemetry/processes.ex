@@ -12,7 +12,7 @@ defmodule ElectricTelemetry.Processes do
     if is_valid_mem_percent(percent) do
       {:ok, percent}
     else
-      {:error, :percent_value_out_of_range}
+      {:error, "mem_percent value must be between 1 and 100, got: #{inspect(percent)}"}
     end
   end
 
