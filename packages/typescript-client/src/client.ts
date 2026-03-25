@@ -776,16 +776,16 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
           // Apply exponential backoff with jitter to prevent tight retry loops
           // (e.g., when onError always returns {} on persistent 4xx errors)
+          const retryCount = ++this.#onErrorRetryCount
           const maxDelay = Math.min(
             this.#onErrorBackoffMaxMs,
-            this.#onErrorBackoffBaseMs * Math.pow(2, this.#onErrorRetryCount)
+            this.#onErrorBackoffBaseMs * Math.pow(2, retryCount)
           )
-          this.#onErrorRetryCount++
           const delayMs = Math.floor(Math.random() * maxDelay)
-          if (this.#onErrorRetryCount > 1) {
+          if (retryCount > 1) {
             console.warn(
               `[Electric] onError retry backoff: waiting ${Math.round(delayMs / 1000)}s before retry ` +
-                `(attempt ${this.#onErrorRetryCount}). ` +
+                `(attempt ${retryCount}). ` +
                 `Previous error: ${(err as Error)?.message ?? err}`
             )
           }
