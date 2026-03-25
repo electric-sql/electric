@@ -40,6 +40,12 @@ icehaunter:
   image: /img/team/ilia.jpg
   url: /about/team#ilia
 
+kevindeporre:
+  name: Kevin De Porre
+  title: Founding Engineer
+  image: /img/team/kevin.jpg
+  url: /about/team#kevin
+
 tdrz:
   name: Tudor Zaharia
   title: Founding Engineer
