@@ -1,7 +1,7 @@
 ---
 title: CLI
 description: >-
-  Command-line interface for managing Electric Cloud resources.
+  Command-line interface for managing Electric Cloud resources, including Postgres sync services and durable streams.
 image: /img/meta/electric-cloud.jpg
 outline: deep
 ---
@@ -10,7 +10,7 @@ outline: deep
 
 # CLI
 
-Command-line interface for [Electric Cloud](https://dashboard.electric-sql.cloud) — manage workspaces, projects, environments, and services from the terminal. The CLI provides full control over your Electric Cloud resources, from provisioning Postgres sync services to managing per-PR environments in CI/CD pipelines. All commands support JSON output for scripting and automation.
+Command-line interface for [Electric Cloud](https://dashboard.electric-sql.cloud) — manage workspaces, projects, environments, and services from the terminal. The CLI provides full control over your Electric Cloud resources, from provisioning [Postgres sync](/products/postgres-sync) services and [durable streams](/products/durable-streams) to managing per-PR environments in CI/CD pipelines. All commands support JSON output for scripting and automation.
 
 ## Installation
 
@@ -30,13 +30,15 @@ npx @electric-sql/cli --help
 
 The CLI checks for credentials in this order:
 
-### 1. `--token` flag
+### 1. Browser login
 
-Pass a token directly for one-off commands or scripts:
+For interactive use, log in via OAuth:
 
 ```shell
-electric projects list --token sv_live_...
+electric auth login
 ```
+
+This opens the Electric Cloud dashboard in your browser. After authenticating, your session is stored locally at `~/.config/electric/auth.json` and is valid for 7 days.
 
 ### 2. `ELECTRIC_API_TOKEN` environment variable
 
@@ -47,15 +49,13 @@ export ELECTRIC_API_TOKEN=sv_live_...
 electric projects list
 ```
 
-### 3. Browser login
+### 3. `--token` flag
 
-For interactive use, log in via OAuth:
+Pass a token directly for one-off commands or scripts:
 
 ```shell
-electric auth login
+electric projects list --token sv_live_...
 ```
-
-This opens the Electric Cloud dashboard in your browser. After authenticating, your session is stored locally at `~/.config/electric/auth.json` and is valid for 7 days.
 
 ## Provision a Postgres sync service
 
@@ -65,6 +65,14 @@ electric environments create --project proj_abc --name "staging"
 electric services create postgres \
   --environment env_abc \
   --database-url "postgresql://user:pass@host:5432/db" \
+  --region us-east-1
+```
+
+## Provision a durable streams service
+
+```shell
+electric services create streams \
+  --environment env_abc \
   --region us-east-1
 ```
 
