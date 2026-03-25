@@ -2,7 +2,7 @@ import fs from 'node:fs'
 import { parse } from 'yaml'
 
 export default {
-  watch: [`./products/products.yaml`],
+  watch: [`./primitives/primitives.yaml`],
 
   load(files) {
     const contents = fs.readFileSync(files[0], `utf-8`)

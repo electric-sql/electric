@@ -1,6 +1,6 @@
 <script setup>
 import Card from './Card.vue'
-import { data as products } from '../../../data/products.data.ts'
+import { data as products } from '../../../data/primitives.data.ts'
 
 const { productPage } = defineProps({
   productPage: {

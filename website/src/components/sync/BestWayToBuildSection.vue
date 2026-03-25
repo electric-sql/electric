@@ -11,8 +11,8 @@ const actions = [
     theme: 'brand',
   },
   {
-    href: '/products',
-    text: 'Products',
+    href: '/primitives',
+    text: 'Primitives',
   },
 ]
 

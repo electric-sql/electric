@@ -48,7 +48,7 @@ Postgres&nbsp;Sync is a sync engine that syncs [subsets of your data](/docs/guid
     alt="Use cases diagram"
 />
 
-You can sync data into anything you like. From web, mobile and desktop apps and client stores like [TanStack&nbsp;DB](/products/tanstack-db) to databases like [PGlite](/products/pglite).
+You can sync data into anything you like. From web, mobile and desktop apps and client stores like [TanStack&nbsp;DB](/primitives/tanstack-db) to databases like [PGlite](/primitives/pglite).
 
 <div style="margin-top: 40px;">
 

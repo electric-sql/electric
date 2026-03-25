@@ -56,11 +56,11 @@ If you haven't checked out Electric recently, it's a great time to [take another
 
 ## What is Electric?
 
-[Electric](/products/postgres-sync) is a Postgres sync engine. We do real-time [partial replication](/docs/guides/shapes) of Postgres data into local apps and services.
+[Electric](/primitives/postgres-sync) is a Postgres sync engine. We do real-time [partial replication](/docs/guides/shapes) of Postgres data into local apps and services.
 
 Use Electric to swap out data _fetching_ for [data _sync_](/sync). Build apps on instant, real-time, local data. Without having to roll your own sync engine or change your stack.
 
-We also develop [PGlite](/products/pglite), a lightweight WASM Postgres you can run in the browser.
+We also develop [PGlite](/primitives/pglite), a lightweight WASM Postgres you can run in the browser.
 
 ## The path to BETA
 

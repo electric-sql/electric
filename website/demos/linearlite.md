@@ -13,7 +13,7 @@ order: 10
 
 # Linearlite
 
-[Linear](https://linear.app) project management app clone, built using [Electric](/products/postgres-sync) and [PGlite](/products/pglite).
+[Linear](https://linear.app) project management app clone, built using [Electric](/primitives/postgres-sync) and [PGlite](/primitives/pglite).
 
 <DemoCTAs :demo="$frontmatter" />
 

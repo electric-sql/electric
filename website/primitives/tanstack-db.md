@@ -96,7 +96,7 @@ Built on a Typescript implementation of [differential dataflow](https://github.c
 
 ### Data flow
 
-TanStack&nbsp;DB acts as the client-side data layer in [the Electric ecosystem](/products/#how-they-fit-together). Data flows from your backend through Electric's sync primitives into TanStack&nbsp;DB, which then powers your reactive UI components.
+TanStack&nbsp;DB acts as the client-side data layer in [the Electric ecosystem](/primitives/#how-they-fit-together). Data flows from your backend through Electric's sync primitives into TanStack&nbsp;DB, which then powers your reactive UI components.
 
 <figure>
   <a href="https://tanstack.com/db/latest/docs/overview#uni-directional-data-flow" class="no-visual">
@@ -106,7 +106,7 @@ TanStack&nbsp;DB acts as the client-side data layer in [the Electric ecosystem](
   </a>
 </figure>
 
-You can load and sync data into it from multiple sources, including [your API](https://tanstack.com/blog/tanstack-db-0.1-the-embedded-client-database-for-tanstack-query), [Postgres&nbsp;Sync](/products/postgres-sync) and [Durable&nbsp;Streams](/products/durable-streams).
+You can load and sync data into it from multiple sources, including [your API](https://tanstack.com/blog/tanstack-db-0.1-the-embedded-client-database-for-tanstack-query), [Postgres&nbsp;Sync](/primitives/postgres-sync) and [Durable&nbsp;Streams](/primitives/durable-streams).
 
 TanStack&nbsp;DB then provides a unified, reactive interface to the data.
 

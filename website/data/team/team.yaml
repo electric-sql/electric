@@ -44,8 +44,8 @@
   {
     'slug': 'sam',
     'name': 'Sam Willis',
-    'job_title': 'Co-founder & Product Architect',
-    'short_bio': 'Multidisciplinary developer, designer and engineer. PGlite, Tetra Framework. Co-founder POSTERHASTE.',
+    'job_title': 'Co-founder & CDO',
+    'short_bio': 'Creative technologist, database systems. Creator of PGlite, Tetra Framework. Co-founder POSTERHASTE.',
     'image': '/img/team/sam.jpg',
     'profile_uri': 'https://www.linkedin.com/in/samwillis',
     'profile_display_uri': 'in/samwillis',

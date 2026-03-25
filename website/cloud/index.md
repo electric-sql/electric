@@ -40,15 +40,15 @@ Scalable data infrastructure platform for building fast, modern apps and
 
 ## Scalable data infrastructure
 
-Electric Cloud is a reactive data platform designed for running multi-user, multi-agent systems that provides turnkey hosting of [Durable&nbsp;Streams](/products/durable-streams) and [Postgres&nbsp;Sync](/products/postgres-sync).
+Electric Cloud is a reactive data platform designed for running multi-user, multi-agent systems that provides turnkey hosting of [Durable&nbsp;Streams](/primitives/durable-streams) and [Postgres&nbsp;Sync](/primitives/postgres-sync).
 
 ### <img src="/img/icons/durable-streams.svg" class="data-source-icon"> Durable&nbsp;Streams
 
-We host [Durable&nbsp;Streams](/products/durable-streams) with [multiple protocols](./protocols), from raw binary streams, to JSON mode, to protocol specific transports and user-defined sync protocols using Durable State. See the [announcement blog post here](/blog/2026/01/22/announcing-hosted-durable-streams).
+We host [Durable&nbsp;Streams](/primitives/durable-streams) with [multiple protocols](./protocols), from raw binary streams, to JSON mode, to protocol specific transports and user-defined sync protocols using Durable State. See the [announcement blog post here](/blog/2026/01/22/announcing-hosted-durable-streams).
 
 ### <img src="/img/icons/electric.svg" class="data-source-icon"> Postgres&nbsp;Sync
 
-We provision, run and operate the [Postgres sync engine](/products/postgres-sync) for you. This connects to your Postgres, consumes changes over logical replication and provides a service endpoint for [syncing shapes](/docs/guides/shapes) into your client.
+We provision, run and operate the [Postgres sync engine](/primitives/postgres-sync) for you. This connects to your Postgres, consumes changes over logical replication and provides a service endpoint for [syncing shapes](/docs/guides/shapes) into your client.
 
 ## Data delivery network
 

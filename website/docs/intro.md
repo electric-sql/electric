@@ -32,21 +32,21 @@ The easiest way to use Electric in production is the [Electric Cloud](/cloud). A
 > [!Warning] 🔭&nbsp; Product documentation is split across multiple sites
 > It's worth taking a moment to understand what's documented where.
 
-This website contains the main documentation for [Postgres&nbsp;Sync](/products/postgres-sync).
+This website contains the main documentation for [Postgres&nbsp;Sync](/primitives/postgres-sync).
 
-Usage examples and recipes often use Postgres&nbsp;Sync together with [TanStack&nbsp;DB](/products/tanstack-db). Guides like [Auth](/docs/guides/auth) and [Security](/docs/guides/security) are also generally relevant for [Durable&nbsp;Streams](/products/durable-streams).
+Usage examples and recipes often use Postgres&nbsp;Sync together with [TanStack&nbsp;DB](/primitives/tanstack-db). Guides like [Auth](/docs/guides/auth) and [Security](/docs/guides/security) are also generally relevant for [Durable&nbsp;Streams](/primitives/durable-streams).
 
 ### Project websites
 
-[Durable&nbsp;Streams](/products/durable-streams), [TanStack&nbsp;DB](/products/tanstack-db) and [PGlite](/products/pglite) each have their own docs:
+[Durable&nbsp;Streams](/primitives/durable-streams), [TanStack&nbsp;DB](/primitives/tanstack-db) and [PGlite](/primitives/pglite) each have their own docs:
 
 <div class="product-signposts">
-  <a href="https://github.com/durable-streams/durable-streams"
+  <a href="https://durablestreams.com"
       class="product-signpost no-visual">
     <img src="/img/icons/durable-streams.svg" alt="Durable&nbsp;Streams" />
     <div>
       <h3>Durable&nbsp;Streams</h3>
-      <p>github.com/durable-streams</p>
+      <p>durablestreams.com</p>
     </div>
   </a>
   <a href="https://tanstack.com/db" class="product-signpost no-visual">

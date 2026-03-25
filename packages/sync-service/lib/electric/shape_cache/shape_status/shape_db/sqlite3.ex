@@ -199,7 +199,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Sqlite3 do
   ## Examples
 
       iex> build_uri(":memory:", [])
-      "file:memory?mode=memory&cache=shared"
+      "file:memory?mode=memory"
 
       iex> build_uri("/my/path/here", [])
       "file:/my/path/here?mode=rwc"
@@ -213,7 +213,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Sqlite3 do
       iex> build_uri("/my//path//here", mode: :readwrite)
       "file:/my/path/here?mode=rwc"
   """
-  def build_uri(":memory:", _opts), do: "file:memory?mode=memory&cache=shared"
+  def build_uri(":memory:", _opts), do: "file:memory?mode=memory"
 
   def build_uri(path, opts) do
     mode =

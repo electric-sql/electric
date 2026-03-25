@@ -19,7 +19,7 @@ import SyncShapeSVG from '/static/img/docs/guides/shapes/sync-shape.svg?url'
 Shapes are the core primitive for controlling sync in the ElectricSQL system.
 
 > [!Warning] TanStack DB
-> You can use shapes with [TanStack DB](/products/tanstack-db) for expressive, [query-driven sync](https://tanstack.com/blog/tanstack-db-0.5-query-driven-sync).
+> You can use shapes with [TanStack DB](/primitives/tanstack-db) for expressive, [query-driven sync](https://tanstack.com/blog/tanstack-db-0.5-query-driven-sync).
 
 ## What is a Shape?
 
@@ -182,9 +182,9 @@ The specified columns must always include the primary key column(s), and should 
 
 ## Subscribing to shapes
 
-Local clients establish shape subscriptions, typically using [client libraries](/docs/api/clients/typescript). These sync data from the [Electric sync engine](/products/postgres-sync) into the client using the [HTTP API](/docs/api/http).
+Local clients establish shape subscriptions, typically using [client libraries](/docs/api/clients/typescript). These sync data from the [Electric sync engine](/primitives/postgres-sync) into the client using the [HTTP API](/docs/api/http).
 
-The sync service maintains shape subscriptions and streams any new data and data changes to the local client. In the client, shapes can be held as objects in memory, for example using a [`useShape`](/docs/integrations/react) hook, or in a normalised store or database like [PGlite](/products/pglite).
+The sync service maintains shape subscriptions and streams any new data and data changes to the local client. In the client, shapes can be held as objects in memory, for example using a [`useShape`](/docs/integrations/react) hook, or in a normalised store or database like [PGlite](/primitives/pglite).
 
 ### HTTP
 
@@ -246,7 +246,7 @@ See the [Quickstart](/docs/quickstart) and [HTTP API](/docs/api/http) docs for m
 
 ### TanStack DB
 
-Or with [TanStack DB](/products/tanstack-db), you can sync shapes into collections:
+Or with [TanStack DB](/primitives/tanstack-db), you can sync shapes into collections:
 
 ```ts
 import { electricCollectionOptions } from '@tanstack/electric-db-collection'
@@ -345,7 +345,7 @@ See the [TypeScript client docs](/docs/api/clients/typescript#requesting-subset-
 
 ### TanStack DB
 
-Or with [TanStack DB](/products/tanstack-db), you can use [query-driven sync](https://tanstack.com/blog/tanstack-db-0.5-query-driven-sync) where your live queries define what data to sync:
+Or with [TanStack DB](/primitives/tanstack-db), you can use [query-driven sync](https://tanstack.com/blog/tanstack-db-0.5-query-driven-sync) where your live queries define what data to sync:
 
 ```ts
 import { electricCollectionOptions } from '@tanstack/electric-db-collection'
