@@ -234,7 +234,8 @@ config :electric,
   otel_export_period: otel_export_period,
   otel_sampling_ratio: env!("ELECTRIC_OTEL_SAMPLING_RATIO", :float, nil),
   metrics_sampling_ratio: env!("ELECTRIC_METRICS_SAMPLING_RATIO", :float, nil),
-  telemetry_top_process_limit: parse_top_process_limit.(env!("ELECTRIC_TELEMETRY_TOP_PROCESS_LIMIT", :string, nil)),
+  telemetry_top_process_limit:
+    parse_top_process_limit.(env!("ELECTRIC_TELEMETRY_TOP_PROCESS_LIMIT", :string, nil)),
   telemetry_long_gc_threshold: env!("ELECTRIC_TELEMETRY_LONG_GC_THRESHOLD", :integer, nil),
   telemetry_long_schedule_threshold:
     env!("ELECTRIC_TELEMETRY_LONG_SCHEDULE_THRESHOLD", :integer, nil),
