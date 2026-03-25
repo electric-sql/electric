@@ -93,7 +93,7 @@ import { electricCollectionOptions } from '@tanstack/electric-db-collection'
 import {
   createReactNativeSQLitePersistence,
   persistedCollectionOptions,
-} from '@tanstack/db-react-native-sqlite-persisted-collection'
+} from '@tanstack/react-native-db-sqlite-persistence'
 
 const database = open({
   name: 'electric-app.sqlite',
