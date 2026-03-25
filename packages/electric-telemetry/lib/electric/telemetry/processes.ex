@@ -5,6 +5,17 @@ defmodule ElectricTelemetry.Processes do
 
   @type limit :: {:count, pos_integer()} | {:mem_percent, 1..100}
 
+  defguardp is_valid_mem_percent(percent)
+            when is_integer(percent) and percent >= 1 and percent <= 100
+
+  def validate_mem_percent(percent) do
+    if is_valid_mem_percent(percent) do
+      {:ok, percent}
+    else
+      {:error, :percent_value_out_of_range}
+    end
+  end
+
   def proc_type(pid), do: proc_type(pid, info(pid))
 
   def top_memory_by_type do
@@ -27,7 +38,7 @@ defmodule ElectricTelemetry.Processes do
   end
 
   def top_memory_by_type(process_list, {:mem_percent, percent})
-      when is_list(process_list) and is_integer(percent) and percent >= 1 and percent <= 100 do
+      when is_list(process_list) and is_valid_mem_percent(percent) do
     # :processes_used excludes memory allocated but not yet used by process heaps,
     # giving a more accurate baseline for the percentage calculation.
     total_process_memory = :erlang.memory(:processes_used)

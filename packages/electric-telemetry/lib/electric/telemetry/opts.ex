@@ -27,7 +27,11 @@ defmodule ElectricTelemetry.Opts do
               {:or,
                [
                  {:tuple, [{:in, [:count]}, :pos_integer]},
-                 {:tuple, [{:in, [:mem_percent]}, :pos_integer]}
+                 {:tuple,
+                  [
+                    {:in, [:mem_percent]},
+                    {:custom, ElectricTelemetry.Processes, :validate_mem_percent, []}
+                  ]}
                ]},
             default: {:count, 5}
           ],

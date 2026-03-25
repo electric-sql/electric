@@ -163,24 +163,6 @@ shape_hibernate_after =
 
 shape_enable_suspend? = env!("ELECTRIC_SHAPE_SUSPEND_CONSUMER", :boolean, nil)
 
-parse_top_process_limit = fn
-  nil ->
-    nil
-
-  str ->
-    case String.split(str, ":", parts: 2) do
-      ["count", n] ->
-        {:count, String.to_integer(n)}
-
-      ["mem_percent", n] ->
-        {:mem_percent, String.to_integer(n)}
-
-      _ ->
-        raise "Invalid ELECTRIC_TELEMETRY_TOP_PROCESS_LIMIT value: #{inspect(str)}. " <>
-                "Expected format: count:<N> or mem_percent:<N>"
-    end
-end
-
 system_metrics_poll_interval =
   env!(
     "ELECTRIC_SYSTEM_METRICS_POLL_INTERVAL",
@@ -235,7 +217,7 @@ config :electric,
   otel_sampling_ratio: env!("ELECTRIC_OTEL_SAMPLING_RATIO", :float, nil),
   metrics_sampling_ratio: env!("ELECTRIC_METRICS_SAMPLING_RATIO", :float, nil),
   telemetry_top_process_limit:
-    parse_top_process_limit.(env!("ELECTRIC_TELEMETRY_TOP_PROCESS_LIMIT", :string, nil)),
+    env!("ELECTRIC_TELEMETRY_TOP_PROCESS_LIMIT", &Electric.Config.parse_top_process_limit!/1, nil),
   telemetry_long_gc_threshold: env!("ELECTRIC_TELEMETRY_LONG_GC_THRESHOLD", :integer, nil),
   telemetry_long_schedule_threshold:
     env!("ELECTRIC_TELEMETRY_LONG_SCHEDULE_THRESHOLD", :integer, nil),
