@@ -790,16 +790,16 @@ export class ShapeStream<T extends Row<unknown> = Row>
             )
           }
           await new Promise<void>((resolve) => {
-            const timer = setTimeout(resolve, delayMs)
-            if (this.options.signal) {
-              const onAbort = () => {
-                clearTimeout(timer)
-                resolve()
-              }
-              this.options.signal.addEventListener(`abort`, onAbort, {
-                once: true,
-              })
+            const signal = this.options.signal
+            const onAbort = () => {
+              clearTimeout(timer)
+              resolve()
             }
+            const timer = setTimeout(() => {
+              signal?.removeEventListener(`abort`, onAbort)
+              resolve()
+            }, delayMs)
+            signal?.addEventListener(`abort`, onAbort, { once: true })
           })
 
           if (this.options.signal?.aborted) {

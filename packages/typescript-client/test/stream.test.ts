@@ -731,23 +731,25 @@ describe(`ShapeStream`, () => {
 
     stream.subscribe(() => {})
 
-    // Wait for several retries to accumulate
+    // Wait for enough retries so we can compare early vs late gaps
     await vi.waitFor(
       () => {
-        expect(requestTimestamps.length).toBeGreaterThanOrEqual(4)
+        expect(requestTimestamps.length).toBeGreaterThanOrEqual(6)
       },
       { timeout: 15_000 }
     )
 
-    // Verify gaps between requests grow over time (exponential backoff)
+    // Verify gaps between requests grow over time (exponential backoff).
+    // Compare the sum of the first half vs the second half of gaps to be
+    // robust against jitter on any individual gap.
     const gaps = requestTimestamps
       .slice(1)
       .map((t, i) => t - requestTimestamps[i]!)
 
-    // Later gaps should be larger than earlier ones on average
-    const earlyGap = gaps[0]!
-    const lateGap = gaps[gaps.length - 1]!
-    expect(lateGap).toBeGreaterThan(earlyGap)
+    const mid = Math.floor(gaps.length / 2)
+    const earlySum = gaps.slice(0, mid).reduce((a, b) => a + b, 0)
+    const lateSum = gaps.slice(mid).reduce((a, b) => a + b, 0)
+    expect(lateSum).toBeGreaterThan(earlySum)
 
     warnSpy.mockRestore()
   })
