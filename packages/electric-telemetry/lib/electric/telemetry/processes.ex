@@ -50,8 +50,10 @@ defmodule ElectricTelemetry.Processes do
   defp take_until_target(proc_groups, target) do
     {_running_total, selected_groups} =
       Enum.reduce_while(proc_groups, {0, []}, fn
-        proc_group, {running_total, acc}
-        when running_total >= target or proc_group.memory < @min_group_memory ->
+        _proc_group, {running_total, acc} when running_total >= target ->
+          {:halt, {running_total, acc}}
+
+        proc_group, {running_total, acc} when proc_group.memory < @min_group_memory ->
           {:halt, {running_total, [proc_group | acc]}}
 
         proc_group, {running_total, acc} ->
