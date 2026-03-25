@@ -1,6 +1,48 @@
 defmodule ElectricTelemetry.ProcessesTest do
   use ExUnit.Case, async: true
 
+  describe "proc_type/1 with binary labels" do
+    import ElectricTelemetry.Processes, only: [proc_type: 1]
+
+    defp spawn_with_label(label) do
+      parent = self()
+
+      pid =
+        spawn(fn ->
+          Process.set_label(label)
+          send(parent, :labelled)
+          Process.sleep(:infinity)
+        end)
+
+      assert_receive :labelled
+      pid
+    end
+
+    test "groups request labels by method and path, stripping query and request id" do
+      pid = spawn_with_label("Request F-jPUudNHxbD8lIAABQG - GET /v1/shape?table=users&offset=-1")
+
+      assert "GET /v1/shape" = proc_type(pid)
+    end
+
+    test "request label without query string keeps full path" do
+      pid = spawn_with_label("Request F-jPUudNHxbD8lIAABQG - GET /v1/health")
+
+      assert "GET /v1/health" = proc_type(pid)
+    end
+
+    test "non-request binary labels are truncated to 20 chars" do
+      pid = spawn_with_label("some_long_label_that_exceeds_twenty_characters")
+
+      assert "some_long_label_that" = proc_type(pid)
+    end
+
+    test "short non-request binary labels are kept as-is" do
+      pid = spawn_with_label("short_label")
+
+      assert "short_label" = proc_type(pid)
+    end
+  end
+
   describe "top_memory_by_type/[1, 2]" do
     import ElectricTelemetry.Processes, only: [top_memory_by_type: 0, top_memory_by_type: 1]
 
