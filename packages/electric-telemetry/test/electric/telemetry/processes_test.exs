@@ -160,6 +160,12 @@ defmodule ElectricTelemetry.ProcessesTest do
     end
 
     test "mem_percent returns groups until target is reached" do
+      :ok =
+        [{:large, 10 * 1024 * 1024}, {:medium, 2 * 1024 * 1024}, {:small, 100}]
+        |> Enum.each(fn {label, size} ->
+          spawn_with_label(label, fn -> Process.put(:str, String.duplicate(".", size)) end)
+        end)
+
       results = top_memory_by_type({:mem_percent, 50})
       assert length(results) >= 1
 
@@ -172,11 +178,12 @@ defmodule ElectricTelemetry.ProcessesTest do
     end
   end
 
-  defp spawn_with_label(label) do
+  defp spawn_with_label(label, fun \\ fn -> nil end) do
     parent = self()
 
     pid =
       spawn_link(fn ->
+        fun.()
         Process.set_label(label)
         send(parent, :labelled)
         Process.sleep(:infinity)
