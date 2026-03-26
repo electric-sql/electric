@@ -96,6 +96,8 @@ defmodule Electric.Shapes.EventRouterTest do
 
       {result, _router} = EventRouter.event_by_shape_handle(router, batch)
 
+      assert ["s1", "s2"] == result |> Map.keys() |> Enum.sort()
+
       assert %{
                "s1" => %TransactionFragment{
                  has_begin?: true,
@@ -275,6 +277,8 @@ defmodule Electric.Shapes.EventRouterTest do
 
       {result, _router} = EventRouter.event_by_shape_handle(router, batch)
 
+      assert ["s1", "s2", "s3", "s4"] == result |> Map.keys() |> Enum.sort()
+
       assert %{
                "s1" => %TransactionFragment{
                  has_begin?: true,
@@ -317,6 +321,8 @@ defmodule Electric.Shapes.EventRouterTest do
       }
 
       {result, _router} = EventRouter.event_by_shape_handle(router, batch)
+
+      assert ["s1", "s2"] == result |> Map.keys() |> Enum.sort()
 
       assert %{
                "s1" => %TransactionFragment{affected_relations: s1_relations},
@@ -374,9 +380,8 @@ defmodule Electric.Shapes.EventRouterTest do
 
       {result2, _router} = EventRouter.event_by_shape_handle(router, batch2)
 
-      assert %{
-               "s1" => %TransactionFragment{has_begin?: true, changes: [^insert]}
-             } = result2
+      assert ["s1"] == Map.keys(result2)
+      assert %{"s1" => %TransactionFragment{has_begin?: true, changes: [^insert]}} = result2
     end
 
     test "Begin seen once per shape even across multiple batches" do
@@ -423,13 +428,14 @@ defmodule Electric.Shapes.EventRouterTest do
       batch1 = %TransactionFragment{xid: 100, has_begin?: true, changes: [insert1]}
 
       {result1, router} = EventRouter.event_by_shape_handle(router, batch1)
+      assert ["s1"] == Map.keys(result1)
       assert %{"s1" => %TransactionFragment{has_begin?: true, changes: [^insert1]}} = result1
 
       insert2 = %NewRecord{relation: {"public", "t1"}, record: %{"id" => "2"}}
       batch2 = %TransactionFragment{xid: 100, has_begin?: false, changes: [insert2]}
 
       {result2, _router} = EventRouter.event_by_shape_handle(router, batch2)
-
+      assert ["s2"] == Map.keys(result2)
       assert %{"s2" => %TransactionFragment{has_begin?: true, changes: [^insert2]}} = result2
     end
 
@@ -445,6 +451,7 @@ defmodule Electric.Shapes.EventRouterTest do
 
       {result1, router} = EventRouter.event_by_shape_handle(router, batch1)
 
+      assert ["s1"] == Map.keys(result1)
       assert %{"s1" => %TransactionFragment{has_begin?: true, changes: [^insert1]}} = result1
 
       insert2 = %NewRecord{relation: {"public", "t1"}, record: %{"id" => "2"}}
@@ -458,6 +465,8 @@ defmodule Electric.Shapes.EventRouterTest do
       }
 
       {result2, _router} = EventRouter.event_by_shape_handle(router, batch2)
+
+      assert ["s1", "s2"] == result2 |> Map.keys() |> Enum.sort()
 
       assert %{
                "s1" => %TransactionFragment{has_begin?: false, commit: ^commit_op, changes: []},
@@ -594,6 +603,7 @@ defmodule Electric.Shapes.EventRouterTest do
       batch1 = %TransactionFragment{xid: 100, has_begin?: true, changes: [insert1]}
 
       {result1, router} = EventRouter.event_by_shape_handle(router, batch1)
+      assert ["s1"] == Map.keys(result1)
       assert %{"s1" => %TransactionFragment{has_begin?: true, changes: [^insert1]}} = result1
 
       insert2 = %NewRecord{relation: {"public", "t1"}, record: %{"id" => "2"}}
@@ -601,6 +611,8 @@ defmodule Electric.Shapes.EventRouterTest do
       batch2 = %TransactionFragment{xid: 100, has_begin?: false, changes: [insert2, insert3]}
 
       {result2, router} = EventRouter.event_by_shape_handle(router, batch2)
+
+      assert ["s2", "s3"] == result2 |> Map.keys() |> Enum.sort()
 
       assert %{
                "s2" => %TransactionFragment{has_begin?: true, changes: [^insert2]},
@@ -618,6 +630,8 @@ defmodule Electric.Shapes.EventRouterTest do
       }
 
       {result3, _router} = EventRouter.event_by_shape_handle(router, batch3)
+
+      assert ["s1", "s2", "s3"] == result3 |> Map.keys() |> Enum.sort()
 
       assert %{
                "s1" => %TransactionFragment{
@@ -646,6 +660,7 @@ defmodule Electric.Shapes.EventRouterTest do
           %TransactionFragment{xid: 100, has_begin?: true, changes: [insert1a, insert2a]}
         )
 
+      assert ["s1"] == Map.keys(result1)
       assert %{"s1" => %TransactionFragment{has_begin?: true, changes: [^insert1a]}} = result1
 
       # Shape s2 added mid-transaction - should not receive any events from this transaction
@@ -674,6 +689,8 @@ defmodule Electric.Shapes.EventRouterTest do
         )
 
       # s1 gets its changes + commit, s2 gets nothing (added mid-transaction)
+      assert ["s1"] == Map.keys(result2)
+
       assert %{
                "s1" => %TransactionFragment{
                  has_begin?: false,
@@ -697,6 +714,8 @@ defmodule Electric.Shapes.EventRouterTest do
             changes: [insert1c, insert2c]
           }
         )
+
+      assert ["s1", "s2"] == result3 |> Map.keys() |> Enum.sort()
 
       assert %{
                "s1" => %TransactionFragment{
@@ -726,6 +745,7 @@ defmodule Electric.Shapes.EventRouterTest do
           %TransactionFragment{xid: 100, has_begin?: true, changes: [insert1a, insert2a]}
         )
 
+      assert ["s1"] == Map.keys(result1)
       assert %{"s1" => %TransactionFragment{has_begin?: true, changes: [^insert1a]}} = result1
 
       # Shapes s2 and s3 added mid-transaction - neither should receive any events from this
@@ -753,6 +773,8 @@ defmodule Electric.Shapes.EventRouterTest do
         )
 
       # s1 gets its changes + commit, s2 and s3 get nothing (added mid-transaction)
+      assert ["s1"] == Map.keys(result2)
+
       assert %{
                "s1" => %TransactionFragment{
                  has_begin?: false,
@@ -777,6 +799,8 @@ defmodule Electric.Shapes.EventRouterTest do
             changes: [insert1c, insert2c, insert3c]
           }
         )
+
+      assert ["s1", "s2", "s3"] == result3 |> Map.keys() |> Enum.sort()
 
       assert %{
                "s1" => %TransactionFragment{
@@ -812,6 +836,8 @@ defmodule Electric.Shapes.EventRouterTest do
           %TransactionFragment{xid: 100, has_begin?: true, changes: [insert1a, insert2a]}
         )
 
+      assert ["s1", "s2"] == result1 |> Map.keys() |> Enum.sort()
+
       assert %{
                "s1" => %TransactionFragment{has_begin?: true, changes: [^insert1a]},
                "s2" => %TransactionFragment{has_begin?: true, changes: [^insert2a]}
@@ -836,6 +862,8 @@ defmodule Electric.Shapes.EventRouterTest do
         )
 
       # s1 gets nothing (removed), s2 gets its changes + commit
+      assert ["s2"] == Map.keys(result2)
+
       assert %{
                "s2" => %TransactionFragment{
                  has_begin?: false,
@@ -859,6 +887,7 @@ defmodule Electric.Shapes.EventRouterTest do
           %TransactionFragment{xid: 100, has_begin?: true, changes: [insert1a, insert2a]}
         )
 
+      assert ["s1"] == Map.keys(result1)
       assert %{"s1" => %TransactionFragment{has_begin?: true, changes: [^insert1a]}} = result1
 
       # s2 added mid-transaction
@@ -879,6 +908,7 @@ defmodule Electric.Shapes.EventRouterTest do
         )
 
       # s2 skipped because added mid-transaction
+      assert ["s1"] == Map.keys(result2)
       assert %{"s1" => %TransactionFragment{has_begin?: false, changes: [^insert1b]}} = result2
 
       # s2 removed before transaction ends
@@ -900,6 +930,8 @@ defmodule Electric.Shapes.EventRouterTest do
         )
 
       # s2 removed, so only s1 gets events
+      assert ["s1"] == Map.keys(result3)
+
       assert %{
                "s1" => %TransactionFragment{
                  has_begin?: false,
@@ -923,6 +955,8 @@ defmodule Electric.Shapes.EventRouterTest do
             changes: [insert1d, insert2d]
           }
         )
+
+      assert ["s1"] == Map.keys(result4)
 
       assert %{
                "s1" => %TransactionFragment{
