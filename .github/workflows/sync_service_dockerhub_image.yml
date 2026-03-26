@@ -19,7 +19,15 @@ on:
     inputs:
       release_tag:
         description: 'The @core/sync-service@... tag to run the workflow for (e.g. @core/sync-service@1.2.10)'
-        required: true
+        required: false
+        type: string
+      custom_ref:
+        description: 'Git ref to build from (branch, tag, or commit SHA). Use with custom_tag.'
+        required: false
+        type: string
+      custom_tag:
+        description: 'Docker Hub tag to publish as (e.g. subqueries-alpha). Use with custom_ref.'
+        required: false
         type: string
 
 env:
@@ -33,6 +41,8 @@ jobs:
     outputs:
       git_ref: ${{ steps.git_ref.outputs.git_ref }}
       is_release: ${{ steps.git_ref.outputs.is_release }}
+      is_custom: ${{ steps.git_ref.outputs.is_custom }}
+      custom_tag: ${{ steps.git_ref.outputs.custom_tag }}
       short_commit_sha: ${{ steps.vars.outputs.short_commit_sha }}
       electric_version: ${{ steps.vars.outputs.electric_version }}
 
@@ -41,22 +51,41 @@ jobs:
         id: git_ref
         env:
           INPUT_RELEASE_TAG: ${{ inputs.release_tag }}
+          INPUT_CUSTOM_REF: ${{ inputs.custom_ref }}
+          INPUT_CUSTOM_TAG: ${{ inputs.custom_tag }}
           EVENT_RELEASE_TAG: ${{ github.event.release.tag_name }}
           COMMIT_SHA: ${{ github.sha }}
         run: |
-          if [ -n "$INPUT_RELEASE_TAG" ]; then
+          if [ -n "$INPUT_CUSTOM_REF" ]; then
+            if [ -z "$INPUT_CUSTOM_TAG" ]; then
+              echo "::error::custom_ref requires custom_tag to be set"
+              exit 1
+            fi
+            ref="$INPUT_CUSTOM_REF"
+            is_release=false
+            is_custom=true
+            custom_tag="$INPUT_CUSTOM_TAG"
+          elif [ -n "$INPUT_RELEASE_TAG" ]; then
             ref="refs/tags/$INPUT_RELEASE_TAG"
             is_release=true
+            is_custom=false
+            custom_tag=""
           elif [ -n "$EVENT_RELEASE_TAG" ]; then
             ref="refs/tags/$EVENT_RELEASE_TAG"
             is_release=true
+            is_custom=false
+            custom_tag=""
           else
             ref="$COMMIT_SHA"
             is_release=false
+            is_custom=false
+            custom_tag=""
           fi
 
           echo "git_ref=$ref" >> $GITHUB_OUTPUT
           echo "is_release=$is_release" >> $GITHUB_OUTPUT
+          echo "is_custom=$is_custom" >> $GITHUB_OUTPUT
+          echo "custom_tag=$custom_tag" >> $GITHUB_OUTPUT
 
       - uses: actions/checkout@v4
         with:
@@ -83,9 +112,13 @@ jobs:
             git rev-parse --short HEAD
           )" >> $GITHUB_OUTPUT
 
-          echo "electric_version=$(
-            git describe --abbrev=7 --tags --always --first-parent --match '@core/sync-service@*' | sed -En 's|^@core/sync-service@||p'
-          )" >> $GITHUB_OUTPUT
+          if [ "${{ steps.git_ref.outputs.is_custom }}" = "true" ]; then
+            echo "electric_version=${{ steps.git_ref.outputs.custom_tag }}" >> $GITHUB_OUTPUT
+          else
+            echo "electric_version=$(
+              git describe --abbrev=7 --tags --always --first-parent --match '@core/sync-service@*' | sed -En 's|^@core/sync-service@||p'
+            )" >> $GITHUB_OUTPUT
+          fi
 
   build_and_push_image:
     strategy:
@@ -160,7 +193,11 @@ jobs:
 
       - name: Derive image tags from the GitHub Actions event
         run: |
-          if [ "${{ needs.derive_build_vars.outputs.is_release }}" = "true" ]; then
+          if [ "${{ needs.derive_build_vars.outputs.is_custom }}" = "true" ]; then
+            # A custom build publishes only the requested tag
+            echo "ELECTRIC_TAGS=-t $DOCKERHUB_REPO:${{ needs.derive_build_vars.outputs.custom_tag }}" >> $GITHUB_ENV
+            echo "ELECTRIC_CANARY_TAGS=" >> $GITHUB_ENV
+          elif [ "${{ needs.derive_build_vars.outputs.is_release }}" = "true" ]; then
             # A release triggers official release image publishing
             echo "ELECTRIC_TAGS=-t $DOCKERHUB_REPO:latest -t $DOCKERHUB_REPO:${{ needs.derive_build_vars.outputs.electric_version }}" >> $GITHUB_ENV
             echo "ELECTRIC_CANARY_TAGS=" >> $GITHUB_ENV
