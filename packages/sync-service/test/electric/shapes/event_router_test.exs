@@ -8,6 +8,7 @@ defmodule Electric.Shapes.EventRouterTest do
   alias Electric.Replication.Changes.TruncatedRelation
   alias Electric.Replication.Changes.UpdatedRecord
   alias Electric.Replication.Changes.TransactionFragment
+  alias Electric.Replication.LogOffset
   alias Electric.Shapes.EventRouter
   alias Electric.Shapes.Shape
   alias Support.StubInspector
@@ -503,6 +504,100 @@ defmodule Electric.Shapes.EventRouterTest do
       {result2, _router} = EventRouter.event_by_shape_handle(router, batch2)
 
       assert result2 == %{"s1" => batch2}
+    end
+
+    test "commit-only fragment for shape when commit has changes only for a different table" do
+      router =
+        EventRouter.new()
+        |> EventRouter.add_shape("s1", Shape.new!("t1", inspector: @inspector))
+        |> EventRouter.add_shape("s2", Shape.new!("t2", inspector: @inspector))
+
+      insert_t1 = %NewRecord{
+        relation: {"public", "t1"},
+        record: %{"id" => "1"},
+        log_offset: LogOffset.new(10, 0)
+      }
+
+      insert_t2_first = %NewRecord{
+        relation: {"public", "t2"},
+        record: %{"id" => "2"},
+        log_offset: LogOffset.new(10, 2)
+      }
+
+      batch1 = %TransactionFragment{
+        xid: 100,
+        has_begin?: true,
+        last_log_offset: LogOffset.new(10, 2),
+        changes: [insert_t1, insert_t2_first],
+        change_count: 2
+      }
+
+      {result1, router} = EventRouter.event_by_shape_handle(router, batch1)
+
+      # Shape s1 only gets the t1 change but last_log_offset is copied from the txn fragment
+      batch1_last_offset = LogOffset.new(10, 2)
+
+      assert ["s1", "s2"] == Map.keys(result1)
+
+      assert %{
+               "s1" => %TransactionFragment{
+                 has_begin?: true,
+                 commit: nil,
+                 changes: [^insert_t1],
+                 change_count: 1,
+                 last_log_offset: ^batch1_last_offset
+               },
+               "s2" => %TransactionFragment{
+                 has_begin?: true,
+                 commit: nil,
+                 changes: [^insert_t2_first],
+                 change_count: 1,
+                 last_log_offset: ^batch1_last_offset
+               }
+             } = result1
+
+      # Commit fragment has only a t2 change
+      insert_t2_last = %NewRecord{
+        relation: {"public", "t2"},
+        record: %{"id" => "99"},
+        log_offset: LogOffset.new(10, 4)
+      }
+
+      commit_op = %Commit{commit_timestamp: ~U[2024-01-01 00:00:00Z]}
+
+      batch2 = %TransactionFragment{
+        xid: 100,
+        has_begin?: false,
+        commit: commit_op,
+        last_log_offset: LogOffset.new(10, 4),
+        changes: [insert_t2_last],
+        change_count: 1
+      }
+
+      {result2, _router} = EventRouter.event_by_shape_handle(router, batch2)
+
+      # s1 gets a commit-only fragment: change_count=0,
+      # and last_log_offset from the commit fragment
+      batch2_last_offset = LogOffset.new(10, 4)
+
+      assert ["s1", "s2"] == Map.keys(result2)
+
+      assert %{
+               "s1" => %TransactionFragment{
+                 has_begin?: false,
+                 commit: ^commit_op,
+                 changes: [],
+                 change_count: 0,
+                 last_log_offset: ^batch2_last_offset
+               },
+               "s2" => %TransactionFragment{
+                 has_begin?: false,
+                 commit: ^commit_op,
+                 changes: [^insert_t2_last],
+                 change_count: 1,
+                 last_log_offset: ^batch2_last_offset
+               }
+             } = result2
     end
 
     test "transaction state is reset after Commit" do
