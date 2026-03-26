@@ -621,7 +621,7 @@ defmodule Electric.Connection.Manager do
     end)
 
     if not state.replication_configuration_blocked_by_pending_transaction do
-      dispatch_stack_event(:replication_slot_creation_blocked_by_pending_trasactions, state)
+      dispatch_stack_event(:replication_slot_creation_blocked_by_pending_transactions, state)
     end
 
     tref = schedule_periodic_connection_status_check(:replication_configuration)
