@@ -45,7 +45,7 @@ defmodule Electric.Shapes.Consumer.State do
     pending_txn: nil,
     # When a {Storage, :flushed, offset} message arrives during a pending
     # transaction, we defer the notification and store the max flushed offset
-    # here. ultiple deferred notifications are collapsed into a single most recent offset.
+    # here. Multiple deferred notifications are collapsed into a single most recent offset.
     pending_flush_offset: nil
   ]
 
