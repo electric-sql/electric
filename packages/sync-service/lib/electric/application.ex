@@ -384,7 +384,7 @@ defmodule Electric.Application do
           long_schedule_threshold: :telemetry_long_schedule_threshold,
           long_message_queue_enable_threshold: :telemetry_long_message_queue_enable_threshold,
           long_message_queue_disable_threshold: :telemetry_long_message_queue_disable_threshold,
-          top_process_count: :telemetry_top_process_count
+          top_process_limit: :telemetry_top_process_limit
         ),
       reporters: [
         statsd_host: get_env(opts, :telemetry_statsd_host),

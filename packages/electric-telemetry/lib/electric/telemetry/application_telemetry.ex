@@ -169,9 +169,9 @@ defmodule ElectricTelemetry.ApplicationTelemetry do
     })
   end
 
-  def process_memory(%{intervals_and_thresholds: %{top_process_count: process_count}}) do
+  def process_memory(%{intervals_and_thresholds: %{top_process_limit: process_limit}}) do
     for %{type: type, memory: memory} <-
-          ElectricTelemetry.Processes.top_memory_by_type(process_count) do
+          ElectricTelemetry.Processes.top_memory_by_type(process_limit) do
       :telemetry.execute([:process, :memory], %{total: memory}, %{process_type: to_string(type)})
     end
   end
