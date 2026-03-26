@@ -19,15 +19,7 @@ on:
     inputs:
       release_tag:
         description: 'The @core/sync-service@... tag to run the workflow for (e.g. @core/sync-service@1.2.10)'
-        required: false
-        type: string
-      custom_ref:
-        description: 'Git ref to build from (branch, tag, or commit SHA). Use with custom_tag.'
-        required: false
-        type: string
-      custom_tag:
-        description: 'Docker Hub tag to publish as (e.g. subqueries-alpha). Use with custom_ref.'
-        required: false
+        required: true
         type: string
 
 env:
@@ -41,8 +33,6 @@ jobs:
     outputs:
       git_ref: ${{ steps.git_ref.outputs.git_ref }}
       is_release: ${{ steps.git_ref.outputs.is_release }}
-      is_custom: ${{ steps.git_ref.outputs.is_custom }}
-      custom_tag: ${{ steps.git_ref.outputs.custom_tag }}
       short_commit_sha: ${{ steps.vars.outputs.short_commit_sha }}
       electric_version: ${{ steps.vars.outputs.electric_version }}
 
@@ -51,41 +41,22 @@ jobs:
         id: git_ref
         env:
           INPUT_RELEASE_TAG: ${{ inputs.release_tag }}
-          INPUT_CUSTOM_REF: ${{ inputs.custom_ref }}
-          INPUT_CUSTOM_TAG: ${{ inputs.custom_tag }}
           EVENT_RELEASE_TAG: ${{ github.event.release.tag_name }}
           COMMIT_SHA: ${{ github.sha }}
         run: |
-          if [ -n "$INPUT_CUSTOM_REF" ]; then
-            if [ -z "$INPUT_CUSTOM_TAG" ]; then
-              echo "::error::custom_ref requires custom_tag to be set"
-              exit 1
-            fi
-            ref="$INPUT_CUSTOM_REF"
-            is_release=false
-            is_custom=true
-            custom_tag="$INPUT_CUSTOM_TAG"
-          elif [ -n "$INPUT_RELEASE_TAG" ]; then
+          if [ -n "$INPUT_RELEASE_TAG" ]; then
             ref="refs/tags/$INPUT_RELEASE_TAG"
             is_release=true
-            is_custom=false
-            custom_tag=""
           elif [ -n "$EVENT_RELEASE_TAG" ]; then
             ref="refs/tags/$EVENT_RELEASE_TAG"
             is_release=true
-            is_custom=false
-            custom_tag=""
           else
             ref="$COMMIT_SHA"
             is_release=false
-            is_custom=false
-            custom_tag=""
           fi
 
           echo "git_ref=$ref" >> $GITHUB_OUTPUT
           echo "is_release=$is_release" >> $GITHUB_OUTPUT
-          echo "is_custom=$is_custom" >> $GITHUB_OUTPUT
-          echo "custom_tag=$custom_tag" >> $GITHUB_OUTPUT
 
       - uses: actions/checkout@v4
         with:
@@ -112,123 +83,37 @@ jobs:
             git rev-parse --short HEAD
           )" >> $GITHUB_OUTPUT
 
-          if [ "${{ steps.git_ref.outputs.is_custom }}" = "true" ]; then
-            echo "electric_version=${{ steps.git_ref.outputs.custom_tag }}" >> $GITHUB_OUTPUT
-          else
-            echo "electric_version=$(
-              git describe --abbrev=7 --tags --always --first-parent --match '@core/sync-service@*' | sed -En 's|^@core/sync-service@||p'
-            )" >> $GITHUB_OUTPUT
-          fi
+          echo "electric_version=$(
+            git describe --abbrev=7 --tags --always --first-parent --match '@core/sync-service@*' | sed -En 's|^@core/sync-service@||p'
+          )" >> $GITHUB_OUTPUT
 
-  build_and_push_image:
-    strategy:
-      matrix:
-        include:
-          - platform: linux/amd64
-            platform_id: amd64
-            runner: blacksmith-4vcpu-ubuntu-2404
-          - platform: linux/arm64/v8
-            platform_id: arm64
-            runner: blacksmith-4vcpu-ubuntu-2404-arm
-    runs-on: ${{ matrix.runner }}
+  derive_tags:
+    name: Derive Docker image tags
     needs: [derive_build_vars]
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ needs.derive_build_vars.outputs.git_ref }}
-
-      - uses: useblacksmith/setup-docker-builder@v1
-
-      - uses: docker/login-action@v3
-        with:
-          registry: docker.io
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Build and push by digest
-        id: build
-        uses: useblacksmith/build-push-action@v2
-        with:
-          context: packages/sync-service
-          build-contexts: |
-            electric-telemetry=packages/electric-telemetry
-          build-args: |
-            ELECTRIC_VERSION=${{ needs.derive_build_vars.outputs.electric_version }}
-          platforms: ${{ matrix.platform }}
-          push: true
-          # push an untagged image and export its digest
-          # the subsequent merge job will assemble the manifest list and apply tags
-          outputs: type=image,push-by-digest=true,name-canonical=true,push=true
-          tags: |
-            ${{ env.DOCKERHUB_REPO }}
-            ${{ env.DOCKERHUB_CANARY_REPO }}
-
-      # Save the digest so the merge job can find both platform images
-      - name: Export digest
-        run: |
-          mkdir -p /tmp/digests
-          echo "${{ steps.build.outputs.digest }}" > "/tmp/digests/${{ matrix.platform_id }}.digest"
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: digests-${{ matrix.platform_id }}
-          path: /tmp/digests/*
-
-  publish_tagged_image:
-    needs: [derive_build_vars, build_and_push_image]
     runs-on: blacksmith-2vcpu-ubuntu-2404
+    outputs:
+      electric_tags: ${{ steps.tags.outputs.electric_tags }}
+      canary_tags: ${{ steps.tags.outputs.canary_tags }}
     steps:
-      - uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - uses: useblacksmith/setup-docker-builder@v1
-
-      - uses: actions/download-artifact@v4
-        with:
-          pattern: digests-*
-          merge-multiple: true
-          path: /tmp/digests
-
       - name: Derive image tags from the GitHub Actions event
+        id: tags
         run: |
-          if [ "${{ needs.derive_build_vars.outputs.is_custom }}" = "true" ]; then
-            # A custom build publishes only the requested tag
-            echo "ELECTRIC_TAGS=-t $DOCKERHUB_REPO:${{ needs.derive_build_vars.outputs.custom_tag }}" >> $GITHUB_ENV
-            echo "ELECTRIC_CANARY_TAGS=" >> $GITHUB_ENV
-          elif [ "${{ needs.derive_build_vars.outputs.is_release }}" = "true" ]; then
+          if [ "${{ needs.derive_build_vars.outputs.is_release }}" = "true" ]; then
             # A release triggers official release image publishing
-            echo "ELECTRIC_TAGS=-t $DOCKERHUB_REPO:latest -t $DOCKERHUB_REPO:${{ needs.derive_build_vars.outputs.electric_version }}" >> $GITHUB_ENV
-            echo "ELECTRIC_CANARY_TAGS=" >> $GITHUB_ENV
+            echo "electric_tags=-t $DOCKERHUB_REPO:latest -t $DOCKERHUB_REPO:${{ needs.derive_build_vars.outputs.electric_version }}" >> $GITHUB_OUTPUT
+            echo "canary_tags=" >> $GITHUB_OUTPUT
           else
             # A regular push to the main branch triggers canary image publishing
-            echo "ELECTRIC_TAGS=-t $DOCKERHUB_REPO:canary" >> $GITHUB_ENV
-            echo "ELECTRIC_CANARY_TAGS=-t $DOCKERHUB_CANARY_REPO:latest -t $DOCKERHUB_CANARY_REPO:${{ needs.derive_build_vars.outputs.short_commit_sha }}" >> $GITHUB_ENV
+            echo "electric_tags=-t $DOCKERHUB_REPO:canary" >> $GITHUB_OUTPUT
+            echo "canary_tags=-t $DOCKERHUB_CANARY_REPO:latest -t $DOCKERHUB_CANARY_REPO:${{ needs.derive_build_vars.outputs.short_commit_sha }}" >> $GITHUB_OUTPUT
           fi
 
-      - name: Create multi-arch manifest list
-        run: |
-          set -euo pipefail
-
-          # Build a list of $DOCKERHUB_REPO@sha256:... source images
-          ELECTRIC_IMAGES=$(
-            for f in /tmp/digests/*.digest; do
-              echo $DOCKERHUB_REPO@$(cat $f)
-            done
-          )
-
-          # Create a manifest list for $DOCKERHUB_REPO:canary that includes both platforms
-          docker buildx imagetools create $ELECTRIC_TAGS $ELECTRIC_IMAGES
-
-          if [ -n "$ELECTRIC_CANARY_TAGS" ]; then
-            # Build a list of $DOCKERHUB_CANARY_REPO@sha256:... source images
-            ELECTRIC_CANARY_IMAGES=$(
-              for f in /tmp/digests/*.digest; do
-                echo $DOCKERHUB_CANARY_REPO@$(cat $f)
-              done
-            )
-
-            # Create a manifest list for $DOCKERHUB_CANARY_REPO:... that includes both platforms
-            docker buildx imagetools create $ELECTRIC_CANARY_TAGS $ELECTRIC_CANARY_IMAGES
-          fi
+  build_and_publish:
+    needs: [derive_build_vars, derive_tags]
+    uses: ./.github/workflows/_build_and_publish_electric_image.yml
+    secrets: inherit
+    with:
+      git_ref: ${{ needs.derive_build_vars.outputs.git_ref }}
+      electric_version: ${{ needs.derive_build_vars.outputs.electric_version }}
+      electric_tags: ${{ needs.derive_tags.outputs.electric_tags }}
+      canary_tags: ${{ needs.derive_tags.outputs.canary_tags }}

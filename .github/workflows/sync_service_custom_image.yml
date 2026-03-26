@@ -1,0 +1,28 @@
+name: Publish custom Electric image to Docker Hub
+
+# Build and publish a Docker image from any branch, tag, or commit SHA
+# with a custom Docker Hub tag. Useful for testing pre-release builds.
+on:
+  workflow_dispatch:
+    inputs:
+      custom_ref:
+        description: 'Git ref to build from (branch name, tag, or commit SHA)'
+        required: true
+        type: string
+      custom_tag:
+        description: 'Docker Hub tag to publish as (e.g. subqueries-alpha)'
+        required: true
+        type: string
+
+env:
+  DOCKERHUB_REPO: electricsql/electric
+
+jobs:
+  build_and_publish:
+    uses: ./.github/workflows/_build_and_publish_electric_image.yml
+    secrets: inherit
+    with:
+      git_ref: ${{ inputs.custom_ref }}
+      electric_version: ${{ inputs.custom_tag }}
+      electric_tags: -t electricsql/electric:${{ inputs.custom_tag }}
+      canary_tags: ''
