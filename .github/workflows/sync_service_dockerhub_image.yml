@@ -87,33 +87,65 @@ jobs:
             git describe --abbrev=7 --tags --always --first-parent --match '@core/sync-service@*' | sed -En 's|^@core/sync-service@||p'
           )" >> $GITHUB_OUTPUT
 
-  derive_tags:
-    name: Derive Docker image tags
+  build:
     needs: [derive_build_vars]
-    runs-on: blacksmith-2vcpu-ubuntu-2404
-    outputs:
-      electric_tags: ${{ steps.tags.outputs.electric_tags }}
-      canary_tags: ${{ steps.tags.outputs.canary_tags }}
-    steps:
-      - name: Derive image tags from the GitHub Actions event
-        id: tags
-        run: |
-          if [ "${{ needs.derive_build_vars.outputs.is_release }}" = "true" ]; then
-            # A release triggers official release image publishing
-            echo "electric_tags=-t $DOCKERHUB_REPO:latest -t $DOCKERHUB_REPO:${{ needs.derive_build_vars.outputs.electric_version }}" >> $GITHUB_OUTPUT
-            echo "canary_tags=" >> $GITHUB_OUTPUT
-          else
-            # A regular push to the main branch triggers canary image publishing
-            echo "electric_tags=-t $DOCKERHUB_REPO:canary" >> $GITHUB_OUTPUT
-            echo "canary_tags=-t $DOCKERHUB_CANARY_REPO:latest -t $DOCKERHUB_CANARY_REPO:${{ needs.derive_build_vars.outputs.short_commit_sha }}" >> $GITHUB_OUTPUT
-          fi
-
-  build_and_publish:
-    needs: [derive_build_vars, derive_tags]
-    uses: ./.github/workflows/_build_and_publish_electric_image.yml
+    uses: ./.github/workflows/_build_electric_image.yml
     secrets: inherit
     with:
       git_ref: ${{ needs.derive_build_vars.outputs.git_ref }}
       electric_version: ${{ needs.derive_build_vars.outputs.electric_version }}
-      electric_tags: ${{ needs.derive_tags.outputs.electric_tags }}
-      canary_tags: ${{ needs.derive_tags.outputs.canary_tags }}
+
+  publish_tagged_image:
+    needs: [derive_build_vars, build]
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    steps:
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - uses: useblacksmith/setup-docker-builder@v1
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: digests-*
+          merge-multiple: true
+          path: /tmp/digests
+
+      - name: Derive image tags from the GitHub Actions event
+        run: |
+          if [ "${{ needs.derive_build_vars.outputs.is_release }}" = "true" ]; then
+            # A release triggers official release image publishing
+            echo "ELECTRIC_TAGS=-t $DOCKERHUB_REPO:latest -t $DOCKERHUB_REPO:${{ needs.derive_build_vars.outputs.electric_version }}" >> $GITHUB_ENV
+            echo "ELECTRIC_CANARY_TAGS=" >> $GITHUB_ENV
+          else
+            # A regular push to the main branch triggers canary image publishing
+            echo "ELECTRIC_TAGS=-t $DOCKERHUB_REPO:canary" >> $GITHUB_ENV
+            echo "ELECTRIC_CANARY_TAGS=-t $DOCKERHUB_CANARY_REPO:latest -t $DOCKERHUB_CANARY_REPO:${{ needs.derive_build_vars.outputs.short_commit_sha }}" >> $GITHUB_ENV
+          fi
+
+      - name: Create multi-arch manifest list
+        run: |
+          set -euo pipefail
+
+          # Build a list of $DOCKERHUB_REPO@sha256:... source images
+          ELECTRIC_IMAGES=$(
+            for f in /tmp/digests/*.digest; do
+              echo $DOCKERHUB_REPO@$(cat $f)
+            done
+          )
+
+          # Create a manifest list for $DOCKERHUB_REPO:canary that includes both platforms
+          docker buildx imagetools create $ELECTRIC_TAGS $ELECTRIC_IMAGES
+
+          if [ -n "$ELECTRIC_CANARY_TAGS" ]; then
+            # Build a list of $DOCKERHUB_CANARY_REPO@sha256:... source images
+            ELECTRIC_CANARY_IMAGES=$(
+              for f in /tmp/digests/*.digest; do
+                echo $DOCKERHUB_CANARY_REPO@$(cat $f)
+              done
+            )
+
+            # Create a manifest list for $DOCKERHUB_CANARY_REPO:... that includes both platforms
+            docker buildx imagetools create $ELECTRIC_CANARY_TAGS $ELECTRIC_CANARY_IMAGES
+          fi
