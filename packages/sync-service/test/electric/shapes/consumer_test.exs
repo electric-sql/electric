@@ -1677,10 +1677,11 @@ defmodule Electric.Shapes.ConsumerTest do
     test "flush notification for multi-fragment txn is not lost when storage flushes before commit fragment",
          %{stack_id: stack_id} = ctx do
       # Regression test for https://github.com/electric-sql/electric/issues/3985
+      # Updated for deferred flush notification fix (#4063).
       #
       # When a multi-fragment transaction's non-commit fragments are flushed to disk
       # before the commit fragment is processed by ShapeLogCollector, the flush
-      # notification was lost because FlushTracker hadn't registered the shape yet.
+      # notification was lost because FlushTracker wasn't tracking the shape's offsets.
       # This caused the shape to be stuck in the FlushTracker, blocking
       # the global flush offset from advancing.
       {shape_handle, _} = ShapeCache.get_or_create_shape_handle(@shape1, stack_id)
@@ -1738,19 +1739,12 @@ defmodule Electric.Shapes.ConsumerTest do
       assert :ok = ShapeLogCollector.handle_event(fragment1, stack_id)
       assert :ok = ShapeLogCollector.handle_event(fragment2, stack_id)
 
-      flushed_log_offset = fragment2.last_log_offset
-
-      # Matching on a traced call inline to avoid any timing issues that
-      # Trace.collect_traced_calls() is susceptible to in this case.
-      assert_receive {:trace, _, :call,
-                      {ShapeLogCollector, :notify_flushed,
-                       [^stack_id, ^shape_handle, ^flushed_log_offset]}},
-                     @receive_timeout
+      # With deferred flush notifications, notify_flushed is NOT called
+      # after non-commit fragments. The flush is deferred until the commit.
+      assert [] == Support.Trace.collect_traced_calls()
 
       # Now send the commit fragment. The commit fragment itself has NO matching
       # changes for the shape — all changes were in earlier fragments.
-      # After this, FlushTracker registers the shape but the data was already
-      # flushed, so no new :flushed message will arrive.
       commit_fragment =
         txn_fragment(
           xid,
@@ -1768,8 +1762,16 @@ defmodule Electric.Shapes.ConsumerTest do
       assert :ok = ShapeLogCollector.handle_event(commit_fragment, ctx.stack_id)
       assert_receive {^ref, :new_changes, _}, @receive_timeout
 
-      # Assert that the flush boundary has advanced which wasn't the case before due to the
-      # aforementioned bug,
+      # The deferred flush notification is sent after the commit, aligned
+      # to the commit fragment's last_log_offset.
+      commit_offset = commit_fragment.last_log_offset
+
+      assert_receive {:trace, _, :call,
+                      {ShapeLogCollector, :notify_flushed,
+                       [^stack_id, ^shape_handle, ^commit_offset]}},
+                     @receive_timeout
+
+      # Flush boundary advances.
       tx_offset = commit_fragment.last_log_offset.tx_offset
       assert_receive {:flush_boundary_updated, ^tx_offset}, @receive_timeout
     end
@@ -1777,7 +1779,7 @@ defmodule Electric.Shapes.ConsumerTest do
     @tag allow_subqueries: false, with_pure_file_storage_opts: [flush_period: 10_000]
     test "flush notification offset is aligned when storage flushes before commit arrives at consumer",
          %{stack_id: stack_id} do
-      # Regression test for https://github.com/electric-sql/electric/issues/4058
+      # Regression test for https://github.com/electric-sql/electric/issues/4063
       #
       # When a non-commit fragment has enough data to trigger a buffer-size
       # flush (>= 64KB), the :flushed message is placed in the consumer's
@@ -1854,21 +1856,26 @@ defmodule Electric.Shapes.ConsumerTest do
 
       assert :ok = ShapeLogCollector.handle_event(non_commit_fragment, stack_id)
 
-      assert [
-               {ShapeLogCollector, :notify_flushed,
-                [stack_id, shape_handle, relevant_change_offset]}
-             ] == Support.Trace.collect_traced_calls()
+      # With deferred flush notifications, the consumer does NOT call notify_flushed
+      # after the non-commit fragment. The :flushed message is saved for later.
+      assert [] == Support.Trace.collect_traced_calls()
 
-      # Send the commit fragment to finalize the transaction in shape consumer.
-      # FlushTracker still tracks the transaction but the consumer won't send another flush
-      # notification, so the shape remains stuck and blocks all further advancement of flushed
-      # offset.
+      # Send the commit fragment to finalize the transaction.
       assert :ok = ShapeLogCollector.handle_event(commit_fragment, stack_id)
 
       # Consumer has processed the relevant change...
       assert_receive {^ref, :new_changes, ^relevant_change_offset}, @receive_timeout
 
-      # ...but the replication client never gets a flush boundary advancement
+      # The deferred flush notification is sent after the commit with the
+      # aligned offset (the commit fragment's last_log_offset).
+      commit_last_log_offset = commit_fragment.last_log_offset
+
+      assert [
+               {ShapeLogCollector, :notify_flushed,
+                [^stack_id, ^shape_handle, ^commit_last_log_offset]}
+             ] = Support.Trace.collect_traced_calls()
+
+      # Flush boundary advances correctly.
       tx_offset = commit_fragment.last_log_offset.tx_offset
       assert_receive {:flush_boundary_updated, ^tx_offset}, @receive_timeout
     end
