@@ -294,7 +294,7 @@ defmodule Support.ComponentSetup do
   defp start_consumer_supervisor(ctx) do
     consumer_supervisor = :"consumer_supervisor_#{full_test_name(ctx)}"
 
-    {Electric.Shapes.DynamicConsumerSupervisor, [stack_id: ctx.stack_id]}
+    {Electric.Shapes.DynamicConsumerSupervisor, [stack_id: ctx.stack_id, partitions: 1]}
     |> Supervisor.child_spec(id: consumer_supervisor, restart: :temporary)
     |> start_supervised!()
 

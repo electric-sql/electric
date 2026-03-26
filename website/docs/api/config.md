@@ -411,6 +411,17 @@ This replaces the previous `ELECTRIC_EXPERIMENTAL_MAX_SHAPES` environment variab
 
 </EnvVarConfig>
 
+### ELECTRIC_CONSUMER_PARTITIONS
+
+<EnvVarConfig
+    name="ELECTRIC_CONSUMER_PARTITIONS"
+    optional="true"
+    example="128">
+
+Consumer processes are partitioned across some number of supervisors to improve launch and shutdown time. If `ELECTRIC_MAX_SHAPES` is set the number of partitions will scale to fit this maximum but if not, it defaults to the number of CPU cores. If you want to improve shutdown performance without setting an upper limit on the number of shapes, then set this to roughly your expected number of shapes / 4000.
+
+</EnvVarConfig>
+
 ## Feature Flags
 
 Feature flags enable experimental or advanced features that are not yet enabled by default in production.
