@@ -41,6 +41,7 @@ defmodule Electric.Plug.LabelProcessPlug do
       "Request F-jPUudNHxbD8lIAABQG - GET /v1/shape?table=users"
   """
   def process_label(conn) do
+    # If you change the format of this string, do not forget to update ElectricTelemetry.Processes.parse_binary_label().
     "Request #{conn.assigns.plug_request_id} - #{conn.method} #{conn.request_path}#{query_suffix(conn)}"
   end
 
