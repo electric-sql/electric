@@ -437,6 +437,45 @@ defmodule Electric.Shapes.QueryingTest do
                )
     end
 
+    test "preserves space padding for char(n) columns in pk-less table", %{db_conn: conn} do
+      Postgrex.query!(
+        conn,
+        """
+        CREATE TABLE padded_no_pk (
+          code CHAR(6),
+          name TEXT
+        )
+        """,
+        []
+      )
+
+      Postgrex.query!(
+        conn,
+        "INSERT INTO padded_no_pk VALUES ('ab', 'first'), ('cd', 'second'), (NULL, 'third')",
+        []
+      )
+
+      shape = Shape.new!("padded_no_pk", inspector: {DirectInspector, conn})
+
+      assert [
+               %{
+                 key: ~S["public"."padded_no_pk"/"ab    "/"first"],
+                 value: %{code: "ab    ", name: "first"}
+               },
+               %{
+                 key: ~S["public"."padded_no_pk"/"cd    "/"second"],
+                 value: %{code: "cd    ", name: "second"}
+               },
+               %{
+                 key: ~S["public"."padded_no_pk"/_/"third"],
+                 value: %{code: nil, name: "third"}
+               }
+             ] =
+               decode_stream(
+                 Querying.stream_initial_data(conn, "dummy-stack-id", "dummy-shape-handle", shape)
+               )
+    end
+
     test "preserves space padding for char(n) columns", %{db_conn: conn} do
       Postgrex.query!(
         conn,
