@@ -24,6 +24,7 @@ on:
       - '.github/workflows/ensure_sync_service*'
       - '.github/workflows/pr.*'
       - '.github/actions/**'
+      - 'patches/**'
 
 permissions:
   contents: read

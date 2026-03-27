@@ -23,6 +23,7 @@ on:
       - '.npmrc'
       - '.github/workflows/ts_*'
       - '.github/actions/**'
+      - 'patches/**'
 
 permissions:
   contents: read
