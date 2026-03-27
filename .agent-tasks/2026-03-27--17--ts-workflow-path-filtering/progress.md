@@ -17,3 +17,8 @@
 ### Implementation plan
 1. `ts_tests.yml`: Change push branches to include `changeset-release/main`, replace `paths-ignore` on PR trigger with `paths` include list
 2. `ts_check_formatting.yml`: Add push trigger for `main` and `changeset-release/main`, replace `paths-ignore` on PR trigger with `paths` include list
+
+### Implementation
+- Implemented both changes as planned
+- Pushed to `alco:erik/ts-workflow-path-filtering`
+- Opened PR: https://github.com/electric-sql/electric/pull/4067 with `claude` label for review
