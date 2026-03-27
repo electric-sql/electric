@@ -45,14 +45,14 @@
   -
   
   ??[warning] Publication fatal misconfiguration: %Electric.DbConfigurationError{type: :publication_missing
-  ??[debug] Starting replication client for stack single_stack
+  ??[debug] Starting replication client
 
   -$fail_pattern
 
   ??[debug] ReplicationClient step: create_publication_query
   ??[debug] ReplicationClient step: drop_slot
   ??[debug] ReplicationClient step: create_slot
-  ??[debug] Created new slot at lsn=
+  ?lsn=.*\[debug\] Created new slot
   ??[notice] Purging all shapes.
   ??[notice] Starting replication from postgres
 
@@ -73,7 +73,7 @@
   ??"value":{"val":"3"}
 
 [shell electric]
-  ??[debug] Snapshot started shape_handle: $new_shape_handle
+  ?shape_handle=$new_shape_handle.*\[debug\] Snapshot started
   ??[debug] Chunked 200
 
 [cleanup]

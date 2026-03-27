@@ -56,13 +56,13 @@ defmodule Electric.AsyncDeleter do
         :ok
 
       {:error, :enoent} ->
-        Logger.debug("AsyncDeleter: path already gone #{path}")
+        Logger.debug("AsyncDeleter: path already gone", path: path)
         :ok
 
       {:error, reason} ->
         # If this is happening then there's something bad going on and our
         # storage is just accruing.
-        Logger.error("AsyncDeleter: rename failed for #{path}: #{inspect(reason)}")
+        Logger.error("AsyncDeleter: rename failed", path: path, reason: reason)
         {:error, reason}
     end
   end
@@ -94,7 +94,7 @@ defmodule Electric.AsyncDeleter do
 
   # schedule cleanup if not already scheduled and no cleanup is running
   def handle_continue(:schedule_cleanup, %{timer_ref: nil, cleanup_task: nil} = state) do
-    Logger.debug("AsyncDeleter: scheduling cleanup in #{state.interval_ms}ms")
+    Logger.debug("AsyncDeleter: scheduling cleanup", interval_ms: state.interval_ms)
 
     {:noreply,
      %{state | timer_ref: Process.send_after(self(), :perform_delete, state.interval_ms)}}
@@ -126,9 +126,9 @@ defmodule Electric.AsyncDeleter do
   def handle_info({ref, :ok}, %{cleanup_task: {%Task{ref: ref}, start_time}} = state) do
     duration = System.monotonic_time(:millisecond) - start_time
 
-    Logger.debug(
-      "AsyncDeleter: deleted #{length(state.in_progress)} paths " <>
-        "for stack #{state.stack_id} in #{duration}ms"
+    Logger.debug("AsyncDeleter: deleted paths",
+      path_count: length(state.in_progress),
+      duration_ms: duration
     )
 
     {:noreply, %{state | in_progress: [], cleanup_task: nil}, {:continue, :schedule_cleanup}}
@@ -140,10 +140,10 @@ defmodule Electric.AsyncDeleter do
       ) do
     duration = System.monotonic_time(:millisecond) - start_time
 
-    Logger.warning(
-      "AsyncDeleter: failed to delete #{length(state.pending)} paths " <>
-        "for stack #{state.stack_id} after #{duration}ms with reason: #{inspect(reason)}" <>
-        " - will retry on next scheduled cleanup."
+    Logger.warning("AsyncDeleter: failed to delete paths, will retry on next scheduled cleanup",
+      path_count: length(state.pending),
+      duration_ms: duration,
+      reason: reason
     )
 
     {:noreply,
@@ -164,7 +164,7 @@ defmodule Electric.AsyncDeleter do
     # which could lead to concurrent `rm_rf` calls on the trash directory, so we explicitly kill
     # it as part of this process termination.
     if not is_nil(state.cleanup_task) do
-      Logger.debug("AsyncDeleter: terminating, killing cleanup task due to #{inspect(reason)}")
+      Logger.debug("AsyncDeleter: terminating, killing cleanup task", reason: reason)
       {task, _start_time} = state.cleanup_task
       Task.shutdown(task, 1_000)
     end
@@ -201,12 +201,12 @@ defmodule Electric.AsyncDeleter do
         Electric.Telemetry.Sentry.set_tags_context(stack_id: stack_id)
 
         trash_dir = trash_dir!(stack_id)
-        Logger.debug("AsyncDeleter: Cleaning trash directory #{inspect(trash_dir)}")
+        Logger.debug("AsyncDeleter: Cleaning trash directory", trash_dir: trash_dir)
 
         try do
           clean_dir!(trash_dir)
         rescue
-          e -> Logger.warning("AsyncDeleter: rm_rf failed: #{inspect(e)}")
+          e -> Logger.warning("AsyncDeleter: rm_rf failed", error: e)
         end
       end)
 

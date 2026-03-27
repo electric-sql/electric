@@ -369,7 +369,7 @@ defmodule Electric.Shapes.Api do
         hold_until_stack_ready(api, block_on_conn_sleeping: true)
 
       {:error, message} ->
-        Logger.warning("Stack not ready after #{opts[:timeout]}ms. Reason: #{message}")
+        Logger.warning("Stack not ready", timeout_ms: opts[:timeout], reason: message)
         {:error, Response.error(api, message, status: 503, retry_after: 5)}
     end
   end
@@ -392,7 +392,7 @@ defmodule Electric.Shapes.Api do
     if LogOffset.compare(offset, last_offset) != :lt or
          last_offset == LogOffset.last_before_real_offsets() do
       ref = Electric.StackSupervisor.subscribe_to_shape_events(stack_id, handle)
-      Logger.debug("Client #{inspect(self())} is registered for changes to #{handle}")
+      Logger.debug("Client is registered for changes", shape_handle: handle)
 
       %{request | new_changes_pid: self(), new_changes_ref: ref}
     else
@@ -411,7 +411,7 @@ defmodule Electric.Shapes.Api do
   defp ensure_subscribed(%Request{} = request) do
     %{handle: handle, api: %{stack_id: stack_id}} = request
     ref = Electric.StackSupervisor.subscribe_to_shape_events(stack_id, handle)
-    Logger.debug("Client #{inspect(self())} is registered for changes to #{handle}")
+    Logger.debug("Client is registered for changes", shape_handle: handle)
     %{request | new_changes_pid: self(), new_changes_ref: ref}
   end
 
@@ -678,15 +678,21 @@ defmodule Electric.Shapes.Api do
 
       {:error, %SnapshotError{type: :schema_changed}} ->
         error = Api.Error.must_refetch()
-        Logger.warning("Schema changed while creating snapshot for #{shape_handle}")
+        Logger.warning("Schema changed while creating snapshot", shape_handle: shape_handle)
         Response.error(request, error.message, status: error.status)
 
       {:error, %SnapshotError{} = error} ->
-        Logger.warning("Failed to create snapshot for #{shape_handle}: #{error.message}")
+        Logger.warning("Failed to create snapshot",
+          shape_handle: shape_handle,
+          err_msg: error.message
+        )
 
         if error.type == :unknown &&
              DbConnectionError.from_error(error.original_error).type == :unknown do
-          Logger.error("Unknown error while creating snapshot: #{inspect(error.original_error)}")
+          Logger.error("Unknown error while creating snapshot",
+            original_error: error.original_error
+          )
+
           message = "Unexpected error while creating snapshot: " <> error.message
           Response.error(request, message, status: 500)
         else
@@ -741,8 +747,8 @@ defmodule Electric.Shapes.Api do
       api: %{stack_id: stack_id}
     } = request
 
-    Logger.debug(
-      "Client #{inspect(self())} is checking for any changes to #{shape_handle} since start of request"
+    Logger.debug("Client is checking for any changes since start of request",
+      shape_handle: shape_handle
     )
 
     case Shapes.resolve_shape_handle(stack_id, shape_handle, shape_def) do
@@ -786,7 +792,7 @@ defmodule Electric.Shapes.Api do
       api: %{long_poll_timeout: long_poll_timeout} = api
     } = request
 
-    Logger.debug("Client #{inspect(self())} is waiting for changes to #{shape_handle}")
+    Logger.debug("Client is waiting for changes", shape_handle: shape_handle)
 
     # Bandit reuses handler processes across requests. This process may have accumulated
     # garbage from previous requests or from building the response for this request.
@@ -850,8 +856,9 @@ defmodule Electric.Shapes.Api do
       params: %{offset: since_offset}
     } = request
 
-    Logger.debug(
-      "Client #{inspect(self())} is streaming SSE for changes to #{shape_handle} since #{inspect(since_offset)}"
+    Logger.debug("Client is streaming SSE for changes",
+      shape_handle: shape_handle,
+      since_offset: since_offset
     )
 
     # Set up timer for SSE comment as keep-alive

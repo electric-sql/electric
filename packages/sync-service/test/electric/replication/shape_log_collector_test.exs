@@ -1192,8 +1192,8 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
           assert :ok = ShapeLogCollector.handle_event(txn, ctx.stack_id)
         end)
 
-      assert log =~
-               ~s'Consumer processes crashed or missing during broadcast: %{"shape-doomed" => {:shutdown, :test}}'
+      assert log =~ "Consumer processes crashed or missing during broadcast"
+      assert log =~ "shape-doomed"
 
       # The alive consumer receives the transaction
       assert_receive {Support.TransactionConsumer, {:alive, _pid}, [_txn]}
@@ -1265,8 +1265,8 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
           assert :ok = ShapeLogCollector.handle_event(frag2, ctx.stack_id)
         end)
 
-      assert log =~
-               ~s'Consumer processes crashed or missing during broadcast: %{"shape-doomed" => :noproc}'
+      assert log =~ "Consumer processes crashed or missing during broadcast"
+      assert log =~ "shape-doomed"
 
       # The alive consumer receives fragment 2
       assert_receive {Support.TransactionConsumer, {:alive, _}, [_]}

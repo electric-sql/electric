@@ -175,7 +175,7 @@ defmodule Electric.AdmissionControl do
       read_concurrency: true
     ])
 
-    Logger.notice("Admission control initialized with table: #{table_name}")
+    Logger.notice("Admission control initialized", table_name: table_name)
     {:ok, %{table_name: table_name}}
   end
 

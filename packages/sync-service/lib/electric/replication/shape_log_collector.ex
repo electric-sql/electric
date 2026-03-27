@@ -409,8 +409,8 @@ defmodule Electric.Replication.ShapeLogCollector do
       ["rel.id": rel.id, "rel.schema": rel.schema, "rel.table": rel.table],
       state.stack_id,
       fn ->
-        Logger.info("Received relation #{inspect(rel.schema)}.#{inspect(rel.table)}")
-        Logger.debug(fn -> "Relation received in ShapeLogCollector: #{inspect(rel)}" end)
+        Logger.info("Received relation", schema: rel.schema, table: rel.table)
+        Logger.debug("Relation received in ShapeLogCollector", relation: rel)
 
         result = handle_relation(state, rel)
         OpenTelemetry.wipe_interval_timer()
@@ -655,7 +655,7 @@ defmodule Electric.Replication.ShapeLogCollector do
       state.stack_id,
       fn ->
         if EventRouter.has_shape?(state.event_router, shape_handle) do
-          Logger.debug("Deleting shape #{shape_handle}")
+          Logger.debug("Deleting shape", shape_handle: shape_handle)
 
           OpenTelemetry.start_interval(:"unsubscribe_shape.remove_subscription.duration_µs")
 

@@ -66,7 +66,7 @@ defmodule Electric.ShapeCache.ExpiryManager do
         # We do not expire shapes if the stack is not active since this may mean that
         # shapes have not fully restored yet and we don't want to expire while restoring
         # as this may cause race conditions.
-        Logger.debug("Expiry check skipped due to inactive stack: #{inspect(status)}")
+        Logger.debug("Expiry check skipped due to inactive stack", status: status)
     end
   end
 
@@ -74,9 +74,9 @@ defmodule Electric.ShapeCache.ExpiryManager do
     number_to_expire = shape_count - state.max_shapes
     {handles_to_expire, min_age} = least_recently_used(state, number_to_expire)
 
-    Logger.notice(
-      "Expiring #{number_to_expire} shapes as the number of shapes " <>
-        "has exceeded the limit (#{state.max_shapes})"
+    Logger.notice("Expiring shapes as the number of shapes has exceeded the limit",
+      number_to_expire: number_to_expire,
+      max_shapes: state.max_shapes
     )
 
     OpenTelemetry.with_span(

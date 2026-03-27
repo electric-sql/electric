@@ -57,7 +57,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Statistics do
 
   @impl GenServer
   def handle_info(msg, state) do
-    Logger.warning("#{__MODULE__} Received unexpected message #{inspect(msg)}")
+    Logger.warning("Received unexpected message", unexpected_msg: msg)
     {:noreply, state}
   end
 end

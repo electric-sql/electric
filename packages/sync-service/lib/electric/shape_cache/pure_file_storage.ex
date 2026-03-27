@@ -1385,7 +1385,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
       Regex.match?(~r/\d{6,}-\d{8,}/, name)
     end)
     |> tap(fn dirs ->
-      Logger.notice("Removing #{length(dirs)} old storage directories")
+      Logger.notice("Removing old storage directories", count: length(dirs))
     end)
     |> Enum.each(fn path ->
       # remove with a delay - don't want this task to interfere with critical processes

@@ -233,8 +233,8 @@ defmodule Electric.Connection.Manager do
 
   def pool_sizes(total_pool_size) do
     if total_pool_size < 2 do
-      Logger.warning(
-        "The configured connection pool size #{total_pool_size} is below the minimum of 2"
+      Logger.warning("The configured connection pool size is below the minimum of 2",
+        pool_size: total_pool_size
       )
     end
 
@@ -348,7 +348,7 @@ defmodule Electric.Connection.Manager do
           stack_id: state.stack_id
         ]
 
-        Logger.debug("Starting replication client for stack #{state.stack_id}")
+        Logger.debug("Starting replication client")
 
         # The replication client starts up quickly and then proceeds to asynchronously opening a
         # replication connection to the database and configuring it.
@@ -386,7 +386,7 @@ defmodule Electric.Connection.Manager do
         } = state
       )
       when is_nil(pool_pids.admin) or is_nil(pool_pids.snapshot) do
-    Logger.debug("Starting connection pool for stack #{state.stack_id}")
+    Logger.debug("Starting connection pool")
 
     # The admin pool uses replication credentials because the replication user
     # owns the publication and has the privileges needed to alter it. The pooled
@@ -520,7 +520,7 @@ defmodule Electric.Connection.Manager do
         :ok
 
       {:error, reason} ->
-        Logger.error("Failed to start shape supervisor: #{inspect(reason)}")
+        Logger.error("Failed to start shape supervisor", reason: reason)
         exit(reason)
     end
 
@@ -576,7 +576,7 @@ defmodule Electric.Connection.Manager do
       else
         {:error, reason} ->
           # no-op, this is a one-shot attempt at fixing a lock
-          Logger.warning("Failed try and break stuck lock connection: #{inspect(reason)}")
+          Logger.warning("Failed try and break stuck lock connection", reason: reason)
           :ok
       end
     else
@@ -599,7 +599,7 @@ defmodule Electric.Connection.Manager do
           current_step: {:start_replication_client, :acquiring_lock}
         } = state
       ) do
-    Logger.warning(fn -> "Waiting for postgres lock to be acquired..." end)
+    Logger.warning("Waiting for postgres lock to be acquired")
     tref = schedule_periodic_connection_status_check(:replication_lock)
     state = %{state | replication_lock_timer: tref}
     {:noreply, state, {:continue, :check_lock_not_abandoned}}
@@ -613,12 +613,12 @@ defmodule Electric.Connection.Manager do
           current_step: {:start_replication_client, :configuring_connection}
         } = state
       ) do
-    Logger.warning(fn ->
+    Logger.warning(
       "Waiting for the replication connection setup to complete... " <>
         "Check that you don't have pending transactions in the database. " <>
         "Electric has to wait for all pending transactions to commit or rollback " <>
         "before it can create the replication slot."
-    end)
+    )
 
     if not state.replication_configuration_blocked_by_pending_transaction do
       dispatch_stack_event(:replication_slot_creation_blocked_by_pending_transactions, state)
@@ -683,8 +683,8 @@ defmodule Electric.Connection.Manager do
       ) do
     time_s = System.convert_time_unit(time, :millisecond, :second)
 
-    Logger.notice(
-      "Closing all database connections after the replication stream has been idle for #{time_s} seconds"
+    Logger.notice("Closing all database connections after the replication stream has been idle",
+      idle_time_s: time_s
     )
 
     Electric.Connection.Restarter.stop_connection_subsystem(state.stack_id)
@@ -862,10 +862,10 @@ defmodule Electric.Connection.Manager do
   end
 
   def handle_cast({:pg_info_obtained, info}, state) do
-    Logger.notice(
-      "Postgres server version = #{info.server_version_num}, " <>
-        "system identifier = #{state.pg_system_identifier}, " <>
-        "timeline_id = #{state.pg_timeline_id}"
+    Logger.notice("Postgres server info obtained",
+      server_version: info.server_version_num,
+      system_identifier: state.pg_system_identifier,
+      timeline_id: state.pg_timeline_id
     )
 
     Electric.Telemetry.OpenTelemetry.execute(
@@ -897,7 +897,7 @@ defmodule Electric.Connection.Manager do
     # before the manager itself terminates.
     # This is important to ensure that upon restarting on an error the
     # connection manager is able to start the processes in a clean state.
-    Logger.debug("Terminating connection manager with reason #{inspect(reason)}.")
+    Logger.debug("Terminating connection manager", reason: reason)
 
     %{
       replication_client_pid: replication_client_pid,
@@ -983,9 +983,9 @@ defmodule Electric.Connection.Manager do
 
     extended_message = message <> pg_error_extra_info(error.original_error)
 
-    Logger.warning(
-      "#{inspect(__MODULE__)} is restarting after it has encountered an error in #{connection_mode} mode: #{extended_message}\n" <>
-        message <> "\n\n" <> inspect(state, pretty: true)
+    Logger.warning("Connection manager is restarting after an error",
+      connection_mode: connection_mode,
+      err_msg: extended_message
     )
 
     dispatch_stack_event(
@@ -1006,8 +1006,9 @@ defmodule Electric.Connection.Manager do
 
     extended_message = message <> pg_error_extra_info(error.original_error)
 
-    Logger.warning(
-      "Database connection in #{connection_mode} mode failed: #{extended_message}\nRetrying..."
+    Logger.warning("Database connection failed, retrying",
+      connection_mode: connection_mode,
+      err_msg: extended_message
     )
 
     dispatch_stack_event(
@@ -1131,7 +1132,7 @@ defmodule Electric.Connection.Manager do
     {time, conn_backoff} = ConnectionBackoff.fail(conn_backoff)
     if is_reference(tref), do: :erlang.cancel_timer(tref)
     tref = :erlang.start_timer(time, self(), {:retry_connection, step})
-    Logger.warning("Reconnecting in #{inspect(time)}ms")
+    Logger.warning("Reconnecting", delay_ms: time)
     %{state | connection_backoff: {conn_backoff, tref}}
   end
 
@@ -1140,7 +1141,7 @@ defmodule Electric.Connection.Manager do
     {total_retry_time, conn_backoff} = ConnectionBackoff.succeed(conn_backoff)
 
     if total_retry_time > 0 do
-      Logger.notice("Reconnection succeeded after #{inspect(total_retry_time)}ms")
+      Logger.notice("Reconnection succeeded", total_retry_time_ms: total_retry_time)
     end
 
     %{state | connection_backoff: {conn_backoff, nil}}
@@ -1204,16 +1205,14 @@ defmodule Electric.Connection.Manager do
         :ok
 
       {:error, %DBConnection.ConnectionError{} = error} ->
-        Logger.warning("Failed to execute query: #{query}\nError: #{inspect(error)}")
+        Logger.warning("Failed to execute query", query: query, error: error)
 
       {:error, error} ->
-        Logger.error("Failed to execute query: #{query}\nError: #{inspect(error)}")
+        Logger.error("Failed to execute query", query: query, error: error)
     end
   catch
     :exit, {_, {DBConnection.Holder, :checkout, _}} ->
-      Logger.warning(
-        "Failed to execute query: #{query}\nError: Database connection not available"
-      )
+      Logger.warning("Failed to execute query: database connection not available", query: query)
   end
 
   defp schedule_periodic_connection_status_check(type) do

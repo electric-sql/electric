@@ -62,7 +62,7 @@ defmodule Electric.Shapes.Consumer.MoveHandling do
         {["$sublink", Integer.to_string(index)], MapSet.new(Enum.map(new_values, &elem(&1, 0)))}
       )
 
-    Logger.debug("Move-in #{name} has been triggered from #{dep_handle}")
+    Logger.debug("Move-in has been triggered", name: name, dep_handle: dep_handle)
 
     %{state | move_handling_state: move_handling_state}
   end

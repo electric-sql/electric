@@ -38,8 +38,11 @@ defmodule ElectricTelemetry.SystemMonitor do
   def handle_info({:monitor, gc_pid, :long_gc, info}, state) do
     type = proc_type(gc_pid)
 
-    Logger.debug(
-      "Long GC detected for pid #{inspect(gc_pid)} (#{inspect(type)}): took #{Keyword.fetch!(info, :timeout)}ms. #{inspect(info, limit: :infinity)}"
+    Logger.debug("Long GC detected",
+      monitored_pid: gc_pid,
+      process_type: type,
+      timeout_ms: Keyword.fetch!(info, :timeout),
+      gc_info: info
     )
 
     :telemetry.execute(@vm_monitor_long_gc, Map.new(info), %{process_type: type})
@@ -48,8 +51,9 @@ defmodule ElectricTelemetry.SystemMonitor do
   end
 
   def handle_info({:monitor, port, :long_schedule, info}, state) when is_port(port) do
-    Logger.debug(
-      "Long schedule detected for port #{inspect(port)}, took #{Keyword.fetch!(info, :timeout)}ms"
+    Logger.debug("Long schedule detected for port",
+      port: port,
+      timeout_ms: Keyword.fetch!(info, :timeout)
     )
 
     :telemetry.execute(@vm_monitor_long_schedule, Map.new(info), %{process_type: :port})
@@ -60,25 +64,17 @@ defmodule ElectricTelemetry.SystemMonitor do
   def handle_info({:monitor, pid, :long_schedule, info}, state) when is_pid(pid) do
     type = proc_type(pid)
 
-    Logger.debug(fn ->
-      locations =
+    Logger.debug("Long schedule detected for pid",
+      monitored_pid: pid,
+      process_type: type,
+      timeout_ms: Keyword.fetch!(info, :timeout),
+      locations:
         info
         |> Keyword.delete(:timeout)
         |> Map.new(fn {loc, {m, f, a}} when loc in [:in, :out] ->
           {loc, Exception.format_mfa(m, f, a)}
         end)
-
-      locs_str =
-        if map_size(locations) > 0 do
-          "; " <>
-            (locations |> Enum.map(fn {key, val} -> "#{key}: #{val}" end) |> Enum.join(", "))
-        else
-          ""
-        end
-
-      "Long schedule detected for pid #{inspect(pid)} (#{inspect(type)}), took #{Keyword.fetch!(info, :timeout)}ms" <>
-        locs_str
-    end)
+    )
 
     :telemetry.execute(@vm_monitor_long_schedule, %{timeout: Keyword.fetch!(info, :timeout)}, %{
       process_type: type
@@ -90,7 +86,7 @@ defmodule ElectricTelemetry.SystemMonitor do
   def handle_info({:monitor, pid, :long_message_queue, true}, state) do
     type = proc_type(pid)
 
-    Logger.debug("Long message queue detected for pid #{inspect(pid)} (#{inspect(type)})")
+    Logger.debug("Long message queue detected", monitored_pid: pid, process_type: type)
 
     log_long_message_queue_event(pid, type)
 
@@ -102,7 +98,7 @@ defmodule ElectricTelemetry.SystemMonitor do
   end
 
   def handle_info({:monitor, pid, :long_message_queue, false}, state) do
-    Logger.debug("Long message queue no longer detected for pid #{inspect(pid)}")
+    Logger.debug("Long message queue no longer detected", monitored_pid: pid)
 
     {:noreply, %{state | long_message_queue_pids: Map.delete(state.long_message_queue_pids, pid)}}
   end

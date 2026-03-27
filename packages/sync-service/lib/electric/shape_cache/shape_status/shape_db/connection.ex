@@ -85,7 +85,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
     case db_version(conn) do
       # not been initialized
       {:ok, 0} ->
-        Logger.notice("Migrating shape db to version #{@schema_version}")
+        Logger.notice("Migrating shape db", schema_version: @schema_version)
 
         with :ok <- execute_all(conn, migration_sqls(opts)) do
           {:ok, @schema_version}
@@ -256,7 +256,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
   end
 
   defp open_with_recovery(db_path, _pool_state, _opts, 0) do
-    Logger.error("Unable to create database at #{db_path}")
+    Logger.error("Unable to create database", db_path: db_path)
     {:error, "failed to open #{db_path}"}
   end
 
@@ -269,7 +269,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
               {:ok, conn}
 
             {:error, reason} ->
-              Logger.warning("Database file corrupt #{db_path}: #{inspect(reason)}")
+              Logger.warning("Database file corrupt", db_path: db_path, reason: reason)
 
               close(conn)
 
@@ -282,7 +282,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Connection do
         end
 
       {:error, reason} ->
-        Logger.warning("Failed to open db #{db_path}: #{inspect(reason)}")
+        Logger.warning("Failed to open db", db_path: db_path, reason: reason)
 
         with :ok <- delete_corrupt_db(db_path) do
           open_with_recovery(db_path, pool_state, opts, attempts_remaining - 1)

@@ -12,6 +12,10 @@
 
 [invoke setup_electric_with_env "ELECTRIC_OTLP_ENDPOINT=http://localhost:4318 ELECTRIC_SYSTEM_METRICS_POLL_INTERVAL=1s ELECTRIC_OTEL_EXPORT_PERIOD=2s DO_NOT_START_CONN_MAN_PING=1 ELECTRIC_LOG_LEVEL=info OTEL_RESOURCE_ATTRIBUTES=custom.attr=electric.val"]
 
+[shell electric]
+    # Override the fail pattern to exclude benign OTEL log handler removal messages
+    -(?i)(?!.*removed_failing_handler.*otel_log_handler)(error|fatal|no such)
+
 [shell otel_collector]
   # Verify that the Collector receives metrics from Electric with expected resource attributes
   ??info	ResourceMetrics
