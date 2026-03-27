@@ -2,16 +2,28 @@ name: TS tests
 
 on:
   push:
-    branches: ['main']
-    paths-ignore:
-      - 'website/**'
-      - '**/README.md'
-      - 'integration-tests/**'
+    branches: ['main', 'changeset-release/main']
   pull_request:
-    paths-ignore:
-      - 'website/**'
-      - '**/README.md'
-      - 'integration-tests/**'
+    paths:
+      - 'packages/typescript-client/**'
+      - 'packages/react-hooks/**'
+      - 'packages/y-electric/**'
+      - 'packages/experimental/**'
+      - 'packages/start/**'
+      - 'examples/**'
+      - 'pnpm-lock.yaml'
+      - 'package.json'
+      - 'pnpm-workspace.yaml'
+      - '.tool-versions'
+      - 'tsconfig.*'
+      - 'eslint.config*'
+      - '.prettierrc*'
+      - '.prettierignore'
+      - '.npmrc'
+      - '.github/workflows/ts_*'
+      - '.github/workflows/ensure_sync_service*'
+      - '.github/workflows/pr.*'
+      - '.github/actions/**'
 
 permissions:
   contents: read

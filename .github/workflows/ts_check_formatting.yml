@@ -1,13 +1,28 @@
 name: TS formatting
 
 on:
+  push:
+    branches: ['main', 'changeset-release/main']
   pull_request:
-    paths-ignore:
-      - '**/README.md'
-      - 'integration-tests/**'
-      - 'packages/electric-telemetry/**'
-      - 'packages/elixir-client/**'
-      - 'packages/sync-service/**'
+    paths:
+      - 'packages/typescript-client/**'
+      - 'packages/react-hooks/**'
+      - 'packages/y-electric/**'
+      - 'packages/experimental/**'
+      - 'packages/start/**'
+      - 'examples/**'
+      - 'website/**'
+      - 'pnpm-lock.yaml'
+      - 'package.json'
+      - 'pnpm-workspace.yaml'
+      - '.tool-versions'
+      - 'tsconfig.*'
+      - 'eslint.config*'
+      - '.prettierrc*'
+      - '.prettierignore'
+      - '.npmrc'
+      - '.github/workflows/ts_*'
+      - '.github/actions/**'
 
 permissions:
   contents: read
