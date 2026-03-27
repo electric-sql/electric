@@ -36,3 +36,6 @@ packages/sync-service
 _build
 deps
 integration-tests
+
+# Ignore agent task files
+.agent-tasks
