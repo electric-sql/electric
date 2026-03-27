@@ -4,27 +4,13 @@ on:
   push:
     branches: ['main', 'changeset-release/main']
   pull_request:
-    paths:
-      - 'packages/typescript-client/**'
-      - 'packages/react-hooks/**'
-      - 'packages/y-electric/**'
-      - 'packages/experimental/**'
-      - 'packages/start/**'
-      - 'examples/**'
-      - 'pnpm-lock.yaml'
-      - 'package.json'
-      - 'pnpm-workspace.yaml'
-      - '.tool-versions'
-      - 'tsconfig.*'
-      - 'eslint.config*'
-      - '.prettierrc*'
-      - '.prettierignore'
-      - '.npmrc'
-      - '.github/workflows/ts_*'
-      - '.github/workflows/ensure_sync_service*'
-      - '.github/workflows/pr.*'
-      - '.github/actions/**'
-      - 'patches/**'
+    paths-ignore:
+      - 'website/**'
+      - '**/README.md'
+      - 'integration-tests/**'
+      - 'packages/sync-service/**'
+      - 'packages/electric-telemetry/**'
+      - 'packages/elixir-client/**'
 
 permissions:
   contents: read
