@@ -59,15 +59,25 @@ export class Shape<T extends Row<unknown> = Row> {
   readonly #insertedKeys = new Set<string>()
   readonly #requestedSubSnapshots = new Set<string>()
   #reexecuteSnapshotsPending = false
+  #started = false
   #status: ShapeStatus = `syncing`
   #error: FetchError | false = false
 
-  constructor(stream: ShapeStreamInterface<T>) {
+  constructor(stream: ShapeStreamInterface<T>, { autoStart = true } = {}) {
     this.stream = stream
-    this.stream.subscribe(
-      this.#process.bind(this),
-      this.#handleError.bind(this)
-    )
+
+    if (autoStart) {
+      this.#started = true
+
+      this.stream.subscribe(
+        this.#process.bind(this),
+        this.#handleError.bind(this)
+      )
+    }
+  }
+
+  get started(): boolean {
+    return this.#started
   }
 
   get isUpToDate(): boolean {
@@ -135,6 +145,17 @@ export class Shape<T extends Row<unknown> = Row> {
   /** Current log mode of the underlying stream */
   get mode(): LogMode {
     return this.stream.mode
+  }
+
+  start(): void {
+    if (this.#started) return
+
+    this.#started = true
+
+    this.stream.subscribe(
+      this.#process.bind(this),
+      this.#handleError.bind(this)
+    )
   }
 
   /**
