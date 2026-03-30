@@ -75,7 +75,18 @@ jobs:
 
       - uses: actions/checkout@v4
         with:
+          # The checked out commit influences the value of the ELECTRIC_VERSION variable
+          # that is baked into the Docker image.
+          #
+          # For regular pushes to main, we check out the HEAD commit and publish canary images.
+          #
+          # For releases we check out the tag corresponding to the release, e.g.
+          # @core/sync-service@v1.2.10.
+          #
+          # For custom builds, we check out the branch, tag, or SHA specified by the caller.
           ref: ${{ steps.git_ref.outputs.git_ref }}
+          # Also important to fetch the whole history since otherwise we won't get the tags
+          # that are required to determine the correct ELECTRIC_VERSION.
           fetch-depth: 0
           fetch-tags: true
 
@@ -149,7 +160,7 @@ jobs:
           outputs: type=image,push-by-digest=true,name-canonical=true,push=true
           tags: |
             ${{ env.DOCKERHUB_REPO }}
-            ${{ needs.derive_build_vars.outputs.build_mode == 'canary' && env.DOCKERHUB_CANARY_REPO || '' }}
+            ${{ env.DOCKERHUB_CANARY_REPO }}
 
       # Save the digest so the merge job can find both platform images
       - name: Export digest
@@ -187,12 +198,15 @@ jobs:
           SHORT_SHA: ${{ needs.derive_build_vars.outputs.short_commit_sha }}
         run: |
           if [ "$BUILD_MODE" = "release" ]; then
+            # A release triggers official release image publishing
             echo "ELECTRIC_TAGS=-t $DOCKERHUB_REPO:latest -t $DOCKERHUB_REPO:$ELECTRIC_VERSION" >> $GITHUB_ENV
             echo "ELECTRIC_CANARY_TAGS=" >> $GITHUB_ENV
           elif [ "$BUILD_MODE" = "custom" ]; then
+            # A custom build publishes with the caller-specified tag only
             echo "ELECTRIC_TAGS=-t $DOCKERHUB_REPO:$DOCKER_TAG" >> $GITHUB_ENV
             echo "ELECTRIC_CANARY_TAGS=" >> $GITHUB_ENV
           else
+            # A regular push to the main branch triggers canary image publishing
             echo "ELECTRIC_TAGS=-t $DOCKERHUB_REPO:canary" >> $GITHUB_ENV
             echo "ELECTRIC_CANARY_TAGS=-t $DOCKERHUB_CANARY_REPO:latest -t $DOCKERHUB_CANARY_REPO:$SHORT_SHA" >> $GITHUB_ENV
           fi
@@ -201,20 +215,24 @@ jobs:
         run: |
           set -euo pipefail
 
+          # Build a list of $DOCKERHUB_REPO@sha256:... source images
           ELECTRIC_IMAGES=$(
             for f in /tmp/digests/*.digest; do
               echo $DOCKERHUB_REPO@$(cat $f)
             done
           )
 
+          # Create a manifest list that includes both platforms
           docker buildx imagetools create $ELECTRIC_TAGS $ELECTRIC_IMAGES
 
           if [ -n "$ELECTRIC_CANARY_TAGS" ]; then
+            # Build a list of $DOCKERHUB_CANARY_REPO@sha256:... source images
             ELECTRIC_CANARY_IMAGES=$(
               for f in /tmp/digests/*.digest; do
                 echo $DOCKERHUB_CANARY_REPO@$(cat $f)
               done
             )
 
+            # Create a manifest list for $DOCKERHUB_CANARY_REPO:... that includes both platforms
             docker buildx imagetools create $ELECTRIC_CANARY_TAGS $ELECTRIC_CANARY_IMAGES
           fi
