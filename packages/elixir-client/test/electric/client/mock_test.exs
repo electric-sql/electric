@@ -20,8 +20,9 @@ defmodule Electric.Client.MockTest do
       start_supervised(
         {Task,
          fn ->
-           events = Client.stream(client, ctx.shape) |> Enum.take(5)
-           send(parent, {:events, events})
+           client
+           |> Client.stream(ctx.shape)
+           |> Enum.each(fn evt -> send(parent, {:event, evt}) end)
          end}
       )
 
@@ -51,10 +52,16 @@ defmodule Electric.Client.MockTest do
         ]
       )
 
-    events =
-      receive do
-        {:events, events} -> events
-      end
+    event_stream =
+      Stream.repeatedly(fn ->
+        receive do
+          {:event, event} -> event
+        after
+          1_000 -> raise "client stream has crashed"
+        end
+      end)
+
+    events = Enum.take(event_stream, 5)
 
     assert [
              %ChangeMessage{value: %{"id" => 1111}},
@@ -63,5 +70,19 @@ defmodule Electric.Client.MockTest do
              %ChangeMessage{value: %{"id" => 4444}},
              up_to_date(1234)
            ] = events
+
+    {:ok, _request} =
+      Client.Mock.response(client,
+        status: 200,
+        schema: %{id: %{type: "int8"}},
+        last_offset: Offset.new(0, 1),
+        shape_handle: "my-shape",
+        body: [
+          Client.Mock.change(value: %{id: "5555"}),
+          Client.Mock.up_to_date(lsn: 1235)
+        ]
+      )
+
+    assert [_, up_to_date(1235)] = Enum.take(event_stream, 2)
   end
 end

@@ -198,9 +198,11 @@ defmodule Electric.Client.Mock do
   end
 
   defp build_response(opts) do
+    opts = Keyword.put_new(opts, :next_cursor, System.unique_integer([:positive, :monotonic]))
+
     %Fetch.Response{
       status: Keyword.get(opts, :status, 200),
-      headers: headers(opts[:headers] || []),
+      headers: headers(opts),
       body: jsonify(opts[:body] || []),
       schema: Keyword.get(opts, :schema, nil),
       shape_handle: Keyword.get(opts, :shape_handle, nil),
@@ -213,12 +215,14 @@ defmodule Electric.Client.Mock do
           {:shape_handle, Client.shape_handle()}
           | {:last_offset, Client.Offset.t()}
           | {:schema, Client.schema()}
+          | {:next_cursor, Client.cursor()}
         ]) :: %{String.t() => [String.t()]}
   def headers(args) do
     %{}
     |> put_optional_header("electric-handle", args[:shape_handle])
     |> put_optional_header("electric-offset", args[:last_offset])
     |> put_optional_header("electric-schema", args[:schema], &Jason.encode!/1)
+    |> put_optional_header("electric-cursor", args[:next_cursor])
   end
 
   defp put_optional_header(headers, header, value, encoder \\ & &1)
