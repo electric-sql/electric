@@ -146,7 +146,8 @@ defmodule Electric.StackSupervisor do
                        type: {:or, [:pos_integer, nil]},
                        default: nil
                      ],
-                     process_spawn_opts: [type: :map, default: %{}]
+                     process_spawn_opts: [type: :map, default: %{}],
+                     consumer_partitions: [type: {:or, [:pos_integer, nil]}, default: nil]
                    ]
                  ],
                  lock_breaker_guard: [

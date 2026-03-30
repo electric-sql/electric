@@ -68,6 +68,7 @@ defmodule Electric.Config do
     stack_ready_timeout: 5_000,
     send_cache_headers?: true,
     max_shapes: nil,
+    consumer_partitions: nil,
     # This value should be tuned for the hardware it's running on.
     max_concurrent_requests: %{initial: 300, existing: 10_000},
     ## Storage

@@ -207,6 +207,7 @@ config :electric,
   max_shapes:
     env!("ELECTRIC_MAX_SHAPES", :integer, nil) ||
       env!("ELECTRIC_EXPERIMENTAL_MAX_SHAPES", :integer, nil),
+  consumer_partitions: env!("ELECTRIC_CONSUMER_PARTITIONS", :integer, nil),
   max_concurrent_requests: max_concurrent_requests,
   # Used in telemetry
   instance_id: instance_id,
