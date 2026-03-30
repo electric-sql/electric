@@ -100,14 +100,9 @@ jobs:
             git rev-parse --short HEAD
           )" >> $GITHUB_OUTPUT
 
-          electric_version=$(
+          echo "electric_version=$(
             git describe --abbrev=7 --tags --always --first-parent --match '@core/sync-service@*' | sed -En 's|^@core/sync-service@||p'
-          )
-          # Fall back to short SHA if no matching tag exists (e.g. custom builds from old branches)
-          if [ -z "$electric_version" ]; then
-            electric_version=$(git rev-parse --short HEAD)
-          fi
-          echo "electric_version=$electric_version" >> $GITHUB_OUTPUT
+          )" >> $GITHUB_OUTPUT
 
           # Determine the docker tag to use
           if [ -n "$INPUT_DOCKER_TAG" ]; then
