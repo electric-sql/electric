@@ -95,41 +95,15 @@ defmodule Electric.Replication.ShapeLogCollector.FlushTracker do
     last_flushed == %{} and :gb_trees.is_empty(tree)
   end
 
-  @spec handle_txn_fragment(
-          t(),
-          TransactionFragment.t(),
-          Enumerable.t(shape_id()),
-          MapSet.t(shape_id())
-        ) :: t()
+  @spec handle_txn_fragment(t(), TransactionFragment.t(), Enumerable.t(shape_id())) :: t()
 
-  # Non-commit fragment: track affected shapes but don't update last_seen_offset
-  # or notify. This ensures shapes are registered early so flush notifications
-  # from Consumers aren't lost when storage flushes before the commit arrives.
-  def handle_txn_fragment(
-        %__MODULE__{} = state,
-        %TransactionFragment{commit: nil, last_log_offset: last_log_offset},
-        affected_shapes,
-        _shapes_with_changes
-      ) do
-    track_shapes(state, last_log_offset, affected_shapes)
-  end
-
-  # Commit fragment: track shapes that have actual changes in this fragment
-  # or are already being tracked (need last_sent updated to commit offset).
-  # Skip shapes that only have a commit marker and already flushed from
-  # earlier non-commit fragments — there's nothing new to flush for them.
+  # Commit fragment: track all shapes affected by all fragments of the transaction and update last_seen_offset.
   def handle_txn_fragment(
         %__MODULE__{} = state,
         %TransactionFragment{commit: %Commit{}, last_log_offset: last_log_offset},
-        affected_shapes,
-        shapes_with_changes
+        affected_shapes
       ) do
-    shapes_to_track =
-      Enum.filter(affected_shapes, fn shape ->
-        shape in shapes_with_changes or is_map_key(state.last_flushed, shape)
-      end)
-
-    state = track_shapes(state, last_log_offset, shapes_to_track)
+    state = track_shapes(state, last_log_offset, affected_shapes)
 
     state = %{state | last_seen_offset: last_log_offset}
 
@@ -211,14 +185,7 @@ defmodule Electric.Replication.ShapeLogCollector.FlushTracker do
         min_incomplete_flush_tree: min_incomplete_flush_tree
     }
 
-    # Only update global offset if we've seen at least one commit.
-    # Before any commit, last_seen_offset is before_all and there's
-    # nothing meaningful to report.
-    if state.last_seen_offset == LogOffset.before_all() do
-      state
-    else
-      update_global_offset(state)
-    end
+    update_global_offset(state)
   end
 
   # If the shape is not in the mapping, then we're processing a flush notification for a shape that was removed
