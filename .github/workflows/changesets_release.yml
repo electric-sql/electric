@@ -71,7 +71,7 @@ jobs:
     uses: ./.github/workflows/sync_service_dockerhub_image.yml
     secrets: inherit
     with:
-      release_tag: ${{ needs.changesets.outputs.sync_service_release_tag }}
+      git_ref: ${{ needs.changesets.outputs.sync_service_release_tag }}
 
   update-cloud:
     name: Update Electric version used by Cloud
