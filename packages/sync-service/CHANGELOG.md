@@ -1,5 +1,19 @@
 # @core/sync-service
 
+## 1.4.16
+
+### Patch Changes
+
+- 6c5068a: Fix stuck flush tracker when storage flush notification arrives mid-transaction in Consumer
+- 93e5d40: Fix typo in source event name
+- 64a89a0: Fixed char(n) column values being trimmed of trailing spaces in snapshot and subset queries, causing inconsistency with values from PG replication.
+- 8919ca3: Reclassify `branch_does_not_exist` error as retryable. PlanetScale returns this
+  error transiently during cluster maintenance, and classifying it as non-retryable
+  caused sources to be permanently shut down requiring manual restart.
+- d89be52: Improve shutdown times by changing the consumer supervision strategy
+- 0af96e9: Make in-memory shape db instances isolated
+- 461576d: Add known errors for pg authorization failures
+
 ## 1.4.15
 
 ### Patch Changes

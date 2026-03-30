@@ -1,5 +1,11 @@
 # @core/elixir-client
 
+## 0.9.4
+
+### Patch Changes
+
+- cb2c45e: Include required headers in client mock responses
+
 ## 0.9.3
 
 ### Patch Changes

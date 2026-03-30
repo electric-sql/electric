@@ -1,5 +1,11 @@
 # @electric-sql/docs
 
+## 0.0.8
+
+### Patch Changes
+
+- d89be52: Document new ELECTRIC_CONSUMER_PARTITIONS environment variable
+
 ## 0.0.7
 
 ### Patch Changes
