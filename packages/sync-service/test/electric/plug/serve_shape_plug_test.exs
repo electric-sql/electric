@@ -111,8 +111,6 @@ defmodule Electric.Plug.ServeShapePlugTest do
                  ]
                }
              }
-
-      assert get_resp_header(conn, "electric-has-data") == []
     end
 
     test "returns 400 for invalid offset", ctx do
@@ -453,7 +451,6 @@ defmodule Electric.Plug.ServeShapePlugTest do
              ]
 
       assert get_resp_header(conn, "electric-up-to-date") == []
-      assert get_resp_header(conn, "electric-has-data") == ["true"]
     end
 
     test "returns 304 Not Modified when If-None-Match matches ETag",
@@ -579,7 +576,6 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
       assert get_resp_header(conn, "electric-offset") == [next_offset_str]
       assert get_resp_header(conn, "electric-up-to-date") == [""]
-      assert get_resp_header(conn, "electric-has-data") == ["true"]
       assert get_resp_header(conn, "electric-schema") == []
 
       expected_cursor =
@@ -671,28 +667,6 @@ defmodule Electric.Plug.ServeShapePlugTest do
       expected_etag_part = "\"#{@test_shape_handle}:#{@test_offset}:#{@test_offset}:"
       assert [^expected_etag_part <> _rest] = get_resp_header(conn, "etag")
 
-      assert get_resp_header(conn, "electric-up-to-date") == [""]
-      assert get_resp_header(conn, "electric-has-data") == ["false"]
-    end
-
-    test "returns electric-has-data: false for offset=now requests", ctx do
-      patch_shape_cache(
-        get_or_create_shape_handle: fn @test_shape, _stack_id, _opts ->
-          {@test_shape_handle, @test_offset}
-        end
-      )
-
-      conn =
-        ctx
-        |> conn(
-          :get,
-          %{"table" => "public.users"},
-          "?offset=now&handle=#{@test_shape_handle}"
-        )
-        |> call_serve_shape_plug(ctx)
-
-      assert conn.status == 200
-      assert get_resp_header(conn, "electric-has-data") == ["false"]
       assert get_resp_header(conn, "electric-up-to-date") == [""]
     end
 
