@@ -39,6 +39,23 @@ defmodule Electric.StatusMonitorTest do
       assert StatusMonitor.service_status(stack_id) == :starting
     end
 
+    test "returns :starting when conn is up but shape pipeline not ready", %{
+      stack_id: stack_id
+    } do
+      start_link_supervised!({StatusMonitor, stack_id: stack_id})
+      StatusMonitor.mark_pg_lock_acquired(stack_id, self())
+      StatusMonitor.mark_replication_client_ready(stack_id, self())
+      StatusMonitor.mark_connection_pool_ready(stack_id, :admin, self())
+      StatusMonitor.mark_connection_pool_ready(stack_id, :snapshot, self())
+      StatusMonitor.mark_integrety_checks_passed(stack_id, self())
+      StatusMonitor.mark_shape_metadata_ready(stack_id, self())
+      StatusMonitor.wait_for_messages_to_be_processed(stack_id)
+
+      # conn is :up, shape is :read_only (log collector + supervisor not ready)
+      # This is a transient post-lock state — should return :starting, not :waiting
+      assert StatusMonitor.service_status(stack_id) == :starting
+    end
+
     test "returns :active when fully operational", %{stack_id: stack_id} do
       start_link_supervised!({StatusMonitor, stack_id: stack_id})
       set_status_to_active(%{stack_id: stack_id})
@@ -302,6 +319,7 @@ defmodule Electric.StatusMonitorTest do
       StatusMonitor.mark_replication_client_ready(stack_id, self())
       StatusMonitor.mark_connection_pool_ready(stack_id, :admin, self())
       StatusMonitor.mark_connection_pool_ready(stack_id, :snapshot, self())
+      StatusMonitor.mark_shape_metadata_ready(stack_id, self())
 
       assert StatusMonitor.wait_until_active(stack_id, timeout: 1) ==
                {:error, "Timeout waiting for shape data to be loaded"}
@@ -313,6 +331,7 @@ defmodule Electric.StatusMonitorTest do
       StatusMonitor.mark_replication_client_ready(stack_id, self())
       StatusMonitor.mark_connection_pool_ready(stack_id, :admin, self())
       StatusMonitor.mark_connection_pool_ready(stack_id, :snapshot, self())
+      StatusMonitor.mark_shape_metadata_ready(stack_id, self())
       StatusMonitor.mark_shape_log_collector_ready(stack_id, self())
       StatusMonitor.mark_supervisor_processes_ready(stack_id, self())
       StatusMonitor.wait_for_messages_to_be_processed(stack_id)

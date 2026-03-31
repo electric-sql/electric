@@ -114,6 +114,9 @@ defmodule Electric.ShapeCache.ShapeStatus do
       with {:ok, shape_hash} <- ShapeDb.add_shape(stack_id, shape, shape_handle) do
         if :ets.insert_new(
              shape_meta_table(stack_id),
+             # Generation 0 is safe here: add_shape only runs in active mode,
+             # and refresh/1 (which sweeps by generation) only runs before active.
+             # They are sequentially ordered by the Connection.Manager state machine.
              {shape_handle, shape_hash, false, nil, 0}
            ) do
           {:ok, shape_handle}

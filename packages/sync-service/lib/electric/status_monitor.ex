@@ -258,11 +258,6 @@ defmodule Electric.StatusMonitor do
     end
   end
 
-  @doc "Convenience wrapper: wait until shapes are servable."
-  def wait_until_shape_servable(stack_id, opts \\ []) do
-    wait_until(stack_id, :read_only, opts)
-  end
-
   @doc """
   Just like `wait_until_active/2` but non-blocking.
 
@@ -439,6 +434,9 @@ defmodule Electric.StatusMonitor do
       %{snapshot_connection_pool_ready: {false, details}} ->
         "Timeout waiting for database connection pool (snapshot) to be ready" <>
           format_details(details)
+
+      %{shape_metadata_ready: {false, details}} ->
+        "Timeout waiting for shape metadata to be loaded" <> format_details(details)
 
       %{shape_log_collector_ready: {false, details}} ->
         "Timeout waiting for shape data to be loaded" <> format_details(details)
