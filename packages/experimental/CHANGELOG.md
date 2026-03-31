@@ -1,5 +1,12 @@
 # @electric-sql/experimental
 
+## 6.0.14
+
+### Patch Changes
+
+- Updated dependencies [deb7c32]
+  - @electric-sql/client@1.5.14
+
 ## 6.0.13
 
 ### Patch Changes

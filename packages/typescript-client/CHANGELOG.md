@@ -1,5 +1,11 @@
 # @electric-sql/client
 
+## 1.5.14
+
+### Patch Changes
+
+- deb7c32: Add move-in event support to the TypeScript client. Rename `MoveOutPattern` to `MovePattern` (with a deprecated alias for backwards compatibility), extend `EventMessage` to accept both `move-out` and `move-in` events, and add `active_conditions` field to `ChangeMessage` headers.
+
 ## 1.5.13
 
 ### Patch Changes
