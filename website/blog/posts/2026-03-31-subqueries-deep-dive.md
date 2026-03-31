@@ -1,5 +1,5 @@
 ---
-title: 'Expressive subqueries with zero resyncs — the engineering deep dive'
+title: 'Expressive subqueries without resyncs — the engineering deep dive'
 description: >-
   A deep dive into how we rebuilt Electric's subquery support — DNF decomposition, splice-point move handling, reverse-indexed stream routing, and oracle testing for correctness.
 excerpt: >-
@@ -12,21 +12,16 @@ post: true
 published: true
 ---
 
-Subqueries are a key feature of Electric for cross-table filtering when syncing
-data subsets into your apps. We've shipped a major upgrade that makes subqueries
-much more expressive, matching more real-world data loading patterns. And solves
-edge cases where data moving into and out of shapes caused unnecessary
-resyncing. Using some advanced algorithmic techniques including DNF
-decomposition and multi-timeline reverse indexes.
+[Subqueries](/docs/guides/shapes#subqueries) are a key feature of Electric's [Postgres Sync](/primitives/postgres-sync), enabling cross-table filtering when syncing [subsets of data](/docs/guides/shapes) into your apps.
 
-This post dives into the engineering details and shows how we approached the
-problem and used our Postgres oracle tests to verify correctness and
-consistency.
+With [v1.X](#) we've shipped a major upgrade to subqueries that makes them more expressive and powerful. Supporting more real-world data loading patterns and solving edge cases where data moving into and out of shapes caused unnecessary re-syncing.
+
+This post dives into the engineering details and shows how we approached the problem with techniques including [DNF decomposition](#arbitrary-expressive-subqueries-via-dnf-decomposition) and [multi-timeline reverse indexes](#replication-stream-routing-with-reverse-indexes). And how we used our [Postgres oracle tests](#oracle-testing-for-correctness) to verify correctness and consistency.
 
 > [!Warning] ✨&nbsp; Try it now
-> - [Shapes guide — subqueries](/docs/guides/shapes#subqueries-experimental)
-> - [Demo app — move-in/move-out visualiser](#) <!-- ASSET: link to demo app when built -->
-> - [GitHub release vX.X](#) <!-- ASSET: link to release when version confirmed -->
+> [Read the docs](/docs/guides/shapes#subqueries), the [release notes](#) <!-- ASSET: link to release when version confirmed --> and the [move-in move-out visualiser](#) demo app<!-- ASSET: link to demo app when built -->.
+
+<!-- ASSET: embed demo video here -->
 
 <!-- ============================================================
      SITUATION / COMPLICATION
@@ -40,6 +35,8 @@ consistency.
      pattern concretely enough that readers with similar apps recognise
      themselves. Keep anonymised. -->
 
+## Understanding subqueries
+
 - Electric syncs subsets of Postgres into local apps using shapes — table +
   where clause + optional columns
 - Real-world apps have relational data; you often need to filter what you sync
@@ -52,6 +49,8 @@ consistency.
   archived — rows need to move in and out of shapes dynamically
 
 <!-- COMPLICATION -->
+
+### Previous limitations
 
 - Our previous subquery support handled the common case well but was
   constrained: single subquery per shape, limited boolean logic
