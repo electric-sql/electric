@@ -1,11 +1,11 @@
 ---
-title: '...'
+title: 'Expressive subqueries with zero resyncs — the engineering deep dive'
 description: >-
-  ...
+  A deep dive into how we rebuilt Electric's subquery support — DNF decomposition, splice-point move handling, reverse-indexed stream routing, and oracle testing for correctness.
 excerpt: >-
-  ...
-authors: [robacourt]
-image: /img/blog/subqueries-deep-dive/header.jpg
+  We shipped a major upgrade to Electric's subquery support. More expressive cross-table filtering, no unnecessary resyncs when data moves in and out of shapes. This post dives into the engineering.
+authors: [rob]
+image: ''
 tags: [electric, subqueries, sync, engineering]
 outline: [2, 3]
 post: true
@@ -277,7 +277,7 @@ consistency.
      contrast with full resync -->
 - Subquery support ships in Electric vX.X — upgrade and start using richer
   cross-table filtering in your shapes
-- Works with [TanStack DB 0.6](/blog/2025/03/25/tanstack-db-0.6-app-ready-with-persistence-and-includes)'s
+- Works with [TanStack DB 0.6](/blog/2026/03/25/tanstack-db-0.6-app-ready-with-persistence-and-includes)'s
   query-driven sync for progressive data loading with relational filtering
 - Join the conversation on [Discord](https://discord.electric-sql.com) — we'd
   love to hear what data loading patterns you're building
