@@ -9,7 +9,7 @@ image: ''
 tags: [electric, subqueries, sync, engineering]
 outline: [2, 3]
 post: true
-published: false
+published: true
 ---
 
 Subqueries are a key feature of Electric for cross-table filtering when syncing
