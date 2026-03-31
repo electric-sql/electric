@@ -217,7 +217,11 @@
 
 [macro check_health_status expected_status]
   [shell electric-health]
-    [invoke wait-for "curl --silent -X GET http://localhost:3000/v1/health" "\{\"status\":\"$expected_status\"\}" 10 $PS1]
+    [invoke wait_health "3000" $expected_status]
+[endmacro]
+
+[macro wait_health port expected_status]
+  [invoke wait-for "curl --silent http://localhost:$port/v1/health" "\{\"status\":\"$expected_status\"\}" 10 $PS1]
 [endmacro]
 
 [macro setup_otel_collector]
@@ -266,21 +270,35 @@
     ?$prompt
 [endmacro]
 
-[macro shape_get_url params]
+[macro shape_get_url port params]
   # strip ANSI codes from response for easier matching
-  !curl --silent -i "http://localhost:$shape_url_port/v1/shape?$params" | sed -r "s/\x1B\[[0-9;]*[mK]//g"
+  !curl --silent -i "http://localhost:$port/v1/shape?$params" | sed -r "s/\x1B\[[0-9;]*[mK]//g"
 [endmacro]
 
+# Convenience macros using $shape_url_port as default port
 [macro shape_get_snapshot table]
-  [invoke shape_get_url "table=$table&offset=-1"]
+  [invoke shape_get_url $shape_url_port "table=$table&offset=-1"]
 [endmacro]
 
 [macro shape_get table handle offset]
-  [invoke shape_get_url "table=$table&handle=$handle&offset=$offset"]
+  [invoke shape_get_url $shape_url_port "table=$table&handle=$handle&offset=$offset"]
 [endmacro]
 
 [macro shape_get_live table handle offset]
-  [invoke shape_get_url "table=$table&handle=$handle&offset=$offset&live=true"]
+  [invoke shape_get_url $shape_url_port "table=$table&handle=$handle&offset=$offset&live=true"]
+[endmacro]
+
+# Port-explicit variants for multi-instance tests
+[macro shape_get_snapshot_on port table]
+  [invoke shape_get_url $port "table=$table&offset=-1"]
+[endmacro]
+
+[macro shape_get_on port table handle offset]
+  [invoke shape_get_url $port "table=$table&handle=$handle&offset=$offset"]
+[endmacro]
+
+[macro shape_get_live_on port table handle offset]
+  [invoke shape_get_url $port "table=$table&handle=$handle&offset=$offset&live=true"]
 [endmacro]
 
 # Prevent curl from outputing download progress, output response headers nd sort the keys in the response JSON body.

@@ -1,4 +1,4 @@
-[doc Verify handling of an Electric rolling deploy]
+[doc Verify handling of an Electric rolling deploy with read-only serving]
 
 [include _macros.luxinc]
 
@@ -40,19 +40,19 @@
   ??[notice] Lock acquired from postgres with name electric_slot_integration
   ??[notice] Starting replication from postgres
 
-# First service should be health and active
-[shell orchestator]
-  !curl -X GET http://localhost:3000/v1/health?database_id=integration_test_tenant
-  ??{"status":"active"}
+# First service should be healthy and active
+[shell orchestrator]
+  [invoke wait_health "3000" "active"]
 
 
-# Initialize a shape and collect the offset
+# Initialize a shape and collect the handle/offset
+[global shape_url_port=3000]
 [shell client]
   [invoke shape_get_snapshot items]
   ?electric-handle: ([\d-]+)
-  [local handle=$1]
+  [global handle=$1]
   ?electric-offset: ([\w\d_]+)
-  [local offset=$1]
+  [global offset=$1]
 
 ## Start the second sync service.
 [invoke setup_electric_shell_with_tenant "electric_2" "3001"]
@@ -62,15 +62,28 @@
 [shell electric_2]
   -Lock acquired from postgres|Starting replication from postgres|$fail_pattern
   ??[notice] Acquiring lock from postgres with name electric_slot_integration
-  [sleep 2]
+
+# Second service should be waiting, ready to take over
+[shell orchestrator]
+  [invoke wait_health "3000" "active"]
+  [invoke wait_health "3001" "waiting"]
 
 
-# Second service should be in waiting state, ready to take over
-[shell orchestator]
-  !curl -X GET http://localhost:3000/v1/health?database_id=integration_test_tenant
-  ??{"status":"active"}
-  !curl -X GET http://localhost:3001/v1/health?database_id=integration_test_tenant
-  ??{"status":"waiting"}
+## Read-only: instance 2 serves existing shape data while waiting
+[shell client_ro]
+  [invoke shape_get_on "3001" items $handle "-1"]
+  ??HTTP/1.1 200 OK
+  ??electric-handle: $handle
+  ??"#1 test val"
+  ?$PS1
+
+## Read-only: instance 2 returns 503 for non-existent table
+[shell client_ro]
+  [invoke shape_get_snapshot_on "3001" nonexistent_table]
+  ??HTTP/1.1 503
+  ??retry-after:
+  ?$PS1
+
 
 # Add more data before handover
 [shell psql]
@@ -80,21 +93,25 @@
   """
   ??INSERT 0 1
 
-# Should see handover update
+# Should see handover update on instance 1
 [shell client]
   [invoke shape_get_live items $handle $offset]
   ??HTTP/1.1 200 OK
   ?electric-offset: ([\w\d_]+)
-  [local offset=$1]
+  [global offset=$1]
   ??"val":"#handover test val"
 
+# Read-only: instance 2 sees fresh data written by instance 1 via shared storage
+# Poll since the active instance's disk flush may lag by ~1s
+[shell client_ro]
+  [loop i 1..5]
+    @handover test val
+    [invoke shape_get_on "3001" items $handle "0_inf"]
+    ?$PS1
+    [sleep 1]
+  [endloop]
+  ?$PS1
 
-# Switch request port to second electric
-[global shape_url_port=3001]
-
-# Should continue same shape in new instance
-[shell client]
-  [invoke shape_get_live items $handle $offset]
 
 # Terminate first electric
 [shell electric_1]
@@ -105,6 +122,11 @@
 [shell electric_2]
   -$fail_pattern
   ??[notice] Lock acquired from postgres with name electric_slot_integration
+  ??[notice] Refreshing shape metadata
+  ??[notice] Starting replication from postgres
+
+[shell orchestrator]
+  [invoke wait_health "3001" "active"]
 
 # Add more data after handover
 [shell psql]
@@ -114,20 +136,27 @@
   """
   ??INSERT 0 1
 
-# Second service should reach healthy and active with loaded backup
-[shell electric_2]
-  ??[notice] Found 1 existing valid shapes
-  ??[notice] Starting replication from postgres
-
-[shell orchestator]
-  # Use wait-for to poll for active status since shape initialization may still be in progress
-  [invoke wait-for "curl -X GET http://localhost:3001/v1/health?database_id=integration_test_tenant" "\{\"status\":\"active\"\}" 10 $PS1]
-
-# Should see post handover update
+# Should continue same shape in new instance and see post handover update
 [shell client]
+  [invoke shape_get_live_on "3001" items $handle $offset]
   ??HTTP/1.1 200 OK
   ??electric-handle: $handle
   ??"val":"#post-handover test val"
+
+# Completeness check: snapshot has initial data, log has all accumulated changes
+[shell client]
+  [invoke shape_get_snapshot_on "3001" items]
+  ??HTTP/1.1 200 OK
+  ??electric-handle: $handle
+  ??"#1 test val"
+  ?$PS1
+
+[shell client]
+  [invoke shape_get_on "3001" items $handle "0_inf"]
+  ??HTTP/1.1 200 OK
+  ??"#handover test val"
+  ??"#post-handover test val"
+  ?$PS1
 
 
 [cleanup]

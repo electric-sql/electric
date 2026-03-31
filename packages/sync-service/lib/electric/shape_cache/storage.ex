@@ -264,6 +264,10 @@ defmodule Electric.ShapeCache.Storage do
     {mod, mod.for_shape(shape_handle, opts)}
   end
 
+  @doc "Mark a storage reference for read-only disk access (no ETS caching)"
+  def as_read_only({mod, storage_opts}), do: {mod, Map.put(storage_opts, :read_only, true)}
+  def as_read_only(storage), do: storage
+
   @impl __MODULE__
   def stack_start_link({mod, opts} = storage) do
     Electric.StackConfig.put(opts.stack_id, __MODULE__, storage)

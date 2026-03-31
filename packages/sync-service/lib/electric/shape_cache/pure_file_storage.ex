@@ -56,6 +56,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
     :shape_handle,
     :stack_id,
     :stack_ets,
+    read_only: false,
     snapshot_file_timeout: :timer.seconds(5),
     version: @version
   ]
@@ -633,11 +634,30 @@ defmodule Electric.ShapeCache.PureFileStorage do
     |> expand_storage_meta(keys)
   end
 
+  defp read_or_initialize_metadata(%__MODULE__{read_only: true} = opts, keys) do
+    # In read-only mode, always read from disk to see the latest data
+    # written by the active instance. Do not cache in ETS.
+    # This trades throughput (~1-2ms per request for file reads) for freshness,
+    # which is acceptable since read-only mode is transient during rolling deploys.
+    read_from_disk_without_caching(opts, keys)
+  end
+
   defp read_or_initialize_metadata(%__MODULE__{shape_handle: handle} = opts, keys) do
     case :ets.lookup(opts.stack_ets, handle) do
       [] -> populate_read_through_cache!(opts, keys)
       [storage_meta() = meta] -> meta
     end
+  end
+
+  defp read_from_disk_without_caching(%__MODULE__{shape_handle: handle} = opts, extra_keys) do
+    read_keys = Enum.into(extra_keys, MapSet.new(@read_path_keys))
+
+    keys =
+      for key <- read_keys do
+        {key, read_metadata!(opts, key)}
+      end
+
+    create_storage_meta([{:shape_handle, handle} | keys])
   end
 
   defp populate_read_through_cache!(%__MODULE__{} = opts, extra_keys) do

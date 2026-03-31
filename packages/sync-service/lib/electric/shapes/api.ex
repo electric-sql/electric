@@ -140,7 +140,9 @@ defmodule Electric.Shapes.Api do
   """
   @spec predefined_shape(t(), shape_opts()) :: {:ok, t()} | {:error, term()}
   def predefined_shape(%Api{} = api, shape_params) do
-    with :ok <- hold_until_stack_ready(api),
+    # In read-only mode, Shape.new relies on the EtsInspector cache being warm
+    # from PersistentKV. If not available, this will return an error.
+    with {:ok, _mode} <- hold_until_stack_ready(api),
          {:ok, params} <- normalise_shape_params(shape_params),
          opts = Keyword.merge(params, inspector: api.inspector, feature_flags: api.feature_flags),
          {:ok, shape} <- Shapes.Shape.new(opts) do
@@ -175,8 +177,9 @@ defmodule Electric.Shapes.Api do
   @spec validate(t(), %{(atom() | binary()) => term()}) ::
           {:ok, Request.t()} | {:error, Response.t()}
   def validate(%Api{} = api, params) when is_configured(api) do
-    with :ok <- hold_until_stack_ready(api),
+    with {:ok, mode} <- hold_until_stack_ready(api),
          {:ok, request} <- validate_params(api, params),
+         request = %{request | read_only: mode == :read_only},
          {:ok, request} <- load_shape_info(request) do
       {:ok, seek(request)}
     end
@@ -185,7 +188,7 @@ defmodule Electric.Shapes.Api do
   @spec validate_for_delete(t(), %{(atom() | binary()) => term()}) ::
           {:ok, Request.t()} | {:error, Response.t()}
   def validate_for_delete(%Api{} = api, params) do
-    with :ok <- hold_until_stack_ready(api) do
+    with {:ok, _mode} <- hold_until_stack_ready(api, require: :active) do
       Api.Delete.validate_for_delete(api, params)
     end
   end
@@ -270,6 +273,15 @@ defmodule Electric.Shapes.Api do
     end)
   end
 
+  # In read-only mode, resolve existing shapes only — no creation.
+  # When handle is nil (new client), resolve_shape_handle falls through to
+  # fetch_handle_by_shape via the validate_shape_handle(nil) -> :error path.
+  # Pass read_only to get fresh offsets from disk rather than stale ETS cache.
+  defp get_or_create_shape_handle(%Request{read_only: true} = request) do
+    %{params: %{handle: handle, shape_definition: shape}, api: %{stack_id: stack_id}} = request
+    Shapes.resolve_shape_handle(stack_id, handle, shape, read_only: true)
+  end
+
   # No handle is provided so we can get the existing one for this shape
   # or create a new shape if it does not yet exist
   defp get_or_create_shape_handle(%Request{params: %{handle: nil}} = request) do
@@ -283,6 +295,14 @@ defmodule Electric.Shapes.Api do
     %{params: %{handle: handle, shape_definition: shape}, api: %{stack_id: stack_id}} = request
 
     Shapes.resolve_shape_handle(stack_id, handle, shape)
+  end
+
+  defp handle_shape_info(nil, %Request{read_only: true, api: api} = request) do
+    # Shape doesn't exist — creation requires active mode.
+    # Wait for active; resolves quickly during startup, times out during rolling deploy.
+    with {:ok, _} <- hold_until_stack_ready(api, require: :active) do
+      handle_shape_info(nil, %{request | read_only: false})
+    end
   end
 
   defp handle_shape_info(nil, %Request{} = request) do
@@ -351,25 +371,19 @@ defmodule Electric.Shapes.Api do
 
   defp hold_until_stack_ready(%Api{} = api, opts \\ []) do
     stack_id = stack_id(api)
-    opts = Keyword.put_new(opts, :timeout, api.stack_ready_timeout)
+    level = Keyword.get(opts, :require, :read_only)
+    wait_opts = Keyword.put_new(opts, :timeout, api.stack_ready_timeout)
 
-    case Electric.StatusMonitor.wait_until_active(stack_id, opts) do
-      :ok ->
-        :ok
+    case Electric.StatusMonitor.wait_until(stack_id, level, wait_opts) do
+      {:ok, _mode} = ok ->
+        ok
 
       :conn_sleeping ->
-        # If the database connections are sleeping, initiate the scaleup process immediately
-        # and hold the request until the stack becomes active again.
-        #
-        # Because the state change happens asynchronoously, we pass the
-        # `block_on_conn_sleeping` flag to the next call of
-        # `Electric.StatusMonitor.wait_until_active()` to prevent this request from getting
-        # into a recursive spin loop until the status value changes in StatusMonitor's ETS table.
         Electric.Connection.Restarter.restore_connection_subsystem(stack_id)
-        hold_until_stack_ready(api, block_on_conn_sleeping: true)
+        hold_until_stack_ready(api, Keyword.put(opts, :block_on_conn_sleeping, true))
 
       {:error, message} ->
-        Logger.warning("Stack not ready after #{opts[:timeout]}ms. Reason: #{message}")
+        Logger.warning("Stack not ready after #{wait_opts[:timeout]}ms. Reason: #{message}")
         {:error, Response.error(api, message, status: 503, retry_after: 5)}
     end
   end
@@ -415,6 +429,16 @@ defmodule Electric.Shapes.Api do
     %{request | new_changes_pid: self(), new_changes_ref: ref}
   end
 
+  # In read-only mode, LsnTracker isn't populated (no replication connection).
+  # Use the shape's own latest offset as the LSN — it's the Postgres LSN of
+  # the last transaction persisted for this shape, which is the best available
+  # value without the replication stream or persisting the LsnTracker or loading
+  # all shapes' latest offsets up front. If we need stronger guarantees on this
+  # we should be persisting the LsnTracker updates to a file.
+  defp determine_global_last_seen_lsn(%Request{read_only: true} = request) do
+    %{request | global_last_seen_lsn: request.last_offset.tx_offset}
+  end
+
   defp determine_global_last_seen_lsn(%Request{} = request) do
     offset =
       request.api.stack_id
@@ -439,7 +463,8 @@ defmodule Electric.Shapes.Api do
       request
 
     chunk_end_offset =
-      Shapes.get_chunk_end_log_offset(api.stack_id, handle, offset) || last_offset
+      Shapes.get_chunk_end_log_offset(api.stack_id, handle, offset, read_only: request.read_only) ||
+        last_offset
 
     Request.update_response(
       %{request | chunk_end_offset: chunk_end_offset},
@@ -645,7 +670,8 @@ defmodule Electric.Shapes.Api do
     case Shapes.get_merged_log_stream(stack_id, shape_handle,
            since: offset,
            up_to: chunk_end_offset,
-           live_sse: in_sse?
+           live_sse: in_sse?,
+           read_only: request.read_only
          ) do
       {:ok, log} ->
         if live? && Enum.take(log, 1) == [] do

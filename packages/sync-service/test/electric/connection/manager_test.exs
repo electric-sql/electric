@@ -85,7 +85,7 @@ defmodule Electric.Connection.ConnectionManagerTest do
     setup [:start_connection_manager]
 
     test "reports status=waiting initially", %{stack_id: stack_id} do
-      assert StatusMonitor.status(stack_id) == %{conn: :waiting_on_lock, shape: :starting}
+      assert StatusMonitor.status(stack_id).conn == :waiting_on_lock
     end
 
     test "reports status=starting once the exclusive connection lock is acquired", %{
@@ -94,7 +94,7 @@ defmodule Electric.Connection.ConnectionManagerTest do
       assert_receive {:stack_status, _, :waiting_for_connection_lock}
       assert_receive {:stack_status, _, :connection_lock_acquired}
       StatusMonitor.wait_for_messages_to_be_processed(stack_id)
-      assert StatusMonitor.status(stack_id) == %{conn: :starting, shape: :starting}
+      assert StatusMonitor.status(stack_id).conn == :starting
     end
 
     test "reports status=active when all connection processes are running", %{stack_id: stack_id} do
@@ -153,7 +153,7 @@ defmodule Electric.Connection.ConnectionManagerTest do
       assert_receive :test_lock_acquired
       StatusMonitor.wait_for_messages_to_be_processed(stack_id)
 
-      assert StatusMonitor.status(stack_id) == %{conn: :waiting_on_lock, shape: :up}
+      assert StatusMonitor.status(stack_id).conn == :waiting_on_lock
     end
 
     test "backtracks the status when the shape log collector goes down", %{stack_id: stack_id} do
@@ -164,7 +164,9 @@ defmodule Electric.Connection.ConnectionManagerTest do
       StatusMonitor.wait_for_messages_to_be_processed(stack_id)
 
       status = StatusMonitor.status(stack_id)
-      assert status.shape == :starting
+
+      # shape_metadata_ready survives (ShapeStatusOwner is alive), so shape is :read_only not :starting
+      assert status.shape == :read_only
     end
 
     test "backtracks the status when the shape cache goes down", %{stack_id: stack_id} do
@@ -181,7 +183,7 @@ defmodule Electric.Connection.ConnectionManagerTest do
       StatusMonitor.wait_for_messages_to_be_processed(stack_id)
 
       status = StatusMonitor.status(stack_id)
-      assert status.shape == :starting
+      assert status.shape == :read_only
     end
 
     test "backtracks the status when the canary goes down", %{stack_id: stack_id} do
@@ -202,7 +204,7 @@ defmodule Electric.Connection.ConnectionManagerTest do
       StatusMonitor.wait_for_messages_to_be_processed(stack_id)
 
       status = StatusMonitor.status(stack_id)
-      assert status.shape == :starting
+      assert status.shape == :read_only
     end
   end
 
