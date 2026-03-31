@@ -5,7 +5,7 @@ description: >-
 excerpt: >-
   We shipped a major upgrade to Electric's subquery support. More expressive cross-table filtering, no unnecessary resyncs when data moves in and out of shapes. This post dives into the engineering.
 authors: [rob]
-image: ''
+image: '/img/blog/subqueries/header.jpg'
 tags: [electric, subqueries, sync, engineering]
 outline: [2, 3]
 post: true
