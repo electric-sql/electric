@@ -225,7 +225,8 @@ defmodule Electric.ShapeCache.Storage do
   def for_stack(stack_id, opts \\ []) do
     {mod, storage_opts} = Electric.StackConfig.lookup!(stack_id, Electric.ShapeCache.Storage)
 
-    if opts[:read_only?] && is_map(storage_opts),
+    # is_map guard: TestStorage uses tuples for opts where read_only? is a no-op
+    if opts[:read_only?] == true and is_map(storage_opts),
       do: {mod, Map.put(storage_opts, :read_only?, true)},
       else: {mod, storage_opts}
   end
