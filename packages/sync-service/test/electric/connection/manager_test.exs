@@ -521,30 +521,9 @@ defmodule Electric.Connection.ConnectionManagerTest do
 
       replication_client_monitor = Process.monitor(replication_client_pid)
 
-      # Run the same lock breaker query that Connection.Manager uses.
-      # With an active slot, it should find no stuck backends to terminate.
-      import Electric.Utils, only: [quote_string: 1]
+      # Use the production lock breaker query to verify it doesn't break active slots
       database = ctx.db_config[:database]
-
-      query = """
-      WITH inactive_slots AS (
-          select slot_name
-          from pg_replication_slots
-          where active = false and database = #{quote_string(database)} and slot_name = #{quote_string(ctx.slot_name)}
-      ),
-      stuck_backends AS (
-          select pid
-          from pg_locks, inactive_slots
-          where
-            hashtext(slot_name) = (classid::bigint << 32) | objid::bigint
-            and locktype = 'advisory'
-            and objsubid = 1
-            and database = (select oid from pg_database where datname = #{quote_string(database)})
-            and granted
-            and pid != #{backend_pid}
-      )
-      SELECT pg_terminate_backend(pid) FROM stuck_backends;
-      """
+      query = Connection.Manager.lock_breaker_query(ctx.slot_name, backend_pid, database)
 
       assert {:ok, %Postgrex.Result{num_rows: 0}} = Postgrex.query(ctx.db_conn, query, [])
 

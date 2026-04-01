@@ -552,20 +552,7 @@ defmodule Electric.Connection.Manager do
       pool = pool_name(state.stack_id, :admin)
       lock_name = Keyword.fetch!(state.replication_opts, :slot_name)
       database = replication_connection_opts(state)[:database]
-      query = lock_breaker_query(lock_name, pg_backend_pid, database)
-
-      case Postgrex.query(pool, query, [], timeout: 5_000) do
-        {:ok, %Postgrex.Result{num_rows: 0}} ->
-          Logger.debug("No stuck backends found")
-
-        {:ok, _result} ->
-          Logger.notice(
-            "Terminated a stuck backend to free the lock #{lock_name} because slot with same name was inactive"
-          )
-
-        {:error, error} ->
-          Logger.warning("Failed to break stuck lock connection: #{inspect(error)}")
-      end
+      execute_lock_breaker_query(pool, lock_name, pg_backend_pid, database)
     else
       if not lock_breaker_allowed do
         Logger.notice(
@@ -575,13 +562,6 @@ defmodule Electric.Connection.Manager do
     end
 
     {:noreply, state}
-  catch
-    kind, error ->
-      Logger.warning(
-        "Failed to break stuck lock connection: #{Exception.format(kind, error, __STACKTRACE__)}"
-      )
-
-      {:noreply, state}
   end
 
   @impl true
@@ -1150,10 +1130,33 @@ defmodule Electric.Connection.Manager do
 
   defp pooled_connection_opts(state), do: state.connection_opts
 
+  defp execute_lock_breaker_query(pool, lock_name, pg_backend_pid, database) do
+    query = lock_breaker_query(lock_name, pg_backend_pid, database)
+
+    case Postgrex.query(pool, query, [], timeout: 5_000) do
+      {:ok, %Postgrex.Result{num_rows: 0}} ->
+        Logger.debug("No stuck backends found")
+
+      {:ok, _result} ->
+        Logger.notice(
+          "Terminated a stuck backend to free the lock #{lock_name} because slot with same name was inactive"
+        )
+
+      {:error, error} ->
+        Logger.warning("Failed to break stuck lock connection: #{inspect(error)}")
+    end
+  catch
+    kind, error ->
+      Logger.warning(
+        "Failed to break stuck lock connection: #{Exception.format(kind, error, __STACKTRACE__)}"
+      )
+  end
+
   # Query to find and terminate backends holding advisory locks for inactive
   # replication slots. Used by the lock breaker to free abandoned locks.
-  defp lock_breaker_query(lock_name, lock_connection_pg_backend_pid, database)
-       when is_integer(lock_connection_pg_backend_pid) or is_nil(lock_connection_pg_backend_pid) do
+  @doc false
+  def lock_breaker_query(lock_name, lock_connection_pg_backend_pid, database)
+      when is_integer(lock_connection_pg_backend_pid) or is_nil(lock_connection_pg_backend_pid) do
     import Electric.Utils, only: [quote_string: 1]
 
     """
