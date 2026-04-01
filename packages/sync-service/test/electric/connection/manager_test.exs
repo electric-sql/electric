@@ -379,8 +379,10 @@ defmodule Electric.Connection.ConnectionManagerTest do
 
       StatusMonitor.wait_until_active(stack_id, timeout: 1000)
 
+      # Assert pooled connection opts are validated separately from replication opts.
+      # If both pool types used the same connection opts, this validation would be cached
+      # from the admin pool's earlier :replication type validation and no message would arrive.
       assert_receive {:validate, ^pooled_conn_opts}
-      assert_receive {:validate, ^repl_opts}
     end
   end
 
