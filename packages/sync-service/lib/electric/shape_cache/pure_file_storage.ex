@@ -56,7 +56,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
     :shape_handle,
     :stack_id,
     :stack_ets,
-    read_only: false,
+    read_only?: false,
     snapshot_file_timeout: :timer.seconds(5),
     version: @version
   ]
@@ -125,6 +125,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
     %__MODULE__{
       buffer_ets: buffer_ets,
       chunk_bytes_threshold: stack_opts.chunk_bytes_threshold,
+      read_only?: Map.get(stack_opts, :read_only?, false),
       shape_handle: shape_handle,
       stack_id: stack_id,
       stack_ets: :ets.whereis(stack_ets)
@@ -634,7 +635,7 @@ defmodule Electric.ShapeCache.PureFileStorage do
     |> expand_storage_meta(keys)
   end
 
-  defp read_or_initialize_metadata(%__MODULE__{read_only: true} = opts, keys) do
+  defp read_or_initialize_metadata(%__MODULE__{read_only?: true} = opts, keys) do
     # In read-only mode, always read from disk to see the latest data
     # written by the active instance. Do not cache in ETS.
     # This trades throughput (~1-2ms per request for file reads) for freshness,

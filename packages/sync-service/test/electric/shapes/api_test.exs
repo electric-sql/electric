@@ -1548,7 +1548,7 @@ defmodule Electric.Shapes.ApiTest do
                  offset: "#{@start_offset_50}"
                })
 
-      assert request.read_only == true
+      assert request.read_only? == true
     end
 
     test "serves existing shape in read-only mode", ctx do

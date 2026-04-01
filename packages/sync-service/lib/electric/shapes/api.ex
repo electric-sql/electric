@@ -179,7 +179,7 @@ defmodule Electric.Shapes.Api do
   def validate(%Api{} = api, params) when is_configured(api) do
     with {:ok, mode} <- hold_until_stack_ready(api),
          {:ok, request} <- validate_params(api, params),
-         request = %{request | read_only: mode == :read_only},
+         request = %{request | read_only?: mode == :read_only},
          {:ok, request} <- load_shape_info(request) do
       {:ok, seek(request)}
     end
@@ -277,9 +277,9 @@ defmodule Electric.Shapes.Api do
   # When handle is nil (new client), resolve_shape_handle falls through to
   # fetch_handle_by_shape via the validate_shape_handle(nil) -> :error path.
   # Pass read_only to get fresh offsets from disk rather than stale ETS cache.
-  defp get_or_create_shape_handle(%Request{read_only: true} = request) do
+  defp get_or_create_shape_handle(%Request{read_only?: true} = request) do
     %{params: %{handle: handle, shape_definition: shape}, api: %{stack_id: stack_id}} = request
-    Shapes.resolve_shape_handle(stack_id, handle, shape, read_only: true)
+    Shapes.resolve_shape_handle(stack_id, handle, shape, read_only?: true)
   end
 
   # No handle is provided so we can get the existing one for this shape
@@ -297,11 +297,11 @@ defmodule Electric.Shapes.Api do
     Shapes.resolve_shape_handle(stack_id, handle, shape)
   end
 
-  defp handle_shape_info(nil, %Request{read_only: true, api: api} = request) do
+  defp handle_shape_info(nil, %Request{read_only?: true, api: api} = request) do
     # Shape doesn't exist — creation requires active mode.
     # Wait for active; resolves quickly during startup, times out during rolling deploy.
     with {:ok, _} <- hold_until_stack_ready(api, require: :active) do
-      handle_shape_info(nil, %{request | read_only: false})
+      handle_shape_info(nil, %{request | read_only?: false})
     end
   end
 
@@ -435,7 +435,7 @@ defmodule Electric.Shapes.Api do
   # value without the replication stream or persisting the LsnTracker or loading
   # all shapes' latest offsets up front. If we need stronger guarantees on this
   # we should be persisting the LsnTracker updates to a file.
-  defp determine_global_last_seen_lsn(%Request{read_only: true} = request) do
+  defp determine_global_last_seen_lsn(%Request{read_only?: true} = request) do
     %{request | global_last_seen_lsn: request.last_offset.tx_offset}
   end
 
@@ -463,7 +463,9 @@ defmodule Electric.Shapes.Api do
       request
 
     chunk_end_offset =
-      Shapes.get_chunk_end_log_offset(api.stack_id, handle, offset, read_only: request.read_only) ||
+      Shapes.get_chunk_end_log_offset(api.stack_id, handle, offset,
+        read_only?: request.read_only?
+      ) ||
         last_offset
 
     Request.update_response(
@@ -671,7 +673,7 @@ defmodule Electric.Shapes.Api do
            since: offset,
            up_to: chunk_end_offset,
            live_sse: in_sse?,
-           read_only: request.read_only
+           read_only?: request.read_only?
          ) do
       {:ok, log} ->
         if live? && Enum.take(log, 1) == [] do

@@ -20,7 +20,12 @@ defmodule Electric.Shapes do
 
     if ShapeCache.has_shape?(shape_handle, stack_id) do
       with :started <- ShapeCache.await_snapshot_start(shape_handle, stack_id) do
-        storage = shape_storage(stack_id, shape_handle, read_only: opts[:read_only])
+        storage =
+          Storage.for_shape(
+            shape_handle,
+            Storage.for_stack(stack_id, read_only?: opts[:read_only?])
+          )
+
         {:ok, Storage.get_log_stream(offset, max_offset, storage)}
       end
     else
@@ -71,7 +76,12 @@ defmodule Electric.Shapes do
   @spec get_chunk_end_log_offset(stack_id(), shape_handle(), LogOffset.t(), keyword()) ::
           LogOffset.t() | nil
   def get_chunk_end_log_offset(stack_id, shape_handle, offset, opts \\ []) do
-    storage = shape_storage(stack_id, shape_handle, opts)
+    storage =
+      Storage.for_shape(
+        shape_handle,
+        Storage.for_stack(stack_id, read_only?: opts[:read_only?])
+      )
+
     Storage.get_chunk_end_log_offset(offset, storage)
   end
 
@@ -125,11 +135,6 @@ defmodule Electric.Shapes do
     with :ok <- Storage.mark_snapshot_as_started(storage) do
       ShapeStatus.mark_snapshot_started(stack_id, shape_handle)
     end
-  end
-
-  defp shape_storage(stack_id, shape_handle, opts) do
-    storage = Storage.for_shape(shape_handle, Storage.for_stack(stack_id))
-    if opts[:read_only], do: Storage.as_read_only(storage), else: storage
   end
 
   def query_subset(handle, shape, subset, opts) do

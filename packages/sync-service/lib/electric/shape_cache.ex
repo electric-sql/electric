@@ -457,13 +457,11 @@ defmodule Electric.ShapeCache do
     {descendents ++ [{handle, shape, start_shape_opts} | siblings], known}
   end
 
-  @spec fetch_latest_offset(stack_id(), shape_handle()) ::
-          {:ok, LogOffset.t()} | :error
   @spec fetch_latest_offset(stack_id(), shape_handle(), keyword()) ::
           {:ok, LogOffset.t()} | :error
   defp fetch_latest_offset(stack_id, shape_handle, opts \\ []) do
-    storage = Storage.for_shape(shape_handle, Storage.for_stack(stack_id))
-    storage = if opts[:read_only], do: Storage.as_read_only(storage), else: storage
+    storage =
+      Storage.for_shape(shape_handle, Storage.for_stack(stack_id, read_only?: opts[:read_only?]))
 
     case Storage.fetch_latest_offset(storage) do
       {:ok, offset} -> {:ok, normalize_latest_offset(offset)}

@@ -9,7 +9,7 @@ defmodule Electric.Shapes.Api.Request do
     :global_last_seen_lsn,
     :new_changes_ref,
     :new_changes_pid,
-    read_only: false,
+    read_only?: false,
     api: %Api{},
     params: %Api.Params{},
     response: %Api.Response{}

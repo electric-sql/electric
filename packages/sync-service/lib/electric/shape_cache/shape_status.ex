@@ -46,7 +46,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
   """
   @spec initialize(stack_id()) :: :ok | {:error, term()}
   def initialize(stack_id) when is_stack_id(stack_id) do
-    create_or_clear_shape_meta_table(stack_id)
+    create_shape_meta_table(stack_id)
 
     {:ok, invalid_handles, valid_shape_count} = ShapeDb.validate_existing_shapes(stack_id)
 
@@ -67,7 +67,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
                stack_id,
                invalid_handles
              ) do
-        populate_shape_meta_table(stack_id)
+        populate_shape_meta_table(stack_id, 0)
       end
     end
   end
@@ -366,28 +366,17 @@ defmodule Electric.ShapeCache.ShapeStatus do
   defp shape_meta_table(stack_id),
     do: :"shape_meta_table:#{stack_id}"
 
-  defp create_or_clear_shape_meta_table(stack_id) do
-    table = shape_meta_table(stack_id)
-
-    case :ets.whereis(table) do
-      :undefined ->
-        :ets.new(table, [
-          :named_table,
-          :public,
-          :set,
-          read_concurrency: true,
-          write_concurrency: :auto
-        ])
-
-      _ref ->
-        :ets.delete_all_objects(table)
-        table
-    end
-
-    table
+  defp create_shape_meta_table(stack_id) do
+    :ets.new(shape_meta_table(stack_id), [
+      :named_table,
+      :public,
+      :set,
+      read_concurrency: true,
+      write_concurrency: :auto
+    ])
   end
 
-  defp populate_shape_meta_table(stack_id, generation \\ 0) do
+  defp populate_shape_meta_table(stack_id, generation) do
     start_time = System.monotonic_time()
 
     ShapeDb.reduce_shape_meta(
