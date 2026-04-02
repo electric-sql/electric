@@ -34,7 +34,7 @@ Two billing dimensions: writes and retention.
 - **$0.10 per GB-month** retention.
 - **No charge** for reads, fan-out, concurrent users, connections, or data&nbsp;delivery.
 
-Some services that run additional infrastructure carry a service cost on top of the base write rate. [Postgres Sync](/products/postgres-sync) runs a dedicated replication engine to filter changes and match them to shapes, adding $2 per million writes emitted to the shape log. You're charged for the filtered output, not the raw replication input — one Postgres change landing on 100 shapes =&nbsp;100&nbsp;writes.
+Some services that run additional infrastructure carry a service cost on top of the base write rate. [Postgres Sync](/products/postgres-sync) runs a dedicated replication engine to filter changes and match them to shapes, adding $2 per million writes emitted to the shape log from the replication stream. You're charged for the filtered output, not the raw replication input — one Postgres change landing on 100 shapes =&nbsp;100&nbsp;writes.
 
 See the [pricing page](/cloud/pricing) for the full breakdown and worked&nbsp;examples.
 
@@ -71,7 +71,7 @@ Assumptions: 500 active users on a project management-style dashboard, syncing a
 - Initial shape loads are served from CDN cache after the first request — reads are&nbsp;free.
 - Database changes: 50,000 row changes/month, average change matches 10 shapes = 500,000 emitted&nbsp;writes.
 - Replication cost: 500K writes &times; $3/M ($1 base + $2 Postgres Sync) = $1.50
-- Shape log writes from initial queries (~2K rows per shape across 500 users): ~1M rows &rarr; $1.00
+- Writes from initial sync and subset queries (~2K rows per shape across 500 users): ~1M rows &rarr; $1.00
 - Retention: ~2GB &rarr; $0.20
 - **Total: ~$2.70/month &rarr; waived on PAYG**
 
