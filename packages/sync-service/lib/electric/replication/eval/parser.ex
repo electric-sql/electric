@@ -183,7 +183,8 @@ defmodule Electric.Replication.Eval.Parser do
 
   # Reject everything else: subqueries, function calls, type casts, expressions, etc.
   defp check_valid_refs(%{location: location} = node, _, _) do
-    {:error, {location, "#{node_type_name(node)} expressions are not allowed in ORDER BY clauses"}}
+    {:error,
+     {location, "#{node_type_name(node)} expressions are not allowed in ORDER BY clauses"}}
   end
 
   defp check_valid_refs(node, _, _) do
