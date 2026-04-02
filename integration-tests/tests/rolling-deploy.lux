@@ -77,11 +77,13 @@
   ??"#1 test val"
   ?$PS1
 
-## Read-only: instance 2 returns 503 for non-existent table
+## Read-only: instance 2 returns 400 for non-existent table
+## (admin pool is available before lock acquisition, so EtsInspector
+## can query the DB and validate the table doesn't exist)
 [shell client_ro]
   [invoke shape_get_snapshot_on "3001" nonexistent_table]
-  ??HTTP/1.1 503
-  ??retry-after:
+  ??HTTP/1.1 400
+  ??does not exist
   ?$PS1
 
 
