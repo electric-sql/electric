@@ -3289,9 +3289,7 @@ defmodule Electric.Plug.RouterTest do
       req = make_shape_req("items", log: "changes_only")
 
       assert {_, 400, %{"errors" => %{"subset" => %{"order_by" => [message]}}}} =
-               shape_req(req, ctx.opts,
-                 subset: %{order_by: ~s|pg_sleep(5)|}
-               )
+               shape_req(req, ctx.opts, subset: %{order_by: ~s|pg_sleep(5)|})
 
       assert message =~ "not allowed in ORDER BY"
     end
@@ -3303,9 +3301,7 @@ defmodule Electric.Plug.RouterTest do
       req = make_shape_req("items", log: "changes_only")
 
       assert {_, 400, %{"errors" => %{"subset" => %{"order_by" => [message]}}}} =
-               shape_req(req, ctx.opts,
-                 subset: %{order_by: ~s|(SELECT count(*) FROM pg_tables)|}
-               )
+               shape_req(req, ctx.opts, subset: %{order_by: ~s|(SELECT count(*) FROM pg_tables)|})
 
       assert message =~ "not allowed in ORDER BY"
     end
@@ -3317,9 +3313,7 @@ defmodule Electric.Plug.RouterTest do
       req = make_shape_req("items", log: "changes_only")
 
       assert {_, 400, %{"errors" => %{"subset" => %{"order_by" => [message]}}}} =
-               shape_req(req, ctx.opts,
-                 subset: %{order_by: ~s|id::text|}
-               )
+               shape_req(req, ctx.opts, subset: %{order_by: ~s|id::text|})
 
       assert message =~ "not allowed in ORDER BY"
     end
