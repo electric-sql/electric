@@ -10,18 +10,25 @@ const PLAN_HIERARCHY = ['payg', 'pro', 'scale']
 // Validate calculator features at dev time
 onMounted(() => {
   if (import.meta.env.DEV && config.calculatorFeatures) {
-    const slugs = tiers.map(t => t.slug)
+    const slugs = tiers.map((t) => t.slug)
     for (const feature of config.calculatorFeatures) {
       if (!slugs.includes(feature.minimumTier)) {
-        console.warn(`[PricingCalculator] Feature "${feature.id}" has minimumTier "${feature.minimumTier}" which doesn't match any loaded plan slug (${slugs.join(', ')})`)
+        console.warn(
+          `[PricingCalculator] Feature "${feature.id}" has minimumTier "${feature.minimumTier}" which doesn't match any loaded plan slug (${slugs.join(', ')})`
+        )
       }
     }
   }
 })
 
 // Non-linear slider stops
-const WRITE_STOPS = [0, 100_000, 500_000, 1_000_000, 2_000_000, 5_000_000, 10_000_000, 25_000_000, 50_000_000, 100_000_000, 250_000_000, 500_000_000, 1_000_000_000]
-const RETENTION_STOPS = [0, 1, 5, 10, 25, 50, 100, 250, 500, 1_000, 2_500, 5_000]
+const WRITE_STOPS = [
+  0, 100_000, 500_000, 1_000_000, 2_000_000, 5_000_000, 10_000_000, 25_000_000,
+  50_000_000, 100_000_000, 250_000_000, 500_000_000, 1_000_000_000,
+]
+const RETENTION_STOPS = [
+  0, 1, 5, 10, 25, 50, 100, 250, 500, 1_000, 2_500, 5_000,
+]
 const SLIDER_MAX = 1000
 
 function valueToSlider(value, stops) {
@@ -51,16 +58,22 @@ const retentionGB = ref(50)
 
 const writesSlider = computed({
   get: () => valueToSlider(writesPerMonth.value, WRITE_STOPS),
-  set: (v) => { writesPerMonth.value = sliderToValue(Number(v), WRITE_STOPS) },
+  set: (v) => {
+    writesPerMonth.value = sliderToValue(Number(v), WRITE_STOPS)
+  },
 })
 const retentionSlider = computed({
   get: () => valueToSlider(retentionGB.value, RETENTION_STOPS),
-  set: (v) => { retentionGB.value = sliderToValue(Number(v), RETENTION_STOPS) },
+  set: (v) => {
+    retentionGB.value = sliderToValue(Number(v), RETENTION_STOPS)
+  },
 })
 
 // Feature checkbox state: { [featureId]: boolean }
 const featureChecks = ref(
-  Object.fromEntries((config.calculatorFeatures || []).map(f => [f.id, false]))
+  Object.fromEntries(
+    (config.calculatorFeatures || []).map((f) => [f.id, false])
+  )
 )
 
 // Currency formatter
@@ -73,7 +86,7 @@ const currencyFmt = new Intl.NumberFormat('en-US', {
 
 function safeVal(v) {
   const n = Number(v)
-  return (isNaN(n) || n < 0) ? 0 : n
+  return isNaN(n) || n < 0 ? 0 : n
 }
 
 // Compute costs for all tiers
@@ -81,7 +94,7 @@ const tierCosts = computed(() => {
   const w = safeVal(writesPerMonth.value)
   const r = safeVal(retentionGB.value)
 
-  return tiers.map(tier => {
+  return tiers.map((tier) => {
     const writeCost = (w / 1000000) * tier.effectiveWriteRate
     const retentionCost = r * tier.effectiveRetentionRate
     const usageCost = writeCost + retentionCost
@@ -113,7 +126,7 @@ const tierCosts = computed(() => {
 // Find minimum tier required by feature checkboxes
 const featureMinTierIndex = computed(() => {
   let maxIndex = 0
-  for (const feature of (config.calculatorFeatures || [])) {
+  for (const feature of config.calculatorFeatures || []) {
     if (featureChecks.value[feature.id]) {
       const idx = PLAN_HIERARCHY.indexOf(feature.minimumTier)
       if (idx > maxIndex) maxIndex = idx
@@ -211,7 +224,11 @@ const planNote = computed(() => {
         />
       </div>
       <div class="toggles-section">
-        <label v-for="feature in config.calculatorFeatures" :key="feature.id" class="toggle-label">
+        <label
+          v-for="feature in config.calculatorFeatures"
+          :key="feature.id"
+          class="toggle-label"
+        >
           <input
             v-model="featureChecks[feature.id]"
             type="checkbox"
@@ -222,16 +239,24 @@ const planNote = computed(() => {
       </div>
     </div>
     <div class="calculator-result">
-      <div :class="`result-content result-content-${recommendation.tier.ctaTheme}`">
+      <div
+        :class="`result-content result-content-${recommendation.tier.ctaTheme}`"
+      >
         <div class="result-header">
           <h4 class="result-label">Recommended plan</h4>
-          <h2 :class="`result-plan-name result-plan-name-${recommendation.tier.ctaTheme}`">{{ recommendation.tier.name }}</h2>
+          <h2
+            :class="`result-plan-name result-plan-name-${recommendation.tier.ctaTheme}`"
+          >
+            {{ recommendation.tier.name }}
+          </h2>
         </div>
         <div class="result-pricing">
           <div class="result-price">{{ formattedTotal }}</div>
           <div class="result-period">/ month</div>
         </div>
-        <div v-if="breakdownText" class="result-breakdown">{{ breakdownText }}</div>
+        <div v-if="breakdownText" class="result-breakdown">
+          {{ breakdownText }}
+        </div>
         <div v-if="planNote" class="result-note">{{ planNote }}</div>
         <div class="result-cta">
           <VPButton
@@ -300,7 +325,9 @@ const planNote = computed(() => {
   font-size: 0.875rem;
   color: var(--vp-c-text-1);
   font-family: inherit;
-  transition: border-color 0.2s, background 0.2s;
+  transition:
+    border-color 0.2s,
+    background 0.2s;
 }
 
 .input-field:focus {

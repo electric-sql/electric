@@ -25,9 +25,8 @@ function formatLimitValue(val) {
 
 function formatCurrency(amount, suffix) {
   // Strip trailing zeros: $1/1M, $0.9/1M, $0.08/GB-mo
-  const str = amount % 1 === 0
-    ? '$' + amount
-    : '$' + parseFloat(amount.toFixed(4))
+  const str =
+    amount % 1 === 0 ? '$' + amount : '$' + parseFloat(amount.toFixed(4))
   return str + suffix
 }
 
@@ -87,9 +86,10 @@ function getFeatureGate(plan, key) {
   return formatCheck(plan.featureGates[key])
 }
 
-const serviceList = config && config.serviceCosts
-  ? Object.entries(config.serviceCosts).map(([id, svc]) => ({ id, ...svc }))
-  : []
+const serviceList =
+  config && config.serviceCosts
+    ? Object.entries(config.serviceCosts).map(([id, svc]) => ({ id, ...svc }))
+    : []
 
 function formatServiceAdditional(plan, service) {
   if (plan.type === 'enterprise') return 'Custom'
@@ -102,14 +102,17 @@ function formatServiceEffectiveRate(plan, service) {
   if (plan.type === 'enterprise') return 'Custom'
   const discount = (plan.discountPercent || 0) / 100
   const baseRate = config.baseRates.writesPerMillion
-  const total = (baseRate + service.additionalWriteCostPerMillion) * (1 - discount)
+  const total =
+    (baseRate + service.additionalWriteCostPerMillion) * (1 - discount)
   return formatCurrency(+total.toFixed(4), '/1M')
 }
 
 function computeScenarioCost(plan, scenario) {
-  if (scenario.writesPerMonth === null || scenario.retentionGB === null) return '...'
+  if (scenario.writesPerMonth === null || scenario.retentionGB === null)
+    return '...'
   if (plan.type === 'enterprise') return 'Custom'
-  const writeCost = (scenario.writesPerMonth / 1000000) * plan.effectiveWriteRate
+  const writeCost =
+    (scenario.writesPerMonth / 1000000) * plan.effectiveWriteRate
   const retentionCost = scenario.retentionGB * plan.effectiveRetentionRate
   const total = writeCost + retentionCost
   return new Intl.NumberFormat('en-US', {
@@ -126,7 +129,12 @@ function computeScenarioCost(plan, scenario) {
     <div class="table-header">
       <div class="metric-column header-spacer"></div>
       <div v-for="plan in comparisonPlans" :key="plan.slug" class="plan-column">
-        <div class="plan-name"><span class="plan-name-full">{{ plan.name }}</span><span v-if="plan.shortName" class="plan-name-short">{{ plan.shortName }}</span></div>
+        <div class="plan-name">
+          <span class="plan-name-full">{{ plan.name }}</span
+          ><span v-if="plan.shortName" class="plan-name-short">{{
+            plan.shortName
+          }}</span>
+        </div>
         <VPButton
           :href="plan.ctaHref"
           :text="plan.ctaText"
@@ -149,37 +157,79 @@ function computeScenarioCost(plan, scenario) {
       <div class="metric-row">
         <div class="metric-column metric-label">Monthly fee</div>
         <div class="plan-column">
-          <div v-for="plan in comparisonPlans" :key="plan.slug" class="metric-value" :data-plan="plan.name">{{ formatFee(plan) }}</div>
+          <div
+            v-for="plan in comparisonPlans"
+            :key="plan.slug"
+            class="metric-value"
+            :data-plan="plan.name"
+          >
+            {{ formatFee(plan) }}
+          </div>
         </div>
       </div>
       <div class="metric-row">
         <div class="metric-column metric-label">Usage discount</div>
         <div class="plan-column">
-          <div v-for="plan in comparisonPlans" :key="plan.slug" class="metric-value" :data-plan="plan.name">{{ formatDiscount(plan) }}</div>
+          <div
+            v-for="plan in comparisonPlans"
+            :key="plan.slug"
+            class="metric-value"
+            :data-plan="plan.name"
+          >
+            {{ formatDiscount(plan) }}
+          </div>
         </div>
       </div>
       <div class="metric-row">
         <div class="metric-column metric-label">Writes</div>
         <div class="plan-column">
-          <div v-for="plan in comparisonPlans" :key="plan.slug" class="metric-value" :data-plan="plan.name">{{ formatWriteRate(plan) }}</div>
+          <div
+            v-for="plan in comparisonPlans"
+            :key="plan.slug"
+            class="metric-value"
+            :data-plan="plan.name"
+          >
+            {{ formatWriteRate(plan) }}
+          </div>
         </div>
       </div>
       <div class="metric-row">
         <div class="metric-column metric-label">Retention</div>
         <div class="plan-column">
-          <div v-for="plan in comparisonPlans" :key="plan.slug" class="metric-value" :data-plan="plan.name">{{ formatRetentionRate(plan) }}</div>
+          <div
+            v-for="plan in comparisonPlans"
+            :key="plan.slug"
+            class="metric-value"
+            :data-plan="plan.name"
+          >
+            {{ formatRetentionRate(plan) }}
+          </div>
         </div>
       </div>
       <div class="metric-row">
         <div class="metric-column metric-label">Billing behavior</div>
         <div class="plan-column">
-          <div v-for="plan in comparisonPlans" :key="plan.slug" class="metric-value" :data-plan="plan.name">{{ getBillingBehavior(plan) }}</div>
+          <div
+            v-for="plan in comparisonPlans"
+            :key="plan.slug"
+            class="metric-value"
+            :data-plan="plan.name"
+          >
+            {{ getBillingBehavior(plan) }}
+          </div>
         </div>
       </div>
       <div class="metric-row">
         <div class="metric-column metric-label">Commitment</div>
         <div class="plan-column">
-          <div v-for="plan in comparisonPlans" :key="plan.slug" class="metric-value" :data-plan="plan.name">{{ getCommitment(plan) }}</div>
+          <div
+            v-for="plan in comparisonPlans"
+            :key="plan.slug"
+            class="metric-value"
+            :data-plan="plan.name"
+          >
+            {{ getCommitment(plan) }}
+          </div>
         </div>
       </div>
     </div>
@@ -193,13 +243,26 @@ function computeScenarioCost(plan, scenario) {
             Additional costs for services that run extra infrastructure.
           </div>
         </div>
-        <div v-for="plan in comparisonPlans" :key="plan.slug" class="plan-column"></div>
+        <div
+          v-for="plan in comparisonPlans"
+          :key="plan.slug"
+          class="plan-column"
+        ></div>
       </div>
       <template v-for="service in serviceList" :key="service.id">
         <div class="metric-row">
-          <div class="metric-column metric-label">{{ service.label }} additional cost *</div>
+          <div class="metric-column metric-label">
+            {{ service.label }} additional cost *
+          </div>
           <div class="plan-column">
-            <div v-for="plan in comparisonPlans" :key="plan.slug" class="metric-value" :data-plan="plan.name">{{ formatServiceAdditional(plan, service) }}</div>
+            <div
+              v-for="plan in comparisonPlans"
+              :key="plan.slug"
+              class="metric-value"
+              :data-plan="plan.name"
+            >
+              {{ formatServiceAdditional(plan, service) }}
+            </div>
           </div>
         </div>
       </template>
@@ -211,36 +274,75 @@ function computeScenarioCost(plan, scenario) {
         <div class="section-title-wrapper">
           <div class="section-title">Limits &amp; features</div>
         </div>
-        <div v-for="plan in comparisonPlans" :key="plan.slug" class="plan-column"></div>
+        <div
+          v-for="plan in comparisonPlans"
+          :key="plan.slug"
+          class="plan-column"
+        ></div>
       </div>
       <div class="metric-row">
         <div class="metric-column metric-label">Max databases</div>
         <div class="plan-column">
-          <div v-for="plan in comparisonPlans" :key="plan.slug" class="metric-value" :data-plan="plan.name">{{ getLimitValue(plan, 'maxDatabases') }}</div>
+          <div
+            v-for="plan in comparisonPlans"
+            :key="plan.slug"
+            class="metric-value"
+            :data-plan="plan.name"
+          >
+            {{ getLimitValue(plan, 'maxDatabases') }}
+          </div>
         </div>
       </div>
       <div class="metric-row">
         <div class="metric-column metric-label">Max users / workspace</div>
         <div class="plan-column">
-          <div v-for="plan in comparisonPlans" :key="plan.slug" class="metric-value" :data-plan="plan.name">{{ getLimitValue(plan, 'maxUsersPerWorkspace') }}</div>
+          <div
+            v-for="plan in comparisonPlans"
+            :key="plan.slug"
+            class="metric-value"
+            :data-plan="plan.name"
+          >
+            {{ getLimitValue(plan, 'maxUsersPerWorkspace') }}
+          </div>
         </div>
       </div>
       <div class="metric-row">
         <div class="metric-column metric-label">Concurrent readers/stream</div>
         <div class="plan-column">
-          <div v-for="plan in comparisonPlans" :key="plan.slug" class="metric-value" :data-plan="plan.name">{{ getLimitValue(plan, 'concurrentReadersPerStream') }}</div>
+          <div
+            v-for="plan in comparisonPlans"
+            :key="plan.slug"
+            class="metric-value"
+            :data-plan="plan.name"
+          >
+            {{ getLimitValue(plan, 'concurrentReadersPerStream') }}
+          </div>
         </div>
       </div>
       <div class="metric-row">
         <div class="metric-column metric-label">Postgres subqueries</div>
         <div class="plan-column">
-          <div v-for="plan in comparisonPlans" :key="plan.slug" class="metric-value" :data-plan="plan.name">{{ getFeatureGate(plan, 'postgresSubqueries') }}</div>
+          <div
+            v-for="plan in comparisonPlans"
+            :key="plan.slug"
+            class="metric-value"
+            :data-plan="plan.name"
+          >
+            {{ getFeatureGate(plan, 'postgresSubqueries') }}
+          </div>
         </div>
       </div>
       <div class="metric-row">
         <div class="metric-column metric-label">Support</div>
         <div class="plan-column">
-          <div v-for="plan in comparisonPlans" :key="plan.slug" class="metric-value" :data-plan="plan.name">{{ getSupport(plan) }}</div>
+          <div
+            v-for="plan in comparisonPlans"
+            :key="plan.slug"
+            class="metric-value"
+            :data-plan="plan.name"
+          >
+            {{ getSupport(plan) }}
+          </div>
         </div>
       </div>
     </div>
@@ -257,7 +359,9 @@ function computeScenarioCost(plan, scenario) {
       </div>
     </div>
     <div v-if="serviceList.length" class="table-footnote">
-      * Additional cost for incremental writes emitted to the shape log from the Postgres replication stream. Initial sync and subsets are billed at the base write rate only.
+      * Additional cost for incremental writes emitted to the shape log from the
+      Postgres replication stream. Initial sync and subsets are billed at the
+      base write rate only.
     </div>
   </div>
 </template>
@@ -342,7 +446,6 @@ function computeScenarioCost(plan, scenario) {
     display: inline;
   }
 }
-
 
 .section {
   border-top: 1.5px solid rgba(255, 255, 255, 0.08);

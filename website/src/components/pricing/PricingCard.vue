@@ -1,7 +1,8 @@
 <script setup>
 const { plan } = defineProps(['plan'])
 
-const priceColorVar = (plan.priceColor === 'ddn') ? 'var(--ddn-color)' : 'var(--electric-color)'
+const priceColorVar =
+  plan.priceColor === 'ddn' ? 'var(--ddn-color)' : 'var(--electric-color)'
 
 function formatPrice(p) {
   if (p.type === 'enterprise') return 'Custom'
@@ -32,42 +33,69 @@ const label = plan.shortName || plan.name
 </script>
 
 <template>
-  <div :class="['pricing-card', { 'pricing-card-highlighted': plan.highlighted }]">
+  <div
+    :class="['pricing-card', { 'pricing-card-highlighted': plan.highlighted }]"
+  >
     <div class="card-header">
-      <div :class="['card-label', { 'card-label-highlighted': plan.highlighted }]">{{ label }}</div>
-      <div v-if="hasPaidPrice" class="card-price">
-        <span class="price-amount" :style="{ color: priceColorVar }">{{ formatPrice(plan) }}</span>
-        <span v-if="plan.priceQualifier" class="price-qualifier">{{ plan.priceQualifier }}</span>
+      <div
+        :class="['card-label', { 'card-label-highlighted': plan.highlighted }]"
+      >
+        {{ label }}
       </div>
-      <div v-else-if="plan.type === 'enterprise'" class="card-hero-name">{{ formatPrice(plan) }}</div>
+      <div v-if="hasPaidPrice" class="card-price">
+        <span class="price-amount" :style="{ color: priceColorVar }">{{
+          formatPrice(plan)
+        }}</span>
+        <span v-if="plan.priceQualifier" class="price-qualifier">{{
+          plan.priceQualifier
+        }}</span>
+      </div>
+      <div v-else-if="plan.type === 'enterprise'" class="card-hero-name">
+        {{ formatPrice(plan) }}
+      </div>
       <div v-else class="card-hero-name">{{ plan.name }}</div>
     </div>
 
     <div class="card-content">
       <div v-if="plan.who" class="card-who">
         {{ plan.who }}
-        <span v-if="hasCommitment" class="detail-commitment"> — {{ commitmentLabel }}</span>
+        <span v-if="hasCommitment" class="detail-commitment">
+          — {{ commitmentLabel }}</span
+        >
       </div>
-     
 
       <div class="card-details">
-        <div v-if="plan.billingBehavior" class="detail-billing">{{ plan.billingBehavior }}</div>
+        <div v-if="plan.billingBehavior" class="detail-billing">
+          {{ plan.billingBehavior }}
+        </div>
 
         <div v-if="plan.effectiveWriteRate !== undefined" class="card-rates">
           <div class="rate-line">
             <span>{{ formatRate(plan.effectiveWriteRate) }} per 1M writes</span>
-            <span v-if="plan.discountPercent" class="discount-badge">{{ plan.discountPercent }}% discount</span>
+            <span v-if="plan.discountPercent" class="discount-badge"
+              >{{ plan.discountPercent }}% discount</span
+            >
           </div>
           <div class="rate-line">
-            <span>{{ formatRate(plan.effectiveRetentionRate) }} per GB-month</span>
-            <span v-if="plan.discountPercent" class="discount-badge">{{ plan.discountPercent }}% discount</span>
+            <span
+              >{{ formatRate(plan.effectiveRetentionRate) }} per GB-month</span
+            >
+            <span v-if="plan.discountPercent" class="discount-badge"
+              >{{ plan.discountPercent }}% discount</span
+            >
           </div>
         </div>
       </div>
 
       <div v-if="plan.features && plan.features.length" class="card-features">
-        <div v-if="plan.support" class="features-support">{{ plan.support }}</div>
-        <div v-for="feature in plan.features" :key="feature" class="feature-item">
+        <div v-if="plan.support" class="features-support">
+          {{ plan.support }}
+        </div>
+        <div
+          v-for="feature in plan.features"
+          :key="feature"
+          class="feature-item"
+        >
           <span class="feature-check">&#10003;</span>
           <span>{{ feature }}</span>
         </div>
