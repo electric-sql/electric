@@ -41,8 +41,8 @@ See the [pricing page](/cloud/pricing) for the full breakdown and worked&nbsp;ex
 ### The tiers
 
 - **PAYG** — $0/month. No commitment, no credit card required. Bills under $5/month&nbsp;waived.
-- **Pro** — $249/month (6-month commitment). 10% usage discount. Monthly fee acts as prepaid usage credit — you're not paying twice. Unlocks advanced features including hosted sub-queries for Postgres Sync and premium&nbsp;support.
-- **Scale** — $1,999/month (12-month commitment). 20% usage discount. Same prepaid credit model. Direct access to founders and hands-on support to accelerate your time to&nbsp;market.
+- **Pro** — $249/month. No commitment. 10% usage discount. Monthly fee acts as prepaid usage credit — you're not paying twice. Unlocks advanced features including hosted sub-queries for Postgres Sync and premium&nbsp;support.
+- **Scale** — $1,999/month (6-month commitment). 20% usage discount. Same prepaid credit model. Direct access to founders and hands-on support to accelerate your time to&nbsp;market.
 
 All tiers include unlimited reads and&nbsp;delivery.
 
