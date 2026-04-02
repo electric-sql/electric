@@ -91,6 +91,21 @@ defmodule Electric.Replication.ShapeLogCollector.FlushTracker do
     }
   end
 
+  @doc """
+  Creates a notify function that sends `{:flush_boundary_updated, lsn}` to a
+  named process. The lambda is defined in this module's bytecode rather than
+  the caller's, making it resilient to caller module recompilation (e.g. by
+  Repatch in async tests).
+  """
+  def make_flush_boundary_notify_fn(replication_client_name) do
+    fn lsn ->
+      case GenServer.whereis(replication_client_name) do
+        nil -> :ok
+        pid -> send(pid, {:flush_boundary_updated, lsn})
+      end
+    end
+  end
+
   def empty?(%__MODULE__{last_flushed: last_flushed, min_incomplete_flush_tree: tree}) do
     last_flushed == %{} and :gb_trees.is_empty(tree)
   end
