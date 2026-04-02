@@ -18,7 +18,7 @@ Pricing is usage-based: you pay for writes and retention. Data delivery — read
 
 :::info Key links
 - [Sign up for Electric Cloud](https://dashboard.electric-sql.cloud)
-- [Pricing details and calculator](/cloud/pricing)
+- [Pricing details and calculator](/pricing)
 - [Electric Cloud docs](/docs/intro)
 :::
 
@@ -36,7 +36,7 @@ Two billing dimensions: writes and retention.
 
 Some services that run additional infrastructure carry a service cost on top of the base write rate. [Postgres Sync](/products/postgres-sync) runs a dedicated replication engine to filter changes and match them to shapes, adding $2 per million writes emitted to the shape log from the replication stream. You're charged for the filtered output, not the raw replication input — one Postgres change landing on 100 shapes =&nbsp;100&nbsp;writes.
 
-See the [pricing page](/cloud/pricing) for the full breakdown and worked&nbsp;examples.
+See the [pricing page](/pricing) for the full breakdown and worked&nbsp;examples.
 
 ### The tiers
 
@@ -79,12 +79,12 @@ You're only charged for what gets emitted after filtering — a change that matc
 
 ## Get started
 
-Sign up at [Electric Cloud](https://dashboard.electric-sql.cloud). Start on PAYG, free below $5, no credit card required. See the full details on the [pricing page](/cloud/pricing), including a calculator to model your&nbsp;workload.
+Sign up at [Electric Cloud](https://dashboard.electric-sql.cloud). Start on PAYG, free below $5, no credit card required. See the full details on the [pricing page](/pricing), including a calculator to model your&nbsp;workload.
 
 Already on Electric Cloud? You'll receive an email when billing is enabled for your&nbsp;workspace.
 
 ***
 
 - [Sign up for Electric Cloud](https://dashboard.electric-sql.cloud)
-- [Pricing calculator](/cloud/pricing#calculator)
+- [Pricing calculator](/pricing#calculator)
 - [Electric Cloud docs](/docs/intro)
