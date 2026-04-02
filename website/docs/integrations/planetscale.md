@@ -96,9 +96,10 @@ DATABASE_URL=postgresql://postgres.abc123:password@host:5432/db npx prisma migra
 ```
 
 > [!Tip] Already have tables owned by a different user?
-> If your tables were created by a different user and you **can't** transfer ownership (common on PlanetScale), you have two options:
-> 1. **Re-create the tables** using the correct user by running your migrations with the Electric user's credentials
-> 2. **Use Manual Mode** — set `ELECTRIC_MANUAL_TABLE_PUBLISHING=true` and have an admin pre-configure the publication and replica identity. See [Manual Mode](/docs/guides/postgres-permissions#manual-mode-setup) in the PostgreSQL Permissions guide.
+> If your tables were created by a different user and you **can't** transfer ownership (common on PlanetScale), you have three options:
+> 1. **Grant the old role to the Electric user** — run `GRANT <old_migration_role> TO <electric_role>` so the Electric user inherits table ownership from the migration role
+> 2. **Re-create the tables** using the correct user by running your migrations with the Electric user's credentials
+> 3. **Use Manual Mode** — set `ELECTRIC_MANUAL_TABLE_PUBLISHING=true` and have an admin pre-configure the publication and replica identity. See [Manual Mode](/docs/guides/postgres-permissions#manual-mode-setup) in the PostgreSQL Permissions guide.
 
 ## Database User Setup
 
