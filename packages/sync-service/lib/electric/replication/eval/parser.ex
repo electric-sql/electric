@@ -113,9 +113,11 @@ defmodule Electric.Replication.Eval.Parser do
   @prefix_length String.length("SELECT 1 WHERE ")
 
   def validate_order_by(order_by, columns) do
-    case PgQuery.parse("SELECT 1 ORDER BY #{order_by}") do
-      {:ok, %{stmts: [%{stmt: %{node: {:select_stmt, stmt}}}]}} ->
-        do_validate_order_by(stmt, columns)
+    wrapper = "SELECT 1 ORDER BY #{order_by}"
+
+    case PgQuery.parse(wrapper) do
+      {:ok, %{stmts: [%{stmt: %{node: {:select_stmt, stmt}}}]} = parse_result} ->
+        do_validate_order_by(stmt, parse_result, columns)
 
       {:ok, _} ->
         {:error, "Unexpected `;` in order by"}
@@ -128,7 +130,7 @@ defmodule Electric.Replication.Eval.Parser do
     end
   end
 
-  defp do_validate_order_by(select_stmt, columns) do
+  defp do_validate_order_by(select_stmt, parse_result, columns) do
     with {:ok, sort_clause} <- extract_clause(select_stmt, :sort_clause),
          {:ok, _} <-
            Walker.reduce(
@@ -136,11 +138,29 @@ defmodule Electric.Replication.Eval.Parser do
              &check_valid_refs/3,
              :ok,
              Map.new(columns, fn %{name: name} -> {[name], :unknown} end)
-           ) do
-      :ok
+           ),
+         {:ok, deparsed} <- deparse_order_by(parse_result) do
+      {:ok, deparsed}
     else
       {:error, {location, reason}} ->
         {:error, "At location #{location}: #{reason}"}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp deparse_order_by(parse_result) do
+    case PgQuery.protobuf_to_query(parse_result) do
+      {:ok, full_query} ->
+        # The full query is "SELECT 1 ORDER BY <normalized>", extract the ORDER BY part
+        case String.split(full_query, " ORDER BY ", parts: 2) do
+          [_, order_by_part] -> {:ok, order_by_part}
+          _ -> {:error, "Failed to extract ORDER BY clause from deparsed query"}
+        end
+
+      {:error, reason} ->
+        {:error, "Failed to deparse ORDER BY: #{inspect(reason)}"}
     end
   end
 
@@ -154,7 +174,24 @@ defmodule Electric.Replication.Eval.Parser do
     {:error, {location, "parameter $#{number} is not supported in ORDER BY clauses"}}
   end
 
-  defp check_valid_refs(_, _, _), do: {:ok, :ok}
+  # Structural nodes that are always present in valid ORDER BY clauses
+  defp check_valid_refs(%PgQuery.SortBy{}, _, _), do: {:ok, :ok}
+  defp check_valid_refs(%PgQuery.Node{}, _, _), do: {:ok, :ok}
+  defp check_valid_refs(%PgQuery.String{}, _, _), do: {:ok, :ok}
+  defp check_valid_refs(%PgQuery.A_Const{}, _, _), do: {:ok, :ok}
+  defp check_valid_refs(%Array{}, _, _), do: {:ok, :ok}
+
+  # Reject everything else: subqueries, function calls, type casts, expressions, etc.
+  defp check_valid_refs(%{location: location} = node, _, _) do
+    {:error, {location, "#{node_type_name(node)} expressions are not allowed in ORDER BY clauses"}}
+  end
+
+  defp check_valid_refs(node, _, _) do
+    {:error, {0, "#{node_type_name(node)} expressions are not allowed in ORDER BY clauses"}}
+  end
+
+  defp node_type_name(%struct{}), do: struct |> Module.split() |> List.last()
+  defp node_type_name(_), do: "unknown"
 
   def extract_subqueries(ast) do
     with {:ok, subqueries} <-

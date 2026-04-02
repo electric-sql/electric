@@ -713,11 +713,11 @@ defmodule Electric.Replication.Eval.ParserTest do
   describe "validate_order_by/2" do
     @columns [%{name: "id"}, %{name: "value"}, %{name: "created_at"}]
 
-    test "accepts valid column references" do
-      assert :ok = Parser.validate_order_by("id ASC", @columns)
-      assert :ok = Parser.validate_order_by("value DESC", @columns)
-      assert :ok = Parser.validate_order_by("id ASC, value DESC", @columns)
-      assert :ok = Parser.validate_order_by("created_at ASC NULLS LAST", @columns)
+    test "accepts valid column references and returns normalized SQL" do
+      assert {:ok, "id ASC"} = Parser.validate_order_by("id ASC", @columns)
+      assert {:ok, "value DESC"} = Parser.validate_order_by("value DESC", @columns)
+      assert {:ok, _} = Parser.validate_order_by("id ASC, value DESC", @columns)
+      assert {:ok, _} = Parser.validate_order_by("created_at ASC NULLS LAST", @columns)
     end
 
     test "rejects references to non-existent columns" do
@@ -745,6 +745,68 @@ defmodule Electric.Replication.Eval.ParserTest do
     test "rejects multiple statements" do
       assert {:error, "Unexpected `;` in order by"} =
                Parser.validate_order_by("id; DROP TABLE users", @columns)
+    end
+
+    test "rejects CAST with subquery (error-based injection)" do
+      assert {:error, "At location " <> rest} =
+               Parser.validate_order_by(~s|CAST((SELECT 1) AS int)|, @columns)
+
+      assert rest =~ "not allowed in ORDER BY"
+    end
+
+    test "rejects bare subqueries" do
+      assert {:error, "At location " <> rest} =
+               Parser.validate_order_by(~s|(SELECT count(*) FROM pg_tables)|, @columns)
+
+      assert rest =~ "not allowed in ORDER BY"
+    end
+
+    test "rejects function calls" do
+      assert {:error, "At location " <> rest} =
+               Parser.validate_order_by(~s|pg_sleep(5)|, @columns)
+
+      assert rest =~ "not allowed in ORDER BY"
+
+      assert {:error, _} = Parser.validate_order_by(~s|current_user|, @columns)
+    end
+
+    test "rejects CASE expressions" do
+      assert {:error, "At location " <> rest} =
+               Parser.validate_order_by(
+                 ~s|CASE WHEN (SELECT true) THEN 1 ELSE 0 END|,
+                 @columns
+               )
+
+      assert rest =~ "not allowed in ORDER BY"
+    end
+
+    test "rejects arithmetic expressions with subqueries" do
+      assert {:error, "At location " <> rest} =
+               Parser.validate_order_by(~s|1 + (SELECT 1)|, @columns)
+
+      assert rest =~ "not allowed in ORDER BY"
+    end
+
+    test "rejects type casts" do
+      assert {:error, "At location " <> rest} =
+               Parser.validate_order_by(~s|id::text|, @columns)
+
+      assert rest =~ "not allowed in ORDER BY"
+
+      assert {:error, "At location " <> rest} =
+               Parser.validate_order_by(~s|CAST(id AS text)|, @columns)
+
+      assert rest =~ "not allowed in ORDER BY"
+    end
+
+    test "rejects injection mixed with valid columns" do
+      assert {:error, "At location " <> rest} =
+               Parser.validate_order_by(
+                 ~s|id ASC, CAST((SELECT version()) AS int) DESC|,
+                 @columns
+               )
+
+      assert rest =~ "not allowed in ORDER BY"
     end
   end
 

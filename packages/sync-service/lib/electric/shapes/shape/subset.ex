@@ -25,12 +25,12 @@ defmodule Electric.Shapes.Shape.Subset do
 
     with {:ok, fields} <- NimbleOptions.validate(Map.new(fields), @schema_options),
          {:ok, columns} <- load_column_info(shape, inspector),
-         :ok <- validate_order_by(fields[:order_by], columns),
+         {:ok, order_by} <- validate_order_by(fields[:order_by], columns),
          refs = Inspector.columns_to_expr(columns),
          {:ok, where} <- validate_where_clause(fields[:where], fields[:params], refs) do
       {:ok,
        %__MODULE__{
-         order_by: fields[:order_by],
+         order_by: order_by,
          limit: fields[:limit],
          offset: fields[:offset],
          where: where
@@ -57,11 +57,11 @@ defmodule Electric.Shapes.Shape.Subset do
     end
   end
 
-  defp validate_order_by(nil, _columns), do: :ok
+  defp validate_order_by(nil, _columns), do: {:ok, nil}
 
   defp validate_order_by(order_by, columns) do
     case Parser.validate_order_by(order_by, columns) do
-      :ok -> :ok
+      {:ok, normalized} -> {:ok, normalized}
       {:error, reason} -> {:error, {:order_by, reason}}
     end
   end
