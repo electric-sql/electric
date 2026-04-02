@@ -28,7 +28,10 @@ Repatch.setup(
     Electric.ShapeCache,
     Electric.Replication.ShapeLogCollector,
     Electric.Shapes.Consumer.Snapshotter,
+    Electric.Shapes.DynamicConsumerSupervisor,
     Electric.Postgres.Inspector,
+    Electric.Connection.Manager,
+    Electric.Shapes.Shape,
     :otel_tracer
   ]
 )

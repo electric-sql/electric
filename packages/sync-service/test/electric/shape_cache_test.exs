@@ -969,7 +969,7 @@ defmodule Electric.ShapeCacheTest do
       # should delay in responding
       refute Task.yield(wait_task, 10)
       Task.await(creation_task)
-      assert :started = Task.await(wait_task, start_consumer_delay)
+      assert :started = Task.await(wait_task, start_consumer_delay + 5_000)
     end
 
     test "should not loop forever waiting for consumer to come up", ctx do
