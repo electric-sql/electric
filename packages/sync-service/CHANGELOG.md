@@ -1,5 +1,16 @@
 # @core/sync-service
 
+## 1.5.0
+
+### Minor Changes
+
+- a4efdab: Start admin connection pool before lock acquisition and inline lock breaker
+
+### Patch Changes
+
+- 61c64bb: Fix SQL injection in ORDER BY clause validation. Replace permissive catch-all in the AST walker with a deny-by-default allowlist of safe node types, and rebuild the clause from validated AST via PgQuery deparse instead of passing the raw user string through.
+- 8aa23ca: Test for empty MapSet using `MapSet.size/1` to avoid spurious allocations
+
 ## 1.4.16
 
 ### Patch Changes
