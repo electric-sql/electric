@@ -46,6 +46,6 @@ defmodule Electric.Shapes.DependencyLayers do
   def get_for_handles(layers, shape_handles) do
     layers
     |> Enum.map(&MapSet.intersection(&1, shape_handles))
-    |> Enum.reject(&(&1 == MapSet.new()))
+    |> Enum.reject(&(MapSet.size(&1) == 0))
   end
 end

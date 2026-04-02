@@ -557,7 +557,7 @@ defmodule Electric.Shapes.Shape do
         opts
       ) do
     # If the change actually doesn't change any columns, we can skip it - this is possible on Postgres but we don't care for those.
-    if is_struct(change, Changes.UpdatedRecord) and change.changed_columns == MapSet.new() do
+    if is_struct(change, Changes.UpdatedRecord) and MapSet.size(change.changed_columns) == 0 do
       []
     else
       [fill_move_tags(change, shape, opts[:stack_id], opts[:shape_handle])]

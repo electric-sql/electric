@@ -99,7 +99,7 @@ defmodule Electric.Shapes.Partitions do
   defp clean_up_partitions(state) do
     {empty, full} =
       Enum.split_with(state.partition_ownership, fn {_relation, shape_ids} ->
-        Enum.empty?(shape_ids)
+        MapSet.size(shape_ids) == 0
       end)
 
     remove_relations = Enum.map(empty, &elem(&1, 0))
