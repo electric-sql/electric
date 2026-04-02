@@ -773,7 +773,9 @@ defmodule Electric.Shapes.Api do
       "Client #{inspect(self())} is checking for any changes to #{shape_handle} since start of request"
     )
 
-    case Shapes.resolve_shape_handle(stack_id, shape_handle, shape_def) do
+    case Shapes.resolve_shape_handle(stack_id, shape_handle, shape_def,
+           read_only?: request.read_only?
+         ) do
       {^shape_handle, ^last_offset} ->
         # no-op, shape is still present and unchanged
         nil
@@ -850,23 +852,72 @@ defmodule Electric.Shapes.Api do
             "changes to #{shape_handle} (out-of-bounds check)"
         end)
 
-        Response.invalid_request(api, errors: @offset_out_of_bounds)
+        case check_for_disk_updates(request) do
+          {:updated, new_offset} ->
+            %{request | last_offset: new_offset}
+            |> determine_global_last_seen_lsn()
+            |> determine_log_chunk_offset()
+            |> determine_up_to_date()
+            |> do_serve_shape_log()
+
+          _ ->
+            Response.invalid_request(api, errors: @offset_out_of_bounds)
+        end
     after
-      # If we timeout, check that the stack is still up and
-      # return an up-to-date message
       long_poll_timeout ->
         request = update_attrs(request, %{ot_is_long_poll_timeout: true})
+        status = Electric.StatusMonitor.status(api.stack_id)
 
-        case Electric.StatusMonitor.status(api.stack_id) do
-          %{shape: :up} ->
+        cond do
+          request.read_only? or status.shape == :read_only ->
+            # No consumer is running (or it stopped), so check if the
+            # active instance has flushed new data to disk.
+            case check_for_disk_updates(request) do
+              {:updated, new_offset} ->
+                %{request | last_offset: new_offset}
+                |> determine_global_last_seen_lsn()
+                |> determine_log_chunk_offset()
+                |> determine_up_to_date()
+                |> do_serve_shape_log()
+
+              _ ->
+                request
+                |> determine_global_last_seen_lsn()
+                |> no_change_response()
+            end
+
+          status.shape == :up ->
             request
             |> determine_global_last_seen_lsn()
             |> no_change_response()
 
-          _ ->
+          true ->
             message = Electric.StatusMonitor.timeout_message(api.stack_id)
             Response.error(request, message, status: 503, retry_after: 10)
         end
+    end
+  end
+
+  # Check if the latest offset on disk has advanced beyond what the request
+  # last saw. This is useful in read-only mode where no consumer process is
+  # running to send :new_changes messages — the active instance may have
+  # flushed new data to the shared filesystem.
+  defp check_for_disk_updates(%Request{} = request) do
+    %{
+      handle: shape_handle,
+      last_offset: last_offset,
+      params: %{shape_definition: shape_def, offset: requested_offset},
+      api: %{stack_id: stack_id}
+    } = request
+
+    case Shapes.resolve_shape_handle(stack_id, shape_handle, shape_def, read_only?: true) do
+      {^shape_handle, latest_offset}
+      when is_log_offset_lt(last_offset, latest_offset) and
+             not is_log_offset_lt(latest_offset, requested_offset) ->
+        {:updated, latest_offset}
+
+      _ ->
+        :no_change
     end
   end
 
