@@ -106,4 +106,5 @@ https://next.electric-sql.com/* https://electric-sql.com/:splat 301!
 /products/                      /primitives/
 /products/*                     /primitives/:splat
 
-/blog/2026/03/18/*            /blog/2026/03/24/:splat
+/blog/2026/03/18/*            /blog/2026/04/02/:splat
+/blog/2026/03/24/electric-cloud-pricing  /blog/2026/04/02/electric-cloud-pricing
