@@ -1,8 +1,11 @@
 <script setup>
 const { plan } = defineProps(['plan'])
 
-const priceColorVar =
-  plan.priceColor === 'ddn' ? 'var(--ddn-color)' : 'var(--electric-color)'
+const priceColorVar = (() => {
+  if (plan.priceColor === 'ddn') return 'var(--ddn-color)'
+  if (plan.priceColor === 'gray') return 'var(--vp-c-text-1)'
+  return 'var(--electric-color)'
+})()
 
 function formatPrice(p) {
   if (p.type === 'enterprise') return 'Custom'

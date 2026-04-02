@@ -5,6 +5,7 @@ type: tier
 monthlyFee: 1999
 discountPercent: 20
 priceQualifier: '/ month'
+priceColor: 'gray'
 
 limits:
   maxDatabases: 200
