@@ -1,0 +1,15 @@
+name: 'Accelerate'
+order: 40
+type: service
+
+who: 'Teams that need hands-on guidance from the Electric team to ship faster.'
+featuresTitle: 'Direct access'
+features:
+  - 'Architecture reviews'
+  - 'Integration guidance'
+  - 'Direct access to founders'
+
+ctaText: 'Contact sales'
+ctaHref: '/about/contact#sales'
+ctaTheme: 'alt'
+priceColor: 'ddn'
