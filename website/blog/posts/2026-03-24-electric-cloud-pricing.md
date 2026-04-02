@@ -14,7 +14,7 @@ published: true
 
 Electric Cloud now has self-serve pricing. Sign up, pick a plan, start building — no sales call needed.
 
-Pricing is usage-based: you pay for writes and retention. Data delivery — reads, fan-out, concurrent users — is free, unlimited, and always will be. PAYG waives bills under $5/month, giving you 5&nbsp;million writes per month at zero cost. Most hobby and simple production apps will run for free&nbsp;forever.
+Pricing is usage-based: you pay for writes and retention. Data delivery — reads, fan-out, concurrent users — is free, unlimited, and always will be. Pay as you go (PAYG) waives bills under $5/month, giving you 5&nbsp;million writes per month at zero cost. Most hobby and simple production apps will run for free&nbsp;forever.
 
 :::info Key links
 - [Sign up for Electric Cloud](https://dashboard.electric-sql.cloud)
@@ -40,7 +40,7 @@ See the [pricing page](/cloud/pricing) for the full breakdown and worked&nbsp;ex
 
 ### The tiers
 
-- **PAYG** — $0/month. No commitment, no credit card required. Bills under $5/month&nbsp;waived.
+- **Pay as you go** — $0/month. No commitment, no credit card required. Bills under $5/month&nbsp;waived.
 - **Pro** — $249/month. No commitment. 10% usage discount. The monthly fee acts as prepaid usage credit — you're not paying twice. Unlocks advanced features including hosted sub-queries for Postgres Sync and premium&nbsp;support.
 - **Scale** — $1,999/month (6-month commitment). 20% usage discount. Same prepaid credit model. Direct access to founders and hands-on support to accelerate your time to&nbsp;market.
 
