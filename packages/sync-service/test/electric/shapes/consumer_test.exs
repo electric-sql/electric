@@ -553,6 +553,11 @@ defmodule Electric.Shapes.ConsumerTest do
     @describetag :tmp_dir
 
     setup do
+      # Pre-warm Repatch on the Storage module so that concurrent async tests
+      # patching Storage (e.g., ApiTest, ServeShapePlugTest) don't trigger a
+      # module recompilation that would destroy our Erlang trace patterns.
+      # Once already recompiled, subsequent patches only update ETS hooks.
+      Repatch.recompile(Electric.ShapeCache.Storage, mode: :shared)
       %{inspector: @base_inspector, pool: nil}
     end
 

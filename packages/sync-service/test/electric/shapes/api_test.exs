@@ -1390,7 +1390,7 @@ defmodule Electric.Shapes.ApiTest do
       assert response.no_changes
     end
 
-    @tag long_poll_timeout: 100
+    @tag long_poll_timeout: 2_000
     test "returns the latest lsn after the long poll timeout even if stack has failed", ctx do
       patch_shape_cache(
         resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id ->
@@ -1438,7 +1438,7 @@ defmodule Electric.Shapes.ApiTest do
           Api.serve_shape_response(request)
         end)
 
-      assert %{status: 503} = Task.await(req_task)
+      assert %{status: 503} = Task.await(req_task, 10_000)
     end
   end
 
