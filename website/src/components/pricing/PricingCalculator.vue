@@ -19,9 +19,44 @@ onMounted(() => {
   }
 })
 
+// Non-linear slider stops
+const WRITE_STOPS = [0, 100_000, 500_000, 1_000_000, 2_000_000, 5_000_000, 10_000_000, 25_000_000, 50_000_000, 100_000_000, 250_000_000, 500_000_000, 1_000_000_000]
+const RETENTION_STOPS = [0, 1, 5, 10, 25, 50, 100, 250, 500, 1_000, 2_500, 5_000]
+const SLIDER_MAX = 1000
+
+function valueToSlider(value, stops) {
+  if (value <= stops[0]) return 0
+  if (value >= stops[stops.length - 1]) return SLIDER_MAX
+  for (let i = 1; i < stops.length; i++) {
+    if (value <= stops[i]) {
+      const segFrac = (value - stops[i - 1]) / (stops[i] - stops[i - 1])
+      return Math.round(((i - 1 + segFrac) / (stops.length - 1)) * SLIDER_MAX)
+    }
+  }
+  return SLIDER_MAX
+}
+
+function sliderToValue(pos, stops) {
+  const frac = pos / SLIDER_MAX
+  const seg = frac * (stops.length - 1)
+  const i = Math.floor(seg)
+  if (i >= stops.length - 1) return stops[stops.length - 1]
+  const segFrac = seg - i
+  return Math.round(stops[i] + segFrac * (stops[i + 1] - stops[i]))
+}
+
 // Inputs
-const writesPerMonth = ref(5000000)
+const writesPerMonth = ref(5_000_000)
 const retentionGB = ref(50)
+
+const writesSlider = computed({
+  get: () => valueToSlider(writesPerMonth.value, WRITE_STOPS),
+  set: (v) => { writesPerMonth.value = sliderToValue(Number(v), WRITE_STOPS) },
+})
+const retentionSlider = computed({
+  get: () => valueToSlider(retentionGB.value, RETENTION_STOPS),
+  set: (v) => { retentionGB.value = sliderToValue(Number(v), RETENTION_STOPS) },
+})
 
 // Feature checkbox state: { [featureId]: boolean }
 const featureChecks = ref(
@@ -146,6 +181,14 @@ const planNote = computed(() => {
             step="1000000"
           />
         </label>
+        <input
+          v-model="writesSlider"
+          type="range"
+          class="input-slider"
+          min="0"
+          :max="SLIDER_MAX"
+          step="1"
+        />
       </div>
       <div class="input-group">
         <label class="input-label">
@@ -158,6 +201,14 @@ const planNote = computed(() => {
             step="10"
           />
         </label>
+        <input
+          v-model="retentionSlider"
+          type="range"
+          class="input-slider"
+          min="0"
+          :max="SLIDER_MAX"
+          step="1"
+        />
       </div>
       <div class="toggles-section">
         <label v-for="feature in config.calculatorFeatures" :key="feature.id" class="toggle-label">
@@ -256,6 +307,38 @@ const planNote = computed(() => {
   outline: none;
   border-color: var(--electric-color);
   background: rgba(255, 255, 255, 0.08);
+}
+
+.input-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.1);
+  outline: none;
+  margin-top: 2px;
+  cursor: pointer;
+}
+
+.input-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--electric-color);
+  cursor: pointer;
+  border: none;
+}
+
+.input-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--electric-color);
+  cursor: pointer;
+  border: none;
 }
 
 .toggles-section {

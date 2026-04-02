@@ -6,6 +6,13 @@ baseRates:
 # Write unit definition
 writeUnitSizeKB: 10 # Each write is up to 10KB; larger messages auto-chunk
 
+# Service costs (additional cost on top of base rates)
+serviceCosts:
+  postgresSync:
+    label: 'Postgres Sync'
+    additionalWriteCostPerMillion: 2 # +$2 per 1M writes
+    description: 'Metered on filtered shape log output (live replication only)'
+
 # PAYG waiver
 paygWaiverThreshold: 5 # Bills under $5/mo waived (display-only; authoritative billing threshold is defined in the billing system)
 
@@ -34,11 +41,11 @@ calculatorFeatures:
 workloadScenarios:
   - id: appDev
     label: 'Typical app development'
-    description: 'Lorem ipsum dolor sit amet'
+    description: 'Small team building a production app'
     writesPerMonth: null # Human fills in
     retentionGB: null # Human fills in
   - id: aiStreaming
     label: 'AI token streaming'
-    description: 'Lorem ipsum dolor sit amet'
+    description: 'Real-time AI response delivery'
     writesPerMonth: null # Human fills in
     retentionGB: null # Human fills in

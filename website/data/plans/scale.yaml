@@ -8,22 +8,21 @@ priceQualifier: '/ month'
 
 limits:
   maxDatabases: 200
-  streamTTL: 'User-defined'
   concurrentReadersPerStream: 10000
   maxUsersPerWorkspace: 50
 
 featureGates:
   postgresSubqueries: true
 
-commitment: '12 months'
+commitment: '6 months'
 support: 'Direct access to founders'
+billingBehavior: 'Monthly fee acts as prepaid usage credit'
 
-who: 'Lorem ipsum dolor sit amet'
-featuresTitle: 'Includes'
+who: 'For large workloads and faster time to market'
 features:
-  - 'Lorem ipsum'
-  - 'Lorem ipsum'
-  - 'Lorem ipsum'
+  - 'Up to 200 databases'
+  - '10,000 concurrent readers'
+  - 'Early access to new features'
 
 ctaText: 'Sign up now'
 ctaTextSmall: 'Sign up'

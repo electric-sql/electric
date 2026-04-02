@@ -11,6 +11,7 @@ import Section from './src/components/home/Section.vue'
 import PricingCard from './src/components/pricing/PricingCard.vue'
 import ComparisonTable from './src/components/pricing/ComparisonTable.vue'
 import PricingCalculator from './src/components/pricing/PricingCalculator.vue'
+import IngressEgressIllustration from './src/components/pricing/IngressEgressIllustration.vue'
 import { data as pricing } from './data/pricing.data.ts'
 
 import LogoStrip from '/static/img/blog/electric-beta-release/logo-strip.svg'
@@ -27,16 +28,14 @@ const config = pricing.config
 
 <Section :actions="[]">
   <template #title>
-    Placeholder hero title
+    Pay for writes and retention. Reads are&nbsp;free.
   </template>
   <template #tagline>
-    Placeholder hero tagline for the
-    <a href="/product/cloud">Electric Cloud</a>
-    pricing page.
+    <a href="/product/cloud">Electric Cloud</a> charges for data
+    ingress and retention. Egress, fan-out, concurrent users, and data
+    delivery are unlimited at no additional&nbsp;cost.
   </template>
-  <div class="ingress-egress-illustration">
-    <p class="illustration-placeholder">[Ingress/Egress illustration — to be designed]</p>
-  </div>
+  <IngressEgressIllustration />
   <div class="pricing-grid">
     <PricingCard
       v-for="tier in tiers"
@@ -54,16 +53,23 @@ const config = pricing.config
 
 <Section :actions="[]">
   <template #title>Need more support?</template>
-  <template #tagline>Placeholder tagline</template>
+  <template #tagline>
+    Hands-on help and bespoke solutions
+    <span class="no-wrap-xs">for teams that need&nbsp;more</span>.
+  </template>
   <div class="support-card">
     <div class="support-options">
       <div class="support-option">
-        <h3>Accelerate</h3>
-        <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit.</p>
+        <h3>Scale</h3>
+        <p>Proactive, hands-on support from the Electric team. Architecture
+          reviews, integration guidance, and direct access to founders to
+          help you ship faster.</p>
       </div>
       <div class="support-option">
         <h3>Enterprise</h3>
-        <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit.</p>
+        <p>Bespoke solutions for teams with custom requirements.
+          Unlimited databases, unlimited concurrent readers,
+          custom SLAs, and dedicated support.</p>
       </div>
     </div>
     <div class="support-cta">
@@ -82,11 +88,12 @@ const config = pricing.config
     </p>
   </div>
   <div class="section-head" style="margin-top: 24px;">
-    <h2 style="font-size: 1.25rem; margin-bottom: 12px;">Using existing CDN infrastructure</h2>
+    <h2 style="font-size: 1.25rem; margin-bottom: 12px;">Powered by CDN caching</h2>
     <p>
-      We uniquely can do this because we deliver real-time data through
-      existing CDN infrastructure. Using caching and request-collapsing to handle
-      concurrency at the CDN layer.
+      Electric delivers real-time data over HTTP, using CDN caching and
+      request collapsing to handle millions of concurrent readers without
+      proportional infrastructure cost. Your costs scale with writes,
+      not users.
     </p>
   </div>
   <div class="strap-actions">
@@ -113,11 +120,7 @@ const config = pricing.config
     </h1>
   </template>
   <template #tagline>
-    Dive into the details to see
-    <span class="no-wrap-xs">
-      what's
-      <span class="no-wrap">
-        right for you</span></span>.
+    Usage-based pricing with <span class="no-wrap-xs">volume discounts <span class="no-wrap">on higher tiers</span></span>.
   </template>
   <ComparisonTable :comparisonPlans="comparisonPlans" :config="config" />
 </Section>
@@ -171,24 +174,64 @@ const config = pricing.config
   <template #title>Frequently asked questions</template>
   <div class="faq-list">
     <details class="faq-item">
-      <summary>Lorem ipsum question one?</summary>
-      <p>Lorem ipsum answer one. Placeholder content to be replaced.</p>
+      <summary>What counts as a write?</summary>
+      <p>A write is a message written to a durable stream, up to 10 KB in
+        size. Messages larger than 10 KB are automatically chunked into
+        multiple write units — for example, a 1 MB message counts as 100
+        write units.</p>
     </details>
     <details class="faq-item">
-      <summary>Lorem ipsum question two?</summary>
-      <p>Lorem ipsum answer two. Placeholder content to be replaced.</p>
+      <summary>Why don't you charge for reads or egress?</summary>
+      <p>Electric delivers real-time data over HTTP using CDN caching and
+        request collapsing. This means concurrent readers are handled at the
+        CDN layer without proportional infrastructure cost. Your costs scale
+        with data written, not with the number of users reading it.</p>
     </details>
     <details class="faq-item">
-      <summary>Lorem ipsum question three?</summary>
-      <p>Lorem ipsum answer three. Placeholder content to be replaced.</p>
+      <summary>What are service costs?</summary>
+      <p>Services that run additional infrastructure carry an additional cost
+        on top of the base write rate. Postgres Sync adds +$2 per 1M writes,
+        metered on the filtered shape log output (the writes emitted to
+        shapes, not the raw replication input). This gives an effective rate
+        of $3 per 1M writes for live Postgres changes. Initial sync and
+        snapshots are billed at the base rate only.</p>
     </details>
     <details class="faq-item">
-      <summary>Lorem ipsum question four?</summary>
-      <p>Lorem ipsum answer four. Placeholder content to be replaced.</p>
+      <summary>How does the monthly fee work on Pro and Scale?</summary>
+      <p>The monthly fee on Pro ($249) and Scale ($1,999) acts as a prepaid
+        usage credit. Your usage is calculated at the discounted rate (10%
+        off for Pro, 20% off for Scale) and if it stays under the monthly
+        fee, you pay only the fee. Usage above the fee is billed as
+        overage.</p>
     </details>
     <details class="faq-item">
-      <summary>Lorem ipsum question five?</summary>
-      <p>Lorem ipsum answer five. Placeholder content to be replaced.</p>
+      <summary>Do I need a credit card for the PAYG plan?</summary>
+      <p>No. You can sign up and start building without a payment method. We
+        waive monthly usage under $5. If your usage grows past $10 (or $5 if
+        your workspace was blocked in the previous billing month), we'll ask
+        you to add a payment method to continue.</p>
+    </details>
+    <details class="faq-item">
+      <summary>How is retention measured?</summary>
+      <p>Retention is measured in byte-seconds — the amount of data stored
+        and for how long. This is converted to GB-months for billing at
+        $0.10 per GB-month. Retention accounts for TTL-based automatic
+        deletion, so you only pay for data that's actually retained.</p>
+    </details>
+    <details class="faq-item">
+      <summary>Can I upgrade or downgrade my plan?</summary>
+      <p>Yes. You can upgrade from PAYG to Pro, PAYG to Scale, or Pro to
+        Scale at any time — upgrades take effect immediately with prorated
+        charges. Downgrades take effect at the end of your current billing
+        period, provided your usage is within the target plan's limits.</p>
+    </details>
+    <details class="faq-item">
+      <summary>What are the concurrent reader limits?</summary>
+      <p>Concurrent readers per stream are monitored by tier — 100 for PAYG,
+        1,000 for Pro, and 10,000 for Scale. These are soft thresholds used
+        for monitoring; they are not hard-enforced at launch. If you
+        consistently exceed your tier's threshold, we'll reach out to
+        discuss upgrading.</p>
     </details>
   </div>
 </Section>
@@ -309,18 +352,48 @@ const config = pricing.config
   max-width: 320px;
 }
 
-.ingress-egress-illustration {
-  margin: 40px 0;
-  padding: 40px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 0.5px solid rgba(255, 255, 255, 0.05);
-  border-radius: 12px;
+.billing-dimensions {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 32px;
   text-align: center;
 }
 
-.illustration-placeholder {
+.dimension {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.dimension-rate {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--electric-color);
+  line-height: 1.2;
+}
+
+.dimension-free .dimension-rate {
+  color: var(--vp-c-green-1, #42b883);
+}
+
+.dimension-label {
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: var(--vp-c-text-1);
+}
+
+.dimension-detail {
+  font-size: 0.8rem;
   color: var(--vp-c-text-3);
-  font-style: italic;
+  margin-top: 2px;
+}
+
+@media (max-width: 529px) {
+  .billing-dimensions {
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
 }
 
 .support-card {
@@ -381,6 +454,9 @@ const config = pricing.config
   color: var(--vp-c-text-1);
   cursor: pointer;
   list-style: none;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
 }
 
 .faq-item summary::-webkit-details-marker {
@@ -389,8 +465,9 @@ const config = pricing.config
 
 .faq-item summary::before {
   content: "+";
-  display: inline-block;
-  width: 20px;
+  flex-shrink: 0;
+  width: 14px;
+  text-align: center;
   font-weight: 400;
   color: var(--vp-c-text-3);
 }
@@ -404,5 +481,9 @@ const config = pricing.config
   font-size: 0.875rem;
   color: var(--vp-c-text-2);
   line-height: 1.6;
+}
+
+.faq-item p:first-of-type {
+  margin-top: -10px !important;
 }
 </style>

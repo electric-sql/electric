@@ -1,6 +1,7 @@
 name: 'Pro'
 order: 20
 type: tier
+highlighted: true
 
 monthlyFee: 249
 discountPercent: 10
@@ -8,22 +9,21 @@ priceQualifier: '/ month'
 
 limits:
   maxDatabases: 50
-  streamTTL: 'User-defined'
   concurrentReadersPerStream: 1000
   maxUsersPerWorkspace: 50
 
 featureGates:
   postgresSubqueries: true
 
-commitment: '6 months'
-support: 'Priority email'
+commitment: 'None'
+support: 'Priority email support'
+billingBehavior: 'Monthly fee acts as prepaid usage credit'
 
-who: 'Lorem ipsum dolor sit amet'
-featuresTitle: 'Includes'
+who: 'For teams running mission-critical apps'
 features:
-  - 'Lorem ipsum'
-  - 'Lorem ipsum'
-  - 'Lorem ipsum'
+  - 'Up to 50 databases'
+  - '1,000 concurrent readers'
+  - 'Early access to new features'
 
 ctaText: 'Sign up now'
 ctaTextSmall: 'Sign up'

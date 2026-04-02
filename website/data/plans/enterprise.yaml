@@ -2,16 +2,16 @@ name: 'Enterprise'
 order: 50
 type: enterprise
 
-who: 'Lorem ipsum dolor sit amet'
+who: 'Organizations with custom requirements, dedicated infrastructure, or compliance needs.'
 featuresTitle: 'Bespoke solutions'
 features:
-  - 'Lorem ipsum'
-  - 'Lorem ipsum'
-  - 'Lorem ipsum'
+  - 'Custom usage pricing'
+  - 'Unlimited databases'
+  - 'Unlimited concurrent readers'
+  - 'Custom SLAs and support'
 
 limits:
   maxDatabases: 'Unlimited'
-  streamTTL: 'Unlimited'
   concurrentReadersPerStream: 'Unlimited'
   maxUsersPerWorkspace: 'Unlimited'
 

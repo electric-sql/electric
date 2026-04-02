@@ -71,6 +71,10 @@ function getSupport(plan) {
   return plan.support || '\u2014'
 }
 
+function getBillingBehavior(plan) {
+  return plan.billingBehavior || '\u2014'
+}
+
 function getLimitValue(plan, key) {
   if (!plan.limits) return '\u2014'
   const val = plan.limits[key]
@@ -81,6 +85,25 @@ function getLimitValue(plan, key) {
 function getFeatureGate(plan, key) {
   if (!plan.featureGates) return '\u2014'
   return formatCheck(plan.featureGates[key])
+}
+
+const serviceList = config && config.serviceCosts
+  ? Object.entries(config.serviceCosts).map(([id, svc]) => ({ id, ...svc }))
+  : []
+
+function formatServiceAdditional(plan, service) {
+  if (plan.type === 'enterprise') return 'Custom'
+  const discount = (plan.discountPercent || 0) / 100
+  const cost = service.additionalWriteCostPerMillion * (1 - discount)
+  return '+' + formatCurrency(+cost.toFixed(4), '/1M')
+}
+
+function formatServiceEffectiveRate(plan, service) {
+  if (plan.type === 'enterprise') return 'Custom'
+  const discount = (plan.discountPercent || 0) / 100
+  const baseRate = config.baseRates.writesPerMillion
+  const total = (baseRate + service.additionalWriteCostPerMillion) * (1 - discount)
+  return formatCurrency(+total.toFixed(4), '/1M')
 }
 
 function computeScenarioCost(plan, scenario) {
@@ -103,7 +126,7 @@ function computeScenarioCost(plan, scenario) {
     <div class="table-header">
       <div class="metric-column header-spacer"></div>
       <div v-for="plan in comparisonPlans" :key="plan.slug" class="plan-column">
-        <div class="plan-name">{{ plan.name }}</div>
+        <div class="plan-name"><span class="plan-name-full">{{ plan.name }}</span><span v-if="plan.shortName" class="plan-name-short">{{ plan.shortName }}</span></div>
         <VPButton
           :href="plan.ctaHref"
           :text="plan.ctaText"
@@ -123,15 +146,6 @@ function computeScenarioCost(plan, scenario) {
 
     <!-- Group 1: Pricing -->
     <div class="section first-section">
-      <div class="section-header">
-        <div class="section-title-wrapper">
-          <div class="section-title">Pricing</div>
-          <div class="section-tagline">
-            Usage-based pricing with volume discounts on higher tiers.
-          </div>
-        </div>
-        <div v-for="plan in comparisonPlans" :key="plan.slug" class="plan-column"></div>
-      </div>
       <div class="metric-row">
         <div class="metric-column metric-label">Monthly fee</div>
         <div class="plan-column">
@@ -157,6 +171,12 @@ function computeScenarioCost(plan, scenario) {
         </div>
       </div>
       <div class="metric-row">
+        <div class="metric-column metric-label">Billing behavior</div>
+        <div class="plan-column">
+          <div v-for="plan in comparisonPlans" :key="plan.slug" class="metric-value" :data-plan="plan.name">{{ getBillingBehavior(plan) }}</div>
+        </div>
+      </div>
+      <div class="metric-row">
         <div class="metric-column metric-label">Commitment</div>
         <div class="plan-column">
           <div v-for="plan in comparisonPlans" :key="plan.slug" class="metric-value" :data-plan="plan.name">{{ getCommitment(plan) }}</div>
@@ -164,14 +184,32 @@ function computeScenarioCost(plan, scenario) {
       </div>
     </div>
 
-    <!-- Group 2: Limits & Features -->
+    <!-- Group 2: Service costs -->
+    <div v-if="serviceList.length" class="section">
+      <div class="section-header">
+        <div class="section-title-wrapper">
+          <div class="section-title">Service costs</div>
+          <div class="section-tagline">
+            Additional costs for services that run extra infrastructure.
+          </div>
+        </div>
+        <div v-for="plan in comparisonPlans" :key="plan.slug" class="plan-column"></div>
+      </div>
+      <template v-for="service in serviceList" :key="service.id">
+        <div class="metric-row">
+          <div class="metric-column metric-label">{{ service.label }} additional cost *</div>
+          <div class="plan-column">
+            <div v-for="plan in comparisonPlans" :key="plan.slug" class="metric-value" :data-plan="plan.name">{{ formatServiceAdditional(plan, service) }}</div>
+          </div>
+        </div>
+      </template>
+    </div>
+
+    <!-- Group 3: Limits & Features -->
     <div class="section">
       <div class="section-header">
         <div class="section-title-wrapper">
           <div class="section-title">Limits &amp; features</div>
-          <div class="section-tagline">
-            Resource limits and feature availability by plan.
-          </div>
         </div>
         <div v-for="plan in comparisonPlans" :key="plan.slug" class="plan-column"></div>
       </div>
@@ -182,9 +220,9 @@ function computeScenarioCost(plan, scenario) {
         </div>
       </div>
       <div class="metric-row">
-        <div class="metric-column metric-label">Stream TTL</div>
+        <div class="metric-column metric-label">Max users / workspace</div>
         <div class="plan-column">
-          <div v-for="plan in comparisonPlans" :key="plan.slug" class="metric-value" :data-plan="plan.name">{{ getLimitValue(plan, 'streamTTL') }}</div>
+          <div v-for="plan in comparisonPlans" :key="plan.slug" class="metric-value" :data-plan="plan.name">{{ getLimitValue(plan, 'maxUsersPerWorkspace') }}</div>
         </div>
       </div>
       <div class="metric-row">
@@ -207,25 +245,6 @@ function computeScenarioCost(plan, scenario) {
       </div>
     </div>
 
-    <!-- Group 3: Workload Scenarios (placeholder) -->
-    <div v-if="config && config.workloadScenarios && config.workloadScenarios.length" class="section">
-      <div class="section-header">
-        <div class="section-title-wrapper">
-          <div class="section-title">Workload scenarios</div>
-          <div class="section-tagline">
-            Estimated monthly usage cost for typical workloads.
-          </div>
-        </div>
-        <div v-for="plan in comparisonPlans" :key="plan.slug" class="plan-column"></div>
-      </div>
-      <div v-for="scenario in config.workloadScenarios" :key="scenario.id" class="metric-row">
-        <div class="metric-column metric-label">{{ scenario.label }}</div>
-        <div class="plan-column">
-          <div v-for="plan in comparisonPlans" :key="plan.slug" class="metric-value" :data-plan="plan.name">{{ computeScenarioCost(plan, scenario) }}</div>
-        </div>
-      </div>
-    </div>
-
     <div class="cta-row">
       <div class="metric-column"></div>
       <div v-for="plan in comparisonPlans" :key="plan.slug" class="plan-column">
@@ -237,6 +256,9 @@ function computeScenarioCost(plan, scenario) {
         />
       </div>
     </div>
+    <div v-if="serviceList.length" class="table-footnote">
+      * Additional cost for incremental writes emitted to the shape log from the Postgres replication stream. Initial sync and subsets are billed at the base write rate only.
+    </div>
   </div>
 </template>
 
@@ -247,6 +269,14 @@ function computeScenarioCost(plan, scenario) {
   border: 1.5px solid rgba(255, 255, 255, 0.08);
   border-radius: 12px;
   overflow: hidden;
+}
+
+.table-footnote {
+  padding: 12px 16px;
+  font-size: 0.75rem;
+  color: var(--vp-c-text-3);
+  line-height: 1.5;
+  border-top: 1.5px solid rgba(255, 255, 255, 0.08);
 }
 
 @media (max-width: 959px) {
@@ -274,6 +304,23 @@ function computeScenarioCost(plan, scenario) {
 
 .header-spacer {
   grid-column: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding-bottom: 14px;
+}
+
+.header-spacer .section-title {
+  font-size: 1.075rem;
+  font-weight: 600;
+  color: var(--vp-c-text-1);
+  margin-bottom: 6px;
+}
+
+.header-spacer .section-tagline {
+  font-size: 0.775rem;
+  color: var(--vp-c-text-3);
+  line-height: 1.5;
 }
 
 .plan-name {
@@ -282,6 +329,20 @@ function computeScenarioCost(plan, scenario) {
   color: var(--vp-c-text-1);
   text-align: center;
 }
+
+.plan-name-short {
+  display: none;
+}
+
+@media (max-width: 529px) {
+  .plan-name:has(.plan-name-short) .plan-name-full {
+    display: none;
+  }
+  .plan-name:has(.plan-name-short) .plan-name-short {
+    display: inline;
+  }
+}
+
 
 .section {
   border-top: 1.5px solid rgba(255, 255, 255, 0.08);
@@ -301,14 +362,13 @@ function computeScenarioCost(plan, scenario) {
 }
 
 .section-header .section-title-wrapper {
-  padding: 16px 16px 12px 16px;
+  padding: 16px 16px 16px 16px;
 }
 
 .section-header .section-title {
   font-size: 1.075rem;
   font-weight: 600;
   color: var(--vp-c-text-1);
-  margin-bottom: 10px;
 }
 
 .section-header .section-tagline {
@@ -479,7 +539,6 @@ function computeScenarioCost(plan, scenario) {
 
   .section-header .section-title {
     font-size: 1rem;
-    margin-bottom: 8px;
   }
 
   .section-header .section-tagline {
