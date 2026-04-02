@@ -22,6 +22,13 @@ Repatch.setup(
     Electric.StatusMonitor,
     Electric.Telemetry.Sampler,
     Electric.ShapeCache.ShapeCleaner,
+    Electric.ShapeCache.Storage,
+    Electric.ShapeCache.PureFileStorage,
+    Electric.ShapeCache.ShapeStatus,
+    Electric.ShapeCache,
+    Electric.Replication.ShapeLogCollector,
+    Electric.Shapes.Consumer.Snapshotter,
+    Electric.Postgres.Inspector,
     :otel_tracer
   ]
 )
