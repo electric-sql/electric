@@ -1,12 +1,23 @@
 defmodule Electric.ShapeCache.ShapeStatusTest do
   use ExUnit.Case, async: true
-  use Repatch.ExUnit, assert_expectations: true
 
   alias Electric.ShapeCache.ShapeStatus
   alias Electric.Shapes.Shape
 
   import Support.ComponentSetup
-  import Support.TestUtils, only: [expect_storage: 2, patch_storage: 1]
+
+  # Minimal storage module that avoids Repatch shared-mode mocking.
+  # Using a real module instead of {Mock.Storage, []} prevents crashes when
+  # Repatch cleanup from concurrent async tests removes shared hooks.
+  defmodule NoopStorage do
+    def cleanup_all!(_opts) do
+      if pid = Process.get(:cleanup_all_test_pid) do
+        send(pid, :cleanup_all_called)
+      end
+
+      :ok
+    end
+  end
 
   @inspector Support.StubInspector.new(
                tables: [{1, {"public", "items"}}, {2, {"public", "other_table"}}],
@@ -32,13 +43,9 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
   end
 
   test "deletes any orphaned shape data if empty", ctx do
-    expect_storage([force: true],
-      cleanup_all!: fn _ ->
-        :ok
-      end
-    )
-
+    Process.put(:cleanup_all_test_pid, self())
     {:ok, _state, []} = new_state(ctx)
+    assert_received :cleanup_all_called
   end
 
   test "can add shapes", ctx do
@@ -340,20 +347,9 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
   end
 
   defp new_state(ctx, opts \\ []) do
-    Electric.StackConfig.put(ctx.stack_id, Electric.ShapeCache.Storage, {Mock.Storage, []})
+    Electric.StackConfig.put(ctx.stack_id, Electric.ShapeCache.Storage, {NoopStorage, []})
 
     stored_shapes = Access.get(opts, :stored_shapes, [])
-
-    try do
-      patch_storage(
-        cleanup_all!: fn _ ->
-          :ok
-        end
-      )
-    rescue
-      # ignore any existing mocking on this function
-      ArgumentError -> :ok
-    end
 
     :ok = ShapeStatus.initialize(ctx.stack_id)
 
