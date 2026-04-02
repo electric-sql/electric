@@ -623,6 +623,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
   #fastLoopMaxCount = 5
   #pendingRequestShapeCacheBuster?: string
   #maxSnapshotRetries = 5
+  _expiredShapeRecoveryKey: string | null = null
 
   constructor(options: ShapeStreamOptions<GetExtensions<T>>) {
     this.options = { subscribe: true, ...options }
@@ -1241,6 +1242,14 @@ export class ShapeStream<T extends Row<unknown> = Row>
       // Cancel the response body to release the connection before retrying.
       await response.body?.cancel()
       if (transition.exceededMaxRetries) {
+        if (shapeKey && this._expiredShapeRecoveryKey !== shapeKey) {
+          this._expiredShapeRecoveryKey = shapeKey
+          expiredShapesCache.delete(shapeKey)
+          this.#reset()
+          throw new StaleCacheError(
+            `Expired handle entry evicted for self-healing retry`
+          )
+        }
         throw new FetchError(
           502,
           undefined,
