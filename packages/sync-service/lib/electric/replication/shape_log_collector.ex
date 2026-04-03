@@ -224,7 +224,12 @@ defmodule Electric.Replication.ShapeLogCollector do
           |> EventRouter.new(),
         flush_tracker:
           FlushTracker.new(
-            notify_fn: FlushTracker.make_flush_boundary_notify_fn(replication_client_name)
+            notify_fn: fn lsn ->
+              case GenServer.whereis(replication_client_name) do
+                nil -> :ok
+                pid -> send(pid, {:flush_boundary_updated, lsn})
+              end
+            end
           ),
         registry_state: registry_state
       })
