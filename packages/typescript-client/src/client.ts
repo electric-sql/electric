@@ -792,8 +792,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
           // Restart from current offset
           this.#started = false
-          await this.#start()
-          return
+          return this.#start()
         }
         // onError returned void, meaning it doesn't want to retry
         // This is an unrecoverable error, notify subscribers
