@@ -621,12 +621,11 @@ describe(`ExpiredShapesCache`, () => {
     expect(caughtError).toBe(null)
   })
 
-  it(`should eventually error when CDN always returns stale handle even after self-healing`, async () => {
+  it(`should clear expired entry and attempt self-healing even when CDN always returns stale handle`, async () => {
     // When CDN caches by path only (ignoring all query params), even the
-    // self-healing retry gets the expired handle back. After self-healing
-    // clears the expired entry, the client accepts the response (no stale
-    // detection) but gets stuck at the same offset, triggering the
-    // fast-loop detector.
+    // self-healing retry gets the expired handle back. Verify that
+    // self-healing still fires and the expired entry is cleared.
+    // (The eventual fast-loop error is tested separately in stream.test.ts)
     const expectedShapeUrl = `${shapeUrl}?table=test`
     const staleHandle = `persistent-stale-handle`
 
@@ -651,31 +650,24 @@ describe(`ExpiredShapesCache`, () => {
       )
     })
 
-    let caughtError: Error | null = null
-
     const stream = new ShapeStream({
       url: shapeUrl,
       params: { table: `test` },
       signal: aborter.signal,
       fetchClient: fetchMock,
       subscribe: false,
-      onError: (error) => {
-        caughtError = error
-      },
     })
 
     stream.subscribe(() => {})
 
-    await new Promise((resolve) => setTimeout(resolve, 1500))
+    // Wait long enough for stale retries + self-healing to fire
+    await new Promise((resolve) => setTimeout(resolve, 500))
 
     // Self-healing should have been attempted (a request without expired_handle)
     const selfHealingFired = capturedUrls.some(
       (url) => !new URL(url).searchParams.has(EXPIRED_HANDLE_QUERY_PARAM)
     )
     expect(selfHealingFired).toBe(true)
-
-    // Should have eventually errored (via fast-loop detection)
-    expect(caughtError).not.toBe(null)
 
     // Expired entry should be cleared
     expect(expiredShapesCache.getExpiredHandle(expectedShapeUrl)).toBeNull()
