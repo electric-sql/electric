@@ -187,11 +187,12 @@ export function analyzeShapeStreamClient(filePath = CLIENT_FILE) {
       .map((report) => ({
         kind: `unbounded-retry-loop`,
         severity: `error`,
-        title: `Recursive call in catch block without bound check: ${report.method} -> ${report.callee}`,
+        title: `Recursive call in catch block without detected bound: ${report.method} -> ${report.callee}`,
         message:
           `${report.method} calls ${report.callee} inside a catch block at line ${report.callLine} ` +
-          `without a preceding counter/limit check that returns or throws. ` +
-          `This can cause an unbounded retry loop when errors persist.`,
+          `without a recognized bounding pattern (counter/limit check, error type guard, or abort signal). ` +
+          `This may indicate an unbounded retry loop when errors persist. ` +
+          `Note: this is a heuristic — verify manually if the call is actually bounded by other means.`,
         file: filePath,
         line: report.callLine,
         locations: [

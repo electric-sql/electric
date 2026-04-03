@@ -92,7 +92,8 @@ describe(`shape-stream static analysis`, () => {
 
     expect(unboundedFindings).toEqual([])
 
-    // Every recursive call in a catch block must have a bound check
+    // Heuristic check: every recursive call in a catch block should have
+    // a recognizable bound pattern (counter check, type guard, or abort signal)
     for (const entry of result.reports.unboundedRetryReport) {
       expect(entry.hasBoundCheck).toBe(true)
     }
