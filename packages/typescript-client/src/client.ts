@@ -1239,6 +1239,12 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
     this.#syncState = transition.state
 
+    // Clear recovery guard when response transitions directly to live (e.g. 204),
+    // since #onMessages won't run for empty bodies.
+    if (transition.action === `accepted` && this.#syncState.kind === `live`) {
+      this.#expiredShapeRecoveryKey = null
+    }
+
     if (transition.action === `stale-retry`) {
       // Cancel the response body to release the connection before retrying.
       await response.body?.cancel()

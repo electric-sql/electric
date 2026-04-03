@@ -673,6 +673,187 @@ describe(`ExpiredShapesCache`, () => {
     expect(expiredShapesCache.getExpiredHandle(expectedShapeUrl)).toBeNull()
   })
 
+  it(`self-healing accepts stale data when proxy always serves expired handle (by design)`, async () => {
+    // Finding 1 from external review: after self-healing clears the expired
+    // entry, if the proxy serves the same stale response with up-to-date,
+    // the client accepts it. This is by design — stale data is better than
+    // permanent 502 for one-shot streams.
+    const expectedShapeUrl = `${shapeUrl}?table=test`
+    const staleHandle = `expired-handle`
+
+    expiredShapesCache.markExpired(expectedShapeUrl, staleHandle)
+
+    let requestCount = 0
+
+    fetchMock.mockImplementation((input: RequestInfo | URL) => {
+      requestCount++
+      const url = new URL(input.toString())
+
+      if (!url.searchParams.has(EXPIRED_HANDLE_QUERY_PARAM)) {
+        // Self-healing request: proxy returns same stale handle + up-to-date
+        return Promise.resolve(
+          new Response(
+            JSON.stringify([
+              { value: { id: 1 } },
+              { headers: { control: `up-to-date` } },
+            ]),
+            {
+              status: 200,
+              headers: {
+                'electric-handle': staleHandle, // same expired handle!
+                'electric-offset': `0_0`,
+                'electric-schema': `{"id":"int4"}`,
+                'electric-up-to-date': ``,
+              },
+            }
+          )
+        )
+      }
+
+      // Stale response during retry phase
+      return Promise.resolve(
+        new Response(JSON.stringify([{ value: { id: 1 } }]), {
+          status: 200,
+          headers: {
+            'electric-handle': staleHandle,
+            'electric-offset': `0_0`,
+            'electric-schema': `{"id":"int4"}`,
+            'electric-cursor': `cursor-1`,
+          },
+        })
+      )
+    })
+
+    let caughtError: Error | null = null
+    const stream = new ShapeStream({
+      url: shapeUrl,
+      params: { table: `test` },
+      signal: aborter.signal,
+      fetchClient: fetchMock,
+      subscribe: false,
+      onError: (error) => {
+        caughtError = error
+      },
+    })
+
+    stream.subscribe(() => {})
+    await new Promise((resolve) => setTimeout(resolve, 300))
+
+    // Self-healing accepts stale data — no error, stream reached up-to-date
+    expect(caughtError).toBe(null)
+    expect(stream.isUpToDate).toBe(true)
+    // 4 stale retries + 1 self-healing = 5
+    expect(requestCount).toBe(5)
+  })
+
+  it(`should clear recovery guard after 204 so self-healing works again`, async () => {
+    // Finding 2 from external review: 204 response transitions directly to
+    // LiveState without going through #onMessages, so #expiredShapeRecoveryKey
+    // is never cleared. With subscribe:true, the stream continues after 204.
+    // When the live long-poll hits a new stale cache entry, self-healing must
+    // be able to fire again (recovery guard was cleared by the 204 path).
+    const expectedShapeUrl = `${shapeUrl}?table=test`
+
+    expiredShapesCache.markExpired(expectedShapeUrl, `stale-handle-1`)
+
+    let selfHealCount = 0
+    let healingDone = false
+
+    fetchMock.mockImplementation((input: RequestInfo | URL) => {
+      const url = new URL(input.toString())
+      const hasExpiredHandle = url.searchParams.has(EXPIRED_HANDLE_QUERY_PARAM)
+
+      // Self-healing requests: no expired_handle param, healing not yet done
+      if (!hasExpiredHandle && !healingDone) {
+        selfHealCount++
+
+        if (selfHealCount === 1) {
+          // First self-healing: return 204 (deprecated path)
+          // Mark a new handle as expired for phase 2
+          expiredShapesCache.markExpired(expectedShapeUrl, `stale-handle-2`)
+          return Promise.resolve(
+            new Response(null, {
+              status: 204,
+              headers: {
+                'electric-handle': `fresh-handle-1`,
+                'electric-offset': `0_0`,
+                'electric-schema': `{"id":"int4"}`,
+              },
+            })
+          )
+        }
+
+        // Second self-healing: return 200 with up-to-date
+        healingDone = true
+        return Promise.resolve(
+          new Response(
+            JSON.stringify([{ headers: { control: `up-to-date` } }]),
+            {
+              status: 200,
+              headers: {
+                'electric-handle': `fresh-handle-2`,
+                'electric-offset': `0_0`,
+                'electric-schema': `{"id":"int4"}`,
+                'electric-cursor': `cursor-2`,
+                'electric-up-to-date': ``,
+              },
+            }
+          )
+        )
+      }
+
+      // Post-healing live requests or stale responses with expired_handle
+      if (hasExpiredHandle) {
+        // Stale response: echo back the expired handle to trigger stale detection
+        const staleHandle = url.searchParams.get(EXPIRED_HANDLE_QUERY_PARAM)!
+        return Promise.resolve(
+          new Response(JSON.stringify([{ value: { id: 1 } }]), {
+            status: 200,
+            headers: {
+              'electric-handle': staleHandle,
+              'electric-offset': `0_0`,
+              'electric-schema': `{"id":"int4"}`,
+              'electric-cursor': `cursor-1`,
+            },
+          })
+        )
+      }
+
+      // Post-healing live long-poll: abort to stop the stream
+      aborter.abort()
+      return Promise.resolve(
+        new Response(`[]`, {
+          status: 200,
+          headers: {
+            'electric-handle': `fresh-handle-2`,
+            'electric-offset': `0_0`,
+            'electric-schema': `{"id":"int4"}`,
+            'electric-cursor': `cursor-2`,
+          },
+        })
+      )
+    })
+
+    let caughtError: Error | null = null
+    const stream = new ShapeStream({
+      url: shapeUrl,
+      params: { table: `test` },
+      signal: aborter.signal,
+      fetchClient: fetchMock,
+      subscribe: true,
+      onError: (error) => {
+        caughtError = error
+      },
+    })
+
+    stream.subscribe(() => {})
+    await new Promise((resolve) => setTimeout(resolve, 1000))
+
+    // Both self-healing cycles should succeed — no terminal 502 error
+    expect(caughtError).toBe(null)
+    expect(selfHealCount).toBe(2)
+  })
+
   it(`client should retry with cache buster when local handle matches expired handle`, async () => {
     // When the client's own persisted handle IS the expired handle,
     // the client should detect that localHandle === expiredHandle and
