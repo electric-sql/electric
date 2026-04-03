@@ -9,6 +9,11 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
   # Minimal storage module that avoids Repatch shared-mode mocking.
   # Using a real module instead of {Mock.Storage, []} prevents crashes when
   # Repatch cleanup from concurrent async tests removes shared hooks.
+  #
+  # NOTE: cleanup_all! uses Process.get to notify the test process. This works
+  # because ShapeStatus.initialize calls it synchronously in the test process.
+  # If that ever changes to a spawned process, switch to an Agent or ETS-based
+  # approach instead.
   defmodule NoopStorage do
     def cleanup_all!(_opts) do
       if pid = Process.get(:cleanup_all_test_pid) do
