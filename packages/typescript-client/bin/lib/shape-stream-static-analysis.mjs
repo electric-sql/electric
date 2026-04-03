@@ -707,7 +707,12 @@ function buildSharedFieldReport(classInfo) {
   return reports.sort(compareReports)
 }
 
-function buildUnboundedRetryReport(sourceFile, classDecl, _classInfo, recursiveMethods) {
+function buildUnboundedRetryReport(
+  sourceFile,
+  classDecl,
+  _classInfo,
+  recursiveMethods
+) {
   const recursiveNames = new Set(recursiveMethods.map((m) => m.name))
   const reports = []
 
