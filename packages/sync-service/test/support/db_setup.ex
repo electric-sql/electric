@@ -243,7 +243,7 @@ defmodule Support.DbSetup do
     start_opts =
       Keyword.merge(@postgrex_start_opts, Electric.Utils.deobfuscate_password(connection_opts))
 
-    start_supervised!({Postgrex, start_opts})
+    start_link_supervised!({Postgrex, start_opts})
   end
 
   defp start_utility_pool(connection_opts) do
