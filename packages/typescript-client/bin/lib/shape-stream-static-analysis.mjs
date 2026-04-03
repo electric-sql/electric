@@ -116,6 +116,7 @@ export function analyzeTypeScriptClient(options = {}) {
     reports: {
       recursiveMethods: clientAnalysis.recursiveMethods,
       sharedFieldReport: clientAnalysis.sharedFieldReport,
+      unboundedRetryReport: clientAnalysis.unboundedRetryReport,
       ignoredActionReport: stateMachineAnalysis.ignoredActionReport,
       protocolLiteralReport: protocolLiteralAnalysis.report,
     },
@@ -136,6 +137,13 @@ export function analyzeShapeStreamClient(filePath = CLIENT_FILE) {
   const classInfo = buildClassInfo(sourceFile, classDecl)
   const recursiveMethods = buildRecursiveMethodReport(classInfo)
   const sharedFieldReport = buildSharedFieldReport(classInfo)
+  const unboundedRetryReport = buildUnboundedRetryReport(
+    sourceFile,
+    classDecl,
+    classInfo,
+    recursiveMethods
+  )
+
   const findings = sharedFieldReport
     .filter((report) => report.risky)
     .map((report) => ({
@@ -173,11 +181,45 @@ export function analyzeShapeStreamClient(filePath = CLIENT_FILE) {
       },
     }))
 
+  findings.push(
+    ...unboundedRetryReport
+      .filter((report) => !report.hasBoundCheck)
+      .map((report) => ({
+        kind: `unbounded-retry-loop`,
+        severity: `error`,
+        title: `Recursive call in catch block without bound check: ${report.method} -> ${report.callee}`,
+        message:
+          `${report.method} calls ${report.callee} inside a catch block at line ${report.callLine} ` +
+          `without a preceding counter/limit check that returns or throws. ` +
+          `This can cause an unbounded retry loop when errors persist.`,
+        file: filePath,
+        line: report.callLine,
+        locations: [
+          {
+            file: filePath,
+            line: report.callLine,
+            label: `unbounded recursive call`,
+          },
+          {
+            file: filePath,
+            line: report.catchLine,
+            label: `catch block`,
+          },
+        ],
+        details: {
+          method: report.method,
+          callee: report.callee,
+          catchLine: report.catchLine,
+        },
+      }))
+  )
+
   return {
     sourceFile,
     classInfo,
     recursiveMethods,
     sharedFieldReport,
+    unboundedRetryReport,
     findings,
   }
 }
@@ -663,6 +705,222 @@ function buildSharedFieldReport(classInfo) {
   }
 
   return reports.sort(compareReports)
+}
+
+function buildUnboundedRetryReport(sourceFile, classDecl, _classInfo, recursiveMethods) {
+  const recursiveNames = new Set(recursiveMethods.map((m) => m.name))
+  const reports = []
+
+  for (const member of classDecl.members) {
+    if (!ts.isMethodDeclaration(member) || !member.body || !member.name) {
+      continue
+    }
+
+    const methodName = formatMemberName(member.name)
+    if (!recursiveNames.has(methodName)) continue
+
+    walk(member.body, (node) => {
+      if (!ts.isCatchClause(node)) return
+
+      const catchLine = getLine(sourceFile, node)
+      const catchBlock = node.block
+
+      const recursiveCalls = []
+      walk(catchBlock, (inner) => {
+        if (!ts.isCallExpression(inner)) return
+        const callee = getThisMemberName(inner.expression)
+        if (!callee) {
+          if (
+            ts.isAwaitExpression(inner.parent) &&
+            ts.isCallExpression(inner)
+          ) {
+            const awaitedCallee = getThisMemberName(inner.expression)
+            if (awaitedCallee && recursiveNames.has(awaitedCallee)) {
+              recursiveCalls.push({
+                callee: awaitedCallee,
+                node: inner,
+                line: getLine(sourceFile, inner),
+              })
+            }
+          }
+          return
+        }
+        if (recursiveNames.has(callee)) {
+          recursiveCalls.push({
+            callee,
+            node: inner,
+            line: getLine(sourceFile, inner),
+          })
+        }
+      })
+
+      for (const call of recursiveCalls) {
+        const hasBoundCheck = catchBlockHasBoundCheckBefore(
+          sourceFile,
+          catchBlock,
+          call.node
+        )
+        const hasTypeGuard = isInsideErrorTypeGuard(call.node, catchBlock)
+
+        reports.push({
+          method: methodName,
+          callee: call.callee,
+          callLine: call.line,
+          catchLine,
+          hasBoundCheck: hasBoundCheck || hasTypeGuard,
+          boundKind: hasBoundCheck
+            ? `counter-check`
+            : hasTypeGuard
+              ? `error-type-guard`
+              : null,
+        })
+      }
+    })
+  }
+
+  return reports
+}
+
+function catchBlockHasBoundCheckBefore(sourceFile, catchBlock, targetCall) {
+  const targetLine = getLine(sourceFile, targetCall)
+
+  let found = false
+  walk(catchBlock, (node) => {
+    if (found) return
+    if (!ts.isIfStatement(node)) return
+    if (getLine(sourceFile, node) >= targetLine) return
+    if (ifStatementIsBoundCheck(node)) {
+      found = true
+    }
+  })
+
+  return found
+}
+
+function ifStatementIsBoundCheck(ifStatement) {
+  const condition = ifStatement.expression
+
+  // Pattern 1: counter comparison (e.g., if (this.#counter > this.#limit))
+  if (hasComparisonOperator(condition) && hasThisFieldReference(condition)) {
+    if (blockContainsReturnOrThrow(ifStatement.thenStatement)) {
+      return true
+    }
+  }
+
+  // Pattern 2: abort signal check (e.g., if (... && isRestartAbort))
+  // These guard recursive calls that only fire on deliberate abort events
+  if (hasAbortSignalCheck(condition)) {
+    return true
+  }
+
+  return false
+}
+
+function hasAbortSignalCheck(node) {
+  let found = false
+  walk(node, (child) => {
+    if (found) return
+    if (ts.isPropertyAccessExpression(child) && child.name.text === `aborted`) {
+      found = true
+    }
+  })
+  return found
+}
+
+function isInsideErrorTypeGuard(callNode, catchBlock) {
+  let current = callNode.parent
+  while (current && current !== catchBlock) {
+    if (ts.isIfStatement(current)) {
+      if (conditionHasTypeNarrowing(current.expression)) {
+        return true
+      }
+    }
+    if (ts.isBlock(current) && ts.isIfStatement(current.parent)) {
+      if (conditionHasTypeNarrowing(current.parent.expression)) {
+        return true
+      }
+    }
+    current = current.parent
+  }
+  return false
+}
+
+function conditionHasTypeNarrowing(node) {
+  let found = false
+  walk(node, (child) => {
+    if (found) return
+    if (ts.isBinaryExpression(child)) {
+      const op = child.operatorToken.kind
+      // instanceof check (e instanceof FetchError)
+      if (op === ts.SyntaxKind.InstanceOfKeyword) {
+        found = true
+        return
+      }
+      // Property equality check (e.status == 409) — specific error code guard
+      if (
+        op === ts.SyntaxKind.EqualsEqualsToken ||
+        op === ts.SyntaxKind.EqualsEqualsEqualsToken
+      ) {
+        const hasPropertyAccess =
+          ts.isPropertyAccessExpression(child.left) ||
+          ts.isPropertyAccessExpression(child.right)
+        const hasLiteral =
+          ts.isNumericLiteral(child.left) ||
+          ts.isNumericLiteral(child.right) ||
+          ts.isStringLiteral(child.left) ||
+          ts.isStringLiteral(child.right)
+        if (hasPropertyAccess && hasLiteral) {
+          found = true
+        }
+      }
+    }
+  })
+  return found
+}
+
+function hasComparisonOperator(node) {
+  if (ts.isBinaryExpression(node)) {
+    const op = node.operatorToken.kind
+    if (
+      op === ts.SyntaxKind.GreaterThanToken ||
+      op === ts.SyntaxKind.GreaterThanEqualsToken ||
+      op === ts.SyntaxKind.LessThanToken ||
+      op === ts.SyntaxKind.LessThanEqualsToken ||
+      op === ts.SyntaxKind.EqualsEqualsToken ||
+      op === ts.SyntaxKind.EqualsEqualsEqualsToken ||
+      op === ts.SyntaxKind.ExclamationEqualsToken ||
+      op === ts.SyntaxKind.ExclamationEqualsEqualsToken
+    ) {
+      return true
+    }
+    return hasComparisonOperator(node.left) || hasComparisonOperator(node.right)
+  }
+  if (ts.isParenthesizedExpression(node)) {
+    return hasComparisonOperator(node.expression)
+  }
+  return false
+}
+
+function hasThisFieldReference(node) {
+  let found = false
+  walk(node, (child) => {
+    if (found) return
+    if (getThisMemberName(child)) {
+      found = true
+    }
+  })
+  return found
+}
+
+function blockContainsReturnOrThrow(node) {
+  let found = false
+  walk(node, (child) => {
+    if (found) return
+    if (ts.isReturnStatement(child) || ts.isThrowStatement(child)) {
+      found = true
+    }
+  })
+  return found
 }
 
 function stronglyConnectedComponents(graph) {
