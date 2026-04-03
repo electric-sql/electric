@@ -7,6 +7,8 @@ import {
 import {
   CACHE_BUSTER_QUERY_PARAM,
   EXPIRED_HANDLE_QUERY_PARAM,
+  OFFSET_QUERY_PARAM,
+  SHAPE_HANDLE_QUERY_PARAM,
 } from '../src/constants'
 
 function waitForFetch(stream: ShapeStream): Promise<void> {
@@ -515,9 +517,11 @@ describe(`ExpiredShapesCache`, () => {
     expect(fetchCount).toBeGreaterThanOrEqual(3)
   })
 
-  it(`should throw error after max stale cache retries exceeded`, async () => {
-    // This test verifies that the client doesn't retry forever when CDN
-    // continues serving stale responses despite cache buster
+  it(`should self-heal after stale cache retries by clearing expired entry and retrying`, async () => {
+    // This test verifies the full stale-retry + self-healing flow:
+    // 1. CDN serves stale response with expired handle (3 retries with cache busters)
+    // 2. After retries exhaust, expired entry is cleared and self-healing retry fires
+    // 3. Self-healing request has no expired_handle param, gets fresh response
     const expectedShapeUrl = `${shapeUrl}?table=test`
     const staleHandle = `persistent-stale-handle`
 
@@ -529,9 +533,29 @@ describe(`ExpiredShapesCache`, () => {
 
     fetchMock.mockImplementation((input: RequestInfo | URL) => {
       requestCount++
-      capturedUrls.push(input.toString())
+      const urlStr = input.toString()
+      capturedUrls.push(urlStr)
 
-      // Always return stale response - simulating severely misconfigured CDN
+      const url = new URL(urlStr)
+      if (!url.searchParams.has(EXPIRED_HANDLE_QUERY_PARAM)) {
+        // Self-healing retry: no expired_handle param, return fresh response
+        return Promise.resolve(
+          new Response(
+            JSON.stringify([{ headers: { control: `up-to-date` } }]),
+            {
+              status: 200,
+              headers: {
+                'electric-handle': `fresh-handle`,
+                'electric-offset': `0_0`,
+                'electric-schema': `{"id":"int4"}`,
+                'electric-up-to-date': ``,
+              },
+            }
+          )
+        )
+      }
+
+      // Stale response while expired_handle param is present (CDN serving old data)
       return Promise.resolve(
         new Response(JSON.stringify([{ value: { id: 1 } }]), {
           status: 200,
@@ -561,22 +585,100 @@ describe(`ExpiredShapesCache`, () => {
     // Subscribe to trigger fetching
     stream.subscribe(() => {})
 
-    // Wait for retries to exhaust (should be fast since no real network)
-    await new Promise((resolve) => setTimeout(resolve, 100))
+    // Wait for retries + self-healing
+    await new Promise((resolve) => setTimeout(resolve, 200))
 
-    // Should have made initial request + 3 retries = 4 total requests
-    expect(requestCount).toBe(4)
+    // Should have made initial request + 3 stale retries + 1 self-healing = 5
+    expect(requestCount).toBe(5)
 
-    // Verify each retry after the first includes cache buster
-    for (let i = 1; i < capturedUrls.length; i++) {
+    // First 4 requests should have expired_handle param
+    for (let i = 0; i < 4; i++) {
+      const url = new URL(capturedUrls[i])
+      expect(url.searchParams.get(EXPIRED_HANDLE_QUERY_PARAM)).toBe(staleHandle)
+    }
+
+    // Retries (requests 2-4) should include cache buster
+    for (let i = 1; i < 4; i++) {
       const url = new URL(capturedUrls[i])
       expect(url.searchParams.has(CACHE_BUSTER_QUERY_PARAM)).toBe(true)
     }
 
-    // Should have thrown an error after max retries
+    // Self-healing request (5th) should be a fresh start: no expired_handle,
+    // no handle, and offset reset to -1
+    const selfHealingUrl = new URL(capturedUrls[4])
+    expect(selfHealingUrl.searchParams.has(EXPIRED_HANDLE_QUERY_PARAM)).toBe(
+      false
+    )
+    expect(selfHealingUrl.searchParams.has(SHAPE_HANDLE_QUERY_PARAM)).toBe(
+      false
+    )
+    expect(selfHealingUrl.searchParams.get(OFFSET_QUERY_PARAM)).toBe(`-1`)
+
+    // Expired entry should have been cleared
+    expect(expiredShapesCache.getExpiredHandle(expectedShapeUrl)).toBeNull()
+
+    // No error — self-healing succeeded
+    expect(caughtError).toBe(null)
+  })
+
+  it(`should eventually error when CDN always returns stale handle even after self-healing`, async () => {
+    // When CDN caches by path only (ignoring all query params), even the
+    // self-healing retry gets the expired handle back. After self-healing
+    // clears the expired entry, the client accepts the response (no stale
+    // detection) but gets stuck at the same offset, triggering the
+    // fast-loop detector.
+    const expectedShapeUrl = `${shapeUrl}?table=test`
+    const staleHandle = `persistent-stale-handle`
+
+    expiredShapesCache.markExpired(expectedShapeUrl, staleHandle)
+
+    const capturedUrls: string[] = []
+
+    fetchMock.mockImplementation((input: RequestInfo | URL) => {
+      capturedUrls.push(input.toString())
+
+      // CDN always returns stale handle regardless of query params
+      return Promise.resolve(
+        new Response(JSON.stringify([{ value: { id: 1 } }]), {
+          status: 200,
+          headers: {
+            'electric-handle': staleHandle,
+            'electric-offset': `0_0`,
+            'electric-schema': `{"id":"int4"}`,
+            'electric-cursor': `cursor-1`,
+          },
+        })
+      )
+    })
+
+    let caughtError: Error | null = null
+
+    const stream = new ShapeStream({
+      url: shapeUrl,
+      params: { table: `test` },
+      signal: aborter.signal,
+      fetchClient: fetchMock,
+      subscribe: false,
+      onError: (error) => {
+        caughtError = error
+      },
+    })
+
+    stream.subscribe(() => {})
+
+    await new Promise((resolve) => setTimeout(resolve, 1500))
+
+    // Self-healing should have been attempted (a request without expired_handle)
+    const selfHealingFired = capturedUrls.some(
+      (url) => !new URL(url).searchParams.has(EXPIRED_HANDLE_QUERY_PARAM)
+    )
+    expect(selfHealingFired).toBe(true)
+
+    // Should have eventually errored (via fast-loop detection)
     expect(caughtError).not.toBe(null)
-    expect(caughtError!.message).toContain(`stale cached responses`)
-    expect(caughtError!.message).toContain(`3 retry attempts`)
+
+    // Expired entry should be cleared
+    expect(expiredShapesCache.getExpiredHandle(expectedShapeUrl)).toBeNull()
   })
 
   it(`client should retry with cache buster when local handle matches expired handle`, async () => {
@@ -654,22 +756,39 @@ describe(`ExpiredShapesCache`, () => {
     // 3. First fetch returns a stale response with data messages
     // 4. checkStaleResponse enters stale-retry (adds cache buster)
     // 5. Client retries with cache buster to bypass CDN
-    // 6. After max retries, client errors (CDN keeps serving stale)
+    // 6. After max retries, self-healing clears the entry and retries
+    // 7. Self-healing request gets fresh response and succeeds
 
     const expectedShapeUrl = `${shapeUrl}?table=test`
     expiredShapesCache.markExpired(expectedShapeUrl, `stale-handle`)
 
-    let fetchCount = 0
     const capturedUrls: string[] = []
-    const errors: Error[] = []
 
     fetchMock.mockImplementation(
       (input: RequestInfo | URL, _init?: RequestInit) => {
-        fetchCount++
-        capturedUrls.push(input.toString())
+        const urlStr = input.toString()
+        capturedUrls.push(urlStr)
 
-        if (fetchCount >= 10) {
-          aborter.abort()
+        const url = new URL(urlStr)
+        if (!url.searchParams.has(EXPIRED_HANDLE_QUERY_PARAM)) {
+          // Self-healing retry: return fresh response
+          return Promise.resolve(
+            new Response(
+              JSON.stringify([{ headers: { control: `up-to-date` } }]),
+              {
+                status: 200,
+                headers: {
+                  'electric-handle': `fresh-handle`,
+                  'electric-offset': `0_0`,
+                  'electric-schema': JSON.stringify({
+                    id: { type: `text` },
+                    name: { type: `text` },
+                  }),
+                  'electric-up-to-date': ``,
+                },
+              }
+            )
+          )
         }
 
         return Promise.resolve(
@@ -697,15 +816,11 @@ describe(`ExpiredShapesCache`, () => {
       signal: aborter.signal,
       fetchClient: fetchMock,
       subscribe: false,
-      onError: (error) => {
-        errors.push(error)
-        return
-      },
     })
 
     stream.subscribe(() => {})
 
-    await new Promise((resolve) => setTimeout(resolve, 500))
+    await new Promise((resolve) => setTimeout(resolve, 200))
 
     // Should have used cache busters to try to bypass stale CDN
     const usedCacheBuster = capturedUrls.some((url) =>
@@ -713,8 +828,8 @@ describe(`ExpiredShapesCache`, () => {
     )
     expect(usedCacheBuster).toBe(true)
 
-    // Should eventually error after max stale retries
-    expect(errors.length).toBeGreaterThan(0)
+    // Expired entry should have been cleared by self-healing
+    expect(expiredShapesCache.getExpiredHandle(expectedShapeUrl)).toBeNull()
   })
 
   it(`should use cache buster instead of handle mutation on 409 without handle header`, async () => {

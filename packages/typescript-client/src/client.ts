@@ -623,7 +623,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
   #fastLoopMaxCount = 5
   #pendingRequestShapeCacheBuster?: string
   #maxSnapshotRetries = 5
-  _expiredShapeRecoveryKey: string | null = null
+  #expiredShapeRecoveryKey: string | null = null
 
   constructor(options: ShapeStreamOptions<GetExtensions<T>>) {
     this.options = { subscribe: true, ...options }
@@ -890,10 +890,11 @@ export class ShapeStream<T extends Row<unknown> = Row>
       }
 
       if (e instanceof StaleCacheError) {
-        // Received a stale cached response from CDN with an expired handle.
-        // The #staleCacheBuster has been set in #onInitialResponse, so retry
-        // the request which will include a random cache buster to bypass the
-        // misconfigured CDN cache.
+        // Two paths throw StaleCacheError:
+        // 1. Normal stale-retry: response handle matched expired handle,
+        //    #staleCacheBuster set to bypass CDN cache on next request.
+        // 2. Self-healing: stale retries exhausted, expired entry cleared,
+        //    stream reset — retry without expired_handle param.
         return this.#requestShape()
       }
 
@@ -1242,13 +1243,27 @@ export class ShapeStream<T extends Row<unknown> = Row>
       // Cancel the response body to release the connection before retrying.
       await response.body?.cancel()
       if (transition.exceededMaxRetries) {
-        if (shapeKey && this._expiredShapeRecoveryKey !== shapeKey) {
-          this._expiredShapeRecoveryKey = shapeKey
+        if (shapeKey) {
+          // Clear the expired entry — keeping it only poisons future sessions.
           expiredShapesCache.delete(shapeKey)
-          this.#reset()
-          throw new StaleCacheError(
-            `Expired handle entry evicted for self-healing retry`
-          )
+
+          // Try one self-healing retry per shape: reset the stream and
+          // retry without the expired_handle param. Since handles are never
+          // reused (see SPEC.md S0), the fresh response will have a new
+          // handle and won't trigger stale detection.
+          if (this.#expiredShapeRecoveryKey !== shapeKey) {
+            console.warn(
+              `[Electric] Stale cache retries exhausted (${this.#maxStaleCacheRetries} attempts). ` +
+                `Clearing expired handle entry and attempting self-healing retry without the expired_handle parameter. ` +
+                `For more information visit the troubleshooting guide: ${TROUBLESHOOTING_URL}`,
+              new Error(`stack trace`)
+            )
+            this.#expiredShapeRecoveryKey = shapeKey
+            this.#reset()
+            throw new StaleCacheError(
+              `Expired handle entry evicted for self-healing retry`
+            )
+          }
         }
         throw new FetchError(
           502,
@@ -1329,6 +1344,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
           shapeKey,
           this.#syncState.liveCacheBuster
         )
+        this.#expiredShapeRecoveryKey = null
       }
     }
 
