@@ -18,11 +18,12 @@ ExUnit.start(assert_receive_timeout: 400, exclude: [:slow, :oracle], capture_log
 # https://github.com/hissssst/repatch/issues/2
 Repatch.setup(
   recompile: [
-    # All modules that any test patches with mode: :shared must be listed here.
-    # Repatch recompiles a module on first patch, which destroys Erlang trace
-    # patterns, invalidates ETS table references, and breaks anonymous function
-    # closures in concurrent async tests. Pre-warming triggers the recompilation
-    # once at startup so subsequent patches only update ETS hooks.
+    # IMPORTANT: When adding a new Repatch.patch(..., mode: :shared, ...) in any
+    # test file, add the target module to this list. Omitting it causes rare async
+    # test failures because Repatch recompiles modules on first patch, which
+    # destroys Erlang trace patterns, invalidates ETS table references, and breaks
+    # anonymous function closures in concurrent tests. Pre-warming here triggers
+    # the recompilation once at startup so subsequent patches only update ETS hooks.
     Postgrex,
     Plug.Conn,
     Electric.StatusMonitor,

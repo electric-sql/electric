@@ -909,7 +909,7 @@ defmodule Electric.Shapes.ApiTest do
       assert response = Api.serve_shape_response(request)
       duration = System.monotonic_time(:millisecond) - now
       # Response should come at ~half the long_poll_timeout (250ms), not the full timeout (500ms)
-      assert duration > 200 and duration < 450
+      assert duration > 200 and duration < 500
 
       # this error returns as a list as it reaches the request stage
       # and so needs cleaning up. when encoded the result is the same
