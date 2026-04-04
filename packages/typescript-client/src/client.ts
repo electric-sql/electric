@@ -772,8 +772,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
           // Restart from current offset
           this.#started = false
-          await this.#start()
-          return
+          return this.#start()
         }
         // onError returned void, meaning it doesn't want to retry
         // This is an unrecoverable error, notify subscribers
@@ -911,15 +910,14 @@ export class ShapeStream<T extends Row<unknown> = Row>
         }
 
         const newShapeHandle = e.headers[SHAPE_HANDLE_HEADER]
-        let nextRequestShapeCacheBuster: string | undefined
         if (!newShapeHandle) {
           console.warn(
             `[Electric] Received 409 response without a shape handle header. ` +
               `This likely indicates a proxy or CDN stripping required headers.`,
             new Error(`stack trace`)
           )
-          nextRequestShapeCacheBuster = createCacheBuster()
         }
+        const nextRequestShapeCacheBuster = createCacheBuster()
         this.#reset(newShapeHandle)
 
         // must refetch control message might be in a list or not depending
@@ -1935,22 +1933,16 @@ export class ShapeStream<T extends Row<unknown> = Row>
         // For snapshot 409s, only update the handle — don't reset offset/schema/etc.
         // The main stream is paused and should not be disturbed.
         const nextHandle = e.headers[SHAPE_HANDLE_HEADER]
-        let nextCacheBuster: string | undefined
         if (nextHandle) {
           this.#syncState = this.#syncState.withHandle(nextHandle)
-          // If 409 returned the same handle, the URL won't change —
-          // pass a cache buster to the next retry to force a unique URL.
-          if (nextHandle === usedHandle) {
-            nextCacheBuster = createCacheBuster()
-          }
         } else {
           console.warn(
             `[Electric] Received 409 response without a shape handle header. ` +
               `This likely indicates a proxy or CDN stripping required headers.`,
             new Error(`stack trace`)
           )
-          nextCacheBuster = createCacheBuster()
         }
+        const nextCacheBuster = createCacheBuster()
 
         return this.#fetchSnapshotWithRetry(
           opts,

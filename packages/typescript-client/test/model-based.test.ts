@@ -102,6 +102,22 @@ function make409(newHandle: string): Response {
   )
 }
 
+/**
+ * 409 Conflict without a handle header. Simulates a proxy stripping
+ * the header. Must always produce a unique retry URL via cache buster.
+ */
+function make409NoHandle(): Response {
+  return new Response(
+    JSON.stringify([{ headers: { control: `must-refetch` } }]),
+    {
+      status: 409,
+      headers: {
+        'content-type': `application/json`,
+      },
+    }
+  )
+}
+
 /** Valid headers but non-array body. Throws FetchError → onError. */
 function makeMalformed200(handle: string): Response {
   nextSeq()
@@ -484,6 +500,82 @@ class RespondMissingHeadersCmd
   }
 }
 
+/**
+ * 409 Conflict without a handle header (proxy stripped it).
+ * Handled by creating a random cache buster. Does NOT affect
+ * the retry counter — same as normal 409.
+ */
+class Respond409NoHandleCmd
+  implements fc.AsyncCommand<StreamModel, StreamReal>
+{
+  check(m: Readonly<StreamModel>): boolean {
+    return !m.terminated
+  }
+  async run(_m: StreamModel, r: StreamReal): Promise<void> {
+    const prevUrl = r.gate.lastUrl
+    await r.respond(make409NoHandle())
+    r.currentHandle = `` // handle cleared after 409 with no handle
+    expect(r.subscriberError).toBeNull()
+    assertGlobalInvariants(r)
+    if (prevUrl) {
+      expect(r.gate.lastUrl).not.toBe(prevUrl)
+    }
+  }
+  toString(): string {
+    return `Respond409NoHandle`
+  }
+}
+
+/**
+ * 409 with the same handle as the current one.
+ */
+class Respond409SameHandleCmd
+  implements fc.AsyncCommand<StreamModel, StreamReal>
+{
+  check(m: Readonly<StreamModel>): boolean {
+    return !m.terminated
+  }
+  async run(_m: StreamModel, r: StreamReal): Promise<void> {
+    const prevUrl = r.gate.lastUrl
+    // 409 with the SAME handle — tests cache buster for handle recycling
+    await r.respond(make409(r.currentHandle))
+    // Don't update r.currentHandle — it's the same
+    expect(r.subscriberError).toBeNull()
+    assertGlobalInvariants(r)
+    if (prevUrl) {
+      expect(r.gate.lastUrl).not.toBe(prevUrl)
+    }
+  }
+  toString(): string {
+    return `Respond409SameHandle`
+  }
+}
+
+// ─── Scenario Tests ────────────────────────────────────────────────
+
+describe(`ShapeStream targeted scenario tests`, () => {
+  it(`consecutive 409s with the same handle produce unique retry URLs`, async () => {
+    const real = await createStreamReal()
+    try {
+      // Advance to a non-initial offset so the first 409 reset is visible
+      await real.respond(make200WithData(real.currentHandle))
+
+      // First 409 with same handle — URL changes because offset resets to -1
+      const urlBefore = real.gate.lastUrl
+      await real.respond(make409(real.currentHandle))
+      expect(real.gate.lastUrl).not.toBe(urlBefore)
+
+      // Second 409 with same handle — offset is already -1, handle unchanged.
+      // Without a cache buster, the retry URL would be identical.
+      const urlAfterFirstRetry = real.gate.lastUrl
+      await real.respond(make409(real.currentHandle))
+      expect(real.gate.lastUrl).not.toBe(urlAfterFirstRetry)
+    } finally {
+      real.cleanup()
+    }
+  })
+})
+
 // ─── Property Tests ─────────────────────────────────────────────────
 
 describe(`ShapeStream model-based property tests`, () => {
@@ -498,6 +590,8 @@ describe(`ShapeStream model-based property tests`, () => {
             fc.constant(new Respond204Cmd()),
             fc.constant(new Respond400Cmd()),
             fc.constant(new Respond409Cmd()),
+            fc.constant(new Respond409SameHandleCmd()),
+            fc.constant(new Respond409NoHandleCmd()),
             fc.constant(new RespondMalformed200Cmd()),
             fc.constant(new RespondMissingHeadersCmd()),
           ],
