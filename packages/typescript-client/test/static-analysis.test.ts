@@ -39,6 +39,15 @@ interface TailPositionAwaitReport {
   isParked: boolean
 }
 
+interface ErrorPathPublishReport {
+  method: string
+  callee: string
+  callLine: number
+  context: string
+  contextLine: number
+  isInErrorPath: boolean
+}
+
 interface TypeScriptClientAnalysisResult {
   findings: AnalysisFinding[]
   reports: {
@@ -46,6 +55,7 @@ interface TypeScriptClientAnalysisResult {
     unboundedRetryReport: UnboundedRetryReport[]
     cacheBusterReport: CacheBusterReport[]
     tailPositionAwaitReport: TailPositionAwaitReport[]
+    errorPathPublishReport: ErrorPathPublishReport[]
   }
 }
 
@@ -144,6 +154,21 @@ describe(`shape-stream static analysis`, () => {
     // No recursive method should have a parked await in tail position
     for (const entry of result.reports.tailPositionAwaitReport) {
       expect(entry.isParked).toBe(false)
+    }
+  })
+
+  it(`does not call #publish or #onMessages in error handling paths`, async () => {
+    const { analyzeTypeScriptClient } = await loadAnalyzerModule()
+    const result = analyzeTypeScriptClient()
+    const errorPathFindings = result.findings.filter(
+      (entry) => entry.kind === `error-path-publish`
+    )
+
+    expect(errorPathFindings).toEqual([])
+
+    // No subscriber-facing call should appear in catch blocks or error status handlers
+    for (const entry of result.reports.errorPathPublishReport) {
+      expect(entry.isInErrorPath).toBe(false)
     }
   })
 

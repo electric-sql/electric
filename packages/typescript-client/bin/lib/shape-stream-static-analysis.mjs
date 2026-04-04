@@ -119,6 +119,7 @@ export function analyzeTypeScriptClient(options = {}) {
       unboundedRetryReport: clientAnalysis.unboundedRetryReport,
       cacheBusterReport: clientAnalysis.cacheBusterReport,
       tailPositionAwaitReport: clientAnalysis.tailPositionAwaitReport,
+      errorPathPublishReport: clientAnalysis.errorPathPublishReport,
       ignoredActionReport: stateMachineAnalysis.ignoredActionReport,
       protocolLiteralReport: protocolLiteralAnalysis.report,
     },
@@ -149,6 +150,10 @@ export function analyzeShapeStreamClient(filePath = CLIENT_FILE) {
     sourceFile,
     classDecl,
     recursiveMethods
+  )
+  const errorPathPublishReport = buildErrorPathPublishReport(
+    sourceFile,
+    classDecl
   )
   const findings = sharedFieldReport
     .filter((report) => report.risky)
@@ -223,7 +228,13 @@ export function analyzeShapeStreamClient(filePath = CLIENT_FILE) {
           locations: [
             { file: filePath, line: entry.statusCheckLine, label: `409 check` },
             ...(entry.cacheBusterLine
-              ? [{ file: filePath, line: entry.cacheBusterLine, label: `conditional cache buster` }]
+              ? [
+                  {
+                    file: filePath,
+                    line: entry.cacheBusterLine,
+                    label: `conditional cache buster`,
+                  },
+                ]
               : []),
             { file: filePath, line: entry.retryLine, label: `retry call` },
           ],
@@ -249,6 +260,27 @@ export function analyzeShapeStreamClient(filePath = CLIENT_FILE) {
           details: entry,
         }))
     )
+    .concat(
+      errorPathPublishReport
+        .filter((entry) => entry.isInErrorPath)
+        .map((entry) => ({
+          kind: `error-path-publish`,
+          severity: `warning`,
+          title: `Subscriber-facing call in error handler: ${entry.callee} in ${entry.method}`,
+          message:
+            `${entry.method} calls ${entry.callee} at line ${entry.callLine} inside a ` +
+            `${entry.context} block (line ${entry.contextLine}). Publishing messages to subscribers ` +
+            `from error/retry paths can deliver stale or partial data. Error handlers should ` +
+            `clean up and retry, not notify subscribers.`,
+          file: filePath,
+          line: entry.callLine,
+          locations: [
+            { file: filePath, line: entry.contextLine, label: entry.context },
+            { file: filePath, line: entry.callLine, label: `subscriber call` },
+          ],
+          details: entry,
+        }))
+    )
 
   return {
     sourceFile,
@@ -258,6 +290,7 @@ export function analyzeShapeStreamClient(filePath = CLIENT_FILE) {
     unboundedRetryReport,
     cacheBusterReport,
     tailPositionAwaitReport,
+    errorPathPublishReport,
     findings,
   }
 }
@@ -512,6 +545,16 @@ export function formatAnalysisResult(result, options = {}) {
         `  ${flag} ${report.method} -> ${report.callee} ` +
           `(line:${report.awaitLine}) ` +
           `${report.isParked ? `PARKED: use return instead of await` : `ok`}`
+      )
+    }
+
+    lines.push(``)
+    lines.push(`Error-Path Publish Report:`)
+    for (const report of result.reports.errorPathPublishReport) {
+      const flag = report.isInErrorPath ? `!` : `-`
+      lines.push(
+        `  ${flag} ${report.method} -> ${report.callee} ` +
+          `(${report.context}:${report.contextLine} call:${report.callLine})`
       )
     }
 
@@ -789,7 +832,8 @@ function buildUnboundedRetryReport(sourceFile, classDecl, recursiveMethods) {
   const recursiveNames = new Set(recursiveMethods.map((m) => m.name))
 
   for (const member of classDecl.members) {
-    if (!ts.isMethodDeclaration(member) || !member.body || !member.name) continue
+    if (!ts.isMethodDeclaration(member) || !member.body || !member.name)
+      continue
     const methodName = formatMemberName(member.name)
     if (!recursiveNames.has(methodName)) continue
 
@@ -831,7 +875,8 @@ function build409CacheBusterReport(sourceFile, classDecl) {
   const report = []
 
   for (const member of classDecl.members) {
-    if (!ts.isMethodDeclaration(member) || !member.body || !member.name) continue
+    if (!ts.isMethodDeclaration(member) || !member.body || !member.name)
+      continue
     const methodName = formatMemberName(member.name)
 
     walk(member.body, (node) => {
@@ -880,7 +925,8 @@ function build409CacheBusterReport(sourceFile, classDecl) {
         statusCheckLine,
         retryCallee: lastRetry.callee,
         retryLine: lastRetry.line,
-        cacheBusterLine: cacheBusterCalls.length > 0 ? cacheBusterCalls[0].line : null,
+        cacheBusterLine:
+          cacheBusterCalls.length > 0 ? cacheBusterCalls[0].line : null,
         unconditional: hasUnconditional,
       })
     })
@@ -904,7 +950,8 @@ function buildTailPositionAwaitReport(sourceFile, classDecl, recursiveMethods) {
   const recursiveNames = new Set(recursiveMethods.map((m) => m.name))
 
   for (const member of classDecl.members) {
-    if (!ts.isMethodDeclaration(member) || !member.body || !member.name) continue
+    if (!ts.isMethodDeclaration(member) || !member.body || !member.name)
+      continue
     const methodName = formatMemberName(member.name)
     if (!recursiveNames.has(methodName)) continue
 
@@ -930,9 +977,7 @@ function buildTailPositionAwaitReport(sourceFile, classDecl, recursiveMethods) {
 
       const next = block.statements[stmtIndex + 1]
       const followedByBareReturn =
-        next &&
-        ts.isReturnStatement(next) &&
-        !next.expression
+        next && ts.isReturnStatement(next) && !next.expression
 
       if (!followedByBareReturn) return
 
@@ -952,6 +997,124 @@ function buildTailPositionAwaitReport(sourceFile, classDecl, recursiveMethods) {
   }
 
   return report.sort(compareReports)
+}
+
+/**
+ * Detects calls to subscriber-facing methods (#publish, #onMessages) inside
+ * error handling paths (catch blocks, status-check if-branches that throw/retry).
+ * Publishing messages from error handlers can deliver stale or partial data to
+ * subscribers — the fix for Bug #4 removed exactly this pattern from the 409 handler.
+ */
+const SUBSCRIBER_METHODS = new Set([`#publish`, `#onMessages`])
+
+function buildErrorPathPublishReport(sourceFile, classDecl) {
+  const report = []
+
+  for (const member of classDecl.members) {
+    if (!ts.isMethodDeclaration(member) || !member.body || !member.name)
+      continue
+    const methodName = formatMemberName(member.name)
+
+    // Check catch blocks
+    walk(member.body, (node) => {
+      if (ts.isCatchClause(node)) {
+        walk(node.block, (inner) => {
+          if (!ts.isCallExpression(inner)) return
+          const callee = getThisMemberName(inner.expression)
+          if (!callee || !SUBSCRIBER_METHODS.has(callee)) return
+
+          report.push({
+            method: methodName,
+            callee,
+            callLine: getLine(sourceFile, inner),
+            context: `catch`,
+            contextLine: getLine(sourceFile, node),
+            isInErrorPath: true,
+          })
+        })
+        return
+      }
+
+      // Check 4xx/5xx status-check if-blocks (e.g., if (e.status == 409))
+      if (ts.isIfStatement(node) && isHttpErrorStatusCheck(node.expression)) {
+        walk(node.thenStatement, (inner) => {
+          if (!ts.isCallExpression(inner)) return
+          const callee = getThisMemberName(inner.expression)
+          if (!callee || !SUBSCRIBER_METHODS.has(callee)) return
+
+          report.push({
+            method: methodName,
+            callee,
+            callLine: getLine(sourceFile, inner),
+            context: `status-${getStatusLiteral(node.expression)}`,
+            contextLine: getLine(sourceFile, node),
+            isInErrorPath: true,
+          })
+        })
+      }
+    })
+  }
+
+  return report.sort(compareReports)
+}
+
+/**
+ * Returns true if the expression checks an HTTP error status (4xx or 5xx).
+ * Recurses into && and || expressions.
+ */
+function isHttpErrorStatusCheck(expression) {
+  if (!ts.isBinaryExpression(expression)) return false
+
+  const op = expression.operatorToken.kind
+  if (
+    op === ts.SyntaxKind.EqualsEqualsToken ||
+    op === ts.SyntaxKind.EqualsEqualsEqualsToken
+  ) {
+    return (
+      (isHttpErrorLiteral(expression.left) &&
+        isStatusAccess(expression.right)) ||
+      (isHttpErrorLiteral(expression.right) && isStatusAccess(expression.left))
+    )
+  }
+
+  if (
+    op === ts.SyntaxKind.AmpersandAmpersandToken ||
+    op === ts.SyntaxKind.BarBarToken
+  ) {
+    return (
+      isHttpErrorStatusCheck(expression.left) ||
+      isHttpErrorStatusCheck(expression.right)
+    )
+  }
+
+  return false
+}
+
+function isHttpErrorLiteral(node) {
+  if (!ts.isNumericLiteral(node)) return false
+  const status = Number(node.text)
+  return status >= 400 && status < 600
+}
+
+function getStatusLiteral(expression) {
+  if (!ts.isBinaryExpression(expression)) return `unknown`
+  const op = expression.operatorToken.kind
+  if (
+    op === ts.SyntaxKind.EqualsEqualsToken ||
+    op === ts.SyntaxKind.EqualsEqualsEqualsToken
+  ) {
+    if (ts.isNumericLiteral(expression.left)) return expression.left.text
+    if (ts.isNumericLiteral(expression.right)) return expression.right.text
+  }
+  if (
+    op === ts.SyntaxKind.AmpersandAmpersandToken ||
+    op === ts.SyntaxKind.BarBarToken
+  ) {
+    const left = getStatusLiteral(expression.left)
+    if (left !== `unknown`) return left
+    return getStatusLiteral(expression.right)
+  }
+  return `unknown`
 }
 
 /**
@@ -993,7 +1156,9 @@ function is409StatusCheck(expression) {
     op === ts.SyntaxKind.AmpersandAmpersandToken ||
     op === ts.SyntaxKind.BarBarToken
   ) {
-    return is409StatusCheck(expression.left) || is409StatusCheck(expression.right)
+    return (
+      is409StatusCheck(expression.left) || is409StatusCheck(expression.right)
+    )
   }
 
   return false
@@ -1029,7 +1194,10 @@ function isInsideIfBlock(node, boundary) {
 
 function classifyRetryBound(sourceFile, catchClause, callNode) {
   const callLine = getLine(sourceFile, callNode)
-  const enclosingConditions = collectEnclosingIfConditions(catchClause, callNode)
+  const enclosingConditions = collectEnclosingIfConditions(
+    catchClause,
+    callNode
+  )
 
   if (findPriorCounterGuard(sourceFile, catchClause.block, callLine)) {
     return `counter`
@@ -1060,7 +1228,11 @@ function collectEnclosingIfConditions(catchClause, callNode) {
 
   while (current && current !== catchClause) {
     const parent = current.parent
-    if (parent && ts.isIfStatement(parent) && current === parent.thenStatement) {
+    if (
+      parent &&
+      ts.isIfStatement(parent) &&
+      current === parent.thenStatement
+    ) {
       conditions.push(parent.expression)
     }
     current = current.parent

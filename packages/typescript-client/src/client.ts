@@ -899,9 +899,9 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
       if (e.status == 409) {
         // Upon receiving a 409, start from scratch with the newly
-        // provided shape handle. If the header is missing (e.g. proxy
-        // stripped it), reset without a handle and use a random
-        // cache-buster query param to ensure the retry URL is unique.
+        // provided shape handle (if present). An unconditional cache
+        // buster ensures the retry URL is always unique regardless of
+        // whether the server returns a new, same, or missing handle.
 
         // Store the current shape URL as expired to avoid future 409s
         if (this.#syncState.handle) {

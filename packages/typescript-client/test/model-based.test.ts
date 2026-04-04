@@ -172,11 +172,10 @@ class FetchGate {
     if (init?.signal?.aborted) return Response.error()
     this._requestCount++
 
-    // Track URLs for invariant checking
     const urlStr = input.toString()
     this.prevUrl = this.lastUrl
     this.lastUrl = urlStr
-    if (urlStr.length > this.maxUrlLength) this.maxUrlLength = urlStr.length
+    this.maxUrlLength = Math.max(this.maxUrlLength, urlStr.length)
 
     if (this._onRequest) {
       const cb = this._onRequest
@@ -244,12 +243,16 @@ async function waitUntilSettled(
   )
 }
 
-async function createStreamReal(): Promise<StreamReal> {
-  // Reset all shared state to prevent cross-iteration pollution
+/** Reset all shared state to prevent cross-iteration pollution. */
+function resetSharedState(): void {
   responseSeq = 0
   localStorage.clear()
   expiredShapesCache.clear()
   upToDateTracker.clear()
+}
+
+async function createStreamReal(): Promise<StreamReal> {
+  resetSharedState()
 
   const initialHandle = `test-handle`
   const gate = new FetchGate()
@@ -317,14 +320,25 @@ const MAX_URL_LENGTH = 2000
  * and handle/offset mismatches (bug #10).
  */
 function assertGlobalInvariants(r: StreamReal): void {
-  // URL length is bounded (catches unbounded suffix growth like -next-next-next)
   expect(r.gate.maxUrlLength).toBeLessThan(MAX_URL_LENGTH)
 
-  // After any successful (non-error) response, isUpToDate state should be
-  // consistent with what we observe (no silent stuck states)
   if (!r.subscriberError && r.stream.isUpToDate) {
-    // If the stream thinks it's up-to-date, it should have synced at some point
     expect(r.stream.lastSyncedAt()).toBeDefined()
+  }
+}
+
+/**
+ * Asserts that a 409 response produced a unique retry URL, catching
+ * identity-loop bugs where the retry URL matches the pre-409 URL.
+ */
+function assert409ProducedUniqueUrl(
+  r: StreamReal,
+  prevUrl: string | null
+): void {
+  expect(r.subscriberError).toBeNull()
+  assertGlobalInvariants(r)
+  if (prevUrl) {
+    expect(r.gate.lastUrl).not.toBe(prevUrl)
   }
 }
 
@@ -335,16 +349,28 @@ function assertGlobalInvariants(r: StreamReal): void {
 // matches. fast-check generates adversarial sequences and shrinks
 // failures to minimal reproductions.
 
+/**
+ * Shared logic for successful responses that reset the consecutive error
+ * counter and should not produce a subscriber error.
+ */
+async function runSuccessResponse(
+  m: StreamModel,
+  r: StreamReal,
+  response: Response
+): Promise<void> {
+  m.consecutiveErrors = 0
+  await r.respond(response)
+  expect(r.subscriberError).toBeNull()
+  assertGlobalInvariants(r)
+}
+
 /** 200 with data — counter resets to 0 */
 class Respond200DataCmd implements fc.AsyncCommand<StreamModel, StreamReal> {
   check(m: Readonly<StreamModel>): boolean {
     return !m.terminated
   }
   async run(m: StreamModel, r: StreamReal): Promise<void> {
-    m.consecutiveErrors = 0
-    await r.respond(make200WithData(r.currentHandle))
-    expect(r.subscriberError).toBeNull()
-    assertGlobalInvariants(r)
+    await runSuccessResponse(m, r, make200WithData(r.currentHandle))
   }
   toString(): string {
     return `Respond200Data`
@@ -359,10 +385,7 @@ class Respond200UpToDateCmd
     return !m.terminated
   }
   async run(m: StreamModel, r: StreamReal): Promise<void> {
-    m.consecutiveErrors = 0
-    await r.respond(make200UpToDate(r.currentHandle))
-    expect(r.subscriberError).toBeNull()
-    assertGlobalInvariants(r)
+    await runSuccessResponse(m, r, make200UpToDate(r.currentHandle))
   }
   toString(): string {
     return `Respond200UpToDate`
@@ -393,13 +416,33 @@ class Respond204Cmd implements fc.AsyncCommand<StreamModel, StreamReal> {
     return !m.terminated
   }
   async run(m: StreamModel, r: StreamReal): Promise<void> {
-    m.consecutiveErrors = 0
-    await r.respond(make204(r.currentHandle))
-    expect(r.subscriberError).toBeNull()
-    assertGlobalInvariants(r)
+    await runSuccessResponse(m, r, make204(r.currentHandle))
   }
   toString(): string {
     return `Respond204`
+  }
+}
+
+/**
+ * Shared logic for error responses that increment the consecutive error
+ * counter and may terminate the stream after MAX_CONSECUTIVE_ERROR_RETRIES.
+ */
+async function runRetryableErrorResponse(
+  m: StreamModel,
+  r: StreamReal,
+  response: Response
+): Promise<void> {
+  m.consecutiveErrors++
+  const shouldTerminate = m.consecutiveErrors > MAX_CONSECUTIVE_ERROR_RETRIES
+  if (shouldTerminate) m.terminated = true
+
+  await r.respond(response)
+
+  if (shouldTerminate) {
+    expect(r.subscriberError).not.toBeNull()
+  } else {
+    expect(r.subscriberError).toBeNull()
+    assertGlobalInvariants(r)
   }
 }
 
@@ -409,18 +452,7 @@ class Respond400Cmd implements fc.AsyncCommand<StreamModel, StreamReal> {
     return !m.terminated
   }
   async run(m: StreamModel, r: StreamReal): Promise<void> {
-    m.consecutiveErrors++
-    const shouldTerminate = m.consecutiveErrors > MAX_CONSECUTIVE_ERROR_RETRIES
-    if (shouldTerminate) m.terminated = true
-
-    await r.respond(make400())
-
-    if (shouldTerminate) {
-      expect(r.subscriberError).not.toBeNull()
-    } else {
-      expect(r.subscriberError).toBeNull()
-      assertGlobalInvariants(r)
-    }
+    await runRetryableErrorResponse(m, r, make400())
   }
   toString(): string {
     return `Respond400`
@@ -441,13 +473,7 @@ class Respond409Cmd implements fc.AsyncCommand<StreamModel, StreamReal> {
     const newHandle = `handle-${nextSeq()}`
     await r.respond(make409(newHandle))
     r.currentHandle = newHandle
-    expect(r.subscriberError).toBeNull()
-    assertGlobalInvariants(r)
-    // After 409, the retry URL must differ from the pre-409 URL
-    // (catches identity-loop bugs like bug #1 and #6)
-    if (prevUrl) {
-      expect(r.gate.lastUrl).not.toBe(prevUrl)
-    }
+    assert409ProducedUniqueUrl(r, prevUrl)
   }
   toString(): string {
     return `Respond409`
@@ -462,18 +488,7 @@ class RespondMalformed200Cmd
     return !m.terminated
   }
   async run(m: StreamModel, r: StreamReal): Promise<void> {
-    m.consecutiveErrors++
-    const shouldTerminate = m.consecutiveErrors > MAX_CONSECUTIVE_ERROR_RETRIES
-    if (shouldTerminate) m.terminated = true
-
-    await r.respond(makeMalformed200(r.currentHandle))
-
-    if (shouldTerminate) {
-      expect(r.subscriberError).not.toBeNull()
-    } else {
-      expect(r.subscriberError).toBeNull()
-      assertGlobalInvariants(r)
-    }
+    await runRetryableErrorResponse(m, r, makeMalformed200(r.currentHandle))
   }
   toString(): string {
     return `RespondMalformed200`
@@ -514,12 +529,8 @@ class Respond409NoHandleCmd
   async run(_m: StreamModel, r: StreamReal): Promise<void> {
     const prevUrl = r.gate.lastUrl
     await r.respond(make409NoHandle())
-    r.currentHandle = `` // handle cleared after 409 with no handle
-    expect(r.subscriberError).toBeNull()
-    assertGlobalInvariants(r)
-    if (prevUrl) {
-      expect(r.gate.lastUrl).not.toBe(prevUrl)
-    }
+    r.currentHandle = ``
+    assert409ProducedUniqueUrl(r, prevUrl)
   }
   toString(): string {
     return `Respond409NoHandle`
@@ -537,14 +548,8 @@ class Respond409SameHandleCmd
   }
   async run(_m: StreamModel, r: StreamReal): Promise<void> {
     const prevUrl = r.gate.lastUrl
-    // 409 with the SAME handle — tests cache buster for handle recycling
     await r.respond(make409(r.currentHandle))
-    // Don't update r.currentHandle — it's the same
-    expect(r.subscriberError).toBeNull()
-    assertGlobalInvariants(r)
-    if (prevUrl) {
-      expect(r.gate.lastUrl).not.toBe(prevUrl)
-    }
+    assert409ProducedUniqueUrl(r, prevUrl)
   }
   toString(): string {
     return `Respond409SameHandle`
@@ -555,10 +560,7 @@ class Respond409SameHandleCmd
 
 describe(`ShapeStream targeted scenario tests`, () => {
   it(`409 does not publish messages to subscribers`, async () => {
-    responseSeq = 0
-    localStorage.clear()
-    expiredShapesCache.clear()
-    upToDateTracker.clear()
+    resetSharedState()
 
     const initialHandle = `test-handle`
     const gate = new FetchGate()
