@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import * as fc from 'fast-check'
 import { ShapeStream } from '../src'
 import { expiredShapesCache } from '../src/expired-shapes-cache'
@@ -8,7 +8,9 @@ import { upToDateTracker } from '../src/up-to-date-tracker'
 //
 // Each factory generates a valid Electric protocol response. A
 // monotonically increasing sequence number keeps offsets and cursors
-// unique across the entire test run.
+// unique across the test run, preventing stale-response detection
+// from firing unexpectedly. All factories accept a `handle` parameter
+// so that responses stay consistent after 409 rotations.
 
 let responseSeq = 0
 
@@ -16,7 +18,19 @@ function nextSeq(): number {
   return ++responseSeq
 }
 
-function make200WithData(): Response {
+/** All Electric headers — valid for both live and non-live requests. */
+function allHeaders(handle: string): Record<string, string> {
+  const seq = responseSeq // use current seq without incrementing
+  return {
+    'electric-handle': handle,
+    'electric-offset': `${seq}_0`,
+    'electric-schema': `{"id":"int4"}`,
+    'electric-cursor': `cursor-${seq}`,
+  }
+}
+
+/** Valid 200 with one data message. Resets the error retry counter. */
+function make200WithData(handle: string): Response {
   const seq = nextSeq()
   return new Response(
     JSON.stringify([
@@ -27,47 +41,41 @@ function make200WithData(): Response {
         key: `key-${seq}`,
       },
     ]),
-    {
-      status: 200,
-      headers: {
-        'electric-handle': `test-handle`,
-        'electric-offset': `${seq}_0`,
-        'electric-schema': `{"id":"int4"}`,
-        'electric-cursor': `cursor-${seq}`,
-      },
-    }
+    { status: 200, headers: allHeaders(handle) }
   )
 }
 
-function make200UpToDate(): Response {
-  const seq = nextSeq()
+/** Valid 200 with up-to-date control message. Resets the error retry counter. */
+function make200UpToDate(handle: string): Response {
+  nextSeq()
   return new Response(
     JSON.stringify([{ headers: { control: `up-to-date` } }]),
     {
       status: 200,
-      headers: {
-        'electric-handle': `test-handle`,
-        'electric-offset': `${seq}_0`,
-        'electric-schema': `{"id":"int4"}`,
-        'electric-cursor': `cursor-${seq}`,
-        'electric-up-to-date': ``,
-      },
+      headers: { ...allHeaders(handle), 'electric-up-to-date': `` },
     }
   )
 }
 
-function make204(): Response {
-  const seq = nextSeq()
-  return new Response(null, {
-    status: 204,
-    headers: {
-      'electric-handle': `test-handle`,
-      'electric-offset': `${seq}_0`,
-      'electric-cursor': `cursor-${seq}`,
-    },
+/** Valid 200 with empty body []. Does NOT reset the error retry counter. */
+function make200Empty(handle: string): Response {
+  nextSeq()
+  return new Response(JSON.stringify([]), {
+    status: 200,
+    headers: allHeaders(handle),
   })
 }
 
+/** 204 No Content. Resets the error retry counter. */
+function make204(handle: string): Response {
+  nextSeq()
+  return new Response(null, {
+    status: 204,
+    headers: allHeaders(handle),
+  })
+}
+
+/** 400 Bad Request. Bypasses backoff, goes straight to onError. */
 function make400(): Response {
   return new Response(`Bad Request`, {
     status: 400,
@@ -75,16 +83,42 @@ function make400(): Response {
   })
 }
 
-function makeMalformed200(): Response {
-  const seq = nextSeq()
+/**
+ * 409 Conflict (shape rotation). Caught by #requestShape internally —
+ * does NOT go through onError, does NOT affect the retry counter.
+ * Returns a unique new handle so that subsequent responses avoid
+ * stale-cache detection.
+ */
+function make409(newHandle: string): Response {
+  return new Response(
+    JSON.stringify([{ headers: { control: `must-refetch` } }]),
+    {
+      status: 409,
+      headers: {
+        'electric-handle': newHandle,
+        'content-type': `application/json`,
+      },
+    }
+  )
+}
+
+/** Valid headers but non-array body. Throws FetchError → onError. */
+function makeMalformed200(handle: string): Response {
+  nextSeq()
   return new Response(JSON.stringify({ error: `not an array` }), {
     status: 200,
-    headers: {
-      'electric-handle': `test-handle`,
-      'electric-offset': `${seq}_0`,
-      'electric-schema': `{"id":"int4"}`,
-      'electric-cursor': `cursor-${seq}`,
-    },
+    headers: allHeaders(handle),
+  })
+}
+
+/**
+ * 200 OK but missing required Electric headers.
+ * Throws MissingHeadersError which is NOT retryable — terminates immediately.
+ */
+function make200MissingHeaders(): Response {
+  return new Response(JSON.stringify([]), {
+    status: 200,
+    headers: {},
   })
 }
 
@@ -115,7 +149,6 @@ class FetchGate {
     if (init?.signal?.aborted) return Response.error()
     this._requestCount++
 
-    // Notify that a new request arrived
     if (this._onRequest) {
       const cb = this._onRequest
       this._onRequest = null
@@ -157,23 +190,24 @@ class FetchGate {
 interface StreamReal {
   gate: FetchGate
   subscriberError: Error | null
+  currentHandle: string
   respond(response: Response): Promise<void>
   cleanup(): void
 }
 
 /**
- * Yield to the event loop until the gate has a pending request,
- * meaning the stream has fully processed the previous response and
- * is blocked waiting for the next one.
+ * Yield to the event loop until the gate has a pending request
+ * (stream processed the response and is blocked on next fetch)
+ * or the stream terminated (subscriber error set).
  */
-async function waitUntilBlocked(
+async function waitUntilSettled(
   gate: FetchGate,
-  subscriberErrorRef: { error: Error | null },
+  errorRef: { error: Error | null },
   maxYields = 50
 ): Promise<void> {
   for (let i = 0; i < maxYields; i++) {
     await new Promise((r) => setTimeout(r, 0))
-    if (gate.hasPendingRequest || subscriberErrorRef.error !== null) return
+    if (gate.hasPendingRequest || errorRef.error !== null) return
   }
   throw new Error(
     `Stream did not settle: no pending request and no subscriber error after ${maxYields} yields`
@@ -181,10 +215,17 @@ async function waitUntilBlocked(
 }
 
 async function createStreamReal(): Promise<StreamReal> {
+  // Reset all shared state to prevent cross-iteration pollution
   responseSeq = 0
+  localStorage.clear()
+  expiredShapesCache.clear()
+  upToDateTracker.clear()
+
+  const initialHandle = `test-handle`
   const gate = new FetchGate()
   const aborter = new AbortController()
   const errorRef = { error: null as Error | null }
+  const handleRef = { current: initialHandle }
 
   const stream = new ShapeStream({
     url: `https://example.com/v1/shape`,
@@ -204,18 +245,24 @@ async function createStreamReal(): Promise<StreamReal> {
 
   // Wait for the first fetch, then bootstrap into live mode
   await gate.waitForRequest()
-  gate.provideResponse(make200UpToDate())
-  await waitUntilBlocked(gate, errorRef)
+  gate.provideResponse(make200UpToDate(initialHandle))
+  await waitUntilSettled(gate, errorRef)
 
   return {
     gate,
     get subscriberError() {
       return errorRef.error
     },
+    get currentHandle() {
+      return handleRef.current
+    },
+    set currentHandle(h: string) {
+      handleRef.current = h
+    },
     async respond(response: Response) {
       await gate.waitForRequest()
       gate.provideResponse(response)
-      await waitUntilBlocked(gate, errorRef)
+      await waitUntilSettled(gate, errorRef)
     },
     cleanup() {
       aborter.abort()
@@ -234,18 +281,19 @@ const MAX_CONSECUTIVE_ERROR_RETRIES = 50
 
 // ─── Commands ───────────────────────────────────────────────────────
 //
-// Each command represents one server response. The `check` method
-// gates on the model (skip if stream already terminated), and the
-// `run` method updates the model, feeds the response to the real
-// system, and asserts consistency.
+// Each command represents one server response. The model predicts
+// the expected state change, and assertions verify the real system
+// matches. fast-check generates adversarial sequences and shrinks
+// failures to minimal reproductions.
 
+/** 200 with data — counter resets to 0 */
 class Respond200DataCmd implements fc.AsyncCommand<StreamModel, StreamReal> {
   check(m: Readonly<StreamModel>): boolean {
     return !m.terminated
   }
   async run(m: StreamModel, r: StreamReal): Promise<void> {
     m.consecutiveErrors = 0
-    await r.respond(make200WithData())
+    await r.respond(make200WithData(r.currentHandle))
     expect(r.subscriberError).toBeNull()
   }
   toString(): string {
@@ -253,6 +301,7 @@ class Respond200DataCmd implements fc.AsyncCommand<StreamModel, StreamReal> {
   }
 }
 
+/** 200 with up-to-date control — counter resets to 0 */
 class Respond200UpToDateCmd
   implements fc.AsyncCommand<StreamModel, StreamReal>
 {
@@ -261,7 +310,7 @@ class Respond200UpToDateCmd
   }
   async run(m: StreamModel, r: StreamReal): Promise<void> {
     m.consecutiveErrors = 0
-    await r.respond(make200UpToDate())
+    await r.respond(make200UpToDate(r.currentHandle))
     expect(r.subscriberError).toBeNull()
   }
   toString(): string {
@@ -269,13 +318,32 @@ class Respond200UpToDateCmd
   }
 }
 
+/**
+ * 200 with empty body [] — does NOT reset counter.
+ * The counter reset in #onMessages is gated by `if (batch.length === 0) return`.
+ */
+class Respond200EmptyCmd implements fc.AsyncCommand<StreamModel, StreamReal> {
+  check(m: Readonly<StreamModel>): boolean {
+    return !m.terminated
+  }
+  async run(_m: StreamModel, r: StreamReal): Promise<void> {
+    // Empty batch → early return → counter unchanged
+    await r.respond(make200Empty(r.currentHandle))
+    expect(r.subscriberError).toBeNull()
+  }
+  toString(): string {
+    return `Respond200Empty`
+  }
+}
+
+/** 204 No Content — counter resets to 0 */
 class Respond204Cmd implements fc.AsyncCommand<StreamModel, StreamReal> {
   check(m: Readonly<StreamModel>): boolean {
     return !m.terminated
   }
   async run(m: StreamModel, r: StreamReal): Promise<void> {
     m.consecutiveErrors = 0
-    await r.respond(make204())
+    await r.respond(make204(r.currentHandle))
     expect(r.subscriberError).toBeNull()
   }
   toString(): string {
@@ -283,6 +351,7 @@ class Respond204Cmd implements fc.AsyncCommand<StreamModel, StreamReal> {
   }
 }
 
+/** 400 Bad Request — counter increments, may terminate at >50 */
 class Respond400Cmd implements fc.AsyncCommand<StreamModel, StreamReal> {
   check(m: Readonly<StreamModel>): boolean {
     return !m.terminated
@@ -305,6 +374,27 @@ class Respond400Cmd implements fc.AsyncCommand<StreamModel, StreamReal> {
   }
 }
 
+/**
+ * 409 Conflict — caught internally by #requestShape, does NOT go
+ * through onError, does NOT affect the retry counter. Rotates to
+ * a unique handle so subsequent responses avoid stale-cache detection.
+ */
+class Respond409Cmd implements fc.AsyncCommand<StreamModel, StreamReal> {
+  check(m: Readonly<StreamModel>): boolean {
+    return !m.terminated
+  }
+  async run(_m: StreamModel, r: StreamReal): Promise<void> {
+    const newHandle = `handle-${nextSeq()}`
+    await r.respond(make409(newHandle))
+    r.currentHandle = newHandle
+    expect(r.subscriberError).toBeNull()
+  }
+  toString(): string {
+    return `Respond409`
+  }
+}
+
+/** Malformed 200 (non-array body) — counter increments, may terminate */
 class RespondMalformed200Cmd
   implements fc.AsyncCommand<StreamModel, StreamReal>
 {
@@ -316,7 +406,7 @@ class RespondMalformed200Cmd
     const shouldTerminate = m.consecutiveErrors > MAX_CONSECUTIVE_ERROR_RETRIES
     if (shouldTerminate) m.terminated = true
 
-    await r.respond(makeMalformed200())
+    await r.respond(makeMalformed200(r.currentHandle))
 
     if (shouldTerminate) {
       expect(r.subscriberError).not.toBeNull()
@@ -329,18 +419,29 @@ class RespondMalformed200Cmd
   }
 }
 
+/**
+ * 200 with missing Electric headers — throws MissingHeadersError which
+ * is NOT retryable. Stream terminates immediately regardless of counter.
+ */
+class RespondMissingHeadersCmd
+  implements fc.AsyncCommand<StreamModel, StreamReal>
+{
+  check(m: Readonly<StreamModel>): boolean {
+    return !m.terminated
+  }
+  async run(m: StreamModel, r: StreamReal): Promise<void> {
+    m.terminated = true
+    await r.respond(make200MissingHeaders())
+    expect(r.subscriberError).not.toBeNull()
+  }
+  toString(): string {
+    return `RespondMissingHeaders`
+  }
+}
+
 // ─── Property Tests ─────────────────────────────────────────────────
 
 describe(`ShapeStream model-based property tests`, () => {
-  beforeEach(() => {
-    localStorage.clear()
-    expiredShapesCache.clear()
-    upToDateTracker.clear()
-  })
-
-  // Cleanup is handled per-run inside the property via real.cleanup()
-  afterEach(() => {})
-
   it(`bounded retry: any mix of server responses respects the retry limit and counter resets`, async () => {
     await fc.assert(
       fc.asyncProperty(
@@ -348,9 +449,12 @@ describe(`ShapeStream model-based property tests`, () => {
           [
             fc.constant(new Respond200DataCmd()),
             fc.constant(new Respond200UpToDateCmd()),
+            fc.constant(new Respond200EmptyCmd()),
             fc.constant(new Respond204Cmd()),
             fc.constant(new Respond400Cmd()),
+            fc.constant(new Respond409Cmd()),
             fc.constant(new RespondMalformed200Cmd()),
+            fc.constant(new RespondMissingHeadersCmd()),
           ],
           { maxCommands: 80 }
         ),
@@ -367,7 +471,7 @@ describe(`ShapeStream model-based property tests`, () => {
           }
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 200 }
     )
-  }, 60_000)
+  }, 120_000)
 })
