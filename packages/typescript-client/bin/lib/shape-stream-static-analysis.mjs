@@ -116,6 +116,7 @@ export function analyzeTypeScriptClient(options = {}) {
     reports: {
       recursiveMethods: clientAnalysis.recursiveMethods,
       sharedFieldReport: clientAnalysis.sharedFieldReport,
+      unboundedRetryReport: clientAnalysis.unboundedRetryReport,
       ignoredActionReport: stateMachineAnalysis.ignoredActionReport,
       protocolLiteralReport: protocolLiteralAnalysis.report,
     },
@@ -136,6 +137,11 @@ export function analyzeShapeStreamClient(filePath = CLIENT_FILE) {
   const classInfo = buildClassInfo(sourceFile, classDecl)
   const recursiveMethods = buildRecursiveMethodReport(classInfo)
   const sharedFieldReport = buildSharedFieldReport(classInfo)
+  const unboundedRetryReport = buildUnboundedRetryReport(
+    sourceFile,
+    classDecl,
+    recursiveMethods
+  )
   const findings = sharedFieldReport
     .filter((report) => report.risky)
     .map((report) => ({
@@ -172,12 +178,33 @@ export function analyzeShapeStreamClient(filePath = CLIENT_FILE) {
         reasons: report.reasons,
       },
     }))
+    .concat(
+      unboundedRetryReport
+        .filter((entry) => !entry.hasBoundCheck)
+        .map((entry) => ({
+          kind: `unbounded-retry-loop`,
+          severity: `warning`,
+          title: `Unbounded recursive retry: ${entry.method} -> ${entry.callee}`,
+          message:
+            `${entry.method} contains a recursive call to ${entry.callee} at line ${entry.callLine} ` +
+            `inside a catch block with no detectable retry bound (counter, type guard, or abort check). ` +
+            `This can cause infinite retries when the error condition persists.`,
+          file: filePath,
+          line: entry.callLine,
+          locations: [
+            { file: filePath, line: entry.catchLine, label: `catch block` },
+            { file: filePath, line: entry.callLine, label: `recursive call` },
+          ],
+          details: entry,
+        }))
+    )
 
   return {
     sourceFile,
     classInfo,
     recursiveMethods,
     sharedFieldReport,
+    unboundedRetryReport,
     findings,
   }
 }
@@ -410,6 +437,17 @@ export function formatAnalysisResult(result, options = {}) {
       lines.push(
         `  ${flag} ${report.field}: writers=${report.writerMethods.join(`, `) || `none`} ` +
           `readers=${report.readerMethods.join(`, `) || `none`}`
+      )
+    }
+
+    lines.push(``)
+    lines.push(`Unbounded Retry Report:`)
+    for (const report of result.reports.unboundedRetryReport) {
+      const flag = report.hasBoundCheck ? `-` : `!`
+      lines.push(
+        `  ${flag} ${report.method} -> ${report.callee} ` +
+          `(catch:${report.catchLine} call:${report.callLine}) ` +
+          `bound=${report.boundKind ?? `none`}`
       )
     }
 
@@ -663,6 +701,187 @@ function buildSharedFieldReport(classInfo) {
   }
 
   return reports.sort(compareReports)
+}
+
+function buildUnboundedRetryReport(sourceFile, classDecl, recursiveMethods) {
+  const report = []
+  const recursiveNames = new Set(recursiveMethods.map((m) => m.name))
+
+  for (const member of classDecl.members) {
+    if (!ts.isMethodDeclaration(member) || !member.body || !member.name) continue
+    const methodName = formatMemberName(member.name)
+    if (!recursiveNames.has(methodName)) continue
+
+    walk(member.body, (node) => {
+      if (!ts.isCatchClause(node)) return
+
+      const catchLine = getLine(sourceFile, node)
+
+      walk(node.block, (inner) => {
+        if (!ts.isCallExpression(inner)) return
+        const callee = getThisMemberName(inner.expression)
+        if (!callee || !recursiveNames.has(callee)) return
+
+        const callLine = getLine(sourceFile, inner)
+        const boundKind = classifyRetryBound(sourceFile, node, inner)
+
+        report.push({
+          method: methodName,
+          callee,
+          callLine,
+          catchLine,
+          hasBoundCheck: boundKind !== null,
+          boundKind,
+        })
+      })
+    })
+  }
+
+  return report.sort(compareReports)
+}
+
+function classifyRetryBound(sourceFile, catchClause, callNode) {
+  const callLine = getLine(sourceFile, callNode)
+  const enclosingConditions = collectEnclosingIfConditions(catchClause, callNode)
+
+  if (findPriorCounterGuard(sourceFile, catchClause.block, callLine)) {
+    return `counter`
+  }
+
+  for (const condition of enclosingConditions) {
+    if (containsThisFieldComparison(condition)) return `counter`
+  }
+
+  for (const condition of enclosingConditions) {
+    if (containsInstanceof(condition) || containsPropertyEquality(condition)) {
+      return `type-guard`
+    }
+  }
+
+  for (const condition of enclosingConditions) {
+    if (containsAbortedAccess(condition)) return `abort-signal`
+  }
+
+  if (enclosingConditions.length > 0) return `callback-gate`
+
+  return null
+}
+
+function collectEnclosingIfConditions(catchClause, callNode) {
+  const conditions = []
+  let current = callNode.parent
+
+  while (current && current !== catchClause) {
+    const parent = current.parent
+    if (parent && ts.isIfStatement(parent) && current === parent.thenStatement) {
+      conditions.push(parent.expression)
+    }
+    current = current.parent
+  }
+
+  return conditions
+}
+
+function findPriorCounterGuard(sourceFile, block, beforeLine) {
+  let found = false
+  walk(block, (node) => {
+    if (found) return
+    if (!ts.isIfStatement(node)) return
+    if (getLine(sourceFile, node) >= beforeLine) return
+    if (!containsThisFieldComparison(node.expression)) return
+    if (!containsExitStatement(node.thenStatement)) return
+    found = true
+  })
+  return found
+}
+
+function containsInstanceof(node) {
+  let found = false
+  walk(node, (inner) => {
+    if (found) return
+    if (
+      ts.isBinaryExpression(inner) &&
+      inner.operatorToken.kind === ts.SyntaxKind.InstanceOfKeyword
+    ) {
+      found = true
+    }
+  })
+  return found
+}
+
+function containsPropertyEquality(node) {
+  let found = false
+  walk(node, (inner) => {
+    if (found) return
+    if (!ts.isBinaryExpression(inner)) return
+    const op = inner.operatorToken.kind
+    if (
+      op !== ts.SyntaxKind.EqualsEqualsToken &&
+      op !== ts.SyntaxKind.EqualsEqualsEqualsToken
+    ) {
+      return
+    }
+    if (
+      ts.isPropertyAccessExpression(inner.left) ||
+      ts.isPropertyAccessExpression(inner.right)
+    ) {
+      found = true
+    }
+  })
+  return found
+}
+
+function containsAbortedAccess(node) {
+  let found = false
+  walk(node, (inner) => {
+    if (found) return
+    if (
+      ts.isPropertyAccessExpression(inner) &&
+      inner.name.text === `aborted`
+    ) {
+      found = true
+    }
+  })
+  return found
+}
+
+function containsThisFieldComparison(node) {
+  let found = false
+  walk(node, (inner) => {
+    if (found) return
+    if (!ts.isBinaryExpression(inner)) return
+    const op = inner.operatorToken.kind
+    if (
+      op !== ts.SyntaxKind.GreaterThanToken &&
+      op !== ts.SyntaxKind.GreaterThanEqualsToken &&
+      op !== ts.SyntaxKind.LessThanToken &&
+      op !== ts.SyntaxKind.LessThanEqualsToken
+    ) {
+      return
+    }
+    if (isThisFieldAccess(inner.left) || isThisFieldAccess(inner.right)) {
+      found = true
+    }
+  })
+  return found
+}
+
+function isThisFieldAccess(node) {
+  return (
+    ts.isPropertyAccessExpression(node) &&
+    node.expression.kind === ts.SyntaxKind.ThisKeyword
+  )
+}
+
+function containsExitStatement(node) {
+  let found = false
+  walk(node, (inner) => {
+    if (found) return
+    if (ts.isReturnStatement(inner) || ts.isThrowStatement(inner)) {
+      found = true
+    }
+  })
+  return found
 }
 
 function stronglyConnectedComponents(graph) {

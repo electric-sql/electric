@@ -14,10 +14,20 @@ interface RecursiveMethodReport {
   name: string
 }
 
+interface UnboundedRetryReport {
+  method: string
+  callee: string
+  callLine: number
+  catchLine: number
+  hasBoundCheck: boolean
+  boundKind: string | null
+}
+
 interface TypeScriptClientAnalysisResult {
   findings: AnalysisFinding[]
   reports: {
     recursiveMethods: RecursiveMethodReport[]
+    unboundedRetryReport: UnboundedRetryReport[]
   }
 }
 
@@ -71,6 +81,22 @@ describe(`shape-stream static analysis`, () => {
     )
 
     expect(ignoredActionFindings).toEqual([])
+  })
+
+  it(`does not report unbounded retry loops in recursive catch blocks`, async () => {
+    const { analyzeTypeScriptClient } = await loadAnalyzerModule()
+    const result = analyzeTypeScriptClient()
+    const unboundedFindings = result.findings.filter(
+      (entry) => entry.kind === `unbounded-retry-loop`
+    )
+
+    expect(unboundedFindings).toEqual([])
+
+    // Every recursive call in a catch block should have a recognizable bound
+    // (counter check, type guard, abort signal, or callback gate)
+    for (const entry of result.reports.unboundedRetryReport) {
+      expect(entry.hasBoundCheck).toBe(true)
+    }
   })
 
   it(`reports near-miss Electric protocol literals`, async () => {
