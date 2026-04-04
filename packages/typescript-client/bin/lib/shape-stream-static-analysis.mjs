@@ -1022,6 +1022,7 @@ function buildErrorPathPublishReport(sourceFile, classDecl) {
           if (!ts.isCallExpression(inner)) return
           const callee = getThisMemberName(inner.expression)
           if (!callee || !SUBSCRIBER_METHODS.has(callee)) return
+          if (isStaticControlMessagePublish(inner)) return
 
           report.push({
             method: methodName,
@@ -1041,6 +1042,7 @@ function buildErrorPathPublishReport(sourceFile, classDecl) {
           if (!ts.isCallExpression(inner)) return
           const callee = getThisMemberName(inner.expression)
           if (!callee || !SUBSCRIBER_METHODS.has(callee)) return
+          if (isStaticControlMessagePublish(inner)) return
 
           report.push({
             method: methodName,
@@ -1056,6 +1058,18 @@ function buildErrorPathPublishReport(sourceFile, classDecl) {
   }
 
   return report.sort(compareReports)
+}
+
+/**
+ * Returns true if a call expression is a #publish([{ headers: { control: ... } }])
+ * with a static array literal containing only object literals. These synthetic
+ * control-only publishes are intentional (e.g., the must-refetch notification
+ * in the 409 handler) and should not trigger the error-path-publish rule.
+ */
+function isStaticControlMessagePublish(callExpr) {
+  const [firstArg] = callExpr.arguments
+  if (!firstArg || !ts.isArrayLiteralExpression(firstArg)) return false
+  return firstArg.elements.every((el) => ts.isObjectLiteralExpression(el))
 }
 
 /**

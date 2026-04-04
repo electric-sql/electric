@@ -559,7 +559,7 @@ class Respond409SameHandleCmd
 // ─── Scenario Tests ────────────────────────────────────────────────
 
 describe(`ShapeStream targeted scenario tests`, () => {
-  it(`409 does not publish messages to subscribers`, async () => {
+  it(`409 publishes only a synthetic must-refetch control message`, async () => {
     resetSharedState()
 
     const initialHandle = `test-handle`
@@ -593,13 +593,17 @@ describe(`ShapeStream targeted scenario tests`, () => {
 
     receivedBatches.length = 0
 
-    // Send a 409 with a JSON body — the must-refetch control message
+    // Send a 409 — client resets and publishes a synthetic must-refetch
     await gate.waitForRequest()
     gate.provideResponse(make409(`new-handle`))
     await waitUntilSettled(gate, errorRef)
 
-    // Subscriber should NOT have received any messages from the 409
-    expect(receivedBatches).toEqual([])
+    // Subscriber should receive only the synthetic must-refetch control
+    // message — no data rows from the raw 409 response body
+    expect(receivedBatches).toHaveLength(1)
+    expect(receivedBatches[0]).toEqual([
+      { headers: { control: `must-refetch` } },
+    ])
 
     aborter.abort()
   })

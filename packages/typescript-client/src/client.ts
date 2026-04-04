@@ -920,6 +920,12 @@ export class ShapeStream<T extends Row<unknown> = Row>
         const nextRequestShapeCacheBuster = createCacheBuster()
         this.#reset(newShapeHandle)
 
+        // Notify subscribers that data must be re-fetched so they can
+        // clear accumulated state (e.g., Shape clears its row map).
+        // We publish a synthetic control message rather than the raw 409
+        // body to avoid delivering stale data rows to subscribers.
+        await this.#publish([{ headers: { control: `must-refetch` } }])
+
         return this.#requestShape(nextRequestShapeCacheBuster)
       } else {
         // errors that have reached this point are not actionable without

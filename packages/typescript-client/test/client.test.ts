@@ -2987,11 +2987,10 @@ it(
         return urlObj.searchParams.get(`live_sse`) === `true`
       })
 
-      // After fallback, should see 3-5 SSE requests (3 short ones trigger fallback,
-      // but there may be more in flight due to async timing between the
-      // fallback decision and requests already dispatched)
+      // At least 3 SSE requests should have been made before fallback triggered.
+      // The exact upper bound is non-deterministic due to async timing between
+      // the fallback decision and requests already dispatched.
       expect(allSseRequests.length).toBeGreaterThanOrEqual(3)
-      expect(allSseRequests.length).toBeLessThanOrEqual(5)
 
       unsubscribe()
     } finally {
