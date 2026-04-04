@@ -554,6 +554,54 @@ class Respond409SameHandleCmd
 // ─── Scenario Tests ────────────────────────────────────────────────
 
 describe(`ShapeStream targeted scenario tests`, () => {
+  it(`409 does not publish messages to subscribers`, async () => {
+    responseSeq = 0
+    localStorage.clear()
+    expiredShapesCache.clear()
+    upToDateTracker.clear()
+
+    const initialHandle = `test-handle`
+    const gate = new FetchGate()
+    const aborter = new AbortController()
+    const errorRef = { error: null as Error | null }
+    const receivedBatches: unknown[][] = []
+
+    const stream = new ShapeStream({
+      url: `https://example.com/v1/shape`,
+      params: { table: `test` },
+      fetchClient: gate.fetchClient,
+      signal: aborter.signal,
+      subscribe: true,
+      onError: () => ({}),
+    })
+
+    stream.subscribe(
+      (msgs) => {
+        receivedBatches.push(msgs)
+      },
+      (err: Error) => {
+        errorRef.error = err
+      }
+    )
+
+    // Bootstrap into live mode
+    await gate.waitForRequest()
+    gate.provideResponse(make200UpToDate(initialHandle))
+    await waitUntilSettled(gate, errorRef)
+
+    receivedBatches.length = 0
+
+    // Send a 409 with a JSON body — the must-refetch control message
+    await gate.waitForRequest()
+    gate.provideResponse(make409(`new-handle`))
+    await waitUntilSettled(gate, errorRef)
+
+    // Subscriber should NOT have received any messages from the 409
+    expect(receivedBatches).toEqual([])
+
+    aborter.abort()
+  })
+
   it(`consecutive 409s with the same handle produce unique retry URLs`, async () => {
     const real = await createStreamReal()
     try {

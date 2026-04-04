@@ -920,16 +920,6 @@ export class ShapeStream<T extends Row<unknown> = Row>
         const nextRequestShapeCacheBuster = createCacheBuster()
         this.#reset(newShapeHandle)
 
-        // must refetch control message might be in a list or not depending
-        // on whether it came from an SSE request or long poll. The body may
-        // also be null/undefined if a proxy returned an unexpected response.
-        // Handle all cases defensively here.
-        const messages409 = Array.isArray(e.json)
-          ? e.json
-          : e.json != null
-            ? [e.json]
-            : []
-        await this.#publish(messages409 as Message<T>[])
         return this.#requestShape(nextRequestShapeCacheBuster)
       } else {
         // errors that have reached this point are not actionable without
