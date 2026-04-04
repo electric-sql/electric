@@ -342,18 +342,30 @@ change the next request URL via state advancement or an explicit cache buster.
 This is enforced by the path-specific guards listed below. Live requests
 (`live=true`) legitimately reuse URLs.
 
+### Invariant: unconditional 409 cache buster
+
+Every code path that handles a 409 response must unconditionally call
+`createCacheBuster()` before retrying. This ensures unique retry URLs regardless
+of whether the server returns a new handle, the same handle, or no handle. The
+cache buster is stripped by `canonicalShapeKey` so it doesn't affect shape
+identity or caching logic — it only affects the raw URL sent to the server/CDN.
+
+**Enforcement**: Static analysis rule `conditional-409-cache-buster` in
+`shape-stream-static-analysis.mjs` + model-based property test commands
+`Respond409SameHandleCmd` and `Respond409NoHandleCmd`.
+
 ### Loop-back sites
 
 Six sites in `client.ts` recurse or loop to issue a new fetch:
 
-| #   | Site                                    | Line | Trigger                                                    | URL changes because                                                                 | Guard                                                   |
-| --- | --------------------------------------- | ---- | ---------------------------------------------------------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------- |
-| L1  | `#requestShape` → `#requestShape`       | 940  | Normal completion after `#fetchShape()`                    | Offset advances from response headers                                               | `#checkFastLoop` (non-live)                             |
-| L2  | `#requestShape` catch → `#requestShape` | 874  | Abort with `FORCE_DISCONNECT_AND_REFRESH` or `SYSTEM_WAKE` | `isRefreshing` flag changes `canLongPoll`, affecting `live` param                   | Abort signals are discrete events                       |
-| L3  | `#requestShape` catch → `#requestShape` | 886  | `StaleCacheError` thrown by `#onInitialResponse`           | `StaleRetryState` adds `cache_buster` param                                         | `maxStaleCacheRetries` counter in state machine         |
-| L4  | `#requestShape` catch → `#requestShape` | 924  | HTTP 409 (shape rotation)                                  | `#reset()` sets offset=-1 + new handle; or request-scoped cache buster if no handle | New handle from 409 response or unique retry URL        |
-| L5  | `#start` catch → `#start`               | 782  | Exception + `onError` returns retry opts                   | Params/headers merged from `retryOpts`                                              | User-controlled; `#checkFastLoop` on next iteration     |
-| L6  | `fetchSnapshot` catch → `fetchSnapshot` | 1975 | HTTP 409 on snapshot fetch                                 | New handle via `withHandle()`; or local retry cache buster if same/no handle        | `#maxSnapshotRetries` (5) + cache buster on same handle |
+| #   | Site                                    | Line | Trigger                                                    | URL changes because                                                             | Guard                                                  |
+| --- | --------------------------------------- | ---- | ---------------------------------------------------------- | ------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| L1  | `#requestShape` → `#requestShape`       | 940  | Normal completion after `#fetchShape()`                    | Offset advances from response headers                                           | `#checkFastLoop` (non-live)                            |
+| L2  | `#requestShape` catch → `#requestShape` | 874  | Abort with `FORCE_DISCONNECT_AND_REFRESH` or `SYSTEM_WAKE` | `isRefreshing` flag changes `canLongPoll`, affecting `live` param               | Abort signals are discrete events                      |
+| L3  | `#requestShape` catch → `#requestShape` | 886  | `StaleCacheError` thrown by `#onInitialResponse`           | `StaleRetryState` adds `cache_buster` param                                     | `maxStaleCacheRetries` counter in state machine        |
+| L4  | `#requestShape` catch → `#requestShape` | 924  | HTTP 409 (shape rotation)                                  | `#reset()` sets offset=-1 + new handle; unconditional cache buster on every 409 | New handle + unique retry URL via cache buster         |
+| L5  | `#start` catch → `#start`               | 782  | Exception + `onError` returns retry opts                   | Params/headers merged from `retryOpts`                                          | User-controlled; `#checkFastLoop` on next iteration    |
+| L6  | `fetchSnapshot` catch → `fetchSnapshot` | 1975 | HTTP 409 on snapshot fetch                                 | New handle via `withHandle()`; unconditional cache buster on every 409          | `#maxSnapshotRetries` (5) + unconditional cache buster |
 
 ### Guard mechanisms
 
@@ -361,7 +373,7 @@ Six sites in `client.ts` recurse or loop to issue a new fetch:
 | ---------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `#checkFastLoop`       | Non-live `#requestShape` only | Detects N requests at same offset within a time window. First: clears caches + resets. Persistent: exponential backoff → throws FetchError(502). |
 | `maxStaleCacheRetries` | Stale response path (L3)      | State machine counts stale retries. Throws FetchError(502) after 3 consecutive stale responses.                                                  |
-| `#maxSnapshotRetries`  | Snapshot 409 path (L6)        | Counts consecutive snapshot 409s. Adds cache buster when handle unchanged. Throws FetchError(502) after 5.                                       |
+| `#maxSnapshotRetries`  | Snapshot 409 path (L6)        | Counts consecutive snapshot 409s. Unconditional cache buster on every retry. Throws FetchError(502) after 5.                                     |
 | Pause lock             | `#requestShape` entry         | Returns immediately if paused. Prevents fetches during snapshots.                                                                                |
 | Up-to-date exit        | `#requestShape` entry         | Returns if `!subscribe` and `isUpToDate`. Breaks loop for one-shot syncs.                                                                        |
 

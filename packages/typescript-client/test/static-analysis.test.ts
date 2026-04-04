@@ -124,6 +124,45 @@ describe(`shape-stream static analysis`, () => {
     }
   })
 
+  it(`includes all internal protocol QUERY_PARAM constants in ELECTRIC_PROTOCOL_QUERY_PARAMS`, async () => {
+    // Internal protocol params (handle, offset, cursor, live, etc.) must be
+    // listed in ELECTRIC_PROTOCOL_QUERY_PARAMS so that canonicalShapeKey
+    // strips them. Missing entries cause cache key divergence between code
+    // paths (e.g., SSE vs long-polling produce different shape keys).
+    //
+    // User-facing shape params (table, where, columns, replica) are
+    // intentionally excluded — they define the shape identity.
+    const constants = await import(`../src/constants`)
+    const protocolParams = new Set(constants.ELECTRIC_PROTOCOL_QUERY_PARAMS)
+
+    // User-facing params that define shape identity — NOT protocol internals
+    const userFacingParams = new Set([
+      `COLUMNS_QUERY_PARAM`,
+      `TABLE_QUERY_PARAM`,
+      `WHERE_QUERY_PARAM`,
+      `REPLICA_PARAM`, // not *_QUERY_PARAM but included for completeness
+      `WHERE_PARAMS_PARAM`,
+    ])
+
+    // Collect internal *_QUERY_PARAM exports
+    const internalParamExports = Object.entries(constants)
+      .filter(
+        ([key]) =>
+          key.endsWith(`_QUERY_PARAM`) &&
+          key !== `ELECTRIC_PROTOCOL_QUERY_PARAMS` &&
+          !userFacingParams.has(key)
+      )
+      .map(([key, value]) => ({ key, value: value as string }))
+
+    expect(internalParamExports.length).toBeGreaterThan(0)
+
+    const missing = internalParamExports.filter(
+      ({ value }) => !protocolParams.has(value)
+    )
+
+    expect(missing.map(({ key }) => key)).toEqual([])
+  })
+
   it(`reports near-miss Electric protocol literals`, async () => {
     const { analyzeProtocolLiterals } = await loadAnalyzerModule()
     const fixturePath = path.resolve(
