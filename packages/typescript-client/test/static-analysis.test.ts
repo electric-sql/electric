@@ -23,11 +23,21 @@ interface UnboundedRetryReport {
   boundKind: string | null
 }
 
+interface CacheBusterReport {
+  method: string
+  statusCheckLine: number
+  retryCallee: string
+  retryLine: number
+  cacheBusterLine: number | null
+  unconditional: boolean
+}
+
 interface TypeScriptClientAnalysisResult {
   findings: AnalysisFinding[]
   reports: {
     recursiveMethods: RecursiveMethodReport[]
     unboundedRetryReport: UnboundedRetryReport[]
+    cacheBusterReport: CacheBusterReport[]
   }
 }
 
@@ -96,6 +106,21 @@ describe(`shape-stream static analysis`, () => {
     // (counter check, type guard, abort signal, or callback gate)
     for (const entry of result.reports.unboundedRetryReport) {
       expect(entry.hasBoundCheck).toBe(true)
+    }
+  })
+
+  it(`does not report conditional 409 cache busters`, async () => {
+    const { analyzeTypeScriptClient } = await loadAnalyzerModule()
+    const result = analyzeTypeScriptClient()
+    const conditionalFindings = result.findings.filter(
+      (entry) => entry.kind === `conditional-409-cache-buster`
+    )
+
+    expect(conditionalFindings).toEqual([])
+
+    // Every 409 handler should have an unconditional cache buster
+    for (const entry of result.reports.cacheBusterReport) {
+      expect(entry.unconditional).toBe(true)
     }
   })
 

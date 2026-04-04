@@ -117,6 +117,7 @@ export function analyzeTypeScriptClient(options = {}) {
       recursiveMethods: clientAnalysis.recursiveMethods,
       sharedFieldReport: clientAnalysis.sharedFieldReport,
       unboundedRetryReport: clientAnalysis.unboundedRetryReport,
+      cacheBusterReport: clientAnalysis.cacheBusterReport,
       ignoredActionReport: stateMachineAnalysis.ignoredActionReport,
       protocolLiteralReport: protocolLiteralAnalysis.report,
     },
@@ -142,6 +143,7 @@ export function analyzeShapeStreamClient(filePath = CLIENT_FILE) {
     classDecl,
     recursiveMethods
   )
+  const cacheBusterReport = build409CacheBusterReport(sourceFile, classDecl)
   const findings = sharedFieldReport
     .filter((report) => report.risky)
     .map((report) => ({
@@ -198,6 +200,30 @@ export function analyzeShapeStreamClient(filePath = CLIENT_FILE) {
           details: entry,
         }))
     )
+    .concat(
+      cacheBusterReport
+        .filter((entry) => !entry.unconditional)
+        .map((entry) => ({
+          kind: `conditional-409-cache-buster`,
+          severity: `warning`,
+          title: `409 handler has conditional or missing cache buster in ${entry.method}`,
+          message:
+            `${entry.method} handles status 409 and retries via ${entry.retryCallee} at line ${entry.retryLine} ` +
+            `but createCacheBuster() is ${entry.cacheBusterLine ? `conditional (line ${entry.cacheBusterLine})` : `missing`}. ` +
+            `Every 409 retry must include an unconditional cache buster to guarantee a unique retry URL, ` +
+            `otherwise same-handle 409s or proxy-cached responses can cause infinite retry loops.`,
+          file: filePath,
+          line: entry.retryLine,
+          locations: [
+            { file: filePath, line: entry.statusCheckLine, label: `409 check` },
+            ...(entry.cacheBusterLine
+              ? [{ file: filePath, line: entry.cacheBusterLine, label: `conditional cache buster` }]
+              : []),
+            { file: filePath, line: entry.retryLine, label: `retry call` },
+          ],
+          details: entry,
+        }))
+    )
 
   return {
     sourceFile,
@@ -205,6 +231,7 @@ export function analyzeShapeStreamClient(filePath = CLIENT_FILE) {
     recursiveMethods,
     sharedFieldReport,
     unboundedRetryReport,
+    cacheBusterReport,
     findings,
   }
 }
@@ -448,6 +475,17 @@ export function formatAnalysisResult(result, options = {}) {
         `  ${flag} ${report.method} -> ${report.callee} ` +
           `(catch:${report.catchLine} call:${report.callLine}) ` +
           `bound=${report.boundKind ?? `none`}`
+      )
+    }
+
+    lines.push(``)
+    lines.push(`409 Cache Buster Report:`)
+    for (const report of result.reports.cacheBusterReport) {
+      const flag = report.unconditional ? `-` : `!`
+      lines.push(
+        `  ${flag} ${report.method} -> ${report.retryCallee} ` +
+          `(409:${report.statusCheckLine} retry:${report.retryLine}) ` +
+          `cacheBuster=${report.unconditional ? `unconditional` : report.cacheBusterLine ? `conditional:${report.cacheBusterLine}` : `missing`}`
       )
     }
 
@@ -738,6 +776,144 @@ function buildUnboundedRetryReport(sourceFile, classDecl, recursiveMethods) {
   }
 
   return report.sort(compareReports)
+}
+
+/**
+ * Finds all 409 status handlers in the ShapeStream class and verifies that
+ * each one unconditionally calls createCacheBuster(). A 409 retry without
+ * a cache buster risks producing identical retry URLs when the server
+ * returns the same handle, causing infinite CDN-cached retry loops.
+ */
+function build409CacheBusterReport(sourceFile, classDecl) {
+  const report = []
+
+  for (const member of classDecl.members) {
+    if (!ts.isMethodDeclaration(member) || !member.body || !member.name) continue
+    const methodName = formatMemberName(member.name)
+
+    walk(member.body, (node) => {
+      // Look for if-statements that check e.status == 409 or e.status === 409
+      if (!ts.isIfStatement(node)) return
+      if (!is409StatusCheck(node.expression)) return
+
+      const statusCheckLine = getLine(sourceFile, node)
+      const block = node.thenStatement
+
+      // Find retry calls (recursive this.# calls or return this.# calls)
+      const retryCalls = []
+      walk(block, (inner) => {
+        if (!ts.isCallExpression(inner)) return
+        const callee = getThisMemberName(inner.expression)
+        if (callee) {
+          retryCalls.push({
+            callee,
+            line: getLine(sourceFile, inner),
+          })
+        }
+      })
+
+      if (retryCalls.length === 0) return
+
+      // Find all createCacheBuster() calls in the 409 block
+      const cacheBusterCalls = []
+      walk(block, (inner) => {
+        if (
+          ts.isCallExpression(inner) &&
+          ts.isIdentifier(inner.expression) &&
+          inner.expression.text === `createCacheBuster`
+        ) {
+          cacheBusterCalls.push({
+            line: getLine(sourceFile, inner),
+            conditional: isInsideIfBlock(inner, block),
+          })
+        }
+      })
+
+      // Determine the last retry call (the one that actually does the retry)
+      const lastRetry = retryCalls[retryCalls.length - 1]
+
+      if (cacheBusterCalls.length === 0) {
+        report.push({
+          method: methodName,
+          statusCheckLine,
+          retryCallee: lastRetry.callee,
+          retryLine: lastRetry.line,
+          cacheBusterLine: null,
+          unconditional: false,
+        })
+      } else {
+        // Check if ANY cache buster call is unconditional (not inside an if)
+        const hasUnconditional = cacheBusterCalls.some((c) => !c.conditional)
+        report.push({
+          method: methodName,
+          statusCheckLine,
+          retryCallee: lastRetry.callee,
+          retryLine: lastRetry.line,
+          cacheBusterLine: cacheBusterCalls[0].line,
+          unconditional: hasUnconditional,
+        })
+      }
+    })
+  }
+
+  return report.sort(compareReports)
+}
+
+/**
+ * Returns true if the expression contains a `.status == 409` or `.status === 409` check.
+ * Recurses into `&&` and `||` expressions to handle compound conditions like
+ * `e instanceof FetchError && e.status === 409`.
+ */
+function is409StatusCheck(expression) {
+  if (!ts.isBinaryExpression(expression)) return false
+
+  const op = expression.operatorToken.kind
+  if (
+    op === ts.SyntaxKind.EqualsEqualsToken ||
+    op === ts.SyntaxKind.EqualsEqualsEqualsToken
+  ) {
+    return (
+      (is409Literal(expression.left) && isStatusAccess(expression.right)) ||
+      (is409Literal(expression.right) && isStatusAccess(expression.left))
+    )
+  }
+
+  if (
+    op === ts.SyntaxKind.AmpersandAmpersandToken ||
+    op === ts.SyntaxKind.BarBarToken
+  ) {
+    return is409StatusCheck(expression.left) || is409StatusCheck(expression.right)
+  }
+
+  return false
+}
+
+function is409Literal(node) {
+  return ts.isNumericLiteral(node) && node.text === `409`
+}
+
+function isStatusAccess(node) {
+  return ts.isPropertyAccessExpression(node) && node.name.text === `status`
+}
+
+/**
+ * Returns true if a node is inside an if-statement's then or else block
+ * within the given boundary node (the 409 handler block).
+ */
+function isInsideIfBlock(node, boundary) {
+  let current = node.parent
+  while (current && current !== boundary) {
+    const parent = current.parent
+    if (
+      parent &&
+      ts.isIfStatement(parent) &&
+      (current === parent.thenStatement || current === parent.elseStatement)
+    ) {
+      return true
+    }
+    current = current.parent
+  }
+  return false
 }
 
 function classifyRetryBound(sourceFile, catchClause, callNode) {
