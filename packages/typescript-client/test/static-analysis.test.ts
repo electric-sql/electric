@@ -32,12 +32,20 @@ interface CacheBusterReport {
   unconditional: boolean
 }
 
+interface TailPositionAwaitReport {
+  method: string
+  callee: string
+  awaitLine: number
+  isParked: boolean
+}
+
 interface TypeScriptClientAnalysisResult {
   findings: AnalysisFinding[]
   reports: {
     recursiveMethods: RecursiveMethodReport[]
     unboundedRetryReport: UnboundedRetryReport[]
     cacheBusterReport: CacheBusterReport[]
+    tailPositionAwaitReport: TailPositionAwaitReport[]
   }
 }
 
@@ -121,6 +129,21 @@ describe(`shape-stream static analysis`, () => {
     // Every 409 handler should have an unconditional cache buster
     for (const entry of result.reports.cacheBusterReport) {
       expect(entry.unconditional).toBe(true)
+    }
+  })
+
+  it(`does not report parked tail-position awaits in recursive methods`, async () => {
+    const { analyzeTypeScriptClient } = await loadAnalyzerModule()
+    const result = analyzeTypeScriptClient()
+    const parkedFindings = result.findings.filter(
+      (entry) => entry.kind === `parked-tail-await`
+    )
+
+    expect(parkedFindings).toEqual([])
+
+    // No recursive method should have a parked await in tail position
+    for (const entry of result.reports.tailPositionAwaitReport) {
+      expect(entry.isParked).toBe(false)
     }
   })
 

@@ -118,6 +118,7 @@ export function analyzeTypeScriptClient(options = {}) {
       sharedFieldReport: clientAnalysis.sharedFieldReport,
       unboundedRetryReport: clientAnalysis.unboundedRetryReport,
       cacheBusterReport: clientAnalysis.cacheBusterReport,
+      tailPositionAwaitReport: clientAnalysis.tailPositionAwaitReport,
       ignoredActionReport: stateMachineAnalysis.ignoredActionReport,
       protocolLiteralReport: protocolLiteralAnalysis.report,
     },
@@ -144,6 +145,11 @@ export function analyzeShapeStreamClient(filePath = CLIENT_FILE) {
     recursiveMethods
   )
   const cacheBusterReport = build409CacheBusterReport(sourceFile, classDecl)
+  const tailPositionAwaitReport = buildTailPositionAwaitReport(
+    sourceFile,
+    classDecl,
+    recursiveMethods
+  )
   const findings = sharedFieldReport
     .filter((report) => report.risky)
     .map((report) => ({
@@ -224,6 +230,25 @@ export function analyzeShapeStreamClient(filePath = CLIENT_FILE) {
           details: entry,
         }))
     )
+    .concat(
+      tailPositionAwaitReport
+        .filter((entry) => entry.isParked)
+        .map((entry) => ({
+          kind: `parked-tail-await`,
+          severity: `warning`,
+          title: `Parked stack frame: await in tail position of ${entry.method}`,
+          message:
+            `${entry.method} uses \`await this.${entry.callee}()\` followed by \`return\` at line ${entry.awaitLine}. ` +
+            `This parks the caller's stack frame until the callee (and all its recursive descendants) resolve. ` +
+            `Use \`return this.${entry.callee}()\` to release the frame immediately.`,
+          file: filePath,
+          line: entry.awaitLine,
+          locations: [
+            { file: filePath, line: entry.awaitLine, label: `parked await` },
+          ],
+          details: entry,
+        }))
+    )
 
   return {
     sourceFile,
@@ -232,6 +257,7 @@ export function analyzeShapeStreamClient(filePath = CLIENT_FILE) {
     sharedFieldReport,
     unboundedRetryReport,
     cacheBusterReport,
+    tailPositionAwaitReport,
     findings,
   }
 }
@@ -479,13 +505,30 @@ export function formatAnalysisResult(result, options = {}) {
     }
 
     lines.push(``)
+    lines.push(`Tail-Position Await Report:`)
+    for (const report of result.reports.tailPositionAwaitReport) {
+      const flag = report.isParked ? `!` : `-`
+      lines.push(
+        `  ${flag} ${report.method} -> ${report.callee} ` +
+          `(line:${report.awaitLine}) ` +
+          `${report.isParked ? `PARKED: use return instead of await` : `ok`}`
+      )
+    }
+
+    lines.push(``)
     lines.push(`409 Cache Buster Report:`)
     for (const report of result.reports.cacheBusterReport) {
       const flag = report.unconditional ? `-` : `!`
+      let cacheBusterStatus = `missing`
+      if (report.unconditional) {
+        cacheBusterStatus = `unconditional`
+      } else if (report.cacheBusterLine) {
+        cacheBusterStatus = `conditional:${report.cacheBusterLine}`
+      }
       lines.push(
         `  ${flag} ${report.method} -> ${report.retryCallee} ` +
           `(409:${report.statusCheckLine} retry:${report.retryLine}) ` +
-          `cacheBuster=${report.unconditional ? `unconditional` : report.cacheBusterLine ? `conditional:${report.cacheBusterLine}` : `missing`}`
+          `cacheBuster=${cacheBusterStatus}`
       )
     }
 
@@ -829,34 +872,102 @@ function build409CacheBusterReport(sourceFile, classDecl) {
         }
       })
 
-      // Determine the last retry call (the one that actually does the retry)
       const lastRetry = retryCalls[retryCalls.length - 1]
+      const hasUnconditional = cacheBusterCalls.some((c) => !c.conditional)
 
-      if (cacheBusterCalls.length === 0) {
-        report.push({
-          method: methodName,
-          statusCheckLine,
-          retryCallee: lastRetry.callee,
-          retryLine: lastRetry.line,
-          cacheBusterLine: null,
-          unconditional: false,
-        })
-      } else {
-        // Check if ANY cache buster call is unconditional (not inside an if)
-        const hasUnconditional = cacheBusterCalls.some((c) => !c.conditional)
-        report.push({
-          method: methodName,
-          statusCheckLine,
-          retryCallee: lastRetry.callee,
-          retryLine: lastRetry.line,
-          cacheBusterLine: cacheBusterCalls[0].line,
-          unconditional: hasUnconditional,
-        })
-      }
+      report.push({
+        method: methodName,
+        statusCheckLine,
+        retryCallee: lastRetry.callee,
+        retryLine: lastRetry.line,
+        cacheBusterLine: cacheBusterCalls.length > 0 ? cacheBusterCalls[0].line : null,
+        unconditional: hasUnconditional,
+      })
     })
   }
 
   return report.sort(compareReports)
+}
+
+/**
+ * Finds `await this.#method()` calls in tail position of recursive methods.
+ * A tail-position await parks the caller's stack frame until the callee resolves,
+ * causing O(n) suspended frames for n recursive iterations. Using `return this.#method()`
+ * instead releases the frame immediately via promise chaining.
+ *
+ * Detects two patterns:
+ *   1. `await this.#foo(); return`  (explicit return after await)
+ *   2. `await this.#foo()` as the last statement in a block (implicit return)
+ */
+function buildTailPositionAwaitReport(sourceFile, classDecl, recursiveMethods) {
+  const report = []
+  const recursiveNames = new Set(recursiveMethods.map((m) => m.name))
+
+  for (const member of classDecl.members) {
+    if (!ts.isMethodDeclaration(member) || !member.body || !member.name) continue
+    const methodName = formatMemberName(member.name)
+    if (!recursiveNames.has(methodName)) continue
+
+    walk(member.body, (node) => {
+      if (!ts.isAwaitExpression(node)) return
+      const awaitExpr = node.expression
+      if (!ts.isCallExpression(awaitExpr)) return
+      const callee = getThisMemberName(awaitExpr.expression)
+      if (!callee) return
+
+      // Check if this await is immediately followed by a bare `return` in
+      // its block. This pattern — `await this.#foo(); return` — parks the
+      // caller's stack frame while the callee resolves. It should be
+      // `return this.#foo()` to release the frame via promise chaining.
+      const exprStmt = node.parent
+      if (!ts.isExpressionStatement(exprStmt)) return
+
+      const block = exprStmt.parent
+      if (!ts.isBlock(block)) return
+
+      const stmtIndex = block.statements.indexOf(exprStmt)
+      if (stmtIndex === -1) return
+
+      const next = block.statements[stmtIndex + 1]
+      const followedByBareReturn =
+        next &&
+        ts.isReturnStatement(next) &&
+        !next.expression
+
+      if (!followedByBareReturn) return
+
+      // Only flag as parked if the await is NOT inside a try block's try clause.
+      // Inside try { await ... } catch { ... }, the await is needed for the catch
+      // to handle errors. In catch/finally blocks or outside try-catch, the await
+      // parks the caller's frame unnecessarily.
+      const isParked = !isInsideTryClause(node, member.body)
+
+      report.push({
+        method: methodName,
+        callee,
+        awaitLine: getLine(sourceFile, node),
+        isParked,
+      })
+    })
+  }
+
+  return report.sort(compareReports)
+}
+
+/**
+ * Returns true if the node is inside the try clause (not catch/finally) of a
+ * TryStatement that is a descendant of the given boundary node.
+ */
+function isInsideTryClause(node, boundary) {
+  let current = node.parent
+  while (current && current !== boundary) {
+    if (ts.isTryStatement(current.parent)) {
+      // Check if `current` is the tryBlock (not catchClause or finallyBlock)
+      if (current === current.parent.tryBlock) return true
+    }
+    current = current.parent
+  }
+  return false
 }
 
 /**
@@ -959,73 +1070,63 @@ function collectEnclosingIfConditions(catchClause, callNode) {
 }
 
 function findPriorCounterGuard(sourceFile, block, beforeLine) {
+  return walkSome(
+    block,
+    (node) =>
+      ts.isIfStatement(node) &&
+      getLine(sourceFile, node) < beforeLine &&
+      containsThisFieldComparison(node.expression) &&
+      containsExitStatement(node.thenStatement)
+  )
+}
+
+/** Walks a node tree and returns true if predicate matches any descendant. */
+function walkSome(root, predicate) {
   let found = false
-  walk(block, (node) => {
+  walk(root, (node) => {
     if (found) return
-    if (!ts.isIfStatement(node)) return
-    if (getLine(sourceFile, node) >= beforeLine) return
-    if (!containsThisFieldComparison(node.expression)) return
-    if (!containsExitStatement(node.thenStatement)) return
-    found = true
+    if (predicate(node)) found = true
   })
   return found
 }
 
 function containsInstanceof(node) {
-  let found = false
-  walk(node, (inner) => {
-    if (found) return
-    if (
+  return walkSome(
+    node,
+    (inner) =>
       ts.isBinaryExpression(inner) &&
       inner.operatorToken.kind === ts.SyntaxKind.InstanceOfKeyword
-    ) {
-      found = true
-    }
-  })
-  return found
+  )
 }
 
 function containsPropertyEquality(node) {
-  let found = false
-  walk(node, (inner) => {
-    if (found) return
-    if (!ts.isBinaryExpression(inner)) return
+  return walkSome(node, (inner) => {
+    if (!ts.isBinaryExpression(inner)) return false
     const op = inner.operatorToken.kind
     if (
       op !== ts.SyntaxKind.EqualsEqualsToken &&
       op !== ts.SyntaxKind.EqualsEqualsEqualsToken
     ) {
-      return
+      return false
     }
-    if (
+    return (
       ts.isPropertyAccessExpression(inner.left) ||
       ts.isPropertyAccessExpression(inner.right)
-    ) {
-      found = true
-    }
+    )
   })
-  return found
 }
 
 function containsAbortedAccess(node) {
-  let found = false
-  walk(node, (inner) => {
-    if (found) return
-    if (
-      ts.isPropertyAccessExpression(inner) &&
-      inner.name.text === `aborted`
-    ) {
-      found = true
-    }
-  })
-  return found
+  return walkSome(
+    node,
+    (inner) =>
+      ts.isPropertyAccessExpression(inner) && inner.name.text === `aborted`
+  )
 }
 
 function containsThisFieldComparison(node) {
-  let found = false
-  walk(node, (inner) => {
-    if (found) return
-    if (!ts.isBinaryExpression(inner)) return
+  return walkSome(node, (inner) => {
+    if (!ts.isBinaryExpression(inner)) return false
     const op = inner.operatorToken.kind
     if (
       op !== ts.SyntaxKind.GreaterThanToken &&
@@ -1033,13 +1134,10 @@ function containsThisFieldComparison(node) {
       op !== ts.SyntaxKind.LessThanToken &&
       op !== ts.SyntaxKind.LessThanEqualsToken
     ) {
-      return
+      return false
     }
-    if (isThisFieldAccess(inner.left) || isThisFieldAccess(inner.right)) {
-      found = true
-    }
+    return isThisFieldAccess(inner.left) || isThisFieldAccess(inner.right)
   })
-  return found
 }
 
 function isThisFieldAccess(node) {
@@ -1050,14 +1148,10 @@ function isThisFieldAccess(node) {
 }
 
 function containsExitStatement(node) {
-  let found = false
-  walk(node, (inner) => {
-    if (found) return
-    if (ts.isReturnStatement(inner) || ts.isThrowStatement(inner)) {
-      found = true
-    }
-  })
-  return found
+  return walkSome(
+    node,
+    (inner) => ts.isReturnStatement(inner) || ts.isThrowStatement(inner)
+  )
 }
 
 function stronglyConnectedComponents(graph) {
