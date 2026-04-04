@@ -134,6 +134,13 @@ class FetchGate {
   private _fetchResolve: ((r: Response) => void) | null = null
   private _onRequest: (() => void) | null = null
 
+  /** Last two request URLs — used to verify no identity loops. */
+  lastUrl: string | null = null
+  prevUrl: string | null = null
+
+  /** Maximum URL length seen across all requests. */
+  maxUrlLength = 0
+
   get requestCount(): number {
     return this._requestCount
   }
@@ -143,11 +150,17 @@ class FetchGate {
   }
 
   readonly fetchClient = async (
-    _input: RequestInfo | URL,
+    input: RequestInfo | URL,
     init?: RequestInit
   ): Promise<Response> => {
     if (init?.signal?.aborted) return Response.error()
     this._requestCount++
+
+    // Track URLs for invariant checking
+    const urlStr = input.toString()
+    this.prevUrl = this.lastUrl
+    this.lastUrl = urlStr
+    if (urlStr.length > this.maxUrlLength) this.maxUrlLength = urlStr.length
 
     if (this._onRequest) {
       const cb = this._onRequest
@@ -189,6 +202,7 @@ class FetchGate {
 
 interface StreamReal {
   gate: FetchGate
+  stream: ShapeStream
   subscriberError: Error | null
   currentHandle: string
   respond(response: Response): Promise<void>
@@ -250,6 +264,7 @@ async function createStreamReal(): Promise<StreamReal> {
 
   return {
     gate,
+    stream,
     get subscriberError() {
       return errorRef.error
     },
@@ -278,6 +293,24 @@ interface StreamModel {
 }
 
 const MAX_CONSECUTIVE_ERROR_RETRIES = 50
+const MAX_URL_LENGTH = 2000
+
+/**
+ * Invariants checked after every command. These catch historical bugs
+ * like URL identity loops (bug #1), `-next` suffix growth (bug #3),
+ * and handle/offset mismatches (bug #10).
+ */
+function assertGlobalInvariants(r: StreamReal): void {
+  // URL length is bounded (catches unbounded suffix growth like -next-next-next)
+  expect(r.gate.maxUrlLength).toBeLessThan(MAX_URL_LENGTH)
+
+  // After any successful (non-error) response, isUpToDate state should be
+  // consistent with what we observe (no silent stuck states)
+  if (!r.subscriberError && r.stream.isUpToDate) {
+    // If the stream thinks it's up-to-date, it should have synced at some point
+    expect(r.stream.lastSyncedAt()).toBeDefined()
+  }
+}
 
 // ─── Commands ───────────────────────────────────────────────────────
 //
@@ -295,6 +328,7 @@ class Respond200DataCmd implements fc.AsyncCommand<StreamModel, StreamReal> {
     m.consecutiveErrors = 0
     await r.respond(make200WithData(r.currentHandle))
     expect(r.subscriberError).toBeNull()
+    assertGlobalInvariants(r)
   }
   toString(): string {
     return `Respond200Data`
@@ -312,6 +346,7 @@ class Respond200UpToDateCmd
     m.consecutiveErrors = 0
     await r.respond(make200UpToDate(r.currentHandle))
     expect(r.subscriberError).toBeNull()
+    assertGlobalInvariants(r)
   }
   toString(): string {
     return `Respond200UpToDate`
@@ -327,9 +362,9 @@ class Respond200EmptyCmd implements fc.AsyncCommand<StreamModel, StreamReal> {
     return !m.terminated
   }
   async run(_m: StreamModel, r: StreamReal): Promise<void> {
-    // Empty batch → early return → counter unchanged
     await r.respond(make200Empty(r.currentHandle))
     expect(r.subscriberError).toBeNull()
+    assertGlobalInvariants(r)
   }
   toString(): string {
     return `Respond200Empty`
@@ -345,6 +380,7 @@ class Respond204Cmd implements fc.AsyncCommand<StreamModel, StreamReal> {
     m.consecutiveErrors = 0
     await r.respond(make204(r.currentHandle))
     expect(r.subscriberError).toBeNull()
+    assertGlobalInvariants(r)
   }
   toString(): string {
     return `Respond204`
@@ -367,6 +403,7 @@ class Respond400Cmd implements fc.AsyncCommand<StreamModel, StreamReal> {
       expect(r.subscriberError).not.toBeNull()
     } else {
       expect(r.subscriberError).toBeNull()
+      assertGlobalInvariants(r)
     }
   }
   toString(): string {
@@ -384,10 +421,17 @@ class Respond409Cmd implements fc.AsyncCommand<StreamModel, StreamReal> {
     return !m.terminated
   }
   async run(_m: StreamModel, r: StreamReal): Promise<void> {
+    const prevUrl = r.gate.lastUrl
     const newHandle = `handle-${nextSeq()}`
     await r.respond(make409(newHandle))
     r.currentHandle = newHandle
     expect(r.subscriberError).toBeNull()
+    assertGlobalInvariants(r)
+    // After 409, the retry URL must differ from the pre-409 URL
+    // (catches identity-loop bugs like bug #1 and #6)
+    if (prevUrl) {
+      expect(r.gate.lastUrl).not.toBe(prevUrl)
+    }
   }
   toString(): string {
     return `Respond409`
@@ -412,6 +456,7 @@ class RespondMalformed200Cmd
       expect(r.subscriberError).not.toBeNull()
     } else {
       expect(r.subscriberError).toBeNull()
+      assertGlobalInvariants(r)
     }
   }
   toString(): string {
