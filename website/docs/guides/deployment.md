@@ -229,6 +229,10 @@ Electric is designed to run behind a caching proxy, such as [Nginx](https://ngin
 
 See the [Caching section](/docs/api/http#caching) of the HTTP API docs for more information.
 
+### Upgrading
+
+If you're running Electric behind an orchestrator that performs rolling updates (e.g., Kubernetes, AWS ECS), see the [Upgrading guide](/docs/guides/upgrading) for strategies to minimize disruption when deploying new versions.
+
 ## 3. Connecting your app
 
 You can then connect your app to Electric [over HTTP](/docs/api/http). Typically you use a [Client library](/docs/api/clients/typescript) and configure the URL in the constructor, e.g.:

@@ -222,6 +222,7 @@ export default defineConfig({
               link: '/docs/guides/postgres-permissions',
             },
             { text: 'Deployment', link: '/docs/guides/deployment' },
+            { text: 'Upgrading', link: '/docs/guides/upgrading' },
             { text: 'Sharding', link: '/docs/guides/sharding' },
             { text: 'Security', link: '/docs/guides/security' },
             { text: 'Troubleshooting', link: '/docs/guides/troubleshooting' },
