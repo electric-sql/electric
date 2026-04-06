@@ -6,6 +6,8 @@ excerpt: >-
   ...
 authors: [samwillis]
 image: /img/blog/building-a-collaborative-ai-editor/header.jpg
+imageWidth: 1536
+imageHeight: 1024
 tags: [durable-streams, yjs, agents, collaboration, tanstack-ai]
 outline: [2, 3]
 post: true
