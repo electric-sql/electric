@@ -27,6 +27,8 @@ This post walks through how I built a [Collaborative AI Editor](https://collabor
 
 <!-- ASSET: Video embed of the full demo experience -->
 
+> **ASSET:** Video embed of the full demo experience
+
 <!-- SITUATION: Head-nodding statements. The reader already believes these
      things. Establish shared reality — no persuasion, just recognition.
      Sam's personal context grounds this in lived experience, not theory. -->
@@ -88,6 +90,45 @@ Both integrations share the same underlying protocol. No WebSocket servers to ma
      Yjs awareness, AI chat) flowing through the same Durable Streams
      infrastructure to the browser and server agent -->
 
+<!-- TODO: swap with SVG -->
+
+```
+ ┌─────────────────────┐              ┌──────────────────────┐
+ │   Browser Client    │              │    Server Agent      │
+ │                     │              │    ("Electra")       │
+ │  ┌───────────────┐  │              │                      │
+ │  │  ProseMirror  │  │              │  ┌────────────────┐  │
+ │  │  + Yjs Editor │  │              │  │  Server Y.Doc  │  │
+ │  └───────┬───────┘  │              │  └───────┬────────┘  │
+ │          │          │              │          │           │
+ │  ┌───────┴───────┐  │              │  ┌───────┴────────┐  │
+ │  │  YjsProvider  │  │              │  │  YjsProvider   │  │
+ │  └───┬───────┬───┘  │              │  └──┬────────┬────┘  │
+ │      │       │      │              │     │        │       │
+ │  ┌───┴───┐   │      │              │     │   ┌────┴────┐  │
+ │  │useChat│   │      │              │     │   │  chat() │  │
+ │  └───┬───┘   │      │              │     │   └────┬────┘  │
+ └──────┼───────┼──────┘              └─────┼────────┼───────┘
+        │       │                           │        │
+        │       │    Durable Streams        │        │
+ ───────┼───────┼───────────────────────────┼────────┼────────
+        │       │                           │        │
+   ┌────┴───────┴───────────────────────────┴────────┴─────┐
+   │                                                       │
+   │  ┌─────────────────────────────────────────────────┐  │
+   │  │  Stream: /doc/{id}/yjs          (Yjs document)  │  │
+   │  └─────────────────────────────────────────────────┘  │
+   │  ┌─────────────────────────────────────────────────┐  │
+   │  │  Stream: /doc/{id}/yjs/awareness (Yjs awareness)│  │
+   │  └─────────────────────────────────────────────────┘  │
+   │  ┌─────────────────────────────────────────────────┐  │
+   │  │  Stream: /doc/{id}/chat         (TanStack AI)   │  │
+   │  └─────────────────────────────────────────────────┘  │
+   │                                                       │
+   │              Durable Streams Server                   │
+   └───────────────────────────────────────────────────────┘
+```
+
 ## The AI as a CRDT peer
 
 <!-- The key architectural decision. The reader should understand WHY
@@ -107,8 +148,39 @@ The agent doesn't manipulate the Yjs document directly. It works through tool ca
 <!-- ASSET: Screenshot or short video showing Electra's cursor and
      presence in the editor alongside a human user -->
 
+> **ASSET:** Screenshot or short video — Electra's cursor and presence in the editor alongside a human user
+
 <!-- ASSET: Short code snippet — createServerAgentSession setup or
      awareness config -->
+
+```ts
+function createServerAgentSession(docKey: string, sessionId: string) {
+  const ydoc = new Doc()
+  const awareness = new Awareness(ydoc)
+
+  // Set up the agent's presence — same awareness protocol as human users
+  awareness.setLocalState({
+    user: {
+      name: 'Electra',
+      color: '#7c3aed',
+      role: 'agent',
+      status: 'idle',
+    },
+  })
+
+  // Connect to the same Durable Stream as the browser clients
+  const provider = new YjsProvider({
+    doc: ydoc,
+    baseUrl: DURABLE_STREAMS_BASE_URL,
+    docId: docKey,
+    awareness,
+  })
+  await provider.connect()
+
+  const fragment = ydoc.getXmlFragment('prosemirror')
+  return { ydoc, awareness, provider, fragment, sessionId }
+}
+```
 
 ### Why server-side matters
 
@@ -164,6 +236,39 @@ When the model finishes generating or calls another tool, the routing automatica
 <!-- ASSET: Short code snippet showing a subset of tool definitions
      from documentTools.ts -->
 
+```ts
+const searchTextDef = toolDefinition({
+  name: 'search_text',
+  description:
+    'Search for exact text inside the document and return stable match handles.',
+  inputSchema: z.object({
+    query: z.string().min(1),
+    maxResults: z.number().int().min(1).max(20).optional(),
+  }),
+})
+
+const placeCursorDef = toolDefinition({
+  name: 'place_cursor',
+  description:
+    'Place the agent cursor at the start or end of a previously returned match.',
+  inputSchema: z.object({
+    matchId: z.string().min(1),
+    edge: z.enum(['start', 'end']).optional(),
+  }),
+})
+
+const startStreamingEditDef = toolDefinition({
+  name: 'start_streaming_edit',
+  description:
+    'Arm the next assistant text message for document insertion at the current '
+    + 'cursor or selection. While active, output only document prose.',
+  inputSchema: z.object({
+    mode: z.enum(['continue', 'insert', 'rewrite']),
+    contentFormat: z.enum(['plain_text', 'markdown']).optional(),
+  }),
+})
+```
+
 ### Relative position anchors
 
 <!-- This is the clever bit. The reader needs to understand why absolute
@@ -175,6 +280,21 @@ Absolute positions in a document shift when other users type, making them useles
 When the user sends a message, the client encodes its current cursor and selection as relative anchors and sends them to the server as part of the chat context. This gives the agent awareness of what the user is doing and where they're looking in the document. The agent doesn't have to use this context, but when the user says "rewrite this paragraph" or "insert something here", it can target the exact semantic position the user intended.
 
 <!-- ASSET: Short code snippet — relative anchor encode/decode -->
+
+```ts
+// Client: encode the cursor position as a Yjs relative position
+const rel = absolutePositionToRelativePosition(cursorPos, fragment, mapping)
+const anchorB64 = toBase64(Y.encodeRelativePosition(rel))
+
+// Sent alongside the chat message as editorContext
+// { kind: 'cursor', anchor: anchorB64 }
+// or { kind: 'selection', anchor: anchorB64, head: headB64 }
+
+// Server: decode the anchor on the agent's Y.Doc to get an absolute position
+const rel = Y.decodeRelativePosition(fromBase64(anchorB64))
+const absPos = relativePositionToAbsolutePosition(ydoc, fragment, rel, mapping)
+// absPos is correct even if other users edited the document since encoding
+```
 
 ### Streaming markdown into the document
 
@@ -193,6 +313,8 @@ The conversion happens incrementally, so formatting streams into the document in
 <!-- ASSET: Animated gif/video showing streaming text appearing in the
      editor with the agent's cursor, while a human edits elsewhere -->
 
+> **ASSET:** Animated gif/video — streaming text appearing in the editor with the agent's cursor, while a human edits elsewhere
+
 ## Durable chat that survives everything
 
 <!-- This section is the most straightforward — it's mostly "swap the
@@ -208,6 +330,19 @@ The chat and document streams are linked but independent. You can have the chat 
 
 <!-- ASSET: Short code snippet — createDurableChatConnection usage -->
 
+```ts
+import { durableStreamConnection } from '@durable-streams/tanstack-ai-transport'
+import { useChat } from '@tanstack/ai-react'
+
+const connection = durableStreamConnection({
+  sendUrl: `/api/chat?docKey=${docKey}&sessionId=${sessionId}`,
+  readUrl: `/api/chat-stream?docKey=${docKey}&sessionId=${sessionId}`,
+})
+
+// useChat works as normal — swap the connection adapter, everything else stays the same
+const { messages, sendMessage, stop } = useChat({ connection })
+```
+
 ### The agent response flow
 
 When the user sends a message, the server runs TanStack&nbsp;AI's `chat()` with the document tools. The agent's text responses stream back through the durable chat stream to all subscribers.
@@ -218,6 +353,8 @@ Cancellation is clean: stopping a generation tears down both the chat stream and
 
 <!-- ASSET: Screenshot showing the chat sidebar with a conversation,
      including tool call indicators showing document edits -->
+
+> **ASSET:** Screenshot — chat sidebar with a conversation, including tool call indicators showing document edits
 
 ## Agents belong in the CRDT
 
