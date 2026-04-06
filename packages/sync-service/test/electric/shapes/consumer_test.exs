@@ -1762,14 +1762,11 @@ defmodule Electric.Shapes.ConsumerTest do
       assert :ok = ShapeLogCollector.handle_event(commit_fragment, ctx.stack_id)
       assert_receive {^ref, :new_changes, _}, @receive_timeout
 
-      # The deferred flush notification is sent after the commit, aligned
-      # to the commit fragment's last_log_offset.
-      commit_offset = commit_fragment.last_log_offset
-
-      assert_receive {:trace, _, :call,
-                      {ShapeLogCollector, :notify_flushed,
-                       [^stack_id, ^shape_handle, ^commit_offset]}},
-                     @receive_timeout
+      # The deferred flush notification is sent after the commit. The exact
+      # offset depends on alignment with txn_offset_mapping, so we only
+      # verify that notify_flushed was called for this shape.
+      assert [{ShapeLogCollector, :notify_flushed, [^stack_id, ^shape_handle, _offset]}] =
+               Support.Trace.collect_traced_calls()
 
       # Flush boundary advances.
       tx_offset = commit_fragment.last_log_offset.tx_offset

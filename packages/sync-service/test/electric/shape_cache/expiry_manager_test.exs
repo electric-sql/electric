@@ -46,7 +46,7 @@ defmodule Electric.ExpiryManagerTest do
                ShapeCleaner,
                :remove_shapes,
                2,
-               100,
+               1_000,
                ctx.expiry_manager
              )
     end

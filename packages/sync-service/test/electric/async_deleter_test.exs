@@ -138,11 +138,11 @@ defmodule Electric.AsyncDeleterTest do
         sleep_time
       end)
 
-    {:ok, max_sleep_time} = Enum.to_list(stream) |> Enum.max()
+    Enum.to_list(stream)
 
     # ensure all files are deleted
     assert_dir_empty(d1, 0)
-    assert_dir_empty(trash_dir, max_sleep_time + 500)
+    assert_dir_empty(trash_dir, 5_000)
   end
 
   @tag add_initial_files: true

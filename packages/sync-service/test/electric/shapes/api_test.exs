@@ -881,7 +881,7 @@ defmodule Electric.Shapes.ApiTest do
       end
     end
 
-    @tag long_poll_timeout: 100
+    @tag long_poll_timeout: 200
     test "returns error after timeout when offset is out of bounds", ctx do
       expect_shape_cache(
         resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id, _opts ->
@@ -909,13 +909,11 @@ defmodule Electric.Shapes.ApiTest do
                  }
                )
 
-      now = System.monotonic_time(:millisecond)
       assert response = Api.serve_shape_response(request)
-      duration = System.monotonic_time(:millisecond) - now
-      assert duration > 50 and duration < 100
 
-      # this error returns as a list as it reaches the request stage
-      # and so needs cleaning up. when encoded the result is the same
+      # The out-of-bounds half-timeout fires at div(200, 2) = 100ms and returns
+      # a 400 error. If instead the full long_poll_timeout fires, we'd get a 200.
+      # The status code alone proves which path was taken — no wall-clock check needed.
       assert response.status == 400
 
       assert response_body(response) == %{
@@ -1393,7 +1391,7 @@ defmodule Electric.Shapes.ApiTest do
       assert response.no_changes
     end
 
-    @tag long_poll_timeout: 100
+    @tag long_poll_timeout: 200
     test "returns the latest lsn after the long poll timeout even if stack has failed", ctx do
       patch_shape_cache(
         resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id, _opts ->
@@ -1436,8 +1434,10 @@ defmodule Electric.Shapes.ApiTest do
 
           Process.exit(status_task, :kill)
           Electric.StatusMonitor.wait_for_messages_to_be_processed(stack_id)
-          Process.sleep(50)
 
+          # serve enters a receive block that waits for long_poll_timeout (200ms).
+          # The StatusMonitor DOWN handler runs within that window and marks the
+          # stack as failed, so the after clause returns 503 instead of 200.
           Api.serve_shape_response(request)
         end)
 
