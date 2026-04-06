@@ -1,5 +1,5 @@
 ---
-title: '...'
+title: 'AI agents as CRDT peers: building a collaborative AI editor with Yjs'
 description: >-
   ...
 excerpt: >-
@@ -239,9 +239,7 @@ Having worked on Durable Streams, then built the [Yjs integration](https://durab
 
 ### Title brief
 
-Direction: "Building a collaborative AI editor with Durable Streams"
-— sentence case, direct, no hype. Could also lean into the dual-stream
-angle: "Three streams, one primitive: building a collaborative AI editor".
+Confirmed: "AI agents as CRDT peers: building a collaborative AI editor with Yjs"
 
 ### Description brief (SEO)
 
@@ -258,11 +256,76 @@ and what the reader gets (a walkthrough of how to build it).
 
 ### Image prompt
 
-Dark background, split composition showing a rich text editor on the
-left with two cursors (human + AI agent "Electra") and a chat sidebar
-on the right with streaming AI responses. Subtle connection lines or
-shared stream visualization linking both sides. Brand colors: #D0BCFF
-purple, #00d2a0 green, #75fbfd cyan. 16:9, ~1536x950px.
+Concept: "Twin cursors in a data stream" — two glowing cursor shapes,
+one human and one AI, floating as peers in the same flowing river of
+data. Abstract, not a literal editor screenshot.
+
+#### Shared prompt (paste this first, then add one variation below)
+
+Create a blog header image, 1536 x 950 pixels, 16:9 aspect ratio.
+
+Style: Clean 3D rendered, crystalline/geometric forms with dramatic
+glow and particle effects. Not photorealistic — stylised and bold.
+Soft volumetric lighting, subtle lens flare. Dark space/void
+background with fine star-like particles.
+
+Colour palette: Dark background required. Use these brand colours
+as accents:
+- #75fbfd (cyan — primary for streams/data flow)
+- #D0BCFF (purple — for the AI/agent cursor)
+- #00d2a0 (green — for the human cursor)
+Colours should appear as light/energy, not flat fills. Gradients
+between brand colours are fine.
+
+Composition: Centered subject within the inner 70% of the frame.
+Breathing room on all edges for responsive cropping. The two cursors
+should be roughly side by side, neither dominant — they are peers.
+Clean upper area.
+
+Mood: Bold, technical, elegant. The feeling of two entities
+collaborating in the same space. Not cold or clinical — there
+should be warmth in the interaction between the two cursors.
+
+CRITICAL: No text in the image. Dark background. The image will be
+displayed alongside the post title — they should work as a pair.
+Master as high-quality JPG.
+
+---
+
+#### Variation A: River of light
+
+Two glowing cursor shapes — one green (#00d2a0), one purple
+(#D0BCFF) — floating side by side in a wide, flowing river of
+cyan (#75fbfd) data particles. The river flows horizontally across
+the frame. Both cursors create matching ripples and wake patterns
+in the particle stream, showing they're affecting the same data.
+The cursors are abstract geometric forms — elongated diamond or
+chevron shapes, like text cursors but crystalline and luminous.
+Fine threads of light connect each cursor down into the stream.
+Subtle depth of field, particles in foreground slightly blurred.
+
+#### Variation B: Shared field
+
+Two glowing cursor shapes — one green, one purple — hovering above
+a dark plane covered in flowing, horizontal lines of tiny cyan
+particles (evoking lines of text, but abstract). The cursors cast
+pools of coloured light onto the plane beneath them — green and
+purple — that overlap slightly where the cursors are close together,
+creating a blended glow. The particle lines flow and shift beneath
+both cursors. The overall composition is like a dark desk or
+document surface seen at a slight angle, with the two cursors
+as the focal point.
+
+#### Variation C: Convergent streams
+
+Two glowing cursor shapes — one green, one purple — at the center
+of the frame where three thin streams of light converge. One cyan
+stream enters from the left (document data), one from the upper
+right (awareness/presence), one from the lower right (chat). The
+streams merge into a shared luminous field around both cursors.
+The cursors face the same direction, side by side, as if working
+together on the same task. Crystalline fragments and particles
+scatter from the convergence point.
 
 ### Asset checklist
 
