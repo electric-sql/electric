@@ -12,7 +12,6 @@ features:
 
 limits:
   maxDatabases: 'Unlimited'
-  concurrentReadersPerStream: 'Unlimited'
   maxUsersPerWorkspace: 'Unlimited'
 
 featureGates:

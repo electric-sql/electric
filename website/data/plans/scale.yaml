@@ -9,7 +9,6 @@ priceColor: 'gray'
 
 limits:
   maxDatabases: 200
-  concurrentReadersPerStream: 10000
   maxUsersPerWorkspace: 50
 
 featureGates:
