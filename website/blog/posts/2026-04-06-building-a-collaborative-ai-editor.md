@@ -18,10 +18,10 @@ published: true
 
 I've spent years in the collaborative editing space, it's how I discovered sync engines. Since AI agents became part of my daily workflow, I've had an ear worm: what would it look like to integrate an AI agent into a Yjs rich text editing flow — not as a sidebar that dumps text, but as a real participant with its own cursor, presence, and streaming edits?
 
-This post walks through how I built a [Collaborative AI Editor](https://collaborative-ai-editor.examples.electric-sql.com) demo using [Durable&nbsp;Streams](https://durablestreams.com) as the single transport layer for both [Yjs](https://yjs.dev) document collaboration and [TanStack&nbsp;AI](https://tanstack.com/ai) chat sessions. Two integrations, one primitive, and the AI becomes a genuine CRDT peer.
+This post walks through how I built a [Collaborative AI Editor](https://collaborative-ai-editor.examples.electric-sql.com) demo — a TanStack Start app with a ProseMirror/Yjs editor and an AI chat sidebar — using [Durable&nbsp;Streams](https://durablestreams.com) as the single transport layer for both [Yjs](https://yjs.dev) document collaboration and [TanStack&nbsp;AI](https://tanstack.com/ai) chat sessions. Two integrations, one primitive, and the AI becomes a genuine CRDT peer.
 
 > [!Warning] Collaborative AI Editor demo
-> Try the [live demo](https://collaborative-ai-editor.examples.electric-sql.com) and browse the [source code](https://github.com/electric-sql/y-llm).
+> Try the [live demo](https://collaborative-ai-editor.examples.electric-sql.com) and browse the [source code](https://github.com/electric-sql/collaborative-ai-editor).
 
 <!-- ASSET: Video embed of the full demo experience -->
 
@@ -69,8 +69,9 @@ Having worked on Durable Streams, then built the [Yjs integration](https://durab
 - Durable Streams is a persistent, addressable HTTP streaming protocol — data in, subscribers out, with automatic catch-up from any offset
 - The Collaborative AI Editor uses three Durable Streams per document:
   - **Yjs document** — streaming edits and persistence, with the Yjs Durable Stream server handling compaction and GC
-  - **Yjs presence** — cursor locations and awareness of other users or agents working on the document
+  - **Yjs awareness** — cursor positions, selections, and presence of other users and agents working on the document
   - **TanStack AI chat** — the conversation session between users and the AI agent
+- The `YjsProvider` abstracts the two Yjs streams behind a single base URL — you configure one endpoint and the provider manages the document and awareness streams for you
 - [`@durable-streams/y-durable-streams`](https://durablestreams.com/yjs) wraps a standard `YjsProvider` — the Yjs client doesn't know it's running over Durable Streams, it just works
 - [`@durable-streams/tanstack-ai-transport`](https://durablestreams.com/tanstack-ai) provides a durable connection adapter for TanStack AI's `useChat` — chat messages POST to one endpoint, the stream reads from another
 - Both use the same underlying protocol: HTTP streaming with durable persistence and automatic reconnection
@@ -78,7 +79,7 @@ Having worked on Durable Streams, then built the [Yjs integration](https://durab
 - The dev server (`@durable-streams/server`) runs locally with file-backed storage; production runs on Durable Streams Cloud or self-hosted
 
 <!-- ASSET: Architecture diagram showing the three durable streams (Yjs doc,
-     Yjs presence, AI chat) flowing through the same Durable Streams
+     Yjs awareness, AI chat) flowing through the same Durable Streams
      infrastructure to the browser and server agent -->
 
 ## The AI as a CRDT peer
@@ -115,8 +116,7 @@ Having worked on Durable Streams, then built the [Yjs integration](https://durab
      time to a CRDT) before the solution makes sense. Walk through
      the techniques in logical order: tools → anchors → commits → markdown. -->
 
-- The hard problem: the AI generates markdown text, but the document is a rich text CRDT — a structured data type, not a string. You need to convert streaming markdown tokens into ProseMirror nodes and insert them at positions that stay valid while other users edit concurrently
-- Three techniques make this work: document tools, relative position anchors, and streaming markdown conversion
+- The hard problem: the AI generates markdown text, but the document is a rich text CRDT — a structured data type, not a string. You need to convert streaming markdown tokens into rich text nodes and insert them at positions that stay valid while other users edit concurrently
 
 ### Document tools
 
@@ -125,18 +125,29 @@ Having worked on Durable Streams, then built the [Yjs integration](https://durab
      edits like a collaborator, not an omnipotent mutator. -->
 
 - The agent doesn't free-form edit the `Y.Doc` — it works through a defined set of Zod-validated tool calls that TanStack AI routes to `DocumentToolRuntime`
+- The core flow is: **read → locate → edit**
 - **get_document_snapshot** — reads a plain-text snapshot of the current document so the agent can see what's there before acting
-- **get_cursor_context** / **get_selection_snapshot** — inspect the text around the user's cursor or selection, so the agent understands "here" and "this"
 - **search_text** — find exact text in the document and get back stable match handles with surrounding context. The agent uses this to locate its own insertion points based on its reading of the document — independent of where the user's cursor is
 - **place_cursor** / **place_cursor_at_document_boundary** — move the agent's cursor to a match handle or to the start/end of the document, setting up the insertion point for the next edit
-- **replace_matches** — replace multiple previously found matches in one step, useful for bulk operations like renaming a character throughout the document
-- **insert_at_cursor** — insert content at the agent's current cursor position, resolved via relative anchors
-- **rewrite_selection** — replace the user's selected text with new content, using progressive rewrite rather than delete-then-insert so the selection doesn't flash empty
-- **stream_markdown** — the heavy hitter: stream a longer piece of generated markdown into the document incrementally, using the stable prefix commit pipeline
-- **formatting tools** — apply marks (bold, italic, code) and structure (headings, lists, blockquotes) to existing content
-- The search → place cursor → edit flow is important: the agent can read the document, find the right location by content rather than by position, and then edit there. This works reliably under concurrent editing because the match handles are backed by Yjs relative positions
+- **insert_text** — insert content at the agent's current cursor position, resolved via relative anchors
+- **start_streaming_edit** — arms the next edit (see below)
+- Plus tools for selection inspection, bulk replace, formatting (`set_format`), and deletion
+- The search → place cursor → edit flow means the agent locates content by meaning, not by position. This works reliably under concurrent editing because the match handles are backed by Yjs relative positions
 - Each tool receives the runtime's server-side `Y.Doc` reference and applies changes with agent transaction origin — human editors see the edits arrive through CRDT sync like any other peer's changes
 - The tool surface is deliberately constrained — the agent operates through the same kinds of editing actions a human would, not arbitrary document mutations
+
+### Routing streaming text into the document
+
+<!-- This is one of the most interesting implementation details. It
+     deserves its own subsection because it solves a real limitation
+     of tool-based AI architectures. -->
+
+- Tool calls don't support async streaming — you call a tool and get a result back. But we want the model to stream prose into the document token by token
+- The solution: `start_streaming_edit` is a tool that flips a routing switch. After it's called, the model's next text output — which normally streams into the chat as an assistant message — gets intercepted by `routeAgentStreamChunks` and redirected into the document via `DocumentToolRuntime` instead
+- `start_streaming_edit` takes a `mode` (continue, insert, or rewrite) and a `contentFormat` (plain text or markdown). Rewrite mode replaces the current selection; insert and continue modes write at the cursor
+- When the model finishes generating or calls another tool, the routing automatically stops — or the model can explicitly call `stop_streaming_edit` to switch back to chat output
+- The system prompt explains this convention to the model so it knows to call `start_streaming_edit` before generating document prose, and to switch back when it wants to talk in the chat
+- This is a clean separation: the model just generates text naturally, the infrastructure decides where it goes
 
 <!-- ASSET: Short code snippet showing a subset of tool definitions
      from documentTools.ts -->
@@ -155,19 +166,14 @@ Having worked on Durable Streams, then built the [Yjs integration](https://durab
 
 <!-- ASSET: Short code snippet — relative anchor encode/decode -->
 
-### Streaming tokens into the document
+### Streaming markdown into the document
 
-- Tokens from the AI model stream into the Yjs document in real-time — the user sees text appear as it's generated, just like watching someone type
-- `takeStablePrefix` commits at word boundaries (spaces, punctuation) so partial words don't flicker into the document mid-token
-- The uncommitted tail (the current partial word) is held in awareness state so the UI can optionally show a preview of what's coming
-
-### Markdown as an intermediate representation
-
+- The edits stream into the document in real-time — the user sees text appear as the AI generates it, just like watching another person type. The agent's cursor moves through the document as it writes
 - AI models have been trained on markdown as a native format — they're very good at it, and naturally use it to express formatting and emphasis
 - Rather than fight against this by inventing a custom format or limiting the agent to tool calls for every formatting operation, we lean into markdown as an intermediate representation
 - The agent generates markdown, and a `streaming-markdown` pipeline incrementally parses it and converts it into the native Yjs document structure — ProseMirror nodes like paragraphs, headings, lists, and inline marks
 - This happens incrementally as the tokens arrive, so formatting streams into the document in real-time — a `**bold**` in the markdown stream becomes a bold mark in the rich text document as it's generated
-- The result: the AI writes naturally in the format it's best at, and the document receives properly structured rich text
+- The result: the AI writes naturally in the format it's best at, and the document receives properly structured rich text — streamed in token by token
 
 <!-- ASSET: Animated gif/video showing streaming text appearing in the
      editor with the agent's cursor, while a human edits elsewhere -->
@@ -201,7 +207,7 @@ Having worked on Durable Streams, then built the [Yjs integration](https://durab
 
 ## Next steps
 
-- Try the [live demo](https://collaborative-ai-editor.examples.electric-sql.com) and browse the [source code](https://github.com/electric-sql/y-llm)
+- Try the [live demo](https://collaborative-ai-editor.examples.electric-sql.com) and browse the [source code](https://github.com/electric-sql/collaborative-ai-editor)
 - Read the [Durable Streams + Yjs docs](https://durablestreams.com/yjs) and [Durable Streams + TanStack AI docs](https://durablestreams.com/tanstack-ai)
 - Check out [Durable Streams Cloud](https://durablestreams.com) for hosted infrastructure
 - [Reach out on Discord](https://discord.electric-sql.com) if you have questions or want help building something similar
@@ -270,7 +276,7 @@ purple, #00d2a0 green, #75fbfd cyan. 16:9, ~1536x950px.
 - [ ] Screenshot — chat sidebar with tool call indicators
 - [ ] Video — full demo experience (top of post)
 - [ ] Live demo link (stable, confirmed)
-- [ ] Repo link — github.com/electric-sql/y-llm (will be public)
+- [ ] Repo link — github.com/electric-sql/collaborative-ai-editor (confirmed)
 
 ### Typesetting checklist
 
@@ -283,7 +289,7 @@ purple, #00d2a0 green, #75fbfd cyan. 16:9, ~1536x950px.
 ### Open questions
 
 - Exact code snippets to include — keep short, link to source for full context
-- Video format — embedded YouTube or inline video/gif?
-- How much to tease async editing — one line or a brief paragraph?
-- Final repo URL — confirm github.com/electric-sql/y-llm
+- Video: embedded YouTube
+- Async editing tease: one line (already in outline at end of "Why server-side matters")
+- Repo URL: github.com/electric-sql/collaborative-ai-editor (confirmed)
 -->
