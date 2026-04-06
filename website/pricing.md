@@ -28,7 +28,7 @@ const config = pricing.config
 
 <Section :actions="[]">
   <template #title>
-    Pay for writes and retention. Reads are&nbsp;free.
+    Pay for writes and retention. Reads&nbsp;are&nbsp;free.
   </template>
   <template #tagline>
     <a href="/product/cloud">Electric Cloud</a> charges for data

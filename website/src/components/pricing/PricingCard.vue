@@ -94,14 +94,6 @@ const label = plan.shortName || plan.name
         <div v-if="plan.support" class="features-support">
           {{ plan.support }}
         </div>
-        <div
-          v-for="feature in plan.features"
-          :key="feature"
-          class="feature-item"
-        >
-          <span class="feature-check">&#10003;</span>
-          <span>{{ feature }}</span>
-        </div>
       </div>
     </div>
 
