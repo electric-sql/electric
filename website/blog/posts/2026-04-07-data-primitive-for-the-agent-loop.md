@@ -1,10 +1,8 @@
 ---
 title: "Durable\u00A0Streams \u2014 the data primitive for the agent loop"
 description: >-
-  Agents accumulate state in the agent loop — messages, tool calls, results,
-  observations. This is a new kind of data with demands that existing
-  infrastructure wasn't designed for. Durable Streams is the purpose-built
-  primitive that meets them.
+  Agents are stateful. The agent loop accumulates a new kind of data that
+  needs a new kind of primitive. Durable Streams is that primitive.
 excerpt: >-
   Agents are stateful. The agent loop accumulates a new kind of data that
   needs a new kind of primitive. Durable Streams is that primitive.
