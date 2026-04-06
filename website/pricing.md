@@ -83,8 +83,8 @@ const config = pricing.config
     <h1>Unlimited data delivery</h1>
     <p>
       We don't charge for egress, data delivery, fan-out, active users,
-      concurrent users, clients, connections, seats, apps, sources — or monthly
-      bills under $5/month.
+      clients, connections, seats, apps, sources — or monthly bills under
+      $5/month.
     </p>
   </div>
   <div class="section-head" style="margin-top: 24px;">
