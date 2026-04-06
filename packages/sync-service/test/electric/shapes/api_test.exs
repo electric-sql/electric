@@ -189,7 +189,7 @@ defmodule Electric.Shapes.ApiTest do
       request_handle = @test_shape_handle <> "-wrong"
 
       expect_shape_cache(
-        resolve_shape_handle: fn ^request_handle, @test_shape, _stack_id ->
+        resolve_shape_handle: fn ^request_handle, @test_shape, _stack_id, _opts ->
           nil
         end,
         get_or_create_shape_handle: fn @test_shape, _stack_id, _opts ->
@@ -215,7 +215,7 @@ defmodule Electric.Shapes.ApiTest do
       request_handle = @test_shape_handle <> "-wrong"
 
       expect_shape_cache(
-        resolve_shape_handle: fn ^request_handle, @test_shape, _stack_id ->
+        resolve_shape_handle: fn ^request_handle, @test_shape, _stack_id, _opts ->
           {@test_shape_handle, @before_all_offset}
         end
       )
@@ -238,7 +238,7 @@ defmodule Electric.Shapes.ApiTest do
       request_handle = @test_shape_handle <> "-wrong"
 
       expect_shape_cache(
-        resolve_shape_handle: fn ^request_handle, @test_shape, _stack_id ->
+        resolve_shape_handle: fn ^request_handle, @test_shape, _stack_id, _opts ->
           {@test_shape_handle, @before_all_offset}
         end
       )
@@ -264,7 +264,7 @@ defmodule Electric.Shapes.ApiTest do
       patch_shape_cache(has_shape?: fn @test_shape_handle, _opts -> false end)
 
       expect_shape_cache(
-        resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id -> nil end,
+        resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id, _opts -> nil end,
         get_or_create_shape_handle: fn @test_shape, _stack_id, _opts ->
           {new_shape_handle, @test_offset}
         end
@@ -650,7 +650,7 @@ defmodule Electric.Shapes.ApiTest do
 
     test "returns log when offset is >= 0", ctx do
       patch_shape_cache(
-        resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id ->
+        resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id, _opts ->
           {@test_shape_handle, @test_offset}
         end,
         has_shape?: fn @test_shape_handle, _opts -> true end,
@@ -750,7 +750,7 @@ defmodule Electric.Shapes.ApiTest do
 
     test "handles live updates", ctx do
       patch_shape_cache(
-        resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id ->
+        resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id, _opts ->
           {@test_shape_handle, @test_offset}
         end,
         has_shape?: fn @test_shape_handle, _opts -> true end,
@@ -826,7 +826,7 @@ defmodule Electric.Shapes.ApiTest do
 
     test "raises if body is read from a different process", ctx do
       patch_shape_cache(
-        resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id ->
+        resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id, _opts ->
           {@test_shape_handle, @test_offset}
         end,
         has_shape?: fn @test_shape_handle, _opts -> true end,
@@ -884,10 +884,14 @@ defmodule Electric.Shapes.ApiTest do
     @tag long_poll_timeout: 100
     test "returns error after timeout when offset is out of bounds", ctx do
       expect_shape_cache(
-        resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id ->
+        resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id, _opts ->
           {@test_shape_handle, @test_offset}
         end,
-        resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id ->
+        resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id, _opts ->
+          {@test_shape_handle, @test_offset}
+        end,
+        # check_for_disk_updates at out-of-bounds timeout — still behind
+        resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id, _opts ->
           {@test_shape_handle, @test_offset}
         end
       )
@@ -934,7 +938,7 @@ defmodule Electric.Shapes.ApiTest do
         patch_shape_cache(
           has_shape?: fn @test_shape_handle, _opts -> true end,
           await_snapshot_start: fn @test_shape_handle, _ -> :started end,
-          resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id ->
+          resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id, _opts ->
             {@test_shape_handle, @test_offset}
           end
         )
@@ -1015,10 +1019,10 @@ defmodule Electric.Shapes.ApiTest do
       )
 
       expect_shape_cache(
-        resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id ->
+        resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id, _opts ->
           {@test_shape_handle, next_offset}
         end,
-        resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id ->
+        resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id, _opts ->
           {@test_shape_handle, last_minute_next_offset}
         end
       )
@@ -1134,7 +1138,7 @@ defmodule Electric.Shapes.ApiTest do
 
     test "handles shape rotation", ctx do
       patch_shape_cache(
-        resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id ->
+        resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id, _opts ->
           {@test_shape_handle, @test_offset}
         end,
         has_shape?: fn @test_shape_handle, _opts -> true end,
@@ -1195,7 +1199,7 @@ defmodule Electric.Shapes.ApiTest do
 
       # # any subsequent get shape calls should return the new offset
       expect_shape_cache(
-        resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id ->
+        resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id, _opts ->
           # Simulate new changes arriving the moment we load the shape
           Registry.dispatch(ctx.registry, @test_shape_handle, fn [{pid, ref}] ->
             send(pid, {ref, :new_changes, next_offset})
@@ -1203,7 +1207,7 @@ defmodule Electric.Shapes.ApiTest do
 
           {@test_shape_handle, @test_offset}
         end,
-        resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id ->
+        resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id, _opts ->
           {@test_shape_handle, next_offset}
         end
       )
@@ -1246,7 +1250,7 @@ defmodule Electric.Shapes.ApiTest do
     @tag long_poll_timeout: 100
     test "picks up shape rotation missed between loading shape and listening for changes", ctx do
       expect_shape_cache(
-        resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id ->
+        resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id, _opts ->
           # Simulate shape rotating a moment after we load the shape
           Registry.dispatch(ctx.registry, @test_shape_handle, fn [{pid, ref}] ->
             send(pid, {ref, :shape_rotation})
@@ -1254,7 +1258,7 @@ defmodule Electric.Shapes.ApiTest do
 
           {@test_shape_handle, @test_offset}
         end,
-        resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id ->
+        resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id, _opts ->
           nil
         end
       )
@@ -1303,13 +1307,13 @@ defmodule Electric.Shapes.ApiTest do
 
       expect_shape_cache(
         # First call during validation - returns valid offset
-        resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id ->
+        resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id, _opts ->
           {@test_shape_handle, @test_offset}
         end,
         # Second call during notify_changes_since_request_start - simulates
         # the race condition where shape metadata was partially cleaned up,
         # causing offset to regress to last_before_real_offsets()
-        resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id ->
+        resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id, _opts ->
           {@test_shape_handle, regressed_offset}
         end
       )
@@ -1354,7 +1358,7 @@ defmodule Electric.Shapes.ApiTest do
     @tag long_poll_timeout: 100
     test "sends an up-to-date response after a timeout if no changes are observed", ctx do
       patch_shape_cache(
-        resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id ->
+        resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id, _opts ->
           {@test_shape_handle, @test_offset}
         end,
         has_shape?: fn @test_shape_handle, _opts -> true end,
@@ -1392,7 +1396,7 @@ defmodule Electric.Shapes.ApiTest do
     @tag long_poll_timeout: 100
     test "returns the latest lsn after the long poll timeout even if stack has failed", ctx do
       patch_shape_cache(
-        resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id ->
+        resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id, _opts ->
           {@test_shape_handle, @test_offset}
         end,
         has_shape?: fn @test_shape_handle, _opts -> true end,
@@ -1516,6 +1520,289 @@ defmodule Electric.Shapes.ApiTest do
                )
 
       assert api.shape == shape
+    end
+  end
+
+  describe "read-only mode" do
+    setup [:configure_request]
+
+    defp set_read_only(ctx) do
+      {:via, _, {registry_name, registry_key}} = Electric.Shapes.Supervisor.name(ctx.stack_id)
+      {:ok, _} = Registry.register(registry_name, registry_key, nil)
+      Electric.LsnTracker.initialize(ctx.stack_id)
+      # Only mark shape metadata ready — not full active
+      Electric.StatusMonitor.mark_shape_metadata_ready(ctx.stack_id, self())
+      Electric.StatusMonitor.wait_for_messages_to_be_processed(ctx.stack_id)
+    end
+
+    test "sets read_only flag on request when in read-only mode", ctx do
+      set_read_only(ctx)
+
+      Repatch.patch(Electric.ShapeCache, :resolve_shape_handle, fn @test_shape_handle,
+                                                                   @test_shape,
+                                                                   _stack_id,
+                                                                   _opts ->
+        {@test_shape_handle, @first_offset}
+      end)
+
+      assert {:ok, request} =
+               Api.validate(ctx.api, %{
+                 table: "public.users",
+                 handle: @test_shape_handle,
+                 offset: "#{@start_offset_50}"
+               })
+
+      assert request.read_only? == true
+    end
+
+    test "serves existing shape in read-only mode", ctx do
+      set_read_only(ctx)
+
+      Repatch.patch(Electric.ShapeCache, :resolve_shape_handle, fn @test_shape_handle,
+                                                                   @test_shape,
+                                                                   _stack_id,
+                                                                   _opts ->
+        {@test_shape_handle, @first_offset}
+      end)
+
+      assert {:ok, request} =
+               Api.validate(ctx.api, %{
+                 table: "public.users",
+                 handle: @test_shape_handle,
+                 offset: "#{@start_offset_50}"
+               })
+
+      assert request.handle == @test_shape_handle
+    end
+
+    test "uses shape's last offset as global_last_seen_lsn in read-only mode", ctx do
+      set_read_only(ctx)
+
+      Repatch.patch(Electric.ShapeCache, :resolve_shape_handle, fn @test_shape_handle,
+                                                                   @test_shape,
+                                                                   _stack_id,
+                                                                   _opts ->
+        {@test_shape_handle, @start_offset_50}
+      end)
+
+      assert {:ok, request} =
+               Api.validate(ctx.api, %{
+                 table: "public.users",
+                 handle: @test_shape_handle,
+                 offset: "#{@start_offset_50}"
+               })
+
+      assert request.global_last_seen_lsn == @start_offset_50.tx_offset
+    end
+
+    @tag stack_ready_timeout: 100
+    test "waits for active when shape not found in read-only mode", ctx do
+      set_read_only(ctx)
+
+      Repatch.patch(Electric.ShapeCache, :resolve_shape_handle, fn nil,
+                                                                   @test_shape,
+                                                                   _stack_id,
+                                                                   _opts ->
+        nil
+      end)
+
+      assert {:error, response} =
+               Api.validate(ctx.api, %{table: "public.users", offset: "-1"})
+
+      assert response.status == 503
+    end
+
+    @tag stack_ready_timeout: 100
+    test "delete returns 503 in read-only mode", ctx do
+      set_read_only(ctx)
+
+      assert {:error, response} =
+               Api.validate_for_delete(ctx.api, %{
+                 table: "public.users",
+                 handle: @test_shape_handle
+               })
+
+      assert response.status == 503
+    end
+
+    @tag long_poll_timeout: 100
+    test "returns up-to-date on long poll timeout when no new data on disk", ctx do
+      set_read_only(ctx)
+
+      patch_shape_cache(
+        has_shape?: fn @test_shape_handle, _opts -> true end,
+        await_snapshot_start: fn @test_shape_handle, _ -> :started end,
+        resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id, _opts ->
+          {@test_shape_handle, @test_offset}
+        end
+      )
+
+      patch_storage(
+        for_shape: fn @test_shape_handle, _opts -> @test_opts end,
+        get_chunk_end_log_offset: fn _, @test_opts -> nil end,
+        get_log_stream: fn @test_offset, _, @test_opts -> [] end
+      )
+
+      assert {:ok, request} =
+               Api.validate(ctx.api, %{
+                 table: "public.users",
+                 offset: "#{@test_offset}",
+                 handle: @test_shape_handle,
+                 live: true
+               })
+
+      assert response = Api.serve_shape_response(request)
+      assert response.status == 200
+      assert response.no_changes
+      assert [%{headers: %{control: "up-to-date"}}] = response_body(response)
+    end
+
+    @tag long_poll_timeout: 100
+    test "serves new data on long poll timeout when active instance has flushed", ctx do
+      set_read_only(ctx)
+      next_offset = LogOffset.increment(@test_offset)
+
+      # First resolve during validate returns @test_offset,
+      # second resolve at timeout returns next_offset (active instance flushed)
+      expect_shape_cache(
+        resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id, _opts ->
+          {@test_shape_handle, @test_offset}
+        end,
+        resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id, _opts ->
+          {@test_shape_handle, @test_offset}
+        end,
+        resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id, _opts ->
+          {@test_shape_handle, next_offset}
+        end
+      )
+
+      patch_shape_cache(
+        has_shape?: fn @test_shape_handle, _opts -> true end,
+        await_snapshot_start: fn @test_shape_handle, _ -> :started end
+      )
+
+      patch_storage(
+        for_shape: fn @test_shape_handle, _opts -> @test_opts end,
+        get_chunk_end_log_offset: fn _, @test_opts -> nil end
+      )
+
+      expect_storage(
+        get_log_stream: fn @test_offset, @test_offset, @test_opts -> [] end,
+        get_log_stream: fn @test_offset, ^next_offset, @test_opts ->
+          [Jason.encode!(%{key: "log1", value: "foo", headers: %{}, offset: next_offset})]
+        end
+      )
+
+      assert {:ok, request} =
+               Api.validate(ctx.api, %{
+                 table: "public.users",
+                 offset: "#{@test_offset}",
+                 handle: @test_shape_handle,
+                 live: true
+               })
+
+      assert response = Api.serve_shape_response(request)
+      assert response.status == 200
+
+      assert [
+               %{"key" => "log1"},
+               %{headers: %{control: "up-to-date"}}
+             ] = response_body(response)
+    end
+
+    @tag long_poll_timeout: 100
+    test "out-of-bounds recovers when active instance flushes data to disk", ctx do
+      set_read_only(ctx)
+      next_offset = LogOffset.increment(@test_offset)
+      next_next_offset = LogOffset.increment(next_offset)
+
+      # First resolve during validate returns @test_offset (behind next_offset),
+      # second resolve at out-of-bounds timeout returns next_next_offset (caught up)
+      expect_shape_cache(
+        resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id, _opts ->
+          {@test_shape_handle, @test_offset}
+        end,
+        resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id, _opts ->
+          {@test_shape_handle, @test_offset}
+        end,
+        resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id, _opts ->
+          {@test_shape_handle, next_next_offset}
+        end
+      )
+
+      patch_shape_cache(
+        has_shape?: fn @test_shape_handle, _opts -> true end,
+        await_snapshot_start: fn @test_shape_handle, _ -> :started end
+      )
+
+      patch_storage(
+        for_shape: fn @test_shape_handle, _opts -> @test_opts end,
+        get_chunk_end_log_offset: fn _, @test_opts -> nil end
+      )
+
+      expect_storage(
+        get_log_stream: fn ^next_offset, ^next_next_offset, @test_opts ->
+          [Jason.encode!(%{key: "log1", value: "foo", headers: %{}, offset: next_next_offset})]
+        end
+      )
+
+      assert {:ok, request} =
+               Api.validate(ctx.api, %{
+                 table: "public.users",
+                 offset: "#{next_offset}",
+                 handle: @test_shape_handle,
+                 live: true
+               })
+
+      assert response = Api.serve_shape_response(request)
+      assert response.status == 200
+
+      assert [
+               %{"key" => "log1"},
+               %{headers: %{control: "up-to-date"}}
+             ] = response_body(response)
+    end
+
+    @tag long_poll_timeout: 100
+    test "out-of-bounds still returns 400 when disk has not caught up", ctx do
+      set_read_only(ctx)
+      next_offset = LogOffset.increment(@test_offset)
+
+      # Both resolves return @test_offset — still behind the requested offset
+      expect_shape_cache(
+        resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id, _opts ->
+          {@test_shape_handle, @test_offset}
+        end,
+        resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id, _opts ->
+          {@test_shape_handle, @test_offset}
+        end,
+        resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id, _opts ->
+          {@test_shape_handle, @test_offset}
+        end
+      )
+
+      patch_shape_cache(
+        has_shape?: fn @test_shape_handle, _opts -> true end,
+        await_snapshot_start: fn @test_shape_handle, _ -> :started end
+      )
+
+      patch_storage(for_shape: fn @test_shape_handle, _opts -> @test_opts end)
+
+      assert {:ok, request} =
+               Api.validate(ctx.api, %{
+                 table: "public.users",
+                 offset: "#{next_offset}",
+                 handle: @test_shape_handle,
+                 live: true
+               })
+
+      assert response = Api.serve_shape_response(request)
+      assert response.status == 400
+
+      assert response_body(response) == %{
+               message: "Invalid request",
+               errors: %{offset: ["out of bounds for this shape"]}
+             }
     end
   end
 

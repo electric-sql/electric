@@ -69,7 +69,9 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
   @spec load_supported_features(opts :: term()) ::
           {:ok, Map.t()} | {:error, String.t() | :connection_not_available}
   def load_supported_features(opts) do
-    GenServer.call(opts[:server], :load_supported_features, :infinity)
+    with :not_in_cache <- fetch_supported_features_from_ets(opts) do
+      GenServer.call(opts[:server], :load_supported_features, :infinity)
+    end
   end
 
   @impl Inspector
@@ -153,6 +155,7 @@ defmodule Electric.Postgres.Inspector.EtsInspector do
            {:ok, features} <-
              wrap_in_db_errors(fn -> DirectInspector.load_supported_features(state.pg_pool) end) do
         store_supported_features(state, features)
+        persist_data(state)
         {:ok, features}
       end
 

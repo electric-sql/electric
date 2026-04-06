@@ -20,7 +20,12 @@ defmodule Electric.Shapes do
 
     if ShapeCache.has_shape?(shape_handle, stack_id) do
       with :started <- ShapeCache.await_snapshot_start(shape_handle, stack_id) do
-        storage = shape_storage(stack_id, shape_handle)
+        storage =
+          Storage.for_shape(
+            shape_handle,
+            Storage.for_stack(stack_id, read_only?: opts[:read_only?])
+          )
+
         {:ok, Storage.get_log_stream(offset, max_offset, storage)}
       end
     else
@@ -47,8 +52,8 @@ defmodule Electric.Shapes do
   @doc """
   Cheaply validate that a shape handle matches the shape definition.
   """
-  def resolve_shape_handle(stack_id, shape_handle, %Shape{} = shape) do
-    ShapeCache.resolve_shape_handle(shape_handle, shape, stack_id)
+  def resolve_shape_handle(stack_id, shape_handle, %Shape{} = shape, opts \\ []) do
+    ShapeCache.resolve_shape_handle(shape_handle, shape, stack_id, opts)
   end
 
   @doc """
@@ -68,9 +73,15 @@ defmodule Electric.Shapes do
 
   If `nil` is returned, chunk is not complete and the shape's latest offset should be used
   """
-  @spec get_chunk_end_log_offset(stack_id(), shape_handle(), LogOffset.t()) :: LogOffset.t() | nil
-  def get_chunk_end_log_offset(stack_id, shape_handle, offset) do
-    storage = shape_storage(stack_id, shape_handle)
+  @spec get_chunk_end_log_offset(stack_id(), shape_handle(), LogOffset.t(), keyword()) ::
+          LogOffset.t() | nil
+  def get_chunk_end_log_offset(stack_id, shape_handle, offset, opts \\ []) do
+    storage =
+      Storage.for_shape(
+        shape_handle,
+        Storage.for_stack(stack_id, read_only?: opts[:read_only?])
+      )
+
     Storage.get_chunk_end_log_offset(offset, storage)
   end
 
@@ -124,10 +135,6 @@ defmodule Electric.Shapes do
     with :ok <- Storage.mark_snapshot_as_started(storage) do
       ShapeStatus.mark_snapshot_started(stack_id, shape_handle)
     end
-  end
-
-  defp shape_storage(stack_id, shape_handle) do
-    Storage.for_shape(shape_handle, Storage.for_stack(stack_id))
   end
 
   def query_subset(handle, shape, subset, opts) do

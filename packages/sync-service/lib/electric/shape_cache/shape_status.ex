@@ -29,8 +29,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
   # MUST be updated when Shape.comparable/1 changes.
   @version 8
 
-  # Position of last_read_time in the shape_meta_table tuple:
-  # {handle, hash, snapshot_started, last_read_time}
+  # Tuple format: {handle, hash, snapshot_started, last_read_time, generation}
   @shape_last_used_time_pos 4
 
   @spec version() :: pos_integer()
@@ -68,8 +67,41 @@ defmodule Electric.ShapeCache.ShapeStatus do
                stack_id,
                invalid_handles
              ) do
-        populate_shape_meta_table(stack_id)
+        populate_shape_meta_table(stack_id, 0)
       end
+    end
+  end
+
+  @doc """
+  Refresh the shape meta table from SQLite without recreating it.
+
+  Used on lock acquisition to pick up any shapes that were created/deleted
+  by a previous instance while we were in read-only mode.
+  """
+  @spec refresh(stack_id()) :: :ok | {:error, term()}
+  def refresh(stack_id) when is_stack_id(stack_id) do
+    {:ok, invalid_handles, valid_shape_count} = ShapeDb.validate_existing_shapes(stack_id)
+
+    Logger.notice(
+      "Refreshing shape metadata: #{valid_shape_count} valid shapes, #{length(invalid_handles)} invalid"
+    )
+
+    with :ok <-
+           Electric.ShapeCache.ShapeCleaner.remove_shape_storage_async(
+             stack_id,
+             invalid_handles
+           ) do
+      # Use a generation counter to avoid clearing the table (which would race
+      # with concurrent readers). Upsert all current shapes with a new generation,
+      # then delete any entries still on the old generation.
+      generation = System.unique_integer([:positive, :monotonic])
+      populate_shape_meta_table(stack_id, generation)
+
+      :ets.select_delete(shape_meta_table(stack_id), [
+        {{:_, :_, :_, :_, :"$1"}, [{:"/=", :"$1", generation}], [true]}
+      ])
+
+      :ok
     end
   end
 
@@ -80,10 +112,12 @@ defmodule Electric.ShapeCache.ShapeStatus do
 
       # Add the lookup last as it is the one that enables clients to find the shape
       with {:ok, shape_hash} <- ShapeDb.add_shape(stack_id, shape, shape_handle) do
-        # Cache shape metadata: {handle, hash, snapshot_started, last_read_time}
         if :ets.insert_new(
              shape_meta_table(stack_id),
-             {shape_handle, shape_hash, false, nil}
+             # Generation 0 is safe here: add_shape only runs in active mode,
+             # and refresh/1 (which sweeps by generation) only runs before active.
+             # They are sequentially ordered by the Connection.Manager state machine.
+             {shape_handle, shape_hash, false, nil, 0}
            ) do
           {:ok, shape_handle}
         else
@@ -219,7 +253,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
   def validate_shape_handle(stack_id, shape_handle, %Shape{} = shape)
       when is_stack_id(stack_id) do
     case :ets.lookup(shape_meta_table(stack_id), shape_handle) do
-      [{^shape_handle, hash, _snapshot_started, _last_read}] ->
+      [{^shape_handle, hash, _snapshot_started, _last_read, _gen}] ->
         if Shape.hash(shape) == hash, do: :ok, else: :error
 
       [] ->
@@ -238,7 +272,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
 
   def snapshot_started?(stack_id, shape_handle) do
     case :ets.lookup(shape_meta_table(stack_id), shape_handle) do
-      [{^shape_handle, _hash, snapshot_started, _last_read}] -> snapshot_started
+      [{^shape_handle, _hash, snapshot_started, _last_read, _gen}] -> snapshot_started
       [] -> false
     end
   end
@@ -285,10 +319,10 @@ defmodule Electric.ShapeCache.ShapeStatus do
         fn
           # This shape has only just been created, so it's too young to be considered for
           # expiration.
-          {_handle, _hash, _snapshot_started, nil}, tree ->
+          {_handle, _hash, _snapshot_started, nil, _gen}, tree ->
             tree
 
-          {handle, _hash, _snapshot_started, last_read}, tree ->
+          {handle, _hash, _snapshot_started, last_read, _gen}, tree ->
             last_read_tuple = {last_read, handle}
 
             if :gb_trees.size(tree) < shape_count do
@@ -333,20 +367,16 @@ defmodule Electric.ShapeCache.ShapeStatus do
     do: :"shape_meta_table:#{stack_id}"
 
   defp create_shape_meta_table(stack_id) do
-    table = shape_meta_table(stack_id)
-
-    :ets.new(table, [
+    :ets.new(shape_meta_table(stack_id), [
       :named_table,
       :public,
       :set,
       read_concurrency: true,
       write_concurrency: :auto
     ])
-
-    table
   end
 
-  defp populate_shape_meta_table(stack_id) do
+  defp populate_shape_meta_table(stack_id, generation) do
     start_time = System.monotonic_time()
 
     ShapeDb.reduce_shape_meta(
@@ -356,7 +386,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
         # any shapes where the snapshot didn't complete have been deleted
         # so there is no intermediate started-but-not-complete state
         # and completed implies started
-        true = :ets.insert(table, {handle, hash, snapshot_complete?, start_time})
+        true = :ets.insert(table, {handle, hash, snapshot_complete?, start_time, generation})
         table
       end
     )
