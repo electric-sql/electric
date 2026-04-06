@@ -9,7 +9,6 @@ priceQualifier: '/ month'
 
 limits:
   maxDatabases: 10
-  concurrentReadersPerStream: 100
   maxUsersPerWorkspace: 50
 
 featureGates:
