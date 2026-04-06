@@ -16,9 +16,9 @@ If you discover a security vulnerability in Electric, please report it through
 
 ### Response timeline
 
-- **Acknowledgement**: within 48 hours of your report
-- **Initial assessment**: within 7 days, we will confirm whether the report is accepted and share our initial severity assessment
-- **Resolution**: we aim to release a fix within 30 days for critical issues, though timelines may vary based on complexity
+- **Acknowledgement**: within 24 hours of your report
+- **Initial assessment**: normally within 48 hours, we will confirm whether the report is accepted and share our initial severity assessment
+- **Resolution**: we aim to fix critical issues the same day, though timelines vary based on complexity. Resolution includes an OSS release and deploying the fix to Electric Cloud
 
 ### Disclosure policy
 
@@ -41,10 +41,12 @@ The following are **in scope**:
 
 - The Electric sync engine (`packages/sync-service`)
 - Official client libraries (`packages/typescript-client`, `packages/elixir-client`, `packages/react-hooks`)
-- The Electric Cloud managed service
+- [Electric Cloud](https://dashboard.electric-sql.cloud/)
+- [Phoenix Sync](https://github.com/electric-sql/phoenix_sync)
 
 The following are **out of scope**:
 
+- Experimental features (e.g. the `@electric-sql/experimental` package, or features behind feature flags)
 - Example applications in the `examples/` directory
 - Third-party dependencies (please report these to the upstream project)
 - Social engineering or phishing attacks against Electric team members
