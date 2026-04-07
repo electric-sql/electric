@@ -14,10 +14,6 @@ post: true
 published: true
 ---
 
-<!-- TLDR: State the point immediately. No setup, no preamble. Technical
-     audience wants to know what this is and why it matters in under
-     10 seconds. -->
-
 I came to sync engines through collaborative editing. Since AI agents became part of my daily workflow, I've had an earworm: what would it look like to integrate an AI agent into a Yjs rich text editing flow — not as a sidebar that dumps text, but as a real participant with its own cursor, presence, and streaming edits?
 
 This post walks through how I built a [Collaborative AI Editor](https://collaborative-ai-editor.examples.electric-sql.com) demo — a [TanStack Start](https://tanstack.com/start) app with a [ProseMirror](https://prosemirror.net)/Yjs editor and an AI chat sidebar. It uses [Durable&nbsp;Streams](https://durablestreams.com) as the single transport layer for both [Yjs](https://yjs.dev) document collaboration and [TanStack&nbsp;AI](https://tanstack.com/ai) chat sessions. Two integrations, one primitive, and the AI becomes a genuine CRDT peer.
@@ -25,17 +21,11 @@ This post walks through how I built a [Collaborative AI Editor](https://collabor
 > [!Warning] Collaborative AI Editor demo
 > Try the [live demo](https://collaborative-ai-editor.examples.electric-sql.com) and browse the [source code](https://github.com/electric-sql/collaborative-ai-editor).
 
-<!-- ASSET: Video embed of the full demo experience -->
-
 <div style="border: 1px solid #555; border-radius: 8px; padding: 48px 24px; text-align: center; color: #888; margin: 24px 0;">
   <p style="font-size: 48px; margin: 0;">&#9654;</p>
   <p style="font-size: 16px; margin: 8px 0 4px;"><strong>TODO: YouTube video embed</strong></p>
   <p style="font-size: 13px; margin: 0;">Full demo walkthrough — editor + chat sidebar + Electra editing in real-time</p>
 </div>
-
-<!-- SITUATION: Head-nodding statements. The reader already believes these
-     things. Establish shared reality — no persuasion, just recognition.
-     Sam's personal context grounds this in lived experience, not theory. -->
 
 ## The natural intersection
 
@@ -44,11 +34,6 @@ AI-assisted writing and editing is everywhere. ChatGPT Canvas, Cursor, Notion AI
 At the same time, real-time collaboration is table stakes for productivity tools. Google Docs taught a generation of users to expect it, and Figma proved the model works for complex creative tools too. If you're building anything where people work on shared artifacts, multiplayer is the baseline.
 
 The overlap is clear. We already have the tools for multiple people to edit a document together in real-time. If we treat an AI agent as just another peer in that system, we get collaborative AI editing without reinventing the wheel. The agent joins the same document, gets its own cursor, and edits alongside you using the same CRDT infrastructure that already handles conflict resolution between humans.
-
-<!-- COMPLICATION: Introduce tension. The reader should feel "yes, that's
-     my problem." This is grounded in what Sam actually encountered and
-     observed — not theoretical concerns. The diff/patch vs CRDT structure
-     point is the sharpest technical hook. -->
 
 ## But the integration is painful
 
@@ -60,21 +45,9 @@ On top of that, most approaches rely on client-side tool calls to edit the docum
 
 Put it all together and you're looking at one protocol for Yjs, another for AI streaming, custom persistence for chat history, and separate reconnection logic for each layer. Every system fails independently. It's a lot of moving parts for something that should feel simple.
 
-<!-- STYLE: The transition from complication to answer should feel natural —
-     Sam worked on Durable Streams, then the Yjs integration, then the
-     TanStack AI integration. Gluing them together was the obvious next step. -->
-
 Having worked on Durable&nbsp;Streams, then built the [Yjs integration](https://durablestreams.com/yjs), then the [TanStack&nbsp;AI integration](https://durablestreams.com/tanstack-ai), the natural question was: what if these two integrations shared the same infrastructure?
 
-<!-- ANSWER SECTIONS: Each ## is a component of the answer. Order by
-     importance. Show, don't tell — code and examples over assertions. -->
-
 ## Three streams, one primitive
-
-<!-- This section establishes the architectural foundation. The reader
-     should understand the "shape" of the system before diving into
-     specifics. Keep it concrete — what are the three streams, how do
-     they connect. -->
 
 [Durable&nbsp;Streams](https://durablestreams.com) is a persistent, addressable HTTP streaming protocol. Writers append data to a stream, subscribers consume it, and any client can catch up from its last offset at any time. The protocol handles reconnection and delivery automatically.
 
@@ -90,51 +63,9 @@ The [`@durable-streams/tanstack-ai-transport`](https://durablestreams.com/tansta
 
 Both integrations share the same underlying protocol. No WebSocket servers to manage, no separate persistence layer to build, no custom reconnection logic. For local development, `@durable-streams/server` runs with file-backed storage. In production, you can use [Durable&nbsp;Streams Cloud](https://durablestreams.com) or self-host.
 
-<!-- Architecture diagram -->
 <img src="/img/blog/building-a-collaborative-ai-editor/architecture.svg" alt="Architecture diagram showing the browser client and server agent both connecting to three Durable Streams: a Yjs document stream, a Yjs awareness stream, and a TanStack AI chat stream" />
 
-<!-- ASCII fallback (replaced by SVG above):
- ┌─────────────────────┐              ┌──────────────────────┐
- │   Browser Client    │              │    Server Agent      │
- │                     │              │    ("Electra")       │
- │  ┌───────────────┐  │              │                      │
- │  │  ProseMirror  │  │              │  ┌────────────────┐  │
- │  │  + Yjs Editor │  │              │  │  Server Y.Doc  │  │
- │  └───────┬───────┘  │              │  └───────┬────────┘  │
- │          │          │              │          │           │
- │  ┌───────┴───────┐  │              │  ┌───────┴────────┐  │
- │  │  YjsProvider  │  │              │  │  YjsProvider   │  │
- │  └───┬───────┬───┘  │              │  └──┬────────┬────┘  │
- │      │       │      │              │     │        │       │
- │  ┌───┴───┐   │      │              │     │   ┌────┴────┐  │
- │  │useChat│   │      │              │     │   │  chat() │  │
- │  └───┬───┘   │      │              │     │   └────┬────┘  │
- └──────┼───────┼──────┘              └─────┼────────┼───────┘
-        │       │                           │        │
-        │       │    Durable Streams        │        │
- ───────┼───────┼───────────────────────────┼────────┼────────
-        │       │                           │        │
-   ┌────┴───────┴───────────────────────────┴────────┴─────┐
-   │                                                       │
-   │  ┌─────────────────────────────────────────────────┐  │
-   │  │  Stream: /doc/{id}/yjs          (Yjs document)  │  │
-   │  └─────────────────────────────────────────────────┘  │
-   │  ┌─────────────────────────────────────────────────┐  │
-   │  │  Stream: /doc/{id}/yjs/awareness (Yjs awareness)│  │
-   │  └─────────────────────────────────────────────────┘  │
-   │  ┌─────────────────────────────────────────────────┐  │
-   │  │  Stream: /doc/{id}/chat         (TanStack AI)   │  │
-   │  └─────────────────────────────────────────────────┘  │
-   │                                                       │
-   │              Durable Streams Server                   │
-   └───────────────────────────────────────────────────────┘
--->
-
 ## The AI as a CRDT peer
-
-<!-- The key architectural decision. The reader should understand WHY
-     server-side matters, not just that it's server-side. The contrast
-     with client-side tool calls is the hook. -->
 
 The key architectural choice: the AI agent is a server-side Yjs peer, not a client-side bolt-on. On the server, the agent opens its own Yjs document and connects to the same Durable Stream as the human editors. It's just another participant in the room. In the demo, the agent is called "Electra".
 
@@ -146,18 +77,12 @@ From the human user's perspective, Electra looks like any other collaborator:
 
 The agent doesn't manipulate the Yjs document directly. It works through tool calls: the AI model decides what to do, a runtime on the server translates those tool calls into Yjs operations, and the CRDT sync propagates the changes to all connected clients. Because the agent is a server-side peer, it can edit the document whether or not any browser has it open.
 
-<!-- ASSET: Screenshot or short video showing Electra's cursor and
-     presence in the editor alongside a human user -->
-
 <figure>
   <video class="w-full" autoplay loop muted playsinline preload="metadata">
     <source src="/videos/blog/building-a-collaborative-ai-editor/multiple-cursors.mp4" type="video/mp4" />
   </video>
   <figcaption>Electra's cursor and presence in the editor&nbsp;alongside&nbsp;a&nbsp;human&nbsp;user.</figcaption>
 </figure>
-
-<!-- ASSET: Short code snippet — createServerAgentSession setup or
-     awareness config -->
 
 ```ts
 async function createServerAgentSession(docKey: string, sessionId: string) {
@@ -196,11 +121,6 @@ Because the agent is a server-side peer, you can start an edit, close your lapto
 
 ## Streaming edits into a live document
 
-<!-- This is the most technically dense section. The reader needs to
-     understand the problem (you can't just append characters one at a
-     time to a CRDT) before the solution makes sense. Walk through
-     the techniques in logical order: tools → anchors → commits → markdown. -->
-
 The hard problem here is that the AI generates markdown text, but the document is a rich text CRDT. It's a structured data type, not a string. You need to convert streaming markdown tokens into rich text nodes and insert them at positions that stay valid while other users are editing concurrently.
 
 ### Document tools
@@ -223,10 +143,6 @@ The tool surface is deliberately constrained. The agent operates through the sam
 
 ### Routing streaming text into the document
 
-<!-- This is one of the most interesting implementation details. It
-     deserves its own subsection because it solves a real limitation
-     of tool-based AI architectures. -->
-
 Tool calls don't support async streaming. You call a tool with arguments and get a result back. But we want the model to stream prose into the document token by token.
 
 The solution is a routing trick. `start_streaming_edit` is a tool that flips a switch: after it's called, the model's next text output gets intercepted and redirected into the document instead of streaming into the chat as an assistant message. The model just generates text naturally. The infrastructure decides where it goes.
@@ -238,9 +154,6 @@ The solution is a routing trick. `start_streaming_edit` is a tool that flips a s
 - Content format can be **plain text** or **markdown**, which determines how the streaming text gets converted into document nodes (more on the markdown path [below](#streaming-markdown-into-the-document))
 
 When the model finishes generating or calls another tool, the routing automatically stops. The model can also explicitly call `stop_streaming_edit` to switch back to chat output mid-turn. The system prompt explains this convention so the model knows to call `start_streaming_edit` before generating document prose, and to switch back when it wants to respond in the chat.
-
-<!-- ASSET: Short code snippet showing a subset of tool definitions
-     from documentTools.ts -->
 
 ```ts
 const searchTextDef = toolDefinition({
@@ -277,15 +190,9 @@ const startStreamingEditDef = toolDefinition({
 
 ### Relative position anchors
 
-<!-- This is the clever bit. The reader needs to understand why absolute
-     positions fail under concurrent editing before relative positions
-     make sense. -->
-
 Absolute positions in a document shift when other users type, making them useless for concurrent editing. [Yjs](https://docs.yjs.dev/api/relative-positions) solves this with relative positions, which are anchored to CRDT items rather than offsets. They stay correct regardless of what other users do to the document.
 
 When the user sends a message, the client encodes its current cursor and selection as relative anchors and sends them to the server as part of the chat context. This gives the agent awareness of what the user is doing and where they're looking in the document. The agent doesn't have to use this context, but when the user says "rewrite this paragraph" or "insert something here", it can target the exact semantic position the user intended.
-
-<!-- ASSET: Short code snippet — relative anchor encode/decode -->
 
 ```ts
 // Client: encode the cursor position as a Yjs relative position
@@ -308,9 +215,6 @@ The edits stream into the document in real-time. The user sees text appear as th
 
 AI models have been trained on markdown as a native format. They naturally use it to express formatting and emphasis. Rather than fight against this by inventing a custom format or requiring tool calls for every formatting operation, we lean into markdown as an intermediate representation. A streaming pipeline incrementally parses the token stream and converts it into native Yjs document nodes as they arrive — `**bold**` becomes a bold mark, `## heading` becomes a heading node, `- item` becomes a list item. The model writes in the format it's best at, and the document receives properly structured rich text.
 
-<!-- ASSET: Animated gif/video showing streaming text appearing in the
-     editor with the agent's cursor, while a human edits elsewhere -->
-
 <figure>
   <video class="w-full" autoplay loop muted playsinline preload="metadata">
     <source src="/videos/blog/building-a-collaborative-ai-editor/markdown.mp4" type="video/mp4" />
@@ -320,18 +224,11 @@ AI models have been trained on markdown as a native format. They naturally use i
 
 ## Durable chat
 
-<!-- This section is the most straightforward — it's mostly "swap the
-     connection adapter and everything works." Keep it tight. The agent
-     response flow subsection adds the interesting detail about how
-     chat and document edits interact. -->
-
 The chat sidebar uses [TanStack&nbsp;AI](https://tanstack.com/ai)'s `useChat` hook with no custom component code. The only difference from a standard chat setup is the connection adapter: instead of the default request/response model, a durable connection routes messages through a Durable&nbsp;Stream. Messages POST to `/api/chat`, and the client subscribes to `/api/chat-stream`.
 
 Because the chat session lives on a Durable&nbsp;Stream, it's resilient by default. Refresh the page mid-generation and the chat picks up where it left off. Close the tab entirely, come back later, and the full conversation history is there, including any generations that completed while you were away.
 
 The chat and document streams are linked but independent. You can have the chat open without the editor, or vice versa.
-
-<!-- ASSET: Short code snippet — createDurableChatConnection usage -->
 
 ```ts
 import { durableStreamConnection } from '@durable-streams/tanstack-ai-transport'
@@ -353,9 +250,6 @@ When the user sends a message, the server runs TanStack&nbsp;AI's `chat()` with 
 When the agent calls a document tool, the edit is applied to the Yjs document and propagates through the Yjs Durable Stream. The tool result goes back through the chat Durable Stream. After making edits, the agent can stream a summary of what it changed back into chat, so the conversation log explains what happened even if you weren't watching the editor.
 
 Cancellation is clean: stopping a generation tears down both the chat stream and any in-flight document edits. You can see this flow end-to-end in the [demo source code](https://github.com/electric-sql/collaborative-ai-editor).
-
-<!-- ASSET: Screenshot showing the chat sidebar with a conversation,
-     including tool call indicators showing document edits -->
 
 <figure>
   <video class="w-full" autoplay loop muted playsinline preload="metadata">
