@@ -125,7 +125,7 @@ Electric measures usage using its internal metering and billing systems. Metered
 
 - Writes, including chunked writes and protocol-level writes recorded by the Services;
 - Retention, including time-based storage of Customer Content (for example measured continuously and converted to GB-month or similar);
-- Tier-limited usage dimensions, such as the number of databases, streams, workspaces, users, concurrent readers per stream, API requests, or other usage or operational indicators where relevant to the Tier; and
+- Tier-limited usage dimensions, such as the number of databases, streams, workspaces, users, API requests, or other usage or operational indicators where relevant to the Tier; and
 - Any additional usage inputs described in the Services, dashboard, or Documentation (as may vary from time to time).
 
 Electric's metering records are the system of record for billing and usage calculations as determined by Electric in their reasonable discretion, unless Electric confirms a material billing error in writing. Metering methods may evolve over time to improve accuracy and prevent abuse, including the use of aggregation, sampling, caching-aware measurement, and safety controls.

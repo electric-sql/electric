@@ -68,8 +68,7 @@ const config = pricing.config
       <div class="support-option">
         <h3>Enterprise</h3>
         <p>Bespoke solutions for teams with custom requirements.
-          Unlimited databases, unlimited concurrent readers,
-          custom SLAs, and dedicated support.</p>
+          Unlimited databases, custom SLAs, and dedicated support.</p>
       </div>
     </div>
     <div class="support-cta">
@@ -224,14 +223,6 @@ const config = pricing.config
         Scale at any time — upgrades take effect immediately with prorated
         charges. Downgrades take effect at the end of your current billing
         period, provided your usage is within the target plan's limits.</p>
-    </details>
-    <details class="faq-item">
-      <summary>What are the concurrent reader limits?</summary>
-      <p>Concurrent readers per stream are monitored by tier — 100 for PAYG,
-        1,000 for Pro, and 10,000 for Scale. These are soft thresholds used
-        for monitoring; they are not hard-enforced at launch. If you
-        consistently exceed your tier's threshold, we'll reach out to
-        discuss upgrading.</p>
     </details>
   </div>
 </Section>

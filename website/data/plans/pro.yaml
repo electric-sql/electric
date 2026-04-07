@@ -21,7 +21,6 @@ billingBehavior: 'Monthly fee acts as prepaid usage credit'
 who: 'For teams running mission-critical apps'
 features:
   - 'Up to 50 databases'
-  - '1,000 concurrent readers'
   - 'Early access to new features'
 
 ctaText: 'Sign up now'
