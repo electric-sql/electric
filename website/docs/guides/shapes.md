@@ -453,3 +453,47 @@ This is especially important if you intend to recreate the table afterwards (pos
 Therefore, recreating the table only works if you first delete the shape.
 
 Electric does not yet automatically delete shapes when tables are dropped because Postgres does not stream DDL statements (such as `DROP TABLE`) on the logical replication stream that Electric uses to detect changes. However, we are actively exploring approaches for automated shape deletion in this [GitHub issue](https://github.com/electric-sql/electric/issues/1733).
+
+## Why shape handles get deleted
+
+When a shape handle is deleted, clients receive a `409 Conflict` response or a [`must-refetch`](/docs/api/http#control-messages) control message. This tells the client to discard its local data and re-sync the shape from scratch. Understanding why this happens can help you reduce how often shapes need to be recreated — especially important for large shapes where re-syncing is expensive.
+
+### Server restart
+
+Electric stores shape logs on disk, but the active shape state is held in memory. When the Electric server restarts, **all active shape handles are invalidated**. Clients will need to create new shape subscriptions and re-sync from scratch.
+
+> [!Tip] Reducing the impact of restarts
+> If you're self-hosting Electric and want to preserve shape data across restarts, ensure that the [`ELECTRIC_STORAGE_DIR`](/docs/api/config#electric-storage-dir) is configured to use persistent storage (not a temporary or ephemeral volume). This allows Electric to recover shape logs from disk on startup, reducing the amount of data that needs to be re-synced.
+
+### Schema changes
+
+When the schema of a table used by a shape changes — for example, adding, removing, or renaming a column — Electric automatically invalidates all shapes on that table. This is because the shape log was built against the old schema and may be missing data for new columns or contain references to removed ones.
+
+Electric detects schema changes in multiple ways:
+- via the logical replication stream when a relation message indicates the table structure has changed
+- via periodic background checks that reconcile cached table metadata with the actual database schema
+
+### Unrecoverable Postgres errors
+
+Certain Postgres errors cause Electric to delete all shapes. These include:
+
+- **Replication slot invalidated** — if the WAL (Write-Ahead Log) retained by Electric's replication slot exceeds the [`max_slot_wal_keep_size`](https://www.postgresql.org/docs/current/runtime-config-replication.html#GUC-MAX-SLOT-WAL-KEEP-SIZE) limit in Postgres, the slot is invalidated. Electric must recreate the slot and rebuild all shapes from scratch. See the [troubleshooting guide](/docs/guides/troubleshooting#wal-growth-mdash-why-is-my-postgres-database-storage-filling-up) for how to monitor and configure WAL retention.
+- **Publication errors** — if the Postgres [publication](https://www.postgresql.org/docs/current/logical-replication-publication.html) used by Electric is dropped or misconfigured, shapes on affected tables are removed.
+
+### Shape eviction (max shapes limit)
+
+If you've configured [`ELECTRIC_MAX_SHAPES`](/docs/api/config#electric-max-shapes), Electric periodically evicts the least recently used shapes when the limit is exceeded. Clients subscribed to an evicted shape will receive a `409 Conflict` response and will need to start a new subscription.
+
+### Explicit deletion via the API
+
+Shapes can be explicitly deleted using the `DELETE /v1/shape` endpoint. This is useful when you know a shape is no longer needed, or when you need to force clients to re-sync — for example, after [dropping and recreating a table](#dropping-tables).
+
+### What happens on the client
+
+When a shape is deleted, the Electric client handles it automatically:
+
+1. The server responds with a `409 Conflict` status or sends a `must-refetch` control message.
+2. The client discards its local copy of the shape data.
+3. The client starts a new shape subscription and re-syncs from scratch.
+
+This is handled transparently by the [TypeScript client](/docs/api/clients/typescript) and [TanStack DB](/primitives/tanstack-db). No manual intervention is required — but the re-sync may take time for large shapes.
