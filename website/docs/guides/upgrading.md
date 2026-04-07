@@ -104,8 +104,8 @@ ELECTRIC_STORAGE_DIR=/shared/electric/data
 ELECTRIC_SECRET=your-secret
 ```
 
-> [!Warning] `ELECTRIC_SHAPE_DB_EXCLUSIVE_MODE` is required for shared storage
-> When two instances access the same storage concurrently during a rolling deploy, you **must** set [`ELECTRIC_SHAPE_DB_EXCLUSIVE_MODE=true`](/docs/api/config#electric-shape-db-exclusive-mode). This configures SQLite to use a single read-write connection, preventing corruption from concurrent access. Without it, shape metadata can become corrupted during the brief overlap window. This setting is included in all shared-storage examples below.
+> [!Warning] `ELECTRIC_SHAPE_DB_EXCLUSIVE_MODE` for shared storage
+> When using a **network filesystem** (NFS, EFS) for shared storage, you **must** set [`ELECTRIC_SHAPE_DB_EXCLUSIVE_MODE=true`](/docs/api/config#electric-shape-db-exclusive-mode). This configures SQLite to use a single read-write connection, preventing corruption from concurrent access &mdash; SQLite's default WAL mode relies on shared-memory locking that does not work correctly on network filesystems. For **local shared volumes** (e.g., a K8s PVC backed by local SSD), this setting is not strictly required but is recommended as a safe default. It is included in all shared-storage examples below.
 
 ### Docker Compose example
 
