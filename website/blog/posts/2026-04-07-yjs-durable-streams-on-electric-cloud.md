@@ -15,7 +15,7 @@ published: true
 [Yjs](https://yjs.dev) is the de facto library for collaborative editing on the web — battle-proven, CRDT-based, and powering tools like [TipTap](https://tiptap.dev), [CodeMirror](https://codemirror.net), and [BlockNote](https://www.blocknotejs.org/). Today we're releasing [`y-durable-streams`](https://www.npmjs.com/package/@durable-streams/y-durable-streams) — a new Yjs provider built on [Durable&nbsp;Streams](/primitives/durable-streams), now live on [Electric&nbsp;Cloud](/cloud). It brings built-in persistence, compaction, and real-time presence to collaborative apps and agentic&nbsp;systems.
 
 >[!info] 🚀&nbsp; Try it now
->[Create a Yjs service](https://dashboard.electric-sql.cloud/?intent=create&serviceType=yjs), see the [integration docs](https://durablestreams.com/yjs), [source&nbsp;code](https://github.com/durable-streams/durable-streams/tree/main/packages/y-durable-streams), and [demo&nbsp;app](https://github.com/balegas/territory-wars).
+>[Create a Yjs service](https://dashboard.electric-sql.cloud/?intent=create&serviceType=yjs), see the [integration docs](https://durablestreams.com/yjs), [source&nbsp;code](https://github.com/durable-streams/durable-streams/tree/main/packages/y-durable-streams), and [demo&nbsp;app](/demos/territory-wars).
 
 ## Yjs on Durable Streams
 
@@ -90,6 +90,6 @@ Electric Cloud implements the protocol faithfully — no proprietary extensions,
 
 - [Create a Yjs service](https://dashboard.electric-sql.cloud/?intent=create&serviceType=yjs) on Electric Cloud
 - [Integration docs](https://durablestreams.com/yjs) and [protocol spec](https://github.com/durable-streams/durable-streams/blob/main/packages/y-durable-streams/YJS-PROTOCOL.md)
-- [Territory Wars demo](https://github.com/balegas/territory-wars) and [collaborative editor example](https://github.com/durable-streams/durable-streams/tree/main/examples/yjs-demo) on GitHub
+- [Territory Wars demo](/demos/territory-wars) and [collaborative editor example](https://github.com/durable-streams/durable-streams/tree/main/examples/yjs-demo) on GitHub
 
 Join us on [Discord](https://discord.electric-sql.com) with any&nbsp;questions.
