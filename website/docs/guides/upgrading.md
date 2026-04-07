@@ -5,11 +5,6 @@ description: >-
 outline: [2, 3]
 ---
 
-<img src="/img/icons/deploy.png" class="product-icon"
-    style="width: 72px"
-    alt="Upgrade icon"
-/>
-
 # Upgrading
 
 How to upgrade the [Electric sync engine](/primitives/postgres-sync) with minimal disruption using rolling deployments. This guide covers two deployment scenarios: [shared storage](#shared-storage-recommended) (recommended) and [separate storage](#separate-storage-ephemeral) for ephemeral environments.
@@ -90,13 +85,11 @@ When instances share the same filesystem (e.g., a persistent volume), they share
 ### When to use
 
 - Kubernetes with [ReadWriteMany](https://kubernetes.io/docs/concepts/storage/persistent-volumes/#access-modes) PersistentVolumeClaims
-- AWS ECS on EC2 with shared host volumes
-- Any platform with a shared or network filesystem
+- AWS ECS on EC2 with shared host volumes (use [placement constraints](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-placement-constraints.html) to keep tasks on the same host)
+- Any platform where both instances can access the same filesystem
 
-> [!Tip] ECS storage options
-> For ECS on EC2, use host bind mounts with [placement constraints](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-placement-constraints.html) to keep both old and new tasks on the same host, sharing a local volume. This gives the best performance.
->
-> [EFS](https://aws.amazon.com/efs/) is also an option and is simpler to configure, but has high latency compared to local storage and may not perform well for large deployments.
+> [!Warning] Network filesystems and performance
+> Electric is IO-intensive &mdash; it reads and writes shape logs and metadata frequently. Network filesystems like [EFS](https://aws.amazon.com/efs/) or NFS add significant latency compared to local storage and may not perform well for large deployments. Prefer local volumes (e.g., NVMe SSDs on EC2 with host bind mounts) where possible. If you must use a network filesystem, see the [troubleshooting guide](/docs/guides/troubleshooting#sqlite-corruption-mdash-why-is-my-shape-metadata-database-corrupt-on-nfs-efs) for important SQLite configuration.
 
 ### Configuration
 
@@ -107,8 +100,6 @@ DATABASE_URL=postgresql://user:password@host:5432/mydb
 ELECTRIC_STORAGE_DIR=/shared/electric/data
 ELECTRIC_SECRET=your-secret
 ```
-
-If using a network filesystem like NFS or EFS, see the [troubleshooting guide](/docs/guides/troubleshooting#sqlite-corruption-mdash-why-is-my-shape-metadata-database-corrupt-on-nfs-efs) for important configuration to avoid SQLite corruption.
 
 ### Docker Compose example
 
