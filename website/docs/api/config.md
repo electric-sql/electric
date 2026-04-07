@@ -140,7 +140,7 @@ When set to `true`, Electric creates a [temporary replication slot](https://www.
 > [!Warning] Unclean shutdowns cause shape rotations
 > If Electric crashes or loses its database connection (e.g., during a network partition), the temporary slot is lost. The next instance starts with a fresh slot and clients connected to old shapes will receive `409` (must-refetch) responses, requiring a full resync.
 
-See the [Upgrading guide](/docs/guides/upgrading#option-b-temporary-replication-slots) for more context on using temporary slots.
+See the [Upgrading guide](/docs/guides/upgrading#option-a-temporary-replication-slots) for more context on using temporary slots.
 
 </EnvVarConfig>
 

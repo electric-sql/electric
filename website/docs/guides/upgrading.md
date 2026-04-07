@@ -7,6 +7,7 @@ outline: [2, 3]
 
 <img src="/img/icons/deploy.png" class="product-icon"
     style="width: 72px"
+    alt="Upgrade icon"
 />
 
 # Upgrading
@@ -15,22 +16,56 @@ How to upgrade the [Electric sync engine](/primitives/postgres-sync) with minima
 
 Before reading this guide, make sure you're familiar with the [Deployment guide](/docs/guides/deployment) for general setup.
 
+## Overview
+
+Electric is designed to run as a **single active instance** per replication stream. It uses a PostgreSQL advisory lock &mdash; a cooperative lock used for application-level coordination that does not lock any tables or rows &mdash; to ensure only one instance actively replicates from Postgres at a time.
+
+When you deploy a new version:
+
+1. The **new instance** starts and loads shape metadata from storage
+2. While the old instance holds the lock, the new instance enters **read-only mode** &mdash; it can serve requests for existing shapes but cannot create new ones
+3. Once the old instance shuts down, its database connection drops and the lock is released
+4. The **new instance** acquires the lock and becomes fully active
+
+```
+Time ────────────────────────────────────────────►
+
+Old    [==== active (200) ====]--shutdown--X
+                                lock released─┐
+New       [starting][waiting (202)]───────────┴─[== active ==]
+              │           │                         │
+          loading    serves existing          fully operational
+          metadata   shapes (read-only)
+```
+
+The read-only window is typically brief &mdash; a few seconds to under a minute, depending on how quickly your orchestrator terminates the old instance. During this window, existing shapes continue to be served. Requests for new shapes return `503` with a `Retry-After` header until the new instance becomes active. The official [TypeScript client](/docs/api/clients/typescript) handles both of these automatically.
+
+### Choosing a strategy
+
+| | Shared storage | Temporary slots | Separate stream IDs |
+|---|---|---|---|
+| Client disruption | Minimal (new shapes delayed) | Minimal on clean shutdown; 409s on crash | None (both active) |
+| Sticky sessions required | No | No | Yes |
+| Postgres overhead | Single slot | Single slot (temporary) | Multiple slots (WAL growth) |
+| Best for | [Most deployments](#shared-storage-recommended) | [Ephemeral environments](#option-a-temporary-replication-slots) | [No shared storage, need full availability](#option-b-separate-replication-stream-ids) |
+
 ## How the advisory lock works
 
-Electric uses a [PostgreSQL advisory lock](https://www.postgresql.org/docs/current/explicit-locking.html#ADVISORY-LOCKS) to ensure only one instance actively replicates from Postgres at a time. The lock is tied to the replication slot name:
+The advisory lock is tied to the replication slot name:
 
 ```sql
 SELECT pg_advisory_lock(hashtext('electric_slot_{stream_id}'))
 ```
 
-Key properties:
+This lock is scoped to Electric's replication slot name and does not conflict with any other advisory locks or table-level locks in your database.
 
 - Only one instance can hold the lock per [`ELECTRIC_REPLICATION_STREAM_ID`](/docs/api/config#electric-replication-stream-id)
 - The lock is held on the replication database connection &mdash; if the connection drops (e.g., instance shutdown), the lock is automatically released
-- A new instance waiting for the lock enters **read-only mode**, where it can serve existing shapes but cannot create new ones
-- Electric includes a lock breaker mechanism that can terminate stale database connections holding the lock, preventing indefinite lock contention if the previous instance failed to cleanly release it
 
-## Health check behavior during deploys
+> [!Tip] Lock breaker
+> Electric includes a lock breaker mechanism that can detect and terminate stale database connections holding the lock. This prevents indefinite lock contention if the previous instance failed to cleanly release it &mdash; for example, after a crash or network partition where the Postgres connection was not properly closed.
+
+## Health check behavior during upgrades
 
 The [`/v1/health`](/docs/guides/deployment#health-checks) endpoint reflects the instance's current state:
 
@@ -46,42 +81,20 @@ During the `waiting` state:
 - Requests that require **creating new shapes** return `503` with a `Retry-After: 5` header
 - **Shape deletion** also requires active mode and returns `503` while waiting
 
-> [!Tip] Probe configuration
-> For **liveness probes**, any response (200 or 202) indicates the service is alive.
->
-> For **readiness probes** during rolling deploys, you should accept both `200` and `202` (i.e., any 2xx response). If you only accept `200`, the new instance can never become ready while the old instance holds the lock &mdash; creating a deadlock where the orchestrator waits for the new instance to be ready before terminating the old one.
->
-> See the [Deployment guide](/docs/guides/deployment#health-checks) for more on health check configuration.
+For **liveness probes**, any response (200 or 202) indicates the service is alive. For **readiness probes** during rolling upgrades, see the [health check warning](#health-checks-must-accept-http-202) below.
 
 ## Shared storage (recommended)
 
 When instances share the same filesystem (e.g., a network volume), they share shape data and metadata. This is the recommended approach because shape handles remain stable across deploys &mdash; clients don't need sticky sessions and experience minimal disruption.
-
-### How it works
-
-```
-Time ──────────────────────────────────────────────────────────►
-
-Instance A    [===== active (200) =====]---shutdown---X
-                                         lock released ─┐
-Instance B         [starting (202)][waiting (202)]──────┴─[=== active (200) ===]
-                        │                │                        │
-                        │          serves existing          fully operational
-                   loading metadata   shapes (read-only)
-```
-
-1. **Instance A** is active, holding the advisory lock, serving all shapes
-2. **Instance B** starts, loads shape metadata from the shared SQLite database, and enters read-only mode (health returns `202` "waiting")
-3. **Instance B** can serve requests for existing shapes while waiting
-4. The orchestrator sends SIGTERM to **Instance A**
-5. **Instance A** shuts down, its database connection drops, and the advisory lock is released
-6. **Instance B** acquires the lock and becomes fully active (health returns `200`)
 
 ### When to use
 
 - Kubernetes with [ReadWriteMany](https://kubernetes.io/docs/concepts/storage/persistent-volumes/#access-modes) PersistentVolumeClaims
 - AWS ECS with [EFS](https://aws.amazon.com/efs/) volumes
 - Any platform with a shared or network filesystem
+
+> [!Warning] EFS performance
+> EFS has high latency compared to local storage and may not perform well for large deployments. It is currently the only easy way to share storage on ECS. For better performance at scale, consider local NVMe storage with the [separate storage](#separate-storage-ephemeral) approach instead.
 
 ### Configuration
 
@@ -93,15 +106,11 @@ ELECTRIC_STORAGE_DIR=/shared/electric/data
 ELECTRIC_SECRET=your-secret
 ```
 
-> [!Warning] SQLite on network filesystems
-> Electric uses SQLite for shape metadata. SQLite can have issues with locking on network filesystems like NFS or EFS. To avoid corruption, either:
->
-> - Set [`ELECTRIC_SHAPE_DB_EXCLUSIVE_MODE=true`](/docs/api/config#electric-shape-db-exclusive-mode) to use a single read-write connection
-> - Or set [`ELECTRIC_SHAPE_DB_STORAGE_DIR`](/docs/api/config#electric-shape-db-storage-dir) to a local (non-shared) path to keep the SQLite database on local storage while sharing shape logs on the network filesystem
+If using a network filesystem like NFS or EFS, see the [troubleshooting guide](/docs/guides/troubleshooting#sqlite-corruption-mdash-why-is-my-shape-metadata-database-corrupt-on-nfs-efs) for important configuration to avoid SQLite corruption.
 
 ### Docker Compose example
 
-This example demonstrates the shared-storage setup with two Electric instances behind a load balancer. In practice, your orchestrator handles starting and stopping instances during a rolling deploy.
+This example demonstrates the shared-storage setup. In practice, your orchestrator handles starting and stopping instances during an upgrade.
 
 ```yaml
 services:
@@ -110,6 +119,7 @@ services:
     environment:
       DATABASE_URL: postgresql://postgres:password@postgres:5432/myapp
       ELECTRIC_STORAGE_DIR: /var/lib/electric/data
+      # Required for shared network filesystems — see troubleshooting guide
       ELECTRIC_SHAPE_DB_EXCLUSIVE_MODE: "true"
       ELECTRIC_SECRET: ${ELECTRIC_SECRET}
     ports:
@@ -167,6 +177,7 @@ spec:
                   key: database-url
             - name: ELECTRIC_STORAGE_DIR
               value: "/var/lib/electric/data"
+            # Required for shared network filesystems
             - name: ELECTRIC_SHAPE_DB_EXCLUSIVE_MODE
               value: "true"
             - name: ELECTRIC_SECRET
@@ -216,9 +227,6 @@ With `maxSurge: 1` and `maxUnavailable: 0`, Kubernetes will:
 3. Kubernetes terminates the old pod
 4. The old pod shuts down, releasing the advisory lock
 5. The new pod acquires the lock and becomes fully active (`200`)
-
-> [!Warning] Don't check for exactly HTTP 200 in your readiness probe
-> The readiness probe must accept `202` responses. If you only accept `200`, the new pod can never become ready while the old pod holds the lock, creating a deadlock. Standard Kubernetes `httpGet` probes treat any 2xx as success, which is the correct behavior here.
 
 ### AWS ECS example
 
@@ -286,7 +294,7 @@ With `maxSurge: 1` and `maxUnavailable: 0`, Kubernetes will:
 }
 ```
 
-Configure your ECS service for rolling deploys:
+Configure your ECS service for rolling upgrades:
 
 ```json
 {
@@ -302,19 +310,47 @@ This ensures ECS starts the new task before stopping the old one, allowing the a
 > [!Tip] ECS health check grace period
 > Set the health check grace period on your ECS service to allow time for the new task to acquire the advisory lock. A value of 60&ndash;90 seconds is typically sufficient.
 
+### Health checks must accept HTTP 202
+
+Your orchestrator's health or readiness check must accept `202` responses during upgrades. If it only considers `200` as healthy, the new instance can never become ready while the old instance holds the lock &mdash; creating a deadlock where the orchestrator waits for the new instance before terminating the old one.
+
+Both Kubernetes `httpGet` probes and ECS health checks using `curl -sf` accept any 2xx by default, which is the correct behavior for rolling upgrades.
+
+> [!Warning] Single-instance readiness probes
+> The [Deployment guide](/docs/guides/deployment#kubernetes-probes) recommends an `exec` readiness probe that checks for exactly HTTP `200`. That approach is correct for single-instance deployments where you don't want a starting instance to receive traffic, but it will deadlock during rolling upgrades. If you are performing rolling upgrades, use `httpGet` readiness probes as shown in the examples above.
+
 ## Separate storage (ephemeral)
 
-When shared storage is not available (e.g., ECS with ephemeral block storage, containers with local-only disks), each instance maintains its own shape data independently. This requires a different approach.
+When shared storage is not available (e.g., ECS with ephemeral block storage, containers with local-only disks), each instance maintains its own shape data independently. This is also a reasonable choice for development or staging environments where simplicity is preferred over durability. The platform examples from the [shared storage](#shared-storage-recommended) section above apply &mdash; just remove the shared volume mount and use the configuration shown here.
 
-### When to use
+### Option A: Temporary replication slots
 
-- AWS ECS without EFS
-- Container platforms with ephemeral storage only
-- Development or staging environments where simplicity is preferred over durability
+Use temporary replication slots that are automatically cleaned up when the connection closes. This avoids accumulating orphaned slots and is the simplest approach for ephemeral storage.
 
-### Option A: Separate replication stream IDs
+```shell
+CLEANUP_REPLICATION_SLOTS_ON_SHUTDOWN=true
+ELECTRIC_TEMPORARY_REPLICATION_SLOT_USE_RANDOM_NAME=true
+ELECTRIC_STORAGE_DIR=/local/electric/data
+```
 
-Give each concurrent instance its own [`ELECTRIC_REPLICATION_STREAM_ID`](/docs/api/config#electric-replication-stream-id). This creates separate replication slots and advisory locks, allowing both instances to be fully active simultaneously.
+The random name option avoids replication slot name conflicts when old and new instances briefly overlap during a rolling upgrade.
+
+With this configuration:
+
+- Electric creates a `TEMPORARY` replication slot on the database connection
+- On **clean shutdown**, the slot is dropped and Postgres frees the retained WAL
+- The new instance creates a fresh temporary slot and starts replicating
+
+> [!Warning] Network partitions cause shape rotations
+> If Electric crashes or loses its database connection unexpectedly, the temporary slot is lost. When the new instance starts with a fresh slot, all existing shapes are invalidated and clients receive `409` (must-refetch) responses requiring a full resync. See [Replication slot recreation](/docs/guides/troubleshooting#replication-slot-recreation-mdash-why-are-all-clients-resyncing-after-a-crash) in the troubleshooting guide for more details.
+>
+> If your application cannot tolerate occasional `409`s during failure scenarios, prefer [shared storage](#shared-storage-recommended) instead.
+
+See the config reference for [`CLEANUP_REPLICATION_SLOTS_ON_SHUTDOWN`](/docs/api/config#cleanup-replication-slots-on-shutdown) and [`ELECTRIC_TEMPORARY_REPLICATION_SLOT_USE_RANDOM_NAME`](/docs/api/config#electric-temporary-replication-slot-use-random-name).
+
+### Option B: Separate replication stream IDs
+
+Give each concurrent instance its own [`ELECTRIC_REPLICATION_STREAM_ID`](/docs/api/config#electric-replication-stream-id). This creates separate replication slots and advisory locks, allowing both instances to be fully active simultaneously. This is different from [sharding](/docs/guides/sharding), where separate stream IDs are used for instances connecting to different databases &mdash; here, both instances connect to the same database.
 
 ```shell
 # Instance A (e.g., blue deployment)
@@ -336,45 +372,12 @@ Each instance maintains its own set of shape handles. The same shape definition 
 >
 > Monitor your replication slots as described in the [Troubleshooting guide](/docs/guides/troubleshooting#wal-growth-mdash-why-is-my-postgres-database-storage-filling-up). Clean up unused slots promptly when old instances are fully decommissioned.
 
-When the old deployment is fully stopped, you should clean up its replication slot and publication in Postgres:
+When the old deployment is fully stopped, clean up its replication slot and publication in Postgres. The names follow the pattern `electric_slot_{stream_id}` and `electric_publication_{stream_id}`:
 
 ```sql
 SELECT pg_drop_replication_slot('electric_slot_deploy_blue');
 DROP PUBLICATION IF EXISTS electric_publication_deploy_blue;
 ```
-
-### Option B: Temporary replication slots
-
-Use temporary replication slots that are automatically cleaned up when the connection closes. This avoids accumulating orphaned slots but comes with tradeoffs around crash recovery.
-
-```shell
-CLEANUP_REPLICATION_SLOTS_ON_SHUTDOWN=true
-ELECTRIC_TEMPORARY_REPLICATION_SLOT_USE_RANDOM_NAME=true
-ELECTRIC_STORAGE_DIR=/local/electric/data
-```
-
-With this configuration:
-
-- Electric creates a `TEMPORARY` replication slot on the database connection
-- On **clean shutdown**, the slot is dropped and Postgres frees the retained WAL
-- The new instance creates a fresh temporary slot and starts replicating
-
-> [!Warning] Network partitions cause shape rotations
-> If Electric crashes or loses its database connection unexpectedly, the temporary slot is lost. When the new instance starts with a fresh slot, clients connected to old shapes will receive `409` (must-refetch) responses and must perform a full resync.
->
-> If your application cannot tolerate occasional `409`s during failure scenarios, prefer [shared storage](#shared-storage-recommended) instead.
-
-See the config reference for [`CLEANUP_REPLICATION_SLOTS_ON_SHUTDOWN`](/docs/api/config#cleanup-replication-slots-on-shutdown) and [`ELECTRIC_TEMPORARY_REPLICATION_SLOT_USE_RANDOM_NAME`](/docs/api/config#electric-temporary-replication-slot-use-random-name).
-
-## Choosing a strategy
-
-| | Shared storage | Separate stream IDs | Temporary slots |
-|---|---|---|---|
-| Client disruption during deploy | Minimal (new shapes delayed) | None (both active) | Minimal on clean shutdown; 409s on crash |
-| Sticky sessions required | No | Yes | No |
-| Postgres resource overhead | Single slot | Multiple slots (WAL growth) | Single slot (temporary) |
-| Complexity | Low | Medium | Medium |
-| Best for | Most deployments | When shared storage is unavailable | Ephemeral / dev environments |
 
 ## Client behavior during deploys
 

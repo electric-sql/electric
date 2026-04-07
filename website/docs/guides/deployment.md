@@ -217,6 +217,9 @@ readinessProbe:
 
 This ensures the pod is only marked ready when Electric is fully operational and ready to serve shape requests.
 
+> [!Tip] Rolling upgrades need different readiness probes
+> If you are performing rolling deployments with `maxSurge: 1`, the `exec` probe above will cause a deadlock &mdash; the new pod can never return `200` while the old pod holds the replication lock. Use an `httpGet` readiness probe instead, which accepts any 2xx. See the [Upgrading guide](/docs/guides/upgrading) for details.
+
 ### Observability
 
 Electric supports [OpenTelemetry](https://opentelemetry.io/) for exporting traces, with built-in support for [Honeycomb.io](https://www.honeycomb.io/). Metrics are also available in StatsD and Prometheus formats.

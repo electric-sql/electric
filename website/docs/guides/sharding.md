@@ -512,5 +512,6 @@ Switching shards is transparent at the API surface (same URL structure), but cli
 ## Next steps
 
 - Review the [deployment guide](/docs/guides/deployment) for production configuration
+- See the [upgrading guide](/docs/guides/upgrading) for rolling deployment strategies
 - See [auth patterns](/docs/guides/auth) for securing your sharded deployment
 - Check [benchmarks](/docs/reference/benchmarks) for performance expectations per shard
