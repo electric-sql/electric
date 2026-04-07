@@ -35,6 +35,9 @@ New       [starting][waiting (202)]───────────┴─[== ac
 
 The read-only window is typically brief &mdash; a few seconds to under a minute, depending on how quickly your orchestrator terminates the old instance. During this window, existing shapes continue to be served. Requests for new shapes return `503` with a `Retry-After` header until the new instance becomes active. The official [TypeScript client](/docs/api/clients/typescript) handles both of these automatically.
 
+> [!Tip] Version compatibility
+> Shape handle stability across deploys depends on Electric's internal shape identity computation not changing between versions. If a new version changes how shapes are identified or changes the storage schema, even shared-storage upgrades may trigger `409` (must-refetch) responses. Check the release notes for any such breaking changes before upgrading.
+
 ### Choosing a strategy
 
 | | Shared storage | Separate storage |
@@ -58,7 +61,7 @@ This lock is scoped to Electric's replication slot name and does not conflict wi
 - The lock is held on the replication database connection &mdash; if the connection drops (e.g., instance shutdown), the lock is automatically released
 
 > [!Tip] Lock breaker
-> Electric includes a lock breaker mechanism that can detect and terminate stale database connections holding the lock. This prevents indefinite lock contention if the previous instance failed to cleanly release it &mdash; for example, after a crash or network partition where the Postgres connection was not properly closed.
+> Electric includes a lock breaker mechanism that checks every 10 seconds whether the replication slot associated with the lock is inactive in Postgres. If the slot is inactive but a backend still holds the advisory lock, Electric terminates that backend. This only affects connections where the replication stream has already stopped, so it will not interfere with a healthy instance during a normal rolling deploy.
 
 ## Health check behavior during upgrades
 
@@ -101,6 +104,9 @@ ELECTRIC_STORAGE_DIR=/shared/electric/data
 ELECTRIC_SECRET=your-secret
 ```
 
+> [!Warning] `ELECTRIC_SHAPE_DB_EXCLUSIVE_MODE` is required for shared storage
+> When two instances access the same storage concurrently during a rolling deploy, you **must** set [`ELECTRIC_SHAPE_DB_EXCLUSIVE_MODE=true`](/docs/api/config#electric-shape-db-exclusive-mode). This configures SQLite to use a single read-write connection, preventing corruption from concurrent access. Without it, shape metadata can become corrupted during the brief overlap window. This setting is included in all shared-storage examples below.
+
 ### Docker Compose example
 
 This example demonstrates the shared-storage setup. In practice, your orchestrator handles starting and stopping instances during an upgrade.
@@ -108,15 +114,12 @@ This example demonstrates the shared-storage setup. In practice, your orchestrat
 ```yaml
 services:
   electric:
-    image: electricsql/electric:latest
+    image: electricsql/electric:0.9  # pin to a specific version
     environment:
-      DATABASE_URL: postgresql://postgres:password@postgres:5432/myapp
+      DATABASE_URL: ${DATABASE_URL}
       ELECTRIC_STORAGE_DIR: /var/lib/electric/data
-      # Required for shared network filesystems — see troubleshooting guide
       ELECTRIC_SHAPE_DB_EXCLUSIVE_MODE: "true"
       ELECTRIC_SECRET: ${ELECTRIC_SECRET}
-    ports:
-      - "3000:3000"
     volumes:
       - electric_data:/var/lib/electric/data
     healthcheck:
@@ -124,18 +127,14 @@ services:
       interval: 10s
       timeout: 2s
       retries: 3
+    # ...ports, networks, etc.
 
 volumes:
   electric_data:
 ```
 
-To simulate a rolling deploy locally, you can scale up a second instance before stopping the first:
-
-```shell
-docker compose up -d --scale electric=2
-# Wait for the new instance to be healthy, then scale back down
-docker compose up -d --scale electric=1
-```
+> [!Tip] Simulating a rolling deploy
+> To test the lock handover locally, start a second container pointing at the same volume, then stop the first. Note that `docker compose --scale` requires removing static port mappings or using a port range to avoid conflicts.
 
 ### Kubernetes example
 
@@ -151,17 +150,13 @@ spec:
     rollingUpdate:
       maxSurge: 1
       maxUnavailable: 0
-  selector:
-    matchLabels:
-      app: electric
   template:
-    metadata:
-      labels:
-        app: electric
+    # ...labels, selectors
     spec:
+      terminationGracePeriodSeconds: 60
       containers:
         - name: electric
-          image: electricsql/electric:latest
+          image: electricsql/electric:0.9  # pin to a specific version
           env:
             - name: DATABASE_URL
               valueFrom:
@@ -170,7 +165,6 @@ spec:
                   key: database-url
             - name: ELECTRIC_STORAGE_DIR
               value: "/var/lib/electric/data"
-            # Required for shared network filesystems
             - name: ELECTRIC_SHAPE_DB_EXCLUSIVE_MODE
               value: "true"
             - name: ELECTRIC_SECRET
@@ -181,6 +175,11 @@ spec:
           volumeMounts:
             - name: electric-storage
               mountPath: /var/lib/electric/data
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "512Mi"
+            # ...limits
           livenessProbe:
             httpGet:
               path: /v1/health
@@ -188,6 +187,7 @@ spec:
             initialDelaySeconds: 10
             periodSeconds: 10
             timeoutSeconds: 2
+            failureThreshold: 6
           readinessProbe:
             httpGet:
               path: /v1/health
@@ -208,6 +208,7 @@ metadata:
 spec:
   accessModes:
     - ReadWriteMany
+  # storageClassName: efs-sc  # use a storage class that supports RWX
   resources:
     requests:
       storage: 10Gi
@@ -225,70 +226,53 @@ With `maxSurge: 1` and `maxUnavailable: 0`, Kubernetes will:
 
 This example uses EC2 launch type with a host bind mount for shared storage. Both old and new tasks share the same directory on the EC2 host.
 
+> [!Warning] Same-host placement
+> ECS does not guarantee that the new task lands on the same host as the old one. To ensure both tasks share the same host volume, your ECS cluster must have exactly one EC2 instance matching your placement constraint, or use a custom instance attribute to pin tasks to a specific host.
+
 ```json
 {
   "family": "electric",
   "networkMode": "awsvpc",
+  "cpu": "1024",
+  "memory": "2048",
+  "executionRoleArn": "arn:aws:iam::...:role/ecsTaskExecutionRole",
   "containerDefinitions": [
     {
       "name": "electric",
-      "image": "electricsql/electric:latest",
+      "image": "electricsql/electric:0.9",
       "portMappings": [
-        {
-          "containerPort": 3000,
-          "protocol": "tcp"
-        }
+        { "containerPort": 3000, "protocol": "tcp" }
       ],
       "environment": [
-        {
-          "name": "ELECTRIC_STORAGE_DIR",
-          "value": "/var/lib/electric/data"
-        },
-        {
-          "name": "ELECTRIC_SHAPE_DB_EXCLUSIVE_MODE",
-          "value": "true"
-        }
+        { "name": "ELECTRIC_STORAGE_DIR", "value": "/var/lib/electric/data" },
+        { "name": "ELECTRIC_SHAPE_DB_EXCLUSIVE_MODE", "value": "true" }
       ],
       "secrets": [
         {
           "name": "DATABASE_URL",
-          "valueFrom": "arn:aws:secretsmanager:region:account:secret:electric/database-url"
+          "valueFrom": "arn:aws:secretsmanager:..."
         },
         {
           "name": "ELECTRIC_SECRET",
-          "valueFrom": "arn:aws:secretsmanager:region:account:secret:electric/secret"
+          "valueFrom": "arn:aws:secretsmanager:..."
         }
       ],
       "mountPoints": [
-        {
-          "sourceVolume": "electric-data",
-          "containerPath": "/var/lib/electric/data"
-        }
+        { "sourceVolume": "electric-data", "containerPath": "/var/lib/electric/data" }
       ],
       "healthCheck": {
-        "command": [
-          "CMD-SHELL",
-          "curl -sf http://localhost:3000/v1/health || exit 1"
-        ],
+        "command": ["CMD-SHELL", "curl -sf http://localhost:3000/v1/health || exit 1"],
         "interval": 10,
         "timeout": 2,
         "retries": 3,
-        "startPeriod": 15
+        "startPeriod": 60
       }
     }
   ],
   "volumes": [
     {
       "name": "electric-data",
-      "host": {
-        "sourcePath": "/var/lib/electric/data"
-      }
-    }
-  ],
-  "placementConstraints": [
-    {
-      "type": "memberOf",
-      "expression": "attribute:ecs.instance-type matches i3en.*"
+      "host": { "sourcePath": "/var/lib/electric/data" }
     }
   ]
 }
@@ -305,10 +289,7 @@ Configure your ECS service for rolling upgrades:
 }
 ```
 
-This ensures ECS starts the new task before stopping the old one, allowing the advisory lock handover to occur.
-
-> [!Tip] ECS health check grace period
-> Set the health check grace period on your ECS service to allow time for the new task to acquire the advisory lock. A value of 60&ndash;90 seconds is typically sufficient.
+This ensures ECS starts the new task before stopping the old one, allowing the advisory lock handover to occur. Set the health check grace period on your ECS service to 60&ndash;90 seconds to allow time for the new task to acquire the advisory lock.
 
 ### Health checks must accept HTTP 202
 
@@ -342,11 +323,11 @@ The random name option avoids replication slot name conflicts when old and new i
 With this configuration:
 
 - Electric creates a `TEMPORARY` replication slot on the database connection
-- On **clean shutdown**, the slot is dropped and Postgres frees the retained WAL
+- The slot is automatically dropped by Postgres when the connection closes (on clean shutdown or crash)
 - The new instance creates a fresh temporary slot and starts replicating
 
 > [!Warning] Network partitions cause shape rotations
-> If Electric crashes or loses its database connection unexpectedly, the temporary slot is lost. When the new instance starts with a fresh slot, all existing shapes are invalidated and clients receive `409` (must-refetch) responses requiring a full resync. See [Replication slot recreation](/docs/guides/troubleshooting#replication-slot-recreation-mdash-why-are-all-clients-resyncing-after-a-crash) in the troubleshooting guide for more details.
+> If Electric crashes or loses its database connection unexpectedly, the temporary slot is eventually cleaned up by Postgres once it detects the dead connection (which depends on TCP keepalive settings and may take minutes). When the new instance starts with a fresh slot, all existing shapes are invalidated and clients receive `409` (must-refetch) responses requiring a full resync. See [Replication slot recreation](/docs/guides/troubleshooting#replication-slot-recreation-mdash-why-are-all-clients-resyncing-after-a-crash) in the troubleshooting guide for more details.
 
 See the config reference for [`CLEANUP_REPLICATION_SLOTS_ON_SHUTDOWN`](/docs/api/config#cleanup-replication-slots-on-shutdown) and [`ELECTRIC_TEMPORARY_REPLICATION_SLOT_USE_RANDOM_NAME`](/docs/api/config#electric-temporary-replication-slot-use-random-name).
 
