@@ -42,12 +42,12 @@ The read-only window is typically brief &mdash; a few seconds to under a minute,
 
 ### Choosing a strategy
 
-| | Shared storage | Temporary slots | Separate stream IDs |
-|---|---|---|---|
-| Client disruption | Minimal (new shapes delayed) | Minimal on clean shutdown; 409s on crash | None (both active) |
-| Sticky sessions required | No | No | Yes |
-| Postgres overhead | Single slot | Single slot (temporary) | Multiple slots (WAL growth) |
-| Best for | [Most deployments](#shared-storage-recommended) | [Ephemeral environments](#option-a-temporary-replication-slots) | [No shared storage, need full availability](#option-b-separate-replication-stream-ids) |
+| | Shared storage | Separate storage |
+|---|---|---|
+| Client disruption | Minimal (new shapes briefly delayed) | 409s (clients must refetch shapes) |
+| Sticky sessions required | No | Yes |
+| Postgres overhead | Single slot | One slot per instance |
+| Best for | [Most deployments](#shared-storage-recommended) | [Ephemeral environments](#separate-storage-ephemeral) |
 
 ## How the advisory lock works
 
@@ -71,9 +71,9 @@ The [`/v1/health`](/docs/guides/deployment#health-checks) endpoint reflects the 
 
 | HTTP Status | Response | Meaning |
 |-------------|----------|---------|
-| `200` | `{"status": "active"}` | Fully operational, holding the advisory lock |
-| `202` | `{"status": "waiting"}` | Waiting for the lock, serving existing shapes in read-only mode |
-| `202` | `{"status": "starting"}` | Starting up, not yet ready to serve any requests |
+| `200` | `{"status": "active"}` | The instance is active &mdash; it holds the advisory lock and is fully operational |
+| `202` | `{"status": "waiting"}` | The instance is ready &mdash; it can serve existing shapes in read-only mode but is not yet active |
+| `202` | `{"status": "starting"}` | The instance is starting up and not yet ready to serve any requests |
 
 During the `waiting` state:
 
@@ -81,20 +81,22 @@ During the `waiting` state:
 - Requests that require **creating new shapes** return `503` with a `Retry-After: 5` header
 - **Shape deletion** also requires active mode and returns `503` while waiting
 
-For **liveness probes**, any response (200 or 202) indicates the service is alive. For **readiness probes** during rolling upgrades, see the [health check warning](#health-checks-must-accept-http-202) below.
+For orchestrator probe configuration, see the [health check section](#health-checks-must-accept-http-202) below.
 
 ## Shared storage (recommended)
 
-When instances share the same filesystem (e.g., a network volume), they share shape data and metadata. This is the recommended approach because shape handles remain stable across deploys &mdash; clients don't need sticky sessions and experience minimal disruption.
+When instances share the same filesystem (e.g., a persistent volume), they share shape data and metadata. This is the recommended approach because shape handles remain stable across deploys &mdash; clients don't need sticky sessions and experience minimal disruption.
 
 ### When to use
 
 - Kubernetes with [ReadWriteMany](https://kubernetes.io/docs/concepts/storage/persistent-volumes/#access-modes) PersistentVolumeClaims
-- AWS ECS with [EFS](https://aws.amazon.com/efs/) volumes
+- AWS ECS on EC2 with shared host volumes
 - Any platform with a shared or network filesystem
 
-> [!Warning] EFS performance
-> EFS has high latency compared to local storage and may not perform well for large deployments. It is currently the only easy way to share storage on ECS. For better performance at scale, consider local NVMe storage with the [separate storage](#separate-storage-ephemeral) approach instead.
+> [!Tip] ECS storage options
+> For ECS on EC2, use host bind mounts with [placement constraints](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-placement-constraints.html) to keep both old and new tasks on the same host, sharing a local volume. This gives the best performance.
+>
+> [EFS](https://aws.amazon.com/efs/) is also an option and is simpler to configure, but has high latency compared to local storage and may not perform well for large deployments.
 
 ### Configuration
 
@@ -230,6 +232,8 @@ With `maxSurge: 1` and `maxUnavailable: 0`, Kubernetes will:
 
 ### AWS ECS example
 
+This example uses EC2 launch type with a host bind mount for shared storage. Both old and new tasks share the same directory on the EC2 host.
+
 ```json
 {
   "family": "electric",
@@ -266,7 +270,7 @@ With `maxSurge: 1` and `maxUnavailable: 0`, Kubernetes will:
       ],
       "mountPoints": [
         {
-          "sourceVolume": "electric-efs",
+          "sourceVolume": "electric-data",
           "containerPath": "/var/lib/electric/data"
         }
       ],
@@ -284,11 +288,16 @@ With `maxSurge: 1` and `maxUnavailable: 0`, Kubernetes will:
   ],
   "volumes": [
     {
-      "name": "electric-efs",
-      "efsVolumeConfiguration": {
-        "fileSystemId": "fs-0123456789abcdef0",
-        "rootDirectory": "/electric"
+      "name": "electric-data",
+      "host": {
+        "sourcePath": "/var/lib/electric/data"
       }
+    }
+  ],
+  "placementConstraints": [
+    {
+      "type": "memberOf",
+      "expression": "attribute:ecs.instance-type matches i3en.*"
     }
   ]
 }
@@ -321,11 +330,15 @@ Both Kubernetes `httpGet` probes and ECS health checks using `curl -sf` accept a
 
 ## Separate storage (ephemeral)
 
-When shared storage is not available (e.g., ECS with ephemeral block storage, containers with local-only disks), each instance maintains its own shape data independently. This is also a reasonable choice for development or staging environments where simplicity is preferred over durability. The platform examples from the [shared storage](#shared-storage-recommended) section above apply &mdash; just remove the shared volume mount and use the configuration shown here.
+When shared storage is not available (e.g., ECS with ephemeral block storage, containers with local-only disks), each instance must have its own replication slot and maintains its own shape data independently. This means each instance has **different shape handles** for the same shape definitions, so clients **must** use sticky sessions and will receive `409` (must-refetch) responses when they switch between instances during a deploy.
 
-### Option A: Temporary replication slots
+The platform examples from the [shared storage](#shared-storage-recommended) section above apply &mdash; just remove the shared volume mount and use the configuration shown here.
 
-Use temporary replication slots that are automatically cleaned up when the connection closes. This avoids accumulating orphaned slots and is the simplest approach for ephemeral storage.
+There are two ways to manage the per-instance replication slots:
+
+### Temporary replication slots
+
+Use temporary replication slots that are automatically cleaned up when the connection closes. This is the simplest approach for ephemeral storage and avoids accumulating orphaned slots.
 
 ```shell
 CLEANUP_REPLICATION_SLOTS_ON_SHUTDOWN=true
@@ -343,14 +356,12 @@ With this configuration:
 
 > [!Warning] Network partitions cause shape rotations
 > If Electric crashes or loses its database connection unexpectedly, the temporary slot is lost. When the new instance starts with a fresh slot, all existing shapes are invalidated and clients receive `409` (must-refetch) responses requiring a full resync. See [Replication slot recreation](/docs/guides/troubleshooting#replication-slot-recreation-mdash-why-are-all-clients-resyncing-after-a-crash) in the troubleshooting guide for more details.
->
-> If your application cannot tolerate occasional `409`s during failure scenarios, prefer [shared storage](#shared-storage-recommended) instead.
 
 See the config reference for [`CLEANUP_REPLICATION_SLOTS_ON_SHUTDOWN`](/docs/api/config#cleanup-replication-slots-on-shutdown) and [`ELECTRIC_TEMPORARY_REPLICATION_SLOT_USE_RANDOM_NAME`](/docs/api/config#electric-temporary-replication-slot-use-random-name).
 
-### Option B: Separate replication stream IDs
+### Separate replication stream IDs
 
-Give each concurrent instance its own [`ELECTRIC_REPLICATION_STREAM_ID`](/docs/api/config#electric-replication-stream-id). This creates separate replication slots and advisory locks, allowing both instances to be fully active simultaneously. This is different from [sharding](/docs/guides/sharding), where separate stream IDs are used for instances connecting to different databases &mdash; here, both instances connect to the same database.
+Alternatively, give each concurrent instance its own [`ELECTRIC_REPLICATION_STREAM_ID`](/docs/api/config#electric-replication-stream-id). This creates named replication slots that persist, giving you more explicit control. This is different from [sharding](/docs/guides/sharding), where separate stream IDs are used for instances connecting to different databases &mdash; here, both instances connect to the same database.
 
 ```shell
 # Instance A (e.g., blue deployment)
@@ -361,11 +372,6 @@ ELECTRIC_STORAGE_DIR=/local/electric/data
 ELECTRIC_REPLICATION_STREAM_ID=deploy-green
 ELECTRIC_STORAGE_DIR=/local/electric/data
 ```
-
-Each instance maintains its own set of shape handles. The same shape definition will have **different handles** on each instance.
-
-> [!Warning] Sticky sessions required
-> You **must** use sticky sessions (session affinity) on your load balancer. A client following shape handle `A` on Instance X cannot switch to Instance Y &mdash; that handle doesn't exist there. Without sticky sessions, clients will receive `409` responses when their requests land on the wrong instance.
 
 > [!Warning] Postgres resource overhead
 > Each replication stream ID creates its own replication slot and publication. Multiple replication slots increase WAL retention on Postgres since each slot independently prevents WAL from being cleaned up.
@@ -389,32 +395,9 @@ The official [TypeScript client](/docs/api/clients/typescript) handles deploy tr
 
 If you're using a custom client, ensure it handles these response codes. See the [HTTP API docs](/docs/api/http) for details on the protocol.
 
-## Troubleshooting
-
-**"My second instance is stuck in 'waiting' state"**
-
-This is expected behavior. The second instance has loaded shape metadata and is serving existing shapes in read-only mode while waiting for the first instance to release the advisory lock. Check `/v1/health` to confirm &mdash; a `202` response with `{"status": "waiting"}` indicates the instance is healthy and serving reads.
-
-**"There's a gap where no instance returns 200"**
-
-During the advisory lock handover, there is a brief window (typically under a minute) where the new instance is waiting for the lock. During this window, existing shapes continue to be served (read-only mode). New shape creation returns `503` with a `Retry-After` header. This is expected and handled gracefully by clients.
-
-**"Should I use separate `ELECTRIC_REPLICATION_STREAM_ID` values?"**
-
-Only if you cannot share storage between instances. Shared storage with a single stream ID is simpler, avoids the need for sticky sessions, and keeps a single replication slot on Postgres. Separate stream IDs are appropriate when shared storage is truly unavailable.
-
-**"Clients are getting 409 errors during deploys"**
-
-With shared storage, 409s should not occur during normal rolling deploys. If you're seeing 409s, check:
-
-- That both instances are pointing to the same `ELECTRIC_STORAGE_DIR` on a shared filesystem
-- That the shape wasn't invalidated by a schema change happening concurrently with the deploy
-
-With separate storage (temporary slots or separate stream IDs), 409s during deploys are expected. Ensure your client handles `409` responses by refetching the shape.
-
 ## Next steps
 
 - [Deployment guide](/docs/guides/deployment) for general deployment setup
 - [Sharding guide](/docs/guides/sharding) for multi-database deployment patterns
 - [Config reference](/docs/api/config) for all configuration options
-- [Troubleshooting guide](/docs/guides/troubleshooting) for common operational issues
+- [Troubleshooting guide](/docs/guides/troubleshooting#rolling-upgrades-mdash-why-is-my-second-instance-stuck-in-waiting-state) for common upgrade issues

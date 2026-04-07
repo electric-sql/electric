@@ -391,7 +391,7 @@ Electric uses SQLite for shape metadata. SQLite relies on file-level locking tha
 
 ### Replication slot recreation &mdash; why are all clients resyncing after a crash?
 
-When Electric's replication slot is dropped or lost &mdash; whether due to a crash, use of [temporary replication slots](/docs/guides/upgrading#option-a-temporary-replication-slots), or Postgres invalidating it because [`max_slot_wal_keep_size`](#recommended-postgresql-settings) was exceeded &mdash; the new slot starts from the current WAL position with no history.
+When Electric's replication slot is dropped or lost &mdash; whether due to a crash, use of [temporary replication slots](/docs/guides/upgrading#temporary-replication-slots), or Postgres invalidating it because [`max_slot_wal_keep_size`](#recommended-postgresql-settings) was exceeded &mdash; the new slot starts from the current WAL position with no history.
 
 This means all existing shapes are invalidated. Clients will receive `409` (must-refetch) responses and must perform a full resync of their shapes. This is normal recovery behavior but results in a temporary spike in load as all clients resync simultaneously.
 
@@ -400,6 +400,14 @@ This means all existing shapes are invalidated. Clients will receive `409` (must
 - Ensure your clients handle `409` responses gracefully (the official [TypeScript client](/docs/api/clients/typescript) does this automatically)
 - Monitor your replication slot health with the [diagnostic checklist](#quick-diagnostic-checklist) above
 - Set `max_slot_wal_keep_size` conservatively to avoid unexpected slot invalidation
+
+### Rolling upgrades &mdash; why is my second instance stuck in 'waiting' state?
+
+This is expected behavior during a [rolling upgrade](/docs/guides/upgrading). The second instance has loaded shape metadata and is serving existing shapes in read-only mode while waiting for the first instance to release the advisory lock. Check `/v1/health` to confirm &mdash; a `202` response with `{"status": "waiting"}` indicates the instance is healthy and serving reads.
+
+During the advisory lock handover, there is a brief window (typically under a minute) where no instance returns `200`. During this window, existing shapes continue to be served in read-only mode. New shape creation returns `503` with a `Retry-After` header. This is expected and handled gracefully by clients.
+
+If you're seeing `409` errors during deploys with shared storage, check that both instances are pointing to the same `ELECTRIC_STORAGE_DIR` on a shared filesystem. With [separate storage](/docs/guides/upgrading#separate-storage-ephemeral), `409`s during deploys are expected since each instance has its own shape handles.
 
 ### Vercel CDN caching &mdash; why are my shapes not updating on Vercel?
 
