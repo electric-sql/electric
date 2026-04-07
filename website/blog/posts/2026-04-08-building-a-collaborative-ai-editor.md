@@ -149,11 +149,12 @@ The agent doesn't manipulate the Yjs document directly. It works through tool ca
 <!-- ASSET: Screenshot or short video showing Electra's cursor and
      presence in the editor alongside a human user -->
 
-<div style="border: 1px solid #555; border-radius: 8px; padding: 32px 24px; text-align: center; color: #888; margin: 24px 0;">
-  <p style="font-size: 36px; margin: 0;">&#128247;</p>
-  <p style="font-size: 16px; margin: 8px 0 4px;"><strong>TODO: Screenshot or short video</strong></p>
-  <p style="font-size: 13px; margin: 0;">Electra's cursor and presence in the editor alongside a human user</p>
-</div>
+<figure>
+  <video class="w-full" autoplay loop muted playsinline preload="metadata">
+    <source src="/videos/blog/building-a-collaborative-ai-editor/multiple-cursors.mp4" type="video/mp4" />
+  </video>
+  <figcaption>Electra's cursor and presence in the editor&nbsp;alongside&nbsp;a&nbsp;human&nbsp;user.</figcaption>
+</figure>
 
 <!-- ASSET: Short code snippet — createServerAgentSession setup or
      awareness config -->
@@ -310,11 +311,12 @@ AI models have been trained on markdown as a native format. They naturally use i
 <!-- ASSET: Animated gif/video showing streaming text appearing in the
      editor with the agent's cursor, while a human edits elsewhere -->
 
-<div style="border: 1px solid #555; border-radius: 8px; padding: 32px 24px; text-align: center; color: #888; margin: 24px 0;">
-  <p style="font-size: 36px; margin: 0;">&#127916;</p>
-  <p style="font-size: 16px; margin: 8px 0 4px;"><strong>TODO: Animated gif or video</strong></p>
-  <p style="font-size: 13px; margin: 0;">Streaming text appearing in the editor with the agent's cursor, while a human edits elsewhere</p>
-</div>
+<figure>
+  <video class="w-full" autoplay loop muted playsinline preload="metadata">
+    <source src="/videos/blog/building-a-collaborative-ai-editor/markdown.mp4" type="video/mp4" />
+  </video>
+  <figcaption>Streaming markdown converted into rich text&nbsp;as&nbsp;the&nbsp;agent&nbsp;types.</figcaption>
+</figure>
 
 ## Durable chat
 
@@ -355,11 +357,12 @@ Cancellation is clean: stopping a generation tears down both the chat stream and
 <!-- ASSET: Screenshot showing the chat sidebar with a conversation,
      including tool call indicators showing document edits -->
 
-<div style="border: 1px solid #555; border-radius: 8px; padding: 32px 24px; text-align: center; color: #888; margin: 24px 0;">
-  <p style="font-size: 36px; margin: 0;">&#128247;</p>
-  <p style="font-size: 16px; margin: 8px 0 4px;"><strong>TODO: Screenshot</strong></p>
-  <p style="font-size: 13px; margin: 0;">Chat sidebar with a conversation, including tool call indicators showing document edits</p>
-</div>
+<figure>
+  <video class="w-full" autoplay loop muted playsinline preload="metadata">
+    <source src="/videos/blog/building-a-collaborative-ai-editor/tool-calls.mp4" type="video/mp4" />
+  </video>
+  <figcaption>Chat sidebar showing tool call indicators as the agent edits&nbsp;the&nbsp;document.</figcaption>
+</figure>
 
 ## Agents belong in the CRDT
 
