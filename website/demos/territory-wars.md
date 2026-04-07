@@ -15,16 +15,12 @@ order: 5
 
 # Territory Wars
 
-Multiplayer territory capture game built with [Yjs](https://yjs.dev) CRDTs on [Durable Streams](/primitives/durable-streams).
+Multiplayer territory capture game built with [Yjs](https://yjs.dev) CRDTs on [Durable Streams](/primitives/durable-streams). Read the [blog post](/blog/2026/04/07/yjs-durable-streams-on-electric-cloud) for more details.
 
 <DemoCTAs :demo="$frontmatter" />
 
-## How it works
-
-The game board is a Yjs Y.Map where each cell is a last-writer-wins register. Players move to claim cells and enclose territory. Player presence is tracked via awareness streams. Game state is managed via [StreamDB](/blog/2026/03/26/stream-db). Built with [`y-durable-streams`](https://www.npmjs.com/package/@durable-streams/y-durable-streams) on [Durable&nbsp;Streams](/primitives/durable-streams).
-
 <figure>
-  <div class="embed-container" style="padding-bottom: 75.842697%">
+  <div class="embed-container">
     <YoutubeEmbed video-id="r3i25BGom0s" />
   </div>
 </figure>
