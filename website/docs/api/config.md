@@ -128,6 +128,35 @@ Suffix for the logical replication publication and slot name.
 
 </EnvVarConfig>
 
+### CLEANUP_REPLICATION_SLOTS_ON_SHUTDOWN
+
+<EnvVarConfig
+    name="CLEANUP_REPLICATION_SLOTS_ON_SHUTDOWN"
+    defaultValue="false"
+    example="true">
+
+When set to `true`, Electric creates a [temporary replication slot](https://www.postgresql.org/docs/current/protocol-replication.html) that is automatically dropped when the database connection closes. This is useful for ephemeral deployments where each container has its own storage and replication slots don't need to persist across restarts.
+
+> [!Warning] Unclean shutdowns cause shape rotations
+> If Electric crashes or loses its database connection (e.g., during a network partition), the temporary slot is lost. The next instance starts with a fresh slot and clients connected to old shapes will receive `409` (must-refetch) responses, requiring a full resync.
+
+See the [Upgrading guide](/docs/guides/upgrading#temporary-replication-slots) for more context on using temporary slots.
+
+</EnvVarConfig>
+
+### ELECTRIC_TEMPORARY_REPLICATION_SLOT_USE_RANDOM_NAME
+
+<EnvVarConfig
+    name="ELECTRIC_TEMPORARY_REPLICATION_SLOT_USE_RANDOM_NAME"
+    defaultValue="false"
+    example="true">
+
+When used with [`CLEANUP_REPLICATION_SLOTS_ON_SHUTDOWN=true`](#cleanup-replication-slots-on-shutdown), generates a random replication slot name instead of the deterministic name based on [`ELECTRIC_REPLICATION_STREAM_ID`](#electric-replication-stream-id). This avoids slot name conflicts when multiple instances run concurrently during rolling deploys.
+
+Has no effect unless `CLEANUP_REPLICATION_SLOTS_ON_SHUTDOWN` is also set to `true`.
+
+</EnvVarConfig>
+
 ### ELECTRIC_REPLICATION_IDLE_TIMEOUT
 
 <EnvVarConfig
