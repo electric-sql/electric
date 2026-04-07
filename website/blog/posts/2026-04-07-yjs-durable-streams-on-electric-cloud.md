@@ -1,5 +1,5 @@
 ---
-title: 'Yjs CRDTs over HTTP on Durable Streams'
+title: 'Yjs over HTTP on Durable Streams'
 description: >-
   We've released a new Yjs provider built on Durable Streams — sync fan-out and fast catch-up from the edge for collaborative and agentic systems. Now live on Electric Cloud.
 excerpt: >-
@@ -38,6 +38,10 @@ For the full details, see the [Yjs Durable Streams Protocol](https://github.com/
 ## Demo
 
 Try [Territory Wars](/demos/territory-wars) — a multiplayer territory capture game running `y-durable-streams` live on Electric&nbsp;Cloud. The game board is a Yjs Y.Map where each cell is a last-writer-wins register. Players move to claim cells and enclose territory. Player presence is tracked via awareness streams. Game state is managed via [StreamDB](/blog/2026/03/26/stream-db).
+
+<div class="embed-container">
+  <YoutubeEmbed video-id="r3i25BGom0s" />
+</div>
 
 ## Get started
 
