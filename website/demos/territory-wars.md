@@ -19,10 +19,12 @@ Multiplayer territory capture game built with [Yjs](https://yjs.dev) CRDTs on [D
 
 <DemoCTAs :demo="$frontmatter" />
 
+## How it works
+
+Built with [`y-durable-streams`](https://www.npmjs.com/package/@durable-streams/y-durable-streams) on [Durable&nbsp;Streams](/primitives/durable-streams). Game state is managed via [StreamDB](/blog/2026/03/26/stream-db). The game board is a Yjs Y.Map where each cell is a last-writer-wins register. Players move to claim cells and enclose territory. Player presence is tracked via ephemeral awareness streams with built-in TTL that garbage-collects stale state from disconnected&nbsp;players.
+
 <figure>
   <div class="embed-container">
     <YoutubeEmbed video-id="r3i25BGom0s" />
   </div>
 </figure>
-
-<DemoEmbed :demo="$frontmatter" />
