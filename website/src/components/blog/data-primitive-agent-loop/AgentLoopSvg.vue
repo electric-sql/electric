@@ -30,7 +30,7 @@ defineProps({
 // for the first half of every cycle.
 const outlineSlots = Array.from(
   { length: MAX_VISIBLE_SLICES },
-  (_, i) => i * (360 / MAX_VISIBLE_SLICES),
+  (_, i) => i * (360 / MAX_VISIBLE_SLICES)
 )
 
 const svgRef = ref(null)

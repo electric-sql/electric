@@ -20,8 +20,7 @@ import DurableLog from './DurableLog.vue'
 
 import { useAgentLoopAnimation } from './useAgentLoopAnimation.js'
 
-const { slices, pulseActive, logEntries, pipeTick } =
-  useAgentLoopAnimation()
+const { slices, pulseActive, logEntries, pipeTick } = useAgentLoopAnimation()
 
 // --- refs into the DOM ---------------------------------------------------
 
@@ -106,7 +105,7 @@ function recomputePipe() {
       svgRect,
       layoutRect,
       MOBILE_EXIT_SVG.x,
-      MOBILE_EXIT_SVG.y,
+      MOBILE_EXIT_SVG.y
     )
     const x = exit.x
     const y1 = exit.y
@@ -127,7 +126,7 @@ function recomputePipe() {
       svgRect,
       layoutRect,
       DESKTOP_EXIT_SVG.x,
-      DESKTOP_EXIT_SVG.y,
+      DESKTOP_EXIT_SVG.y
     )
     const sliceExitLayoutY = exit.y
     const x1 = exit.x
@@ -142,8 +141,7 @@ function recomputePipe() {
     } else {
       // No entries yet — fall back to a precomputed approximation of where
       // the first bar will land relative to the log-section top.
-      progressBarLayoutY =
-        logRect.top - layoutRect.top + LOG_FIRST_BAR_FALLBACK
+      progressBarLayoutY = logRect.top - layoutRect.top + LOG_FIRST_BAR_FALLBACK
     }
 
     // Subtract whatever offset we already applied so the measurement
@@ -208,7 +206,7 @@ watch(
         recomputePipe()
       })
     }
-  },
+  }
 )
 </script>
 
