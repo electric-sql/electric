@@ -2,8 +2,13 @@
 // and runs the cycle. Components stay presentational — they read the
 // refs returned here and render them. Tweak timings and behaviours via
 // the SEQUENCE / TIMING constants in ./sequence.js.
+//
+// The cycle is explicitly started and stopped by the consumer (so the
+// animation can be paused when scrolled out of view). `start()` is
+// idempotent; `stop()` cancels in-flight waits and animation frames so
+// the async cycle loop can unwind cleanly.
 
-import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { onBeforeUnmount, ref } from 'vue'
 
 import { SEQUENCE, TIMING, MAX_VISIBLE_SLICES } from './sequence.js'
 
@@ -24,10 +29,16 @@ export function useAgentLoopAnimation() {
   // element and restart the CSS keyframe.
   const pipeTick = ref(0)
 
-  // Internal cancellation state.
+  // Internal state. `stopped` short-circuits waits/frames so an in-flight
+  // runCycle can unwind. `wantRun` captures the caller's intent and is
+  // reconciled by `supervise()` — if start() fires while a previous
+  // runCycle is still unwinding, the supervisor picks up the new intent
+  // and kicks off a fresh cycle as soon as the old one completes.
   let nextId = 0
-  let stopped = false
-  const pendingTimers = new Set()
+  let stopped = true
+  let wantRun = false
+  let supervising = false
+  const pendingWaits = new Set()
   const pendingFrames = new Set()
 
   function id() {
@@ -44,13 +55,20 @@ export function useAgentLoopAnimation() {
     })
   }
 
+  // A cancellable sleep. When stop() fires, the timer is cleared and the
+  // promise is resolved immediately so the awaiting runCycle can unwind.
   function wait(ms) {
     return new Promise((resolve) => {
-      const t = setTimeout(() => {
-        pendingTimers.delete(t)
+      if (stopped) {
+        resolve()
+        return
+      }
+      const entry = { resolve, timer: null }
+      entry.timer = setTimeout(() => {
+        pendingWaits.delete(entry)
         resolve()
       }, ms)
-      pendingTimers.add(t)
+      pendingWaits.add(entry)
     })
   }
 
@@ -183,23 +201,46 @@ export function useAgentLoopAnimation() {
     }
   }
 
+  // Supervisor: keeps calling runCycle as long as `wantRun` stays true.
+  // Only one supervisor runs at a time. If start() is called while the
+  // previous runCycle is still unwinding from a stop(), the supervisor's
+  // while-loop observes the updated wantRun after the unwind and starts
+  // a fresh cycle — so scrolling out and back in reliably restarts it.
+  async function supervise() {
+    if (supervising) return
+    supervising = true
+    try {
+      while (wantRun) {
+        // Clean slate for each cycle.
+        stopped = false
+        slices.value = []
+        logEntries.value = []
+        pulseActive.value = false
+        await runCycle()
+      }
+    } finally {
+      supervising = false
+    }
+  }
+
+  function start() {
+    wantRun = true
+    supervise()
+  }
+
   function stop() {
+    wantRun = false
+    if (stopped) return
     stopped = true
-    pendingTimers.forEach((t) => clearTimeout(t))
-    pendingTimers.clear()
+    // Resolve any pending waits so runCycle can unwind past its awaits.
+    pendingWaits.forEach((entry) => {
+      clearTimeout(entry.timer)
+      entry.resolve()
+    })
+    pendingWaits.clear()
     pendingFrames.forEach((h) => cancelAnimationFrame(h))
     pendingFrames.clear()
   }
-
-  onMounted(() => {
-    stopped = false
-    // Tiny delay so the first cycle doesn't fight component mount.
-    const t = setTimeout(() => {
-      pendingTimers.delete(t)
-      runCycle()
-    }, 1000)
-    pendingTimers.add(t)
-  })
 
   onBeforeUnmount(stop)
 
@@ -208,5 +249,7 @@ export function useAgentLoopAnimation() {
     pulseActive,
     logEntries,
     pipeTick,
+    start,
+    stop,
   }
 }

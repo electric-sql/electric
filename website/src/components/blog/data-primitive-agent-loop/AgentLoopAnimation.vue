@@ -3,6 +3,12 @@
 // three presentational pieces (loop SVG, pipe, durable log). Layout and
 // pipe geometry are handled entirely in CSS via container query units,
 // so there is no JS for positioning, resize handling, or pipe geometry.
+//
+// The animation is started and stopped as the component scrolls into
+// and out of view so it doesn't burn cycles (or distract) while the
+// reader is elsewhere on the page.
+
+import { onBeforeUnmount, onMounted, ref } from 'vue'
 
 import AgentLoopSvg from './AgentLoopSvg.vue'
 import DataPipe from './DataPipe.vue'
@@ -10,11 +16,40 @@ import DurableLog from './DurableLog.vue'
 
 import { useAgentLoopAnimation } from './useAgentLoopAnimation.js'
 
-const { slices, pulseActive, logEntries, pipeTick } = useAgentLoopAnimation()
+const { slices, pulseActive, logEntries, pipeTick, start, stop } =
+  useAgentLoopAnimation()
+
+const rootRef = ref(null)
+let observer = null
+
+onMounted(() => {
+  // Fallback: if IntersectionObserver isn't available, just run.
+  if (typeof IntersectionObserver === 'undefined' || !rootRef.value) {
+    start()
+    return
+  }
+  observer = new IntersectionObserver((entries) => {
+    for (const entry of entries) {
+      if (entry.isIntersecting) {
+        start()
+      } else {
+        stop()
+      }
+    }
+  })
+  observer.observe(rootRef.value)
+})
+
+onBeforeUnmount(() => {
+  if (observer) {
+    observer.disconnect()
+    observer = null
+  }
+})
 </script>
 
 <template>
-  <div class="agent-loop-animation">
+  <div ref="rootRef" class="agent-loop-animation">
     <div class="layout">
       <div class="loop-slot">
         <AgentLoopSvg :slices="slices" :pulse-active="pulseActive" />
