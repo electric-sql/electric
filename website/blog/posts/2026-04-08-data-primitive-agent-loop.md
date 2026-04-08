@@ -162,7 +162,7 @@ Durable Streams are designed to meet all of the demands of state management for 
 
 ### Extensible layers and integrations
 
-Beyond the core [open protocol](), Durable Streams is designed as a composable, layered stack on top of the core binary stream primitive. This allows them to be wired into and used from agentic systems easily and for the raw streams to support structured and multi-modal data.
+Beyond the core [open protocol](https://github.com/durable-streams/durable-streams/blob/main/PROTOCOL.md), Durable Streams is designed as a composable, layered stack on top of the core binary stream primitive. This allows them to be wired into and used from agentic systems easily and for the raw streams to support structured and multi-modal data.
 
 The layers are growing all the time, for example including:
 
