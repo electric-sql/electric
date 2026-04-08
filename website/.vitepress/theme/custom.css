@@ -614,6 +614,12 @@ span.no-visual {
   }
 }
 
+@media (min-width: 768px) and (max-width: 1149px) {
+  .VPNavBar.has-sidebar .VPNavBarSocialLinks > .VPSocialLink:nth-of-type(-n + 3) {
+    display: none !important;
+  }
+}
+
 .container {
   max-width: 1152px;
   margin: 0 auto;
