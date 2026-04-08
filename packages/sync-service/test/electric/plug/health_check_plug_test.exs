@@ -58,13 +58,16 @@ defmodule Electric.Plug.HealthCheckPlugTest do
     end
 
     @tag connection_status: %{conn: :waiting_on_lock, shape: :up}
-    test "returns 202 waiting when waiting on lock with full shape pipeline up", ctx do
+    test "returns 202 starting when waiting on lock with full shape pipeline up", ctx do
+      # When shape pipeline survived a connection drop (shape: :up), we report :starting
+      # rather than :waiting because serving read-only during reconnection is unsafe —
+      # the concurrent Connection.Manager restart can invalidate shapes.
       conn =
         conn(ctx)
         |> HealthCheckPlug.call([])
 
       assert conn.status == 202
-      assert Jason.decode!(conn.resp_body) == %{"status" => "waiting"}
+      assert Jason.decode!(conn.resp_body) == %{"status" => "starting"}
     end
 
     @tag connection_status: %{conn: :starting, shape: :starting}

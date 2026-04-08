@@ -43,9 +43,7 @@ defmodule Electric.StatusMonitor do
   Returns the high-level service status as a single atom.
 
   - `:active` — fully operational
-  - `:waiting` — waiting on advisory lock, shape data available (can serve existing shapes read-only).
-    This covers both the rolling-deploy scenario (lock contention with metadata loaded) and the
-    reconnection scenario (DB connection dropped but shape pipeline survived).
+  - `:waiting` — waiting on advisory lock, shape metadata loaded (can serve existing shapes read-only)
   - `:starting` — system is initializing (metadata not yet loaded or connection progressing)
   - `:sleeping` — connections scaled down
   """
@@ -54,7 +52,7 @@ defmodule Electric.StatusMonitor do
     case status(stack_id) do
       %{conn: :up, shape: :up} -> :active
       %{conn: :sleeping} -> :sleeping
-      %{conn: :waiting_on_lock, shape: shape} when shape in [:read_only, :up] -> :waiting
+      %{conn: :waiting_on_lock, shape: :read_only} -> :waiting
       _ -> :starting
     end
   end

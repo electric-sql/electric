@@ -28,19 +28,20 @@ defmodule Electric.StatusMonitorTest do
       assert StatusMonitor.service_status(stack_id) == :waiting
     end
 
-    test "returns :waiting when conn waiting on lock and full shape pipeline up", %{
+    test "returns :starting when conn waiting on lock and full shape pipeline up", %{
       stack_id: stack_id
     } do
       start_link_supervised!({StatusMonitor, stack_id: stack_id})
-      # Simulate reconnection scenario: shape pipeline survived a connection drop
+      # When shape pipeline survived a connection drop, shape is :up but conn is :waiting_on_lock.
+      # This maps to :starting (not :waiting) because serving read-only during reconnection
+      # is unsafe — the concurrent Connection.Manager restart can invalidate shapes.
       StatusMonitor.mark_shape_metadata_ready(stack_id, self())
       StatusMonitor.mark_shape_log_collector_ready(stack_id, self())
       StatusMonitor.mark_supervisor_processes_ready(stack_id, self())
       StatusMonitor.wait_for_messages_to_be_processed(stack_id)
 
-      # conn is :waiting_on_lock, shape is :up — e.g. after DB connection drop
       assert StatusMonitor.status(stack_id) == %{conn: :waiting_on_lock, shape: :up}
-      assert StatusMonitor.service_status(stack_id) == :waiting
+      assert StatusMonitor.service_status(stack_id) == :starting
     end
 
     test "returns :starting when conn is progressing even with shapes loaded", %{
@@ -437,18 +438,6 @@ defmodule Electric.StatusMonitorTest do
     } do
       start_link_supervised!({StatusMonitor, stack_id: stack_id})
       StatusMonitor.mark_shape_metadata_ready(stack_id, self())
-      StatusMonitor.wait_for_messages_to_be_processed(stack_id)
-
-      assert StatusMonitor.wait_until(stack_id, :read_only, timeout: 100) == {:ok, :read_only}
-    end
-
-    test "with :read_only returns {:ok, :read_only} when shape pipeline is up but conn is waiting on lock",
-         %{stack_id: stack_id} do
-      start_link_supervised!({StatusMonitor, stack_id: stack_id})
-      # Simulate reconnection: shape pipeline survived but conn is re-establishing
-      StatusMonitor.mark_shape_metadata_ready(stack_id, self())
-      StatusMonitor.mark_shape_log_collector_ready(stack_id, self())
-      StatusMonitor.mark_supervisor_processes_ready(stack_id, self())
       StatusMonitor.wait_for_messages_to_be_processed(stack_id)
 
       assert StatusMonitor.wait_until(stack_id, :read_only, timeout: 100) == {:ok, :read_only}
