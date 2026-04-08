@@ -2176,6 +2176,35 @@ defmodule Electric.Plug.RouterTest do
       # After completion, all permits should be released
       assert %{initial: 0, existing: 0} = Electric.AdmissionControl.get_current(stack_id)
     end
+
+    @tag with_sql: [
+           "INSERT INTO items VALUES (gen_random_uuid(), 'test value 1')"
+         ]
+    test "does not create shapes when admission control rejects initial requests", %{
+      opts: opts,
+      stack_id: stack_id
+    } do
+      # Verify no shapes exist initially
+      assert Electric.ShapeCache.count_shapes(stack_id) == 0
+
+      # Pre-fill both initial admission slots (limit is 2) so the next request is rejected
+      :ok = Electric.AdmissionControl.try_acquire(stack_id, :initial, max_concurrent: 2)
+      :ok = Electric.AdmissionControl.try_acquire(stack_id, :initial, max_concurrent: 2)
+      assert %{initial: 2, existing: 0} = Electric.AdmissionControl.get_current(stack_id)
+
+      # Send an initial request for a new shape - should be rejected by admission control
+      conn = conn("GET", "/v1/shape?table=items&offset=-1") |> Router.call(opts)
+      assert %{status: 503} = conn
+
+      # BUG: shapes are created during validation, BEFORE admission control checks.
+      # This means a shape gets created even though the request is rejected.
+      # After the fix, no shape should be created when admission control rejects.
+      assert Electric.ShapeCache.count_shapes(stack_id) == 0
+
+      # Clean up manually acquired permits
+      Electric.AdmissionControl.release(stack_id, :initial)
+      Electric.AdmissionControl.release(stack_id, :initial)
+    end
   end
 
   describe "/v1/shapes - subqueries" do

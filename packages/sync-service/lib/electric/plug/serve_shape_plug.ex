@@ -20,12 +20,13 @@ defmodule Electric.Plug.ServeShapePlug do
   plug :parse_body
 
   plug :validate_request
-  # Admission control is applied here, but note:
-  # - /v1/health bypasses this plug (routed to HealthCheckPlug)
-  # - /metrics bypasses this plug (on separate utility router/port)
-  # - / (root) bypasses this plug (handled directly in router)
-  # This ensures observability remains available under load
+  # Admission control is applied here, after parameter validation but before
+  # shape creation. This ensures invalid requests are rejected cheaply without
+  # consuming a permit, while shape creation (the expensive part) only happens
+  # for admitted requests.
+  # Note: /v1/health, /metrics, and / bypass this plug entirely.
   plug :check_admission
+  plug :load_shape
   plug :serve_shape_response
 
   # end_telemetry_span needs to always be the last plug here.
@@ -102,7 +103,7 @@ defmodule Electric.Plug.ServeShapePlug do
         &(&1 != "false")
       )
 
-    case Api.validate(api, all_params) do
+    case Api.validate_params(api, all_params) do
       {:ok, request} ->
         assign(conn, :request, request)
 
@@ -202,6 +203,18 @@ defmodule Electric.Plug.ServeShapePlug do
     base = 5
     jitter = :rand.uniform(5)
     base + jitter
+  end
+
+  defp load_shape(%Conn{assigns: %{request: request}} = conn, _) do
+    case Api.load_shape_info(request) do
+      {:ok, request} ->
+        assign(conn, :request, request)
+
+      {:error, response} ->
+        conn
+        |> Api.Response.send(response)
+        |> halt()
+    end
   end
 
   defp serve_shape_response(%Conn{assigns: %{request: request}} = conn, _) do

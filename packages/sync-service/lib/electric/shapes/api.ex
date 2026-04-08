@@ -172,15 +172,45 @@ defmodule Electric.Shapes.Api do
   end
 
   @doc """
-  Validate the parameters for the request.
+  Validate the parameters for the request and load/create the shape.
+
+  This is a convenience wrapper that calls `validate_params/2` followed by
+  `load_shape_info/1`. Use the individual functions when you need to perform
+  actions (like admission control) between validation and shape creation.
   """
   @spec validate(t(), %{(atom() | binary()) => term()}) ::
           {:ok, Request.t()} | {:error, Response.t()}
   def validate(%Api{} = api, params) when is_configured(api) do
-    with {:ok, mode} <- hold_until_stack_ready(api),
-         {:ok, request} <- validate_params(api, params),
-         request = %{request | read_only?: mode == :read_only},
+    with {:ok, request} <- validate_params(api, params),
          {:ok, request} <- load_shape_info(request) do
+      {:ok, request}
+    end
+  end
+
+  @doc """
+  Validate request parameters without creating or loading a shape.
+
+  Returns a validated `Request` with parsed parameters and shape definition,
+  but no shape handle. Call `load_shape_info/1` afterwards to create or look
+  up the shape.
+  """
+  @spec validate_params(t(), %{(atom() | binary()) => term()}) ::
+          {:ok, Request.t()} | {:error, Response.t()}
+  def validate_params(%Api{} = api, params) when is_configured(api) do
+    with {:ok, mode} <- hold_until_stack_ready(api),
+         {:ok, request} <- cast_and_validate_params(api, params) do
+      {:ok, %{request | read_only?: mode == :read_only}}
+    end
+  end
+
+  @doc """
+  Load or create the shape for a validated request, and seek to the correct offset.
+
+  Must be called with a request returned by `validate_params/2`.
+  """
+  @spec load_shape_info(Request.t()) :: {:ok, Request.t()} | {:error, Response.t()}
+  def load_shape_info(%Request{} = request) do
+    with {:ok, request} <- do_load_shape_info(request) do
       {:ok, seek(request)}
     end
   end
@@ -193,7 +223,7 @@ defmodule Electric.Shapes.Api do
     end
   end
 
-  defp validate_params(api, params) do
+  defp cast_and_validate_params(api, params) do
     with {:ok, request_params} <- Api.Params.validate(api, params) do
       request_for_params(
         api,
@@ -265,7 +295,7 @@ defmodule Electric.Shapes.Api do
     Request.update_response(request, &%{&1 | up_to_date: true, offset: request.last_offset})
   end
 
-  defp load_shape_info(%Request{} = request) do
+  defp do_load_shape_info(%Request{} = request) do
     with_span(request, "shape_get.api.load_shape_info", fn ->
       request
       |> get_or_create_shape_handle()
