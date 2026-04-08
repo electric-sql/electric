@@ -1,9 +1,9 @@
 ---
-title: 'AI agents as CRDT peers: building a collaborative AI editor with Yjs'
+title: 'AI agents as CRDT peers — building collaborative AI with Yjs'
 description: >-
   How to build a collaborative AI editor where the AI agent is a server-side CRDT peer, using Durable Streams for both Yjs document sync and TanStack AI chat sessions.
 excerpt: >-
-  What if an AI agent could join a collaborative document as a real-time CRDT peer? This post walks through building an editor where the agent has its own cursor, streams edits into a live Yjs document, and the whole thing runs on Durable Streams.
+  What if an AI agent could be a real-time CRDT peer? Where the agent has its own cursor, streams edits into a live Yjs document, and the whole thing runs on Durable Streams.
 authors: [samwillis]
 image: /img/blog/building-a-collaborative-ai-editor/header.jpg
 imageWidth: 1536
@@ -133,10 +133,6 @@ Because the agent is a server-side peer, you can start an edit, close your lapto
 The hard problem here is that the AI generates markdown text, but the document is a rich text CRDT. It's a structured data type, not a string. You need to convert streaming markdown tokens into rich text nodes and insert them at positions that stay valid while other users are editing concurrently.
 
 ### Document tools
-
-<!-- The tool surface defines the contract between the AI model and the
-     document. Emphasise that it's deliberately constrained — the agent
-     edits like a collaborator, not an omnipotent mutator. -->
 
 Modern AI models have been trained to use tool calls to interact with the outside world. We give the agent a set of tools for working with the document, and the core flow is **read → locate → edit**:
 
