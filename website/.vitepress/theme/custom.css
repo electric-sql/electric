@@ -417,6 +417,18 @@ span.no-visual {
   }
 }
 
+@media (min-width: 768px) and (max-width: 1029px) {
+  .VPNavBar:not(.has-sidebar) .VPNavBarMenu > a.VPNavBarMenuLink:last-of-type {
+    display: none !important;
+  }
+}
+
+@media (min-width: 768px) and (max-width: 1360px) {
+  .VPNavBar.has-sidebar .VPNavBarMenu > a.VPNavBarMenuLink:last-of-type {
+    display: none !important;
+  }
+}
+
 @media (max-width: 767px) {
   .nav-item.VPNavBarCTA {
     display: none;
@@ -506,6 +518,45 @@ span.no-visual {
   }
 }
 
+/* Sidebar pages: compress one step earlier (each bucket shifts up) */
+@media (min-width: 1200px) and (max-width: 1360px) {
+  .VPNavBar.has-sidebar .VPNavBarMenuLink {
+    padding: 0 10px !important;
+  }
+  .VPNavBar.has-sidebar .VPSocialLink {
+    width: 30px !important;
+  }
+}
+@media (min-width: 1121px) and (max-width: 1199px) {
+  .VPNavBar.has-sidebar .VPNavBarMenuLink {
+    padding: 0 8px !important;
+  }
+}
+@media (min-width: 1060px) and (max-width: 1120px) {
+  .VPNavBar.has-sidebar .VPNavBarMenuLink {
+    padding: 0 6px !important;
+  }
+  .VPNavBar.has-sidebar .VPSocialLink {
+    width: 27px !important;
+  }
+}
+@media (min-width: 960px) and (max-width: 1059px) {
+  .VPNavBar.has-sidebar .VPNavBarMenuLink {
+    padding: 0 6px !important;
+  }
+  .VPNavBar.has-sidebar .VPSocialLink {
+    width: 27px !important;
+  }
+}
+@media (min-width: 768px) and (max-width: 959px) {
+  .VPNavBar.has-sidebar .VPNavBarMenuLink {
+    padding: 0 6px !important;
+  }
+  .VPNavBar.has-sidebar .VPSocialLink {
+    width: 27px !important;
+  }
+}
+
 @media (min-width: 768px) {
   .VPSocialLinks.VPNavBarSocialLinks.social-links {
     display: none !important;
@@ -540,6 +591,13 @@ span.no-visual {
     padding: 0 2px;
   }
 }
+@media (max-width: 1360px) {
+  .VPNavBar.has-sidebar .DocSearch-Button .DocSearch-Button-Placeholder {
+    visibility: hidden;
+    width: 4px;
+    padding: 0 2px;
+  }
+}
 @media (min-width: 768px) {
   .VPNavBarSocialLinks {
     order: 2;
@@ -553,6 +611,12 @@ span.no-visual {
   .VPNavBarSocialLinks {
     display: flex !important;
     align-items: center;
+  }
+}
+
+@media (min-width: 768px) and (max-width: 1149px) {
+  .VPNavBar.has-sidebar .VPNavBarSocialLinks > .VPSocialLink:nth-of-type(-n + 3) {
+    display: none !important;
   }
 }
 
