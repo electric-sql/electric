@@ -15,7 +15,6 @@ defmodule ElectricTelemetry.EtsTables do
 
   @default_individual_count 10
   @default_type_count 10
-  @word_size :erlang.system_info(:wordsize)
 
   @doc """
   Returns the top N individual ETS tables by memory usage.
@@ -41,9 +40,11 @@ defmodule ElectricTelemetry.EtsTables do
   def top_tables(count \\ @default_individual_count)
 
   def top_tables(count) when is_integer(count) and count > 0 do
+    word_size = word_size()
+
     all_table_info =
       :ets.all()
-      |> Enum.map(&table_info/1)
+      |> Enum.map(&table_info(&1, word_size))
       |> Enum.reject(&(&1.memory == 0))
 
     # Calculate type statistics
@@ -90,9 +91,11 @@ defmodule ElectricTelemetry.EtsTables do
   def top_by_type(count \\ @default_type_count)
 
   def top_by_type(count) when is_integer(count) and count > 0 do
+    word_size = word_size()
+
     all_table_info =
       :ets.all()
-      |> Enum.map(&table_info/1)
+      |> Enum.map(&table_info(&1, word_size))
       |> Enum.reject(&(&1.memory == 0))
 
     type_stats = calculate_type_stats(all_table_info)
@@ -138,9 +141,11 @@ defmodule ElectricTelemetry.EtsTables do
   def top_memory_stats(individual_count, type_count)
       when is_integer(individual_count) and individual_count > 0 and
              is_integer(type_count) and type_count > 0 do
+    word_size = word_size()
+
     all_table_info =
       :ets.all()
-      |> Enum.map(&table_info/1)
+      |> Enum.map(&table_info(&1, word_size))
       |> Enum.reject(&(&1.memory == 0))
 
     # Calculate type statistics once
@@ -180,7 +185,7 @@ defmodule ElectricTelemetry.EtsTables do
 
   # Private functions
 
-  defp table_info(table_ref) do
+  defp table_info(table_ref, word_size) do
     case :ets.info(table_ref, :name) do
       :undefined ->
         # Table was deleted between :ets.all() and this call
@@ -188,7 +193,7 @@ defmodule ElectricTelemetry.EtsTables do
 
       name ->
         type = table_type(name)
-        memory = table_memory(table_ref)
+        memory = table_memory_words(table_ref) * word_size
         size = table_size(table_ref)
 
         %{
@@ -219,13 +224,10 @@ defmodule ElectricTelemetry.EtsTables do
     |> Map.new()
   end
 
-  defp table_memory(table_ref) do
+  defp table_memory_words(table_ref) do
     case :ets.info(table_ref, :memory) do
-      :undefined ->
-        0
-
-      words when is_integer(words) ->
-        words * @word_size
+      :undefined -> 0
+      words when is_integer(words) -> words
     end
   end
 
@@ -298,4 +300,6 @@ defmodule ElectricTelemetry.EtsTables do
         |> Enum.join(separator)
     end
   end
+
+  defp word_size, do: :erlang.system_info(:wordsize)
 end
