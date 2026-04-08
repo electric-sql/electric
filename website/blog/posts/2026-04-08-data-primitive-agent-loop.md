@@ -1,5 +1,5 @@
 ---
-title: "Durable\u00A0Streams \u2014 the\u00A0data\u00A0primitive for the\u00A0agent\u00A0loop"
+title: "Durable\u00A0Streams \u2014 the data primitive for the\u00A0agent\u00A0loop"
 description: >-
   Agents are stateful. The agent loop accumulates a new kind of data that needs a new kind of primitive. Durable Streams is that primitive.
 excerpt: >-
@@ -9,6 +9,8 @@ image: /img/blog/data-primitive-agent-loop/header.jpg
 tags: [durable-streams, agents, sync]
 outline: [2, 3]
 post: true
+homepageSolution: true
+homepageOrder: 20
 published: true
 ---
 
