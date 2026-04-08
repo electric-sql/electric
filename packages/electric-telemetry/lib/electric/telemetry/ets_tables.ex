@@ -41,13 +41,7 @@ defmodule ElectricTelemetry.EtsTables do
 
   def top_tables(count) when is_integer(count) and count > 0 do
     word_size = word_size()
-
-    all_table_info =
-      :ets.all()
-      |> Enum.map(&table_info(&1, word_size))
-      |> Enum.reject(&(&1.memory == 0))
-
-    # Calculate type statistics
+    all_table_info = Enum.flat_map(:ets.all(), &table_info(&1, word_size))
     type_stats = calculate_type_stats(all_table_info)
 
     # Enrich each table with type statistics
@@ -92,12 +86,7 @@ defmodule ElectricTelemetry.EtsTables do
 
   def top_by_type(count) when is_integer(count) and count > 0 do
     word_size = word_size()
-
-    all_table_info =
-      :ets.all()
-      |> Enum.map(&table_info(&1, word_size))
-      |> Enum.reject(&(&1.memory == 0))
-
+    all_table_info = Enum.flat_map(:ets.all(), &table_info(&1, word_size))
     type_stats = calculate_type_stats(all_table_info)
 
     type_stats
@@ -142,13 +131,7 @@ defmodule ElectricTelemetry.EtsTables do
       when is_integer(individual_count) and individual_count > 0 and
              is_integer(type_count) and type_count > 0 do
     word_size = word_size()
-
-    all_table_info =
-      :ets.all()
-      |> Enum.map(&table_info(&1, word_size))
-      |> Enum.reject(&(&1.memory == 0))
-
-    # Calculate type statistics once
+    all_table_info = Enum.flat_map(:ets.all(), &table_info(&1, word_size))
     type_stats = calculate_type_stats(all_table_info)
 
     top_tables =
@@ -189,29 +172,28 @@ defmodule ElectricTelemetry.EtsTables do
     case :ets.info(table_ref, :name) do
       :undefined ->
         # Table was deleted between :ets.all() and this call
-        %{name: inspect(table_ref), type: "deleted", memory: 0, size: 0}
+        nil
 
       name ->
         type = table_type(name)
         memory = table_memory_words(table_ref) * word_size
         size = table_size(table_ref)
 
-        %{
-          name: name,
-          type: type,
-          memory: memory,
-          size: size
-        }
-    end
+        if memory > 0 do
+          [%{name: name, type: type, memory: memory, size: size}]
+        end
+    end || []
   end
 
   defp calculate_type_stats(all_table_info) do
     all_table_info
     |> Enum.group_by(& &1.type)
     |> Enum.map(fn {type, tables} ->
-      total_memory = Enum.reduce(tables, 0, fn table, acc -> acc + table.memory end)
-      total_size = Enum.reduce(tables, 0, fn table, acc -> acc + table.size end)
-      count = length(tables)
+      {count, total_memory, total_size} =
+        Enum.reduce(tables, {0, 0, 0}, fn table, {count, mem, size} ->
+          {count + 1, mem + table.memory, size + table.size}
+        end)
+
       avg_size = if count > 0, do: total_size / count, else: 0.0
 
       {type,
