@@ -48,7 +48,17 @@ defmodule Electric.Plug.HealthCheckPlugTest do
     end
 
     @tag connection_status: %{conn: :waiting_on_lock, shape: :read_only}
-    test "returns 202 waiting when waiting on lock with shapes loaded", ctx do
+    test "returns 202 waiting when waiting on lock with shapes metadata loaded", ctx do
+      conn =
+        conn(ctx)
+        |> HealthCheckPlug.call([])
+
+      assert conn.status == 202
+      assert Jason.decode!(conn.resp_body) == %{"status" => "waiting"}
+    end
+
+    @tag connection_status: %{conn: :waiting_on_lock, shape: :up}
+    test "returns 202 waiting when waiting on lock with full shape pipeline up", ctx do
       conn =
         conn(ctx)
         |> HealthCheckPlug.call([])
