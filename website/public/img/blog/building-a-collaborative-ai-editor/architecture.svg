@@ -1,0 +1,93 @@
+<svg width="820" height="520" viewBox="0 0 820 520" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <style>
+    text { font-family: 'Inter', 'Open Sauce Sans', system-ui, sans-serif; }
+  </style>
+
+  <!-- Browser Client box -->
+  <rect x="40" y="30" width="260" height="220" rx="8" stroke="#f5f5f5" stroke-width="1.5" stroke-dasharray="6 4" />
+  <text x="170" y="58" fill="#f5f5f5" font-size="14" font-weight="600" text-anchor="middle">Browser Client</text>
+
+  <!-- ProseMirror + Yjs Editor -->
+  <rect x="80" y="75" width="180" height="44" rx="6" stroke="#f5f5f5" stroke-width="1.5" />
+  <text x="170" y="102" fill="#f5f5f5" font-size="13" text-anchor="middle">ProseMirror + Yjs</text>
+
+  <!-- YjsProvider -->
+  <rect x="80" y="140" width="180" height="36" rx="6" stroke="#f5f5f5" stroke-width="1.5" />
+  <text x="170" y="163" fill="#f5f5f5" font-size="12" text-anchor="middle">YjsProvider</text>
+
+  <!-- useChat -->
+  <rect x="80" y="195" width="180" height="36" rx="6" stroke="#f5f5f5" stroke-width="1.5" />
+  <text x="170" y="218" fill="#f5f5f5" font-size="12" text-anchor="middle">useChat</text>
+
+  <!-- Lines inside browser: Editor to YjsProvider -->
+  <line x1="170" y1="119" x2="170" y2="140" stroke="#f5f5f5" stroke-width="1" />
+
+  <!-- Server Agent box -->
+  <rect x="520" y="30" width="260" height="220" rx="8" stroke="#f5f5f5" stroke-width="1.5" stroke-dasharray="6 4" />
+  <text x="650" y="58" fill="#f5f5f5" font-size="14" font-weight="600" text-anchor="middle">Server Agent (&quot;Electra&quot;)</text>
+
+  <!-- Server Y.Doc -->
+  <rect x="560" y="75" width="180" height="44" rx="6" stroke="#f5f5f5" stroke-width="1.5" />
+  <text x="650" y="102" fill="#f5f5f5" font-size="13" text-anchor="middle">Server Y.Doc</text>
+
+  <!-- YjsProvider (server) -->
+  <rect x="560" y="140" width="180" height="36" rx="6" stroke="#f5f5f5" stroke-width="1.5" />
+  <text x="650" y="163" fill="#f5f5f5" font-size="12" text-anchor="middle">YjsProvider</text>
+
+  <!-- chat() -->
+  <rect x="560" y="195" width="180" height="36" rx="6" stroke="#f5f5f5" stroke-width="1.5" />
+  <text x="650" y="218" fill="#f5f5f5" font-size="12" text-anchor="middle">chat()</text>
+
+  <!-- Lines inside server: Y.Doc to YjsProvider -->
+  <line x1="650" y1="119" x2="650" y2="140" stroke="#f5f5f5" stroke-width="1" />
+
+  <!-- Vertical lines from Browser to Durable Streams area -->
+  <line x1="140" y1="176" x2="140" y2="310" stroke="#f5f5f5" stroke-width="1.5" />
+  <line x1="200" y1="231" x2="200" y2="310" stroke="#f5f5f5" stroke-width="1.5" />
+
+  <!-- Vertical lines from Server to Durable Streams area -->
+  <line x1="680" y1="176" x2="680" y2="310" stroke="#f5f5f5" stroke-width="1.5" />
+  <line x1="620" y1="231" x2="620" y2="310" stroke="#f5f5f5" stroke-width="1.5" />
+
+  <!-- Durable Streams label -->
+  <text x="410" y="290" fill="#f5f5f5" font-size="12" text-anchor="middle" opacity="0.6">Durable Streams</text>
+
+  <!-- Horizontal divider line -->
+  <line x1="30" y1="310" x2="790" y2="310" stroke="#f5f5f5" stroke-width="1" opacity="0.3" />
+
+  <!-- Durable Streams Server box -->
+  <rect x="60" y="330" width="700" height="170" rx="8" stroke="#f5f5f5" stroke-width="1.5" />
+  <text x="410" y="490" fill="#f5f5f5" font-size="12" text-anchor="middle" opacity="0.5">Durable Streams Server</text>
+
+  <!-- Stream 1: Yjs document -->
+  <rect x="100" y="350" width="620" height="34" rx="5" stroke="#f5f5f5" stroke-width="1" opacity="0.8" />
+  <text x="410" y="372" fill="#f5f5f5" font-size="12" text-anchor="middle">/doc/{id}/yjs &#x2014; Yjs document</text>
+
+  <!-- Stream 2: Yjs awareness -->
+  <rect x="100" y="396" width="620" height="34" rx="5" stroke="#f5f5f5" stroke-width="1" opacity="0.8" />
+  <text x="410" y="418" fill="#f5f5f5" font-size="12" text-anchor="middle">/doc/{id}/yjs/awareness &#x2014; Yjs awareness</text>
+
+  <!-- Stream 3: TanStack AI chat -->
+  <rect x="100" y="442" width="620" height="34" rx="5" stroke="#f5f5f5" stroke-width="1" opacity="0.8" />
+  <text x="410" y="464" fill="#f5f5f5" font-size="12" text-anchor="middle">/doc/{id}/chat &#x2014; TanStack AI chat</text>
+
+  <!-- Connection lines from browser YjsProvider to streams 1 and 2 -->
+  <line x1="140" y1="310" x2="140" y2="367" stroke="#f5f5f5" stroke-width="1.5" />
+  <circle cx="140" cy="367" r="3" fill="#f5f5f5" />
+  <line x1="140" y1="367" x2="140" y2="413" stroke="#f5f5f5" stroke-width="1.5" />
+  <circle cx="140" cy="413" r="3" fill="#f5f5f5" />
+
+  <!-- Connection line from browser useChat to stream 3 -->
+  <line x1="200" y1="310" x2="200" y2="459" stroke="#f5f5f5" stroke-width="1.5" />
+  <circle cx="200" cy="459" r="3" fill="#f5f5f5" />
+
+  <!-- Connection lines from server YjsProvider to streams 1 and 2 -->
+  <line x1="680" y1="310" x2="680" y2="367" stroke="#f5f5f5" stroke-width="1.5" />
+  <circle cx="680" cy="367" r="3" fill="#f5f5f5" />
+  <line x1="680" y1="367" x2="680" y2="413" stroke="#f5f5f5" stroke-width="1.5" />
+  <circle cx="680" cy="413" r="3" fill="#f5f5f5" />
+
+  <!-- Connection line from server chat() to stream 3 -->
+  <line x1="620" y1="310" x2="620" y2="459" stroke="#f5f5f5" stroke-width="1.5" />
+  <circle cx="620" cy="459" r="3" fill="#f5f5f5" />
+</svg>
