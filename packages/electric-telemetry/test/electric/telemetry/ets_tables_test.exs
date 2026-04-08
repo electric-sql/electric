@@ -7,34 +7,8 @@ defmodule ElectricTelemetry.EtsTablesTest do
     test "returns top N tables by memory usage" do
       # Create some test tables
       table1 = :ets.new(:test_table_1, [:public, :named_table])
-
-      on_exit(fn ->
-        try do
-          :ets.delete(table1)
-        rescue
-          _ -> :ok
-        end
-      end)
-
       table2 = :ets.new(:test_table_2, [:public, :named_table])
-
-      on_exit(fn ->
-        try do
-          :ets.delete(table2)
-        rescue
-          _ -> :ok
-        end
-      end)
-
       table3 = :ets.new(:test_table_3, [:public, :named_table])
-
-      on_exit(fn ->
-        try do
-          :ets.delete(table3)
-        rescue
-          _ -> :ok
-        end
-      end)
 
       # Insert data to create memory usage differences
       for i <- 1..100, do: :ets.insert(table1, {i, :binary.copy(<<0>>, 1000)})
@@ -85,34 +59,8 @@ defmodule ElectricTelemetry.EtsTablesTest do
       # Create tables with same type but different sizes
       # Use UUID-like suffixes so type extraction groups them under "TestType"
       table1 = :ets.new(:"TestType:aaa11111-1111", [:public])
-
-      on_exit(fn ->
-        try do
-          :ets.delete(table1)
-        rescue
-          _ -> :ok
-        end
-      end)
-
       table2 = :ets.new(:"TestType:bbb22222-2222", [:public])
-
-      on_exit(fn ->
-        try do
-          :ets.delete(table2)
-        rescue
-          _ -> :ok
-        end
-      end)
-
       table3 = :ets.new(:"TestType:ccc33333-3333", [:public])
-
-      on_exit(fn ->
-        try do
-          :ets.delete(table3)
-        rescue
-          _ -> :ok
-        end
-      end)
 
       # Insert different amounts of data to get different sizes
       # Using more data to ensure these tables appear in top results
@@ -145,34 +93,8 @@ defmodule ElectricTelemetry.EtsTablesTest do
     test "groups tables by type and sums memory" do
       # Create tables with patterns that should be grouped
       table1 = :ets.new(:"Electric.Test:6dd7c00b-8e31-4cfa", [:public])
-
-      on_exit(fn ->
-        try do
-          :ets.delete(table1)
-        rescue
-          _ -> :ok
-        end
-      end)
-
       table2 = :ets.new(:"Electric.Test:61fec704-7dbf-49a5", [:public])
-
-      on_exit(fn ->
-        try do
-          :ets.delete(table2)
-        rescue
-          _ -> :ok
-        end
-      end)
-
       table3 = :ets.new(:"Another.Module:abcd1234-5678-9abc", [:public])
-
-      on_exit(fn ->
-        try do
-          :ets.delete(table3)
-        rescue
-          _ -> :ok
-        end
-      end)
 
       # Insert some data
       for i <- 1..10, do: :ets.insert(table1, {i, :binary.copy(<<0>>, 100)})
@@ -209,24 +131,7 @@ defmodule ElectricTelemetry.EtsTablesTest do
     test "handles unnamed tables with same name" do
       # Create multiple unnamed tables
       table1 = :ets.new(:unnamed_test, [:public, :named_table])
-
-      on_exit(fn ->
-        try do
-          :ets.delete(table1)
-        rescue
-          _ -> :ok
-        end
-      end)
-
-      table2 = :ets.new(:unnamed_test_2, [:public])
-
-      on_exit(fn ->
-        try do
-          :ets.delete(table2)
-        rescue
-          _ -> :ok
-        end
-      end)
+      _table2 = :ets.new(:unnamed_test_2, [:public])
 
       # Insert data
       for i <- 1..5, do: :ets.insert(table1, {i, :data})
@@ -251,34 +156,8 @@ defmodule ElectricTelemetry.EtsTablesTest do
       # Create tables with same type but different sizes
       # Use UUID-like suffixes so type extraction groups them under "GroupTest"
       table1 = :ets.new(:"GroupTest:11111111-1111", [:public])
-
-      on_exit(fn ->
-        try do
-          :ets.delete(table1)
-        rescue
-          _ -> :ok
-        end
-      end)
-
       table2 = :ets.new(:"GroupTest:22222222-2222", [:public])
-
-      on_exit(fn ->
-        try do
-          :ets.delete(table2)
-        rescue
-          _ -> :ok
-        end
-      end)
-
       table3 = :ets.new(:"GroupTest:33333333-3333", [:public])
-
-      on_exit(fn ->
-        try do
-          :ets.delete(table3)
-        rescue
-          _ -> :ok
-        end
-      end)
 
       # Insert different amounts of data
       for i <- 1..1500, do: :ets.insert(table1, {i, :binary.copy(<<0>>, 100)})
@@ -334,25 +213,8 @@ defmodule ElectricTelemetry.EtsTablesTest do
 
   describe "table type extraction" do
     test "extracts type from colon-separated stack_id pattern" do
-      table1 = :ets.new(:"Electric.StatusMonitor:6dd7c00b-8e31", [:public])
-
-      on_exit(fn ->
-        try do
-          :ets.delete(table1)
-        rescue
-          _ -> :ok
-        end
-      end)
-
-      table2 = :ets.new(:"shapedb:shape_lookup:61fec704-7dbf-49a5", [:public])
-
-      on_exit(fn ->
-        try do
-          :ets.delete(table2)
-        rescue
-          _ -> :ok
-        end
-      end)
+      _table1 = :ets.new(:"Electric.StatusMonitor:6dd7c00b-8e31", [:public])
+      _table2 = :ets.new(:"shapedb:shape_lookup:61fec704-7dbf-49a5", [:public])
 
       results = EtsTables.top_tables(100)
 
@@ -374,15 +236,7 @@ defmodule ElectricTelemetry.EtsTablesTest do
     end
 
     test "extracts type from underscore-separated stack_id pattern" do
-      table1 = :ets.new(:stack_call_home_telemetry_6dd7c00b, [:public])
-
-      on_exit(fn ->
-        try do
-          :ets.delete(table1)
-        rescue
-          _ -> :ok
-        end
-      end)
+      _table1 = :ets.new(:stack_call_home_telemetry_6dd7c00b, [:public])
 
       results = EtsTables.top_tables(100)
 
@@ -396,15 +250,7 @@ defmodule ElectricTelemetry.EtsTablesTest do
     end
 
     test "uses full name when no pattern is detected" do
-      table1 = :ets.new(:simple_table_name, [:public, :named_table])
-
-      on_exit(fn ->
-        try do
-          :ets.delete(table1)
-        rescue
-          _ -> :ok
-        end
-      end)
+      _table1 = :ets.new(:simple_table_name, [:public, :named_table])
 
       results = EtsTables.top_tables(100)
 
@@ -416,25 +262,8 @@ defmodule ElectricTelemetry.EtsTablesTest do
 
     test "handles partial UUID patterns correctly" do
       # Some production tables have truncated UUIDs
-      table1 = :ets.new(:"Electric.Test:6dd7c00b", [:public])
-
-      on_exit(fn ->
-        try do
-          :ets.delete(table1)
-        rescue
-          _ -> :ok
-        end
-      end)
-
-      table2 = :ets.new(:"Electric.Test:61fec704-7dbf", [:public])
-
-      on_exit(fn ->
-        try do
-          :ets.delete(table2)
-        rescue
-          _ -> :ok
-        end
-      end)
+      _table1 = :ets.new(:"Electric.Test:6dd7c00b", [:public])
+      _table2 = :ets.new(:"Electric.Test:61fec704-7dbf", [:public])
 
       results = EtsTables.top_tables(100)
 
