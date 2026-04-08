@@ -14,6 +14,17 @@ post: true
 published: true
 ---
 
+<style scoped>
+  .embed-container {
+    margin: 24px 0;
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .embed-container.top {
+    margin: 32px 0 -12px 0;
+  }
+</style>
+
 I came to sync engines through collaborative editing. Since AI agents became part of my daily workflow, I've had an earworm: what would it look like to integrate an AI agent into a Yjs rich text editing flow — not as a sidebar that dumps text, but as a real participant with its own cursor, presence, and streaming edits?
 
 This post walks through how I built a [Collaborative AI Editor](https://collaborative-ai-editor.examples.electric-sql.com) demo — a [TanStack Start](https://tanstack.com/start) app with a [ProseMirror](https://prosemirror.net)/Yjs editor and an AI chat sidebar. It uses [Durable&nbsp;Streams](https://durablestreams.com) as the single transport layer for both [Yjs](https://yjs.dev) document collaboration and [TanStack&nbsp;AI](https://tanstack.com/ai) chat sessions. Two integrations, one primitive, and the AI becomes a genuine CRDT peer.
@@ -21,10 +32,8 @@ This post walks through how I built a [Collaborative AI Editor](https://collabor
 > [!Warning] Collaborative AI Editor demo
 > Try the [live demo](https://collaborative-ai-editor.examples.electric-sql.com) and browse the [source code](https://github.com/electric-sql/collaborative-ai-editor).
 
-<div style="border: 1px solid #555; border-radius: 8px; padding: 48px 24px; text-align: center; color: #888; margin: 24px 0;">
-  <p style="font-size: 48px; margin: 0;">&#9654;</p>
-  <p style="font-size: 16px; margin: 8px 0 4px;"><strong>TODO: YouTube video embed</strong></p>
-  <p style="font-size: 13px; margin: 0;">Full demo walkthrough — editor + chat sidebar + Electra editing in real-time</p>
+<div class="embed-container top" style="padding-bottom: 56.25%">
+  <YoutubeEmbed video-id="qdEIE5XY0wo" />
 </div>
 
 ## The natural intersection
