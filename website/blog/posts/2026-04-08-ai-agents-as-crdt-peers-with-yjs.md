@@ -36,23 +36,13 @@ This post walks through how I built a [Collaborative AI Editor](https://collabor
   <YoutubeEmbed video-id="qdEIE5XY0wo" />
 </div>
 
-## The natural intersection
+## The integration problem
 
-AI-assisted writing and editing is everywhere. ChatGPT Canvas, Cursor, Notion AI all let an AI modify a document alongside you. Software engineers see this more clearly than most: we already have agents editing our code files daily, working alongside us in the same codebase.
+AI-assisted writing and editing is everywhere — ChatGPT Canvas, Cursor, Notion AI all let an AI modify a document alongside you. Software engineers see this more clearly than most: we already have agents editing our code files daily. At the same time, real-time collaboration is table stakes. Google Docs and Figma taught users to expect multiplayer. The natural move is to treat an AI agent as just another peer in the same collaborative system.
 
-At the same time, real-time collaboration is table stakes for productivity tools. Google Docs taught a generation of users to expect it, and Figma proved the model works for complex creative tools too. If you're building anything where people work on shared artifacts, multiplayer is the baseline.
+But actually building that is painful. [Yjs](https://yjs.dev) has become the dominant toolkit for CRDT-based editors, and building a collaborative AI editor on top of it means integrating several separate real-time systems: CRDT sync for the document, token streaming for the AI, and presence/awareness, each with its own transport, persistence, and failure handling.
 
-The overlap is clear. We already have the tools for multiple people to edit a document together in real-time. If we treat an AI agent as just another peer in that system, we get collaborative AI editing without reinventing the wheel. The agent joins the same document, gets its own cursor, and edits alongside you using the same CRDT infrastructure that already handles conflict resolution between humans.
-
-## But the integration is painful
-
-The technology for building collaborative editors has evolved. Earlier editors like Google Docs used operational transforms (OT), which require a central server to resolve conflicts. CRDTs removed that constraint, and [Yjs](https://yjs.dev) has become the dominant toolkit for building CRDT-based editors today. But building a collaborative AI editor on top of Yjs means integrating several separate real-time systems: CRDT sync for the document, token streaming for the AI, and presence/awareness, each with its own transport, connection lifecycle, persistence, and failure handling.
-
-There's also a fundamental mismatch in how most AI writing tools approach document editing. They generate a diff and patch the document as markdown or plain text. But a rich text document built on CRDTs is a data structure, not a string. You need to stream edits in as CRDT operations, not text patches.
-
-On top of that, most approaches rely on client-side tool calls to edit the document, which means the document has to be open in the user's browser for the agent to do anything. A server-side agent that edits the CRDT directly doesn't have that limitation.
-
-Put it all together and you're looking at one protocol for Yjs, another for AI streaming, custom persistence for chat history, and separate reconnection logic for each layer. Every system fails independently. It's a lot of moving parts for something that should feel simple.
+There's also a fundamental mismatch in how most AI writing tools approach editing. They generate a diff and patch the document as text. But a rich text CRDT is a data structure, not a string — you need to stream edits in as CRDT operations. And most approaches rely on client-side tool calls, which means the document has to be open in the user's browser for the agent to do anything.
 
 Having worked on Durable&nbsp;Streams, then built the [Yjs integration](https://durablestreams.com/yjs), then the [TanStack&nbsp;AI integration](https://durablestreams.com/tanstack-ai), the natural question was: what if these two integrations shared the same infrastructure?
 
