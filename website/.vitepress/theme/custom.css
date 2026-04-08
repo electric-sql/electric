@@ -417,6 +417,12 @@ span.no-visual {
   }
 }
 
+@media (min-width: 768px) and (max-width: 1029px) {
+  .VPNavBar:not(.has-sidebar) .VPNavBarMenu > a.VPNavBarMenuLink:last-of-type {
+    display: none !important;
+  }
+}
+
 @media (min-width: 768px) and (max-width: 1360px) {
   .VPNavBar.has-sidebar .VPNavBarMenu > a.VPNavBarMenuLink:last-of-type {
     display: none !important;
