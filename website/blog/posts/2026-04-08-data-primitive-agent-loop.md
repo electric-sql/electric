@@ -1,5 +1,5 @@
 ---
-title: "Durable\u00A0Streams \u2014 the data primitive for the\u00A0agent\u00A0loop"
+title: "Durable\u00A0Streams \u2014 the\u00A0data\u00A0primitive for the\u00A0agent\u00A0loop"
 description: >-
   Agents are stateful. The agent loop accumulates a new kind of data that needs a new kind of primitive. Durable Streams is that primitive.
 excerpt: >-
@@ -17,12 +17,20 @@ import Card from '../../src/components/home/Card.vue'
 import AgentLoopAnimation from '../../src/components/blog/data-primitive-agent-loop/AgentLoopAnimation.vue'
 </script>
 
+<style scoped>
+  .requirements-list ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+</style>
+
 The agent loop accumulates state: messages, token streams, tool calls and results. A new kind of data that needs a new data&nbsp;primitive.
 
 [Durable&nbsp;Streams](https://durablestreams.com) are persistent, addressable, real-time streams. Reactive, resumable and extensible, they are the data primitive for the agent&nbsp;loop.
 
 > [!Warning] <img src="/img/icons/durable-streams.square.svg" style="height: 20px; margin-right: 6px; margin-top: -1px; display: inline; vertical-align: text-top" /> Dive into Durable&nbsp;Streams
-> See the [docs](https://durablestreams.com), [transports](/blog/2026/03/24/durable-transport-ai-sdks), [extensions](/blog/2026/03/26/stream-db), [examples](https://github.com/durable-streams/durable-streams/tree/main/examples) and [deploy&nbsp;now](https://dashboard.electric-sql.cloud/?intent=create&serviceType=streams) on [Electric&nbsp;Cloud](/cloud).
+> See the [docs](https://durablestreams.com), [transports](/blog/2026/03/24/durable-transport-ai-sdks), [extensions](/blog/2026/03/26/stream-db), [examples](https://github.com/durable-streams/durable-streams/tree/main/examples) and <span class="no-wrap-xs">[deploy<span class="hidden-xs">&nbsp;now</span>](https://dashboard.electric-sql.cloud/?intent=create&serviceType=streams) on [Electric&nbsp;Cloud](/cloud)</span>.
 
 ## The agent loop
 
@@ -72,14 +80,17 @@ The payload can be anything. The delivery protocol is standard HTTP. So it works
 
 Durable Streams are:
 
-- **persistent** so agent sessions are durable and survive disconnects and restarts
-- **addressable** so people, agents and systems can find them (every stream has a URL, every position an opaque monotonic offset)
-- **reactive** so humans and agents can collaborate on the same session in real time
-- **replayable** so you can join, audit or restart from any point
-- **forkable** so users and agents can branch sessions to explore alternatives
-- **lightweight** so they're trivial to spin up for every agent
-- **low-latency** for single-digit ms latency at the CDN edge
-- **extensible** with support for structured, multiplexed and multi-modal data
+| | |
+|-|-|
+| **Persistent** | So agent sessions are durable and survive disconnects and restarts |
+| **Addressable** | So you can find them (every stream has a URL, every position an offset) |
+| **Reactive** | So you can collaborate on the same session in real time |
+| **Replayable** | So you can join, audit or restart from any point |
+| **Forkable** | So you can branch sessions to explore alternatives |
+| **Lightweight** | So they're trivial to spin up for every agent |
+| **Low-latency** | For single-digit ms latency at the CDN edge |
+| **Schema-aware** | For multiplexing structured and multi-modal data |
+| **Extensible** | Via wrapper protocols and integrations |
 
 ### Extensible layers and integrations
 
@@ -107,7 +118,7 @@ Agents can subscribe to and build on each other's work. Users and agents can spa
 
 Because Durable Streams use the [Electric delivery protocol](/docs/api/http), they support massive, elastic fan-out and concurrency through existing CDN infrastructure. Scale to zero or scale to [millions of concurrent real-time subscribers](/docs/reference/benchmarks#cloud).
 
-## Data primitive for the agent loop
+## Data primitive for the agent&nbsp;loop
 
 Agents are stateful. The agent loop accumulates state with every iteration. This state needs a new primitive. That's [Durable&nbsp;Streams](https://durablestreams.com).
 
