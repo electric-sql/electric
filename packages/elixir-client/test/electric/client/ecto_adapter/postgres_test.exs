@@ -15,6 +15,7 @@ defmodule Electric.Client.EctoAdapter.PostgresTest do
       field(:ff, :float)
       field(:ss, :string)
       field(:uu, :binary_id)
+      field(:eu, Ecto.ULID)
       field(:nd, :naive_datetime)
       field(:ud, :utc_datetime)
       field(:dd, :date)
@@ -40,6 +41,7 @@ defmodule Electric.Client.EctoAdapter.PostgresTest do
     ud = ~U[2024-10-23 14:36:39Z]
     dd = ~D[2024-10-23]
     mm = Decimal.new("199.99")
+    eu = "01KNN1EKXZ6QX7RBY56M1GYDYC"
     ul = "ul_coa2saf4czblth3g5jhleb4574"
 
     assert_where(where(TestTable, ii: ^ii), ~s[("ii" = 1234)])
@@ -47,6 +49,7 @@ defmodule Electric.Client.EctoAdapter.PostgresTest do
     assert_where(where(TestTable, ss: ^ss1), ~s[("ss" = 'my string')])
     assert_where(where(TestTable, ss: ^ss2), ~s[("ss" = 'it''s mine')])
     assert_where(where(TestTable, uu: ^uu), ~s[("uu" = '247a6f62-9f05-4ac6-8314-89e77177d1e3')])
+    assert_where(where(TestTable, eu: ^eu), ~s[("eu" = '019d6a17-4fbf-35fa-7c2f-c535030f37cc')])
     assert_where(where(TestTable, nd: ^nd), ~s[("nd" = '2024-10-23T14:36:39'::timestamp)])
     assert_where(where(TestTable, ud: ^ud), ~s[("ud" = '2024-10-23T14:36:39Z'::timestamptz)])
     assert_where(where(TestTable, dd: ^dd), ~s[("dd" = '2024-10-23'::date)])
@@ -66,6 +69,7 @@ defmodule Electric.Client.EctoAdapter.PostgresTest do
     values_ff = [3.14, 2.71, 6.626]
     values_mm = [Decimal.new("3.14"), Decimal.new("2.71"), Decimal.new("6.626")]
     values_mm2 = [Decimal.new("9.99")]
+    values_eu = ["01KNN1EKXZ6QX7RBY56M1GYDYC", "01JXA5469C68QNGM0N5YA0XNSN"]
     ff = 3.14
 
     assert_where(from(t in TestTable) |> where([t], t.ii in [1, 2, 3]), ~s|("ii" IN (1,2,3))|)
@@ -85,6 +89,11 @@ defmodule Electric.Client.EctoAdapter.PostgresTest do
     assert_where(
       from(t in TestTable) |> where([t], t.ff in ^values_ff),
       ~s|("ff" IN (3.14::float,2.71::float,6.626::float))|
+    )
+
+    assert_where(
+      from(t in TestTable) |> where([t], t.eu in ^values_eu),
+      ~s|("eu" IN ('019d6a17-4fbf-35fa-7c2f-c535030f37cc','01975452-192c-322f-5850-152f940ed735'))|
     )
 
     assert_where(
