@@ -1,91 +1,51 @@
 <script setup>
 // The pipe between the loop and the durable log.
 //
-// DataPipe is absolutely positioned inside the `.layout` container. The
-// parent computes a `geometry` object (in layout-local pixel coordinates)
-// that describes where the pipe starts and ends; DataPipe just translates
-// that into a thin line + a sweep element.
+// DataPipe is absolutely positioned inside the `.layout` container. All
+// of its geometry is expressed in container query units (`cqw`) so it
+// tracks the loop and log without any JS measurement.
 //
 // The sweep fill child is re-keyed on every `pipeTick` bump so the CSS
 // keyframe restarts cleanly each time the composable fires it. The
-// keyframe direction depends on the orientation (horizontal vs vertical).
+// media query switches between horizontal (desktop) and vertical
+// (mobile) sweep animations.
 
-import { computed } from 'vue'
-
-const props = defineProps({
+defineProps({
   pipeTick: {
     type: Number,
     required: true,
   },
-  geometry: {
-    type: Object,
-    default: null,
-  },
-})
-
-// Thickness of the pipe rail (the short axis). Matches the original
-// 12px look closely enough to keep the gradient sweep readable.
-const RAIL_THICKNESS = 5
-
-const style = computed(() => {
-  if (!props.geometry) {
-    return { display: 'none' }
-  }
-  const { x1, y1, x2, y2 } = props.geometry
-  const horizontal = Math.abs(x2 - x1) >= Math.abs(y2 - y1)
-  if (horizontal) {
-    return {
-      left: `${Math.min(x1, x2)}px`,
-      top: `${y1}px`,
-      width: `${Math.max(1, Math.abs(x2 - x1))}px`,
-      height: `${RAIL_THICKNESS}px`,
-    }
-  } else {
-    return {
-      left: `${x1}px`,
-      top: `${Math.min(y1, y2)}px`,
-      width: `${RAIL_THICKNESS}px`,
-      height: `${Math.max(1, Math.abs(y2 - y1))}px`,
-    }
-  }
-})
-
-const orientation = computed(() => {
-  if (!props.geometry) return 'horizontal'
-  const { x1, y1, x2, y2 } = props.geometry
-  return Math.abs(x2 - x1) >= Math.abs(y2 - y1) ? 'horizontal' : 'vertical'
 })
 </script>
 
 <template>
-  <div class="pipe" :class="orientation" :style="style">
+  <div class="pipe">
     <div :key="pipeTick" class="pipe-fill" />
   </div>
 </template>
 
 <style scoped>
+/*
+ * Desktop: horizontal pipe from the spawn slice exit to the left edge
+ * of the log. Loop is 0..45cqw, gap is 45..55cqw, log starts at 55cqw.
+ * Slice exit X = 45cqw * (970/1024). Slice exit Y = 45cqw * (339/1024).
+ * Pipe runs from exit X to 55cqw (the log's left edge), at exit Y.
+ */
 .pipe {
   position: absolute;
+  left: calc(45cqw * 970 / 1024);
+  top: calc(45cqw * 339 / 1024);
+  width: calc(55cqw - 45cqw * 970 / 1024);
+  height: 5px;
   pointer-events: none;
   overflow: hidden;
   background: rgba(117, 251, 253, 0.03);
-}
-
-.pipe.horizontal {
   border-top: 1px solid rgba(117, 251, 253, 0.4);
   border-bottom: 1px solid rgba(117, 251, 253, 0.4);
 }
 
-.pipe.vertical {
-  border-left: 1px solid rgba(117, 251, 253, 0.4);
-  border-right: 1px solid rgba(117, 251, 253, 0.4);
-}
-
 .pipe-fill {
   position: absolute;
-}
-
-.pipe.horizontal .pipe-fill {
   top: 0;
   left: -40%;
   width: 40%;
@@ -99,26 +59,49 @@ const orientation = computed(() => {
   animation: pipe-flow-horizontal 0.6s cubic-bezier(0.4, 0, 0.2, 1) forwards;
 }
 
-.pipe.vertical .pipe-fill {
-  left: 0;
-  top: -40%;
-  width: 100%;
-  height: 40%;
-  background: linear-gradient(
-    180deg,
-    transparent,
-    rgba(117, 251, 253, 0.9),
-    transparent
-  );
-  animation: pipe-flow-vertical 0.6s cubic-bezier(0.4, 0, 0.2, 1) forwards;
-}
-
 @keyframes pipe-flow-horizontal {
   0% {
     left: -40%;
   }
   100% {
     left: 100%;
+  }
+}
+
+/*
+ * Mobile: vertical pipe. The slices-rotator in AgentLoopSvg is rotated
+ * 150° about the viewBox centre, which takes the spawn path's
+ * (930.228, 275.038) corner — the tip that becomes the visible bottom
+ * of the rotated slice — to roughly (268, 926) in the loop's coordinate
+ * space. The loop fills the column width, so loop width = loop height
+ * = 100cqw, and the pipe drops from that point through the 24px gap to
+ * the top of the log.
+ */
+@media (max-width: 499px) {
+  .pipe {
+    left: calc(100cqw * 268 / 1024);
+    /* -3px nudges the pipe up so it sits flush with the slice edge. */
+    top: calc(100cqw * 926 / 1024 - 3px);
+    width: 5px;
+    height: calc(100cqw - 100cqw * 926 / 1024 + 27px);
+    border-top: none;
+    border-bottom: none;
+    border-left: 1px solid rgba(117, 251, 253, 0.4);
+    border-right: 1px solid rgba(117, 251, 253, 0.4);
+  }
+
+  .pipe-fill {
+    top: -40%;
+    left: 0;
+    width: 100%;
+    height: 40%;
+    background: linear-gradient(
+      180deg,
+      transparent,
+      rgba(117, 251, 253, 0.9),
+      transparent
+    );
+    animation: pipe-flow-vertical 0.6s cubic-bezier(0.4, 0, 0.2, 1) forwards;
   }
 }
 

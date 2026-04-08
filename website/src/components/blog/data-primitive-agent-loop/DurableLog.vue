@@ -3,26 +3,17 @@
 // first. Each entry has its own progress bar that the composable fills as
 // the corresponding slice writes through the pipe.
 
-import { ref } from 'vue'
-
 defineProps({
   entries: {
     type: Array,
     required: true,
   },
 })
-
-const logEntriesRef = ref(null)
-
-defineExpose({ logEntriesRef })
 </script>
 
 <template>
   <div class="log-section">
-    <div class="log-header">
-      <span class="log-title">DURABLE LOG</span>
-    </div>
-    <div ref="logEntriesRef" class="log-entries">
+    <div class="log-entries">
       <transition-group name="log-entry">
         <div v-for="entry in entries" :key="entry.id" class="log-entry">
           <div class="entry-header">
@@ -46,25 +37,6 @@ defineExpose({ logEntriesRef })
   display: flex;
   flex-direction: column;
   width: 100%;
-}
-
-.log-header {
-  margin-bottom: 24px;
-  border-bottom: 1px solid rgba(117, 251, 253, 0.2);
-  padding-bottom: 12px;
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-end;
-  display: none;
-}
-
-.log-title {
-  font-size: 11px;
-  letter-spacing: 0.3em;
-  color: rgba(117, 251, 253, 0.8);
-  font-weight: 900;
-  text-transform: uppercase;
-  font-family: var(--vp-font-family-mono);
 }
 
 .log-entries {
@@ -140,22 +112,4 @@ defineExpose({ logEntriesRef })
   }
 }
 
-/* Mobile: flip the column so the label sits under the entries, and flip
-   the header border so it reads as a top border from the entries' side. */
-@media (max-width: 499px) {
-  .log-section {
-    flex-direction: column-reverse;
-    max-width: 300px;
-    align-self: flex-start;
-  }
-
-  .log-header {
-    margin-bottom: 0;
-    margin-top: 24px;
-    border-bottom: none;
-    border-top: 1px solid rgba(117, 251, 253, 0.2);
-    padding-bottom: 0;
-    padding-top: 12px;
-  }
-}
 </style>

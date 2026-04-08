@@ -13,12 +13,13 @@ published: true
 ---
 
 <script setup>
+import Card from '../../src/components/home/Card.vue'
 import AgentLoopAnimation from '../../src/components/blog/data-primitive-agent-loop/AgentLoopAnimation.vue'
 </script>
 
-Agents are stateful. The agent loop accumulates state: messages, token streams, tool calls, results. A new kind of data that existing infra wasn't designed for.
+The agent loop accumulates state: messages, token streams, tool calls and results. A new kind of data that needs a new data&nbsp;primitive.
 
-[Durable&nbsp;Streams](https://durablestreams.com) are persistent, addressable, real-time streams. Reactive, subscribable, replayable, forkable and extensible, they are the data primitive for the agent&nbsp;loop.
+[Durable&nbsp;Streams](https://durablestreams.com) are persistent, addressable, real-time streams. Reactive, resumable and extensible, they are the data primitive for the agent&nbsp;loop.
 
 > [!Warning] <img src="/img/icons/durable-streams.square.svg" style="height: 20px; margin-right: 6px; margin-top: -1px; display: inline; vertical-align: text-top" /> Dive into Durable&nbsp;Streams
 > See the [docs](https://durablestreams.com), [transports](/blog/2026/03/24/durable-transport-ai-sdks), [extensions](/blog/2026/03/26/stream-db), [examples](https://github.com/durable-streams/durable-streams/tree/main/examples) and [deploy&nbsp;now](https://dashboard.electric-sql.cloud/?intent=create&serviceType=streams) on [Electric&nbsp;Cloud](/cloud).
@@ -29,9 +30,13 @@ Agents are being deployed at massive and accelerating scale. The core execution 
 
 The agent receives a task, reasons about what to do, decides on an action, executes it and then feeds the result back into its own context as a new observation.
 
-<ClientOnly>
-  <AgentLoopAnimation />
-</ClientOnly>
+<figure>
+  <Card>
+    <ClientOnly>
+      <AgentLoopAnimation />
+    </ClientOnly>
+  </Card>
+</figure>
 
 This loop repeats. Each iteration is a full inference call where the model decides what to do next. State accumulates with every iteration. Messages, tool calls, tool call results, observations, artifacts, etc.
 
@@ -104,7 +109,7 @@ Because Durable Streams use the [Electric delivery protocol](/docs/api/http), th
 
 ## Data primitive for the agent loop
 
-Agents are stateful. The agent loop accumulates state with every iteration. This state needs a new primitive. That's [Durable&nbsp;Streams](https://durablestreams.com) &mdash; the data primitive for the agent loop.
+Agents are stateful. The agent loop accumulates state with every iteration. This state needs a new primitive. That's [Durable&nbsp;Streams](https://durablestreams.com).
 
-> [!Warning] <img src="/img/icons/durable-streams.square.svg" style="height: 20px; margin-right: 6px; margin-top: -1px; display: inline; vertical-align: text-top" /> Try it in action now
+> [!Warning] <img src="/img/icons/durable-streams.square.svg" style="height: 20px; margin-right: 6px; margin-top: -1px; display: inline; vertical-align: text-top" /> Try Durable&nbsp;Streams now
 > See the [docs](https://durablestreams.com), [transports](/blog/2026/03/24/durable-transport-ai-sdks), [extensions](/blog/2026/03/26/stream-db), [examples](https://github.com/durable-streams/durable-streams/tree/main/examples) and [deploy&nbsp;now](https://dashboard.electric-sql.cloud/?intent=create&serviceType=streams) on [Electric&nbsp;Cloud](/cloud).
