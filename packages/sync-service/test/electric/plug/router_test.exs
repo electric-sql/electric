@@ -2196,9 +2196,9 @@ defmodule Electric.Plug.RouterTest do
       conn = conn("GET", "/v1/shape?table=items&offset=-1") |> Router.call(opts)
       assert %{status: 503} = conn
 
-      # BUG: shapes are created during validation, BEFORE admission control checks.
-      # This means a shape gets created even though the request is rejected.
-      # After the fix, no shape should be created when admission control rejects.
+      # Previously, shapes were created during validation, before admission control
+      # ran, so a rejected request would still leave a shape in the cache.
+      # This test asserts the fix: no shape is created when admission control rejects.
       assert Electric.ShapeCache.count_shapes(stack_id) == 0
 
       # Clean up manually acquired permits
