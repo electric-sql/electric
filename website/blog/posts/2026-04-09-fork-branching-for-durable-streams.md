@@ -88,7 +88,9 @@ With Durable Streams, a conversation tree is a set of streams related by forks. 
 
 We built a demo that shows this: a chat application where users can fork any point in a conversation and explore a different direction.
 
-> [Demo link TBD] | [Source code link TBD]
+<div class="embed-container">
+  <YoutubeEmbed video-id="gmkqygh9ezo" />
+</div>
 
 ### Parallel paths
 
