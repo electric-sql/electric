@@ -494,7 +494,8 @@ defmodule Electric.Postgres.ReplicationConnection do
 
     {:keep_state, s} = maybe_handle(mod, :handle_disconnect, [mod_state], s)
 
-    {:keep_state, %{s | streaming: nil, paused: false, buffered_copies: [], buffered_sock_msg: nil},
+    {:keep_state,
+     %{s | streaming: nil, paused: false, buffered_copies: [], buffered_sock_msg: nil},
      {:next_event, :internal, {:connect, :reconnect}}}
   end
 
@@ -507,5 +508,4 @@ defmodule Electric.Postgres.ReplicationConnection do
 
   defp opts(), do: Process.get(__MODULE__)
   defp put_opts(opts), do: Process.put(__MODULE__, opts)
-
 end

@@ -403,7 +403,9 @@ defmodule Electric.Postgres.ReplicationClient do
     keepalive_interval = keepalive_interval(state.wal_sender_timeout)
     :timer.send_interval(keepalive_interval, :send_keepalive)
 
-    Logger.info("Keepalive interval set to #{keepalive_interval}ms (wal_sender_timeout=#{state.wal_sender_timeout}ms)")
+    Logger.info(
+      "Keepalive interval set to #{keepalive_interval}ms (wal_sender_timeout=#{state.wal_sender_timeout}ms)"
+    )
 
     notify_seen_first_message(state)
     handle_data(data, state)
@@ -583,12 +585,12 @@ defmodule Electric.Postgres.ReplicationClient do
     >>
   end
 
-
   # Derive keepalive interval from PostgreSQL's wal_sender_timeout.
   # Uses min(timeout/3, 15s): timeout/3 provides a safe margin for low timeouts,
   # while the 15s cap ensures responsiveness even if wal_sender_timeout is very
   # high or changes on the source PG after we've connected.
   defp keepalive_interval(0), do: @max_keepalive_interval
+
   defp keepalive_interval(wal_sender_timeout_ms),
     do: min(div(wal_sender_timeout_ms, 3), @max_keepalive_interval)
 

@@ -281,7 +281,6 @@ defmodule Electric.StatusMonitor do
     ref
   end
 
-
   # Only used in tests
   def wait_for_messages_to_be_processed(stack_id) do
     GenServer.call(name(stack_id), :wait_for_messages_to_be_processed)
