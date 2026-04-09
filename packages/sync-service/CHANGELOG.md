@@ -1,5 +1,12 @@
 # @core/sync-service
 
+## 1.5.1
+
+### Patch Changes
+
+- 11b151b: Fix admission control bypass where shapes were created before admission control checks. Shape creation now happens after admission control, preventing resource exhaustion under load.
+- 25acc0e: Add read-only mode for seamless rolling deploys. Electric instances now serve existing shape data while waiting for the advisory lock, eliminating the HTTP outage window during rolling deploys.
+
 ## 1.5.0
 
 ### Minor Changes
