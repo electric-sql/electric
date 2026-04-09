@@ -90,7 +90,7 @@ const config = pricing.config
     <h2 style="font-size: 1.25rem; margin-bottom: 12px;">Powered by CDN caching</h2>
     <p>
       Electric delivers real-time data over HTTP, using CDN caching and
-      request collapsing to handle millions of users without
+      request collapsing to handle millions of concurrent readers without
       proportional infrastructure cost. Your costs scale with writes,
       not users.
     </p>
@@ -182,9 +182,9 @@ const config = pricing.config
     <details class="faq-item">
       <summary>Why don't you charge for reads or egress?</summary>
       <p>Electric delivers real-time data over HTTP using CDN caching and
-        request collapsing. This means reads are handled at the CDN layer
-        without proportional infrastructure cost. Your costs scale with data
-        written, not with the number of users reading it.</p>
+        request collapsing. This means concurrent readers are handled at the
+        CDN layer without proportional infrastructure cost. Your costs scale
+        with data written, not with the number of users reading it.</p>
     </details>
     <details class="faq-item">
       <summary>What are service costs?</summary>
