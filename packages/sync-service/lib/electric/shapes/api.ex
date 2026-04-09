@@ -539,6 +539,8 @@ defmodule Electric.Shapes.Api do
   end
 
   def serve_shape_response(%Plug.Conn{} = conn, %Request{} = request) do
+    {conn, request} = start_long_poll_keepalive(conn, request)
+
     response =
       case if_not_modified(conn, request) do
         {:halt, response} ->
@@ -605,6 +607,8 @@ defmodule Electric.Shapes.Api do
   end
 
   def serve_shape_log(%Plug.Conn{} = conn, %Request{} = request) do
+    {conn, request} = start_long_poll_keepalive(conn, request)
+
     response =
       case if_not_modified(conn, request) do
         {:halt, response} ->
@@ -843,7 +847,7 @@ defmodule Electric.Shapes.Api do
     %{
       new_changes_ref: ref,
       handle: shape_handle,
-      api: %{long_poll_timeout: long_poll_timeout} = api
+      api: %{long_poll_timeout: long_poll_timeout}
     } = request
 
     Logger.debug("Client #{inspect(self())} is waiting for changes to #{shape_handle}")
@@ -854,6 +858,25 @@ defmodule Electric.Shapes.Api do
     # run garbage collection so we don't hold onto memory while idle.
     # Combined with handler_fullsweep_after config, this helps keep handler memory usage low.
     :erlang.garbage_collect()
+
+    # Use a timer instead of `receive...after` so that the timeout is not
+    # reset when we re-enter receive to handle keepalive messages.
+    timeout_timer = Process.send_after(self(), {:long_poll_timeout, ref}, long_poll_timeout)
+
+    try do
+      do_hold_until_change(request)
+    after
+      Process.cancel_timer(timeout_timer)
+    end
+  end
+
+  defp do_hold_until_change(%Request{} = request) do
+    %{
+      new_changes_ref: ref,
+      on_keepalive: on_keepalive,
+      handle: shape_handle,
+      api: api
+    } = request
 
     receive do
       {^ref, :new_changes, latest_log_offset} ->
@@ -893,8 +916,16 @@ defmodule Electric.Shapes.Api do
           _ ->
             Response.invalid_request(api, errors: @offset_out_of_bounds)
         end
-    after
-      long_poll_timeout ->
+
+      :long_poll_keepalive ->
+        # Invoke the keepalive callback (sends HTTP 102 Processing) to keep
+        # the connection alive through network middleboxes that drop idle
+        # connections. Invisible to HTTP clients — they only see the final
+        # response.
+        if on_keepalive, do: on_keepalive.()
+        do_hold_until_change(request)
+
+      {:long_poll_timeout, ^ref} ->
         request = update_attrs(request, %{ot_is_long_poll_timeout: true})
         status = Electric.StatusMonitor.status(api.stack_id)
 
@@ -1120,6 +1151,53 @@ defmodule Electric.Shapes.Api do
     Request.update_response(request, fn response ->
       Map.update!(response, :trace_attrs, &Map.merge(&1, attrs))
     end)
+  end
+
+  @min_keepalive_interval 5_000
+  @max_keepalive_interval 15_000
+
+  # Start a periodic keepalive timer for long-poll requests and register
+  # a before_send callback to cancel it when the response is sent.
+  # The timer sends :long_poll_keepalive messages which hold_until_change
+  # handles by calling the on_keepalive callback, which sends an HTTP 102
+  # Processing informational response to keep the connection alive through
+  # network middleboxes (e.g. Cloudflare edge nodes on long paths to origin).
+  #
+  # 102 Processing (RFC 2518) is deprecated from the HTTP standard but is
+  # explicitly supported by Cloudflare for keepalive and is safe per RFC 9110
+  # §15.2, which requires HTTP/1.1+ clients to handle unknown 1xx gracefully.
+  # L7 load balancers like AWS ALB may silently drop 1xx responses — this is
+  # harmless since ALB's idle timeout (default 60s, configurable up to 4000s)
+  # already exceeds typical long-poll durations.
+  defp start_long_poll_keepalive(conn, %Request{params: %{live: true, live_sse: false}} = request) do
+    keepalive_interval =
+      request.api.long_poll_timeout
+      |> div(4)
+      |> max(@min_keepalive_interval)
+      |> min(@max_keepalive_interval)
+
+    {:ok, timer_ref} = :timer.send_interval(keepalive_interval, :long_poll_keepalive)
+
+    conn =
+      Plug.Conn.register_before_send(conn, fn conn ->
+        :timer.cancel(timer_ref)
+        flush_long_poll_keepalive()
+        conn
+      end)
+
+    on_keepalive = fn -> Plug.Conn.inform(conn, 102) end
+
+    {conn, %{request | on_keepalive: on_keepalive}}
+  end
+
+  defp start_long_poll_keepalive(conn, request), do: {conn, request}
+
+  defp flush_long_poll_keepalive do
+    receive do
+      :long_poll_keepalive -> flush_long_poll_keepalive()
+    after
+      0 -> :ok
+    end
   end
 
   defp maybe_up_to_date(%Request{response: %{up_to_date: true}}, up_to_date_lsn) do
