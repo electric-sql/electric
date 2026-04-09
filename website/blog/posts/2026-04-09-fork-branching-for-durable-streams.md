@@ -9,7 +9,7 @@ image: /img/blog/fork-branching-for-durable-streams/header.jpg
 tags: [release, durable-streams, cloud, agentic, AI]
 outline: [2, 3]
 post: true
-published: false
+published: true
 ---
 
 Durable Streams is the session primitive for agent and multi-user applications. We're extending it with fork: go back to any point in a session and try a different path, fan out across multiple agents from shared context, or compact aggressively without losing history.
