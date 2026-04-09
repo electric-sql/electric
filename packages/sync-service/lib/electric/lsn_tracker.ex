@@ -46,14 +46,12 @@ defmodule Electric.LsnTracker do
     initialize_last_processed_lsn(stack_ref, Lsn.from_integer(lsn))
   end
 
-  @spec get_last_processed_lsn(stack_ref()) :: Lsn.t()
+  @spec get_last_processed_lsn(stack_ref()) :: Lsn.t() | nil
   def get_last_processed_lsn(stack_ref) do
-    [last_processed_lsn: lsn] =
-      stack_ref
-      |> table()
-      |> :ets.lookup(:last_processed_lsn)
-
-    lsn
+    case stack_ref |> table() |> :ets.lookup(:last_processed_lsn) do
+      [{:last_processed_lsn, lsn}] -> lsn
+      [] -> nil
+    end
   end
 
   @spec broadcast_last_seen_lsn(stack_ref(), Lsn.t() | non_neg_integer()) :: :ok

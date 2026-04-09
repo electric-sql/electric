@@ -1595,6 +1595,72 @@ defmodule Electric.Shapes.ApiTest do
       assert request.global_last_seen_lsn == @start_offset_50.tx_offset
     end
 
+    test "falls back to shape offset for global_last_seen_lsn when LsnTracker is not populated",
+         ctx do
+      # Simulate active mode but with an empty LsnTracker — e.g. after a
+      # ShapeStatusOwner crash/restart that wipes the ETS table.
+      {:via, _, {registry_name, registry_key}} = Electric.Shapes.Supervisor.name(ctx.stack_id)
+      {:ok, _} = Registry.register(registry_name, registry_key, nil)
+      Electric.LsnTracker.initialize(ctx.stack_id)
+      # Do NOT populate the LsnTracker — leave it empty
+      set_status_to_active(ctx)
+
+      Repatch.patch(Electric.ShapeCache, :resolve_shape_handle, fn @test_shape_handle,
+                                                                   @test_shape,
+                                                                   _stack_id,
+                                                                   _opts ->
+        {@test_shape_handle, @start_offset_50}
+      end)
+
+      assert {:ok, request} =
+               Api.validate(ctx.api, %{
+                 table: "public.users",
+                 handle: @test_shape_handle,
+                 offset: "#{@start_offset_50}"
+               })
+
+      assert request.read_only? == false
+      # Falls back to the shape's last offset when LsnTracker is empty
+      assert request.global_last_seen_lsn == @start_offset_50.tx_offset
+    end
+
+    @tag long_poll_timeout: 100
+    test "long poll timeout does not crash when LsnTracker is not populated", ctx do
+      # Simulate active mode but with an empty LsnTracker
+      {:via, _, {registry_name, registry_key}} = Electric.Shapes.Supervisor.name(ctx.stack_id)
+      {:ok, _} = Registry.register(registry_name, registry_key, nil)
+      Electric.LsnTracker.initialize(ctx.stack_id)
+      set_status_to_active(ctx)
+
+      patch_shape_cache(
+        has_shape?: fn @test_shape_handle, _opts -> true end,
+        await_snapshot_start: fn @test_shape_handle, _ -> :started end,
+        resolve_shape_handle: fn @test_shape_handle, @test_shape, _stack_id, _opts ->
+          {@test_shape_handle, @test_offset}
+        end
+      )
+
+      patch_storage(
+        for_shape: fn @test_shape_handle, _opts -> @test_opts end,
+        get_chunk_end_log_offset: fn _, @test_opts -> nil end,
+        get_log_stream: fn @test_offset, _, @test_opts -> [] end
+      )
+
+      assert {:ok, request} =
+               Api.validate(ctx.api, %{
+                 table: "public.users",
+                 offset: "#{@test_offset}",
+                 handle: @test_shape_handle,
+                 live: true
+               })
+
+      assert request.read_only? == false
+      assert response = Api.serve_shape_response(request)
+      assert response.status == 200
+      assert response.no_changes
+      assert [%{headers: %{control: "up-to-date"}}] = response_body(response)
+    end
+
     @tag stack_ready_timeout: 100
     test "waits for active when shape not found in read-only mode", ctx do
       set_read_only(ctx)
