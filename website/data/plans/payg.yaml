@@ -21,7 +21,6 @@ billingBehavior: 'Under $5/mo waived'
 who: 'For any app, from prototype to production'
 features:
   - 'Up to 10 databases'
-  - '100 concurrent readers'
   - 'No credit card required'
 
 ctaText: 'Sign up now'

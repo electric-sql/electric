@@ -68,8 +68,7 @@ const config = pricing.config
       <div class="support-option">
         <h3>Enterprise</h3>
         <p>Bespoke solutions for teams with custom requirements.
-          Unlimited databases, unlimited concurrent readers,
-          custom SLAs, and dedicated support.</p>
+          Unlimited databases, custom SLAs, and dedicated support.</p>
       </div>
     </div>
     <div class="support-cta">
@@ -91,7 +90,7 @@ const config = pricing.config
     <h2 style="font-size: 1.25rem; margin-bottom: 12px;">Powered by CDN caching</h2>
     <p>
       Electric delivers real-time data over HTTP, using CDN caching and
-      request collapsing to handle millions of concurrent readers without
+      request collapsing to handle millions of users without
       proportional infrastructure cost. Your costs scale with writes,
       not users.
     </p>
@@ -183,9 +182,9 @@ const config = pricing.config
     <details class="faq-item">
       <summary>Why don't you charge for reads or egress?</summary>
       <p>Electric delivers real-time data over HTTP using CDN caching and
-        request collapsing. This means concurrent readers are handled at the
-        CDN layer without proportional infrastructure cost. Your costs scale
-        with data written, not with the number of users reading it.</p>
+        request collapsing. This means reads are handled at the CDN layer
+        without proportional infrastructure cost. Your costs scale with data
+        written, not with the number of users reading it.</p>
     </details>
     <details class="faq-item">
       <summary>What are service costs?</summary>
@@ -224,14 +223,6 @@ const config = pricing.config
         Scale at any time — upgrades take effect immediately with prorated
         charges. Downgrades take effect at the end of your current billing
         period, provided your usage is within the target plan's limits.</p>
-    </details>
-    <details class="faq-item">
-      <summary>What are the concurrent reader limits?</summary>
-      <p>Concurrent readers per stream are monitored by tier — 100 for PAYG,
-        1,000 for Pro, and 10,000 for Scale. These are soft thresholds used
-        for monitoring; they are not hard-enforced at launch. If you
-        consistently exceed your tier's threshold, we'll reach out to
-        discuss upgrading.</p>
     </details>
   </div>
 </Section>
