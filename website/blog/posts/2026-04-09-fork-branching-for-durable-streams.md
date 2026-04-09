@@ -18,9 +18,9 @@ A fork creates a new stream from any point in an existing one. It shares everyth
 
 ## Streams are sessions
 
-Agent infrastructure is converging on a pattern: the session — the complete log of messages, tool calls, and decisions — lives in an a durable object that lives outside the agent itself. Anthropic's recent post on [Managed Agents](https://www.anthropic.com/engineering/managed-agents) describes exactly this architecture: an append-only session log that the harness writes to, reads from, and resumes after a crash. Durable Streams provide exactly this primitive.
+Agent infrastructure is converging on a pattern: the session — the complete log of messages, tool calls, and decisions — lives in a durable stream that lives outside the agent itself. Anthropic's recent post on [Managed Agents](https://www.anthropic.com/engineering/managed-agents) describes exactly this architecture: an append-only session log that the harness writes to, reads from, and resumes after a crash. Durable Streams provide exactly this primitive.
 
-A session log is linear but agent workflows aren't. An agent goes down a path that isn't working and wants to rewind a few turns. You want to preserve the full uncompacted history while compressing the working context. Multiple agents need to fan out from the same starting point. These all require the same operation that a linear log doesn't have: the ability to take the session at any point and diverge.
+A session log is linear but agent workflows aren't. An agent goes down a path that isn't working and you want to rewind a few turns. Multiple agents need to fan out from the same starting point. You want to ask an agent a question without putting it in its history. These all require the same operation that a linear log doesn't have: the ability to take the session at any point and diverge.
 
 ## Fork: branching for streams
 
@@ -102,7 +102,11 @@ Fork the session once per agent. Each gets its own branch while the shared histo
   <img src="/img/blog/fork-branching-for-durable-streams/fork-parallel-paths-diagram.svg" alt="Parallel paths: a shared session forks into three agents, each pursuing a different strategy independently" />
 </figure>
 
-Fork also enables speculative work. An agent can branch into a scratch context to test a hypothesis or try a risky tool call without affecting the main session. If the result is useful, summarize it back. If not, the branch is just left behind — still there for debugging or audit, but with no effect on the source.
+### Scratch contexts
+
+Sometimes you need to interrogate an agent without changing its state. A developer debugging a misbehaving agent wants to ask "what do you think the user wants?" without that meta-question influencing the next real turn. A harness wants to test whether the agent can answer a factual question before committing to a tool call.
+
+Fork the session, run the side conversation in the fork, read the result. The main session is untouched — no phantom turns in the history, no context pollution. If the answer is useful, the harness can bring it forward explicitly. If not, the fork is just abandoned.
 
 ### Non-destructive compaction
 
