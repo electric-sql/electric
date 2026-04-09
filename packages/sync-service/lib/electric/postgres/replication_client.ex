@@ -356,6 +356,12 @@ defmodule Electric.Postgres.ReplicationClient do
     {:noreply, %{state | wait_for_active_ref: nil}}
   end
 
+  # Stale or unexpected StatusMonitor notification (e.g. after a retry already
+  # succeeded and cleared wait_ref). Discard silently.
+  def handle_info({{Electric.StatusMonitor, _ref}, _result}, state) do
+    {:noreply, state}
+  end
+
   # This callback is invoked when the connection process receives a shutdown signal.
   def handle_info({:EXIT, _pid, :shutdown}, _state) do
     Logger.debug("Replication client #{inspect(self())} received shutdown signal, stopping")
@@ -403,7 +409,7 @@ defmodule Electric.Postgres.ReplicationClient do
     keepalive_interval = keepalive_interval(state.wal_sender_timeout)
     :timer.send_interval(keepalive_interval, :send_keepalive)
 
-    Logger.info(
+    Logger.debug(
       "Keepalive interval set to #{keepalive_interval}ms (wal_sender_timeout=#{state.wal_sender_timeout}ms)"
     )
 
@@ -525,6 +531,9 @@ defmodule Electric.Postgres.ReplicationClient do
   # when the stack becomes active, then retry. This replaces the old blocking
   # wait_until_active(timeout: :infinity) call with an async notification.
   # The keepalive timer prevents wal_sender_timeout during the wait.
+  # The remaining budget is intentionally discarded — a fresh @max_event_retry_time
+  # is used after the stack becomes active, matching the old apply_with_retries
+  # behavior which reset the retry timer after wait_until_active returned.
   defp wait_for_active_and_retry(event, _remaining, state) do
     ref = Electric.StatusMonitor.wait_until_async(state.stack_id, :active)
     {:noreply, %{state | wait_for_active_ref: {ref, event}}}
