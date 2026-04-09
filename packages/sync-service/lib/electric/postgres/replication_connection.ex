@@ -1,4 +1,4 @@
-# Derived from Postgrex.ReplicationConnection
+# Derived from Postgrex.ReplicationConnection v0.22.0
 # https://github.com/elixir-ecto/postgrex
 #
 # Copyright 2013 Eric Meadows-Jönsson and contributors
@@ -8,6 +8,10 @@
 # Modifications by Electric DB Ltd:
 #   - Added socket pause/resume for backpressure (paused, buffered_copies,
 #     buffered_sock_msg, noreply_and_pause/noreply_and_resume return types).
+#
+# This module depends on Postgrex.Protocol internals (handle_copy_recv,
+# handle_copy_send, activate, buffer state). Review compatibility when
+# upgrading Postgrex beyond 0.22.x.
 
 defmodule Electric.Postgres.ReplicationConnection do
   @moduledoc """
@@ -308,9 +312,14 @@ defmodule Electric.Postgres.ReplicationConnection do
   end
 
   # Second socket message while paused — shouldn't happen with {active, :once}
-  # but handle gracefully by replacing (the protocol hasn't re-armed the socket).
-  def handle_event(:info, _msg, @state, %{paused: true} = s) when false do
-    # This clause is unreachable with {active, :once} but kept as documentation.
+  # but handle defensively in case of future OTP behavior changes.
+  def handle_event(:info, msg, @state, %{paused: true} = s)
+      when is_socket_msg(msg) do
+    Logger.warning(
+      "Unexpected second socket message while paused (#{elem(msg, 0)}). " <>
+        "This should not happen with {active, :once}."
+    )
+
     {:keep_state, s}
   end
 
