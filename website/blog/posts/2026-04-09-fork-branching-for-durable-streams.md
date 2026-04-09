@@ -108,17 +108,6 @@ Sometimes you need to interrogate an agent without changing its state. A develop
 
 Fork the session, run the side conversation in the fork, read the result. The main session is untouched — no phantom turns in the history, no context pollution. If the answer is useful, the harness can bring it forward explicitly. If not, the fork is just abandoned.
 
-### Non-destructive compaction
-
-As an agent works over many turns, its context window fills up. The standard approaches — compaction, trimming, memory tools — all involve irreversible decisions about what to keep and what to discard. And it's hard to predict which tokens future turns will need.
-
-Fork makes context management non-destructive. Before compacting, fork the session. The fork preserves the full, uncompacted history. The original stream continues with the compressed context. If the compaction lost something important — a constraint mentioned twenty turns ago, an architectural decision that matters again — the full history is still there on the fork. The harness can read back into it, find what it needs, and bring that context forward.
-
-This lets you be aggressive about compaction in a way that's hard to justify when the decision is permanent. Compress hard, move fast, and know that nothing is actually lost.
-
-<figure>
-  <img src="/img/blog/fork-branching-for-durable-streams/fork-compaction-diagram.svg" alt="Non-destructive compaction: fork preserves full history while the main stream continues with compressed context" />
-</figure>
 
 ## Getting started
 
