@@ -539,7 +539,7 @@ defmodule Electric.Shapes.Api do
   end
 
   def serve_shape_response(%Plug.Conn{} = conn, %Request{} = request) do
-    {conn, request} = start_long_poll_keepalive(conn, request)
+    request = set_long_poll_keepalive(conn, request)
 
     response =
       case if_not_modified(conn, request) do
@@ -607,7 +607,7 @@ defmodule Electric.Shapes.Api do
   end
 
   def serve_shape_log(%Plug.Conn{} = conn, %Request{} = request) do
-    {conn, request} = start_long_poll_keepalive(conn, request)
+    request = set_long_poll_keepalive(conn, request)
 
     response =
       case if_not_modified(conn, request) do
@@ -859,14 +859,14 @@ defmodule Electric.Shapes.Api do
     # Combined with handler_fullsweep_after config, this helps keep handler memory usage low.
     :erlang.garbage_collect()
 
-    # Use a timer instead of `receive...after` so that the timeout is not
-    # reset when we re-enter receive to handle keepalive messages.
+    keepalive_timer = start_keepalive_timer(request)
     timeout_timer = Process.send_after(self(), {:long_poll_timeout, ref}, long_poll_timeout)
 
     try do
       do_hold_until_change(request)
     after
       Process.cancel_timer(timeout_timer)
+      cancel_keepalive_timer(keepalive_timer)
     end
   end
 
@@ -918,10 +918,6 @@ defmodule Electric.Shapes.Api do
         end
 
       :long_poll_keepalive ->
-        # Invoke the keepalive callback (sends HTTP 102 Processing) to keep
-        # the connection alive through network middleboxes that drop idle
-        # connections. Invisible to HTTP clients — they only see the final
-        # response.
         if on_keepalive, do: on_keepalive.()
         do_hold_until_change(request)
 
@@ -1156,46 +1152,42 @@ defmodule Electric.Shapes.Api do
   @min_keepalive_interval 5_000
   @max_keepalive_interval 15_000
 
-  # Start a periodic keepalive timer for long-poll requests and register
-  # a before_send callback to cancel it when the response is sent.
-  # The timer sends :long_poll_keepalive messages which hold_until_change
-  # handles by calling the on_keepalive callback, which sends an HTTP 102
-  # Processing informational response to keep the connection alive through
-  # network middleboxes (e.g. Cloudflare edge nodes on long paths to origin).
-  #
-  # 102 Processing (RFC 2518) is deprecated from the HTTP standard but is
-  # explicitly supported by Cloudflare for keepalive and is safe per RFC 9110
-  # §15.2, which requires HTTP/1.1+ clients to handle unknown 1xx gracefully.
-  # L7 load balancers like AWS ALB may silently drop 1xx responses — this is
-  # harmless since ALB's idle timeout (default 60s, configurable up to 4000s)
-  # already exceeds typical long-poll durations.
-  defp start_long_poll_keepalive(conn, %Request{params: %{live: true, live_sse: false}} = request) do
+  # Set up a keepalive callback that sends HTTP 102 Processing (IANA-registered,
+  # RFC 2518) to keep the connection alive through network middleboxes (e.g.
+  # Cloudflare). 1xx informational responses are invisible to HTTP clients —
+  # they only see the final response. The timer that triggers the callback is
+  # started in hold_until_change. Return value of inform/2 intentionally
+  # ignored — a raised exception on a half-closed connection is caught by
+  # hold_until_change's try/after block.
+  defp set_long_poll_keepalive(conn, %Request{params: %{live: true, live_sse: false}} = request) do
+    on_keepalive = fn -> Plug.Conn.inform(conn, 102) end
+    %{request | on_keepalive: on_keepalive}
+  end
+
+  defp set_long_poll_keepalive(_conn, request), do: request
+
+  defp start_keepalive_timer(%Request{on_keepalive: nil}), do: nil
+
+  defp start_keepalive_timer(%Request{api: %{long_poll_timeout: long_poll_timeout}}) do
     keepalive_interval =
-      request.api.long_poll_timeout
+      long_poll_timeout
       |> div(4)
       |> max(@min_keepalive_interval)
       |> min(@max_keepalive_interval)
 
     {:ok, timer_ref} = :timer.send_interval(keepalive_interval, :long_poll_keepalive)
-
-    conn =
-      Plug.Conn.register_before_send(conn, fn conn ->
-        :timer.cancel(timer_ref)
-        flush_long_poll_keepalive()
-        conn
-      end)
-
-    # Return value intentionally ignored — if the adapter raises (e.g.
-    # half-closed connection), the exception propagates through
-    # do_hold_until_change and the try/after block cancels the timeout
-    # timer before the process crashes. This is acceptable: Bandit will
-    # clean up the connection.
-    on_keepalive = fn -> Plug.Conn.inform(conn, 102) end
-
-    {conn, %{request | on_keepalive: on_keepalive}}
+    timer_ref
   end
 
-  defp start_long_poll_keepalive(conn, request), do: {conn, request}
+  defp cancel_keepalive_timer(nil), do: :ok
+
+  defp cancel_keepalive_timer(timer_ref) do
+    :timer.cancel(timer_ref)
+
+    # Flush stale keepalive messages from the mailbox to prevent them from
+    # interfering with the next request on this reused Bandit handler process.
+    flush_long_poll_keepalive()
+  end
 
   defp flush_long_poll_keepalive do
     receive do
