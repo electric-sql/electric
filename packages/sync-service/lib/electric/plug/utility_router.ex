@@ -6,10 +6,16 @@ defmodule Electric.Plug.UtilityRouter do
   plug :dispatch
 
   with_telemetry TelemetryMetricsPrometheus.Core do
-    get "/metrics", do: resp(conn, 200, TelemetryMetricsPrometheus.Core.scrape())
+    get "/metrics", do: text_resp(conn, 200, TelemetryMetricsPrometheus.Core.scrape())
   else
-    get "/metrics", do: resp(conn, 200, "[]")
+    get "/metrics", do: text_resp(conn, 200, "")
   end
 
-  get _, do: resp(conn, 404, "Not found")
+  get _, do: text_resp(conn, 404, "Not found")
+
+  defp text_resp(conn, status, body) do
+    conn
+    |> put_resp_content_type("text/plain")
+    |> resp(status, body)
+  end
 end
