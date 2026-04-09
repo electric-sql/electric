@@ -56,7 +56,7 @@ Fork from offset 2 — right after the assistant's first response:
 
 ```http
 PUT /v1/stream/{service}/chat-123-containers
-Stream-Forked-From: chat-123
+Stream-Forked-From: /v1/stream/{service}/chat-123
 Stream-Fork-Offset: 2
 ```
 
@@ -64,7 +64,7 @@ Stream-Fork-Offset: 2
 
 ```http
 PUT /v1/stream/{service}/chat-123-vms
-Stream-Forked-From: chat-123
+Stream-Forked-From: /v1/stream/{service}/chat-123
 Stream-Fork-Offset: 2
 ```
 
