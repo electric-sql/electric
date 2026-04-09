@@ -118,12 +118,12 @@ This lets you be aggressive about compaction in a way that's hard to justify whe
 
 Fork is available now on all Durable Streams services on [Electric Cloud](/cloud). Sign up, create a stream service, and start using it.
 
-The [protocol spec](https://github.com/durable-streams/durable-streams) covers the full fork semantics — offset behavior across forks, concurrent readers, deletion propagation. The [API docs](/docs) have the reference for all stream operations including fork.
+The [protocol spec](https://github.com/durable-streams/durable-streams) covers the full fork semantics — offset behavior across forks, concurrent readers, deletion propagation. The [API docs](/docs/intro) have the reference for all stream operations including fork.
 
 ***
 
 - [Sign up for Electric Cloud](/cloud)
-- [Read the docs](/docs)
+- [Read the docs](/docs/intro)
 - [Join the Discord](https://discord.electric-sql.com)
 
 <div class="actions cta-actions page-footer-actions left">
@@ -135,7 +135,7 @@ The [protocol spec](https://github.com/durable-streams/durable-streams) covers t
     />
     &nbsp;
     <VPButton
-        href="/docs"
+        href="/docs/intro"
         text="Docs"
         theme="alt"
     />
