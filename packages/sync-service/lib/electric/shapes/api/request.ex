@@ -24,6 +24,7 @@ defmodule Electric.Shapes.Api.Request do
           global_last_seen_lsn: nil | pos_integer(),
           new_changes_ref: nil | reference(),
           new_changes_pid: nil | pid(),
+          on_keepalive: nil | (-> any()),
           api: Api.t(),
           params: Api.Params.t(),
           response: Api.Response.t()

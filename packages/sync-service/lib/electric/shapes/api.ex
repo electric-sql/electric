@@ -1185,6 +1185,11 @@ defmodule Electric.Shapes.Api do
         conn
       end)
 
+    # Return value intentionally ignored — if the adapter raises (e.g.
+    # half-closed connection), the exception propagates through
+    # do_hold_until_change and the try/after block cancels the timeout
+    # timer before the process crashes. This is acceptable: Bandit will
+    # clean up the connection.
     on_keepalive = fn -> Plug.Conn.inform(conn, 102) end
 
     {conn, %{request | on_keepalive: on_keepalive}}
