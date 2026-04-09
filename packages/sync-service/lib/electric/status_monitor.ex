@@ -36,7 +36,7 @@ defmodule Electric.StatusMonitor do
 
     :ets.new(ets_table(stack_id), [:named_table, :protected])
 
-    {:ok, %{stack_id: stack_id, waiters: MapSet.new(), conn_waiters: []}}
+    {:ok, %{stack_id: stack_id, waiters: MapSet.new()}}
   end
 
   @doc """
@@ -259,22 +259,28 @@ defmodule Electric.StatusMonitor do
   end
 
   @doc """
-  Just like `wait_until_active/2` but non-blocking.
+  Non-blocking version of `wait_until/3`.
 
-  This function basically subscribes to status updates to get notified by StatusMonitor when
-  the status transitions to `%{conn: :up, shape: :up}`.
+  Subscribes to status updates from StatusMonitor. Returns a reference.
+  The caller will receive `{ref, {:ok, level}}` when the status reaches
+  the requested level (`:active` or `:read_only`).
 
-  Returns a ref that will then be passed in the notification message as `{<ref>, <reply from StatusMonitor>}`.
+  Uses the existing `{:wait_until, level, :infinity}` handler internally,
+  so no timeout is applied — the caller manages its own lifecycle.
   """
-  @spec wait_until_conn_up_async(String.t()) :: reference()
-  def wait_until_conn_up_async(stack_id) do
+  @spec wait_until_async(String.t(), :read_only | :active) :: reference()
+  def wait_until_async(stack_id, level) when level in [:read_only, :active] do
     pid = stack_id |> name() |> GenServer.whereis()
-    call_ref = make_ref()
+    ref = make_ref()
 
-    send(pid, {:"$gen_call", {self(), call_ref}, :wait_until_conn_up})
+    # Use {__MODULE__, ref} as the reply tag so the notification message is
+    # {{Electric.StatusMonitor, ref}, {:ok, level}} — easily distinguishable
+    # from other GenServer replies in the caller's mailbox.
+    send(pid, {:"$gen_call", {self(), {__MODULE__, ref}}, {:wait_until, level, :infinity}})
 
-    call_ref
+    ref
   end
+
 
   # Only used in tests
   def wait_for_messages_to_be_processed(stack_id) do
@@ -322,13 +328,6 @@ defmodule Electric.StatusMonitor do
     end
   end
 
-  def handle_call(:wait_until_conn_up, from, %{conn_waiters: conn_waiters} = state) do
-    case status(state.stack_id) do
-      %{conn: :up} -> {:reply, :ok, state}
-      _ -> {:noreply, %{state | conn_waiters: [from | conn_waiters]}}
-    end
-  end
-
   def handle_call(:wait_for_messages_to_be_processed, _from, state) do
     {:reply, :ok, state}
   end
@@ -360,14 +359,11 @@ defmodule Electric.StatusMonitor do
     end
   end
 
-  defp maybe_reply_to_waiters(%{waiters: waiters, conn_waiters: conn_waiters} = state)
-       when map_size(waiters) == 0 and conn_waiters == [],
+  defp maybe_reply_to_waiters(%{waiters: waiters} = state)
+       when map_size(waiters) == 0,
        do: state
 
   defp maybe_reply_to_waiters(state) do
-    status = status(state.stack_id)
-
-    # Reply to level-based waiters whose requirements are now met
     waiters =
       Enum.reduce(state.waiters, state.waiters, fn {from, level} = waiter, acc ->
         case check_level(level, state.stack_id) do
@@ -380,15 +376,7 @@ defmodule Electric.StatusMonitor do
         end
       end)
 
-    conn_waiters =
-      if status.conn == :up do
-        Enum.each(state.conn_waiters, &GenServer.reply(&1, :ok))
-        []
-      end
-
-    state
-    |> Map.update!(:waiters, fn _ -> waiters end)
-    |> Map.update!(:conn_waiters, &(conn_waiters || &1))
+    %{state | waiters: waiters}
   end
 
   defp db_state(table) do
