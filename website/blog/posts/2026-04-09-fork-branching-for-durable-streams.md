@@ -1,9 +1,9 @@
 ---
-title: '...'
+title: 'Fork: branching for durable streams'
 description: >-
-  ...
+  Durable Streams is the session primitive for agent infrastructure. Fork adds branching — go back to any point, explore parallel paths, compact without losing history. Live on Electric Cloud.
 excerpt: >-
-  ...
+  Agent sessions need branching. Fork adds it to Durable Streams — branch from any point, fan out across agents, compact aggressively without losing history. One API call, live on Electric Cloud.
 authors: [balegas]
 image: /img/blog/fork-branching-for-durable-streams/header.jpg
 tags: [release, durable-streams, cloud, agentic, AI]
@@ -12,65 +12,27 @@ post: true
 published: false
 ---
 
-<!-- TLDR — what shipped and why it matters. No setup, no preamble. -->
+Durable Streams is the session primitive for agent and multi-user applications. We're extending it with fork: go back to any point in a session and try a different path, fan out across multiple agents from shared context, or compact aggressively without losing history.
 
-[Durable Streams](/blog/2026/04/08/data-primitive-agent-loop) is the data
-primitive for the agent loop. Today we're shipping fork — branching for
-streams.
+A fork creates a new stream from any point in an existing one. It shares everything before the fork point with its source and evolves independently after it. One API call, two headers.
 
-Fork creates a new stream from any point in an existing one. Instant,
-single API call. Explore alternatives in parallel, go back and try a
-different path, spin up scratch contexts.
+## Streams are sessions
 
-Live on Electric Cloud today.
+Agent infrastructure is converging on a pattern: the session — the complete log of messages, tool calls, and decisions — lives in an a durable object that lives outside the agent itself. Anthropic's recent post on [Managed Agents](https://www.anthropic.com/engineering/managed-agents) describes exactly this architecture: an append-only session log that the harness writes to, reads from, and resumes after a crash. Durable Streams provide exactly this primitive.
 
-:::info
-- [Protocol spec](https://github.com/durable-streams/durable-streams)
-- [API docs](/docs)
-- [Electric Cloud](/cloud)
-:::
+A session log is linear but agent workflows aren't. An agent goes down a path that isn't working and wants to rewind a few turns. You want to preserve the full uncompacted history while compressing the working context. Multiple agents need to fan out from the same starting point. These all require the same operation that a linear log doesn't have: the ability to take the session at any point and diverge.
 
-<!-- CONTEXT — brief orientation. Why branching matters, what's missing. -->
+## Fork: branching for streams
 
-## Why branching
+A [Durable Stream](/primitives/durable-streams) assigns an offset to each message as it's appended. When you fork a stream, you specify a source stream and a fork offset. The system creates a new stream that inherits all messages from the source up to that offset. After the fork point, the new stream lives independently — its own URL, its own appends, its own subscribers.
 
-<!-- This section establishes the gap: branching is solved everywhere
-     except agent conversation state. Keep it brisk — 4 bullets, not
-     a backstory. -->
+Forks don't copy data. The shared history between a fork and its source is genuinely shared at the storage level. This means forking is instant regardless of stream length — a stream with ten thousand messages forks just as quickly as one with three.
 
-Durable Streams are persistent, addressable, real-time streams over
-HTTP — the coordination layer for agent and multi-user apps.
+Because forks are themselves regular Durable Streams, they can be forked. This gives you trees of arbitrary depth where every node is an addressable stream with the full set of stream operations available.
 
-Branching is becoming a core operation in agent workflows. LangGraph
-built checkpoint-based forking. ChatGPT shipped branch conversations.
-Academic work is formalizing conversation trees
-([ContextBranch](https://arxiv.org/abs/2512.13914),
-[CTA](https://arxiv.org/abs/2603.21278)).
+### The API
 
-Git solved branching for code. Neon and PlanetScale brought it to
-databases. But agent conversation state is still hard — people hack
-around it with manual snapshots and message list copies.
-
-Fork adds branching to Durable Streams. A forked stream shares history
-up to the fork point, then diverges independently.
-
-<!-- WHAT'S SHIPPING — the mental model, API walkthrough, key properties. -->
-
-## How fork works
-
-<!-- Lead with the mental model, then walk through a concrete example
-     with actual HTTP calls. Tone: factual, show don't tell. -->
-
-Fork works like branching in git, but for streams. A fork shares history
-with its source up to the fork point, then accumulates its own data
-independently.
-
-### Example: branching an AI chat
-
-<!-- Walk through a concrete use case. Each step is a real HTTP call
-     the reader can try. -->
-
-Create a conversation stream and append messages:
+Create a conversation stream and append some messages:
 
 ```http
 PUT /v1/stream/{service}/chat-123
@@ -87,59 +49,78 @@ Content-Type: application/json
 POST /v1/stream/{service}/chat-123
 Content-Type: application/json
 
-{"role": "assistant", "content": "There are two approaches..."}
+{"role": "assistant", "content": "Two main options: containerized with Fly or Railway, or a VM setup on EC2. The tradeoffs are..."}
 ```
 
-User wants to explore a different direction from the first message.
-Fork with two headers:
+Fork from offset 2 — right after the assistant's first response:
 
 ```http
-PUT /v1/stream/{service}/chat-123-branch-a
+PUT /v1/stream/{service}/chat-123-containers
 Stream-Forked-From: chat-123
-Stream-Fork-Offset: {offset-after-first-message}
+Stream-Fork-Offset: 2
 ```
 
-The fork is its own stream. Append different messages, read it —
-clients see one continuous sequence (first message inherited from
-source, then the fork's own data). No client changes needed.
+`chat-123-containers` now exists with the first two messages as shared history. Anything appended from here is independent. Fork again from the same offset for a second branch:
 
-Fork again from the same point for a second branch. Fork a fork for
-deeper trees. Each fork is instant, independent, and has its own URL.
+```http
+PUT /v1/stream/{service}/chat-123-vms
+Stream-Forked-From: chat-123
+Stream-Fork-Offset: 2
+```
 
-<!-- ASSET: diagram showing the conversation tree: source stream →
-     fork at message 1 → two branches -->
+Clients reading any branch see a single continuous sequence — the shared prefix followed by branch-specific messages — without any special handling.
 
-### Key properties
+### Properties
 
-- **Branch from any point** — one API call, two headers
-- **Build trees** — fork a fork, any depth. Conversation trees,
-  agent decision trees
-- **Forks are independent** — no lifecycle coupling between source
-  and forks
+- **Instant** — metadata operation, not a data copy. Cost doesn't scale with stream length.
+- **Independent** — no lifecycle coupling between source and forks. Delete or append to one without affecting the other.
+- **Transparent** — readers see one continuous sequence. The fork boundary is invisible unless you inspect stream metadata.
+- **Composable** — fork a fork for trees of any depth.
+- **Plain HTTP** — same protocol, same SSE, same offset-based reads. Two new headers on the PUT.
 
-## Get started
+## What fork enables
 
-<!-- Show don't tell. Code sample, links, get the reader moving. -->
+### Conversation trees
 
-Sign up for [Electric Cloud](/cloud) and create a service. Fork is
-available now on all Durable Streams.
+ChatGPT shipped branch conversations as a user-facing feature. LangGraph added checkpoint-based forking to their agent framework. The pattern keeps showing up because agent conversations aren't linear — users want to go back, try a different direction, compare alternatives.
 
-- [Protocol spec](https://github.com/durable-streams/durable-streams) —
-  full fork semantics in the Durable Streams protocol
-- [API docs](/docs) — reference for all stream operations
-- [Electric Cloud](/cloud) — managed hosting for Durable Streams
+With Durable Streams, a conversation tree is a set of streams related by forks. The root is the original conversation. Each branch point is a fork. Every node is a regular stream with the full set of stream operations — reads, writes, real-time subscriptions. Branching lives at the data layer, not inside a specific framework's checkpoint system, so any client that can read a Durable Stream can work with forked streams without modification.
 
-## Coming next
+We built a demo that shows this: a chat application where users can fork any point in a conversation and explore a different direction.
 
-<!-- Tease without overpromising. Invite ideas. -->
+> [Demo link TBD] | [Source code link TBD]
 
-What would you build? Conversation trees, agent tournaments,
-time-travel debugging, speculative branching at every decision
-point — fork makes these one API call away.
+### Parallel paths
+
+Conversation trees branch sequentially — a user or agent tries one direction, then goes back and tries another. Parallel paths are different: multiple agents fork from the same point and run simultaneously.
+
+Fork the session once per agent. Each gets its own branch while the shared history exists once at the storage level. A fleet of agents can fan out from the same session to tackle a problem from different angles. A lead agent can fork when the current approach isn't working and hand the branch to a specialist. Each branch is fully isolated, but the common context is shared. Compare the results and pick the best path.
+
+<figure>
+  <img src="/img/blog/fork-branching-for-durable-streams/fork-parallel-paths-diagram.svg" alt="Parallel paths: a shared session forks into three agents, each pursuing a different strategy independently" />
+</figure>
+
+Fork also enables speculative work. An agent can branch into a scratch context to test a hypothesis or try a risky tool call without affecting the main session. If the result is useful, summarize it back. If not, the branch is just left behind — still there for debugging or audit, but with no effect on the source.
+
+### Non-destructive compaction
+
+As an agent works over many turns, its context window fills up. The standard approaches — compaction, trimming, memory tools — all involve irreversible decisions about what to keep and what to discard. And it's hard to predict which tokens future turns will need.
+
+Fork makes context management non-destructive. Before compacting, fork the session. The fork preserves the full, uncompacted history. The original stream continues with the compressed context. If the compaction lost something important — a constraint mentioned twenty turns ago, an architectural decision that matters again — the full history is still there on the fork. The harness can read back into it, find what it needs, and bring that context forward.
+
+This lets you be aggressive about compaction in a way that's hard to justify when the decision is permanent. Compress hard, move fast, and know that nothing is actually lost.
+
+<figure>
+  <img src="/img/blog/fork-branching-for-durable-streams/fork-compaction-diagram.svg" alt="Non-destructive compaction: fork preserves full history while the main stream continues with compressed context" />
+</figure>
+
+## Getting started
+
+Fork is available now on all Durable Streams services on [Electric Cloud](/cloud). Sign up, create a stream service, and start using it.
+
+The [protocol spec](https://github.com/durable-streams/durable-streams) covers the full fork semantics — offset behavior across forks, concurrent readers, deletion propagation. The [API docs](/docs) have the reference for all stream operations including fork.
 
 ***
-
-## Next steps
 
 - [Sign up for Electric Cloud](/cloud)
 - [Read the docs](/docs)
@@ -166,73 +147,3 @@ point — fork makes these one API call away.
     />
   </div>
 </div>
-
-<!--
-  ============================================================
-  DELETE EVERYTHING BELOW THIS LINE BEFORE PUBLISHING
-  ============================================================
-
-  ## Intent
-
-  - **What is this post about?** Durable Streams now supports fork —
-    branching for streams, live on Electric Cloud.
-  - **What's interesting?** Agents need branching: explore alternatives,
-    go back and try a different path, scratch contexts. Fork makes this
-    instant and built into the primitive.
-  - **Reader takeaway:** Fork is available on Electric Cloud now. You
-    can add branching to any stream-backed app with one API call.
-  - **CTAs:** Sign up for Electric Cloud, read docs (protocol spec,
-    API), try the demo.
-  - **Authority:** We built Durable Streams and designed fork into the
-    protocol. First-party release announcement.
-
-  ## Title brief
-
-  Sentence case. Should convey "fork is shipping on Electric Cloud"
-  without being generic. Directions:
-  - "Fork: branching for durable streams"
-  - "Durable streams now fork"
-  - "Shipping fork on Electric Cloud"
-
-  ## Description brief (SEO)
-
-  Mention fork, durable streams, branching, agent workflows. Convey
-  that this is a new feature release on Electric Cloud.
-
-  ## Excerpt brief (blog listing card)
-
-  2-3 short sentences. Fork adds branching to Durable Streams — branch
-  from any point, instant, single API call. Live on Electric Cloud.
-
-  ## Image prompt
-
-  - Concept: branching/forking streams — a single stream splitting
-    into multiple paths
-  - Dark theme background
-  - Brand colors: #D0BCFF (purple), #00d2a0 (green), #75fbfd (cyan)
-  - 16:9, ~1536x950px, center-center composition
-  - Use /blog-image-brief for a detailed prompt
-
-  ## Asset checklist
-
-  - [ ] Header image (use /blog-image-brief)
-  - [ ] Diagram: conversation tree showing source stream forking
-        into branches
-  - [ ] Demo video: AI chat with fork buttons (when demo is ready)
-  - [ ] Demo link: add to info box when ready
-
-  ## Typesetting checklist
-
-  - [ ] Non-breaking spaces where appropriate to avoid widows/orphans
-  - [ ] Title uses sentence case
-  - [ ] Check title, image, and post at different screen widths
-  - [ ] No LLM tells: "it's worth noting", "importantly",
-        "in conclusion", "let's dive in", "at its core"
-
-  ## Open questions
-
-  - Demo: link to be added when companion demo is ready
-  - Social proof: any community reactions or early users to quote?
-  - Coming next: confirm this is the right tease
-  - Doc links: confirm correct paths for protocol spec and API docs
--->
