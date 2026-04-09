@@ -621,6 +621,10 @@ export class ShapeStream<T extends Row<unknown> = Row>
   #fastLoopBackoffMaxMs = 5_000
   #fastLoopConsecutiveCount = 0
   #fastLoopMaxCount = 5
+  // onError retry backoff: prevent tight loops when onError always returns {}
+  #onErrorRetryCount = 0
+  #onErrorBackoffBaseMs = 100
+  #onErrorBackoffMaxMs = 30_000
   #pendingRequestShapeCacheBuster?: string
   #maxSnapshotRetries = 5
 
@@ -769,6 +773,39 @@ export class ShapeStream<T extends Row<unknown> = Row>
           }
           this.#fastLoopConsecutiveCount = 0
           this.#recentRequestEntries = []
+
+          // Apply exponential backoff with jitter to prevent tight retry loops
+          // (e.g., when onError always returns {} on persistent 4xx errors)
+          const retryCount = ++this.#onErrorRetryCount
+          const maxDelay = Math.min(
+            this.#onErrorBackoffMaxMs,
+            this.#onErrorBackoffBaseMs * Math.pow(2, retryCount - 1)
+          )
+          const delayMs = Math.floor(Math.random() * maxDelay)
+          if (retryCount > 1) {
+            console.warn(
+              `[Electric] onError retry backoff: waiting ${Math.round(delayMs / 1000)}s before retry ` +
+                `(attempt ${retryCount}). ` +
+                `Previous error: ${(err as Error)?.message ?? err}`
+            )
+          }
+          await new Promise<void>((resolve) => {
+            const signal = this.options.signal
+            const onAbort = () => {
+              clearTimeout(timer)
+              resolve()
+            }
+            const timer = setTimeout(() => {
+              signal?.removeEventListener(`abort`, onAbort)
+              resolve()
+            }, delayMs)
+            signal?.addEventListener(`abort`, onAbort, { once: true })
+          })
+
+          if (this.options.signal?.aborted) {
+            this.#teardown()
+            return
+          }
 
           // Restart from current offset
           this.#started = false
