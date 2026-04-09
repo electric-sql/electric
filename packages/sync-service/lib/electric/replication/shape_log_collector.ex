@@ -101,6 +101,25 @@ defmodule Electric.Replication.ShapeLogCollector do
   end
 
   @doc """
+  Suspend event processing, causing `handle_event/2` to return
+  `{:error, :not_ready}` until `resume_event_processing/1` is called.
+
+  Used in integration tests to simulate sustained backpressure on the
+  replication stream — e.g. to verify that the replication connection
+  survives `wal_sender_timeout` during prolonged processing delays.
+  """
+  def suspend_event_processing(stack_id) do
+    GenServer.call(name(stack_id), :suspend_event_processing)
+  end
+
+  @doc """
+  Resume event processing after `suspend_event_processing/1`.
+  """
+  def resume_event_processing(stack_id) do
+    GenServer.call(name(stack_id), :resume_event_processing)
+  end
+
+  @doc """
   Adds a shape to the shape matching index in the ShapeLogCollector
   used for matching and sending replication stream operations.
   """
@@ -302,6 +321,18 @@ defmodule Electric.Replication.ShapeLogCollector do
 
     Electric.StatusMonitor.mark_shape_log_collector_ready(state.stack_id, self())
     {:reply, :ok, Map.put(state, :last_processed_offset, offset)}
+  end
+
+  def handle_call(:suspend_event_processing, _from, state) do
+    {:reply, :ok, Map.put(state, :event_processing_suspended, true)}
+  end
+
+  def handle_call(:resume_event_processing, _from, state) do
+    {:reply, :ok, Map.delete(state, :event_processing_suspended)}
+  end
+
+  def handle_call({:handle_event, _, _}, _from, %{event_processing_suspended: true} = state) do
+    {:reply, {:error, :not_ready}, state}
   end
 
   def handle_call({:handle_event, _, _}, _from, state)

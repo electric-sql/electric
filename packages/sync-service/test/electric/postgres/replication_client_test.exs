@@ -251,6 +251,33 @@ defmodule Electric.Postgres.ReplicationClientTest do
       assert %NewRecord{record: %{"value" => "test value 2"}} = receive_tx_change()
     end
 
+    @tag database_settings: ["wal_sender_timeout='3s'"]
+    @tag handle_event: {MockTransactionProcessor, :handle_event, []}
+    test "connection survives wal_sender_timeout when event handler is unavailable",
+         %{db_conn: conn} = ctx do
+      client_pid = start_client(ctx)
+      ref = Process.monitor(client_pid)
+
+      # Insert data without MockTransactionProcessor started — events crash
+      # with :noproc, triggering the retry loop. The gen_statem is free between
+      # retries, allowing the keepalive timer to send StandbyStatusUpdate messages.
+      insert_item(conn, "test value 1")
+
+      # Wait ~2x wal_sender_timeout (3s). Without the keepalive fix, PG kills
+      # the connection and the process crashes with "tcp send: closed".
+      # The refute_receive is both the wait AND the assertion: if the process
+      # dies during this window, the test fails immediately.
+      refute_receive {:DOWN, ^ref, :process, ^client_pid, _}, 6_000
+
+      # Start the handler — pending event should be retried and succeed.
+      start_supervised({MockTransactionProcessor, self()})
+      assert %NewRecord{record: %{"value" => "test value 1"}} = receive_tx_change()
+
+      # Insert more data that requires a LIVE connection to receive new WAL.
+      insert_item(conn, "test value 2")
+      assert %NewRecord{record: %{"value" => "test value 2"}} = receive_tx_change()
+    end
+
     @tag handle_event: {MockTransactionProcessor, :handle_event, []}
     test "aborts held processing of transaction on exit", %{db_conn: conn} = ctx do
       client_pid = start_client(ctx)

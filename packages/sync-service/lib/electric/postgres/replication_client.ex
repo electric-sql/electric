@@ -2,7 +2,7 @@ defmodule Electric.Postgres.ReplicationClient do
   @moduledoc """
   A client module for Postgres logical replication.
   """
-  use Postgrex.ReplicationConnection
+  use Electric.Postgres.ReplicationConnection
 
   alias Electric.Postgres.LogicalReplication.Decoder
   alias Electric.Postgres.Lsn
@@ -51,7 +51,13 @@ defmodule Electric.Postgres.ReplicationClient do
       :message_converter,
       :publication_owner?,
       :replication_idle_timeout,
+      # PostgreSQL's wal_sender_timeout in ms, queried during connection setup.
+      # Used to derive the keepalive interval (wal_sender_timeout / 3).
+      wal_sender_timeout: 60_000,
       step: :disconnected,
+      # Ref for a pending wait_until_async subscription, paired with the event to retry.
+      # Set when the event handler returns :not_ready and cleared on notification.
+      wait_for_active_ref: nil,
       # Cache the end_lsn of the last processed Commit message to report it back to Postgres
       # on demand via standby status update messages -
       # https://www.postgresql.org/docs/current/protocol-replication.html#PROTOCOL-REPLICATION-STANDBY-STATUS-UPDATE
@@ -146,6 +152,17 @@ defmodule Electric.Postgres.ReplicationClient do
   @default_connect_timeout 30_000
   @idle_check_interval Electric.Config.min_replication_idle_timeout()
 
+  # Maximum keepalive interval. Caps the derived interval (wal_sender_timeout/3)
+  # so we stay responsive even if wal_sender_timeout is set very high or changes
+  # on the source PG after we've connected.
+  @max_keepalive_interval 15_000
+
+  # Delay before retrying a failed event dispatch.
+  @event_retry_delay 50
+
+  # Maximum time to spend retrying a crashed event handler before giving up.
+  @max_event_retry_time 10 * 60_000
+
   @spec start_link(Keyword.t()) :: :gen_statem.start_ret()
   def start_link(opts) do
     config = Map.new(opts)
@@ -161,7 +178,7 @@ defmodule Electric.Postgres.ReplicationClient do
         sync_connect: false
       ] ++ Electric.Utils.deobfuscate_password(config.replication_opts[:connection_opts])
 
-    Postgrex.ReplicationConnection.start_link(
+    Electric.Postgres.ReplicationConnection.start_link(
       __MODULE__,
       Keyword.delete(config.replication_opts, :connection_opts),
       start_opts
@@ -180,7 +197,7 @@ defmodule Electric.Postgres.ReplicationClient do
   end
 
   def stop(client, reason) do
-    Postgrex.ReplicationConnection.call(client, {:stop, reason})
+    Electric.Postgres.ReplicationConnection.call(client, {:stop, reason})
   end
 
   # The `Postgrex.ReplicationConnection` behaviour does not follow the gen server conventions and
@@ -312,6 +329,33 @@ defmodule Electric.Postgres.ReplicationClient do
     end
   end
 
+  # Periodic keepalive: send a StandbyStatusUpdate to prevent wal_sender_timeout.
+  # This fires every @keepalive_interval ms regardless of whether the socket is
+  # paused. Sending the same LSN without advancement is safe — it only resets
+  # PostgreSQL's last_reply_timestamp.
+  def handle_info(:send_keepalive, %State{step: :streaming} = state) do
+    {:noreply, [encode_standby_status_update(state)], state}
+  end
+
+  def handle_info(:send_keepalive, state) do
+    {:noreply, state}
+  end
+
+  # Event processing messages — see dispatch_event/2 and apply_event/3 below.
+  def handle_info({:process_event, event, time_remaining}, state),
+    do: apply_event(event, time_remaining, state)
+
+  # StatusMonitor notification: stack became active — retry the pending event.
+  # The delay prevents spinning if the handler returns :not_ready again despite
+  # StatusMonitor reporting :active (a brief race during startup).
+  def handle_info(
+        {{Electric.StatusMonitor, ref}, {:ok, :active}},
+        %State{wait_for_active_ref: {ref, event}} = state
+      ) do
+    Process.send_after(self(), {:process_event, event, @max_event_retry_time}, @event_retry_delay)
+    {:noreply, %{state | wait_for_active_ref: nil}}
+  end
+
   # This callback is invoked when the connection process receives a shutdown signal.
   def handle_info({:EXIT, _pid, :shutdown}, _state) do
     Logger.debug("Replication client #{inspect(self())} received shutdown signal, stopping")
@@ -336,7 +380,10 @@ defmodule Electric.Postgres.ReplicationClient do
   # Postgres.
   @impl true
   @spec handle_data(binary(), State.t()) ::
-          {:noreply, State.t()} | {:noreply, list(binary()), State.t()}
+          {:noreply, State.t()}
+          | {:noreply, list(binary()), State.t()}
+          | {:noreply_and_pause, list(binary()), State.t()}
+          | {:disconnect, term()}
   def handle_data(data, %State{step: :start_streaming} = state) do
     # Modify the state as if we've just seen a transaction so that in the future we have a
     # starting point to check how long the stream has been idle for.
@@ -345,6 +392,18 @@ defmodule Electric.Postgres.ReplicationClient do
     if state.replication_idle_timeout > 0 do
       :timer.send_interval(@idle_check_interval, :check_if_idle)
     end
+
+    # Start a periodic keepalive timer. This sends StandbyStatusUpdate messages
+    # to PostgreSQL at regular intervals, preventing wal_sender_timeout from
+    # firing even when the socket is paused for backpressure.
+    #
+    # The interval is derived from PostgreSQL's wal_sender_timeout (queried during
+    # connection setup): timeout/3 provides a safe margin, matching the heuristic
+    # used by pg_recvlogical and other replication clients.
+    keepalive_interval = keepalive_interval(state.wal_sender_timeout)
+    :timer.send_interval(keepalive_interval, :send_keepalive)
+
+    Logger.info("Keepalive interval set to #{keepalive_interval}ms (wal_sender_timeout=#{state.wal_sender_timeout}ms)")
 
     notify_seen_first_message(state)
     handle_data(data, state)
@@ -390,16 +449,6 @@ defmodule Electric.Postgres.ReplicationClient do
       ) do
     msg = Decoder.decode(data)
 
-    # Useful for debugging:
-    # %struct{} = msg
-    # message_type = struct |> to_string() |> String.split(".") |> List.last()
-
-    # Logger.debug(
-    #   "XLogData: wal_start=#{wal_start} (#{Lsn.from_integer(wal_start)}), " <>
-    #     "wal_end=#{wal_end} (#{Lsn.from_integer(wal_end)})\n" <>
-    #     message_type <> " :: " <> inspect(Map.from_struct(msg))
-    # )
-
     case MessageConverter.convert(msg, state.message_converter) do
       {:error, reason} ->
         {:disconnect, {:irrecoverable_slot, reason}}
@@ -409,21 +458,74 @@ defmodule Electric.Postgres.ReplicationClient do
 
       {:ok, event, converter} ->
         state = %{state | message_converter: converter}
-
-        handle_event(event, state)
-
-        state = maybe_update_flush_up_to_date(state)
-
-        {acks, state} = acknowledge_transaction(event, state)
-
-        {:noreply, acks, state}
+        dispatch_event(event, state)
     end
   end
 
-  defp handle_event(event, state) do
-    {m, f, args} = state.handle_event
+  # Dispatch event processing asynchronously. Pauses the socket so we don't
+  # receive more data until processing completes. The gen_statem remains
+  # responsive to handle_info messages (keepalive timer, flush_boundary_updated,
+  # EXIT signals) while providing backpressure to the replication stream.
+  #
+  # maybe_update_flush_up_to_date and acknowledge_transaction are intentionally
+  # deferred to apply_event's success path, preserving the original semantics
+  # where they only ran after handle_event succeeded.
+  defp dispatch_event(event, state) do
+    send(self(), {:process_event, event, @max_event_retry_time})
+    {:noreply_and_pause, [], state}
+  end
 
-    apply_with_retries({m, f, [event | args]}, state)
+  # Apply the event handler. On success, acknowledge the transaction and resume
+  # socket reads. On failure, retry — either after a short delay (for crashes)
+  # or after StatusMonitor signals the stack is active (for :not_ready errors).
+  #
+  # This replaces the old synchronous apply_with_retries/3 which blocked the
+  # gen_statem process and prevented keepalive responses.
+  defp apply_event(event, time_remaining, state) do
+    {m, f, args} = state.handle_event
+    start_time = System.monotonic_time(:millisecond)
+
+    try do
+      case apply(m, f, [event | args]) do
+        :ok ->
+          state = maybe_update_flush_up_to_date(state)
+          {acks, state} = acknowledge_transaction(event, state)
+          {:noreply_and_resume, acks, state}
+
+        {:error, error} when error in [:not_ready, :connection_not_available] ->
+          remaining = time_remaining - (System.monotonic_time(:millisecond) - start_time)
+          wait_for_active_and_retry(event, remaining, state)
+      end
+    catch
+      kind, reason ->
+        remaining = time_remaining - (System.monotonic_time(:millisecond) - start_time)
+
+        if remaining > 0 do
+          Logger.error(
+            "Error processing replication event (#{remaining}ms retry budget left): " <>
+              Exception.format(kind, reason, __STACKTRACE__)
+          )
+
+          Process.send_after(self(), {:process_event, event, remaining}, @event_retry_delay)
+          {:noreply, state}
+        else
+          Logger.error(
+            "Exhausted retry budget processing replication event: " <>
+              Exception.format(kind, reason, __STACKTRACE__)
+          )
+
+          :erlang.raise(kind, reason, __STACKTRACE__)
+        end
+    end
+  end
+
+  # Downstream returned :not_ready — subscribe to StatusMonitor for notification
+  # when the stack becomes active, then retry. This replaces the old blocking
+  # wait_until_active(timeout: :infinity) call with an async notification.
+  # The keepalive timer prevents wal_sender_timeout during the wait.
+  defp wait_for_active_and_retry(event, _remaining, state) do
+    ref = Electric.StatusMonitor.wait_until_async(state.stack_id, :active)
+    {:noreply, %{state | wait_for_active_ref: {ref, event}}}
   end
 
   defp acknowledge_transaction(%TransactionFragment{commit: nil}, state), do: {[], state}
@@ -481,45 +583,14 @@ defmodule Electric.Postgres.ReplicationClient do
     >>
   end
 
-  # Retry applying the given MFA
-  # A retry may need to happen if the connection is available or the collector is not ready yet.
-  # In those instances we wait until the stack is ready and retry, and will go on retrying forever.
-  # We may also get a process down, and we retry here too but with a timeout since processes should
-  # be bought back up by the supervisor and if this carries on for longer than the timeout there may
-  # be a more serious issue.
-  @retry_time 10 * 60_000
-  @spin_prevention_delay 50
-  defp apply_with_retries(mfa, state, time_remaining \\ @retry_time) do
-    start_time = System.monotonic_time(:millisecond)
-    {m, f, args} = mfa
 
-    try do
-      case apply(m, f, args) do
-        :ok ->
-          :ok
-
-        {:error, error} when error in [:not_ready, :connection_not_available] ->
-          Process.sleep(@spin_prevention_delay)
-
-          Electric.StatusMonitor.wait_until_active(state.stack_id,
-            timeout: :infinity,
-            block_on_conn_sleeping: true
-          )
-
-          apply_with_retries(mfa, state, @retry_time)
-      end
-    catch
-      _, _ when time_remaining > 0 ->
-        receive do
-          # on receiving an exit while holding processing, we should respect the exit
-          {:EXIT, _from, reason} -> exit(reason)
-        after
-          @spin_prevention_delay ->
-            time_remaining = time_remaining - (System.monotonic_time(:millisecond) - start_time)
-            apply_with_retries(mfa, state, time_remaining)
-        end
-    end
-  end
+  # Derive keepalive interval from PostgreSQL's wal_sender_timeout.
+  # Uses min(timeout/3, 15s): timeout/3 provides a safe margin for low timeouts,
+  # while the 15s cap ensures responsiveness even if wal_sender_timeout is very
+  # high or changes on the source PG after we've connected.
+  defp keepalive_interval(0), do: @max_keepalive_interval
+  defp keepalive_interval(wal_sender_timeout_ms),
+    do: min(div(wal_sender_timeout_ms, 3), @max_keepalive_interval)
 
   @epoch DateTime.to_unix(~U[2000-01-01 00:00:00Z], :microsecond)
   defp current_time(), do: System.os_time(:microsecond) - @epoch
