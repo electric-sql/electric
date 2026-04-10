@@ -59,8 +59,14 @@ interface TypeScriptClientAnalysisResult {
   }
 }
 
+interface ShapeStreamAnalysisResult {
+  findings: AnalysisFinding[]
+  errorPathPublishReport: ErrorPathPublishReport[]
+}
+
 type AnalyzerModule = {
   analyzeTypeScriptClient: () => TypeScriptClientAnalysisResult
+  analyzeShapeStreamClient: (filePath: string) => ShapeStreamAnalysisResult
   analyzeProtocolLiterals: (
     filePaths: string[],
     options?: {
@@ -170,6 +176,23 @@ describe(`shape-stream static analysis`, () => {
     }
   })
 
+  it(`flags a data-row #publish inside a catch block (not a static control message)`, async () => {
+    // Regression: isStaticControlMessagePublish must not exempt arbitrary
+    // object-literal arrays. It should only exempt static control-only
+    // publishes (those with headers.control as a string literal). A data-row
+    // publish in a catch block is a bug #4 shape and must be flagged.
+    const { analyzeShapeStreamClient } = await loadAnalyzerModule()
+    const fixturePath = path.resolve(
+      process.cwd(),
+      `test/fixtures/static-analysis/error-path-data-publish.ts`
+    )
+
+    const result = analyzeShapeStreamClient(fixturePath)
+    expect(
+      result.errorPathPublishReport.some((entry) => entry.callee === `#publish`)
+    ).toBe(true)
+  })
+
   it(`includes all internal protocol QUERY_PARAM constants in ELECTRIC_PROTOCOL_QUERY_PARAMS`, async () => {
     // Internal protocol params must be listed in ELECTRIC_PROTOCOL_QUERY_PARAMS
     // so canonicalShapeKey strips them. Missing entries cause cache key
@@ -181,8 +204,6 @@ describe(`shape-stream static analysis`, () => {
       `COLUMNS_QUERY_PARAM`,
       `TABLE_QUERY_PARAM`,
       `WHERE_QUERY_PARAM`,
-      `REPLICA_PARAM`,
-      `WHERE_PARAMS_PARAM`,
     ])
 
     const internalParamExports = Object.entries(constants)

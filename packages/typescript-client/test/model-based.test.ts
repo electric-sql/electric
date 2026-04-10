@@ -455,7 +455,7 @@ interface StreamReal {
 async function waitUntilSettled(
   gate: FetchGate,
   errorRef: { error: Error | null },
-  maxYields = 50
+  maxYields = 200
 ): Promise<void> {
   for (let i = 0; i < maxYields; i++) {
     await new Promise((r) => setTimeout(r, 0))

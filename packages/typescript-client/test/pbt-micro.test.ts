@@ -679,6 +679,107 @@ describe(`Shape#process notification PBT`, () => {
     expect(lastSize).toBe(shape.currentRows.length)
   })
 
+  // Regression: the real sync-service initial fetch (offset=-1) returns
+  // data without an `electric-up-to-date` header (server sets
+  // `up_to_date: false` for before_all_offset requests, see
+  // sync-service api.ex:523-527). The client's handleMessageBatch only
+  // sets lastSyncedAt when `hasUpToDateMessage` is true, so the stream's
+  // lastSyncedAt stays undefined after the first batch. Bug #2's fix
+  // made Shape notify subscribers on every change message — which now
+  // fires the callback with `shape.lastSyncedAt()` still undefined.
+  it(`regression: subscriber must not see undefined lastSyncedAt during initial sync with real ShapeStream`, async () => {
+    let callCount = 0
+    const fetchClient = async (
+      input: RequestInfo | URL,
+      init?: RequestInit
+    ): Promise<Response> => {
+      callCount++
+      const url = new URL(input.toString())
+      const isInitial = url.searchParams.get(`offset`) === `-1`
+
+      if (isInitial) {
+        // First response: data rows, NO up-to-date header or message.
+        // Mirrors what sync-service returns for offset=-1.
+        return new Response(
+          JSON.stringify([
+            {
+              key: `"public"."issues"/"1"`,
+              value: { id: 1 },
+              headers: { operation: `insert` },
+            },
+          ]),
+          {
+            status: 200,
+            headers: {
+              'electric-handle': `h1`,
+              'electric-offset': `5_0`,
+              'electric-schema': `{"id":"int4"}`,
+              'electric-cursor': `c1`,
+            },
+          }
+        )
+      }
+      if (callCount === 2) {
+        // First live request: up-to-date. Subscriber should now be notified
+        // and lastSyncedAt must be defined (not undefined).
+        return new Response(
+          JSON.stringify([{ headers: { control: `up-to-date` } }]),
+          {
+            status: 200,
+            headers: {
+              'electric-handle': `h1`,
+              'electric-offset': `5_0`,
+              'electric-schema': `{"id":"int4"}`,
+              'electric-cursor': `c2`,
+              'electric-up-to-date': ``,
+            },
+          }
+        )
+      }
+      // Subsequent (live) requests: hang until abort, then return a
+      // network error (mirroring a fetch that was cancelled mid-flight)
+      // so the stream does not see a missing-headers response.
+      if (init?.signal?.aborted) return Response.error()
+      return new Promise<Response>((resolve) => {
+        init?.signal?.addEventListener(
+          `abort`,
+          () => resolve(Response.error()),
+          { once: true }
+        )
+      })
+    }
+
+    const aborter = new AbortController()
+    const stream = new ShapeStream<{ id: number }>({
+      url: `https://example.com/v1/shape`,
+      params: { table: `test_table` },
+      fetchClient,
+      signal: aborter.signal,
+    })
+    const shape = new Shape<{ id: number }>(stream)
+
+    const observations: Array<number | undefined> = []
+    shape.subscribe(({ rows }) => {
+      if (rows.length > 0) observations.push(shape.lastSyncedAt())
+    })
+
+    // Wait for the initial fetch + any follow-up.
+    for (let i = 0; i < 20; i++) {
+      await new Promise((r) => setTimeout(r, 10))
+      if (observations.length > 0) break
+    }
+
+    try {
+      expect(observations.length).toBeGreaterThan(0)
+      for (const v of observations) {
+        expect(v).toBeDefined()
+      }
+    } finally {
+      aborter.abort()
+    }
+    void callCount
+  })
+
   it(`PBT: subscriber's last observation matches shape whenever data or up-to-date state changes`, () => {
     type Op =
       | { kind: `insert`; key: string }
@@ -711,46 +812,55 @@ describe(`Shape#process notification PBT`, () => {
 
         let counter = 0
         for (const batch of batches) {
-          const preKeys = new Set(modelData.keys())
-          const preStatus = modelStatus
-
+          // Simulate Shape#process message-by-message to determine
+          // exactly when the real shape fires #notify. The invariant:
+          // after a notification, the subscriber's view must match the
+          // shape's currentRows.
+          let shouldHaveNotified = false
           const msgs: Message<RowT>[] = []
           for (const op of batch) {
             switch (op.kind) {
-              case `insert`:
+              case `insert`: {
                 counter += 1
                 msgs.push(insertMsg(op.key, counter))
+                const wasUpToDate = modelStatus === `up-to-date`
                 modelData.set(op.key, { id: op.key, n: counter })
                 modelStatus = `syncing`
+                if (wasUpToDate) shouldHaveNotified = true
                 break
-              case `delete`:
+              }
+              case `delete`: {
                 msgs.push(deleteMsg(op.key))
+                const wasUpToDate = modelStatus === `up-to-date`
+                const hadKey = modelData.has(op.key)
                 modelData.delete(op.key)
                 modelStatus = `syncing`
+                // Shape#process sets shouldNotify on delete in full mode
+                // regardless of whether the key existed — match that.
+                void hadKey
+                if (wasUpToDate) shouldHaveNotified = true
                 break
-              case `upToDate`:
+              }
+              case `upToDate`: {
                 msgs.push(upToDateMsg())
+                if (modelStatus !== `up-to-date`) shouldHaveNotified = true
                 modelStatus = `up-to-date`
                 break
-              case `mustRefetch`:
+              }
+              case `mustRefetch`: {
                 msgs.push(mustRefetchMsg())
+                const hadData = modelData.size > 0
                 modelData = new Map()
                 modelStatus = `syncing`
+                if (hadData) shouldHaveNotified = true
                 break
+              }
             }
           }
 
-          const keysNow = new Set(modelData.keys())
-          const sameKeys =
-            keysNow.size === preKeys.size &&
-            [...keysNow].every((k) => preKeys.has(k))
-          const dataChanged = !sameKeys
-          const becameUpToDate =
-            preStatus !== `up-to-date` && modelStatus === `up-to-date`
-
           stream.publish(msgs)
 
-          if (dataChanged || becameUpToDate) {
+          if (shouldHaveNotified) {
             expect(
               lastObservedSize,
               `batch=${JSON.stringify(batch)} observed=${lastObservedSize} expected=${shape.currentRows.length}`
@@ -1067,10 +1177,9 @@ describe(`snakeCamelMapper collision PBT`, () => {
     expect(snakeToCamel(`user__id`)).not.toBe(snakeToCamel(`user_id`))
   })
 
-  it(`deterministic: snakeCamelMapper decode is not injective`, () => {
+  it(`deterministic: snakeCamelMapper decode is injective across underscore counts`, () => {
     const mapper = snakeCamelMapper()
-    // Two different PG columns should decode to different app keys.
-    // BUG: they collide to the same "userId".
+    // Two different PG columns must decode to different app keys.
     const a = mapper.decode(`user_id`)
     const b = mapper.decode(`user__id`)
     expect(
@@ -1079,15 +1188,13 @@ describe(`snakeCamelMapper collision PBT`, () => {
     ).not.toBe(b)
   })
 
-  it(`deterministic: round-trip user__id → userId → user_id loses a column`, () => {
-    // round-trip identity: snake → camel → snake must equal input
+  it(`deterministic: camel ⇄ snake round-trip preserves underscore count`, () => {
     const input = `user__id`
     const rt = camelToSnake(snakeToCamel(input))
-    // BUG: round-trip returns "user_id", not "user__id".
     expect(rt, `round-trip should be identity, got ${rt}`).toBe(input)
   })
 
-  it(`deterministic: applyColumnMapper loses data on collision`, () => {
+  it(`deterministic: applyColumnMapper preserves distinct columns differing only in underscore count`, () => {
     // Simulates the applyColumnMapper closure in client.ts.
     const mapper = snakeCamelMapper()
     const row: Record<string, unknown> = {
@@ -1098,7 +1205,6 @@ describe(`snakeCamelMapper collision PBT`, () => {
     for (const [k, v] of Object.entries(row)) {
       result[mapper.decode(k)] = v
     }
-    // Two input keys but only one output key: one value was silently lost.
     expect(
       Object.keys(result).length,
       `both db columns should be present in the result, got ${JSON.stringify(result)}`
@@ -1125,8 +1231,6 @@ describe(`snakeCamelMapper collision PBT`, () => {
           fc.pre(n1 !== n2)
           const x = a + `_`.repeat(n1) + b
           const y = a + `_`.repeat(n2) + b
-          // BUG: `/_+([a-z])/g` collapses any underscore run, so x and
-          // y (distinct PG columns) decode to the same camelCase name.
           expect(
             snakeToCamel(x),
             `snakeToCamel("${x}") === snakeToCamel("${y}")`

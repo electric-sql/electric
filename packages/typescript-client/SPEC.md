@@ -292,6 +292,55 @@ back to Live, SSE state resets to defaults.
 
 **Enforcement**: Dedicated test (`SSE state is preserved through LiveState self-transitions`).
 
+## Shape notification semantics
+
+The `Shape` class (`shape.ts`) wraps a `ShapeStream` and notifies subscribers
+when the materialised `rows` change. These invariants define _when_ `#notify`
+fires. They are separate from the ShapeStream state machine above; the stream
+delivers every message, but the Shape decides when the resulting view is
+consistent enough to surface to subscribers.
+
+### N1: No notify before first up-to-date
+
+Data messages (insert/update/delete) that arrive while `Shape.#status ===
+'syncing'` apply to `#data` but do NOT call `#notify`. The first subscriber
+notification fires when the shape transitions from `syncing` to `up-to-date`
+via an `up-to-date` control message.
+
+**Rationale**: the sync-service may send a response without an up-to-date
+control message (e.g. the initial response for `offset === -1`, see
+`api.ex:determine_up_to_date`). If the Shape notified subscribers on those
+inserts, subscribers would observe a partial view AND the stream's
+`lastSyncedAt()` would still be `undefined` (stream.ts `handleMessageBatch`
+only writes `lastSyncedAt` when the batch contains an up-to-date). N1 ties
+subscriber-visible snapshots to the stream-level "we've caught up" signal.
+
+**Enforcement**: `Shape#process notification PBT > regression: subscriber
+must not see undefined lastSyncedAt during initial sync with real
+ShapeStream` in `test/pbt-micro.test.ts` and the broader PBT there.
+
+### N2: Notify on change while up-to-date
+
+Once `#status === 'up-to-date'`, any data message triggers a notification,
+and the status then transitions back to `syncing` until the next up-to-date.
+This is the mechanism that delivers the `[up-to-date, insert]`-in-one-batch
+case (the insert runs after the up-to-date message has set status to
+up-to-date, so the insert sees `wasUpToDate === true` and calls `#notify`).
+
+**Enforcement**: `Shape#process notification PBT > deterministic:
+[up-to-date, insert] — subscriber's last view must match shape` and the
+broader PBT.
+
+### N3: Notify on must-refetch with prior data
+
+A `must-refetch` control message clears `#data` and `#insertedKeys`. If the
+shape had any prior data (`#data.size > 0 || #insertedKeys.size > 0`), a
+notification fires regardless of current status, so subscribers observe the
+now-empty state.
+
+**Enforcement**: `Shape#process notification PBT > deterministic:
+[must-refetch] from up-to-date state notifies subscribers`.
+
 ## Bidirectional Enforcement Checklist
 
 ### Doc -> Code: Is each invariant enforced?

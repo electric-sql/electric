@@ -16,6 +16,30 @@ export type ShapeChangedCallback<T extends Row<unknown> = Row> = (data: {
 type ShapeStatus = `syncing` | `up-to-date`
 
 /**
+ * Shape subscriber notification semantics (see SPEC.md → "Shape
+ * notification semantics" for the canonical contract):
+ *
+ * - **N1 (no notify before first up-to-date).** Data messages that
+ *   arrive while `status === 'syncing'` apply to `#data` but do NOT
+ *   call `#notify`. The first notification fires when the shape
+ *   transitions from `syncing` to `up-to-date` via an up-to-date
+ *   control message. This guarantees that subscribers observing
+ *   `rows` always see a consistent snapshot of the shape AND can
+ *   read a defined `stream.lastSyncedAt()`.
+ *
+ * - **N2 (notify on change while up-to-date).** Once
+ *   `status === 'up-to-date'`, any data message (insert/update/delete,
+ *   subject to `mode === 'changes_only'` filtering) triggers a
+ *   notification; the status then transitions back to `syncing` until
+ *   the next up-to-date message.
+ *
+ * - **N3 (notify on must-refetch with prior data).** A `must-refetch`
+ *   control message clears `#data` and `#insertedKeys`. If the shape
+ *   had any prior data, a notification fires so subscribers observe
+ *   the now-empty state.
+ */
+
+/**
  * A Shape is an object that subscribes to a shape log,
  * keeps a materialised shape `.rows` in memory and
  * notifies subscribers when the value has changed.
@@ -176,23 +200,24 @@ export class Shape<T extends Row<unknown> = Row> {
 
     messages.forEach((message) => {
       if (isChangeMessage(message)) {
+        const wasUpToDate = this.#status === `up-to-date`
         this.#updateShapeStatus(`syncing`)
         if (this.mode === `full`) {
           switch (message.headers.operation) {
             case `insert`:
               this.#data.set(message.key, message.value)
-              shouldNotify = true
+              if (wasUpToDate) shouldNotify = true
               break
             case `update`:
               this.#data.set(message.key, {
                 ...this.#data.get(message.key)!,
                 ...message.value,
               })
-              shouldNotify = true
+              if (wasUpToDate) shouldNotify = true
               break
             case `delete`:
               this.#data.delete(message.key)
-              shouldNotify = true
+              if (wasUpToDate) shouldNotify = true
               break
           }
         } else {
@@ -201,7 +226,7 @@ export class Shape<T extends Row<unknown> = Row> {
             case `insert`:
               this.#insertedKeys.add(message.key)
               this.#data.set(message.key, message.value)
-              shouldNotify = true
+              if (wasUpToDate) shouldNotify = true
               break
             case `update`:
               if (this.#insertedKeys.has(message.key)) {
@@ -209,14 +234,14 @@ export class Shape<T extends Row<unknown> = Row> {
                   ...this.#data.get(message.key)!,
                   ...message.value,
                 })
-                shouldNotify = true
+                if (wasUpToDate) shouldNotify = true
               }
               break
             case `delete`:
               if (this.#insertedKeys.has(message.key)) {
                 this.#data.delete(message.key)
                 this.#insertedKeys.delete(message.key)
-                shouldNotify = true
+                if (wasUpToDate) shouldNotify = true
               }
               break
           }

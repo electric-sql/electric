@@ -1095,15 +1095,36 @@ function buildErrorPathPublishReport(sourceFile, classDecl) {
 }
 
 /**
- * Returns true if a call expression is a #publish([{ headers: { control: ... } }])
- * with a static array literal containing only object literals. These synthetic
- * control-only publishes are intentional (e.g., the must-refetch notification
- * in the 409 handler) and should not trigger the error-path-publish rule.
+ * Returns true iff a call expression is a #publish([{ headers: { control: <string literal> } }, ...])
+ * with a non-empty static array where every element is an object literal whose
+ * `headers.control` is a string literal. These synthetic control-only publishes
+ * are intentional (e.g., the must-refetch notification in the 409 handler) and
+ * should not trigger the error-path-publish rule. A data-row publish
+ * (headers.operation = 'insert' etc.) is NOT exempt and must be flagged.
  */
 function isStaticControlMessagePublish(callExpr) {
   const [firstArg] = callExpr.arguments
   if (!firstArg || !ts.isArrayLiteralExpression(firstArg)) return false
-  return firstArg.elements.every((el) => ts.isObjectLiteralExpression(el))
+  if (firstArg.elements.length === 0) return false
+  return firstArg.elements.every((el) => {
+    if (!ts.isObjectLiteralExpression(el)) return false
+    const headersProp = el.properties.find(
+      (p) =>
+        ts.isPropertyAssignment(p) &&
+        ts.isIdentifier(p.name) &&
+        p.name.text === `headers`
+    )
+    if (!headersProp || !ts.isObjectLiteralExpression(headersProp.initializer))
+      return false
+    return headersProp.initializer.properties.some(
+      (p) =>
+        ts.isPropertyAssignment(p) &&
+        ts.isIdentifier(p.name) &&
+        p.name.text === `control` &&
+        (ts.isStringLiteral(p.initializer) ||
+          ts.isNoSubstitutionTemplateLiteral(p.initializer))
+    )
+  })
 }
 
 /**
