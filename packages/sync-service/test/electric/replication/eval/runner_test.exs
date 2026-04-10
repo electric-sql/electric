@@ -184,6 +184,43 @@ defmodule Electric.Replication.Eval.RunnerTest do
                |> Runner.execute(%{["x"] => [[[3, 4]]]})
     end
 
+    test "supports coalesce as a variadic function" do
+      expr =
+        ~S|coalesce("value", 'fallback', 'unused')|
+        |> Parser.parse_and_validate_expression!(refs: %{["value"] => :text})
+
+      assert {:ok, "fallback"} = Runner.execute(expr, %{["value"] => nil})
+      assert {:ok, "present"} = Runner.execute(expr, %{["value"] => "present"})
+    end
+
+    test "supports greatest as a variadic function and ignores nil arguments" do
+      expr =
+        ~S|greatest("value", 2, 3, NULL::int4)|
+        |> Parser.parse_and_validate_expression!(refs: %{["value"] => :int4})
+
+      assert {:ok, 3} = Runner.execute(expr, %{["value"] => nil})
+      assert {:ok, 4} = Runner.execute(expr, %{["value"] => 4})
+
+      assert {:ok, nil} =
+               ~S|greatest(NULL::int4, NULL::int4)|
+               |> Parser.parse_and_validate_expression!()
+               |> Runner.execute(%{})
+    end
+
+    test "supports least as a variadic function for datetime values" do
+      expr =
+        ~S|least("value", date '2024-01-02', NULL::date)|
+        |> Parser.parse_and_validate_expression!(refs: %{["value"] => :date})
+
+      assert {:ok, ~D[2024-01-02]} = Runner.execute(expr, %{["value"] => nil})
+      assert {:ok, ~D[2024-01-01]} = Runner.execute(expr, %{["value"] => ~D[2024-01-01]})
+
+      assert {:ok, nil} =
+               ~S|least(NULL::date, NULL::date)|
+               |> Parser.parse_and_validate_expression!()
+               |> Runner.execute(%{})
+    end
+
     test "subquery" do
       assert {:ok, true} =
                ~S|test IN (SELECT val FROM tester)|

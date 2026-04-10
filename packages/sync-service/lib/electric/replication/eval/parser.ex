@@ -77,9 +77,9 @@ defmodule Electric.Replication.Eval.Parser do
       :name,
       strict?: true,
       immutable?: true,
-      # So this parameter is (1) internal for now, i.e. `defpostgres` in known functions cannot set it,
-      # and (2) is a bit of a hack. This allows us to specify that this function should be applied to each element of an array,
-      # without supporting essentially anonymous functions in our AST for an equivalent of `Enum.map/2`.
+      # Variadic arguments are represented as a single packed array-like AST node at this position.
+      # This is also reused internally for helpers such as array indexing, where one argument is
+      # already list-like and should be passed through as a single value.
       map_over_array_in_pos: nil,
       variadic_arg: nil,
       location: 0
@@ -705,26 +705,37 @@ defmodule Electric.Replication.Eval.Parser do
          _,
          %{env: env}
        ) do
-    with {:ok, choices} <- find_available_functions(call, env),
-         {:ok, concrete} <- Lookups.pick_concrete_function_overload(choices, args, env),
-         {:ok, args} <- cast_unknowns(args, concrete.args, env),
-         {:ok, args} <- cast_implicit(args, concrete.args, env) do
-      {:ok, from_concrete(concrete, args)}
-    else
-      {:error, {_loc, _msg}} = error ->
-        error
+    handle_function_call(
+      identifier(call.funcname),
+      args,
+      call.location,
+      env,
+      explicit_variadic?: call.func_variadic
+    )
+  end
 
-      :error ->
-        arg_list =
-          Enum.map_join(args, ", ", fn
-            %UnknownConst{} -> "unknown"
-            %{type: type} -> to_string(type)
-          end)
+  defp node_to_ast(
+         %PgQuery.CoalesceExpr{location: location},
+         %{args: args},
+         _,
+         %{env: env}
+       ) do
+    handle_function_call("coalesce", args, location, env)
+  end
 
-        {:error,
-         {call.location,
-          "Could not select a function overload for #{identifier(call.funcname)}(#{arg_list})"}}
-    end
+  defp node_to_ast(
+         %PgQuery.MinMaxExpr{location: location, op: op},
+         %{args: args},
+         _,
+         %{env: env}
+       ) do
+    func_name =
+      case op do
+        :IS_GREATEST -> "greatest"
+        :IS_LEAST -> "least"
+      end
+
+    handle_function_call(func_name, args, location, env)
   end
 
   # Next block of overloads matches on `A_Expr`, which is any operator call, as well as special syntax calls (e.g. `BETWEEN` or `ANY`).
@@ -1117,13 +1128,57 @@ defmodule Electric.Replication.Eval.Parser do
     end
   end
 
-  defp find_available_functions(%PgQuery.FuncCall{} = call, %{funcs: funcs}) do
-    name = identifier(call.funcname)
-    arity = length(call.args)
+  defp handle_function_call(name, args, location, env, opts \\ []) do
+    with {:ok, choices} <-
+           find_available_functions(name, length(args), location, env,
+             explicit_variadic?: Keyword.get(opts, :explicit_variadic?, false)
+           ),
+         {:ok, concrete} <- Lookups.pick_concrete_function_overload(choices, args, env),
+         {:ok, args} <- cast_unknowns(args, concrete.args, env),
+         {:ok, args} <- cast_implicit(args, concrete.args, env) do
+      {:ok, from_concrete(concrete, args)}
+    else
+      {:error, {_loc, _msg}} = error ->
+        error
 
-    case Map.fetch(funcs, {name, arity}) do
-      {:ok, options} -> {:ok, options}
-      :error -> {:error, {call.location, "unknown or unsupported function #{name}/#{arity}"}}
+      :error ->
+        arg_list =
+          Enum.map_join(args, ", ", fn
+            %UnknownConst{} -> "unknown"
+            %{type: type} -> to_string(type)
+          end)
+
+        {:error, {location, "Could not select a function overload for #{name}(#{arg_list})"}}
+    end
+  end
+
+  defp find_available_functions(name, arity, location, %{funcs: funcs}, opts) do
+    exact_choices = Map.get(funcs, {name, arity}, [])
+    explicit_variadic? = Keyword.get(opts, :explicit_variadic?, false)
+
+    variadic_choices =
+      if explicit_variadic? do
+        []
+      else
+        funcs
+        |> Enum.flat_map(fn
+          {{^name, candidate_arity}, overloads} when candidate_arity < arity ->
+            overloads
+            |> Enum.filter(&(&1[:variadic_arg] == candidate_arity - 1))
+            |> Enum.map(&Lookups.expand_variadic_function_overload(&1, arity))
+
+          _ ->
+            []
+        end)
+      end
+
+    choices =
+      (exact_choices ++ variadic_choices)
+      |> Enum.sort_by(&if is_nil(&1[:variadic_arg]), do: 0, else: 1)
+
+    case choices do
+      [] -> {:error, {location, "unknown or unsupported function #{name}/#{arity}"}}
+      options -> {:ok, options}
     end
   end
 
@@ -1310,11 +1365,39 @@ defmodule Electric.Replication.Eval.Parser do
     # arguments are of different types (e.g. `date + int8`)
     commutative_overload? = Map.get(concrete, :commutative_overload?, false)
 
+    args =
+      if commutative_overload? do
+        Enum.reverse(args)
+      else
+        args
+      end
+
+    args =
+      case Map.get(concrete, :variadic_arg) do
+        nil ->
+          args
+
+        variadic_arg ->
+          {fixed_args, variadic_args} = Enum.split(args, variadic_arg)
+          variadic_type = Enum.at(concrete.args, variadic_arg)
+          variadic_location = variadic_args |> List.first() |> Map.get(:location, 0)
+
+          fixed_args ++
+            [
+              %Array{
+                elements: variadic_args,
+                type: {:array, variadic_type},
+                location: variadic_location
+              }
+            ]
+      end
+
     %Func{
       implementation: concrete.implementation,
       name: concrete.name,
-      args: if(commutative_overload?, do: Enum.reverse(args), else: args),
+      args: args,
       type: concrete.returns,
+      variadic_arg: Map.get(concrete, :variadic_arg),
       # These two fields are always set by macro generation, but not always in tests
       strict?: Map.get(concrete, :strict?, true),
       immutable?: Map.get(concrete, :immutable?, true)

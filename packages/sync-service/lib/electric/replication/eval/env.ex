@@ -62,6 +62,7 @@ defmodule Electric.Replication.Eval.Env do
   @type func :: %{
           optional(:strict?) => boolean(),
           optional(:immutable?) => boolean(),
+          optional(:variadic_arg) => non_neg_integer(),
           args: [pg_type()],
           returns: pg_type(),
           implementation: {module(), atom()} | fun(),
