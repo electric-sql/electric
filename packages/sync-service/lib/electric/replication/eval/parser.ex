@@ -77,10 +77,10 @@ defmodule Electric.Replication.Eval.Parser do
       :name,
       strict?: true,
       immutable?: true,
-      # Variadic arguments are represented as a single packed array-like AST node at this position.
-      # This is also reused internally for helpers such as array indexing, where one argument is
-      # already list-like and should be passed through as a single value.
+      # Allows treating one argument position as an array-mapped input without introducing
+      # anonymous function nodes into the eval AST.
       map_over_array_in_pos: nil,
+      # Variadic arguments are packed into a single array-like AST node at this position.
       variadic_arg: nil,
       location: 0
     ]
@@ -1129,10 +1129,23 @@ defmodule Electric.Replication.Eval.Parser do
   end
 
   defp handle_function_call(name, args, location, env, opts \\ []) do
+    if Keyword.get(opts, :explicit_variadic?, false) do
+      {:error, {location, "explicit VARIADIC function calls are not currently supported"}}
+    else
+      do_handle_function_call(name, args, location, env)
+    end
+  end
+
+  @spec do_handle_function_call(
+          String.t(),
+          list(tree_part() | UnknownConst.t()),
+          non_neg_integer(),
+          Env.t()
+        ) ::
+          {:ok, tree_part()} | {:error, {non_neg_integer(), String.t()}}
+  defp do_handle_function_call(name, args, location, env) do
     with {:ok, choices} <-
-           find_available_functions(name, length(args), location, env,
-             explicit_variadic?: Keyword.get(opts, :explicit_variadic?, false)
-           ),
+           find_available_functions(name, length(args), location, env),
          {:ok, concrete} <- Lookups.pick_concrete_function_overload(choices, args, env),
          {:ok, args} <- cast_unknowns(args, concrete.args, env),
          {:ok, args} <- cast_implicit(args, concrete.args, env) do
@@ -1152,29 +1165,26 @@ defmodule Electric.Replication.Eval.Parser do
     end
   end
 
-  defp find_available_functions(name, arity, location, %{funcs: funcs}, opts) do
+  @spec find_available_functions(String.t(), non_neg_integer(), non_neg_integer(), Env.t()) ::
+          {:ok, list(map())} | {:error, {non_neg_integer(), String.t()}}
+  defp find_available_functions(name, arity, location, %{funcs: funcs}) do
     exact_choices = Map.get(funcs, {name, arity}, [])
-    explicit_variadic? = Keyword.get(opts, :explicit_variadic?, false)
 
     variadic_choices =
-      if explicit_variadic? do
-        []
-      else
-        funcs
-        |> Enum.flat_map(fn
-          {{^name, candidate_arity}, overloads} when candidate_arity < arity ->
-            overloads
-            |> Enum.filter(&(&1[:variadic_arg] == candidate_arity - 1))
-            |> Enum.map(&Lookups.expand_variadic_function_overload(&1, arity))
+      funcs
+      |> Enum.flat_map(fn
+        {{^name, candidate_arity}, overloads} when candidate_arity < arity ->
+          overloads
+          |> Enum.filter(&(&1[:variadic_arg] == candidate_arity - 1))
+          |> Enum.map(&Lookups.expand_variadic_function_overload(&1, arity))
 
-          _ ->
-            []
-        end)
-      end
+        _ ->
+          []
+      end)
 
     choices =
       (exact_choices ++ variadic_choices)
-      |> Enum.sort_by(&if is_nil(&1[:variadic_arg]), do: 0, else: 1)
+      |> Enum.sort_by(&(not is_nil(&1[:variadic_arg])))
 
     case choices do
       [] -> {:error, {location, "unknown or unsupported function #{name}/#{arity}"}}
@@ -1380,7 +1390,12 @@ defmodule Electric.Replication.Eval.Parser do
         variadic_arg ->
           {fixed_args, variadic_args} = Enum.split(args, variadic_arg)
           variadic_type = Enum.at(concrete.args, variadic_arg)
-          variadic_location = variadic_args |> List.first() |> Map.get(:location, 0)
+
+          variadic_location =
+            case variadic_args do
+              [%{location: location} | _] -> location
+              [] -> 0
+            end
 
           fixed_args ++
             [

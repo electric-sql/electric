@@ -258,6 +258,14 @@ defmodule Electric.Replication.Eval.ParserTest do
       assert %Func{name: "-", args: [%Ref{path: ["test"], type: :int4}]} = result
     end
 
+    test "should reject explicit variadic function calls for now" do
+      assert {:error,
+              "At location 0: explicit VARIADIC function calls are not currently supported"} =
+               Parser.parse_and_validate_expression(
+                 ~S|array_cat(VARIADIC ARRAY[ARRAY[1], ARRAY[2]])|
+               )
+    end
+
     test "should correctly parse coalesce special form as a variadic function" do
       assert {:ok, %Expr{eval: result}} =
                Parser.parse_and_validate_expression(
@@ -330,6 +338,38 @@ defmodule Electric.Replication.Eval.ParserTest do
                  }
                ]
              } = result
+    end
+
+    test "should prefer an exact non-variadic overload over a variadic expansion" do
+      env =
+        Env.empty(
+          funcs: %{
+            {"prefer_exact", 1} => [
+              %{
+                args: [:int4],
+                variadic_arg: 0,
+                returns: :int4,
+                implementation: &List.first/1,
+                name: "variadic"
+              }
+            ],
+            {"prefer_exact", 2} => [
+              %{
+                args: [:int4, :int4],
+                returns: :int4,
+                implementation: &Kernel.+/2,
+                name: "exact"
+              }
+            ]
+          }
+        )
+
+      assert {:ok, %Expr{eval: %Func{name: "exact"}}} =
+               Parser.parse_and_validate_expression(
+                 ~S|prefer_exact("test", 2)|,
+                 refs: %{["test"] => :int4},
+                 env: env
+               )
     end
 
     test "should reduce down immutable function calls that have only constants" do
