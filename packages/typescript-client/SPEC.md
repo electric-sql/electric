@@ -350,9 +350,11 @@ of whether the server returns a new handle, the same handle, or no handle. The
 cache buster is stripped by `canonicalShapeKey` so it doesn't affect shape
 identity or caching logic — it only affects the raw URL sent to the server/CDN.
 
-**Enforcement**: Static analysis rule `conditional-409-cache-buster` in
-`shape-stream-static-analysis.mjs` + model-based property test commands
-`Respond409SameHandleCmd` and `Respond409NoHandleCmd`.
+**Enforcement**:
+
+- Static analysis rule `conditional-409-cache-buster` in `shape-stream-static-analysis.mjs` — covers both L4 and L6 code paths at source level.
+- L4 (main stream `#requestShape` 409 path): model-based property test commands `Respond409SameHandleCmd` and `Respond409NoHandleCmd` in `test/model-based.test.ts`.
+- L6 (`fetchSnapshotWithRetry` 409 path): property tests in `test/pbt-micro.test.ts > Shape #fetchSnapshotWithRetry 409 loop PBT` — asserts every retry URL carries a unique `cache-buster` param across 409-new, 409-same, and 409-no-handle sequences, and that `#maxSnapshotRetries = 5` is strictly upheld.
 
 ### Loop-back sites
 
@@ -369,13 +371,13 @@ Six sites in `client.ts` recurse or loop to issue a new fetch:
 
 ### Guard mechanisms
 
-| Guard                  | Scope                         | How it works                                                                                                                                     |
-| ---------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `#checkFastLoop`       | Non-live `#requestShape` only | Detects N requests at same offset within a time window. First: clears caches + resets. Persistent: exponential backoff → throws FetchError(502). |
-| `maxStaleCacheRetries` | Stale response path (L3)      | State machine counts stale retries. Throws FetchError(502) after 3 consecutive stale responses.                                                  |
-| `#maxSnapshotRetries`  | Snapshot 409 path (L6)        | Counts consecutive snapshot 409s. Unconditional cache buster on every retry. Throws FetchError(502) after 5.                                     |
-| Pause lock             | `#requestShape` entry         | Returns immediately if paused. Prevents fetches during snapshots.                                                                                |
-| Up-to-date exit        | `#requestShape` entry         | Returns if `!subscribe` and `isUpToDate`. Breaks loop for one-shot syncs.                                                                        |
+| Guard                  | Scope                         | How it works                                                                                                                                                                                               |
+| ---------------------- | ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `#checkFastLoop`       | Non-live `#requestShape` only | Detects N requests at same offset within a time window. First: clears caches + resets. Persistent: exponential backoff → throws FetchError(502).                                                           |
+| `maxStaleCacheRetries` | Stale response path (L3)      | State machine counts stale retries. Throws FetchError(502) after 3 consecutive stale responses.                                                                                                            |
+| `#maxSnapshotRetries`  | Snapshot 409 path (L6)        | Counts consecutive snapshot 409s. Unconditional cache buster on every retry. Throws FetchError(502) after 5. Runtime-enforced by `Shape #fetchSnapshotWithRetry 409 loop PBT` in `test/pbt-micro.test.ts`. |
+| Pause lock             | `#requestShape` entry         | Returns immediately if paused. Prevents fetches during snapshots.                                                                                                                                          |
+| Up-to-date exit        | `#requestShape` entry         | Returns if `!subscribe` and `isUpToDate`. Breaks loop for one-shot syncs.                                                                                                                                  |
 
 ### Coverage gaps
 

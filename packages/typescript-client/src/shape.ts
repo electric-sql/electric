@@ -2,7 +2,7 @@ import { Message, Offset, Row } from './types'
 import {
   isChangeMessage,
   isControlMessage,
-  bigintSafeStringify,
+  canonicalBigintSafeStringify,
 } from './helpers'
 import { FetchError } from './error'
 import { LogMode, ShapeStreamInterface } from './client'
@@ -144,8 +144,9 @@ export class Shape<T extends Row<unknown> = Row> {
   async requestSnapshot(
     params: Parameters<ShapeStreamInterface<T>[`requestSnapshot`]>[0]
   ): Promise<void> {
-    // Track this snapshot request for future re-execution on shape rotation
-    const key = bigintSafeStringify(params)
+    // Track this snapshot request for future re-execution on shape rotation.
+    // Use canonical stringify so permutation-equivalent params dedup.
+    const key = canonicalBigintSafeStringify(params)
     this.#requestedSubSnapshots.add(key)
     // Ensure the stream is up-to-date so schema is available for parsing
     await this.#awaitUpToDate()
@@ -175,20 +176,23 @@ export class Shape<T extends Row<unknown> = Row> {
 
     messages.forEach((message) => {
       if (isChangeMessage(message)) {
-        shouldNotify = this.#updateShapeStatus(`syncing`)
+        this.#updateShapeStatus(`syncing`)
         if (this.mode === `full`) {
           switch (message.headers.operation) {
             case `insert`:
               this.#data.set(message.key, message.value)
+              shouldNotify = true
               break
             case `update`:
               this.#data.set(message.key, {
                 ...this.#data.get(message.key)!,
                 ...message.value,
               })
+              shouldNotify = true
               break
             case `delete`:
               this.#data.delete(message.key)
+              shouldNotify = true
               break
           }
         } else {
@@ -197,6 +201,7 @@ export class Shape<T extends Row<unknown> = Row> {
             case `insert`:
               this.#insertedKeys.add(message.key)
               this.#data.set(message.key, message.value)
+              shouldNotify = true
               break
             case `update`:
               if (this.#insertedKeys.has(message.key)) {
@@ -204,12 +209,14 @@ export class Shape<T extends Row<unknown> = Row> {
                   ...this.#data.get(message.key)!,
                   ...message.value,
                 })
+                shouldNotify = true
               }
               break
             case `delete`:
               if (this.#insertedKeys.has(message.key)) {
                 this.#data.delete(message.key)
                 this.#insertedKeys.delete(message.key)
+                shouldNotify = true
               }
               break
           }
@@ -219,20 +226,23 @@ export class Shape<T extends Row<unknown> = Row> {
       if (isControlMessage(message)) {
         switch (message.headers.control) {
           case `up-to-date`:
-            shouldNotify = this.#updateShapeStatus(`up-to-date`)
+            if (this.#updateShapeStatus(`up-to-date`)) shouldNotify = true
             if (this.#reexecuteSnapshotsPending) {
               this.#reexecuteSnapshotsPending = false
               void this.#reexecuteSnapshots()
             }
             break
-          case `must-refetch`:
+          case `must-refetch`: {
+            const hadData = this.#data.size > 0 || this.#insertedKeys.size > 0
             this.#data.clear()
             this.#insertedKeys.clear()
             this.#error = false
-            shouldNotify = this.#updateShapeStatus(`syncing`)
+            this.#updateShapeStatus(`syncing`)
+            if (hadData) shouldNotify = true
             // Flag to re-execute sub-snapshots once the new shape is up-to-date
             this.#reexecuteSnapshotsPending = true
             break
+          }
         }
       }
     })
@@ -241,36 +251,68 @@ export class Shape<T extends Row<unknown> = Row> {
   }
 
   async #reexecuteSnapshots(): Promise<void> {
-    // Wait until stream is up-to-date again (ensures schema is available)
-    await this.#awaitUpToDate()
+    try {
+      await this.#awaitUpToDate()
+    } catch (e) {
+      this.#surfaceReexecuteError(e)
+      return
+    }
 
-    // Re-execute all snapshots concurrently
-    await Promise.all(
+    const results = await Promise.all(
       Array.from(this.#requestedSubSnapshots).map(async (jsonParams) => {
         try {
           const snapshot = JSON.parse(jsonParams)
           await this.stream.requestSnapshot(snapshot)
-        } catch (_) {
-          // Ignore and continue; errors will be surfaced via stream onError
+          return undefined
+        } catch (e) {
+          return e
         }
       })
     )
+
+    const firstError = results.find((e) => e !== undefined)
+    if (firstError !== undefined) this.#surfaceReexecuteError(firstError)
+  }
+
+  #surfaceReexecuteError(e: unknown): void {
+    if (e instanceof FetchError) {
+      this.#error = e
+    } else if (e instanceof Error) {
+      this.#error = new FetchError(0, e.message, undefined, {}, ``, e.message)
+    } else {
+      this.#error = new FetchError(0, String(e), undefined, {}, ``, String(e))
+    }
+    this.#notify()
   }
 
   async #awaitUpToDate(): Promise<void> {
+    if (this.#error) throw this.#error
     if (this.stream.isUpToDate) return
-    await new Promise<void>((resolve) => {
+    if (this.stream.error) throw this.stream.error as Error
+    await new Promise<void>((resolve, reject) => {
+      let settled = false
+      let interval: ReturnType<typeof setInterval>
+      let unsub: (() => void) | undefined
+      const done = (action: () => void) => {
+        if (settled) return
+        settled = true
+        clearInterval(interval)
+        unsub?.()
+        action()
+      }
       const check = () => {
-        if (this.stream.isUpToDate) {
-          clearInterval(interval)
-          unsub()
-          resolve()
+        if (this.stream.isUpToDate) return done(resolve)
+        const streamError = this.stream.error as Error | undefined
+        if (streamError) return done(() => reject(streamError))
+        if (this.#error) {
+          const err = this.#error
+          return done(() => reject(err))
         }
       }
-      const interval = setInterval(check, 10)
-      const unsub = this.stream.subscribe(
+      interval = setInterval(check, 10)
+      unsub = this.stream.subscribe(
         () => check(),
-        () => check()
+        (err) => done(() => reject(err))
       )
       check()
     })

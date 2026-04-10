@@ -508,13 +508,14 @@ export interface ShapeStreamInterface<T extends Row<unknown> = Row> {
 /**
  * Creates a canonical shape key from a URL excluding only Electric protocol parameters
  */
-function canonicalShapeKey(url: URL): string {
+export function canonicalShapeKey(url: URL): string {
   const cleanUrl = new URL(url.origin + url.pathname)
 
-  // Copy all params except Electric protocol ones that vary between requests
+  // Copy all params except Electric protocol ones that vary between requests.
+  // Use append() so duplicate keys (e.g. ?table=a&table=b) are preserved.
   for (const [key, value] of url.searchParams) {
     if (!ELECTRIC_PROTOCOL_QUERY_PARAMS.includes(key)) {
-      cleanUrl.searchParams.set(key, value)
+      cleanUrl.searchParams.append(key, value)
     }
   }
 
@@ -1124,9 +1125,9 @@ export class ShapeStream<T extends Row<unknown> = Row>
           SUBSET_PARAM_WHERE_PARAMS,
           bigintSafeStringify(subsetParams.params)
         )
-      if (subsetParams.limit)
+      if (subsetParams.limit !== undefined)
         setQueryParam(fetchUrl, SUBSET_PARAM_LIMIT, subsetParams.limit)
-      if (subsetParams.offset)
+      if (subsetParams.offset !== undefined)
         setQueryParam(fetchUrl, SUBSET_PARAM_OFFSET, subsetParams.offset)
 
       // Prefer structured ORDER BY expressions when available
