@@ -673,11 +673,13 @@ describe(`ExpiredShapesCache`, () => {
     expect(expiredShapesCache.getExpiredHandle(expectedShapeUrl)).toBeNull()
   })
 
-  it(`self-healing accepts stale data when proxy always serves expired handle (by design)`, async () => {
+  it(`self-healing accepts stale data when proxy always serves expired handle (by design) but warns loudly`, async () => {
     // Finding 1 from external review: after self-healing clears the expired
     // entry, if the proxy serves the same stale response with up-to-date,
     // the client accepts it. This is by design — stale data is better than
-    // permanent 502 for one-shot streams.
+    // permanent 502 for one-shot streams — but the client MUST warn loudly
+    // so operators can detect and fix the proxy misconfiguration.
+    const warnSpy = vi.spyOn(console, `warn`).mockImplementation(() => {})
     const expectedShapeUrl = `${shapeUrl}?table=test`
     const staleHandle = `expired-handle`
 
@@ -744,6 +746,20 @@ describe(`ExpiredShapesCache`, () => {
     expect(stream.isUpToDate).toBe(true)
     // 4 stale retries + 1 self-healing = 5
     expect(requestCount).toBe(5)
+
+    // CRITICAL: silent acceptance of stale data would be a bug. The client
+    // MUST emit a warning naming the stale handle so operators can detect
+    // and fix the proxy misconfiguration. Without this signal, apps would
+    // sit on stale data with no way to know.
+    const staleAcceptWarning = warnSpy.mock.calls.find(
+      (args) =>
+        typeof args[0] === `string` &&
+        args[0].includes(
+          `Self-healing retry received the same handle "${staleHandle}"`
+        )
+    )
+    expect(staleAcceptWarning).toBeTruthy()
+    warnSpy.mockRestore()
   })
 
   it(`should clear recovery guard after 204 so self-healing works again`, async () => {

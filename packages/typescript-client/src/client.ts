@@ -624,6 +624,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
   #pendingRequestShapeCacheBuster?: string
   #maxSnapshotRetries = 5
   #expiredShapeRecoveryKey: string | null = null
+  #pendingSelfHealCheck: { shapeKey: string; staleHandle: string } | null = null
 
   constructor(options: ShapeStreamOptions<GetExtensions<T>>) {
     this.options = { subscribe: true, ...options }
@@ -1225,6 +1226,25 @@ export class ShapeStream<T extends Row<unknown> = Row>
       ? expiredShapesCache.getExpiredHandle(shapeKey)
       : null
 
+    // If this response is the first one after a self-healing retry, check
+    // whether the proxy/CDN returned the exact handle we just marked expired.
+    // If so, the client is about to accept stale data silently — loudly warn
+    // so operators can detect and fix the proxy misconfiguration.
+    if (this.#pendingSelfHealCheck) {
+      const { shapeKey: healedKey, staleHandle } = this.#pendingSelfHealCheck
+      this.#pendingSelfHealCheck = null
+      if (shapeKey === healedKey && shapeHandle === staleHandle) {
+        console.warn(
+          `[Electric] Self-healing retry received the same handle "${staleHandle}" that was just marked expired. ` +
+            `This means your proxy/CDN is serving a stale cached response and ignoring cache-buster query params. ` +
+            `The client will proceed with this stale data to avoid a permanent failure, but it may be out of date until the cache refreshes. ` +
+            `Fix: configure your proxy/CDN to include all query parameters (especially 'handle' and 'offset') in its cache key. ` +
+            `For more information visit the troubleshooting guide: ${TROUBLESHOOTING_URL}`,
+          new Error(`stack trace`)
+        )
+      }
+    }
+
     const transition = this.#syncState.handleResponseMetadata({
       status,
       responseHandle: shapeHandle,
@@ -1239,9 +1259,9 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
     this.#syncState = transition.state
 
-    // Clear recovery guard when response transitions directly to live (e.g. 204),
-    // since #onMessages won't run for empty bodies.
-    if (transition.action === `accepted` && this.#syncState.kind === `live`) {
+    // Clear recovery guard on 204 (no-content), since the empty body means
+    // #onMessages won't run to clear it via the up-to-date path.
+    if (status === 204) {
       this.#expiredShapeRecoveryKey = null
     }
 
@@ -1265,6 +1285,16 @@ export class ShapeStream<T extends Row<unknown> = Row>
               new Error(`stack trace`)
             )
             this.#expiredShapeRecoveryKey = shapeKey
+            // Arm a post-self-heal check: if the next response comes back
+            // with the same handle we just marked expired, the proxy/CDN is
+            // still serving stale data and we'll warn loudly instead of
+            // accepting it silently.
+            if (shapeHandle) {
+              this.#pendingSelfHealCheck = {
+                shapeKey,
+                staleHandle: shapeHandle,
+              }
+            }
             this.#reset()
             throw new StaleCacheError(
               `Expired handle entry evicted for self-healing retry`
@@ -1770,9 +1800,10 @@ export class ShapeStream<T extends Row<unknown> = Row>
   #reset(handle?: string) {
     this.#syncState = this.#syncState.markMustRefetch(handle)
     this.#connected = false
-    // releaseAllMatching intentionally doesn't fire onReleased — it's called
-    // from within the running stream loop (#requestShape's 409 handler), so
-    // the stream is already active and doesn't need a resume signal.
+    // releaseAllMatching intentionally doesn't fire onReleased — every caller
+    // (#requestShape's 409 handler, #checkFastLoop, and stale-retry
+    // self-healing in #onInitialResponse) runs inside the active stream loop,
+    // so the stream is already active and doesn't need a resume signal.
     this.#pauseLock.releaseAllMatching(`snapshot`)
   }
 
