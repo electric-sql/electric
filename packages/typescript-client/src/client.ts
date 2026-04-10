@@ -508,13 +508,14 @@ export interface ShapeStreamInterface<T extends Row<unknown> = Row> {
 /**
  * Creates a canonical shape key from a URL excluding only Electric protocol parameters
  */
-function canonicalShapeKey(url: URL): string {
+export function canonicalShapeKey(url: URL): string {
   const cleanUrl = new URL(url.origin + url.pathname)
 
-  // Copy all params except Electric protocol ones that vary between requests
+  // Copy all params except Electric protocol ones that vary between requests.
+  // Use append() so duplicate keys (e.g. ?table=a&table=b) are preserved.
   for (const [key, value] of url.searchParams) {
     if (!ELECTRIC_PROTOCOL_QUERY_PARAMS.includes(key)) {
-      cleanUrl.searchParams.set(key, value)
+      cleanUrl.searchParams.append(key, value)
     }
   }
 
@@ -928,9 +929,9 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
       if (e.status == 409) {
         // Upon receiving a 409, start from scratch with the newly
-        // provided shape handle. If the header is missing (e.g. proxy
-        // stripped it), reset without a handle and use a random
-        // cache-buster query param to ensure the retry URL is unique.
+        // provided shape handle (if present). An unconditional cache
+        // buster ensures the retry URL is always unique regardless of
+        // whether the server returns a new, same, or missing handle.
 
         // Store the current shape URL as expired to avoid future 409s
         if (this.#syncState.handle) {
@@ -939,27 +940,22 @@ export class ShapeStream<T extends Row<unknown> = Row>
         }
 
         const newShapeHandle = e.headers[SHAPE_HANDLE_HEADER]
-        let nextRequestShapeCacheBuster: string | undefined
         if (!newShapeHandle) {
           console.warn(
             `[Electric] Received 409 response without a shape handle header. ` +
               `This likely indicates a proxy or CDN stripping required headers.`,
             new Error(`stack trace`)
           )
-          nextRequestShapeCacheBuster = createCacheBuster()
         }
+        const nextRequestShapeCacheBuster = createCacheBuster()
         this.#reset(newShapeHandle)
 
-        // must refetch control message might be in a list or not depending
-        // on whether it came from an SSE request or long poll. The body may
-        // also be null/undefined if a proxy returned an unexpected response.
-        // Handle all cases defensively here.
-        const messages409 = Array.isArray(e.json)
-          ? e.json
-          : e.json != null
-            ? [e.json]
-            : []
-        await this.#publish(messages409 as Message<T>[])
+        // Notify subscribers that data must be re-fetched so they can
+        // clear accumulated state (e.g., Shape clears its row map).
+        // We publish a synthetic control message rather than the raw 409
+        // body to avoid delivering stale data rows to subscribers.
+        await this.#publish([{ headers: { control: `must-refetch` } }])
+
         return this.#requestShape(nextRequestShapeCacheBuster)
       } else {
         // errors that have reached this point are not actionable without
@@ -1158,9 +1154,9 @@ export class ShapeStream<T extends Row<unknown> = Row>
           SUBSET_PARAM_WHERE_PARAMS,
           bigintSafeStringify(subsetParams.params)
         )
-      if (subsetParams.limit)
+      if (subsetParams.limit !== undefined)
         setQueryParam(fetchUrl, SUBSET_PARAM_LIMIT, subsetParams.limit)
-      if (subsetParams.offset)
+      if (subsetParams.offset !== undefined)
         setQueryParam(fetchUrl, SUBSET_PARAM_OFFSET, subsetParams.offset)
 
       // Prefer structured ORDER BY expressions when available
@@ -2028,22 +2024,16 @@ export class ShapeStream<T extends Row<unknown> = Row>
         // For snapshot 409s, only update the handle — don't reset offset/schema/etc.
         // The main stream is paused and should not be disturbed.
         const nextHandle = e.headers[SHAPE_HANDLE_HEADER]
-        let nextCacheBuster: string | undefined
         if (nextHandle) {
           this.#syncState = this.#syncState.withHandle(nextHandle)
-          // If 409 returned the same handle, the URL won't change —
-          // pass a cache buster to the next retry to force a unique URL.
-          if (nextHandle === usedHandle) {
-            nextCacheBuster = createCacheBuster()
-          }
         } else {
           console.warn(
             `[Electric] Received 409 response without a shape handle header. ` +
               `This likely indicates a proxy or CDN stripping required headers.`,
             new Error(`stack trace`)
           )
-          nextCacheBuster = createCacheBuster()
         }
+        const nextCacheBuster = createCacheBuster()
 
         return this.#fetchSnapshotWithRetry(
           opts,

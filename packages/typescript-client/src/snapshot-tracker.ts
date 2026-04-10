@@ -16,7 +16,13 @@ import { ChangeMessage } from './types'
 export class SnapshotTracker {
   private activeSnapshots: Map<
     number,
-    { xmin: bigint; xmax: bigint; xip_list: bigint[]; keys: Set<string> }
+    {
+      xmin: bigint
+      xmax: bigint
+      xip_list: bigint[]
+      keys: Set<string>
+      databaseLsn: bigint
+    }
   > = new Map()
   private xmaxSnapshots: Map<bigint, Set<number>> = new Map()
   private snapshotsByDatabaseLsn: Map<bigint, Set<number>> = new Map()
@@ -25,24 +31,24 @@ export class SnapshotTracker {
    * Add a new snapshot for tracking
    */
   addSnapshot(metadata: SnapshotMetadata, keys: Set<string>): void {
+    // If this mark already exists, drop its reverse-index entries first
+    // so they don't linger with the old (xmax, database_lsn) coordinates.
+    this.#detachFromReverseIndexes(metadata.snapshot_mark)
+
+    const xmax = BigInt(metadata.xmax)
+    const databaseLsn = BigInt(metadata.database_lsn)
     this.activeSnapshots.set(metadata.snapshot_mark, {
       xmin: BigInt(metadata.xmin),
-      xmax: BigInt(metadata.xmax),
+      xmax,
       xip_list: metadata.xip_list.map(BigInt),
       keys,
+      databaseLsn,
     })
-    const xmaxSet =
-      this.xmaxSnapshots
-        .get(BigInt(metadata.xmax))
-        ?.add(metadata.snapshot_mark) ?? new Set([metadata.snapshot_mark])
-    this.xmaxSnapshots.set(BigInt(metadata.xmax), xmaxSet)
-    const databaseLsnSet =
-      this.snapshotsByDatabaseLsn
-        .get(BigInt(metadata.database_lsn))
-        ?.add(metadata.snapshot_mark) ?? new Set([metadata.snapshot_mark])
-    this.snapshotsByDatabaseLsn.set(
-      BigInt(metadata.database_lsn),
-      databaseLsnSet
+    this.#addToSet(this.xmaxSnapshots, xmax, metadata.snapshot_mark)
+    this.#addToSet(
+      this.snapshotsByDatabaseLsn,
+      databaseLsn,
+      metadata.snapshot_mark
     )
   }
 
@@ -50,7 +56,39 @@ export class SnapshotTracker {
    * Remove a snapshot from tracking
    */
   removeSnapshot(snapshotMark: number): void {
+    this.#detachFromReverseIndexes(snapshotMark)
     this.activeSnapshots.delete(snapshotMark)
+  }
+
+  #detachFromReverseIndexes(snapshotMark: number): void {
+    const existing = this.activeSnapshots.get(snapshotMark)
+    if (!existing) return
+    this.#removeFromSet(this.xmaxSnapshots, existing.xmax, snapshotMark)
+    this.#removeFromSet(
+      this.snapshotsByDatabaseLsn,
+      existing.databaseLsn,
+      snapshotMark
+    )
+  }
+
+  #addToSet(map: Map<bigint, Set<number>>, key: bigint, value: number): void {
+    const set = map.get(key)
+    if (set) {
+      set.add(value)
+    } else {
+      map.set(key, new Set([value]))
+    }
+  }
+
+  #removeFromSet(
+    map: Map<bigint, Set<number>>,
+    key: bigint,
+    value: number
+  ): void {
+    const set = map.get(key)
+    if (!set) return
+    set.delete(value)
+    if (set.size === 0) map.delete(key)
   }
 
   /**

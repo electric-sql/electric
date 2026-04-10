@@ -87,6 +87,26 @@ export function bigintSafeStringify(value: unknown): string {
 }
 
 /**
+ * Canonical, BigInt-safe stringify. Recursively sorts object keys so that
+ * permutation-equivalent inputs produce identical output. Suitable for
+ * dedup keys and cache lookups.
+ */
+export function canonicalBigintSafeStringify(value: unknown): string {
+  return JSON.stringify(canonicalize(value))
+}
+
+function canonicalize(value: unknown): unknown {
+  if (typeof value === `bigint`) return value.toString()
+  if (value === null || typeof value !== `object`) return value
+  if (Array.isArray(value)) return value.map(canonicalize)
+  const sorted: Record<string, unknown> = {}
+  for (const k of Object.keys(value as Record<string, unknown>).sort()) {
+    sorted[k] = canonicalize((value as Record<string, unknown>)[k])
+  }
+  return sorted
+}
+
+/**
  * Checks if a transaction is visible in a snapshot.
  *
  * @param txid - the transaction id to check

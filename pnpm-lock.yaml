@@ -80,8 +80,6 @@ importers:
 
   examples/bash: {}
 
-  examples/basic-example: {}
-
   examples/burn:
     dependencies:
       camelcase:
@@ -676,8 +674,6 @@ importers:
         specifier: ^5.3.4
         version: 5.4.10(@types/node@22.19.1)(lightningcss@1.30.1)(terser@5.44.0)
 
-  examples/nextjs-example: {}
-
   examples/phoenix-liveview:
     dependencies:
       camelcase:
@@ -863,8 +859,6 @@ importers:
         specifier: ^4.18.1
         version: 4.24.4
 
-  examples/redis-sync: {}
-
   examples/remix:
     dependencies:
       '@electric-sql/client':
@@ -943,8 +937,6 @@ importers:
       vite:
         specifier: ^5.3.4
         version: 5.4.10(@types/node@22.19.1)(lightningcss@1.30.1)(terser@5.44.0)
-
-  examples/remix-basic: {}
 
   examples/tanstack:
     dependencies:
@@ -1260,8 +1252,6 @@ importers:
       web-vitals:
         specifier: ^5.1.0
         version: 5.1.0
-
-  examples/tanstack-example: {}
 
   examples/todo-app:
     dependencies:

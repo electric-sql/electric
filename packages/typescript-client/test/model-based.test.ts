@@ -37,12 +37,235 @@ function make200WithData(handle: string): Response {
       {
         offset: `${seq}_0`,
         value: { id: seq },
-        headers: { operation: `insert` },
+        headers: {
+          operation: `insert`,
+          lsn: `${seq}`,
+          op_position: 0,
+          txids: [`${seq}`],
+        },
         key: `key-${seq}`,
       },
     ]),
     { status: 200, headers: allHeaders(handle) }
   )
+}
+
+/** 200 with a single `update` operation followed by up-to-date. */
+function make200WithUpdate(handle: string): Response {
+  const seq = nextSeq()
+  return new Response(
+    JSON.stringify([
+      {
+        offset: `${seq}_0`,
+        value: { id: seq, title: `updated-${seq}` },
+        old_value: { title: `prev-${seq}` },
+        headers: {
+          operation: `update`,
+          lsn: `${seq}`,
+          op_position: 1,
+          last: true,
+          txids: [`${seq}`],
+        },
+        key: `key-${seq}`,
+      },
+      { headers: { control: `up-to-date` } },
+    ]),
+    {
+      status: 200,
+      headers: { ...allHeaders(handle), 'electric-up-to-date': `` },
+    }
+  )
+}
+
+/** 200 with a single `delete` operation followed by up-to-date. */
+function make200WithDelete(handle: string): Response {
+  const seq = nextSeq()
+  return new Response(
+    JSON.stringify([
+      {
+        offset: `${seq}_0`,
+        value: { id: seq },
+        headers: {
+          operation: `delete`,
+          lsn: `${seq}`,
+          op_position: 0,
+          last: true,
+        },
+        key: `key-${seq}`,
+      },
+      { headers: { control: `up-to-date` } },
+    ]),
+    {
+      status: 200,
+      headers: { ...allHeaders(handle), 'electric-up-to-date': `` },
+    }
+  )
+}
+
+/** 200 with a mixed batch (insert + update + delete + up-to-date). */
+function make200MixedBatch(handle: string): Response {
+  const seq = nextSeq()
+  return new Response(
+    JSON.stringify([
+      {
+        offset: `${seq}_0`,
+        value: { id: seq },
+        headers: { operation: `insert`, lsn: `${seq}`, op_position: 0 },
+        key: `ins-${seq}`,
+      },
+      {
+        offset: `${seq}_1`,
+        value: { id: seq, title: `t` },
+        headers: { operation: `update`, lsn: `${seq}`, op_position: 1 },
+        key: `upd-${seq}`,
+      },
+      {
+        offset: `${seq}_2`,
+        value: { id: seq },
+        headers: {
+          operation: `delete`,
+          lsn: `${seq}`,
+          op_position: 2,
+          last: true,
+        },
+        key: `del-${seq}`,
+      },
+      { headers: { control: `up-to-date` } },
+    ]),
+    {
+      status: 200,
+      headers: { ...allHeaders(handle), 'electric-up-to-date': `` },
+    }
+  )
+}
+
+/**
+ * 200 with a stray `snapshot-end` control message (orphan snapshot_mark).
+ * The client should tolerate unknown snapshot marks — no snapshot was
+ * requested, so the tracker should ignore it gracefully.
+ */
+function make200StraySnapshotEnd(handle: string): Response {
+  const seq = nextSeq()
+  return new Response(
+    JSON.stringify([
+      {
+        headers: {
+          control: `snapshot-end`,
+          xmin: `${seq * 10}`,
+          xmax: `${seq * 10 + 50}`,
+          xip_list: [],
+          snapshot_mark: 999000 + seq, // never requested
+        },
+      },
+      { headers: { control: `up-to-date` } },
+    ]),
+    {
+      status: 200,
+      headers: { ...allHeaders(handle), 'electric-up-to-date': `` },
+    }
+  )
+}
+
+/**
+ * 200 with an unknown control message type. Forward-compatibility:
+ * the client should ignore unknown controls rather than crash.
+ */
+function make200UnknownControl(handle: string): Response {
+  nextSeq()
+  return new Response(
+    JSON.stringify([
+      { headers: { control: `future-unknown-${nextSeq()}` } },
+      { headers: { control: `up-to-date` } },
+    ]),
+    {
+      status: 200,
+      headers: { ...allHeaders(handle), 'electric-up-to-date': `` },
+    }
+  )
+}
+
+/**
+ * 200 with an op carrying a snapshot_mark that wasn't requested. The
+ * SnapshotTracker's shouldRejectMessage() must handle unknown marks.
+ */
+function make200OpWithOrphanSnapshotMark(handle: string): Response {
+  const seq = nextSeq()
+  return new Response(
+    JSON.stringify([
+      {
+        offset: `${seq}_0`,
+        value: { id: seq },
+        headers: {
+          operation: `insert`,
+          lsn: `${seq}`,
+          op_position: 0,
+          snapshot_mark: 888000 + seq,
+        },
+        key: `orphan-${seq}`,
+      },
+      { headers: { control: `up-to-date` } },
+    ]),
+    {
+      status: 200,
+      headers: { ...allHeaders(handle), 'electric-up-to-date': `` },
+    }
+  )
+}
+
+/**
+ * 200 body is a JSON string (not an array). Client should throw
+ * FetchError (non-array response body) → retryable via #backoffAndRetry.
+ */
+function make200StringBody(handle: string): Response {
+  nextSeq()
+  return new Response(JSON.stringify(`just a string, not an array`), {
+    status: 200,
+    headers: allHeaders(handle),
+  })
+}
+
+/** 429 Too Many Requests with Retry-After. Propagates to shape-level retry. */
+function make429(): Response {
+  return new Response(
+    JSON.stringify({ message: `Too many requests — try again later` }),
+    {
+      status: 429,
+      headers: {
+        'content-type': `application/json`,
+        'retry-after': `0`,
+      },
+    }
+  )
+}
+
+/** 503 Service Unavailable with Retry-After. Propagates to shape-level retry. */
+function make503(): Response {
+  return new Response(
+    JSON.stringify({ code: `database_unreachable`, error: `DB unreachable` }),
+    {
+      status: 503,
+      headers: {
+        'content-type': `application/json`,
+        'retry-after': `0`,
+      },
+    }
+  )
+}
+
+/** 500 Internal Server Error. Propagates to shape-level retry. */
+function make500(): Response {
+  return new Response(JSON.stringify({ message: `Unexpected error` }), {
+    status: 500,
+    headers: { 'content-type': `application/json` },
+  })
+}
+
+/** 404 Not Found. Non-retryable 4xx (like 400) in the fetch backoff layer. */
+function make404(): Response {
+  return new Response(JSON.stringify({ message: `Shape not found` }), {
+    status: 404,
+    headers: { 'content-type': `application/json` },
+  })
 }
 
 /** Valid 200 with up-to-date control message. Resets the error retry counter. */
@@ -96,6 +319,22 @@ function make409(newHandle: string): Response {
       status: 409,
       headers: {
         'electric-handle': newHandle,
+        'content-type': `application/json`,
+      },
+    }
+  )
+}
+
+/**
+ * 409 Conflict without a handle header. Simulates a proxy stripping
+ * the header. Must always produce a unique retry URL via cache buster.
+ */
+function make409NoHandle(): Response {
+  return new Response(
+    JSON.stringify([{ headers: { control: `must-refetch` } }]),
+    {
+      status: 409,
+      headers: {
         'content-type': `application/json`,
       },
     }
@@ -156,11 +395,10 @@ class FetchGate {
     if (init?.signal?.aborted) return Response.error()
     this._requestCount++
 
-    // Track URLs for invariant checking
     const urlStr = input.toString()
     this.prevUrl = this.lastUrl
     this.lastUrl = urlStr
-    if (urlStr.length > this.maxUrlLength) this.maxUrlLength = urlStr.length
+    this.maxUrlLength = Math.max(this.maxUrlLength, urlStr.length)
 
     if (this._onRequest) {
       const cb = this._onRequest
@@ -217,7 +455,7 @@ interface StreamReal {
 async function waitUntilSettled(
   gate: FetchGate,
   errorRef: { error: Error | null },
-  maxYields = 50
+  maxYields = 200
 ): Promise<void> {
   for (let i = 0; i < maxYields; i++) {
     await new Promise((r) => setTimeout(r, 0))
@@ -228,12 +466,16 @@ async function waitUntilSettled(
   )
 }
 
-async function createStreamReal(): Promise<StreamReal> {
-  // Reset all shared state to prevent cross-iteration pollution
+/** Reset all shared state to prevent cross-iteration pollution. */
+function resetSharedState(): void {
   responseSeq = 0
   localStorage.clear()
   expiredShapesCache.clear()
   upToDateTracker.clear()
+}
+
+async function createStreamReal(): Promise<StreamReal> {
+  resetSharedState()
 
   const initialHandle = `test-handle`
   const gate = new FetchGate()
@@ -248,6 +490,16 @@ async function createStreamReal(): Promise<StreamReal> {
     signal: aborter.signal,
     subscribe: true,
     onError: () => ({}), // always retry — the scenario under test
+    // Zero-delay backoff with no internal retries so 5xx/429 responses
+    // propagate to the shape-level #backoffAndRetry loop on every call.
+    // The fetch-layer backoff is covered by unit tests; here we want to
+    // stress the higher-level state machine.
+    backoffOptions: {
+      initialDelay: 0,
+      maxDelay: 0,
+      multiplier: 1,
+      maxRetries: 0,
+    },
   })
 
   stream.subscribe(
@@ -301,14 +553,25 @@ const MAX_URL_LENGTH = 2000
  * and handle/offset mismatches (bug #10).
  */
 function assertGlobalInvariants(r: StreamReal): void {
-  // URL length is bounded (catches unbounded suffix growth like -next-next-next)
   expect(r.gate.maxUrlLength).toBeLessThan(MAX_URL_LENGTH)
 
-  // After any successful (non-error) response, isUpToDate state should be
-  // consistent with what we observe (no silent stuck states)
   if (!r.subscriberError && r.stream.isUpToDate) {
-    // If the stream thinks it's up-to-date, it should have synced at some point
     expect(r.stream.lastSyncedAt()).toBeDefined()
+  }
+}
+
+/**
+ * Asserts that a 409 response produced a unique retry URL, catching
+ * identity-loop bugs where the retry URL matches the pre-409 URL.
+ */
+function assert409ProducedUniqueUrl(
+  r: StreamReal,
+  prevUrl: string | null
+): void {
+  expect(r.subscriberError).toBeNull()
+  assertGlobalInvariants(r)
+  if (prevUrl) {
+    expect(r.gate.lastUrl).not.toBe(prevUrl)
   }
 }
 
@@ -319,16 +582,28 @@ function assertGlobalInvariants(r: StreamReal): void {
 // matches. fast-check generates adversarial sequences and shrinks
 // failures to minimal reproductions.
 
+/**
+ * Shared logic for successful responses that reset the consecutive error
+ * counter and should not produce a subscriber error.
+ */
+async function runSuccessResponse(
+  m: StreamModel,
+  r: StreamReal,
+  response: Response
+): Promise<void> {
+  m.consecutiveErrors = 0
+  await r.respond(response)
+  expect(r.subscriberError).toBeNull()
+  assertGlobalInvariants(r)
+}
+
 /** 200 with data — counter resets to 0 */
 class Respond200DataCmd implements fc.AsyncCommand<StreamModel, StreamReal> {
   check(m: Readonly<StreamModel>): boolean {
     return !m.terminated
   }
   async run(m: StreamModel, r: StreamReal): Promise<void> {
-    m.consecutiveErrors = 0
-    await r.respond(make200WithData(r.currentHandle))
-    expect(r.subscriberError).toBeNull()
-    assertGlobalInvariants(r)
+    await runSuccessResponse(m, r, make200WithData(r.currentHandle))
   }
   toString(): string {
     return `Respond200Data`
@@ -343,10 +618,7 @@ class Respond200UpToDateCmd
     return !m.terminated
   }
   async run(m: StreamModel, r: StreamReal): Promise<void> {
-    m.consecutiveErrors = 0
-    await r.respond(make200UpToDate(r.currentHandle))
-    expect(r.subscriberError).toBeNull()
-    assertGlobalInvariants(r)
+    await runSuccessResponse(m, r, make200UpToDate(r.currentHandle))
   }
   toString(): string {
     return `Respond200UpToDate`
@@ -377,13 +649,33 @@ class Respond204Cmd implements fc.AsyncCommand<StreamModel, StreamReal> {
     return !m.terminated
   }
   async run(m: StreamModel, r: StreamReal): Promise<void> {
-    m.consecutiveErrors = 0
-    await r.respond(make204(r.currentHandle))
-    expect(r.subscriberError).toBeNull()
-    assertGlobalInvariants(r)
+    await runSuccessResponse(m, r, make204(r.currentHandle))
   }
   toString(): string {
     return `Respond204`
+  }
+}
+
+/**
+ * Shared logic for error responses that increment the consecutive error
+ * counter and may terminate the stream after MAX_CONSECUTIVE_ERROR_RETRIES.
+ */
+async function runRetryableErrorResponse(
+  m: StreamModel,
+  r: StreamReal,
+  response: Response
+): Promise<void> {
+  m.consecutiveErrors++
+  const shouldTerminate = m.consecutiveErrors > MAX_CONSECUTIVE_ERROR_RETRIES
+  if (shouldTerminate) m.terminated = true
+
+  await r.respond(response)
+
+  if (shouldTerminate) {
+    expect(r.subscriberError).not.toBeNull()
+  } else {
+    expect(r.subscriberError).toBeNull()
+    assertGlobalInvariants(r)
   }
 }
 
@@ -393,18 +685,7 @@ class Respond400Cmd implements fc.AsyncCommand<StreamModel, StreamReal> {
     return !m.terminated
   }
   async run(m: StreamModel, r: StreamReal): Promise<void> {
-    m.consecutiveErrors++
-    const shouldTerminate = m.consecutiveErrors > MAX_CONSECUTIVE_ERROR_RETRIES
-    if (shouldTerminate) m.terminated = true
-
-    await r.respond(make400())
-
-    if (shouldTerminate) {
-      expect(r.subscriberError).not.toBeNull()
-    } else {
-      expect(r.subscriberError).toBeNull()
-      assertGlobalInvariants(r)
-    }
+    await runRetryableErrorResponse(m, r, make400())
   }
   toString(): string {
     return `Respond400`
@@ -425,13 +706,7 @@ class Respond409Cmd implements fc.AsyncCommand<StreamModel, StreamReal> {
     const newHandle = `handle-${nextSeq()}`
     await r.respond(make409(newHandle))
     r.currentHandle = newHandle
-    expect(r.subscriberError).toBeNull()
-    assertGlobalInvariants(r)
-    // After 409, the retry URL must differ from the pre-409 URL
-    // (catches identity-loop bugs like bug #1 and #6)
-    if (prevUrl) {
-      expect(r.gate.lastUrl).not.toBe(prevUrl)
-    }
+    assert409ProducedUniqueUrl(r, prevUrl)
   }
   toString(): string {
     return `Respond409`
@@ -446,18 +721,7 @@ class RespondMalformed200Cmd
     return !m.terminated
   }
   async run(m: StreamModel, r: StreamReal): Promise<void> {
-    m.consecutiveErrors++
-    const shouldTerminate = m.consecutiveErrors > MAX_CONSECUTIVE_ERROR_RETRIES
-    if (shouldTerminate) m.terminated = true
-
-    await r.respond(makeMalformed200(r.currentHandle))
-
-    if (shouldTerminate) {
-      expect(r.subscriberError).not.toBeNull()
-    } else {
-      expect(r.subscriberError).toBeNull()
-      assertGlobalInvariants(r)
-    }
+    await runRetryableErrorResponse(m, r, makeMalformed200(r.currentHandle))
   }
   toString(): string {
     return `RespondMalformed200`
@@ -484,39 +748,355 @@ class RespondMissingHeadersCmd
   }
 }
 
+/**
+ * 409 Conflict without a handle header (proxy stripped it).
+ * Handled by creating a random cache buster. Does NOT affect
+ * the retry counter — same as normal 409.
+ */
+class Respond409NoHandleCmd
+  implements fc.AsyncCommand<StreamModel, StreamReal>
+{
+  check(m: Readonly<StreamModel>): boolean {
+    return !m.terminated
+  }
+  async run(_m: StreamModel, r: StreamReal): Promise<void> {
+    const prevUrl = r.gate.lastUrl
+    await r.respond(make409NoHandle())
+    // Simulates server recovery after the proxy-stripped-handle 409:
+    // the next response must carry a fresh handle, not an empty string.
+    r.currentHandle = `handle-recovered-${nextSeq()}`
+    assert409ProducedUniqueUrl(r, prevUrl)
+  }
+  toString(): string {
+    return `Respond409NoHandle`
+  }
+}
+
+/** 200 with a single update operation — counter resets to 0 */
+class Respond200UpdateCmd implements fc.AsyncCommand<StreamModel, StreamReal> {
+  check(m: Readonly<StreamModel>): boolean {
+    return !m.terminated
+  }
+  async run(m: StreamModel, r: StreamReal): Promise<void> {
+    await runSuccessResponse(m, r, make200WithUpdate(r.currentHandle))
+  }
+  toString(): string {
+    return `Respond200Update`
+  }
+}
+
+/** 200 with a single delete operation — counter resets to 0 */
+class Respond200DeleteCmd implements fc.AsyncCommand<StreamModel, StreamReal> {
+  check(m: Readonly<StreamModel>): boolean {
+    return !m.terminated
+  }
+  async run(m: StreamModel, r: StreamReal): Promise<void> {
+    await runSuccessResponse(m, r, make200WithDelete(r.currentHandle))
+  }
+  toString(): string {
+    return `Respond200Delete`
+  }
+}
+
+/** 200 with a mixed batch (insert + update + delete + up-to-date) */
+class Respond200MixedBatchCmd
+  implements fc.AsyncCommand<StreamModel, StreamReal>
+{
+  check(m: Readonly<StreamModel>): boolean {
+    return !m.terminated
+  }
+  async run(m: StreamModel, r: StreamReal): Promise<void> {
+    await runSuccessResponse(m, r, make200MixedBatch(r.currentHandle))
+  }
+  toString(): string {
+    return `Respond200MixedBatch`
+  }
+}
+
+/**
+ * 200 with a stray snapshot-end control (orphan snapshot_mark).
+ * Client should tolerate it — counter resets on the trailing up-to-date.
+ */
+class Respond200StraySnapshotEndCmd
+  implements fc.AsyncCommand<StreamModel, StreamReal>
+{
+  check(m: Readonly<StreamModel>): boolean {
+    return !m.terminated
+  }
+  async run(m: StreamModel, r: StreamReal): Promise<void> {
+    await runSuccessResponse(m, r, make200StraySnapshotEnd(r.currentHandle))
+  }
+  toString(): string {
+    return `Respond200StraySnapshotEnd`
+  }
+}
+
+/** 200 with an unknown control message type — counter resets on trailing up-to-date. */
+class Respond200UnknownControlCmd
+  implements fc.AsyncCommand<StreamModel, StreamReal>
+{
+  check(m: Readonly<StreamModel>): boolean {
+    return !m.terminated
+  }
+  async run(m: StreamModel, r: StreamReal): Promise<void> {
+    await runSuccessResponse(m, r, make200UnknownControl(r.currentHandle))
+  }
+  toString(): string {
+    return `Respond200UnknownControl`
+  }
+}
+
+/**
+ * 200 with an operation carrying an orphan snapshot_mark. The
+ * SnapshotTracker must gracefully accept unknown marks.
+ */
+class Respond200OrphanSnapshotMarkCmd
+  implements fc.AsyncCommand<StreamModel, StreamReal>
+{
+  check(m: Readonly<StreamModel>): boolean {
+    return !m.terminated
+  }
+  async run(m: StreamModel, r: StreamReal): Promise<void> {
+    await runSuccessResponse(
+      m,
+      r,
+      make200OpWithOrphanSnapshotMark(r.currentHandle)
+    )
+  }
+  toString(): string {
+    return `Respond200OrphanSnapshotMark`
+  }
+}
+
+/**
+ * 200 with a JSON string body (not an array). Throws FetchError —
+ * behaves as retryable error (same shape as RespondMalformed200Cmd).
+ */
+class Respond200StringBodyCmd
+  implements fc.AsyncCommand<StreamModel, StreamReal>
+{
+  check(m: Readonly<StreamModel>): boolean {
+    return !m.terminated
+  }
+  async run(m: StreamModel, r: StreamReal): Promise<void> {
+    await runRetryableErrorResponse(m, r, make200StringBody(r.currentHandle))
+  }
+  toString(): string {
+    return `Respond200StringBody`
+  }
+}
+
+/**
+ * 429 Too Many Requests. With `maxRetries: 0`, the fetch-backoff layer
+ * rethrows immediately, so the shape-level retry counter ticks.
+ */
+class Respond429Cmd implements fc.AsyncCommand<StreamModel, StreamReal> {
+  check(m: Readonly<StreamModel>): boolean {
+    return !m.terminated
+  }
+  async run(m: StreamModel, r: StreamReal): Promise<void> {
+    await runRetryableErrorResponse(m, r, make429())
+  }
+  toString(): string {
+    return `Respond429`
+  }
+}
+
+/** 503 Service Unavailable — retryable, counter ticks at shape level. */
+class Respond503Cmd implements fc.AsyncCommand<StreamModel, StreamReal> {
+  check(m: Readonly<StreamModel>): boolean {
+    return !m.terminated
+  }
+  async run(m: StreamModel, r: StreamReal): Promise<void> {
+    await runRetryableErrorResponse(m, r, make503())
+  }
+  toString(): string {
+    return `Respond503`
+  }
+}
+
+/** 500 Internal Server Error — retryable, counter ticks at shape level. */
+class Respond500Cmd implements fc.AsyncCommand<StreamModel, StreamReal> {
+  check(m: Readonly<StreamModel>): boolean {
+    return !m.terminated
+  }
+  async run(m: StreamModel, r: StreamReal): Promise<void> {
+    await runRetryableErrorResponse(m, r, make500())
+  }
+  toString(): string {
+    return `Respond500`
+  }
+}
+
+/** 404 Not Found — 4xx, non-retryable at fetch layer, ticks at shape layer. */
+class Respond404Cmd implements fc.AsyncCommand<StreamModel, StreamReal> {
+  check(m: Readonly<StreamModel>): boolean {
+    return !m.terminated
+  }
+  async run(m: StreamModel, r: StreamReal): Promise<void> {
+    await runRetryableErrorResponse(m, r, make404())
+  }
+  toString(): string {
+    return `Respond404`
+  }
+}
+
+/**
+ * 409 with the same handle as the current one.
+ */
+class Respond409SameHandleCmd
+  implements fc.AsyncCommand<StreamModel, StreamReal>
+{
+  check(m: Readonly<StreamModel>): boolean {
+    return !m.terminated
+  }
+  async run(_m: StreamModel, r: StreamReal): Promise<void> {
+    const prevUrl = r.gate.lastUrl
+    await r.respond(make409(r.currentHandle))
+    assert409ProducedUniqueUrl(r, prevUrl)
+  }
+  toString(): string {
+    return `Respond409SameHandle`
+  }
+}
+
+// ─── Scenario Tests ────────────────────────────────────────────────
+
+describe(`ShapeStream targeted scenario tests`, () => {
+  it(`409 publishes only a synthetic must-refetch control message`, async () => {
+    resetSharedState()
+
+    const initialHandle = `test-handle`
+    const gate = new FetchGate()
+    const aborter = new AbortController()
+    const errorRef = { error: null as Error | null }
+    const receivedBatches: unknown[][] = []
+
+    const stream = new ShapeStream({
+      url: `https://example.com/v1/shape`,
+      params: { table: `test` },
+      fetchClient: gate.fetchClient,
+      signal: aborter.signal,
+      subscribe: true,
+      onError: () => ({}),
+    })
+
+    stream.subscribe(
+      (msgs) => {
+        receivedBatches.push(msgs)
+      },
+      (err: Error) => {
+        errorRef.error = err
+      }
+    )
+
+    // Bootstrap into live mode
+    await gate.waitForRequest()
+    gate.provideResponse(make200UpToDate(initialHandle))
+    await waitUntilSettled(gate, errorRef)
+
+    receivedBatches.length = 0
+
+    // Send a 409 — client resets and publishes a synthetic must-refetch
+    await gate.waitForRequest()
+    gate.provideResponse(make409(`new-handle`))
+    await waitUntilSettled(gate, errorRef)
+
+    // Subscriber should receive only the synthetic must-refetch control
+    // message — no data rows from the raw 409 response body
+    expect(receivedBatches).toHaveLength(1)
+    expect(receivedBatches[0]).toEqual([
+      { headers: { control: `must-refetch` } },
+    ])
+
+    aborter.abort()
+  })
+
+  it(`consecutive 409s with the same handle produce unique retry URLs`, async () => {
+    const real = await createStreamReal()
+    try {
+      // Advance to a non-initial offset so the first 409 reset is visible
+      await real.respond(make200WithData(real.currentHandle))
+
+      // First 409 with same handle — URL changes because offset resets to -1
+      const urlBefore = real.gate.lastUrl
+      await real.respond(make409(real.currentHandle))
+      expect(real.gate.lastUrl).not.toBe(urlBefore)
+
+      // Second 409 with same handle — offset is already -1, handle unchanged.
+      // Without a cache buster, the retry URL would be identical.
+      const urlAfterFirstRetry = real.gate.lastUrl
+      await real.respond(make409(real.currentHandle))
+      expect(real.gate.lastUrl).not.toBe(urlAfterFirstRetry)
+    } finally {
+      real.cleanup()
+    }
+  })
+})
+
 // ─── Property Tests ─────────────────────────────────────────────────
 
 describe(`ShapeStream model-based property tests`, () => {
-  it(`bounded retry: any mix of server responses respects the retry limit and counter resets`, async () => {
-    await fc.assert(
-      fc.asyncProperty(
-        fc.commands(
-          [
-            fc.constant(new Respond200DataCmd()),
-            fc.constant(new Respond200UpToDateCmd()),
-            fc.constant(new Respond200EmptyCmd()),
-            fc.constant(new Respond204Cmd()),
-            fc.constant(new Respond400Cmd()),
-            fc.constant(new Respond409Cmd()),
-            fc.constant(new RespondMalformed200Cmd()),
-            fc.constant(new RespondMissingHeadersCmd()),
-          ],
-          { maxCommands: 80 }
+  const PBT_NUM_RUNS = Number(process.env.PBT_NUM_RUNS ?? `200`)
+  const PBT_TIMEOUT_MS = Number(process.env.PBT_TIMEOUT_MS ?? `120000`)
+  const PBT_MAX_COMMANDS = Number(process.env.PBT_MAX_COMMANDS ?? `80`)
+  const PBT_SEED = process.env.PBT_SEED
+    ? Number(process.env.PBT_SEED)
+    : undefined
+  const PBT_PATH = process.env.PBT_PATH
+
+  it(
+    `bounded retry: any mix of server responses respects the retry limit and counter resets`,
+    async () => {
+      await fc.assert(
+        fc.asyncProperty(
+          fc.commands(
+            [
+              fc.constant(new Respond200DataCmd()),
+              fc.constant(new Respond200UpToDateCmd()),
+              fc.constant(new Respond200EmptyCmd()),
+              fc.constant(new Respond204Cmd()),
+              fc.constant(new Respond200UpdateCmd()),
+              fc.constant(new Respond200DeleteCmd()),
+              fc.constant(new Respond200MixedBatchCmd()),
+              fc.constant(new Respond200StraySnapshotEndCmd()),
+              fc.constant(new Respond200UnknownControlCmd()),
+              fc.constant(new Respond200OrphanSnapshotMarkCmd()),
+              fc.constant(new Respond400Cmd()),
+              fc.constant(new Respond404Cmd()),
+              fc.constant(new Respond429Cmd()),
+              fc.constant(new Respond500Cmd()),
+              fc.constant(new Respond503Cmd()),
+              fc.constant(new Respond409Cmd()),
+              fc.constant(new Respond409SameHandleCmd()),
+              fc.constant(new Respond409NoHandleCmd()),
+              fc.constant(new RespondMalformed200Cmd()),
+              fc.constant(new Respond200StringBodyCmd()),
+              fc.constant(new RespondMissingHeadersCmd()),
+            ],
+            { maxCommands: PBT_MAX_COMMANDS }
+          ),
+          async (cmds) => {
+            const real = await createStreamReal()
+            const model: StreamModel = {
+              consecutiveErrors: 0,
+              terminated: false,
+            }
+            try {
+              await fc.asyncModelRun(() => ({ model, real }), cmds)
+            } finally {
+              real.cleanup()
+            }
+          }
         ),
-        async (cmds) => {
-          const real = await createStreamReal()
-          const model: StreamModel = {
-            consecutiveErrors: 0,
-            terminated: false,
-          }
-          try {
-            await fc.asyncModelRun(() => ({ model, real }), cmds)
-          } finally {
-            real.cleanup()
-          }
+        {
+          numRuns: PBT_NUM_RUNS,
+          ...(PBT_SEED !== undefined ? { seed: PBT_SEED } : {}),
+          ...(PBT_PATH ? { path: PBT_PATH } : {}),
+          verbose: true,
         }
-      ),
-      { numRuns: 200 }
-    )
-  }, 120_000)
+      )
+    },
+    PBT_TIMEOUT_MS
+  )
 })

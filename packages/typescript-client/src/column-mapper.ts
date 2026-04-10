@@ -63,15 +63,21 @@ export interface ColumnMapper {
  * Handles edge cases:
  * - Preserves leading underscores: `_user_id` → `_userId`
  * - Preserves trailing underscores: `user_id_` → `userId_`
- * - Collapses multiple underscores: `user__id` → `userId`
+ * - Preserves multi-underscore count for injectivity:
+ *     `user__id` → `user_Id`, `user___id` → `user__Id`
  * - Normalizes to lowercase first: `user_Column` → `userColumn`
+ *
+ * The transform is designed to be injective on lowercase input and
+ * round-trippable via `camelToSnake`, so distinct db columns never
+ * collide on the same app key.
  *
  * @example
  * snakeToCamel('user_id') // 'userId'
  * snakeToCamel('project_id') // 'projectId'
  * snakeToCamel('created_at') // 'createdAt'
  * snakeToCamel('_private') // '_private'
- * snakeToCamel('user__id') // 'userId'
+ * snakeToCamel('user__id') // 'user_Id'
+ * snakeToCamel('user___id') // 'user__Id'
  * snakeToCamel('user_id_') // 'userId_'
  */
 export function snakeToCamel(str: string): string {
@@ -91,10 +97,13 @@ export function snakeToCamel(str: string): string {
   // Convert to lowercase
   const normalized = core.toLowerCase()
 
-  // Convert snake_case to camelCase (handling multiple underscores)
-  const camelCased = normalized.replace(/_+([a-z])/g, (_, letter) =>
-    letter.toUpperCase()
-  )
+  // Convert snake_case to camelCase. For a run of n underscores before
+  // a letter, keep (n-1) literal underscores and uppercase the letter.
+  // This preserves underscore count so distinct inputs never collide.
+  const camelCased = normalized.replace(/_+([a-z])/g, (match, letter) => {
+    const extraUnderscores = `_`.repeat(match.length - 2)
+    return extraUnderscores + letter.toUpperCase()
+  })
 
   return leadingUnderscores + camelCased + trailingUnderscores
 }
@@ -116,9 +125,10 @@ export function snakeToCamel(str: string): string {
 export function camelToSnake(str: string): string {
   return (
     str
-      // Insert underscore before uppercase letters that follow lowercase letters
-      // e.g., userId -> user_Id
-      .replace(/([a-z])([A-Z])/g, `$1_$2`)
+      // Insert underscore before uppercase letters that follow a
+      // lowercase letter or an underscore. The `_` case preserves the
+      // injective encoding from snakeToCamel: `user_Id` → `user__id`.
+      .replace(/([a-z_])([A-Z])/g, `$1_$2`)
       // Insert underscore before uppercase letters that are followed by lowercase letters
       // This handles acronyms: userID -> user_ID, but parseHTMLString -> parse_HTML_String
       .replace(/([A-Z]+)([A-Z][a-z])/g, `$1_$2`)

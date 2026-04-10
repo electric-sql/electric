@@ -25,6 +25,7 @@ sst-*.log
 **/deps/*
 **/junit
 **/coverage
+**/pbt-soak-logs
 response.tmp
 .claude
 !website/.claude/commands
