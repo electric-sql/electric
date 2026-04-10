@@ -193,6 +193,29 @@ defmodule Electric.Replication.Eval.RunnerTest do
       assert {:ok, "present"} = Runner.execute(expr, %{["value"] => "present"})
     end
 
+    test "coalesce short-circuits later arguments" do
+      expr =
+        ~S|coalesce("value", 1 / "divisor")|
+        |> Parser.parse_and_validate_expression!(
+          refs: %{["value"] => :int4, ["divisor"] => :int4}
+        )
+
+      assert {:ok, 10} = Runner.execute(expr, %{["value"] => 10, ["divisor"] => 0})
+
+      assert {:error, _} =
+               Runner.execute(expr, %{["value"] => nil, ["divisor"] => 0})
+    end
+
+    test "coalesce skips unreachable constant branches after a non-null fallback" do
+      expr =
+        ~S|coalesce("value", 1, 1 / "divisor")|
+        |> Parser.parse_and_validate_expression!(
+          refs: %{["value"] => :int4, ["divisor"] => :int4}
+        )
+
+      assert {:ok, 1} = Runner.execute(expr, %{["value"] => nil, ["divisor"] => 0})
+    end
+
     test "supports greatest as a variadic function and ignores nil arguments" do
       expr =
         ~S|greatest("value", 2, 3, NULL::int4)|

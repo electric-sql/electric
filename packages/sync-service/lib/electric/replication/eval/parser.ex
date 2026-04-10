@@ -483,9 +483,64 @@ defmodule Electric.Replication.Eval.Parser do
   end
 
   defp reduce_ast(ast) do
-    Walker.fold(ast, fn node, children, _ctx ->
-      do_maybe_reduce(Map.merge(node, children))
-    end)
+    reduce_node(ast)
+  end
+
+  defp reduce_node(%Const{} = const), do: {:ok, const}
+  defp reduce_node(%Ref{} = ref), do: {:ok, ref}
+  defp reduce_node(%UnknownConst{} = unknown), do: {:ok, unknown}
+
+  defp reduce_node(%Array{elements: elements} = array) do
+    with {:ok, elements} <- Utils.map_while_ok(elements, &reduce_node/1) do
+      do_maybe_reduce(%{array | elements: elements})
+    end
+  end
+
+  defp reduce_node(%RowExpr{elements: elements} = row_expr) do
+    with {:ok, elements} <- Utils.map_while_ok(elements, &reduce_node/1) do
+      do_maybe_reduce(%{row_expr | elements: elements})
+    end
+  end
+
+  defp reduce_node(
+         %Func{name: "coalesce", variadic_arg: 0, args: [%Array{} = variadic_args]} = func
+       ) do
+    case reduce_coalesce_elements(variadic_args.elements, []) do
+      {:ok, {:const, const}} ->
+        {:ok, const}
+
+      {:ok, {:elements, elements}} ->
+        {:ok, %{func | args: [%{variadic_args | elements: elements}]}}
+
+      {:ok, :all_nil} ->
+        {:ok, %Const{type: func.type, location: func.location, value: nil}}
+
+      {:error, {_loc, _message}} = error ->
+        error
+    end
+  end
+
+  defp reduce_node(%Func{args: args} = func) do
+    with {:ok, args} <- Utils.map_while_ok(args, &reduce_node/1) do
+      do_maybe_reduce(%{func | args: args})
+    end
+  end
+
+  defp reduce_coalesce_elements([], _reduced_prefix), do: {:ok, :all_nil}
+
+  defp reduce_coalesce_elements([arg | rest], reduced_prefix) do
+    with {:ok, reduced_arg} <- reduce_node(arg) do
+      case reduced_arg do
+        %Const{value: nil} ->
+          reduce_coalesce_elements(rest, [reduced_arg | reduced_prefix])
+
+        %Const{} = const ->
+          {:ok, {:const, const}}
+
+        other ->
+          {:ok, {:elements, Enum.reverse([other | reduced_prefix]) ++ rest}}
+      end
+    end
   end
 
   @spec node_to_ast(struct(), map(), map(), map()) ::

@@ -290,6 +290,11 @@ defmodule Electric.Replication.Eval.ParserTest do
              } = result
     end
 
+    test "should stop reducing coalesce after the first non-null constant" do
+      assert {:ok, %Expr{eval: %Const{type: :int4, value: 1}}} =
+               Parser.parse_and_validate_expression(~S|coalesce(NULL::int4, 1, 1 / 0)|)
+    end
+
     test "should correctly resolve a variadic greatest special form" do
       assert {:ok, %Expr{eval: result}} =
                Parser.parse_and_validate_expression(
