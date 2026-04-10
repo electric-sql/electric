@@ -3,7 +3,7 @@ defmodule Electric.Plug.LabelProcessPlug do
   A plug that assists debugging by labelling processes that handle requests with
   details about the request.
 
-  The plug should be places right after the match plug in the router:
+  The plug should be placed right after the match plug in the router:
 
     plug :match
     plug Electric.Plug.LabelProcessPlug
@@ -20,7 +20,7 @@ defmodule Electric.Plug.LabelProcessPlug do
   end
 
   @doc """
-  Returns a description of the HTTP request to be used as the lable for the request process.
+  Returns a description of the HTTP request to be used as the label for the request process.
 
   ## Examples
 
@@ -41,6 +41,7 @@ defmodule Electric.Plug.LabelProcessPlug do
       "Request F-jPUudNHxbD8lIAABQG - GET /v1/shape?table=users"
   """
   def process_label(conn) do
+    # If you change the format of this string, do not forget to update ElectricTelemetry.Processes.parse_binary_label().
     "Request #{conn.assigns.plug_request_id} - #{conn.method} #{conn.request_path}#{query_suffix(conn)}"
   end
 

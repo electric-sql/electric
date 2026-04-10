@@ -274,7 +274,15 @@ defmodule Electric.Shapes.Querying do
     |> pg_coalesce_json_string()
   end
 
-  defp pg_cast_column_to_text(column), do: ~s["#{Utils.escape_quotes(column)}"::text]
+  defp pg_cast_column_to_text(column) do
+    escaped = Utils.escape_quotes(column)
+    col = ~s["#{escaped}"]
+    # In PostgreSQL, casting bpchar (char(n)) to text strips trailing spaces.
+    # Use concat() for bpchar columns to preserve the space padding, since
+    # concat() converts its argument to text without trimming.
+    ~s[CASE WHEN #{col} IS NULL THEN NULL::text WHEN pg_typeof(#{col}) = 'character'::regtype THEN concat(#{col}, '') ELSE #{col}::text END]
+  end
+
   defp pg_escape_string_for_json(str), do: ~s[to_json(#{str})::text]
   defp pg_coalesce_json_string(str), do: ~s[coalesce(#{str} , 'null')]
 

@@ -1,5 +1,27 @@
 # @core/electric-telemetry
 
+## 0.2.0
+
+### Minor Changes
+
+- cc623d7: Add ETS table memory observability metrics, reporting top N table types by memory usage similar to process memory metrics
+
+## 0.1.10
+
+### Patch Changes
+
+- 0aa8c00: Extend top processes by memory metric to collect processes until the specified mem usage threshold is covered.
+
+  `ELECTRIC_TELEMETRY_TOP_PROCESS_COUNT` has been renamed to `ELECTRIC_TELEMETRY_TOP_PROCESS_LIMIT` with a new format: `count:<N>` or `mem_percent:<N>`. The old env var is still accepted as a fallback.
+
+- 0aa8c00: Group request handler processes together to see their aggregated memory usage.
+
+## 0.1.9
+
+### Patch Changes
+
+- 2659598: chore: ensure more metrics are pushed via statsd
+
 ## 0.1.8
 
 ### Patch Changes

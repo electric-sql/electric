@@ -137,6 +137,7 @@ defmodule Electric.Application do
       max_shapes: get_env(opts, :max_shapes),
       tweaks: [
         publication_alter_debounce_ms: get_env(opts, :publication_alter_debounce_ms),
+        consumer_partitions: get_env(opts, :consumer_partitions),
         registry_partitions: get_env(opts, :process_registry_partitions),
         publication_refresh_period: get_env(opts, :publication_refresh_period),
         schema_reconciler_period: get_env(opts, :schema_reconciler_period),
@@ -384,7 +385,7 @@ defmodule Electric.Application do
           long_schedule_threshold: :telemetry_long_schedule_threshold,
           long_message_queue_enable_threshold: :telemetry_long_message_queue_enable_threshold,
           long_message_queue_disable_threshold: :telemetry_long_message_queue_disable_threshold,
-          top_process_count: :telemetry_top_process_count
+          top_process_limit: :telemetry_top_process_limit
         ),
       reporters: [
         statsd_host: get_env(opts, :telemetry_statsd_host),

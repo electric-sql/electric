@@ -10,21 +10,34 @@ defmodule ElectricTelemetry.Reporters.Statsd do
             formatter: :datadog,
             global_tags: [instance_id: telemetry_opts.instance_id]
           ],
-          reporter_opts
+          Keyword.update!(reporter_opts, :metrics, &add_instance_id_tag/1)
         )
 
       {TelemetryMetricsStatsd, start_opts}
     end
   end
 
+  defp add_instance_id_tag(metrics) do
+    Enum.map(metrics, fn metric -> Map.update!(metric, :tags, &[:instance_id | &1]) end)
+  end
+
   def router_dispatch_metrics do
+    tag_values = fn metadata ->
+      %{
+        route: metadata[:route],
+        status: (metadata[:conn] || %{}) |> Map.get(:status, "")
+      }
+    end
+
     [
       distribution("plug.router_dispatch.stop.duration",
-        tags: [:route],
+        tags: [:route, :status],
+        tag_values: tag_values,
         unit: {:native, :millisecond}
       ),
       distribution("plug.router_dispatch.exception.duration",
-        tags: [:route],
+        tags: [:route, :status],
+        tag_values: tag_values,
         unit: {:native, :millisecond}
       )
     ]

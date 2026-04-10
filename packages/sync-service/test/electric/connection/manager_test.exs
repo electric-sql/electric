@@ -85,7 +85,7 @@ defmodule Electric.Connection.ConnectionManagerTest do
     setup [:start_connection_manager]
 
     test "reports status=waiting initially", %{stack_id: stack_id} do
-      assert StatusMonitor.status(stack_id) == %{conn: :waiting_on_lock, shape: :starting}
+      assert StatusMonitor.status(stack_id).conn == :waiting_on_lock
     end
 
     test "reports status=starting once the exclusive connection lock is acquired", %{
@@ -94,7 +94,7 @@ defmodule Electric.Connection.ConnectionManagerTest do
       assert_receive {:stack_status, _, :waiting_for_connection_lock}
       assert_receive {:stack_status, _, :connection_lock_acquired}
       StatusMonitor.wait_for_messages_to_be_processed(stack_id)
-      assert StatusMonitor.status(stack_id) == %{conn: :starting, shape: :starting}
+      assert StatusMonitor.status(stack_id).conn == :starting
     end
 
     test "reports status=active when all connection processes are running", %{stack_id: stack_id} do
@@ -153,7 +153,7 @@ defmodule Electric.Connection.ConnectionManagerTest do
       assert_receive :test_lock_acquired
       StatusMonitor.wait_for_messages_to_be_processed(stack_id)
 
-      assert StatusMonitor.status(stack_id) == %{conn: :waiting_on_lock, shape: :up}
+      assert StatusMonitor.status(stack_id).conn == :waiting_on_lock
     end
 
     test "backtracks the status when the shape log collector goes down", %{stack_id: stack_id} do
@@ -164,7 +164,9 @@ defmodule Electric.Connection.ConnectionManagerTest do
       StatusMonitor.wait_for_messages_to_be_processed(stack_id)
 
       status = StatusMonitor.status(stack_id)
-      assert status.shape == :starting
+
+      # shape_metadata_ready survives (ShapeStatusOwner is alive), so shape is :read_only not :starting
+      assert status.shape == :read_only
     end
 
     test "backtracks the status when the shape cache goes down", %{stack_id: stack_id} do
@@ -181,7 +183,7 @@ defmodule Electric.Connection.ConnectionManagerTest do
       StatusMonitor.wait_for_messages_to_be_processed(stack_id)
 
       status = StatusMonitor.status(stack_id)
-      assert status.shape == :starting
+      assert status.shape == :read_only
     end
 
     test "backtracks the status when the canary goes down", %{stack_id: stack_id} do
@@ -202,7 +204,7 @@ defmodule Electric.Connection.ConnectionManagerTest do
       StatusMonitor.wait_for_messages_to_be_processed(stack_id)
 
       status = StatusMonitor.status(stack_id)
-      assert status.shape == :starting
+      assert status.shape == :read_only
     end
   end
 
@@ -379,8 +381,10 @@ defmodule Electric.Connection.ConnectionManagerTest do
 
       StatusMonitor.wait_until_active(stack_id, timeout: 1000)
 
+      # Assert pooled connection opts are validated separately from replication opts.
+      # If both pool types used the same connection opts, this validation would be cached
+      # from the admin pool's earlier :replication type validation and no message would arrive.
       assert_receive {:validate, ^pooled_conn_opts}
-      assert_receive {:validate, ^repl_opts}
     end
   end
 
@@ -415,7 +419,126 @@ defmodule Electric.Connection.ConnectionManagerTest do
     end
   end
 
-  describe "lock_breaker_guard" do
+  describe "admin pool before lock" do
+    test "admin pool is available while waiting for lock", ctx do
+      test_pid = self()
+
+      # Hold the advisory lock so the manager stays in acquiring_lock state
+      start_supervised!({
+        Task,
+        fn ->
+          DBConnection.run(ctx.db_conn, fn conn ->
+            Postgrex.query!(
+              conn,
+              "SELECT pg_advisory_lock(hashtext('#{ctx.slot_name}'))",
+              []
+            )
+
+            send(test_pid, :lock_held)
+            Process.sleep(:infinity)
+          end)
+        end
+      })
+
+      assert_receive :lock_held
+
+      start_connection_manager(ctx)
+
+      # Wait for the manager to reach the lock acquisition step
+      assert_receive {:stack_status, _, :waiting_for_connection_lock}, 5000
+
+      # The admin pool should be registered and accessible before the lock is acquired
+      assert is_pid(GenServer.whereis(Connection.Manager.admin_pool(ctx.stack_id)))
+    end
+  end
+
+  describe "lock_breaker" do
+    test "breaks an abandoned lock when slot is inactive", ctx do
+      test_pid = self()
+
+      # Create an inactive replication slot so the lock breaker query finds it
+      Postgrex.query!(
+        ctx.db_conn,
+        "SELECT pg_create_logical_replication_slot('#{ctx.slot_name}', 'pgoutput')",
+        []
+      )
+
+      # Hold the advisory lock from a separate connection, simulating an abandoned lock
+      start_supervised!({
+        Task,
+        fn ->
+          DBConnection.run(ctx.db_conn, fn conn ->
+            Postgrex.query!(
+              conn,
+              "SELECT pg_advisory_lock(hashtext('#{ctx.slot_name}'))",
+              []
+            )
+
+            send(test_pid, :lock_held)
+            Process.sleep(:infinity)
+          end)
+        end
+      })
+
+      assert_receive :lock_held
+
+      start_connection_manager(ctx)
+
+      # Wait for the manager to start waiting for the lock
+      assert_receive {:stack_status, _, :waiting_for_connection_lock}, 5000
+
+      manager_pid = GenServer.whereis(Connection.Manager.name(ctx.stack_id))
+
+      # Wait for pg_info_obtained to set the backend PID
+      %{replication_lock_timer: tref} = wait_for_pg_backend_pid(manager_pid)
+      :erlang.cancel_timer(tref)
+
+      # Manually trigger the lock breaker check
+      send(manager_pid, {:timeout, tref, {:check_status, :replication_lock}})
+
+      # The lock breaker should terminate the stuck backend, freeing the lock.
+      # The lock breaker should terminate the stuck backend, freeing the lock.
+      # The replication client should then acquire the lock and proceed.
+      assert_receive {:stack_status, _, :connection_lock_acquired}, 5000
+    end
+
+    test "does not break the lock when slot is active", ctx do
+      # Start a replication client that acquires the lock and makes the slot active.
+      # This simulates a healthy Electric instance holding the lock.
+      {:ok, replication_client_pid} =
+        start_supervised(
+          {Electric.Postgres.ReplicationClient,
+           stack_id: ctx.stack_id,
+           replication_opts: [
+             connection_opts: ctx.db_config,
+             stack_id: ctx.stack_id,
+             publication_name: "test_pub_#{:erlang.phash2(ctx.stack_id)}",
+             try_creating_publication?: true,
+             slot_name: ctx.slot_name,
+             handle_event: nil,
+             connection_manager: self()
+           ]}
+        )
+
+      assert_receive {:"$gen_cast", :replication_client_lock_acquired}, 5000
+      assert_receive {:"$gen_cast", {:pg_info_obtained, %{pg_backend_pid: backend_pid}}}
+
+      replication_client_monitor = Process.monitor(replication_client_pid)
+
+      # Use the production lock breaker query to verify it doesn't break active slots
+      database = ctx.db_config[:database]
+      query = Connection.Manager.lock_breaker_query(ctx.slot_name, backend_pid, database)
+
+      assert {:ok, %Postgrex.Result{num_rows: 0}} = Postgrex.query(ctx.db_conn, query, [])
+
+      # The replication client should still be alive — the lock was not broken
+      refute_receive {:DOWN, ^replication_client_monitor, :process, ^replication_client_pid,
+                      _reason},
+                     200
+
+      assert Process.alive?(replication_client_pid)
+    end
+
     test "skips lock breaker when guard returns false", ctx do
       test_pid = self()
 
@@ -504,6 +627,10 @@ defmodule Electric.Connection.ConnectionManagerTest do
 
       # Without a guard, the lock breaker should attempt to run (no "skipped" message)
       refute log =~ "Lock breaker skipped"
+
+      # The lock is held by a plain connection with no matching inactive replication slot,
+      # so the lock breaker should not terminate any backends
+      refute log =~ "Terminated a stuck backend"
     end
   end
 

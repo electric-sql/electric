@@ -265,7 +265,7 @@ For example, sync into [LiveStore](https://docs.livestore.dev/reference/syncing/
 | -------- | ------------------- | ------- | ---------- | ---------------- | ------ |
 | Postgres | TanStack&nbsp;Start | Drizzle | Cloudflare | TanStack&nbsp;DB | tRPC   |
 
-[Tanstack DB](/products/tanstack-db) is a reactive client store for [building super fast apps on&nbsp;sync](https://tanstack.com/blog/tanstack-db-0.1-the-embedded-client-database-for-tanstack-query).
+[Tanstack DB](/primitives/tanstack-db) is a reactive client store for [building super fast apps on&nbsp;sync](https://tanstack.com/blog/tanstack-db-0.1-the-embedded-client-database-for-tanstack-query).
 
 [Paired with Electric](/blog/2025/07/29/super-fast-apps-on-sync-with-tanstack-db) and [TanStack Start](https://tanstack.com/start), it gives you an end-to-end sync stack that's type-safe, declarative, incrementally adoptable and insanely fast.
 
@@ -310,7 +310,7 @@ Components use [live queries](https://tanstack.com/db/latest/docs/guides/live-qu
 
 [Phoenix](https://www.phoenixframework.org) is a full-stack web development framework for [Elixir](https://elixir-lang.org).
 
-Electric is [developed in Elixir](/products/postgres-sync#how-does-it-work), has a first-class [Elixir client](/docs/api/clients/elixir) and a deep Phoenix framework integration in the form of the official [Phoenix.Sync](https://hexdocs.pm/phoenix_sync) library.
+Electric is [developed in Elixir](/primitives/postgres-sync#how-does-it-work), has a first-class [Elixir client](/docs/api/clients/elixir) and a deep Phoenix framework integration in the form of the official [Phoenix.Sync](https://hexdocs.pm/phoenix_sync) library.
 
 ### Phoenix.Sync
 

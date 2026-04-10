@@ -97,3 +97,14 @@ https://next.electric-sql.com/* https://electric-sql.com/:splat 301!
 /product/cloud/usage                                /cloud/usage
 /docs/guides/llms                                   /docs/agents
 /blog/2025/07/29/local-first-sync-with-tanstack-db  /blog/2025/07/29/super-fast-apps-on-sync-with-tanstack-db
+
+# Cloud pricing moved to top-level pricing page
+/cloud/pricing                  /pricing 302
+
+# Products are primitives, products are something else
+/products                       /primitives
+/products/                      /primitives/
+/products/*                     /primitives/:splat
+
+/blog/2026/03/18/*            /blog/2026/04/02/:splat
+/blog/2026/03/24/electric-cloud-pricing  /blog/2026/04/02/electric-cloud-pricing

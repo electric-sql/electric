@@ -17,7 +17,7 @@ import ComponentsSmPNG from '/static/img/docs/guides/deployment/components.sm.pn
 
 # Deployment
 
-How to deploy the [Electric sync engine](/products/postgres-sync), with links to integration docs for specific platforms like [Supabase](/docs/integrations/supabase), [Neon](/docs/integrations/neon), [Render](/docs/integrations/render) and [AWS](/docs/integrations/aws).
+How to deploy the [Electric sync engine](/primitives/postgres-sync), with links to integration docs for specific platforms like [Supabase](/docs/integrations/supabase), [Neon](/docs/integrations/neon), [Render](/docs/integrations/render) and [AWS](/docs/integrations/aws).
 
 > [!TIP] Electric Cloud &ndash; the simplest way to use Electric
 > The simplest way to use Electric is via the [Electric Cloud](/cloud), which is a simple, scalable, <span class="no-wrap">low-cost</span>, managed Electric hosting service.
@@ -116,7 +116,7 @@ When running, Electric also keeps a pool of active database connections open. Th
 
 ## 2. Running Electric
 
-The [Electric sync engine](/products/postgres-sync) is an Elixir web service, packaged using Docker.
+The [Electric sync engine](/primitives/postgres-sync) is an Elixir web service, packaged using Docker.
 
 You can deploy it anywhere you can run a container with a filesystem and exposed HTTP port. This includes cloud and application hosting platforms like:
 
@@ -217,6 +217,9 @@ readinessProbe:
 
 This ensures the pod is only marked ready when Electric is fully operational and ready to serve shape requests.
 
+> [!Tip] Rolling upgrades need different readiness probes
+> If you are performing rolling deployments with `maxSurge: 1`, the `exec` probe above will cause a deadlock &mdash; the new pod can never return `200` while the old pod holds the replication lock. Use an `httpGet` readiness probe instead, which accepts any 2xx. See the [Upgrading guide](/docs/guides/upgrading) for details.
+
 ### Observability
 
 Electric supports [OpenTelemetry](https://opentelemetry.io/) for exporting traces, with built-in support for [Honeycomb.io](https://www.honeycomb.io/). Metrics are also available in StatsD and Prometheus formats.
@@ -225,9 +228,13 @@ See the [Telemetry reference](/docs/reference/telemetry#opentelemetry) for confi
 
 ### Caching proxy
 
-Electric is designed to run behind a caching proxy, such as [Nginx](https://nginx.org/en), [Caddy](https://caddyserver.com), [Varnish](https://varnish-cache.org) or a CDN like [Cloudflare](https://www.cloudflare.com/en-gb/application-services/products/cdn) or [Fastly](https://www.fastly.com/products/cdn). You don't _have_ to run a proxy in front of Electric but you will benefit from radically better performance if you do.
+Electric is designed to run behind a caching proxy, such as [Nginx](https://nginx.org/en), [Caddy](https://caddyserver.com), [Varnish](https://varnish-cache.org) or a CDN like [Cloudflare](https://www.cloudflare.com/en-gb/application-services/primitives/cdn) or [Fastly](https://www.fastly.com/primitives/cdn). You don't _have_ to run a proxy in front of Electric but you will benefit from radically better performance if you do.
 
 See the [Caching section](/docs/api/http#caching) of the HTTP API docs for more information.
+
+### Upgrading
+
+If you're running Electric behind an orchestrator that performs rolling updates (e.g., Kubernetes, AWS ECS), see the [Upgrading guide](/docs/guides/upgrading) for strategies to minimize disruption when deploying new versions.
 
 ## 3. Connecting your app
 

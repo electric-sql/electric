@@ -1,0 +1,29 @@
+name: 'Pay as you go'
+shortName: 'PAYG'
+order: 10
+type: tier
+
+monthlyFee: 0
+discountPercent: 0
+priceQualifier: '/ month'
+
+limits:
+  maxDatabases: 10
+  maxUsersPerWorkspace: 50
+
+featureGates:
+  postgresSubqueries: false
+
+commitment: 'None'
+support: 'Community (Discord)'
+billingBehavior: 'Under $5/mo waived'
+
+who: 'For any app, from prototype to production'
+features:
+  - 'Up to 10 databases'
+  - 'No credit card required'
+
+ctaText: 'Sign up now'
+ctaTextSmall: 'Sign up'
+ctaHref: 'https://dashboard.electric-sql.cloud'
+ctaTheme: 'brand'

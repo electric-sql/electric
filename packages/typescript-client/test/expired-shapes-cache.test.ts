@@ -954,6 +954,7 @@ describe(`ExpiredShapesCache`, () => {
       signal: aborter.signal,
       fetchClient: fetchMock,
       subscribe: false,
+      onError: () => {},
     })
 
     stream.subscribe(() => {})
@@ -1093,6 +1094,7 @@ describe(`ExpiredShapesCache`, () => {
       signal: aborter.signal,
       fetchClient: fetchMock,
       subscribe: false,
+      onError: () => {},
     })
 
     stream.subscribe(() => {})
@@ -1168,6 +1170,7 @@ describe(`ExpiredShapesCache`, () => {
       signal: aborter.signal,
       fetchClient: fetchMock,
       subscribe: false,
+      onError: () => {},
     })
 
     stream.subscribe(() => {})

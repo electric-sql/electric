@@ -202,18 +202,56 @@ defmodule Electric.DbConnectionError do
         %Postgrex.Error{
           postgres: %{
             code: :invalid_authorization_specification,
-            message: "branch " <> _,
+            message: message,
             severity: "FATAL",
             pg_code: "28000"
           }
         } = error
       ) do
-    %DbConnectionError{
-      message: error.postgres.message,
-      type: :branch_does_not_exist,
-      original_error: error,
-      retry_may_fix?: false
-    }
+    cond do
+      String.starts_with?(message, "branch ") ->
+        %DbConnectionError{
+          message: error.postgres.message,
+          type: :branch_does_not_exist,
+          original_error: error,
+          retry_may_fix?: true
+        }
+
+      # https://github.com/postgres/postgres/blob/93b76db0ace674a29a5d2146a139d6dd87b99659/src/backend/libpq/auth.c#L530
+      String.starts_with?(message, "no pg_hba.conf entry for host ") ->
+        ~r/, (?<reason>[\w ]+?)$/
+        |> Regex.named_captures(message)
+        |> case do
+          %{"reason" => "no encryption"} ->
+            %DbConnectionError{
+              message:
+                "Connection refused: server requires SSL/TLS but the client connected without encryption",
+              type: :ssl_connection_required,
+              original_error: error,
+              retry_may_fix?: false
+            }
+
+          %{"reason" => _reason} ->
+            # Possible reasons here are:
+            #
+            # - "SSL encryption", and
+            # - "GSS encryption"
+            #
+            # both of which are the result of the connection tuple {host, user,
+            # database} having no entry in the pg_hba.conf file, not a problem
+            # with the connection's encryption. This rejection happens before
+            # the connection authenticates.
+            %DbConnectionError{
+              message: "Connection rejected: #{message}",
+              type: :authorization_failure,
+              original_error: error,
+              retry_may_fix?: false
+            }
+        end
+
+      true ->
+        unknown_error(error)
+    end
   end
 
   def from_error(%Postgrex.Error{postgres: %{code: :admin_shutdown, severity: "FATAL"}} = error) do

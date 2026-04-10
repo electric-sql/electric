@@ -19,11 +19,11 @@ hero:
       text: Cloud
       link: https://dashboard.electric-sql.cloud/
     - theme: alt
-      text: Products
-      link: /products
+      text: Primitives
+      link: /primitives
     - theme: alt
-      text: Products
-      link: /products
+      text: Primitives
+      link: /primitives
   image:
     src: /img/home/zap-with-halo.svg
 ---

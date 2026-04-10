@@ -270,10 +270,20 @@ defmodule Electric.Shapes.Consumer do
     end
   end
 
-  def handle_info({ShapeCache.Storage, :flushed, offset_in}, state) do
-    {state, offset_txn} = State.align_offset_to_txn_boundary(state, offset_in)
+  def handle_info({ShapeCache.Storage, :flushed, flushed_offset}, state) do
+    state =
+      if is_write_unit_txn(state.write_unit) or is_nil(state.pending_txn) do
+        # We're not currently in the middle of processing a transaction. This flushed offset is either
+        # from a previously processed transaction or a non-commit fragment of the most recently
+        # seen transaction. Notify ShapeLogCollector about it immediately.
+        confirm_flushed_and_notify(state, flushed_offset)
+      else
+        # Storage has signaled latest flushed offset in the middle of processing a multi-fragment
+        # transaction. Save it for later, to be handled when the commit fragment arrives.
+        updated_offset = more_recent_offset(state.pending_flush_offset, flushed_offset)
+        %{state | pending_flush_offset: updated_offset}
+      end
 
-    ShapeLogCollector.notify_flushed(state.stack_id, state.shape_handle, offset_txn)
     {:noreply, state, state.hibernate_after}
   end
 
@@ -567,7 +577,7 @@ defmodule Electric.Shapes.Consumer do
       # With write_unit=txn all fragments are buffered until the Commit change is seen. At that
       # point, a transaction struct is produced from the buffered fragments and is written to
       # storage.
-      state.write_unit == State.write_unit_txn() ->
+      is_write_unit_txn(state.write_unit) ->
         {txns, transaction_builder} =
           TransactionBuilder.build(txn_fragment, state.transaction_builder)
 
@@ -597,6 +607,7 @@ defmodule Electric.Shapes.Consumer do
   defp skip_txn_fragment(state, %TransactionFragment{} = txn_fragment) do
     %{state | pending_txn: nil}
     |> consider_flushed(txn_fragment.last_log_offset)
+    |> clear_pending_flush_offset()
   end
 
   # This function does similar things to do_handle_txn/2 but with the following simplifications:
@@ -747,9 +758,10 @@ defmodule Electric.Shapes.Consumer do
         "No relevant changes written in transaction xid=#{txn.xid}"
       end)
 
-      state = %{state | pending_txn: nil}
-      consider_flushed(state, txn_fragment.last_log_offset)
+      %{state | pending_txn: nil}
+      |> consider_flushed(txn_fragment.last_log_offset)
     end
+    |> clear_pending_flush_offset()
   end
 
   def process_buffered_txn_fragments(%State{buffer: buffer} = state) do
@@ -1005,6 +1017,31 @@ defmodule Electric.Shapes.Consumer do
       end
     end
   end
+
+  defp confirm_flushed_and_notify(state, flushed_offset) do
+    {state, txn_offset} = State.align_offset_to_txn_boundary(state, flushed_offset)
+    ShapeLogCollector.notify_flushed(state.stack_id, state.shape_handle, txn_offset)
+    state
+  end
+
+  # After a pending transaction completes and txn_offset_mapping is populated,
+  # process the deferred flushed offset (if any).
+  #
+  # Even if the most recent transaction is skipped or no changes from it end up satisfying the
+  # shape's `where` condition, Storage may have signaled a flush offset from the previous transaction
+  # while we were still processing fragments of the current one. Therefore this function must
+  # be called any time `state.pending_txn` is reset to nil in a multi-fragment transaction
+  # processing setting.
+  defp clear_pending_flush_offset(%{pending_flush_offset: nil} = state), do: state
+
+  defp clear_pending_flush_offset(%{pending_flush_offset: flushed_offset} = state) do
+    %{state | pending_flush_offset: nil}
+    |> confirm_flushed_and_notify(flushed_offset)
+  end
+
+  defp more_recent_offset(nil, offset), do: offset
+  defp more_recent_offset(offset, nil), do: offset
+  defp more_recent_offset(offset1, offset2), do: LogOffset.max(offset1, offset2)
 
   defp subscribe(state, action) do
     case ShapeLogCollector.add_shape(state.stack_id, state.shape_handle, state.shape, action) do

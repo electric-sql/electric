@@ -77,8 +77,9 @@ defmodule Electric.ShapeCache do
     end
   end
 
-  @spec resolve_shape_handle(shape_handle(), shape_def(), stack_id()) :: handle_position() | nil
-  def resolve_shape_handle(shape_handle, shape, stack_id) do
+  @spec resolve_shape_handle(shape_handle(), shape_def(), stack_id(), keyword()) ::
+          handle_position() | nil
+  def resolve_shape_handle(shape_handle, shape, stack_id, opts \\ []) do
     # Ensure that the given shape handle matches the shape using a cheap shape
     # hash check.
     # If not (or the handle has gone/changed) then try a more expensive
@@ -90,7 +91,7 @@ defmodule Electric.ShapeCache do
         else: fetch_handle_by_shape(shape, stack_id)
 
     with {:ok, resolved_handle} <- result,
-         {:ok, offset} <- fetch_latest_offset(stack_id, resolved_handle) do
+         {:ok, offset} <- fetch_latest_offset(stack_id, resolved_handle, opts) do
       {resolved_handle, offset}
     else
       _ -> nil
@@ -216,8 +217,17 @@ defmodule Electric.ShapeCache do
   @spec has_shape?(shape_handle(), Access.t()) :: boolean()
   def has_shape?(shape_handle, stack_id)
       when is_shape_handle(shape_handle) and is_stack_id(stack_id) do
-    ShapeStatus.has_shape_handle?(stack_id, shape_handle) ||
-      GenServer.call(name(stack_id), {:has_shape_handle?, shape_handle}, @call_timeout)
+    if ShapeStatus.has_shape_handle?(stack_id, shape_handle) do
+      true
+    else
+      try do
+        GenServer.call(name(stack_id), {:has_shape_handle?, shape_handle}, @call_timeout)
+      catch
+        :exit, {:noproc, _} ->
+          Logger.debug("ShapeCache GenServer not running, shape #{shape_handle} not found in ETS")
+          false
+      end
+    end
   end
 
   @spec start_consumer_for_handle(shape_handle(), stack_id()) ::
@@ -447,12 +457,13 @@ defmodule Electric.ShapeCache do
     {descendents ++ [{handle, shape, start_shape_opts} | siblings], known}
   end
 
-  @spec fetch_latest_offset(stack_id(), shape_handle()) :: {:ok, LogOffset.t()} | :error
-  defp fetch_latest_offset(stack_id, shape_handle) do
-    shape_handle
-    |> Storage.for_shape(Storage.for_stack(stack_id))
-    |> Storage.fetch_latest_offset()
-    |> case do
+  @spec fetch_latest_offset(stack_id(), shape_handle(), keyword()) ::
+          {:ok, LogOffset.t()} | :error
+  defp fetch_latest_offset(stack_id, shape_handle, opts \\ []) do
+    storage =
+      Storage.for_shape(shape_handle, Storage.for_stack(stack_id, read_only?: opts[:read_only?]))
+
+    case Storage.fetch_latest_offset(storage) do
       {:ok, offset} -> {:ok, normalize_latest_offset(offset)}
       {:error, _reason} -> :error
     end

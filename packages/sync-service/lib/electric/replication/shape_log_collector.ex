@@ -465,17 +465,14 @@ defmodule Electric.Replication.ShapeLogCollector do
 
     OpenTelemetry.add_span_attributes("txn.is_dropped": true)
 
-    {:ok,
-     %{
-       state
-       | flush_tracker:
-           FlushTracker.handle_txn_fragment(
-             state.flush_tracker,
-             txn_fragment,
-             [],
-             MapSet.new()
-           )
-     }}
+    flush_tracker =
+      if txn_fragment.commit do
+        FlushTracker.handle_txn_fragment(state.flush_tracker, txn_fragment, [])
+      else
+        state.flush_tracker
+      end
+
+    {:ok, %{state | flush_tracker: flush_tracker}}
   end
 
   defp handle_txn_fragment(
@@ -578,22 +575,9 @@ defmodule Electric.Replication.ShapeLogCollector do
 
     flush_tracker =
       case event do
-        %TransactionFragment{} ->
-          shapes_with_changes =
-            for {id, frag} <- events_by_handle,
-                frag.change_count > 0,
-                not MapSet.member?(undeliverable_set, id),
-                do: id,
-                into: MapSet.new()
-
-          if event.commit, do: LsnTracker.broadcast_last_seen_lsn(state.stack_id, lsn)
-
-          FlushTracker.handle_txn_fragment(
-            flush_tracker,
-            event,
-            delivered_shapes,
-            shapes_with_changes
-          )
+        %TransactionFragment{commit: commit} when not is_nil(commit) ->
+          LsnTracker.broadcast_last_seen_lsn(state.stack_id, lsn)
+          FlushTracker.handle_txn_fragment(flush_tracker, event, delivered_shapes)
 
         _ ->
           flush_tracker

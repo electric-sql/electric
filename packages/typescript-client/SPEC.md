@@ -372,23 +372,23 @@ Six sites in `client.ts` recurse or loop to issue a new fetch:
 | L2  | `#requestShape` catch → `#requestShape` | 874  | Abort with `FORCE_DISCONNECT_AND_REFRESH` or `SYSTEM_WAKE` | `isRefreshing` flag changes `canLongPoll`, affecting `live` param                                                 | Abort signals are discrete events                                            |
 | L3  | `#requestShape` catch → `#requestShape` | 886  | `StaleCacheError` thrown by `#onInitialResponse`           | `StaleRetryState` adds `cache_buster` param; after max retries, self-healing clears expired entry + resets stream | `maxStaleCacheRetries` counter + `#expiredShapeRecoveryKey` (once per shape) |
 | L4  | `#requestShape` catch → `#requestShape` | 924  | HTTP 409 (shape rotation)                                  | `#reset()` sets offset=-1 + new handle; or request-scoped cache buster if no handle                               | New handle from 409 response or unique retry URL                             |
-| L5  | `#start` catch → `#start`               | 782  | Exception + `onError` returns retry opts                   | Params/headers merged from `retryOpts`                                                                            | User-controlled; `#checkFastLoop` on next iteration                          |
+| L5  | `#start` catch → `#start`               | 782  | Exception + `onError` returns retry opts                   | Params/headers merged from `retryOpts`                                                                            | `#maxConsecutiveErrorRetries` (50)                                           |
 | L6  | `fetchSnapshot` catch → `fetchSnapshot` | 1975 | HTTP 409 on snapshot fetch                                 | New handle via `withHandle()`; or local retry cache buster if same/no handle                                      | `#maxSnapshotRetries` (5) + cache buster on same handle                      |
 
 ### Guard mechanisms
 
-| Guard                      | Scope                         | How it works                                                                                                                                                                          |
-| -------------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `#checkFastLoop`           | Non-live `#requestShape` only | Detects N requests at same offset within a time window. First: clears caches + resets. Persistent: exponential backoff → throws FetchError(502).                                      |
-| `maxStaleCacheRetries`     | Stale response path (L3)      | State machine counts stale retries. After 3 consecutive stale responses, clears expired entry and attempts one self-healing retry. Throws FetchError(502) if self-healing also fails. |
-| `#expiredShapeRecoveryKey` | Self-healing (L3 extension)   | Records shape key after first self-healing attempt. Second exhaustion on same key skips self-healing → FetchError(502). Cleared on up-to-date.                                        |
-| `#maxSnapshotRetries`      | Snapshot 409 path (L6)        | Counts consecutive snapshot 409s. Adds cache buster when handle unchanged. Throws FetchError(502) after 5.                                                                            |
-| Pause lock                 | `#requestShape` entry         | Returns immediately if paused. Prevents fetches during snapshots.                                                                                                                     |
-| Up-to-date exit            | `#requestShape` entry         | Returns if `!subscribe` and `isUpToDate`. Breaks loop for one-shot syncs.                                                                                                             |
+| Guard                         | Scope                         | How it works                                                                                                                                                                          |
+| ----------------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `#checkFastLoop`              | Non-live `#requestShape` only | Detects N requests at same offset within a time window. First: clears caches + resets. Persistent: exponential backoff → throws FetchError(502).                                      |
+| `maxStaleCacheRetries`        | Stale response path (L3)      | State machine counts stale retries. After 3 consecutive stale responses, clears expired entry and attempts one self-healing retry. Throws FetchError(502) if self-healing also fails. |
+| `#expiredShapeRecoveryKey`    | Self-healing (L3 extension)   | Records shape key after first self-healing attempt. Second exhaustion on same key skips self-healing → FetchError(502). Cleared on up-to-date.                                        |
+| `#maxSnapshotRetries`         | Snapshot 409 path (L6)        | Counts consecutive snapshot 409s. Adds cache buster when handle unchanged. Throws FetchError(502) after 5.                                                                            |
+| `#maxConsecutiveErrorRetries` | `#start` onError retry (L5)   | Counts consecutive error retries. Sends error to subscribers and tears down after 50. Reset on successful message batch.                                                              |
+| Pause lock                    | `#requestShape` entry         | Returns immediately if paused. Prevents fetches during snapshots.                                                                                                                     |
+| Up-to-date exit               | `#requestShape` entry         | Returns if `!subscribe` and `isUpToDate`. Breaks loop for one-shot syncs.                                                                                                             |
 
 ### Coverage gaps
 
-| Gap                              | Risk | Notes                                                                              |
-| -------------------------------- | ---- | ---------------------------------------------------------------------------------- |
-| L5 user `onError` infinite retry | Low  | User callback controls retry; `#checkFastLoop` provides secondary guard            |
-| Live polling same URL            | None | Intentionally allowed — server long-polls, cursor may not change between responses |
+| Gap                   | Risk | Notes                                                                              |
+| --------------------- | ---- | ---------------------------------------------------------------------------------- |
+| Live polling same URL | None | Intentionally allowed — server long-polls, cursor may not change between responses |

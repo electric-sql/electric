@@ -90,7 +90,7 @@ A markdown file listing invariants is worthless without enforcement. The best ex
 
 **JustHTML**: Emil Stenström built a complete HTML5 parser using AI agents by hooking in the [html5lib-tests conformance suite](https://github.com/html5lib/html5lib-tests)—9,200 tests used by browser vendors—from the start. The suite *is* the configurancy. As Emil put it: ["The agent did the typing; I did the thinking."](https://simonwillison.net/2025/Dec/14/justhtml/) Then Simon Willison [ported it to JavaScript in 4.5 hours](https://simonwillison.net/2025/Dec/15/porting-justhtml/) by pointing a different agent at the same conformance suite—same shared understanding, completely different implementations.
 
-**Durable Streams**: We've been building [durable-streams](https://github.com/durable-streams/durable-streams) the same way—a [protocol specification](https://github.com/durable-streams/durable-streams/blob/main/PROTOCOL.md) with server and client conformance suites. Any implementation that passes the suite implements the protocol correctly.
+**Durable Streams**: We've been building [durable-streams](https://durablestreams.com) the same way—a [protocol specification](https://github.com/durable-streams/durable-streams/blob/main/PROTOCOL.md) with server and client conformance suites. Any implementation that passes the suite implements the protocol correctly.
 
 **Code Contracts**: [Cheng Huang](https://zfhuang99.github.io/rust/claude%20code/codex/contracts/spec-driven%20development/2025/12/01/rust-with-ai.html) built 130K lines of Rust using preconditions, postconditions, and invariants that AI generates tests from. One contract caught a subtle Paxos safety violation.
 

@@ -25,7 +25,7 @@ import YoutubeEmbed from '../../src/components/YoutubeEmbed.vue'
 
 We spent 3 years [building a Postgres-native sync engine](/blog/2025/03/17/electricsql-1.0-released). Along the way, we realized the most important thing we built wasn't Postgres sync. It was the primitive underneath.
 
-We [released](/blog/2025/12/09/announcing-durable-streams) this primitive as [Durable&nbsp;Streams](/products/durable-streams) in December. Today we're releasing version 0.2.0. This brings new features (like idempotent producers and exactly-once semantics) and turnkey, scalable hosting of Durable&nbsp;Streams on [Electric Cloud](/cloud).
+We [released](/blog/2025/12/09/announcing-durable-streams) this primitive as [Durable&nbsp;Streams](/primitives/durable-streams) in December. Today we're releasing version 0.2.0. This brings new features (like idempotent producers and exactly-once semantics) and turnkey, scalable hosting of Durable&nbsp;Streams on [Electric Cloud](/cloud).
 
 ## A new coordination model
 
@@ -35,7 +35,7 @@ Today infrastructure is the bottleneck. However, it's not just infrastructure, i
 
 [Request/response assumes two parties taking turns](/blog/2026/01/12/durable-sessions-for-collaborative-ai#evolving-the-interaction-paradigm). Agentic apps have multiple agents and multiple users all acting at once. That requires a different primitive. And people are cobbling together Redis, WebSockets, and retry logic to build it.
 
-So it turns out we'd built exactly the right primitive for this moment: [Durable&nbsp;Streams](/products/durable-streams). Persistent, resumable event streams over HTTP.
+So it turns out we'd built exactly the right primitive for this moment: [Durable&nbsp;Streams](/primitives/durable-streams). Persistent, resumable event streams over HTTP.
 
 ## The missing primitive
 
@@ -55,7 +55,7 @@ With 0.2.0, the protocol is mature—we're ready for more people to build with i
 
 ## What's shipping
 
-Hosted durable streams is now live on [Electric Cloud](/cloud), our managed sync platform. Electric Cloud also hosts [Postgres sync](/products/postgres-sync), so you can combine real-time streams with synced relational data in the same app.
+Hosted durable streams is now live on [Electric Cloud](/cloud), our managed sync platform. Electric Cloud also hosts [Postgres sync](/primitives/postgres-sync), so you can combine real-time streams with synced relational data in the same app.
 
 - **Reads don't hit origin.** Electric Cloud's Sync CDN serves all reads. We've tested to 1M concurrent connections per stream.
 - **Fast writes.** 240K writes/second for small messages, with 15-25 MB/sec sustained throughput.

@@ -6,6 +6,9 @@ defmodule Electric.ShapeCache.ShapeStatusOwner do
   `Electric.ShapeCache.ShapeStatus` early in the supervision tree so that
   dependent processes (e.g., shape consumers) can use a single, shared
   ShapeStatus instance regardless of their own supervisor start order.
+
+  Initialization is done asynchronously via `handle_continue` to avoid
+  blocking the supervision tree startup on potentially slow SQLite reads.
   """
 
   use GenServer
@@ -20,13 +23,14 @@ defmodule Electric.ShapeCache.ShapeStatusOwner do
     Electric.ProcessRegistry.name(stack_id, __MODULE__)
   end
 
-  def initialize(stack_id) do
-    # Use an infinite timeout because on laggy storage with an incorrectly
-    # shut-down database this call can take  a long time, none of which is
-    # really within our control. So rather than be sensitive to this timing at
-    # a critical point, just let SQLite do its thing, which normally is quite
-    # quick.
-    GenServer.call(name(stack_id), :initialize, :infinity)
+  @doc """
+  Refresh shape metadata from SQLite after lock acquisition.
+
+  Uses an infinite timeout because on laggy storage with an incorrectly
+  shut-down database this can take a long time.
+  """
+  def refresh(stack_id) do
+    GenServer.call(name(stack_id), :refresh, :infinity)
   end
 
   def start_link(opts) do
@@ -46,16 +50,26 @@ defmodule Electric.ShapeCache.ShapeStatusOwner do
 
     :ok = Electric.LsnTracker.initialize(stack_id)
 
-    {:ok, %{stack_id: stack_id, initialized: false}, :hibernate}
+    {:ok, %{stack_id: stack_id}, {:continue, :initialize}}
   end
 
   @impl true
-  def handle_call(:initialize, _from, %{initialized: false} = state) do
+  def handle_continue(:initialize, state) do
+    # Initialize shape metadata from SQLite so we can serve shapes in
+    # read-only mode before the advisory lock is acquired
     :ok = ShapeStatus.initialize(state.stack_id)
-    {:reply, :ok, %{state | initialized: true}, :hibernate}
+
+    # Signal that shape metadata is loaded and shapes can be served read-only
+    Electric.StatusMonitor.mark_shape_metadata_ready(state.stack_id, self())
+
+    Logger.notice("Shape metadata initialized, entering read-only mode")
+
+    {:noreply, state, :hibernate}
   end
 
-  def handle_call(:initialize, _from, %{initialized: true} = state) do
+  @impl true
+  def handle_call(:refresh, _from, state) do
+    :ok = ShapeStatus.refresh(state.stack_id)
     {:reply, :ok, state, :hibernate}
   end
 end

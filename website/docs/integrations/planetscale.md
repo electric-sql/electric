@@ -24,8 +24,12 @@ PlanetScale has several unique characteristics that require special attention:
 1. **Logical replication** - Not enabled by default, must configure cluster parameters
 2. **Connection limits** - Default of 25 is too low for Electric's pool of 20
 3. **Failover requirements** - Replication slots must support failover
+4. **Table ownership** - The database user Electric connects as must own the tables it syncs
 
 For general PostgreSQL user and permission setup, see the [PostgreSQL Permissions guide](/docs/guides/postgres-permissions).
+
+> [!Warning] Table ownership is critical
+> On PlanetScale, you typically **cannot** transfer table ownership after the fact. Run your database migrations using the **same database user** that Electric connects as, so that user owns the tables from the start. See [Table Ownership](#table-ownership) below.
 
 ## Deploy Postgres
 
@@ -78,12 +82,31 @@ Alternatively, reduce Electric's pool size if you have limited connections:
 ELECTRIC_DB_POOL_SIZE=10
 ```
 
-## Create Replication User
+## Table Ownership
+
+Electric needs to **own** the tables it syncs in order to add them to publications and set `REPLICA IDENTITY FULL`. On PlanetScale, the default role cannot run `ALTER TABLE ... OWNER TO`, so you cannot transfer ownership after tables are created.
+
+**Run your migrations as the same database user that Electric will connect as.** This way, that user owns the tables from the start and Electric can manage them automatically.
+
+For example, if your PlanetScale connection string uses `postgres.abc123`:
+
+```shell
+# Use the same user for migrations that Electric will connect as
+DATABASE_URL=postgresql://postgres.abc123:password@host:5432/db npx prisma migrate deploy
+```
+
+> [!Tip] Already have tables owned by a different user?
+> If your tables were created by a different user and you **can't** transfer ownership (common on PlanetScale), you have three options:
+> 1. **Reassign objects in PlanetScale Console** — go to your database role's menu (three dots) and select **"Reassign objects"** to transfer table ownership from the old migration role to the Electric user
+> 2. **Re-create the tables** using the correct user by running your migrations with the Electric user's credentials
+> 3. **Use Manual Mode** — set `ELECTRIC_MANUAL_TABLE_PUBLISHING=true` and have an admin pre-configure the publication and replica identity. See [Manual Mode](/docs/guides/postgres-permissions#manual-mode-setup) in the PostgreSQL Permissions guide.
+
+## Database User Setup
 
 Follow the [PostgreSQL Permissions guide](/docs/guides/postgres-permissions) to set up the Electric user with proper permissions.
 
 > [!Important] PlanetScale-Specific Note
-> PlanetScale's default `postgres` role includes the `REPLICATION` attribute. You can use it directly, or create a dedicated replication role for least-privilege access per your organization's security policy.
+> PlanetScale's default `postgres` role includes the `REPLICATION` attribute. You can use it directly for both migrations and Electric's connection. If you create a dedicated replication role instead, make sure to also run your migrations as that role so it owns the tables.
 
 ## Connect Electric
 
@@ -92,23 +115,36 @@ Get your [connection string from PlanetScale](https://planetscale.com/docs/postg
 > [!Important] Connection String Requirements
 > - Use the **direct connection** (port 5432), not PgBouncer (port 6432)
 > - Include `sslmode=require` (PlanetScale requires SSL/TLS)
+> - See [Table Ownership](#table-ownership) for user requirements
 > - See [PlanetScale connection strings documentation](https://planetscale.com/docs/postgres/connection-strings)
+
+### Using Electric Cloud
+
+The simplest way to connect is via [Electric Cloud](/cloud). Use the **direct connection string** (port 5432) with `sslmode=require`. The database user must be the same one that ran your migrations (see [Table Ownership](#table-ownership)).
+
+### Self-hosted
 
 ```shell
 docker run -it \
-    -e "DATABASE_URL=postgresql://electric:secure_password@aws-us-east-1.connect.psdb.cloud:5432/your_db?sslmode=require" \
+    -e "DATABASE_URL=postgresql://postgres.abc123:password@aws-us-east-1.connect.psdb.cloud:5432/your_db?sslmode=require" \
     -p 3000:3000 \
     electricsql/electric:latest
 ```
 
 > [!Note] FOR ALL TABLES Limitation
-> Some sources suggest PlanetScale doesn't support `CREATE PUBLICATION ... FOR ALL TABLES`. If you encounter this issue, explicitly list tables in your publication. See [Manual Publication Management](/docs/guides/postgres-permissions#manual-configuration-steps) in the PostgreSQL Permissions guide.
+> PlanetScale requires tables to be [added to publications individually](https://planetscale.com/docs/postgres/integrations/logical-cdc) and does not support `CREATE PUBLICATION ... FOR ALL TABLES`. If you encounter this issue, explicitly list tables in your publication. See [Manual Publication Management](/docs/guides/postgres-permissions#manual-configuration-steps) in the PostgreSQL Permissions guide.
 
 ## Troubleshooting
 
 For general PostgreSQL permission and configuration errors, see the [PostgreSQL Permissions guide](/docs/guides/postgres-permissions#troubleshooting).
 
 ### PlanetScale-Specific Issues
+
+#### Error: "must be owner of table"
+
+**Cause:** The database user Electric connects as does not own the table. This commonly happens when tables were created by a different user than the one Electric is using.
+
+**Solution:** Run your migrations as the same database user that Electric connects as. See [Table Ownership](#table-ownership) for details, or use [Manual Mode](/docs/guides/postgres-permissions#manual-mode-setup) (`ELECTRIC_MANUAL_TABLE_PUBLISHING=true`) if you cannot re-run migrations.
 
 #### Error: "too many connections"
 

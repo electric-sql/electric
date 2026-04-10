@@ -120,6 +120,7 @@ defmodule Support.TestUtils do
     Electric.StatusMonitor.mark_replication_client_ready(stack_id, self())
     Electric.StatusMonitor.mark_connection_pool_ready(stack_id, :admin, self())
     Electric.StatusMonitor.mark_connection_pool_ready(stack_id, :snapshot, self())
+    Electric.StatusMonitor.mark_shape_metadata_ready(stack_id, self())
     Electric.StatusMonitor.mark_shape_log_collector_ready(stack_id, self())
     Electric.StatusMonitor.mark_supervisor_processes_ready(stack_id, self())
     Electric.StatusMonitor.mark_integrety_checks_passed(stack_id, self())

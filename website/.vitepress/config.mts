@@ -161,8 +161,9 @@ export default defineConfig({
     logo: '/img/brand/logo.svg',
     nav: [
       { text: 'Sync', link: '/sync', activeMatch: '/sync' },
-      { text: 'Products', link: '/products', activeMatch: '/products' },
+      { text: 'Primitives', link: '/primitives', activeMatch: '/primitives' },
       { text: 'Cloud', link: '/cloud', activeMatch: '/cloud' },
+      { text: 'Pricing', link: '/pricing', activeMatch: '/pricing' },
       { text: 'Docs', link: '/docs/intro', activeMatch: '/docs/' },
       { text: 'Demos', link: '/demos', activeMatch: '/demos' },
       { text: 'Blog', link: '/blog', activeMatch: '/blog' },
@@ -173,15 +174,15 @@ export default defineConfig({
       provider: 'local',
     },
     sidebar: {
-      '/products': [
+      '/primitives': [
         {
-          text: 'Products',
+          text: 'Primitives',
           items: [
-            { text: 'Overview', link: '/products/' },
-            { text: 'Postgres Sync', link: '/products/postgres-sync' },
-            { text: 'Durable Streams', link: '/products/durable-streams' },
-            { text: 'TanStack DB', link: '/products/tanstack-db' },
-            { text: 'PGlite', link: '/products/pglite' },
+            { text: 'Overview', link: '/primitives/' },
+            { text: 'Postgres Sync', link: '/primitives/postgres-sync' },
+            { text: 'Durable Streams', link: '/primitives/durable-streams' },
+            { text: 'TanStack DB', link: '/primitives/tanstack-db' },
+            { text: 'PGlite', link: '/primitives/pglite' },
           ],
         },
       ],
@@ -192,50 +193,8 @@ export default defineConfig({
             { text: 'Overview', link: '/cloud/' },
             { text: 'Usage', link: '/cloud/usage' },
             { text: 'Protocols', link: '/cloud/protocols' },
-            { text: 'Pricing', link: '/cloud/pricing' },
-          ],
-        },
-      ],
-      '/use-cases': [
-        {
-          text: 'Use cases',
-          items: [
-            {
-              text: 'Replace data fetching with data sync',
-              link: '/use-cases/data-sync',
-            },
-            {
-              text: 'Build resilient software that works offline',
-              link: '/use-cases/local-first-software',
-            },
-            // {
-            //   text: 'Provision data into dev and test environments',
-            //   link: '/use-cases/dev-and-test'
-            // },
-            //{
-            //  text: 'Add multi-user collaboration to your apps',
-            //  link: '/use-cases/multi-user'
-            //},
-            {
-              text: 'Automate cache invalidation',
-              link: '/use-cases/cache-invalidation',
-            },
-            //{
-            //  text: 'Hydrating edge workers',
-            //  link: '/use-cases/edge-workers'
-            //},
-            //{
-            //  text: 'Partial replicas for distributed cloud services',
-            //  link: '/use-cases/cloud-services'
-            //},
-            {
-              text: 'Retrieve data for local AI',
-              link: '/use-cases/local-ai',
-            },
-            {
-              text: 'Reduce your cloud costs',
-              link: '/use-cases/cloud-costs',
-            },
+            { text: 'Pricing', link: '/pricing' },
+            { text: 'CLI', link: '/cloud/cli' },
           ],
         },
       ],
@@ -263,6 +222,7 @@ export default defineConfig({
               link: '/docs/guides/postgres-permissions',
             },
             { text: 'Deployment', link: '/docs/guides/deployment' },
+            { text: 'Upgrading', link: '/docs/guides/upgrading' },
             { text: 'Sharding', link: '/docs/guides/sharding' },
             { text: 'Security', link: '/docs/guides/security' },
             { text: 'Troubleshooting', link: '/docs/guides/troubleshooting' },
@@ -378,7 +338,6 @@ export default defineConfig({
               items: [
                 { text: 'Terms', link: '/about/legal/terms' },
                 { text: 'Privacy', link: '/about/legal/privacy' },
-                { text: 'Cookies', link: '/about/legal/cookies' },
               ],
               collapsed: false,
             },
@@ -389,7 +348,7 @@ export default defineConfig({
     },
     siteTitle: false,
     socialLinks: [
-      { icon: 'durable-streams', link: 'https://github.com/durable-streams/durable-streams' },
+      { icon: 'durable-streams', link: 'https://durablestreams.com' },
       { icon: 'tanstack', link: 'https://tanstack.com/db' },
       { icon: 'pglite', link: 'https://pglite.dev' },
       { icon: 'x', link: 'https://x.com/ElectricSQL' },

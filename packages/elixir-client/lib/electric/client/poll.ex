@@ -84,6 +84,7 @@ defmodule Electric.Client.Poll do
 
     case Fetch.request(client, request) do
       %Fetch.Response{status: status} = resp when status in 200..299 ->
+        validate_headers!(resp, state)
         handle_success(resp, client, state, shape_key)
 
       {:error, %Fetch.Response{status: 409} = resp} ->
@@ -135,19 +136,15 @@ defmodule Electric.Client.Poll do
   defp maybe_add_cache_buster(params, buster), do: Map.put(params, "cache-buster", buster)
 
   defp handle_success(resp, client, state, shape_key) do
-    response_handle = shape_handle!(resp)
+    response_handle = resp.shape_handle
     expired_handle = ExpiredShapesCache.get_expired_handle(shape_key)
 
-    # Check for stale CDN response
+    # Check for stale CDN response — always enter stale-retry to add a cache
+    # buster. Without this, the CDN keeps serving the same stale response and
+    # the client loops infinitely (the URL never changes).
     cond do
-      # Stale: response matches expired AND no valid local handle
-      response_handle == expired_handle and
-          (is_nil(state.shape_handle) or state.shape_handle == expired_handle) ->
-        handle_stale_response(state)
-
-      # Stale but have valid local handle: ignore response
       response_handle == expired_handle ->
-        {:stale_ignored, ShapeState.clear_stale_retry(state)}
+        handle_stale_response(state)
 
       # Normal: process response
       true ->
@@ -192,7 +189,9 @@ defmodule Electric.Client.Poll do
       ExpiredShapesCache.mark_expired(shape_key, state.shape_handle)
     end
 
-    handle = shape_handle(resp) || "#{state.shape_handle}-next"
+    handle =
+      shape_handle(resp) ||
+        "#{String.trim_trailing(state.shape_handle || "", "-next")}-next"
 
     new_state = ShapeState.reset(state, handle)
     new_state = handle_schema(resp, client, new_state)
@@ -276,9 +275,46 @@ defmodule Electric.Client.Poll do
     end
   end
 
-  defp shape_handle!(resp) do
-    shape_handle(resp) ||
-      raise Client.Error, message: "Missing electric-handle header", resp: resp
+  defp validate_headers!(%Fetch.Response{} = resp, %ShapeState{} = state) do
+    # Validate required Electric response fields, matching the TypeScript
+    # client's createFetchWithResponseHeadersCheck middleware.
+    #
+    # We check parsed struct fields (not raw HTTP headers) so this works
+    # for both real HTTP responses and the Mock fetch implementation.
+    #
+    # Rules (based on TypeScript's createFetchWithResponseHeadersCheck):
+    # - All responses: electric-handle, electric-offset
+    # - Non-live responses: electric-schema (server always sends it, but we
+    #   only validate when we don't have one yet since it's first-write-wins)
+    # - Live responses: electric-cursor (CDN cache buster)
+    is_live? = state.up_to_date?
+
+    missing = []
+
+    missing =
+      if is_nil(resp.shape_handle), do: ["electric-handle" | missing], else: missing
+
+    missing =
+      if is_nil(resp.last_offset), do: ["electric-offset" | missing], else: missing
+
+    missing =
+      if not is_live? and is_nil(state.schema) and is_nil(resp.schema),
+        do: ["electric-schema" | missing],
+        else: missing
+
+    missing =
+      if is_live? and is_nil(resp.next_cursor),
+        do: ["electric-cursor" | missing],
+        else: missing
+
+    if missing != [] do
+      raise Client.Error,
+        message:
+          "Response is missing required Electric header(s): #{Enum.join(missing, ", ")}. " <>
+            "This usually indicates a proxy or CDN misconfiguration — " <>
+            "check that your proxy forwards all Electric headers " <>
+            "(electric-handle, electric-offset, electric-schema, electric-cursor) to the client."
+    end
   end
 
   defp shape_handle(%Fetch.Response{shape_handle: shape_handle}) do

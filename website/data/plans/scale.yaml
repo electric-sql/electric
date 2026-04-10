@@ -1,0 +1,29 @@
+name: 'Scale'
+order: 30
+type: tier
+
+monthlyFee: 1999
+discountPercent: 20
+priceQualifier: '/ month'
+priceColor: 'gray'
+
+limits:
+  maxDatabases: 200
+  maxUsersPerWorkspace: 50
+
+featureGates:
+  postgresSubqueries: true
+
+commitment: '6 months'
+support: 'Direct access to founders'
+billingBehavior: 'Monthly fee acts as prepaid usage credit'
+
+who: 'For large workloads and faster time to market'
+features:
+  - 'Up to 200 databases'
+  - 'Early access to new features'
+
+ctaText: 'Sign up now'
+ctaTextSmall: 'Sign up'
+ctaHref: 'https://dashboard.electric-sql.cloud?plan=scale'
+ctaTheme: 'brand'

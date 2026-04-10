@@ -42,7 +42,11 @@ defmodule Electric.Shapes.Consumer.State do
     # Tracks in-progress transaction, initialized when a txn fragment with has_begin?=true is seen.
     # It is used to check whether the entire txn is visible in the snapshot and to mark it
     # as flushed in order to handle its remaining fragments appropriately.
-    pending_txn: nil
+    pending_txn: nil,
+    # When a {Storage, :flushed, offset} message arrives during a pending
+    # transaction, we defer the notification and store the max flushed offset
+    # here. Multiple deferred notifications are collapsed into a single most recent offset.
+    pending_flush_offset: nil
   ]
 
   @type pg_snapshot() :: SnapshotQuery.pg_snapshot()
@@ -393,6 +397,6 @@ defmodule Electric.Shapes.Consumer.State do
     ]
   end
 
-  def write_unit_txn, do: @write_unit_txn
-  def write_unit_txn_fragment, do: @write_unit_txn_fragment
+  defguard is_write_unit_txn(write_unit) when write_unit == @write_unit_txn
+  defguard is_write_unit_txn_fragment(write_unit) when write_unit == @write_unit_txn_fragment
 end

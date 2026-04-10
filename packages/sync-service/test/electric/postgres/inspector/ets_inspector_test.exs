@@ -475,6 +475,17 @@ defmodule Electric.Postgres.Inspector.EtsInspectorTest do
       assert {:ok, ^features} = EtsInspector.load_supported_features(opts)
     end
 
+    test "returns supported features from persistence when DB is unavailable",
+         %{opts: opts} = ctx do
+      assert {:ok, features} = EtsInspector.load_supported_features(opts)
+      stop_supervised!(EtsInspector)
+
+      # Restart inspector without a DB pool — features should come from PersistentKV
+      %{inspector: {EtsInspector, opts}} = with_inspector(ctx |> Map.put(:db_conn, :no_pool))
+
+      assert {:ok, ^features} = EtsInspector.load_supported_features(opts)
+    end
+
     test "doesn't load back last seen state on a restart if the storage format is old",
          %{
            opts: opts,

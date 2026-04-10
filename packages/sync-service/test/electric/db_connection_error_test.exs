@@ -603,8 +603,59 @@ defmodule Electric.DbConnectionErrorTest do
                message: "branch 3ibd4pbmos9p does not exist",
                type: :branch_does_not_exist,
                original_error: error,
+               retry_may_fix?: true
+             } == DbConnectionError.from_error(error)
+    end
+
+    test "with failure to authenticate an unencrypted connection error" do
+      error = %Postgrex.Error{
+        message: nil,
+        postgres: %{
+          code: :invalid_authorization_specification,
+          message:
+            "no pg_hba.conf entry for host \"89.105.67.212\", user \"postgres\", database \"postgres\", no encryption",
+          unknown: "FATAL",
+          severity: "FATAL",
+          pg_code: "28000"
+        },
+        connection_id: nil,
+        query: nil
+      }
+
+      assert %DbConnectionError{
+               message:
+                 "Connection refused: server requires SSL/TLS but the client connected without encryption",
+               type: :ssl_connection_required,
+               original_error: error,
                retry_may_fix?: false
              } == DbConnectionError.from_error(error)
+    end
+
+    test "with failure to authenticate an encrypted connection error" do
+      for reason <- ["SSL encryption", "GSS encryption"] do
+        message =
+          "no pg_hba.conf entry for host \"89.105.67.212\", user \"postgres\", database \"postgres\", #{reason}"
+
+        error = %Postgrex.Error{
+          message: nil,
+          postgres: %{
+            code: :invalid_authorization_specification,
+            message: message,
+            unknown: "FATAL",
+            severity: "FATAL",
+            pg_code: "28000"
+          },
+          connection_id: nil,
+          query: nil
+        }
+
+        assert %DbConnectionError{
+                 message: "Connection rejected: #{message}",
+                 type: :authorization_failure,
+                 original_error: error,
+                 retry_may_fix?: false
+               } == DbConnectionError.from_error(error)
+      end
     end
 
     test "with an unknown error" do

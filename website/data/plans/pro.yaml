@@ -1,0 +1,29 @@
+name: 'Pro'
+order: 20
+type: tier
+highlighted: true
+
+monthlyFee: 249
+discountPercent: 10
+priceQualifier: '/ month'
+
+limits:
+  maxDatabases: 50
+  maxUsersPerWorkspace: 50
+
+featureGates:
+  postgresSubqueries: true
+
+commitment: 'None'
+support: 'Priority email support'
+billingBehavior: 'Monthly fee acts as prepaid usage credit'
+
+who: 'For teams running mission-critical apps'
+features:
+  - 'Up to 50 databases'
+  - 'Early access to new features'
+
+ctaText: 'Sign up now'
+ctaTextSmall: 'Sign up'
+ctaHref: 'https://dashboard.electric-sql.cloud?plan=pro'
+ctaTheme: 'brand'

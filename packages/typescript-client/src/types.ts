@@ -60,13 +60,16 @@ export type Operation = `insert` | `update` | `delete`
 export type MoveTag = string
 
 /**
- * A move-out pattern is a position and a value. The position is the index of the column
- * that is being moved out. The value is the value of the column that is being moved out.
+ * A move pattern is a position and a value. The position is the index of the column
+ * involved in the move. The value is the value of that column.
  *
  * Tag width and value order is fixed for a given shape, so the client can determine
  * which tags match this pattern.
  */
-export type MoveOutPattern = { pos: number; value: string }
+export type MovePattern = { pos: number; value: string }
+
+/** @deprecated Use {@link MovePattern} instead */
+export type MoveOutPattern = MovePattern
 
 /**
  * Serialized expression types for structured subset queries.
@@ -125,7 +128,7 @@ export type ControlMessage = {
 }
 
 export type EventMessage = {
-  headers: Header & { event: `move-out`; patterns: MoveOutPattern[] }
+  headers: Header & { event: `move-out` | `move-in`; patterns: MovePattern[] }
 }
 
 export type ChangeMessage<T extends Row<unknown> = Row> = {
@@ -138,6 +141,7 @@ export type ChangeMessage<T extends Row<unknown> = Row> = {
     /** Tags will always be present for changes if the shape has a subquery in its where clause, and are omitted otherwise.*/
     tags?: MoveTag[]
     removed_tags?: MoveTag[]
+    active_conditions?: boolean[]
   }
 }
 

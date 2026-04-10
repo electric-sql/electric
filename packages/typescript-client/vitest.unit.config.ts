@@ -16,6 +16,7 @@ export default defineConfig({
       `test/static-analysis.test.ts`,
       `test/stream.test.ts`,
       `test/204-no-content.test.ts`,
+      `test/model-based.test.ts`,
     ],
     testTimeout: 30000,
     environment: `jsdom`,

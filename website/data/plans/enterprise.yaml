@@ -1,0 +1,26 @@
+name: 'Enterprise'
+order: 50
+type: enterprise
+
+who: 'Organizations with custom requirements, dedicated infrastructure, or compliance needs.'
+featuresTitle: 'Bespoke solutions'
+features:
+  - 'Custom usage pricing'
+  - 'Unlimited databases'
+  - 'Custom SLAs and support'
+
+limits:
+  maxDatabases: 'Unlimited'
+  maxUsersPerWorkspace: 'Unlimited'
+
+featureGates:
+  postgresSubqueries: true
+
+commitment: 'Custom'
+support: 'Custom'
+
+ctaText: 'Contact sales'
+ctaTextSmall: 'Contact'
+ctaHref: '/about/contact#sales'
+ctaTheme: 'alt'
+priceColor: 'ddn'

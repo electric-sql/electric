@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ShapeStream, isChangeMessage, Message, Row } from '../src'
 import { snakeCamelMapper } from '../src/column-mapper'
+import { expiredShapesCache } from '../src/expired-shapes-cache'
+import { upToDateTracker } from '../src/up-to-date-tracker'
 import { resolveInMacrotask } from './support/test-helpers'
 
 describe(`ShapeStream`, () => {
@@ -8,6 +10,9 @@ describe(`ShapeStream`, () => {
   let aborter: AbortController
 
   beforeEach(() => {
+    localStorage.clear()
+    expiredShapesCache.clear()
+    upToDateTracker.clear()
     aborter = new AbortController()
   })
 
@@ -705,5 +710,332 @@ describe(`ShapeStream`, () => {
     )
 
     warnSpy.mockRestore()
+  })
+
+  it(`onError retry loop should be bounded for persistent errors`, async () => {
+    // Regression: onError always returning retry for a persistent error
+    // caused an unbounded retry loop. The consecutive error retry limit
+    // ensures the loop terminates.
+    let requestCount = 0
+
+    // First request succeeds → LiveState. All subsequent → persistent 400.
+    const fetchMock = vi.fn(async () => {
+      requestCount++
+
+      if (requestCount === 1) {
+        return new Response(
+          JSON.stringify([
+            { value: { id: 1 } },
+            { headers: { control: `up-to-date` } },
+          ]),
+          {
+            status: 200,
+            headers: {
+              'electric-handle': `test-handle`,
+              'electric-offset': `0_0`,
+              'electric-schema': `{"id":"int4"}`,
+              'electric-up-to-date': ``,
+            },
+          }
+        )
+      }
+
+      // 400 bypasses backoff, creating a tight retry loop
+      return new Response(`Bad Request`, {
+        status: 400,
+        statusText: `Bad Request`,
+      })
+    })
+
+    let lastError: Error | null = null
+    const stream = new ShapeStream({
+      url: shapeUrl,
+      params: { table: `test` },
+      signal: aborter.signal,
+      fetchClient: fetchMock,
+      subscribe: true,
+      onError: (error) => {
+        lastError = error
+        return {} // always retry — simulates TanStack DB's shouldRetryOnFailure
+      },
+    })
+
+    let subscriberError: Error | null = null
+    stream.subscribe(
+      () => {},
+      (err) => {
+        subscriberError = err
+      }
+    )
+
+    // The retry loop is asynchronous recursion via microtasks, so it
+    // completes well within this window.
+    await new Promise((resolve) => setTimeout(resolve, 500))
+
+    expect(lastError).not.toBeNull()
+    expect(subscriberError).not.toBeNull()
+    // 1 initial success + ~51 retries (limit fires at >50)
+    expect(requestCount).toBeLessThan(100)
+  })
+
+  it(`onError retry counter resets after successful data`, async () => {
+    // The consecutive error retry counter must reset when the stream
+    // processes real data. Without the reset, intermittent error bursts
+    // would accumulate across the stream's lifetime and eventually kill
+    // a stream that is making progress between failures.
+
+    let requestCount = 0
+    const phase = { current: `errors1` } // errors1 → success1 → errors2 → done
+
+    const fetchMock = vi.fn(
+      async (_url: RequestInfo | URL, init?: RequestInit) => {
+        // Yield to the event loop to prevent OOM from deeply nested
+        // recursive await this.#start() with instant mock resolution
+        await new Promise((r) => setTimeout(r, 0))
+        if (init?.signal?.aborted) return Response.error()
+
+        requestCount++
+
+        if (phase.current === `errors1` && requestCount <= 30) {
+          return new Response(`Bad Request`, {
+            status: 400,
+            statusText: `Bad Request`,
+          })
+        }
+        if (phase.current === `errors1`) {
+          phase.current = `success1`
+        }
+        if (phase.current === `success1`) {
+          phase.current = `errors2`
+          requestCount = 0
+          return new Response(
+            JSON.stringify([
+              { value: { id: 1 } },
+              { headers: { control: `up-to-date` } },
+            ]),
+            {
+              status: 200,
+              headers: {
+                'electric-handle': `test-handle`,
+                'electric-offset': `0_0`,
+                'electric-schema': `{"id":"int4"}`,
+                'electric-cursor': `cursor-1`,
+                'electric-up-to-date': ``,
+              },
+            }
+          )
+        }
+        if (phase.current === `errors2` && requestCount <= 30) {
+          return new Response(`Bad Request`, {
+            status: 400,
+            statusText: `Bad Request`,
+          })
+        }
+        // Both bursts survived — abort
+        phase.current = `done`
+        aborter.abort()
+        return new Response(
+          JSON.stringify([
+            { value: { id: 2 } },
+            { headers: { control: `up-to-date` } },
+          ]),
+          {
+            status: 200,
+            headers: {
+              'electric-handle': `test-handle`,
+              'electric-offset': `0_1`,
+              'electric-schema': `{"id":"int4"}`,
+              'electric-cursor': `cursor-2`,
+              'electric-up-to-date': ``,
+            },
+          }
+        )
+      }
+    )
+
+    let subscriberError: Error | null = null
+    const stream = new ShapeStream({
+      url: shapeUrl,
+      params: { table: `test` },
+      signal: aborter.signal,
+      fetchClient: fetchMock,
+      subscribe: true,
+      onError: () => ({}), // always retry
+    })
+
+    stream.subscribe(
+      () => {},
+      (err) => {
+        subscriberError = err
+      }
+    )
+
+    await vi.waitFor(
+      () => {
+        expect(phase.current).toBe(`done`)
+      },
+      { timeout: 10_000 }
+    )
+
+    // Stream survived 60 total errors (2 bursts of 30) because the
+    // counter reset between bursts. Without the reset, the cumulative
+    // count would hit 50 and kill the stream during the first burst.
+    expect(subscriberError).toBeNull()
+  })
+
+  it(`204 No Content responses reset the consecutive error retry counter`, async () => {
+    // 204 is a deprecated but supported "you're caught up" response that
+    // returns an empty body. The retry counter must reset on 204 success,
+    // not just on non-empty message batches.
+    let requestCount = 0
+
+    // Pattern: initial 200 → LiveState, then alternating bursts of
+    // 10 errors and 204 successes, repeated 6 times.
+    // Total errors: 60 (exceeds the 50 cap if counter doesn't reset).
+    const fetchMock = vi.fn(async () => {
+      await new Promise((r) => setTimeout(r, 0))
+      requestCount++
+
+      // First request: initial 200 to establish shape
+      if (requestCount === 1) {
+        return new Response(
+          JSON.stringify([
+            { value: { id: 1 } },
+            { headers: { control: `up-to-date` } },
+          ]),
+          {
+            status: 200,
+            headers: {
+              'electric-handle': `handle-204-test`,
+              'electric-offset': `0_0`,
+              'electric-schema': `{"id":"int4"}`,
+              'electric-up-to-date': ``,
+            },
+          }
+        )
+      }
+
+      // After initial success: cycle through 10 errors then 1 x 204, repeat
+      const cyclePos = (requestCount - 2) % 11 // 0-9 = errors, 10 = 204
+      if (cyclePos < 10) {
+        return new Response(`Bad Request`, {
+          status: 400,
+          statusText: `Bad Request`,
+        })
+      }
+
+      // 204 No Content — should reset counter
+      return new Response(null, {
+        status: 204,
+        headers: {
+          'electric-handle': `handle-204-test`,
+          'electric-offset': `0_0`,
+          'electric-schema': `{"id":"int4"}`,
+          'electric-cursor': `cursor-${requestCount}`,
+        },
+      })
+    })
+
+    let subscriberError: Error | null = null
+    const stream = new ShapeStream({
+      url: shapeUrl,
+      params: { table: `test` },
+      signal: aborter.signal,
+      fetchClient: fetchMock,
+      subscribe: true,
+      onError: () => ({}),
+    })
+
+    stream.subscribe(
+      () => {},
+      (err) => {
+        subscriberError = err
+      }
+    )
+
+    // Wait long enough for 60+ errors across 6 cycles
+    await vi.waitFor(
+      () => {
+        expect(requestCount).toBeGreaterThan(60)
+      },
+      { timeout: 10_000 }
+    )
+
+    aborter.abort()
+
+    // If counter resets on 204, the stream survives 60+ total errors.
+    // If it doesn't, the counter hits 50 and tears down the stream.
+    expect(subscriberError).toBeNull()
+  })
+
+  it(`malformed 200 responses are bounded by the retry counter`, async () => {
+    // A proxy/CDN returning 200 OK with invalid JSON (non-array body)
+    // must still be bounded. The counter must NOT reset before the body
+    // is successfully parsed, otherwise accepted headers + parse failure
+    // creates an unbounded loop (counter resets to 0 every iteration).
+    let requestCount = 0
+
+    const fetchMock = vi.fn(
+      async (_url: RequestInfo | URL, init?: RequestInit) => {
+        await new Promise((r) => setTimeout(r, 0))
+        if (init?.signal?.aborted) return Response.error()
+        requestCount++
+
+        // First request: valid 200 to establish shape
+        if (requestCount === 1) {
+          return new Response(
+            JSON.stringify([
+              { value: { id: 1 } },
+              { headers: { control: `up-to-date` } },
+            ]),
+            {
+              status: 200,
+              headers: {
+                'electric-handle': `handle-malformed-test`,
+                'electric-offset': `0_0`,
+                'electric-schema': `{"id":"int4"}`,
+                'electric-up-to-date': ``,
+              },
+            }
+          )
+        }
+
+        // All subsequent: 200 OK with valid headers but non-array body
+        return new Response(`{"error": "not an array"}`, {
+          status: 200,
+          headers: {
+            'electric-handle': `handle-malformed-test`,
+            'electric-offset': `0_0`,
+            'electric-schema': `{"id":"int4"}`,
+            'electric-cursor': `cursor-${requestCount}`,
+          },
+        })
+      }
+    )
+
+    let subscriberError: Error | null = null
+    const stream = new ShapeStream({
+      url: shapeUrl,
+      params: { table: `test` },
+      signal: aborter.signal,
+      fetchClient: fetchMock,
+      subscribe: true,
+      onError: () => ({}),
+    })
+
+    stream.subscribe(
+      () => {},
+      (err) => {
+        subscriberError = err
+      }
+    )
+
+    await new Promise((resolve) => setTimeout(resolve, 2000))
+
+    // The retry counter must eventually exhaust and tear down the stream.
+    // If the counter resets on accepted headers (before parse), this
+    // assertion fails because the stream loops forever.
+    expect(subscriberError).not.toBeNull()
+    expect(requestCount).toBeLessThan(200)
   })
 })

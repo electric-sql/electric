@@ -330,7 +330,7 @@ export const userCollection = createCollection(
 )
 ```
 
-Electric collections use the [Electric sync engine](/products/postgres-sync) (in this case via Phoenix.Sync) to keep the data in the collection up-to-date and in-sync with the contents of the Postgres database. Components then read data from the collections using live queries:
+Electric collections use the [Electric sync engine](/primitives/postgres-sync) (in this case via Phoenix.Sync) to keep the data in the collection up-to-date and in-sync with the contents of the Postgres database. Components then read data from the collections using live queries:
 
 ```tsx
 // From `assets/src/components/ChatArea.tsx`
@@ -447,7 +447,7 @@ There's a lot of hype around agentic system development. Concepts like agentic m
 
 When you dig into it, these all collapse down to processes and database state. You can build agentic systems with a database, standard web tooling and real-time sync.
 
-See the [🔥 Burn demo app](/demos/burn) and [source code](https://github.com/electric-sql/electric/tree/main/examples/burn) for an example and build your own agentic system with [Phoenix.Sync](https://hexdocs.pm/phoenix_sync) and [TanStack&nbsp;DB](/products/tanstack-db).
+See the [🔥 Burn demo app](/demos/burn) and [source code](https://github.com/electric-sql/electric/tree/main/examples/burn) for an example and build your own agentic system with [Phoenix.Sync](https://hexdocs.pm/phoenix_sync) and [TanStack&nbsp;DB](/primitives/tanstack-db).
 
 <div class="actions cta-actions page-footer-actions left">
   <div class="action cloud-cta hidden-sm">

@@ -11,7 +11,7 @@ import EnvVarConfig from '../../src/components/EnvVarConfig.vue'
 
 # Sync service configuration
 
-This page documents the config options for [self-hosting](/docs/guides/deployment) the [Electric sync engine](/products/postgres-sync).
+This page documents the config options for [self-hosting](/docs/guides/deployment) the [Electric sync engine](/primitives/postgres-sync).
 
 > [!Warning] Advanced only
 > You don't need to worry about this if you're using [Electric Cloud](/cloud).
@@ -125,6 +125,35 @@ Note, however, that setting `sslmode=disable` in `DATABASE_URL` and enabling cer
     example="my-app">
 
 Suffix for the logical replication publication and slot name.
+
+</EnvVarConfig>
+
+### CLEANUP_REPLICATION_SLOTS_ON_SHUTDOWN
+
+<EnvVarConfig
+    name="CLEANUP_REPLICATION_SLOTS_ON_SHUTDOWN"
+    defaultValue="false"
+    example="true">
+
+When set to `true`, Electric creates a [temporary replication slot](https://www.postgresql.org/docs/current/protocol-replication.html) that is automatically dropped when the database connection closes. This is useful for ephemeral deployments where each container has its own storage and replication slots don't need to persist across restarts.
+
+> [!Warning] Unclean shutdowns cause shape rotations
+> If Electric crashes or loses its database connection (e.g., during a network partition), the temporary slot is lost. The next instance starts with a fresh slot and clients connected to old shapes will receive `409` (must-refetch) responses, requiring a full resync.
+
+See the [Upgrading guide](/docs/guides/upgrading#temporary-replication-slots) for more context on using temporary slots.
+
+</EnvVarConfig>
+
+### ELECTRIC_TEMPORARY_REPLICATION_SLOT_USE_RANDOM_NAME
+
+<EnvVarConfig
+    name="ELECTRIC_TEMPORARY_REPLICATION_SLOT_USE_RANDOM_NAME"
+    defaultValue="false"
+    example="true">
+
+When used with [`CLEANUP_REPLICATION_SLOTS_ON_SHUTDOWN=true`](#cleanup-replication-slots-on-shutdown), generates a random replication slot name instead of the deterministic name based on [`ELECTRIC_REPLICATION_STREAM_ID`](#electric-replication-stream-id). This avoids slot name conflicts when multiple instances run concurrently during rolling deploys.
+
+Has no effect unless `CLEANUP_REPLICATION_SLOTS_ON_SHUTDOWN` is also set to `true`.
 
 </EnvVarConfig>
 
@@ -408,6 +437,17 @@ When set, Electric periodically evicts the least recently used shapes to stay wi
 Clients subscribed to an expired shape will receive a `409 Conflict` response, prompting them to create a new shape subscription with a fresh initial sync.
 
 This replaces the previous `ELECTRIC_EXPERIMENTAL_MAX_SHAPES` environment variable, which is deprecated and will be removed in a future release.
+
+</EnvVarConfig>
+
+### ELECTRIC_CONSUMER_PARTITIONS
+
+<EnvVarConfig
+    name="ELECTRIC_CONSUMER_PARTITIONS"
+    optional="true"
+    example="128">
+
+Consumer processes are partitioned across some number of supervisors to improve launch and shutdown time. If `ELECTRIC_MAX_SHAPES` is set the number of partitions will scale to fit this maximum but if not, it defaults to the number of CPU cores. If you want to improve shutdown performance without setting an upper limit on the number of shapes, then set this to roughly your expected number of shapes / 4000.
 
 </EnvVarConfig>
 

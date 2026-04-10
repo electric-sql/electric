@@ -2176,6 +2176,35 @@ defmodule Electric.Plug.RouterTest do
       # After completion, all permits should be released
       assert %{initial: 0, existing: 0} = Electric.AdmissionControl.get_current(stack_id)
     end
+
+    @tag with_sql: [
+           "INSERT INTO items VALUES (gen_random_uuid(), 'test value 1')"
+         ]
+    test "does not create shapes when admission control rejects initial requests", %{
+      opts: opts,
+      stack_id: stack_id
+    } do
+      # Verify no shapes exist initially
+      assert Electric.ShapeCache.count_shapes(stack_id) == 0
+
+      # Pre-fill both initial admission slots (limit is 2) so the next request is rejected
+      :ok = Electric.AdmissionControl.try_acquire(stack_id, :initial, max_concurrent: 2)
+      :ok = Electric.AdmissionControl.try_acquire(stack_id, :initial, max_concurrent: 2)
+      assert %{initial: 2, existing: 0} = Electric.AdmissionControl.get_current(stack_id)
+
+      # Send an initial request for a new shape - should be rejected by admission control
+      conn = conn("GET", "/v1/shape?table=items&offset=-1") |> Router.call(opts)
+      assert %{status: 503} = conn
+
+      # Previously, shapes were created during validation, before admission control
+      # ran, so a rejected request would still leave a shape in the cache.
+      # This test asserts the fix: no shape is created when admission control rejects.
+      assert Electric.ShapeCache.count_shapes(stack_id) == 0
+
+      # Clean up manually acquired permits
+      Electric.AdmissionControl.release(stack_id, :initial)
+      Electric.AdmissionControl.release(stack_id, :initial)
+    end
   end
 
   describe "/v1/shapes - subqueries" do
@@ -3264,6 +3293,89 @@ defmodule Electric.Plug.RouterTest do
                shape_req(req, ctx.opts,
                  subset: %{where: "value = $1::text", params: %{"1" => "test value 1"}}
                )
+    end
+
+    # --- SQL injection prevention in ORDER BY (integration tests) ---
+
+    @tag with_sql: [
+           "INSERT INTO items VALUES (gen_random_uuid(), 'test value 1')"
+         ]
+    test "rejects CAST with subquery injection in order_by", ctx do
+      req = make_shape_req("items", log: "changes_only")
+
+      assert {_, 400, %{"errors" => %{"subset" => %{"order_by" => [message]}}}} =
+               shape_req(req, ctx.opts,
+                 subset: %{order_by: ~s|CAST((SELECT version()) AS int) DESC|}
+               )
+
+      assert message =~ "not allowed in ORDER BY"
+    end
+
+    @tag with_sql: [
+           "INSERT INTO items VALUES (gen_random_uuid(), 'test value 1')"
+         ]
+    test "rejects function call injection in order_by", ctx do
+      req = make_shape_req("items", log: "changes_only")
+
+      assert {_, 400, %{"errors" => %{"subset" => %{"order_by" => [message]}}}} =
+               shape_req(req, ctx.opts, subset: %{order_by: ~s|pg_sleep(5)|})
+
+      assert message =~ "not allowed in ORDER BY"
+    end
+
+    @tag with_sql: [
+           "INSERT INTO items VALUES (gen_random_uuid(), 'test value 1')"
+         ]
+    test "rejects bare subquery injection in order_by", ctx do
+      req = make_shape_req("items", log: "changes_only")
+
+      assert {_, 400, %{"errors" => %{"subset" => %{"order_by" => [message]}}}} =
+               shape_req(req, ctx.opts, subset: %{order_by: ~s|(SELECT count(*) FROM pg_tables)|})
+
+      assert message =~ "not allowed in ORDER BY"
+    end
+
+    @tag with_sql: [
+           "INSERT INTO items VALUES (gen_random_uuid(), 'test value 1')"
+         ]
+    test "rejects type cast injection in order_by", ctx do
+      req = make_shape_req("items", log: "changes_only")
+
+      assert {_, 400, %{"errors" => %{"subset" => %{"order_by" => [message]}}}} =
+               shape_req(req, ctx.opts, subset: %{order_by: ~s|id::text|})
+
+      assert message =~ "not allowed in ORDER BY"
+    end
+
+    @tag with_sql: [
+           "INSERT INTO items VALUES (gen_random_uuid(), 'test value 1')"
+         ]
+    test "rejects information_schema enumeration via order_by", ctx do
+      req = make_shape_req("items", log: "changes_only")
+
+      payload =
+        ~s|CAST((SELECT string_agg(table_name, ',') FROM information_schema.tables) AS int) DESC|
+
+      assert {_, 400, %{"errors" => %{"subset" => %{"order_by" => [message]}}}} =
+               shape_req(req, ctx.opts, subset: %{order_by: payload})
+
+      assert message =~ "not allowed in ORDER BY"
+    end
+
+    @tag with_sql: [
+           "INSERT INTO items VALUES (gen_random_uuid(), 'test value 1')"
+         ]
+    test "rejects CASE expression injection in order_by", ctx do
+      req = make_shape_req("items", log: "changes_only")
+
+      assert {_, 400, %{"errors" => %{"subset" => %{"order_by" => [message]}}}} =
+               shape_req(req, ctx.opts,
+                 subset: %{
+                   order_by: ~s|CASE WHEN (SELECT true) THEN 1 ELSE 0 END|
+                 }
+               )
+
+      assert message =~ "not allowed in ORDER BY"
     end
 
     test "GET requests aren't cached", ctx do

@@ -8,16 +8,20 @@ defmodule Electric.StackSupervisor do
 
   1. `Electric.Postgres.Inspector.EtsInspector` is started with a pool name as a config option, module that is passed from the base config is __ignored__
   2. `Electric.Connection.Supervisor` takes a LOT of options to configure replication and start the rest of the tree. It starts (3) and then (4) in `rest-for-one` mode
-  3. `Electric.Connection.Manager` takes all the connection/replication options and starts the db pool. It goes through the following steps:
-      - start_lock_connection
-      - exclusive_connection_lock_acquired (as a callback from the lock connection)
+  3. `Electric.Connection.Manager` takes all the connection/replication options and starts the db pools. It goes through the following steps:
+      - start_admin_pool
+        Starts an admin connection pool (3.1) using replication credentials before the lock is acquired.
+        This pool is available for operations like lock breaking, shutdown cleanup, and ETS inspector cache population.
       - start_replication_client
-        This starts a replication client (3.1) with no auto-reconnection, because manager is expected to restart this client in case something goes wrong. The streaming of WAL does not start automatically and has to be started explicitly by the manager
-      - start_connection_pool (only if it's not started already, otherwise start streaming)
-        This starts a `Postgrex` connection pool (3.2) to the DB we're going to use. If it's ok, we then do a bunch of checks, then ask (3) to finally start (4), and start streaming
+        This starts a replication client (3.2) with no auto-reconnection, because manager is expected to restart this client in case something goes wrong. The streaming of WAL does not start automatically and has to be started explicitly by the manager.
+        The replication client acquires the advisory lock, creates/verifies the publication and slot.
+      - start_snapshot_pool
+        Starts a snapshot connection pool (3.3) using pooled credentials after the replication client is configured.
+        If it's ok, we then do a bunch of checks, then ask (3) to finally start (4), and start streaming.
 
-      1. `Electric.Postgres.ReplicationClient` - connects to PG in replication mod, sets up slots, _does not start streaming_ until requested
-      2. `Postgrex` connection pool is started for querying initial snapshots & info about the DB
+      1. `Postgrex` admin pool - small pool (1-4 connections) for metadata/admin operations
+      2. `Electric.Postgres.ReplicationClient` - connects to PG in replication mode, sets up slots, _does not start streaming_ until requested
+      3. `Postgrex` snapshot pool - larger pool for querying initial snapshots & info about the DB
   4. `Electric.Shapes.Supervisor` is a supervisor responsible for taking the replication log from the replication client and shoving it into storage appropriately. It starts 3 things in one-for-all mode:
       1. `Electric.Shapes.DynamicConsumerSupervisor` is DynamicSupervisor. It oversees various per-shape processes
           1. `Electric.Shapes.Consumer` is a consumer subscribing to `LogCollector`, which acts a shared producer for all shapes. It passes any incoming operation along to the storage.
@@ -146,7 +150,8 @@ defmodule Electric.StackSupervisor do
                        type: {:or, [:pos_integer, nil]},
                        default: nil
                      ],
-                     process_spawn_opts: [type: :map, default: %{}]
+                     process_spawn_opts: [type: :map, default: %{}],
+                     consumer_partitions: [type: {:or, [:pos_integer, nil]}, default: nil]
                    ]
                  ],
                  lock_breaker_guard: [

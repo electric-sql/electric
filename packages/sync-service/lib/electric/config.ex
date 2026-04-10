@@ -68,6 +68,7 @@ defmodule Electric.Config do
     stack_ready_timeout: 5_000,
     send_cache_headers?: true,
     max_shapes: nil,
+    consumer_partitions: nil,
     # This value should be tuned for the hardware it's running on.
     max_concurrent_requests: %{initial: 300, existing: 10_000},
     ## Storage
@@ -558,6 +559,86 @@ defmodule Electric.Config do
     case parse_human_readable_size(str) do
       {:ok, result} -> result
       {:error, message} -> raise Dotenvy.Error, message: message
+    end
+  end
+
+  @doc """
+  Parse a top process limit string into a tagged tuple.
+
+  ## Examples
+
+    iex> parse_top_process_limit("count:5")
+    {:ok, {:count, 5}}
+
+    iex> parse_top_process_limit("mem_percent:80")
+    {:ok, {:mem_percent, 80}}
+
+    iex> parse_top_process_limit("mem_percent:0")
+    {:error, "mem_percent value must be between 1 and 100, got: 0"}
+
+    iex> parse_top_process_limit("count:0")
+    {:error, "count value must be a positive integer, got: 0"}
+
+    iex> parse_top_process_limit("foo")
+    {:error, ~S'invalid top process limit: "foo". Expected format: count:<N> or mem_percent:<N>'}
+  """
+  @spec parse_top_process_limit(binary) ::
+          {:ok, {:count, pos_integer()} | {:mem_percent, 1..100}} | {:error, binary}
+  def parse_top_process_limit(str) do
+    case String.split(str, ":", parts: 2) do
+      ["count", n] ->
+        parse_process_count(n)
+
+      ["mem_percent", n] ->
+        parse_mem_percent(n)
+
+      _ ->
+        {:error,
+         "invalid top process limit: #{inspect(str)}. Expected format: count:<N> or mem_percent:<N>"}
+    end
+  end
+
+  def parse_top_process_limit!(str) do
+    case parse_top_process_limit(str) do
+      {:ok, result} -> result
+      {:error, message} -> raise Dotenvy.Error, message: message
+    end
+  end
+
+  @doc """
+  Parse the deprecated ELECTRIC_TELEMETRY_TOP_PROCESS_COUNT value (a plain integer)
+  into a `{:count, N}` tuple.
+
+  ## Examples
+
+    iex> parse_legacy_top_process_count("10")
+    {:ok, {:count, 10}}
+
+    iex> parse_legacy_top_process_count("0")
+    {:error, "count value must be a positive integer, got: 0"}
+  """
+  @spec parse_legacy_top_process_count(binary) ::
+          {:ok, {:count, pos_integer()}} | {:error, binary}
+  def parse_legacy_top_process_count(str), do: parse_process_count(str)
+
+  def parse_legacy_top_process_count!(str) do
+    case parse_legacy_top_process_count(str) do
+      {:ok, result} -> result
+      {:error, message} -> raise Dotenvy.Error, message: message
+    end
+  end
+
+  defp parse_process_count(str) do
+    case Integer.parse(str) do
+      {val, ""} when val > 0 -> {:ok, {:count, val}}
+      _ -> {:error, "count value must be a positive integer, got: #{str}"}
+    end
+  end
+
+  defp parse_mem_percent(str) do
+    case Integer.parse(str) do
+      {val, ""} when val >= 1 and val <= 100 -> {:ok, {:mem_percent, val}}
+      _ -> {:error, "mem_percent value must be between 1 and 100, got: #{str}"}
     end
   end
 

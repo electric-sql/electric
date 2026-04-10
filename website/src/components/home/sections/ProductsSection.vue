@@ -4,8 +4,8 @@ import ProductsGrid from '../ProductsGrid.vue'
 
 const actions = [
   {
-    href: '/products',
-    text: 'Products',
+    href: '/primitives',
+    text: 'Primitives',
     theme: 'brand',
   },
   {

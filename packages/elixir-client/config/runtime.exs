@@ -3,7 +3,7 @@ import Config
 config :logger, level: :warning
 
 if config_env() == :test do
-  port = 3333
+  port = System.get_env("ELECTRIC_PORT", "3333") |> String.to_integer()
   default_database_url = "postgresql://postgres:password@localhost:54321/electric?sslmode=disable"
   database_url = System.get_env("DATABASE_URL", default_database_url)
 

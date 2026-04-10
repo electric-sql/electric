@@ -207,6 +207,7 @@ config :electric,
   max_shapes:
     env!("ELECTRIC_MAX_SHAPES", :integer, nil) ||
       env!("ELECTRIC_EXPERIMENTAL_MAX_SHAPES", :integer, nil),
+  consumer_partitions: env!("ELECTRIC_CONSUMER_PARTITIONS", :integer, nil),
   max_concurrent_requests: max_concurrent_requests,
   # Used in telemetry
   instance_id: instance_id,
@@ -216,7 +217,20 @@ config :electric,
   otel_export_period: otel_export_period,
   otel_sampling_ratio: env!("ELECTRIC_OTEL_SAMPLING_RATIO", :float, nil),
   metrics_sampling_ratio: env!("ELECTRIC_METRICS_SAMPLING_RATIO", :float, nil),
-  telemetry_top_process_count: env!("ELECTRIC_TELEMETRY_TOP_PROCESS_COUNT", :integer, nil),
+  telemetry_top_process_limit:
+    env!("ELECTRIC_TELEMETRY_TOP_PROCESS_LIMIT", &Electric.Config.parse_top_process_limit!/1, nil) ||
+      env!(
+        "ELECTRIC_TELEMETRY_TOP_PROCESS_COUNT",
+        fn str ->
+          IO.warn(
+            "ELECTRIC_TELEMETRY_TOP_PROCESS_COUNT is deprecated, " <>
+              "use ELECTRIC_TELEMETRY_TOP_PROCESS_LIMIT=count:#{str} instead"
+          )
+
+          Electric.Config.parse_legacy_top_process_count!(str)
+        end,
+        nil
+      ),
   telemetry_long_gc_threshold: env!("ELECTRIC_TELEMETRY_LONG_GC_THRESHOLD", :integer, nil),
   telemetry_long_schedule_threshold:
     env!("ELECTRIC_TELEMETRY_LONG_SCHEDULE_THRESHOLD", :integer, nil),

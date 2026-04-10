@@ -44,8 +44,15 @@ defmodule Electric.CoreSupervisor do
     inspector = Keyword.fetch!(opts, :inspector)
     persistent_kv = Keyword.fetch!(opts, :persistent_kv)
     tweaks = Keyword.fetch!(opts, :tweaks)
+    max_shapes = Keyword.fetch!(opts, :max_shapes)
 
-    consumer_supervisor_spec = {Electric.Shapes.DynamicConsumerSupervisor, [stack_id: stack_id]}
+    consumer_supervisor_spec =
+      {Electric.Shapes.DynamicConsumerSupervisor,
+       [
+         stack_id: stack_id,
+         max_shapes: max_shapes,
+         partitions: Keyword.get(tweaks, :consumer_partitions)
+       ]}
 
     shape_cache_spec = {Electric.ShapeCache, shape_cache_opts}
 
@@ -69,8 +76,7 @@ defmodule Electric.CoreSupervisor do
        period: Keyword.get(tweaks, :schema_reconciler_period, 60_000)}
 
     expiry_manager_spec =
-      {Electric.ShapeCache.ExpiryManager,
-       max_shapes: Keyword.fetch!(opts, :max_shapes), stack_id: stack_id}
+      {Electric.ShapeCache.ExpiryManager, max_shapes: max_shapes, stack_id: stack_id}
 
     child_spec =
       Supervisor.child_spec(
