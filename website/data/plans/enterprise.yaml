@@ -7,12 +7,10 @@ featuresTitle: 'Bespoke solutions'
 features:
   - 'Custom usage pricing'
   - 'Unlimited databases'
-  - 'Unlimited concurrent readers'
   - 'Custom SLAs and support'
 
 limits:
   maxDatabases: 'Unlimited'
-  concurrentReadersPerStream: 'Unlimited'
   maxUsersPerWorkspace: 'Unlimited'
 
 featureGates:

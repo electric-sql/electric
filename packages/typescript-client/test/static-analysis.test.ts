@@ -151,7 +151,6 @@ describe(`shape-stream static analysis`, () => {
 
     expect(parkedFindings).toEqual([])
 
-    // No recursive method should have a parked await in tail position
     for (const entry of result.reports.tailPositionAwaitReport) {
       expect(entry.isParked).toBe(false)
     }
@@ -166,33 +165,26 @@ describe(`shape-stream static analysis`, () => {
 
     expect(errorPathFindings).toEqual([])
 
-    // No subscriber-facing call should appear in catch blocks or error status handlers
     for (const entry of result.reports.errorPathPublishReport) {
       expect(entry.isInErrorPath).toBe(false)
     }
   })
 
   it(`includes all internal protocol QUERY_PARAM constants in ELECTRIC_PROTOCOL_QUERY_PARAMS`, async () => {
-    // Internal protocol params (handle, offset, cursor, live, etc.) must be
-    // listed in ELECTRIC_PROTOCOL_QUERY_PARAMS so that canonicalShapeKey
-    // strips them. Missing entries cause cache key divergence between code
-    // paths (e.g., SSE vs long-polling produce different shape keys).
-    //
-    // User-facing shape params (table, where, columns, replica) are
-    // intentionally excluded — they define the shape identity.
+    // Internal protocol params must be listed in ELECTRIC_PROTOCOL_QUERY_PARAMS
+    // so canonicalShapeKey strips them. Missing entries cause cache key
+    // divergence between code paths (e.g., SSE vs long-polling).
     const constants = await import(`../src/constants`)
     const protocolParams = new Set(constants.ELECTRIC_PROTOCOL_QUERY_PARAMS)
 
-    // User-facing params that define shape identity — NOT protocol internals
     const userFacingParams = new Set([
       `COLUMNS_QUERY_PARAM`,
       `TABLE_QUERY_PARAM`,
       `WHERE_QUERY_PARAM`,
-      `REPLICA_PARAM`, // not *_QUERY_PARAM but included for completeness
+      `REPLICA_PARAM`,
       `WHERE_PARAMS_PARAM`,
     ])
 
-    // Collect internal *_QUERY_PARAM exports
     const internalParamExports = Object.entries(constants)
       .filter(
         ([key]) =>

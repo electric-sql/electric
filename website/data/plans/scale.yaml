@@ -9,7 +9,6 @@ priceColor: 'gray'
 
 limits:
   maxDatabases: 200
-  concurrentReadersPerStream: 10000
   maxUsersPerWorkspace: 50
 
 featureGates:
@@ -22,7 +21,6 @@ billingBehavior: 'Monthly fee acts as prepaid usage credit'
 who: 'For large workloads and faster time to market'
 features:
   - 'Up to 200 databases'
-  - '10,000 concurrent readers'
   - 'Early access to new features'
 
 ctaText: 'Sign up now'

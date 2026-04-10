@@ -226,13 +226,12 @@ defmodule Electric.AdmissionControlTest do
                  table_name: table_name
                )
 
-      # Should receive telemetry event
+      # Should receive telemetry event (match on stack_id to filter out concurrent tests)
       assert_receive {:telemetry_acquire, [:electric, :admission_control, :acquire], measurements,
-                      metadata}
+                      %{stack_id: ^stack_id} = metadata}
 
       assert measurements.count == 1
       assert measurements.current == 1
-      assert metadata.stack_id == stack_id
       assert metadata.kind == :initial
       assert metadata.limit == 10
 
@@ -274,12 +273,11 @@ defmodule Electric.AdmissionControlTest do
                  table_name: table_name
                )
 
-      # Should receive telemetry event
+      # Should receive telemetry event (match on stack_id to filter out concurrent tests)
       assert_receive {:telemetry_reject, [:electric, :admission_control, :reject], measurements,
-                      metadata}
+                      %{stack_id: ^stack_id} = metadata}
 
       assert measurements.count == 1
-      assert metadata.stack_id == stack_id
       assert metadata.kind == :initial
       assert metadata.reason == :overloaded
       assert metadata.current == 3

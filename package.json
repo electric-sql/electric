@@ -33,9 +33,9 @@
   "lint-staged": {
     "*.{js,jsx,ts,tsx}": [
       "eslint --fix",
-      "prettier --write"
+      "node_modules/.bin/prettier --write"
     ],
-    "*.{json,css,md,yml,yaml}": "prettier --write"
+    "*.{json,css,md,yml,yaml}": "node_modules/.bin/prettier --write"
   },
   "pnpm": {
     "patchedDependencies": {

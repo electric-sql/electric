@@ -1,12 +1,28 @@
 defmodule Electric.ShapeCache.ShapeStatusTest do
   use ExUnit.Case, async: true
-  use Repatch.ExUnit, assert_expectations: true
 
   alias Electric.ShapeCache.ShapeStatus
   alias Electric.Shapes.Shape
 
   import Support.ComponentSetup
-  import Support.TestUtils, only: [expect_storage: 2, patch_storage: 1]
+
+  # Minimal storage module that avoids Repatch shared-mode mocking.
+  # Using a real module instead of {Mock.Storage, []} prevents crashes when
+  # Repatch cleanup from concurrent async tests removes shared hooks.
+  #
+  # NOTE: cleanup_all! uses Process.get to notify the test process. This works
+  # because ShapeStatus.initialize calls it synchronously in the test process.
+  # If that ever changes to a spawned process, switch to an Agent or ETS-based
+  # approach instead.
+  defmodule NoopStorage do
+    def cleanup_all!(_opts) do
+      if pid = Process.get(:cleanup_all_test_pid) do
+        send(pid, :cleanup_all_called)
+      end
+
+      :ok
+    end
+  end
 
   @inspector Support.StubInspector.new(
                tables: [{1, {"public", "items"}}, {2, {"public", "other_table"}}],
@@ -32,13 +48,9 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
   end
 
   test "deletes any orphaned shape data if empty", ctx do
-    expect_storage([force: true],
-      cleanup_all!: fn _ ->
-        :ok
-      end
-    )
-
+    Process.put(:cleanup_all_test_pid, self())
     {:ok, _state, []} = new_state(ctx)
+    assert_received :cleanup_all_called
   end
 
   test "can add shapes", ctx do
@@ -321,6 +333,74 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
     end
   end
 
+  describe "refresh/1" do
+    test "picks up new shapes added to SQLite", ctx do
+      {:ok, state, [handle]} = new_state(ctx, shapes: [shape!()])
+      ShapeStatus.ShapeDb.mark_snapshot_complete(state, handle)
+
+      # Add a new shape directly to SQLite (simulating another instance)
+      new_shape = shape!("new_from_other_instance")
+      {:ok, _hash} = ShapeStatus.ShapeDb.add_shape(state, new_shape, "other-handle-123")
+      ShapeStatus.ShapeDb.mark_snapshot_complete(state, "other-handle-123")
+
+      refute ShapeStatus.has_shape_handle?(state, "other-handle-123")
+
+      :ok = ShapeStatus.refresh(state)
+
+      assert ShapeStatus.has_shape_handle?(state, "other-handle-123")
+      # Original shape still present
+      assert ShapeStatus.has_shape_handle?(state, handle)
+    end
+
+    test "removes shapes deleted from SQLite", ctx do
+      {:ok, state, [handle]} = new_state(ctx, shapes: [shape!()])
+      ShapeStatus.ShapeDb.mark_snapshot_complete(state, handle)
+
+      assert ShapeStatus.has_shape_handle?(state, handle)
+
+      # Remove from SQLite directly (simulating another instance's cleanup)
+      :ok = ShapeStatus.ShapeDb.remove_shape(state, handle)
+
+      # Still in ETS
+      assert ShapeStatus.has_shape_handle?(state, handle)
+
+      :ok = ShapeStatus.refresh(state)
+
+      # Now gone from ETS
+      refute ShapeStatus.has_shape_handle?(state, handle)
+    end
+
+    test "updates snapshot_complete flag", ctx do
+      # Create two shapes, one with complete snapshot, one without
+      {:ok, state, [handle_a, handle_b]} =
+        new_state(ctx, shapes: [shape!("a"), shape!("b")])
+
+      # Mark both complete so validate_existing_shapes doesn't reject them
+      ShapeStatus.ShapeDb.mark_snapshot_complete(state, handle_a)
+      ShapeStatus.ShapeDb.mark_snapshot_complete(state, handle_b)
+
+      # ETS still has old value (snapshot_started? = false from add_shape)
+      refute ShapeStatus.snapshot_started?(state, handle_b)
+
+      :ok = ShapeStatus.refresh(state)
+
+      # Now updated from SQLite
+      assert ShapeStatus.snapshot_started?(state, handle_b)
+    end
+
+    test "existing entries remain visible during refresh", ctx do
+      {:ok, state, [handle]} = new_state(ctx, shapes: [shape!()])
+      ShapeStatus.ShapeDb.mark_snapshot_complete(state, handle)
+
+      # Refresh uses upsert (not clear-then-populate), so the entry
+      # should be visible at all times. We verify it's present after refresh.
+      :ok = ShapeStatus.refresh(state)
+
+      assert ShapeStatus.has_shape_handle?(state, handle)
+      assert ShapeStatus.snapshot_started?(state, handle)
+    end
+  end
+
   defp shape!, do: shape!("test")
 
   defp shape!(val) do
@@ -340,20 +420,9 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
   end
 
   defp new_state(ctx, opts \\ []) do
-    Electric.StackConfig.put(ctx.stack_id, Electric.ShapeCache.Storage, {Mock.Storage, []})
+    Electric.StackConfig.put(ctx.stack_id, Electric.ShapeCache.Storage, {NoopStorage, []})
 
     stored_shapes = Access.get(opts, :stored_shapes, [])
-
-    try do
-      patch_storage(
-        cleanup_all!: fn _ ->
-          :ok
-        end
-      )
-    rescue
-      # ignore any existing mocking on this function
-      ArgumentError -> :ok
-    end
 
     :ok = ShapeStatus.initialize(ctx.stack_id)
 

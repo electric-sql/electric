@@ -1,5 +1,11 @@
 # @core/electric-telemetry
 
+## 0.2.0
+
+### Minor Changes
+
+- cc623d7: Add ETS table memory observability metrics, reporting top N table types by memory usage similar to process memory metrics
+
 ## 0.1.10
 
 ### Patch Changes

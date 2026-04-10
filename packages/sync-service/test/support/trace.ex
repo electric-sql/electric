@@ -105,13 +105,15 @@ defmodule Support.Trace do
   Get the list of all traced calls already sitting in the current process' mailbox.
 
   Matches trace messages for any module.
-  """
-  def collect_traced_calls do
-    timeout = Keyword.fetch!(ExUnit.configuration(), :assert_receive_timeout)
 
+  The default timeout (1000ms) is deliberately higher than ExUnit's
+  `assert_receive_timeout` because trace messages involve cross-process
+  delivery that is slower under CI load.
+  """
+  def collect_traced_calls(timeout \\ 1_000) do
     receive do
       {:trace, _test_pid, :call, {_mod, _f, _a} = mfa} ->
-        [mfa | collect_traced_calls()]
+        [mfa | collect_traced_calls(timeout)]
     after
       timeout -> []
     end

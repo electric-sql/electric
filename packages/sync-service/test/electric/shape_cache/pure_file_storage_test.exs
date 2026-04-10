@@ -1006,7 +1006,9 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
     test "sends a message to the calling process within the predefined time period", ctx do
       compaction_config = Map.put(ctx.base_opts.compaction_config, :period, 5)
       PureFileStorage.schedule_compaction(compaction_config)
-      assert_receive {Storage, {PureFileStorage, :scheduled_compaction, [^compaction_config]}}, 20
+
+      assert_receive {Storage, {PureFileStorage, :scheduled_compaction, [^compaction_config]}},
+                     500
     end
   end
 

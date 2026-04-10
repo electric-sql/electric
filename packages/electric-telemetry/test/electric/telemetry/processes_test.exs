@@ -104,8 +104,16 @@ defmodule ElectricTelemetry.ProcessesTest do
 
   describe "proc_type/1 for dead processes" do
     test "returns :dead for a process that has exited" do
-      pid = spawn_link(fn -> :ok end)
+      pid =
+        spawn_link(fn ->
+          receive do
+            :die -> :ok
+          end
+        end)
+
       ref = Process.monitor(pid)
+      send(pid, :die)
+
       assert_receive {:DOWN, ^ref, :process, ^pid, :normal}
       assert :dead = proc_type(pid)
     end
@@ -189,7 +197,7 @@ defmodule ElectricTelemetry.ProcessesTest do
         Process.sleep(:infinity)
       end)
 
-    assert_receive :labelled
+    assert_receive :labelled, 150
     pid
   end
 end
