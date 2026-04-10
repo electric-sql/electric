@@ -1,4 +1,12 @@
-import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest'
+import {
+  beforeEach,
+  afterEach,
+  describe,
+  expect,
+  it,
+  vi,
+  type MockInstance,
+} from 'vitest'
 import { ShapeStream } from '../src'
 import {
   ExpiredShapesCache,
@@ -30,6 +38,10 @@ describe(`ExpiredShapesCache`, () => {
       (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
     >
   >
+  // Many tests in this suite intentionally simulate stale-cache scenarios
+  // that produce expected console.warn output. Silence by default; tests
+  // that need to assert on warnings can read warnSpy.mock.calls directly.
+  let warnSpy: MockInstance
 
   beforeEach(() => {
     localStorage.clear()
@@ -41,9 +53,13 @@ describe(`ExpiredShapesCache`, () => {
         (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
       >()
     vi.clearAllMocks()
+    warnSpy = vi.spyOn(console, `warn`).mockImplementation(() => {})
   })
 
-  afterEach(() => aborter.abort())
+  afterEach(() => {
+    aborter.abort()
+    warnSpy.mockRestore()
+  })
 
   it(`should mark shapes as expired and check expiration status`, () => {
     const shapeUrl1 = `https://example.com/v1/shape?table=test1`
@@ -656,12 +672,26 @@ describe(`ExpiredShapesCache`, () => {
       signal: aborter.signal,
       fetchClient: fetchMock,
       subscribe: false,
+      // Responses never reach up-to-date, so the stream loops forever until
+      // the fast-loop detector or abort fires. Swallow those terminal errors
+      // so they don't surface as unhandled rejections in CI.
+      onError: () => {},
     })
 
     stream.subscribe(() => {})
 
-    // Wait long enough for stale retries + self-healing to fire
-    await new Promise((resolve) => setTimeout(resolve, 500))
+    // Poll until self-healing fires (a request without expired_handle), then
+    // abort immediately so the stream doesn't keep looping in the background.
+    const deadline = Date.now() + 2000
+    while (
+      !capturedUrls.some(
+        (url) => !new URL(url).searchParams.has(EXPIRED_HANDLE_QUERY_PARAM)
+      ) &&
+      Date.now() < deadline
+    ) {
+      await new Promise((resolve) => setTimeout(resolve, 10))
+    }
+    aborter.abort()
 
     // Self-healing should have been attempted (a request without expired_handle)
     const selfHealingFired = capturedUrls.some(
@@ -679,7 +709,6 @@ describe(`ExpiredShapesCache`, () => {
     // the client accepts it. This is by design — stale data is better than
     // permanent 502 for one-shot streams — but the client MUST warn loudly
     // so operators can detect and fix the proxy misconfiguration.
-    const warnSpy = vi.spyOn(console, `warn`).mockImplementation(() => {})
     const expectedShapeUrl = `${shapeUrl}?table=test`
     const staleHandle = `expired-handle`
 
@@ -759,7 +788,6 @@ describe(`ExpiredShapesCache`, () => {
         )
     )
     expect(staleAcceptWarning).toBeTruthy()
-    warnSpy.mockRestore()
   })
 
   it(`should clear recovery guard after 204 so self-healing works again`, async () => {
@@ -856,6 +884,10 @@ describe(`ExpiredShapesCache`, () => {
       signal: aborter.signal,
       fetchClient: fetchMock,
       subscribe: true,
+      // On slower CI runners the fast-loop detector can fire before the
+      // test's abort propagates. Swallow it so it doesn't surface as an
+      // unhandled rejection — we only care about the selfHealCount signal.
+      onError: () => {},
     })
 
     stream.subscribe(() => {})
@@ -864,8 +896,6 @@ describe(`ExpiredShapesCache`, () => {
     // The recovery guard was cleared after the 204, so the second
     // self-healing attempt fires. This is the precise signal — if the
     // guard were stuck, the code throws 502 before incrementing.
-    // (We don't assert caughtError because the fast-loop detector may
-    // fire a separate 502 on slower machines — that's orthogonal.)
     expect(selfHealCount).toBe(2)
   })
 
