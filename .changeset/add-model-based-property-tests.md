@@ -22,4 +22,5 @@ Add fast-check model-based and micro-target property tests (plus static analysis
 - `Shape#awaitUpToDate` hanging forever on a terminally-errored stream
 
 **Shape notification contract fix:**
-- `Shape#process` no longer notifies subscribers on data messages while the shape is still `syncing` (i.e. before the first `up-to-date` control message). Previously, the sync-service's initial response (offset=-1) could cause subscribers to fire with a partial view while `stream.lastSyncedAt()` was still `undefined`. Shape now follows the N1/N2/N3 invariants documented in `SPEC.md` (Shape notification semantics).
+- `Shape#process` no longer notifies subscribers on data messages while the shape is still `syncing` (i.e. before the first `up-to-date` control message). Previously, the sync-service's initial response (offset=-1) could cause subscribers to fire with a partial view while `stream.lastSyncedAt()` was still `undefined`. Shape now follows the N1/N2 invariants documented in `SPEC.md` (Shape notification semantics).
+- `Shape#process` no longer fires an intermediate empty-rows notification on `must-refetch`. The status transitions back to `syncing` and subscribers receive the post-rotation state on the next `up-to-date`, matching the long-standing `should resync from scratch on a shape rotation` integration test.

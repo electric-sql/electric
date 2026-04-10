@@ -331,15 +331,12 @@ up-to-date, so the insert sees `wasUpToDate === true` and calls `#notify`).
 [up-to-date, insert] — subscriber's last view must match shape` and the
 broader PBT.
 
-### N3: Notify on must-refetch with prior data
-
-A `must-refetch` control message clears `#data` and `#insertedKeys`. If the
-shape had any prior data (`#data.size > 0 || #insertedKeys.size > 0`), a
-notification fires regardless of current status, so subscribers observe the
-now-empty state.
-
-**Enforcement**: `Shape#process notification PBT > deterministic:
-[must-refetch] from up-to-date state notifies subscribers`.
+A `must-refetch` control message clears `#data` and `#insertedKeys` and
+transitions `#status` back to `syncing`, which re-engages N1: subscribers
+receive the post-rotation state on the next `up-to-date` without ever
+observing an intermediate empty-rows notification. The
+`should resync from scratch on a shape rotation` integration test in
+`test/client.test.ts` pins this behavior.
 
 ## Bidirectional Enforcement Checklist
 

@@ -636,7 +636,7 @@ describe(`Shape#process notification PBT`, () => {
   const mustRefetchMsg = (): Message<RowT> =>
     ({ headers: { control: `must-refetch` } }) as unknown as Message<RowT>
 
-  it(`deterministic: [must-refetch] from up-to-date state notifies subscribers`, () => {
+  it(`deterministic: [must-refetch] does not notify; next up-to-date delivers the new state`, () => {
     const stream = new MockStream()
     const shape = new Shape(stream)
 
@@ -646,20 +646,19 @@ describe(`Shape#process notification PBT`, () => {
     stream.publish([insertMsg(`k1`, 1), upToDateMsg()])
     expect(shape.currentRows.length).toBe(1)
     expect(shape.isUpToDate).toBe(true)
-    const notifyCountBefore = observed.length
-    expect(notifyCountBefore).toBeGreaterThan(0)
+    const notifyCountAfterInitial = observed.length
+    expect(notifyCountAfterInitial).toBeGreaterThan(0)
 
-    // Matches the single-message batch client.ts:927 publishes on 409.
     stream.publish([mustRefetchMsg()])
-
     expect(shape.currentRows.length).toBe(0)
+    // No intermediate empty-rows notification — N1 re-engaged by the
+    // status transition back to `syncing`.
+    expect(observed.length).toBe(notifyCountAfterInitial)
 
-    // BUG: no notification, so subscribers still believe the shape
-    // contains the pre-refetch row set.
-    expect(
-      observed.length,
-      `subscribers should have been notified that data was cleared`
-    ).toBeGreaterThan(notifyCountBefore)
+    stream.publish([insertMsg(`k2`, 2), upToDateMsg()])
+    expect(shape.currentRows.length).toBe(1)
+    expect(observed.length).toBe(notifyCountAfterInitial + 1)
+    expect(observed[observed.length - 1]).toBe(1)
   })
 
   it(`deterministic: [up-to-date, insert] — subscriber's last view must match shape`, () => {
@@ -849,10 +848,8 @@ describe(`Shape#process notification PBT`, () => {
               }
               case `mustRefetch`: {
                 msgs.push(mustRefetchMsg())
-                const hadData = modelData.size > 0
                 modelData = new Map()
                 modelStatus = `syncing`
-                if (hadData) shouldHaveNotified = true
                 break
               }
             }

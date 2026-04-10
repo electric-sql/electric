@@ -19,13 +19,13 @@ type ShapeStatus = `syncing` | `up-to-date`
  * Shape subscriber notification semantics (see SPEC.md → "Shape
  * notification semantics" for the canonical contract):
  *
- * - **N1 (no notify before first up-to-date).** Data messages that
- *   arrive while `status === 'syncing'` apply to `#data` but do NOT
- *   call `#notify`. The first notification fires when the shape
- *   transitions from `syncing` to `up-to-date` via an up-to-date
- *   control message. This guarantees that subscribers observing
- *   `rows` always see a consistent snapshot of the shape AND can
- *   read a defined `stream.lastSyncedAt()`.
+ * - **N1 (no notify while syncing).** Data messages that arrive while
+ *   `status === 'syncing'` apply to `#data` but do NOT call `#notify`.
+ *   A notification fires only when the shape transitions from
+ *   `syncing` to `up-to-date` via an up-to-date control message. This
+ *   guarantees that subscribers observing `rows` always see a
+ *   consistent snapshot of the shape AND can read a defined
+ *   `stream.lastSyncedAt()`.
  *
  * - **N2 (notify on change while up-to-date).** Once
  *   `status === 'up-to-date'`, any data message (insert/update/delete,
@@ -33,10 +33,10 @@ type ShapeStatus = `syncing` | `up-to-date`
  *   notification; the status then transitions back to `syncing` until
  *   the next up-to-date message.
  *
- * - **N3 (notify on must-refetch with prior data).** A `must-refetch`
- *   control message clears `#data` and `#insertedKeys`. If the shape
- *   had any prior data, a notification fires so subscribers observe
- *   the now-empty state.
+ * A `must-refetch` control message clears `#data` and transitions the
+ * status back to `syncing`, which re-engages N1 — subscribers will
+ * receive the post-rotation state on the next `up-to-date` without
+ * ever observing an intermediate empty-rows notification.
  */
 
 /**
@@ -257,17 +257,13 @@ export class Shape<T extends Row<unknown> = Row> {
               void this.#reexecuteSnapshots()
             }
             break
-          case `must-refetch`: {
-            const hadData = this.#data.size > 0 || this.#insertedKeys.size > 0
+          case `must-refetch`:
             this.#data.clear()
             this.#insertedKeys.clear()
             this.#error = false
             this.#updateShapeStatus(`syncing`)
-            if (hadData) shouldNotify = true
-            // Flag to re-execute sub-snapshots once the new shape is up-to-date
             this.#reexecuteSnapshotsPending = true
             break
-          }
         }
       }
     })
