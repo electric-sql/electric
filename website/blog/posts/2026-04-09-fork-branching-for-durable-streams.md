@@ -1,9 +1,9 @@
 ---
-title: 'Fork: branching for durable streams'
+title: 'Fork — branching for Durable Streams'
 description: >-
-  Durable Streams is the session primitive for agent infrastructure. Fork adds branching — go back to any point, explore parallel paths, compact without losing history. Live on Electric Cloud.
+  Fork is branching for Durable Streams. Branch any stream at any point with a single API call. Rewind history, fan out agents in parallel, or probe without polluting context. Live on Electric Cloud.
 excerpt: >-
-  Agent sessions need branching. Fork adds it to Durable Streams — branch from any point, fan out across agents, compact aggressively without losing history. One API call, live on Electric Cloud.
+  Fork adds branching to Durable Streams. Branch any stream at any point — rewind history, fan out agents, or probe without polluting context.
 authors: [balegas]
 image: /img/blog/fork-branching-for-durable-streams/header.jpg
 tags: [release, durable-streams, cloud, agentic, AI]
@@ -12,7 +12,7 @@ post: true
 published: true
 ---
 
-Durable Streams is the session primitive for agent and multi-user applications. We're extending it with fork: go back to any point in a session and try a different path, fan out across multiple agents from shared context, or compact aggressively without losing history.
+[Durable Streams](/primitives/durable-streams) is the [data primitive for the agent loop](/blog/2026/04/08/data-primitive-agent-loop). Today we're shipping fork — a single API call that branches a stream at any point. Rewind history, fan out agents in parallel, or probe an agent without polluting its context.
 
 A fork creates a new stream from any point in an existing one. It shares everything before the fork point with its source and evolves independently after it. One API call, two headers.
 
