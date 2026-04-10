@@ -623,6 +623,8 @@ export class ShapeStream<T extends Row<unknown> = Row>
   #fastLoopMaxCount = 5
   #pendingRequestShapeCacheBuster?: string
   #maxSnapshotRetries = 5
+  #consecutiveErrorRetries = 0
+  #maxConsecutiveErrorRetries = 50
 
   constructor(options: ShapeStreamOptions<GetExtensions<T>>) {
     this.options = { subscribe: true, ...options }
@@ -762,6 +764,24 @@ export class ShapeStream<T extends Row<unknown> = Row>
             }
           }
 
+          // Bound the onError retry loop to prevent unbounded retries
+          this.#consecutiveErrorRetries++
+          if (
+            this.#consecutiveErrorRetries > this.#maxConsecutiveErrorRetries
+          ) {
+            console.warn(
+              `[Electric] onError retry loop exhausted after ${this.#maxConsecutiveErrorRetries} consecutive retries. ` +
+                `The error was never resolved by the onError handler. ` +
+                `Error: ${err instanceof Error ? err.message : String(err)}`,
+              new Error(`stack trace`)
+            )
+            if (err instanceof Error) {
+              this.#sendErrorToSubscribers(err)
+            }
+            this.#teardown()
+            return
+          }
+
           // Clear the error since we're retrying
           this.#error = null
           if (this.#syncState instanceof ErrorState) {
@@ -772,8 +792,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
           // Restart from current offset
           this.#started = false
-          await this.#start()
-          return
+          return this.#start()
         }
         // onError returned void, meaning it doesn't want to retry
         // This is an unrecoverable error, notify subscribers
@@ -803,6 +822,12 @@ export class ShapeStream<T extends Row<unknown> = Row>
   }
 
   async #requestShape(requestShapeCacheBuster?: string): Promise<void> {
+    // ErrorState should never reach the request loop — re-throw so
+    // #start's catch block can route it through onError properly.
+    if (this.#syncState instanceof ErrorState) {
+      throw this.#syncState.error
+    }
+
     const activeCacheBuster =
       requestShapeCacheBuster ?? this.#pendingRequestShapeCacheBuster
 
@@ -1237,6 +1262,10 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
     this.#syncState = transition.state
 
+    if (transition.action === `accepted` && status === 204) {
+      this.#consecutiveErrorRetries = 0
+    }
+
     if (transition.action === `stale-retry`) {
       // Cancel the response body to release the connection before retrying.
       await response.body?.cancel()
@@ -1292,6 +1321,8 @@ export class ShapeStream<T extends Row<unknown> = Row>
       return
     }
     if (batch.length === 0) return
+
+    this.#consecutiveErrorRetries = 0
 
     const lastMessage = batch[batch.length - 1]
     const hasUpToDateMessage = isUpToDateMessage(lastMessage)
