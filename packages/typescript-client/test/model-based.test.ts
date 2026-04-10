@@ -762,7 +762,9 @@ class Respond409NoHandleCmd
   async run(_m: StreamModel, r: StreamReal): Promise<void> {
     const prevUrl = r.gate.lastUrl
     await r.respond(make409NoHandle())
-    r.currentHandle = ``
+    // Simulates server recovery after the proxy-stripped-handle 409:
+    // the next response must carry a fresh handle, not an empty string.
+    r.currentHandle = `handle-recovered-${nextSeq()}`
     assert409ProducedUniqueUrl(r, prevUrl)
   }
   toString(): string {

@@ -1590,24 +1590,25 @@ describe(`canonicalShapeKey cross-module invariants PBT`, () => {
     )
   })
 
-  it(`deterministic: log mode is stripped — full vs changes_only collide`, () => {
-    // `log` is on the protocol strip list (constants.ts:35). That
-    // means two ShapeStreams on the same base URL but with different
-    // log modes have the same canonical key. A 409 on one of them
-    // leaks an `expired_handle` hint into requests from the other.
+  it(`deterministic: log mode is stripped so full and changes_only share a canonical key`, () => {
+    // `log` is an internal protocol param (constants.ts). Two
+    // ShapeStreams on the same base URL but with different log modes
+    // are the same logical shape for cache-coherence purposes and
+    // MUST share a canonical key.
     const full = new URL(`http://host.example/v1/shape?table=t&log=full`)
     const changes = new URL(
       `http://host.example/v1/shape?table=t&log=changes_only`
     )
-    // This test CONFIRMS the collision. If fixed by excluding `log`
-    // from ELECTRIC_PROTOCOL_QUERY_PARAMS, flip the assertion.
     expect(
       canonicalShapeKey(full),
-      `log-mode collision: full and changes_only currently share a key`
+      `log mode must not affect the canonical shape key`
     ).toBe(canonicalShapeKey(changes))
   })
 
-  it(`deterministic: subset__* params stripped — distinct snapshot requests collide`, () => {
+  it(`deterministic: subset__* params are stripped so distinct snapshot requests share a canonical key`, () => {
+    // subset__* are internal protocol params used for sub-snapshot
+    // queries. They must not affect the canonical shape key —
+    // sub-snapshot requests are all looking at the same logical shape.
     const a = new URL(
       `http://host.example/v1/shape?table=t&subset__limit=10&subset__offset=0`
     )
@@ -1616,7 +1617,7 @@ describe(`canonicalShapeKey cross-module invariants PBT`, () => {
     )
     expect(
       canonicalShapeKey(a),
-      `subset params collapse: distinct snapshot URLs share a key`
+      `subset__* params must not affect the canonical shape key`
     ).toBe(canonicalShapeKey(b))
   })
 
