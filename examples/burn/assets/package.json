@@ -50,7 +50,7 @@
     "eslint-plugin-prettier": "^5.4.0",
     "eslint-plugin-react-hooks": "^4.6.0",
     "eslint-plugin-react-refresh": "^0.4.6",
-    "prettier": "^3.2.4",
+    "prettier": "^3.6.2",
     "typescript": "^5.2.2",
     "vite": "^6.2.3"
   }
