@@ -128,6 +128,99 @@ describe(`ShapeStream`, () => {
     await startedStreaming
   })
 
+  it(`should enable verbose diagnostics with localStorage electric.debug`, async () => {
+    localStorage.setItem(`electric.debug`, `true`)
+    const debugSpy = vi.spyOn(console, `debug`).mockImplementation(() => {})
+
+    const fetchMock = vi.fn(() =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify([
+            { headers: { control: `up-to-date` }, offset: `0_0` },
+          ]),
+          {
+            status: 200,
+            headers: {
+              'electric-handle': `test-handle`,
+              'electric-offset': `0_0`,
+              'electric-schema': `{}`,
+            },
+          }
+        )
+      )
+    )
+
+    const stream = new ShapeStream({
+      url: shapeUrl,
+      params: { table: `foo` },
+      signal: aborter.signal,
+      fetchClient: fetchMock,
+      subscribe: false,
+    })
+
+    stream.subscribe(() => {})
+
+    await vi.waitFor(() => {
+      expect(stream.isUpToDate).toBe(true)
+    })
+
+    expect(debugSpy).toHaveBeenCalledWith(
+      expect.stringContaining(`event="diagnostics-enabled"`)
+    )
+    expect(debugSpy).toHaveBeenCalledWith(
+      expect.stringContaining(`event="request:dispatch"`)
+    )
+    expect(debugSpy).toHaveBeenCalledWith(
+      expect.stringContaining(`event="messages:batch"`)
+    )
+
+    debugSpy.mockRestore()
+  })
+
+  it(`should enable verbose diagnostics with localStorage debug namespaces`, async () => {
+    localStorage.setItem(`debug`, `electric*`)
+    const debugSpy = vi.spyOn(console, `debug`).mockImplementation(() => {})
+
+    const fetchMock = vi.fn(() =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify([
+            { headers: { control: `up-to-date` }, offset: `0_0` },
+          ]),
+          {
+            status: 200,
+            headers: {
+              'electric-handle': `test-handle`,
+              'electric-offset': `0_0`,
+              'electric-schema': `{}`,
+            },
+          }
+        )
+      )
+    )
+
+    const stream = new ShapeStream({
+      url: shapeUrl,
+      params: { table: `foo` },
+      signal: aborter.signal,
+      fetchClient: fetchMock,
+      subscribe: false,
+    })
+
+    stream.subscribe(() => {})
+
+    await vi.waitFor(() => {
+      expect(stream.isUpToDate).toBe(true)
+    })
+
+    expect(debugSpy).toHaveBeenCalledWith(
+      expect.stringContaining(`event="diagnostics-enabled"`)
+    )
+    expect(debugSpy).toHaveBeenCalledWith(expect.stringContaining(`electric*`))
+
+    debugSpy.mockRestore()
+  })
+
   it(`should correctly serialize objects into query params`, async () => {
     const eventTarget = new EventTarget()
     const requestedUrls: Array<string> = []

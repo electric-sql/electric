@@ -95,9 +95,122 @@ const RESERVED_PARAMS: Set<ReservedParamKeys> = new Set([
 ])
 
 const TROUBLESHOOTING_URL = `https://electric-sql.com/docs/guides/troubleshooting`
+const SHAPE_STREAM_DEBUG_LOCAL_STORAGE_KEY = `electric.debug`
+const DEBUG_NAMESPACES_LOCAL_STORAGE_KEY = `debug`
+const SHAPE_STREAM_DEBUG_NAMESPACES = [
+  `electric`,
+  `electric:*`,
+  `electric:shape-stream`,
+  `electric:shape-stream:*`,
+  `@electric-sql/client`,
+  `@electric-sql/client:*`,
+] as const
+
+type DiagnosticValue = string | number | boolean | null | undefined
+
+type ShapeStreamDiagnosticsConfig = {
+  enabled: boolean
+  source?: string
+}
 
 function createCacheBuster(): string {
   return `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`
+}
+
+function readLocalStorageItem(key: string): string | null {
+  if (typeof localStorage === `undefined`) return null
+  try {
+    return localStorage.getItem(key)
+  } catch {
+    return null
+  }
+}
+
+function isTruthyFlag(value: string | null): boolean {
+  if (value === null) return false
+
+  const normalized = value.trim().toLowerCase()
+  return (
+    normalized !== `` &&
+    normalized !== `0` &&
+    normalized !== `false` &&
+    normalized !== `off` &&
+    normalized !== `no`
+  )
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, `\\$&`)
+}
+
+function matchesDebugNamespace(pattern: string, namespace: string): boolean {
+  if (pattern === `*`) return true
+
+  const regex = new RegExp(`^${escapeRegExp(pattern).replace(/\\\*/g, `.*`)}$`)
+  return regex.test(namespace)
+}
+
+function isShapeStreamDebugNamespaceEnabled(value: string): boolean {
+  const patterns = value
+    .split(/[\s,]+/)
+    .map((part) => part.trim())
+    .filter(Boolean)
+
+  if (patterns.length === 0) return false
+
+  const negativePatterns = patterns
+    .filter((pattern) => pattern.startsWith(`-`))
+    .map((pattern) => pattern.slice(1))
+  const positivePatterns = patterns.filter(
+    (pattern) => !pattern.startsWith(`-`)
+  )
+
+  const matchesAnyNamespace = (pattern: string) =>
+    SHAPE_STREAM_DEBUG_NAMESPACES.some((namespace) =>
+      matchesDebugNamespace(pattern, namespace)
+    )
+
+  if (negativePatterns.some(matchesAnyNamespace)) {
+    return false
+  }
+
+  return positivePatterns.some(matchesAnyNamespace)
+}
+
+function getShapeStreamDiagnosticsConfig(): ShapeStreamDiagnosticsConfig {
+  const explicitFlag = readLocalStorageItem(
+    SHAPE_STREAM_DEBUG_LOCAL_STORAGE_KEY
+  )
+  if (isTruthyFlag(explicitFlag)) {
+    return {
+      enabled: true,
+      source: `localStorage[${JSON.stringify(SHAPE_STREAM_DEBUG_LOCAL_STORAGE_KEY)}]=${JSON.stringify(explicitFlag)}`,
+    }
+  }
+
+  const debugNamespaces = readLocalStorageItem(
+    DEBUG_NAMESPACES_LOCAL_STORAGE_KEY
+  )
+  if (debugNamespaces && isShapeStreamDebugNamespaceEnabled(debugNamespaces)) {
+    return {
+      enabled: true,
+      source: `localStorage[${JSON.stringify(DEBUG_NAMESPACES_LOCAL_STORAGE_KEY)}]=${JSON.stringify(debugNamespaces)}`,
+    }
+  }
+
+  return { enabled: false }
+}
+
+function describeDiagnosticValue(value: unknown): string | undefined {
+  if (value === undefined || value === null) return undefined
+  if (typeof value === `string`) return value
+  if (value instanceof Error) return `${value.name}: ${value.message}`
+
+  try {
+    return JSON.stringify(value)
+  } catch {
+    return String(value)
+  }
 }
 
 type Replica = `full` | `default`
@@ -561,6 +674,13 @@ export function canonicalShapeKey(url: URL): string {
  * // Later...
  * aborter.abort()
  * ```
+ *
+ * To enable verbose client diagnostics after a refresh:
+ * ```
+ * localStorage.setItem('electric.debug', 'true')
+ * // or, for `debug` package compatibility:
+ * localStorage.setItem('debug', 'electric*')
+ * ```
  */
 
 export class ShapeStream<T extends Row<unknown> = Row>
@@ -628,10 +748,16 @@ export class ShapeStream<T extends Row<unknown> = Row>
   #pendingSelfHealCheck: { shapeKey: string; staleHandle: string } | null = null
   #consecutiveErrorRetries = 0
   #maxConsecutiveErrorRetries = 50
+  readonly #debugEnabled: boolean
+  readonly #debugSource?: string
+  #requestSequence = 0
 
   constructor(options: ShapeStreamOptions<GetExtensions<T>>) {
     this.options = { subscribe: true, ...options }
     validateOptions(this.options)
+    const diagnosticsConfig = getShapeStreamDiagnosticsConfig()
+    this.#debugEnabled = diagnosticsConfig.enabled
+    this.#debugSource = diagnosticsConfig.source
     this.#syncState = createInitialState({
       offset: this.options.offset ?? `-1`,
       handle: this.options.handle,
@@ -692,6 +818,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
     const backOffOpts = {
       ...(options.backoffOptions ?? BackoffDefaults),
+      debug: this.#debugEnabled || options.backoffOptions?.debug === true,
       onFailedAttempt: () => {
         this.#connected = false
         options.backoffOptions?.onFailedAttempt?.()
@@ -709,6 +836,13 @@ export class ShapeStream<T extends Row<unknown> = Row>
     this.#fetchClient = createFetchWithConsumedMessages(this.#sseFetchClient)
 
     this.#subscribeToVisibilityChanges()
+
+    this.#debugLog(`diagnostics-enabled`, {
+      source: this.#debugSource,
+      logMode: this.#mode,
+      subscribe: this.options.subscribe,
+      liveSse: !!(this.options.liveSse ?? this.options.experimentalLiveSse),
+    })
   }
 
   get shapeHandle() {
@@ -734,11 +868,16 @@ export class ShapeStream<T extends Row<unknown> = Row>
   async #start(): Promise<void> {
     this.#started = true
     this.#subscribeToWakeDetection()
+    this.#debugLog(`stream:start`)
 
     try {
       await this.#requestShape()
     } catch (err) {
       this.#error = err
+      this.#debugLog(`stream:error-caught`, {
+        errorName: err instanceof Error ? err.name : undefined,
+        errorMessage: err instanceof Error ? err.message : String(err),
+      })
       const previousState = this.#syncState
       if (err instanceof Error) {
         this.#syncState = this.#syncState.toErrorState(err)
@@ -781,6 +920,15 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
           // Bound the onError retry loop to prevent unbounded retries
           this.#consecutiveErrorRetries++
+          this.#debugLog(`onError:retry`, {
+            consecutiveErrorRetries: this.#consecutiveErrorRetries,
+            retryParamKeys: retryOpts.params
+              ? Object.keys(retryOpts.params).join(`,`)
+              : undefined,
+            retryHeaderKeys: retryOpts.headers
+              ? Object.keys(retryOpts.headers).join(`,`)
+              : undefined,
+          })
           if (
             this.#consecutiveErrorRetries > this.#maxConsecutiveErrorRetries
           ) {
@@ -812,6 +960,10 @@ export class ShapeStream<T extends Row<unknown> = Row>
         }
         // onError returned void, meaning it doesn't want to retry
         // This is an unrecoverable error, notify subscribers
+        this.#debugLog(`onError:stop`, {
+          retryRequested: false,
+          retryable: isRetryable,
+        })
         if (err instanceof Error) {
           this.#sendErrorToSubscribers(err)
         }
@@ -821,6 +973,9 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
       // No onError handler provided, this is an unrecoverable error
       // Notify subscribers and throw
+      this.#debugLog(`stream:throw`, {
+        hasOnErrorHandler: false,
+      })
       if (err instanceof Error) {
         this.#sendErrorToSubscribers(err)
       }
@@ -832,6 +987,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
   }
 
   #teardown() {
+    this.#debugLog(`stream:teardown`)
     this.#connected = false
     this.#tickPromiseRejecter?.()
     this.#unsubscribeFromWakeDetection?.()
@@ -839,7 +995,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
   #formatStateDiagnostics(
     state: ShapeStreamState = this.#syncState,
-    extra: Record<string, string | number | boolean | null | undefined> = {}
+    extra: Record<string, DiagnosticValue> = {}
   ): string {
     const currentUrl = this.#currentFetchUrl?.toString()
     const shapeKey = this.#currentFetchUrl
@@ -871,6 +1027,17 @@ export class ShapeStream<T extends Row<unknown> = Row>
       .join(` `)
   }
 
+  #debugLog(event: string, extra: Record<string, DiagnosticValue> = {}) {
+    if (!this.#debugEnabled) return
+
+    console.debug(
+      `[Electric] Debug ${this.#formatStateDiagnostics(this.#syncState, {
+        event,
+        ...extra,
+      })}`
+    )
+  }
+
   async #requestShape(requestShapeCacheBuster?: string): Promise<void> {
     // ErrorState should never reach the request loop — re-throw so
     // #start's catch block can route it through onError properly.
@@ -885,6 +1052,9 @@ export class ShapeStream<T extends Row<unknown> = Row>
       if (activeCacheBuster) {
         this.#pendingRequestShapeCacheBuster = activeCacheBuster
       }
+      this.#debugLog(`request:skipped-paused`, {
+        requestCacheBuster: activeCacheBuster,
+      })
       return
     }
 
@@ -892,6 +1062,10 @@ export class ShapeStream<T extends Row<unknown> = Row>
       !this.options.subscribe &&
       (this.options.signal?.aborted || this.#syncState.isUpToDate)
     ) {
+      this.#debugLog(`request:stopped`, {
+        signalAborted: this.options.signal?.aborted,
+        isUpToDate: this.#syncState.isUpToDate,
+      })
       return
     }
 
@@ -907,6 +1081,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
     if (this.#syncState instanceof PausedState) {
       resumingFromPause = true
       this.#syncState = this.#syncState.resume()
+      this.#debugLog(`request:resumed`)
     }
 
     const { url, signal } = this.options
@@ -914,6 +1089,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
       url,
       resumingFromPause
     )
+    const requestId = ++this.#requestSequence
 
     if (activeCacheBuster) {
       fetchUrl.searchParams.set(CACHE_BUSTER_QUERY_PARAM, activeCacheBuster)
@@ -932,6 +1108,10 @@ export class ShapeStream<T extends Row<unknown> = Row>
       if (activeCacheBuster) {
         this.#pendingRequestShapeCacheBuster = activeCacheBuster
       }
+      this.#debugLog(`request:cancelled-before-dispatch`, {
+        requestId,
+        fetchUrl: fetchUrl.toString(),
+      })
       this.#requestAbortController = undefined
       return
     }
@@ -940,6 +1120,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
     try {
       await this.#fetchShape({
+        requestId,
         fetchUrl,
         requestAbortController,
         headers: requestHeaders,
@@ -956,10 +1137,18 @@ export class ShapeStream<T extends Row<unknown> = Row>
         (e instanceof FetchError || e instanceof FetchBackoffAbortError) &&
         isRestartAbort
       ) {
+        this.#debugLog(`request:restart-after-abort`, {
+          requestId,
+          abortReason: describeDiagnosticValue(abortReason),
+        })
         return this.#requestShape()
       }
 
       if (e instanceof FetchBackoffAbortError) {
+        this.#debugLog(`request:aborted`, {
+          requestId,
+          abortReason: describeDiagnosticValue(abortReason),
+        })
         return // interrupted
       }
 
@@ -969,12 +1158,20 @@ export class ShapeStream<T extends Row<unknown> = Row>
         //    #staleCacheBuster set to bypass CDN cache on next request.
         // 2. Self-healing: stale retries exhausted, expired entry cleared,
         //    stream reset — retry without expired_handle param.
+        this.#debugLog(`request:stale-cache-retry`, {
+          requestId,
+          errorMessage: e.message,
+        })
         return this.#requestShape()
       }
 
       if (!(e instanceof FetchError)) throw e // should never happen
 
       if (e.status == 409) {
+        this.#debugLog(`request:must-refetch`, {
+          requestId,
+          responseStatus: e.status,
+        })
         // Upon receiving a 409, start from scratch with the newly
         // provided shape handle (if present). An unconditional cache
         // buster ensures the retry URL is always unique regardless of
@@ -1009,6 +1206,12 @@ export class ShapeStream<T extends Row<unknown> = Row>
         // additional user input, such as 400s or failures to read the
         // body of a response, so we exit the loop and let #start handle it
         // Note: We don't notify subscribers here because onError might recover
+        this.#debugLog(`request:failed`, {
+          requestId,
+          errorName: e.name,
+          errorMessage: e.message,
+          responseStatus: e.status,
+        })
         throw e
       }
     } finally {
@@ -1264,6 +1467,9 @@ export class ShapeStream<T extends Row<unknown> = Row>
     // If user provided a signal, listen to it and pass on the reason for the abort
     if (signal) {
       const abortListener = () => {
+        this.#debugLog(`request:abort-signal`, {
+          abortReason: describeDiagnosticValue(signal.reason),
+        })
         this.#requestAbortController?.abort(signal.reason)
       }
 
@@ -1271,6 +1477,9 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
       if (signal.aborted) {
         // If the signal is already aborted, abort the request immediately
+        this.#debugLog(`request:abort-signal-already-aborted`, {
+          abortReason: describeDiagnosticValue(signal.reason),
+        })
         this.#requestAbortController?.abort(signal.reason)
       }
 
@@ -1284,9 +1493,16 @@ export class ShapeStream<T extends Row<unknown> = Row>
    * or `false` if the response was ignored (stale) and the body should be skipped.
    * Throws on stale-retry (to trigger a retry with cache buster).
    */
-  async #onInitialResponse(response: Response): Promise<boolean> {
+  async #onInitialResponse(
+    response: Response,
+    requestId?: number
+  ): Promise<boolean> {
     const { headers, status } = response
     const shapeHandle = headers.get(SHAPE_HANDLE_HEADER)
+    const responseOffset = headers.get(
+      CHUNK_LAST_OFFSET_HEADER
+    ) as Offset | null
+    const responseCursor = headers.get(LIVE_CACHE_BUSTER_HEADER)
     const shapeKey = this.#currentFetchUrl
       ? canonicalShapeKey(this.#currentFetchUrl)
       : null
@@ -1316,8 +1532,8 @@ export class ShapeStream<T extends Row<unknown> = Row>
     const transition = this.#syncState.handleResponseMetadata({
       status,
       responseHandle: shapeHandle,
-      responseOffset: headers.get(CHUNK_LAST_OFFSET_HEADER) as Offset | null,
-      responseCursor: headers.get(LIVE_CACHE_BUSTER_HEADER),
+      responseOffset,
+      responseCursor,
       responseSchema: getSchemaFromHeaders(headers),
       expiredHandle,
       now: Date.now(),
@@ -1326,6 +1542,15 @@ export class ShapeStream<T extends Row<unknown> = Row>
     })
 
     this.#syncState = transition.state
+    this.#debugLog(`response:headers`, {
+      requestId,
+      action: transition.action,
+      responseStatus: status,
+      responseHandle: shapeHandle,
+      responseOffset,
+      responseCursor,
+      expiredHandle,
+    })
 
     // Clear recovery guard on 204 (no-content), since the empty body means
     // #onMessages won't run to clear it via the up-to-date path.
@@ -1418,7 +1643,11 @@ export class ShapeStream<T extends Row<unknown> = Row>
     return true
   }
 
-  async #onMessages(batch: Array<Message<T>>, isSseMessage = false) {
+  async #onMessages(
+    batch: Array<Message<T>>,
+    isSseMessage = false,
+    requestId?: number
+  ) {
     if (!Array.isArray(batch)) {
       console.warn(
         `[Electric] #onMessages called with non-array argument (${typeof batch}). ` +
@@ -1470,6 +1699,15 @@ export class ShapeStream<T extends Row<unknown> = Row>
       return true // Always process control messages
     })
 
+    this.#debugLog(`messages:batch`, {
+      requestId,
+      transport: isSseMessage ? `sse` : `long-poll`,
+      batchSize: batch.length,
+      publishedCount: messagesToProcess.length,
+      hasUpToDateMessage,
+      upToDateOffset,
+    })
+
     await this.#publish(messagesToProcess)
   }
 
@@ -1481,6 +1719,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
    * @returns A promise that resolves when the request is complete (i.e. the long poll receives a response or the SSE connection is closed).
    */
   async #fetchShape(opts: {
+    requestId: number
     fetchUrl: URL
     requestAbortController: AbortController
     headers: Record<string, string>
@@ -1502,13 +1741,19 @@ export class ShapeStream<T extends Row<unknown> = Row>
     }
 
     const useSse = this.options.liveSse ?? this.options.experimentalLiveSse
-    if (
-      this.#syncState.shouldUseSse({
-        liveSseEnabled: !!useSse,
-        isRefreshing: this.#isRefreshing,
-        resumingFromPause: !!opts.resumingFromPause,
-      })
-    ) {
+    const shouldUseSse = this.#syncState.shouldUseSse({
+      liveSseEnabled: !!useSse,
+      isRefreshing: this.#isRefreshing,
+      resumingFromPause: !!opts.resumingFromPause,
+    })
+    this.#debugLog(`request:dispatch`, {
+      requestId: opts.requestId,
+      transport: shouldUseSse ? `sse` : `long-poll`,
+      fetchUrl: opts.fetchUrl.toString(),
+      resumingFromPause: !!opts.resumingFromPause,
+      isRefreshing: this.#isRefreshing,
+    })
+    if (shouldUseSse) {
       opts.fetchUrl.searchParams.set(EXPERIMENTAL_LIVE_SSE_QUERY_PARAM, `true`)
       opts.fetchUrl.searchParams.set(LIVE_SSE_QUERY_PARAM, `true`)
       return this.#requestShapeSSE(opts)
@@ -1518,6 +1763,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
   }
 
   async #requestShapeLongPoll(opts: {
+    requestId: number
     fetchUrl: URL
     requestAbortController: AbortController
     headers: Record<string, string>
@@ -1529,7 +1775,10 @@ export class ShapeStream<T extends Row<unknown> = Row>
     })
 
     this.#connected = true
-    const shouldProcessBody = await this.#onInitialResponse(response)
+    const shouldProcessBody = await this.#onInitialResponse(
+      response,
+      opts.requestId
+    )
     if (!shouldProcessBody) return
 
     const schema = this.#syncState.schema! // we know that it is not undefined because it is set by `this.#onInitialResponse`
@@ -1550,10 +1799,11 @@ export class ShapeStream<T extends Row<unknown> = Row>
       )
     }
 
-    await this.#onMessages(batch)
+    await this.#onMessages(batch, false, opts.requestId)
   }
 
   async #requestShapeSSE(opts: {
+    requestId: number
     fetchUrl: URL
     requestAbortController: AbortController
     headers: Record<string, string>
@@ -1578,7 +1828,10 @@ export class ShapeStream<T extends Row<unknown> = Row>
         fetch,
         onopen: async (response: Response) => {
           this.#connected = true
-          const shouldProcessBody = await this.#onInitialResponse(response)
+          const shouldProcessBody = await this.#onInitialResponse(
+            response,
+            opts.requestId
+          )
           if (!shouldProcessBody) {
             ignoredStaleResponse = true
             throw new Error(`stale response ignored`)
@@ -1597,7 +1850,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
             if (isUpToDateMessage(message)) {
               // Flush the buffer on up-to-date message.
               // Ensures that we only process complete batches of operations.
-              this.#onMessages(buffer, true)
+              this.#onMessages(buffer, true, opts.requestId)
               buffer = []
             }
           }
@@ -1645,6 +1898,13 @@ export class ShapeStream<T extends Row<unknown> = Row>
         maxShortConnections: this.#maxShortSseConnections,
       })
       this.#syncState = transition.state
+      this.#debugLog(`sse:closed`, {
+        requestId: opts.requestId,
+        connectionDuration,
+        wasAborted,
+        fellBackToLongPolling: transition.fellBackToLongPolling,
+        wasShortConnection: transition.wasShortConnection,
+      })
 
       if (transition.fellBackToLongPolling) {
         console.warn(
@@ -1747,6 +2007,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
    */
   async forceDisconnectAndRefresh(): Promise<void> {
     this.#refreshCount++
+    this.#debugLog(`stream:force-refresh`)
     try {
       if (
         this.#syncState.isUpToDate &&
@@ -1802,8 +2063,10 @@ export class ShapeStream<T extends Row<unknown> = Row>
     if (this.#hasBrowserVisibilityAPI()) {
       const visibilityHandler = () => {
         if (document.hidden) {
+          this.#debugLog(`pause:visibility`, { hidden: true })
           this.#pauseLock.acquire(`visibility`)
         } else {
+          this.#debugLog(`pause:visibility`, { hidden: false })
           this.#pauseLock.release(`visibility`)
         }
       }
@@ -1846,6 +2109,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
       if (elapsed > INTERVAL_MS + WAKE_THRESHOLD_MS) {
         if (!this.#pauseLock.isPaused && this.#requestAbortController) {
+          this.#debugLog(`wake:detected`, { elapsedMs: elapsed })
           this.#refreshCount++
           this.#requestAbortController.abort(SYSTEM_WAKE)
           // Wake handler is synchronous (setInterval callback) so we can't
@@ -1876,6 +2140,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
    * shape handle
    */
   #reset(handle?: string) {
+    this.#debugLog(`stream:reset`, { nextHandle: handle })
     this.#syncState = this.#syncState.markMustRefetch(handle)
     this.#connected = false
     // releaseAllMatching intentionally doesn't fire onReleased — every caller

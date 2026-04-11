@@ -28,6 +28,14 @@ This skill builds on electric-shapes and electric-proxy-auth. Read those first.
 
 ## Setup
 
+For field debugging, you can enable verbose client diagnostics and refresh:
+
+```js
+localStorage.setItem('electric.debug', 'true')
+// or, for debug-package compatibility:
+localStorage.setItem('debug', 'electric*')
+```
+
 Enable debug logging to see retry and state machine behavior:
 
 ```ts

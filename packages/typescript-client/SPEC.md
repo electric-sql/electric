@@ -118,6 +118,27 @@ Operationally:
 `should ignore successful responses that arrive after a paused request was aborted`
 in `test/stream.test.ts`.
 
+## Operational Diagnostics
+
+Client-side diagnostics controls that exist to make field failures observable
+without changing the state machine's behavior.
+
+### D0: Diagnostics are observational only
+
+Verbose diagnostics may be enabled at stream construction time via client-side
+storage, for example:
+
+- `localStorage.setItem('electric.debug', 'true')`
+- `localStorage.setItem('debug', 'electric*')`
+
+When enabled, the client may emit detailed request/response/state logs, but
+those diagnostics must not alter fetch sequencing, state transitions, retry
+eligibility, or message delivery semantics.
+
+**Enforcement**: diagnostics are implemented as logging-only hooks in
+`client.ts`, and the request/state behavior remains covered by the existing
+state-machine tests.
+
 ## Invariants
 
 Properties that must hold after every state transition. Checked automatically by
