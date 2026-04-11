@@ -108,9 +108,20 @@ const SHAPE_STREAM_DEBUG_NAMESPACES = [
 const SHAPE_STREAM_DEBUG_MAX_LOGS_PER_WINDOW = 50
 const SHAPE_STREAM_DEBUG_WINDOW_MS = 1_000
 const SHAPE_STREAM_WARNING_MAX_LOGS_PER_WINDOW = 3
+const SHAPE_STREAM_IGNORED_RESPONSE_WARNING_MAX_LOGS_PER_WINDOW = 1
 const SHAPE_STREAM_WARNING_WINDOW_MS = 5_000
 
 type DiagnosticValue = string | number | boolean | null | undefined
+
+type ErrorDiagnosticContext = {
+  generationId: number
+  requestId?: number
+  transport?: `long-poll` | `sse`
+  errorName: string
+  errorMessage: string
+  responseStatus?: number
+  capturedAt: number
+}
 
 type ShapeStreamDiagnosticsConfig = {
   enabled: boolean
@@ -754,7 +765,11 @@ export class ShapeStream<T extends Row<unknown> = Row>
   #maxConsecutiveErrorRetries = 3
   readonly #debugEnabled: boolean
   readonly #debugSource?: string
+  #streamGenerationSequence = 0
+  #activeGenerationId = 0
   #requestSequence = 0
+  #lastErrorContext: ErrorDiagnosticContext | null = null
+  #pendingErrorContext: ErrorDiagnosticContext | null = null
   #debugWindowStartedAt = 0
   #debugLogsInWindow = 0
   #debugLogsSuppressed = 0
@@ -878,18 +893,54 @@ export class ShapeStream<T extends Row<unknown> = Row>
   }
 
   async #start(): Promise<void> {
+    const generationId = ++this.#streamGenerationSequence
+    this.#activeGenerationId = generationId
+    this.#pendingErrorContext = null
     this.#started = true
     this.#subscribeToWakeDetection()
-    this.#debugLog(`stream:start`)
+    this.#debugLog(`stream:start`, { generationId })
 
     try {
-      await this.#requestShape()
+      await this.#requestShape(generationId)
     } catch (err) {
       this.#error = err
+      const errorRequestId =
+        this.#pendingErrorContext === null
+          ? this.#lastErrorContext?.requestId
+          : (this.#pendingErrorContext as ErrorDiagnosticContext).requestId
+      const errorTransport =
+        this.#pendingErrorContext === null
+          ? this.#lastErrorContext?.transport
+          : (this.#pendingErrorContext as ErrorDiagnosticContext).transport
+      this.#lastErrorContext =
+        err instanceof Error
+          ? (this.#pendingErrorContext ?? {
+              generationId,
+              errorName: err.name,
+              errorMessage: err.message,
+              capturedAt: Date.now(),
+            })
+          : null
       this.#debugLog(`stream:error-caught`, {
+        generationId,
+        errorRequestId,
+        errorTransport,
+        isActiveGeneration: generationId === this.#activeGenerationId,
         errorName: err instanceof Error ? err.name : undefined,
         errorMessage: err instanceof Error ? err.message : String(err),
       })
+      if (generationId !== this.#activeGenerationId) {
+        this.#warnWithRateLimit(
+          `stale-generation-error`,
+          `[Electric] A stale request generation surfaced an error after a newer generation was already active. ` +
+            `This may indicate overlapping request generations or late async work escaping quarantine. ` +
+            `${this.#formatStateDiagnostics(this.#syncState, {
+              errorGeneration: generationId,
+              errorRequestId,
+              errorTransport,
+            })}`
+        )
+      }
       const previousState = this.#syncState
       if (err instanceof Error) {
         this.#syncState = this.#syncState.toErrorState(err)
@@ -898,6 +949,11 @@ export class ShapeStream<T extends Row<unknown> = Row>
             `entered-error-state`,
             `[Electric] Entered error state. ` +
               `${this.#formatStateDiagnostics(this.#syncState, {
+                errorGeneration: generationId,
+                errorRequestId,
+                errorTransport,
+                isActiveGenerationError:
+                  generationId === this.#activeGenerationId,
                 previousState: previousState.kind,
                 errorName: err.name,
                 errorMessage: err.message,
@@ -933,6 +989,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
           // Bound the onError retry loop to prevent unbounded retries
           this.#consecutiveErrorRetries++
           this.#debugLog(`onError:retry`, {
+            generationId,
             consecutiveErrorRetries: this.#consecutiveErrorRetries,
             retryParamKeys: retryOpts.params
               ? Object.keys(retryOpts.params).join(`,`)
@@ -962,6 +1019,8 @@ export class ShapeStream<T extends Row<unknown> = Row>
           console.log(
             `[Electric] onError requested retry. Restarting stream from current offset. ` +
               `${this.#formatStateDiagnostics(this.#syncState, {
+                errorGeneration: generationId,
+                errorRequestId,
                 consecutiveErrorRetries: this.#consecutiveErrorRetries,
               })}`,
             err
@@ -1031,12 +1090,16 @@ export class ShapeStream<T extends Row<unknown> = Row>
         offset: state.offset,
         cursor: state.liveCacheBuster,
         replayCursor: state.replayCursor,
+        activeGeneration: this.#activeGenerationId,
         paused: this.#pauseLock.isPaused,
         connected: this.#connected,
         started: this.#started,
         currentUrl,
         shapeKey,
         expiredHandle,
+        lastErrorGeneration: this.#lastErrorContext?.generationId,
+        lastErrorRequestId: this.#lastErrorContext?.requestId,
+        lastErrorName: this.#lastErrorContext?.errorName,
         ...extra,
       }
 
@@ -1044,6 +1107,45 @@ export class ShapeStream<T extends Row<unknown> = Row>
       .filter(([, value]) => value !== undefined && value !== null)
       .map(([key, value]) => `${key}=${JSON.stringify(value)}`)
       .join(` `)
+  }
+
+  #recordPendingErrorContext(
+    generationId: number,
+    error: Error,
+    extra: {
+      requestId?: number
+      transport?: `long-poll` | `sse`
+      responseStatus?: number
+    } = {}
+  ) {
+    this.#pendingErrorContext = {
+      generationId,
+      requestId: extra.requestId,
+      transport: extra.transport,
+      errorName: error.name,
+      errorMessage: error.message,
+      responseStatus: extra.responseStatus,
+      capturedAt: Date.now(),
+    }
+  }
+
+  #debugGenerationMismatch(
+    eventType: string,
+    extra: {
+      generationId: number
+      requestId?: number
+      transport?: `long-poll` | `sse`
+    }
+  ) {
+    if (extra.generationId === this.#activeGenerationId) return
+
+    this.#debugLog(`generation:mismatch`, {
+      eventType,
+      eventGeneration: extra.generationId,
+      requestId: extra.requestId,
+      transport: extra.transport,
+      isActiveGeneration: false,
+    })
   }
 
   #debugLog(event: string, extra: Record<string, DiagnosticValue> = {}) {
@@ -1095,7 +1197,11 @@ export class ShapeStream<T extends Row<unknown> = Row>
     this.#debugLogsSuppressed = 0
   }
 
-  #warnWithRateLimit(key: string, message: string) {
+  #warnWithRateLimit(
+    key: string,
+    message: string,
+    maxLogsPerWindow = SHAPE_STREAM_WARNING_MAX_LOGS_PER_WINDOW
+  ) {
     const now = Date.now()
     const window = this.#warningWindows.get(key)
 
@@ -1115,7 +1221,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
       return
     }
 
-    if (window.emitted < SHAPE_STREAM_WARNING_MAX_LOGS_PER_WINDOW) {
+    if (window.emitted < maxLogsPerWindow) {
       window.emitted++
       console.warn(message, new Error(`stack trace`))
       return
@@ -1124,7 +1230,10 @@ export class ShapeStream<T extends Row<unknown> = Row>
     window.suppressed++
   }
 
-  async #requestShape(requestShapeCacheBuster?: string): Promise<void> {
+  async #requestShape(
+    generationId: number,
+    requestShapeCacheBuster?: string
+  ): Promise<void> {
     // ErrorState should never reach the request loop — re-throw so
     // #start's catch block can route it through onError properly.
     if (this.#syncState instanceof ErrorState) {
@@ -1139,6 +1248,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
         this.#pendingRequestShapeCacheBuster = activeCacheBuster
       }
       this.#debugLog(`request:skipped-paused`, {
+        generationId,
         requestCacheBuster: activeCacheBuster,
       })
       return
@@ -1149,6 +1259,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
       (this.options.signal?.aborted || this.#syncState.isUpToDate)
     ) {
       this.#debugLog(`request:stopped`, {
+        generationId,
         signalAborted: this.options.signal?.aborted,
         isUpToDate: this.#syncState.isUpToDate,
       })
@@ -1167,7 +1278,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
     if (this.#syncState instanceof PausedState) {
       resumingFromPause = true
       this.#syncState = this.#syncState.resume()
-      this.#debugLog(`request:resumed`)
+      this.#debugLog(`request:resumed`, { generationId })
     }
 
     const { url, signal } = this.options
@@ -1195,6 +1306,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
         this.#pendingRequestShapeCacheBuster = activeCacheBuster
       }
       this.#debugLog(`request:cancelled-before-dispatch`, {
+        generationId,
         requestId,
         fetchUrl: fetchUrl.toString(),
       })
@@ -1206,6 +1318,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
     try {
       await this.#fetchShape({
+        generationId,
         requestId,
         fetchUrl,
         requestAbortController,
@@ -1224,14 +1337,16 @@ export class ShapeStream<T extends Row<unknown> = Row>
         isRestartAbort
       ) {
         this.#debugLog(`request:restart-after-abort`, {
+          generationId,
           requestId,
           abortReason: describeDiagnosticValue(abortReason),
         })
-        return this.#requestShape()
+        return this.#requestShape(generationId)
       }
 
       if (e instanceof FetchBackoffAbortError) {
         this.#debugLog(`request:aborted`, {
+          generationId,
           requestId,
           abortReason: describeDiagnosticValue(abortReason),
         })
@@ -1245,16 +1360,23 @@ export class ShapeStream<T extends Row<unknown> = Row>
         // 2. Self-healing: stale retries exhausted, expired entry cleared,
         //    stream reset — retry without expired_handle param.
         this.#debugLog(`request:stale-cache-retry`, {
+          generationId,
           requestId,
           errorMessage: e.message,
         })
-        return this.#requestShape()
+        return this.#requestShape(generationId)
       }
 
-      if (!(e instanceof FetchError)) throw e // should never happen
+      if (!(e instanceof FetchError)) {
+        if (e instanceof Error) {
+          this.#recordPendingErrorContext(generationId, e, { requestId })
+        }
+        throw e // should never happen
+      }
 
       if (e.status == 409) {
         this.#debugLog(`request:must-refetch`, {
+          generationId,
           requestId,
           responseStatus: e.status,
         })
@@ -1286,13 +1408,18 @@ export class ShapeStream<T extends Row<unknown> = Row>
         // body to avoid delivering stale data rows to subscribers.
         await this.#publish([{ headers: { control: `must-refetch` } }])
 
-        return this.#requestShape(nextRequestShapeCacheBuster)
+        return this.#requestShape(generationId, nextRequestShapeCacheBuster)
       } else {
         // errors that have reached this point are not actionable without
         // additional user input, such as 400s or failures to read the
         // body of a response, so we exit the loop and let #start handle it
         // Note: We don't notify subscribers here because onError might recover
+        this.#recordPendingErrorContext(generationId, e, {
+          requestId,
+          responseStatus: e.status,
+        })
         this.#debugLog(`request:failed`, {
+          generationId,
           requestId,
           errorName: e.name,
           errorMessage: e.message,
@@ -1308,7 +1435,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
     }
 
     this.#tickPromiseResolver?.()
-    return this.#requestShape()
+    return this.#requestShape(generationId)
   }
 
   /**
@@ -1581,7 +1708,11 @@ export class ShapeStream<T extends Row<unknown> = Row>
    */
   async #onInitialResponse(
     response: Response,
-    requestId?: number
+    opts?: {
+      generationId: number
+      requestId: number
+      transport: `long-poll` | `sse`
+    }
   ): Promise<boolean> {
     const { headers, status } = response
     const shapeHandle = headers.get(SHAPE_HANDLE_HEADER)
@@ -1629,7 +1760,14 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
     this.#syncState = transition.state
     this.#debugLog(`response:headers`, {
-      requestId,
+      generationId: opts?.generationId,
+      requestId: opts?.requestId,
+      transport: opts?.transport,
+      eventGeneration: opts?.generationId,
+      isActiveGeneration:
+        opts?.generationId === undefined
+          ? undefined
+          : opts.generationId === this.#activeGenerationId,
       action: transition.action,
       responseStatus: status,
       responseHandle: shapeHandle,
@@ -1637,6 +1775,9 @@ export class ShapeStream<T extends Row<unknown> = Row>
       responseCursor,
       expiredHandle,
     })
+    if (opts) {
+      this.#debugGenerationMismatch(`response:headers`, opts)
+    }
 
     // Clear recovery guard on 204 (no-content), since the empty body means
     // #onMessages won't run to clear it via the up-to-date path.
@@ -1713,15 +1854,35 @@ export class ShapeStream<T extends Row<unknown> = Row>
     }
 
     if (transition.action === `ignored`) {
+      this.#debugLog(`response:ignored`, {
+        generationId: opts?.generationId,
+        requestId: opts?.requestId,
+        transport: opts?.transport,
+        eventGeneration: opts?.generationId,
+        isActiveGeneration:
+          opts?.generationId === undefined
+            ? undefined
+            : opts.generationId === this.#activeGenerationId,
+        responseHandle: shapeHandle,
+        responseStatus: status,
+      })
       this.#warnWithRateLimit(
         `ignored-response-${this.#syncState.kind}`,
         `[Electric] Response was ignored by state "${this.#syncState.kind}". ` +
           `The response body will be skipped. ` +
           `This may indicate a proxy/CDN caching issue or a client state machine bug. ` +
           `${this.#formatStateDiagnostics(this.#syncState, {
+            eventGeneration: opts?.generationId,
+            requestId: opts?.requestId,
+            transport: opts?.transport,
+            isActiveGeneration:
+              opts?.generationId === undefined
+                ? undefined
+                : opts.generationId === this.#activeGenerationId,
             responseHandle: shapeHandle,
             responseStatus: status,
-          })}`
+          })}`,
+        SHAPE_STREAM_IGNORED_RESPONSE_WARNING_MAX_LOGS_PER_WINDOW
       )
       return false
     }
@@ -1732,7 +1893,11 @@ export class ShapeStream<T extends Row<unknown> = Row>
   async #onMessages(
     batch: Array<Message<T>>,
     isSseMessage = false,
-    requestId?: number
+    opts?: {
+      generationId: number
+      requestId: number
+      transport: `long-poll` | `sse`
+    }
   ) {
     if (!Array.isArray(batch)) {
       console.warn(
@@ -1786,13 +1951,22 @@ export class ShapeStream<T extends Row<unknown> = Row>
     })
 
     this.#debugLog(`messages:batch`, {
-      requestId,
-      transport: isSseMessage ? `sse` : `long-poll`,
+      generationId: opts?.generationId,
+      requestId: opts?.requestId,
+      transport: opts?.transport ?? (isSseMessage ? `sse` : `long-poll`),
+      eventGeneration: opts?.generationId,
+      isActiveGeneration:
+        opts?.generationId === undefined
+          ? undefined
+          : opts.generationId === this.#activeGenerationId,
       batchSize: batch.length,
       publishedCount: messagesToProcess.length,
       hasUpToDateMessage,
       upToDateOffset,
     })
+    if (opts) {
+      this.#debugGenerationMismatch(`messages:batch`, opts)
+    }
 
     await this.#publish(messagesToProcess)
   }
@@ -1805,6 +1979,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
    * @returns A promise that resolves when the request is complete (i.e. the long poll receives a response or the SSE connection is closed).
    */
   async #fetchShape(opts: {
+    generationId: number
     requestId: number
     fetchUrl: URL
     requestAbortController: AbortController
@@ -1832,9 +2007,11 @@ export class ShapeStream<T extends Row<unknown> = Row>
       isRefreshing: this.#isRefreshing,
       resumingFromPause: !!opts.resumingFromPause,
     })
+    const transport = shouldUseSse ? `sse` : `long-poll`
     this.#debugLog(`request:dispatch`, {
+      generationId: opts.generationId,
       requestId: opts.requestId,
-      transport: shouldUseSse ? `sse` : `long-poll`,
+      transport,
       fetchUrl: opts.fetchUrl.toString(),
       resumingFromPause: !!opts.resumingFromPause,
       isRefreshing: this.#isRefreshing,
@@ -1842,14 +2019,16 @@ export class ShapeStream<T extends Row<unknown> = Row>
     if (shouldUseSse) {
       opts.fetchUrl.searchParams.set(EXPERIMENTAL_LIVE_SSE_QUERY_PARAM, `true`)
       opts.fetchUrl.searchParams.set(LIVE_SSE_QUERY_PARAM, `true`)
-      return this.#requestShapeSSE(opts)
+      return this.#requestShapeSSE({ ...opts, transport: `sse` })
     }
 
-    return this.#requestShapeLongPoll(opts)
+    return this.#requestShapeLongPoll({ ...opts, transport: `long-poll` })
   }
 
   async #requestShapeLongPoll(opts: {
+    generationId: number
     requestId: number
+    transport: `long-poll`
     fetchUrl: URL
     requestAbortController: AbortController
     headers: Record<string, string>
@@ -1861,10 +2040,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
     })
 
     this.#connected = true
-    const shouldProcessBody = await this.#onInitialResponse(
-      response,
-      opts.requestId
-    )
+    const shouldProcessBody = await this.#onInitialResponse(response, opts)
     if (!shouldProcessBody) return
 
     const schema = this.#syncState.schema! // we know that it is not undefined because it is set by `this.#onInitialResponse`
@@ -1885,11 +2061,13 @@ export class ShapeStream<T extends Row<unknown> = Row>
       )
     }
 
-    await this.#onMessages(batch, false, opts.requestId)
+    await this.#onMessages(batch, false, opts)
   }
 
   async #requestShapeSSE(opts: {
+    generationId: number
     requestId: number
+    transport: `sse`
     fetchUrl: URL
     requestAbortController: AbortController
     headers: Record<string, string>
@@ -1916,7 +2094,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
           this.#connected = true
           const shouldProcessBody = await this.#onInitialResponse(
             response,
-            opts.requestId
+            opts
           )
           if (!shouldProcessBody) {
             ignoredStaleResponse = true
@@ -1936,7 +2114,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
             if (isUpToDateMessage(message)) {
               // Flush the buffer on up-to-date message.
               // Ensures that we only process complete batches of operations.
-              this.#onMessages(buffer, true, opts.requestId)
+              this.#onMessages(buffer, true, opts)
               buffer = []
             }
           }
@@ -1985,12 +2163,15 @@ export class ShapeStream<T extends Row<unknown> = Row>
       })
       this.#syncState = transition.state
       this.#debugLog(`sse:closed`, {
+        generationId: opts.generationId,
         requestId: opts.requestId,
+        transport: opts.transport,
         connectionDuration,
         wasAborted,
         fellBackToLongPolling: transition.fellBackToLongPolling,
         wasShortConnection: transition.wasShortConnection,
       })
+      this.#debugGenerationMismatch(`sse:closed`, opts)
 
       if (transition.fellBackToLongPolling) {
         console.warn(
