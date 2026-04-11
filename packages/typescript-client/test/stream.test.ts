@@ -941,6 +941,7 @@ describe(`ShapeStream`, () => {
     // caused an unbounded retry loop. The consecutive error retry limit
     // ensures the loop terminates.
     let requestCount = 0
+    const warnSpy = vi.spyOn(console, `warn`).mockImplementation(() => {})
 
     // First request succeeds → LiveState. All subsequent → persistent 400.
     const fetchMock = vi.fn(async () => {
@@ -1000,6 +1001,9 @@ describe(`ShapeStream`, () => {
     expect(subscriberError).not.toBeNull()
     // 1 initial success + ~51 retries (limit fires at >50)
     expect(requestCount).toBeLessThan(100)
+    expect(warnSpy.mock.calls.length).toBeLessThanOrEqual(5)
+
+    warnSpy.mockRestore()
   })
 
   it(`onError retry counter resets after successful data`, async () => {

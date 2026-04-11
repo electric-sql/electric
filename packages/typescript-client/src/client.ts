@@ -107,6 +107,8 @@ const SHAPE_STREAM_DEBUG_NAMESPACES = [
 ] as const
 const SHAPE_STREAM_DEBUG_MAX_LOGS_PER_WINDOW = 50
 const SHAPE_STREAM_DEBUG_WINDOW_MS = 1_000
+const SHAPE_STREAM_WARNING_MAX_LOGS_PER_WINDOW = 3
+const SHAPE_STREAM_WARNING_WINDOW_MS = 5_000
 
 type DiagnosticValue = string | number | boolean | null | undefined
 
@@ -756,6 +758,10 @@ export class ShapeStream<T extends Row<unknown> = Row>
   #debugWindowStartedAt = 0
   #debugLogsInWindow = 0
   #debugLogsSuppressed = 0
+  #warningWindows = new Map<
+    string,
+    { startedAt: number; emitted: number; suppressed: number }
+  >()
 
   constructor(options: ShapeStreamOptions<GetExtensions<T>>) {
     this.options = { subscribe: true, ...options }
@@ -888,14 +894,14 @@ export class ShapeStream<T extends Row<unknown> = Row>
       if (err instanceof Error) {
         this.#syncState = this.#syncState.toErrorState(err)
         if (!(previousState instanceof ErrorState)) {
-          console.warn(
+          this.#warnWithRateLimit(
+            `entered-error-state`,
             `[Electric] Entered error state. ` +
               `${this.#formatStateDiagnostics(this.#syncState, {
                 previousState: previousState.kind,
                 errorName: err.name,
                 errorMessage: err.message,
-              })}`,
-            new Error(`stack trace`)
+              })}`
           )
         }
       }
@@ -1080,6 +1086,35 @@ export class ShapeStream<T extends Row<unknown> = Row>
         `The stream is likely in a tight loop or repeated error path.`
     )
     this.#debugLogsSuppressed = 0
+  }
+
+  #warnWithRateLimit(key: string, message: string) {
+    const now = Date.now()
+    const window = this.#warningWindows.get(key)
+
+    if (!window || now - window.startedAt >= SHAPE_STREAM_WARNING_WINDOW_MS) {
+      if (window && window.suppressed > 0) {
+        console.warn(
+          `[Electric] Suppressed ${window.suppressed} repeated "${key}" warnings in the last ${SHAPE_STREAM_WARNING_WINDOW_MS}ms.`
+        )
+      }
+
+      this.#warningWindows.set(key, {
+        startedAt: now,
+        emitted: 1,
+        suppressed: 0,
+      })
+      console.warn(message, new Error(`stack trace`))
+      return
+    }
+
+    if (window.emitted < SHAPE_STREAM_WARNING_MAX_LOGS_PER_WINDOW) {
+      window.emitted++
+      console.warn(message, new Error(`stack trace`))
+      return
+    }
+
+    window.suppressed++
   }
 
   async #requestShape(requestShapeCacheBuster?: string): Promise<void> {
@@ -1671,15 +1706,15 @@ export class ShapeStream<T extends Row<unknown> = Row>
     }
 
     if (transition.action === `ignored`) {
-      console.warn(
+      this.#warnWithRateLimit(
+        `ignored-response-${this.#syncState.kind}`,
         `[Electric] Response was ignored by state "${this.#syncState.kind}". ` +
           `The response body will be skipped. ` +
           `This may indicate a proxy/CDN caching issue or a client state machine bug. ` +
           `${this.#formatStateDiagnostics(this.#syncState, {
             responseHandle: shapeHandle,
             responseStatus: status,
-          })}`,
-        new Error(`stack trace`)
+          })}`
       )
       return false
     }
