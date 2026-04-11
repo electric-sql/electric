@@ -712,6 +712,126 @@ describe(`ShapeStream`, () => {
     warnSpy.mockRestore()
   })
 
+  it(`should ignore successful responses that arrive after a paused request was aborted`, async () => {
+    const warnSpy = vi.spyOn(console, `warn`).mockImplementation(() => {})
+
+    let streamRequestCount = 0
+    let resolveAbortedRequest: ((response: Response) => void) | null = null
+    let resolveResumedRequest: ((response: Response) => void) | null = null
+    let subscriberError: Error | null = null
+
+    const fetchMock = vi.fn((input: RequestInfo | URL): Promise<Response> => {
+      const url = input.toString()
+      const isSnapshotRequest = url.includes(`subset__limit=`)
+
+      if (isSnapshotRequest) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              metadata: {
+                snapshot_mark: 1,
+                xmin: `0`,
+                xmax: `0`,
+                xip_list: [],
+                database_lsn: `0`,
+              },
+              data: [],
+            }),
+            {
+              status: 200,
+              headers: {
+                'electric-offset': `0_0`,
+                'electric-handle': `snapshot-handle`,
+                'electric-schema': `{}`,
+              },
+            }
+          )
+        )
+      }
+
+      streamRequestCount++
+
+      // The first request is the one that gets aborted by the snapshot
+      // pause. We deliberately ignore the abort signal and resolve later
+      // to simulate a custom fetch client (or upstream wrapper) returning
+      // a late success after the stream has already moved on.
+      if (streamRequestCount === 1) {
+        return new Promise<Response>((resolve) => {
+          resolveAbortedRequest = resolve
+        })
+      }
+
+      if (streamRequestCount === 2) {
+        return new Promise<Response>((resolve) => {
+          resolveResumedRequest = resolve
+        })
+      }
+
+      return Promise.resolve(Response.error())
+    })
+
+    const stream = new ShapeStream({
+      url: shapeUrl,
+      params: { table: `test` },
+      signal: aborter.signal,
+      fetchClient: fetchMock,
+      log: `changes_only`,
+      onError: () => {},
+    })
+
+    stream.subscribe(
+      () => {},
+      (error) => {
+        subscriberError = error
+      }
+    )
+
+    await vi.waitFor(() => {
+      expect(streamRequestCount).toBe(1)
+    })
+
+    await stream.requestSnapshot({ limit: 1 })
+
+    await vi.waitFor(() => {
+      expect(streamRequestCount).toBe(2)
+    })
+
+    resolveResumedRequest!(
+      new Response(`Bad Request`, {
+        status: 400,
+        statusText: `Bad Request`,
+      })
+    )
+
+    await vi.waitFor(() => {
+      expect(subscriberError).not.toBeNull()
+    })
+
+    resolveAbortedRequest!(
+      new Response(
+        JSON.stringify([{ headers: { control: `up-to-date` }, offset: `0_0` }]),
+        {
+          status: 200,
+          headers: {
+            'electric-handle': `late-handle`,
+            'electric-offset': `0_0`,
+            'electric-schema': `{}`,
+            'electric-up-to-date': ``,
+          },
+        }
+      )
+    )
+
+    await new Promise((resolve) => setTimeout(resolve, 50))
+
+    expect(warnSpy).not.toHaveBeenCalledWith(
+      expect.stringContaining(`Response was ignored by state "error"`),
+      expect.any(Error)
+    )
+
+    warnSpy.mockRestore()
+  })
+
   it(`onError retry loop should be bounded for persistent errors`, async () => {
     // Regression: onError always returning retry for a persistent error
     // caused an unbounded retry loop. The consecutive error retry limit

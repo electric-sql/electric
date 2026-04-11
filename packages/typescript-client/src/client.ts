@@ -739,8 +739,20 @@ export class ShapeStream<T extends Row<unknown> = Row>
       await this.#requestShape()
     } catch (err) {
       this.#error = err
+      const previousState = this.#syncState
       if (err instanceof Error) {
         this.#syncState = this.#syncState.toErrorState(err)
+        if (!(previousState instanceof ErrorState)) {
+          console.warn(
+            `[Electric] Entered error state. ` +
+              `${this.#formatStateDiagnostics(this.#syncState, {
+                previousState: previousState.kind,
+                errorName: err.name,
+                errorMessage: err.message,
+              })}`,
+            new Error(`stack trace`)
+          )
+        }
       }
 
       // Check if onError handler wants to retry
@@ -775,7 +787,8 @@ export class ShapeStream<T extends Row<unknown> = Row>
             console.warn(
               `[Electric] onError retry loop exhausted after ${this.#maxConsecutiveErrorRetries} consecutive retries. ` +
                 `The error was never resolved by the onError handler. ` +
-                `Error: ${err instanceof Error ? err.message : String(err)}`,
+                `Error: ${err instanceof Error ? err.message : String(err)}. ` +
+                `${this.#formatStateDiagnostics(this.#syncState)}`,
               new Error(`stack trace`)
             )
             if (err instanceof Error) {
@@ -822,6 +835,40 @@ export class ShapeStream<T extends Row<unknown> = Row>
     this.#connected = false
     this.#tickPromiseRejecter?.()
     this.#unsubscribeFromWakeDetection?.()
+  }
+
+  #formatStateDiagnostics(
+    state: ShapeStreamState = this.#syncState,
+    extra: Record<string, string | number | boolean | null | undefined> = {}
+  ): string {
+    const currentUrl = this.#currentFetchUrl?.toString()
+    const shapeKey = this.#currentFetchUrl
+      ? canonicalShapeKey(this.#currentFetchUrl)
+      : undefined
+    const expiredHandle = shapeKey
+      ? expiredShapesCache.getExpiredHandle(shapeKey)
+      : null
+
+    const fields: Record<string, string | number | boolean | null | undefined> =
+      {
+        state: state.kind,
+        handle: state.handle,
+        offset: state.offset,
+        cursor: state.liveCacheBuster,
+        replayCursor: state.replayCursor,
+        paused: this.#pauseLock.isPaused,
+        connected: this.#connected,
+        started: this.#started,
+        currentUrl,
+        shapeKey,
+        expiredHandle,
+        ...extra,
+      }
+
+    return Object.entries(fields)
+      .filter(([, value]) => value !== undefined && value !== null)
+      .map(([key, value]) => `${key}=${JSON.stringify(value)}`)
+      .join(` `)
   }
 
   async #requestShape(requestShapeCacheBuster?: string): Promise<void> {
@@ -1358,7 +1405,11 @@ export class ShapeStream<T extends Row<unknown> = Row>
       console.warn(
         `[Electric] Response was ignored by state "${this.#syncState.kind}". ` +
           `The response body will be skipped. ` +
-          `This may indicate a proxy/CDN caching issue or a client state machine bug.`,
+          `This may indicate a proxy/CDN caching issue or a client state machine bug. ` +
+          `${this.#formatStateDiagnostics(this.#syncState, {
+            responseHandle: shapeHandle,
+            responseStatus: status,
+          })}`,
         new Error(`stack trace`)
       )
       return false
