@@ -942,6 +942,7 @@ describe(`ShapeStream`, () => {
     // ensures the loop terminates.
     let requestCount = 0
     const warnSpy = vi.spyOn(console, `warn`).mockImplementation(() => {})
+    const logSpy = vi.spyOn(console, `log`).mockImplementation(() => {})
 
     // First request succeeds → LiveState. All subsequent → persistent 400.
     const fetchMock = vi.fn(async () => {
@@ -999,11 +1000,16 @@ describe(`ShapeStream`, () => {
 
     expect(lastError).not.toBeNull()
     expect(subscriberError).not.toBeNull()
-    // 1 initial success + ~51 retries (limit fires at >50)
-    expect(requestCount).toBeLessThan(100)
+    // 1 initial success + 4 failing requests (limit fires at >3)
+    expect(requestCount).toBeLessThan(10)
     expect(warnSpy.mock.calls.length).toBeLessThanOrEqual(5)
+    expect(logSpy).toHaveBeenCalledWith(
+      expect.stringContaining(`onError requested retry. Restarting stream`),
+      expect.any(Error)
+    )
 
     warnSpy.mockRestore()
+    logSpy.mockRestore()
   })
 
   it(`onError retry counter resets after successful data`, async () => {
@@ -1024,7 +1030,7 @@ describe(`ShapeStream`, () => {
 
         requestCount++
 
-        if (phase.current === `errors1` && requestCount <= 30) {
+        if (phase.current === `errors1` && requestCount <= 2) {
           return new Response(`Bad Request`, {
             status: 400,
             statusText: `Bad Request`,
@@ -1053,7 +1059,7 @@ describe(`ShapeStream`, () => {
             }
           )
         }
-        if (phase.current === `errors2` && requestCount <= 30) {
+        if (phase.current === `errors2` && requestCount <= 2) {
           return new Response(`Bad Request`, {
             status: 400,
             statusText: `Bad Request`,
@@ -1105,9 +1111,9 @@ describe(`ShapeStream`, () => {
       { timeout: 10_000 }
     )
 
-    // Stream survived 60 total errors (2 bursts of 30) because the
+    // Stream survived 4 total errors (2 bursts of 2) because the
     // counter reset between bursts. Without the reset, the cumulative
-    // count would hit 50 and kill the stream during the first burst.
+    // count would hit 4 and kill the stream during the second burst.
     expect(subscriberError).toBeNull()
   })
 
@@ -1118,8 +1124,8 @@ describe(`ShapeStream`, () => {
     let requestCount = 0
 
     // Pattern: initial 200 → LiveState, then alternating bursts of
-    // 10 errors and 204 successes, repeated 6 times.
-    // Total errors: 60 (exceeds the 50 cap if counter doesn't reset).
+    // 2 errors and 204 successes, repeated 4 times.
+    // Total errors: 8 (exceeds the cap of 3 if the counter doesn't reset).
     const fetchMock = vi.fn(async () => {
       await new Promise((r) => setTimeout(r, 0))
       requestCount++
@@ -1143,9 +1149,9 @@ describe(`ShapeStream`, () => {
         )
       }
 
-      // After initial success: cycle through 10 errors then 1 x 204, repeat
-      const cyclePos = (requestCount - 2) % 11 // 0-9 = errors, 10 = 204
-      if (cyclePos < 10) {
+      // After initial success: cycle through 2 errors then 1 x 204, repeat
+      const cyclePos = (requestCount - 2) % 3 // 0-1 = errors, 2 = 204
+      if (cyclePos < 2) {
         return new Response(`Bad Request`, {
           status: 400,
           statusText: `Bad Request`,
@@ -1181,18 +1187,18 @@ describe(`ShapeStream`, () => {
       }
     )
 
-    // Wait long enough for 60+ errors across 6 cycles
+    // Wait long enough for 8+ errors across 4 cycles
     await vi.waitFor(
       () => {
-        expect(requestCount).toBeGreaterThan(60)
+        expect(requestCount).toBeGreaterThan(10)
       },
       { timeout: 10_000 }
     )
 
     aborter.abort()
 
-    // If counter resets on 204, the stream survives 60+ total errors.
-    // If it doesn't, the counter hits 50 and tears down the stream.
+    // If counter resets on 204, the stream survives 8+ total errors.
+    // If it doesn't, the counter hits 4 and tears down the stream.
     expect(subscriberError).toBeNull()
   })
 
@@ -1264,6 +1270,6 @@ describe(`ShapeStream`, () => {
     // If the counter resets on accepted headers (before parse), this
     // assertion fails because the stream loops forever.
     expect(subscriberError).not.toBeNull()
-    expect(requestCount).toBeLessThan(200)
+    expect(requestCount).toBeLessThan(10)
   })
 })

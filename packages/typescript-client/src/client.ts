@@ -751,7 +751,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
   #expiredShapeRecoveryKey: string | null = null
   #pendingSelfHealCheck: { shapeKey: string; staleHandle: string } | null = null
   #consecutiveErrorRetries = 0
-  #maxConsecutiveErrorRetries = 50
+  #maxConsecutiveErrorRetries = 3
   readonly #debugEnabled: boolean
   readonly #debugSource?: string
   #requestSequence = 0
@@ -959,6 +959,13 @@ export class ShapeStream<T extends Row<unknown> = Row>
           }
 
           // Clear the error since we're retrying
+          console.log(
+            `[Electric] onError requested retry. Restarting stream from current offset. ` +
+              `${this.#formatStateDiagnostics(this.#syncState, {
+                consecutiveErrorRetries: this.#consecutiveErrorRetries,
+              })}`,
+            err
+          )
           this.#error = null
           if (this.#syncState instanceof ErrorState) {
             this.#syncState = this.#syncState.retry()
