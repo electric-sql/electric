@@ -131,6 +131,7 @@ describe(`ShapeStream`, () => {
   it(`should enable verbose diagnostics with localStorage electric.debug`, async () => {
     localStorage.setItem(`electric.debug`, `true`)
     const debugSpy = vi.spyOn(console, `debug`).mockImplementation(() => {})
+    const infoSpy = vi.spyOn(console, `info`).mockImplementation(() => {})
 
     const fetchMock = vi.fn(() =>
       Promise.resolve(
@@ -173,13 +174,19 @@ describe(`ShapeStream`, () => {
     expect(debugSpy).toHaveBeenCalledWith(
       expect.stringContaining(`event="messages:batch"`)
     )
+    expect(infoSpy).toHaveBeenCalledWith(
+      expect.stringContaining(`ShapeStream diagnostics enabled`)
+    )
+    expect(infoSpy).toHaveBeenCalledWith(expect.stringContaining(`Verbose`))
 
     debugSpy.mockRestore()
+    infoSpy.mockRestore()
   })
 
   it(`should enable verbose diagnostics with localStorage debug namespaces`, async () => {
     localStorage.setItem(`debug`, `electric*`)
     const debugSpy = vi.spyOn(console, `debug`).mockImplementation(() => {})
+    const infoSpy = vi.spyOn(console, `info`).mockImplementation(() => {})
 
     const fetchMock = vi.fn(() =>
       Promise.resolve(
@@ -217,8 +224,12 @@ describe(`ShapeStream`, () => {
       expect.stringContaining(`event="diagnostics-enabled"`)
     )
     expect(debugSpy).toHaveBeenCalledWith(expect.stringContaining(`electric*`))
+    expect(infoSpy).toHaveBeenCalledWith(
+      expect.stringContaining(`ShapeStream diagnostics enabled`)
+    )
 
     debugSpy.mockRestore()
+    infoSpy.mockRestore()
   })
 
   it(`should correctly serialize objects into query params`, async () => {

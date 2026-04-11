@@ -36,6 +36,11 @@ localStorage.setItem('electric.debug', 'true')
 localStorage.setItem('debug', 'electric*')
 ```
 
+When enabled, the client prints one visible `console.info` line confirming that
+diagnostics are active. Detailed per-request diagnostics are emitted at
+`console.debug` / `Verbose` level and are rate-limited to avoid overwhelming a
+tight-looping runtime.
+
 Enable debug logging to see retry and state machine behavior:
 
 ```ts

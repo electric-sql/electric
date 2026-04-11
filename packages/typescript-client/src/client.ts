@@ -105,6 +105,8 @@ const SHAPE_STREAM_DEBUG_NAMESPACES = [
   `@electric-sql/client`,
   `@electric-sql/client:*`,
 ] as const
+const SHAPE_STREAM_DEBUG_MAX_LOGS_PER_WINDOW = 50
+const SHAPE_STREAM_DEBUG_WINDOW_MS = 1_000
 
 type DiagnosticValue = string | number | boolean | null | undefined
 
@@ -751,6 +753,9 @@ export class ShapeStream<T extends Row<unknown> = Row>
   readonly #debugEnabled: boolean
   readonly #debugSource?: string
   #requestSequence = 0
+  #debugWindowStartedAt = 0
+  #debugLogsInWindow = 0
+  #debugLogsSuppressed = 0
 
   constructor(options: ShapeStreamOptions<GetExtensions<T>>) {
     this.options = { subscribe: true, ...options }
@@ -837,6 +842,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
     this.#subscribeToVisibilityChanges()
 
+    this.#announceDiagnosticsMode()
     this.#debugLog(`diagnostics-enabled`, {
       source: this.#debugSource,
       logMode: this.#mode,
@@ -1030,12 +1036,50 @@ export class ShapeStream<T extends Row<unknown> = Row>
   #debugLog(event: string, extra: Record<string, DiagnosticValue> = {}) {
     if (!this.#debugEnabled) return
 
+    const now = Date.now()
+
+    if (
+      this.#debugWindowStartedAt === 0 ||
+      now - this.#debugWindowStartedAt >= SHAPE_STREAM_DEBUG_WINDOW_MS
+    ) {
+      this.#flushSuppressedDebugLogs()
+      this.#debugWindowStartedAt = now
+      this.#debugLogsInWindow = 0
+    }
+
+    if (this.#debugLogsInWindow >= SHAPE_STREAM_DEBUG_MAX_LOGS_PER_WINDOW) {
+      this.#debugLogsSuppressed++
+      return
+    }
+
+    this.#debugLogsInWindow++
     console.debug(
       `[Electric] Debug ${this.#formatStateDiagnostics(this.#syncState, {
         event,
         ...extra,
       })}`
     )
+  }
+
+  #announceDiagnosticsMode() {
+    if (!this.#debugEnabled) return
+
+    console.info(
+      `[Electric] ShapeStream diagnostics enabled` +
+        (this.#debugSource ? ` from ${this.#debugSource}.` : `.`) +
+        ` Detailed per-request logs use console.debug / Verbose level in DevTools. ` +
+        `Verbose logs are rate-limited to ${SHAPE_STREAM_DEBUG_MAX_LOGS_PER_WINDOW} per ${SHAPE_STREAM_DEBUG_WINDOW_MS}ms to avoid overwhelming the runtime.`
+    )
+  }
+
+  #flushSuppressedDebugLogs() {
+    if (!this.#debugEnabled || this.#debugLogsSuppressed === 0) return
+
+    console.info(
+      `[Electric] ShapeStream diagnostics suppressed ${this.#debugLogsSuppressed} verbose logs in the last ${SHAPE_STREAM_DEBUG_WINDOW_MS}ms. ` +
+        `The stream is likely in a tight loop or repeated error path.`
+    )
+    this.#debugLogsSuppressed = 0
   }
 
   async #requestShape(requestShapeCacheBuster?: string): Promise<void> {
