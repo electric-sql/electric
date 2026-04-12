@@ -228,6 +228,17 @@ function describeDiagnosticValue(value: unknown): string | undefined {
   }
 }
 
+function summarizeDiagnosticValue(
+  value: unknown,
+  maxLength = 240
+): string | undefined {
+  const described = describeDiagnosticValue(value)
+  if (!described) return described
+  return described.length > maxLength
+    ? `${described.slice(0, maxLength - 3)}...`
+    : described
+}
+
 type Replica = `full` | `default`
 export type LogMode = `changes_only` | `full`
 
@@ -1395,7 +1406,9 @@ export class ShapeStream<T extends Row<unknown> = Row>
         if (!newShapeHandle) {
           console.warn(
             `[Electric] Received 409 response without a shape handle header. ` +
-              `This likely indicates a proxy or CDN stripping required headers.`,
+              `This can happen if a proxy/CDN strips required headers or if the server emitted ` +
+              `a must-refetch response without a replacement handle. ` +
+              `stream="main" requestUrl=${JSON.stringify(fetchUrl.toString())}`,
             new Error(`stack trace`)
           )
         }
@@ -2449,8 +2462,13 @@ export class ShapeStream<T extends Row<unknown> = Row>
     }
 
     const snapshotReason = `snapshot-${++this.#snapshotCounter}`
+    const snapshotSummary = summarizeDiagnosticValue(opts)
 
     this.#pauseLock.acquire(snapshotReason)
+    this.#debugLog(`snapshot:pause-acquired`, {
+      snapshotReason,
+      snapshotSummary,
+    })
 
     // Warn if the snapshot holds the pause lock for too long — this likely
     // indicates a hung fetch or leaked lock. Visibility pauses are
@@ -2459,7 +2477,8 @@ export class ShapeStream<T extends Row<unknown> = Row>
       console.warn(
         `[Electric] Snapshot "${snapshotReason}" has held the pause lock for 30s — ` +
           `possible hung request or leaked lock. ` +
-          `Current holders: ${[...new Set([snapshotReason])].join(`, `)}`,
+          `Current holders: ${[...new Set([snapshotReason])].join(`, `)} ` +
+          `subset=${JSON.stringify(snapshotSummary)}`,
         new Error(`stack trace`)
       )
     }, 30_000)
@@ -2467,6 +2486,14 @@ export class ShapeStream<T extends Row<unknown> = Row>
     try {
       const { metadata, data, responseOffset, responseHandle } =
         await this.fetchSnapshot(opts)
+
+      this.#debugLog(`snapshot:completed`, {
+        snapshotReason,
+        snapshotSummary,
+        responseHandle,
+        responseOffset,
+        rowCount: data.length,
+      })
 
       const dataWithEndBoundary = (data as Array<Message<T>>).concat([
         { headers: { control: `snapshot-end`, ...metadata } },
@@ -2508,9 +2535,24 @@ export class ShapeStream<T extends Row<unknown> = Row>
         metadata,
         data,
       }
+    } catch (e) {
+      this.#debugLog(`snapshot:error`, {
+        snapshotReason,
+        snapshotSummary,
+        errorName: e instanceof Error ? e.name : undefined,
+        errorMessage:
+          e instanceof Error
+            ? summarizeDiagnosticValue(e.message, 320)
+            : undefined,
+      })
+      throw e
     } finally {
       clearTimeout(snapshotWarnTimer)
       this.#pauseLock.release(snapshotReason)
+      this.#debugLog(`snapshot:pause-released`, {
+        snapshotReason,
+        snapshotSummary,
+      })
     }
   }
 
@@ -2546,6 +2588,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
   }> {
     const method = opts.method ?? this.options.subsetMethod ?? `GET`
     const usePost = method === `POST`
+    const snapshotSummary = summarizeDiagnosticValue(opts)
 
     let fetchUrl: URL
     let fetchOptions: RequestInit
@@ -2575,6 +2618,14 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
     // Capture handle before fetch to avoid race conditions if it changes during the request
     const usedHandle = this.#syncState.handle
+    this.#debugLog(`snapshot:fetch:start`, {
+      retryCount,
+      method,
+      fetchUrl: fetchUrl.toString(),
+      usedHandle,
+      cacheBuster,
+      snapshotSummary,
+    })
 
     let response: Response
     try {
@@ -2586,6 +2637,15 @@ export class ShapeStream<T extends Row<unknown> = Row>
       // clear the pause lock and break requestSnapshot's pause/resume logic.
       if (e instanceof FetchError && e.status === 409) {
         const nextRetryCount = retryCount + 1
+        const nextHandle = e.headers[SHAPE_HANDLE_HEADER]
+        this.#debugLog(`snapshot:fetch:409`, {
+          retryCount,
+          nextRetryCount,
+          fetchUrl: fetchUrl.toString(),
+          usedHandle,
+          nextHandle,
+          snapshotSummary,
+        })
         if (nextRetryCount > this.#maxSnapshotRetries) {
           throw new FetchError(
             502,
@@ -2606,13 +2666,15 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
         // For snapshot 409s, only update the handle — don't reset offset/schema/etc.
         // The main stream is paused and should not be disturbed.
-        const nextHandle = e.headers[SHAPE_HANDLE_HEADER]
         if (nextHandle) {
           this.#syncState = this.#syncState.withHandle(nextHandle)
         } else {
           console.warn(
             `[Electric] Received 409 response without a shape handle header. ` +
-              `This likely indicates a proxy or CDN stripping required headers.`,
+              `This can happen if a proxy/CDN strips required headers or if the server emitted ` +
+              `a must-refetch response without a replacement handle. ` +
+              `stream="snapshot" retryCount=${nextRetryCount} requestUrl=${JSON.stringify(fetchUrl.toString())} ` +
+              `snapshot=${JSON.stringify(snapshotSummary)}`,
             new Error(`stack trace`)
           )
         }
@@ -2648,6 +2710,14 @@ export class ShapeStream<T extends Row<unknown> = Row>
     const responseOffset =
       (response.headers.get(CHUNK_LAST_OFFSET_HEADER) as Offset) || null
     const responseHandle = response.headers.get(SHAPE_HANDLE_HEADER)
+    this.#debugLog(`snapshot:fetch:success`, {
+      retryCount,
+      fetchUrl: fetchUrl.toString(),
+      responseHandle,
+      responseOffset,
+      rowCount: data.length,
+      snapshotSummary,
+    })
 
     return { metadata, data, responseOffset, responseHandle }
   }
