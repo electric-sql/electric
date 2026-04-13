@@ -397,11 +397,16 @@ end
 # ensure the dashboard port is firewalled or otherwise restricted to trusted
 # networks only.
 if live_dashboard_port do
+  dashboard_ip =
+    if env!("ELECTRIC_LISTEN_ON_IPV6", :boolean, false),
+      do: {0, 0, 0, 0, 0, 0, 0, 0},
+      else: {0, 0, 0, 0}
+
   config :electric, Electric.LiveDashboardEndpoint,
     adapter: Bandit.PhoenixAdapter,
     http: [
       port: live_dashboard_port,
-      ip: {0, 0, 0, 0}
+      ip: dashboard_ip
     ],
     server: true,
     render_errors: [
