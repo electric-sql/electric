@@ -55,14 +55,14 @@ defmodule ElectricTelemetry.Processes do
 
     process_list
     |> sorted_groups(:proc_mem)
-    |> take_until_target(target, @min_group_memory)
+    |> take_until_target(:proc_mem, target, @min_group_memory)
   end
 
   defp top_by(sort_key, process_list, {:at_least_bytes, low_cutoff})
        when is_integer(low_cutoff) and low_cutoff >= 0 do
     process_list
     |> sorted_groups(sort_key)
-    |> take_until_target(:infinity, low_cutoff)
+    |> take_until_target(sort_key, :infinity, low_cutoff)
   end
 
   defp sorted_groups(process_list, sort_key) do
@@ -78,19 +78,22 @@ defmodule ElectricTelemetry.Processes do
     |> Enum.sort_by(&(-Map.fetch!(&1, sort_key)))
   end
 
-  defp take_until_target(proc_groups, target, low_cutoff) do
+  defp take_until_target(proc_groups, sort_key, target, low_cutoff) do
     {_running_total, selected_groups} =
       Enum.reduce_while(proc_groups, {0, []}, fn
         _proc_group, {running_total, acc} when running_total >= target ->
           {:halt, {running_total, acc}}
 
-        proc_group, {running_total, acc} when proc_group.proc_mem < low_cutoff ->
-          # Include this last process group in the result so it's clear to the caller that the
-          # low cutoff threshold has been reached earlier than the target total mem one.
-          {:halt, {running_total, [proc_group | acc]}}
-
         proc_group, {running_total, acc} ->
-          {:cont, {running_total + proc_group.proc_mem, [proc_group | acc]}}
+          value = Map.fetch!(proc_group, sort_key)
+
+          if value < low_cutoff do
+            # Include this last process group in the result so it's clear to the caller that the
+            # low cutoff threshold has been reached earlier than the target total mem one.
+            {:halt, {running_total, [proc_group | acc]}}
+          else
+            {:cont, {running_total + value, [proc_group | acc]}}
+          end
       end)
 
     Enum.reverse(selected_groups)
