@@ -8,9 +8,7 @@ import RequestResponseSmall from '/static/img/blog/durable-sessions-for-collabor
 import SyncBased from '/static/img/blog/durable-sessions-for-collaborative-ai/sync-based-architecture.jpg?url'
 import SyncBasedSmall from '/static/img/blog/durable-sessions-for-collaborative-ai/sync-based-architecture.sm.jpg?url'
 
-const post = data.find((p) =>
-  p.path.includes('data-primitive-agent-loop')
-)
+const post = data.find((p) => p.path.includes('data-primitive-agent-loop'))
 
 const actions = [
   {
