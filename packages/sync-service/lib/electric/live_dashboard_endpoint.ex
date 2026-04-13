@@ -2,6 +2,11 @@ defmodule Electric.LiveDashboardEndpoint do
   @moduledoc """
   Phoenix Endpoint for serving LiveDashboard on a separate port.
   This runs independently from the main Plug-based HTTP server.
+
+  **WARNING: This endpoint is completely unauthenticated.** It exposes internal
+  system state (VM metrics, process info, etc.). In production, ensure the
+  dashboard port is not publicly accessible — use firewall rules or network
+  policies to restrict access.
   """
 
   use Phoenix.Endpoint, otp_app: :electric

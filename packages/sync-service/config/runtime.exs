@@ -391,6 +391,11 @@ if Electric.telemetry_enabled?() do
 end
 
 # Phoenix LiveDashboard Endpoint Configuration
+#
+# WARNING: The dashboard is completely unauthenticated and exposes internal
+# system state (VM metrics, process info, ETS tables, etc.). In production,
+# ensure the dashboard port is firewalled or otherwise restricted to trusted
+# networks only.
 if live_dashboard_port do
   config :electric, Electric.LiveDashboardEndpoint,
     adapter: Bandit.PhoenixAdapter,
