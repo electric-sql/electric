@@ -41,48 +41,74 @@ defmodule Electric.Postgres.SnapshotQuery do
   def execute_for_shape(pool, shape_handle, shape, opts) do
     query_fn = Access.fetch!(opts, :query_fn)
     snapshot_info_fn = Access.fetch!(opts, :snapshot_info_fn)
-    shape_attrs = shape_attrs(shape_handle, shape)
+    query_reason = Access.get(opts, :query_reason, "initial_snapshot")
+    shape_attrs = shape_attrs(shape_handle, shape, query_reason)
     stack_id = Access.fetch!(opts, :stack_id)
 
-    Postgrex.transaction(
-      pool,
-      fn conn ->
-        ctx = %{
-          conn: conn,
-          stack_id: stack_id,
-          span_attrs: shape_attrs,
-          query_reason: Access.get(opts, :query_reason, "initial_snapshot")
-        }
+    OpenTelemetry.with_child_span(
+      "shape_snapshot.execute_for_shape",
+      shape_attrs,
+      stack_id,
+      fn ->
+        OpenTelemetry.start_interval(:"shape_snapshot.checkout_wait.duration_µs")
 
-        query!(ctx, "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY",
-          span_name: "shape_snapshot.start_readonly_txn"
+        Postgrex.transaction(
+          pool,
+          fn conn ->
+            OpenTelemetry.start_interval(:"shape_snapshot.setup.duration_µs")
+
+            ctx = %{
+              conn: conn,
+              stack_id: stack_id,
+              span_attrs: shape_attrs
+            }
+
+            query!(ctx, "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY",
+              span_name: "shape_snapshot.start_readonly_txn"
+            )
+
+            [%{rows: [[pg_snapshot, lsn]]}] =
+              query!(ctx, "SELECT pg_current_snapshot(), pg_current_wal_lsn()",
+                span_name: "shape_snapshot.get_pg_snapshot"
+              )
+
+            snapshot_info_fn.(shape_handle, pg_snapshot, lsn)
+
+            query!(ctx, Electric.Postgres.display_settings(),
+              span_name: "shape_snapshot.set_display_settings"
+            )
+
+            OpenTelemetry.start_interval(:"shape_snapshot.query.duration_µs")
+
+            result =
+              OpenTelemetry.with_child_span(
+                "shape_snapshot.query_fn",
+                shape_attrs,
+                stack_id,
+                fn -> query_fn.(conn, pg_snapshot, lsn) end
+              )
+
+            OpenTelemetry.stop_and_save_intervals(
+              total_attribute: :"shape_snapshot.total.duration_µs"
+            )
+
+            result
+          end,
+          timeout: :infinity
         )
-
-        [%{rows: [[pg_snapshot, lsn]]}] =
-          query!(ctx, "SELECT pg_current_snapshot(), pg_current_wal_lsn()",
-            span_name: "shape_snapshot.get_pg_snapshot"
-          )
-
-        snapshot_info_fn.(shape_handle, pg_snapshot, lsn)
-
-        query!(ctx, Electric.Postgres.display_settings(),
-          span_name: "shape_snapshot.set_display_settings"
-        )
-
-        query_fn.(conn, pg_snapshot, lsn)
-      end,
-      timeout: :infinity
+      end
     )
   catch
     :exit, {_, {DBConnection.Holder, :checkout, _}} ->
       raise SnapshotError.connection_not_available()
   end
 
-  defp shape_attrs(shape_handle, shape) do
+  defp shape_attrs(shape_handle, shape, query_reason) do
     [
       "shape.handle": shape_handle,
       "shape.root_table": shape.root_table,
-      "shape.where": if(not is_nil(shape.where), do: shape.where.query, else: nil)
+      "shape.where": if(not is_nil(shape.where), do: shape.where.query, else: nil),
+      "shape.query_reason": query_reason
     ]
   end
 
