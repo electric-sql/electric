@@ -16,6 +16,7 @@ defmodule Electric.Replication.Eval.KnownDefinition do
   @known_definition_keys [
     :args,
     :returns,
+    :variadic_arg,
     :strict?,
     :immutable?,
     :commutative_overload?,
@@ -207,7 +208,7 @@ defmodule Electric.Replication.Eval.KnownDefinition do
         parse_binary_operator(operator_or_func)
 
       Regex.match?(func_regex(), operator_or_func) ->
-        parse_function(operator_or_func)
+        parse_function(operator_or_func, caller)
 
       true ->
         raise CompileError,
@@ -243,16 +244,44 @@ defmodule Electric.Replication.Eval.KnownDefinition do
     }
   end
 
-  defp parse_function(function) do
+  defp parse_function(function, caller) do
     %{"name" => name, "args" => args, "return_type" => return} =
       Regex.named_captures(func_regex(), function)
 
     # TODO: doesn't support default or optional arguments
-    arg_types =
+    arg_defs =
       args
       |> String.split(",", trim: true)
-      |> Enum.map(fn arg ->
-        String.to_atom(String.trim(arg))
+      |> Enum.map(&String.trim/1)
+
+    variadic_positions =
+      Enum.with_index(arg_defs)
+      |> Enum.filter(fn {arg, _idx} -> String.match?(arg, ~r/^VARIADIC\s+/i) end)
+
+    variadic_arg =
+      case variadic_positions do
+        [] ->
+          nil
+
+        [{_, idx}] when idx == length(arg_defs) - 1 ->
+          idx
+
+        [{_arg, idx}] ->
+          raise CompileError,
+            line: caller.line,
+            description:
+              "VARIADIC argument must be the last function argument in defpostgres, got position #{idx + 1}"
+
+        _ ->
+          raise CompileError,
+            line: caller.line,
+            description: "defpostgres does not support more than one VARIADIC argument"
+      end
+
+    arg_types =
+      Enum.map(arg_defs, fn arg ->
+        Regex.replace(~r/^VARIADIC\s+/i, arg, "")
+        |> String.to_atom()
       end)
 
     %{
@@ -260,7 +289,8 @@ defmodule Electric.Replication.Eval.KnownDefinition do
       name: name,
       arity: length(arg_types),
       args: arg_types,
-      returns: String.to_atom(return)
+      returns: String.to_atom(return),
+      variadic_arg: variadic_arg
     }
   end
 

@@ -77,10 +77,10 @@ defmodule Electric.Replication.Eval.Parser do
       :name,
       strict?: true,
       immutable?: true,
-      # So this parameter is (1) internal for now, i.e. `defpostgres` in known functions cannot set it,
-      # and (2) is a bit of a hack. This allows us to specify that this function should be applied to each element of an array,
-      # without supporting essentially anonymous functions in our AST for an equivalent of `Enum.map/2`.
+      # Allows treating one argument position as an array-mapped input without introducing
+      # anonymous function nodes into the eval AST.
       map_over_array_in_pos: nil,
+      # Variadic arguments are packed into a single array-like AST node at this position.
       variadic_arg: nil,
       location: 0
     ]
@@ -483,9 +483,64 @@ defmodule Electric.Replication.Eval.Parser do
   end
 
   defp reduce_ast(ast) do
-    Walker.fold(ast, fn node, children, _ctx ->
-      do_maybe_reduce(Map.merge(node, children))
-    end)
+    reduce_node(ast)
+  end
+
+  defp reduce_node(%Const{} = const), do: {:ok, const}
+  defp reduce_node(%Ref{} = ref), do: {:ok, ref}
+  defp reduce_node(%UnknownConst{} = unknown), do: {:ok, unknown}
+
+  defp reduce_node(%Array{elements: elements} = array) do
+    with {:ok, elements} <- Utils.map_while_ok(elements, &reduce_node/1) do
+      do_maybe_reduce(%{array | elements: elements})
+    end
+  end
+
+  defp reduce_node(%RowExpr{elements: elements} = row_expr) do
+    with {:ok, elements} <- Utils.map_while_ok(elements, &reduce_node/1) do
+      do_maybe_reduce(%{row_expr | elements: elements})
+    end
+  end
+
+  defp reduce_node(
+         %Func{name: "coalesce", variadic_arg: 0, args: [%Array{} = variadic_args]} = func
+       ) do
+    case reduce_coalesce_elements(variadic_args.elements, []) do
+      {:ok, {:const, const}} ->
+        {:ok, const}
+
+      {:ok, {:elements, elements}} ->
+        {:ok, %{func | args: [%{variadic_args | elements: elements}]}}
+
+      {:ok, :all_nil} ->
+        {:ok, %Const{type: func.type, location: func.location, value: nil}}
+
+      {:error, {_loc, _message}} = error ->
+        error
+    end
+  end
+
+  defp reduce_node(%Func{args: args} = func) do
+    with {:ok, args} <- Utils.map_while_ok(args, &reduce_node/1) do
+      do_maybe_reduce(%{func | args: args})
+    end
+  end
+
+  defp reduce_coalesce_elements([], _reduced_prefix), do: {:ok, :all_nil}
+
+  defp reduce_coalesce_elements([arg | rest], reduced_prefix) do
+    with {:ok, reduced_arg} <- reduce_node(arg) do
+      case reduced_arg do
+        %Const{value: nil} ->
+          reduce_coalesce_elements(rest, [reduced_arg | reduced_prefix])
+
+        %Const{} = const ->
+          {:ok, {:const, const}}
+
+        other ->
+          {:ok, {:elements, Enum.reverse([other | reduced_prefix]) ++ rest}}
+      end
+    end
   end
 
   @spec node_to_ast(struct(), map(), map(), map()) ::
@@ -705,26 +760,37 @@ defmodule Electric.Replication.Eval.Parser do
          _,
          %{env: env}
        ) do
-    with {:ok, choices} <- find_available_functions(call, env),
-         {:ok, concrete} <- Lookups.pick_concrete_function_overload(choices, args, env),
-         {:ok, args} <- cast_unknowns(args, concrete.args, env),
-         {:ok, args} <- cast_implicit(args, concrete.args, env) do
-      {:ok, from_concrete(concrete, args)}
-    else
-      {:error, {_loc, _msg}} = error ->
-        error
+    handle_function_call(
+      identifier(call.funcname),
+      args,
+      call.location,
+      env,
+      explicit_variadic?: call.func_variadic
+    )
+  end
 
-      :error ->
-        arg_list =
-          Enum.map_join(args, ", ", fn
-            %UnknownConst{} -> "unknown"
-            %{type: type} -> to_string(type)
-          end)
+  defp node_to_ast(
+         %PgQuery.CoalesceExpr{location: location},
+         %{args: args},
+         _,
+         %{env: env}
+       ) do
+    handle_function_call("coalesce", args, location, env)
+  end
 
-        {:error,
-         {call.location,
-          "Could not select a function overload for #{identifier(call.funcname)}(#{arg_list})"}}
-    end
+  defp node_to_ast(
+         %PgQuery.MinMaxExpr{location: location, op: op},
+         %{args: args},
+         _,
+         %{env: env}
+       ) do
+    func_name =
+      case op do
+        :IS_GREATEST -> "greatest"
+        :IS_LEAST -> "least"
+      end
+
+    handle_function_call(func_name, args, location, env)
   end
 
   # Next block of overloads matches on `A_Expr`, which is any operator call, as well as special syntax calls (e.g. `BETWEEN` or `ANY`).
@@ -1117,13 +1183,67 @@ defmodule Electric.Replication.Eval.Parser do
     end
   end
 
-  defp find_available_functions(%PgQuery.FuncCall{} = call, %{funcs: funcs}) do
-    name = identifier(call.funcname)
-    arity = length(call.args)
+  defp handle_function_call(name, args, location, env, opts \\ []) do
+    if Keyword.get(opts, :explicit_variadic?, false) do
+      {:error, {location, "explicit VARIADIC function calls are not currently supported"}}
+    else
+      do_handle_function_call(name, args, location, env)
+    end
+  end
 
-    case Map.fetch(funcs, {name, arity}) do
-      {:ok, options} -> {:ok, options}
-      :error -> {:error, {call.location, "unknown or unsupported function #{name}/#{arity}"}}
+  @spec do_handle_function_call(
+          String.t(),
+          list(tree_part() | UnknownConst.t()),
+          non_neg_integer(),
+          Env.t()
+        ) ::
+          {:ok, tree_part()} | {:error, {non_neg_integer(), String.t()}}
+  defp do_handle_function_call(name, args, location, env) do
+    with {:ok, choices} <-
+           find_available_functions(name, length(args), location, env),
+         {:ok, concrete} <- Lookups.pick_concrete_function_overload(choices, args, env),
+         {:ok, args} <- cast_unknowns(args, concrete.args, env),
+         {:ok, args} <- cast_implicit(args, concrete.args, env) do
+      {:ok, from_concrete(concrete, args)}
+    else
+      {:error, {_loc, _msg}} = error ->
+        error
+
+      :error ->
+        arg_list =
+          Enum.map_join(args, ", ", fn
+            %UnknownConst{} -> "unknown"
+            %{type: type} -> to_string(type)
+          end)
+
+        {:error, {location, "Could not select a function overload for #{name}(#{arg_list})"}}
+    end
+  end
+
+  @spec find_available_functions(String.t(), non_neg_integer(), non_neg_integer(), Env.t()) ::
+          {:ok, list(map())} | {:error, {non_neg_integer(), String.t()}}
+  defp find_available_functions(name, arity, location, %{funcs: funcs}) do
+    exact_choices = Map.get(funcs, {name, arity}, [])
+
+    variadic_choices =
+      funcs
+      |> Enum.flat_map(fn
+        {{^name, candidate_arity}, overloads} when candidate_arity < arity ->
+          overloads
+          |> Enum.filter(&(&1[:variadic_arg] == candidate_arity - 1))
+          |> Enum.map(&Lookups.expand_variadic_function_overload(&1, arity))
+
+        _ ->
+          []
+      end)
+
+    choices =
+      (exact_choices ++ variadic_choices)
+      |> Enum.sort_by(&(not is_nil(&1[:variadic_arg])))
+
+    case choices do
+      [] -> {:error, {location, "unknown or unsupported function #{name}/#{arity}"}}
+      options -> {:ok, options}
     end
   end
 
@@ -1310,11 +1430,44 @@ defmodule Electric.Replication.Eval.Parser do
     # arguments are of different types (e.g. `date + int8`)
     commutative_overload? = Map.get(concrete, :commutative_overload?, false)
 
+    args =
+      if commutative_overload? do
+        Enum.reverse(args)
+      else
+        args
+      end
+
+    args =
+      case Map.get(concrete, :variadic_arg) do
+        nil ->
+          args
+
+        variadic_arg ->
+          {fixed_args, variadic_args} = Enum.split(args, variadic_arg)
+          variadic_type = Enum.at(concrete.args, variadic_arg)
+
+          variadic_location =
+            case variadic_args do
+              [%{location: location} | _] -> location
+              [] -> 0
+            end
+
+          fixed_args ++
+            [
+              %Array{
+                elements: variadic_args,
+                type: {:array, variadic_type},
+                location: variadic_location
+              }
+            ]
+      end
+
     %Func{
       implementation: concrete.implementation,
       name: concrete.name,
-      args: if(commutative_overload?, do: Enum.reverse(args), else: args),
+      args: args,
       type: concrete.returns,
+      variadic_arg: Map.get(concrete, :variadic_arg),
       # These two fields are always set by macro generation, but not always in tests
       strict?: Map.get(concrete, :strict?, true),
       immutable?: Map.get(concrete, :immutable?, true)
