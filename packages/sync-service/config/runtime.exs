@@ -404,6 +404,6 @@ if live_dashboard_port do
       layout: false
     ],
     live_view: [signing_salt: "live_dashboard_salt"],
-    secret_key_base: String.duplicate("a", 64),
+    secret_key_base: Base.encode64(:crypto.strong_rand_bytes(48)),
     pubsub_server: Electric.PubSub
 end
