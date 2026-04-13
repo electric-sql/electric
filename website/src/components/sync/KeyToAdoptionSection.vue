@@ -9,7 +9,7 @@ import SyncBased from '/static/img/blog/durable-sessions-for-collaborative-ai/sy
 import SyncBasedSmall from '/static/img/blog/durable-sessions-for-collaborative-ai/sync-based-architecture.sm.jpg?url'
 
 const post = data.find((p) =>
-  p.path.includes('durable-sessions-for-collaborative-ai')
+  p.path.includes('data-primitive-agent-loop')
 )
 
 const actions = [
