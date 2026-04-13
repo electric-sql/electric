@@ -22,6 +22,5 @@ defmodule Electric.LiveDashboardRouter do
     get "/favicon.ico", Electric.FaviconController, :show
 
     live_dashboard "/", ecto_repos: []
-
   end
 end
