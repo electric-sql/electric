@@ -183,7 +183,7 @@ The following operators are supported in where clauses:
 | **Range** | `BETWEEN`, `NOT BETWEEN`, `BETWEEN SYMMETRIC`, `NOT BETWEEN SYMMETRIC` | |
 | **Quantified** | `= ANY(array)`, `<> ALL(array)`, etc. | Use any comparison operator with `ANY` or `ALL` |
 
-Supported functions: `lower()`, `upper()`, `like()`, `ilike()`, `array_cat()`, `array_prepend()`, `array_append()`, `array_ndims()`, `timezone()`, `justify_days()`, `justify_hours()`, `justify_interval()`.
+Supported functions: `lower()`, `upper()`, `like()`, `ilike()`, `coalesce()`, `greatest()`, `least()`, `array_cat()`, `array_prepend()`, `array_append()`, `array_ndims()`, `timezone()`, `justify_days()`, `justify_hours()`, `justify_interval()`.
 
 #### Unsupported operators
 
