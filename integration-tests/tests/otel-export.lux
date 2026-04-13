@@ -48,11 +48,11 @@
   ScopeMetrics #0
   """
 
-  # Verify the presence of process.memory.* metrics
+  # Verify the presence of process.bin_memory.* metrics
   """?
   Metric #[0-9]+
   Descriptor:
-       -> Name: process\.memory\.avg_bin_count
+       -> Name: process\.bin_memory\.avg_bin_count
        -> Description: 
        -> Unit: 
        -> DataType: Gauge
@@ -67,7 +67,7 @@
   """?
   Metric #[0-9]+
   Descriptor:
-       -> Name: process\.memory\.avg_ref_count
+       -> Name: process\.bin_memory\.avg_ref_count
        -> Description: 
        -> Unit: 
        -> DataType: Gauge
@@ -82,7 +82,37 @@
   """?
   Metric #[0-9]+
   Descriptor:
-       -> Name: process\.memory\.binary
+       -> Name: process\.bin_memory\.max_bin_count
+       -> Description: 
+       -> Unit: 
+       -> DataType: Gauge
+  NumberDataPoints #0
+  Data point attributes:
+       -> process_type: Str\(A_memory_hog\)
+  StartTimestamp: [-0-9]+ [.:0-9]+ [-+0-9]+ UTC
+  Timestamp: [-0-9]+ [.:0-9]+ [-+0-9]+ UTC
+  Value: [0-9]+
+  """
+
+  """?
+  Metric #[0-9]+
+  Descriptor:
+       -> Name: process\.bin_memory\.max_ref_count
+       -> Description: 
+       -> Unit: 
+       -> DataType: Gauge
+  NumberDataPoints #0
+  Data point attributes:
+       -> process_type: Str\(A_memory_hog\)
+  StartTimestamp: [-0-9]+ [.:0-9]+ [-+0-9]+ UTC
+  Timestamp: [-0-9]+ [.:0-9]+ [-+0-9]+ UTC
+  Value: [0-9]+
+  """
+
+  """?
+  Metric #[0-9]+
+  Descriptor:
+       -> Name: process\.bin_memory\.total
        -> Description: 
        -> Unit: By
        -> DataType: Gauge
@@ -94,6 +124,7 @@
   Value: [0-9]+
   """
 
+  # Verify the presence of process.memory.total metric
   """?
   Metric #[0-9]+
   Descriptor:
@@ -162,6 +193,7 @@
   Timestamp: [-0-9]+ [.:0-9]+ [-+0-9]+ UTC
   Value: [-+.0-9]+
   """
+
 [invoke start_psql]
 
 [shell psql]

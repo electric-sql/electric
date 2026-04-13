@@ -1,9 +1,11 @@
 defmodule ElectricTelemetry.Processes do
+  @type limit :: {:count, pos_integer()} | {:mem_percent, 1..100}
+
   @default_count 5
+  @default_limit {:count, @default_count}
+
   # Minimum memory threshold for a process group when using :mem_percent mode.
   @min_group_memory 1024 * 1024
-
-  @type limit :: {:count, pos_integer()} | {:mem_percent, 1..100}
 
   defguardp is_valid_mem_percent(percent)
             when is_integer(percent) and percent >= 1 and percent <= 100
@@ -18,38 +20,44 @@ defmodule ElectricTelemetry.Processes do
 
   def proc_type(pid), do: proc_type(pid, info(pid))
 
-  def top_memory_by_type do
-    top_memory_by_type(Process.list(), {:count, @default_count})
-  end
+  def top_memory_by_type, do: top_by(:proc_mem)
+  def top_memory_by_type(proc_list_or_limit), do: top_by(:proc_mem, proc_list_or_limit)
+  def top_memory_by_type(proc_list, limit), do: top_by(:proc_mem, proc_list, limit)
 
-  def top_memory_by_type({_, _} = limit) do
-    top_memory_by_type(Process.list(), limit)
-  end
+  def top_bin_memory_by_type, do: top_by(:binary_mem)
+  def top_bin_memory_by_type({_, _} = limit), do: top_by(:binary_mem, limit)
+  def top_bin_memory_by_type(proc_list_or_limit), do: top_by(:binary_mem, proc_list_or_limit)
+  def top_bin_memory_by_type(proc_list, limit), do: top_by(:binary_mem, proc_list, limit)
 
-  def top_memory_by_type(process_list) when is_list(process_list) do
-    top_memory_by_type(process_list, {:count, @default_count})
-  end
+  def top_by(sort_key), do: top_by(sort_key, Process.list(), @default_limit)
+  def top_by(sort_key, {_, _} = limit), do: top_by(sort_key, Process.list(), limit)
 
-  def top_memory_by_type(process_list, {:count, count})
-      when is_list(process_list) and is_integer(count) and count > 0 do
+  def top_by(sort_key, proc_list) when is_list(proc_list),
+    do: top_by(sort_key, proc_list, @default_limit)
+
+  defp top_by(sort_key, process_list, {:count, count})
+       when is_integer(count) and count > 0 do
     process_list
-    |> sorted_groups()
+    |> sorted_groups(sort_key)
     |> Enum.take(count)
   end
 
-  def top_memory_by_type(process_list, {:mem_percent, percent})
-      when is_list(process_list) and is_valid_mem_percent(percent) do
+  # When sortying by binary mem, processes double-count the same refc binary, so it doesn't
+  # make sense to talk about a "percentage of the total" in that case.
+  # Instead, for binary memory telemetry the low cutoff threshold should be provided.
+  defp top_by(:proc_mem, process_list, {:mem_percent, percent})
+       when is_valid_mem_percent(percent) do
     # :processes_used excludes memory allocated but not yet used by process heaps,
     # giving a more accurate baseline for the percentage calculation.
     total_process_memory = :erlang.memory(:processes_used)
     target = total_process_memory * percent / 100
 
     process_list
-    |> sorted_groups()
+    |> sorted_groups(:proc_mem)
     |> take_until_target(target)
   end
 
-  defp sorted_groups(process_list) do
+  defp sorted_groups(process_list, sort_key) do
     process_list
     |> Enum.map(&type_and_memory/1)
     |> Enum.reject(&(&1.type == :dead))
@@ -59,7 +67,7 @@ defmodule ElectricTelemetry.Processes do
       |> mem_stats_for_procs()
       |> Map.put(:type, type)
     end)
-    |> Enum.sort_by(&(-&1.proc_mem))
+    |> Enum.sort_by(&(-Map.fetch!(&1, sort_key)))
   end
 
   defp take_until_target(proc_groups, target) do
