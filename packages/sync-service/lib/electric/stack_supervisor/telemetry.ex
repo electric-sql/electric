@@ -158,7 +158,11 @@ defmodule Electric.StackSupervisor.Telemetry do
       existing_resource = Keyword.get(otel_opts_base, :resource, %{})
 
       otel_opts =
-        Keyword.put(otel_opts_base, :resource, Map.put_new(existing_resource, :stack_id, config.stack_id))
+        Keyword.put(
+          otel_opts_base,
+          :resource,
+          Map.put_new(existing_resource, :stack_id, config.stack_id)
+        )
 
       telemetry_opts =
         config.telemetry_opts
