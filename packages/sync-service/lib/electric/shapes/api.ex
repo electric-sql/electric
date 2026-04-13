@@ -459,21 +459,17 @@ defmodule Electric.Shapes.Api do
     %{request | new_changes_pid: self(), new_changes_ref: ref}
   end
 
-  # In read-only mode, LsnTracker isn't populated (no replication connection).
-  # Use the shape's own latest offset as the LSN — it's the Postgres LSN of
-  # the last transaction persisted for this shape, which is the best available
-  # value without the replication stream or persisting the LsnTracker or loading
-  # all shapes' latest offsets up front. If we need stronger guarantees on this
-  # we should be persisting the LsnTracker updates to a file.
-  defp determine_global_last_seen_lsn(%Request{read_only?: true} = request) do
-    %{request | global_last_seen_lsn: request.last_offset.tx_offset}
-  end
-
+  # When the LsnTracker is populated (active mode), use the global last
+  # processed LSN. Otherwise fall back to the shape's own latest offset —
+  # the Postgres LSN of the last transaction persisted for this shape.
+  # This covers read-only mode (no replication connection) and transient
+  # states where the LsnTracker has been reset (e.g. process restarts).
   defp determine_global_last_seen_lsn(%Request{} = request) do
     offset =
-      request.api.stack_id
-      |> Electric.LsnTracker.get_last_processed_lsn()
-      |> Electric.Postgres.Lsn.to_integer()
+      case Electric.LsnTracker.get_last_processed_lsn(request.api.stack_id) do
+        nil -> request.last_offset.tx_offset
+        lsn -> Electric.Postgres.Lsn.to_integer(lsn)
+      end
 
     %{request | global_last_seen_lsn: offset}
   end
@@ -900,6 +896,11 @@ defmodule Electric.Shapes.Api do
 
         cond do
           request.read_only? or status.shape == :read_only ->
+            # Align the request flag with the current runtime status so that
+            # downstream functions (determine_log_chunk_offset, get_merged_log_stream,
+            # etc.) use the correct read-only strategy.
+            request = %{request | read_only?: true}
+
             # No consumer is running (or it stopped), so check if the
             # active instance has flushed new data to disk.
             case check_for_disk_updates(request) do

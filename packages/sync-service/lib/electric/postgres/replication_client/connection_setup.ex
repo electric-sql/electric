@@ -32,7 +32,8 @@ defmodule Electric.Postgres.ReplicationClient.ConnectionSetup do
 
   # Process the result of executing the query, pick the next step and return the `{:query, ...}`
   # tuple for it.
-  @spec process_query_result(query_result, state) :: {step, step, extra_info, callback_return}
+  @spec process_query_result(query_result, state) ::
+          {step, step, extra_info, state, callback_return}
   def process_query_result(result, %{step: step} = state) do
     {extra_info, state} =
       case dispatch_query_result(step, result, state) do
@@ -41,7 +42,7 @@ defmodule Electric.Postgres.ReplicationClient.ConnectionSetup do
       end
 
     next_step = next_step(state)
-    {step, next_step, extra_info, query_for_step(next_step, %{state | step: next_step})}
+    {step, next_step, extra_info, state, query_for_step(next_step, %{state | step: next_step})}
   end
 
   # Instruct `Postgrex.ReplicationConnection` to switch the connection into the logical
