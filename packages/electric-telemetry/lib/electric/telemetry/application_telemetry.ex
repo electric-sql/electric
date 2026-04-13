@@ -181,7 +181,9 @@ defmodule ElectricTelemetry.ApplicationTelemetry do
         %{
           total: map.proc_mem,
           binary: map.binary_mem,
+          max_bin_count: map.max_bin_count,
           avg_bin_count: map.avg_bin_count,
+          max_ref_count: map.max_ref_count,
           avg_ref_count: map.avg_ref_count
         },
         %{process_type: to_string(map.type)}

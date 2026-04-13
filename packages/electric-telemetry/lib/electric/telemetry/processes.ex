@@ -82,14 +82,18 @@ defmodule ElectricTelemetry.Processes do
   end
 
   defp mem_stats_for_procs(proc_infos) when is_list(proc_infos) do
-    {proc_mem, binary_mem, ref_count_sum, num_binaries, num_procs} =
-      Enum.reduce(proc_infos, {0, 0, 0, 0, 0}, fn map,
-                                                  {proc_mem, binary_mem, ref_count_sum,
-                                                   num_binaries, num_procs} ->
+    {proc_mem, binary_mem, max_ref_count, ref_count_sum, max_num_binaries, num_binaries,
+     num_procs} =
+      Enum.reduce(proc_infos, {0, 0, 0, 0, 0, 0, 0}, fn map,
+                                                        {proc_mem, binary_mem, max_ref_count,
+                                                         ref_count_sum, max_num_binaries,
+                                                         num_binaries, num_procs} ->
         {
           proc_mem + map.proc_mem,
           binary_mem + map.binary_mem,
+          max(max_ref_count, map.max_ref_count),
           ref_count_sum + map.ref_count_sum,
+          max(max_num_binaries, map.num_binaries),
           num_binaries + map.num_binaries,
           num_procs + 1
         }
@@ -98,7 +102,9 @@ defmodule ElectricTelemetry.Processes do
     %{
       proc_mem: proc_mem,
       binary_mem: binary_mem,
+      max_bin_count: max_num_binaries,
       avg_bin_count: num_binaries / num_procs,
+      max_ref_count: max_ref_count,
       avg_ref_count: if(num_binaries == 0, do: 0, else: ref_count_sum / num_binaries)
     }
   end
@@ -154,21 +160,28 @@ defmodule ElectricTelemetry.Processes do
 
     case info[:binary] do
       list when is_list(list) ->
-        {binary_mem, {ref_sum, num_entries}} =
-          Enum.reduce(list, {0, {0, 0}}, fn {_reference, size, ref_count},
-                                            {total_size, {ref_sum, num_entries}} ->
-            {total_size + size, {ref_sum + ref_count, num_entries + 1}}
+        {binary_mem, max_ref_count, ref_count_sum, num_entries} =
+          Enum.reduce(list, {0, 0, 0, 0}, fn {_reference, bin_size, bin_ref_count},
+                                             {binary_mem, max_ref_count, ref_count_sum,
+                                              num_entries} ->
+            {
+              binary_mem + bin_size,
+              max(max_ref_count, bin_ref_count),
+              ref_count_sum + bin_ref_count,
+              num_entries + 1
+            }
           end)
 
         %{
           proc_mem: memory,
           binary_mem: binary_mem,
-          ref_count_sum: ref_sum,
+          max_ref_count: max_ref_count,
+          ref_count_sum: ref_count_sum,
           num_binaries: num_entries
         }
 
       _ ->
-        %{proc_mem: memory, binary_mem: 0, ref_count_sum: 0, num_binaries: 0}
+        %{proc_mem: memory, binary_mem: 0, max_ref_count: 0, ref_count_sum: 0, num_binaries: 0}
     end
   end
 
