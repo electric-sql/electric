@@ -21,10 +21,10 @@
     Process.set_label(:A_memory_hog)
 
     on_heap_strings =
-      Enum.map(1..1_000_000, fn _ -> String.duplicate("on heap", :random.uniform(8)) end)
+      Enum.map(1..4000, fn _ -> String.duplicate("on heap", 4000) end)
 
     off_heap_strings =
-      Enum.map(1..100_000, fn i -> String.duplicate("1234567890", 70 * i) end)
+      Enum.map(1..10, fn i -> String.duplicate("1234567890", 7000) end)
 
     receive do
       pid -> send(pid, {on_heap_strings, off_heap_strings})
