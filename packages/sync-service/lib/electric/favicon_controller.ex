@@ -4,17 +4,9 @@ defmodule Electric.FaviconController do
   Returns a 204 No Content response to avoid 500 errors.
   """
 
-  import Plug.Conn
-
-  def init(opts), do: opts
-
-  def call(conn, _opts) do
-    show(conn, %{})
-  end
+  use Phoenix.Controller, formats: [:html]
 
   def show(conn, _params) do
-    conn
-    |> send_resp(204, "")
-    |> halt()
+    send_resp(conn, 204, "")
   end
 end
