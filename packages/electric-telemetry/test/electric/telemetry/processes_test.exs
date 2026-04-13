@@ -1,7 +1,7 @@
 defmodule ElectricTelemetry.ProcessesTest do
   use ExUnit.Case, async: true
 
-  import ElectricTelemetry.Processes, only: [proc_type: 1]
+  import ElectricTelemetry.Processes
 
   describe "proc_type/1 with binary labels" do
     test "groups request labels by method and path, stripping query and request id" do
@@ -120,8 +120,6 @@ defmodule ElectricTelemetry.ProcessesTest do
   end
 
   describe "top_memory_by_type/[1, 2]" do
-    import ElectricTelemetry.Processes, only: [top_memory_by_type: 0, top_memory_by_type: 1]
-
     test "handles dead processes" do
       parent = self()
 
@@ -195,9 +193,6 @@ defmodule ElectricTelemetry.ProcessesTest do
   end
 
   describe "top_bin_memory_by_type/[0, 1, 2]" do
-    import ElectricTelemetry.Processes,
-      only: [top_bin_memory_by_type: 0, top_bin_memory_by_type: 1, top_bin_memory_by_type: 2]
-
     test "defaults to top 5 sorted by binary_mem" do
       results = top_bin_memory_by_type()
       assert length(results) == 5
@@ -208,27 +203,26 @@ defmodule ElectricTelemetry.ProcessesTest do
     test "sorts by binary_mem, not proc_mem" do
       # Spawn a process with large binary memory but small heap
       spawn_with_label(:big_binary, fn ->
-        # Store a large binary ref — this inflates binary_mem
         Process.put(:bin, :crypto.strong_rand_bytes(2 * 1024 * 1024))
       end)
 
       # Spawn a process with large heap but no binary memory
       spawn_with_label(:big_heap, fn ->
-        # Build a large non-binary term to inflate proc_mem
         Process.put(:list, Enum.to_list(1..200_000))
       end)
 
-      proc_mem_results =
-        ElectricTelemetry.Processes.top_memory_by_type({:count, 100})
-
+      proc_mem_results = top_memory_by_type({:count, 100})
       bin_mem_results = top_bin_memory_by_type({:count, 100})
 
-      proc_mem_order = Enum.map(proc_mem_results, & &1.type)
-      bin_mem_order = Enum.map(bin_mem_results, & &1.type)
+      # Each list is sorted by its own key
+      proc_mems = Enum.map(proc_mem_results, & &1.proc_mem)
+      assert proc_mems == Enum.sort(proc_mems, :desc)
 
-      # The two orderings should differ since the processes have
-      # inverted proc_mem vs binary_mem rankings
-      assert proc_mem_order != bin_mem_order
+      binary_mems = Enum.map(bin_mem_results, & &1.binary_mem)
+      assert binary_mems == Enum.sort(binary_mems, :desc)
+
+      # The top entry in each list should be different
+      assert hd(proc_mem_results).type != hd(bin_mem_results).type
     end
 
     test "at_least_bytes stops at the cutoff" do
