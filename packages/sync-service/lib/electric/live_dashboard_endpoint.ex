@@ -22,7 +22,7 @@ defmodule Electric.LiveDashboardEndpoint do
   plug Plug.Session,
     store: :cookie,
     key: "_live_dashboard_key",
-    signing_salt: "live_dashboard",
+    signing_salt: "abc43s8Z",
     same_site: "Lax"
 
   # Parse request body for LiveView

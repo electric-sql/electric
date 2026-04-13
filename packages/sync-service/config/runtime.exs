@@ -403,7 +403,7 @@ if live_dashboard_port do
       formats: [html: Electric.ErrorView],
       layout: false
     ],
-    live_view: [signing_salt: "live_dashboard_salt"],
+    live_view: [signing_salt: "r5zw+GcXjt3wP3Z/snFRqQ5uH2cm8Vb7ldc8t0POZdo="],
     secret_key_base: Base.encode64(:crypto.strong_rand_bytes(48)),
     pubsub_server: Electric.PubSub
 end
