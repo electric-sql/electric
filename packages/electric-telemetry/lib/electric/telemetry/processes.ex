@@ -1,5 +1,6 @@
 defmodule ElectricTelemetry.Processes do
-  @type limit :: {:count, pos_integer()} | {:mem_percent, 1..100}
+  @type limit ::
+          {:count, pos_integer()} | {:mem_percent, 1..100} | {:at_least_bytes, non_neg_integer()}
 
   @default_count 5
   @default_limit {:count, @default_count}
@@ -42,7 +43,7 @@ defmodule ElectricTelemetry.Processes do
     |> Enum.take(count)
   end
 
-  # When sortying by binary mem, processes double-count the same refc binary, so it doesn't
+  # When sorting by binary mem, processes double-count the same refc binary, so it doesn't
   # make sense to talk about a "percentage of the total" in that case.
   # Instead, for binary memory telemetry the low cutoff threshold should be provided.
   defp top_by(:proc_mem, process_list, {:mem_percent, percent})
@@ -54,7 +55,14 @@ defmodule ElectricTelemetry.Processes do
 
     process_list
     |> sorted_groups(:proc_mem)
-    |> take_until_target(target)
+    |> take_until_target(target, @min_group_memory)
+  end
+
+  defp top_by(sort_key, process_list, {:at_least_bytes, low_cutoff})
+       when is_integer(low_cutoff) and low_cutoff >= 0 do
+    process_list
+    |> sorted_groups(sort_key)
+    |> take_until_target(:infinity, low_cutoff)
   end
 
   defp sorted_groups(process_list, sort_key) do
@@ -70,16 +78,15 @@ defmodule ElectricTelemetry.Processes do
     |> Enum.sort_by(&(-Map.fetch!(&1, sort_key)))
   end
 
-  defp take_until_target(proc_groups, target) do
+  defp take_until_target(proc_groups, target, low_cutoff) do
     {_running_total, selected_groups} =
       Enum.reduce_while(proc_groups, {0, []}, fn
         _proc_group, {running_total, acc} when running_total >= target ->
           {:halt, {running_total, acc}}
 
-        proc_group, {running_total, acc} when proc_group.memory < @min_group_memory ->
+        proc_group, {running_total, acc} when proc_group.proc_mem < low_cutoff ->
           # Include this last process group in the result so it's clear to the caller that the
-          # minimum group memory threshold has been reached earlier than the target total mem
-          # one.
+          # low cutoff threshold has been reached earlier than the target total mem one.
           {:halt, {running_total, [proc_group | acc]}}
 
         proc_group, {running_total, acc} ->
