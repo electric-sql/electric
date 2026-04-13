@@ -150,6 +150,7 @@ replication_stream_id =
   )
 
 prometheus_port = env!("ELECTRIC_PROMETHEUS_PORT", :integer, nil)
+live_dashboard_port = env!("ELECTRIC_LIVE_DASHBOARD_PORT", :integer, nil)
 
 call_home_telemetry_url =
   env!(
@@ -240,6 +241,7 @@ config :electric,
     env!("ELECTRIC_TELEMETRY_LONG_MESSAGE_QUEUE_DISABLE_THRESHOLD", :integer, nil),
   telemetry_statsd_host: statsd_host,
   prometheus_port: prometheus_port,
+  live_dashboard_port: live_dashboard_port,
   db_pool_size: env!("ELECTRIC_DB_POOL_SIZE", :integer, nil),
   replication_stream_id: replication_stream_id,
   replication_slot_temporary?: env!("CLEANUP_REPLICATION_SLOTS_ON_SHUTDOWN", :boolean, nil),
@@ -386,4 +388,22 @@ if Electric.telemetry_enabled?() do
     # We don't want any of that unless OpenTelemetry export is explicitly enabled.
     config :opentelemetry, processors: []
   end
+end
+
+# Phoenix LiveDashboard Endpoint Configuration
+if live_dashboard_port do
+  config :electric, Electric.LiveDashboardEndpoint,
+    adapter: Bandit.PhoenixAdapter,
+    http: [
+      port: live_dashboard_port,
+      ip: {0, 0, 0, 0}
+    ],
+    server: true,
+    render_errors: [
+      formats: [html: Electric.ErrorView],
+      layout: false
+    ],
+    live_view: [signing_salt: "live_dashboard_salt"],
+    secret_key_base: String.duplicate("a", 64),
+    pubsub_server: Electric.PubSub
 end
