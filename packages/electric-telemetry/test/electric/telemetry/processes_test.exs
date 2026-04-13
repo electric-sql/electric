@@ -194,6 +194,80 @@ defmodule ElectricTelemetry.ProcessesTest do
     end
   end
 
+  describe "top_bin_memory_by_type/[0, 1, 2]" do
+    import ElectricTelemetry.Processes,
+      only: [top_bin_memory_by_type: 0, top_bin_memory_by_type: 1, top_bin_memory_by_type: 2]
+
+    test "defaults to top 5 sorted by binary_mem" do
+      results = top_bin_memory_by_type()
+      assert length(results) == 5
+      binary_mems = Enum.map(results, & &1.binary_mem)
+      assert binary_mems == Enum.sort(binary_mems, :desc)
+    end
+
+    test "sorts by binary_mem, not proc_mem" do
+      # Spawn a process with large binary memory but small heap
+      spawn_with_label(:big_binary, fn ->
+        # Store a large binary ref — this inflates binary_mem
+        Process.put(:bin, :crypto.strong_rand_bytes(2 * 1024 * 1024))
+      end)
+
+      # Spawn a process with large heap but no binary memory
+      spawn_with_label(:big_heap, fn ->
+        # Build a large non-binary term to inflate proc_mem
+        Process.put(:list, Enum.to_list(1..200_000))
+      end)
+
+      proc_mem_results =
+        ElectricTelemetry.Processes.top_memory_by_type({:count, 100})
+
+      bin_mem_results = top_bin_memory_by_type({:count, 100})
+
+      proc_mem_order = Enum.map(proc_mem_results, & &1.type)
+      bin_mem_order = Enum.map(bin_mem_results, & &1.type)
+
+      # The two orderings should differ since the processes have
+      # inverted proc_mem vs binary_mem rankings
+      assert proc_mem_order != bin_mem_order
+    end
+
+    test "at_least_bytes stops at the cutoff" do
+      spawn_with_label(:bin_large, fn ->
+        Process.put(:bin, :crypto.strong_rand_bytes(2 * 1024 * 1024))
+      end)
+
+      spawn_with_label(:bin_small, fn ->
+        Process.put(:bin, :crypto.strong_rand_bytes(100))
+      end)
+
+      results = top_bin_memory_by_type({:at_least_bytes, 1024 * 1024})
+
+      # The last entry should be the one that fell below the cutoff
+      last = List.last(results)
+      above_cutoff = Enum.drop(results, -1)
+
+      assert Enum.all?(above_cutoff, &(&1.binary_mem >= 1024 * 1024))
+      assert last.binary_mem < 1024 * 1024
+    end
+
+    test "at_least_bytes with process list" do
+      pid1 =
+        spawn_with_label(:with_bin, fn ->
+          Process.put(:bin, :crypto.strong_rand_bytes(512 * 1024))
+        end)
+
+      pid2 =
+        spawn_with_label(:without_bin, fn ->
+          :ok
+        end)
+
+      results = top_bin_memory_by_type([pid1, pid2], {:at_least_bytes, 1024})
+
+      types = Enum.map(results, & &1.type)
+      assert :with_bin in types
+    end
+  end
+
   defp spawn_with_label(label, fun \\ fn -> nil end) do
     parent = self()
 
