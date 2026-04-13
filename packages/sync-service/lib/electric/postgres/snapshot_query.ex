@@ -44,29 +44,24 @@ defmodule Electric.Postgres.SnapshotQuery do
     query_reason = Access.get(opts, :query_reason, "initial_snapshot")
     shape_attrs = shape_attrs(shape_handle, shape, query_reason)
     stack_id = Access.fetch!(opts, :stack_id)
-    started_at = System.monotonic_time(:microsecond)
 
     OpenTelemetry.with_child_span(
       "shape_snapshot.execute_for_shape",
       shape_attrs,
       stack_id,
       fn ->
+        OpenTelemetry.start_interval(:"shape_snapshot.checkout_wait.duration_µs")
+
         Postgrex.transaction(
           pool,
           fn conn ->
-            checkout_wait_duration = System.monotonic_time(:microsecond) - started_at
+            OpenTelemetry.start_interval(:"shape_snapshot.setup.duration_µs")
 
             ctx = %{
               conn: conn,
               stack_id: stack_id,
               span_attrs: shape_attrs
             }
-
-            OpenTelemetry.add_span_attributes(
-              "shape_snapshot.checkout_wait.duration_µs": checkout_wait_duration
-            )
-
-            setup_started_at = System.monotonic_time(:microsecond)
 
             query!(ctx, "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY",
               span_name: "shape_snapshot.start_readonly_txn"
@@ -83,41 +78,18 @@ defmodule Electric.Postgres.SnapshotQuery do
               span_name: "shape_snapshot.set_display_settings"
             )
 
-            setup_duration = System.monotonic_time(:microsecond) - setup_started_at
+            OpenTelemetry.start_interval(:"shape_snapshot.query.duration_µs")
 
-            OpenTelemetry.add_span_attributes("shape_snapshot.setup.duration_µs": setup_duration)
+            result =
+              OpenTelemetry.with_child_span(
+                "shape_snapshot.query_fn",
+                shape_attrs,
+                stack_id,
+                fn -> query_fn.(conn, pg_snapshot, lsn) end
+              )
 
-            {query_duration, result} =
-              :timer.tc(fn ->
-                OpenTelemetry.with_child_span(
-                  "shape_snapshot.query_fn",
-                  shape_attrs,
-                  stack_id,
-                  fn -> query_fn.(conn, pg_snapshot, lsn) end
-                )
-              end)
-
-            total_duration = System.monotonic_time(:microsecond) - started_at
-
-            OpenTelemetry.add_span_attributes(%{
-              "shape_snapshot.query.duration_µs" => query_duration,
-              "shape_snapshot.total.duration_µs" => total_duration
-            })
-
-            OpenTelemetry.execute(
-              [:electric, :shape_snapshot, :query],
-              %{
-                checkout_wait_duration: checkout_wait_duration,
-                setup_duration: setup_duration,
-                query_duration: query_duration,
-                total_duration: total_duration
-              },
-              %{
-                stack_id: stack_id,
-                query_reason: query_reason,
-                "shape.handle": shape_handle,
-                "shape.root_table": shape.root_table
-              }
+            OpenTelemetry.stop_and_save_intervals(
+              total_attribute: :"shape_snapshot.total.duration_µs"
             )
 
             result
