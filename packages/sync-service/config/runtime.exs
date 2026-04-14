@@ -402,7 +402,7 @@ if live_dashboard_port do
       do: {0, 0, 0, 0, 0, 0, 0, 0},
       else: {0, 0, 0, 0}
 
-  config :electric, Electric.LiveDashboardEndpoint,
+  config :electric, Electric.LiveDashboard.Endpoint,
     adapter: Bandit.PhoenixAdapter,
     http: [
       port: live_dashboard_port,
@@ -410,7 +410,7 @@ if live_dashboard_port do
     ],
     server: true,
     render_errors: [
-      formats: [html: Electric.ErrorView],
+      formats: [html: Electric.LiveDashboard.ErrorView],
       layout: false
     ],
     live_view: [signing_salt: "r5zw+GcXjt3wP3Z/snFRqQ5uH2cm8Vb7ldc8t0POZdo="],

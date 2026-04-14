@@ -1,4 +1,4 @@
-defmodule Electric.ErrorView do
+defmodule Electric.LiveDashboard.ErrorView do
   @moduledoc """
   Error view for the LiveDashboard endpoint.
   Handles rendering of HTTP errors.

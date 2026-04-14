@@ -1,4 +1,4 @@
-defmodule Electric.FaviconController do
+defmodule Electric.LiveDashboard.FaviconController do
   @moduledoc """
   Simple controller to handle favicon requests.
   Returns a 204 No Content response to avoid 500 errors.

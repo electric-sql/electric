@@ -1,4 +1,4 @@
-defmodule Electric.LiveDashboardRouter do
+defmodule Electric.LiveDashboard.Router do
   @moduledoc """
   Phoenix Router for LiveDashboard.
   Mounts the dashboard at the root path.
@@ -19,7 +19,7 @@ defmodule Electric.LiveDashboardRouter do
     pipe_through :browser
 
     # Handle favicon requests gracefully
-    get "/favicon.ico", Electric.FaviconController, :show
+    get "/favicon.ico", Electric.LiveDashboard.FaviconController, :show
 
     live_dashboard "/", ecto_repos: []
   end

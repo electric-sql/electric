@@ -1,4 +1,4 @@
-defmodule Electric.LiveDashboardEndpoint do
+defmodule Electric.LiveDashboard.Endpoint do
   @moduledoc """
   Phoenix Endpoint for serving LiveDashboard on a separate port.
   This runs independently from the main Plug-based HTTP server.
@@ -40,5 +40,5 @@ defmodule Electric.LiveDashboardEndpoint do
   plug Plug.Head
 
   # Route all requests to the LiveDashboard router
-  plug Electric.LiveDashboardRouter
+  plug Electric.LiveDashboard.Router
 end
