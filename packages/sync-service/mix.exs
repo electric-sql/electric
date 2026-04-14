@@ -105,7 +105,8 @@ defmodule Electric.MixProject do
         {:remote_ip, "~> 1.2"},
         {:req, "~> 0.5"},
         {:stream_split, "~> 0.1"},
-        {:tz, "~> 0.28"}
+        {:tz, "~> 0.28"},
+        {:phoenix_live_dashboard, "~> 0.8"}
       ],
       dev_and_test_deps(),
       telemetry_deps(Mix.target())

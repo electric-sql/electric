@@ -53,7 +53,8 @@ defmodule Electric.Application do
       application_telemetry(config),
       [{Electric.StackSupervisor, Keyword.put(config, :name, Electric.StackSupervisor)}],
       api_server_children(config),
-      prometheus_endpoint(Electric.Config.get_env(:prometheus_port))
+      prometheus_endpoint(Electric.Config.get_env(:prometheus_port)),
+      live_dashboard_endpoint(Electric.Config.get_env(:live_dashboard_port))
     ])
   end
 
@@ -267,6 +268,15 @@ defmodule Electric.Application do
         port: port,
         thousand_island_options: thousand_island_options(num_acceptors: 1)
       }
+    ]
+  end
+
+  defp live_dashboard_endpoint(nil), do: []
+
+  defp live_dashboard_endpoint(_port) do
+    [
+      {Phoenix.PubSub, name: Electric.PubSub},
+      Electric.LiveDashboard.Endpoint
     ]
   end
 
