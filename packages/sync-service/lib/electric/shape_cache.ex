@@ -339,8 +339,12 @@ defmodule Electric.ShapeCache do
     :exit, reason ->
       {:error, {:exit, reason}}
 
-    :throw, {:error, _reason} = error ->
-      error
+    :error, exception ->
+      Logger.error(
+        "Failed to create shape #{inspect(shape)}: #{Exception.format(:error, exception, __STACKTRACE__)}"
+      )
+
+      {:error, exception}
   end
 
   defp maybe_create_shape(shape, %{stack_id: stack_id} = opts) do
@@ -351,30 +355,42 @@ defmodule Electric.ShapeCache do
       {:ok, {shape_handle, offset}}
     else
       :error ->
-        shape_handles =
-          shape.shape_dependencies
-          |> Enum.map(&maybe_create_shape(&1, Map.put(opts, :is_subquery_shape?, true)))
-          |> Enum.map(fn
-            {:ok, {handle, _offset}} -> handle
-            {:error, _} = error -> throw(error)
-          end)
+        with {:ok, shape_handles} <- safe_maybe_create_inner_shapes(shape, opts) do
+          shape = %{shape | shape_dependencies_handles: shape_handles}
 
-        shape = %{shape | shape_dependencies_handles: shape_handles}
+          {:ok, shape_handle} = ShapeStatus.add_shape(stack_id, shape)
 
-        {:ok, shape_handle} = ShapeStatus.add_shape(stack_id, shape)
+          Logger.info("Creating new shape for #{inspect(shape)} with handle #{shape_handle}")
 
-        Logger.info("Creating new shape for #{inspect(shape)} with handle #{shape_handle}")
+          case start_shape(shape_handle, shape, Map.put(opts, :action, :create)) do
+            {:ok, _pid} ->
+              # We're guaranteed to have a newly started shape, so we can be sure
+              # about its "latest offset" because it'll be in the snapshotting stage
+              {:ok, {shape_handle, LogOffset.last_before_real_offsets()}}
 
-        case start_shape(shape_handle, shape, Map.put(opts, :action, :create)) do
-          {:ok, _pid} ->
-            # We're guaranteed to have a newly started shape, so we can be sure
-            # about its "latest offset" because it'll be in the snapshotting stage
-            {:ok, {shape_handle, LogOffset.last_before_real_offsets()}}
-
-          :error ->
-            # start_shape already cleaned up via clean_shape on failure
-            {:error, :consumer_start_failed}
+            :error ->
+              # start_shape already cleaned up via clean_shape on failure
+              {:error, :consumer_start_failed}
+          end
         end
+    end
+  end
+
+  defp safe_maybe_create_inner_shapes(%Shape{shape_dependencies: []}, _opts) do
+    {:ok, []}
+  end
+
+  defp safe_maybe_create_inner_shapes(%Shape{shape_dependencies: shape_dependencies}, opts) do
+    inner_opts = Map.put(opts, :is_subquery_shape?, true)
+
+    with {:ok, handles} <-
+           Enum.reduce_while(shape_dependencies, {:ok, []}, fn inner_shape, {:ok, handles} ->
+             case safe_maybe_create_shape(inner_shape, inner_opts) do
+               {:ok, {handle, _offset}} -> {:cont, {:ok, [handle | handles]}}
+               {:error, _reason} = error -> {:halt, error}
+             end
+           end) do
+      {:ok, Enum.reverse(handles)}
     end
   end
 
