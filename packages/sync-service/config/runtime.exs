@@ -177,6 +177,13 @@ otel_export_period =
     nil
   )
 
+stack_telemetry_init_delay =
+  env!(
+    "ELECTRIC_STACK_TELEMETRY_INIT_DELAY",
+    &Electric.Config.parse_human_readable_time!/1,
+    nil
+  )
+
 # The provided database id is relevant if you had used v0.8 and want to keep the storage
 # instead of having hanging files. We use a provided value as stack id, but nothing else.
 provided_database_id = env!("ELECTRIC_DATABASE_ID", :string, nil)
@@ -214,6 +221,7 @@ config :electric,
   call_home_telemetry?: env!("ELECTRIC_USAGE_REPORTING", :boolean, config_env() == :prod),
   telemetry_url: call_home_telemetry_url,
   system_metrics_poll_interval: system_metrics_poll_interval,
+  stack_telemetry_init_delay: stack_telemetry_init_delay,
   otel_export_period: otel_export_period,
   otel_sampling_ratio: env!("ELECTRIC_OTEL_SAMPLING_RATIO", :float, nil),
   metrics_sampling_ratio: env!("ELECTRIC_METRICS_SAMPLING_RATIO", :float, nil),

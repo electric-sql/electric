@@ -22,6 +22,7 @@ defmodule ElectricTelemetry.Opts do
         default: [],
         keys: [
           system_metrics_poll_interval: [type: :integer, default: :timer.seconds(5)],
+          stack_telemetry_init_delay: [type: :integer, default: :timer.seconds(30)],
           top_process_limit: [
             type:
               {:or,
@@ -31,7 +32,8 @@ defmodule ElectricTelemetry.Opts do
                   [
                     {:in, [:mem_percent]},
                     {:custom, ElectricTelemetry.Processes, :validate_mem_percent, []}
-                  ]}
+                  ]},
+                 {:tuple, [{:in, [:at_least_bytes]}, :non_neg_integer]}
                ]},
             default: {:count, 5}
           ],

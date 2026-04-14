@@ -154,10 +154,21 @@ defmodule Electric.StackSupervisor.Telemetry do
 
   if Code.ensure_loaded?(ElectricTelemetry.StackTelemetry) do
     def child_spec(config) when is_map(config) do
+      otel_opts_base = Keyword.get(config.telemetry_opts, :otel_opts, [])
+      existing_resource = Keyword.get(otel_opts_base, :resource, %{})
+
+      otel_opts =
+        Keyword.put(
+          otel_opts_base,
+          :resource,
+          Map.put_new(existing_resource, :stack_id, config.stack_id)
+        )
+
       telemetry_opts =
         config.telemetry_opts
         |> Keyword.put(:stack_id, config.stack_id)
         |> Keyword.put(:storage_dir, config.storage_dir)
+        |> Keyword.put(:otel_opts, otel_opts)
         # Always enable default periodic measurements in addition to the user-provided ones
         |> Keyword.update(
           :periodic_measurements,

@@ -1,7 +1,7 @@
 defmodule ElectricTelemetry.ProcessesTest do
   use ExUnit.Case, async: true
 
-  import ElectricTelemetry.Processes, only: [proc_type: 1]
+  import ElectricTelemetry.Processes
 
   describe "proc_type/1 with binary labels" do
     test "groups request labels by method and path, stripping query and request id" do
@@ -120,8 +120,6 @@ defmodule ElectricTelemetry.ProcessesTest do
   end
 
   describe "top_memory_by_type/[1, 2]" do
-    import ElectricTelemetry.Processes, only: [top_memory_by_type: 0, top_memory_by_type: 1]
-
     test "handles dead processes" do
       parent = self()
 
@@ -145,25 +143,33 @@ defmodule ElectricTelemetry.ProcessesTest do
 
       refute Process.alive?(pid1)
 
-      assert [%{memory: memory, type: :erlang}] = top_memory_by_type([pid1, pid2])
+      assert [
+               %{
+                 proc_mem: memory,
+                 binary_mem: _,
+                 avg_bin_count: _,
+                 avg_ref_count: _,
+                 type: :erlang
+               }
+             ] = top_memory_by_type([pid1, pid2])
 
       assert is_integer(memory)
     end
 
     test "defaults to top 5 of all processes" do
       assert [
-               %{memory: _, type: _},
-               %{memory: _, type: _},
-               %{memory: _, type: _},
-               %{memory: _, type: _},
-               %{memory: _, type: _}
+               %{proc_mem: _, type: _},
+               %{proc_mem: _, type: _},
+               %{proc_mem: _, type: _},
+               %{proc_mem: _, type: _},
+               %{proc_mem: _, type: _}
              ] = top_memory_by_type()
     end
 
     test "allows for setting count limit" do
       assert [
-               %{memory: _, type: _},
-               %{memory: _, type: _}
+               %{proc_mem: _, type: _},
+               %{proc_mem: _, type: _}
              ] = top_memory_by_type({:count, 2})
     end
 
@@ -178,11 +184,81 @@ defmodule ElectricTelemetry.ProcessesTest do
       assert length(results) >= 1
 
       total_process_memory = :erlang.memory(:processes_used)
-      returned_memory = results |> Enum.map(& &1.memory) |> Enum.sum()
+      returned_memory = results |> Enum.map(& &1.proc_mem) |> Enum.sum()
 
       # Either we hit the 50% target or we ran out of groups above 1MiB
       assert returned_memory >= total_process_memory * 0.5 or
-               List.last(results).memory < 1024 * 1024
+               List.last(results).proc_mem < 1024 * 1024
+    end
+  end
+
+  describe "top_bin_memory_by_type/[0, 1, 2]" do
+    test "defaults to top 5 sorted by binary_mem" do
+      results = top_bin_memory_by_type()
+      assert length(results) == 5
+      binary_mems = Enum.map(results, & &1.binary_mem)
+      assert binary_mems == Enum.sort(binary_mems, :desc)
+    end
+
+    test "sorts by binary_mem, not proc_mem" do
+      # Spawn a process with large binary memory but small heap
+      spawn_with_label(:big_binary, fn ->
+        Process.put(:bin, :crypto.strong_rand_bytes(2 * 1024 * 1024))
+      end)
+
+      # Spawn a process with large heap but no binary memory
+      spawn_with_label(:big_heap, fn ->
+        Process.put(:list, Enum.to_list(1..200_000))
+      end)
+
+      proc_mem_results = top_memory_by_type({:count, 100})
+      bin_mem_results = top_bin_memory_by_type({:count, 100})
+
+      # Each list is sorted by its own key
+      proc_mems = Enum.map(proc_mem_results, & &1.proc_mem)
+      assert proc_mems == Enum.sort(proc_mems, :desc)
+
+      binary_mems = Enum.map(bin_mem_results, & &1.binary_mem)
+      assert binary_mems == Enum.sort(binary_mems, :desc)
+
+      # The top entry in each list should be different
+      assert hd(proc_mem_results).type != hd(bin_mem_results).type
+    end
+
+    test "at_least_bytes stops at the cutoff" do
+      spawn_with_label(:bin_large, fn ->
+        Process.put(:bin, :crypto.strong_rand_bytes(2 * 1024 * 1024))
+      end)
+
+      spawn_with_label(:bin_small, fn ->
+        Process.put(:bin, :crypto.strong_rand_bytes(100))
+      end)
+
+      results = top_bin_memory_by_type({:at_least_bytes, 1024 * 1024})
+
+      # The last entry should be the one that fell below the cutoff
+      last = List.last(results)
+      above_cutoff = Enum.drop(results, -1)
+
+      assert Enum.all?(above_cutoff, &(&1.binary_mem >= 1024 * 1024))
+      assert last.binary_mem < 1024 * 1024
+    end
+
+    test "at_least_bytes with process list" do
+      pid1 =
+        spawn_with_label(:with_bin, fn ->
+          Process.put(:bin, :crypto.strong_rand_bytes(512 * 1024))
+        end)
+
+      pid2 =
+        spawn_with_label(:without_bin, fn ->
+          :ok
+        end)
+
+      results = top_bin_memory_by_type([pid1, pid2], {:at_least_bytes, 1024})
+
+      types = Enum.map(results, & &1.type)
+      assert :with_bin in types
     end
   end
 

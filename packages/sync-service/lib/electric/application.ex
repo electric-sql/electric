@@ -381,6 +381,7 @@ defmodule Electric.Application do
       intervals_and_thresholds:
         get_opts(opts,
           system_metrics_poll_interval: :system_metrics_poll_interval,
+          stack_telemetry_init_delay: :stack_telemetry_init_delay,
           long_gc_threshold: :telemetry_long_gc_threshold,
           long_schedule_threshold: :telemetry_long_schedule_threshold,
           long_message_queue_enable_threshold: :telemetry_long_message_queue_enable_threshold,
