@@ -8,6 +8,7 @@ defmodule Electric.ShapeCacheTest do
   alias Electric.Replication.ShapeLogCollector
   alias Electric.ShapeCache
   alias Electric.ShapeCache.{Storage, ShapeStatus}
+  alias Electric.ShapeCache.ShapeStatus.ShapeDb
   alias Electric.Shapes
   alias Electric.Shapes.Shape
 
@@ -604,6 +605,67 @@ defmodule Electric.ShapeCacheTest do
       assert num_shapes == ShapeCache.count_shapes(ctx.stack_id)
 
       wait_shape_init(handles, ctx)
+    end
+  end
+
+  describe "write pool contention" do
+    setup do
+      Support.TestUtils.patch_snapshotter(fn _, _, _, _ -> nil end)
+    end
+
+    # Use a short write checkout timeout to avoid waiting 10s in the test
+    @tag shape_db_opts: [write_checkout_timeout: 200]
+
+    setup [
+      :with_noop_publication_manager,
+      :with_log_chunking,
+      :with_no_pool,
+      :with_registry,
+      :with_shape_log_collector,
+      :with_shape_cache
+    ]
+
+    test "write pool timeout in maybe_create_shape returns error without crashing GenServer",
+         ctx do
+      parent = self()
+      shape_cache_pid = GenServer.whereis(ShapeCache.name(ctx.stack_id))
+      ref = Process.monitor(shape_cache_pid)
+
+      # Hold the single write pool connection indefinitely, simulating a long
+      # WriteBuffer flush or slow SQLite operation
+      holder =
+        spawn(fn ->
+          ShapeDb.Connection.checkout_write!(
+            ctx.stack_id,
+            :test_hold,
+            fn _conn ->
+              send(parent, :write_pool_held)
+              receive(do: (:release -> :ok))
+            end,
+            30_000
+          )
+        end)
+
+      on_exit(fn -> send(holder, :release) end)
+
+      assert_receive :write_pool_held
+
+      # Now try to create a shape. This goes through the GenServer, which calls
+      # maybe_create_shape -> fetch_handle_by_shape_critical -> checkout_write!
+      # The shape doesn't exist in WriteBuffer ETS, so it must hit SQLite via
+      # the write pool, which is held. The checkout times out and the GenServer
+      # should catch the exit and return an error instead of crashing.
+      log =
+        capture_log(fn ->
+          assert {:error, {:exit, _reason}} =
+                   ShapeCache.get_or_create_shape_handle(@shape, ctx.stack_id, otel_ctx: %{})
+        end)
+
+      assert log =~ "Failed to create shape"
+
+      # The ShapeCache GenServer should still be alive
+      refute_received {:DOWN, ^ref, :process, ^shape_cache_pid, _reason}
+      assert Process.alive?(shape_cache_pid)
     end
   end
 

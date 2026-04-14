@@ -61,7 +61,7 @@ defmodule Electric.ShapeCache do
   end
 
   @spec get_or_create_shape_handle(shape_def(), stack_id(), opts :: Access.t()) ::
-          handle_position()
+          handle_position() | {:error, term()}
   def get_or_create_shape_handle(shape, stack_id, opts \\ []) when is_stack_id(stack_id) do
     # Get or create the shape handle and fire a snapshot if necessary
     with {:ok, handle} <- fetch_handle_by_shape(shape, stack_id),
@@ -288,15 +288,20 @@ defmodule Electric.ShapeCache do
 
   @impl GenServer
   def handle_call({:create_or_wait_shape_handle, shape, otel_ctx}, _from, state) do
-    {shape_handle, latest_offset} =
-      maybe_create_shape(shape, %{
-        stack_id: state.stack_id,
-        otel_ctx: otel_ctx,
-        feature_flags: state.feature_flags
-      })
+    case safe_maybe_create_shape(shape, %{
+           stack_id: state.stack_id,
+           otel_ctx: otel_ctx,
+           feature_flags: state.feature_flags
+         }) do
+      {:ok, {shape_handle, latest_offset}} ->
+        Logger.debug("Returning shape id #{shape_handle} for shape #{inspect(shape)}")
+        {:reply, {shape_handle, latest_offset}, state}
 
-    Logger.debug("Returning shape id #{shape_handle} for shape #{inspect(shape)}")
-    {:reply, {shape_handle, latest_offset}, state}
+      {:error, reason} ->
+        Logger.warning("Failed to create shape for #{inspect(shape)}: #{inspect(reason)}")
+
+        {:reply, {:error, reason}, state}
+    end
   end
 
   def handle_call({:has_shape_handle?, shape_handle}, _from, state) do
@@ -328,18 +333,31 @@ defmodule Electric.ShapeCache do
     end
   end
 
+  defp safe_maybe_create_shape(shape, opts) do
+    maybe_create_shape(shape, opts)
+  catch
+    :exit, reason ->
+      {:error, {:exit, reason}}
+
+    :throw, {:error, _reason} = error ->
+      error
+  end
+
   defp maybe_create_shape(shape, %{stack_id: stack_id} = opts) do
     # fetch_handle_by_shape_critical is a slower but guaranteed consistent
     # shape lookup
     with {:ok, shape_handle} <- ShapeStatus.fetch_handle_by_shape_critical(stack_id, shape),
          {:ok, offset} <- fetch_latest_offset(stack_id, shape_handle) do
-      {shape_handle, offset}
+      {:ok, {shape_handle, offset}}
     else
       :error ->
         shape_handles =
           shape.shape_dependencies
           |> Enum.map(&maybe_create_shape(&1, Map.put(opts, :is_subquery_shape?, true)))
-          |> Enum.map(&elem(&1, 0))
+          |> Enum.map(fn
+            {:ok, {handle, _offset}} -> handle
+            {:error, _} = error -> throw(error)
+          end)
 
         shape = %{shape | shape_dependencies_handles: shape_handles}
 
@@ -347,11 +365,16 @@ defmodule Electric.ShapeCache do
 
         Logger.info("Creating new shape for #{inspect(shape)} with handle #{shape_handle}")
 
-        {:ok, _pid} = start_shape(shape_handle, shape, Map.put(opts, :action, :create))
+        case start_shape(shape_handle, shape, Map.put(opts, :action, :create)) do
+          {:ok, _pid} ->
+            # We're guaranteed to have a newly started shape, so we can be sure
+            # about its "latest offset" because it'll be in the snapshotting stage
+            {:ok, {shape_handle, LogOffset.last_before_real_offsets()}}
 
-        # In this branch of `if`, we're guaranteed to have a newly started shape, so we can be sure about it's
-        # "latest offset" because it'll be in the snapshotting stage
-        {shape_handle, LogOffset.last_before_real_offsets()}
+          :error ->
+            # start_shape already cleaned up via clean_shape on failure
+            {:error, :consumer_start_failed}
+        end
     end
   end
 

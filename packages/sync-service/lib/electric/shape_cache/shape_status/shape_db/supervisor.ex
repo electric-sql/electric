@@ -14,6 +14,7 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Supervisor do
   end
 
   @default_connection_idle_timeout 30_000
+  @default_write_checkout_timeout 10_000
 
   def init(opts) do
     shape_db_opts = Keyword.fetch!(opts, :shape_db_opts)
@@ -21,6 +22,11 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb.Supervisor do
     opts = Keyword.put(shape_db_opts, :stack_id, stack_id)
     exclusive_mode = Keyword.get(opts, :exclusive_mode, false)
     idle_timeout = Keyword.get(opts, :connection_idle_timeout, @default_connection_idle_timeout)
+
+    write_checkout_timeout =
+      Keyword.get(opts, :write_checkout_timeout, @default_write_checkout_timeout)
+
+    Electric.StackConfig.put(stack_id, :write_checkout_timeout, write_checkout_timeout)
     # don't close the write connection in exclusive mode
     # NimblePool treats `worker_idle_timeout: nil` as no idle timeout
     write_pool_idle_timeout = if(exclusive_mode, do: nil, else: idle_timeout)
