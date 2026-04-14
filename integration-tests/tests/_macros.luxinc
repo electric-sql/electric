@@ -301,15 +301,10 @@
   [invoke shape_get_url $port "table=$table&handle=$handle&offset=$offset&live=true"]
 [endmacro]
 
-# Prevent curl from outputing download progress, output response headers and sort the keys in the response JSON body.
-# The awk script skips HTTP 1xx informational responses (e.g. 102 Processing keepalives)
-# by resetting when it sees a blank line while the last status was 1xx.
+# Prevent curl from outputing download progress, output response headers nd sort the keys in the response JSON body.
 [macro curl_shape url]
   !curl --no-progress-meter -i "$url" | awk '\
     BEGIN {reading_headers=1} \
-    reading_headers && /^HTTP\/[0-9.]+ 1[0-9][0-9]/ {is_1xx=1; next} \
-    reading_headers && is_1xx && /^\s*$/ {is_1xx=0; next} \
-    reading_headers && is_1xx {next} \
     reading_headers && /^\s*$/ {reading_headers=0; print ""; next} \
     reading_headers {print} \
     !reading_headers {print | "jq --sort-keys --compact-output --monochrome-output"}'
