@@ -88,8 +88,9 @@ defmodule Electric.ShapeCache.ShapeStatus.ShapeDb do
   @doc """
   Find a handle for a shape using the write connection to guarantee consistency.
   """
-  def handle_for_shape_critical(stack_id, %Shape{} = shape) when is_stack_id(stack_id) do
-    checkout_fun = &checkout_write!(stack_id, :handle_for_shape_critical, &1)
+  def handle_for_shape_critical(stack_id, %Shape{} = shape, timeout \\ 10_000)
+      when is_stack_id(stack_id) do
+    checkout_fun = &checkout_write!(stack_id, :handle_for_shape_critical, &1, timeout)
     handle_for_shape_inner(stack_id, shape, checkout_fun)
   end
 

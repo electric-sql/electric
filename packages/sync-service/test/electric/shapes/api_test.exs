@@ -1443,6 +1443,22 @@ defmodule Electric.Shapes.ApiTest do
 
       assert %{status: 503} = Task.await(req_task)
     end
+
+    test "returns error with retry when ShapeCache fails to create a shape", ctx do
+      patch_storage(for_shape: fn @test_shape_handle, _opts -> @test_opts end)
+
+      patch_shape_cache(fetch_handle_by_shape: fn @test_shape, _stack_id -> :error end)
+
+      expect_shape_cache(
+        get_or_create_shape_handle: fn _shape, _stack_id, _opts ->
+          {:error, "failed"}
+        end
+      )
+
+      assert {:error, response} = Api.validate(ctx.api, %{table: "public.users", offset: "-1"})
+      assert response.status == 503
+      assert response.retry_after == 1
+    end
   end
 
   describe "Pre-defined shape API" do

@@ -346,6 +346,14 @@ defmodule Electric.Shapes.Api do
     |> handle_shape_info(request)
   end
 
+  defp handle_shape_info({:error, _reason}, %Request{} = request) do
+    {:error,
+     Response.error(request, "Failed to create shape, please retry",
+       status: 503,
+       retry_after: 1
+     )}
+  end
+
   # Handle "now" offset - it's never out of bounds
   defp handle_shape_info(
          {active_shape_handle, last_offset},
