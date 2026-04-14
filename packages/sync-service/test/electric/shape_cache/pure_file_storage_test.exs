@@ -1173,6 +1173,101 @@ defmodule Electric.ShapeCache.PureFileStorageTest do
 
       PureFileStorage.terminate(writer)
     end
+
+    test "reader falls back to disk when ETS table is deleted (pure ETS path)", %{
+      writer: writer,
+      opts: opts,
+      stack_id: stack_id
+    } do
+      import Electric.ShapeCache.PureFileStorage.SharedRecords
+
+      writer =
+        PureFileStorage.append_to_log!(
+          [{LogOffset.new(10, 0), "test_key", :insert, ~S|{"test": 1}|}],
+          writer
+        )
+
+      assert_receive {Storage, {PureFileStorage, :perform_scheduled_flush, [0]}}
+      _writer = PureFileStorage.perform_scheduled_flush(writer, 0)
+
+      stack_ets = PureFileStorage.stack_ets(stack_id)
+      [fresh_meta] = :ets.lookup(stack_ets, @shape_handle)
+      assert storage_meta(ets_table: ets_ref) = fresh_meta
+
+      # Stale last_persisted <= min_offset forces the pure ETS branch in stream_main_log
+      stale_meta =
+        storage_meta(fresh_meta,
+          last_persisted_offset: LogOffset.last_before_real_offsets(),
+          last_seen_txn_offset: LogOffset.new(10, 0)
+        )
+
+      :ets.insert(stack_ets, stale_meta)
+      :ets.delete(ets_ref)
+
+      result =
+        PureFileStorage.get_log_stream(
+          LogOffset.new(5, 0),
+          LogOffset.last(),
+          opts
+        )
+        |> Enum.to_list()
+
+      assert result == [~S|{"test": 1}|]
+
+      PureFileStorage.cleanup!(opts)
+    end
+
+    test "reader falls back to disk when ETS table is deleted (mixed disk + ETS path)", %{
+      writer: writer,
+      opts: opts,
+      stack_id: stack_id
+    } do
+      import Electric.ShapeCache.PureFileStorage.SharedRecords
+
+      writer =
+        PureFileStorage.append_to_log!(
+          [{LogOffset.new(10, 0), "test_key", :insert, ~S|{"test": 1}|}],
+          writer
+        )
+
+      assert_receive {Storage, {PureFileStorage, :perform_scheduled_flush, [0]}}
+      writer = PureFileStorage.perform_scheduled_flush(writer, 0)
+
+      writer =
+        PureFileStorage.append_to_log!(
+          [{LogOffset.new(11, 0), "test_key2", :insert, ~S|{"test": 2}|}],
+          writer
+        )
+
+      assert_receive {Storage, {PureFileStorage, :perform_scheduled_flush, [1]}}
+      _writer = PureFileStorage.perform_scheduled_flush(writer, 1)
+
+      stack_ets = PureFileStorage.stack_ets(stack_id)
+      [fresh_meta] = :ets.lookup(stack_ets, @shape_handle)
+      assert storage_meta(ets_table: ets_ref) = fresh_meta
+
+      # Stale last_persisted between the two offsets forces the mixed disk+ETS branch
+      stale_meta =
+        storage_meta(fresh_meta,
+          last_persisted_offset: LogOffset.new(10, 0),
+          last_seen_txn_offset: LogOffset.new(11, 0)
+        )
+
+      :ets.insert(stack_ets, stale_meta)
+      :ets.delete(ets_ref)
+
+      result =
+        PureFileStorage.get_log_stream(
+          LogOffset.new(0, 0),
+          LogOffset.last(),
+          opts
+        )
+        |> Enum.to_list()
+
+      assert result == [~S|{"test": 1}|, ~S|{"test": 2}|]
+
+      PureFileStorage.cleanup!(opts)
+    end
   end
 
   describe "remove_unnested_storage/1" do
