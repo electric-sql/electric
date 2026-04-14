@@ -14,6 +14,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
   to access the data in the ETS from anywhere, so there's an internal api,
   using the full state and an external api using just the table name.
   """
+  alias Electric.Shapes.Filter
   alias Electric.Shapes.Shape
   alias Electric.ShapeCache.ShapeStatus.ShapeDb
   alias Electric.Telemetry.OpenTelemetry
@@ -25,12 +26,18 @@ defmodule Electric.ShapeCache.ShapeStatus do
 
   @type stack_id() :: Electric.stack_id()
   @type shape_handle() :: Electric.shape_handle()
+  @type shape_counts() :: %{
+          total: non_neg_integer(),
+          indexed: non_neg_integer(),
+          unindexed: non_neg_integer()
+        }
 
   # MUST be updated when Shape.comparable/1 changes.
   @version 8
 
   # Tuple format: {handle, hash, snapshot_started, last_read_time, generation}
   @shape_last_used_time_pos 4
+  @shape_counts_key :counts
 
   @spec version() :: pos_integer()
   def version, do: @version
@@ -66,7 +73,8 @@ defmodule Electric.ShapeCache.ShapeStatus do
              Electric.ShapeCache.ShapeCleaner.remove_shape_storage_async(
                stack_id,
                invalid_handles
-             ) do
+             ),
+           :ok <- rebuild_shape_routing_state(stack_id) do
         populate_shape_meta_table(stack_id, 0)
       end
     end
@@ -90,7 +98,8 @@ defmodule Electric.ShapeCache.ShapeStatus do
            Electric.ShapeCache.ShapeCleaner.remove_shape_storage_async(
              stack_id,
              invalid_handles
-           ) do
+           ),
+         :ok <- rebuild_shape_routing_state(stack_id) do
       # Use a generation counter to avoid clearing the table (which would race
       # with concurrent readers). Upsert all current shapes with a new generation,
       # then delete any entries still on the old generation.
@@ -109,6 +118,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
   def add_shape(stack_id, shape) when is_stack_id(stack_id) do
     OpenTelemetry.with_child_span("shape_status.add_shape", [], stack_id, fn ->
       {_, shape_handle} = Shape.generate_id(shape)
+      indexed? = Filter.indexed_shape?(shape)
 
       # Add the lookup last as it is the one that enables clients to find the shape
       with {:ok, shape_hash} <- ShapeDb.add_shape(stack_id, shape, shape_handle) do
@@ -119,6 +129,8 @@ defmodule Electric.ShapeCache.ShapeStatus do
              # They are sequentially ordered by the Connection.Manager state machine.
              {shape_handle, shape_hash, false, nil, 0}
            ) do
+          :ets.insert(shape_indexability_table(stack_id), {shape_handle, indexed?})
+          increment_shape_counts(stack_id, indexed?)
           {:ok, shape_handle}
         else
           {:error, "duplicate shape #{inspect(shape_handle)}: #{inspect(shape)}"}
@@ -158,7 +170,23 @@ defmodule Electric.ShapeCache.ShapeStatus do
 
   @spec count_shapes(stack_id()) :: non_neg_integer()
   def count_shapes(stack_id) when is_stack_id(stack_id) do
-    ShapeDb.count_shapes!(stack_id)
+    case shape_counts(stack_id) do
+      %{total: total} -> total
+      :error -> ShapeDb.count_shapes!(stack_id)
+    end
+  end
+
+  @spec shape_counts(stack_id()) :: shape_counts() | :error
+  def shape_counts(stack_id) when is_stack_id(stack_id) do
+    case :ets.lookup(shape_counts_table(stack_id), @shape_counts_key) do
+      [{@shape_counts_key, total, indexed, unindexed}] ->
+        %{total: total, indexed: indexed, unindexed: unindexed}
+
+      [] ->
+        :error
+    end
+  rescue
+    ArgumentError -> :error
   end
 
   @spec list_shape_handles_for_relations(stack_id(), [Electric.oid_relation()]) :: [
@@ -179,6 +207,7 @@ defmodule Electric.ShapeCache.ShapeStatus do
   def remove_shape(stack_id, shape_handle) when is_stack_id(stack_id) do
     with :ok <- ShapeDb.remove_shape(stack_id, shape_handle) do
       :ets.delete(shape_meta_table(stack_id), shape_handle)
+      decrement_shape_counts(stack_id, shape_cached_as_indexed?(stack_id, shape_handle))
       :ok
     end
   end
@@ -187,6 +216,8 @@ defmodule Electric.ShapeCache.ShapeStatus do
   def reset(stack_id) when is_stack_id(stack_id) do
     :ok = ShapeDb.reset(stack_id)
     :ets.delete_all_objects(shape_meta_table(stack_id))
+    :ets.delete_all_objects(shape_indexability_table(stack_id))
+    put_shape_counts(stack_id, empty_shape_counts())
     :ok
   end
 
@@ -366,14 +397,33 @@ defmodule Electric.ShapeCache.ShapeStatus do
   defp shape_meta_table(stack_id),
     do: :"shape_meta_table:#{stack_id}"
 
+  @spec shape_indexability_table(stack_id()) :: atom()
+  defp shape_indexability_table(stack_id),
+    do: :"shape_indexability_table:#{stack_id}"
+
+  @spec shape_counts_table(stack_id()) :: atom()
+  defp shape_counts_table(stack_id),
+    do: :"shape_counts_table:#{stack_id}"
+
   defp create_shape_meta_table(stack_id) do
-    :ets.new(shape_meta_table(stack_id), [
-      :named_table,
-      :public,
-      :set,
+    ensure_state_table(shape_meta_table(stack_id),
       read_concurrency: true,
       write_concurrency: :auto
-    ])
+    )
+
+    ensure_state_table(shape_indexability_table(stack_id),
+      read_concurrency: true,
+      write_concurrency: :auto
+    )
+
+    ensure_state_table(shape_counts_table(stack_id),
+      read_concurrency: true,
+      write_concurrency: true
+    )
+
+    :ets.delete_all_objects(shape_meta_table(stack_id))
+    :ets.delete_all_objects(shape_indexability_table(stack_id))
+    put_shape_counts(stack_id, empty_shape_counts())
   end
 
   defp populate_shape_meta_table(stack_id, generation) do
@@ -392,5 +442,75 @@ defmodule Electric.ShapeCache.ShapeStatus do
     )
 
     :ok
+  end
+
+  defp rebuild_shape_routing_state(stack_id) do
+    case ShapeDb.reduce_shapes(stack_id, {empty_shape_counts(), []}, fn {shape_handle, shape},
+                                                                        {counts, entries} ->
+           indexed? = Filter.indexed_shape?(shape)
+           {update_shape_counts(counts, indexed?, 1), [{shape_handle, indexed?} | entries]}
+         end) do
+      {:error, _reason} = error ->
+        error
+
+      {counts, entries} ->
+        :ets.delete_all_objects(shape_indexability_table(stack_id))
+
+        if entries != [] do
+          true = :ets.insert(shape_indexability_table(stack_id), entries)
+        end
+
+        put_shape_counts(stack_id, counts)
+        :ok
+    end
+  end
+
+  defp ensure_state_table(table_name, opts) do
+    if :ets.whereis(table_name) == :undefined do
+      :ets.new(table_name, [:named_table, :public, :set] ++ opts)
+    end
+  end
+
+  defp empty_shape_counts do
+    %{total: 0, indexed: 0, unindexed: 0}
+  end
+
+  defp put_shape_counts(stack_id, %{total: total, indexed: indexed, unindexed: unindexed}) do
+    :ets.insert(shape_counts_table(stack_id), {@shape_counts_key, total, indexed, unindexed})
+  end
+
+  defp increment_shape_counts(stack_id, indexed?) do
+    :ets.update_counter(
+      shape_counts_table(stack_id),
+      @shape_counts_key,
+      [{2, 1}, {3, if(indexed?, do: 1, else: 0)}, {4, if(indexed?, do: 0, else: 1)}],
+      {@shape_counts_key, 0, 0, 0}
+    )
+  end
+
+  defp decrement_shape_counts(_stack_id, nil), do: :ok
+
+  defp decrement_shape_counts(stack_id, indexed?) do
+    :ets.update_counter(
+      shape_counts_table(stack_id),
+      @shape_counts_key,
+      [{2, -1}, {3, if(indexed?, do: -1, else: 0)}, {4, if(indexed?, do: 0, else: -1)}],
+      {@shape_counts_key, 0, 0, 0}
+    )
+  end
+
+  defp shape_cached_as_indexed?(stack_id, shape_handle) do
+    case :ets.take(shape_indexability_table(stack_id), shape_handle) do
+      [{^shape_handle, indexed?}] -> indexed?
+      [] -> nil
+    end
+  end
+
+  defp update_shape_counts(%{total: total, indexed: indexed, unindexed: unindexed}, true, delta) do
+    %{total: total + delta, indexed: indexed + delta, unindexed: unindexed}
+  end
+
+  defp update_shape_counts(%{total: total, indexed: indexed, unindexed: unindexed}, false, delta) do
+    %{total: total + delta, indexed: indexed, unindexed: unindexed + delta}
   end
 end

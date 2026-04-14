@@ -112,6 +112,15 @@ defmodule Electric.ShapeCache do
     ArgumentError -> :error
   end
 
+  @spec shape_counts(stack_id()) ::
+          %{total: non_neg_integer(), indexed: non_neg_integer(), unindexed: non_neg_integer()}
+          | :error
+  def shape_counts(stack_id) when is_stack_id(stack_id) do
+    ShapeStatus.shape_counts(stack_id)
+  rescue
+    ArgumentError -> :error
+  end
+
   @spec clean_shape(shape_handle(), stack_id()) :: :ok
   def clean_shape(shape_handle, stack_id)
       when is_shape_handle(shape_handle) and is_stack_id(stack_id) do

@@ -78,6 +78,20 @@ defmodule Electric.Shapes.Filter do
   end
 
   @doc """
+  Returns `true` when ShapeLogCollector can route the shape through any of its
+  indexes instead of relying exclusively on `other_shapes` scans.
+
+  This includes both the primary equality/inclusion indexes and the sublink
+  inverted index used for dependency-driven subquery routing.
+  """
+  @spec indexed_shape?(Shape.t()) :: boolean()
+  def indexed_shape?(%Shape{} = shape) do
+    WhereCondition.indexed_where?(shape.where) or
+      (Shape.dependency_handles_known?(shape) and
+         map_size(extract_sublink_fields(shape.where)) > 0)
+  end
+
+  @doc """
   Add a shape for the filter to track.
 
   The `shape_id` can be any term you like to identify the shape. Whatever you use will be returned
