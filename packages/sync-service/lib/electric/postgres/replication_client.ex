@@ -51,24 +51,10 @@ defmodule Electric.Postgres.ReplicationClient do
       :message_converter,
       :publication_owner?,
       :replication_idle_timeout,
-      # PostgreSQL's wal_sender_timeout in ms, queried during connection setup.
-      # Used to derive the keepalive interval (wal_sender_timeout / 3).
       wal_sender_timeout: 60_000,
       step: :disconnected,
-      # Ref for a pending wait_until_async subscription, paired with the event to retry.
-      # Set when the event handler returns :not_ready and cleared on notification.
       wait_for_active_ref: nil,
-      # Tracks an in-flight async event handler call ($gen_call).
-      # {monitor_ref, event, time_remaining, start_time} | nil
       pending_event: nil,
-      # Cache the end_lsn of the last processed Commit message to report it back to Postgres
-      # on demand via standby status update messages -
-      # https://www.postgresql.org/docs/current/protocol-replication.html#PROTOCOL-REPLICATION-STANDBY-STATUS-UPDATE
-      #
-      # Postgres defines separate "received and written to disk", "flushed to disk" and
-      # "applied" offsets but we only keep track of the "applied" offset which we define as the
-      # end LSN of the last transaction that we have successfully processed and persisted in the
-      # shape log storage.
       received_wal: 0,
       flushed_wal: 0,
       last_seen_txn_lsn: Lsn.from_integer(0),
@@ -91,7 +77,10 @@ defmodule Electric.Postgres.ReplicationClient do
             message_converter: MessageConverter.t(),
             publication_owner?: boolean(),
             replication_idle_timeout: non_neg_integer(),
+            wal_sender_timeout: non_neg_integer(),
             step: Electric.Postgres.ReplicationClient.step(),
+            wait_for_active_ref: {reference(), term()} | nil,
+            pending_event: {reference(), term(), non_neg_integer(), integer()} | nil,
             received_wal: non_neg_integer(),
             flushed_wal: non_neg_integer(),
             last_seen_txn_lsn: Lsn.t(),
