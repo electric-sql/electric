@@ -121,7 +121,8 @@ defmodule Electric.Config do
     shape_db_synchronous:
       Electric.ShapeCache.ShapeStatus.ShapeDb.Connection.default!(:synchronous),
     shape_db_cache_size: Electric.ShapeCache.ShapeStatus.ShapeDb.Connection.default!(:cache_size),
-    exclude_spans: MapSet.new()
+    exclude_spans: MapSet.new(),
+    live_dashboard_port: nil
   ]
 
   @installation_id_key "electric_installation_id"
