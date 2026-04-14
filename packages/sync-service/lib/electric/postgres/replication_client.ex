@@ -58,6 +58,9 @@ defmodule Electric.Postgres.ReplicationClient do
       # Ref for a pending wait_until_async subscription, paired with the event to retry.
       # Set when the event handler returns :not_ready and cleared on notification.
       wait_for_active_ref: nil,
+      # Tracks an in-flight async event handler call ($gen_call).
+      # {monitor_ref, event, time_remaining, start_time} | nil
+      pending_event: nil,
       # Cache the end_lsn of the last processed Commit message to report it back to Postgres
       # on demand via standby status update messages -
       # https://www.postgresql.org/docs/current/protocol-replication.html#PROTOCOL-REPLICATION-STANDBY-STATUS-UPDATE
@@ -362,6 +365,54 @@ defmodule Electric.Postgres.ReplicationClient do
     {:noreply, state}
   end
 
+  # Async event handler replied :ok — demonitor, ack transaction, resume socket.
+  def handle_info(
+        {ref, :ok},
+        %State{pending_event: {ref, event, _time_remaining, _start_time}} = state
+      )
+      when is_reference(ref) do
+    Process.demonitor(ref, [:flush])
+    state = %{state | pending_event: nil}
+    state = maybe_update_flush_up_to_date(state)
+    {acks, state} = acknowledge_transaction(event, state)
+    {:noreply_and_resume, acks, state}
+  end
+
+  # Async event handler replied with a recoverable error — wait and retry.
+  def handle_info(
+        {ref, {:error, error}},
+        %State{pending_event: {ref, event, time_remaining, start_time}} = state
+      )
+      when is_reference(ref) and error in [:not_ready, :connection_not_available] do
+    Process.demonitor(ref, [:flush])
+    remaining = time_remaining - (System.monotonic_time(:millisecond) - start_time)
+    state = %{state | pending_event: nil}
+    wait_for_active_and_retry(event, remaining, state)
+  end
+
+  # Async event handler crashed — retry with budget.
+  def handle_info(
+        {:DOWN, ref, :process, _pid, reason},
+        %State{pending_event: {ref, event, time_remaining, start_time}} = state
+      ) do
+    remaining = time_remaining - (System.monotonic_time(:millisecond) - start_time)
+    state = %{state | pending_event: nil}
+
+    if remaining > 0 do
+      Logger.error(
+        "Error processing replication event (#{remaining}ms retry budget left): " <>
+          inspect(reason)
+      )
+
+      Process.send_after(self(), {:process_event, event, remaining}, @event_retry_delay)
+      {:noreply, state}
+    else
+      Logger.error("Exhausted retry budget processing replication event: " <> inspect(reason))
+
+      exit(reason)
+    end
+  end
+
   # This callback is invoked when the connection process receives a shutdown signal.
   def handle_info({:EXIT, _pid, :shutdown}, _state) do
     Logger.debug("Replication client #{inspect(self())} received shutdown signal, stopping")
@@ -483,34 +534,25 @@ defmodule Electric.Postgres.ReplicationClient do
     {:noreply_and_pause, [], state}
   end
 
-  # Apply the event handler. On success, acknowledge the transaction and resume
-  # socket reads. On failure, retry — either after a short delay (for crashes)
-  # or after StatusMonitor signals the stack is active (for :not_ready errors).
-  #
-  # This replaces the old synchronous apply_with_retries/3 which blocked the
-  # gen_statem process and prevented keepalive responses.
+  # Dispatch the event handler as a non-blocking $gen_call. The MFA returns a
+  # monitor ref; the gen_statem returns immediately and handles the reply (or
+  # :DOWN on crash) in handle_info. This keeps the gen_statem responsive to
+  # keepalive timers while the handler processes the event.
   defp apply_event(event, time_remaining, state) do
     {m, f, args} = state.handle_event
     start_time = System.monotonic_time(:millisecond)
 
     try do
-      case apply(m, f, [event | args]) do
-        :ok ->
-          state = maybe_update_flush_up_to_date(state)
-          {acks, state} = acknowledge_transaction(event, state)
-          {:noreply_and_resume, acks, state}
+      ref = apply(m, f, [event | args])
 
-        {:error, error} when error in [:not_ready, :connection_not_available] ->
-          remaining = time_remaining - (System.monotonic_time(:millisecond) - start_time)
-          wait_for_active_and_retry(event, remaining, state)
-      end
+      {:noreply, %{state | pending_event: {ref, event, time_remaining, start_time}}}
     catch
       kind, reason ->
         remaining = time_remaining - (System.monotonic_time(:millisecond) - start_time)
 
         if remaining > 0 do
           Logger.error(
-            "Error processing replication event (#{remaining}ms retry budget left): " <>
+            "Error dispatching replication event (#{remaining}ms retry budget left): " <>
               Exception.format(kind, reason, __STACKTRACE__)
           )
 
@@ -518,7 +560,7 @@ defmodule Electric.Postgres.ReplicationClient do
           {:noreply, state}
         else
           Logger.error(
-            "Exhausted retry budget processing replication event: " <>
+            "Exhausted retry budget dispatching replication event: " <>
               Exception.format(kind, reason, __STACKTRACE__)
           )
 

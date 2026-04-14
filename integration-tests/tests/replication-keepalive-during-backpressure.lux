@@ -1,4 +1,4 @@
-[doc Verify that the replication connection survives when event processing is stuck for longer than wal_sender_timeout. When ShapeLogCollector returns not_ready, the replication client retries asynchronously while sending periodic keepalives that prevent PostgreSQL from killing the connection.]
+[doc Verify that the replication connection survives when event processing is stuck for longer than wal_sender_timeout. The replication client dispatches events via non-blocking $gen_call and sends periodic keepalives that prevent PostgreSQL from killing the connection.]
 
 [include _macros.luxinc]
 
@@ -40,21 +40,16 @@
   [invoke shape_get_snapshot items]
   ??before-block
 
-## Suspend event processing in ShapeLogCollector so it returns {:error, :not_ready}.
+## Set event processing mode to :suspend so SLC returns {:error, :not_ready}.
 ## This simulates sustained backpressure on the replication stream.
 ##
-## In the old code, apply_with_retries loops inside handle_data:
-##   sleep(50) -> wait_until_active(infinity) -> retry -> :not_ready -> repeat
-## The gen_statem never returns to its event loop, so keepalive timer messages
-## pile up unprocessed. After wal_sender_timeout, PostgreSQL kills the connection.
-##
-## With the fix, event dispatch is async: the gen_statem returns between retries,
-## allowing the keepalive timer to fire and send StandbyStatusUpdate messages.
+## The gen_statem dispatches events via a non-blocking $gen_call, keeping it
+## responsive to keepalive timers while waiting for the handler to respond.
 [shell electric]
   # Disable the fail pattern — we expect error/warning logs during the retry period
   -
 
-  !Electric.Replication.ShapeLogCollector.suspend_event_processing("single_stack")
+  !Electric.Replication.ShapeLogCollector.set_event_processing_mode("single_stack", :suspend)
   ??:ok
 
 ## Insert data to trigger event processing — this starts the :not_ready retry loop
@@ -78,7 +73,7 @@
   # or the gen_statem terminating with "tcp send: closed".
   -connection closed|tcp send: closed|ssl send: closed|$fail_pattern
 
-  !Electric.Replication.ShapeLogCollector.resume_event_processing("single_stack")
+  !Electric.Replication.ShapeLogCollector.set_event_processing_mode("single_stack", :normal)
   ??:ok
 
 ## Insert data that should flow through if the connection survived

@@ -101,22 +101,41 @@ defmodule Electric.Replication.ShapeLogCollector do
   end
 
   @doc """
-  Suspend event processing, causing `handle_event/2` to return
-  `{:error, :not_ready}` until `resume_event_processing/1` is called.
+  Non-blocking variant of `handle_event/2`.
 
-  Used in integration tests to simulate sustained backpressure on the
-  replication stream — e.g. to verify that the replication connection
-  survives `wal_sender_timeout` during prolonged processing delays.
+  Sends a `$gen_call` to the collector and returns a monitor reference.
+  The caller receives `{monitor_ref, response}` when the event is processed,
+  or `{:DOWN, monitor_ref, :process, pid, reason}` if the collector crashes.
+
+  Uses the same `$gen_call` protocol as `GenServer.call` internally — the
+  existing `handle_call` handles the request unchanged.
   """
-  def suspend_event_processing(stack_id) do
-    GenServer.call(name(stack_id), :suspend_event_processing)
+  def handle_event_async(event, stack_id) do
+    trace_context = OpenTelemetry.get_current_context()
+    server = name(stack_id)
+
+    case GenServer.whereis(server) do
+      nil ->
+        exit({:noproc, {__MODULE__, :handle_event_async, [event, stack_id]}})
+
+      pid ->
+        monitor_ref = Process.monitor(pid)
+        send(pid, {:"$gen_call", {self(), monitor_ref}, {:handle_event, event, trace_context}})
+        monitor_ref
+    end
   end
 
   @doc """
-  Resume event processing after `suspend_event_processing/1`.
+  Set the event processing mode for integration testing.
+
+  Modes:
+  - `:suspend` — return `{:error, :not_ready}` without processing
+  - `:hang` — accept the event but never reply (simulates slow handler)
+  - `:crash` — raise an error on the next event
+  - `:normal` — process events normally (clears any test mode)
   """
-  def resume_event_processing(stack_id) do
-    GenServer.call(name(stack_id), :resume_event_processing)
+  def set_event_processing_mode(stack_id, mode) do
+    GenServer.call(name(stack_id), {:set_event_processing_mode, mode})
   end
 
   @doc """
@@ -323,16 +342,26 @@ defmodule Electric.Replication.ShapeLogCollector do
     {:reply, :ok, Map.put(state, :last_processed_offset, offset)}
   end
 
-  def handle_call(:suspend_event_processing, _from, state) do
-    {:reply, :ok, Map.put(state, :event_processing_suspended, true)}
+  def handle_call({:set_event_processing_mode, :normal}, _from, state) do
+    {:reply, :ok, Map.delete(state, :event_processing_mode)}
   end
 
-  def handle_call(:resume_event_processing, _from, state) do
-    {:reply, :ok, Map.delete(state, :event_processing_suspended)}
+  def handle_call({:set_event_processing_mode, mode}, _from, state) do
+    {:reply, :ok, Map.put(state, :event_processing_mode, mode)}
   end
 
-  def handle_call({:handle_event, _, _}, _from, %{event_processing_suspended: true} = state) do
+  # Test-only modes: suspend, delay, crash — set via set_event_processing_mode/2
+  def handle_call({:handle_event, _, _}, _from, %{event_processing_mode: :suspend} = state) do
     {:reply, {:error, :not_ready}, state}
+  end
+
+  def handle_call({:handle_event, _, _}, _from, %{event_processing_mode: :crash}) do
+    raise "Simulated event processing crash for integration testing"
+  end
+
+  def handle_call({:handle_event, _, _}, _from, %{event_processing_mode: :hang} = state) do
+    Process.sleep(:infinity)
+    {:reply, :ok, state}
   end
 
   def handle_call({:handle_event, _, _}, _from, state)

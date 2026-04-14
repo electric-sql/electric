@@ -61,19 +61,37 @@ defmodule Electric.Postgres.ReplicationClientTest do
 
     @impl true
     def init(test_pid) do
-      {:ok, %{test_pid: test_pid, should_crash?: false}}
+      {:ok, %{test_pid: test_pid, should_crash?: false, delay: 0}}
     end
 
     def handle_event(event) do
-      GenServer.call(__MODULE__, {:handle_event, event})
+      GenServer.call(__MODULE__, {:handle_event, event}, :infinity)
+    end
+
+    def handle_event_async(event) do
+      case GenServer.whereis(__MODULE__) do
+        nil ->
+          exit({:noproc, {__MODULE__, :handle_event_async, [event]}})
+
+        pid ->
+          monitor_ref = Process.monitor(pid)
+          send(pid, {:"$gen_call", {self(), monitor_ref}, {:handle_event, event}})
+          monitor_ref
+      end
     end
 
     def toggle_crash(should_crash?) do
       GenServer.call(__MODULE__, {:toggle_crash, should_crash?})
     end
 
+    def set_delay(delay_ms) do
+      GenServer.call(__MODULE__, {:set_delay, delay_ms})
+    end
+
     @impl true
     def handle_call({:handle_event, %TransactionFragment{} = txn_fragment}, _from, state) do
+      if state.delay > 0, do: Process.sleep(state.delay)
+
       if state.should_crash? do
         raise "Interrupting transaction processing abnormally"
       end
@@ -89,6 +107,10 @@ defmodule Electric.Postgres.ReplicationClientTest do
 
     def handle_call({:toggle_crash, should_crash?}, _from, state) do
       {:reply, :ok, %{state | should_crash?: should_crash?}}
+    end
+
+    def handle_call({:set_delay, delay_ms}, _from, state) do
+      {:reply, :ok, %{state | delay: delay_ms}}
     end
   end
 
@@ -228,7 +250,7 @@ defmodule Electric.Postgres.ReplicationClientTest do
       refute_receive _
     end
 
-    @tag handle_event: {MockTransactionProcessor, :handle_event, []}
+    @tag handle_event: {MockTransactionProcessor, :handle_event_async, []}
     test "holds processing of transaction until ready", %{db_conn: conn} = ctx do
       client_pid = start_client(ctx)
 
@@ -252,7 +274,7 @@ defmodule Electric.Postgres.ReplicationClientTest do
     end
 
     @tag database_settings: ["wal_sender_timeout='3s'"]
-    @tag handle_event: {MockTransactionProcessor, :handle_event, []}
+    @tag handle_event: {MockTransactionProcessor, :handle_event_async, []}
     test "connection survives wal_sender_timeout when event handler is unavailable",
          %{db_conn: conn} = ctx do
       client_pid = start_client(ctx)
@@ -278,7 +300,35 @@ defmodule Electric.Postgres.ReplicationClientTest do
       assert %NewRecord{record: %{"value" => "test value 2"}} = receive_tx_change()
     end
 
-    @tag handle_event: {MockTransactionProcessor, :handle_event, []}
+    @tag database_settings: ["wal_sender_timeout='3s'"]
+    @tag handle_event: {MockTransactionProcessor, :handle_event_async, []}
+    test "connection survives wal_sender_timeout when event handler is slow",
+         %{db_conn: conn} = ctx do
+      start_supervised({MockTransactionProcessor, self()})
+      MockTransactionProcessor.set_delay(6_000)
+
+      client_pid = start_client(ctx)
+      ref = Process.monitor(client_pid)
+
+      # Insert data — the event handler will take 6s to respond (2x wal_sender_timeout).
+      # Because apply_event dispatches via $gen_call, the gen_statem is free to send
+      # keepalives. Without the async fix, the gen_statem would be blocked for 6s and
+      # PG would kill the connection after 3s.
+      insert_item(conn, "slow value")
+
+      # The process must survive the full processing window.
+      refute_receive {:DOWN, ^ref, :process, ^client_pid, _}, 8_000
+
+      # The slow event should have been processed.
+      assert %NewRecord{record: %{"value" => "slow value"}} = receive_tx_change()
+
+      # Verify the connection is still live by sending more data with no delay.
+      MockTransactionProcessor.set_delay(0)
+      insert_item(conn, "fast value")
+      assert %NewRecord{record: %{"value" => "fast value"}} = receive_tx_change()
+    end
+
+    @tag handle_event: {MockTransactionProcessor, :handle_event_async, []}
     test "aborts held processing of transaction on exit", %{db_conn: conn} = ctx do
       client_pid = start_client(ctx)
       insert_item(conn, "test value 1")
@@ -738,7 +788,7 @@ defmodule Electric.Postgres.ReplicationClientTest do
           Map.get(
             ctx,
             :handle_event,
-            {__MODULE__, :test_handle_event, [self()]}
+            {__MODULE__, :test_handle_event_async, [self()]}
           ),
         connection_manager: ctx.connection_manager
       ]
@@ -777,6 +827,23 @@ defmodule Electric.Postgres.ReplicationClientTest do
   def test_handle_event(%Relation{} = relation, test_pid) do
     send(test_pid, {:from_replication, [relation]})
     :ok
+  end
+
+  # Async variant for the $gen_call-based apply_event. Runs the handler inline
+  # (in the gen_statem process) and queues the result as a {ref, result} message.
+  # Since these test handlers are fast (no delay), this doesn't block keepalives.
+  def test_handle_event_async(event, test_pid) do
+    ref = make_ref()
+
+    try do
+      result = test_handle_event(event, test_pid)
+      send(self(), {ref, result})
+    catch
+      kind, reason ->
+        send(self(), {:DOWN, ref, :process, self(), {kind, reason, __STACKTRACE__}})
+    end
+
+    ref
   end
 
   defp gen_random_string(length) do
