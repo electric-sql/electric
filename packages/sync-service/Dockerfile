@@ -25,7 +25,7 @@ COPY --from=electric-telemetry / /builder/electric-telemetry
 
 COPY mix.* /builder/electric/
 RUN mix deps.get
-RUN MIX_OS_DEPS_COMPILE_PARTITION_COUNT=4 mix deps.compile
+RUN mix deps.compile
 
 # These are ordered by change frequency, with the least frequently changing dir first.
 COPY rel /builder/electric/rel
