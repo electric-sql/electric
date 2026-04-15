@@ -1125,13 +1125,15 @@ defmodule Electric.Plug.ServeShapePlugTest do
                Electric.AdmissionControl.get_current(ctx.stack_id)
     end
 
-    test "does not crash when exception occurs before config is assigned", ctx do
+    test "does not call release when exception occurs before config is assigned", ctx do
       # If an exception occurs and the original conn lacks :config (i.e. the
       # Router didn't pre-assign it), ensure_admission_control_release must
-      # handle nil stack_id gracefully rather than crashing.
+      # skip the release call rather than calling release(nil, kind).
       Repatch.patch(Electric.Shapes.Api, :validate_params, fn _api, _params ->
         raise RuntimeError, "crash during validation"
       end)
+
+      Repatch.spy(Electric.AdmissionControl)
 
       try do
         # Deliberately omit Plug.Conn.assign(:config, ...) — the Plug.ErrorHandler
@@ -1143,13 +1145,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
         _kind, _reason -> :ok
       end
 
-      # No permit was acquired, counter should remain at zero
-      assert %{initial: 0, existing: 0} =
-               Electric.AdmissionControl.get_current(ctx.stack_id)
-
-      # Without the nil guard, release(nil, kind) would create a spurious
-      # ETS entry keyed by nil in the admission control ETS table
-      assert [] = :ets.lookup(:electric_admission_control, nil)
+      refute Repatch.called?(Electric.AdmissionControl, :release, 3)
     end
 
     # Pre-assigns :config to match production behaviour: the Router sets
