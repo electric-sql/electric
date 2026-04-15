@@ -150,6 +150,10 @@ defmodule Electric.Application do
         process_spawn_opts: get_env(opts, :process_spawn_opts)
       ],
       manual_table_publishing?: get_env(opts, :manual_table_publishing?),
+      durable_streams_url: get_env(opts, :durable_streams_url),
+      durable_streams_token: get_env(opts, :durable_streams_token),
+      durable_streams_writer_pool_size: get_env(opts, :durable_streams_writer_pool_size),
+      wal_buffer_capacity: get_env(opts, :wal_buffer_capacity),
       shape_db_opts: [
         exclusive_mode: get_env(opts, :shape_db_exclusive_mode),
         storage_dir:

@@ -1,0 +1,17 @@
+[package]
+name = "lmdb_nif"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "lmdb_nif"
+crate-type = ["cdylib"]
+
+[dependencies]
+rustler = "0.37"
+heed = "0.20"  # Safe LMDB wrapper for Rust
+thiserror = "2"
+
+[profile.release]
+opt-level = 3
+lto = true

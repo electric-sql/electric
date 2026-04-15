@@ -224,6 +224,25 @@ defmodule Electric.Shapes.Consumer do
     {:noreply, State.mark_snapshot_started(state), state.hibernate_after}
   end
 
+  def handle_cast({:snapshot_data_written, shape_handle}, %{shape_handle: shape_handle} = state) do
+    # For LmdbQueueStorage: perform the queue state transition to copy
+    # snapshot and streaming data into the output queue.
+    alias Electric.ShapeCache.LmdbQueueStorage
+
+    case state.writer do
+      {LmdbQueueStorage, %LmdbQueueStorage.WriterState{} = writer_state} ->
+        Logger.debug("Performing queue transition for #{shape_handle}")
+        writer_state = LmdbQueueStorage.transition_to_live(writer_state)
+        # Output queue now has data — notify the writer pool
+        Electric.DurableStreams.Distributor.notify_writes(state.stack_id, shape_handle)
+        {:noreply, %{state | writer: {LmdbQueueStorage, writer_state}}, state.hibernate_after}
+
+      _ ->
+        # Not using LmdbQueueStorage, ignore
+        {:noreply, state, state.hibernate_after}
+    end
+  end
+
   @impl GenServer
   def handle_info({:initialize_shape, shape, opts}, state) do
     %{stack_id: stack_id, shape_handle: shape_handle} = state
@@ -239,12 +258,20 @@ defmodule Electric.Shapes.Consumer do
       :ignore -> :ok
     end
 
+    Logger.debug("Initializing LMDB queue storage for #{shape_handle}")
     writer = ShapeCache.Storage.init_writer!(storage, shape)
 
     state = State.initialize(state, storage, writer)
+    Logger.debug("LMDB queue storage initialized for #{shape_handle}")
 
-    if all_materializers_alive?(state) && subscribe(state, opts.action) do
-      Logger.debug("Writer for #{shape_handle} initialized")
+    # Create the backing durable stream before subscribing to events.
+    # This is synchronous and may take ~1s. The shape must not receive
+    # events from the ShapeLogCollector until the stream exists.
+    Logger.debug("Creating durable stream for #{shape_handle}")
+
+    if create_durable_stream(stack_id, shape_handle) &&
+         all_materializers_alive?(state) && subscribe(state, opts.action) do
+      Logger.debug("Shape #{shape_handle} fully initialized — durable stream created, subscribed to events")
 
       # We start the snapshotter even if there's a snapshot because it also performs the call
       # to PublicationManager.add_shape/3. We *could* do that call here and avoid spawning a
@@ -648,7 +675,9 @@ defmodule Electric.Shapes.Consumer do
         timestamp = System.monotonic_time()
 
         {lines, total_size} = prepare_log_entries(converted_changes, xid, shape)
+        Logger.debug(fn -> "Consumer #{state.shape_handle} appending fragment xid=#{xid} (#{num_changes} changes, #{total_size} bytes)" end)
         writer = ShapeCache.Storage.append_fragment_to_log!(lines, writer)
+        Electric.DurableStreams.Distributor.notify_writes(state.stack_id, state.shape_handle)
 
         # The Materializer must see all txn changes for correct tracking of move-ins and
         # move-outs for the outer shape. The commit=false flag ensure it doesn't yet notify
@@ -833,7 +862,9 @@ defmodule Electric.Shapes.Consumer do
         timestamp = System.monotonic_time()
 
         {lines, total_size} = prepare_log_entries(changes, xid, shape)
+        Logger.debug(fn -> "Consumer #{state.shape_handle} appending txn xid=#{xid} (#{num_changes} changes, #{total_size} bytes)" end)
         writer = ShapeCache.Storage.append_to_log!(lines, writer)
+        Electric.DurableStreams.Distributor.notify_writes(state.stack_id, state.shape_handle)
 
         OpenTelemetry.add_span_attributes(%{
           num_bytes: total_size,
@@ -1042,6 +1073,36 @@ defmodule Electric.Shapes.Consumer do
   defp more_recent_offset(nil, offset), do: offset
   defp more_recent_offset(offset, nil), do: offset
   defp more_recent_offset(offset1, offset2), do: LogOffset.max(offset1, offset2)
+
+  defp create_durable_stream(stack_id, shape_handle) do
+    case Electric.StackConfig.lookup(stack_id, :durable_streams_url) do
+      nil ->
+        raise "ELECTRIC_DURABLE_STREAMS_URL is not configured"
+
+      url ->
+        token = Electric.StackConfig.lookup!(stack_id, :durable_streams_token)
+        Logger.debug("Creating durable stream at #{url}/#{shape_handle}")
+        start = System.monotonic_time(:millisecond)
+
+        case Electric.DurableStreams.StreamManager.create_stream(shape_handle,
+               durable_streams_url: url,
+               durable_streams_token: token
+             ) do
+          :ok ->
+            elapsed = System.monotonic_time(:millisecond) - start
+            Logger.debug("Durable stream created for #{shape_handle} in #{elapsed}ms")
+            true
+
+          {:error, reason} ->
+            elapsed = System.monotonic_time(:millisecond) - start
+            Logger.error(
+              "Failed to create durable stream for #{shape_handle} after #{elapsed}ms: #{inspect(reason)}"
+            )
+
+            false
+        end
+    end
+  end
 
   defp subscribe(state, action) do
     case ShapeLogCollector.add_shape(state.stack_id, state.shape_handle, state.shape, action) do

@@ -32,3 +32,6 @@ electric-*.tar
 /persistent
 
 .env.*.local
+
+/native/*/target
+/priv/native/

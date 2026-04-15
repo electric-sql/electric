@@ -89,6 +89,12 @@ storage_dir = env!("ELECTRIC_STORAGE_DIR", :string, "./persistent")
 shape_path = Path.join(storage_dir, "./shapes")
 persistent_state_path = Path.join(storage_dir, "./state")
 
+# Durable Streams configuration
+durable_streams_url = env!("ELECTRIC_DURABLE_STREAMS_URL", :string, nil)
+durable_streams_token = env!("ELECTRIC_DURABLE_STREAMS_TOKEN", :string, nil)
+durable_streams_writer_pool_size = env!("ELECTRIC_DURABLE_STREAMS_WRITER_POOL_SIZE", :integer, 4)
+wal_buffer_capacity = env!("ELECTRIC_WAL_BUFFER_CAPACITY", :integer, 64 * 1024 * 1024)
+
 persistent_kv_spec =
   env!(
     "ELECTRIC_PERSISTENT_STATE",
@@ -129,8 +135,13 @@ storage_spec =
         "fast_file" ->
           {Electric.ShapeCache.PureFileStorage, storage_dir: shape_path}
 
+        "lmdb" ->
+          {Electric.ShapeCache.LmdbQueueStorage,
+           storage_dir: shape_path, stack_id: "single_stack"}
+
         _ ->
-          raise Dotenvy.Error, message: "storage must be one of: MEMORY, FAST_FILE, LEGACY_FILE"
+          raise Dotenvy.Error,
+            message: "storage must be one of: MEMORY, FAST_FILE, LEGACY_FILE, LMDB"
       end
     end,
     nil
@@ -310,7 +321,11 @@ config :electric,
   shape_db_cache_size:
     env!("ELECTRIC_SHAPE_DB_CACHE_SIZE", &Electric.Config.parse_human_readable_size!/1, nil),
   exclude_spans:
-    env!("ELECTRIC_EXCLUDE_SPANS", &Electric.Config.parse_comma_separated_set!/1, nil)
+    env!("ELECTRIC_EXCLUDE_SPANS", &Electric.Config.parse_comma_separated_set!/1, nil),
+  durable_streams_url: durable_streams_url,
+  durable_streams_token: durable_streams_token,
+  durable_streams_writer_pool_size: durable_streams_writer_pool_size,
+  wal_buffer_capacity: wal_buffer_capacity
 
 if Electric.telemetry_enabled?() do
   # Disable the default telemetry_poller process since we start our own in

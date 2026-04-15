@@ -9,7 +9,9 @@ defmodule Electric.Config.Defaults do
   @doc false
   def storage(opts \\ []) do
     storage_dir = Keyword.get_lazy(opts, :storage_dir, fn -> storage_dir("shapes") end)
-    {Electric.ShapeCache.PureFileStorage, storage_dir: storage_dir}
+
+    {Electric.ShapeCache.LmdbQueueStorage,
+     storage_dir: storage_dir, stack_id: "single_stack"}
   end
 
   @doc false
@@ -122,7 +124,12 @@ defmodule Electric.Config do
       Electric.ShapeCache.ShapeStatus.ShapeDb.Connection.default!(:synchronous),
     shape_db_cache_size: Electric.ShapeCache.ShapeStatus.ShapeDb.Connection.default!(:cache_size),
     exclude_spans: MapSet.new(),
-    live_dashboard_port: nil
+    live_dashboard_port: nil,
+    ## Durable Streams
+    durable_streams_url: nil,
+    durable_streams_token: nil,
+    durable_streams_writer_pool_size: 4,
+    wal_buffer_capacity: 64 * 1024 * 1024
   ]
 
   @installation_id_key "electric_installation_id"

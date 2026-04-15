@@ -94,6 +94,7 @@ defmodule Electric.MixProject do
         {:ecto, "~> 3.12"},
         {:esqlite, "~> 0.9.0"},
         {:jason, "~> 1.4"},
+        {:mint, "~> 1.7"},
         {:nimble_options, "~> 1.1"},
         {:nimble_pool, "~> 1.1"},
         {:opentelemetry_telemetry, "~> 1.1"},
@@ -104,6 +105,7 @@ defmodule Electric.MixProject do
         {:retry, "~> 0.19"},
         {:remote_ip, "~> 1.2"},
         {:req, "~> 0.5"},
+        {:rustler, "~> 0.35", runtime: false},
         {:stream_split, "~> 0.1"},
         {:tz, "~> 0.28"},
         {:phoenix_live_dashboard, "~> 0.8"}

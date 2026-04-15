@@ -445,13 +445,19 @@ defmodule Electric.Postgres.ReplicationClient do
       )
     end
 
+    lsn_int = Lsn.to_integer(lsn)
+
+    # handle_event has already returned, meaning the event (and all prior
+    # fragments of this transaction) are durably persisted in the WalBuffer
+    # ring buffer. Advance flushed_wal so Postgres can discard this data.
     state =
       %{
         state
         | last_seen_txn_lsn: lsn,
-          last_seen_txn_timestamp: System.monotonic_time()
+          last_seen_txn_timestamp: System.monotonic_time(),
+          flushed_wal: max(state.flushed_wal, lsn_int)
       }
-      |> update_received_wal(Lsn.to_integer(lsn))
+      |> update_received_wal(lsn_int)
 
     {[encode_standby_status_update(state)], state}
   end

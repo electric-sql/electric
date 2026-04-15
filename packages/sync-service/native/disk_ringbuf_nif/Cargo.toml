@@ -1,0 +1,18 @@
+[package]
+name = "disk_ringbuf_nif"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "disk_ringbuf_nif"
+crate-type = ["cdylib"]
+
+[dependencies]
+rustler = "0.37"
+memmap2 = "0.9"
+crc32fast = "1.4"
+thiserror = "2"
+
+[profile.release]
+opt-level = 3
+lto = true

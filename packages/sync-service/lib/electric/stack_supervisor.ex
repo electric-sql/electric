@@ -167,6 +167,10 @@ defmodule Electric.StackSupervisor do
                      "Specify whether tables are to be added to the Postgres publication automatically or by hand",
                    default: false
                  ],
+                 durable_streams_url: [type: {:or, [:string, nil]}, default: nil],
+                 durable_streams_token: [type: {:or, [:string, nil]}, default: nil],
+                 durable_streams_writer_pool_size: [type: :pos_integer, default: 4],
+                 wal_buffer_capacity: [type: :pos_integer, default: 64 * 1024 * 1024],
                  shape_db_opts: [
                    type: :keyword_list,
                    required: true,
@@ -366,7 +370,7 @@ defmodule Electric.StackSupervisor do
       replication_opts:
         [
           stack_id: stack_id,
-          handle_event: {Electric.Replication.ShapeLogCollector, :handle_event, [stack_id]}
+          handle_event: {Electric.Replication.WalBuffer, :push_event, [stack_id]}
         ] ++ config.replication_opts,
       pool_opts: [types: PgInterop.Postgrex.Types] ++ config.pool_opts,
       timeline_opts: [
@@ -402,7 +406,12 @@ defmodule Electric.StackSupervisor do
            shape_hibernate_after: shape_hibernate_after,
            shape_enable_suspend?: shape_enable_suspend?,
            process_spawn_opts: process_spawn_opts,
-           feature_flags: Map.get(config, :feature_flags, [])
+           feature_flags: Map.get(config, :feature_flags, []),
+           storage_dir: config.storage_dir,
+           durable_streams_url: config.durable_streams_url,
+           durable_streams_token: config.durable_streams_token,
+           durable_streams_writer_pool_size: config.durable_streams_writer_pool_size,
+           wal_buffer_capacity: config.wal_buffer_capacity
          ]},
         {Electric.AsyncDeleter,
          stack_id: stack_id,

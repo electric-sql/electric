@@ -128,6 +128,16 @@ defmodule Electric.Replication.ShapeLogCollector do
   end
 
   @doc """
+  Notify the ShapeLogCollector that the WalBuffer has data available.
+
+  Called by `WalBuffer.push_event/2` after persisting an event.
+  The ShapeLogCollector will pull events from the buffer when ready.
+  """
+  def wal_data_available(stack_id) do
+    GenServer.cast(name(stack_id), :pull_wal_buffer)
+  end
+
+  @doc """
   Notifies the ShapeLogCollector that a shape's data has been flushed
   up to a certain offset, used to mark the overall flush progress.
 
@@ -301,7 +311,12 @@ defmodule Electric.Replication.ShapeLogCollector do
       end
 
     Electric.StatusMonitor.mark_shape_log_collector_ready(state.stack_id, self())
-    {:reply, :ok, Map.put(state, :last_processed_offset, offset)}
+    state = Map.put(state, :last_processed_offset, offset)
+
+    # Check for persisted events from a previous session
+    state = pull_wal_buffer(state)
+
+    {:reply, :ok, state}
   end
 
   def handle_call({:handle_event, _, _}, _from, state)
@@ -339,6 +354,15 @@ defmodule Electric.Replication.ShapeLogCollector do
     {:noreply,
      state
      |> Map.update!(:flush_tracker, &FlushTracker.handle_flush_notification(&1, shape_id, offset))}
+  end
+
+  def handle_cast(:pull_wal_buffer, state) when not is_ready_to_process(state) do
+    # Not ready yet — events will be pulled when mark_as_ready is called
+    {:noreply, state}
+  end
+
+  def handle_cast(:pull_wal_buffer, state) do
+    {:noreply, pull_wal_buffer(state)}
   end
 
   def handle_cast(
@@ -409,6 +433,35 @@ defmodule Electric.Replication.ShapeLogCollector do
       end
     )
   end
+
+  alias Electric.Replication.WalBuffer
+
+  defp pull_wal_buffer(state) do
+    case WalBuffer.peek(state.stack_id) do
+      {:ok, event} ->
+        Logger.debug(fn -> "ShapeLogCollector pulling event from WalBuffer: #{inspect_event(event)}" end)
+        {_response, state} = do_handle_event(event, state)
+        :ok = WalBuffer.commit(state.stack_id)
+        pull_wal_buffer(state)
+
+      :empty ->
+        state
+
+      {:error, reason} ->
+        Logger.error("Error pulling from WalBuffer: #{inspect(reason)}")
+        state
+    end
+  end
+
+  defp inspect_event(%TransactionFragment{xid: xid, lsn: lsn, change_count: n}) do
+    "txn xid=#{xid} lsn=#{lsn} changes=#{n}"
+  end
+
+  defp inspect_event(%Relation{id: id, schema: schema, table: table}) do
+    "relation id=#{id} #{schema}.#{table}"
+  end
+
+  defp inspect_event(other), do: inspect(other, limit: 3)
 
   defp do_handle_event(%Relation{} = rel, state) do
     OpenTelemetry.with_span(

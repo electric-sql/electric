@@ -266,6 +266,10 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
         |> Stream.concat([finishing_control_message])
         |> record_snapshot_metrics(stack_id, shape_handle, shape)
         |> Electric.Shapes.make_new_snapshot!(storage, stack_id, shape_handle)
+
+        # Notify the consumer that snapshot data is fully written to storage,
+        # so it can perform the queue copy transition (for LmdbQueueStorage).
+        GenServer.cast(consumer, {:snapshot_data_written, shape_handle})
       end
     )
   end

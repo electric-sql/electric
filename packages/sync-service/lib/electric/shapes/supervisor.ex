@@ -46,17 +46,42 @@ defmodule Electric.Shapes.Supervisor do
     expiry_manager = Keyword.fetch!(opts, :expiry_manager)
     schema_reconciler = Keyword.fetch!(opts, :schema_reconciler)
 
+    storage_dir = Electric.StackConfig.lookup!(stack_id, :storage_dir)
+    wal_buffer_capacity = Electric.StackConfig.lookup(stack_id, :wal_buffer_capacity, 64 * 1024 * 1024)
+    durable_streams_url = Electric.StackConfig.lookup(stack_id, :durable_streams_url)
+    durable_streams_token = Electric.StackConfig.lookup(stack_id, :durable_streams_token)
+    num_writers = Electric.StackConfig.lookup(stack_id, :durable_streams_writer_pool_size, 4)
+
+    wal_buffer_spec =
+      {Electric.Replication.WalBuffer,
+       stack_id: stack_id, data_dir: storage_dir, wal_buffer_capacity: wal_buffer_capacity}
+
+    durable_streams_children =
+      if durable_streams_url do
+        [
+          {Electric.DurableStreams.Distributor,
+           stack_id: stack_id, num_writers: num_writers},
+          {Electric.DurableStreams.WriterPool,
+           stack_id: stack_id,
+           num_writers: num_writers,
+           durable_streams_url: durable_streams_url,
+           durable_streams_token: durable_streams_token}
+        ]
+      else
+        []
+      end
+
     children = [
       {Task.Supervisor,
        name: Electric.ProcessRegistry.name(stack_id, Electric.StackTaskSupervisor)},
+      wal_buffer_spec,
       log_collector,
       publication_manager,
       consumer_supervisor,
       shape_cache,
       expiry_manager,
-      schema_reconciler,
-      canary_spec(stack_id)
-    ]
+      schema_reconciler
+    ] ++ durable_streams_children ++ [canary_spec(stack_id)]
 
     Supervisor.init(children, strategy: :one_for_all)
   end
