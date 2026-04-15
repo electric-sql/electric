@@ -1,0 +1,105 @@
+<svg width="100%" viewBox="0 0 920 250" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="A shared session forks into three agent branches">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M2 1L8 5L2 9" fill="none" stroke="#FFFFFF" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+    </marker>
+    <style>
+      text {
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+      .label {
+        font-size: 15px;
+        font-weight: 600;
+        fill: #444441;
+      }
+      .connector {
+        fill: none;
+        stroke: #FFFFFF;
+        stroke-width: 1.5;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        marker-end: url(#arrow);
+      }
+      .shared-fill { fill: #9FE1CB; }
+      .shared-stroke { stroke: #0F6E56; }
+      .shared-text { fill: #085041; }
+      .a-fill { fill: #CECBF6; }
+      .a-stroke { stroke: #534AB7; }
+      .a-text { fill: #3C3489; }
+      .b-fill { fill: #F5C4B3; }
+      .b-stroke { stroke: #993C1D; }
+      .b-text { fill: #712B13; }
+      .c-fill { fill: #FAC775; }
+      .c-stroke { stroke: #854F0B; }
+      .c-text { fill: #633806; }
+      .box {
+        stroke-width: 1.25;
+      }
+      .title {
+        font-size: 16px;
+        font-weight: 600;
+      }
+      .subtitle {
+        font-size: 13px;
+      }
+      .small {
+        font-size: 13px;
+        font-weight: 500;
+      }
+    </style>
+  </defs>
+
+  <text class="label" x="42" y="52">Shared session</text>
+
+  <rect class="box shared-fill shared-stroke" x="42" y="74" width="96" height="44" rx="8" />
+  <text class="shared-text small" x="90" y="100" text-anchor="middle">context</text>
+
+  <line class="connector" x1="138" y1="96" x2="164" y2="96" />
+
+  <rect class="box shared-fill shared-stroke" x="172" y="74" width="96" height="44" rx="8" />
+  <text class="shared-text small" x="220" y="100" text-anchor="middle">task</text>
+
+  <line class="connector" x1="268" y1="96" x2="294" y2="96" />
+
+  <rect class="box shared-fill shared-stroke" x="302" y="74" width="96" height="44" rx="8" />
+  <text class="shared-text small" x="350" y="100" text-anchor="middle">plan</text>
+
+  <circle cx="420" cy="96" r="7" fill="#EF9F27" />
+
+  <line class="connector" x1="427" y1="96" x2="470" y2="96" />
+  <path class="connector" d="M470 96 V44 H510" />
+  <line class="connector" x1="470" y1="122" x2="510" y2="122" />
+  <path class="connector" d="M470 96 V200 H510" />
+
+  <rect class="box a-fill a-stroke" x="510" y="18" width="164" height="52" rx="10" />
+  <text class="a-text title" x="592" y="39" text-anchor="middle">Agent A</text>
+  <text class="a-text subtitle" x="592" y="57" text-anchor="middle">strategy 1</text>
+
+  <line class="connector" x1="674" y1="44" x2="700" y2="44" />
+  <rect class="box a-fill a-stroke" x="708" y="24" width="78" height="40" rx="8" />
+  <text class="a-text small" x="747" y="48" text-anchor="middle">msg 4</text>
+
+  <line class="connector" x1="786" y1="44" x2="812" y2="44" />
+  <rect class="box a-fill a-stroke" x="820" y="24" width="78" height="40" rx="8" />
+  <text class="a-text small" x="859" y="48" text-anchor="middle">msg 5</text>
+
+  <rect class="box b-fill b-stroke" x="510" y="96" width="164" height="52" rx="10" />
+  <text class="b-text title" x="592" y="117" text-anchor="middle">Agent B</text>
+  <text class="b-text subtitle" x="592" y="135" text-anchor="middle">strategy 2</text>
+
+  <line class="connector" x1="674" y1="122" x2="700" y2="122" />
+  <rect class="box b-fill b-stroke" x="708" y="102" width="78" height="40" rx="8" />
+  <text class="b-text small" x="747" y="126" text-anchor="middle">msg 4</text>
+
+  <line class="connector" x1="786" y1="122" x2="812" y2="122" />
+  <rect class="box b-fill b-stroke" x="820" y="102" width="78" height="40" rx="8" />
+  <text class="b-text small" x="859" y="126" text-anchor="middle">msg 5</text>
+
+  <rect class="box c-fill c-stroke" x="510" y="174" width="164" height="52" rx="10" />
+  <text class="c-text title" x="592" y="195" text-anchor="middle">Agent C</text>
+  <text class="c-text subtitle" x="592" y="213" text-anchor="middle">strategy 3</text>
+
+  <line class="connector" x1="674" y1="200" x2="700" y2="200" />
+  <rect class="box c-fill c-stroke" x="708" y="180" width="78" height="40" rx="8" />
+  <text class="c-text small" x="747" y="204" text-anchor="middle">msg 4</text>
+</svg>
