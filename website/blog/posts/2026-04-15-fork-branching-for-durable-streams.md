@@ -26,7 +26,7 @@ A session log is linear but agent workflows aren't. An agent goes down a path th
 
 A [Durable Stream](/primitives/durable-streams) assigns an offset to each message as it's appended. When you fork a stream, you specify a source stream and a fork offset. The system creates a new stream that inherits all messages from the source up to that offset. After the fork point, the new stream lives independently — its own URL, its own appends, its own subscribers.
 
-Forks don't copy data. The shared history between a fork and its source is genuinely shared at the storage level. This means forking is instant regardless of stream length — a stream with ten thousand messages forks just as quickly as one with three.
+Forks don't copy data. They use copy-on-write (COW): the shared history between a fork and its source is genuinely shared at the storage level, and only new writes diverge. This means forking is instant regardless of stream length — a stream with ten thousand messages forks just as quickly as one with three.
 
 Because forks are themselves regular Durable Streams, they can be forked. This gives you trees of arbitrary depth where every node is an addressable stream with the full set of stream operations available.
 
