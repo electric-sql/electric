@@ -4,7 +4,7 @@ description: >-
   Fork is branching for Durable Streams. Branch any stream at any point with a single API call. Rewind history, fan out agents in parallel, or probe without polluting context. Live on Electric Cloud.
 excerpt: >-
   Fork adds branching to Durable Streams. Branch any stream at any point — rewind history, fan out agents, or probe without polluting context.
-authors: [balegas]
+authors: [balegas, samwillis]
 image: /img/blog/fork-branching-for-durable-streams/header.jpg
 tags: [release, durable-streams, cloud, agentic, AI]
 outline: [2, 3]
@@ -52,12 +52,12 @@ Content-Type: application/json
 {"role": "assistant", "content": "Two main options: containerized with Fly or Railway, or a VM setup on EC2. The tradeoffs are..."}
 ```
 
-Fork from offset 2 — right after the assistant's first response:
+Fork from offset `002f_0cf0` — right after the assistant's first response:
 
 ```http
 PUT /v1/stream/{service}/chat-123-containers
 Stream-Forked-From: /v1/stream/{service}/chat-123
-Stream-Fork-Offset: 2
+Stream-Fork-Offset: 002f_0cf0
 ```
 
 `chat-123-containers` now exists with the first two messages as shared history. Anything appended from here is independent. Fork again from the same offset for a second branch:
@@ -65,7 +65,7 @@ Stream-Fork-Offset: 2
 ```http
 PUT /v1/stream/{service}/chat-123-vms
 Stream-Forked-From: /v1/stream/{service}/chat-123
-Stream-Fork-Offset: 2
+Stream-Fork-Offset: 002f_0cf0
 ```
 
 Clients reading any branch see a single continuous sequence — the shared prefix followed by branch-specific messages — without any special handling.
@@ -125,7 +125,7 @@ The [protocol spec](https://github.com/durable-streams/durable-streams) covers t
 <div class="actions cta-actions page-footer-actions left">
   <div class="action cloud-cta">
     <VPButton
-        href="/cloud/sign-up"
+        href="https://dashboard.electric-sql.cloud/?intent=create&serviceType=streams"
         text="Sign up"
         theme="brand"
     />
