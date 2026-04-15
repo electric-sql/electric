@@ -348,8 +348,11 @@ defmodule Electric.Plug.ServeShapePlug do
 
     conn = fetch_query_params(conn)
 
-    # Admission control permit is released by the register_before_send callback
-    # set in check_admission/2, which fires when send_resp is called below.
+    # register_before_send callbacks are not available here because
+    # Plug.ErrorHandler passes the original conn (before plugs ran) to
+    # handle_errors, so we must release the permit explicitly.
+    ensure_admission_control_release(conn)
+
     conn
     |> assign(:error_str, error_str)
     |> put_resp_header("retry-after", "10")
@@ -368,8 +371,11 @@ defmodule Electric.Plug.ServeShapePlug do
 
     conn = fetch_query_params(conn)
 
-    # Admission control permit is released by the register_before_send callback
-    # set in check_admission/2, which fires when send_resp is called below.
+    # register_before_send callbacks are not available here because
+    # Plug.ErrorHandler passes the original conn (before plugs ran) to
+    # handle_errors, so we must release the permit explicitly.
+    ensure_admission_control_release(conn)
+
     conn
     |> assign(:error_str, error_str)
     |> send_resp(conn.status, Jason.encode!(%{error: error_str}))
@@ -377,5 +383,16 @@ defmodule Electric.Plug.ServeShapePlug do
     # No end_telemetry_span() call here because by this point that stack of plugs has been
     # unwound to the point where the `conn` struct did not yet have any span-related properties
     # assigned to it.
+  end
+
+  defp ensure_admission_control_release(conn) do
+    stack_id = get_in(conn.assigns, [:config, :stack_id])
+
+    kind =
+      if conn.query_params["offset"] == "-1",
+        do: :initial,
+        else: :existing
+
+    Electric.AdmissionControl.release(stack_id, kind)
   end
 end

@@ -1085,6 +1085,99 @@ defmodule Electric.Plug.ServeShapePlugTest do
     end
   end
 
+  describe "admission control release on error" do
+    setup :with_lsn_tracker
+
+    setup ctx do
+      {:via, _, {registry_name, registry_key}} =
+        Electric.Shapes.Supervisor.name(ctx.stack_id)
+
+      {:ok, _} = Registry.register(registry_name, registry_key, nil)
+      set_status_to_active(ctx)
+
+      :ok
+    end
+
+    test "releases admission control permit when load_shape raises", ctx do
+      # Verify clean state
+      assert %{initial: 0, existing: 0} =
+               Electric.AdmissionControl.get_current(ctx.stack_id)
+
+      # Patch load_shape_info to raise an exception (simulating e.g. a DB crash)
+      Repatch.patch(Electric.Shapes.Api, :load_shape_info, fn _request ->
+        raise RuntimeError, "simulated crash"
+      end)
+
+      # Build the opts the same way call_serve_shape_plug does
+      opts =
+        Api.plug_opts(
+          stack_id: ctx.stack_id,
+          inspector: @inspector,
+          stack_ready_timeout: Access.get(ctx, :stack_ready_timeout, 100),
+          long_poll_timeout: long_poll_timeout(ctx),
+          sse_timeout: sse_timeout(ctx),
+          max_age: max_age(ctx),
+          stale_age: stale_age(ctx),
+          max_concurrent_requests: %{initial: 300, existing: 10_000}
+        )
+
+      # The request passes validate_request and check_admission (acquiring a permit),
+      # then crashes in load_shape. Plug.ErrorHandler catches the exception and
+      # calls handle_errors with the *original* conn — which does not have the
+      # register_before_send callback. The permit must be released explicitly in
+      # handle_errors.
+      #
+      # Pre-assign :config to the conn to match production behaviour: the Router
+      # sets conn.assigns.config before dispatching to ServeShapePlug, so the
+      # original conn that Plug.ErrorHandler captures already carries the config.
+      try do
+        ctx
+        |> conn(:get, %{"table" => "public.users"}, "?offset=-1")
+        |> Plug.Conn.assign(:config, opts)
+        |> ServeShapePlug.call(opts)
+      catch
+        # Plug.ErrorHandler re-raises after calling handle_errors
+        _kind, _reason -> :ok
+      end
+
+      assert %{initial: 0, existing: 0} =
+               Electric.AdmissionControl.get_current(ctx.stack_id)
+    end
+
+    test "releases admission control permit on DBConnection.ConnectionError", ctx do
+      assert %{initial: 0, existing: 0} =
+               Electric.AdmissionControl.get_current(ctx.stack_id)
+
+      Repatch.patch(Electric.Shapes.Api, :load_shape_info, fn _request ->
+        raise DBConnection.ConnectionError, "connection refused"
+      end)
+
+      opts =
+        Api.plug_opts(
+          stack_id: ctx.stack_id,
+          inspector: @inspector,
+          stack_ready_timeout: Access.get(ctx, :stack_ready_timeout, 100),
+          long_poll_timeout: long_poll_timeout(ctx),
+          sse_timeout: sse_timeout(ctx),
+          max_age: max_age(ctx),
+          stale_age: stale_age(ctx),
+          max_concurrent_requests: %{initial: 300, existing: 10_000}
+        )
+
+      try do
+        ctx
+        |> conn(:get, %{"table" => "public.users"}, "?offset=-1")
+        |> Plug.Conn.assign(:config, opts)
+        |> ServeShapePlug.call(opts)
+      catch
+        _kind, _reason -> :ok
+      end
+
+      assert %{initial: 0, existing: 0} =
+               Electric.AdmissionControl.get_current(ctx.stack_id)
+    end
+  end
+
   describe "stack not ready" do
     test "returns 503", ctx do
       conn =
