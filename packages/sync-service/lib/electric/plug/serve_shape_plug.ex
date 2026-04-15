@@ -20,11 +20,10 @@ defmodule Electric.Plug.ServeShapePlug do
   plug :parse_body
 
   plug :validate_request
-  # Admission control is applied here, after parameter validation but before
-  # shape creation. This ensures invalid requests are rejected cheaply without
-  # consuming a permit, while shape creation (the expensive part) only happens
-  # for admitted requests.
-  # Note: /v1/health, /metrics, and / bypass this plug entirely.
+  # Check if the shape already exists so admission control can classify
+  # accurately (:initial for new shapes, :existing for known shapes).
+  # Also pre-resolves handles to save redundant lookups in load_shape.
+  plug :resolve_existing_shape
   plug :check_admission
   plug :load_shape
   plug :serve_shape_response
@@ -140,6 +139,31 @@ defmodule Electric.Plug.ServeShapePlug do
     else
       Map.merge(query_params, body_params)
     end
+  end
+
+  defp resolve_existing_shape(
+         %Conn{assigns: %{config: config, request: request}} = conn,
+         _
+       ) do
+    stack_id = get_in(config, [:stack_id])
+
+    case Electric.Shapes.fetch_handle_by_shape(stack_id, request.params.shape_definition) do
+      {:ok, handle} ->
+        # Pre-resolve handle when client didn't provide one to save a lookup in load_shape.
+        # When client provided a handle, keep it for 409 redirect flow.
+        conn =
+          if request.params.handle,
+            do: conn,
+            else: assign(conn, :request, %{request | params: %{request.params | handle: handle}})
+
+        put_private(conn, :shape_exists, true)
+
+      :error ->
+        put_private(conn, :shape_exists, false)
+    end
+  rescue
+    # Shape cache not yet available (startup race) — classify conservatively
+    ArgumentError -> put_private(conn, :shape_exists, false)
   end
 
   defp check_admission(%Conn{assigns: %{config: config}} = conn, _) do
@@ -395,8 +419,11 @@ defmodule Electric.Plug.ServeShapePlug do
   end
 
   defp admission_kind(conn) do
-    if conn.query_params["offset"] == "-1",
-      do: :initial,
-      else: :existing
+    case conn.private[:shape_exists] do
+      true -> :existing
+      false -> :initial
+      # Fallback for error handlers where resolve_existing_shape hasn't run
+      nil -> if conn.query_params["offset"] == "-1", do: :initial, else: :existing
+    end
   end
 end
