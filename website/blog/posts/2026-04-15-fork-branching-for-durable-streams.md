@@ -86,9 +86,9 @@ ChatGPT shipped branch conversations as a user-facing feature. LangGraph added c
 
 With Durable Streams, a conversation tree is a set of streams related by forks. The root is the original conversation. Each branch point is a fork. Every node is a regular stream with the full set of stream operations — reads, writes, real-time subscriptions. Branching lives at the data layer, not inside a specific framework's checkpoint system, so any client that can read a Durable Stream can work with forked streams without modification.
 
-We built a demo that shows this: a chat application where users can fork any point in a conversation and explore a different direction.
+We built a demo that shows this: a chat application where users can fork any point in a conversation and explore a different direction. [Try the fork demo](https://fork-ai-chat.examples.electric-sql.com).
 
-<div class="embed-container">
+<div class="embed-container" style="padding-bottom: 84.4%">
   <YoutubeEmbed video-id="gmkqygh9ezo" />
 </div>
 
@@ -118,6 +118,7 @@ The [protocol spec](https://github.com/durable-streams/durable-streams) covers t
 ***
 
 - [Sign up for Electric Cloud](/cloud)
+- [Try the fork demo](https://fork-ai-chat.examples.electric-sql.com)
 - [Read the docs](/docs/intro)
 - [Join the Discord](https://discord.electric-sql.com)
 
