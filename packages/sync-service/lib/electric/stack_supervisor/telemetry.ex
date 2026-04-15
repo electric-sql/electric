@@ -31,10 +31,11 @@ defmodule Electric.StackSupervisor.Telemetry do
   def count_shapes(stack_id, _telemetry_opts) do
     # Telemetry is started before everything else in the stack, so we need to handle
     # the case where the shape cache is not started yet.
-    with num_shapes when is_integer(num_shapes) <- Electric.ShapeCache.count_shapes(stack_id) do
+    with %{total: num_shapes, indexed: indexed_shapes, unindexed: unindexed_shapes} <-
+           Electric.ShapeCache.shape_counts(stack_id) do
       Electric.Telemetry.OpenTelemetry.execute(
         [:electric, :shapes, :total_shapes],
-        %{count: num_shapes},
+        %{count: num_shapes, count_indexed: indexed_shapes, count_unindexed: unindexed_shapes},
         %{stack_id: stack_id}
       )
     end
@@ -189,6 +190,8 @@ defmodule Electric.StackSupervisor.Telemetry do
     defp default_metrics_from_periodic_measurements do
       [
         Telemetry.Metrics.last_value("electric.shapes.total_shapes.count"),
+        Telemetry.Metrics.last_value("electric.shapes.total_shapes.count_indexed"),
+        Telemetry.Metrics.last_value("electric.shapes.total_shapes.count_unindexed"),
         Telemetry.Metrics.last_value("electric.shapes.active_shapes.count"),
         Telemetry.Metrics.last_value("electric.shape_db.write_buffer.pending_writes.count"),
         Telemetry.Metrics.last_value("electric.postgres.replication.pg_wal_offset"),
