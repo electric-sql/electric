@@ -53,7 +53,8 @@ defmodule Electric.Application do
       application_telemetry(config),
       [{Electric.StackSupervisor, Keyword.put(config, :name, Electric.StackSupervisor)}],
       api_server_children(config),
-      prometheus_endpoint(Electric.Config.get_env(:prometheus_port))
+      prometheus_endpoint(Electric.Config.get_env(:prometheus_port)),
+      live_dashboard_endpoint(Electric.Config.get_env(:live_dashboard_port))
     ])
   end
 
@@ -270,6 +271,15 @@ defmodule Electric.Application do
     ]
   end
 
+  defp live_dashboard_endpoint(nil), do: []
+
+  defp live_dashboard_endpoint(_port) do
+    [
+      {Phoenix.PubSub, name: Electric.PubSub},
+      Electric.LiveDashboard.Endpoint
+    ]
+  end
+
   @doc false
   # REQUIRED (but undocumented) public API for Phoenix.Sync
   def api_server do
@@ -381,6 +391,7 @@ defmodule Electric.Application do
       intervals_and_thresholds:
         get_opts(opts,
           system_metrics_poll_interval: :system_metrics_poll_interval,
+          stack_telemetry_init_delay: :stack_telemetry_init_delay,
           long_gc_threshold: :telemetry_long_gc_threshold,
           long_schedule_threshold: :telemetry_long_schedule_threshold,
           long_message_queue_enable_threshold: :telemetry_long_message_queue_enable_threshold,

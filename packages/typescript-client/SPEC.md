@@ -66,6 +66,26 @@ Any ──markMustRefetch─► Initial (offset = -1)
 - `response` on Paused delegates to `previousState`, preserving the Paused wrapper for `accepted` and `stale-retry` transitions; `ignored` returns `this`
 - `response`/`messages`/`sseClose` on Error return `this` (ignored)
 
+## Server Assumptions
+
+Properties of the sync service that the client state machine depends on.
+
+### S0: Shape handles are unique and never reused
+
+The server generates handles as `{phash2_hash}-{microsecond_timestamp}`. Uniqueness
+is enforced by monotonic timestamps, a SQLite `UNIQUE INDEX` on the handle column,
+and ETS `insert_new` checks. Even after server restarts, old handles persist in
+SQLite and new ones receive fresh timestamps, so collisions cannot occur.
+
+**Implication for expired shapes cache**: Once a handle is marked expired (after a
+409 response), the server will never issue that handle again. If a response contains
+an expired handle, it must be coming from a caching layer (browser HTTP cache,
+CDN, or proxy) — not from the server itself.
+
+**Source**: `packages/sync-service/lib/electric/shapes/shape.ex` (`generate_id/1`),
+`packages/sync-service/lib/electric/shape_cache/shape_status/shape_db/connection.ex`
+(`shapes_handle_idx`).
+
 ## Invariants
 
 Properties that must hold after every state transition. Checked automatically by
@@ -272,6 +292,52 @@ back to Live, SSE state resets to defaults.
 
 **Enforcement**: Dedicated test (`SSE state is preserved through LiveState self-transitions`).
 
+## Shape notification semantics
+
+The `Shape` class (`shape.ts`) wraps a `ShapeStream` and notifies subscribers
+when the materialised `rows` change. These invariants define _when_ `#notify`
+fires. They are separate from the ShapeStream state machine above; the stream
+delivers every message, but the Shape decides when the resulting view is
+consistent enough to surface to subscribers.
+
+### N1: No notify before first up-to-date
+
+Data messages (insert/update/delete) that arrive while `Shape.#status ===
+'syncing'` apply to `#data` but do NOT call `#notify`. The first subscriber
+notification fires when the shape transitions from `syncing` to `up-to-date`
+via an `up-to-date` control message.
+
+**Rationale**: the sync-service may send a response without an up-to-date
+control message (e.g. the initial response for `offset === -1`, see
+`api.ex:determine_up_to_date`). If the Shape notified subscribers on those
+inserts, subscribers would observe a partial view AND the stream's
+`lastSyncedAt()` would still be `undefined` (stream.ts `handleMessageBatch`
+only writes `lastSyncedAt` when the batch contains an up-to-date). N1 ties
+subscriber-visible snapshots to the stream-level "we've caught up" signal.
+
+**Enforcement**: `Shape#process notification PBT > regression: subscriber
+must not see undefined lastSyncedAt during initial sync with real
+ShapeStream` in `test/pbt-micro.test.ts` and the broader PBT there.
+
+### N2: Notify on change while up-to-date
+
+Once `#status === 'up-to-date'`, any data message triggers a notification,
+and the status then transitions back to `syncing` until the next up-to-date.
+This is the mechanism that delivers the `[up-to-date, insert]`-in-one-batch
+case (the insert runs after the up-to-date message has set status to
+up-to-date, so the insert sees `wasUpToDate === true` and calls `#notify`).
+
+**Enforcement**: `Shape#process notification PBT > deterministic:
+[up-to-date, insert] — subscriber's last view must match shape` and the
+broader PBT.
+
+A `must-refetch` control message clears `#data` and `#insertedKeys` and
+transitions `#status` back to `syncing`, which re-engages N1: subscribers
+receive the post-rotation state on the next `up-to-date` without ever
+observing an intermediate empty-rows notification. The
+`should resync from scratch on a shape rotation` integration test in
+`test/client.test.ts` pins this behavior.
+
 ## Bidirectional Enforcement Checklist
 
 ### Doc -> Code: Is each invariant enforced?
@@ -342,32 +408,47 @@ change the next request URL via state advancement or an explicit cache buster.
 This is enforced by the path-specific guards listed below. Live requests
 (`live=true`) legitimately reuse URLs.
 
+### Invariant: unconditional 409 cache buster
+
+Every code path that handles a 409 response must unconditionally call
+`createCacheBuster()` before retrying. This ensures unique retry URLs regardless
+of whether the server returns a new handle, the same handle, or no handle. The
+cache buster is stripped by `canonicalShapeKey` so it doesn't affect shape
+identity or caching logic — it only affects the raw URL sent to the server/CDN.
+
+**Enforcement**:
+
+- Static analysis rule `conditional-409-cache-buster` in `shape-stream-static-analysis.mjs` — covers both L4 and L6 code paths at source level.
+- L4 (main stream `#requestShape` 409 path): model-based property test commands `Respond409SameHandleCmd` and `Respond409NoHandleCmd` in `test/model-based.test.ts`.
+- L6 (`fetchSnapshotWithRetry` 409 path): property tests in `test/pbt-micro.test.ts > Shape #fetchSnapshotWithRetry 409 loop PBT` — asserts every retry URL carries a unique `cache-buster` param across 409-new, 409-same, and 409-no-handle sequences, and that `#maxSnapshotRetries = 5` is strictly upheld.
+
 ### Loop-back sites
 
 Six sites in `client.ts` recurse or loop to issue a new fetch:
 
-| #   | Site                                    | Line | Trigger                                                    | URL changes because                                                                 | Guard                                                   |
-| --- | --------------------------------------- | ---- | ---------------------------------------------------------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------- |
-| L1  | `#requestShape` → `#requestShape`       | 940  | Normal completion after `#fetchShape()`                    | Offset advances from response headers                                               | `#checkFastLoop` (non-live)                             |
-| L2  | `#requestShape` catch → `#requestShape` | 874  | Abort with `FORCE_DISCONNECT_AND_REFRESH` or `SYSTEM_WAKE` | `isRefreshing` flag changes `canLongPoll`, affecting `live` param                   | Abort signals are discrete events                       |
-| L3  | `#requestShape` catch → `#requestShape` | 886  | `StaleCacheError` thrown by `#onInitialResponse`           | `StaleRetryState` adds `cache_buster` param                                         | `maxStaleCacheRetries` counter in state machine         |
-| L4  | `#requestShape` catch → `#requestShape` | 924  | HTTP 409 (shape rotation)                                  | `#reset()` sets offset=-1 + new handle; or request-scoped cache buster if no handle | New handle from 409 response or unique retry URL        |
-| L5  | `#start` catch → `#start`               | 782  | Exception + `onError` returns retry opts                   | Params/headers merged from `retryOpts`                                              | User-controlled; `#checkFastLoop` on next iteration     |
-| L6  | `fetchSnapshot` catch → `fetchSnapshot` | 1975 | HTTP 409 on snapshot fetch                                 | New handle via `withHandle()`; or local retry cache buster if same/no handle        | `#maxSnapshotRetries` (5) + cache buster on same handle |
+| #   | Site                                    | Line | Trigger                                                    | URL changes because                                                                                               | Guard                                                                        |
+| --- | --------------------------------------- | ---- | ---------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| L1  | `#requestShape` → `#requestShape`       | 939  | Normal completion after `#fetchShape()`                    | Offset advances from response headers                                                                             | `#checkFastLoop` (non-live)                                                  |
+| L2  | `#requestShape` catch → `#requestShape` | 883  | Abort with `FORCE_DISCONNECT_AND_REFRESH` or `SYSTEM_WAKE` | `isRefreshing` flag changes `canLongPoll`, affecting `live` param                                                 | Abort signals are discrete events                                            |
+| L3  | `#requestShape` catch → `#requestShape` | 895  | `StaleCacheError` thrown by `#onInitialResponse`           | `StaleRetryState` adds `cache_buster` param; after max retries, self-healing clears expired entry + resets stream | `maxStaleCacheRetries` counter + `#expiredShapeRecoveryKey` (once per shape) |
+| L4  | `#requestShape` catch → `#requestShape` | 923  | HTTP 409 (shape rotation)                                  | `#reset()` sets offset=-1 + new handle; unconditional cache buster on every 409                                   | New handle + unique retry URL via cache buster                               |
+| L5  | `#start` catch → `#start`               | 775  | Exception + `onError` returns retry opts                   | Params/headers merged from `retryOpts`                                                                            | `#maxConsecutiveErrorRetries` (50)                                           |
+| L6  | `fetchSnapshot` catch → `fetchSnapshot` | 1937 | HTTP 409 on snapshot fetch                                 | New handle via `withHandle()`; unconditional cache buster on every 409                                            | `#maxSnapshotRetries` (5) + unconditional cache buster                       |
 
 ### Guard mechanisms
 
-| Guard                  | Scope                         | How it works                                                                                                                                     |
-| ---------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `#checkFastLoop`       | Non-live `#requestShape` only | Detects N requests at same offset within a time window. First: clears caches + resets. Persistent: exponential backoff → throws FetchError(502). |
-| `maxStaleCacheRetries` | Stale response path (L3)      | State machine counts stale retries. Throws FetchError(502) after 3 consecutive stale responses.                                                  |
-| `#maxSnapshotRetries`  | Snapshot 409 path (L6)        | Counts consecutive snapshot 409s. Adds cache buster when handle unchanged. Throws FetchError(502) after 5.                                       |
-| Pause lock             | `#requestShape` entry         | Returns immediately if paused. Prevents fetches during snapshots.                                                                                |
-| Up-to-date exit        | `#requestShape` entry         | Returns if `!subscribe` and `isUpToDate`. Breaks loop for one-shot syncs.                                                                        |
+| Guard                         | Scope                         | How it works                                                                                                                                                                                               |
+| ----------------------------- | ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `#checkFastLoop`              | Non-live `#requestShape` only | Detects N requests at same offset within a time window. First: clears caches + resets. Persistent: exponential backoff → throws FetchError(502).                                                           |
+| `maxStaleCacheRetries`        | Stale response path (L3)      | State machine counts stale retries. After 3 consecutive stale responses, clears expired entry and attempts one self-healing retry. Throws FetchError(502) if self-healing also fails.                      |
+| `#expiredShapeRecoveryKey`    | Self-healing (L3 extension)   | Records shape key after first self-healing attempt. Second exhaustion on same key skips self-healing → FetchError(502). Cleared on up-to-date.                                                             |
+| `#maxSnapshotRetries`         | Snapshot 409 path (L6)        | Counts consecutive snapshot 409s. Unconditional cache buster on every retry. Throws FetchError(502) after 5. Runtime-enforced by `Shape #fetchSnapshotWithRetry 409 loop PBT` in `test/pbt-micro.test.ts`. |
+| `#maxConsecutiveErrorRetries` | `#start` onError retry (L5)   | Counts consecutive error retries. Sends error to subscribers and tears down after 50. Reset on successful message batch.                                                                                   |
+| Pause lock                    | `#requestShape` entry         | Returns immediately if paused. Prevents fetches during snapshots.                                                                                                                                          |
+| Up-to-date exit               | `#requestShape` entry         | Returns if `!subscribe` and `isUpToDate`. Breaks loop for one-shot syncs.                                                                                                                                  |
 
 ### Coverage gaps
 
-| Gap                              | Risk | Notes                                                                              |
-| -------------------------------- | ---- | ---------------------------------------------------------------------------------- |
-| L5 user `onError` infinite retry | Low  | User callback controls retry; `#checkFastLoop` provides secondary guard            |
-| Live polling same URL            | None | Intentionally allowed — server long-polls, cursor may not change between responses |
+| Gap                   | Risk | Notes                                                                              |
+| --------------------- | ---- | ---------------------------------------------------------------------------------- |
+| Live polling same URL | None | Intentionally allowed — server long-polls, cursor may not change between responses |

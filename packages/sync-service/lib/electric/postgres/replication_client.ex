@@ -230,7 +230,7 @@ defmodule Electric.Postgres.ReplicationClient do
 
   @impl true
   def handle_result(result_list_or_error, state) do
-    {current_step, next_step, extra_info, return_val} =
+    {current_step, next_step, extra_info, updated_state, return_val} =
       ConnectionSetup.process_query_result(result_list_or_error, state)
 
     if current_step == :identify_system,
@@ -248,13 +248,17 @@ defmodule Electric.Postgres.ReplicationClient do
 
     # for new slots, always reset the last processed LSN
     if current_step == :create_slot and extra_info == :created_new_slot do
-      Electric.LsnTracker.set_last_processed_lsn(state.stack_id, state.flushed_wal)
+      Electric.LsnTracker.set_last_processed_lsn(state.stack_id, updated_state.flushed_wal)
       notify_created_new_slot(state)
     end
 
     # for existing slots, populate the last processed LSN if not present
     if current_step == :query_slot_flushed_lsn,
-      do: Electric.LsnTracker.initialize_last_processed_lsn(state.stack_id, state.flushed_wal)
+      do:
+        Electric.LsnTracker.initialize_last_processed_lsn(
+          state.stack_id,
+          updated_state.flushed_wal
+        )
 
     if next_step == :ready_to_stream,
       do: notify_ready_to_stream(state)

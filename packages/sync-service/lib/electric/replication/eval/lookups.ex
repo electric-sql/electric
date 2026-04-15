@@ -132,6 +132,17 @@ defmodule Electric.Replication.Eval.Lookups do
     end
   end
 
+  @doc """
+  Expand a variadic function definition to a concrete call arity.
+  """
+  @spec expand_variadic_function_overload(map(), non_neg_integer()) :: map()
+  def expand_variadic_function_overload(%{variadic_arg: variadic_arg, args: args} = choice, arity)
+      when is_integer(variadic_arg) and variadic_arg >= 0 do
+    {fixed_args, [variadic_type]} = Enum.split(args, variadic_arg)
+
+    %{choice | args: fixed_args ++ List.duplicate(variadic_type, arity - variadic_arg)}
+  end
+
   defp filter_overloads_on_heuristics(choices, arg_types, any_unknowns?, env) do
     steps = [
       &filter_overloads_on_implicit_conversion/4,

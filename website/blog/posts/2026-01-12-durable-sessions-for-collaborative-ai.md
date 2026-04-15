@@ -10,8 +10,6 @@ imageWidth: 1536
 imageHeight: 947
 tags: [agents, collaboration, durable-streams, tanstack-db]
 outline: [2, 3]
-homepageSolution: true
-homepageOrder: 20
 post: true
 ---
 

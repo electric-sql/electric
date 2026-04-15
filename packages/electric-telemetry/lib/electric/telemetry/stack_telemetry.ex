@@ -38,7 +38,7 @@ defmodule ElectricTelemetry.StackTelemetry do
         [
           ElectricTelemetry.Poller.child_spec(opts,
             callback_module: __MODULE__,
-            init_delay: :timer.seconds(30)
+            init_delay: opts.intervals_and_thresholds.stack_telemetry_init_delay
           )
         ],
         disk_usage_child_specs(opts),
@@ -61,10 +61,6 @@ defmodule ElectricTelemetry.StackTelemetry do
       ),
       Reporters.Otel.child_spec(opts,
         name: :"stack_otel_telemetry_#{stack_id}",
-        metrics: metrics
-      ),
-      Reporters.Prometheus.child_spec(opts,
-        name: :"stack_prometheus_telemetry_#{stack_id}",
         metrics: metrics
       ),
       Reporters.Statsd.child_spec(opts,

@@ -60,6 +60,18 @@ defmodule Electric.ShapeCache.ShapeStatusTest do
     assert [{^shape_handle, ^shape}] = ShapeStatus.list_shapes(state)
   end
 
+  test "can count shapes by indexability", ctx do
+    {:ok, state, []} = new_state(ctx)
+
+    assert {:ok, indexed_handle} = ShapeStatus.add_shape(state, shape!("indexed"))
+    assert {:ok, _unindexed_handle} = ShapeStatus.add_shape(state, shape2!())
+
+    assert %{total: 2, indexed: 1, unindexed: 1} = ShapeStatus.shape_counts(state)
+
+    assert :ok = ShapeStatus.remove_shape(state, indexed_handle)
+    assert %{total: 1, indexed: 0, unindexed: 1} = ShapeStatus.shape_counts(state)
+  end
+
   test "can delete shape instances", ctx do
     {:ok, state, []} = new_state(ctx)
     shape_1 = shape!()

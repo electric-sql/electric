@@ -63,9 +63,12 @@ describe(`snakeToCamel`, () => {
     expect(snakeToCamel(`user_id__`)).toBe(`userId__`)
   })
 
-  it(`should collapse multiple consecutive underscores`, () => {
-    expect(snakeToCamel(`user__id`)).toBe(`userId`)
-    expect(snakeToCamel(`user___id`)).toBe(`userId`)
+  it(`should preserve underscore count for injective round-trip`, () => {
+    // A run of n underscores collapses the LAST underscore to a
+    // camelCase boundary and keeps (n - 1) literal underscores, so
+    // distinct db columns never collide on the same app key.
+    expect(snakeToCamel(`user__id`)).toBe(`user_Id`)
+    expect(snakeToCamel(`user___id`)).toBe(`user__Id`)
   })
 
   it(`should normalize mixed case to lowercase`, () => {

@@ -59,7 +59,8 @@ defmodule Electric.Shapes do
   @doc """
   Get or create a shape handle and return it along with the latest offset of the shape
   """
-  @spec get_or_create_shape_handle(stack_id(), Shape.t()) :: {shape_handle(), LogOffset.t()}
+  @spec get_or_create_shape_handle(stack_id(), Shape.t()) ::
+          {shape_handle(), LogOffset.t()} | {:error, term()}
   def get_or_create_shape_handle(stack_id, shape_def) when is_stack_id(stack_id) do
     ShapeCache.get_or_create_shape_handle(
       shape_def,

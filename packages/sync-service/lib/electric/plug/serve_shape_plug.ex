@@ -20,12 +20,13 @@ defmodule Electric.Plug.ServeShapePlug do
   plug :parse_body
 
   plug :validate_request
-  # Admission control is applied here, but note:
-  # - /v1/health bypasses this plug (routed to HealthCheckPlug)
-  # - /metrics bypasses this plug (on separate utility router/port)
-  # - / (root) bypasses this plug (handled directly in router)
-  # This ensures observability remains available under load
+  # Admission control is applied here, after parameter validation but before
+  # shape creation. This ensures invalid requests are rejected cheaply without
+  # consuming a permit, while shape creation (the expensive part) only happens
+  # for admitted requests.
+  # Note: /v1/health, /metrics, and / bypass this plug entirely.
   plug :check_admission
+  plug :load_shape
   plug :serve_shape_response
 
   # end_telemetry_span needs to always be the last plug here.
@@ -102,7 +103,7 @@ defmodule Electric.Plug.ServeShapePlug do
         &(&1 != "false")
       )
 
-    case Api.validate(api, all_params) do
+    case Api.validate_params(api, all_params) do
       {:ok, request} ->
         assign(conn, :request, request)
 
@@ -202,6 +203,18 @@ defmodule Electric.Plug.ServeShapePlug do
     base = 5
     jitter = :rand.uniform(5)
     base + jitter
+  end
+
+  defp load_shape(%Conn{assigns: %{request: request}} = conn, _) do
+    case Api.load_shape_info(request) do
+      {:ok, request} ->
+        assign(conn, :request, request)
+
+      {:error, response} ->
+        conn
+        |> Api.Response.send(response)
+        |> halt()
+    end
   end
 
   defp serve_shape_response(%Conn{assigns: %{request: request}} = conn, _) do
@@ -334,8 +347,9 @@ defmodule Electric.Plug.ServeShapePlug do
     error_str = Exception.format(:error, exception)
 
     conn = fetch_query_params(conn)
-    ensure_admission_control_release(conn)
 
+    # Admission control permit is released by the register_before_send callback
+    # set in check_admission/2, which fires when send_resp is called below.
     conn
     |> assign(:error_str, error_str)
     |> put_resp_header("retry-after", "10")
@@ -353,8 +367,9 @@ defmodule Electric.Plug.ServeShapePlug do
     error_str = Exception.format(error.kind, error.reason)
 
     conn = fetch_query_params(conn)
-    ensure_admission_control_release(conn)
 
+    # Admission control permit is released by the register_before_send callback
+    # set in check_admission/2, which fires when send_resp is called below.
     conn
     |> assign(:error_str, error_str)
     |> send_resp(conn.status, Jason.encode!(%{error: error_str}))
@@ -362,16 +377,5 @@ defmodule Electric.Plug.ServeShapePlug do
     # No end_telemetry_span() call here because by this point that stack of plugs has been
     # unwound to the point where the `conn` struct did not yet have any span-related properties
     # assigned to it.
-  end
-
-  defp ensure_admission_control_release(conn) do
-    stack_id = get_in(conn.assigns, [:config, :stack_id])
-
-    kind =
-      if conn.query_params["offset"] == "-1",
-        do: :initial,
-        else: :existing
-
-    Electric.AdmissionControl.release(stack_id, kind)
   end
 end

@@ -116,6 +116,10 @@ export function analyzeTypeScriptClient(options = {}) {
     reports: {
       recursiveMethods: clientAnalysis.recursiveMethods,
       sharedFieldReport: clientAnalysis.sharedFieldReport,
+      unboundedRetryReport: clientAnalysis.unboundedRetryReport,
+      cacheBusterReport: clientAnalysis.cacheBusterReport,
+      tailPositionAwaitReport: clientAnalysis.tailPositionAwaitReport,
+      errorPathPublishReport: clientAnalysis.errorPathPublishReport,
       ignoredActionReport: stateMachineAnalysis.ignoredActionReport,
       protocolLiteralReport: protocolLiteralAnalysis.report,
     },
@@ -136,6 +140,21 @@ export function analyzeShapeStreamClient(filePath = CLIENT_FILE) {
   const classInfo = buildClassInfo(sourceFile, classDecl)
   const recursiveMethods = buildRecursiveMethodReport(classInfo)
   const sharedFieldReport = buildSharedFieldReport(classInfo)
+  const unboundedRetryReport = buildUnboundedRetryReport(
+    sourceFile,
+    classDecl,
+    recursiveMethods
+  )
+  const cacheBusterReport = build409CacheBusterReport(sourceFile, classDecl)
+  const tailPositionAwaitReport = buildTailPositionAwaitReport(
+    sourceFile,
+    classDecl,
+    recursiveMethods
+  )
+  const errorPathPublishReport = buildErrorPathPublishReport(
+    sourceFile,
+    classDecl
+  )
   const findings = sharedFieldReport
     .filter((report) => report.risky)
     .map((report) => ({
@@ -172,12 +191,140 @@ export function analyzeShapeStreamClient(filePath = CLIENT_FILE) {
         reasons: report.reasons,
       },
     }))
+    .concat(
+      unboundedRetryReport
+        .filter((entry) => !entry.hasBoundCheck)
+        .map((entry) => ({
+          kind: `unbounded-retry-loop`,
+          severity: `warning`,
+          title: `Unbounded recursive retry: ${entry.method} -> ${entry.callee}`,
+          message:
+            `${entry.method} contains a recursive call to ${entry.callee} at line ${entry.callLine} ` +
+            `inside a catch block with no detectable retry bound (counter, type guard, or abort check). ` +
+            `This can cause infinite retries when the error condition persists.`,
+          file: filePath,
+          line: entry.callLine,
+          locations: [
+            { file: filePath, line: entry.catchLine, label: `catch block` },
+            { file: filePath, line: entry.callLine, label: `recursive call` },
+          ],
+          details: entry,
+        }))
+    )
+    .concat(
+      cacheBusterReport
+        .filter((entry) => !entry.unconditional)
+        .map((entry) => ({
+          kind: `conditional-409-cache-buster`,
+          severity: `warning`,
+          title: `409 handler has conditional or missing cache buster in ${entry.method}`,
+          message:
+            `${entry.method} handles status 409 and retries via ${entry.retryCallee} at line ${entry.retryLine} ` +
+            `but createCacheBuster() is ${entry.cacheBusterLine ? `conditional (line ${entry.cacheBusterLine})` : `missing`}. ` +
+            `Every 409 retry must include an unconditional cache buster to guarantee a unique retry URL, ` +
+            `otherwise same-handle 409s or proxy-cached responses can cause infinite retry loops.`,
+          file: filePath,
+          line: entry.retryLine,
+          locations: [
+            { file: filePath, line: entry.statusCheckLine, label: `409 check` },
+            ...(entry.cacheBusterLine
+              ? [
+                  {
+                    file: filePath,
+                    line: entry.cacheBusterLine,
+                    label: `conditional cache buster`,
+                  },
+                ]
+              : []),
+            { file: filePath, line: entry.retryLine, label: `retry call` },
+          ],
+          details: entry,
+        }))
+    )
+    .concat(
+      tailPositionAwaitReport
+        .filter((entry) => entry.isParked)
+        .map((entry) => ({
+          kind: `parked-tail-await`,
+          severity: `warning`,
+          title: `Parked stack frame: await in tail position of ${entry.method}`,
+          message:
+            `${entry.method} uses \`await this.${entry.callee}()\` followed by \`return\` at line ${entry.awaitLine}. ` +
+            `This parks the caller's stack frame until the callee (and all its recursive descendants) resolve. ` +
+            `Use \`return this.${entry.callee}()\` to release the frame immediately.`,
+          file: filePath,
+          line: entry.awaitLine,
+          locations: [
+            { file: filePath, line: entry.awaitLine, label: `parked await` },
+          ],
+          details: entry,
+        }))
+    )
+    .concat(
+      errorPathPublishReport
+        .filter((entry) => entry.isInErrorPath)
+        .map((entry) => ({
+          kind: `error-path-publish`,
+          severity: `warning`,
+          title: `Subscriber-facing call in error handler: ${entry.callee} in ${entry.method}`,
+          message:
+            `${entry.method} calls ${entry.callee} at line ${entry.callLine} inside a ` +
+            `${entry.context} block (line ${entry.contextLine}). Publishing messages to subscribers ` +
+            `from error/retry paths can deliver stale or partial data. Error handlers should ` +
+            `clean up and retry, not notify subscribers.`,
+          file: filePath,
+          line: entry.callLine,
+          locations: [
+            { file: filePath, line: entry.contextLine, label: entry.context },
+            { file: filePath, line: entry.callLine, label: `subscriber call` },
+          ],
+          details: entry,
+        }))
+    )
+
+  findings.push(
+    ...unboundedRetryReport
+      .filter((report) => !report.hasBoundCheck)
+      .map((report) => ({
+        kind: `unbounded-retry-loop`,
+        severity: `error`,
+        title: `Recursive call in catch block without detected bound: ${report.method} -> ${report.callee}`,
+        message:
+          `${report.method} calls ${report.callee} inside a catch block at line ${report.callLine} ` +
+          `without a recognized bounding pattern (counter/limit check, error type guard, or abort signal). ` +
+          `This may indicate an unbounded retry loop when errors persist. ` +
+          `Note: this is a heuristic — verify manually if the call is actually bounded by other means.`,
+        file: filePath,
+        line: report.callLine,
+        locations: [
+          {
+            file: filePath,
+            line: report.callLine,
+            label: `unbounded recursive call`,
+          },
+          {
+            file: filePath,
+            line: report.catchLine,
+            label: `catch block`,
+          },
+        ],
+        details: {
+          method: report.method,
+          callee: report.callee,
+          catchLine: report.catchLine,
+        },
+      }))
+  )
 
   return {
     sourceFile,
     classInfo,
     recursiveMethods,
     sharedFieldReport,
+    unboundedRetryReport,
+    cacheBusterReport,
+    tailPositionAwaitReport,
+    errorPathPublishReport,
     findings,
   }
 }
@@ -410,6 +557,55 @@ export function formatAnalysisResult(result, options = {}) {
       lines.push(
         `  ${flag} ${report.field}: writers=${report.writerMethods.join(`, `) || `none`} ` +
           `readers=${report.readerMethods.join(`, `) || `none`}`
+      )
+    }
+
+    lines.push(``)
+    lines.push(`Unbounded Retry Report:`)
+    for (const report of result.reports.unboundedRetryReport) {
+      const flag = report.hasBoundCheck ? `-` : `!`
+      lines.push(
+        `  ${flag} ${report.method} -> ${report.callee} ` +
+          `(catch:${report.catchLine} call:${report.callLine}) ` +
+          `bound=${report.boundKind ?? `none`}`
+      )
+    }
+
+    lines.push(``)
+    lines.push(`Tail-Position Await Report:`)
+    for (const report of result.reports.tailPositionAwaitReport) {
+      const flag = report.isParked ? `!` : `-`
+      lines.push(
+        `  ${flag} ${report.method} -> ${report.callee} ` +
+          `(line:${report.awaitLine}) ` +
+          `${report.isParked ? `PARKED: use return instead of await` : `ok`}`
+      )
+    }
+
+    lines.push(``)
+    lines.push(`Error-Path Publish Report:`)
+    for (const report of result.reports.errorPathPublishReport) {
+      const flag = report.isInErrorPath ? `!` : `-`
+      lines.push(
+        `  ${flag} ${report.method} -> ${report.callee} ` +
+          `(${report.context}:${report.contextLine} call:${report.callLine})`
+      )
+    }
+
+    lines.push(``)
+    lines.push(`409 Cache Buster Report:`)
+    for (const report of result.reports.cacheBusterReport) {
+      const flag = report.unconditional ? `-` : `!`
+      let cacheBusterStatus = `missing`
+      if (report.unconditional) {
+        cacheBusterStatus = `unconditional`
+      } else if (report.cacheBusterLine) {
+        cacheBusterStatus = `conditional:${report.cacheBusterLine}`
+      }
+      lines.push(
+        `  ${flag} ${report.method} -> ${report.retryCallee} ` +
+          `(409:${report.statusCheckLine} retry:${report.retryLine}) ` +
+          `cacheBuster=${cacheBusterStatus}`
       )
     }
 
@@ -663,6 +859,540 @@ function buildSharedFieldReport(classInfo) {
   }
 
   return reports.sort(compareReports)
+}
+
+function buildUnboundedRetryReport(sourceFile, classDecl, recursiveMethods) {
+  const report = []
+  const recursiveNames = new Set(recursiveMethods.map((m) => m.name))
+
+  for (const member of classDecl.members) {
+    if (!ts.isMethodDeclaration(member) || !member.body || !member.name)
+      continue
+    const methodName = formatMemberName(member.name)
+    if (!recursiveNames.has(methodName)) continue
+
+    walk(member.body, (node) => {
+      if (!ts.isCatchClause(node)) return
+
+      const catchLine = getLine(sourceFile, node)
+
+      walk(node.block, (inner) => {
+        if (!ts.isCallExpression(inner)) return
+        const callee = getThisMemberName(inner.expression)
+        if (!callee || !recursiveNames.has(callee)) return
+
+        const callLine = getLine(sourceFile, inner)
+        const boundKind = classifyRetryBound(sourceFile, node, inner)
+
+        report.push({
+          method: methodName,
+          callee,
+          callLine,
+          catchLine,
+          hasBoundCheck: boundKind !== null,
+          boundKind,
+        })
+      })
+    })
+  }
+
+  return report.sort(compareReports)
+}
+
+/**
+ * Finds all 409 status handlers in the ShapeStream class and verifies that
+ * each one unconditionally calls createCacheBuster(). A 409 retry without
+ * a cache buster risks producing identical retry URLs when the server
+ * returns the same handle, causing infinite CDN-cached retry loops.
+ */
+function build409CacheBusterReport(sourceFile, classDecl) {
+  const report = []
+
+  for (const member of classDecl.members) {
+    if (!ts.isMethodDeclaration(member) || !member.body || !member.name)
+      continue
+    const methodName = formatMemberName(member.name)
+
+    walk(member.body, (node) => {
+      // Look for if-statements that check e.status == 409 or e.status === 409
+      if (!ts.isIfStatement(node)) return
+      if (!is409StatusCheck(node.expression)) return
+
+      const statusCheckLine = getLine(sourceFile, node)
+      const block = node.thenStatement
+
+      // Find retry calls (recursive this.# calls or return this.# calls)
+      const retryCalls = []
+      walk(block, (inner) => {
+        if (!ts.isCallExpression(inner)) return
+        const callee = getThisMemberName(inner.expression)
+        if (callee) {
+          retryCalls.push({
+            callee,
+            line: getLine(sourceFile, inner),
+          })
+        }
+      })
+
+      if (retryCalls.length === 0) return
+
+      // Find all createCacheBuster() calls in the 409 block
+      const cacheBusterCalls = []
+      walk(block, (inner) => {
+        if (
+          ts.isCallExpression(inner) &&
+          ts.isIdentifier(inner.expression) &&
+          inner.expression.text === `createCacheBuster`
+        ) {
+          cacheBusterCalls.push({
+            line: getLine(sourceFile, inner),
+            conditional: isInsideIfBlock(inner, block),
+          })
+        }
+      })
+
+      const lastRetry = retryCalls[retryCalls.length - 1]
+      const hasUnconditional = cacheBusterCalls.some((c) => !c.conditional)
+
+      report.push({
+        method: methodName,
+        statusCheckLine,
+        retryCallee: lastRetry.callee,
+        retryLine: lastRetry.line,
+        cacheBusterLine:
+          cacheBusterCalls.length > 0 ? cacheBusterCalls[0].line : null,
+        unconditional: hasUnconditional,
+      })
+    })
+  }
+
+  return report.sort(compareReports)
+}
+
+/**
+ * Finds `await this.#method()` calls in tail position of recursive methods.
+ * A tail-position await parks the caller's stack frame until the callee resolves,
+ * causing O(n) suspended frames for n recursive iterations. Using `return this.#method()`
+ * instead releases the frame immediately via promise chaining.
+ *
+ * Detects two patterns:
+ *   1. `await this.#foo(); return`  (explicit return after await)
+ *   2. `await this.#foo()` as the last statement in a block (implicit return)
+ */
+function buildTailPositionAwaitReport(sourceFile, classDecl, recursiveMethods) {
+  const report = []
+  const recursiveNames = new Set(recursiveMethods.map((m) => m.name))
+
+  for (const member of classDecl.members) {
+    if (!ts.isMethodDeclaration(member) || !member.body || !member.name)
+      continue
+    const methodName = formatMemberName(member.name)
+    if (!recursiveNames.has(methodName)) continue
+
+    walk(member.body, (node) => {
+      if (!ts.isAwaitExpression(node)) return
+      const awaitExpr = node.expression
+      if (!ts.isCallExpression(awaitExpr)) return
+      const callee = getThisMemberName(awaitExpr.expression)
+      if (!callee) return
+
+      // Check if this await is immediately followed by a bare `return` in
+      // its block. This pattern — `await this.#foo(); return` — parks the
+      // caller's stack frame while the callee resolves. It should be
+      // `return this.#foo()` to release the frame via promise chaining.
+      const exprStmt = node.parent
+      if (!ts.isExpressionStatement(exprStmt)) return
+
+      const block = exprStmt.parent
+      if (!ts.isBlock(block)) return
+
+      const stmtIndex = block.statements.indexOf(exprStmt)
+      if (stmtIndex === -1) return
+
+      const next = block.statements[stmtIndex + 1]
+      const followedByBareReturn =
+        next && ts.isReturnStatement(next) && !next.expression
+
+      if (!followedByBareReturn) return
+
+      // Only flag as parked if the await is NOT inside a try block's try clause.
+      // Inside try { await ... } catch { ... }, the await is needed for the catch
+      // to handle errors. In catch/finally blocks or outside try-catch, the await
+      // parks the caller's frame unnecessarily.
+      const isParked = !isInsideTryClause(node, member.body)
+
+      report.push({
+        method: methodName,
+        callee,
+        awaitLine: getLine(sourceFile, node),
+        isParked,
+      })
+    })
+  }
+
+  return report.sort(compareReports)
+}
+
+/**
+ * Detects calls to subscriber-facing methods (#publish, #onMessages) inside
+ * error handling paths (catch blocks, status-check if-branches that throw/retry).
+ * Publishing messages from error handlers can deliver stale or partial data to
+ * subscribers — the fix for Bug #4 removed exactly this pattern from the 409 handler.
+ */
+const SUBSCRIBER_METHODS = new Set([`#publish`, `#onMessages`])
+
+function buildErrorPathPublishReport(sourceFile, classDecl) {
+  const report = []
+
+  for (const member of classDecl.members) {
+    if (!ts.isMethodDeclaration(member) || !member.body || !member.name)
+      continue
+    const methodName = formatMemberName(member.name)
+
+    // Check catch blocks
+    walk(member.body, (node) => {
+      if (ts.isCatchClause(node)) {
+        walk(node.block, (inner) => {
+          if (!ts.isCallExpression(inner)) return
+          const callee = getThisMemberName(inner.expression)
+          if (!callee || !SUBSCRIBER_METHODS.has(callee)) return
+          if (isStaticControlMessagePublish(inner)) return
+
+          report.push({
+            method: methodName,
+            callee,
+            callLine: getLine(sourceFile, inner),
+            context: `catch`,
+            contextLine: getLine(sourceFile, node),
+            isInErrorPath: true,
+          })
+        })
+        return
+      }
+
+      // Check 4xx/5xx status-check if-blocks (e.g., if (e.status == 409))
+      if (ts.isIfStatement(node) && isHttpErrorStatusCheck(node.expression)) {
+        walk(node.thenStatement, (inner) => {
+          if (!ts.isCallExpression(inner)) return
+          const callee = getThisMemberName(inner.expression)
+          if (!callee || !SUBSCRIBER_METHODS.has(callee)) return
+          if (isStaticControlMessagePublish(inner)) return
+
+          report.push({
+            method: methodName,
+            callee,
+            callLine: getLine(sourceFile, inner),
+            context: `status-${getStatusLiteral(node.expression)}`,
+            contextLine: getLine(sourceFile, node),
+            isInErrorPath: true,
+          })
+        })
+      }
+    })
+  }
+
+  return report.sort(compareReports)
+}
+
+/**
+ * Returns true iff a call expression is a #publish([{ headers: { control: <string literal> } }, ...])
+ * with a non-empty static array where every element is an object literal whose
+ * `headers.control` is a string literal. These synthetic control-only publishes
+ * are intentional (e.g., the must-refetch notification in the 409 handler) and
+ * should not trigger the error-path-publish rule. A data-row publish
+ * (headers.operation = 'insert' etc.) is NOT exempt and must be flagged.
+ */
+function isStaticControlMessagePublish(callExpr) {
+  const [firstArg] = callExpr.arguments
+  if (!firstArg || !ts.isArrayLiteralExpression(firstArg)) return false
+  if (firstArg.elements.length === 0) return false
+  return firstArg.elements.every((el) => {
+    if (!ts.isObjectLiteralExpression(el)) return false
+    const headersProp = el.properties.find(
+      (p) =>
+        ts.isPropertyAssignment(p) &&
+        ts.isIdentifier(p.name) &&
+        p.name.text === `headers`
+    )
+    if (!headersProp || !ts.isObjectLiteralExpression(headersProp.initializer))
+      return false
+    return headersProp.initializer.properties.some(
+      (p) =>
+        ts.isPropertyAssignment(p) &&
+        ts.isIdentifier(p.name) &&
+        p.name.text === `control` &&
+        (ts.isStringLiteral(p.initializer) ||
+          ts.isNoSubstitutionTemplateLiteral(p.initializer))
+    )
+  })
+}
+
+/**
+ * Returns true if the expression checks an HTTP error status (4xx or 5xx).
+ * Recurses into && and || expressions.
+ */
+function isHttpErrorStatusCheck(expression) {
+  if (!ts.isBinaryExpression(expression)) return false
+
+  const op = expression.operatorToken.kind
+  if (
+    op === ts.SyntaxKind.EqualsEqualsToken ||
+    op === ts.SyntaxKind.EqualsEqualsEqualsToken
+  ) {
+    return (
+      (isHttpErrorLiteral(expression.left) &&
+        isStatusAccess(expression.right)) ||
+      (isHttpErrorLiteral(expression.right) && isStatusAccess(expression.left))
+    )
+  }
+
+  if (
+    op === ts.SyntaxKind.AmpersandAmpersandToken ||
+    op === ts.SyntaxKind.BarBarToken
+  ) {
+    return (
+      isHttpErrorStatusCheck(expression.left) ||
+      isHttpErrorStatusCheck(expression.right)
+    )
+  }
+
+  return false
+}
+
+function isHttpErrorLiteral(node) {
+  if (!ts.isNumericLiteral(node)) return false
+  const status = Number(node.text)
+  return status >= 400 && status < 600
+}
+
+function getStatusLiteral(expression) {
+  if (!ts.isBinaryExpression(expression)) return `unknown`
+  const op = expression.operatorToken.kind
+  if (
+    op === ts.SyntaxKind.EqualsEqualsToken ||
+    op === ts.SyntaxKind.EqualsEqualsEqualsToken
+  ) {
+    if (ts.isNumericLiteral(expression.left)) return expression.left.text
+    if (ts.isNumericLiteral(expression.right)) return expression.right.text
+  }
+  if (
+    op === ts.SyntaxKind.AmpersandAmpersandToken ||
+    op === ts.SyntaxKind.BarBarToken
+  ) {
+    const left = getStatusLiteral(expression.left)
+    if (left !== `unknown`) return left
+    return getStatusLiteral(expression.right)
+  }
+  return `unknown`
+}
+
+/**
+ * Returns true if the node is inside the try clause (not catch/finally) of a
+ * TryStatement that is a descendant of the given boundary node.
+ */
+function isInsideTryClause(node, boundary) {
+  let current = node.parent
+  while (current && current !== boundary) {
+    if (ts.isTryStatement(current.parent)) {
+      // Check if `current` is the tryBlock (not catchClause or finallyBlock)
+      if (current === current.parent.tryBlock) return true
+    }
+    current = current.parent
+  }
+  return false
+}
+
+/**
+ * Returns true if the expression contains a `.status == 409` or `.status === 409` check.
+ * Recurses into `&&` and `||` expressions to handle compound conditions like
+ * `e instanceof FetchError && e.status === 409`.
+ */
+function is409StatusCheck(expression) {
+  if (!ts.isBinaryExpression(expression)) return false
+
+  const op = expression.operatorToken.kind
+  if (
+    op === ts.SyntaxKind.EqualsEqualsToken ||
+    op === ts.SyntaxKind.EqualsEqualsEqualsToken
+  ) {
+    return (
+      (is409Literal(expression.left) && isStatusAccess(expression.right)) ||
+      (is409Literal(expression.right) && isStatusAccess(expression.left))
+    )
+  }
+
+  if (
+    op === ts.SyntaxKind.AmpersandAmpersandToken ||
+    op === ts.SyntaxKind.BarBarToken
+  ) {
+    return (
+      is409StatusCheck(expression.left) || is409StatusCheck(expression.right)
+    )
+  }
+
+  return false
+}
+
+function is409Literal(node) {
+  return ts.isNumericLiteral(node) && node.text === `409`
+}
+
+function isStatusAccess(node) {
+  return ts.isPropertyAccessExpression(node) && node.name.text === `status`
+}
+
+/**
+ * Returns true if a node is inside an if-statement's then or else block
+ * within the given boundary node (the 409 handler block).
+ */
+function isInsideIfBlock(node, boundary) {
+  let current = node.parent
+  while (current && current !== boundary) {
+    const parent = current.parent
+    if (
+      parent &&
+      ts.isIfStatement(parent) &&
+      (current === parent.thenStatement || current === parent.elseStatement)
+    ) {
+      return true
+    }
+    current = current.parent
+  }
+  return false
+}
+
+function classifyRetryBound(sourceFile, catchClause, callNode) {
+  const callLine = getLine(sourceFile, callNode)
+  const enclosingConditions = collectEnclosingIfConditions(
+    catchClause,
+    callNode
+  )
+
+  if (findPriorCounterGuard(sourceFile, catchClause.block, callLine)) {
+    return `counter`
+  }
+
+  for (const condition of enclosingConditions) {
+    if (containsThisFieldComparison(condition)) return `counter`
+  }
+
+  for (const condition of enclosingConditions) {
+    if (containsInstanceof(condition) || containsPropertyEquality(condition)) {
+      return `type-guard`
+    }
+  }
+
+  for (const condition of enclosingConditions) {
+    if (containsAbortedAccess(condition)) return `abort-signal`
+  }
+
+  if (enclosingConditions.length > 0) return `callback-gate`
+
+  return null
+}
+
+function collectEnclosingIfConditions(catchClause, callNode) {
+  const conditions = []
+  let current = callNode.parent
+
+  while (current && current !== catchClause) {
+    const parent = current.parent
+    if (
+      parent &&
+      ts.isIfStatement(parent) &&
+      current === parent.thenStatement
+    ) {
+      conditions.push(parent.expression)
+    }
+    current = current.parent
+  }
+
+  return conditions
+}
+
+function findPriorCounterGuard(sourceFile, block, beforeLine) {
+  return walkSome(
+    block,
+    (node) =>
+      ts.isIfStatement(node) &&
+      getLine(sourceFile, node) < beforeLine &&
+      containsThisFieldComparison(node.expression) &&
+      containsExitStatement(node.thenStatement)
+  )
+}
+
+/** Walks a node tree and returns true if predicate matches any descendant. */
+function walkSome(root, predicate) {
+  let found = false
+  walk(root, (node) => {
+    if (found) return
+    if (predicate(node)) found = true
+  })
+  return found
+}
+
+function containsInstanceof(node) {
+  return walkSome(
+    node,
+    (inner) =>
+      ts.isBinaryExpression(inner) &&
+      inner.operatorToken.kind === ts.SyntaxKind.InstanceOfKeyword
+  )
+}
+
+function containsPropertyEquality(node) {
+  return walkSome(node, (inner) => {
+    if (!ts.isBinaryExpression(inner)) return false
+    const op = inner.operatorToken.kind
+    if (
+      op !== ts.SyntaxKind.EqualsEqualsToken &&
+      op !== ts.SyntaxKind.EqualsEqualsEqualsToken
+    ) {
+      return false
+    }
+    return (
+      ts.isPropertyAccessExpression(inner.left) ||
+      ts.isPropertyAccessExpression(inner.right)
+    )
+  })
+}
+
+function containsAbortedAccess(node) {
+  return walkSome(
+    node,
+    (inner) =>
+      ts.isPropertyAccessExpression(inner) && inner.name.text === `aborted`
+  )
+}
+
+function containsThisFieldComparison(node) {
+  return walkSome(node, (inner) => {
+    if (!ts.isBinaryExpression(inner)) return false
+    const op = inner.operatorToken.kind
+    if (
+      op !== ts.SyntaxKind.GreaterThanToken &&
+      op !== ts.SyntaxKind.GreaterThanEqualsToken &&
+      op !== ts.SyntaxKind.LessThanToken &&
+      op !== ts.SyntaxKind.LessThanEqualsToken
+    ) {
+      return false
+    }
+    return isThisFieldAccess(inner.left) || isThisFieldAccess(inner.right)
+  })
+}
+
+function isThisFieldAccess(node) {
+  return (
+    ts.isPropertyAccessExpression(node) &&
+    node.expression.kind === ts.SyntaxKind.ThisKeyword
+  )
+}
+
+function containsExitStatement(node) {
+  return walkSome(
+    node,
+    (inner) => ts.isReturnStatement(inner) || ts.isThrowStatement(inner)
+  )
 }
 
 function stronglyConnectedComponents(graph) {

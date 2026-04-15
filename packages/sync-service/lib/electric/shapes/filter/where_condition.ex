@@ -29,6 +29,13 @@ defmodule Electric.Shapes.Filter.WhereCondition do
     :ets.insert(table, {condition_id, {MapSet.new(), %{}}})
   end
 
+  @doc """
+  Returns `true` when the WHERE clause can use the primary equality/inclusion
+  indexes maintained by the filter.
+  """
+  @spec indexed_where?(Expr.t() | nil) :: boolean()
+  def indexed_where?(where_clause), do: optimise_where(where_clause) != :not_optimised
+
   def add_shape(%Filter{where_cond_table: table} = filter, condition_id, shape_id, where_clause) do
     case optimise_where(where_clause) do
       :not_optimised ->

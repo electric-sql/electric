@@ -21,6 +21,42 @@ defmodule Electric.Shapes.FilterTest do
                ]
              )
 
+  describe "indexed_shape?/1" do
+    test "returns true for equality-indexed shapes" do
+      shape = Shape.new!("t1", where: "id = 7", inspector: @inspector)
+
+      assert Filter.indexed_shape?(shape)
+    end
+
+    test "returns false for shapes without an indexable where clause" do
+      shape = Shape.new!("t1", inspector: @inspector)
+
+      refute Filter.indexed_shape?(shape)
+    end
+
+    test "returns true for non-optimisable subquery shapes with sublink fields" do
+      shape =
+        Shape.new!("t1",
+          where: "id = 1 OR id IN (SELECT id FROM t2)",
+          inspector: @inspector
+        )
+        |> with_known_dependency_handles()
+
+      assert Filter.indexed_shape?(shape)
+    end
+
+    test "returns false for row-expression subquery shapes with no indexable fields" do
+      shape =
+        Shape.new!("t1",
+          where: "(id, number) IN (SELECT id, number FROM t2)",
+          inspector: @inspector
+        )
+        |> with_known_dependency_handles()
+
+      refute Filter.indexed_shape?(shape)
+    end
+  end
+
   describe "affected_shapes/2" do
     test "returns shapes affected by insert" do
       filter =
@@ -776,6 +812,11 @@ defmodule Electric.Shapes.FilterTest do
       relation: {"public", table},
       record: record
     }
+  end
+
+  defp with_known_dependency_handles(%Shape{shape_dependencies: deps} = shape) do
+    handles = Enum.with_index(deps, fn _dep, index -> "dep-#{index}" end)
+    %{shape | shape_dependencies_handles: handles}
   end
 
   describe "refs_fun threading through indexes" do

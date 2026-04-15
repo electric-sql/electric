@@ -150,6 +150,7 @@ replication_stream_id =
   )
 
 prometheus_port = env!("ELECTRIC_PROMETHEUS_PORT", :integer, nil)
+live_dashboard_port = env!("ELECTRIC_LIVE_DASHBOARD_PORT", :integer, nil)
 
 call_home_telemetry_url =
   env!(
@@ -173,6 +174,13 @@ system_metrics_poll_interval =
 otel_export_period =
   env!(
     "ELECTRIC_OTEL_EXPORT_PERIOD",
+    &Electric.Config.parse_human_readable_time!/1,
+    nil
+  )
+
+stack_telemetry_init_delay =
+  env!(
+    "ELECTRIC_STACK_TELEMETRY_INIT_DELAY",
     &Electric.Config.parse_human_readable_time!/1,
     nil
   )
@@ -214,6 +222,7 @@ config :electric,
   call_home_telemetry?: env!("ELECTRIC_USAGE_REPORTING", :boolean, config_env() == :prod),
   telemetry_url: call_home_telemetry_url,
   system_metrics_poll_interval: system_metrics_poll_interval,
+  stack_telemetry_init_delay: stack_telemetry_init_delay,
   otel_export_period: otel_export_period,
   otel_sampling_ratio: env!("ELECTRIC_OTEL_SAMPLING_RATIO", :float, nil),
   metrics_sampling_ratio: env!("ELECTRIC_METRICS_SAMPLING_RATIO", :float, nil),
@@ -240,6 +249,7 @@ config :electric,
     env!("ELECTRIC_TELEMETRY_LONG_MESSAGE_QUEUE_DISABLE_THRESHOLD", :integer, nil),
   telemetry_statsd_host: statsd_host,
   prometheus_port: prometheus_port,
+  live_dashboard_port: live_dashboard_port,
   db_pool_size: env!("ELECTRIC_DB_POOL_SIZE", :integer, nil),
   replication_stream_id: replication_stream_id,
   replication_slot_temporary?: env!("CLEANUP_REPLICATION_SLOTS_ON_SHUTDOWN", :boolean, nil),
@@ -386,4 +396,32 @@ if Electric.telemetry_enabled?() do
     # We don't want any of that unless OpenTelemetry export is explicitly enabled.
     config :opentelemetry, processors: []
   end
+end
+
+# Phoenix LiveDashboard Endpoint Configuration
+#
+# WARNING: The dashboard is completely unauthenticated and exposes internal
+# system state (VM metrics, process info, ETS tables, etc.). In production,
+# ensure the dashboard port is firewalled or otherwise restricted to trusted
+# networks only.
+if live_dashboard_port do
+  dashboard_ip =
+    if env!("ELECTRIC_LISTEN_ON_IPV6", :boolean, false),
+      do: {0, 0, 0, 0, 0, 0, 0, 0},
+      else: {0, 0, 0, 0}
+
+  config :electric, Electric.LiveDashboard.Endpoint,
+    adapter: Bandit.PhoenixAdapter,
+    http: [
+      port: live_dashboard_port,
+      ip: dashboard_ip
+    ],
+    server: true,
+    render_errors: [
+      formats: [html: Electric.LiveDashboard.ErrorView],
+      layout: false
+    ],
+    live_view: [signing_salt: "r5zw+GcXjt3wP3Z/snFRqQ5uH2cm8Vb7ldc8t0POZdo="],
+    secret_key_base: Base.encode64(:crypto.strong_rand_bytes(48)),
+    pubsub_server: Electric.PubSub
 end

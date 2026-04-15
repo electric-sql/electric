@@ -1,6 +1,5 @@
 defmodule Electric.Replication.Eval.Runner do
   require Logger
-  alias Electric.Replication.Eval.Walker
   alias Electric.Utils
   alias Electric.Replication.Eval.Expr
   alias Electric.Replication.Eval.Env
@@ -52,22 +51,52 @@ defmodule Electric.Replication.Eval.Runner do
   """
   @spec execute(Expr.t(), map()) :: {:ok, term()} | {:error, {%Func{}, [term()]}}
   def execute(%Expr{} = tree, ref_values) do
-    Walker.fold(tree.eval, &do_execute/3, ref_values)
+    execute_node(tree.eval, ref_values)
   catch
     {:could_not_compute, func} -> {:error, func}
   end
 
-  defp do_execute(%Const{value: value}, _, _), do: {:ok, value}
-  defp do_execute(%Ref{path: path}, _, refs), do: {:ok, Map.fetch!(refs, path)}
-  defp do_execute(%Array{}, %{elements: elements}, _), do: {:ok, elements}
-  defp do_execute(%RowExpr{}, %{elements: elements}, _), do: {:ok, List.to_tuple(elements)}
+  defp execute_node(%Const{value: value}, _), do: {:ok, value}
+  defp execute_node(%Ref{path: path}, refs), do: {:ok, Map.fetch!(refs, path)}
 
-  defp do_execute(%Func{strict?: false} = func, %{args: args}, _) do
+  defp execute_node(%Array{elements: elements}, refs) do
+    Utils.map_while_ok(elements, &execute_node(&1, refs))
+  end
+
+  defp execute_node(%RowExpr{elements: elements}, refs) do
+    with {:ok, elements} <- Utils.map_while_ok(elements, &execute_node(&1, refs)) do
+      {:ok, List.to_tuple(elements)}
+    end
+  end
+
+  defp execute_node(
+         %Func{name: "coalesce", variadic_arg: 0, args: [%Array{elements: elements}]},
+         refs
+       ) do
+    execute_coalesce(elements, refs)
+  end
+
+  defp execute_node(%Func{args: args} = func, refs) do
+    with {:ok, args} <- Utils.map_while_ok(args, &execute_node(&1, refs)) do
+      apply_func(func, args)
+    end
+  end
+
+  defp execute_coalesce([], _refs), do: {:ok, nil}
+
+  defp execute_coalesce([arg | rest], refs) do
+    case execute_node(arg, refs) do
+      {:ok, nil} -> execute_coalesce(rest, refs)
+      {:ok, value} -> {:ok, value}
+    end
+  end
+
+  defp apply_func(%Func{strict?: false} = func, args) do
     # For a non-strict function, we don't care about nil values in the arguments
     {:ok, try_apply(func, args)}
   end
 
-  defp do_execute(%Func{strict?: true, variadic_arg: vararg_position} = func, %{args: args}, _) do
+  defp apply_func(%Func{strict?: true, variadic_arg: vararg_position} = func, args) do
     has_nils? =
       case vararg_position do
         nil -> Enum.any?(args, &is_nil/1)

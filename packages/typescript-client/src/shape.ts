@@ -2,7 +2,7 @@ import { Message, Offset, Row } from './types'
 import {
   isChangeMessage,
   isControlMessage,
-  bigintSafeStringify,
+  canonicalBigintSafeStringify,
 } from './helpers'
 import { FetchError } from './error'
 import { LogMode, ShapeStreamInterface } from './client'
@@ -14,6 +14,30 @@ export type ShapeChangedCallback<T extends Row<unknown> = Row> = (data: {
 }) => void
 
 type ShapeStatus = `syncing` | `up-to-date`
+
+/**
+ * Shape subscriber notification semantics (see SPEC.md → "Shape
+ * notification semantics" for the canonical contract):
+ *
+ * - **N1 (no notify while syncing).** Data messages that arrive while
+ *   `status === 'syncing'` apply to `#data` but do NOT call `#notify`.
+ *   A notification fires only when the shape transitions from
+ *   `syncing` to `up-to-date` via an up-to-date control message. This
+ *   guarantees that subscribers observing `rows` always see a
+ *   consistent snapshot of the shape AND can read a defined
+ *   `stream.lastSyncedAt()`.
+ *
+ * - **N2 (notify on change while up-to-date).** Once
+ *   `status === 'up-to-date'`, any data message (insert/update/delete,
+ *   subject to `mode === 'changes_only'` filtering) triggers a
+ *   notification; the status then transitions back to `syncing` until
+ *   the next up-to-date message.
+ *
+ * A `must-refetch` control message clears `#data` and transitions the
+ * status back to `syncing`, which re-engages N1 — subscribers will
+ * receive the post-rotation state on the next `up-to-date` without
+ * ever observing an intermediate empty-rows notification.
+ */
 
 /**
  * A Shape is an object that subscribes to a shape log,
@@ -144,8 +168,9 @@ export class Shape<T extends Row<unknown> = Row> {
   async requestSnapshot(
     params: Parameters<ShapeStreamInterface<T>[`requestSnapshot`]>[0]
   ): Promise<void> {
-    // Track this snapshot request for future re-execution on shape rotation
-    const key = bigintSafeStringify(params)
+    // Track this snapshot request for future re-execution on shape rotation.
+    // Use canonical stringify so permutation-equivalent params dedup.
+    const key = canonicalBigintSafeStringify(params)
     this.#requestedSubSnapshots.add(key)
     // Ensure the stream is up-to-date so schema is available for parsing
     await this.#awaitUpToDate()
@@ -175,20 +200,24 @@ export class Shape<T extends Row<unknown> = Row> {
 
     messages.forEach((message) => {
       if (isChangeMessage(message)) {
-        shouldNotify = this.#updateShapeStatus(`syncing`)
+        const wasUpToDate = this.#status === `up-to-date`
+        this.#updateShapeStatus(`syncing`)
         if (this.mode === `full`) {
           switch (message.headers.operation) {
             case `insert`:
               this.#data.set(message.key, message.value)
+              if (wasUpToDate) shouldNotify = true
               break
             case `update`:
               this.#data.set(message.key, {
                 ...this.#data.get(message.key)!,
                 ...message.value,
               })
+              if (wasUpToDate) shouldNotify = true
               break
             case `delete`:
               this.#data.delete(message.key)
+              if (wasUpToDate) shouldNotify = true
               break
           }
         } else {
@@ -197,6 +226,7 @@ export class Shape<T extends Row<unknown> = Row> {
             case `insert`:
               this.#insertedKeys.add(message.key)
               this.#data.set(message.key, message.value)
+              if (wasUpToDate) shouldNotify = true
               break
             case `update`:
               if (this.#insertedKeys.has(message.key)) {
@@ -204,12 +234,14 @@ export class Shape<T extends Row<unknown> = Row> {
                   ...this.#data.get(message.key)!,
                   ...message.value,
                 })
+                if (wasUpToDate) shouldNotify = true
               }
               break
             case `delete`:
               if (this.#insertedKeys.has(message.key)) {
                 this.#data.delete(message.key)
                 this.#insertedKeys.delete(message.key)
+                if (wasUpToDate) shouldNotify = true
               }
               break
           }
@@ -219,7 +251,7 @@ export class Shape<T extends Row<unknown> = Row> {
       if (isControlMessage(message)) {
         switch (message.headers.control) {
           case `up-to-date`:
-            shouldNotify = this.#updateShapeStatus(`up-to-date`)
+            if (this.#updateShapeStatus(`up-to-date`)) shouldNotify = true
             if (this.#reexecuteSnapshotsPending) {
               this.#reexecuteSnapshotsPending = false
               void this.#reexecuteSnapshots()
@@ -229,8 +261,7 @@ export class Shape<T extends Row<unknown> = Row> {
             this.#data.clear()
             this.#insertedKeys.clear()
             this.#error = false
-            shouldNotify = this.#updateShapeStatus(`syncing`)
-            // Flag to re-execute sub-snapshots once the new shape is up-to-date
+            this.#updateShapeStatus(`syncing`)
             this.#reexecuteSnapshotsPending = true
             break
         }
@@ -241,36 +272,68 @@ export class Shape<T extends Row<unknown> = Row> {
   }
 
   async #reexecuteSnapshots(): Promise<void> {
-    // Wait until stream is up-to-date again (ensures schema is available)
-    await this.#awaitUpToDate()
+    try {
+      await this.#awaitUpToDate()
+    } catch (e) {
+      this.#surfaceReexecuteError(e)
+      return
+    }
 
-    // Re-execute all snapshots concurrently
-    await Promise.all(
+    const results = await Promise.all(
       Array.from(this.#requestedSubSnapshots).map(async (jsonParams) => {
         try {
           const snapshot = JSON.parse(jsonParams)
           await this.stream.requestSnapshot(snapshot)
-        } catch (_) {
-          // Ignore and continue; errors will be surfaced via stream onError
+          return undefined
+        } catch (e) {
+          return e
         }
       })
     )
+
+    const firstError = results.find((e) => e !== undefined)
+    if (firstError !== undefined) this.#surfaceReexecuteError(firstError)
+  }
+
+  #surfaceReexecuteError(e: unknown): void {
+    if (e instanceof FetchError) {
+      this.#error = e
+    } else if (e instanceof Error) {
+      this.#error = new FetchError(0, e.message, undefined, {}, ``, e.message)
+    } else {
+      this.#error = new FetchError(0, String(e), undefined, {}, ``, String(e))
+    }
+    this.#notify()
   }
 
   async #awaitUpToDate(): Promise<void> {
+    if (this.#error) throw this.#error
     if (this.stream.isUpToDate) return
-    await new Promise<void>((resolve) => {
+    if (this.stream.error) throw this.stream.error as Error
+    await new Promise<void>((resolve, reject) => {
+      let settled = false
+      let interval: ReturnType<typeof setInterval>
+      let unsub: (() => void) | undefined
+      const done = (action: () => void) => {
+        if (settled) return
+        settled = true
+        clearInterval(interval)
+        unsub?.()
+        action()
+      }
       const check = () => {
-        if (this.stream.isUpToDate) {
-          clearInterval(interval)
-          unsub()
-          resolve()
+        if (this.stream.isUpToDate) return done(resolve)
+        const streamError = this.stream.error as Error | undefined
+        if (streamError) return done(() => reject(streamError))
+        if (this.#error) {
+          const err = this.#error
+          return done(() => reject(err))
         }
       }
-      const interval = setInterval(check, 10)
-      const unsub = this.stream.subscribe(
+      interval = setInterval(check, 10)
+      unsub = this.stream.subscribe(
         () => check(),
-        () => check()
+        (err) => done(() => reject(err))
       )
       check()
     })

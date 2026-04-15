@@ -22,28 +22,28 @@ const panels = [
     title: 'Super-fast reactivity',
     body: 'Build fast, modern apps like Figma and Linear. <span class="no-wrap-md">With sub-millisecond</span> reactivity and <span class="no-wrap-sm">instant local&nbsp;writes</span>.',
     icon: '/img/home/sync-targets/app.svg',
-    link: '/blog/posts/2025-07-29-super-fast-apps-on-sync-with-tanstack-db',
+    link: '/blog/2025/07/29/super-fast-apps-on-sync-with-tanstack-db',
   },
   {
     id: 'resilience',
     title: 'Resilient transport',
     body: 'Build apps that work reliably, even with patchy connectivity. With resilient transport that ensures data is never&nbsp;lost.',
     icon: '/img/icons/resilience.svg',
-    link: '/blog/posts/2025-04-09-building-ai-apps-on-sync',
+    link: '/blog/2026/03/24/durable-transport-ai-sdks',
   },
   {
     id: 'collaboration',
     title: 'Real-time collaboration',
     body: 'Build multi-user, multi-agent apps that naturally support both real-time and asynchronous collaboration.',
     icon: '/img/home/sync-targets/agent.svg',
-    link: '/blog/posts/2026-01-12-durable-sessions-for-collaborative-ai',
+    link: '/blog/2026/01/12/durable-sessions-for-collaborative-ai',
   },
   {
     id: 'durability',
     title: 'Durable state',
     body: 'Build multi-step agentic workflows that resume after failures. With agents and workers syncing and resuming from durable&nbsp;state.',
     icon: '/img/icons/durable-streams.square.svg',
-    link: '/blog/2025/12/23/durable-streams-0.1.0#introducing-the-state-protocol',
+    link: '/blog/2026/04/08/data-primitive-agent-loop',
   },
 ]
 </script>

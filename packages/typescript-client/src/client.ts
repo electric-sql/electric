@@ -508,13 +508,14 @@ export interface ShapeStreamInterface<T extends Row<unknown> = Row> {
 /**
  * Creates a canonical shape key from a URL excluding only Electric protocol parameters
  */
-function canonicalShapeKey(url: URL): string {
+export function canonicalShapeKey(url: URL): string {
   const cleanUrl = new URL(url.origin + url.pathname)
 
-  // Copy all params except Electric protocol ones that vary between requests
+  // Copy all params except Electric protocol ones that vary between requests.
+  // Use append() so duplicate keys (e.g. ?table=a&table=b) are preserved.
   for (const [key, value] of url.searchParams) {
     if (!ELECTRIC_PROTOCOL_QUERY_PARAMS.includes(key)) {
-      cleanUrl.searchParams.set(key, value)
+      cleanUrl.searchParams.append(key, value)
     }
   }
 
@@ -623,6 +624,10 @@ export class ShapeStream<T extends Row<unknown> = Row>
   #fastLoopMaxCount = 5
   #pendingRequestShapeCacheBuster?: string
   #maxSnapshotRetries = 5
+  #expiredShapeRecoveryKey: string | null = null
+  #pendingSelfHealCheck: { shapeKey: string; staleHandle: string } | null = null
+  #consecutiveErrorRetries = 0
+  #maxConsecutiveErrorRetries = 50
 
   constructor(options: ShapeStreamOptions<GetExtensions<T>>) {
     this.options = { subscribe: true, ...options }
@@ -762,6 +767,24 @@ export class ShapeStream<T extends Row<unknown> = Row>
             }
           }
 
+          // Bound the onError retry loop to prevent unbounded retries
+          this.#consecutiveErrorRetries++
+          if (
+            this.#consecutiveErrorRetries > this.#maxConsecutiveErrorRetries
+          ) {
+            console.warn(
+              `[Electric] onError retry loop exhausted after ${this.#maxConsecutiveErrorRetries} consecutive retries. ` +
+                `The error was never resolved by the onError handler. ` +
+                `Error: ${err instanceof Error ? err.message : String(err)}`,
+              new Error(`stack trace`)
+            )
+            if (err instanceof Error) {
+              this.#sendErrorToSubscribers(err)
+            }
+            this.#teardown()
+            return
+          }
+
           // Clear the error since we're retrying
           this.#error = null
           if (this.#syncState instanceof ErrorState) {
@@ -772,8 +795,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
           // Restart from current offset
           this.#started = false
-          await this.#start()
-          return
+          return this.#start()
         }
         // onError returned void, meaning it doesn't want to retry
         // This is an unrecoverable error, notify subscribers
@@ -803,6 +825,12 @@ export class ShapeStream<T extends Row<unknown> = Row>
   }
 
   async #requestShape(requestShapeCacheBuster?: string): Promise<void> {
+    // ErrorState should never reach the request loop — re-throw so
+    // #start's catch block can route it through onError properly.
+    if (this.#syncState instanceof ErrorState) {
+      throw this.#syncState.error
+    }
+
     const activeCacheBuster =
       requestShapeCacheBuster ?? this.#pendingRequestShapeCacheBuster
 
@@ -889,10 +917,11 @@ export class ShapeStream<T extends Row<unknown> = Row>
       }
 
       if (e instanceof StaleCacheError) {
-        // Received a stale cached response from CDN with an expired handle.
-        // The #staleCacheBuster has been set in #onInitialResponse, so retry
-        // the request which will include a random cache buster to bypass the
-        // misconfigured CDN cache.
+        // Two paths throw StaleCacheError:
+        // 1. Normal stale-retry: response handle matched expired handle,
+        //    #staleCacheBuster set to bypass CDN cache on next request.
+        // 2. Self-healing: stale retries exhausted, expired entry cleared,
+        //    stream reset — retry without expired_handle param.
         return this.#requestShape()
       }
 
@@ -900,9 +929,9 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
       if (e.status == 409) {
         // Upon receiving a 409, start from scratch with the newly
-        // provided shape handle. If the header is missing (e.g. proxy
-        // stripped it), reset without a handle and use a random
-        // cache-buster query param to ensure the retry URL is unique.
+        // provided shape handle (if present). An unconditional cache
+        // buster ensures the retry URL is always unique regardless of
+        // whether the server returns a new, same, or missing handle.
 
         // Store the current shape URL as expired to avoid future 409s
         if (this.#syncState.handle) {
@@ -911,27 +940,22 @@ export class ShapeStream<T extends Row<unknown> = Row>
         }
 
         const newShapeHandle = e.headers[SHAPE_HANDLE_HEADER]
-        let nextRequestShapeCacheBuster: string | undefined
         if (!newShapeHandle) {
           console.warn(
             `[Electric] Received 409 response without a shape handle header. ` +
               `This likely indicates a proxy or CDN stripping required headers.`,
             new Error(`stack trace`)
           )
-          nextRequestShapeCacheBuster = createCacheBuster()
         }
+        const nextRequestShapeCacheBuster = createCacheBuster()
         this.#reset(newShapeHandle)
 
-        // must refetch control message might be in a list or not depending
-        // on whether it came from an SSE request or long poll. The body may
-        // also be null/undefined if a proxy returned an unexpected response.
-        // Handle all cases defensively here.
-        const messages409 = Array.isArray(e.json)
-          ? e.json
-          : e.json != null
-            ? [e.json]
-            : []
-        await this.#publish(messages409 as Message<T>[])
+        // Notify subscribers that data must be re-fetched so they can
+        // clear accumulated state (e.g., Shape clears its row map).
+        // We publish a synthetic control message rather than the raw 409
+        // body to avoid delivering stale data rows to subscribers.
+        await this.#publish([{ headers: { control: `must-refetch` } }])
+
         return this.#requestShape(nextRequestShapeCacheBuster)
       } else {
         // errors that have reached this point are not actionable without
@@ -1130,9 +1154,9 @@ export class ShapeStream<T extends Row<unknown> = Row>
           SUBSET_PARAM_WHERE_PARAMS,
           bigintSafeStringify(subsetParams.params)
         )
-      if (subsetParams.limit)
+      if (subsetParams.limit !== undefined)
         setQueryParam(fetchUrl, SUBSET_PARAM_LIMIT, subsetParams.limit)
-      if (subsetParams.offset)
+      if (subsetParams.offset !== undefined)
         setQueryParam(fetchUrl, SUBSET_PARAM_OFFSET, subsetParams.offset)
 
       // Prefer structured ORDER BY expressions when available
@@ -1223,6 +1247,25 @@ export class ShapeStream<T extends Row<unknown> = Row>
       ? expiredShapesCache.getExpiredHandle(shapeKey)
       : null
 
+    // If this response is the first one after a self-healing retry, check
+    // whether the proxy/CDN returned the exact handle we just marked expired.
+    // If so, the client is about to accept stale data silently — loudly warn
+    // so operators can detect and fix the proxy misconfiguration.
+    if (this.#pendingSelfHealCheck) {
+      const { shapeKey: healedKey, staleHandle } = this.#pendingSelfHealCheck
+      this.#pendingSelfHealCheck = null
+      if (shapeKey === healedKey && shapeHandle === staleHandle) {
+        console.warn(
+          `[Electric] Self-healing retry received the same handle "${staleHandle}" that was just marked expired. ` +
+            `This means your proxy/CDN is serving a stale cached response and ignoring cache-buster query params. ` +
+            `The client will proceed with this stale data to avoid a permanent failure, but it may be out of date until the cache refreshes. ` +
+            `Fix: configure your proxy/CDN to include all query parameters (especially 'handle' and 'offset') in its cache key. ` +
+            `For more information visit the troubleshooting guide: ${TROUBLESHOOTING_URL}`,
+          new Error(`stack trace`)
+        )
+      }
+    }
+
     const transition = this.#syncState.handleResponseMetadata({
       status,
       responseHandle: shapeHandle,
@@ -1237,10 +1280,52 @@ export class ShapeStream<T extends Row<unknown> = Row>
 
     this.#syncState = transition.state
 
+    // Clear recovery guard on 204 (no-content), since the empty body means
+    // #onMessages won't run to clear it via the up-to-date path.
+    if (status === 204) {
+      this.#expiredShapeRecoveryKey = null
+    }
+
+    if (transition.action === `accepted` && status === 204) {
+      this.#consecutiveErrorRetries = 0
+    }
+
     if (transition.action === `stale-retry`) {
       // Cancel the response body to release the connection before retrying.
       await response.body?.cancel()
       if (transition.exceededMaxRetries) {
+        if (shapeKey) {
+          // Clear the expired entry — keeping it only poisons future sessions.
+          expiredShapesCache.delete(shapeKey)
+
+          // Try one self-healing retry per shape: reset the stream and
+          // retry without the expired_handle param. Since handles are never
+          // reused (see SPEC.md S0), the fresh response will have a new
+          // handle and won't trigger stale detection.
+          if (this.#expiredShapeRecoveryKey !== shapeKey) {
+            console.warn(
+              `[Electric] Stale cache retries exhausted (${this.#maxStaleCacheRetries} attempts). ` +
+                `Clearing expired handle entry and attempting self-healing retry without the expired_handle parameter. ` +
+                `For more information visit the troubleshooting guide: ${TROUBLESHOOTING_URL}`,
+              new Error(`stack trace`)
+            )
+            this.#expiredShapeRecoveryKey = shapeKey
+            // Arm a post-self-heal check: if the next response comes back
+            // with the same handle we just marked expired, the proxy/CDN is
+            // still serving stale data and we'll warn loudly instead of
+            // accepting it silently.
+            if (shapeHandle) {
+              this.#pendingSelfHealCheck = {
+                shapeKey,
+                staleHandle: shapeHandle,
+              }
+            }
+            this.#reset()
+            throw new StaleCacheError(
+              `Expired handle entry evicted for self-healing retry`
+            )
+          }
+        }
         throw new FetchError(
           502,
           undefined,
@@ -1293,6 +1378,8 @@ export class ShapeStream<T extends Row<unknown> = Row>
     }
     if (batch.length === 0) return
 
+    this.#consecutiveErrorRetries = 0
+
     const lastMessage = batch[batch.length - 1]
     const hasUpToDateMessage = isUpToDateMessage(lastMessage)
     const upToDateOffset = hasUpToDateMessage
@@ -1320,6 +1407,7 @@ export class ShapeStream<T extends Row<unknown> = Row>
           shapeKey,
           this.#syncState.liveCacheBuster
         )
+        this.#expiredShapeRecoveryKey = null
       }
     }
 
@@ -1739,9 +1827,10 @@ export class ShapeStream<T extends Row<unknown> = Row>
   #reset(handle?: string) {
     this.#syncState = this.#syncState.markMustRefetch(handle)
     this.#connected = false
-    // releaseAllMatching intentionally doesn't fire onReleased — it's called
-    // from within the running stream loop (#requestShape's 409 handler), so
-    // the stream is already active and doesn't need a resume signal.
+    // releaseAllMatching intentionally doesn't fire onReleased — every caller
+    // (#requestShape's 409 handler, #checkFastLoop, and stale-retry
+    // self-healing in #onInitialResponse) runs inside the active stream loop,
+    // so the stream is already active and doesn't need a resume signal.
     this.#pauseLock.releaseAllMatching(`snapshot`)
   }
 
@@ -1935,22 +2024,16 @@ export class ShapeStream<T extends Row<unknown> = Row>
         // For snapshot 409s, only update the handle — don't reset offset/schema/etc.
         // The main stream is paused and should not be disturbed.
         const nextHandle = e.headers[SHAPE_HANDLE_HEADER]
-        let nextCacheBuster: string | undefined
         if (nextHandle) {
           this.#syncState = this.#syncState.withHandle(nextHandle)
-          // If 409 returned the same handle, the URL won't change —
-          // pass a cache buster to the next retry to force a unique URL.
-          if (nextHandle === usedHandle) {
-            nextCacheBuster = createCacheBuster()
-          }
         } else {
           console.warn(
             `[Electric] Received 409 response without a shape handle header. ` +
               `This likely indicates a proxy or CDN stripping required headers.`,
             new Error(`stack trace`)
           )
-          nextCacheBuster = createCacheBuster()
         }
+        const nextCacheBuster = createCacheBuster()
 
         return this.#fetchSnapshotWithRetry(
           opts,

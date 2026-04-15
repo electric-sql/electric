@@ -3,7 +3,7 @@ defmodule Electric.Replication.Eval.ParserTest do
 
   alias Electric.Replication.Eval.Env.ExplicitCasts
   alias Electric.Replication.Eval.Parser
-  alias Electric.Replication.Eval.Parser.{Const, Func, Ref}
+  alias Electric.Replication.Eval.Parser.{Array, Const, Func, Ref}
   alias Electric.Replication.Eval.Env
   alias Electric.Replication.Eval.Expr
 
@@ -256,6 +256,125 @@ defmodule Electric.Replication.Eval.ParserTest do
                )
 
       assert %Func{name: "-", args: [%Ref{path: ["test"], type: :int4}]} = result
+    end
+
+    test "should reject explicit variadic function calls for now" do
+      assert {:error,
+              "At location 0: explicit VARIADIC function calls are not currently supported"} =
+               Parser.parse_and_validate_expression(
+                 ~S|array_cat(VARIADIC ARRAY[ARRAY[1], ARRAY[2]])|
+               )
+    end
+
+    test "should correctly parse coalesce special form as a variadic function" do
+      assert {:ok, %Expr{eval: result}} =
+               Parser.parse_and_validate_expression(
+                 ~S|coalesce("test", 'fallback')|,
+                 refs: %{["test"] => :text}
+               )
+
+      assert %Func{
+               name: "coalesce",
+               variadic_arg: 0,
+               strict?: false,
+               type: :text,
+               args: [
+                 %Array{
+                   type: {:array, :text},
+                   elements: [
+                     %Ref{path: ["test"], type: :text},
+                     %Const{type: :text, value: "fallback"}
+                   ]
+                 }
+               ]
+             } = result
+    end
+
+    test "should stop reducing coalesce after the first non-null constant" do
+      assert {:ok, %Expr{eval: %Const{type: :int4, value: 1}}} =
+               Parser.parse_and_validate_expression(~S|coalesce(NULL::int4, 1, 1 / 0)|)
+    end
+
+    test "should correctly resolve a variadic greatest special form" do
+      assert {:ok, %Expr{eval: result}} =
+               Parser.parse_and_validate_expression(
+                 ~S|greatest("test", 2, '3')|,
+                 refs: %{["test"] => :int4}
+               )
+
+      assert %Func{
+               name: "greatest",
+               variadic_arg: 0,
+               strict?: false,
+               type: :int4,
+               args: [
+                 %Array{
+                   type: {:array, :int4},
+                   elements: [
+                     %Ref{path: ["test"], type: :int4},
+                     %Const{type: :int4, value: 2},
+                     %Const{type: :int4, value: 3}
+                   ]
+                 }
+               ]
+             } = result
+    end
+
+    test "should correctly resolve a variadic least special form" do
+      assert {:ok, %Expr{eval: result}} =
+               Parser.parse_and_validate_expression(
+                 ~S|least("test", 2.0, '3')|,
+                 refs: %{["test"] => :int4}
+               )
+
+      assert %Func{
+               name: "least",
+               variadic_arg: 0,
+               strict?: false,
+               type: :numeric,
+               args: [
+                 %Array{
+                   type: {:array, :numeric},
+                   elements: [
+                     %Ref{path: ["test"], type: :int4},
+                     %Const{type: :numeric, value: 2.0},
+                     %Const{type: :numeric, value: 3.0}
+                   ]
+                 }
+               ]
+             } = result
+    end
+
+    test "should prefer an exact non-variadic overload over a variadic expansion" do
+      env =
+        Env.empty(
+          funcs: %{
+            {"prefer_exact", 1} => [
+              %{
+                args: [:int4],
+                variadic_arg: 0,
+                returns: :int4,
+                implementation: &List.first/1,
+                name: "variadic"
+              }
+            ],
+            {"prefer_exact", 2} => [
+              %{
+                args: [:int4, :int4],
+                returns: :int4,
+                implementation: &Kernel.+/2,
+                name: "exact"
+              }
+            ]
+          }
+        )
+
+      assert {:ok, %Expr{eval: %Func{name: "exact"}}} =
+               Parser.parse_and_validate_expression(
+                 ~S|prefer_exact("test", 2)|,
+                 refs: %{["test"] => :int4},
+                 env: env
+               )
     end
 
     test "should reduce down immutable function calls that have only constants" do

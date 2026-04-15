@@ -519,8 +519,8 @@ defmodule Electric.ShapeCache.PureFileStorage do
 
   def terminate(writer_state(ets: ets_table, opts: opts) = state) do
     close_all_files(state)
-    try(do: :ets.delete(ets_table), rescue: (_ -> true))
     clean_shape_ets_entry(opts)
+    try(do: :ets.delete(ets_table), rescue: (_ -> true))
   end
 
   # remove cached values not needed for the read path
@@ -1145,7 +1145,10 @@ defmodule Electric.ShapeCache.PureFileStorage do
           LogOffset.t_tuple() | nil
         ) :: {list(), LogOffset.t_tuple() | nil}
   defp read_range_from_ets_cache(ets, min, {max_tx, max_op} = max, acc, last_offset) do
-    case :ets.next_lookup(ets, min) do
+    case safe_next_lookup(ets, min) do
+      :ets_dead ->
+        {Enum.reverse(acc), last_offset}
+
       :"$end_of_table" ->
         {Enum.reverse(acc), last_offset}
 
@@ -1155,6 +1158,14 @@ defmodule Electric.ShapeCache.PureFileStorage do
       {new_min, [{_, item}]} ->
         read_range_from_ets_cache(ets, new_min, max, [item | acc], new_min)
     end
+  end
+
+  # The owning Consumer's buffer ETS table may be destroyed during terminate.
+  # Falling back is safe because terminate flushes to disk before deleting.
+  defp safe_next_lookup(ets, min) do
+    :ets.next_lookup(ets, min)
+  rescue
+    ArgumentError -> :ets_dead
   end
 
   defp stream_from_disk(%__MODULE__{}, min_offset, max_offset, _)

@@ -8,6 +8,8 @@ authors: [thruflo]
 image: /img/blog/durable-transport-ai-sdks/header.jpg
 tags: [durable-streams, cloud, agentic, AI]
 outline: [2, 3]
+homepageSolution: true
+homepageOrder: 30
 post: true
 ---
 

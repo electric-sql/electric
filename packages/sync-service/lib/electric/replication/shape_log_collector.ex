@@ -291,8 +291,15 @@ defmodule Electric.Replication.ShapeLogCollector do
   end
 
   def handle_call(:mark_as_ready, _from, state) do
-    lsn = LsnTracker.get_last_processed_lsn(state.stack_id)
-    offset = LogOffset.new(Lsn.to_integer(lsn), :infinity)
+    offset =
+      case LsnTracker.get_last_processed_lsn(state.stack_id) do
+        %Lsn{} = lsn ->
+          LogOffset.new(Lsn.to_integer(lsn), :infinity)
+
+        nil ->
+          raise "LsnTracker must be populated before marking shape_log_collector as ready"
+      end
+
     Electric.StatusMonitor.mark_shape_log_collector_ready(state.stack_id, self())
     {:reply, :ok, Map.put(state, :last_processed_offset, offset)}
   end

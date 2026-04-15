@@ -5,6 +5,60 @@ defmodule Electric.Replication.Eval.Env.KnownFunctions do
   alias Electric.Replication.PostgresInterop.Casting
   alias Electric.Replication.Eval.Env.BasicTypes
 
+  def coalesce(values), do: Enum.find(values, &(not is_nil(&1)))
+
+  def greatest(values), do: pick_extreme(values, :greatest)
+  def least(values), do: pick_extreme(values, :least)
+
+  defp pick_extreme(values, direction) do
+    case Enum.reject(values, &is_nil/1) do
+      [] ->
+        nil
+
+      [head | tail] ->
+        Enum.reduce(tail, head, fn value, acc ->
+          case compare(value, acc) do
+            :gt when direction == :greatest -> value
+            :lt when direction == :least -> value
+            _ -> acc
+          end
+        end)
+    end
+  end
+
+  defp compare(%Date{} = left, %Date{} = right), do: Date.compare(left, right)
+  defp compare(%Time{} = left, %Time{} = right), do: Time.compare(left, right)
+
+  defp compare(%NaiveDateTime{} = left, %NaiveDateTime{} = right),
+    do: NaiveDateTime.compare(left, right)
+
+  defp compare(%DateTime{} = left, %DateTime{} = right), do: DateTime.compare(left, right)
+
+  defp compare(left, right) do
+    cond do
+      left > right -> :gt
+      left < right -> :lt
+      true -> :eq
+    end
+  end
+
+  ## Conditional expressions
+
+  defpostgres("coalesce(VARIADIC anycompatible) -> anycompatible",
+    strict?: false,
+    delegate: &__MODULE__.coalesce/1
+  )
+
+  defpostgres("greatest(VARIADIC anycompatible) -> anycompatible",
+    strict?: false,
+    delegate: &__MODULE__.greatest/1
+  )
+
+  defpostgres("least(VARIADIC anycompatible) -> anycompatible",
+    strict?: false,
+    delegate: &__MODULE__.least/1
+  )
+
   ## "input" functions
 
   defpostgres("int2(text) -> int2", delegate: &Casting.parse_int2/1)

@@ -13,6 +13,10 @@ defmodule Electric.LsnTrackerTest do
       :ok
     end
 
+    test "returns nil when not yet populated", %{stack_id: stack_id} do
+      assert LsnTracker.get_last_processed_lsn(stack_id) == nil
+    end
+
     test "returns inital lsn", %{stack_id: stack_id} do
       lsn = Lsn.from_integer(7)
       LsnTracker.set_last_processed_lsn(stack_id, lsn)

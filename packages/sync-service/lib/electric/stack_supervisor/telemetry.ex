@@ -31,10 +31,11 @@ defmodule Electric.StackSupervisor.Telemetry do
   def count_shapes(stack_id, _telemetry_opts) do
     # Telemetry is started before everything else in the stack, so we need to handle
     # the case where the shape cache is not started yet.
-    with num_shapes when is_integer(num_shapes) <- Electric.ShapeCache.count_shapes(stack_id) do
+    with %{total: num_shapes, indexed: indexed_shapes, unindexed: unindexed_shapes} <-
+           Electric.ShapeCache.shape_counts(stack_id) do
       Electric.Telemetry.OpenTelemetry.execute(
         [:electric, :shapes, :total_shapes],
-        %{count: num_shapes},
+        %{count: num_shapes, count_indexed: indexed_shapes, count_unindexed: unindexed_shapes},
         %{stack_id: stack_id}
       )
     end
@@ -154,10 +155,21 @@ defmodule Electric.StackSupervisor.Telemetry do
 
   if Code.ensure_loaded?(ElectricTelemetry.StackTelemetry) do
     def child_spec(config) when is_map(config) do
+      otel_opts_base = Keyword.get(config.telemetry_opts, :otel_opts, [])
+      existing_resource = Keyword.get(otel_opts_base, :resource, %{})
+
+      otel_opts =
+        Keyword.put(
+          otel_opts_base,
+          :resource,
+          Map.put_new(existing_resource, :stack_id, config.stack_id)
+        )
+
       telemetry_opts =
         config.telemetry_opts
         |> Keyword.put(:stack_id, config.stack_id)
         |> Keyword.put(:storage_dir, config.storage_dir)
+        |> Keyword.put(:otel_opts, otel_opts)
         # Always enable default periodic measurements in addition to the user-provided ones
         |> Keyword.update(
           :periodic_measurements,
@@ -178,6 +190,8 @@ defmodule Electric.StackSupervisor.Telemetry do
     defp default_metrics_from_periodic_measurements do
       [
         Telemetry.Metrics.last_value("electric.shapes.total_shapes.count"),
+        Telemetry.Metrics.last_value("electric.shapes.total_shapes.count_indexed"),
+        Telemetry.Metrics.last_value("electric.shapes.total_shapes.count_unindexed"),
         Telemetry.Metrics.last_value("electric.shapes.active_shapes.count"),
         Telemetry.Metrics.last_value("electric.shape_db.write_buffer.pending_writes.count"),
         Telemetry.Metrics.last_value("electric.postgres.replication.pg_wal_offset"),
