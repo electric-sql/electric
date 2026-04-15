@@ -16,6 +16,13 @@ published: true
 
 A fork creates a new stream from any point in an existing one. It shares everything before the fork point with its source and evolves independently after it. One API call, two headers.
 
+> [!Warning] Durable Streams AI chat demo with forkable sessions
+> Try the [live demo](https://fork-ai-chat.examples.electric-sql.com), read the [docs](/docs/intro), and [sign up for Electric Cloud](https://dashboard.electric-sql.cloud/?intent=create&serviceType=streams).
+
+<div class="embed-container top" style="padding-bottom: 84.4%">
+  <YoutubeEmbed video-id="gmkqygh9ezo" />
+</div>
+
 ## Streams are sessions
 
 Agent infrastructure is converging on a pattern: the session — the complete log of messages, tool calls, and decisions — lives in a durable stream that lives outside the agent itself. Anthropic's recent post on [Managed Agents](https://www.anthropic.com/engineering/managed-agents) describes exactly this architecture: an append-only session log that the harness writes to, reads from, and resumes after a crash. Durable Streams provide exactly this primitive.
@@ -87,10 +94,6 @@ ChatGPT shipped branch conversations as a user-facing feature. LangGraph added c
 With Durable Streams, a conversation tree is a set of streams related by forks. The root is the original conversation. Each branch point is a fork. Every node is a regular stream with the full set of stream operations — reads, writes, real-time subscriptions. Branching lives at the data layer, not inside a specific framework's checkpoint system, so any client that can read a Durable Stream can work with forked streams without modification.
 
 We built a demo that shows this: a chat application where users can fork any point in a conversation and explore a different direction. [Try the fork demo](https://fork-ai-chat.examples.electric-sql.com).
-
-<div class="embed-container" style="padding-bottom: 84.4%">
-  <YoutubeEmbed video-id="gmkqygh9ezo" />
-</div>
 
 ### Parallel paths
 
