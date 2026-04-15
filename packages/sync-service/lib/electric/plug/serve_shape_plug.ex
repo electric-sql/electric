@@ -145,10 +145,7 @@ defmodule Electric.Plug.ServeShapePlug do
   defp check_admission(%Conn{assigns: %{config: config}} = conn, _) do
     stack_id = get_in(config, [:stack_id])
 
-    kind =
-      if conn.query_params["offset"] == "-1",
-        do: :initial,
-        else: :existing
+    kind = admission_kind(conn)
 
     max_concurrent = Map.fetch!(config[:api].max_concurrent_requests, kind)
 
@@ -386,13 +383,20 @@ defmodule Electric.Plug.ServeShapePlug do
   end
 
   defp ensure_admission_control_release(conn) do
-    stack_id = get_in(conn.assigns, [:config, :stack_id])
+    # Safe to call even if check_admission never ran: AdmissionControl.release
+    # uses a floor-at-0 ETS counter so spurious calls are no-ops.
+    case get_in(conn.assigns, [:config, :stack_id]) do
+      nil ->
+        :ok
 
-    kind =
-      if conn.query_params["offset"] == "-1",
-        do: :initial,
-        else: :existing
+      stack_id ->
+        Electric.AdmissionControl.release(stack_id, admission_kind(conn))
+    end
+  end
 
-    Electric.AdmissionControl.release(stack_id, kind)
+  defp admission_kind(conn) do
+    if conn.query_params["offset"] == "-1",
+      do: :initial,
+      else: :existing
   end
 end
