@@ -64,20 +64,21 @@ defmodule Electric.Plug.ServeShapePlugTest do
     Plug.Test.conn(method, "/" <> query_string, params)
   end
 
-  def call_serve_shape_plug(conn, ctx) do
-    opts =
-      Api.plug_opts(
-        stack_id: ctx.stack_id,
-        inspector: @inspector,
-        stack_ready_timeout: Access.get(ctx, :stack_ready_timeout, 100),
-        long_poll_timeout: long_poll_timeout(ctx),
-        sse_timeout: sse_timeout(ctx),
-        max_age: max_age(ctx),
-        stale_age: stale_age(ctx),
-        max_concurrent_requests: %{initial: 300, existing: 10_000}
-      )
+  defp build_plug_opts(ctx) do
+    Api.plug_opts(
+      stack_id: ctx.stack_id,
+      inspector: @inspector,
+      stack_ready_timeout: Access.get(ctx, :stack_ready_timeout, 100),
+      long_poll_timeout: long_poll_timeout(ctx),
+      sse_timeout: sse_timeout(ctx),
+      max_age: max_age(ctx),
+      stale_age: stale_age(ctx),
+      max_concurrent_requests: %{initial: 300, existing: 10_000}
+    )
+  end
 
-    ServeShapePlug.call(conn, opts)
+  def call_serve_shape_plug(conn, ctx) do
+    ServeShapePlug.call(conn, build_plug_opts(ctx))
   end
 
   describe "serving shape" do
@@ -1082,6 +1083,83 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
       assert conn.status == 400
       assert %{"error" => "Failed to read request body"} = Jason.decode!(conn.resp_body)
+    end
+  end
+
+  # Plug.ErrorHandler catches exceptions and calls handle_errors with the
+  # *original* conn (before plugs ran), which does not carry the
+  # register_before_send callback set by check_admission. Permits must be
+  # released explicitly in handle_errors.
+  describe "admission control release on error" do
+    setup :with_lsn_tracker
+
+    setup ctx do
+      {:via, _, {registry_name, registry_key}} =
+        Electric.Shapes.Supervisor.name(ctx.stack_id)
+
+      {:ok, _} = Registry.register(registry_name, registry_key, nil)
+      set_status_to_active(ctx)
+
+      %{plug_opts: build_plug_opts(ctx)}
+    end
+
+    test "releases permit when load_shape raises RuntimeError", ctx do
+      Repatch.patch(Electric.Shapes.Api, :load_shape_info, fn _request ->
+        raise RuntimeError, "simulated crash"
+      end)
+
+      call_plug_expecting_crash(ctx)
+
+      assert %{initial: 0, existing: 0} =
+               Electric.AdmissionControl.get_current(ctx.stack_id)
+    end
+
+    test "releases permit when load_shape raises DBConnection.ConnectionError", ctx do
+      Repatch.patch(Electric.Shapes.Api, :load_shape_info, fn _request ->
+        raise DBConnection.ConnectionError, "connection refused"
+      end)
+
+      call_plug_expecting_crash(ctx)
+
+      assert %{initial: 0, existing: 0} =
+               Electric.AdmissionControl.get_current(ctx.stack_id)
+    end
+
+    test "does not call release when exception occurs before config is assigned", ctx do
+      # If an exception occurs and the original conn lacks :config (i.e. the
+      # Router didn't pre-assign it), ensure_admission_control_release must
+      # skip the release call rather than calling release(nil, kind).
+      Repatch.patch(Electric.Shapes.Api, :validate_params, fn _api, _params ->
+        raise RuntimeError, "crash during validation"
+      end)
+
+      Repatch.spy(Electric.AdmissionControl)
+
+      try do
+        # Deliberately omit Plug.Conn.assign(:config, ...) — the Plug.ErrorHandler
+        # catch clause uses the original conn which won't have :config.
+        ctx
+        |> conn(:get, %{"table" => "public.users"}, "?offset=-1")
+        |> ServeShapePlug.call(ctx.plug_opts)
+      catch
+        _kind, _reason -> :ok
+      end
+
+      refute Repatch.called?(Electric.AdmissionControl, :release, 3)
+    end
+
+    # Pre-assigns :config to match production behaviour: the Router sets
+    # conn.assigns.config before dispatching to ServeShapePlug, so the
+    # original conn that Plug.ErrorHandler captures already carries it.
+    defp call_plug_expecting_crash(ctx) do
+      try do
+        ctx
+        |> conn(:get, %{"table" => "public.users"}, "?offset=-1")
+        |> Plug.Conn.assign(:config, ctx.plug_opts)
+        |> ServeShapePlug.call(ctx.plug_opts)
+      catch
+        _kind, _reason -> :ok
+      end
     end
   end
 

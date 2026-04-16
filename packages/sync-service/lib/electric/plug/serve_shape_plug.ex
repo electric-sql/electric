@@ -145,10 +145,7 @@ defmodule Electric.Plug.ServeShapePlug do
   defp check_admission(%Conn{assigns: %{config: config}} = conn, _) do
     stack_id = get_in(config, [:stack_id])
 
-    kind =
-      if conn.query_params["offset"] == "-1",
-        do: :initial,
-        else: :existing
+    kind = admission_kind(conn)
 
     max_concurrent = Map.fetch!(config[:api].max_concurrent_requests, kind)
 
@@ -348,8 +345,11 @@ defmodule Electric.Plug.ServeShapePlug do
 
     conn = fetch_query_params(conn)
 
-    # Admission control permit is released by the register_before_send callback
-    # set in check_admission/2, which fires when send_resp is called below.
+    # register_before_send callbacks are not available here because
+    # Plug.ErrorHandler passes the original conn (before plugs ran) to
+    # handle_errors, so we must release the permit explicitly.
+    ensure_admission_control_release(conn)
+
     conn
     |> assign(:error_str, error_str)
     |> put_resp_header("retry-after", "10")
@@ -368,8 +368,11 @@ defmodule Electric.Plug.ServeShapePlug do
 
     conn = fetch_query_params(conn)
 
-    # Admission control permit is released by the register_before_send callback
-    # set in check_admission/2, which fires when send_resp is called below.
+    # register_before_send callbacks are not available here because
+    # Plug.ErrorHandler passes the original conn (before plugs ran) to
+    # handle_errors, so we must release the permit explicitly.
+    ensure_admission_control_release(conn)
+
     conn
     |> assign(:error_str, error_str)
     |> send_resp(conn.status, Jason.encode!(%{error: error_str}))
@@ -377,5 +380,23 @@ defmodule Electric.Plug.ServeShapePlug do
     # No end_telemetry_span() call here because by this point that stack of plugs has been
     # unwound to the point where the `conn` struct did not yet have any span-related properties
     # assigned to it.
+  end
+
+  defp ensure_admission_control_release(conn) do
+    # Safe to call even if check_admission never ran: AdmissionControl.release
+    # uses a floor-at-0 ETS counter so spurious calls are no-ops.
+    case get_in(conn.assigns, [:config, :stack_id]) do
+      nil ->
+        :ok
+
+      stack_id ->
+        Electric.AdmissionControl.release(stack_id, admission_kind(conn))
+    end
+  end
+
+  defp admission_kind(conn) do
+    if conn.query_params["offset"] == "-1",
+      do: :initial,
+      else: :existing
   end
 end
