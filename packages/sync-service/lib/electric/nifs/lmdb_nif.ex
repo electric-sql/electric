@@ -58,6 +58,31 @@ defmodule Electric.Nifs.LmdbNif do
     end
   end
 
+  @doc """
+  Peek at entries after `after_key`. Returns entries with keys strictly
+  greater than `after_key`. Used to pipeline multiple in-flight batches
+  from the same LMDB queue.
+  """
+  @spec drain_after(db(), key(), pos_integer()) :: {:ok, [{key(), value()}]} | :empty
+  def drain_after(db, after_key, limit) do
+    # iterate_from uses >= semantics, so we need to skip the after_key itself.
+    # Fetch limit+1 entries starting from after_key, drop any that match it.
+    case iterate_from(db, after_key, limit + 1) do
+      {:ok, []} ->
+        :empty
+
+      {:ok, [{^after_key, _} | rest]} ->
+        case rest do
+          [] -> :empty
+          entries -> {:ok, Enum.take(entries, limit)}
+        end
+
+      {:ok, entries} ->
+        # after_key wasn't in the result (already deleted), entries are all > after_key
+        {:ok, Enum.take(entries, limit)}
+    end
+  end
+
   @spec ack(db(), [{key(), value()}]) :: :ok | {:error, term()}
   def ack(db, entries) do
     keys = Enum.map(entries, fn {key, _value} -> key end)

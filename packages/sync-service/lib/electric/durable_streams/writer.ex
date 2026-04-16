@@ -161,31 +161,43 @@ defmodule Electric.DurableStreams.Writer do
   end
 
   defp process_one_shape(state, shape_handle) do
-    # Skip shapes that already have an in-flight batch — drain returns
-    # the same entries until they're acked, so sending again would cause
-    # a sequence regression on the server.
-    if shape_in_flight?(state, shape_handle) do
-      state
-    else
-      case get_output_db(state, shape_handle) do
-        {:ok, db, state} ->
-          case LmdbNif.drain(db, @drain_batch_size) do
-            :empty ->
-              %{state | dirty_shapes: MapSet.delete(state.dirty_shapes, shape_handle)}
-
-            {:ok, entries} ->
-              send_entries(state, shape_handle, db, entries)
+    case get_output_db(state, shape_handle) do
+      {:ok, db, state} ->
+        # If this shape already has in-flight batches, drain after the
+        # last in-flight key to avoid sending duplicate entries.
+        drain_result =
+          case last_in_flight_key(state, shape_handle) do
+            nil -> LmdbNif.drain(db, @drain_batch_size)
+            after_key -> LmdbNif.drain_after(db, after_key, @drain_batch_size)
           end
 
-        {:error, reason} ->
-          Logger.debug(fn -> "Writer #{state.index} output queue not available for #{shape_handle}: #{inspect(reason)}" end)
-          %{state | dirty_shapes: MapSet.delete(state.dirty_shapes, shape_handle)}
-      end
+        case drain_result do
+          :empty ->
+            # Only remove from dirty if nothing is in-flight either
+            if last_in_flight_key(state, shape_handle) == nil do
+              %{state | dirty_shapes: MapSet.delete(state.dirty_shapes, shape_handle)}
+            else
+              state
+            end
+
+          {:ok, entries} ->
+            send_entries(state, shape_handle, db, entries)
+        end
+
+      {:error, reason} ->
+        Logger.debug(fn -> "Writer #{state.index} output queue not available for #{shape_handle}: #{inspect(reason)}" end)
+        %{state | dirty_shapes: MapSet.delete(state.dirty_shapes, shape_handle)}
     end
   end
 
-  defp shape_in_flight?(state, shape_handle) do
-    Enum.any?(state.in_flight, fn {_seq, {sh, _, _, _}} -> sh == shape_handle end)
+  defp last_in_flight_key(state, shape_handle) do
+    state.in_flight
+    |> Enum.filter(fn {_slot, {sh, _, _, _}} -> sh == shape_handle end)
+    |> Enum.map(fn {_slot, {_, entries, _, _}} ->
+      {last_key, _} = List.last(entries)
+      last_key
+    end)
+    |> Enum.max(fn -> nil end)
   end
 
   defp send_entries(state, shape_handle, _db, entries) do
