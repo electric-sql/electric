@@ -1086,10 +1086,10 @@ defmodule Electric.Plug.ServeShapePlugTest do
     end
   end
 
-  # Plug.ErrorHandler catches exceptions and calls handle_errors with the
-  # *original* conn (before plugs ran), which does not carry the
-  # register_before_send callback set by check_admission. Permits must be
-  # released explicitly in handle_errors.
+  # The plug pipeline is split into outer (setup/admission) and inner
+  # (load_shape/serve_shape_response) modules so that Inner's ErrorHandler
+  # receives the conn with full outer state — including the before_send
+  # callback from check_admission that releases the correct permit kind.
   describe "admission control release on error" do
     setup :with_lsn_tracker
 
@@ -1146,6 +1146,42 @@ defmodule Electric.Plug.ServeShapePlugTest do
       end
 
       refute Repatch.called?(Electric.AdmissionControl, :release, 3)
+    end
+
+    test "releases correct :existing permit when shape exists and offset is -1", ctx do
+      # Regression: when an existing shape is requested with offset=-1 (reconnecting
+      # client), resolve_existing_shape classifies the request as :existing. If
+      # load_shape then raises, the error handler must release :existing — not
+      # :initial (which the old offset-based heuristic would have picked).
+      Repatch.patch(Electric.Shapes, :fetch_handle_by_shape, fn _stack_id, _shape ->
+        {:ok, @test_shape_handle}
+      end)
+
+      Repatch.patch(Electric.Shapes.Api, :load_shape_info, fn _request ->
+        raise RuntimeError, "simulated crash"
+      end)
+
+      call_plug_expecting_crash(ctx)
+
+      assert %{initial: 0, existing: 0} =
+               Electric.AdmissionControl.get_current(ctx.stack_id)
+    end
+
+    test "releases correct :initial permit when shape does not exist", ctx do
+      # Complement to the above: when the shape doesn't exist, the permit kind
+      # is :initial. Verify the counter returns to zero on exception.
+      Repatch.patch(Electric.Shapes, :fetch_handle_by_shape, fn _stack_id, _shape ->
+        :error
+      end)
+
+      Repatch.patch(Electric.Shapes.Api, :load_shape_info, fn _request ->
+        raise RuntimeError, "simulated crash"
+      end)
+
+      call_plug_expecting_crash(ctx)
+
+      assert %{initial: 0, existing: 0} =
+               Electric.AdmissionControl.get_current(ctx.stack_id)
     end
 
     # Pre-assigns :config to match production behaviour: the Router sets

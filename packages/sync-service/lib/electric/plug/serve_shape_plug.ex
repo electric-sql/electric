@@ -1,4 +1,46 @@
+# Inner module is defined first because Plug.Builder resolves
+# `Electric.Plug.ServeShapePlug.Inner.init/1` at compile time.
+defmodule Electric.Plug.ServeShapePlug.Inner do
+  @moduledoc false
+  use Plug.Builder
+  use Plug.ErrorHandler
+
+  alias Electric.Plug.ServeShapePlug
+
+  plug :load_shape
+  plug :serve_shape_response
+
+  # end_telemetry_span needs to always be the last plug here.
+  plug :end_telemetry_span
+
+  defp load_shape(conn, opts), do: ServeShapePlug.do_load_shape(conn, opts)
+  defp serve_shape_response(conn, opts), do: ServeShapePlug.do_serve_shape_response(conn, opts)
+  defp end_telemetry_span(conn, opts), do: ServeShapePlug.do_end_telemetry_span(conn, opts)
+
+  # Inner ErrorHandler: the conn here carries the full outer pipeline state
+  # (shape_exists, admission_kind, before_send callbacks), so admission control
+  # release happens correctly via the before_send callback when send_resp fires.
+  @impl Plug.ErrorHandler
+  def handle_errors(conn, error), do: ServeShapePlug.do_handle_errors(conn, error)
+end
+
 defmodule Electric.Plug.ServeShapePlug do
+  @moduledoc """
+  Plug pipeline for serving shape requests.
+
+  Split into an outer pipeline (this module) and an inner pipeline (`Inner`)
+  following Jose Valim's recommended pattern (Plug issue #486). The outer
+  pipeline handles request setup, validation, and admission control. The inner
+  pipeline handles shape loading and response streaming.
+
+  This split ensures that when an exception occurs in the inner pipeline,
+  `Plug.ErrorHandler` receives the conn with all outer state intact —
+  including `conn.private[:admission_kind]` and the `register_before_send`
+  callback from `check_admission`. The outer ErrorHandler acts as a safety net
+  for exceptions in setup plugs; Plug skips it when the inner handler already
+  sent a response (via the `{:plug_conn, :sent}` mailbox check).
+  """
+
   use Plug.Builder, copy_opts_to_assign: :config
   use Plug.ErrorHandler
 
@@ -25,11 +67,12 @@ defmodule Electric.Plug.ServeShapePlug do
   # Also pre-resolves handles to save redundant lookups in load_shape.
   plug :resolve_existing_shape
   plug :check_admission
-  plug :load_shape
-  plug :serve_shape_response
 
-  # end_telemetry_span needs to always be the last plug here.
-  plug :end_telemetry_span
+  # Inner pipeline: load_shape, serve_shape_response, end_telemetry_span.
+  # Exceptions here are caught by Inner's ErrorHandler which has access to
+  # the full conn state from the outer pipeline (shape_exists, admission_kind,
+  # before_send callbacks).
+  plug Electric.Plug.ServeShapePlug.Inner
 
   # Parse JSON body for POST requests to support subset parameters in body
   # This allows clients to send longer subset queries that would exceed URL length limits
@@ -226,7 +269,12 @@ defmodule Electric.Plug.ServeShapePlug do
     base + jitter
   end
 
-  defp load_shape(%Conn{assigns: %{request: request}} = conn, _) do
+  # Public functions called by Inner module. These use @doc false because they
+  # are not part of the public API — they are public only so Inner can call
+  # them across the module boundary.
+
+  @doc false
+  def do_load_shape(%Conn{assigns: %{request: request}} = conn, _) do
     case Api.load_shape_info(request) do
       {:ok, request} ->
         assign(conn, :request, request)
@@ -234,12 +282,93 @@ defmodule Electric.Plug.ServeShapePlug do
       {:error, response} ->
         conn
         |> Api.Response.send(response)
-        |> halt()
+        |> do_halt()
     end
   end
 
-  defp serve_shape_response(%Conn{assigns: %{request: request}} = conn, _) do
+  @doc false
+  def do_serve_shape_response(%Conn{assigns: %{request: request}} = conn, _) do
     Api.serve_shape_response(conn, request)
+  end
+
+  # Assign root span attributes based on the latest state of Plug.Conn and end the root span.
+  #
+  # We want to have all the relevant HTTP and shape request attributes on the root span. This
+  # is the place to assign them because we keep this plug last in the "plug pipeline" defined
+  # in this module.
+  @doc false
+  def do_end_telemetry_span(%Conn{assigns: assigns} = conn, _opts \\ nil) do
+    start_time = get_in(conn.private, [:electric_telemetry_span, :start_time])
+    now = System.monotonic_time()
+
+    OpenTelemetry.execute(
+      [:electric, :plug, :serve_shape],
+      %{
+        count: 1,
+        bytes: assigns[:streaming_bytes_sent] || 0,
+        monotonic_time: now,
+        duration: if(start_time, do: now - start_time, else: 0)
+      },
+      %{
+        live: get_live_mode(assigns),
+        shape_handle: get_handle(assigns) || conn.query_params["handle"],
+        client_ip: conn.remote_ip,
+        status: conn.status,
+        stack_id: get_in(conn.assigns, [:config, :stack_id])
+      }
+    )
+
+    add_span_attrs_from_conn(conn)
+    OpentelemetryTelemetry.end_telemetry_span(OpenTelemetry, %{})
+    conn
+  end
+
+  # Shared error handler used by both outer and Inner ErrorHandlers.
+  #
+  # Ends the telemetry span here because Inner errors have the full conn from the
+  # outer pipeline (proper duration), and outer errors use a fallback duration of 0.
+  # The OTEL span is always popped from the process dictionary.
+  @doc false
+  def do_handle_errors(conn, %{kind: :error, reason: exception, stack: stack})
+      when is_exception(exception, DBConnection.ConnectionError) do
+    OpenTelemetry.record_exception(:error, exception, stack)
+    error_str = Exception.format(:error, exception)
+    conn = cleanup_on_error(conn)
+
+    conn
+    |> assign(:error_str, error_str)
+    |> put_resp_header("retry-after", "10")
+    |> put_resp_header("cache-control", "no-store")
+    |> put_resp_header("surrogate-control", "no-store")
+    |> send_resp(
+      503,
+      Jason.encode!(%{code: "database_unreachable", error: "Database is unreachable"})
+    )
+  end
+
+  def do_handle_errors(conn, error) do
+    OpenTelemetry.record_exception(error.kind, error.reason, error.stack)
+    error_str = Exception.format(error.kind, error.reason)
+    conn = cleanup_on_error(conn)
+
+    conn
+    |> assign(:error_str, error_str)
+    |> send_resp(conn.status, Jason.encode!(%{error: error_str}))
+  end
+
+  defp cleanup_on_error(conn) do
+    conn = fetch_query_params(conn)
+    do_end_telemetry_span(conn)
+
+    # Only release explicitly when the before_send callback won't handle it.
+    # Inner errors have admission_permit_acquired on the conn — send_resp will
+    # trigger before_send which releases the correct permit kind. Outer errors
+    # never acquired a permit (check_admission is the last outer plug).
+    if !conn.private[:admission_permit_acquired] do
+      ensure_admission_control_release(conn)
+    end
+
+    conn
   end
 
   defp open_telemetry_attrs(%Conn{assigns: assigns} = conn) do
@@ -309,34 +438,6 @@ defmodule Electric.Plug.ServeShapePlug do
     put_private(conn, :electric_telemetry_span, %{start_time: System.monotonic_time()})
   end
 
-  # Assign root span attributes based on the latest state of Plug.Conn and end the root span.
-  #
-  # We want to have all the relevant HTTP and shape request attributes on the root span. This
-  # is the place to assign them because we keep this plug last in the "plug pipeline" defined
-  # in this module.
-  defp end_telemetry_span(%Conn{assigns: assigns} = conn, _ \\ nil) do
-    OpenTelemetry.execute(
-      [:electric, :plug, :serve_shape],
-      %{
-        count: 1,
-        bytes: assigns[:streaming_bytes_sent] || 0,
-        monotonic_time: System.monotonic_time(),
-        duration: System.monotonic_time() - conn.private[:electric_telemetry_span][:start_time]
-      },
-      %{
-        live: get_live_mode(assigns),
-        shape_handle: get_handle(assigns) || conn.query_params["handle"],
-        client_ip: conn.remote_ip,
-        status: conn.status,
-        stack_id: get_in(conn.assigns, [:config, :stack_id])
-      }
-    )
-
-    add_span_attrs_from_conn(conn)
-    OpentelemetryTelemetry.end_telemetry_span(OpenTelemetry, %{})
-    conn
-  end
-
   defp get_handle(%{response: %{shape_handle: shape_handle}}), do: shape_handle
   defp get_handle(%{request: %{shape_handle: shape_handle}}), do: shape_handle
   defp get_handle(_), do: nil
@@ -351,60 +452,24 @@ defmodule Electric.Plug.ServeShapePlug do
     |> OpenTelemetry.add_span_attributes()
   end
 
-  # This overrides Plug.Conn.halt/1 (which is deliberately "unimported" at the top of this
-  # module) so that we can record the response status in the OpenTelemetry span for this
-  # request.
-  defp halt(conn) do
+  # Overrides Plug.Conn.halt/1 (deliberately "unimported" at the top) to end the
+  # telemetry span before halting. We can't use register_before_send for this because
+  # send_chunked triggers before_send BEFORE streaming starts, which would end the
+  # span before streaming completes — losing duration and bytes metrics.
+  @doc false
+  def do_halt(conn) do
     conn
-    |> end_telemetry_span()
+    |> do_end_telemetry_span()
     |> Plug.Conn.halt()
   end
 
+  defp halt(conn), do: do_halt(conn)
+
+  # Outer ErrorHandler: safety net for exceptions in setup plugs (parse_body,
+  # validate_request, resolve_existing_shape, check_admission). Plug skips this
+  # when the Inner handler already sent a response.
   @impl Plug.ErrorHandler
-  def handle_errors(conn, %{kind: :error, reason: exception, stack: stack})
-      when is_exception(exception, DBConnection.ConnectionError) do
-    OpenTelemetry.record_exception(:error, exception, stack)
-
-    error_str = Exception.format(:error, exception)
-
-    conn = fetch_query_params(conn)
-
-    # register_before_send callbacks are not available here because
-    # Plug.ErrorHandler passes the original conn (before plugs ran) to
-    # handle_errors, so we must release the permit explicitly.
-    ensure_admission_control_release(conn)
-
-    conn
-    |> assign(:error_str, error_str)
-    |> put_resp_header("retry-after", "10")
-    |> put_resp_header("cache-control", "no-store")
-    |> put_resp_header("surrogate-control", "no-store")
-    |> send_resp(
-      503,
-      Jason.encode!(%{code: "database_unreachable", error: "Database is unreachable"})
-    )
-  end
-
-  def handle_errors(conn, error) do
-    OpenTelemetry.record_exception(error.kind, error.reason, error.stack)
-
-    error_str = Exception.format(error.kind, error.reason)
-
-    conn = fetch_query_params(conn)
-
-    # register_before_send callbacks are not available here because
-    # Plug.ErrorHandler passes the original conn (before plugs ran) to
-    # handle_errors, so we must release the permit explicitly.
-    ensure_admission_control_release(conn)
-
-    conn
-    |> assign(:error_str, error_str)
-    |> send_resp(conn.status, Jason.encode!(%{error: error_str}))
-
-    # No end_telemetry_span() call here because by this point that stack of plugs has been
-    # unwound to the point where the `conn` struct did not yet have any span-related properties
-    # assigned to it.
-  end
+  def handle_errors(conn, error), do: do_handle_errors(conn, error)
 
   defp ensure_admission_control_release(conn) do
     # Safe to call even if check_admission never ran: AdmissionControl.release
@@ -419,11 +484,18 @@ defmodule Electric.Plug.ServeShapePlug do
   end
 
   defp admission_kind(conn) do
-    case conn.private[:shape_exists] do
-      true -> :existing
-      false -> :initial
-      # Fallback for error handlers where resolve_existing_shape hasn't run
-      nil -> if conn.query_params["offset"] == "-1", do: :initial, else: :existing
+    case conn.private[:admission_kind] do
+      kind when kind in [:initial, :existing] ->
+        kind
+
+      nil ->
+        case conn.private[:shape_exists] do
+          true -> :existing
+          false -> :initial
+          # Last-resort fallback for outer error handler where neither
+          # check_admission nor resolve_existing_shape has run on this conn.
+          nil -> if conn.query_params["offset"] == "-1", do: :initial, else: :existing
+        end
     end
   end
 end
