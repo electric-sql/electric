@@ -1,22 +1,22 @@
 defmodule Electric.DurableStreams.Writer do
   @moduledoc """
-  GenServer that drains shape LMDB queues and writes to durable streams.
+  GenServer that drains shape DiskQueues and writes to durable streams.
 
   Sends are pipelined: entries are drained and sent without waiting for
   acks. When an ack arrives via `handle_info({:batch_response, ...})`,
-  the confirmed entries are deleted from the LMDB queue.
+  the confirmed entries are committed (removed) from the DiskQueue.
   """
 
   use GenServer
 
   require Logger
 
-  alias Electric.Nifs.LmdbNif
+  alias Electric.Nifs.DiskQueue
   alias Electric.DurableStreams.{Distributor, SendLoop, StreamPoster}
 
   @drain_batch_size 100
   @process_interval_ms 5
-  @lmdb_map_size :erlang.bsl(4, 30)
+  @max_in_flight_per_shape 3
 
   def name(stack_id, index) do
     Electric.ProcessRegistry.name(stack_id, __MODULE__, index)
@@ -34,7 +34,15 @@ defmodule Electric.DurableStreams.Writer do
       [{_, stats}] = :ets.lookup(@stats_table, {stack_id, index})
       stats
     rescue
-      _ -> %{index: index, dirty_shapes: 0, total_acked: 0, total_errors: 0, in_flight: 0, last_ack_us: nil}
+      _ ->
+        %{
+          index: index,
+          dirty_shapes: 0,
+          total_acked: 0,
+          total_errors: 0,
+          in_flight: 0,
+          last_ack_us: nil
+        }
     end
   end
 
@@ -75,10 +83,14 @@ defmodule Electric.DurableStreams.Writer do
       send_loop: send_loop_pid,
       base_path: base_path,
       dirty_shapes: MapSet.new(),
-      shape_dbs: %{},
+      # shape_handle => DiskQueue reference
+      shape_queues: %{},
       shape_timestamps: %{},
-      # slot_id => {shape_handle, entries, send_start_us, timestamps}
-      in_flight: %{},
+      # slot_id => shape_handle (for ack routing)
+      slot_to_shape: %{},
+      # shape_handle => [{slot_id, count, :pending | {:acked, breakdown} | :failed}]
+      # Ordered list of batches per shape, in send order.
+      shape_batches: %{},
       next_slot_id: 0,
       processing: false,
       total_acked: 0,
@@ -99,7 +111,11 @@ defmodule Electric.DurableStreams.Writer do
         existing = Map.get(state.shape_timestamps, shape_handle)
 
         if is_nil(existing) or entered_at_us < elem(existing, 0) do
-          %{state | shape_timestamps: Map.put(state.shape_timestamps, shape_handle, {entered_at_us, queued_at_us})}
+          %{
+            state
+            | shape_timestamps:
+                Map.put(state.shape_timestamps, shape_handle, {entered_at_us, queued_at_us})
+          }
         else
           state
         end
@@ -130,7 +146,26 @@ defmodule Electric.DurableStreams.Writer do
   end
 
   def handle_info(:http_connection_lost, state) do
-    Logger.warning("HTTP connection lost, will retry")
+    Logger.warning(
+      "Writer #{state.index} HTTP connection lost, failing #{map_size(state.slot_to_shape)} in-flight batches"
+    )
+
+    # Mark all pending batches as failed so the commit cursor keeps moving.
+    # The entries are lost (see TODO in flush_shape_batches).
+    state =
+      Enum.reduce(state.slot_to_shape, state, fn {slot_id, {shape_handle, _send_start, _ts}},
+                                                 acc ->
+        mark_batch(acc, shape_handle, slot_id, {:error, :connection_lost}, 0, nil)
+      end)
+
+    state = %{state | slot_to_shape: %{}}
+
+    # Flush all shapes
+    state =
+      state.shape_batches
+      |> Map.keys()
+      |> Enum.reduce(state, fn shape_handle, acc -> flush_shape_batches(acc, shape_handle) end)
+
     {:noreply, state}
   end
 
@@ -161,57 +196,52 @@ defmodule Electric.DurableStreams.Writer do
   end
 
   defp process_one_shape(state, shape_handle) do
-    case get_output_db(state, shape_handle) do
-      {:ok, db, state} ->
-        # If this shape already has in-flight batches, drain after the
-        # last in-flight key to avoid sending duplicate entries.
-        drain_result =
-          case last_in_flight_key(state, shape_handle) do
-            nil -> LmdbNif.drain(db, @drain_batch_size)
-            after_key -> LmdbNif.drain_after(db, after_key, @drain_batch_size)
+    in_flight_count = shape_in_flight_count(state, shape_handle)
+
+    if in_flight_count >= @max_in_flight_per_shape do
+      # Pipeline is full — wait for acks before sending more
+      state
+    else
+      case get_output_queue(state, shape_handle) do
+        {:ok, q, state} ->
+          case DiskQueue.peek_n(q, @drain_batch_size) do
+            {:ok, []} ->
+              if in_flight_count == 0 do
+                %{state | dirty_shapes: MapSet.delete(state.dirty_shapes, shape_handle)}
+              else
+                state
+              end
+
+            {:ok, entries} ->
+              send_entries(state, shape_handle, entries)
           end
 
-        case drain_result do
-          :empty ->
-            # Only remove from dirty if nothing is in-flight either
-            if last_in_flight_key(state, shape_handle) == nil do
-              %{state | dirty_shapes: MapSet.delete(state.dirty_shapes, shape_handle)}
-            else
-              state
-            end
+        {:error, reason} ->
+          Logger.debug(fn ->
+            "Writer #{state.index} output queue not available for #{shape_handle}: #{inspect(reason)}"
+          end)
 
-          {:ok, entries} ->
-            send_entries(state, shape_handle, db, entries)
-        end
-
-      {:error, reason} ->
-        Logger.debug(fn -> "Writer #{state.index} output queue not available for #{shape_handle}: #{inspect(reason)}" end)
-        %{state | dirty_shapes: MapSet.delete(state.dirty_shapes, shape_handle)}
+          %{state | dirty_shapes: MapSet.delete(state.dirty_shapes, shape_handle)}
+      end
     end
   end
 
-  defp last_in_flight_key(state, shape_handle) do
-    state.in_flight
-    |> Enum.filter(fn {_slot, {sh, _, _, _}} -> sh == shape_handle end)
-    |> Enum.map(fn {_slot, {_, entries, _, _}} ->
-      {last_key, _} = List.last(entries)
-      last_key
-    end)
-    |> Enum.max(fn -> nil end)
+  defp shape_in_flight_count(state, shape_handle) do
+    state.shape_batches
+    |> Map.get(shape_handle, [])
+    |> Enum.count(fn {_, _, status} -> status == :pending end)
   end
 
-  defp send_entries(state, shape_handle, _db, entries) do
-    encoded_body = StreamPoster.encode_queue_entries(entries)
+  defp send_entries(state, shape_handle, entries) do
+    values = Enum.map(entries, fn {_id, data} -> data end)
+    encoded_body = StreamPoster.encode_values(values)
 
-    {last_key, _} = List.last(entries)
-    stream_seq = Base.encode16(last_key, case: :lower)
+    {last_id, _} = List.last(entries)
+    stream_seq = DiskQueue.format_seq(last_id)
 
     shape_path = "#{state.base_path}/#{shape_handle}"
     send_start = System.monotonic_time(:microsecond)
     timestamps = Map.get(state.shape_timestamps, shape_handle)
-
-    # Use a monotonic slot_id for in-flight tracking — stream_seq can
-    # collide across shapes (e.g., snapshot keys with lsn=0).
     slot_id = state.next_slot_id
 
     Logger.debug(fn ->
@@ -229,12 +259,16 @@ defmodule Electric.DurableStreams.Writer do
       shape_path
     )
 
-    in_flight = Map.put(state.in_flight, slot_id, {shape_handle, entries, send_start, timestamps})
+    batches = Map.get(state.shape_batches, shape_handle, [])
+    batches = batches ++ [{slot_id, length(entries), :pending}]
 
-    %{state |
-      in_flight: in_flight,
-      next_slot_id: slot_id + 1,
-      shape_timestamps: Map.delete(state.shape_timestamps, shape_handle)
+    %{
+      state
+      | slot_to_shape:
+          Map.put(state.slot_to_shape, slot_id, {shape_handle, send_start, timestamps}),
+        shape_batches: Map.put(state.shape_batches, shape_handle, batches),
+        next_slot_id: slot_id + 1,
+        shape_timestamps: Map.delete(state.shape_timestamps, shape_handle)
     }
   end
 
@@ -242,104 +276,163 @@ defmodule Electric.DurableStreams.Writer do
   # Internal — ack handling
   # ============================================================================
 
-  defp handle_ack(state, slot_seq, result) do
-    case Map.pop(state.in_flight, slot_seq) do
+  # Per-shape batch tracking. Each shape has an ordered list of batches:
+  #   [{slot_id, count, :pending | {:acked, breakdown} | :failed}]
+  # Batches are appended in send order. On ack, the batch is marked.
+  # We then flush from the front: commit all consecutive acked/failed
+  # batches from the head of the list.
+
+  defp handle_ack(state, slot_id, result) do
+    case Map.pop(state.slot_to_shape, slot_id) do
       {nil, _} ->
-        Logger.debug(fn -> "Writer #{state.index} received ack for unknown seq #{slot_seq}" end)
+        Logger.debug(fn -> "Writer #{state.index} received ack for unknown slot #{slot_id}" end)
         state
 
-      {{shape_handle, entries, send_start, timestamps}, in_flight} ->
-        state = %{state | in_flight: in_flight}
+      {{shape_handle, send_start, timestamps}, slot_to_shape} ->
+        state = %{state | slot_to_shape: slot_to_shape}
 
-        case result do
-          :ok ->
-            now = System.monotonic_time(:microsecond)
-            http_us = now - send_start
+        state = mark_batch(state, shape_handle, slot_id, result, send_start, timestamps)
+        flush_shape_batches(state, shape_handle)
+    end
+  end
 
-            breakdown =
-              case timestamps do
-                {entered_at, queued_at} when is_integer(entered_at) and is_integer(queued_at) ->
-                  %{
-                    consumer_us: queued_at - entered_at,
-                    queue_wait_us: send_start - queued_at,
-                    http_us: http_us,
-                    total_us: now - entered_at
-                  }
+  defp mark_batch(state, shape_handle, slot_id, result, send_start, timestamps) do
+    batches = Map.get(state.shape_batches, shape_handle, [])
 
-                _ ->
-                  %{http_us: http_us}
-              end
+    batches =
+      Enum.map(batches, fn
+        {^slot_id, count, :pending} ->
+          case result do
+            :ok ->
+              now = System.monotonic_time(:microsecond)
+              http_us = now - send_start
+
+              breakdown =
+                case timestamps do
+                  {entered_at, queued_at} when is_integer(entered_at) and is_integer(queued_at) ->
+                    %{
+                      consumer_us: queued_at - entered_at,
+                      queue_wait_us: send_start - queued_at,
+                      http_us: http_us,
+                      total_us: now - entered_at
+                    }
+
+                  _ ->
+                    %{http_us: http_us}
+                end
+
+              {slot_id, count, {:acked, breakdown}}
+
+            {:error, reason} ->
+              Logger.warning(
+                "Writer #{state.index} failed for #{shape_handle} slot #{slot_id}: #{inspect(reason)}"
+              )
+
+              {slot_id, count, :failed}
+          end
+
+        other ->
+          other
+      end)
+
+    %{state | shape_batches: Map.put(state.shape_batches, shape_handle, batches)}
+  end
+
+  defp flush_shape_batches(state, shape_handle) do
+    batches = Map.get(state.shape_batches, shape_handle, [])
+
+    case batches do
+      [{slot_id, count, {:acked, breakdown}} | rest] ->
+        case get_output_queue(state, shape_handle) do
+          {:ok, q, state} ->
+            :ok = DiskQueue.commit_n(q, count)
+            Electric.DurableStreams.Stats.record_latency(state.stack_id, breakdown)
 
             Logger.debug(fn ->
-              parts = [
-                "http=#{http_us}µs",
-                if(breakdown[:consumer_us], do: "consumer=#{breakdown.consumer_us}µs"),
-                if(breakdown[:queue_wait_us], do: "queue=#{breakdown.queue_wait_us}µs"),
-                if(breakdown[:total_us], do: "total=#{breakdown.total_us}µs")
-              ]
-              "Writer #{state.index} acked #{length(entries)} for #{shape_handle} #{Enum.join(Enum.filter(parts, & &1), " ")}"
+              "Writer #{state.index} committed #{count} for #{shape_handle} slot=#{slot_id}"
             end)
 
-            # Confirmed — delete from LMDB queue and re-mark shape as dirty
-            # so the next processing cycle drains more entries.
-            case get_output_db(state, shape_handle) do
-              {:ok, db, state} ->
-                :ok = LmdbNif.ack(db, entries)
-                Electric.DurableStreams.Stats.record_latency(state.stack_id, breakdown)
+            state = %{
+              state
+              | total_acked: state.total_acked + count,
+                last_ack_us: breakdown[:http_us],
+                dirty_shapes: MapSet.put(state.dirty_shapes, shape_handle),
+                shape_batches: Map.put(state.shape_batches, shape_handle, rest)
+            }
 
-                state = %{state |
-                  total_acked: state.total_acked + length(entries),
-                  last_ack_us: http_us,
-                  dirty_shapes: MapSet.put(state.dirty_shapes, shape_handle)
-                }
-
-                # Kick the processing loop if not already running
-                state =
-                  if not state.processing do
-                    send(self(), :process)
-                    %{state | processing: true}
-                  else
-                    state
-                  end
-
-                publish_stats(state)
+            state =
+              if not state.processing do
+                send(self(), :process)
+                %{state | processing: true}
+              else
                 state
+              end
 
-              {:error, _} ->
-                Logger.warning("Writer #{state.index} cannot ack entries for #{shape_handle}: output db not found")
-                state
-            end
-
-          {:error, reason} ->
-            Logger.warning("Writer #{state.index} failed for #{shape_handle}: #{inspect(reason)}")
-            state = %{state | total_errors: state.total_errors + 1}
             publish_stats(state)
+            flush_shape_batches(state, shape_handle)
+
+          {:error, _} ->
+            Logger.warning(
+              "Writer #{state.index} cannot commit for #{shape_handle}: queue not found"
+            )
+
             state
         end
+
+      [{_slot_id, count, :failed} | rest] ->
+        # TODO: failed batches should be retried, not dropped.
+        # Currently we commit (discard) the failed entries to keep
+        # the commit cursor moving and unblock subsequent batches.
+        # This loses data.
+        case get_output_queue(state, shape_handle) do
+          {:ok, q, state} ->
+            DiskQueue.commit_n(q, count)
+
+            state = %{
+              state
+              | total_errors: state.total_errors + 1,
+                shape_batches: Map.put(state.shape_batches, shape_handle, rest)
+            }
+
+            publish_stats(state)
+            flush_shape_batches(state, shape_handle)
+
+          _ ->
+            state
+        end
+
+      _ ->
+        # Head is :pending or list is empty — nothing to flush
+        state
     end
   end
 
   # ============================================================================
-  # Internal — LMDB access
+  # Internal — DiskQueue access
   # ============================================================================
 
-  defp get_output_db(state, shape_handle) do
-    case Map.get(state.shape_dbs, shape_handle) do
+  defp get_output_queue(state, shape_handle) do
+    case Map.get(state.shape_queues, shape_handle) do
       nil ->
-        {_mod, storage_opts} = Electric.StackConfig.lookup!(state.stack_id, Electric.ShapeCache.Storage)
-        base_path = Map.fetch!(storage_opts, :base_path)
-        queue_dir = Path.join([base_path, shape_handle, "queue", "output"])
+        # Look up the shared output queue handle registered by the Consumer
+        # during transition_to_live. This ensures we share the same DiskQueue
+        # reference (and its peek/commit cursors) instead of opening a
+        # separate handle that can't commit the Consumer's records.
+        case Electric.QueueSystem.Queue.lookup_output(shape_handle) do
+          {:ok, q} ->
+            Logger.debug(fn ->
+              "Writer #{state.index} using shared output queue for #{shape_handle} (size=#{DiskQueue.size(q)})"
+            end)
 
-        if File.exists?(queue_dir) do
-          db = LmdbNif.open(queue_dir, @lmdb_map_size, 1)
-          state = %{state | shape_dbs: Map.put(state.shape_dbs, shape_handle, db)}
-          {:ok, db, state}
-        else
-          {:error, :not_found}
+            state = %{state | shape_queues: Map.put(state.shape_queues, shape_handle, q)}
+            {:ok, q, state}
+
+          :error ->
+            {:error, :not_registered}
         end
 
-      db ->
-        {:ok, db, state}
+      q ->
+        {:ok, q, state}
     end
   end
 
@@ -347,7 +440,7 @@ defmodule Electric.DurableStreams.Writer do
     stats = %{
       index: state.index,
       dirty_shapes: MapSet.size(state.dirty_shapes),
-      in_flight: map_size(state.in_flight),
+      in_flight: map_size(state.slot_to_shape),
       total_acked: state.total_acked,
       total_errors: state.total_errors,
       last_ack_us: state.last_ack_us

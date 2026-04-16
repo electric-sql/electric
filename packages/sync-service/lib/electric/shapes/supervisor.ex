@@ -50,7 +50,7 @@ defmodule Electric.Shapes.Supervisor do
     wal_buffer_capacity = Electric.StackConfig.lookup(stack_id, :wal_buffer_capacity, 64 * 1024 * 1024)
     durable_streams_url = Electric.StackConfig.lookup(stack_id, :durable_streams_url)
     durable_streams_token = Electric.StackConfig.lookup(stack_id, :durable_streams_token)
-    num_writers = Electric.StackConfig.lookup(stack_id, :durable_streams_writer_pool_size, 4)
+    num_writers = Electric.StackConfig.lookup(stack_id, :durable_streams_writer_pool_size, 16)
 
     wal_buffer_spec =
       {Electric.Replication.WalBuffer,

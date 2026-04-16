@@ -128,33 +128,41 @@ defmodule Electric.Bench.LoadGenerator do
   end
 
   # ---------------------------------------------------------------------------
-  # Phase 1: Seed
+  # Phase 1: Seed — ensure exactly row_count rows exist
   # ---------------------------------------------------------------------------
 
   defp seed(db_pool, table, partitions, row_count, content_size) do
-    Logger.info("Seeding #{row_count} rows across #{partitions} partitions...")
+    %{rows: [[existing]]} =
+      Postgrex.query!(db_pool, ~s|SELECT count(*) FROM "#{table}"|, [])
 
-    concurrency = min(row_count, 20)
+    if existing >= row_count do
+      Logger.info("Table already has #{existing} rows (need #{row_count}), skipping seed")
+    else
+      needed = row_count - existing
+      Logger.info("Seeding #{needed} rows (#{existing} exist, need #{row_count})...")
 
-    1..row_count
-    |> Task.async_stream(
-      fn i ->
-        partition = rem(i - 1, partitions) + 1
-        content = random_content(content_size)
+      concurrency = min(needed, 20)
 
-        Postgrex.query!(
-          db_pool,
-          ~s|INSERT INTO "#{table}" (value, partition) VALUES ($1, $2)|,
-          [content, partition]
-        )
-      end,
-      max_concurrency: concurrency,
-      timeout: :infinity,
-      ordered: false
-    )
-    |> Stream.run()
+      1..needed
+      |> Task.async_stream(
+        fn i ->
+          partition = rem(i - 1, partitions) + 1
+          content = random_content(content_size)
 
-    Logger.info("Seeded #{row_count} rows")
+          Postgrex.query!(
+            db_pool,
+            ~s|INSERT INTO "#{table}" (value, partition) VALUES ($1, $2)|,
+            [content, partition]
+          )
+        end,
+        max_concurrency: concurrency,
+        timeout: :infinity,
+        ordered: false
+      )
+      |> Stream.run()
+
+      Logger.info("Seeded #{needed} rows (total now #{row_count})")
+    end
   end
 
   # ---------------------------------------------------------------------------

@@ -1,36 +1,32 @@
 defmodule Electric.ShapeCache.LmdbQueueStorage do
   @moduledoc """
-  Storage behaviour implementation backed by per-shape LMDB queues.
+  Storage behaviour implementation backed by per-shape DiskQueues.
 
   Each shape gets a `Electric.QueueSystem.Queue` that manages snapshot + streaming
-  data flow into a single output queue. The output queue is also consumed by the
+  data flow into a single output queue. The output queue is consumed by the
   Distributor/Writer pool for writing to durable streams.
 
-  Keys are 16-byte binaries: `<<lsn::64, offset::64>>` for replication entries
-  and `<<0::64, offset::64>>` for snapshot entries.
+  Values are stored as-is (JSON strings). The DiskQueue assigns monotonic
+  integer IDs automatically — no explicit key management needed.
   """
 
   @behaviour Electric.ShapeCache.Storage
 
-  alias Electric.Nifs.LmdbNif
-  alias Electric.QueueSystem.{Queue, Key}
+  alias Electric.Nifs.DiskQueue
+  alias Electric.QueueSystem.Queue
   alias Electric.Replication.LogOffset
   alias Electric.ShapeCache.Storage
 
   require Logger
-
-  @default_map_size :erlang.bsl(4, 30)
 
   defstruct [
     :base_path,
     :stack_id,
     :shape_handle,
     :chunk_bytes_threshold,
-    :map_size,
     read_only?: false
   ]
 
-  # Writer state: wraps the Queue struct plus metadata
   defmodule WriterState do
     @moduledoc false
     defstruct [
@@ -51,13 +47,11 @@ defmodule Electric.ShapeCache.LmdbQueueStorage do
     storage_dir = Keyword.fetch!(opts, :storage_dir)
     stack_id = Keyword.fetch!(opts, :stack_id)
     chunk_bytes_threshold = Keyword.get(opts, :chunk_bytes_threshold, 64 * 1024)
-    map_size = Keyword.get(opts, :map_size, @default_map_size)
 
     %{
       base_path: Path.join(storage_dir, stack_id),
       stack_id: stack_id,
-      chunk_bytes_threshold: chunk_bytes_threshold,
-      map_size: map_size
+      chunk_bytes_threshold: chunk_bytes_threshold
     }
   end
 
@@ -67,39 +61,30 @@ defmodule Electric.ShapeCache.LmdbQueueStorage do
       base_path: Path.join(compiled_opts.base_path, shape_handle),
       stack_id: compiled_opts.stack_id,
       shape_handle: shape_handle,
-      chunk_bytes_threshold: compiled_opts.chunk_bytes_threshold,
-      map_size: compiled_opts[:map_size] || @default_map_size
+      chunk_bytes_threshold: compiled_opts.chunk_bytes_threshold
     }
   end
 
   @impl Storage
-  def stack_start_link(_compiled_opts) do
-    :ignore
-  end
+  def stack_start_link(_compiled_opts), do: :ignore
 
   @impl Storage
-  def start_link(_shape_opts) do
-    :ignore
-  end
+  def start_link(_shape_opts), do: :ignore
 
   @impl Storage
   def init_writer!(%__MODULE__{} = opts, _shape) do
     queue_dir = Path.join(opts.base_path, "queue")
     File.mkdir_p!(queue_dir)
-    Logger.debug("LmdbQueueStorage creating queue at #{queue_dir}")
+    Logger.debug("Creating DiskQueue at #{queue_dir}")
 
-    queue = Queue.new(queue_dir, map_size: opts.map_size)
+    queue = Queue.new(queue_dir)
 
-    # Try to recover latest offset from output DB
-    latest_offset = recover_latest_offset(queue)
-
-    # Check if snapshot metadata exists
     snapshot_started? = File.exists?(Path.join(opts.base_path, "snapshot_started"))
 
     %WriterState{
       queue: queue,
       opts: opts,
-      latest_offset: latest_offset,
+      latest_offset: nil,
       snapshot_started?: snapshot_started?,
       pg_snapshot: nil
     }
@@ -107,19 +92,15 @@ defmodule Electric.ShapeCache.LmdbQueueStorage do
 
   @impl Storage
   def append_to_log!(log_items, %WriterState{} = state) do
-    keyed_entries = Enum.map(log_items, &log_item_to_entry/1)
-    queue = Queue.write_keyed(state.queue, keyed_entries)
+    values = Enum.map(log_items, &log_item_to_value/1)
+    queue = Enum.reduce(values, state.queue, fn value, q -> Queue.push(q, value) end)
 
     latest_offset =
-      case keyed_entries do
-        [] ->
-          state.latest_offset
-
-        _ ->
-          log_items |> List.last() |> elem(0)
+      case log_items do
+        [] -> state.latest_offset
+        _ -> log_items |> List.last() |> elem(0)
       end
 
-    # Send flushed notification to self (Consumer expects this)
     if latest_offset do
       send(self(), {Storage, :flushed, latest_offset})
     end
@@ -133,27 +114,22 @@ defmodule Electric.ShapeCache.LmdbQueueStorage do
   end
 
   @impl Storage
-  def signal_txn_commit!(_xid, %WriterState{} = state) do
-    state
-  end
+  def signal_txn_commit!(_xid, %WriterState{} = state), do: state
 
   @impl Storage
   def make_new_snapshot!(data_stream, %__MODULE__{} = opts) do
     snapshot_dir = Path.join([opts.base_path, "queue", "snapshot"])
     File.mkdir_p!(snapshot_dir)
 
-    # Open a direct handle to snapshot_db (separate from the Consumer's Queue)
-    db = LmdbNif.open(snapshot_dir, opts.map_size, 1)
-    seq = write_snapshot_entries(db, data_stream, 0)
+    {:ok, q} = DiskQueue.open(snapshot_dir)
+    count = write_snapshot_entries(q, data_stream, 0)
 
-    Logger.debug("Wrote #{seq} snapshot entries to #{snapshot_dir}")
-
+    Logger.debug("Wrote #{count} snapshot entries to #{snapshot_dir}")
     :ok
   end
 
-  defp write_snapshot_entries(db, stream, seq) do
-    Enum.reduce(stream, seq, fn item, acc ->
-      # Skip :chunk_boundary markers from the snapshot stream
+  defp write_snapshot_entries(q, stream, count) do
+    Enum.reduce(stream, count, fn item, acc ->
       if item == :chunk_boundary do
         acc
       else
@@ -163,8 +139,7 @@ defmodule Electric.ShapeCache.LmdbQueueStorage do
             binary when is_binary(binary) -> binary
           end
 
-        key = Key.snapshot_key(acc)
-        :ok = LmdbNif.put(db, key, value)
+        {:ok, _seq} = DiskQueue.push(q, value)
         acc + 1
       end
     end)
@@ -173,42 +148,34 @@ defmodule Electric.ShapeCache.LmdbQueueStorage do
   @doc """
   Perform the queue state transition after snapshot data has been written.
 
-  Called by the Consumer process after receiving notification that snapshot
-  data is fully written to snapshot_db. This copies the snapshot and streaming
-  data into the output queue in the correct order.
-
-  The transition follows the 4-state pattern from QueueSystem:
-  1. Copy snapshot_db → output_db
+  Copies snapshot and streaming data into the output queue in order:
+  1. Copy snapshot queue → output queue
   2. start_buffering (captures streaming boundary, buffers new writes)
-  3. Copy streaming_db (up to boundary) → output_db
+  3. Copy streaming queue (up to boundary) → output queue
   4. go_live (flush buffer, switch to direct output writes)
   """
   def transition_to_live(%WriterState{} = state) do
     queue = state.queue
 
-    # Step 1: Copy all snapshot entries to output
-    {:ok, snap_count} = Electric.QueueSystem.Copier.copy(queue.snapshot_db, queue.output_db)
+    {:ok, snap_count} = Queue.copy_snapshot_to_output(queue)
     Logger.debug("Copied #{snap_count} snapshot entries to output")
 
-    # Step 2: Capture the streaming boundary and switch to buffering
-    {queue, last_key} = Queue.start_buffering(queue)
+    {queue, last_id} = Queue.start_buffering(queue)
 
-    # Step 3: Copy streaming entries up to the boundary
-    if last_key do
-      {:ok, stream_count} =
-        Electric.QueueSystem.Copier.copy_until(queue.streaming_db, queue.output_db, last_key)
+    {:ok, stream_count} = Queue.copy_streaming_to_output(queue, last_id)
 
+    if stream_count > 0 do
       Logger.debug("Copied #{stream_count} streaming entries to output")
     end
 
-    # Step 4: Flush buffer and go live
     queue = Queue.go_live(queue)
-
-    # Clean up temporary DBs
     queue = Queue.cleanup_temp(queue)
 
-    Logger.debug("Queue transitioned to live mode")
+    # Register the output queue handle so the Writer can share it
+    # instead of opening a separate handle to the same directory.
+    Queue.register_output(state.opts.shape_handle, Queue.output(queue))
 
+    Logger.debug("Queue transitioned to live mode")
     %{state | queue: queue}
   end
 
@@ -225,30 +192,10 @@ defmodule Electric.ShapeCache.LmdbQueueStorage do
   end
 
   @impl Storage
-  def fetch_latest_offset(%__MODULE__{} = opts) do
-    queue_dir = Path.join(opts.base_path, "queue")
-
-    if File.exists?(Path.join(queue_dir, "output")) do
-      db = LmdbNif.open(Path.join(queue_dir, "output"), @default_map_size, 1)
-
-      case LmdbNif.size(db) do
-        0 ->
-          {:ok, LogOffset.last_before_real_offsets()}
-
-        _n ->
-          # Get the last key to determine the latest offset
-          case LmdbNif.iterate_from(db, <<0>>, 0) do
-            {:ok, entries} when entries != [] ->
-              {last_key, _} = List.last(entries)
-              {:ok, key_to_log_offset(last_key)}
-
-            _ ->
-              {:ok, LogOffset.last_before_real_offsets()}
-          end
-      end
-    else
-      {:ok, LogOffset.last_before_real_offsets()}
-    end
+  def fetch_latest_offset(%__MODULE__{} = _opts) do
+    # DiskQueue doesn't support random access — return a default.
+    # The read path uses durable streams, not local storage.
+    {:ok, LogOffset.last_before_real_offsets()}
   end
 
   @impl Storage
@@ -287,86 +234,47 @@ defmodule Electric.ShapeCache.LmdbQueueStorage do
   end
 
   @impl Storage
-  def get_total_disk_usage(_compiled_opts) do
-    0
+  def get_total_disk_usage(_compiled_opts), do: 0
+
+  @impl Storage
+  def get_log_stream(_offset, _max_offset, %__MODULE__{} = _opts) do
+    # Read path is served from durable streams, not local storage.
+    Stream.map([], & &1)
   end
 
   @impl Storage
-  def get_log_stream(offset, max_offset, %__MODULE__{} = opts) do
-    queue_dir = Path.join(opts.base_path, "queue")
-
-    if File.exists?(Path.join(queue_dir, "output")) do
-      db = LmdbNif.open(Path.join(queue_dir, "output"), @default_map_size, 1)
-      start_key = log_offset_to_key(offset)
-      end_key = log_offset_to_key(max_offset)
-
-      case LmdbNif.iterate_range(db, start_key, end_key, 0) do
-        {:ok, entries} ->
-          Stream.map(entries, fn {_key, value} -> value end)
-
-        {:error, _} ->
-          Stream.map([], & &1)
-      end
-    else
-      Stream.map([], & &1)
-    end
-  end
+  def get_chunk_end_log_offset(_offset, _opts), do: LogOffset.last()
 
   @impl Storage
-  def get_chunk_end_log_offset(_offset, _opts) do
-    # For LMDB queue storage, we don't track chunks — all data is in one queue
-    LogOffset.last()
-  end
+  def terminate(%WriterState{} = _state), do: :ok
 
   @impl Storage
-  def terminate(%WriterState{} = _state) do
-    :ok
-  end
-
-  @impl Storage
-  def hibernate(%WriterState{} = state) do
-    state
-  end
+  def hibernate(%WriterState{} = state), do: state
 
   @impl Storage
   def cleanup!(%__MODULE__{} = opts) do
-    if File.exists?(opts.base_path) do
-      File.rm_rf!(opts.base_path)
-    end
-
+    if File.exists?(opts.base_path), do: File.rm_rf!(opts.base_path)
     :ok
   end
 
   @impl Storage
   def cleanup!(compiled_opts, shape_handle) do
     path = Path.join(compiled_opts.base_path, shape_handle)
-
-    if File.exists?(path) do
-      File.rm_rf!(path)
-    end
-
+    if File.exists?(path), do: File.rm_rf!(path)
     :ok
   end
 
   @impl Storage
   def cleanup_all!(compiled_opts) do
-    if File.exists?(compiled_opts.base_path) do
-      File.rm_rf!(compiled_opts.base_path)
-    end
-
+    if File.exists?(compiled_opts.base_path), do: File.rm_rf!(compiled_opts.base_path)
     :ok
   end
 
   @impl Storage
-  def supports_txn_fragment_streaming?() do
-    true
-  end
+  def supports_txn_fragment_streaming?(), do: true
 
   @impl Storage
-  def compact(_opts, _keep_complete_chunks) do
-    # No-op for LMDB queue storage — compaction is handled by drain/ack
-    :ok
-  end
+  def compact(_opts, _keep_complete_chunks), do: :ok
 
   @impl Storage
   def write_move_in_snapshot!(_data_stream, _name, _opts) do
@@ -380,16 +288,13 @@ defmodule Electric.ShapeCache.LmdbQueueStorage do
 
   @impl Storage
   def append_control_message!(message, %WriterState{} = state) do
-    # Control messages get a synthetic offset
     offset = LogOffset.increment(state.latest_offset || LogOffset.last_before_real_offsets())
     json = if is_binary(message), do: message, else: Jason.encode!(message)
-    key = log_offset_to_key(offset)
 
-    queue = Queue.write_keyed(state.queue, [{key, json}])
+    queue = Queue.push(state.queue, json)
     state = %{state | queue: queue, latest_offset: offset}
 
     send(self(), {Storage, :flushed, offset})
-
     {{offset, offset}, state}
   end
 
@@ -397,55 +302,10 @@ defmodule Electric.ShapeCache.LmdbQueueStorage do
   # Internal helpers
   # ============================================================================
 
-  defp log_item_to_entry({%LogOffset{} = offset, _key, _op_type, json}) do
-    lmdb_key = log_offset_to_key(offset)
-
-    value =
-      case json do
-        iodata when is_list(iodata) -> IO.iodata_to_binary(iodata)
-        binary when is_binary(binary) -> binary
-      end
-
-    {lmdb_key, value}
-  end
-
-  defp log_offset_to_key(%LogOffset{tx_offset: tx, op_offset: :infinity}) do
-    Key.key(tx, 0xFFFFFFFFFFFFFFFF)
-  end
-
-  defp log_offset_to_key(%LogOffset{tx_offset: tx, op_offset: op}) do
-    Key.key(tx, op)
-  end
-
-  defp log_offset_to_key({tx, :infinity}) do
-    Key.key(tx, 0xFFFFFFFFFFFFFFFF)
-  end
-
-  defp log_offset_to_key({tx, op}) do
-    Key.key(tx, op)
-  end
-
-  defp key_to_log_offset(<<lsn::unsigned-big-integer-size(64), offset::unsigned-big-integer-size(64)>>) do
-    LogOffset.new(lsn, offset)
-  end
-
-  defp recover_latest_offset(%Queue{} = queue) do
-    db = Queue.output_db(queue)
-
-    case LmdbNif.size(db) do
-      0 ->
-        nil
-
-      _n ->
-        # Scan to find the last key
-        case LmdbNif.iterate_from(db, <<0>>, 0) do
-          {:ok, entries} when entries != [] ->
-            {last_key, _} = List.last(entries)
-            key_to_log_offset(last_key)
-
-          _ ->
-            nil
-        end
+  defp log_item_to_value({%LogOffset{}, _key, _op_type, json}) do
+    case json do
+      iodata when is_list(iodata) -> IO.iodata_to_binary(iodata)
+      binary when is_binary(binary) -> binary
     end
   end
 end

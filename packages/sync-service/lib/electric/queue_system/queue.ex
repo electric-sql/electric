@@ -1,138 +1,133 @@
 defmodule Electric.QueueSystem.Queue do
   @moduledoc """
-  A processless multi-database LMDB queue that manages snapshot + streaming
-  replication data flow into a single output queue.
+  A processless multi-queue that manages snapshot + streaming replication
+  data flow into a single output queue, backed by DiskQueue.
 
   The consumer process owns the Queue struct and passes it through function calls.
-  The reader just holds the output_db ref.
 
   ## States
 
-  1. `:streaming` — writes go to streaming_db, snapshot writes go to snapshot_db
-  2. `:buffering` — writes accumulate in memory, streaming_db is being copied to output
-  3. `:live` — writes go directly to output_db
+  1. `:streaming` — writes go to streaming queue, snapshot writes go to snapshot queue
+  2. `:buffering` — writes accumulate in memory, streaming queue is being copied to output
+  3. `:live` — writes go directly to output queue
   """
 
-  alias Electric.QueueSystem.Key
-  alias Electric.Nifs.LmdbNif
-
-  @map_size :erlang.bsl(4, 30)
+  alias Electric.Nifs.DiskQueue
 
   defstruct [
     :mode,
-    :output_db,
-    :streaming_db,
-    :snapshot_db,
+    :output,
+    :streaming,
+    :snapshot,
     :base_dir,
     buffer: [],
-    streaming_seq: 0,
-    snapshot_seq: 0
+    last_streaming_id: nil
   ]
 
   @doc """
-  Create a new queue with 3 LMDB databases in `base_dir`.
+  Create a new queue with 3 DiskQueues in `base_dir`.
   """
-  def new(base_dir, opts \\ []) do
-    map_size = opts[:map_size] || @map_size
-
-    output_db = LmdbNif.open(Path.join(base_dir, "output"), map_size, 1)
-    streaming_db = LmdbNif.open(Path.join(base_dir, "streaming"), map_size, 1)
-    snapshot_db = LmdbNif.open(Path.join(base_dir, "snapshot"), map_size, 1)
+  def new(base_dir, _opts \\ []) do
+    {:ok, output} = DiskQueue.open(Path.join(base_dir, "output"))
+    {:ok, streaming} = DiskQueue.open(Path.join(base_dir, "streaming"))
+    {:ok, snapshot} = DiskQueue.open(Path.join(base_dir, "snapshot"))
 
     %__MODULE__{
       mode: :streaming,
-      output_db: output_db,
-      streaming_db: streaming_db,
-      snapshot_db: snapshot_db,
+      output: output,
+      streaming: streaming,
+      snapshot: snapshot,
       base_dir: base_dir
     }
   end
 
   @doc """
-  Write streaming entries to the queue. Behavior depends on current mode:
-  - `:streaming` → writes to streaming_db
+  Push a value to the queue. Behavior depends on current mode:
+  - `:streaming` → pushes to streaming queue
   - `:buffering` → appends to in-memory buffer
-  - `:live` → writes directly to output_db
+  - `:live` → pushes directly to output queue
   """
-  def write(%__MODULE__{mode: :streaming} = q, entries) do
-    {pairs, seq} = key_entries(entries, q.streaming_seq, &Key.streaming_key/1)
-    :ok = LmdbNif.batch_put(q.streaming_db, pairs)
-    %{q | streaming_seq: seq}
+  def push(%__MODULE__{mode: :streaming} = q, value) do
+    {:ok, id} = DiskQueue.push(q.streaming, value)
+    %{q | last_streaming_id: id}
   end
 
-  def write(%__MODULE__{mode: :buffering} = q, entries) do
-    {pairs, seq} = key_entries(entries, q.streaming_seq, &Key.streaming_key/1)
-    %{q | buffer: q.buffer ++ pairs, streaming_seq: seq}
+  def push(%__MODULE__{mode: :buffering} = q, value) do
+    %{q | buffer: q.buffer ++ [value]}
   end
 
-  def write(%__MODULE__{mode: :live} = q, entries) do
-    {pairs, seq} = key_entries(entries, q.streaming_seq, &Key.streaming_key/1)
-    :ok = LmdbNif.batch_put(q.output_db, pairs)
-    %{q | streaming_seq: seq}
-  end
-
-  @doc """
-  Write entries with explicit keys to the queue.
-  `keyed_entries` is a list of `{key, value}` tuples.
-  """
-  def write_keyed(%__MODULE__{mode: :streaming} = q, keyed_entries) do
-    :ok = LmdbNif.batch_put(q.streaming_db, keyed_entries)
-    q
-  end
-
-  def write_keyed(%__MODULE__{mode: :buffering} = q, keyed_entries) do
-    %{q | buffer: q.buffer ++ keyed_entries}
-  end
-
-  def write_keyed(%__MODULE__{mode: :live} = q, keyed_entries) do
-    :ok = LmdbNif.batch_put(q.output_db, keyed_entries)
+  def push(%__MODULE__{mode: :live} = q, value) do
+    {:ok, _id} = DiskQueue.push(q.output, value)
     q
   end
 
   @doc """
-  Returns a `Electric.QueueSystem.SnapshotCollector` that implements `Collectable`.
+  Push a value to the snapshot queue.
   """
-  def snapshot_collector(%__MODULE__{} = q, consumer_pid) do
-    %Electric.QueueSystem.SnapshotCollector{
-      snapshot_db: q.snapshot_db,
-      consumer_pid: consumer_pid,
-      seq: q.snapshot_seq
-    }
+  def push_snapshot(%__MODULE__{} = q, value) do
+    {:ok, _id} = DiskQueue.push(q.snapshot, value)
+    q
   end
 
   @doc """
   Switch from `:streaming` to `:buffering` mode.
-  Returns `{queue, last_streaming_key}` so the caller knows the boundary
-  for the streaming DB copy.
+  Returns `{queue, last_streaming_id}` so the caller knows the boundary
+  for the streaming queue copy.
   """
   def start_buffering(%__MODULE__{mode: :streaming} = q) do
-    last_key =
-      if q.streaming_seq > 0 do
-        Key.streaming_key(q.streaming_seq - 1)
-      end
-
-    {%{q | mode: :buffering}, last_key}
+    {%{q | mode: :buffering}, q.last_streaming_id}
   end
 
   @doc """
   Switch from `:buffering` to `:live` mode.
-  Flushes the in-memory buffer to the output_db.
+  Flushes the in-memory buffer to the output queue.
   """
   def go_live(%__MODULE__{mode: :buffering} = q) do
     if q.buffer != [] do
-      :ok = LmdbNif.batch_put(q.output_db, q.buffer)
+      {:ok, _seqs} = DiskQueue.batch_push(q.output, q.buffer)
     end
 
-    %{q | mode: :live, buffer: [], streaming_db: nil, snapshot_db: nil}
+    %{q | mode: :live, buffer: [], streaming: nil, snapshot: nil}
+  end
+
+  @output_table :disk_queue_output_refs
+
+  @doc """
+  Returns the output queue handle for the Writer.
+  """
+  def output(%__MODULE__{} = q), do: q.output
+
+  @doc """
+  Register the output queue handle so the Writer can look it up
+  by shape handle. Called after transition to live mode.
+  """
+  def register_output(shape_handle, output_ref) do
+    try do
+      :ets.insert(@output_table, {shape_handle, output_ref})
+    rescue
+      _ ->
+        :ets.new(@output_table, [:public, :named_table, :set])
+        :ets.insert(@output_table, {shape_handle, output_ref})
+    end
   end
 
   @doc """
-  Returns the output DB handle for readers.
+  Look up a registered output queue handle by shape handle.
+  Returns `{:ok, ref}` or `:error`.
   """
-  def output_db(%__MODULE__{} = q), do: q.output_db
+  def lookup_output(shape_handle) do
+    try do
+      case :ets.lookup(@output_table, shape_handle) do
+        [{_, ref}] -> {:ok, ref}
+        [] -> :error
+      end
+    rescue
+      _ -> :error
+    end
+  end
 
   @doc """
-  Delete the temporary snapshot and streaming DB directories.
+  Delete the temporary snapshot and streaming queue directories.
   """
   def cleanup_temp(%__MODULE__{} = q) do
     File.rm_rf(Path.join(q.base_dir, "snapshot"))
@@ -140,12 +135,75 @@ defmodule Electric.QueueSystem.Queue do
     q
   end
 
-  defp key_entries(entries, start_seq, key_fun) do
-    {pairs, seq} =
-      Enum.reduce(entries, {[], start_seq}, fn value, {acc, seq} ->
-        {[{key_fun.(seq), value} | acc], seq + 1}
-      end)
+  @doc """
+  Copy all entries from the snapshot queue to the output queue.
+  Returns `{:ok, count}`.
+  """
+  def copy_snapshot_to_output(%__MODULE__{} = q) do
+    copy_all(q.snapshot, q.output)
+  end
 
-    {Enum.reverse(pairs), seq}
+  @doc """
+  Copy entries from the streaming queue to the output queue,
+  up to and including `last_id`. Returns `{:ok, count}`.
+  """
+  def copy_streaming_to_output(%__MODULE__{} = _q, nil), do: {:ok, 0}
+
+  def copy_streaming_to_output(%__MODULE__{} = q, last_id) do
+    copy_until(q.streaming, q.output, last_id)
+  end
+
+  # ------------------------------------------------------------------
+  # Internal copy helpers
+  # ------------------------------------------------------------------
+
+  defp copy_all(src, dst) do
+    do_copy_all(src, dst, 0)
+  end
+
+  defp do_copy_all(src, dst, count) do
+    case DiskQueue.peek_n(src, 100) do
+      {:ok, []} ->
+        {:ok, count}
+
+      {:ok, records} ->
+        values = Enum.map(records, fn {_id, data} -> data end)
+        {:ok, _seqs} = DiskQueue.batch_push(dst, values)
+        :ok = DiskQueue.commit_n(src, length(records))
+        do_copy_all(src, dst, count + length(records))
+    end
+  end
+
+  defp copy_until(src, dst, last_id) do
+    do_copy_until(src, dst, last_id, 0)
+  end
+
+  defp do_copy_until(src, dst, last_id, count) do
+    case DiskQueue.peek_n(src, 100) do
+      {:ok, []} ->
+        {:ok, count}
+
+      {:ok, records} ->
+        # Take only records up to and including last_id
+        {to_copy, _rest} = Enum.split_while(records, fn {id, _} -> id <= last_id end)
+
+        if to_copy == [] do
+          # Rewind the peek cursor since we didn't commit
+          DiskQueue.rewind_peek(src)
+          {:ok, count}
+        else
+          values = Enum.map(to_copy, fn {_id, data} -> data end)
+          {:ok, _seqs} = DiskQueue.batch_push(dst, values)
+          :ok = DiskQueue.commit_n(src, length(to_copy))
+
+          {last_copied_id, _} = List.last(to_copy)
+
+          if last_copied_id >= last_id do
+            {:ok, count + length(to_copy)}
+          else
+            do_copy_until(src, dst, last_id, count + length(to_copy))
+          end
+        end
+    end
   end
 end
