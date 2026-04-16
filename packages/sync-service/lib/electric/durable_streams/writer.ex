@@ -26,11 +26,15 @@ defmodule Electric.DurableStreams.Writer do
     GenServer.cast(pid, {:process_shape, shape_handle, entered_at_us, queued_at_us})
   end
 
-  @doc "Return stats for this writer. Non-blocking via persistent_term."
+  @stats_table :durable_streams_writer_stats
+
+  @doc "Return stats for this writer. Non-blocking via ETS."
   def stats(stack_id, index) do
-    case :persistent_term.get({__MODULE__, :stats, stack_id, index}, nil) do
-      nil -> %{index: index, dirty_shapes: 0, total_acked: 0, total_errors: 0, in_flight: 0, last_ack_us: nil}
-      stats -> stats
+    try do
+      [{_, stats}] = :ets.lookup(@stats_table, {stack_id, index})
+      stats
+    rescue
+      _ -> %{index: index, dirty_shapes: 0, total_acked: 0, total_errors: 0, in_flight: 0, last_ack_us: nil}
     end
   end
 
@@ -337,6 +341,12 @@ defmodule Electric.DurableStreams.Writer do
       last_ack_us: state.last_ack_us
     }
 
-    :persistent_term.put({__MODULE__, :stats, state.stack_id, state.index}, stats)
+    try do
+      :ets.insert(@stats_table, {{state.stack_id, state.index}, stats})
+    rescue
+      _ ->
+        :ets.new(@stats_table, [:public, :named_table, :set])
+        :ets.insert(@stats_table, {{state.stack_id, state.index}, stats})
+    end
   end
 end

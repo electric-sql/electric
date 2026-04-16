@@ -32,7 +32,9 @@ defmodule Electric.StackConfig do
       shape_enable_suspend?: Electric.Config.default(:shape_enable_suspend?),
       chunk_bytes_threshold: Electric.ShapeCache.LogChunker.default_chunk_size_threshold(),
       feature_flags: [],
-      process_spawn_opts: %{}
+      process_spawn_opts: %{
+        shape_log_collector: [priority: :high]
+      }
     ]
   end
 

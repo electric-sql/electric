@@ -144,8 +144,10 @@ defmodule Electric.Replication.ShapeLogCollector do
   Should be called by consumer processes after they flush data.
   """
   @spec notify_flushed(Electric.stack_id(), Electric.shape_handle(), LogOffset.t()) :: :ok
-  def notify_flushed(stack_id, shape_handle, offset) do
-    GenServer.cast(name(stack_id), {:writer_flushed, shape_handle, offset})
+  def notify_flushed(_stack_id, _shape_handle, _offset) do
+    # No-op: the ReplicationClient now acks to Postgres immediately after
+    # pushing to the WalBuffer, so FlushTracker feedback is not needed.
+    :ok
   end
 
   @doc """
@@ -316,6 +318,10 @@ defmodule Electric.Replication.ShapeLogCollector do
     # Check for persisted events from a previous session
     state = pull_wal_buffer(state)
 
+    # Start periodic polling as a safety net — ensures the buffer
+    # gets drained even when no new push notifications arrive.
+    schedule_wal_poll()
+
     {:reply, :ok, state}
   end
 
@@ -363,6 +369,17 @@ defmodule Electric.Replication.ShapeLogCollector do
 
   def handle_cast(:pull_wal_buffer, state) do
     {:noreply, pull_wal_buffer(state)}
+  end
+
+  def handle_cast(:poll_wal_buffer, state) when not is_ready_to_process(state) do
+    schedule_wal_poll()
+    {:noreply, state}
+  end
+
+  def handle_cast(:poll_wal_buffer, state) do
+    state = pull_wal_buffer(state)
+    schedule_wal_poll()
+    {:noreply, state}
   end
 
   def handle_cast(
@@ -436,7 +453,17 @@ defmodule Electric.Replication.ShapeLogCollector do
 
   alias Electric.Replication.WalBuffer
 
+  @wal_poll_interval_ms 50
+
+  defp schedule_wal_poll do
+    Process.send_after(self(), {:"$gen_cast", :poll_wal_buffer}, @wal_poll_interval_ms)
+  end
+
   defp pull_wal_buffer(state) do
+    pull_wal_buffer(state, 0)
+  end
+
+  defp pull_wal_buffer(state, processed) do
     case WalBuffer.peek(state.stack_id) do
       {:ok, event} ->
         start = System.monotonic_time(:microsecond)
@@ -444,9 +471,15 @@ defmodule Electric.Replication.ShapeLogCollector do
         :ok = WalBuffer.commit(state.stack_id)
         elapsed = System.monotonic_time(:microsecond) - start
         record_slc_timing(state.stack_id, elapsed)
-        pull_wal_buffer(state)
+        pull_wal_buffer(state, processed + 1)
 
       :empty ->
+        # If we processed events, yield to let other messages through
+        # (writer_flushed, shape registrations) then immediately re-check.
+        if processed > 0 do
+          GenServer.cast(self(), :pull_wal_buffer)
+        end
+
         state
 
       {:error, reason} ->
@@ -455,41 +488,76 @@ defmodule Electric.Replication.ShapeLogCollector do
     end
   end
 
-  @slc_stats_key :slc_event_timings
-  @slc_window 1000
+  @slc_stats_table :slc_event_timings
 
-  defp record_slc_timing(stack_id, elapsed_us) do
-    key = {__MODULE__, @slc_stats_key, stack_id}
-
+  defp record_slc_timing(_stack_id, elapsed_us) do
     try do
-      samples = :persistent_term.get(key, [])
-      :persistent_term.put(key, [elapsed_us | Enum.take(samples, @slc_window - 1)])
+      # Use atomic counters: [count, sum, max, min, sum_of_squares]
+      # Plus a reservoir sample of 100 values for percentiles
+      :ets.update_counter(@slc_stats_table, :count, 1)
+      :ets.update_counter(@slc_stats_table, :sum, elapsed_us)
+
+      [{_, cur_max}] = :ets.lookup(@slc_stats_table, :max)
+      if elapsed_us > cur_max, do: :ets.insert(@slc_stats_table, {:max, elapsed_us})
+
+      [{_, cur_min}] = :ets.lookup(@slc_stats_table, :min)
+      if elapsed_us < cur_min, do: :ets.insert(@slc_stats_table, {:min, elapsed_us})
+
+      # Reservoir sampling: 1-in-10 chance to record for percentiles
+      if :rand.uniform(10) == 1 do
+        [{_, samples}] = :ets.lookup(@slc_stats_table, :reservoir)
+        samples = if length(samples) >= 200, do: tl(samples), else: samples
+        :ets.insert(@slc_stats_table, {:reservoir, samples ++ [elapsed_us]})
+      end
     rescue
-      _ -> :ok
+      _ ->
+        try do
+          :ets.new(@slc_stats_table, [:public, :named_table, :set])
+          :ets.insert(@slc_stats_table, {:count, 0})
+          :ets.insert(@slc_stats_table, {:sum, 0})
+          :ets.insert(@slc_stats_table, {:max, 0})
+          :ets.insert(@slc_stats_table, {:min, 999_999_999})
+          :ets.insert(@slc_stats_table, {:reservoir, []})
+          record_slc_timing(nil, elapsed_us)
+        rescue
+          _ -> :ok
+        end
     end
   end
 
   @doc false
-  def get_event_timing_stats(stack_id) do
-    key = {__MODULE__, @slc_stats_key, stack_id}
-    samples = :persistent_term.get(key, [])
+  def get_event_timing_stats(_stack_id) do
+    try do
+      [{_, count}] = :ets.lookup(@slc_stats_table, :count)
+      [{_, sum}] = :ets.lookup(@slc_stats_table, :sum)
+      [{_, max}] = :ets.lookup(@slc_stats_table, :max)
+      [{_, min}] = :ets.lookup(@slc_stats_table, :min)
+      [{_, reservoir}] = :ets.lookup(@slc_stats_table, :reservoir)
 
-    case samples do
-      [] ->
+      if count == 0 do
         %{count: 0}
+      else
+        sorted = Enum.sort(reservoir)
+        rcount = length(sorted)
 
-      _ ->
-        sorted = Enum.sort(samples)
-        count = length(sorted)
-
-        %{
+        base = %{
           count: count,
-          min_ms: Float.round(List.first(sorted) / 1000, 2),
-          max_ms: Float.round(List.last(sorted) / 1000, 2),
-          mean_ms: Float.round(Enum.sum(sorted) / count / 1000, 2),
-          p50_ms: Float.round(Enum.at(sorted, div(count, 2)) / 1000, 2),
-          p99_ms: Float.round(Enum.at(sorted, trunc(count * 0.99)) / 1000, 2)
+          min_ms: Float.round(min / 1000, 2),
+          max_ms: Float.round(max / 1000, 2),
+          mean_ms: Float.round(sum / count / 1000, 2)
         }
+
+        if rcount > 0 do
+          Map.merge(base, %{
+            p50_ms: Float.round(Enum.at(sorted, div(rcount, 2)) / 1000, 2),
+            p99_ms: Float.round(Enum.at(sorted, trunc(rcount * 0.99)) / 1000, 2)
+          })
+        else
+          base
+        end
+      end
+    rescue
+      _ -> %{count: 0}
     end
   end
 
