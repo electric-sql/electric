@@ -439,9 +439,11 @@ defmodule Electric.Replication.ShapeLogCollector do
   defp pull_wal_buffer(state) do
     case WalBuffer.peek(state.stack_id) do
       {:ok, event} ->
-        Logger.debug(fn -> "ShapeLogCollector pulling event from WalBuffer: #{inspect_event(event)}" end)
+        start = System.monotonic_time(:microsecond)
         {_response, state} = do_handle_event(event, state)
         :ok = WalBuffer.commit(state.stack_id)
+        elapsed = System.monotonic_time(:microsecond) - start
+        record_slc_timing(state.stack_id, elapsed)
         pull_wal_buffer(state)
 
       :empty ->
@@ -453,15 +455,43 @@ defmodule Electric.Replication.ShapeLogCollector do
     end
   end
 
-  defp inspect_event(%TransactionFragment{xid: xid, lsn: lsn, change_count: n}) do
-    "txn xid=#{xid} lsn=#{lsn} changes=#{n}"
+  @slc_stats_key :slc_event_timings
+  @slc_window 1000
+
+  defp record_slc_timing(stack_id, elapsed_us) do
+    key = {__MODULE__, @slc_stats_key, stack_id}
+
+    try do
+      samples = :persistent_term.get(key, [])
+      :persistent_term.put(key, [elapsed_us | Enum.take(samples, @slc_window - 1)])
+    rescue
+      _ -> :ok
+    end
   end
 
-  defp inspect_event(%Relation{id: id, schema: schema, table: table}) do
-    "relation id=#{id} #{schema}.#{table}"
-  end
+  @doc false
+  def get_event_timing_stats(stack_id) do
+    key = {__MODULE__, @slc_stats_key, stack_id}
+    samples = :persistent_term.get(key, [])
 
-  defp inspect_event(other), do: inspect(other, limit: 3)
+    case samples do
+      [] ->
+        %{count: 0}
+
+      _ ->
+        sorted = Enum.sort(samples)
+        count = length(sorted)
+
+        %{
+          count: count,
+          min_ms: Float.round(List.first(sorted) / 1000, 2),
+          max_ms: Float.round(List.last(sorted) / 1000, 2),
+          mean_ms: Float.round(Enum.sum(sorted) / count / 1000, 2),
+          p50_ms: Float.round(Enum.at(sorted, div(count, 2)) / 1000, 2),
+          p99_ms: Float.round(Enum.at(sorted, trunc(count * 0.99)) / 1000, 2)
+        }
+    end
+  end
 
   defp do_handle_event(%Relation{} = rel, state) do
     OpenTelemetry.with_span(

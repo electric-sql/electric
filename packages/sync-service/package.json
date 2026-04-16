@@ -5,5 +5,8 @@
   "scripts": {
     "publish:hex": "../../scripts/publish_hex.sh electric",
     "changeset": "pushd ../..; pnpm changeset; popd"
+  },
+  "dependencies": {
+    "@durable-streams/cli": "^0.2.3"
   }
 }

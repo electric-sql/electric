@@ -381,12 +381,20 @@ defmodule Electric.DurableStreams.SendLoop do
             status == 409 ->
               closed = get_header(headers, "stream-closed")
 
-              if closed == "true" do
-                Logger.error("Stream is closed (409), body: #{body}")
-                {:error, :stream_closed}
-              else
-                Logger.warning("Conflict (409) for seq #{commit_lsn}, body: #{body}")
-                {:error, {:conflict, body}}
+              cond do
+                closed == "true" ->
+                  Logger.error("Stream is closed (409), body: #{body}")
+                  {:error, :stream_closed}
+
+                String.contains?(body, "SEQUENCE_REGRESSION") ->
+                  # Our seq <= server's last seq. Since we're the only writer,
+                  # this means the data was already accepted — treat as success.
+                  Logger.debug("Sequence already accepted (409) for seq #{commit_lsn}")
+                  :ok
+
+                true ->
+                  Logger.warning("Conflict (409) for seq #{commit_lsn}, body: #{body}")
+                  {:error, {:conflict, body}}
               end
 
             status == 413 ->

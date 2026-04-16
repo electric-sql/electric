@@ -31,7 +31,8 @@ defmodule Electric.Plug.DebugStatsPlug do
       replication: replication_stats(stack_id),
       shapes: shape_stats(stack_id),
       writers: writer_stats(stack_id),
-      pipeline: pipeline_stats(stack_id)
+      pipeline: pipeline_stats(stack_id),
+      shape_log_collector: slc_stats(stack_id)
     }
   end
 
@@ -84,9 +85,15 @@ defmodule Electric.Plug.DebugStatsPlug do
     _ -> []
   end
 
+  defp slc_stats(stack_id) do
+    Electric.Replication.ShapeLogCollector.get_event_timing_stats(stack_id)
+  rescue
+    _ -> %{count: 0, error: "not_available"}
+  end
+
   defp pipeline_stats(stack_id) do
     Electric.DurableStreams.Stats.get_stats(stack_id)
   rescue
-    _ -> %{pipeline_latency: %{count: 0, error: "not_available"}}
+    _ -> %{error: "not_available"}
   end
 end

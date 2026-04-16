@@ -673,11 +673,12 @@ defmodule Electric.Shapes.Consumer do
           |> Enum.reverse()
 
         timestamp = System.monotonic_time()
+        recv_at_us = System.monotonic_time(:microsecond)
 
         {lines, total_size} = prepare_log_entries(converted_changes, xid, shape)
         Logger.debug(fn -> "Consumer #{state.shape_handle} appending fragment xid=#{xid} (#{num_changes} changes, #{total_size} bytes)" end)
         writer = ShapeCache.Storage.append_fragment_to_log!(lines, writer)
-        Electric.DurableStreams.Distributor.notify_writes(state.stack_id, state.shape_handle)
+        Electric.DurableStreams.Distributor.notify_writes(state.stack_id, state.shape_handle, recv_at_us)
 
         # The Materializer must see all txn changes for correct tracking of move-ins and
         # move-outs for the outer shape. The commit=false flag ensure it doesn't yet notify
@@ -860,11 +861,12 @@ defmodule Electric.Shapes.Consumer do
 
       {changes, state, num_changes, last_log_offset} ->
         timestamp = System.monotonic_time()
+        recv_at_us = System.monotonic_time(:microsecond)
 
         {lines, total_size} = prepare_log_entries(changes, xid, shape)
         Logger.debug(fn -> "Consumer #{state.shape_handle} appending txn xid=#{xid} (#{num_changes} changes, #{total_size} bytes)" end)
         writer = ShapeCache.Storage.append_to_log!(lines, writer)
-        Electric.DurableStreams.Distributor.notify_writes(state.stack_id, state.shape_handle)
+        Electric.DurableStreams.Distributor.notify_writes(state.stack_id, state.shape_handle, recv_at_us)
 
         OpenTelemetry.add_span_attributes(%{
           num_bytes: total_size,

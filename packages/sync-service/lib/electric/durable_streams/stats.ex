@@ -2,13 +2,18 @@ defmodule Electric.DurableStreams.Stats do
   @moduledoc """
   Collects and exposes durable streams pipeline stats for the debug endpoint.
 
-  Uses an ETS table for lock-free reads from the HTTP handler while
-  writers update stats from their own processes.
+  Tracks latency broken down into segments:
+  - **consumer**: Consumer receives txn → finishes LMDB write
+  - **queue_wait**: LMDB write complete → Writer picks it up
+  - **http**: Writer sends → durable stream ack
+  - **total**: Consumer receives → durable stream ack (end-to-end)
   """
 
   use GenServer
 
   @table __MODULE__
+  @window_size 1000
+  @segments [:consumer_us, :queue_wait_us, :http_us, :total_us]
 
   def start_link(opts) do
     stack_id = Keyword.fetch!(opts, :stack_id)
@@ -24,24 +29,26 @@ defmodule Electric.DurableStreams.Stats do
     stack_id = Keyword.fetch!(opts, :stack_id)
     tab = :"#{@table}:#{stack_id}"
     :ets.new(tab, [:public, :named_table, :set, write_concurrency: true])
-    :ets.insert(tab, {:pipeline_latencies, []})
-    :ets.insert(tab, {:totals, %{acked: 0, errors: 0, bytes_sent: 0}})
+
+    for seg <- @segments do
+      :ets.insert(tab, {seg, []})
+    end
+
     {:ok, %{stack_id: stack_id, table: tab}}
   end
 
   @doc """
-  Record a pipeline latency sample (microseconds from replication receive to durable ack).
-  Called by Writer after successful ack.
+  Record a latency breakdown map. Keys are :consumer_us, :queue_wait_us,
+  :http_us, :total_us. Missing keys are skipped.
   """
-  def record_latency(stack_id, latency_us) do
+  def record_latency(stack_id, breakdown) when is_map(breakdown) do
     tab = :"#{@table}:#{stack_id}"
 
     try do
-      # Keep a sliding window of recent samples
-      [{_, samples}] = :ets.lookup(tab, :pipeline_latencies)
-      # Keep last 1000 samples
-      samples = [latency_us | Enum.take(samples, 999)]
-      :ets.insert(tab, {:pipeline_latencies, samples})
+      for seg <- @segments, value = Map.get(breakdown, seg), is_integer(value) do
+        [{_, samples}] = :ets.lookup(tab, seg)
+        :ets.insert(tab, {seg, [value | Enum.take(samples, @window_size - 1)]})
+      end
     rescue
       _ -> :ok
     end
@@ -52,27 +59,35 @@ defmodule Electric.DurableStreams.Stats do
     tab = :"#{@table}:#{stack_id}"
 
     try do
-      [{_, samples}] = :ets.lookup(tab, :pipeline_latencies)
-
-      latency_stats =
-        if samples == [] do
-          %{count: 0}
-        else
-          sorted = Enum.sort(samples)
-          count = length(sorted)
-          %{
-            count: count,
-            min_us: List.first(sorted),
-            max_us: List.last(sorted),
-            mean_us: div(Enum.sum(sorted), count),
-            p50_us: Enum.at(sorted, div(count, 2)),
-            p99_us: Enum.at(sorted, trunc(count * 0.99))
-          }
-        end
-
-      %{pipeline_latency: latency_stats}
+      Map.new(@segments, fn seg ->
+        [{_, samples}] = :ets.lookup(tab, seg)
+        key = seg |> Atom.to_string() |> String.trim_trailing("_us")
+        {key, percentiles(samples)}
+      end)
     rescue
-      _ -> %{pipeline_latency: %{count: 0, error: "not_started"}}
+      _ ->
+        Map.new(@segments, fn seg ->
+          key = seg |> Atom.to_string() |> String.trim_trailing("_us")
+          {key, %{count: 0}}
+        end)
     end
   end
+
+  defp percentiles([]), do: %{count: 0}
+
+  defp percentiles(samples) do
+    sorted = Enum.sort(samples)
+    count = length(sorted)
+
+    %{
+      count: count,
+      min_ms: us_to_ms(List.first(sorted)),
+      max_ms: us_to_ms(List.last(sorted)),
+      mean_ms: us_to_ms(div(Enum.sum(sorted), count)),
+      p50_ms: us_to_ms(Enum.at(sorted, div(count, 2))),
+      p99_ms: us_to_ms(Enum.at(sorted, trunc(count * 0.99)))
+    }
+  end
+
+  defp us_to_ms(us), do: Float.round(us / 1000, 1)
 end

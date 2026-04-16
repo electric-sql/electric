@@ -19,7 +19,7 @@ defmodule Electric.Plug.Router do
   plug Electric.Plug.LabelProcessPlug
   plug Electric.Plug.TraceContextPlug
   plug Plug.Telemetry, event_prefix: [:electric, :routing]
-  plug Plug.Logger, log: :debug
+  plug :maybe_log
 
   with_telemetry Sentry.PlugCapture do
     plug Sentry.PlugContext
@@ -96,4 +96,7 @@ defmodule Electric.Plug.Router do
     Electric.Telemetry.Sentry.set_tags_context(stack_id: conn.assigns.config[:stack_id])
     conn
   end
+
+  def maybe_log(%Plug.Conn{request_path: "/debug/stats"} = conn, _opts), do: conn
+  def maybe_log(conn, _opts), do: Plug.Logger.call(conn, Plug.Logger.init(log: :debug))
 end

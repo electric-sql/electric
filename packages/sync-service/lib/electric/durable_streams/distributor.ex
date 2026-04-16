@@ -26,10 +26,12 @@ defmodule Electric.DurableStreams.Distributor do
 
   No-op if the distributor is not running (durable streams not configured).
   """
-  def notify_writes(stack_id, shape_handle) do
+  def notify_writes(stack_id, shape_handle, entered_at_us \\ nil) do
+    queued_at_us = if entered_at_us, do: System.monotonic_time(:microsecond)
+
     case GenServer.whereis(name(stack_id)) do
       nil -> :ok
-      pid -> GenServer.cast(pid, {:notify_writes, shape_handle})
+      pid -> GenServer.cast(pid, {:notify_writes, shape_handle, entered_at_us, queued_at_us})
     end
   end
 
@@ -56,7 +58,7 @@ defmodule Electric.DurableStreams.Distributor do
   end
 
   @impl GenServer
-  def handle_cast({:notify_writes, shape_handle}, state) do
+  def handle_cast({:notify_writes, shape_handle, entered_at_us, queued_at_us}, state) do
     writer_index = :erlang.phash2(shape_handle, state.num_writers)
     Logger.debug(fn -> "Distributor routing #{shape_handle} -> writer #{writer_index}" end)
 
@@ -66,7 +68,7 @@ defmodule Electric.DurableStreams.Distributor do
         {:noreply, state}
 
       pid when is_pid(pid) ->
-        Writer.process_shape(pid, shape_handle)
+        Writer.process_shape(pid, shape_handle, entered_at_us, queued_at_us)
         {:noreply, state}
     end
   end
