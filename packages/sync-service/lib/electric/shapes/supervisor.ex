@@ -59,6 +59,7 @@ defmodule Electric.Shapes.Supervisor do
     durable_streams_children =
       if durable_streams_url do
         [
+          {Electric.DurableStreams.Stats, stack_id: stack_id},
           {Electric.DurableStreams.Distributor,
            stack_id: stack_id, num_writers: num_writers},
           {Electric.DurableStreams.WriterPool,

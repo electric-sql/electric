@@ -92,6 +92,18 @@ defmodule Electric.Replication.WalBuffer do
     DiskRingBuf.is_empty(buf)
   end
 
+  @doc "Returns a stats map for the debug endpoint."
+  def stats(stack_id) do
+    buf = get_buffer(stack_id)
+    %{
+      entries: DiskRingBuf.len(buf),
+      capacity_bytes: DiskRingBuf.capacity(buf),
+      full: DiskRingBuf.is_full(buf)
+    }
+  rescue
+    ArgumentError -> %{entries: 0, capacity_bytes: 0, full: false, error: "not_started"}
+  end
+
   def start_link(opts) do
     stack_id = Keyword.fetch!(opts, :stack_id)
     GenServer.start_link(__MODULE__, opts, name: name(stack_id))

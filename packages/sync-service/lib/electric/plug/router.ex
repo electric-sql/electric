@@ -47,6 +47,10 @@ defmodule Electric.Plug.Router do
 
   get "/v1/health", to: Electric.Plug.HealthCheckPlug
 
+  get "/debug/stats",
+    to: PassAssignToOptsPlug,
+    init_opts: [plug: Electric.Plug.DebugStatsPlug, assign_key: :config]
+
   match _, do: send_resp(conn, 404, "Not found")
 
   def server_header(conn, version),

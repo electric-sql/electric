@@ -35,6 +35,14 @@ defmodule Electric.DurableStreams.Writer do
     GenServer.cast(pid, {:process_shape, shape_handle})
   end
 
+  @doc "Return stats for this writer. Non-blocking via ETS."
+  def stats(stack_id, index) do
+    case :persistent_term.get({__MODULE__, :stats, stack_id, index}, nil) do
+      nil -> %{index: index, dirty_shapes: 0, total_acked: 0, total_errors: 0, last_ack_us: nil}
+      stats -> stats
+    end
+  end
+
   def start_link(opts) do
     stack_id = Keyword.fetch!(opts, :stack_id)
     index = Keyword.fetch!(opts, :index)
@@ -76,9 +84,13 @@ defmodule Electric.DurableStreams.Writer do
       dirty_shapes: MapSet.new(),
       # shape_handle => output_db reference
       shape_dbs: %{},
-      processing: false
+      processing: false,
+      total_acked: 0,
+      total_errors: 0,
+      last_ack_us: nil
     }
 
+    publish_stats(state)
     {:ok, state}
   end
 
@@ -181,14 +193,22 @@ defmodule Electric.DurableStreams.Writer do
             )
 
             # Wait for ack synchronously to ensure confirmed before deleting
+            send_start = System.monotonic_time(:microsecond)
+
             case SendLoop.wait_for_ack(state.send_loop) do
               {_seq, :ok} ->
-                Logger.debug(fn -> "Writer #{state.index} acked #{length(entries)} entries for #{shape_handle}, removing from queue" end)
+                ack_us = System.monotonic_time(:microsecond) - send_start
+                Logger.debug(fn -> "Writer #{state.index} acked #{length(entries)} entries for #{shape_handle} in #{ack_us}µs, removing from queue" end)
                 :ok = LmdbNif.ack(db, entries)
+                Electric.DurableStreams.Stats.record_latency(state.stack_id, ack_us)
+                state = %{state | total_acked: state.total_acked + length(entries), last_ack_us: ack_us}
+                publish_stats(state)
                 state
 
               {_seq, {:error, reason}} ->
                 Logger.warning("Writer #{state.index} failed to write to durable stream for #{shape_handle}: #{inspect(reason)}")
+                state = %{state | total_errors: state.total_errors + 1}
+                publish_stats(state)
                 state
             end
         end
@@ -219,5 +239,17 @@ defmodule Electric.DurableStreams.Writer do
       db ->
         {:ok, db, state}
     end
+  end
+
+  defp publish_stats(state) do
+    stats = %{
+      index: state.index,
+      dirty_shapes: MapSet.size(state.dirty_shapes),
+      total_acked: state.total_acked,
+      total_errors: state.total_errors,
+      last_ack_us: state.last_ack_us
+    }
+
+    :persistent_term.put({__MODULE__, :stats, state.stack_id, state.index}, stats)
   end
 end
