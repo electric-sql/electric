@@ -74,8 +74,13 @@ defmodule Electric.Bench.LoadGenerator do
     """)
 
     ensure_table(db_pool, table)
-    create_shapes(electric_url, table, partitions)
-    seed(db_pool, table, partitions, row_count, content_size)
+
+    # Create shapes and seed data concurrently so that replication
+    # data starts flowing through Electric while shapes are being created.
+    shape_task = Task.async(fn -> create_shapes(electric_url, table, partitions) end)
+    seed_task = Task.async(fn -> seed(db_pool, table, partitions, row_count, content_size) end)
+    Task.await(shape_task, :infinity)
+    Task.await(seed_task, :infinity)
 
     Logger.info(
       "Seed complete. Starting #{worker_count} update workers at #{target_tps} TPS total..."

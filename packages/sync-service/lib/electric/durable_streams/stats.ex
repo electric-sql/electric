@@ -62,7 +62,8 @@ defmodule Electric.DurableStreams.Stats do
       Map.new(@segments, fn seg ->
         [{_, samples}] = :ets.lookup(tab, seg)
         key = seg |> Atom.to_string() |> String.trim_trailing("_us")
-        {key, percentiles(samples)}
+        unit = if seg == :consumer_us, do: :us, else: :ms
+        {key, percentiles(samples, unit)}
       end)
     rescue
       _ ->
@@ -73,21 +74,22 @@ defmodule Electric.DurableStreams.Stats do
     end
   end
 
-  defp percentiles([]), do: %{count: 0}
+  defp percentiles([], _unit), do: %{count: 0}
 
-  defp percentiles(samples) do
+  defp percentiles(samples, unit) do
     sorted = Enum.sort(samples)
     count = length(sorted)
+    {suffix, convert} = unit_config(unit)
 
-    %{
-      count: count,
-      min_ms: us_to_ms(List.first(sorted)),
-      max_ms: us_to_ms(List.last(sorted)),
-      mean_ms: us_to_ms(div(Enum.sum(sorted), count)),
-      p50_ms: us_to_ms(Enum.at(sorted, div(count, 2))),
-      p99_ms: us_to_ms(Enum.at(sorted, trunc(count * 0.99)))
-    }
+    %{}
+    |> Map.put(:count, count)
+    |> Map.put(:"min_#{suffix}", convert.(List.first(sorted)))
+    |> Map.put(:"max_#{suffix}", convert.(List.last(sorted)))
+    |> Map.put(:"mean_#{suffix}", convert.(div(Enum.sum(sorted), count)))
+    |> Map.put(:"p50_#{suffix}", convert.(Enum.at(sorted, div(count, 2))))
+    |> Map.put(:"p99_#{suffix}", convert.(Enum.at(sorted, trunc(count * 0.99))))
   end
 
-  defp us_to_ms(us), do: Float.round(us / 1000, 1)
+  defp unit_config(:ms), do: {"ms", &Float.round(&1 / 1000, 1)}
+  defp unit_config(:us), do: {"us", &Function.identity/1}
 end

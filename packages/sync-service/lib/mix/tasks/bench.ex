@@ -255,10 +255,15 @@ defmodule Mix.Tasks.Bench do
   end
 
   defp format_latency(lat) do
-    if Map.get(lat, "count", 0) > 0 do
-      "p50=#{lat["p50_ms"]}ms p99=#{lat["p99_ms"]}ms max=#{lat["max_ms"]}ms (n=#{lat["count"]})"
-    else
-      "no samples"
+    cond do
+      Map.get(lat, "count", 0) == 0 ->
+        "no samples"
+
+      Map.has_key?(lat, "p50_us") ->
+        "p50=#{lat["p50_us"]}µs p99=#{lat["p99_us"]}µs max=#{lat["max_us"]}µs (n=#{lat["count"]})"
+
+      true ->
+        "p50=#{lat["p50_ms"]}ms p99=#{lat["p99_ms"]}ms max=#{lat["max_ms"]}ms (n=#{lat["count"]})"
     end
   end
 end
