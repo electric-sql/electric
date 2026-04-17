@@ -107,24 +107,33 @@ defmodule Electric.Bench.LoadGenerator do
   end
 
   defp create_shapes(electric_url, table, partitions) do
-    Logger.info("Creating #{partitions} shapes in Electric...")
+    Logger.info("Creating #{partitions} shapes in Electric (in parallel)...")
 
-    for p <- 1..partitions do
-      url = "#{electric_url}/v1/shape?table=#{table}&offset=-1&where=partition%3D#{p}"
-
-      case Req.get(url, receive_timeout: 30_000) do
-        {:ok, %Req.Response{status: status}} when status in 200..299 ->
-          Logger.debug("Shape for partition #{p} created (HTTP #{status})")
-
-        {:ok, %Req.Response{status: status, body: body}} ->
-          Logger.warning("Shape for partition #{p} returned HTTP #{status}: #{inspect(body)}")
-
-        {:error, reason} ->
-          Logger.warning("Failed to create shape for partition #{p}: #{inspect(reason)}")
-      end
-    end
+    1..partitions
+    |> Task.async_stream(
+      fn p -> create_shape(electric_url, table, p) end,
+      max_concurrency: partitions,
+      timeout: :infinity,
+      ordered: false
+    )
+    |> Stream.run()
 
     Logger.info("All #{partitions} shapes requested")
+  end
+
+  defp create_shape(electric_url, table, p) do
+    url = "#{electric_url}/v1/shape?table=#{table}&offset=-1&where=partition%3D#{p}"
+
+    case Req.get(url, receive_timeout: 30_000) do
+      {:ok, %Req.Response{status: status}} when status in 200..299 ->
+        Logger.debug("Shape for partition #{p} created (HTTP #{status})")
+
+      {:ok, %Req.Response{status: status, body: body}} ->
+        Logger.warning("Shape for partition #{p} returned HTTP #{status}: #{inspect(body)}")
+
+      {:error, reason} ->
+        Logger.warning("Failed to create shape for partition #{p}: #{inspect(reason)}")
+    end
   end
 
   # ---------------------------------------------------------------------------
