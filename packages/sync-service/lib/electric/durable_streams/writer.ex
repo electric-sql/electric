@@ -16,7 +16,7 @@ defmodule Electric.DurableStreams.Writer do
 
   @drain_batch_size 100
   @process_interval_ms 5
-  @max_in_flight_per_shape 3
+  @max_in_flight_per_shape 30
 
   def name(stack_id, index) do
     Electric.ProcessRegistry.name(stack_id, __MODULE__, index)
