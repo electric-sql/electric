@@ -83,6 +83,19 @@ defmodule Electric.Shapes.Consumer do
     consumer_pid(stack_id, shape_handle)
   end
 
+  @doc """
+  Called by the snapshotter task at the end of the snapshot, before copying
+  the streaming buffer into the output queue.
+
+  Flips the consumer's `Queue` into `:buffering` mode so that concurrent
+  replication writes accumulate in-memory, and returns the id of the last
+  record written to the streaming queue (the copy boundary).
+  """
+  @spec start_transition(pid()) :: {:ok, non_neg_integer() | nil}
+  def start_transition(consumer) when is_pid(consumer) do
+    GenServer.call(consumer, :start_transition, :infinity)
+  end
+
   def stop(nil, _reason) do
     :ok
   end
@@ -162,6 +175,22 @@ defmodule Electric.Shapes.Consumer do
     {:noreply, State.add_waiter(state, from), state.hibernate_after}
   end
 
+  def handle_call(:start_transition, _from, state) do
+    alias Electric.QueueSystem.Queue
+    alias Electric.ShapeCache.LmdbQueueStorage
+
+    case state.writer do
+      {LmdbQueueStorage, %LmdbQueueStorage.WriterState{queue: queue} = ws} ->
+        {queue, last_id} = Queue.start_buffering(queue)
+        ws = %{ws | queue: queue}
+        state = %{state | writer: {LmdbQueueStorage, ws}}
+        {:reply, {:ok, last_id}, state, state.hibernate_after}
+
+      _ ->
+        {:reply, {:ok, nil}, state, state.hibernate_after}
+    end
+  end
+
   def handle_call({:handle_event, event, trace_context}, _from, state) do
     OpenTelemetry.set_current_context(trace_context)
 
@@ -225,20 +254,25 @@ defmodule Electric.Shapes.Consumer do
   end
 
   def handle_cast({:snapshot_data_written, shape_handle}, %{shape_handle: shape_handle} = state) do
-    # For LmdbQueueStorage: perform the queue state transition to copy
-    # snapshot and streaming data into the output queue.
+    alias Electric.QueueSystem.Queue
     alias Electric.ShapeCache.LmdbQueueStorage
 
     case state.writer do
-      {LmdbQueueStorage, %LmdbQueueStorage.WriterState{} = writer_state} ->
-        Logger.debug("Performing queue transition for #{shape_handle}")
-        writer_state = LmdbQueueStorage.transition_to_live(writer_state)
-        # Output queue now has data — notify the writer pool
+      {LmdbQueueStorage, %LmdbQueueStorage.WriterState{queue: queue} = ws} ->
+        Logger.debug("Resuming transition for #{shape_handle}")
+
+        queue =
+          queue
+          |> Queue.go_live()
+          |> Queue.cleanup_temp()
+
+        Queue.register_output(shape_handle, Queue.output(queue))
         Electric.DurableStreams.Distributor.notify_writes(state.stack_id, shape_handle)
-        {:noreply, %{state | writer: {LmdbQueueStorage, writer_state}}, state.hibernate_after}
+
+        ws = %{ws | queue: queue}
+        {:noreply, %{state | writer: {LmdbQueueStorage, ws}}, state.hibernate_after}
 
       _ ->
-        # Not using LmdbQueueStorage, ignore
         {:noreply, state, state.hibernate_after}
     end
   end

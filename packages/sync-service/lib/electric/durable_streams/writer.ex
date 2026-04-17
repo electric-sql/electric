@@ -415,9 +415,9 @@ defmodule Electric.DurableStreams.Writer do
     case Map.get(state.shape_queues, shape_handle) do
       nil ->
         # Look up the shared output queue handle registered by the Consumer
-        # during transition_to_live. This ensures we share the same DiskQueue
-        # reference (and its peek/commit cursors) instead of opening a
-        # separate handle that can't commit the Consumer's records.
+        # when it handled the {:snapshot_data_written, ...} cast. Sharing the
+        # handle keeps peek/commit cursors consistent across producer and
+        # writer.
         case Electric.QueueSystem.Queue.lookup_output(shape_handle) do
           {:ok, q} ->
             Logger.debug(fn ->

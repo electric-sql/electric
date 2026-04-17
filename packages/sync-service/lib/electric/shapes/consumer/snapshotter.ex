@@ -267,9 +267,7 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
         |> record_snapshot_metrics(stack_id, shape_handle, shape)
         |> Electric.Shapes.make_new_snapshot!(storage, stack_id, shape_handle)
 
-        # Notify the consumer that snapshot data is fully written to storage,
-        # so it can perform the queue copy transition (for LmdbQueueStorage).
-        GenServer.cast(consumer, {:snapshot_data_written, shape_handle})
+        drive_post_snapshot_transition(storage, consumer, shape_handle)
       end
     )
   end
@@ -298,6 +296,21 @@ defmodule Electric.Shapes.Consumer.Snapshotter do
         )
       end
     )
+  end
+
+  defp drive_post_snapshot_transition(storage, consumer, shape_handle) do
+    alias Electric.ShapeCache.LmdbQueueStorage
+
+    case storage do
+      {LmdbQueueStorage, %LmdbQueueStorage{} = opts} ->
+        {:ok, last_id} = Electric.Shapes.Consumer.start_transition(consumer)
+        _count = LmdbQueueStorage.copy_buffer_to_output!(opts, last_id)
+
+      _ ->
+        :ok
+    end
+
+    GenServer.cast(consumer, {:snapshot_data_written, shape_handle})
   end
 
   defp telemetry_shape_attrs(shape_handle, shape) do

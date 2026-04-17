@@ -118,13 +118,13 @@ defmodule Electric.ShapeCache.LmdbQueueStorage do
 
   @impl Storage
   def make_new_snapshot!(data_stream, %__MODULE__{} = opts) do
-    snapshot_dir = Path.join([opts.base_path, "queue", "snapshot"])
-    File.mkdir_p!(snapshot_dir)
+    output_dir = Path.join([opts.base_path, "queue", "output"])
+    File.mkdir_p!(output_dir)
 
-    {:ok, q} = DiskQueue.open(snapshot_dir)
+    {:ok, q} = DiskQueue.open(output_dir)
     count = write_snapshot_entries(q, data_stream, 0)
 
-    Logger.debug("Wrote #{count} snapshot entries to #{snapshot_dir}")
+    Logger.debug("Wrote #{count} snapshot entries to #{output_dir}")
     :ok
   end
 
@@ -146,37 +146,24 @@ defmodule Electric.ShapeCache.LmdbQueueStorage do
   end
 
   @doc """
-  Perform the queue state transition after snapshot data has been written.
+  Copy the streaming buffer into the output queue. Called from the snapshotter
+  task after the snapshot has been written and the consumer has been flipped
+  into `:buffering` mode.
 
-  Copies snapshot and streaming data into the output queue in order:
-  1. Copy snapshot queue → output queue
-  2. start_buffering (captures streaming boundary, buffers new writes)
-  3. Copy streaming queue (up to boundary) → output queue
-  4. go_live (flush buffer, switch to direct output writes)
+  Opens fresh handles on `<base>/queue/streaming/` and `<base>/queue/output/`
+  for the duration of the copy; they are dropped when this function returns.
+
+  Returns the number of records copied.
   """
-  def transition_to_live(%WriterState{} = state) do
-    queue = state.queue
+  def copy_buffer_to_output!(%__MODULE__{} = opts, last_id) do
+    queue_dir = Path.join(opts.base_path, "queue")
+    {:ok, src} = DiskQueue.open(Path.join(queue_dir, "streaming"))
+    {:ok, dst} = DiskQueue.open(Path.join(queue_dir, "output"))
 
-    {:ok, snap_count} = Queue.copy_snapshot_to_output(queue)
-    Logger.debug("Copied #{snap_count} snapshot entries to output")
+    {:ok, count} = Queue.copy_streaming_to_output(src, dst, last_id)
 
-    {queue, last_id} = Queue.start_buffering(queue)
-
-    {:ok, stream_count} = Queue.copy_streaming_to_output(queue, last_id)
-
-    if stream_count > 0 do
-      Logger.debug("Copied #{stream_count} streaming entries to output")
-    end
-
-    queue = Queue.go_live(queue)
-    queue = Queue.cleanup_temp(queue)
-
-    # Register the output queue handle so the Writer can share it
-    # instead of opening a separate handle to the same directory.
-    Queue.register_output(state.opts.shape_handle, Queue.output(queue))
-
-    Logger.debug("Queue transitioned to live mode")
-    %{state | queue: queue}
+    if count > 0, do: Logger.debug("Copied #{count} streaming entries to output")
+    count
   end
 
   @impl Storage
