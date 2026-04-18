@@ -26,7 +26,7 @@ defmodule Electric.Replication.ShapeLogCollector do
   alias Electric.Replication.Changes.Relation
   alias Electric.Replication.Changes.TransactionFragment
   alias Electric.Replication.LogOffset
-  alias Electric.Shapes.Consumer.Materializer
+
   alias Electric.Shapes.DependencyLayers
   alias Electric.Shapes.EventRouter
   alias Electric.Shapes.Partitions
@@ -219,7 +219,6 @@ defmodule Electric.Replication.ShapeLogCollector do
         pids_by_shape_handle: %{},
         event_router:
           opts
-          |> Map.put(:refs_fun, &Materializer.get_all_as_refs(&1, stack_id))
           |> Keyword.new()
           |> EventRouter.new(),
         flush_tracker:

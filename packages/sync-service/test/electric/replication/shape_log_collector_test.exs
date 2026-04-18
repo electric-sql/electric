@@ -40,6 +40,16 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
   @shape Shape.new!("test_table", inspector: @inspector)
   @shape_handle "the-shape-handle"
 
+  @subquery_inspector Support.StubInspector.new(
+                        tables: [{1234, {"public", "test_table"}}, {5678, {"public", "parent"}}],
+                        columns: [%{name: "id", type: "int8", type_id: {20, 1}, pk_position: 0}]
+                      )
+  @subquery_shape Shape.new!("test_table",
+                    inspector: @subquery_inspector,
+                    where: "id IN (SELECT id FROM public.parent)"
+                  )
+  @subquery_shape_handle "subquery-shape-handle"
+
   def setup_log_collector(ctx) do
     %{stack_id: stack_id} = ctx
     # Start a test Registry
@@ -135,6 +145,61 @@ defmodule Electric.Replication.ShapeLogCollectorTest do
           %Changes.NewRecord{
             relation: {"public", "test_table"},
             record: %{"id" => "2", "name" => "foo"},
+            log_offset: last_log_offset
+          }
+        ])
+
+      assert :ok = ShapeLogCollector.handle_event(txn, ctx.stack_id)
+
+      xids = Support.TransactionConsumer.assert_consume([{1, consumer}], [txn])
+      assert xids == [xmin]
+    end
+
+    @tag restore_shapes: [{@subquery_shape_handle, @subquery_shape}],
+         inspector: @subquery_inspector
+    test "restored subquery shape routes via fallback before consumer seeds index", ctx do
+      alias Electric.Shapes.Filter.Indexes.SubqueryIndex
+
+      # After restore, the subquery shape should be in fallback because
+      # no consumer has seeded the SubqueryIndex yet.
+      index = SubqueryIndex.for_stack(ctx.stack_id)
+      assert index != nil
+      assert SubqueryIndex.fallback?(index, @subquery_shape_handle)
+
+      parent = self()
+
+      consumer =
+        start_link_supervised!(
+          {Support.TransactionConsumer,
+           [
+             id: 1,
+             stack_id: ctx.stack_id,
+             parent: parent,
+             shape: @subquery_shape,
+             shape_handle: @subquery_shape_handle,
+             stack_id: ctx.stack_id,
+             action: :restore
+           ]}
+        )
+
+      :ok =
+        Electric.Shapes.ConsumerRegistry.register_consumer(
+          consumer,
+          @subquery_shape_handle,
+          ctx.stack_id
+        )
+
+      xmin = 100
+      lsn = Lsn.from_string("0/10")
+      last_log_offset = LogOffset.new(lsn, 0)
+
+      # Any root-table change should route to the shape via fallback,
+      # even if the record wouldn't match the subquery membership.
+      txn =
+        transaction(xmin, lsn, [
+          %Changes.NewRecord{
+            relation: {"public", "test_table"},
+            record: %{"id" => "999"},
             log_offset: last_log_offset
           }
         ])
