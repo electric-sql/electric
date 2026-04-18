@@ -60,6 +60,14 @@ defmodule Electric.LsnTracker do
   end
 
   def broadcast_last_seen_lsn(stack_ref, lsn) when is_integer(lsn) do
+    # Store the broadcast LSN so newly subscribing consumers can read the
+    # current value without waiting for the next broadcast.
+    try do
+      stack_ref |> table() |> :ets.insert({:last_broadcast_lsn, lsn})
+    rescue
+      ArgumentError -> :ok
+    end
+
     registry = Electric.StackSupervisor.registry_name(stack_ref)
 
     if Process.whereis(registry) do
@@ -71,13 +79,35 @@ defmodule Electric.LsnTracker do
     :ok
   end
 
+  @doc """
+  Returns the most recently broadcast LSN, or 0 if none has been broadcast yet.
+  """
+  @spec get_last_broadcast_lsn(stack_ref()) :: non_neg_integer()
+  def get_last_broadcast_lsn(stack_ref) do
+    case :ets.lookup(table(stack_ref), :last_broadcast_lsn) do
+      [{:last_broadcast_lsn, lsn}] -> lsn
+      [] -> 0
+    end
+  rescue
+    ArgumentError -> 0
+  end
+
   @spec subscribe_to_global_lsn_updates(stack_ref(), term()) :: {:ok, pid()} | {:error, term()}
   def subscribe_to_global_lsn_updates(stack_ref, value \\ []) do
-    Registry.register(
-      Electric.StackSupervisor.registry_name(stack_ref),
-      @global_lsn_updates_topic,
-      value
-    )
+    with {:ok, _} <-
+           Registry.register(
+             Electric.StackSupervisor.registry_name(stack_ref),
+             @global_lsn_updates_topic,
+             value
+           ) do
+      last_lsn = get_last_broadcast_lsn(stack_ref)
+
+      if last_lsn > 0 do
+        send(self(), {:global_last_seen_lsn, last_lsn})
+      end
+
+      {:ok, self()}
+    end
   end
 
   @spec unsubscribe_from_global_lsn_updates(stack_ref()) :: :ok
