@@ -77,7 +77,7 @@ defmodule Support.OracleHarness do
   @spec test_against_oracle(map(), [shape()], [batch()], map()) :: :ok
   def test_against_oracle(ctx, shapes, batches, opts \\ %{}) do
     opts = Map.merge(default_opts_from_env(), opts)
-    timeout_ms = opts[:timeout_ms] || @default_timeout_ms
+    timeout_ms = opts[:timeout_ms] || env_int("CHECK_TIMEOUT") || @default_timeout_ms
 
     log_test_config(shapes, batches)
 
