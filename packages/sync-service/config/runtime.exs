@@ -260,6 +260,8 @@ config :electric,
   # The ELECTRIC_EXPERIMENTAL_MAX_BATCH_SIZE is undocumented and used for testing only.
   max_batch_size: env!("ELECTRIC_EXPERIMENTAL_MAX_BATCH_SIZE", :integer, nil),
   service_port: env!("ELECTRIC_PORT", :integer, nil),
+  subquery_buffer_max_transactions:
+    env!("ELECTRIC_SUBQUERY_BUFFER_MAX_TRANSACTIONS", :integer, nil),
   shape_hibernate_after: shape_hibernate_after,
   shape_enable_suspend?: shape_enable_suspend?,
   storage_dir: storage_dir,

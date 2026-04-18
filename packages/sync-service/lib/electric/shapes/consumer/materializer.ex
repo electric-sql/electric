@@ -318,21 +318,28 @@ defmodule Electric.Shapes.Consumer.Materializer do
       } ->
         case operation do
           "insert" ->
-            %Changes.NewRecord{key: key, record: value, move_tags: Map.get(headers, "tags", [])}
+            %Changes.NewRecord{
+              key: key,
+              record: value,
+              move_tags: Map.get(headers, "tags", []),
+              active_conditions: Map.get(headers, "active_conditions", [])
+            }
 
           "update" ->
             %Changes.UpdatedRecord{
               key: key,
               record: value,
               move_tags: Map.get(headers, "tags", []),
-              removed_move_tags: Map.get(headers, "removed_tags", [])
+              removed_move_tags: Map.get(headers, "removed_tags", []),
+              active_conditions: Map.get(headers, "active_conditions", [])
             }
 
           "delete" ->
             %Changes.DeletedRecord{
               key: key,
               old_record: value,
-              move_tags: Map.get(headers, "tags", [])
+              move_tags: Map.get(headers, "tags", []),
+              active_conditions: Map.get(headers, "active_conditions", [])
             }
         end
 
@@ -343,6 +350,14 @@ defmodule Electric.Shapes.Consumer.Materializer do
           end)
 
         %{headers: %{event: "move-out", patterns: patterns}}
+
+      %{"headers" => %{"event" => "move-in", "patterns" => patterns}} ->
+        patterns =
+          Enum.map(patterns, fn %{"pos" => pos, "value" => value} ->
+            %{pos: pos, value: value}
+          end)
+
+        %{headers: %{event: "move-in", patterns: patterns}}
     end)
   end
 
@@ -441,20 +456,41 @@ defmodule Electric.Shapes.Consumer.Materializer do
         changes,
         {{state.index, state.tag_indices}, {state.value_counts, []}},
         fn
-          %Changes.NewRecord{key: key, record: record, move_tags: move_tags},
+          %Changes.NewRecord{
+            key: key,
+            record: record,
+            move_tags: move_tags,
+            active_conditions: ac
+          },
           {{index, tag_indices}, counts_and_events} ->
             {value, original_string} = cast!(record, state)
             if is_map_key(index, key), do: raise("Key #{key} already exists")
-            index = Map.put(index, key, value)
+            included? = evaluate_inclusion(move_tags, ac)
+
+            index =
+              Map.put(index, key, %{
+                value: value,
+                tags: move_tags,
+                active_conditions: ac,
+                included?: included?
+              })
+
             tag_indices = add_row_to_tag_indices(tag_indices, key, move_tags)
-            {{index, tag_indices}, increment_value(counts_and_events, value, original_string)}
+
+            counts_and_events =
+              if included?,
+                do: increment_value(counts_and_events, value, original_string),
+                else: counts_and_events
+
+            {{index, tag_indices}, counts_and_events}
 
           %Changes.UpdatedRecord{
             key: key,
             old_key: old_key,
             record: record,
             move_tags: move_tags,
-            removed_move_tags: removed_move_tags
+            removed_move_tags: removed_move_tags,
+            active_conditions: ac
           },
           {{index, tag_indices}, counts_and_events} ->
             # When the primary key doesn't change, old_key may be nil; default to key
@@ -464,46 +500,97 @@ defmodule Electric.Shapes.Consumer.Materializer do
             columns_present = Enum.any?(state.columns, &is_map_key(record, &1))
             has_tag_updates = removed_move_tags != []
             pk_changed = old_key != key
+            has_ac_update = ac != [] and is_map_key(index, old_key)
 
-            if columns_present or has_tag_updates or pk_changed do
-              # When PK changes, old_key must be removed from all tag indices it
-              # belongs to (both removed and retained tags), not just removed_move_tags
+            if columns_present or has_tag_updates or has_ac_update or pk_changed do
+              old_entry = Map.fetch!(index, old_key)
+
+              # When the primary key changes, re-index every existing tag for the new key.
               tags_to_remove =
                 if pk_changed,
-                  do: removed_move_tags ++ move_tags,
+                  do: old_entry.tags,
                   else: removed_move_tags
+
+              new_tags =
+                if has_tag_updates or move_tags != [], do: move_tags, else: old_entry.tags
+
+              new_ac = if ac != [], do: ac, else: old_entry.active_conditions
+              new_included? = evaluate_inclusion(new_tags, new_ac)
 
               tag_indices =
                 tag_indices
                 |> remove_row_from_tag_indices(old_key, tags_to_remove)
-                |> add_row_to_tag_indices(key, move_tags)
+                |> add_row_to_tag_indices(key, new_tags)
 
               if columns_present do
                 {value, original_string} = cast!(record, state)
-                {old_value, index} = Map.pop!(index, old_key)
-                index = Map.put(index, key, value)
+                old_value = old_entry.value
 
-                # Skip decrement/increment dance if value hasn't changed to avoid
-                # spurious move_out/move_in events when only the tag changed
-                if old_value == value do
-                  {{index, tag_indices}, counts_and_events}
-                else
-                  {{index, tag_indices},
-                   counts_and_events
-                   |> decrement_value(old_value, value_to_string(old_value, state))
-                   |> increment_value(value, original_string)}
+                index =
+                  index
+                  |> Map.delete(old_key)
+                  |> Map.put(key, %{
+                    value: value,
+                    tags: new_tags,
+                    active_conditions: new_ac,
+                    included?: new_included?
+                  })
+
+                cond do
+                  old_entry.included? and new_included? and old_value != value ->
+                    {{index, tag_indices},
+                     counts_and_events
+                     |> decrement_value(old_value, value_to_string(old_value, state))
+                     |> increment_value(value, original_string)}
+
+                  old_entry.included? and not new_included? ->
+                    {{index, tag_indices},
+                     decrement_value(
+                       counts_and_events,
+                       old_value,
+                       value_to_string(old_value, state)
+                     )}
+
+                  not old_entry.included? and new_included? ->
+                    {{index, tag_indices},
+                     increment_value(counts_and_events, value, original_string)}
+
+                  true ->
+                    # Skip decrement/increment dance if value hasn't changed to avoid
+                    # spurious move_out/move_in events when only the tag changed
+                    {{index, tag_indices}, counts_and_events}
                 end
               else
-                # PK changed but tracked column not in record — re-key the index entry
                 index =
-                  if pk_changed do
-                    {value, index} = Map.pop!(index, old_key)
-                    Map.put(index, key, value)
-                  else
-                    index
-                  end
+                  index
+                  |> Map.delete(old_key)
+                  |> Map.put(key, %{
+                    old_entry
+                    | tags: new_tags,
+                      active_conditions: new_ac,
+                      included?: new_included?
+                  })
 
-                {{index, tag_indices}, counts_and_events}
+                cond do
+                  old_entry.included? and not new_included? ->
+                    {{index, tag_indices},
+                     decrement_value(
+                       counts_and_events,
+                       old_entry.value,
+                       value_to_string(old_entry.value, state)
+                     )}
+
+                  not old_entry.included? and new_included? ->
+                    {{index, tag_indices},
+                     increment_value(
+                       counts_and_events,
+                       old_entry.value,
+                       value_to_string(old_entry.value, state)
+                     )}
+
+                  true ->
+                    {{index, tag_indices}, counts_and_events}
+                end
               end
             else
               # Nothing relevant to this materializer has been updated
@@ -512,22 +599,43 @@ defmodule Electric.Shapes.Consumer.Materializer do
 
           %Changes.DeletedRecord{key: key, move_tags: move_tags},
           {{index, tag_indices}, counts_and_events} ->
-            {value, index} = Map.pop!(index, key)
-
+            {entry, index} = Map.pop!(index, key)
             tag_indices = remove_row_from_tag_indices(tag_indices, key, move_tags)
 
-            {{index, tag_indices},
-             decrement_value(counts_and_events, value, value_to_string(value, state))}
+            if entry.included? do
+              {{index, tag_indices},
+               decrement_value(
+                 counts_and_events,
+                 entry.value,
+                 value_to_string(entry.value, state)
+               )}
+            else
+              {{index, tag_indices}, counts_and_events}
+            end
 
-          %{headers: %{event: "move-out", patterns: patterns}},
-          {{index, tag_indices}, counts_and_events} ->
-            {keys, tag_indices} = pop_keys_from_tag_indices(tag_indices, patterns)
+          %{headers: %{event: event, patterns: patterns}},
+          {{index, tag_indices}, counts_and_events}
+          when event in ["move-out", "move-in"] ->
+            new_condition = event == "move-in"
+            affected = collect_affected_keys(tag_indices, patterns)
 
-            {index, counts_and_events} =
-              Enum.reduce(keys, {index, counts_and_events}, fn key, {index, counts_and_events} ->
-                {value, index} = Map.pop!(index, key)
-                {index, decrement_value(counts_and_events, value, value_to_string(value, state))}
-              end)
+            {{index, tag_indices}, counts_and_events} =
+              Enum.reduce(
+                affected,
+                {{index, tag_indices}, counts_and_events},
+                fn {key, matched_positions}, acc ->
+                  entry = Map.fetch!(index, key)
+
+                  process_move_event(
+                    entry,
+                    key,
+                    matched_positions,
+                    new_condition,
+                    acc,
+                    state
+                  )
+                end
+              )
 
             {{index, tag_indices}, counts_and_events}
         end
@@ -559,39 +667,138 @@ defmodule Electric.Shapes.Consumer.Materializer do
     end
   end
 
+  # Position-aware tag indexing: tags are "/" separated strings where each slot
+  # corresponds to a DNF position. Non-empty slots are indexed as {pos, hash}.
+  # For backward compat, flat tags (no "/") are treated as position 0.
   defp add_row_to_tag_indices(tag_indices, key, move_tags) do
-    # For now we only support one move tag per row (i.e. no `OR`s in the where clause if there's a subquery)
     Enum.reduce(move_tags, tag_indices, fn tag, acc when is_binary(tag) ->
-      Map.update(acc, tag, MapSet.new([key]), &MapSet.put(&1, key))
+      tag
+      |> parse_tag_slots()
+      |> Enum.reduce(acc, fn
+        {"", _pos}, acc ->
+          acc
+
+        {hash, pos}, acc ->
+          Map.update(acc, {pos, hash}, MapSet.new([key]), &MapSet.put(&1, key))
+      end)
     end)
   end
 
   defp remove_row_from_tag_indices(tag_indices, key, move_tags) do
     Enum.reduce(move_tags, tag_indices, fn tag, acc when is_binary(tag) ->
-      case Map.fetch(acc, tag) do
-        {:ok, v} ->
-          new_mapset = MapSet.delete(v, key)
-
-          if MapSet.size(new_mapset) == 0 do
-            Map.delete(acc, tag)
-          else
-            Map.put(acc, tag, new_mapset)
-          end
-
-        :error ->
+      tag
+      |> parse_tag_slots()
+      |> Enum.reduce(acc, fn
+        {"", _pos}, acc ->
           acc
+
+        {hash, pos}, acc ->
+          case Map.fetch(acc, {pos, hash}) do
+            {:ok, v} ->
+              new_mapset = MapSet.delete(v, key)
+
+              if MapSet.size(new_mapset) == 0 do
+                Map.delete(acc, {pos, hash})
+              else
+                Map.put(acc, {pos, hash}, new_mapset)
+              end
+
+            :error ->
+              acc
+          end
+      end)
+    end)
+  end
+
+  defp parse_tag_slots(tag) do
+    tag |> String.split("/") |> Enum.with_index()
+  end
+
+  # Collect keys affected by move patterns, returning %{key => MapSet<positions>}
+  defp collect_affected_keys(tag_indices, patterns) do
+    Enum.reduce(patterns, %{}, fn %{pos: pos, value: value}, acc ->
+      case Map.get(tag_indices, {pos, value}) do
+        nil ->
+          acc
+
+        keys ->
+          Enum.reduce(keys, acc, fn key, acc ->
+            Map.update(acc, key, MapSet.new([pos]), &MapSet.put(&1, pos))
+          end)
       end
     end)
   end
 
-  defp pop_keys_from_tag_indices(tag_indices, patterns) do
-    # This implementation is naive while we support only one tag per row and no composite tags.
-    Enum.reduce(patterns, {MapSet.new(), tag_indices}, fn %{pos: _pos, value: value},
-                                                          {keys, acc} ->
-      case Map.pop(acc, value) do
-        {nil, acc} -> {keys, acc}
-        {v, acc} -> {MapSet.union(keys, v), acc}
-      end
+  defp process_move_event(entry, key, matched_positions, new_condition, {{idx, ti}, ce}, state) do
+    case entry.active_conditions do
+      [] when new_condition == false ->
+        # No DNF, move-out: remove row entirely (backward compat)
+        ti = remove_row_from_tag_indices(ti, key, entry.tags)
+        idx = Map.delete(idx, key)
+        {{idx, ti}, decrement_value(ce, entry.value, value_to_string(entry.value, state))}
+
+      [] ->
+        # No DNF, move-in: no-op
+        {{idx, ti}, ce}
+
+      ac ->
+        # DNF: flip matched positions, re-evaluate inclusion
+        new_ac = flip_active_conditions(ac, matched_positions, new_condition)
+        new_included? = evaluate_inclusion(entry.tags, new_ac)
+
+        cond do
+          entry.included? and not new_included? ->
+            # Remove row entirely to avoid stale tag_indices. If the row
+            # should become included again later, it will re-enter via a
+            # move-in query or NewRecord with fresh tags and ac.
+            ti = remove_row_from_tag_indices(ti, key, entry.tags)
+            idx = Map.delete(idx, key)
+            {{idx, ti}, decrement_value(ce, entry.value, value_to_string(entry.value, state))}
+
+          not entry.included? and new_included? ->
+            idx =
+              Map.put(idx, key, %{
+                entry
+                | active_conditions: new_ac,
+                  included?: new_included?
+              })
+
+            {{idx, ti}, increment_value(ce, entry.value, value_to_string(entry.value, state))}
+
+          true ->
+            idx =
+              Map.put(idx, key, %{
+                entry
+                | active_conditions: new_ac,
+                  included?: new_included?
+              })
+
+            {{idx, ti}, ce}
+        end
+    end
+  end
+
+  defp flip_active_conditions(ac, positions, new_value) do
+    ac
+    |> Enum.with_index()
+    |> Enum.map(fn {val, idx} ->
+      if MapSet.member?(positions, idx), do: new_value, else: val
+    end)
+  end
+
+  # Evaluate whether a row is included based on its tags and active_conditions.
+  # A row is included if any disjunct (tag) has all participating positions active.
+  defp evaluate_inclusion([], _ac), do: true
+  defp evaluate_inclusion(_tags, []), do: true
+
+  defp evaluate_inclusion(tags, ac) do
+    Enum.any?(tags, fn tag ->
+      tag
+      |> parse_tag_slots()
+      |> Enum.all?(fn
+        {"", _pos} -> true
+        {_hash, pos} -> Enum.at(ac, pos, true)
+      end)
     end)
   end
 end

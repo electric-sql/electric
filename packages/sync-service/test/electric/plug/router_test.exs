@@ -2377,21 +2377,41 @@ defmodule Electric.Plug.RouterTest do
     end
 
     @tag with_sql: [
-           "CREATE TABLE parent (id INT PRIMARY KEY, value INT NOT NULL)",
-           "CREATE TABLE child (id INT PRIMARY KEY, parent_id INT NOT NULL REFERENCES parent(id), value INT NOT NULL)",
-           "INSERT INTO parent (id, value) VALUES (1, 1), (2, 2)",
-           "INSERT INTO child (id, parent_id, value) VALUES (1, 1, 10), (2, 2, 20)"
+           "CREATE TABLE inner_table (id INT PRIMARY KEY, value INT NOT NULL)",
+           "CREATE TABLE outer_table (id INT PRIMARY KEY, inner_id INT NOT NULL REFERENCES inner_table(id), value INT NOT NULL)"
+         ]
+    test "return 400 if same subquery is used with both positive and negative polarity", %{
+      opts: opts
+    } do
+      assert %{status: 400} =
+               conn("GET", "/v1/shape", %{
+                 table: "outer_table",
+                 offset: "-1",
+                 where:
+                   "inner_id IN (SELECT id FROM inner_table) OR NOT inner_id IN (SELECT id FROM inner_table)"
+               })
+               |> Router.call(opts)
+    end
+
+    @tag with_sql: [
+           "CREATE TABLE inner_table (id INT PRIMARY KEY, value INT NOT NULL)",
+           "CREATE TABLE outer_table (id INT PRIMARY KEY, inner_id INT NOT NULL REFERENCES inner_table(id), value INT NOT NULL)",
+           "INSERT INTO inner_table (id, value) VALUES (1, 1), (2, 2)",
+           "INSERT INTO outer_table (id, inner_id, value) VALUES (1, 1, 10), (2, 2, 20)"
          ]
     test "a move-out from the inner shape is propagated to the outer shape", %{
       opts: opts,
       db_conn: db_conn
     } do
-      req = make_shape_req("child", where: "parent_id in (SELECT id FROM parent WHERE value = 1)")
+      req =
+        make_shape_req("outer_table",
+          where: "inner_id in (SELECT id FROM inner_table WHERE value = 1)"
+        )
 
       assert {req, 200, [data, snapshot_end]} = shape_req(req, opts)
 
       assert %{
-               "value" => %{"id" => "1", "parent_id" => "1", "value" => "10"},
+               "value" => %{"id" => "1", "inner_id" => "1", "value" => "10"},
                "headers" => %{"operation" => "insert", "tags" => [tag]}
              } = data
 
@@ -2399,7 +2419,7 @@ defmodule Electric.Plug.RouterTest do
 
       task = live_shape_req(req, opts)
 
-      Postgrex.query!(db_conn, "UPDATE parent SET value = 3 WHERE id = 1", [])
+      Postgrex.query!(db_conn, "UPDATE inner_table SET value = 3 WHERE id = 1", [])
 
       assert {_req, 200, [data, %{"headers" => %{"control" => "up-to-date"}}]} = Task.await(task)
 
@@ -2412,68 +2432,79 @@ defmodule Electric.Plug.RouterTest do
     end
 
     @tag with_sql: [
-           "CREATE TABLE parent (id INT PRIMARY KEY, value INT NOT NULL)",
-           "CREATE TABLE child (id INT PRIMARY KEY, parent_id INT NOT NULL REFERENCES parent(id), value INT NOT NULL)",
-           "INSERT INTO parent (id, value) VALUES (1, 1), (2, 2)",
-           "INSERT INTO child (id, parent_id, value) VALUES (1, 1, 10), (2, 2, 20)"
+           "CREATE TABLE inner_table (id INT PRIMARY KEY, value INT NOT NULL)",
+           "CREATE TABLE outer_table (id INT PRIMARY KEY, inner_id INT NOT NULL REFERENCES inner_table(id), value INT NOT NULL)",
+           "INSERT INTO inner_table (id, value) VALUES (1, 1), (2, 2)",
+           "INSERT INTO outer_table (id, inner_id, value) VALUES (1, 1, 10), (2, 2, 20)"
          ]
     test "a move-in from the inner shape causes a query and new entries in the outer shape", %{
       opts: opts,
       db_conn: db_conn,
       stack_id: stack_id
     } do
-      req = make_shape_req("child", where: "parent_id in (SELECT id FROM parent WHERE value = 1)")
+      req =
+        make_shape_req("outer_table",
+          where: "inner_id in (SELECT id FROM inner_table WHERE value = 1)"
+        )
+
       assert {req, 200, [data, snapshot_end]} = shape_req(req, opts)
 
       tag =
         :crypto.hash(:md5, stack_id <> req.handle <> "v:1")
         |> Base.encode16(case: :lower)
 
-      assert %{"id" => "1", "parent_id" => "1", "value" => "10"} = data["value"]
+      assert %{"id" => "1", "inner_id" => "1", "value" => "10"} = data["value"]
       assert %{"operation" => "insert", "tags" => [^tag]} = data["headers"]
       assert %{"headers" => %{"control" => "snapshot-end"}} = snapshot_end
 
       task = live_shape_req(req, opts)
 
       # Move in reflects in the new shape without invalidating it
-      Postgrex.query!(db_conn, "UPDATE parent SET value = 1 WHERE id = 2", [])
+      Postgrex.query!(db_conn, "UPDATE inner_table SET value = 1 WHERE id = 2", [])
 
       tag2 =
         :crypto.hash(:md5, stack_id <> req.handle <> "v:2")
         |> Base.encode16(case: :lower)
 
-      assert {_, 200, [data, %{"headers" => %{"control" => "snapshot-end"}}, up_to_date_ctl()]} =
+      assert {_, 200,
+              [
+                %{"headers" => %{"event" => "move-in"}},
+                data,
+                %{"headers" => %{"control" => "snapshot-end"}},
+                up_to_date_ctl()
+              ]} =
                Task.await(task)
 
-      assert %{"id" => "2", "parent_id" => "2", "value" => "20"} = data["value"]
+      assert %{"id" => "2", "inner_id" => "2", "value" => "20"} = data["value"]
 
       assert %{"operation" => "insert", "is_move_in" => true, "tags" => [^tag2]} =
                data["headers"]
     end
 
     @tag with_sql: [
-           "CREATE TABLE parent (id INT PRIMARY KEY, excluded BOOLEAN NOT NULL DEFAULT FALSE)",
-           "CREATE TABLE child (id INT PRIMARY KEY, parent_id INT NOT NULL REFERENCES parent(id), value INT NOT NULL)",
-           "INSERT INTO parent (id, excluded) VALUES (1, false), (2, true)",
-           "INSERT INTO child (id, parent_id, value) VALUES (1, 1, 10), (2, 2, 20)"
+           "CREATE TABLE inner_table (id INT PRIMARY KEY, excluded BOOLEAN NOT NULL DEFAULT FALSE)",
+           "CREATE TABLE outer_table (id INT PRIMARY KEY, inner_id INT NOT NULL REFERENCES inner_table(id), value INT NOT NULL)",
+           "INSERT INTO inner_table (id, excluded) VALUES (1, false), (2, true)",
+           "INSERT INTO outer_table (id, inner_id, value) VALUES (1, 1, 10), (2, 2, 20)"
          ]
-    test "NOT IN subquery should return 409 on move-in to subquery", %{
+    test "NOT IN subquery emits a move-out when a dependency value moves in", %{
       opts: opts,
-      db_conn: db_conn
+      db_conn: db_conn,
+      stack_id: stack_id
     } do
-      # Child rows where parent_id is NOT IN the set of excluded parents
-      # Initially: parent 1 is not excluded, so child 1 is in the shape
-      # parent 2 is excluded, so child 2 is NOT in the shape
+      # Outer rows where inner_id is NOT IN the set of excluded inner rows.
+      # Initially: inner row 1 is not excluded, so outer row 1 is in the shape.
+      # Inner row 2 is excluded, so outer row 2 is not in the shape.
       req =
-        make_shape_req("child",
-          where: "parent_id NOT IN (SELECT id FROM parent WHERE excluded = true)"
+        make_shape_req("outer_table",
+          where: "inner_id NOT IN (SELECT id FROM inner_table WHERE excluded = true)"
         )
 
       assert {req, 200, [data, snapshot_end]} = shape_req(req, opts)
 
-      # Only child 1 should be in the shape (parent 1 is not excluded)
+      # Only outer row 1 should be in the shape.
       assert %{
-               "value" => %{"id" => "1", "parent_id" => "1", "value" => "10"},
+               "value" => %{"id" => "1", "inner_id" => "1", "value" => "10"},
                "headers" => %{"operation" => "insert"}
              } = data
 
@@ -2481,13 +2512,60 @@ defmodule Electric.Plug.RouterTest do
 
       task = live_shape_req(req, opts)
 
-      # Now set parent 1 to excluded = true
-      # This causes parent 1 to move INTO the subquery result
-      # Which should cause child 1 to move OUT of the outer shape
-      # Since NOT IN subquery move-out isn't implemented, we expect a 409
-      Postgrex.query!(db_conn, "UPDATE parent SET excluded = true WHERE id = 1", [])
+      tag =
+        :crypto.hash(:md5, stack_id <> req.handle <> "v:1")
+        |> Base.encode16(case: :lower)
 
-      assert {_req, 409, _response} = Task.await(task)
+      # Now set inner row 1 to excluded = true.
+      # This moves it into the subquery result and forces outer row 1 out.
+      Postgrex.query!(db_conn, "UPDATE inner_table SET excluded = true WHERE id = 1", [])
+
+      assert {_req, 200, [data, up_to_date_ctl()]} = Task.await(task)
+
+      assert %{
+               "headers" => %{
+                 "event" => "move-out",
+                 "patterns" => [%{"pos" => 0, "value" => ^tag}]
+               }
+             } = data
+    end
+
+    @tag with_sql: [
+           "CREATE TABLE inner_table (id INT PRIMARY KEY, excluded BOOLEAN NOT NULL DEFAULT FALSE)",
+           "CREATE TABLE outer_table (id INT PRIMARY KEY, inner_id INT NOT NULL REFERENCES inner_table(id), value INT NOT NULL)",
+           "INSERT INTO inner_table (id, excluded) VALUES (1, true), (2, true)",
+           "INSERT INTO outer_table (id, inner_id, value) VALUES (1, 1, 10), (2, 2, 20)"
+         ]
+    test "NOT IN subquery emits a move-in query when a dependency value moves out", %{
+      opts: opts,
+      db_conn: db_conn,
+      stack_id: stack_id
+    } do
+      req =
+        make_shape_req("outer_table",
+          where: "inner_id NOT IN (SELECT id FROM inner_table WHERE excluded = true)"
+        )
+
+      assert {req, 200, [%{"headers" => %{"control" => "snapshot-end"}}]} = shape_req(req, opts)
+
+      task = live_shape_req(req, opts)
+
+      Postgrex.query!(db_conn, "UPDATE inner_table SET excluded = false WHERE id = 1", [])
+
+      tag =
+        :crypto.hash(:md5, stack_id <> req.handle <> "v:1")
+        |> Base.encode16(case: :lower)
+
+      assert {_req, 200,
+              [
+                %{"headers" => %{"event" => "move-in"}},
+                data,
+                %{"headers" => %{"control" => "snapshot-end"}},
+                up_to_date_ctl()
+              ]} = Task.await(task)
+
+      assert %{"id" => "1", "inner_id" => "1", "value" => "10"} = data["value"]
+      assert %{"operation" => "insert", "is_move_in" => true, "tags" => [^tag]} = data["headers"]
     end
 
     @tag with_sql: [
@@ -2540,6 +2618,7 @@ defmodule Electric.Plug.RouterTest do
 
       assert {_, 200,
               [
+                %{"headers" => %{"event" => "move-in"}},
                 %{"value" => %{"id" => "2", "other_value" => "4"}},
                 %{"headers" => %{"control" => "snapshot-end"}},
                 up_to_date_ctl()
@@ -2587,6 +2666,7 @@ defmodule Electric.Plug.RouterTest do
 
       assert {req, 200,
               [
+                %{"headers" => %{"event" => "move-in"}},
                 %{
                   "value" => %{"id" => "2", "value" => "20"},
                   "headers" => %{"operation" => "insert", "is_move_in" => true, "tags" => [tag]}
@@ -2618,7 +2698,7 @@ defmodule Electric.Plug.RouterTest do
            "INSERT INTO parent (id, include_parent) VALUES (1, true)",
            "INSERT INTO child (id, parent_id, include_child) VALUES (1, 1, true)"
          ]
-    test "subquery combined with OR should return a 409 on move-out", %{
+    test "subquery combined with OR handles move-out via DNF without invalidation", %{
       opts: opts,
       db_conn: db_conn
     } do
@@ -2632,16 +2712,33 @@ defmodule Electric.Plug.RouterTest do
       # Should contain the data record and the snapshot-end control message
       assert length(response) == 2
 
-      assert %{"value" => %{"id" => "1", "include_child" => "true"}} =
+      tag =
+        :crypto.hash(:md5, opts[:stack_id] <> req.handle <> "v:1")
+        |> Base.encode16(case: :lower)
+
+      assert %{
+               "value" => %{"id" => "1"},
+               "headers" => %{
+                 "tags" => [^tag <> "/", "/1"],
+                 "active_conditions" => [true, true]
+               }
+             } =
                Enum.find(response, &Map.has_key?(&1, "key"))
 
       task = live_shape_req(req, opts)
 
-      # Setting include_parent to false may cause a move out, but it doesn't in this case because include_child is still true
+      # Toggling the inner-side condition to false causes a move out on the
+      # subquery position, but the row stays because the outer-side predicate
+      # remains true on the second disjunct.
+      # With DNF runtime, this is handled as a position flip, not invalidation.
       Postgrex.query!(db_conn, "UPDATE parent SET include_parent = false WHERE id = 1", [])
 
-      # Rather than working out whether this is a move out or not we return a 409
-      assert {_req, 409, _response} = Task.await(task)
+      assert {_req, 200, response} = Task.await(task)
+
+      assert [%{"headers" => %{"event" => "move-out", "patterns" => [%{"pos" => 0}]}}] =
+               Enum.filter(response, &match?(%{"headers" => %{"event" => _}}, &1))
+
+      refute Enum.any?(response, &Map.has_key?(&1, "key"))
     end
 
     @tag with_sql: [
@@ -2650,7 +2747,7 @@ defmodule Electric.Plug.RouterTest do
            "INSERT INTO parent (id, include_parent) VALUES (1, false)",
            "INSERT INTO child (id, parent_id, include_child) VALUES (1, 1, true)"
          ]
-    test "subquery combined with OR should return a 409 on move-in", %{
+    test "subquery combined with OR handles move-in via DNF without invalidation", %{
       opts: opts,
       db_conn: db_conn
     } do
@@ -2664,16 +2761,35 @@ defmodule Electric.Plug.RouterTest do
       # Should contain the data record and the snapshot-end control message
       assert length(response) == 2
 
-      assert %{"value" => %{"id" => "1", "include_child" => "true"}} =
+      tag =
+        :crypto.hash(:md5, opts[:stack_id] <> req.handle <> "v:1")
+        |> Base.encode16(case: :lower)
+
+      assert %{
+               "value" => %{"id" => "1"},
+               "headers" => %{
+                 "tags" => [^tag <> "/", "/1"],
+                 "active_conditions" => [false, true]
+               }
+             } =
                Enum.find(response, &Map.has_key?(&1, "key"))
 
       task = live_shape_req(req, opts)
 
-      # Setting include_parent to true may cause a move in, but it doesn't in this case because include_child is already true
+      # Toggling the inner-side condition to true causes a move in on the
+      # subquery position. The row is already present via the outer-side
+      # predicate on the second disjunct.
+      # With DNF runtime, the move-in is handled as a position flip, not invalidation.
       Postgrex.query!(db_conn, "UPDATE parent SET include_parent = true WHERE id = 1", [])
 
-      # Rather than working out whether this is a move in or not we return a 409
-      assert {_req, 409, _response} = Task.await(task)
+      assert {_req, 200, response} = Task.await(task)
+
+      # Move-in control message with move-in query rows
+      move_in_events =
+        Enum.filter(response, &match?(%{"headers" => %{"event" => "move-in"}}, &1))
+
+      assert length(move_in_events) >= 1
+      refute Enum.any?(response, &Map.has_key?(&1, "key"))
     end
 
     @tag with_sql: [
@@ -2684,7 +2800,7 @@ defmodule Electric.Plug.RouterTest do
            "INSERT INTO parent (id, grandparent_id, include_parent) VALUES (1, 1, true)",
            "INSERT INTO child (id, parent_id) VALUES (1, 1)"
          ]
-    test "nested subquery combined with OR should return a 409 on move-in", %{
+    test "nested subquery combined with OR handles move-in via DNF without invalidation", %{
       opts: opts,
       db_conn: db_conn
     } do
@@ -2703,15 +2819,25 @@ defmodule Electric.Plug.RouterTest do
 
       task = live_shape_req(req, opts)
 
-      # Setting include_grandparent to true may cause a move in, but it doesn't in this case because include_parent is already true
+      # Toggling the innermost condition to true causes a move-in in the middle
+      # shape's subquery, but middle row 1 is already present because its direct
+      # predicate is still true. With DNF on the middle shape, this becomes a
+      # position flip with no row-level change.
+      # The outer shape sees no change and stays live.
       Postgrex.query!(
         db_conn,
         "UPDATE grandparent SET include_grandparent = true WHERE id = 1",
         []
       )
 
-      # Rather than working out whether this is a move in or not we return a 409
-      assert {_req, 409, _response} = Task.await(task)
+      # The middle shape handles the move-in via DNF. The outer dependency does
+      # not change, so no move event is triggered on the outer shape.
+      # The live request should receive the middle shape's move-in broadcast
+      # (propagated via the dependency materializer).
+      assert {_req, 200, response} = Task.await(task)
+
+      # Verify we got a response without invalidation.
+      assert is_list(response)
     end
 
     @tag with_sql: [
@@ -2755,6 +2881,7 @@ defmodule Electric.Plug.RouterTest do
 
       assert {req, 200,
               [
+                %{"headers" => %{"event" => "move-in"}},
                 %{
                   "value" => %{"id" => "2", "name" => "Team B"},
                   "headers" => %{"tags" => [^tag], "is_move_in" => true}
@@ -2832,6 +2959,7 @@ defmodule Electric.Plug.RouterTest do
 
       assert {req, 200,
               [
+                %{"headers" => %{"event" => "move-in"}},
                 %{
                   "headers" => %{"tags" => [^tag]},
                   "value" => %{"id" => "2", "role" => "Member"}
@@ -2897,12 +3025,16 @@ defmodule Electric.Plug.RouterTest do
       task = live_shape_req(req, ctx.opts)
       Postgrex.query!(ctx.db_conn, "UPDATE parent SET other_value = 10 WHERE id = 2")
 
-      tag =
+      tag_hash =
         :crypto.hash(:md5, ctx.stack_id <> req.handle <> "v:20")
         |> Base.encode16(case: :lower)
 
+      # DNF tags: "subquery_hash/row_predicate_slot"
+      tag = "#{tag_hash}/1"
+
       assert {_, 200,
               [
+                %{"headers" => %{"event" => "move-in"}},
                 %{"headers" => %{"tags" => [^tag]}, "value" => %{"id" => "3"}},
                 %{"headers" => %{"control" => "snapshot-end"}},
                 up_to_date_ctl()
@@ -2928,7 +3060,11 @@ defmodule Electric.Plug.RouterTest do
       # Should contain the data record and the snapshot-end control message
       assert length(response) == 2
 
-      tag = :crypto.hash(:md5, ctx.stack_id <> req.handle <> "v:1") |> Base.encode16(case: :lower)
+      tag_hash =
+        :crypto.hash(:md5, ctx.stack_id <> req.handle <> "v:1") |> Base.encode16(case: :lower)
+
+      # DNF tags: "subquery_hash/row_predicate_slot"
+      tag = "#{tag_hash}/1"
 
       assert %{
                "value" => %{"id" => "1", "parentId" => "1", "Value" => "10"},
@@ -2974,11 +3110,13 @@ defmodule Electric.Plug.RouterTest do
       assert {req, 200,
               [
                 %{"headers" => %{"event" => "move-out"}},
+                %{"headers" => %{"event" => "move-in"}},
                 %{
                   "headers" => %{"operation" => "insert", "is_move_in" => true, "tags" => [tag2]},
                   "value" => %{"parent_id" => "2", "value" => "12"}
                 },
                 %{"headers" => %{"control" => "snapshot-end"}},
+                %{"headers" => %{"event" => "move-in"}},
                 %{
                   "headers" => %{"operation" => "insert", "is_move_in" => true, "tags" => [^tag]},
                   "value" => %{"id" => "1", "parent_id" => "1", "value" => "13"}
@@ -3013,7 +3151,8 @@ defmodule Electric.Plug.RouterTest do
            "INSERT INTO parent (id, value) VALUES (1, 1), (2, 2), (3, 3)",
            "INSERT INTO child (id, parent_id, value) VALUES (1, 1, 10), (2, 2, 20), (3, 3, 30)"
          ]
-    test "move-in into move-out into move-in of the same parent results in a ", ctx do
+    test "move-in into move-out into move-in of the same dependency row collapses queued oscillations",
+         ctx do
       req = make_shape_req("child", where: "parent_id in (SELECT id FROM parent WHERE value = 1)")
 
       assert {req, 200, [data, _snapshot_end]} = shape_req(req, ctx.opts)
@@ -3038,19 +3177,33 @@ defmodule Electric.Plug.RouterTest do
       # Hard to wait exactly what we want, so this should be OK
       Process.sleep(1000)
 
-      # We're essentially guaranteed, in this test environment, to see move-out before move-in resolves.
-      # It's safe to propagate a move-out even for stuff client hasn't seen (because of hashing in the pattern)
-      # as it's just a no-op.
-      # So we should see 2 move-outs and a move-in but only for the 3rd parent. The move-in should be filtered despite
-      # being triggered for 2 moved in parents initially
+      tag2 =
+        :crypto.hash(:md5, ctx.stack_id <> req.handle <> "v:2") |> Base.encode16(case: :lower)
+
+      tag3 =
+        :crypto.hash(:md5, ctx.stack_id <> req.handle <> "v:3") |> Base.encode16(case: :lower)
+
+      # The reduced move queue keeps the first move-in/move-out pair for
+      # dependency row 2, then drops the later move-in/move-out oscillation
+      # before dependency row 3 moves in.
       assert {_req, 200,
               [
-                %{"headers" => %{"event" => "move-out", "patterns" => p1}},
-                %{"headers" => %{"event" => "move-out", "patterns" => p1}},
+                %{"headers" => %{"event" => "move-in"}},
+                %{
+                  "headers" => %{"operation" => "insert", "is_move_in" => true, "tags" => [^tag2]},
+                  "value" => %{"id" => "2", "value" => "20"}
+                },
                 %{"headers" => %{"control" => "snapshot-end"}},
                 %{
-                  "headers" => %{"operation" => "insert", "is_move_in" => true},
-                  "value" => %{"id" => "3", "parent_id" => "3", "value" => "30"}
+                  "headers" => %{
+                    "event" => "move-out",
+                    "patterns" => [%{"pos" => 0, "value" => ^tag2}]
+                  }
+                },
+                %{"headers" => %{"event" => "move-in"}},
+                %{
+                  "headers" => %{"operation" => "insert", "is_move_in" => true, "tags" => [^tag3]},
+                  "value" => %{"id" => "3", "value" => "30"}
                 },
                 %{"headers" => %{"control" => "snapshot-end"}},
                 up_to_date_ctl()
@@ -3074,6 +3227,7 @@ defmodule Electric.Plug.RouterTest do
 
       assert {req, 200,
               [
+                %{"headers" => %{"event" => "move-in"}},
                 %{
                   "value" => %{"id" => "1", "parent_id" => "1", "value" => "10"},
                   "headers" => %{"operation" => "insert", "tags" => [tag]}
@@ -3108,7 +3262,7 @@ defmodule Electric.Plug.RouterTest do
            "INSERT INTO project_members (project_id, user_id) VALUES (1, 100), (3, 100)",
            "INSERT INTO projects (id, workspace_id, name) VALUES (1, 1, 'project 1'), (2, 1, 'project 2')"
          ]
-    test "supports two subqueries at the same level but returns 409 on move-in", %{
+    test "supports two subqueries at the same level with move-in", %{
       opts: opts,
       db_conn: db_conn
     } do
@@ -3176,8 +3330,17 @@ defmodule Electric.Plug.RouterTest do
         []
       )
 
-      # Should get a 409 because multiple same-level subqueries cannot currently correctly handle move-ins
-      assert %{status: 409} = Task.await(task)
+      # With DNF runtime, multiple same-level subqueries now handle move-ins correctly
+      assert %{status: 200} = conn = Task.await(task)
+
+      body = Jason.decode!(conn.resp_body)
+
+      assert [%{"headers" => %{"event" => "move-in"}} | rest] = body
+
+      assert Enum.any?(rest, fn
+               %{"value" => %{"id" => "2", "name" => "project 2"}} -> true
+               _ -> false
+             end)
     end
   end
 

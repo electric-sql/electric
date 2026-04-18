@@ -1,11 +1,12 @@
 defmodule Electric.Shapes.Consumer do
   use GenServer, restart: :temporary
 
-  alias Electric.Shapes.Consumer.ChangeHandling
+  alias Electric.Shapes.Consumer.EventHandler
+  alias Electric.Shapes.Consumer.EventHandlerBuilder
+  alias Electric.Shapes.Consumer.Effects
   alias Electric.Shapes.Consumer.InitialSnapshot
-  alias Electric.Shapes.Consumer.MoveHandling
-  alias Electric.Shapes.Consumer.MoveIns
   alias Electric.Shapes.Consumer.PendingTxn
+  alias Electric.Shapes.Consumer.SetupEffects
   alias Electric.Shapes.Consumer.State
 
   import Electric.Shapes.Consumer.State, only: :macros
@@ -16,6 +17,7 @@ defmodule Electric.Shapes.Consumer do
   alias Electric.Shapes.Consumer.Materializer
   alias Electric.Shapes.ConsumerRegistry
   alias Electric.LogItems
+
   alias Electric.Postgres.Inspector
   alias Electric.Replication.Changes
   alias Electric.Replication.Changes.Transaction
@@ -132,6 +134,32 @@ defmodule Electric.Shapes.Consumer do
   end
 
   @impl GenServer
+  def handle_continue({:init_consumer, config}, state) do
+    %{
+      stack_id: stack_id,
+      shape_handle: shape_handle
+    } = state
+
+    {:ok, shape} = ShapeCache.ShapeStatus.fetch_shape_by_handle(stack_id, shape_handle)
+
+    state = State.initialize_shape(state, shape, config)
+
+    stack_storage = ShapeCache.Storage.for_stack(stack_id)
+    storage = ShapeCache.Storage.for_shape(shape_handle, stack_storage)
+
+    # TODO: Remove. Only needed for InMemoryStorage
+    case ShapeCache.Storage.start_link(storage) do
+      {:ok, _pid} -> :ok
+      :ignore -> :ok
+    end
+
+    writer = ShapeCache.Storage.init_writer!(storage, shape)
+
+    state = State.initialize(state, storage, writer)
+
+    finish_initialization(state, config.action, config.otel_ctx)
+  end
+
   def handle_continue(:stop_and_clean, state) do
     stop_and_clean(state)
   end
@@ -243,31 +271,7 @@ defmodule Electric.Shapes.Consumer do
 
     state = State.initialize(state, storage, writer)
 
-    if all_materializers_alive?(state) && subscribe(state, opts.action) do
-      Logger.debug("Writer for #{shape_handle} initialized")
-
-      # We start the snapshotter even if there's a snapshot because it also performs the call
-      # to PublicationManager.add_shape/3. We *could* do that call here and avoid spawning a
-      # process if the shape already has a snapshot but the current semantics rely on being able
-      # to wait for the snapshot asynchronously and if we called publication manager here it would
-      # block and prevent await_snapshot_start calls from adding snapshot subscribers.
-
-      {:ok, _pid} =
-        Shapes.DynamicConsumerSupervisor.start_snapshotter(
-          stack_id,
-          %{
-            stack_id: stack_id,
-            shape: shape,
-            shape_handle: shape_handle,
-            storage: storage,
-            otel_ctx: Map.get(opts, :otel_ctx, nil)
-          }
-        )
-
-      {:noreply, state}
-    else
-      stop_and_clean(state)
-    end
+    finish_initialization(state, opts.action, Map.get(opts, :otel_ctx, nil))
   end
 
   def handle_info({ShapeCache.Storage, :flushed, flushed_offset}, state) do
@@ -287,6 +291,16 @@ defmodule Electric.Shapes.Consumer do
     {:noreply, state, state.hibernate_after}
   end
 
+  def handle_info({:global_last_seen_lsn, _lsn} = event, state) do
+    case handle_event(event, state) do
+      %{terminating?: true} = state ->
+        {:noreply, state, {:continue, :stop_and_clean}}
+
+      state ->
+        {:noreply, state, state.hibernate_after}
+    end
+  end
+
   # This is part of the storage module contract - messages tagged storage should be applied to the writer state.
   def handle_info({ShapeCache.Storage, message}, state) do
     writer = ShapeCache.Storage.apply_message(state.writer, message)
@@ -301,63 +315,38 @@ defmodule Electric.Shapes.Consumer do
       "Consumer reacting to #{length(move_in)} move ins and #{length(move_out)} move outs from its #{dep_handle} dependency"
     end)
 
-    feature_flags = Electric.StackConfig.lookup(state.stack_id, :feature_flags, [])
-    tagged_subqueries_enabled? = "tagged_subqueries" in feature_flags
+    handle_apply_event_result(
+      state,
+      apply_event(
+        state,
+        {:materializer_changes, dep_handle, %{move_in: move_in, move_out: move_out}}
+      )
+    )
+  end
 
-    # We need to invalidate the consumer in the following cases:
-    # - tagged subqueries are disabled since we cannot support causally correct event processing of 3+ level dependency trees
-    #   so we just invalidating this middle shape instead
-    # - the where clause has an OR combined with the subquery so we can't tell if the move ins/outs actually affect the shape or not
-    # - the where clause has a NOT combined with the subquery (e.g. NOT IN) since move-in to the subquery
-    #   should cause move-out from the outer shape, which isn't implemented
-    # - the shape has multiple subqueries at the same level since we can't correctly determine
-    #   which dependency caused the move-in/out
-    should_invalidate? =
-      not tagged_subqueries_enabled? or state.or_with_subquery? or state.not_with_subquery? or
-        length(state.shape.shape_dependencies) > 1
+  def handle_info({:pg_snapshot_known, snapshot}, state) do
+    Logger.debug(fn -> "Snapshot known for active move-in" end)
+    handle_apply_event_result(state, apply_event(state, {:pg_snapshot_known, snapshot}))
+  end
 
-    if should_invalidate? do
-      stop_and_clean(state)
-    else
-      {state, notification} =
+  def handle_info(
+        {:query_move_in_complete, snapshot_name, row_count, row_bytes, move_in_lsn},
         state
-        |> MoveHandling.process_move_ins(dep_handle, move_in)
-        |> MoveHandling.process_move_outs(dep_handle, move_out)
-
-      :ok = notify_new_changes(state, notification)
-
-      {:noreply, state}
-    end
-  end
-
-  def handle_info({:pg_snapshot_known, name, snapshot}, state) do
-    Logger.debug(fn -> "Snapshot known for move-in #{name}" end)
-
-    # Update the snapshot in waiting_move_ins
-    move_handling_state = MoveIns.set_snapshot(state.move_handling_state, name, snapshot)
-
-    # Garbage collect touches visible in all known snapshots
-    state = %{state | move_handling_state: move_handling_state}
-    state = State.gc_touch_tracker(state)
-
-    {:noreply, state, state.hibernate_after}
-  end
-
-  def handle_info({:query_move_in_complete, name, key_set, snapshot}, state) do
+      ) do
     Logger.debug(fn ->
-      "Consumer query move in complete for #{name} with #{length(key_set)} keys"
+      "Consumer query move in complete for #{state.shape_handle} with #{row_count} rows from #{snapshot_name} (#{row_bytes} bytes)"
     end)
 
-    {state, notification} = MoveHandling.query_complete(state, name, key_set, snapshot)
-    :ok = notify_new_changes(state, notification)
-
-    # Garbage collect touches after query completes (no buffer consumption needed)
-    state = State.gc_touch_tracker(state)
-
-    {:noreply, state, state.hibernate_after}
+    handle_apply_event_result(
+      state,
+      apply_event(
+        state,
+        {:query_move_in_complete, snapshot_name, row_count, row_bytes, move_in_lsn}
+      )
+    )
   end
 
-  def handle_info({:query_move_in_error, _, error, stacktrace}, state) do
+  def handle_info({:query_move_in_error, error, stacktrace}, state) do
     Logger.error(
       "Error querying move in for #{state.shape_handle}: #{Exception.format(:error, error, stacktrace)}"
     )
@@ -385,8 +374,6 @@ defmodule Electric.Shapes.Consumer do
     Logger.warning(
       "Materializer down for a dependency: #{handle} (#{inspect(pid)}) (#{inspect(reason)})"
     )
-
-    Materializer.delete_link_values(state.stack_id, handle)
 
     handle_materializer_down(reason, state)
   end
@@ -447,11 +434,6 @@ defmodule Electric.Shapes.Consumer do
       end
     end)
 
-    # Clean up this shape's link-values ETS entry. This consumer may itself be
-    # a dep shape; removing the entry prevents stale cached values from persisting
-    # after shutdown.
-    Materializer.delete_link_values(state.stack_id, state.shape_handle)
-
     # always need to terminate writer to remove the writer ets (which belongs
     # to this process). leads to unecessary writes in the case of a deleted
     # shape but the alternative is leaking ets tables.
@@ -480,6 +462,20 @@ defmodule Electric.Shapes.Consumer do
       {:error, "Shape relation changed before snapshot was ready"}
     )
     |> mark_for_removal()
+  end
+
+  defp handle_event({:global_last_seen_lsn, _lsn} = event, state) do
+    case apply_event(state, event) do
+      {:error, reason} ->
+        handle_event_error(state, reason)
+
+      {state, notification, _num_changes, _total_size} ->
+        if notification do
+          :ok = notify_new_changes(state, notification)
+        end
+
+        state
+    end
   end
 
   defp handle_event(%TransactionFragment{} = txn_fragment, state) do
@@ -667,7 +663,7 @@ defmodule Electric.Shapes.Consumer do
     end
   end
 
-  defp convert_fragment_changes(changes, stack_id, shape_handle, shape) do
+  defp convert_fragment_changes(changes, stack_id, shape_handle, shape, extra_refs \\ nil) do
     Enum.reduce_while(changes, {[], 0}, fn
       %Changes.TruncatedRelation{}, _acc ->
         {:halt, :includes_truncate}
@@ -676,7 +672,11 @@ defmodule Electric.Shapes.Consumer do
         # Apply Shape.convert_change to each change to:
         # 1. Filter out changes not matching the shape's table
         # 2. Apply WHERE clause filtering
-        case Shape.convert_change(shape, change, stack_id: stack_id, shape_handle: shape_handle) do
+        case Shape.convert_change(shape, change,
+               stack_id: stack_id,
+               shape_handle: shape_handle,
+               extra_refs: extra_refs
+             ) do
           [] ->
             {:cont, acc}
 
@@ -796,75 +796,94 @@ defmodule Electric.Shapes.Consumer do
     )
   end
 
-  defp do_handle_txn(%Transaction{xid: xid, changes: changes} = txn, state) do
-    %{shape: shape, writer: writer} = state
+  defp do_handle_txn(%Transaction{} = txn, state) do
+    timestamp = System.monotonic_time()
 
-    state = State.remove_completed_move_ins(state, txn)
+    case apply_event(state, txn) do
+      {:error, reason} ->
+        handle_event_error(state, reason)
 
-    extra_refs_full =
-      Materializer.get_all_as_refs(shape, state.stack_id)
+      {state, notification, num_changes, total_size} ->
+        if notification do
+          :ok = notify_new_changes(state, notification)
 
-    extra_refs_before_move_ins =
-      Enum.reduce(state.move_handling_state.in_flight_values, extra_refs_full, fn {key, value},
-                                                                                  acc ->
-        if is_map_key(acc, key),
-          do: Map.update!(acc, key, &MapSet.difference(&1, value)),
-          else: acc
-      end)
+          OpenTelemetry.add_span_attributes(%{
+            num_bytes: total_size,
+            actual_num_changes: num_changes
+          })
 
-    Logger.debug(fn -> "Extra refs: #{inspect(extra_refs_before_move_ins)}" end)
+          lag = calculate_replication_lag(txn.commit_timestamp)
+          OpenTelemetry.add_span_attributes(replication_lag: lag)
 
-    case ChangeHandling.process_changes(
-           changes,
-           state,
-           %{xid: xid, extra_refs: {extra_refs_before_move_ins, extra_refs_full}}
-         ) do
-      :includes_truncate ->
-        handle_txn_with_truncate(txn.xid, state)
+          Electric.Telemetry.OpenTelemetry.execute(
+            [:electric, :storage, :transaction_stored],
+            %{
+              duration: System.monotonic_time() - timestamp,
+              bytes: total_size,
+              count: 1,
+              operations: num_changes,
+              replication_lag: lag
+            },
+            Map.new(State.telemetry_attrs(state))
+          )
 
-      {_, state, 0, _} ->
-        Logger.debug(fn ->
-          "No relevant changes found for #{inspect(shape)} in txn #{txn.xid}"
-        end)
-
-        consider_flushed(state, txn.last_log_offset)
-
-      {changes, state, num_changes, last_log_offset} ->
-        timestamp = System.monotonic_time()
-
-        {lines, total_size} = prepare_log_entries(changes, xid, shape)
-        writer = ShapeCache.Storage.append_to_log!(lines, writer)
-
-        OpenTelemetry.add_span_attributes(%{
-          num_bytes: total_size,
-          actual_num_changes: num_changes
-        })
-
-        :ok = notify_new_changes(state, changes, last_log_offset)
-
-        lag = calculate_replication_lag(txn.commit_timestamp)
-        OpenTelemetry.add_span_attributes(replication_lag: lag)
-
-        Electric.Telemetry.OpenTelemetry.execute(
-          [:electric, :storage, :transaction_stored],
-          %{
-            duration: System.monotonic_time() - timestamp,
-            bytes: total_size,
-            count: 1,
-            operations: num_changes,
-            replication_lag: lag
-          },
-          Map.new(State.telemetry_attrs(state))
-        )
-
-        %{
           state
-          | writer: writer,
-            latest_offset: last_log_offset,
-            txn_offset_mapping:
-              state.txn_offset_mapping ++ [{last_log_offset, txn.last_log_offset}]
-        }
+        else
+          state
+        end
     end
+  end
+
+  defp handle_apply_event_result(state, {:error, reason}) do
+    state = handle_event_error(state, reason)
+
+    if state.terminating? do
+      {:noreply, state, {:continue, :stop_and_clean}}
+    else
+      stop_and_clean(state)
+    end
+  end
+
+  defp handle_apply_event_result(_old_state, {state, notification, _num_changes, _total_size}) do
+    if notification do
+      :ok = notify_new_changes(state, notification)
+    end
+
+    {:noreply, state, state.hibernate_after}
+  end
+
+  defp apply_event(state, event) do
+    case EventHandler.handle_event(state.event_handler, event) do
+      {:error, reason} ->
+        {:error, reason}
+
+      {:ok, new_handler, effects} ->
+        state = %{state | event_handler: new_handler}
+        previous_offset = state.latest_offset
+
+        result = Effects.execute(effects, state)
+
+        notification =
+          if result.state.latest_offset != previous_offset do
+            {{previous_offset, result.state.latest_offset}, result.state.latest_offset}
+          end
+
+        {result.state, notification, result.num_changes, result.total_size}
+    end
+  end
+
+  defp handle_event_error(state, {:truncate, xid}) do
+    handle_txn_with_truncate(xid, state)
+  end
+
+  defp handle_event_error(state, :unsupported_subquery) do
+    mark_for_removal(state)
+  end
+
+  defp handle_event_error(state, :buffer_overflow) do
+    Logger.warning("Subquery buffer overflow for #{state.shape_handle} - terminating shape")
+
+    mark_for_removal(state)
   end
 
   defp handle_txn_with_truncate(xid, state) do
@@ -1043,17 +1062,47 @@ defmodule Electric.Shapes.Consumer do
   defp more_recent_offset(offset, nil), do: offset
   defp more_recent_offset(offset1, offset2), do: LogOffset.max(offset1, offset2)
 
-  defp subscribe(state, action) do
-    case ShapeLogCollector.add_shape(state.stack_id, state.shape_handle, state.shape, action) do
-      :ok ->
-        true
+  defp initialize_event_handler(%State{} = state, action) do
+    with {:ok, handler, setup_effects} <- EventHandlerBuilder.build(state, action),
+         {:ok, state} <- SetupEffects.execute(setup_effects, %{state | event_handler: handler}) do
+      {:ok, state}
+    else
+      {:error, %State{} = state} ->
+        {:error, state}
+    end
+  end
 
-      {:error, error} ->
-        Logger.warning(
-          "Shape #{state.shape_handle} cannot subscribe due to #{inspect(error)} - invalidating shape"
-        )
+  defp finish_initialization(%State{} = state, action, otel_ctx) do
+    if all_materializers_alive?(state) do
+      case initialize_event_handler(state, action) do
+        {:ok, state} ->
+          Logger.debug("Writer for #{state.shape_handle} initialized")
 
-        false
+          # We start the snapshotter even if there's a snapshot because it also performs the call
+          # to PublicationManager.add_shape/3. We *could* do that call here and avoid spawning a
+          # process if the shape already has a snapshot but the current semantics rely on being able
+          # to wait for the snapshot asynchronously and if we called publication manager here it would
+          # block and prevent await_snapshot_start calls from adding snapshot subscribers.
+
+          {:ok, _pid} =
+            Shapes.DynamicConsumerSupervisor.start_snapshotter(
+              state.stack_id,
+              %{
+                stack_id: state.stack_id,
+                shape: state.shape,
+                shape_handle: state.shape_handle,
+                storage: state.storage,
+                otel_ctx: otel_ctx
+              }
+            )
+
+          {:noreply, state}
+
+        {:error, state} ->
+          stop_and_clean(state)
+      end
+    else
+      stop_and_clean(state)
     end
   end
 
