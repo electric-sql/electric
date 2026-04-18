@@ -13,7 +13,8 @@ defmodule Electric.Client.Message do
       txids: [],
       op_position: 0,
       tags: [],
-      removed_tags: []
+      removed_tags: [],
+      active_conditions: []
     ]
 
     @type operation :: :insert | :update | :delete
@@ -29,7 +30,8 @@ defmodule Electric.Client.Message do
             txids: txids(),
             op_position: non_neg_integer(),
             tags: [tag()],
-            removed_tags: [tag()]
+            removed_tags: [tag()],
+            active_conditions: [boolean()]
           }
 
     @doc false
@@ -44,7 +46,8 @@ defmodule Electric.Client.Message do
         lsn: Map.get(msg, "lsn", nil),
         op_position: Map.get(msg, "op_position", 0),
         tags: Map.get(msg, "tags", []),
-        removed_tags: Map.get(msg, "removed_tags", [])
+        removed_tags: Map.get(msg, "removed_tags", []),
+        active_conditions: Map.get(msg, "active_conditions", [])
       }
     end
 
@@ -187,14 +190,22 @@ defmodule Electric.Client.Message do
 
     @enforce_keys [:shape_handle, :offset, :schema]
 
-    defstruct [:shape_handle, :offset, :schema, tag_to_keys: %{}, key_data: %{}]
+    defstruct [
+      :shape_handle,
+      :offset,
+      :schema,
+      tag_to_keys: %{},
+      key_data: %{},
+      disjunct_positions: nil
+    ]
 
     @type t :: %__MODULE__{
             shape_handle: Client.shape_handle(),
             offset: Offset.t(),
             schema: Client.schema(),
-            tag_to_keys: %{String.t() => MapSet.t(String.t())},
-            key_data: %{String.t() => %{tags: MapSet.t(String.t()), msg: ChangeMessage.t()}}
+            tag_to_keys: %{optional(term()) => MapSet.t(String.t())},
+            key_data: %{optional(String.t()) => map()},
+            disjunct_positions: [[non_neg_integer()]] | nil
           }
   end
 
@@ -251,6 +262,57 @@ defmodule Electric.Client.Message do
     end
   end
 
+  defmodule MoveInMessage do
+    @moduledoc """
+    Represents a move-in event from the server.
+
+    Move-in events are sent when the server's subquery filter has changed and
+    rows may now be included in the shape. The `patterns` field contains position
+    and hash information that the client uses to update `active_conditions` on
+    tracked rows.
+    """
+
+    defstruct [:patterns, :handle, :request_timestamp]
+
+    @type pattern :: %{pos: non_neg_integer(), value: String.t()}
+    @type t :: %__MODULE__{
+            patterns: [pattern()],
+            handle: Client.shape_handle(),
+            request_timestamp: DateTime.t()
+          }
+
+    def from_message(
+          %{"headers" => %{"event" => "move-in", "patterns" => patterns}},
+          handle,
+          request_timestamp
+        ) do
+      %__MODULE__{
+        patterns: normalize_patterns(patterns),
+        handle: handle,
+        request_timestamp: request_timestamp
+      }
+    end
+
+    def from_message(
+          %{headers: %{event: "move-in", patterns: patterns}},
+          handle,
+          request_timestamp
+        ) do
+      %__MODULE__{
+        patterns: normalize_patterns(patterns),
+        handle: handle,
+        request_timestamp: request_timestamp
+      }
+    end
+
+    defp normalize_patterns(patterns) do
+      Enum.map(patterns, fn
+        %{"pos" => pos, "value" => value} -> %{pos: pos, value: value}
+        %{pos: _, value: _} = pattern -> pattern
+      end)
+    end
+  end
+
   defguard is_insert(msg) when is_struct(msg, ChangeMessage) and msg.headers.operation == :insert
 
   def parse(%{"value" => _} = msg, shape_handle, value_mapper_fun, request_timestamp) do
@@ -286,6 +348,24 @@ defmodule Electric.Client.Message do
         request_timestamp
       ) do
     [MoveOutMessage.from_message(msg, shape_handle, request_timestamp)]
+  end
+
+  def parse(
+        %{"headers" => %{"event" => "move-in"}} = msg,
+        shape_handle,
+        _value_mapper_fun,
+        request_timestamp
+      ) do
+    [MoveInMessage.from_message(msg, shape_handle, request_timestamp)]
+  end
+
+  def parse(
+        %{headers: %{event: "move-in"}} = msg,
+        shape_handle,
+        _value_mapper_fun,
+        request_timestamp
+      ) do
+    [MoveInMessage.from_message(msg, shape_handle, request_timestamp)]
   end
 
   def parse("", _handle, _value_mapper_fun, _request_timestamp) do

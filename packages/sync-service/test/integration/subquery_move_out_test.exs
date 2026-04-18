@@ -357,6 +357,90 @@ defmodule Electric.Integration.SubqueryMoveOutTest do
     end
   end
 
+  describe "negated subquery move-in and move-out" do
+    setup [:with_unique_db, :with_inner_outer_tables, :with_sql_execute]
+    setup :with_complete_stack
+    setup :with_electric_client
+
+    # Shape: outer rows whose inner row is NOT active
+    @negated_where "inner_id NOT IN (SELECT id FROM inner_table WHERE active = true)"
+
+    setup _ctx do
+      shape = ShapeDefinition.new!("outer_table", where: @negated_where)
+      %{shape: shape}
+    end
+
+    @tag with_sql: [
+           "INSERT INTO inner_table (id, active) VALUES ('inner-1', true)",
+           "INSERT INTO outer_table (id, inner_id, value) VALUES ('outer-1', 'inner-1', 'test value')"
+         ]
+    test "outer row enters shape when inner row becomes inactive (negated move-in)", %{
+      client: client,
+      shape: shape,
+      db_conn: db_conn
+    } do
+      stream = Client.stream(client, shape, live: true)
+
+      with_consumer stream do
+        # Initially outer-1 is not in shape because inner-1 is active.
+        # NOT IN active inner rows means only outer rows linked to inactive
+        # inner rows are included.
+        assert_up_to_date(consumer)
+
+        # Deactivate inner-1 and outer-1 should enter the shape.
+        Postgrex.query!(db_conn, "UPDATE inner_table SET active = false WHERE id = 'inner-1'", [])
+
+        assert_insert(consumer, %{"id" => "outer-1"})
+      end
+    end
+
+    @tag with_sql: [
+           "INSERT INTO inner_table (id, active) VALUES ('inner-1', false)",
+           "INSERT INTO outer_table (id, inner_id, value) VALUES ('outer-1', 'inner-1', 'test value')"
+         ]
+    test "outer row leaves shape when inner row becomes active (negated move-out)", %{
+      client: client,
+      shape: shape,
+      db_conn: db_conn
+    } do
+      stream = Client.stream(client, shape, live: true)
+
+      with_consumer stream do
+        # Initially outer-1 is in shape because inner-1 is inactive.
+        assert_insert(consumer, %{"id" => "outer-1"})
+        assert_up_to_date(consumer)
+
+        # Activate inner-1 and outer-1 should leave the shape.
+        Postgrex.query!(db_conn, "UPDATE inner_table SET active = true WHERE id = 'inner-1'", [])
+
+        assert_delete(consumer, %{"id" => "outer-1"})
+      end
+    end
+  end
+
+  # Helper to set up inner/outer tables for subquery tests
+  def with_inner_outer_tables(%{db_conn: conn} = _context) do
+    statements = [
+      """
+      CREATE TABLE inner_table (
+        id TEXT PRIMARY KEY,
+        active BOOLEAN NOT NULL DEFAULT true
+      )
+      """,
+      """
+      CREATE TABLE outer_table (
+        id TEXT PRIMARY KEY,
+        inner_id TEXT NOT NULL REFERENCES inner_table(id) ON DELETE CASCADE,
+        value TEXT NOT NULL
+      )
+      """
+    ]
+
+    Enum.each(statements, &Postgrex.query!(conn, &1, []))
+
+    %{tables: [{"public", "inner_table"}, {"public", "outer_table"}]}
+  end
+
   # Helper to set up parent/child tables for subquery tests
   def with_parent_child_tables(%{db_conn: conn} = _context) do
     statements = [
