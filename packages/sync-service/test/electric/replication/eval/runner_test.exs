@@ -254,6 +254,26 @@ defmodule Electric.Replication.Eval.RunnerTest do
                |> Runner.execute(%{["test"] => 4, ["$sublink", "0"] => MapSet.new([2, 3, 4])})
     end
 
+    test "subquery with callback-backed membership" do
+      expr =
+        ~S|test IN (SELECT val FROM tester)|
+        |> Parser.parse_and_validate_expression!(
+          refs: %{["test"] => :int4, ["$sublink", "0"] => {:array, :int4}},
+          sublink_queries: %{0 => "SELECT val FROM tester"}
+        )
+
+      subquery_member? = fn
+        ["$sublink", "0"], 4 -> true
+        ["$sublink", "0"], _ -> false
+      end
+
+      assert {:ok, true} =
+               Runner.execute(expr, %{["test"] => 4}, subquery_member?: subquery_member?)
+
+      assert {:ok, false} =
+               Runner.execute(expr, %{["test"] => 5}, subquery_member?: subquery_member?)
+    end
+
     test "subquery with row expression" do
       assert {:ok, true} =
                ~S|(test1, test2) IN (SELECT val1, val2 FROM tester)|
