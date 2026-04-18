@@ -46,6 +46,7 @@ defmodule Electric.Client.ShapeState do
     tag_to_keys: %{},
     key_data: %{},
     stale_cache_retry_count: 0,
+    disjunct_positions: nil,
     recent_requests: [],
     fast_loop_consecutive_count: 0
   ]
@@ -59,6 +60,7 @@ defmodule Electric.Client.ShapeState do
           up_to_date?: boolean(),
           tag_to_keys: %{optional(term()) => MapSet.t()},
           key_data: %{optional(term()) => %{tags: MapSet.t(), msg: term()}},
+          disjunct_positions: [[non_neg_integer()]] | nil,
           stale_cache_buster: String.t() | nil,
           stale_cache_retry_count: non_neg_integer(),
           recent_requests: [{integer(), Offset.t()}],
@@ -95,7 +97,8 @@ defmodule Electric.Client.ShapeState do
       schema: resume.schema,
       up_to_date?: true,
       tag_to_keys: Map.get(resume, :tag_to_keys, %{}),
-      key_data: Map.get(resume, :key_data, %{})
+      key_data: Map.get(resume, :key_data, %{}),
+      disjunct_positions: Map.get(resume, :disjunct_positions)
     }
   end
 
@@ -116,7 +119,8 @@ defmodule Electric.Client.ShapeState do
         tag_to_keys: %{},
         key_data: %{},
         recent_requests: [],
-        fast_loop_consecutive_count: 0
+        fast_loop_consecutive_count: 0,
+        disjunct_positions: nil
     }
   end
 
@@ -130,7 +134,8 @@ defmodule Electric.Client.ShapeState do
       offset: state.offset,
       schema: state.schema,
       tag_to_keys: state.tag_to_keys,
-      key_data: state.key_data
+      key_data: state.key_data,
+      disjunct_positions: state.disjunct_positions
     }
   end
 

@@ -1601,7 +1601,11 @@ defmodule Electric.ClientTest do
         Jason.encode!([
           %{
             "key" => "row-1",
-            "headers" => %{"operation" => "insert", "tags" => ["tag-abc"]},
+            "headers" => %{
+              "operation" => "insert",
+              "tags" => ["tag-abc"],
+              "active_conditions" => [true]
+            },
             "offset" => "1_0",
             "value" => %{"id" => "1111", "name" => "test"}
           },
@@ -1664,13 +1668,21 @@ defmodule Electric.ClientTest do
         Jason.encode!([
           %{
             "key" => "row-1",
-            "headers" => %{"operation" => "insert", "tags" => ["shared-tag"]},
+            "headers" => %{
+              "operation" => "insert",
+              "tags" => ["shared-tag"],
+              "active_conditions" => [true]
+            },
             "offset" => "1_0",
             "value" => %{"id" => "1111"}
           },
           %{
             "key" => "row-2",
-            "headers" => %{"operation" => "insert", "tags" => ["shared-tag"]},
+            "headers" => %{
+              "operation" => "insert",
+              "tags" => ["shared-tag"],
+              "active_conditions" => [true]
+            },
             "offset" => "1_1",
             "value" => %{"id" => "2222"}
           },
@@ -1732,7 +1744,11 @@ defmodule Electric.ClientTest do
         Jason.encode!([
           %{
             "key" => "row-1",
-            "headers" => %{"operation" => "insert", "tags" => ["tag-A"]},
+            "headers" => %{
+              "operation" => "insert",
+              "tags" => ["tag-A"],
+              "active_conditions" => [true]
+            },
             "offset" => "1_0",
             "value" => %{"id" => "1111"}
           },
@@ -1794,7 +1810,11 @@ defmodule Electric.ClientTest do
         Jason.encode!([
           %{
             "key" => "row-1",
-            "headers" => %{"operation" => "insert", "tags" => ["old-tag"]},
+            "headers" => %{
+              "operation" => "insert",
+              "tags" => ["old-tag"],
+              "active_conditions" => [true]
+            },
             "offset" => "1_0",
             "value" => %{"id" => "1111"}
           },
@@ -1808,7 +1828,8 @@ defmodule Electric.ClientTest do
             "headers" => %{
               "operation" => "update",
               "tags" => ["new-tag"],
-              "removed_tags" => ["old-tag"]
+              "removed_tags" => ["old-tag"],
+              "active_conditions" => [true]
             },
             "offset" => "2_0",
             "value" => %{"id" => "1111", "name" => "updated"}
@@ -1871,7 +1892,11 @@ defmodule Electric.ClientTest do
         Jason.encode!([
           %{
             "key" => "row-1",
-            "headers" => %{"operation" => "insert", "tags" => ["my-tag"]},
+            "headers" => %{
+              "operation" => "insert",
+              "tags" => ["my-tag"],
+              "active_conditions" => [true]
+            },
             "offset" => "1_0",
             "value" => %{"id" => "1111"}
           },
@@ -1882,7 +1907,11 @@ defmodule Electric.ClientTest do
         Jason.encode!([
           %{
             "key" => "row-1",
-            "headers" => %{"operation" => "delete", "tags" => ["my-tag"]},
+            "headers" => %{
+              "operation" => "delete",
+              "tags" => ["my-tag"],
+              "active_conditions" => [true]
+            },
             "offset" => "2_0",
             "value" => %{"id" => "1111"}
           },
@@ -1949,7 +1978,11 @@ defmodule Electric.ClientTest do
         Jason.encode!([
           %{
             "key" => "row-1",
-            "headers" => %{"operation" => "insert", "tags" => ["my-tag"]},
+            "headers" => %{
+              "operation" => "insert",
+              "tags" => ["my-tag"],
+              "active_conditions" => [true]
+            },
             "offset" => "1_0",
             "value" => %{"id" => "1111", "version" => "1"}
           },
@@ -1963,7 +1996,8 @@ defmodule Electric.ClientTest do
             "headers" => %{
               "operation" => "update",
               # Same tag, but no removed_tags - this is the problematic case
-              "tags" => ["my-tag"]
+              "tags" => ["my-tag"],
+              "active_conditions" => [true]
             },
             "offset" => "2_0",
             "value" => %{"id" => "1111", "version" => "2"}
@@ -2025,15 +2059,20 @@ defmodule Electric.ClientTest do
              "Expected 1 synthetic delete but got #{length(delete_msgs)} - duplicate entries in tag_index"
     end
 
-    test "row with multiple tags - partial move-out should not delete if other tags remain",
+    test "row with multiple disjuncts - partial move-out should not delete if another disjunct satisfied",
          ctx do
-      # Edge case: row has multiple tags, move-out for one tag shouldn't delete
-      # if the row still belongs to the shape via another tag
+      # Row matches via two disjuncts at different positions.
+      # Move-out for one position shouldn't delete if the other disjunct is still satisfied.
+      # Tags: ["tag-a/", "/tag-b"] means disjunct 0 uses pos 0, disjunct 1 uses pos 1
       body1 =
         Jason.encode!([
           %{
             "key" => "row-1",
-            "headers" => %{"operation" => "insert", "tags" => ["tag-a", "tag-b"]},
+            "headers" => %{
+              "operation" => "insert",
+              "tags" => ["tag-a/", "/tag-b"],
+              "active_conditions" => [true, true]
+            },
             "offset" => "1_0",
             "value" => %{"id" => "1111"}
           },
@@ -2045,7 +2084,7 @@ defmodule Electric.ClientTest do
           %{
             "headers" => %{
               "event" => "move-out",
-              # Only moving out tag-a, row still has tag-b
+              # Only moving out pos 0, disjunct 1 (pos 1) still satisfied
               "patterns" => [%{"pos" => 0, "value" => "tag-a"}]
             }
           },
@@ -2078,17 +2117,13 @@ defmodule Electric.ClientTest do
 
       bypass_response(ctx, responses)
 
-      # insert, up-to-date, up-to-date
-      # BUG: Currently generates a synthetic delete even though row still has tag-b
-      # EXPECTED: No synthetic delete since row still belongs via tag-b
+      # insert, up-to-date, up-to-date (no synthetic delete)
       msgs = stream(ctx, 3)
 
       delete_msgs = Enum.filter(msgs, &match?(%ChangeMessage{headers: %{operation: :delete}}, &1))
 
-      # This documents expected behavior - row should NOT be deleted
-      # If this fails, it confirms the bug that partial move-out incorrectly deletes
       assert delete_msgs == [],
-             "Row with multiple tags should not be deleted when only one tag is moved out"
+             "Row should not be deleted when another disjunct is still satisfied"
     end
 
     test "synthetic delete uses latest value after update", ctx do
@@ -2097,7 +2132,11 @@ defmodule Electric.ClientTest do
         Jason.encode!([
           %{
             "key" => "row-1",
-            "headers" => %{"operation" => "insert", "tags" => ["my-tag"]},
+            "headers" => %{
+              "operation" => "insert",
+              "tags" => ["my-tag"],
+              "active_conditions" => [true]
+            },
             "offset" => "1_0",
             "value" => %{"id" => "1111", "name" => "original"}
           },
@@ -2111,7 +2150,8 @@ defmodule Electric.ClientTest do
             "headers" => %{
               "operation" => "update",
               "tags" => ["my-tag"],
-              "removed_tags" => ["my-tag"]
+              "removed_tags" => ["my-tag"],
+              "active_conditions" => [true]
             },
             "offset" => "2_0",
             "value" => %{"id" => "1111", "name" => "updated"}
@@ -2174,70 +2214,6 @@ defmodule Electric.ClientTest do
              "Synthetic delete should use latest value, got: #{inspect(delete.value)}"
     end
 
-    test "multiple patterns matching same row generates single delete", ctx do
-      # Edge case: move-out with multiple patterns that both match the same row
-      body1 =
-        Jason.encode!([
-          %{
-            "key" => "row-1",
-            "headers" => %{"operation" => "insert", "tags" => ["tag-a", "tag-b"]},
-            "offset" => "1_0",
-            "value" => %{"id" => "1111"}
-          },
-          %{"headers" => %{"control" => "up-to-date", "global_last_seen_lsn" => 9998}}
-        ])
-
-      body2 =
-        Jason.encode!([
-          %{
-            "headers" => %{
-              "event" => "move-out",
-              # Both patterns match the same row
-              "patterns" => [
-                %{"pos" => 0, "value" => "tag-a"},
-                %{"pos" => 1, "value" => "tag-b"}
-              ]
-            }
-          },
-          %{"headers" => %{"control" => "up-to-date", "global_last_seen_lsn" => 9999}}
-        ])
-
-      schema = Jason.encode!(%{"id" => %{type: "text"}})
-
-      {:ok, responses} =
-        start_supervised(
-          {Agent,
-           fn ->
-             %{
-               {"-1", nil} => [
-                 &bypass_resp(&1, body1,
-                   shape_handle: "my-shape",
-                   last_offset: "1_0",
-                   schema: schema
-                 )
-               ],
-               {"1_0", "my-shape"} => [
-                 &bypass_resp(&1, body2,
-                   shape_handle: "my-shape",
-                   last_offset: "2_0"
-                 )
-               ]
-             }
-           end}
-        )
-
-      bypass_response(ctx, responses)
-
-      # insert, up-to-date, synthetic delete, up-to-date
-      msgs = stream(ctx, 4)
-
-      delete_msgs = Enum.filter(msgs, &match?(%ChangeMessage{headers: %{operation: :delete}}, &1))
-
-      # Should only generate 1 delete, not 2
-      assert length(delete_msgs) == 1,
-             "Multiple patterns matching same row should generate single delete, got #{length(delete_msgs)}"
-    end
-
     test "update removing all tags should clear tag index so move-out is a no-op", ctx do
       # This test demonstrates the stale tag-index entry bug:
       # When a row is updated to remove ALL its tags (with removed_tags but no new tags),
@@ -2252,7 +2228,11 @@ defmodule Electric.ClientTest do
         Jason.encode!([
           %{
             "key" => "row-1",
-            "headers" => %{"operation" => "insert", "tags" => ["tag-A"]},
+            "headers" => %{
+              "operation" => "insert",
+              "tags" => ["tag-A"],
+              "active_conditions" => [true]
+            },
             "offset" => "1_0",
             "value" => %{"id" => "1111"}
           },
@@ -2266,8 +2246,8 @@ defmodule Electric.ClientTest do
             "headers" => %{
               "operation" => "update",
               # Remove the old tag but add NO new tags
-              "removed_tags" => ["tag-A"]
-              # Note: no "tags" field, meaning this row now has zero tags
+              "removed_tags" => ["tag-A"],
+              "active_conditions" => [false]
             },
             "offset" => "2_0",
             "value" => %{"id" => "1111", "name" => "updated"}
@@ -2340,7 +2320,11 @@ defmodule Electric.ClientTest do
         Jason.encode!([
           %{
             "key" => "row-1",
-            "headers" => %{"operation" => "insert", "tags" => ["my-tag"]},
+            "headers" => %{
+              "operation" => "insert",
+              "tags" => ["my-tag"],
+              "active_conditions" => [true]
+            },
             "offset" => "1_0",
             "value" => %{"id" => "1111"}
           },

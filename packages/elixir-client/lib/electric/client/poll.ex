@@ -234,10 +234,21 @@ defmodule Electric.Client.Poll do
   end
 
   defp handle_message(%Message.ChangeMessage{} = msg, state) do
-    {tag_to_keys, key_data} =
-      TagTracker.update_tag_index(state.tag_to_keys, state.key_data, msg)
+    {tag_to_keys, key_data, disjunct_positions} =
+      TagTracker.update_tag_index(
+        state.tag_to_keys,
+        state.key_data,
+        state.disjunct_positions,
+        msg
+      )
 
-    {:message, msg, %{state | tag_to_keys: tag_to_keys, key_data: key_data}}
+    {:message, msg,
+     %{
+       state
+       | tag_to_keys: tag_to_keys,
+         key_data: key_data,
+         disjunct_positions: disjunct_positions
+     }}
   end
 
   defp handle_message(
@@ -248,11 +259,26 @@ defmodule Electric.Client.Poll do
       TagTracker.generate_synthetic_deletes(
         state.tag_to_keys,
         state.key_data,
+        state.disjunct_positions,
         patterns,
         request_timestamp
       )
 
     {:messages, synthetic_deletes, %{state | tag_to_keys: tag_to_keys, key_data: key_data}}
+  end
+
+  defp handle_message(
+         %Message.MoveInMessage{patterns: patterns},
+         state
+       ) do
+    {tag_to_keys, key_data} =
+      TagTracker.handle_move_in(
+        state.tag_to_keys,
+        state.key_data,
+        patterns
+      )
+
+    {:skip, %{state | tag_to_keys: tag_to_keys, key_data: key_data}}
   end
 
   defp handle_schema(%Fetch.Response{schema: schema}, client, %{value_mapper_fun: nil} = state)
