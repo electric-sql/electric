@@ -49,44 +49,70 @@ defmodule Electric.Replication.Eval.Runner do
   @doc """
   Run a PG function parsed by `Electric.Replication.Eval.Parser` based on the inputs
   """
-  @spec execute(Expr.t(), map()) :: {:ok, term()} | {:error, {%Func{}, [term()]}}
-  def execute(%Expr{} = tree, ref_values) do
-    execute_node(tree.eval, ref_values)
+  @spec execute(Expr.t(), map(), keyword()) :: {:ok, term()} | {:error, {%Func{}, [term()]}}
+  def execute(%Expr{} = tree, ref_values, opts \\ []) do
+    ctx = %{refs: ref_values, subquery_member?: Keyword.get(opts, :subquery_member?)}
+    execute_node(tree.eval, ctx)
   catch
     {:could_not_compute, func} -> {:error, func}
   end
 
-  defp execute_node(%Const{value: value}, _), do: {:ok, value}
-  defp execute_node(%Ref{path: path}, refs), do: {:ok, Map.fetch!(refs, path)}
+  defp execute_node(%Const{value: value}, _ctx), do: {:ok, value}
 
-  defp execute_node(%Array{elements: elements}, refs) do
-    Utils.map_while_ok(elements, &execute_node(&1, refs))
+  defp execute_node(
+         %Ref{path: ["$sublink", _] = path},
+         %{refs: refs, subquery_member?: subquery_member?}
+       )
+       when is_function(subquery_member?, 2) do
+    {:ok, Map.get(refs, path, {:subquery_ref, path})}
   end
 
-  defp execute_node(%RowExpr{elements: elements}, refs) do
-    with {:ok, elements} <- Utils.map_while_ok(elements, &execute_node(&1, refs)) do
+  defp execute_node(%Ref{path: path}, %{refs: refs}), do: {:ok, Map.fetch!(refs, path)}
+
+  defp execute_node(%Array{elements: elements}, ctx) do
+    Utils.map_while_ok(elements, &execute_node(&1, ctx))
+  end
+
+  defp execute_node(%RowExpr{elements: elements}, ctx) do
+    with {:ok, elements} <- Utils.map_while_ok(elements, &execute_node(&1, ctx)) do
       {:ok, List.to_tuple(elements)}
     end
   end
 
   defp execute_node(
          %Func{name: "coalesce", variadic_arg: 0, args: [%Array{elements: elements}]},
-         refs
+         ctx
        ) do
-    execute_coalesce(elements, refs)
+    execute_coalesce(elements, ctx)
   end
 
-  defp execute_node(%Func{args: args} = func, refs) do
-    with {:ok, args} <- Utils.map_while_ok(args, &execute_node(&1, refs)) do
+  defp execute_node(
+         %Func{name: "sublink_membership_check"} = func,
+         %{subquery_member?: subquery_member?} = ctx
+       )
+       when is_function(subquery_member?, 2) do
+    with {:ok, [value, {:subquery_ref, path}]} <-
+           Utils.map_while_ok(func.args, &execute_node(&1, ctx)) do
+      {:ok,
+       try do
+         subquery_member?.(path, value)
+       rescue
+         _ -> throw({:could_not_compute, %{func | args: [value, {:subquery_ref, path}]}})
+       end}
+    end
+  end
+
+  defp execute_node(%Func{args: args} = func, ctx) do
+    with {:ok, args} <- Utils.map_while_ok(args, &execute_node(&1, ctx)) do
       apply_func(func, args)
     end
   end
 
-  defp execute_coalesce([], _refs), do: {:ok, nil}
+  defp execute_coalesce([], _ctx), do: {:ok, nil}
 
-  defp execute_coalesce([arg | rest], refs) do
-    case execute_node(arg, refs) do
-      {:ok, nil} -> execute_coalesce(rest, refs)
+  defp execute_coalesce([arg | rest], ctx) do
+    case execute_node(arg, ctx) do
+      {:ok, nil} -> execute_coalesce(rest, ctx)
       {:ok, value} -> {:ok, value}
     end
   end
