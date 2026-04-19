@@ -458,12 +458,11 @@ export default defineConfig({
       ],
       '/docs/streams': [
         {
-          text: 'Streams',
+          text: 'Docs',
           collapsed: false,
           items: [
-            { text: 'Overview', link: '/docs/streams' },
+            { text: 'Overview', link: '/docs/streams/concepts' },
             { text: 'Quickstart', link: '/docs/streams/quickstart' },
-            { text: 'Concepts', link: '/docs/streams/concepts' },
           ],
         },
         {
@@ -471,30 +470,26 @@ export default defineConfig({
           collapsed: false,
           items: [
             { text: 'CLI', link: '/docs/streams/cli' },
+            {
+              text: 'Clients',
+              collapsed: false,
+              items: [
+                {
+                  text: 'TypeScript',
+                  link: '/docs/streams/clients/typescript',
+                },
+                { text: 'Python', link: '/docs/streams/clients/python' },
+                {
+                  text: 'Other clients',
+                  link: '/docs/streams/clients/other',
+                },
+              ],
+            },
             { text: 'JSON mode', link: '/docs/streams/json-mode' },
-            { text: 'Durable proxy', link: '/docs/streams/durable-proxy' },
-            { text: 'Durable state', link: '/docs/streams/durable-state' },
-            { text: 'Stream DB', link: '/docs/streams/stream-db' },
-            { text: 'Stream FS', link: '/docs/streams/stream-fs' },
-            { text: 'Deployment', link: '/docs/streams/deployment' },
-            {
-              text: 'Building a client',
-              link: '/docs/streams/building-a-client',
-            },
-            {
-              text: 'Building a server',
-              link: '/docs/streams/building-a-server',
-            },
-            { text: 'Benchmarking', link: '/docs/streams/benchmarking' },
-          ],
-        },
-        {
-          text: 'Clients',
-          collapsed: false,
-          items: [
-            { text: 'TypeScript', link: '/docs/streams/clients/typescript' },
-            { text: 'Python', link: '/docs/streams/clients/python' },
-            { text: 'Other clients', link: '/docs/streams/clients/other' },
+            { text: 'Durable Proxy', link: '/docs/streams/durable-proxy' },
+            { text: 'Durable State', link: '/docs/streams/durable-state' },
+            { text: 'StreamDB', link: '/docs/streams/stream-db' },
+            { text: 'StreamFS', link: '/docs/streams/stream-fs' },
           ],
         },
         {
@@ -510,6 +505,30 @@ export default defineConfig({
               link: '/docs/streams/integrations/vercel-ai-sdk',
             },
             { text: 'Yjs', link: '/docs/streams/integrations/yjs' },
+            {
+              text: 'AnyCable',
+              link: 'https://docs.anycable.io/anycable-go/durable_streams',
+            },
+          ],
+        },
+        {
+          text: 'Reference',
+          collapsed: false,
+          items: [
+            { text: 'Deployment', link: '/docs/streams/deployment' },
+            {
+              text: 'Building a client',
+              link: '/docs/streams/building-a-client',
+            },
+            {
+              text: 'Building a server',
+              link: '/docs/streams/building-a-server',
+            },
+            { text: 'Benchmarking', link: '/docs/streams/benchmarking' },
+            {
+              text: 'Protocol',
+              link: 'https://github.com/durable-streams/durable-streams/blob/main/PROTOCOL.md',
+            },
           ],
         },
       ],
