@@ -8,7 +8,7 @@
         font-family="OpenSauceOne, sans-serif"
         font-size="14"
         font-weight="700"
-        fill="rgba(235, 235, 245, 0.7)"
+        class="iei-text-strong" fill="currentColor"
       >
         You pay for
       </text>
@@ -19,7 +19,7 @@
         font-family="OpenSauceOne, sans-serif"
         font-size="14"
         font-weight="700"
-        fill="#00d2a0"
+        class="iei-text-brand" fill="currentColor"
       >
         You don't pay for
       </text>
@@ -31,7 +31,7 @@
         rx="6"
         stroke-dasharray="6 4"
         stroke-width="1.5"
-        stroke="rgba(235, 235, 245, 0.15)"
+        class="iei-stroke-soft" stroke="currentColor"
         fill="none"
       />
       <text
@@ -41,7 +41,7 @@
         font-family="OpenSauceOne, sans-serif"
         font-size="16"
         font-weight="700"
-        fill="rgba(255, 255, 245, 0.86)"
+        class="iei-text-1" fill="currentColor"
       >
         Writes
       </text>
@@ -51,7 +51,7 @@
         text-anchor="middle"
         font-family="OpenSauceOne, sans-serif"
         font-size="12"
-        fill="rgba(235, 235, 245, 0.56)"
+        class="iei-text-2" fill="currentColor"
       >
         Data you feed in
       </text>
@@ -63,7 +63,7 @@
         rx="6"
         stroke-dasharray="6 4"
         stroke-width="1.5"
-        stroke="rgba(235, 235, 245, 0.15)"
+        class="iei-stroke-soft" stroke="currentColor"
         fill="none"
       />
       <text
@@ -73,7 +73,7 @@
         font-family="OpenSauceOne, sans-serif"
         font-size="16"
         font-weight="700"
-        fill="rgba(255, 255, 245, 0.86)"
+        class="iei-text-1" fill="currentColor"
       >
         Retention
       </text>
@@ -83,7 +83,7 @@
         text-anchor="middle"
         font-family="OpenSauceOne, sans-serif"
         font-size="12"
-        fill="rgba(235, 235, 245, 0.56)"
+        class="iei-text-2" fill="currentColor"
       >
         Data you store
       </text>
@@ -105,8 +105,8 @@
             y2="76.395"
             gradientUnits="userSpaceOnUse"
           >
-            <stop stop-color="#4338BC" />
-            <stop offset="1" stop-color="#4338BC" stop-opacity="0" />
+            <stop stop-color="#1A1A2E" />
+            <stop offset="1" stop-color="#1A1A2E" stop-opacity="0" />
           </linearGradient>
           <linearGradient
             id="zap1"
@@ -116,8 +116,8 @@
             y2="146.435"
             gradientUnits="userSpaceOnUse"
           >
-            <stop stop-color="#4338BC" />
-            <stop offset="1" stop-color="#4338BC" stop-opacity="0" />
+            <stop stop-color="#1A1A2E" />
+            <stop offset="1" stop-color="#1A1A2E" stop-opacity="0" />
           </linearGradient>
           <linearGradient
             id="zap2"
@@ -127,8 +127,8 @@
             y2="55.7803"
             gradientUnits="userSpaceOnUse"
           >
-            <stop stop-color="#4338BC" />
-            <stop offset="1" stop-color="#4338BC" stop-opacity="0" />
+            <stop stop-color="#1A1A2E" />
+            <stop offset="1" stop-color="#1A1A2E" stop-opacity="0" />
           </linearGradient>
           <linearGradient
             id="zap3"
@@ -138,8 +138,8 @@
             y2="163.915"
             gradientUnits="userSpaceOnUse"
           >
-            <stop stop-color="#4338BC" />
-            <stop offset="1" stop-color="#4338BC" stop-opacity="0" />
+            <stop stop-color="#1A1A2E" />
+            <stop offset="1" stop-color="#1A1A2E" stop-opacity="0" />
           </linearGradient>
           <radialGradient
             id="zap4"
@@ -149,8 +149,8 @@
             gradientUnits="userSpaceOnUse"
             gradientTransform="translate(548.881 113) rotate(-99.4208) scale(101.638 592.884)"
           >
-            <stop stop-color="#4338BC" />
-            <stop offset="1" stop-color="#4338BC" stop-opacity="0" />
+            <stop stop-color="#1A1A2E" />
+            <stop offset="1" stop-color="#1A1A2E" stop-opacity="0" />
           </radialGradient>
           <radialGradient
             id="zap5"
@@ -160,8 +160,8 @@
             gradientUnits="userSpaceOnUse"
             gradientTransform="translate(734.119 115) rotate(80.6117) scale(91.2219 614.019)"
           >
-            <stop stop-color="#4338BC" />
-            <stop offset="1" stop-color="#4338BC" stop-opacity="0" />
+            <stop stop-color="#1A1A2E" />
+            <stop offset="1" stop-color="#1A1A2E" stop-opacity="0" />
           </radialGradient>
           <linearGradient
             id="zap6"
@@ -171,8 +171,8 @@
             y2="226.071"
             gradientUnits="userSpaceOnUse"
           >
-            <stop stop-color="#C7C6FF" />
-            <stop offset="1" stop-color="#362952" />
+            <stop stop-color="#B8FDFE" />
+            <stop offset="1" stop-color="#1A1A2E" />
           </linearGradient>
           <linearGradient
             id="zap7"
@@ -182,9 +182,9 @@
             y2="211"
             gradientUnits="userSpaceOnUse"
           >
-            <stop stop-color="#C2B5FF" stop-opacity="0" />
-            <stop offset="0.536458" stop-color="#A5B9FF" />
-            <stop offset="0.953125" stop-color="#C2B5FF" stop-opacity="0" />
+            <stop stop-color="#B8FDFE" stop-opacity="0" />
+            <stop offset="0.536458" stop-color="#75FBFD" />
+            <stop offset="0.953125" stop-color="#B8FDFE" stop-opacity="0" />
           </linearGradient>
         </defs>
         <path
@@ -232,7 +232,7 @@
         font-family="OpenSauceOne, sans-serif"
         font-size="16"
         font-weight="700"
-        fill="#00d2a0"
+        class="iei-text-brand" fill="currentColor"
       >
         Reads
       </text>
@@ -242,7 +242,7 @@
         text-anchor="middle"
         font-family="OpenSauceOne, sans-serif"
         font-size="12"
-        fill="rgba(235, 235, 245, 0.56)"
+        class="iei-text-2" fill="currentColor"
       >
         Unlimited
       </text>
@@ -253,7 +253,7 @@
         font-family="OpenSauceOne, sans-serif"
         font-size="16"
         font-weight="700"
-        fill="#00d2a0"
+        class="iei-text-brand" fill="currentColor"
       >
         Egress
       </text>
@@ -263,7 +263,7 @@
         text-anchor="middle"
         font-family="OpenSauceOne, sans-serif"
         font-size="12"
-        fill="rgba(235, 235, 245, 0.56)"
+        class="iei-text-2" fill="currentColor"
       >
         Unlimited
       </text>
@@ -274,7 +274,7 @@
         font-family="OpenSauceOne, sans-serif"
         font-size="16"
         font-weight="700"
-        fill="#00d2a0"
+        class="iei-text-brand" fill="currentColor"
       >
         Fan-out
       </text>
@@ -284,7 +284,7 @@
         text-anchor="middle"
         font-family="OpenSauceOne, sans-serif"
         font-size="12"
-        fill="rgba(235, 235, 245, 0.56)"
+        class="iei-text-2" fill="currentColor"
       >
         Unlimited
       </text>
@@ -299,6 +299,21 @@
 .ingress-egress-illustration svg {
   width: 100%;
   height: auto;
+}
+.ingress-egress-illustration :deep(.iei-text-1) {
+  color: var(--vp-c-text-1);
+}
+.ingress-egress-illustration :deep(.iei-text-strong) {
+  color: var(--vp-c-text-1-5);
+}
+.ingress-egress-illustration :deep(.iei-text-2) {
+  color: var(--vp-c-text-2-5);
+}
+.ingress-egress-illustration :deep(.iei-text-brand) {
+  color: var(--vp-c-brand-1);
+}
+.ingress-egress-illustration :deep(.iei-stroke-soft) {
+  color: var(--vp-c-divider);
 }
 @media (max-width: 959px) {
   .ingress-egress-illustration {

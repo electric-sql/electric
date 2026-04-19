@@ -89,10 +89,10 @@ const secondaryOptions = [
   border-radius: 12px;
   background:
     linear-gradient(to right, var(--vp-c-bg-soft) 45%, transparent 85%),
-    linear-gradient(rgba(26, 27, 30, 0.5), rgba(26, 27, 30, 0.5)),
+    linear-gradient(var(--ec-overlay-medium), var(--ec-overlay-medium)),
     url('/img/home/dashboard-stream.jpg') right top / auto 109% no-repeat,
     var(--vp-c-bg-soft);
-  border: 1px solid rgba(42, 44, 52, 0.5);
+  border: 1px solid var(--vp-c-divider);
   overflow: hidden;
   padding: 40px 32px 48px;
 }
@@ -185,7 +185,7 @@ const secondaryOptions = [
     padding: 40px 32px 46px;
     background:
       linear-gradient(to right, var(--vp-c-bg-soft) 40%, transparent 85%),
-      linear-gradient(rgba(26, 27, 30, 0.6), rgba(26, 27, 30, 0.6)),
+      linear-gradient(var(--ec-overlay-medium), var(--ec-overlay-medium)),
       url('/img/home/dashboard-stream.jpg') right top / auto 109% no-repeat,
       var(--vp-c-bg-soft);
   }
@@ -213,7 +213,7 @@ const secondaryOptions = [
     padding: 32px 24px 40px;
     background:
       linear-gradient(to right, var(--vp-c-bg-soft) 40%, transparent 85%),
-      linear-gradient(rgba(26, 27, 30, 0.8), rgba(26, 27, 30, 0.8)),
+      linear-gradient(var(--ec-overlay-strong), var(--ec-overlay-strong)),
       url('/img/home/dashboard-stream.jpg') right top / auto 109% no-repeat,
       var(--vp-c-bg-soft);
   }

@@ -76,13 +76,13 @@ onUnmounted(() => {
 .discord-placeholder {
   width: 100%;
   height: 523px;
-  border: 1px solid rgba(48, 54, 61, 0.5);
+  border: 1px solid var(--vp-c-divider);
   border-radius: 8px;
-  background: #2b2d31;
+  background: var(--vp-c-bg-soft);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--vp-c-text-2);
   font-size: 14px;
 }
 </style>
@@ -109,7 +109,7 @@ onUnmounted(() => {
           sandbox="allow-popups allow-same-origin allow-popups-to-escape-sandbox allow-scripts"
           style="
             width: 100%;
-            border: 1px solid rgba(48, 54, 61, 0.5);
+            border: 1px solid var(--vp-c-divider);
             border-radius: 8px;
             overflow: hidden;
           "

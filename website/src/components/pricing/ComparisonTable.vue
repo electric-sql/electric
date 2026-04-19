@@ -128,7 +128,11 @@ function computeScenarioCost(plan, scenario) {
   <div class="comparison-table">
     <div class="table-header">
       <div class="metric-column header-spacer"></div>
-      <div v-for="plan in comparisonPlans" :key="plan.slug" class="plan-column">
+      <div
+        v-for="plan in comparisonPlans"
+        :key="plan.slug"
+        class="plan-column"
+      >
         <div class="plan-name">
           <span class="plan-name-full">{{ plan.name }}</span
           ><span v-if="plan.shortName" class="plan-name-short">{{
@@ -336,7 +340,11 @@ function computeScenarioCost(plan, scenario) {
 
     <div class="cta-row">
       <div class="metric-column"></div>
-      <div v-for="plan in comparisonPlans" :key="plan.slug" class="plan-column">
+      <div
+        v-for="plan in comparisonPlans"
+        :key="plan.slug"
+        class="plan-column"
+      >
         <VPButton
           :href="plan.ctaHref"
           :text="plan.ctaText"
@@ -356,8 +364,8 @@ function computeScenarioCost(plan, scenario) {
 <style scoped>
 .comparison-table {
   margin: 40px 0;
-  background: rgba(255, 255, 255, 0.015);
-  border: 1.5px solid rgba(255, 255, 255, 0.08);
+  background: var(--ec-surface-1);
+  border: 1px solid var(--ec-border-1);
   border-radius: 12px;
   overflow: hidden;
 }
@@ -367,7 +375,7 @@ function computeScenarioCost(plan, scenario) {
   font-size: 0.75rem;
   color: var(--vp-c-text-3);
   line-height: 1.5;
-  border-top: 1.5px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid var(--ec-border-1);
 }
 
 @media (max-width: 959px) {
@@ -380,7 +388,7 @@ function computeScenarioCost(plan, scenario) {
 .table-header {
   display: grid;
   grid-template-columns: 2fr repeat(4, 1fr);
-  border-bottom: 1.5px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid var(--ec-border-1);
   background: var(--vp-sidebar-bg-color);
 }
 
@@ -390,7 +398,7 @@ function computeScenarioCost(plan, scenario) {
 
 .table-header .plan-column {
   padding: 16px 14px 14px;
-  border-left: 1.5px solid rgba(255, 255, 255, 0.08);
+  border-left: 1px solid var(--ec-border-1);
 }
 
 .header-spacer {
@@ -435,7 +443,7 @@ function computeScenarioCost(plan, scenario) {
 }
 
 .section {
-  border-top: 1.5px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid var(--ec-border-1);
 }
 
 .first-section {
@@ -443,7 +451,7 @@ function computeScenarioCost(plan, scenario) {
 }
 
 .section:nth-child(odd) {
-  background: rgba(255, 255, 255, 0.0375);
+  background: var(--ec-surface-2);
 }
 
 .section-header {
@@ -470,13 +478,13 @@ function computeScenarioCost(plan, scenario) {
 
 .section-header .plan-column {
   padding: 10px;
-  border-left: 1.5px solid rgba(255, 255, 255, 0.08);
+  border-left: 1px solid var(--ec-border-1);
 }
 
 .metric-row {
   display: grid;
   grid-template-columns: 2fr 4fr;
-  border-top: 1.5px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid var(--ec-border-1);
 }
 
 .metric-row:first-of-type {
@@ -494,7 +502,7 @@ function computeScenarioCost(plan, scenario) {
 
 .metric-row .plan-column {
   padding: 0;
-  border-left: 1.5px solid rgba(255, 255, 255, 0.08);
+  border-left: 1px solid var(--ec-border-1);
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 0;
@@ -503,7 +511,7 @@ function computeScenarioCost(plan, scenario) {
 .metric-row .plan-column .metric-value {
   padding: 10px;
   text-align: center;
-  border-left: 1.5px solid rgba(255, 255, 255, 0.08);
+  border-left: 1px solid var(--ec-border-1);
 }
 
 .metric-row .plan-column .metric-value:first-child {
@@ -525,7 +533,7 @@ function computeScenarioCost(plan, scenario) {
 .cta-row {
   display: grid;
   grid-template-columns: 2fr repeat(4, 1fr);
-  border-top: 1.5px solid rgba(255, 255, 255, 0.1);
+  border-top: 1px solid var(--ec-border-1);
 }
 
 .cta-row .metric-column {
@@ -534,7 +542,7 @@ function computeScenarioCost(plan, scenario) {
 
 .cta-row .plan-column {
   padding: 18px 14px 22px;
-  border-left: 1.5px solid rgba(255, 255, 255, 0.08);
+  border-left: 1px solid var(--ec-border-1);
   display: flex;
   justify-content: center;
   align-items: center;
@@ -551,7 +559,7 @@ function computeScenarioCost(plan, scenario) {
     z-index: 100;
     background: var(--vp-sidebar-bg-color);
     padding: 0;
-    border-bottom: 1.5px solid rgb(45, 45, 49);
+    border-bottom: 1px solid var(--ec-border-1);
     border-radius: 12px 12px 0 0;
   }
 
@@ -646,7 +654,7 @@ function computeScenarioCost(plan, scenario) {
 
   .metric-row .metric-column {
     padding: 0;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    border-bottom: 1px solid var(--ec-border-1);
   }
 
   .metric-row .metric-label {
@@ -667,7 +675,7 @@ function computeScenarioCost(plan, scenario) {
   .metric-row .plan-column .metric-value {
     text-align: center;
     padding: 10px 6px;
-    border-left: 1px solid rgba(255, 255, 255, 0.08);
+    border-left: 1px solid var(--ec-border-1);
   }
 
   .metric-row .plan-column .metric-value:first-child {

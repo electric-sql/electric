@@ -3,7 +3,7 @@ import path from 'node:path'
 import { parse } from 'yaml'
 
 export default {
-  watch: [`../about/jobs/*.md`],
+  watch: [`../about/careers/*.md`],
 
   load(files) {
     return files
@@ -14,7 +14,7 @@ export default {
         const frontmatter = contents.split(`---\n`)[1]
 
         const data = parse(frontmatter)
-        data.link = `/about/jobs/${slug}`
+        data.link = `/about/careers/${slug}`
 
         return data
       })

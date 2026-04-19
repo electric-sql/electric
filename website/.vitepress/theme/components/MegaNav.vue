@@ -113,9 +113,9 @@ const RESOURCES = {
       link: '/about/team',
     },
     {
-      label: 'Jobs',
+      label: 'Careers',
       sublabel: 'Work with us',
-      link: '/about/jobs',
+      link: '/about/careers',
     },
     {
       label: 'Contact',

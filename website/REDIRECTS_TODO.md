@@ -40,7 +40,7 @@ Per-page mapping:
 | Source | Target |
 | --- | --- |
 | `electric-agents.com/` | `https://electric-sql.com/agents` |
-| `electric-agents.com/docs/getting-started/about` | `https://electric-sql.com/docs/agents/about` |
+| `electric-agents.com/docs/getting-started/about` | `https://electric-sql.com/docs/agents/` |
 | `electric-agents.com/docs/getting-started/quickstart` | `https://electric-sql.com/docs/agents/quickstart` |
 | `electric-agents.com/docs/usage/*` | `https://electric-sql.com/docs/agents/usage/:splat` |
 | `electric-agents.com/docs/reference/*` | `https://electric-sql.com/docs/agents/reference/:splat` |

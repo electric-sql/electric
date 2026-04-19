@@ -1,9 +1,231 @@
 ---
 title: Defining tools
-description: Coming soon — placeholder for the new Agents documentation.
-outline: deep
+titleTemplate: "... - Electric Agents"
+description: >-
+  Create stateless, stateful, and handler-scoped tools for the LLM agent loop.
+outline: [2, 3]
 ---
 
 # Defining tools
 
-Coming soon. This page is a placeholder while the new Agents documentation is being prepared.
+Tools are functions the LLM can call during the agent loop. Each tool has a name, description, typed parameters, and an execute function.
+
+## AgentTool interface
+
+Re-exported from `@mariozechner/pi-agent-core`:
+
+```ts
+interface AgentTool<TParameters extends TSchema = TSchema, TDetails = any> {
+  name: string
+  label: string
+  description: string
+  parameters: TParameters
+  execute: (
+    toolCallId: string,
+    params: Static<TParameters>,
+    signal?: AbortSignal,
+    onUpdate?: AgentToolUpdateCallback<TDetails>
+  ) => Promise<AgentToolResult<TDetails>>
+}
+```
+
+The return type:
+
+```ts
+interface AgentToolResult<T = any> {
+  content: Array<{ type: "text"; text: string }>
+  details: T
+}
+```
+
+## Parameters
+
+Defined using [TypeBox](https://github.com/sinclairzx81/typebox) (`@sinclair/typebox`). The schema is used for LLM function calling and argument validation.
+
+```ts
+import { Type } from "@sinclair/typebox"
+
+parameters: Type.Object({
+  expression: Type.String({ description: "Math expression to evaluate" }),
+  precision: Type.Optional(Type.Number({ description: "Decimal places" })),
+})
+```
+
+## Stateless tools
+
+Pure functions with no side effects beyond what they compute. Define directly as an `AgentTool` object.
+
+```ts
+import { Type } from "@sinclair/typebox"
+import type { AgentTool } from "@durable-streams/darix-runtime"
+
+const calculatorTool: AgentTool = {
+  name: "calculator",
+  label: "Calculator",
+  description: "Evaluate mathematical expressions.",
+  parameters: Type.Object({
+    expression: Type.String({ description: "The expression to evaluate" }),
+  }),
+  execute: async (_toolCallId, params) => {
+    const { expression } = params as { expression: string }
+    const result = evaluate(expression)
+    return {
+      content: [{ type: "text", text: String(result) }],
+      details: {},
+    }
+  },
+}
+```
+
+## Stateful tools
+
+Use a factory function that receives a `StateCollectionProxy`. The state persists across wakes -- it is backed by the entity's durable stream.
+
+```ts
+import { Type } from "@sinclair/typebox"
+import type {
+  AgentTool,
+  StateCollectionProxy,
+} from "@durable-streams/darix-runtime"
+
+function createMemoryStoreTool(
+  stateProxy: StateCollectionProxy<{ key: string; value: string }>
+): AgentTool {
+  return {
+    name: "memory_store",
+    label: "Memory Store",
+    description: "Persistent key-value store.",
+    parameters: Type.Object({
+      operation: Type.Union([
+        Type.Literal("get"),
+        Type.Literal("set"),
+        Type.Literal("delete"),
+        Type.Literal("list"),
+      ]),
+      key: Type.Optional(Type.String()),
+      value: Type.Optional(Type.String()),
+    }),
+    execute: async (_, params) => {
+      const { operation, key, value } = params as {
+        operation: string
+        key?: string
+        value?: string
+      }
+      if (operation === "set") {
+        const existing = stateProxy.get(key!)
+        if (existing) {
+          stateProxy.update(key!, (draft) => {
+            draft.value = value!
+          })
+        } else {
+          stateProxy.insert({ key: key!, value: value! })
+        }
+        return {
+          content: [{ type: "text", text: `Stored "${key}"` }],
+          details: {},
+        }
+      }
+      if (operation === "get") {
+        const entry = stateProxy.get(key!)
+        const text = entry ? entry.value : `No value found for "${key}"`
+        return { content: [{ type: "text", text }], details: {} }
+      }
+      if (operation === "delete") {
+        stateProxy.delete(key!)
+        return {
+          content: [{ type: "text", text: `Deleted "${key}"` }],
+          details: {},
+        }
+      }
+      // list
+      const entries = stateProxy.toArray
+      const text = entries.map((e) => `${e.key}: ${e.value}`).join("\n")
+      return {
+        content: [{ type: "text", text: text || "(empty)" }],
+        details: {},
+      }
+    },
+  }
+}
+```
+
+The `StateCollectionProxy` API:
+
+| Method                 | Description                                                 |
+| ---------------------- | ----------------------------------------------------------- |
+| `insert(row)`          | Insert a new row.                                           |
+| `update(key, updater)` | Update a row by key using an Immer-style draft.             |
+| `delete(key)`          | Delete a row by key.                                        |
+| `get(key)`             | Read a single row by key. Returns `undefined` if not found. |
+| `toArray`              | All rows as an array (property, not method).                |
+
+## Handler-scoped tools
+
+Use a factory that receives the `HandlerContext`. These tools can spawn entities, observe streams, send messages, and use any other `ctx` primitive.
+
+```ts
+import { Type } from "@sinclair/typebox"
+import type { AgentTool, HandlerContext } from "@durable-streams/darix-runtime"
+
+function createDispatchTool(ctx: HandlerContext): AgentTool {
+  return {
+    name: "dispatch",
+    label: "Dispatch",
+    description: "Spawn a child agent and wait for its response.",
+    parameters: Type.Object({
+      type: Type.String({ description: "Entity type to spawn" }),
+      systemPrompt: Type.String({ description: "System prompt for the child" }),
+      task: Type.String({ description: "Task to send to the child" }),
+    }),
+    execute: async (_, params) => {
+      const { type, systemPrompt, task } = params as {
+        type: string
+        systemPrompt: string
+        task: string
+      }
+      const child = await ctx.spawn(
+        type,
+        `dispatch-${Date.now()}`,
+        { systemPrompt },
+        {
+          initialMessage: task,
+          wake: "runFinished",
+        }
+      )
+      const text = (await child.text()).join("\n\n")
+      return {
+        content: [{ type: "text", text }],
+        details: {},
+      }
+    },
+  }
+}
+```
+
+`ctx.spawn` returns an `EntityHandle`. Passing `wake: 'runFinished'` means the parent will be woken when the child's agent run completes. `child.text()` returns all text outputs from the child's stream.
+
+## Wiring tools together
+
+Tools are constructed in the handler and passed to `configureAgent` alongside `ctx.darixTools`:
+
+```ts
+registry.define("assistant", {
+  description: "An assistant with memory and delegation",
+  state: {
+    kv: { primaryKey: "key" },
+  },
+  async handler(ctx) {
+    const memoryTool = createMemoryStoreTool(ctx.state.kv)
+    const dispatchTool = createDispatchTool(ctx)
+
+    ctx.configureAgent({
+      systemPrompt: "You are a helpful assistant with persistent memory.",
+      model: "claude-sonnet-4-5-20250929",
+      tools: [...ctx.darixTools, memoryTool, dispatchTool, calculatorTool],
+    })
+    await ctx.agent.run()
+  },
+})
+```
+
+Always spread `ctx.darixTools` first. Your custom tools follow.

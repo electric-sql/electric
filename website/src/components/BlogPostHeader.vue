@@ -28,6 +28,29 @@ const headerImageHeight = computed(() => frontmatter.value.imageHeight ?? 860)
 </script>
 
 <style scoped>
+.post-back {
+  margin: -40px 0 20px !important;
+  font-size: 14px;
+}
+.post-back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--vp-c-text-2);
+  text-decoration: none;
+  transition: color 0.2s;
+}
+.post-back-link:hover {
+  color: var(--vp-c-brand-1);
+}
+.post-back-arrow {
+  display: inline-block;
+  transition: transform 0.2s;
+}
+.post-back-link:hover .post-back-arrow {
+  transform: translateX(-2px);
+}
+
 .post-image {
   margin-top: -2px !important;
   margin-bottom: 32px;
@@ -35,11 +58,16 @@ const headerImageHeight = computed(() => frontmatter.value.imageHeight ?? 860)
 .post-image img {
   width: 100%;
   height: auto;
+  border-radius: 12px;
+  display: block;
 }
 @media (max-width: 559px) {
   .post-image {
     margin-top: -14px !important;
     margin-bottom: 24px !important;
+  }
+  .post-image img {
+    border-radius: 8px;
   }
 }
 
@@ -82,6 +110,12 @@ h1 {
 
 <template>
   <div class="post-header">
+    <p class="post-back">
+      <a href="/blog" class="post-back-link no-visual">
+        <span class="post-back-arrow" aria-hidden="true">←</span>
+        Blog
+      </a>
+    </p>
     <p class="post-image">
       <NetlifyImage
         :src="frontmatter.image"

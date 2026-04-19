@@ -2,7 +2,7 @@
 const { plan } = defineProps(['plan'])
 
 const priceColorVar = (() => {
-  if (plan.priceColor === 'ddn') return 'var(--ddn-color)'
+  if (plan.priceColor === 'ddn') return 'var(--durable-streams-color)'
   if (plan.priceColor === 'gray') return 'var(--vp-c-text-1)'
   return 'var(--electric-color)'
 })()
@@ -109,17 +109,21 @@ const label = plan.shortName || plan.name
 
 <style scoped>
 .pricing-card {
-  background: rgba(255, 255, 255, 0.03);
-  border: 0.5px solid rgba(255, 255, 255, 0.05);
+  position: relative;
+  background: var(--ec-surface-1);
+  border: 1px solid var(--ec-border-1);
   border-radius: 12px;
   padding: 32px 30px;
   display: flex;
   flex-direction: column;
   height: 100%;
+  transition:
+    border-color 0.2s,
+    transform 0.2s;
 }
 
 .pricing-card-highlighted {
-  border: 1.5px solid var(--electric-color);
+  border-color: var(--electric-color);
 }
 
 .card-header {

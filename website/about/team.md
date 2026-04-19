@@ -27,7 +27,7 @@ const currentlyHiring = activeJobs.length > 0
 <div v-if="currentlyHiring">
 
 > [!TIP] We're hiring!
-> See the [jobs page](/about/jobs/) for active roles.
+> See the [careers page](/about/careers/) for active roles.
 
 </div>
 

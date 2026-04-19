@@ -1,5 +1,5 @@
 ---
-title: Jobs
+title: Careers
 description: >-
   Join a small, technical, multi-disciplinary team that's passionate
   about product, engineering and developer experience.
@@ -19,7 +19,7 @@ const currentlyHiring = activeJobs.length > 0
   </a>
 </figure>
 
-<h1 id="#join">Join the ElectricSQL team</h1>
+<h1 id="#join">Join the Electric team</h1>
 
 We're a [small, technical team](/about/team) that's passionate about our work, our product and our culture. We work remote-first, on European time, with a four day week.
 

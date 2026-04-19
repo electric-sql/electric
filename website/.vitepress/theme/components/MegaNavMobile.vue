@@ -51,7 +51,7 @@ const RESOURCES = {
     { label: 'Blog', link: '/blog' },
     { label: 'Community', link: '/about/community' },
     { label: 'Team', link: '/about/team' },
-    { label: 'Jobs', link: '/about/jobs' },
+    { label: 'Careers', link: '/about/careers' },
     { label: 'Contact', link: '/about/contact' },
     { label: 'LLMs / AGENTS.md', link: '/llms' },
   ],

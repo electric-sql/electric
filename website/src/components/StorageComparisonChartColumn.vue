@@ -47,7 +47,7 @@ export default {
       Chart.register(LogarithmicScale)
     } catch (_) {}
     Chart.defaults.color = getComputedStyleValue('--vp-c-text-1')
-    Chart.defaults.borderColor = `#ffffff50`
+    Chart.defaults.borderColor = getComputedStyleValue('--vp-c-divider')
     Chart.defaults.font = {
       ...Chart.defaults.font,
       family: getComputedStyleValue('--vp-font-family-base'),

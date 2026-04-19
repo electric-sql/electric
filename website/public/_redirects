@@ -121,8 +121,12 @@ https://next.electric-sql.com/* https://electric-sql.com/:splat 301!
 /docs/integrations/*              /docs/sync/integrations/:splat
 /docs/reference/*                 /docs/sync/reference/:splat
 
-# AGENTS.md page moved to /llms
-/docs/agents                      /llms
+# Agents docs: about page folded into the section overview
+/docs/agents/about                /docs/agents/
+
+# Jobs page renamed to Careers
+/about/jobs                       /about/careers
+/about/jobs/*                     /about/careers/:splat
 
 # Demos moved under /sync/demos
 /demos                            /sync/demos

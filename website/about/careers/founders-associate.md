@@ -1,5 +1,5 @@
 ---
-title: Founders Associate - Jobs
+title: Founders Associate - Careers
 description: >-
   We're looking for a generalist future founder to take over and manage as much of the company operations as you can.
 image: /img/icons/electric.svg

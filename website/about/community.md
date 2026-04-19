@@ -1,14 +1,14 @@
 ---
 title: About
 description: >-
-  ElectricSQL is an open source project. We welcome new users,
+  Electric is an open source project. We welcome new users,
   contributors, supporters and community members.
 outline: deep
 ---
 
 # Community
 
-ElectricSQL is an open source project. We welcome new users, developers, contributors, advocates and <span class="no-wrap">community members :)</span>
+Electric is an open source project. We welcome new users, developers, contributors, advocates and <span class="no-wrap">community members :)</span>
 
 ## Source code
 

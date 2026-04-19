@@ -1,4 +1,3 @@
-import fs from 'node:fs'
 import { defineConfig } from 'vitepress'
 import { tabsMarkdownPlugin } from 'vitepress-plugin-tabs'
 import llmstxt from 'vitepress-plugin-llms'
@@ -7,18 +6,6 @@ import type { LanguageRegistration } from 'shiki'
 import caddyfileGrammar from './theme/syntax/caddyfile.json'
 
 import { buildMetaImageUrl } from '../src/lib/meta-image'
-import postsData from '../data/posts.data.ts'
-
-const postPaths = fs
-  .readdirSync('blog/posts')
-  .filter((x) => x.endsWith('.md'))
-  .map((x) => `blog/posts/${x}`)
-const posts = await postsData.load(postPaths)
-
-const blogSidebarItems = await posts.map((post) => ({
-  text: post.title,
-  link: post.path,
-}))
 
 const caddyfileLanguage: LanguageRegistration = {
   ...caddyfileGrammar,
@@ -68,7 +55,7 @@ export default defineConfig({
   title: 'Electric',
   description:
     "Electric provides the data primitives and infra to build collaborative, multi-agent systems. Including Postgres Sync, Durable Streams, TanStack DB and PGlite.",
-  appearance: 'force-dark',
+  appearance: 'dark',
   base: '/',
   cleanUrls: true,
   head: [
@@ -158,7 +145,7 @@ export default defineConfig({
       pattern:
         'https://github.com/electric-sql/electric/edit/main/website/:path',
     },
-    logo: '/img/brand/logo.svg',
+    logo: { light: '/img/brand/logo.inverse.svg', dark: '/img/brand/logo.svg' },
     nav: [],
     search: {
       provider: 'local',
@@ -325,7 +312,6 @@ export default defineConfig({
           items: [
             { text: 'Overview', link: '/docs/agents' },
             { text: 'Quickstart', link: '/docs/agents/quickstart' },
-            { text: 'About', link: '/docs/agents/about' },
           ],
         },
         {
@@ -459,6 +445,16 @@ export default defineConfig({
             },
           ],
         },
+        {
+          text: 'Examples',
+          collapsed: false,
+          items: [
+            { text: 'Overview', link: '/docs/agents/examples/' },
+            { text: 'Playground', link: '/docs/agents/examples/playground' },
+            { text: 'Mega Draw', link: '/docs/agents/examples/mega-draw' },
+            { text: 'Grid app', link: '/docs/agents/examples/grid-app' },
+          ],
+        },
       ],
       '/docs/streams': [
         {
@@ -517,12 +513,6 @@ export default defineConfig({
           ],
         },
       ],
-      '/blog': [
-        {
-          text: 'Blog',
-          items: blogSidebarItems,
-        },
-      ],
       '/about': [
         {
           text: 'About',
@@ -530,12 +520,12 @@ export default defineConfig({
             { text: 'Community', link: '/about/community' },
             { text: 'Team', link: '/about/team' },
             {
-              text: 'Jobs',
-              link: '/about/jobs',
+              text: 'Careers',
+              link: '/about/careers',
               items: [
                 {
                   text: 'Founders Associate',
-                  link: '/about/jobs/founders-associate',
+                  link: '/about/careers/founders-associate',
                 },
               ],
               collapsed: false,

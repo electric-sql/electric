@@ -96,7 +96,7 @@ const actions = [
 
 .paradigm-panel {
   background-color: var(--vp-c-bg-soft);
-  border: 1px solid rgba(42, 44, 52, 0.5);
+  border: 1px solid var(--vp-c-divider);
   border-radius: 12px;
   display: flex;
   flex-direction: column;

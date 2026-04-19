@@ -23,6 +23,12 @@ defineEmits(['navigate'])
         :class="{ 'mega-nav-panel-grid-2col': product.secondary }"
       >
         <div class="mega-nav-panel-section">
+          <div
+            v-if="product.secondary"
+            class="mega-nav-panel-heading"
+          >
+            Learn
+          </div>
           <a
             class="mega-nav-panel-item mega-nav-panel-item-brand"
             :href="product.base"

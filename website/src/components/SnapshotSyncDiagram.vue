@@ -125,7 +125,7 @@
   height: 36px;
   padding: 0 8px;
   background: var(--vp-c-bg-soft);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--ec-border-2);
   border-right: none;
   font-family: var(--vp-font-family-mono);
   font-size: 12px;
@@ -133,7 +133,7 @@
   white-space: nowrap;
 }
 .stream-cell:last-of-type {
-  border-right: 1px solid rgba(255, 255, 255, 0.1);
+  border-right: 1px solid var(--ec-border-2);
 }
 .stream-cell.highlight {
   border: 2px solid var(--durable-streams-color);
@@ -221,7 +221,7 @@
   text-transform: uppercase;
   letter-spacing: 0.5px;
   color: var(--vp-c-text-3);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  border: 1px solid var(--ec-border-2);
   border-radius: 4px;
   padding: 2px 10px;
 }
@@ -229,7 +229,7 @@
 /* Flow section */
 .flow-section {
   margin-top: 28px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid var(--ec-border-2);
   padding-top: 20px;
 }
 .flow-title {
@@ -275,7 +275,7 @@
   padding: 4px 10px;
   border-radius: 4px;
   display: inline-block;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--ec-border-2);
 }
 .step-code.redirect {
   color: var(--electric-color);
@@ -299,7 +299,7 @@
   background: var(--vp-c-bg-soft);
   padding: 4px 10px;
   border-radius: 4px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--ec-border-2);
 }
 .response-header {
   color: var(--vp-c-text-3);

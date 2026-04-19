@@ -71,33 +71,200 @@
   src: url('./fonts/SourceCodePro-Regular.woff2') format('woff2');
 }
 
+/* ── Tokens shared between light + dark ────────────────────────────── */
+
 :root,
 .dark {
-  --vp-c-indigo-1: #d0bcff;
-  --vp-c-indigo-2: #998fe7;
-  --vp-c-indigo-3: #7e78db;
+  /* Legacy aliases — kept so anything still referring to them gets the
+     new accent colour. Prefer --vp-c-brand-1 / --durable-streams-color
+     in new code. */
+  --vp-c-indigo-1: var(--vp-c-brand-1);
+  --vp-c-indigo-2: var(--vp-c-brand-2);
+  --vp-c-indigo-3: var(--vp-c-brand-3);
+  --ddn-color: var(--durable-streams-color);
 
   --vp-nav-logo-height: 30px;
 
+  --electric-color: #75fbfd;
+  --pglite-color: #f6f95c;
+  --durable-streams-color: #75fbfd;
+  --tanstack-db-color: #ff8c3b;
+
+  --vp-code-font-size: 0.875em;
+  --vp-font-family-base: OpenSauceOne, ui-sans-serif, system-ui, sans-serif,
+    'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+  --vp-font-family-mono: SourceCodePro, ui-monospace, Menlo, Monaco, Consolas,
+    'Liberation Mono', 'Courier New', monospace;
+}
+
+/* ── Light theme ──────────────────────────────────────────────────────
+   Ported from darix-docs.  Brand is the deep ink colour, accent teal is
+   reserved for the dark theme — in light mode the brand reads as the
+   strong navy text colour. */
+
+:root {
+  /* Brand */
+  --vp-c-brand-1: #1a1a2e;
+  --vp-c-brand-2: #4a4a6a;
+  --vp-c-brand-3: #0f0f1e;
+  --vp-c-brand-soft: rgba(26, 26, 46, 0.1);
+
+  /* Buttons */
+  --vp-button-brand-bg: #1a1a2e;
+  --vp-button-brand-hover-bg: #3a3a56;
+  --vp-button-brand-active-bg: #0f0f1e;
+  --vp-button-brand-border: transparent;
+  --vp-button-brand-hover-border: transparent;
+  --vp-button-brand-active-border: transparent;
+  --vp-button-brand-text: #ffffff;
+  --vp-button-brand-hover-text: #ffffff;
+  --vp-button-brand-active-text: #ffffff;
+
+  color-scheme: light;
+
+  /* Page surfaces (warm stone) */
+  --vp-c-bg: #f7f7f5;
+  --vp-c-bg-alt: #f0efed;
+  --vp-c-bg-soft: #f0efed;
+  --vp-c-bg-elv: #ffffff;
+  --vp-c-divider: #e4e3e0;
+
+  /* Text */
+  --vp-c-text-1: #1a1a2e;
+  --vp-c-text-1-5: rgba(26, 26, 46, 0.86);
+  --vp-c-text-2: #5c5c6e;
+  --vp-c-text-2-5: rgba(92, 92, 110, 0.85);
+  --vp-c-text-3: #999999;
+
+  /* Hero gradient */
+  --vp-home-hero-name-color: transparent;
+  --vp-home-hero-name-background: linear-gradient(135deg, #1a1a2e, #2d2d44);
+
+  /* Code blocks */
+  --vp-code-bg: var(--vp-c-bg-elv);
+  --vp-code-color: #1a1a2e;
+
+  /* Electric Agents homepage tokens — alias the main palette so the
+     agents page stays in the same colour family as the rest of the site. */
+  --ea-bg: var(--vp-c-bg);
+  --ea-bg-soft: var(--vp-c-bg-soft);
+  --ea-surface: var(--vp-c-bg-elv);
+  --ea-surface-alt: var(--vp-c-bg-soft);
+  --ea-text-1: var(--vp-c-text-1);
+  --ea-text-2: var(--vp-c-text-2);
+  --ea-text-3: var(--vp-c-text-3);
+  --ea-divider: var(--vp-c-divider);
+  --ea-brand: #1a1a2e;
+
+  --ea-event-message: #3b82f6;
+  --ea-event-run: #8888a0;
+  --ea-event-tool-call: #d97706;
+  --ea-event-tool-result: #059669;
+  --ea-event-text: #1a1a2e;
+  --ea-event-error: #dc2626;
+  --ea-indicator-sleep: #c4c3c0;
+  --ea-indicator-active: #1a1a2e;
+
+  /* Surfaces & borders ─ used across cards, pricing, home, etc.
+     Light theme: warm stone ladder that steps cleanly off the page bg
+     so cards stay in the same colour family rather than picking up a
+     muddy neutral grey from a transparent overlay. */
+  --ec-surface-1: #f0efed;
+  --ec-surface-2: #e8e7e3;
+  --ec-surface-3: #dedcd6;
+  --ec-border-1: #e6e5e1;
+  --ec-border-2: #d6d4ce;
+  --ec-overlay-strong: rgba(255, 255, 255, 0.6);
+  --ec-overlay-medium: rgba(255, 255, 255, 0.4);
+  --ec-overlay-soft: rgba(255, 255, 255, 0.2);
+}
+
+/* ── Dark theme ─────────────────────────────────────────────────────── */
+
+.dark {
+  /* Brand — accent teal */
+  --vp-c-brand-1: #75fbfd;
+  --vp-c-brand-2: #b8fdfe;
+  --vp-c-brand-3: #56e8ea;
+  --vp-c-brand-soft: rgba(117, 251, 253, 0.16);
+
+  /* Buttons */
+  --vp-button-brand-bg: #75fbfd;
+  --vp-button-brand-hover-bg: #56e8ea;
+  --vp-button-brand-active-bg: #3cd5d8;
+  --vp-button-brand-border: transparent;
+  --vp-button-brand-hover-border: transparent;
+  --vp-button-brand-active-border: transparent;
+  --vp-button-brand-text: #1a1a1a;
+  --vp-button-brand-hover-text: #1a1a1a;
+  --vp-button-brand-active-text: #1a1a1a;
+
+  color-scheme: dark;
+
+  /* Page surfaces (deep night) */
+  --vp-c-bg: #111318;
+  --vp-c-bg-soft: #16181f;
+  --vp-c-bg-alt: var(--vp-c-bg-soft);
+  --vp-c-bg-elv: #22252f;
+  --vp-c-divider: #2a2d38;
+
+  /* Text */
   --vp-c-text-1: rgba(255, 255, 245, 0.92);
   --vp-c-text-1-5: rgba(235, 235, 245, 0.86);
   --vp-c-text-2: rgba(235, 235, 245, 0.8);
   --vp-c-text-2-5: rgba(235, 235, 245, 0.74);
   --vp-c-text-3: rgba(235, 235, 245, 0.68);
 
-  --electric-color: #00d2a0;
-  --ddn-color: #d0bcff;
-  --pglite-color: #f6f95c;
-  --durable-streams-color: #75fbfd;
-  --tanstack-db-color: #FF8C3B;
+  /* Hero gradient */
+  --vp-home-hero-name-background: linear-gradient(135deg, #75fbfd, #56e8ea);
 
+  /* Code blocks */
   --vp-code-bg: var(--vp-c-bg-elv);
   --vp-code-color: #9ecbff;
-  --vp-code-font-size: 0.875em;
-  --vp-font-family-base: OpenSauceOne, ui-sans-serif, system-ui, sans-serif,
-    'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
-  --vp-font-family-mono: SourceCodePro, ui-monospace, Menlo, Monaco, Consolas,
-    'Liberation Mono', 'Courier New', monospace;
+
+  /* Electric Agents homepage tokens — alias the main palette so the
+     agents page stays in the same colour family as the rest of the site. */
+  --ea-bg: var(--vp-c-bg);
+  --ea-bg-soft: var(--vp-c-bg-soft);
+  --ea-surface: var(--ec-surface-1);
+  --ea-surface-alt: var(--vp-c-bg-soft);
+  --ea-text-1: var(--vp-c-text-1);
+  --ea-text-2: var(--vp-c-text-2);
+  --ea-text-3: var(--vp-c-text-3);
+  --ea-divider: var(--vp-c-divider);
+  --ea-brand: var(--vp-c-brand-1);
+
+  --ea-event-message: #60a5fa;
+  --ea-event-run: #6b7280;
+  --ea-event-tool-call: #fbbf24;
+  --ea-event-tool-result: #34d399;
+  --ea-event-text: #75fbfd;
+  --ea-event-error: #f87171;
+  --ea-indicator-sleep: #4a4d58;
+  --ea-indicator-active: #75fbfd;
+
+  /* Surfaces & borders ─ cool blue-black ladder that steps off the page
+     bg in the same colour family (no neutral white-overlay muddiness). */
+  --ec-surface-1: #1a1d27;
+  --ec-surface-2: #22252f;
+  --ec-surface-3: #2d3142;
+  --ec-border-1: #22252f;
+  --ec-border-2: #2a2d38;
+  --ec-overlay-strong: rgba(0, 0, 0, 0.65);
+  --ec-overlay-medium: rgba(0, 0, 0, 0.5);
+  --ec-overlay-soft: rgba(0, 0, 0, 0.3);
+
+  /* Override VitePress' warm-slate gray family with cool blue-blacks
+     that match the page palette. These tokens flow into --vp-c-default-*,
+     which in turn drives --vp-button-alt-*, code blocks, badges, callouts
+     and other neutral surfaces. */
+  --vp-c-gray-1: #3a3f52;
+  --vp-c-gray-2: #2d3142;
+  --vp-c-gray-3: #22252f;
+  --vp-c-gray-soft: rgba(255, 255, 255, 0.05);
+
+  --vp-c-border: #2a2d38;
+  --vp-c-gutter: #0a0b0e;
 }
 
 .Layout {
@@ -396,13 +563,19 @@ span.no-visual {
   padding-top: 1px;
 }
 
-/* Hide navbar bottom divider on home pages regardless of scroll position */
+/* Hide navbar bottom divider on home pages regardless of scroll position.
+   Includes `.ea-homepage` (Electric Agents landing page), which uses
+   `layout: page` rather than `layout: home` and so doesn't pick up the
+   `.VPNavBar.home` class on its own. */
 @media (min-width: 960px) {
-  .VPNavBar.home:not(.top) {
+  .VPNavBar.home:not(.top),
+  .ea-homepage .VPNavBar:not(.top) {
     background-color: transparent !important;
   }
   .VPNavBar.home .divider,
-  .VPNavBar.home .divider-line {
+  .VPNavBar.home .divider-line,
+  .ea-homepage .VPNavBar .divider,
+  .ea-homepage .VPNavBar .divider-line {
     background-color: transparent !important;
   }
 }
@@ -573,6 +746,17 @@ span.no-visual {
 }
 .DocSearch-Button .DocSearch-Button-Placeholder {
   padding-right: 14px;
+}
+
+/* In dark mode lift the navbar search button a step above the page surface
+   so it stands out clearly without needing a border. Light mode keeps the
+   default `--vp-c-bg-alt` tint (which already reads as slightly darker than
+   the page background). */
+.dark .VPNavBarSearch .DocSearch-Button {
+  background-color: var(--vp-c-bg-elv);
+}
+.dark .VPNavBarSearch .DocSearch-Button:hover {
+  background-color: var(--vp-c-default-soft);
 }
 @media (max-width: 767px) {
   .DocSearch-Button {
@@ -777,10 +961,10 @@ span.no-visual {
   }
 }
 .img-border {
-  border: 1px #ccc solid;
+  border: 1px solid var(--vp-c-divider);
   border-radius: 10px;
   padding: 10px;
-  background: rgb(20, 21, 23);
+  background: var(--vp-c-bg-elv);
 }
 figure {
   margin: 40px 0;
@@ -927,7 +1111,7 @@ iframe {
   background:
     linear-gradient(to right, var(--vp-c-bg) 45%, transparent 85%),
     linear-gradient(to top, var(--vp-c-bg) 0%, transparent 25%),
-    linear-gradient(rgba(26, 27, 30, 0.5), rgba(26, 27, 30, 0.5)),
+    linear-gradient(var(--ec-overlay-medium), var(--ec-overlay-medium)),
     url('/img/home/dashboard-stream.jpg') right top / auto 100% no-repeat;
   overflow: hidden;
   padding: 20px 0 88px;
@@ -943,7 +1127,7 @@ iframe {
     background:
       linear-gradient(to right, var(--vp-c-bg) 35%, transparent 80%),
       linear-gradient(to top, var(--vp-c-bg) 0%, transparent 25%),
-      linear-gradient(rgba(26, 27, 30, 0.6), rgba(26, 27, 30, 0.6)),
+      linear-gradient(var(--ec-overlay-medium), var(--ec-overlay-medium)),
       url('/img/home/dashboard-stream.jpg') right top / auto 100% no-repeat;
   }
 }
@@ -953,7 +1137,7 @@ iframe {
     background:
       linear-gradient(to right, var(--vp-c-bg) 25%, transparent 75%),
       linear-gradient(to top, var(--vp-c-bg) 0%, transparent 25%),
-      linear-gradient(rgba(26, 27, 30, 0.8), rgba(26, 27, 30, 0.8)),
+      linear-gradient(var(--ec-overlay-strong), var(--ec-overlay-strong)),
       url('/img/home/dashboard-stream.jpg') right top / auto 100% no-repeat;
   }
 
@@ -1068,6 +1252,27 @@ ul.benefits {
   font-size: 14px;
 }
 
+/* Blog posts: tighten the top padding of the doc area. The post header carries
+   its own visual rhythm (back link → image → title → byline) so the default
+   VPDoc 48px top padding leaves an awkward gap above the back link.
+
+   We deliberately leave the right-hand `.aside-container` at its default
+   position so "On this page" continues to align with the article body (where
+   the H1 would sit on a normal docs page), only moving the main content up. */
+.VPDoc:has(.post-header) {
+  padding-top: 8px;
+}
+@media (min-width: 768px) {
+  .VPDoc:has(.post-header) {
+    padding-top: 12px;
+  }
+}
+@media (min-width: 960px) {
+  .VPDoc:has(.post-header) {
+    padding-top: 8px;
+  }
+}
+
 .demos-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(216px, 1fr));
@@ -1161,18 +1366,18 @@ ul.demo-actions li .VPButton {
 
 /* Primary CTA button styling */
 .primary-cta-button {
-  background-color: #7c40ff; /* Match your brand purple color */
-  color: white !important;
+  background-color: var(--vp-button-brand-bg);
+  color: var(--vp-button-brand-text) !important;
   padding: 0.5rem 1.2rem;
   border-radius: 6px;
   font-weight: 500;
   margin-left: 1rem;
   transition: background-color 0.2s;
-  order: 4; /* Ensure it appears after search */
+  order: 4;
 }
 
 .primary-cta-button:hover {
-  background-color: #6930d9; /* Darker shade for hover */
+  background-color: var(--vp-button-brand-hover-bg);
   text-decoration: none;
 }
 
@@ -1198,7 +1403,7 @@ ul.demo-actions li .VPButton {
     padding: 0.8rem;
     width: 100%;
     border-radius: 0;
-    background-color: #7c40ff;
+    background-color: var(--vp-button-brand-bg);
   }
 
   /* Add a divider above the button in mobile view */
@@ -1206,7 +1411,7 @@ ul.demo-actions li .VPButton {
     content: '';
     display: block;
     height: 1px;
-    background-color: rgba(255, 255, 255, 0.1);
+    background-color: var(--vp-c-divider);
     margin-bottom: 1rem;
   }
 }
@@ -1491,15 +1696,6 @@ ul.demo-actions li .VPButton {
   color: var(--vp-c-text-3);
 }
 
-/* When a 2-column product grid has a section heading in any column, push
-   sibling sections (that do not have their own heading) down by the same
-   amount so the items in each column line up.
-   Height = padding-top (6) + line-height (14) + padding-bottom (2) = 22px. */
-.mega-nav-panel-grid-2col:has(.mega-nav-panel-heading)
-  > .mega-nav-panel-section:not(:has(> .mega-nav-panel-heading)) {
-  padding-top: 22px;
-}
-
 .mega-nav-panel-item {
   display: flex;
   flex-direction: column;
@@ -1759,4 +1955,26 @@ ul.demo-actions li .VPButton {
 .MegaNavMobile .mega-nav-mobile-social-link:hover {
   background-color: var(--vp-c-bg-soft);
   color: var(--vp-c-brand-1);
+}
+
+/* ── Appearance toggle is rendered in the footer, hide from navbar ── */
+
+.VPNavBar .content-body .appearance,
+.VPNavScreenAppearance {
+  display: none !important;
+}
+.VPNavBar .content-body .appearance::before {
+  display: none !important;
+  content: none !important;
+}
+
+/* ── Footer appearance toggle (used by SiteFooter) ──────────────────── */
+
+.VPFooter .ea-footer-appearance {
+  display: flex;
+  justify-content: center;
+  margin: 12px 0 4px;
+}
+.VPFooter .ea-footer-appearance .VPSwitchAppearance {
+  margin: 0;
 }

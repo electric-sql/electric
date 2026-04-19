@@ -130,16 +130,16 @@ onMounted(() => {
 
 <style scoped>
 .repo-card {
-  border: 1px solid rgba(48, 54, 61, 0.5);
+  border: 1px solid var(--vp-c-divider);
   border-radius: 6px;
-  background: hsl(225 6.25% 12.549% / 1);
+  background: var(--vp-c-bg-soft);
   padding: 16px;
   line-height: 1.5;
 }
 
 .loading,
 .error {
-  color: rgb(139, 148, 158);
+  color: var(--vp-c-text-2);
   font-size: 14px;
 }
 
@@ -153,7 +153,7 @@ onMounted(() => {
 }
 
 .header .icon {
-  fill: rgb(139, 148, 158);
+  fill: var(--vp-c-text-2);
   margin-right: 8px;
 }
 
@@ -163,7 +163,7 @@ onMounted(() => {
 
 .name a {
   text-decoration: none;
-  color: #d0bcff;
+  color: var(--vp-c-brand-1);
 }
 
 .name a:hover {
@@ -171,7 +171,7 @@ onMounted(() => {
 }
 
 .fork-info {
-  color: rgb(139, 148, 158);
+  color: var(--vp-c-text-2);
   font-size: 14px;
 }
 
@@ -183,7 +183,7 @@ onMounted(() => {
 .description {
   font-size: 14px;
   margin: 8px 0;
-  color: rgb(139, 148, 158);
+  color: var(--vp-c-text-2);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -191,13 +191,13 @@ onMounted(() => {
 
 .meta {
   font-size: 14px;
-  color: rgb(139, 148, 158);
+  color: var(--vp-c-text-2);
   display: flex;
   gap: 16px;
 }
 
 .meta .icon {
-  fill: rgb(139, 148, 158);
+  fill: var(--vp-c-text-2);
 }
 
 .language,

@@ -4,8 +4,8 @@
 </mask>
 <g mask="url(#mask0_883_204)">
 <rect x="7" y="3" width="90" height="82" fill="white" fill-opacity="0.92"/>
-<path d="M33 10L43 4.5H49.5L52 11.5L44.5 24.5L38.5 20.5L33 10Z" fill="#D0BCFF"/>
-<path d="M52 42.5L61 28H67.5L76 53.5L83.5 66.5L96.5 81.5L78 86.5L66 64.5L52 42.5Z" fill="#D0BCFF"/>
+<path d="M33 10L43 4.5H49.5L52 11.5L44.5 24.5L38.5 20.5L33 10Z" fill="#75FBFD"/>
+<path d="M52 42.5L61 28H67.5L76 53.5L83.5 66.5L96.5 81.5L78 86.5L66 64.5L52 42.5Z" fill="#75FBFD"/>
 </g>
 <defs>
 <pattern id="pattern0_883_204" patternContentUnits="objectBoundingBox" width="1" height="1">

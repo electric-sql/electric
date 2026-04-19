@@ -1,5 +1,5 @@
 ---
-title: PGlite Engineer - Jobs
+title: PGlite Engineer - Careers
 description: >-
   We're looking for a generalist web and systems engineer to join the core PGlite team,
   working mainly in Typescript, Rust and C++.
@@ -37,7 +37,7 @@ PGlite is a [lightweight embeddable/WASM Postgres](https://pglite.dev). It's a f
   </div>
 </div>
 
-You'll work as part of the PGlite team at [ElectricSQL](https://electric-sql.com/about/team), with [Sam Willis](https://github.com/samwillis) and [Paul Peny](https://github.com/pmp-p). We work remote-first, with ~quartely on-sites in Europe. You must be based in Europe or eastern USA. See the [Jobs](/about/jobs/) and [Team](/about/team) pages for more information about working at Electric and to see the team you'll be joining.
+You'll work as part of the PGlite team at [ElectricSQL](https://electric-sql.com/about/team), with [Sam Willis](https://github.com/samwillis) and [Paul Peny](https://github.com/pmp-p). We work remote-first, with ~quartely on-sites in Europe. You must be based in Europe or eastern USA. See the [Careers](/about/careers/) and [Team](/about/team) pages for more information about working at Electric and to see the team you'll be joining.
 
 > [!TIP] Flexible basis, sponsored by Supabase
 > The role is co-funded by Supabase and provides an opportunity to work in collaboration with members of the Supabase team, including [Greg Richardson](https://github.com/gregnr) (the guy in the video above!), as well as other partners and contributors from the open source community.

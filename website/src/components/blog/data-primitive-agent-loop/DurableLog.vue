@@ -71,7 +71,7 @@ defineProps({
 .entry-label {
   font-size: 10px;
   font-weight: 700;
-  color: #75fbfd;
+  color: var(--durable-streams-color);
   letter-spacing: 0.15em;
   text-transform: uppercase;
   font-family: var(--vp-font-family-mono);

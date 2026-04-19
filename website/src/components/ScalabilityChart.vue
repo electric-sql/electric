@@ -34,7 +34,7 @@ function formatClients(numClients) {
 export default {
   setup() {
     Chart.defaults.color = getComputedStyleValue('--vp-c-text-1')
-    Chart.defaults.borderColor = `#ffffff50`
+    Chart.defaults.borderColor = getComputedStyleValue('--vp-c-divider')
     Chart.defaults.font = {
       ...Chart.defaults.font,
       family: getComputedStyleValue('--vp-font-family-base'),
@@ -149,7 +149,7 @@ export default {
             },
             crosshair: {
               line: {
-                color: '#ffffff40',
+                color: getComputedStyleValue('--vp-c-divider'),
                 width: 1,
               },
             },
@@ -214,7 +214,7 @@ export default {
           },
           cursor: {
             mode: 'vertical',
-            color: '#ffffff40',
+            color: getComputedStyleValue('--vp-c-divider'),
           },
           scales: {
             x: {
@@ -245,7 +245,7 @@ export default {
                 callback: (value) => `${value} ms`,
               },
               grid: {
-                color: '#ffffff20',
+                color: getComputedStyleValue('--vp-c-divider'),
               },
             },
             y1: {

@@ -50,7 +50,7 @@ export default {
   },
   setup(props) {
     Chart.defaults.color = getComputedStyleValue('--vp-c-text-1')
-    Chart.defaults.borderColor = `#ffffff50`
+    Chart.defaults.borderColor = getComputedStyleValue('--vp-c-divider')
     Chart.defaults.font = {
       ...Chart.defaults.font,
       family: getComputedStyleValue('--vp-font-family-base'),
@@ -184,7 +184,7 @@ export default {
                 callback: (value) => `${value}${props.yAxisSuffix}`,
               },
               grid: {
-                color: '#ffffff20',
+                color: getComputedStyleValue('--vp-c-divider'),
               },
             },
           },

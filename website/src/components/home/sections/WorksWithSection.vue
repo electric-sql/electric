@@ -73,7 +73,7 @@ onMounted(() => {
   margin: 0 !important;
 
   border-radius: 12px;
-  border: 1px solid rgba(42, 44, 52, 0.5);
+  border: 1px solid var(--vp-c-divider);
   background: var(--vp-c-bg-soft);
   height: 288px;
 }
@@ -120,7 +120,7 @@ onMounted(() => {
 .data-source {
   flex: 1;
   border-radius: 12px;
-  border: 1px solid rgba(42, 44, 52, 0.5);
+  border: 1px solid var(--vp-c-divider);
   background: var(--vp-c-bg-soft);
   display: flex;
   flex-direction: column;
@@ -157,7 +157,7 @@ onMounted(() => {
   background: var(--vp-c-bg);
   display: flex;
   align-items: center;
-  border-top: 1px solid rgba(42, 44, 52, 0.3);
+  border-top: 1px solid var(--vp-c-divider);
   min-width: 0;
   overflow: hidden;
 }
@@ -201,7 +201,7 @@ onMounted(() => {
   padding: 15.5px 17px;
   margin-bottom: 18.3333px;
   border-radius: 12px;
-  border: 1px solid rgba(42, 44, 52, 0.5);
+  border: 1px solid var(--vp-c-divider);
   background: var(--vp-c-bg-soft);
 
   display: flex;

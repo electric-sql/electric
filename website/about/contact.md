@@ -14,7 +14,7 @@ outline: deep
 
 # Contact us
 
-ElectricSQL is a US Delaware corp headquartered in the San Francisco Bay Area.
+Electric is a US Delaware corp headquartered in the San Francisco Bay Area.
 <span class="no-wrap">Our team</span> works across US and European timezones.
 
 Get in touch by email on [info@electric-sql.com](mailto:info@electric-sql.com) or join our [community Discord](https://discord.electric-sql.com).

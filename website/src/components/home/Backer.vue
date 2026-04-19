@@ -21,7 +21,7 @@ const { image, name, profile_uri, short_bio } = backer
 
   border-radius: 12px;
   background-color: var(--vp-c-bg-soft);
-  border: 1px solid rgba(42, 44, 52, 0.5);
+  border: 1px solid var(--vp-c-divider);
 
   overflow: hidden;
 }

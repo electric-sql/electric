@@ -53,7 +53,7 @@ onMounted(async () => {
   .header {
     text-align: center;
     padding: 0;
-    margin: 60px 48px 32px;
+    margin: 0 48px 32px;
   }
   .header img {
     width: 100%;
@@ -120,16 +120,11 @@ onMounted(async () => {
   <div class="container">
     <main>
       <div class="header">
-        <NetlifyImage
-          :src="ElectricElephant"
-          :width="720"
-          :height="440"
-        />
         <h1>
-          ElectricSQL Blog
+          Electric Blog
         </h1>
         <p>
-          The latest news and updates from the ElectricSQL&nbsp;project.
+          The latest news and updates from Electric.
         </p>
         <div class="actions cta-actions">
           <div class="action hidden-sm">

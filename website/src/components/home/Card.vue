@@ -16,7 +16,7 @@ const { background, body, href, icon, image, title } = defineProps([
   flex-direction: column;
   border-radius: 12px;
   background-color: var(--vp-c-bg-soft);
-  border: 1px solid rgba(42, 44, 52, 0.5);
+  border: 1px solid var(--vp-c-divider);
 
   overflow: hidden;
 

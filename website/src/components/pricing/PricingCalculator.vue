@@ -240,32 +240,32 @@ const planNote = computed(() => {
       </div>
     </div>
     <div class="calculator-result">
-      <div
-        :class="`result-content result-content-${recommendation.tier.ctaTheme}`"
-      >
-        <div class="result-header">
-          <h4 class="result-label">Recommended plan</h4>
-          <h2
-            :class="`result-plan-name result-plan-name-${recommendation.tier.ctaTheme}`"
-          >
-            {{ recommendation.tier.name }}
-          </h2>
+      <div class="result-header">
+        <h4 class="result-label">Recommended plan</h4>
+        <h2
+          :class="`result-plan-name result-plan-name-${recommendation.tier.ctaTheme}`"
+        >
+          {{ recommendation.tier.name }}
+        </h2>
+      </div>
+      <div class="result-pricing">
+        <div
+          :class="`result-price result-price-${recommendation.tier.ctaTheme}`"
+        >
+          {{ formattedTotal }}
         </div>
-        <div class="result-pricing">
-          <div class="result-price">{{ formattedTotal }}</div>
-          <div class="result-period">/ month</div>
-        </div>
-        <div v-if="breakdownText" class="result-breakdown">
-          {{ breakdownText }}
-        </div>
-        <div v-if="planNote" class="result-note">{{ planNote }}</div>
-        <div class="result-cta">
-          <VPButton
-            :href="recommendation.tier.ctaHref"
-            :text="recommendation.tier.ctaText"
-            theme="brand"
-          />
-        </div>
+        <div class="result-period">/ month</div>
+      </div>
+      <div v-if="breakdownText" class="result-breakdown">
+        {{ breakdownText }}
+      </div>
+      <div v-if="planNote" class="result-note">{{ planNote }}</div>
+      <div class="result-cta">
+        <VPButton
+          :href="recommendation.tier.ctaHref"
+          :text="recommendation.tier.ctaText"
+          theme="brand"
+        />
       </div>
     </div>
   </div>
@@ -275,18 +275,19 @@ const planNote = computed(() => {
 .calculator-container {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 40px;
   margin: 40px 0;
-  padding: 40px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 0.5px solid rgba(255, 255, 255, 0.05);
+  background: var(--ec-surface-1);
+  border: 1px solid var(--ec-border-1);
   border-radius: 12px;
+  overflow: hidden;
 }
 
 .calculator-inputs {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  padding: 32px;
+  border-right: 1px solid var(--ec-border-1);
 }
 
 .calculator-title {
@@ -319,8 +320,8 @@ const planNote = computed(() => {
 }
 
 .input-field {
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--ec-surface-2);
+  border: 1px solid var(--ec-border-2);
   border-radius: 6px;
   padding: 9px 12px;
   font-size: 0.875rem;
@@ -334,7 +335,7 @@ const planNote = computed(() => {
 .input-field:focus {
   outline: none;
   border-color: var(--electric-color);
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--ec-surface-3);
 }
 
 .input-slider {
@@ -343,7 +344,7 @@ const planNote = computed(() => {
   width: 100%;
   height: 4px;
   border-radius: 2px;
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--ec-border-2);
   outline: none;
   margin-top: 2px;
   cursor: pointer;
@@ -392,10 +393,50 @@ const planNote = computed(() => {
 }
 
 .toggle-input {
+  appearance: none;
+  -webkit-appearance: none;
+  flex-shrink: 0;
   width: 18px;
   height: 18px;
+  margin: 0;
   cursor: pointer;
-  accent-color: var(--electric-color);
+  background: var(--ec-surface-2);
+  border: 1px solid var(--ec-border-2);
+  border-radius: 4px;
+  display: inline-grid;
+  place-content: center;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
+}
+
+.toggle-input:hover {
+  border-color: var(--electric-color);
+}
+
+.toggle-input:focus-visible {
+  outline: 2px solid var(--electric-color);
+  outline-offset: 2px;
+}
+
+.toggle-input:checked {
+  background: var(--electric-color);
+  border-color: var(--electric-color);
+}
+
+.toggle-input:checked::before {
+  content: '';
+  width: 10px;
+  height: 10px;
+  background: #1a1a1a;
+  clip-path: polygon(
+    14% 44%,
+    0 65%,
+    35% 100%,
+    100% 16%,
+    80% 0%,
+    35% 67%
+  );
 }
 
 .toggle-text {
@@ -406,23 +447,11 @@ const planNote = computed(() => {
 
 .calculator-result {
   display: flex;
-  align-items: flex-start;
+  flex-direction: column;
+  align-items: center;
   justify-content: center;
-  padding-top: 20px;
-}
-
-.result-content {
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 12px;
-  padding: 32px;
-  width: 100%;
+  padding: 40px 32px;
   text-align: center;
-}
-.result-content-brand {
-  border: 1px solid var(--electric-color);
-}
-.result-content-alt {
-  border: 1px solid var(--ddn-color);
 }
 
 .result-header {
@@ -430,25 +459,20 @@ const planNote = computed(() => {
 }
 
 .result-label {
-  font-size: 0.825rem;
+  font-size: 0.75rem;
   font-weight: 500;
   color: var(--vp-c-text-3);
   text-transform: uppercase;
-  letter-spacing: 0.5px;
-  margin: 0;
+  letter-spacing: 0.6px;
+  margin: 0 0 6px;
   line-height: 1.5;
 }
 
 .result-plan-name {
-  font-size: 2.25rem;
+  font-size: 1.75rem;
   font-weight: 700;
   margin: 0;
-}
-.result-plan-name-brand {
-  color: var(--electric-color);
-}
-.result-plan-name-alt {
-  color: var(--ddn-color);
+  color: var(--vp-c-text-1);
 }
 
 .result-pricing {
@@ -460,10 +484,15 @@ const planNote = computed(() => {
 }
 
 .result-price {
-  font-size: 2rem;
+  font-size: 2.25rem;
   font-weight: 700;
-  color: var(--vp-c-text-1);
   line-height: 1;
+}
+.result-price-brand {
+  color: var(--electric-color);
+}
+.result-price-alt {
+  color: var(--durable-streams-color);
 }
 
 .result-period {
@@ -495,17 +524,25 @@ const planNote = computed(() => {
 @media (max-width: 759px) {
   .calculator-container {
     grid-template-columns: 1fr;
-    gap: 24px;
-    padding: 32px 24px;
-  }
-
-  .calculator-result {
-    order: -1;
-    padding-top: 0;
   }
 
   .calculator-inputs {
     gap: 12px;
+    padding: 24px;
+    border-right: none;
+    border-bottom: 1px solid var(--ec-border-1);
+  }
+
+  .calculator-result {
+    order: -1;
+    padding: 28px 24px;
+    border-bottom: 1px solid var(--ec-border-1);
+  }
+
+  /* When the result is shown above inputs on mobile, the inputs no longer
+     need a bottom divider. */
+  .calculator-inputs {
+    border-bottom: none;
   }
 
   .toggles-section {
@@ -514,16 +551,13 @@ const planNote = computed(() => {
 }
 
 @media (max-width: 529px) {
-  .calculator-container {
-    padding: 24px 20px;
-  }
-
-  .result-content {
+  .calculator-inputs,
+  .calculator-result {
     padding: 24px 20px;
   }
 
   .result-plan-name {
-    font-size: 1.75rem;
+    font-size: 1.5rem;
   }
 
   .result-price {

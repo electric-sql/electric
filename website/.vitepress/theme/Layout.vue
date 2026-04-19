@@ -62,10 +62,17 @@ onMounted(() => {
   )
 })
 const shouldShowReleasebanner = frontmatter.hideReleaseBanner || !hasSidebar
+
+const layoutClass = computed(() => {
+  const classes = []
+  if (!hasSidebar.value) classes.push('nav-relative')
+  if (frontmatter.value?.pageClass) classes.push(frontmatter.value.pageClass)
+  return classes.join(' ')
+})
 </script>
 
 <template>
-  <Layout :class="!hasSidebar ? 'nav-relative' : ''">
+  <Layout :class="layoutClass">
     <template #layout-top>
       <template v-if="shouldShowReleasebanner">
         <ReleaseBanner />

@@ -101,7 +101,7 @@ const panels = [
   flex-direction: row;
   align-items: flex-start;
   background-color: var(--vp-c-bg-soft);
-  border: 1px solid rgba(42, 44, 52, 0.5);
+  border: 1px solid var(--vp-c-divider);
   border-radius: 12px;
   height: 100%;
   overflow: hidden;
@@ -193,7 +193,7 @@ hr {
 }
 
 .panel-link {
-  color: var(--vp-c-indigo-1);
+  color: var(--vp-c-brand-1);
   font-size: 13px;
   font-weight: 450;
 }

@@ -389,17 +389,23 @@ const config = pricing.config
 
 .support-card {
   margin: 40px 0;
-  padding: 40px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 0.5px solid rgba(255, 255, 255, 0.05);
+  background: var(--ec-surface-1);
+  border: 1px solid var(--ec-border-1);
   border-radius: 12px;
+  overflow: hidden;
 }
 
 .support-options {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 40px;
-  margin-bottom: 32px;
+}
+
+.support-option {
+  padding: 36px 36px 28px;
+}
+
+.support-option + .support-option {
+  border-left: 1px solid var(--ec-border-1);
 }
 
 .support-option h3 {
@@ -413,16 +419,28 @@ const config = pricing.config
   font-size: 0.875rem;
   color: var(--vp-c-text-2);
   line-height: 1.6;
+  margin: 0;
 }
 
 .support-cta {
   text-align: center;
+  padding: 24px 36px 32px;
+  border-top: 1px solid var(--ec-border-1);
 }
 
 @media (max-width: 639px) {
   .support-options {
     grid-template-columns: 1fr;
-    gap: 24px;
+  }
+  .support-option {
+    padding: 28px 24px 24px;
+  }
+  .support-option + .support-option {
+    border-left: none;
+    border-top: 1px solid var(--ec-border-1);
+  }
+  .support-cta {
+    padding: 20px 24px 28px;
   }
 }
 
@@ -431,15 +449,24 @@ const config = pricing.config
 }
 
 .faq-item {
-  background: rgba(255, 255, 255, 0.03);
-  border: 0.5px solid rgba(255, 255, 255, 0.05);
+  background: var(--ec-surface-1);
+  border: 1px solid var(--ec-border-1);
   border-radius: 8px;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
   overflow: hidden;
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.faq-item:hover {
+  border-color: var(--ec-border-2);
+}
+
+.faq-item[open] {
+  border-color: var(--ec-border-2);
 }
 
 .faq-item summary {
-  padding: 16px 20px;
+  padding: 14px 18px;
   font-size: 0.95rem;
   font-weight: 600;
   color: var(--vp-c-text-1);
@@ -447,7 +474,7 @@ const config = pricing.config
   list-style: none;
   display: flex;
   align-items: baseline;
-  gap: 8px;
+  gap: 10px;
 }
 
 .faq-item summary::-webkit-details-marker {
@@ -459,12 +486,18 @@ const config = pricing.config
   flex-shrink: 0;
   width: 14px;
   text-align: center;
-  font-weight: 400;
+  font-weight: 500;
   color: var(--vp-c-text-3);
+  transition: color 0.2s;
+}
+
+.faq-item:hover summary::before {
+  color: var(--electric-color);
 }
 
 .faq-item[open] summary::before {
   content: "\2212";
+  color: var(--electric-color);
 }
 
 .faq-item p {
