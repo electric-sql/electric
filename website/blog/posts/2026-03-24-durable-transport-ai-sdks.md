@@ -37,7 +37,7 @@ Use them to add resilience, resumeability and multi-user, multi-agent collaborat
 
 Most AI apps break if there's [any kind of problem](/blog/2025/04/09/building-ai-apps-on-sync#resumability) with connectivity. Be it patchy network, or a navigation or re-render interrupting a long-running active generation.
 
-[Durable Streams](/primitives/durable-streams) are the perfect solution for this. As persistent, addressable streams with a reliable delivery protocol, they provide **resilience** and **resumeability** for long-running active generations and agentic sesstions.
+[Durable Streams](/streams) are the perfect solution for this. As persistent, addressable streams with a reliable delivery protocol, they provide **resilience** and **resumeability** for long-running active generations and agentic sesstions.
 
 Integrating Durable Streams via a [Durable Sessions](/blog/2026/01/12/durable-sessions-for-collaborative-ai) pattern extends this with natural support for multi-tab, multi-device, multi-user and multi-agent collaboration.
 

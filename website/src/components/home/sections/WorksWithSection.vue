@@ -422,7 +422,7 @@ onMounted(() => {
             <div class="data-source-header">
               <img src="/img/icons/electric.svg" class="data-source-icon" />
               <a
-                href="/primitives/postgres-sync"
+                href="/sync"
                 class="data-source-label no-visual"
                 >Database sync</a
               >
@@ -438,7 +438,7 @@ onMounted(() => {
                 class="data-source-icon"
               />
               <a
-                href="/primitives/durable-streams"
+                href="/streams"
                 class="data-source-label no-visual"
                 >Real-time streams</a
               >
@@ -497,7 +497,7 @@ onMounted(() => {
           <div class="data-source-header">
             <img src="/img/icons/tanstack.svg" class="data-source-icon" />
             <a
-              href="/primitives/tanstack-db"
+              href="/sync/tanstack-db"
               class="data-source-label no-visual"
               style="margin-left: 2px"
               >Live data</a

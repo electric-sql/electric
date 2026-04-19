@@ -29,8 +29,8 @@ homepage: false
   import { data as demosData } from '../../data/demos.data.ts'
   const { demos } = demosData
 
-  const notesDemo = demos.find(x => x.link === '/demos/notes')
-  const pixelArtDemo = demos.find(x => x.link === '/demos/pixel-art')
+  const notesDemo = demos.find(x => x.link === '/sync/demos/notes')
+  const pixelArtDemo = demos.find(x => x.link === '/sync/demos/pixel-art')
 
   onMounted(async () => {
     if (typeof window !== 'undefined' && document.querySelector) {
@@ -56,11 +56,11 @@ If you haven't checked out Electric recently, it's a great time to [take another
 
 ## What is Electric?
 
-[Electric](/primitives/postgres-sync) is a Postgres sync engine. We do real-time [partial replication](/docs/guides/shapes) of Postgres data into local apps and services.
+[Electric](/sync) is a Postgres sync engine. We do real-time [partial replication](/docs/guides/shapes) of Postgres data into local apps and services.
 
 Use Electric to swap out data _fetching_ for [data _sync_](/sync). Build apps on instant, real-time, local data. Without having to roll your own sync engine or change your stack.
 
-We also develop [PGlite](/primitives/pglite), a lightweight WASM Postgres you can run in the browser.
+We also develop [PGlite](/sync/pglite), a lightweight WASM Postgres you can run in the browser.
 
 ## The path to BETA
 

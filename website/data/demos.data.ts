@@ -3,10 +3,11 @@ import path from 'node:path'
 import { parse } from 'yaml'
 
 export default {
-  watch: [`../demos/*.md`],
+  watch: [`../sync/demos/*.md`],
 
   load(files) {
     const demos = files
+      .filter((file) => path.basename(file) !== `index.md`)
       .map((file) => {
         const slug = path.basename(file, `.md`)
 
@@ -14,7 +15,7 @@ export default {
         const frontmatter = contents.split(`---\n`)[1]
 
         const data = parse(frontmatter)
-        data.link = `/demos/${slug}`
+        data.link = `/sync/demos/${slug}`
 
         return data
       })

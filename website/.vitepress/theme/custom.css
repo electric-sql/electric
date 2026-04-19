@@ -1312,3 +1312,451 @@ ul.demo-actions li .VPButton {
 .VPDocFooter .edit-info {
   padding-right: 120px;
 }
+
+/* === MegaNav: custom mega-menu nav (replaces VPNavBarMenu items) ============ */
+
+/* Safety net: hide default VPNavBarMenu links / social links if VitePress
+   ever re-renders them. The :not(.mega-nav-link) escape-hatch lets MegaNav
+   reuse .VPNavBarMenuLink styling without being hidden. */
+.VPNavBar .VPNavBarMenu > a.VPNavBarMenuLink:not(.mega-nav-link) {
+  display: none !important;
+}
+.VPNavBar .VPNavBarSocialLinks {
+  display: none !important;
+}
+.VPNavBar .VPNavBarSocialLinks::before,
+.VPNavBar .VPNavBarSocialLinks::after {
+  display: none !important;
+}
+
+/* Container for the MegaNav: replaces the old .VPNavBarMenu items. Hidden
+   on mobile (the mobile screen menu uses MegaNavMobile instead). */
+.MegaNav {
+  display: none;
+  align-items: center;
+  height: var(--vp-nav-height);
+}
+@media (min-width: 768px) {
+  .MegaNav {
+    display: flex;
+  }
+}
+
+.MegaNav .mega-nav-trigger-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: 100%;
+}
+
+.MegaNav .mega-nav-link {
+  display: inline-flex;
+  align-items: center;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 14px !important;
+  font-weight: 500;
+  line-height: var(--vp-nav-height);
+  padding: 0 8px !important;
+  color: var(--vp-c-text-1);
+  transition: color 0.25s;
+}
+.MegaNav .mega-nav-link:hover,
+.MegaNav .mega-nav-link.active,
+.MegaNav .mega-nav-link.open {
+  color: var(--vp-c-brand-1);
+}
+
+/* Defeat VitePress default `.VPNavBarMenuLink:last-of-type{display:none!important}`
+   which would hide the last <a> (Pricing) and the last <button> in MegaNav. */
+.MegaNav .mega-nav-link {
+  display: inline-flex !important;
+}
+
+.MegaNav .mega-nav-link.mega-nav-trigger {
+  gap: 4px;
+}
+
+.MegaNav .mega-nav-chevron {
+  width: 12px;
+  height: 12px;
+  opacity: 0.7;
+  transition: transform 0.2s ease;
+}
+.MegaNav .mega-nav-trigger.open .mega-nav-chevron {
+  transform: rotate(180deg);
+}
+
+.MegaNav .mega-nav-divider {
+  width: 1px;
+  height: 20px;
+  background-color: var(--vp-c-divider);
+  margin: 0 8px;
+  flex-shrink: 0;
+}
+
+@media (min-width: 1200px) {
+  .MegaNav .mega-nav-divider {
+    margin: 0 10px;
+  }
+}
+
+/* Hide group dividers when buttons compress hardest, to claw back room. */
+@media (max-width: 1059px) {
+  .MegaNav .mega-nav-divider {
+    display: none;
+  }
+}
+
+/* Popdown panel positioning */
+.MegaNav .mega-nav-panel-wrap {
+  position: absolute;
+  top: calc(var(--vp-nav-height) - 8px);
+  left: -8px;
+  right: auto;
+  z-index: calc(var(--vp-z-index-nav) + 1);
+  /* The padding acts as an invisible hover bridge between the trigger
+     and the visible panel, preventing accidental dismissal. */
+  padding: 12px 8px 0;
+}
+.MegaNav .mega-nav-trigger-wrap[data-id='resources'] .mega-nav-panel-wrap {
+  left: auto;
+  right: -8px;
+}
+
+/* Popdown panel chrome */
+.mega-nav-panel {
+  background: var(--vp-c-bg-elv);
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 12px;
+  box-shadow: var(--vp-shadow-3);
+  padding: 8px;
+  min-width: 240px;
+  max-width: min(560px, calc(100vw - 32px));
+  max-height: calc(100vh - var(--vp-nav-height) - 16px);
+  overflow-y: auto;
+}
+.mega-nav-panel:has(.mega-nav-panel-grid-2col) {
+  min-width: 480px;
+}
+
+.mega-nav-panel-section {
+  display: flex;
+  flex-direction: column;
+}
+.mega-nav-panel-extras {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--vp-c-divider);
+}
+
+/* Product panel grid: single column by default, two columns when the
+   product has a secondary section (Sync). */
+.mega-nav-panel-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+}
+.mega-nav-panel-grid-2col {
+  grid-template-columns: minmax(220px, 1fr) minmax(220px, 1fr);
+  gap: 0 8px;
+}
+.mega-nav-panel-grid-2col .mega-nav-panel-secondary {
+  border-left: 1px solid var(--vp-c-divider);
+  padding-left: 12px;
+  margin-left: 4px;
+}
+@media (max-width: 599px) {
+  .mega-nav-panel-grid-2col {
+    grid-template-columns: 1fr;
+  }
+  .mega-nav-panel-grid-2col .mega-nav-panel-secondary {
+    border-left: none;
+    border-top: 1px solid var(--vp-c-divider);
+    padding-left: 0;
+    margin-left: 0;
+    padding-top: 8px;
+    margin-top: 8px;
+  }
+}
+
+.mega-nav-panel-heading {
+  padding: 6px 12px 2px;
+  font-size: 11px;
+  line-height: 14px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--vp-c-text-3);
+}
+
+/* When a 2-column product grid has a section heading in any column, push
+   sibling sections (that do not have their own heading) down by the same
+   amount so the items in each column line up.
+   Height = padding-top (6) + line-height (14) + padding-bottom (2) = 22px. */
+.mega-nav-panel-grid-2col:has(.mega-nav-panel-heading)
+  > .mega-nav-panel-section:not(:has(> .mega-nav-panel-heading)) {
+  padding-top: 22px;
+}
+
+.mega-nav-panel-item {
+  display: flex;
+  flex-direction: column;
+  padding: 8px 12px;
+  border-radius: 8px;
+  color: var(--vp-c-text-1);
+  text-decoration: none;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+.mega-nav-panel-item:hover {
+  background-color: var(--vp-c-bg-soft);
+  color: var(--vp-c-brand-1);
+}
+.mega-nav-panel-label {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+.mega-nav-panel-sublabel {
+  font-size: 12px;
+  color: var(--vp-c-text-2);
+  line-height: 1.4;
+  margin-top: 2px;
+}
+
+/* Item with leading icon: horizontal row, icon on the left, text stacked
+   on the right. Defined AFTER .mega-nav-panel-item so it wins the cascade. */
+.mega-nav-panel-item.mega-nav-panel-item-icon {
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 10px;
+}
+.mega-nav-panel-item-img {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  object-fit: contain;
+  /* Align with the main label cap-height rather than the full link box. */
+  margin-top: -1px;
+}
+.mega-nav-panel-item-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* Resources panel: two columns on wide, one column on narrow */
+.mega-nav-panel-resources {
+  min-width: 480px;
+}
+.mega-nav-panel-cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 8px;
+}
+@media (max-width: 599px) {
+  .mega-nav-panel-resources {
+    min-width: 0;
+  }
+  .mega-nav-panel-cols {
+    grid-template-columns: 1fr;
+  }
+}
+
+.mega-nav-panel-social {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 4px;
+  margin-top: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--vp-c-divider);
+}
+.mega-nav-panel-social-item {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  color: var(--vp-c-text-2);
+  text-decoration: none;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+.mega-nav-panel-social-item:hover {
+  background-color: var(--vp-c-bg-soft);
+  color: var(--vp-c-brand-1);
+}
+.mega-nav-social-icon {
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+}
+
+/* Brand item: emphasize the product home link at the top of each panel */
+.mega-nav-panel-item-brand .mega-nav-panel-label {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+/* Global vpi-social-* icon definitions (SiteFooter scopes these so they
+   are not available in MegaNav otherwise; without --icon they render as
+   solid white squares via the default vpi mask). */
+.vpi-social-x {
+  --icon: url('https://api.iconify.design/simple-icons/x.svg');
+}
+.vpi-social-discord {
+  --icon: url('https://api.iconify.design/simple-icons/discord.svg');
+}
+.vpi-social-bluesky {
+  --icon: url('https://api.iconify.design/simple-icons/bluesky.svg');
+}
+
+/* Open/close transition */
+.mega-nav-fade-enter-active,
+.mega-nav-fade-leave-active {
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+.mega-nav-fade-enter-from,
+.mega-nav-fade-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mega-nav-fade-enter-active,
+  .mega-nav-fade-leave-active,
+  .MegaNav .mega-nav-chevron,
+  .MegaNavMobile .mega-nav-mobile-chevron {
+    transition: none !important;
+  }
+}
+
+/* === MegaNavMobile: left-aligned accordion menu =========================== */
+
+.MegaNavMobile {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  text-align: left;
+}
+
+/* Defeat VitePress's default centered nav-screen alignment for our items. */
+.VPNavScreen .container .MegaNavMobile,
+.VPNavScreen .MegaNavMobile {
+  align-items: stretch;
+}
+
+/* Top-level row: applies to leaf links and accordion triggers alike. */
+.MegaNavMobile .mega-nav-mobile-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+  text-decoration: none;
+  color: var(--vp-c-text-1);
+  padding: 14px 4px;
+  transition: color 0.15s ease;
+}
+.MegaNavMobile .mega-nav-mobile-row:hover,
+.MegaNavMobile .mega-nav-mobile-row:active {
+  color: var(--vp-c-brand-1);
+}
+
+.MegaNavMobile .mega-nav-mobile-row-label {
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.MegaNavMobile .mega-nav-mobile-row-chevron {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  opacity: 0.55;
+  transition: transform 0.2s ease;
+}
+.MegaNavMobile .mega-nav-mobile-group.open .mega-nav-mobile-row-chevron {
+  transform: rotate(180deg);
+}
+
+.MegaNavMobile .mega-nav-mobile-divider {
+  border: none;
+  border-top: 1px solid var(--vp-c-divider);
+  margin: 8px 0;
+  width: 100%;
+}
+
+/* Submenu indented under the trigger. */
+.MegaNavMobile .mega-nav-mobile-submenu {
+  display: flex;
+  flex-direction: column;
+  padding: 4px 0 8px 16px;
+  border-left: 1px solid var(--vp-c-divider);
+  margin: 0 0 4px 6px;
+}
+
+.MegaNavMobile .mega-nav-mobile-subrow {
+  display: block;
+  padding: 10px 4px;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--vp-c-text-2);
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+.MegaNavMobile .mega-nav-mobile-subrow:hover,
+.MegaNavMobile .mega-nav-mobile-subrow:active {
+  color: var(--vp-c-brand-1);
+}
+
+/* Brand row at the top of a product submenu. */
+.MegaNavMobile .mega-nav-mobile-subrow-brand {
+  padding: 8px 4px 12px;
+}
+.MegaNavMobile .mega-nav-mobile-brand-label {
+  display: block;
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.25;
+  color: var(--vp-c-text-1);
+}
+.MegaNavMobile .mega-nav-mobile-brand-sublabel {
+  display: block;
+  margin-top: 2px;
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--vp-c-text-2);
+  line-height: 1.4;
+}
+
+/* Social row on the resources submenu. */
+.MegaNavMobile .mega-nav-mobile-social-row {
+  display: flex;
+  flex-direction: row;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 8px 0 0 4px;
+}
+.MegaNavMobile .mega-nav-mobile-social-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  color: var(--vp-c-text-2);
+  text-decoration: none;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+.MegaNavMobile .mega-nav-mobile-social-link:hover {
+  background-color: var(--vp-c-bg-soft);
+  color: var(--vp-c-brand-1);
+}

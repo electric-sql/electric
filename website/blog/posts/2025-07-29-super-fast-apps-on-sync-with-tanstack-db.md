@@ -44,14 +44,14 @@ import ScalabilityChart from '../../src/components/ScalabilityChart.vue'
 
 <div class="hidden-xs">
 
-[Tanstack&nbsp;DB](/primitives/tanstack-db) is a [reactive client store for building super fast apps on sync](https://tanstack.com/blog/tanstack-db-0.1-the-embedded-client-database-for-tanstack-query). Paired with [Postgres&nbsp;Sync](/primitives/postgres-sync), it provides an optimal end-to-end sync stack<span class="no-wrap-sm"> for app development</span>.
+[Tanstack&nbsp;DB](/sync/tanstack-db) is a [reactive client store for building super fast apps on sync](https://tanstack.com/blog/tanstack-db-0.1-the-embedded-client-database-for-tanstack-query). Paired with [Postgres&nbsp;Sync](/sync), it provides an optimal end-to-end sync stack<span class="no-wrap-sm"> for app development</span>.
 
 </div>
 <div class="block-xs">
 
-[Tanstack&nbsp;DB](/primitives/tanstack-db) is a reactive client store for [building super fast apps on&nbsp;sync](https://tanstack.com/blog/tanstack-db-0.1-the-embedded-client-database-for-tanstack-query).
+[Tanstack&nbsp;DB](/sync/tanstack-db) is a reactive client store for [building super fast apps on&nbsp;sync](https://tanstack.com/blog/tanstack-db-0.1-the-embedded-client-database-for-tanstack-query).
 
-Paired with [Postgres&nbsp;Sync](/primitives/postgres-sync), it provides an optimal end-to-end sync stack for app&nbsp;development.
+Paired with [Postgres&nbsp;Sync](/sync), it provides an optimal end-to-end sync stack for app&nbsp;development.
 
 </div>
 
@@ -195,7 +195,7 @@ If we have these three things &mdash; collections, live queries and mutations th
 
 ## Introducing TanStack&nbsp;DB
 
-[TanStack&nbsp;DB](/primitives/tanstack-db) is a reactive client store that extends TanStack Query with:
+[TanStack&nbsp;DB](/sync/tanstack-db) is a reactive client store that extends TanStack Query with:
 
 - [collections](#collections)
 - [live queries](#live-queries)
@@ -656,7 +656,7 @@ Each step will make your app faster and more resilient, as well as providing a p
 
 ## Next steps
 
-[TanStack&nbsp;DB](/primitives/tanstack-db) with Electric [Postgres&nbsp;Sync](/primitives/postgres-sync) provides a pathway to real-time without the re-write and an optimal, end-to-end local-first sync stack that just&nbsp;works.
+[TanStack&nbsp;DB](/sync/tanstack-db) with Electric [Postgres&nbsp;Sync](/sync) provides a pathway to real-time without the re-write and an optimal, end-to-end local-first sync stack that just&nbsp;works.
 
 To get started, check out the [TanStack&nbsp;Start&nbsp;starter](https://github.com/electric-sql/electric/tree/main/examples/tanstack-db-web-starter) for web and [Expo&nbsp;starter](https://github.com/electric-sql/electric/tree/main/examples/tanstack-db-expo-starter) for&nbsp;mobile.
 

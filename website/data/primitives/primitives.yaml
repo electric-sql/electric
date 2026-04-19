@@ -3,25 +3,25 @@
   title: Postgres Sync
   body: Sync from your database <span class="breaker no-wrap">into your apps</span>
   detail: With partial replication, <span class="breaker no-wrap">data delivery and fan-out</span>
-  href: /primitives/postgres-sync
+  href: /sync
 
 - slug: durable-streams
   icon: /img/icons/durable-streams.svg
   title: Durable Streams
   body: The data primitive for <span class="breaker no-wrap">the agent loop</span>
   detail: For building <span class="hide-home">resilient, </span>collaborative <span class="breaker no-wrap">multi-agent systems</span>
-  href: /primitives/durable-streams
+  href: /streams
 
 - slug: tanstack-db
   icon: /img/icons/tanstack.svg
   title: TanStack DB
   body: Reactive client store <span class="breaker no-wrap">for super-fast apps</span>
   detail: For sub-millisecond <span class="breaker no-wrap">reactivity and instant writes</span>
-  href: /primitives/tanstack-db
+  href: /sync/tanstack-db
 
 - slug: pglite
   icon: /img/icons/pglite.product.svg
   title: PGlite
   body: Embeddable Postgres <span class="breaker no-wrap">with reactivity and sync</span>
   detail: A full database inside <span class="breaker no-wrap">your client or runtime</span>
-  href: /primitives/pglite
+  href: /sync/pglite

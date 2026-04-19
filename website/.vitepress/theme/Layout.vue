@@ -13,6 +13,9 @@ import NavSignupButton from '../../src/components/NavSignupButton.vue'
 import SiteFooter from '../../src/components/SiteFooter.vue'
 import UseCaseHeader from '../../src/components/UseCaseHeader.vue'
 
+import MegaNav from './components/MegaNav.vue'
+import MegaNavMobile from './components/MegaNavMobile.vue'
+
 import ReleaseBanner from '../../src/components/home/ReleaseBanner.vue'
 
 import HomeFeaturesAfter from '../../src/partials/home-features-after.md'
@@ -68,8 +71,14 @@ const shouldShowReleasebanner = frontmatter.hideReleaseBanner || !hasSidebar
         <ReleaseBanner />
       </template>
     </template>
+    <template #nav-bar-content-before>
+      <MegaNav />
+    </template>
     <template #nav-bar-content-after>
       <NavSignupButton />
+    </template>
+    <template #nav-screen-content-before>
+      <MegaNavMobile />
     </template>
     <template #doc-top>
       <!-- Local nav bar: Medium screens - markdown link floats right -->

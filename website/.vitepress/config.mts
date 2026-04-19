@@ -7,23 +7,7 @@ import type { LanguageRegistration } from 'shiki'
 import caddyfileGrammar from './theme/syntax/caddyfile.json'
 
 import { buildMetaImageUrl } from '../src/lib/meta-image'
-import demosData from '../data/demos.data.ts'
 import postsData from '../data/posts.data.ts'
-
-const demoPaths = fs
-  .readdirSync('demos')
-  .filter((x) => x.endsWith('.md'))
-  .map((x) => `demos/${x}`)
-const { demos, examples } = await demosData.load(demoPaths)
-
-const demoSidebarItems = await demos.map((demo) => ({
-  text: demo.title,
-  link: demo.link,
-}))
-const exampleSidebarItems = await examples.map((example) => ({
-  text: example.title,
-  link: example.link,
-}))
 
 const postPaths = fs
   .readdirSync('blog/posts')
@@ -120,7 +104,23 @@ export default defineConfig({
       },
     ],
   ],
-  ignoreDeadLinks: [/localhost/, /^\/AGENTS(\.md)?$/, /^\/cloud$/],
+  ignoreDeadLinks: [
+    /localhost/,
+    /^\/AGENTS(\.md)?$/,
+    /^\/cloud$/,
+    // Legacy /docs/* paths handled by Netlify redirects to /docs/sync/*
+    /^\/docs\/(intro|quickstart|stacks)(\/|$|#)/,
+    /^\/docs\/(guides|api|integrations|reference)\//,
+    // Bare paths to dirs with index.md (vitepress dead-link checker needs trailing slash)
+    /^\/sync$/,
+    /^\/streams$/,
+    /^\/agents$/,
+    /^\/docs\/sync$/,
+    /^\/docs\/agents$/,
+    /^\/docs\/streams$/,
+    // Legacy /demos/* paths handled by Netlify redirects to /sync/demos/*
+    /^\/demos(\/|$|#)/,
+  ],
   markdown: {
     theme: 'github-dark',
     languages: [
@@ -159,30 +159,24 @@ export default defineConfig({
         'https://github.com/electric-sql/electric/edit/main/website/:path',
     },
     logo: '/img/brand/logo.svg',
-    nav: [
-      { text: 'Sync', link: '/sync', activeMatch: '/sync' },
-      { text: 'Primitives', link: '/primitives', activeMatch: '/primitives' },
-      { text: 'Cloud', link: '/cloud', activeMatch: '/cloud' },
-      { text: 'Pricing', link: '/pricing', activeMatch: '/pricing' },
-      { text: 'Docs', link: '/docs/intro', activeMatch: '/docs/' },
-      { text: 'Demos', link: '/demos', activeMatch: '/demos' },
-      { text: 'Blog', link: '/blog', activeMatch: '/blog' },
-      { text: 'About', link: '/about/community', activeMatch: '/about/' },
-      { component: 'NavSignupButton' },
-    ],
+    nav: [],
     search: {
       provider: 'local',
     },
     sidebar: {
-      '/primitives': [
+      '/sync/': [
         {
-          text: 'Primitives',
+          text: 'Electric Sync',
           items: [
-            { text: 'Overview', link: '/primitives/' },
-            { text: 'Postgres Sync', link: '/primitives/postgres-sync' },
-            { text: 'Durable Streams', link: '/primitives/durable-streams' },
-            { text: 'TanStack DB', link: '/primitives/tanstack-db' },
-            { text: 'PGlite', link: '/primitives/pglite' },
+            { text: 'Overview', link: '/sync' },
+            { text: 'Demos', link: '/sync/demos/' },
+          ],
+        },
+        {
+          text: 'Client primitives',
+          items: [
+            { text: 'TanStack DB', link: '/sync/tanstack-db' },
+            { text: 'PGlite', link: '/sync/pglite' },
           ],
         },
       ],
@@ -198,37 +192,40 @@ export default defineConfig({
           ],
         },
       ],
-      '/docs': [
+      '/docs/sync': [
         {
-          text: 'Docs',
+          text: 'Sync',
           collapsed: false,
           items: [
-            { text: 'Intro', link: '/docs/intro' },
-            { text: 'Quickstart', link: '/docs/quickstart' },
-            { text: 'Stacks', link: '/docs/stacks' },
-            { text: 'AGENTS.md', link: '/docs/agents' },
+            { text: 'Overview', link: '/docs/sync' },
+            { text: 'Intro', link: '/docs/sync/intro' },
+            { text: 'Quickstart', link: '/docs/sync/quickstart' },
+            { text: 'Stacks', link: '/docs/sync/stacks' },
           ],
         },
         {
           text: 'Guides',
           collapsed: false,
           items: [
-            { text: 'Auth', link: '/docs/guides/auth' },
-            { text: 'Shapes', link: '/docs/guides/shapes' },
-            { text: 'Writes', link: '/docs/guides/writes' },
-            { text: 'Installation', link: '/docs/guides/installation' },
+            { text: 'Auth', link: '/docs/sync/guides/auth' },
+            { text: 'Shapes', link: '/docs/sync/guides/shapes' },
+            { text: 'Writes', link: '/docs/sync/guides/writes' },
+            { text: 'Installation', link: '/docs/sync/guides/installation' },
             {
               text: 'PostgreSQL Permissions',
-              link: '/docs/guides/postgres-permissions',
+              link: '/docs/sync/guides/postgres-permissions',
             },
-            { text: 'Deployment', link: '/docs/guides/deployment' },
-            { text: 'Upgrading', link: '/docs/guides/upgrading' },
-            { text: 'Sharding', link: '/docs/guides/sharding' },
-            { text: 'Security', link: '/docs/guides/security' },
-            { text: 'Troubleshooting', link: '/docs/guides/troubleshooting' },
+            { text: 'Deployment', link: '/docs/sync/guides/deployment' },
+            { text: 'Upgrading', link: '/docs/sync/guides/upgrading' },
+            { text: 'Sharding', link: '/docs/sync/guides/sharding' },
+            { text: 'Security', link: '/docs/sync/guides/security' },
+            {
+              text: 'Troubleshooting',
+              link: '/docs/sync/guides/troubleshooting',
+            },
             {
               text: 'Client development',
-              link: '/docs/guides/client-development',
+              link: '/docs/sync/guides/client-development',
             },
           ],
         },
@@ -236,16 +233,19 @@ export default defineConfig({
           text: 'API',
           collapsed: false,
           items: [
-            { text: 'HTTP', link: '/docs/api/http' },
+            { text: 'HTTP', link: '/docs/sync/api/http' },
             {
               text: 'Clients',
               items: [
-                { text: 'TypeScript', link: '/docs/api/clients/typescript' },
-                { text: 'Elixir', link: '/docs/api/clients/elixir' },
+                {
+                  text: 'TypeScript',
+                  link: '/docs/sync/api/clients/typescript',
+                },
+                { text: 'Elixir', link: '/docs/sync/api/clients/elixir' },
               ],
               collapsed: false,
             },
-            { text: 'Config', link: '/docs/api/config' },
+            { text: 'Config', link: '/docs/sync/api/config' },
           ],
         },
         {
@@ -255,34 +255,43 @@ export default defineConfig({
             {
               text: 'Frameworks',
               items: [
-                { text: 'LiveStore', link: '/docs/integrations/livestore' },
-                { text: 'MobX', link: '/docs/integrations/mobx' },
-                { text: 'Next.js', link: '/docs/integrations/next' },
-                { text: 'Phoenix', link: '/docs/integrations/phoenix' },
-                { text: 'React', link: '/docs/integrations/react' },
-                { text: 'Redis', link: '/docs/integrations/redis' },
-                { text: 'TanStack', link: '/docs/integrations/tanstack' },
-                { text: 'Yjs', link: '/docs/integrations/yjs' },
+                {
+                  text: 'LiveStore',
+                  link: '/docs/sync/integrations/livestore',
+                },
+                { text: 'MobX', link: '/docs/sync/integrations/mobx' },
+                { text: 'Next.js', link: '/docs/sync/integrations/next' },
+                { text: 'Phoenix', link: '/docs/sync/integrations/phoenix' },
+                { text: 'React', link: '/docs/sync/integrations/react' },
+                { text: 'Redis', link: '/docs/sync/integrations/redis' },
+                { text: 'TanStack', link: '/docs/sync/integrations/tanstack' },
+                { text: 'Yjs', link: '/docs/sync/integrations/yjs' },
               ],
             },
             {
               text: 'Platforms',
               items: [
-                { text: 'AWS', link: '/docs/integrations/aws' },
-                { text: 'Cloudflare', link: '/docs/integrations/cloudflare' },
-                { text: 'Crunchy', link: '/docs/integrations/crunchy' },
+                { text: 'AWS', link: '/docs/sync/integrations/aws' },
+                {
+                  text: 'Cloudflare',
+                  link: '/docs/sync/integrations/cloudflare',
+                },
+                { text: 'Crunchy', link: '/docs/sync/integrations/crunchy' },
                 {
                   text: 'Digital Ocean',
-                  link: '/docs/integrations/digital-ocean',
+                  link: '/docs/sync/integrations/digital-ocean',
                 },
-                { text: 'Expo', link: '/docs/integrations/expo' },
-                { text: 'Fly.io', link: '/docs/integrations/fly' },
-                { text: 'GCP', link: '/docs/integrations/gcp' },
-                { text: 'Neon', link: '/docs/integrations/neon' },
-                { text: 'Netlify', link: '/docs/integrations/netlify' },
-                { text: 'PlanetScale', link: '/docs/integrations/planetscale' },
-                { text: 'Render', link: '/docs/integrations/render' },
-                { text: 'Supabase', link: '/docs/integrations/supabase' },
+                { text: 'Expo', link: '/docs/sync/integrations/expo' },
+                { text: 'Fly.io', link: '/docs/sync/integrations/fly' },
+                { text: 'GCP', link: '/docs/sync/integrations/gcp' },
+                { text: 'Neon', link: '/docs/sync/integrations/neon' },
+                { text: 'Netlify', link: '/docs/sync/integrations/netlify' },
+                {
+                  text: 'PlanetScale',
+                  link: '/docs/sync/integrations/planetscale',
+                },
+                { text: 'Render', link: '/docs/sync/integrations/render' },
+                { text: 'Supabase', link: '/docs/sync/integrations/supabase' },
               ],
             },
           ],
@@ -291,23 +300,221 @@ export default defineConfig({
           text: 'Reference',
           collapsed: false,
           items: [
-            { text: 'Alternatives', link: '/docs/reference/alternatives' },
-            { text: 'Benchmarks', link: '/docs/reference/benchmarks' },
-            { text: 'Literature', link: '/docs/reference/literature' },
-            { text: 'Telemetry', link: '/docs/reference/telemetry' },
+            {
+              text: 'Alternatives',
+              link: '/docs/sync/reference/alternatives',
+            },
+            { text: 'Benchmarks', link: '/docs/sync/reference/benchmarks' },
+            { text: 'Literature', link: '/docs/sync/reference/literature' },
+            { text: 'Telemetry', link: '/docs/sync/reference/telemetry' },
+          ],
+        },
+        {
+          text: 'Client primitives',
+          collapsed: false,
+          items: [
+            { text: 'TanStack DB', link: '/sync/tanstack-db' },
+            { text: 'PGlite', link: '/sync/pglite' },
           ],
         },
       ],
-      '/demos': [
+      '/docs/agents': [
         {
-          text: 'Demos',
+          text: 'Agents',
           collapsed: false,
-          items: demoSidebarItems,
+          items: [
+            { text: 'Overview', link: '/docs/agents' },
+            { text: 'Quickstart', link: '/docs/agents/quickstart' },
+            { text: 'About', link: '/docs/agents/about' },
+          ],
         },
         {
-          text: 'Examples',
+          text: 'Usage',
           collapsed: false,
-          items: exampleSidebarItems,
+          items: [
+            { text: 'Overview', link: '/docs/agents/usage/overview' },
+            {
+              text: 'Defining entities',
+              link: '/docs/agents/usage/defining-entities',
+            },
+            {
+              text: 'Writing handlers',
+              link: '/docs/agents/usage/writing-handlers',
+            },
+            {
+              text: 'Configuring the agent',
+              link: '/docs/agents/usage/configuring-the-agent',
+            },
+            {
+              text: 'Defining tools',
+              link: '/docs/agents/usage/defining-tools',
+            },
+            {
+              text: 'Managing state',
+              link: '/docs/agents/usage/managing-state',
+            },
+            {
+              text: 'Spawning and coordinating',
+              link: '/docs/agents/usage/spawning-and-coordinating',
+            },
+            { text: 'Shared state', link: '/docs/agents/usage/shared-state' },
+            { text: 'App setup', link: '/docs/agents/usage/app-setup' },
+            { text: 'Testing', link: '/docs/agents/usage/testing' },
+          ],
+        },
+        {
+          text: 'Reference',
+          collapsed: false,
+          items: [
+            { text: 'CLI', link: '/docs/agents/reference/cli' },
+            {
+              text: 'Handler context',
+              link: '/docs/agents/reference/handler-context',
+            },
+            {
+              text: 'Entity definition',
+              link: '/docs/agents/reference/entity-definition',
+            },
+            {
+              text: 'Agent config',
+              link: '/docs/agents/reference/agent-config',
+            },
+            { text: 'Agent tool', link: '/docs/agents/reference/agent-tool' },
+            {
+              text: 'State collection proxy',
+              link: '/docs/agents/reference/state-collection-proxy',
+            },
+            {
+              text: 'Entity handle',
+              link: '/docs/agents/reference/entity-handle',
+            },
+            {
+              text: 'Shared state handle',
+              link: '/docs/agents/reference/shared-state-handle',
+            },
+            { text: 'Wake event', link: '/docs/agents/reference/wake-event' },
+            {
+              text: 'Built-in collections',
+              link: '/docs/agents/reference/built-in-collections',
+            },
+            {
+              text: 'Entity registry',
+              link: '/docs/agents/reference/entity-registry',
+            },
+            {
+              text: 'Runtime handler',
+              link: '/docs/agents/reference/runtime-handler',
+            },
+          ],
+        },
+        {
+          text: 'Entities',
+          collapsed: false,
+          items: [
+            {
+              text: 'Agents',
+              items: [
+                { text: 'Chat', link: '/docs/agents/entities/agents/chat' },
+                {
+                  text: 'Researcher',
+                  link: '/docs/agents/entities/agents/researcher',
+                },
+                { text: 'Coder', link: '/docs/agents/entities/agents/coder' },
+                {
+                  text: 'Worker',
+                  link: '/docs/agents/entities/agents/worker',
+                },
+              ],
+              collapsed: false,
+            },
+            {
+              text: 'Patterns',
+              items: [
+                {
+                  text: 'Manager / worker',
+                  link: '/docs/agents/entities/patterns/manager-worker',
+                },
+                {
+                  text: 'Pipeline',
+                  link: '/docs/agents/entities/patterns/pipeline',
+                },
+                {
+                  text: 'Map / reduce',
+                  link: '/docs/agents/entities/patterns/map-reduce',
+                },
+                {
+                  text: 'Dispatcher',
+                  link: '/docs/agents/entities/patterns/dispatcher',
+                },
+                {
+                  text: 'Blackboard',
+                  link: '/docs/agents/entities/patterns/blackboard',
+                },
+                {
+                  text: 'Reactive observers',
+                  link: '/docs/agents/entities/patterns/reactive-observers',
+                },
+              ],
+              collapsed: false,
+            },
+          ],
+        },
+      ],
+      '/docs/streams': [
+        {
+          text: 'Streams',
+          collapsed: false,
+          items: [
+            { text: 'Overview', link: '/docs/streams' },
+            { text: 'Quickstart', link: '/docs/streams/quickstart' },
+            { text: 'Concepts', link: '/docs/streams/concepts' },
+          ],
+        },
+        {
+          text: 'Usage',
+          collapsed: false,
+          items: [
+            { text: 'CLI', link: '/docs/streams/cli' },
+            { text: 'JSON mode', link: '/docs/streams/json-mode' },
+            { text: 'Durable proxy', link: '/docs/streams/durable-proxy' },
+            { text: 'Durable state', link: '/docs/streams/durable-state' },
+            { text: 'Stream DB', link: '/docs/streams/stream-db' },
+            { text: 'Stream FS', link: '/docs/streams/stream-fs' },
+            { text: 'Deployment', link: '/docs/streams/deployment' },
+            {
+              text: 'Building a client',
+              link: '/docs/streams/building-a-client',
+            },
+            {
+              text: 'Building a server',
+              link: '/docs/streams/building-a-server',
+            },
+            { text: 'Benchmarking', link: '/docs/streams/benchmarking' },
+          ],
+        },
+        {
+          text: 'Clients',
+          collapsed: false,
+          items: [
+            { text: 'TypeScript', link: '/docs/streams/clients/typescript' },
+            { text: 'Python', link: '/docs/streams/clients/python' },
+            { text: 'Other clients', link: '/docs/streams/clients/other' },
+          ],
+        },
+        {
+          text: 'Integrations',
+          collapsed: false,
+          items: [
+            {
+              text: 'TanStack AI',
+              link: '/docs/streams/integrations/tanstack-ai',
+            },
+            {
+              text: 'Vercel AI SDK',
+              link: '/docs/streams/integrations/vercel-ai-sdk',
+            },
+            { text: 'Yjs', link: '/docs/streams/integrations/yjs' },
+          ],
         },
       ],
       '/blog': [
@@ -347,14 +554,7 @@ export default defineConfig({
       ],
     },
     siteTitle: false,
-    socialLinks: [
-      { icon: 'durable-streams', link: 'https://durablestreams.com' },
-      { icon: 'tanstack', link: 'https://tanstack.com/db' },
-      { icon: 'pglite', link: 'https://pglite.dev' },
-      { icon: 'x', link: 'https://x.com/ElectricSQL' },
-      { icon: 'discord', link: 'https://discord.electric-sql.com' },
-      { icon: 'github', link: 'https://github.com/electric-sql/electric' },
-    ],
+    socialLinks: [],
   },
   transformHead: ({ pageData, siteData }) => {
     const fm = pageData.frontmatter

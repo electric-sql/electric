@@ -9,13 +9,13 @@ at a time</span>.
 <br class="hidden-md" />
 Using
 our
-<a href="/docs/api/http">
+<a href="/docs/sync/api/http">
 HTTP API</a>,
 <span class="no-wrap-sm">
-<a href="/docs/api/clients/typescript">
+<a href="/docs/sync/api/clients/typescript">
 client&nbsp;libraries</a>
 and
-<a href="/docs/integrations/react">
+<a href="/docs/sync/integrations/react">
 framework&nbsp;hooks</a></span>.
 </span>
 
@@ -39,19 +39,19 @@ const Component = () => {
 <div class="actions cta-actions">
   <div class="action">
     <VPButton
-        href="/docs/quickstart"
+        href="/docs/sync/quickstart"
         text="Quickstart"
         theme="brand"
     />
   </div>
   <div class="action">
-    <VPButton href="/docs/api/http"
+    <VPButton href="/docs/sync/api/http"
         text="API docs"
         theme="alt"
     />
   </div>
   <div class="action hidden-sm">
-    <VPButton href="/demos"
+    <VPButton href="/sync/demos"
         target="_blank"
         text="Demos"
         theme="alt"
@@ -64,7 +64,7 @@ And you can level-up
 all the way</span>
 to syncing into a local embedded
 <span class="no-wrap">
-[PGlite database](/primitives/pglite)</span>.
+[PGlite database](/sync/pglite)</span>.
 <span class="no-wrap-md hidden-sm">
 With
 <span class="no-wrap">
@@ -78,7 +78,7 @@ and
 <div class="actions cta-actions">
   <div class="action">
     <VPButton
-        href="/docs/intro"
+        href="/docs/sync/intro"
         text="Learn more"
         theme="brand"
     />

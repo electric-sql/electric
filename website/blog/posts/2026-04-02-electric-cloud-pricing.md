@@ -34,7 +34,7 @@ Two billing dimensions: writes and retention.
 - **$0.10 per GB-month** retention.
 - **No charge** for reads, fan-out, concurrent users, connections, or data&nbsp;delivery.
 
-Some services that run additional infrastructure carry a service cost on top of the base write rate. [Postgres Sync](/primitives/postgres-sync) runs a dedicated replication engine to filter changes and match them to shapes, adding $2 per million writes emitted to the shape log from the replication stream. You're charged for the filtered output, not the raw replication input — one Postgres change landing on 100 shapes =&nbsp;100&nbsp;writes.
+Some services that run additional infrastructure carry a service cost on top of the base write rate. [Postgres Sync](/sync) runs a dedicated replication engine to filter changes and match them to shapes, adding $2 per million writes emitted to the shape log from the replication stream. You're charged for the filtered output, not the raw replication input — one Postgres change landing on 100 shapes =&nbsp;100&nbsp;writes.
 
 See the [pricing page](/pricing) for the full breakdown and worked&nbsp;examples.
 

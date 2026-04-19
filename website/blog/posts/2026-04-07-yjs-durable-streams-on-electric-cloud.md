@@ -12,14 +12,14 @@ post: true
 published: true
 ---
 
-[Yjs](https://yjs.dev) is the de facto library for collaborative editing on the web — battle-proven, CRDT-based, and powering tools like [TipTap](https://tiptap.dev), [CodeMirror](https://codemirror.net), and [BlockNote](https://www.blocknotejs.org/). Today we're releasing [`y-durable-streams`](https://www.npmjs.com/package/@durable-streams/y-durable-streams) — a new Yjs provider built on [Durable&nbsp;Streams](/primitives/durable-streams), now live on [Electric&nbsp;Cloud](/cloud). It brings built-in persistence, compaction, and real-time presence to collaborative apps and agentic&nbsp;systems.
+[Yjs](https://yjs.dev) is the de facto library for collaborative editing on the web — battle-proven, CRDT-based, and powering tools like [TipTap](https://tiptap.dev), [CodeMirror](https://codemirror.net), and [BlockNote](https://www.blocknotejs.org/). Today we're releasing [`y-durable-streams`](https://www.npmjs.com/package/@durable-streams/y-durable-streams) — a new Yjs provider built on [Durable&nbsp;Streams](/streams), now live on [Electric&nbsp;Cloud](/cloud). It brings built-in persistence, compaction, and real-time presence to collaborative apps and agentic&nbsp;systems.
 
 >[!info] 🚀&nbsp; Try it now
 >[Create a Yjs service](https://dashboard.electric-sql.cloud/?intent=create&serviceType=yjs), see the [integration docs](https://durablestreams.com/yjs), [source&nbsp;code](https://github.com/durable-streams/durable-streams/tree/main/packages/y-durable-streams), and [demo&nbsp;app](/demos/territory-wars).
 
 ## Yjs on Durable Streams
 
-[Durable&nbsp;Streams](/primitives/durable-streams) is an open HTTP protocol for persistent, resumable, real-time streams. Data is durably stored, synced over plain HTTP, and cacheable at the&nbsp;edge.
+[Durable&nbsp;Streams](/streams) is an open HTTP protocol for persistent, resumable, real-time streams. Data is durably stored, synced over plain HTTP, and cacheable at the&nbsp;edge.
 
 Most Yjs setups rely on WebSocket relay servers that maintain persistent point-to-point connections to sync changes to clients in real time. As agentic systems bring more participants into collaborative documents, they challenge the scalability of these&nbsp;setups.
 

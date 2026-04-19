@@ -12,24 +12,23 @@ https://next.electric-sql.com/* https://electric-sql.com/:splat 301!
 
 /about                          /about/community
 /about/enterprise               /about/community
-/docs/api/generator             /docs/intro
-/docs/integrations/deployment   /docs/guides/deployment
-/docs/integrations/deployment/* /docs/guides/deployment
-/docs/overview                  /docs/intro
-/docs/overview/examples         /demos
-/docs/overview/faqs             /docs/intro
-/docs/overview/technical-intro  /docs/intro
-/docs/overview/welcome          /docs/intro
-/docs/reference/anomalies       /docs/reference/literature
-/docs/reference/limitations     /docs/reference/roadmap
-/docs/usage/configure           /docs/quickstart
-/docs/usage/drivers             /docs/quickstart
-/docs/usage/frameworks          /docs/integrations/react
-/docs/usage/install             /docs/quickstart
-/docs/usage/quickstart          /docs/quickstart
-/docs/usage/reactivity          /docs/intro
-/docs/usage/replication         /docs/intro
-/demos                          https://github.com/electric-sql/electric/tree/main/examples
+/docs/api/generator             /docs/sync/intro
+/docs/integrations/deployment   /docs/sync/guides/deployment
+/docs/integrations/deployment/* /docs/sync/guides/deployment
+/docs/overview                  /docs/sync/intro
+/docs/overview/examples         /sync/demos
+/docs/overview/faqs             /docs/sync/intro
+/docs/overview/technical-intro  /docs/sync/intro
+/docs/overview/welcome          /docs/sync/intro
+/docs/reference/anomalies       /docs/sync/reference/literature
+/docs/reference/limitations     /docs/sync/reference/roadmap
+/docs/usage/configure           /docs/sync/quickstart
+/docs/usage/drivers             /docs/sync/quickstart
+/docs/usage/frameworks          /docs/sync/integrations/react
+/docs/usage/install             /docs/sync/quickstart
+/docs/usage/quickstart          /docs/sync/quickstart
+/docs/usage/reactivity          /docs/sync/intro
+/docs/usage/replication         /docs/sync/intro
 /legal                          /legal/terms
 
 # Bumped the introducing post date and version
@@ -38,10 +37,10 @@ https://next.electric-sql.com/* https://electric-sql.com/:splat 301!
 
 # Shortpaths for nice links
 
-/docs                                        /docs/intro
-/intro                                       /docs/intro
-/examples                                    /demos
-/docs/guides/troubleshooting/missing-headers /docs/guides/troubleshooting#missing-headers-mdash-why-is-the-client-complaining-about-missing-headers
+/docs                                        /docs/sync/intro
+/intro                                       /docs/sync/intro
+/examples                                    /sync/demos
+/docs/guides/troubleshooting/missing-headers /docs/sync/guides/troubleshooting#missing-headers-mdash-why-is-the-client-complaining-about-missing-headers
 
 # More links from legacy site
 
@@ -52,33 +51,33 @@ https://next.electric-sql.com/* https://electric-sql.com/:splat 301!
 /blog/tags/team                 /about/team
 /search                         /
 /about/partnerships             /about/community
-/docs/api                       /docs/api/http
-/docs/api/*                     /docs/api/http
-/docs/deployment                /docs/guides/deployment
-/docs/deployment/*              /docs/guides/deployment
-/docs/examples                  /demos
-/docs/examples/*                /demos
-/docs/integrations              /docs/integrations/react
-/docs/integrations/*            /docs/integrations/react
-/docs/intro/*                   /docs/intro
-/docs/recipes                   /docs/intro
-/docs/recipes/*                 /docs/intro
-/docs/reference                 /docs/intro
-/docs/reference/architecture    /docs/intro
-/docs/reference/consistency     /docs/intro
-/docs/reference/integrity       /docs/intro
-/docs/reference/local-first     /docs/intro
-/docs/reference/release_notes   /docs/intro
-/docs/reference/roadmap         /docs/intro
-/docs/usage                     /docs/quickstart
-/docs/usage/auth                /docs/guides/auth
-/docs/usage/auth/*              /docs/guides/auth
-/docs/usage/data-access         /docs/intro
-/docs/usage/data-access/*       /docs/intro
-/docs/usage/data-modelling      /docs/intro
-/docs/usage/data-modelling/*    /docs/intro
-/docs/usage/installation        /docs/quickstart
-/docs/usage/installation/*      /docs/quickstart
+/docs/api                       /docs/sync/api/http
+/docs/api/*                     /docs/sync/api/http
+/docs/deployment                /docs/sync/guides/deployment
+/docs/deployment/*              /docs/sync/guides/deployment
+/docs/examples                  /sync/demos
+/docs/examples/*                /sync/demos
+/docs/integrations              /docs/sync/integrations/react
+/docs/integrations/*            /docs/sync/integrations/react
+/docs/intro/*                   /docs/sync/intro
+/docs/recipes                   /docs/sync/intro
+/docs/recipes/*                 /docs/sync/intro
+/docs/reference                 /docs/sync/intro
+/docs/reference/architecture    /docs/sync/intro
+/docs/reference/consistency     /docs/sync/intro
+/docs/reference/integrity       /docs/sync/intro
+/docs/reference/local-first     /docs/sync/intro
+/docs/reference/release_notes   /docs/sync/intro
+/docs/reference/roadmap         /docs/sync/intro
+/docs/usage                     /docs/sync/quickstart
+/docs/usage/auth                /docs/sync/guides/auth
+/docs/usage/auth/*              /docs/sync/guides/auth
+/docs/usage/data-access         /docs/sync/intro
+/docs/usage/data-access/*       /docs/sync/intro
+/docs/usage/data-modelling      /docs/sync/intro
+/docs/usage/data-modelling/*    /docs/sync/intro
+/docs/usage/installation        /docs/sync/quickstart
+/docs/usage/installation/*      /docs/sync/quickstart
 
 # Renamed pages on new site
 /product/ddn                          /product/cloud
@@ -89,22 +88,51 @@ https://next.electric-sql.com/* https://electric-sql.com/:splat 301!
 /product/cloud                                      /cloud
 /product/pglite                                     /products/pglite
 /use-cases/*                                        /sync
-/docs/api/integrations/react                        /docs/integrations/react
-/docs/guides/writing-your-own-client                /docs/guides/client-development
+/docs/api/integrations/react                        /docs/sync/integrations/react
+/docs/guides/writing-your-own-client                /docs/sync/guides/client-development
 /use-cases/state-transfer                           /use-cases/data-sync
 /product/cloud/sign-up                              https://dashboard.electric-sql.cloud
 /product/cloud/onboarding                           /cloud/overview
 /product/cloud/usage                                /cloud/usage
-/docs/guides/llms                                   /docs/agents
+/docs/guides/llms                                   /llms
 /blog/2025/07/29/local-first-sync-with-tanstack-db  /blog/2025/07/29/super-fast-apps-on-sync-with-tanstack-db
 
 # Cloud pricing moved to top-level pricing page
 /cloud/pricing                  /pricing 302
 
-# Products are primitives, products are something else
-/products                       /primitives
-/products/                      /primitives/
-/products/*                     /primitives/:splat
+# Legacy /products/* (was renamed to /primitives/*) now lands on /sync
+/products                                /sync
+/products/postgres-sync                  /sync
+/products/durable-streams                /streams
+/products/tanstack-db                    /sync/tanstack-db
+/products/pglite                         /sync/pglite
+/products/*                              /sync
 
 /blog/2026/03/18/*            /blog/2026/04/02/:splat
 /blog/2026/03/24/electric-cloud-pricing  /blog/2026/04/02/electric-cloud-pricing
+
+# Site restructure (2026-04) — product verticals
+# Sync docs moved under /docs/sync/*
+/docs/intro                       /docs/sync/intro
+/docs/quickstart                  /docs/sync/quickstart
+/docs/stacks                      /docs/sync/stacks
+/docs/guides/*                    /docs/sync/guides/:splat
+/docs/api/*                       /docs/sync/api/:splat
+/docs/integrations/*              /docs/sync/integrations/:splat
+/docs/reference/*                 /docs/sync/reference/:splat
+
+# AGENTS.md page moved to /llms
+/docs/agents                      /llms
+
+# Demos moved under /sync/demos
+/demos                            /sync/demos
+/demos/*                          /sync/demos/:splat
+
+# Primitives section dropped; PGlite + TanStack DB live under /sync,
+# Postgres Sync = Sync product, Durable Streams = Streams product.
+/primitives                       /sync
+/primitives/postgres-sync         /sync
+/primitives/durable-streams       /streams
+/primitives/tanstack-db           /sync/tanstack-db
+/primitives/pglite                /sync/pglite
+/primitives/*                     /sync

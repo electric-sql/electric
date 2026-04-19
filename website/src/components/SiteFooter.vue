@@ -144,10 +144,10 @@
             <a href="/about/community"> About</a>
             <a href="/about/contact"> Contact</a>
             <a href="/about/legal/terms"> Legal</a>
-            <a href="/docs/intro"> Docs</a>
+            <a href="/docs/sync/intro"> Docs</a>
           </span>
           <span class="no-wrap">
-            <a href="/demos"> Demos</a>
+            <a href="/sync/demos"> Demos</a>
             <a href="/blog"> Blog</a>
             <a href="https://dashboard.electric-sql.cloud/"> Sign up</a>
           </span>

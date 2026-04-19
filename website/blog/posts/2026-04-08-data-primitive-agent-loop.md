@@ -54,7 +54,7 @@ If you think of an agent loop as a work cycle, this accumulated state is the wor
 
 ## A new kind of data
 
-At Electric, we started off building [Postgres Sync](/primitives/postgres-sync) for [state transfer in app development](/blog/2022/12/16/evolution-state-transfer). Then, as the type of software that teams were building on us evolved into AI apps and agentic systems, it became clear that [AI apps should be built on sync](/blog/2025/04/09/building-ai-apps-on-sync) too.
+At Electric, we started off building [Postgres Sync](/sync) for [state transfer in app development](/blog/2022/12/16/evolution-state-transfer). Then, as the type of software that teams were building on us evolved into AI apps and agentic systems, it became clear that [AI apps should be built on sync](/blog/2025/04/09/building-ai-apps-on-sync) too.
 
 But it also became clear that syncing through Postgres wasn't going to cut it. We did the math: 50 tokens per second across a thousand concurrent sessions is 50,000 writes per second. Postgres maxes out around 20,000 writes per second. Factor in centralized latency and it doesn't add up.
 

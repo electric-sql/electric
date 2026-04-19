@@ -12,7 +12,7 @@ post: true
 published: true
 ---
 
-[Durable Streams](/primitives/durable-streams) is the [data primitive for the agent loop](/blog/2026/04/08/data-primitive-agent-loop). Today we're shipping fork — a single API call that branches a stream at any point. Rewind history, fan out agents in parallel, or probe an agent without polluting its context.
+[Durable Streams](/streams) is the [data primitive for the agent loop](/blog/2026/04/08/data-primitive-agent-loop). Today we're shipping fork — a single API call that branches a stream at any point. Rewind history, fan out agents in parallel, or probe an agent without polluting its context.
 
 A fork creates a new stream from any point in an existing one. It shares everything before the fork point with its source and evolves independently after it. One API call, two headers.
 
@@ -31,7 +31,7 @@ A session log is linear but agent workflows aren't. An agent goes down a path th
 
 ## Fork: branching for streams
 
-A [Durable Stream](/primitives/durable-streams) assigns an offset to each message as it's appended. When you fork a stream, you specify a source stream and a fork offset. The system creates a new stream that inherits all messages from the source up to that offset. After the fork point, the new stream lives independently — its own URL, its own appends, its own subscribers.
+A [Durable Stream](/streams) assigns an offset to each message as it's appended. When you fork a stream, you specify a source stream and a fork offset. The system creates a new stream that inherits all messages from the source up to that offset. After the fork point, the new stream lives independently — its own URL, its own appends, its own subscribers.
 
 Forks don't copy data. They use copy-on-write (COW): the shared history between a fork and its source is genuinely shared at the storage level, and only new writes diverge. This means forking is instant regardless of stream length — a stream with ten thousand messages forks just as quickly as one with three.
 

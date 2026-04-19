@@ -11,6 +11,10 @@ import HTML5Video from '../../src/components/HTML5Video.vue'
 import NavSignupButton from '../../src/components/NavSignupButton.vue'
 import YoutubeEmbed from '../../src/components/YoutubeEmbed.vue'
 
+import MegaNav from './components/MegaNav.vue'
+import MegaNavMobile from './components/MegaNavMobile.vue'
+import MegaNavPanel from './components/MegaNavPanel.vue'
+
 import './custom.css'
 
 export default {
@@ -20,6 +24,9 @@ export default {
     app.component(`DemoListing`, DemoListing)
     app.component(`HelpWanted`, HelpWanted)
     app.component(`HTML5Video`, HTML5Video)
+    app.component(`MegaNav`, MegaNav)
+    app.component(`MegaNavMobile`, MegaNavMobile)
+    app.component(`MegaNavPanel`, MegaNavPanel)
     app.component(`NavSignupButton`, NavSignupButton)
     app.component(`VPButton`, VPButton)
     app.component(`YoutubeEmbed`, YoutubeEmbed)

@@ -11,8 +11,8 @@ const actions = [
     theme: 'brand',
   },
   {
-    href: '/primitives',
-    text: 'Primitives',
+    href: '/sync/tanstack-db',
+    text: 'TanStack DB',
   },
 ]
 

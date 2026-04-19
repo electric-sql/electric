@@ -20,7 +20,7 @@ TanStack DB 0.6 adds two core features: persistence and includes.
 
 For Electric users, this is more than a point release. With persisted local state, app restarts are fast since data can be loaded locally from disk. With includes, query results can match UI shape without custom projection layers.
 
-Together with [Postgres&nbsp;Sync](/primitives/postgres-sync) and [Durable&nbsp;Streams](/primitives/durable-streams), this gives you a more complete local-first stack that is still optional, composable, and incrementally adoptable.
+Together with [Postgres&nbsp;Sync](/sync) and [Durable&nbsp;Streams](/streams), this gives you a more complete local-first stack that is still optional, composable, and incrementally adoptable.
 
 > [!WARNING] 🪧&nbsp; Quicklinks
 > - TanStack release post: [TanStack DB 0.6 now includes persistence, offline support, and hierarchical data](https://tanstack.com/blog/tanstack-db-0.6-app-ready-with-persistence-and-includes)
@@ -31,7 +31,7 @@ Together with [Postgres&nbsp;Sync](/primitives/postgres-sync) and [Durable&nbsp;
 
 ## How this fits the Electric stack
 
-Electric and TanStack&nbsp;DB pair naturally: [Postgres&nbsp;Sync](/primitives/postgres-sync) syncs normalized shapes from Postgres to clients using incremental sync, and TanStack&nbsp;DB handles local query execution, optimistic state, and reactive UI updates. [Durable&nbsp;Streams](/primitives/durable-streams) extends the same model beyond Postgres — real-time event data, AI sessions, and collaborative state all flow through TanStack&nbsp;DB collections via [StreamDB](https://durablestreams.com/stream-db).
+Electric and TanStack&nbsp;DB pair naturally: [Postgres&nbsp;Sync](/sync) syncs normalized shapes from Postgres to clients using incremental sync, and TanStack&nbsp;DB handles local query execution, optimistic state, and reactive UI updates. [Durable&nbsp;Streams](/streams) extends the same model beyond Postgres — real-time event data, AI sessions, and collaborative state all flow through TanStack&nbsp;DB collections via [StreamDB](https://durablestreams.com/stream-db).
 
 That stack already delivered fast, sync-powered apps. What was missing was local state that survives reloads and restarts. TanStack&nbsp;DB 0.6 closes that gap with SQLite-backed persistence across browser, Node, React&nbsp;Native, Expo, Capacitor, and edge runtimes like Cloudflare Durable Objects.
 
