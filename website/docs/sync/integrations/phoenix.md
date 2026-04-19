@@ -151,7 +151,7 @@ const MyComponent = () => {
 }
 ```
 
-See the Electric [demos](/sync/demos/) and [documentation](/docs/sync/intro) for more client-side usage examples.
+See the Electric [demos](/sync/demos/) and [documentation](/docs/sync) for more client-side usage examples.
 
 ## Installation and configuration
 

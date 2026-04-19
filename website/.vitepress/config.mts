@@ -184,8 +184,8 @@ export default defineConfig({
           text: 'Sync',
           collapsed: false,
           items: [
+            { text: 'Introduction', link: '/sync' },
             { text: 'Overview', link: '/docs/sync' },
-            { text: 'Intro', link: '/docs/sync/intro' },
             { text: 'Quickstart', link: '/docs/sync/quickstart' },
             { text: 'Stacks', link: '/docs/sync/stacks' },
           ],
@@ -310,6 +310,7 @@ export default defineConfig({
           text: 'Agents',
           collapsed: false,
           items: [
+            { text: 'Introduction', link: '/agents' },
             { text: 'Overview', link: '/docs/agents' },
             { text: 'Quickstart', link: '/docs/agents/quickstart' },
           ],
@@ -458,9 +459,10 @@ export default defineConfig({
       ],
       '/docs/streams': [
         {
-          text: 'Docs',
+          text: 'Streams',
           collapsed: false,
           items: [
+            { text: 'Introduction', link: '/streams' },
             { text: 'Overview', link: '/docs/streams/concepts' },
             { text: 'Quickstart', link: '/docs/streams/quickstart' },
           ],

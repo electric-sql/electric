@@ -36,35 +36,41 @@ function copyInstall() {
           <a href="https://durablestreams.com" class="ea-hero-link">Durable&nbsp;Streams</a>,
           using your existing&nbsp;stack.
         </p>
-        <div class="ea-hero-install" @click="copyInstall">
-          <span class="ea-hero-install-text"><span class="ea-hero-install-prompt">$</span> npm i electric-agents</span>
-          <span class="ea-hero-install-copy" :class="{ copied: installCopied }">
-            <svg v-if="!installCopied" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
-            <svg v-else xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-          </span>
+        <div class="ea-hero-row">
+          <div class="ea-hero-install" @click="copyInstall">
+            <span class="ea-hero-install-text"><span class="ea-hero-install-prompt">$</span> npm i electric-agents</span>
+            <span class="ea-hero-install-copy" :class="{ copied: installCopied }">
+              <svg v-if="!installCopied" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+              <svg v-else xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            </span>
+          </div>
+
+          <VPButton
+            tag="a"
+            size="medium"
+            theme="brand"
+            text="Quickstart"
+            href="/docs/agents/quickstart"
+          />
         </div>
       </div>
     </section>
 
     <!-- Section 1b: Agents need to come online -->
-    <Section id="come-online" title="Agents need to come&nbsp;online">
+    <Section id="come-online">
       <div class="ea-come-online">
         <div class="ea-come-online-text">
+          <h2 class="ea-section-title">Agents need to come&nbsp;online</h2>
           <p class="ea-prose">
             Today's agents live on your laptop or behind a chat window.
             But real work happens inside business systems — triggered by
-            webhooks, pulling from queues, coordinating across services,
-            running 24/7 without&nbsp;supervision.
-          </p>
-          <p class="ea-prose">
-            To get there, agents need to be durable, addressable, and
-            composable. They need to spawn sub-agents, survive restarts,
-            and scale to zero when there's nothing to&nbsp;do.
+            webhooks, running 24/7 without&nbsp;supervision.
           </p>
           <p class="ea-prose">
             <strong>Electric Agents brings the agent loop online.</strong>
-            Every agent is backed by a durable stream. They sleep when idle,
-            wake on demand, and plug straight into your existing&nbsp;infrastructure.
+            Every agent is backed by a durable stream — sleeping when idle,
+            waking on demand, surviving restarts, and plugging straight
+            into your existing&nbsp;infrastructure.
           </p>
         </div>
         <div class="ea-come-online-visual">
@@ -354,6 +360,100 @@ function copyInstall() {
       </div>
     </Section>
 
+    <!-- Section 8: Get started CTA -->
+    <Section id="get-started">
+      <div class="ea-cta">
+        <div class="ea-cta-eyebrow mono">
+          <span class="dot"></span>
+          Open source · Apache&nbsp;2.0 · built on Durable&nbsp;Streams
+        </div>
+        <h2 class="ea-cta-title">
+          Bring your agents&nbsp;<span class="ea-cta-accent">online</span>.
+        </h2>
+        <p class="ea-cta-tagline">
+          Install the SDK, define an entity, and ship a durable agent on top of
+          your existing&nbsp;stack.
+        </p>
+
+        <button
+          class="ea-cta-install"
+          type="button"
+          @click="copyInstall"
+          :aria-label="installCopied ? 'Copied' : 'Copy install command'"
+        >
+          <span class="ea-cta-install-text">
+            <span class="ea-cta-install-prompt">$</span>
+            npm i electric-agents
+          </span>
+          <span
+            class="ea-cta-install-copy"
+            :class="{ copied: installCopied }"
+            aria-hidden="true"
+          >
+            <svg
+              v-if="!installCopied"
+              xmlns="http://www.w3.org/2000/svg"
+              width="15"
+              height="15"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
+              <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
+            </svg>
+            <svg
+              v-else
+              xmlns="http://www.w3.org/2000/svg"
+              width="15"
+              height="15"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <polyline points="20 6 9 17 4 12" />
+            </svg>
+          </span>
+        </button>
+
+        <div class="ea-cta-buttons">
+          <VPButton
+            tag="a"
+            size="medium"
+            theme="brand"
+            text="Quickstart"
+            href="/docs/agents/quickstart"
+          />
+          <VPButton
+            tag="a"
+            size="medium"
+            theme="alt"
+            text="Read the Docs"
+            href="/docs/agents/"
+          />
+          <VPButton
+            tag="a"
+            size="medium"
+            theme="alt"
+            text="GitHub"
+            href="https://github.com/electric-sql/electric"
+          />
+        </div>
+
+        <div class="ea-cta-foot mono">
+          Or
+          <a href="https://dashboard.electric-sql.cloud/">sign up to Electric Cloud</a>
+          and skip the&nbsp;ops.
+        </div>
+      </div>
+    </Section>
+
   </div>
 </template>
 
@@ -431,12 +531,19 @@ function copyInstall() {
   text-decoration-color: var(--vp-c-brand-1);
 }
 
-.ea-hero-install {
+.ea-hero-row {
   margin-top: 32px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.ea-hero-install {
   display: inline-flex;
   align-items: center;
   gap: 12px;
-  margin-top: 28px;
   padding: 10px 16px;
   background: var(--ea-surface-alt);
   border: 1px solid var(--vp-c-divider);
@@ -1119,10 +1226,153 @@ function copyInstall() {
   margin-top: 40px;
 }
 
-/* --- Agents need to come online --- */
-:deep(#come-online .ea-section-header) {
-  margin-bottom: 12px;
+/* --- Get started CTA --- */
+.ea-cta {
+  position: relative;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  padding: 56px 32px 48px;
+  background: var(--ea-surface);
+  border: 1px solid var(--ea-divider);
+  border-radius: 12px;
+  overflow: hidden;
+  isolation: isolate;
 }
+.ea-cta::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    ellipse 70% 90% at 50% 0%,
+    color-mix(in srgb, var(--vp-c-brand-1) 6%, transparent) 0%,
+    transparent 55%
+  );
+  z-index: -1;
+  opacity: 0.7;
+}
+.ea-cta-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ea-text-3);
+  padding: 4px 10px;
+  background: var(--ea-surface-alt);
+  border: 1px solid var(--ea-divider);
+  border-radius: 999px;
+  margin-bottom: 22px;
+}
+.ea-cta-eyebrow .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--vp-c-brand-1);
+}
+.ea-cta-title {
+  font-size: 38px;
+  font-weight: 800;
+  line-height: 1.15;
+  letter-spacing: -0.015em;
+  color: var(--ea-text-1);
+  margin: 0;
+  max-width: 560px;
+}
+.ea-cta-accent {
+  background: var(--vp-home-hero-name-background);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: var(--vp-home-hero-name-color);
+}
+.ea-cta-tagline {
+  font-family: var(--vp-font-family-base);
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--ea-text-2);
+  margin: 14px auto 0;
+  max-width: 460px;
+}
+.ea-cta-install {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  margin-top: 28px;
+  background: var(--ea-bg);
+  border: 1px solid var(--ea-divider);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: border-color 0.2s;
+  user-select: none;
+  font: inherit;
+}
+.ea-cta-install:hover {
+  border-color: var(--vp-c-brand-1);
+}
+.ea-cta-install-text {
+  font-family: var(--vp-font-family-mono);
+  font-size: 13.5px;
+  color: var(--ea-text-1);
+  letter-spacing: -0.01em;
+}
+.ea-cta-install-prompt {
+  color: var(--ea-text-3);
+  margin-right: 4px;
+}
+.ea-cta-install-copy {
+  color: var(--ea-text-3);
+  display: flex;
+  transition: color 0.2s;
+}
+.ea-cta-install-copy.copied {
+  color: var(--vp-c-brand-1);
+}
+.ea-cta-buttons {
+  display: flex;
+  gap: 10px;
+  margin-top: 20px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.ea-cta-foot {
+  margin-top: 28px;
+  padding-top: 20px;
+  border-top: 1px dashed var(--ea-divider);
+  width: 100%;
+  max-width: 480px;
+  font-size: 12px;
+  color: var(--ea-text-3);
+  letter-spacing: 0.02em;
+}
+.ea-cta-foot a {
+  color: var(--vp-c-brand-1);
+  text-decoration: none;
+}
+.ea-cta-foot a:hover {
+  text-decoration: underline;
+}
+@media (max-width: 480px) {
+  .ea-cta {
+    padding: 40px 20px 32px;
+  }
+  .ea-cta-title {
+    font-size: 28px;
+  }
+  .ea-cta-buttons {
+    flex-direction: column;
+    align-self: stretch;
+    max-width: 280px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+}
+
+/* --- Agents need to come online --- */
 .ea-come-online {
   display: flex;
   gap: 56px;
@@ -1131,7 +1381,13 @@ function copyInstall() {
 .ea-come-online-text {
   flex: 1;
   min-width: 0;
-  padding-top: 12px;
+}
+.ea-come-online-text .ea-section-title {
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--ea-text-1);
+  margin: 0 0 20px;
 }
 .ea-come-online-visual {
   flex: 1;
@@ -1247,7 +1503,8 @@ function copyInstall() {
     font-size: 22px;
   }
   .ea-durable-text .ea-section-title,
-  .ea-scale-text .ea-section-title {
+  .ea-scale-text .ea-section-title,
+  .ea-come-online-text .ea-section-title {
     font-size: 22px;
   }
   .code-block {

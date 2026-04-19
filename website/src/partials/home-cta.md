@@ -78,7 +78,7 @@ and
 <div class="actions cta-actions">
   <div class="action">
     <VPButton
-        href="/docs/sync/intro"
+        href="/docs/sync"
         text="Learn more"
         theme="brand"
     />

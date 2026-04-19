@@ -105,8 +105,8 @@
             y2="76.395"
             gradientUnits="userSpaceOnUse"
           >
-            <stop stop-color="#1A1A2E" />
-            <stop offset="1" stop-color="#1A1A2E" stop-opacity="0" />
+            <stop stop-color="#75FBFD" />
+            <stop offset="1" stop-color="#75FBFD" stop-opacity="0" />
           </linearGradient>
           <linearGradient
             id="zap1"
@@ -116,8 +116,8 @@
             y2="146.435"
             gradientUnits="userSpaceOnUse"
           >
-            <stop stop-color="#1A1A2E" />
-            <stop offset="1" stop-color="#1A1A2E" stop-opacity="0" />
+            <stop stop-color="#75FBFD" />
+            <stop offset="1" stop-color="#75FBFD" stop-opacity="0" />
           </linearGradient>
           <linearGradient
             id="zap2"
@@ -127,8 +127,8 @@
             y2="55.7803"
             gradientUnits="userSpaceOnUse"
           >
-            <stop stop-color="#1A1A2E" />
-            <stop offset="1" stop-color="#1A1A2E" stop-opacity="0" />
+            <stop stop-color="#75FBFD" />
+            <stop offset="1" stop-color="#75FBFD" stop-opacity="0" />
           </linearGradient>
           <linearGradient
             id="zap3"
@@ -138,8 +138,8 @@
             y2="163.915"
             gradientUnits="userSpaceOnUse"
           >
-            <stop stop-color="#1A1A2E" />
-            <stop offset="1" stop-color="#1A1A2E" stop-opacity="0" />
+            <stop stop-color="#75FBFD" />
+            <stop offset="1" stop-color="#75FBFD" stop-opacity="0" />
           </linearGradient>
           <radialGradient
             id="zap4"
@@ -149,8 +149,8 @@
             gradientUnits="userSpaceOnUse"
             gradientTransform="translate(548.881 113) rotate(-99.4208) scale(101.638 592.884)"
           >
-            <stop stop-color="#1A1A2E" />
-            <stop offset="1" stop-color="#1A1A2E" stop-opacity="0" />
+            <stop stop-color="#75FBFD" />
+            <stop offset="1" stop-color="#75FBFD" stop-opacity="0" />
           </radialGradient>
           <radialGradient
             id="zap5"
@@ -160,8 +160,8 @@
             gradientUnits="userSpaceOnUse"
             gradientTransform="translate(734.119 115) rotate(80.6117) scale(91.2219 614.019)"
           >
-            <stop stop-color="#1A1A2E" />
-            <stop offset="1" stop-color="#1A1A2E" stop-opacity="0" />
+            <stop stop-color="#75FBFD" />
+            <stop offset="1" stop-color="#75FBFD" stop-opacity="0" />
           </radialGradient>
           <linearGradient
             id="zap6"
@@ -171,8 +171,9 @@
             y2="226.071"
             gradientUnits="userSpaceOnUse"
           >
-            <stop stop-color="#B8FDFE" />
-            <stop offset="1" stop-color="#1A1A2E" />
+            <stop stop-color="#A0F5F7" />
+            <stop offset="0.4" stop-color="#56E8EA" />
+            <stop offset="1" stop-color="#1A2A3E" />
           </linearGradient>
           <linearGradient
             id="zap7"
@@ -190,32 +191,32 @@
         <path
           d="M111.988 1.16972C112.738 0.42079 113.755 0.000141473 114.815 0.000141198L659 0L547.012 111.83C546.262 112.579 545.246 113 544.186 113H5.90403e-05L111.988 1.16972Z"
           fill="url(#zap0)"
-          fill-opacity="0.25"
+          fill-opacity="0.05"
         />
         <path
           d="M1173.89 211.003C1173.16 211.645 1172.22 212 1171.25 212L641 212L734.824 116.201C735.576 115.433 736.606 115 737.681 115L1283 115L1173.89 211.003Z"
           fill="url(#zap1)"
-          fill-opacity="0.25"
+          fill-opacity="0.05"
         />
         <path
           d="M111.988 1.16972C112.738 0.42079 113.755 0.000141473 114.815 0.000141198L659 0L547.012 111.83C546.262 112.579 545.246 113 544.186 113H5.90403e-05L111.988 1.16972Z"
           fill="url(#zap2)"
-          fill-opacity="0.25"
+          fill-opacity="0.05"
         />
         <path
           d="M1104.36 210.811C1103.61 211.572 1102.58 212 1101.51 212L641 212L735.641 116.189C736.393 115.428 737.418 115 738.487 115L1199 115L1104.36 210.811Z"
           fill="url(#zap3)"
-          fill-opacity="0.25"
+          fill-opacity="0.05"
         />
         <path
           d="M113.159 0.000141627L659 0L545.841 113H0L113.159 0.000141627Z"
           fill="url(#zap4)"
-          fill-opacity="0.25"
+          fill-opacity="0.07"
         />
         <path
           d="M1187.17 210.828C1186.42 211.579 1185.4 212 1184.34 212L640.5 212L735.986 116.177C736.737 115.423 737.757 115 738.82 115L1283 115L1187.17 210.828Z"
           fill="url(#zap5)"
-          fill-opacity="0.25"
+          fill-opacity="0.07"
         />
         <path
           d="M658.247 0.250138L736.4 0.250001L626.024 111.457C624.889 112.601 623.353 113.242 621.753 113.242H543.6L653.977 2.03571C655.112 0.891675 656.647 0.25014 658.247 0.250138ZM645.52 115.341L736.402 115.341L642.616 210.391V118.288C642.616 116.657 643.919 115.341 645.52 115.341Z"

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, reactive, computed, watch, nextTick, onBeforeUnmount } from "vue"
-import { useDemoVisibility } from "../../composables/useDemoVisibility"
+import { useDemoVisibility } from "../../../.vitepress/theme/composables/useDemoVisibility"
 
 const containerRef = ref<HTMLElement>()
 const logRef = ref<HTMLElement>()

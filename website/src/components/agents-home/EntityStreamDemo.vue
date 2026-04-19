@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, watch, onUnmounted } from "vue"
 import StreamViewer from "./StreamViewer.vue"
-import { useDemoVisibility } from "../../composables/useDemoVisibility"
+import { useDemoVisibility } from "../../../.vitepress/theme/composables/useDemoVisibility"
 
 interface StreamEvent {
   id: string

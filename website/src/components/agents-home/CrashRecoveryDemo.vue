@@ -2,7 +2,7 @@
 import { ref, onMounted, onUnmounted } from "vue"
 import StreamViewer from "./StreamViewer.vue"
 import type { StreamEvent } from "./StreamViewer.vue"
-import { useDemoVisibility } from "../../composables/useDemoVisibility"
+import { useDemoVisibility } from "../../../.vitepress/theme/composables/useDemoVisibility"
 
 type Phase = "active" | "crash" | "recovery" | "pause"
 

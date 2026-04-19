@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { reactive, ref, watch, onUnmounted } from "vue"
 import EntityNode from "./EntityNode.vue"
-import { useDemoVisibility } from "../../composables/useDemoVisibility"
+import { useDemoVisibility } from "../../../.vitepress/theme/composables/useDemoVisibility"
 
 const rootRef = ref<HTMLElement>()
 const isVisible = useDemoVisibility(rootRef)

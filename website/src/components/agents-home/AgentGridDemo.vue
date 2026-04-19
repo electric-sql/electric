@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onBeforeUnmount } from "vue"
-import { useDemoVisibility } from "../../composables/useDemoVisibility"
+import { useDemoVisibility } from "../../../.vitepress/theme/composables/useDemoVisibility"
 
 const DESKTOP_COLS = 8
 const DESKTOP_ROWS = 5

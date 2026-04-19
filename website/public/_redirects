@@ -12,14 +12,14 @@ https://next.electric-sql.com/* https://electric-sql.com/:splat 301!
 
 /about                          /about/community
 /about/enterprise               /about/community
-/docs/api/generator             /docs/sync/intro
+/docs/api/generator             /docs/sync
 /docs/integrations/deployment   /docs/sync/guides/deployment
 /docs/integrations/deployment/* /docs/sync/guides/deployment
-/docs/overview                  /docs/sync/intro
+/docs/overview                  /docs/sync
 /docs/overview/examples         /sync/demos
-/docs/overview/faqs             /docs/sync/intro
-/docs/overview/technical-intro  /docs/sync/intro
-/docs/overview/welcome          /docs/sync/intro
+/docs/overview/faqs             /docs/sync
+/docs/overview/technical-intro  /docs/sync
+/docs/overview/welcome          /docs/sync
 /docs/reference/anomalies       /docs/sync/reference/literature
 /docs/reference/limitations     /docs/sync/reference/roadmap
 /docs/usage/configure           /docs/sync/quickstart
@@ -27,8 +27,8 @@ https://next.electric-sql.com/* https://electric-sql.com/:splat 301!
 /docs/usage/frameworks          /docs/sync/integrations/react
 /docs/usage/install             /docs/sync/quickstart
 /docs/usage/quickstart          /docs/sync/quickstart
-/docs/usage/reactivity          /docs/sync/intro
-/docs/usage/replication         /docs/sync/intro
+/docs/usage/reactivity          /docs/sync
+/docs/usage/replication         /docs/sync
 /legal                          /legal/terms
 
 # Bumped the introducing post date and version
@@ -37,8 +37,8 @@ https://next.electric-sql.com/* https://electric-sql.com/:splat 301!
 
 # Shortpaths for nice links
 
-/docs                                        /docs/sync/intro
-/intro                                       /docs/sync/intro
+/docs                                        /docs/sync
+/intro                                       /docs/sync
 /examples                                    /sync/demos
 /docs/guides/troubleshooting/missing-headers /docs/sync/guides/troubleshooting#missing-headers-mdash-why-is-the-client-complaining-about-missing-headers
 
@@ -59,23 +59,23 @@ https://next.electric-sql.com/* https://electric-sql.com/:splat 301!
 /docs/examples/*                /sync/demos
 /docs/integrations              /docs/sync/integrations/react
 /docs/integrations/*            /docs/sync/integrations/react
-/docs/intro/*                   /docs/sync/intro
-/docs/recipes                   /docs/sync/intro
-/docs/recipes/*                 /docs/sync/intro
-/docs/reference                 /docs/sync/intro
-/docs/reference/architecture    /docs/sync/intro
-/docs/reference/consistency     /docs/sync/intro
-/docs/reference/integrity       /docs/sync/intro
-/docs/reference/local-first     /docs/sync/intro
-/docs/reference/release_notes   /docs/sync/intro
-/docs/reference/roadmap         /docs/sync/intro
+/docs/intro/*                   /docs/sync
+/docs/recipes                   /docs/sync
+/docs/recipes/*                 /docs/sync
+/docs/reference                 /docs/sync
+/docs/reference/architecture    /docs/sync
+/docs/reference/consistency     /docs/sync
+/docs/reference/integrity       /docs/sync
+/docs/reference/local-first     /docs/sync
+/docs/reference/release_notes   /docs/sync
+/docs/reference/roadmap         /docs/sync
 /docs/usage                     /docs/sync/quickstart
 /docs/usage/auth                /docs/sync/guides/auth
 /docs/usage/auth/*              /docs/sync/guides/auth
-/docs/usage/data-access         /docs/sync/intro
-/docs/usage/data-access/*       /docs/sync/intro
-/docs/usage/data-modelling      /docs/sync/intro
-/docs/usage/data-modelling/*    /docs/sync/intro
+/docs/usage/data-access         /docs/sync
+/docs/usage/data-access/*       /docs/sync
+/docs/usage/data-modelling      /docs/sync
+/docs/usage/data-modelling/*    /docs/sync
 /docs/usage/installation        /docs/sync/quickstart
 /docs/usage/installation/*      /docs/sync/quickstart
 
@@ -113,7 +113,8 @@ https://next.electric-sql.com/* https://electric-sql.com/:splat 301!
 
 # Site restructure (2026-04) — product verticals
 # Sync docs moved under /docs/sync/*
-/docs/intro                       /docs/sync/intro
+/docs/intro                       /docs/sync
+/docs/sync/intro                  /docs/sync
 /docs/quickstart                  /docs/sync/quickstart
 /docs/stacks                      /docs/sync/stacks
 /docs/guides/*                    /docs/sync/guides/:splat

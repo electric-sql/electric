@@ -564,18 +564,22 @@ span.no-visual {
 }
 
 /* Hide navbar bottom divider on home pages regardless of scroll position.
-   Includes `.ea-homepage` (Electric Agents landing page), which uses
-   `layout: page` rather than `layout: home` and so doesn't pick up the
-   `.VPNavBar.home` class on its own. */
+   Includes `.ea-homepage` (Electric Agents landing page) and
+   `.ds-homepage` (Durable Streams landing page), both of which use
+   `layout: page` rather than `layout: home` and so don't pick up the
+   `.VPNavBar.home` class on their own. */
 @media (min-width: 960px) {
   .VPNavBar.home:not(.top),
-  .ea-homepage .VPNavBar:not(.top) {
+  .ea-homepage .VPNavBar:not(.top),
+  .ds-homepage .VPNavBar:not(.top) {
     background-color: transparent !important;
   }
   .VPNavBar.home .divider,
   .VPNavBar.home .divider-line,
   .ea-homepage .VPNavBar .divider,
-  .ea-homepage .VPNavBar .divider-line {
+  .ea-homepage .VPNavBar .divider-line,
+  .ds-homepage .VPNavBar .divider,
+  .ds-homepage .VPNavBar .divider-line {
     background-color: transparent !important;
   }
 }

@@ -15,21 +15,27 @@ import MegaNav from './components/MegaNav.vue'
 import MegaNavMobile from './components/MegaNavMobile.vue'
 import MegaNavPanel from './components/MegaNavPanel.vue'
 
+// Electric Sync homepage.
+import SyncHomePage from '../../src/components/sync-home/SyncHomePage.vue'
+
+// Durable Streams homepage.
+import StreamsHomePage from '../../src/components/streams-home/StreamsHomePage.vue'
+
 // Electric Agents homepage (ported from darix-docs).
-import AgentGridDemo from './components/agents-home/AgentGridDemo.vue'
-import AgentsHomePage from './components/agents-home/HomePage.vue'
-import AgentsSection from './components/agents-home/Section.vue'
-import ContextCompositionDemo from './components/agents-home/ContextCompositionDemo.vue'
-import CoordinationDemo from './components/agents-home/CoordinationDemo.vue'
-import CopyPageMarkdown from './components/agents-home/CopyPageMarkdown.vue'
-import CrashRecoveryDemo from './components/agents-home/CrashRecoveryDemo.vue'
-import EntityNode from './components/agents-home/EntityNode.vue'
-import EntityOverviewDiagram from './components/agents-home/EntityOverviewDiagram.vue'
-import EntityStreamDemo from './components/agents-home/EntityStreamDemo.vue'
-import HeroNetworkBg from './components/agents-home/HeroNetworkBg.vue'
-import MessageLine from './components/agents-home/MessageLine.vue'
-import StreamViewer from './components/agents-home/StreamViewer.vue'
-import SystemMonitorDemo from './components/agents-home/SystemMonitorDemo.vue'
+import AgentGridDemo from '../../src/components/agents-home/AgentGridDemo.vue'
+import AgentsHomePage from '../../src/components/agents-home/HomePage.vue'
+import AgentsSection from '../../src/components/agents-home/Section.vue'
+import ContextCompositionDemo from '../../src/components/agents-home/ContextCompositionDemo.vue'
+import CoordinationDemo from '../../src/components/agents-home/CoordinationDemo.vue'
+import CopyPageMarkdown from '../../src/components/agents-home/CopyPageMarkdown.vue'
+import CrashRecoveryDemo from '../../src/components/agents-home/CrashRecoveryDemo.vue'
+import EntityNode from '../../src/components/agents-home/EntityNode.vue'
+import EntityOverviewDiagram from '../../src/components/agents-home/EntityOverviewDiagram.vue'
+import EntityStreamDemo from '../../src/components/agents-home/EntityStreamDemo.vue'
+import HeroNetworkBg from '../../src/components/agents-home/HeroNetworkBg.vue'
+import MessageLine from '../../src/components/agents-home/MessageLine.vue'
+import StreamViewer from '../../src/components/agents-home/StreamViewer.vue'
+import SystemMonitorDemo from '../../src/components/agents-home/SystemMonitorDemo.vue'
 
 import './custom.css'
 
@@ -61,6 +67,8 @@ export default {
     app.component(`HeroNetworkBg`, HeroNetworkBg)
     app.component(`MessageLine`, MessageLine)
     app.component(`StreamViewer`, StreamViewer)
+    app.component(`SyncHomePage`, SyncHomePage)
+    app.component(`StreamsHomePage`, StreamsHomePage)
     app.component(`SystemMonitorDemo`, SystemMonitorDemo)
     enhanceAppWithTabs(app)
   },
