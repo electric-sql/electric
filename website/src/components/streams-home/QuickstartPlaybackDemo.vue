@@ -410,7 +410,7 @@ onUnmounted(() => {
           <span class="qs-dot qs-dot--y"></span>
           <span class="qs-dot qs-dot--g"></span>
           <span class="qs-title">
-            Terminal — durable-streams quickstart
+            <span class="qs-title-prefix">Terminal — </span>durable-streams quickstart
           </span>
         </div>
 
@@ -630,6 +630,10 @@ onUnmounted(() => {
   font-family: var(--vp-font-family-mono);
   font-size: 12px;
   color: var(--ea-text-2);
+  white-space: nowrap;
+  max-width: calc(100% - 80px);
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .qs-body {
@@ -982,6 +986,18 @@ onUnmounted(() => {
   }
   .qs-annot {
     font-size: 12px;
+  }
+  /* Drop the "Terminal — " prefix and shrink the chrome title so it
+     fits between the traffic-light dots without wrapping. */
+  .qs-title-prefix {
+    display: none;
+  }
+  .qs-title {
+    font-size: 10.5px;
+    max-width: calc(100% - 70px);
+  }
+  .qs-chrome {
+    padding: 8px 12px;
   }
 }
 </style>
