@@ -127,10 +127,14 @@ defmodule Electric.Plug.ServeShapePlug do
   defp handle_errors(conn, %{kind: kind, reason: reason, stack: stack}) do
     OpenTelemetry.record_exception(kind, reason, stack)
     error_str = Exception.format(kind, reason)
+    # Log the full exception server-side — the client response is sanitized
+    # to avoid leaking internal details (module names, messages), so operators
+    # rely on these logs + OTEL for debugging.
+    Logger.error(error_str)
 
     conn
     |> assign(:error_str, error_str)
-    |> send_resp(conn.status || 500, Jason.encode!(%{error: error_str}))
+    |> send_resp(conn.status || 500, Jason.encode!(%{error: "Internal server error"}))
   end
 
   # Parse JSON body for POST requests to support subset parameters in body
@@ -264,7 +268,11 @@ defmodule Electric.Plug.ServeShapePlug do
         put_private(conn, :shape_exists, false)
     end
   rescue
-    # Shape cache not yet available (startup race) — classify conservatively
+    # Narrow rescue by design: this only catches the startup race where the
+    # shape cache registry isn't yet populated (Registry.lookup raises
+    # ArgumentError). Any other exception from fetch_handle_by_shape
+    # intentionally propagates to the outer try/catch in call/2, since no
+    # permit has been acquired yet and handle_errors will send a 500.
     ArgumentError -> put_private(conn, :shape_exists, false)
   end
 
@@ -320,9 +328,17 @@ defmodule Electric.Plug.ServeShapePlug do
   end
 
   defp admission_kind(conn) do
+    # Exhaustive by design. `resolve_existing_shape` always runs before
+    # `check_admission` in the plug pipeline, so :shape_exists is always set
+    # to a boolean by the time this is called. The catch-all exists as a
+    # defensive default in case the plug order is ever changed or this
+    # function is called from a future code path that bypasses
+    # resolve_existing_shape — conservative classification is :initial
+    # (the tighter bucket), so an unknown state can't hide under the
+    # permissive :existing limit.
     case conn.private[:shape_exists] do
       true -> :existing
-      false -> :initial
+      _ -> :initial
     end
   end
 

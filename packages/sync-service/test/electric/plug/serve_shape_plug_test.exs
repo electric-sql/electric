@@ -1182,6 +1182,11 @@ defmodule Electric.Plug.ServeShapePlugTest do
                Electric.AdmissionControl.get_current(ctx.stack_id)
     end
 
+    # The `catch` only fires on the re-raise path (`handle_caught` sees
+    # `{:plug_conn, :sent}` in the mailbox and re-raises). For the tests
+    # in this describe block the exception is raised before any response is
+    # sent, so `handle_errors` sends a 500 and `call/2` returns normally —
+    # the `catch` is defensive for generality.
     defp call_plug_expecting_crash(ctx) do
       try do
         ctx
