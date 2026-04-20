@@ -82,6 +82,8 @@ This syncs all tasks where the current user is either a project member or direct
 
 This has been our most requested feature — the intersection of subqueries and boolean logic is where most real-world access-control patterns live.
 
+To support arbitrary boolean expressions, we updated the client protocol to use tags based on the DNF (Disjunctive Normal Form) decomposition of the WHERE clause. This lets the sync service track exactly which conditions each row satisfies, so it can determine precisely which rows to move in or out when any dependency changes — without resorting to full invalidation.
+
 
 ## Get started
 
