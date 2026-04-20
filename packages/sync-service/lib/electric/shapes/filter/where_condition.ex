@@ -19,6 +19,7 @@ defmodule Electric.Shapes.Filter.WhereCondition do
   alias Electric.Replication.Eval.Parser.Func
   alias Electric.Replication.Eval.Parser.Ref
   alias Electric.Replication.Eval.Parser.RowExpr
+  alias Electric.Replication.PostgresInterop.Casting
   alias Electric.Shapes.Filter
   alias Electric.Shapes.Filter.Index
   alias Electric.Shapes.WhereClause
@@ -31,22 +32,30 @@ defmodule Electric.Shapes.Filter.WhereCondition do
   end
 
   @doc """
-  Returns `true` when the WHERE clause can use the primary equality/inclusion
-  indexes maintained by the filter.
+  Returns `true` when the WHERE clause can use the filter's indexed routing
+  path instead of relying entirely on `other_shapes`.
   """
   @spec indexed_where?(Expr.t() | nil) :: boolean()
-  def indexed_where?(where_clause), do: optimise_where(where_clause) != :not_optimised
+  def indexed_where?(where_clause), do: planned_where(where_clause) != :not_optimised
 
   def add_shape(%Filter{where_cond_table: table} = filter, condition_id, shape_id, where_clause) do
-    case optimise_where(where_clause) do
+    case planned_where(where_clause) do
       :not_optimised ->
-        [{_, {index_keys, other_shapes}}] = :ets.lookup(table, condition_id)
-        other_shapes = Map.put(other_shapes, shape_id, where_clause)
-        :ets.insert(table, {condition_id, {index_keys, other_shapes}})
+        add_shape_to_other_shapes(table, condition_id, shape_id, where_clause)
 
-      optimisation ->
+      {:split_or, left, right} ->
+        add_shape(filter, condition_id, shape_id, left)
+        add_shape(filter, condition_id, shape_id, right)
+
+      {:index, optimisation} ->
         add_shape_to_index(filter, condition_id, shape_id, optimisation)
     end
+  end
+
+  defp add_shape_to_other_shapes(table, condition_id, shape_id, where_clause) do
+    [{_, {index_keys, other_shapes}}] = :ets.lookup(table, condition_id)
+    other_shapes = Map.put(other_shapes, shape_id, where_clause)
+    :ets.insert(table, {condition_id, {index_keys, other_shapes}})
   end
 
   defp add_shape_to_index(
@@ -64,23 +73,43 @@ defmodule Electric.Shapes.Filter.WhereCondition do
   end
 
   @doc false
-  defp optimise_where(%Expr{eval: eval}), do: optimise_where(eval)
+  defp planned_where(nil), do: :not_optimised
 
-  defp optimise_where(%Func{
+  defp planned_where(%Expr{eval: eval}), do: planned_where(eval)
+
+  defp planned_where(%Func{name: "or", args: [left, right]}) do
+    if indexed_eval?(left) and indexed_eval?(right) do
+      {:split_or, where_expr(left), where_expr(right)}
+    else
+      :not_optimised
+    end
+  end
+
+  defp planned_where(eval) do
+    case extract_index_optimisation(eval) do
+      {:ok, optimisation, residual} ->
+        {:index, %{optimisation | and_where: maybe_where_expr(residual)}}
+
+      :error ->
+        :not_optimised
+    end
+  end
+
+  defp direct_optimisation(%Func{
          name: ~s("="),
          args: [%Ref{path: [field], type: type}, %Const{value: value}]
        }) do
     %{operation: "=", field: field, type: type, value: value, and_where: nil}
   end
 
-  defp optimise_where(%Func{
+  defp direct_optimisation(%Func{
          name: ~s("="),
          args: [%Const{value: value}, %Ref{path: [field], type: type}]
        }) do
     %{operation: "=", field: field, type: type, value: value, and_where: nil}
   end
 
-  defp optimise_where(%Func{
+  defp direct_optimisation(%Func{
          name: ~s("@>"),
          args: [%Ref{path: [field], type: type}, %Const{value: value}]
        })
@@ -88,7 +117,7 @@ defmodule Electric.Shapes.Filter.WhereCondition do
     %{operation: "@>", field: field, type: type, value: value, and_where: nil}
   end
 
-  defp optimise_where(%Func{
+  defp direct_optimisation(%Func{
          name: ~s("<@"),
          args: [%Const{value: value}, %Ref{path: [field], type: type}]
        })
@@ -97,7 +126,7 @@ defmodule Electric.Shapes.Filter.WhereCondition do
   end
 
   # const = ANY(array_ref) → reuse @> index with [const] as single-element array
-  defp optimise_where(%Func{
+  defp direct_optimisation(%Func{
          name: "any",
          args: [
            %Func{
@@ -111,49 +140,68 @@ defmodule Electric.Shapes.Filter.WhereCondition do
     %{operation: "@>", field: field, type: type, value: [value], and_where: nil}
   end
 
-  defp optimise_where(%Func{name: "sublink_membership_check"} = subquery) do
+  defp direct_optimisation(%Func{name: "sublink_membership_check"} = subquery) do
     subquery_optimisation(subquery, :positive)
   end
 
-  defp optimise_where(%Func{
+  defp direct_optimisation(%Func{
          name: "not",
          args: [%Func{name: "sublink_membership_check"} = subquery]
        }) do
     subquery_optimisation(subquery, :negated)
   end
 
-  # field IN (const1, const2, ...) → reuse = index with multiple values
-  defp optimise_where(%Func{name: "or"} = expr) do
-    case flatten_or_equalities(expr) do
-      {:ok, field, type, values} ->
-        %{operation: "in", field: field, type: type, values: values, and_where: nil}
+  defp direct_optimisation(_), do: :not_optimised
+
+  defp extract_index_optimisation(%Expr{eval: eval}), do: extract_index_optimisation(eval)
+
+  defp extract_index_optimisation(%Func{name: "and", args: [left, right]}) do
+    case extract_index_optimisation(left) do
+      {:ok, optimisation, residual} ->
+        {:ok, optimisation, and_eval(residual, right)}
 
       :error ->
-        :not_optimised
+        case extract_index_optimisation(right) do
+          {:ok, optimisation, residual} ->
+            {:ok, optimisation, and_eval(left, residual)}
+
+          :error ->
+            :error
+        end
     end
   end
 
-  defp optimise_where(%Func{name: "and", args: [arg1, arg2]}) do
-    case {optimise_where(arg1), optimise_where(arg2)} do
-      {%{operation: op, and_where: nil} = params, _} when op in ["=", "@>", "in", "subquery"] ->
-        %{params | and_where: where_expr(arg2)}
-
-      {_, %{operation: op, and_where: nil} = params} when op in ["=", "@>", "in", "subquery"] ->
-        %{params | and_where: where_expr(arg1)}
-
-      _ ->
-        :not_optimised
+  defp extract_index_optimisation(eval) do
+    case direct_optimisation(eval) do
+      :not_optimised -> :error
+      optimisation -> {:ok, optimisation, nil}
     end
   end
 
-  defp optimise_where(_), do: :not_optimised
+  defp indexed_eval?(eval), do: planned_where(eval) != :not_optimised
 
-  # "in" shares the EqualityIndex with "=", so use the same index key
-  defp index_key("in"), do: "="
   defp index_key(op), do: op
+
+  defp maybe_where_expr(nil), do: nil
+  defp maybe_where_expr(eval), do: where_expr(eval)
 
   defp where_expr(eval) do
     %Expr{eval: eval, used_refs: Parser.find_refs(eval), returns: :bool}
+  end
+
+  defp and_eval(nil, nil), do: nil
+  defp and_eval(nil, eval), do: eval
+  defp and_eval(eval, nil), do: eval
+
+  defp and_eval(left, right) do
+    %Func{
+      args: [left, right],
+      type: :bool,
+      implementation: &Casting.pg_and/2,
+      name: "and",
+      strict?: false,
+      location: min(Map.get(left, :location, 0), Map.get(right, :location, 0))
+    }
   end
 
   defp subquery_optimisation(
@@ -177,44 +225,6 @@ defmodule Electric.Shapes.Filter.WhereCondition do
     end
   end
 
-  # Flatten an OR chain of equalities on the same field into {field, type, [values]}
-  defp flatten_or_equalities(expr) do
-    case collect_or_equalities(expr, []) do
-      {:ok, [{field, type, _} | _] = pairs} ->
-        if Enum.all?(pairs, fn {f, t, _} -> f == field and t == type end) do
-          values = Enum.map(pairs, fn {_, _, v} -> v end)
-          {:ok, field, type, values}
-        else
-          :error
-        end
-
-      _ ->
-        :error
-    end
-  end
-
-  defp collect_or_equalities(%Func{name: "or", args: [left, right]}, acc) do
-    with {:ok, acc} <- collect_or_equalities(left, acc) do
-      collect_or_equalities(right, acc)
-    end
-  end
-
-  defp collect_or_equalities(
-         %Func{name: ~s("="), args: [%Ref{path: [field], type: type}, %Const{value: value}]},
-         acc
-       ) do
-    {:ok, [{field, type, value} | acc]}
-  end
-
-  defp collect_or_equalities(
-         %Func{name: ~s("="), args: [%Const{value: value}, %Ref{path: [field], type: type}]},
-         acc
-       ) do
-    {:ok, [{field, type, value} | acc]}
-  end
-
-  defp collect_or_equalities(_, _acc), do: :error
-
   @doc """
   Remove a shape from a WhereCondition.
 
@@ -228,19 +238,29 @@ defmodule Electric.Shapes.Filter.WhereCondition do
         shape_id,
         where_clause
       ) do
-    case optimise_where(where_clause) do
+    case planned_where(where_clause) do
       :not_optimised ->
         remove_shape_from_other_shapes(table, condition_id, shape_id)
 
-      optimisation ->
+      {:split_or, left, right} ->
+        _ = remove_shape(filter, condition_id, shape_id, left)
+        _ = remove_shape(filter, condition_id, shape_id, right)
+        condition_status(table, condition_id)
+
+      {:index, optimisation} ->
         remove_shape_from_index(filter, condition_id, shape_id, optimisation)
     end
   end
 
   defp remove_shape_from_other_shapes(table, condition_id, shape_id) do
-    [{_, {index_keys, other_shapes}}] = :ets.lookup(table, condition_id)
-    other_shapes = Map.delete(other_shapes, shape_id)
-    update_or_delete_condition(table, condition_id, index_keys, other_shapes)
+    case :ets.lookup(table, condition_id) do
+      [] ->
+        :deleted
+
+      [{_, {index_keys, other_shapes}}] ->
+        other_shapes = Map.delete(other_shapes, shape_id)
+        update_or_delete_condition(table, condition_id, index_keys, other_shapes)
+    end
   end
 
   defp remove_shape_from_index(
@@ -251,13 +271,25 @@ defmodule Electric.Shapes.Filter.WhereCondition do
        ) do
     case Index.remove_shape(filter, condition_id, shape_id, optimisation) do
       :deleted ->
-        [{_, {index_keys, other_shapes}}] = :ets.lookup(table, condition_id)
-        key = {optimisation.field, index_key(optimisation.operation)}
-        index_keys = MapSet.delete(index_keys, key)
-        update_or_delete_condition(table, condition_id, index_keys, other_shapes)
+        case :ets.lookup(table, condition_id) do
+          [] ->
+            :deleted
+
+          [{_, {index_keys, other_shapes}}] ->
+            key = {optimisation.field, index_key(optimisation.operation)}
+            index_keys = MapSet.delete(index_keys, key)
+            update_or_delete_condition(table, condition_id, index_keys, other_shapes)
+        end
 
       :ok ->
         :ok
+    end
+  end
+
+  defp condition_status(table, condition_id) do
+    case :ets.lookup(table, condition_id) do
+      [] -> :deleted
+      [_] -> :ok
     end
   end
 
