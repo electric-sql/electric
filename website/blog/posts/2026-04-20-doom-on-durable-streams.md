@@ -1,5 +1,5 @@
 ---
-title: 'Can Doom run on Durable Streams?'
+title: 'Doom on Durable Streams'
 description: >-
   Can Doom run on Durable Streams? Absolutely! Live streaming, rewinding, and fork — branch any session at any point and you're instantly back in the game.
 excerpt: >-
@@ -12,7 +12,7 @@ post: true
 published: true
 ---
 
-We wanted to find out if Doom can run on [Durable&nbsp;Streams](/blog/2025/12/09/announcing-durable-streams). The result turned out to be surprisingly interesting and a showcase of the patterns for building multi-agent systems.
+Can Doom run on [Durable&nbsp;Streams](/blog/2025/12/09/announcing-durable-streams)? Absolutely! The result turned out to be surprisingly interesting and a showcase of the patterns for building multi-agent systems.
 
 Durable Doom is a fun little experiment where we hook into the game's loop to log every state change into a Durable Stream. Live streaming, time traveling, and the ability to resume playing from any point. What enables a globally-distributed, repayable game loop is the same primitive that power multi-agents.
 
