@@ -19,7 +19,6 @@ Electric now supports complex WHERE clauses with AND, OR, and NOT around subquer
 When a user gains access to a workspace, joins a project, or gets added to a team, only the affected rows sync in. No shape invalidation. No expensive full resync.
 
 :::info
-- [Docs: WHERE clause filtering](/docs/guides/shapes#where-clauses)
 - [PR #4051](https://github.com/electric-sql/electric/pull/4051)
 - Requires `@tanstack/db >= 0.6.2` and `@tanstack/electric-db-collection >= 0.3.0`
 :::
