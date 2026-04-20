@@ -106,13 +106,20 @@ defmodule Electric.Bench.LoadGenerator do
     Logger.info("Table #{table} ready")
   end
 
+  # Concurrency cap for shape creation. Finch's default pool has limited
+  # connections — fanning out 1000+ simultaneous requests exhausts it.
+  @shape_creation_concurrency 50
+  @shape_creation_max_retries 5
+
   defp create_shapes(electric_url, table, partitions) do
-    Logger.info("Creating #{partitions} shapes in Electric (in parallel)...")
+    Logger.info(
+      "Creating #{partitions} shapes in Electric (concurrency=#{@shape_creation_concurrency})..."
+    )
 
     1..partitions
     |> Task.async_stream(
-      fn p -> create_shape(electric_url, table, p) end,
-      max_concurrency: partitions,
+      fn p -> create_shape(electric_url, table, p, @shape_creation_max_retries) end,
+      max_concurrency: min(partitions, @shape_creation_concurrency),
       timeout: :infinity,
       ordered: false
     )
@@ -121,15 +128,23 @@ defmodule Electric.Bench.LoadGenerator do
     Logger.info("All #{partitions} shapes requested")
   end
 
-  defp create_shape(electric_url, table, p) do
+  defp create_shape(electric_url, table, p, retries_left) do
     url = "#{electric_url}/v1/shape?table=#{table}&offset=-1&where=partition%3D#{p}"
 
-    case Req.get(url, receive_timeout: 30_000) do
+    case Req.get(url, receive_timeout: 60_000, retry: false) do
       {:ok, %Req.Response{status: status}} when status in 200..299 ->
         Logger.debug("Shape for partition #{p} created (HTTP #{status})")
 
       {:ok, %Req.Response{status: status, body: body}} ->
         Logger.warning("Shape for partition #{p} returned HTTP #{status}: #{inspect(body)}")
+
+      {:error, reason} when retries_left > 0 ->
+        # Common failure: Finch pool queue timeout under burst.
+        # Back off briefly and retry.
+        backoff_ms = (@shape_creation_max_retries - retries_left + 1) * 200
+        Logger.debug("Shape for partition #{p} retry (#{retries_left} left): #{inspect(reason)}")
+        Process.sleep(backoff_ms)
+        create_shape(electric_url, table, p, retries_left - 1)
 
       {:error, reason} ->
         Logger.warning("Failed to create shape for partition #{p}: #{inspect(reason)}")
