@@ -548,7 +548,7 @@ defmodule Electric.Shapes.Querying do
   end
 
   defp tag_slot_sql(%{is_subquery: true, tag_columns: [col]}, stack_id, shape_handle) do
-    col_sql = ~s["#{col}"::text]
+    col_sql = pg_cast_column_to_text(col)
     namespaced = pg_namespace_value_sql(col_sql)
     ~s[md5('#{stack_id}#{shape_handle}' || #{namespaced})]
   end
@@ -560,7 +560,7 @@ defmodule Electric.Shapes.Querying do
        ) do
     column_parts =
       Enum.map(cols, fn col_name ->
-        col = ~s["#{col_name}"::text]
+        col = pg_cast_column_to_text(col_name)
         ~s['#{col_name}:' || #{pg_namespace_value_sql(col)}]
       end)
 
