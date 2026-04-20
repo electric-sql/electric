@@ -313,7 +313,7 @@ Use these as examples when building your own client:
 - [Rust](https://github.com/durable-streams/durable-streams/tree/main/packages/client-rust)
 - [Ruby](https://github.com/durable-streams/durable-streams/tree/main/packages/client-rb)
 
-All pass the conformance test suite. See [Client libraries](clients) for details.
+All pass the conformance test suite. See [Client libraries](./clients/other) for details.
 
 ---
 

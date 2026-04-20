@@ -186,6 +186,6 @@ pnpm darix observe /assistant/my-assistant
 
 ## Next steps
 
-- [About](./about) — understand the mental model.
+- [About](./index) — understand the mental model.
 - [Defining entities](./usage/defining-entities) — entity types, schemas, and configuration.
 - [Writing handlers](./usage/writing-handlers) — handler lifecycle and context API.
