@@ -349,7 +349,7 @@ defmodule Electric.Shapes.Querying do
     end
   end
 
-  def move_in_where_clause(plan, dep_index, move_in_values, views, used_refs) do
+  def move_in_where_clause(plan, dep_index, views_before_move, views_after_move, used_refs) do
     impacted = Map.get(plan.dependency_disjuncts, dep_index, [])
     all_idxs = Enum.to_list(0..(length(plan.disjuncts) - 1))
     unaffected = all_idxs -- impacted
@@ -358,33 +358,36 @@ defmodule Electric.Shapes.Querying do
       build_disjuncts_sql(
         plan,
         impacted,
-        dep_index,
-        move_in_values,
-        views,
+        views_after_move,
         used_refs,
-        1,
-        ignore_trigger_polarity?: true
+        1
       )
 
-    {exclusion_sql, exclusion_params, _} =
+    {impacted_before_sql, impacted_before_params, next_param} =
+      build_disjuncts_sql(
+        plan,
+        impacted,
+        views_before_move,
+        used_refs,
+        next_param
+      )
+
+    {unaffected_sql, unaffected_params, _} =
       build_disjuncts_sql(
         plan,
         unaffected,
-        nil,
-        nil,
-        views,
+        views_before_move,
         used_refs,
-        next_param,
-        ignore_trigger_polarity?: false
+        next_param
       )
 
     where =
-      case exclusion_sql do
+      case join_sql(" OR ", [impacted_before_sql, unaffected_sql]) do
         nil -> candidate_sql
         excl -> "(#{candidate_sql}) AND NOT (#{excl})"
       end
 
-    {where, candidate_params ++ exclusion_params}
+    {where, candidate_params ++ impacted_before_params ++ unaffected_params}
   end
 
   def active_conditions_sql(plan) do
@@ -408,7 +411,7 @@ defmodule Electric.Shapes.Querying do
         info = Map.fetch!(plan.positions, pos)
 
         {base_sql, sql_params, next_param_idx} =
-          position_to_sql(info, nil, nil, views, used_refs, param_idx)
+          position_to_sql(info, views, used_refs, param_idx)
 
         sql =
           if info.negated do
@@ -443,12 +446,9 @@ defmodule Electric.Shapes.Querying do
   defp build_disjuncts_sql(
          _plan,
          [],
-         _trigger_dep,
-         _trigger_vals,
          _views,
          _used_refs,
-         pidx,
-         _opts
+         pidx
        ) do
     {nil, [], pidx}
   end
@@ -456,64 +456,33 @@ defmodule Electric.Shapes.Querying do
   defp build_disjuncts_sql(
          plan,
          disjunct_idxs,
-         trigger_dep,
-         trigger_vals,
          views,
          used_refs,
-         pidx,
-         opts
+         pidx
        ) do
     {sqls, params, next_pidx} =
       Enum.reduce(disjunct_idxs, {[], [], pidx}, fn didx, {sqls, params, pi} ->
         conj = Enum.at(plan.disjuncts, didx)
 
         {conj_sql, conj_params, next_pi} =
-          build_conjunction_sql(
-            plan,
-            conj,
-            trigger_dep,
-            trigger_vals,
-            views,
-            used_refs,
-            pi,
-            opts
-          )
+          build_conjunction_sql(plan, conj, views, used_refs, pi)
 
         {[conj_sql | sqls], params ++ conj_params, next_pi}
       end)
 
-    sql =
-      case Enum.reverse(sqls) do
-        [single] -> single
-        multiple -> Enum.map_join(multiple, " OR ", &"(#{&1})")
-      end
+    sql = join_sql(" OR ", Enum.reverse(sqls))
 
     {sql, params, next_pidx}
   end
 
-  defp build_conjunction_sql(
-         plan,
-         conj,
-         trigger_dep,
-         trigger_vals,
-         views,
-         used_refs,
-         pidx,
-         opts
-       ) do
+  defp build_conjunction_sql(plan, conj, views, used_refs, pidx) do
     {parts, params, next_pi} =
       Enum.reduce(conj, {[], [], pidx}, fn {pos, polarity}, {parts, params, pi} ->
         info = plan.positions[pos]
 
-        {sql, ps, next_pi} =
-          position_to_sql(info, trigger_dep, trigger_vals, views, used_refs, pi)
+        {sql, ps, next_pi} = position_to_sql(info, views, used_refs, pi)
 
-        sql =
-          if polarity == :negated and not ignore_polarity_for_trigger?(info, trigger_dep, opts) do
-            "NOT (#{sql})"
-          else
-            sql
-          end
+        sql = if polarity == :negated, do: "NOT (#{sql})", else: sql
 
         {[sql | parts], params ++ ps, next_pi}
       end)
@@ -522,27 +491,19 @@ defmodule Electric.Shapes.Querying do
     {sql, params, next_pi}
   end
 
-  defp position_to_sql(%{is_subquery: false} = info, _, _, _, _, pidx) do
+  defp position_to_sql(%{is_subquery: false} = info, _, _, pidx) do
     {info.sql, [], pidx}
   end
 
   defp position_to_sql(
-         %{is_subquery: true, dependency_index: dep_idx} = info,
-         trigger_dep,
-         trigger_vals,
+         %{is_subquery: true} = info,
          views,
          used_refs,
          pidx
        ) do
     lhs_sql = lhs_sql_from_ast(info.ast)
     ref_type = Map.get(used_refs, info.subquery_ref)
-
-    values =
-      if dep_idx == trigger_dep and trigger_vals != nil do
-        trigger_vals
-      else
-        Map.get(views, info.subquery_ref, MapSet.new()) |> MapSet.to_list()
-      end
+    values = Map.get(views, info.subquery_ref, MapSet.new()) |> MapSet.to_list()
 
     case ref_type do
       {:array, {:row, col_types}} ->
@@ -610,9 +571,12 @@ defmodule Electric.Shapes.Querying do
     "'1'"
   end
 
-  defp ignore_polarity_for_trigger?(info, trigger_dep, opts) do
-    Keyword.get(opts, :ignore_trigger_polarity?, false) and info.is_subquery and
-      info.dependency_index == trigger_dep
+  defp join_sql(separator, sqls) do
+    case Enum.reject(sqls, &is_nil/1) do
+      [] -> nil
+      [single] -> single
+      multiple -> Enum.map_join(multiple, separator, &"(#{&1})")
+    end
   end
 
   defp active_conditions_json_expr(%{active_conditions_sqls: nil, tags_sqls: tags_sqls}) do

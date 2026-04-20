@@ -249,8 +249,8 @@ defmodule Electric.Shapes.Consumer.Effects do
       Querying.move_in_where_clause(
         request.dnf_plan,
         request.trigger_dep_index,
-        Enum.map(request.values, &elem(&1, 0)),
         request.views_before_move,
+        request.views_after_move,
         consumer_state.shape.where.used_refs
       )
 

@@ -609,13 +609,15 @@ defmodule Electric.Shapes.QueryingTest do
 
       {:ok, dnf_plan} = DnfPlan.compile(shape)
       move_in_values = ["ab      ", "cd      "]
+      views_before_move = %{["$sublink", "0"] => MapSet.new()}
+      views_after_move = %{["$sublink", "0"] => MapSet.new(move_in_values)}
 
       assert {where, params} =
                Querying.move_in_where_clause(
                  dnf_plan,
                  0,
-                 move_in_values,
-                 %{["$sublink", "0"] => MapSet.new()},
+                 views_before_move,
+                 views_after_move,
                  shape.where.used_refs
                )
 
@@ -652,13 +654,15 @@ defmodule Electric.Shapes.QueryingTest do
 
       {:ok, dnf_plan} = DnfPlan.compile(shape)
       move_in_values = [1, 2]
+      views_before_move = %{["$sublink", "0"] => MapSet.new()}
+      views_after_move = %{["$sublink", "0"] => MapSet.new(move_in_values)}
 
       assert {where, params} =
                Querying.move_in_where_clause(
                  dnf_plan,
                  0,
-                 move_in_values,
-                 %{["$sublink", "0"] => MapSet.new()},
+                 views_before_move,
+                 views_after_move,
                  shape.where.used_refs
                )
 
@@ -703,13 +707,15 @@ defmodule Electric.Shapes.QueryingTest do
 
       {:ok, dnf_plan} = DnfPlan.compile(shape)
       move_in_values = [{1, 1}, {2, 2}]
+      views_before_move = %{["$sublink", "0"] => MapSet.new()}
+      views_after_move = %{["$sublink", "0"] => MapSet.new(move_in_values)}
 
       assert {where, params} =
                Querying.move_in_where_clause(
                  dnf_plan,
                  0,
-                 move_in_values,
-                 %{["$sublink", "0"] => MapSet.new()},
+                 views_before_move,
+                 views_after_move,
                  shape.where.used_refs
                )
 
@@ -741,6 +747,144 @@ defmodule Electric.Shapes.QueryingTest do
                |> Enum.map(fn [_key, _tags, json] -> json end)
                |> decode_stream()
     end
+
+    test "returns rows that become visible when the same dependency is used twice in a conjunction",
+         %{db_conn: conn} do
+      for statement <- [
+            "CREATE TABLE dep (id INTEGER PRIMARY KEY, value INTEGER)",
+            "CREATE TABLE child (id INTEGER PRIMARY KEY, x INTEGER, y INTEGER)",
+            "INSERT INTO dep (id, value) VALUES (1, 10), (2, 20)",
+            "INSERT INTO child (id, x, y) VALUES (1, 1, 1), (2, 2, 1), (3, 1, 2), (4, 2, 2)"
+          ],
+          do: Postgrex.query!(conn, statement)
+
+      shape =
+        Shape.new!("child",
+          where: "x IN (SELECT id FROM dep) AND y IN (SELECT id FROM dep)",
+          inspector: {DirectInspector, conn}
+        )
+        |> fill_handles()
+
+      assert length(shape.shape_dependencies) == 1
+
+      {:ok, dnf_plan} = DnfPlan.compile(shape)
+      views_before_move = %{["$sublink", "0"] => MapSet.new([1])}
+      views_after_move = %{["$sublink", "0"] => MapSet.new([1, 2])}
+
+      {where, params} =
+        Querying.move_in_where_clause(
+          dnf_plan,
+          0,
+          views_before_move,
+          views_after_move,
+          shape.where.used_refs
+        )
+
+      rows =
+        Querying.query_move_in(
+          conn,
+          "dummy-stack-id",
+          "dummy-shape-handle",
+          shape,
+          {where, params}
+        )
+        |> Enum.map(fn [_key, _tags, json] -> json end)
+        |> decode_stream()
+
+      assert rows |> Enum.map(& &1.value.id) |> Enum.sort() == ["2", "3", "4"]
+    end
+
+    test "does not re-select rows that were already visible through another branch of the same dependency",
+         %{db_conn: conn} do
+      for statement <- [
+            "CREATE TABLE dep (id INTEGER PRIMARY KEY, value INTEGER)",
+            "CREATE TABLE child (id INTEGER PRIMARY KEY, x INTEGER, y INTEGER)",
+            "INSERT INTO dep (id, value) VALUES (1, 10), (2, 20)",
+            "INSERT INTO child (id, x, y) VALUES (1, 1, 1), (2, 2, 1), (3, 1, 2), (4, 2, 2)"
+          ],
+          do: Postgrex.query!(conn, statement)
+
+      shape =
+        Shape.new!("child",
+          where: "x IN (SELECT id FROM dep) OR y IN (SELECT id FROM dep)",
+          inspector: {DirectInspector, conn}
+        )
+        |> fill_handles()
+
+      assert length(shape.shape_dependencies) == 1
+
+      {:ok, dnf_plan} = DnfPlan.compile(shape)
+      views_before_move = %{["$sublink", "0"] => MapSet.new([1])}
+      views_after_move = %{["$sublink", "0"] => MapSet.new([1, 2])}
+
+      {where, params} =
+        Querying.move_in_where_clause(
+          dnf_plan,
+          0,
+          views_before_move,
+          views_after_move,
+          shape.where.used_refs
+        )
+
+      rows =
+        Querying.query_move_in(
+          conn,
+          "dummy-stack-id",
+          "dummy-shape-handle",
+          shape,
+          {where, params}
+        )
+        |> Enum.map(fn [_key, _tags, json] -> json end)
+        |> decode_stream()
+
+      assert rows |> Enum.map(& &1.value.id) == ["4"]
+    end
+
+    test "handles repeated negated dependency positions by comparing before and after views",
+         %{db_conn: conn} do
+      for statement <- [
+            "CREATE TABLE dep (id INTEGER PRIMARY KEY, value INTEGER)",
+            "CREATE TABLE child (id INTEGER PRIMARY KEY, x INTEGER, y INTEGER)",
+            "INSERT INTO dep (id, value) VALUES (1, 10), (2, 20)",
+            "INSERT INTO child (id, x, y) VALUES (1, 1, 1), (2, 1, 3), (3, 3, 1), (4, 3, 3)"
+          ],
+          do: Postgrex.query!(conn, statement)
+
+      shape =
+        Shape.new!("child",
+          where: "NOT x IN (SELECT id FROM dep) AND NOT y IN (SELECT id FROM dep)",
+          inspector: {DirectInspector, conn}
+        )
+        |> fill_handles()
+
+      assert length(shape.shape_dependencies) == 1
+
+      {:ok, dnf_plan} = DnfPlan.compile(shape)
+      views_before_move = %{["$sublink", "0"] => MapSet.new([1, 2])}
+      views_after_move = %{["$sublink", "0"] => MapSet.new([2])}
+
+      {where, params} =
+        Querying.move_in_where_clause(
+          dnf_plan,
+          0,
+          views_before_move,
+          views_after_move,
+          shape.where.used_refs
+        )
+
+      rows =
+        Querying.query_move_in(
+          conn,
+          "dummy-stack-id",
+          "dummy-shape-handle",
+          shape,
+          {where, params}
+        )
+        |> Enum.map(fn [_key, _tags, json] -> json end)
+        |> decode_stream()
+
+      assert rows |> Enum.map(& &1.value.id) |> Enum.sort() == ["1", "2", "3"]
+    end
   end
 
   describe "move_in_where_clause/5 - x IN sq1 OR y IN sq2" do
@@ -758,32 +902,61 @@ defmodule Electric.Shapes.QueryingTest do
 
     test "move on dep 0 generates candidate for sq1 and exclusion for sq2",
          %{plan: plan, where: where} do
-      move_in_values = [1, 2, 3]
-      views = %{["$sublink", "0"] => MapSet.new([10]), ["$sublink", "1"] => MapSet.new([20, 30])}
+      views_before_move = %{
+        ["$sublink", "0"] => MapSet.new([10]),
+        ["$sublink", "1"] => MapSet.new([20, 30])
+      }
+
+      views_after_move = %{
+        ["$sublink", "0"] => MapSet.new([1, 2, 3, 10]),
+        ["$sublink", "1"] => MapSet.new([20, 30])
+      }
 
       {sql, params} =
-        Querying.move_in_where_clause(plan, 0, move_in_values, views, where.used_refs)
+        Querying.move_in_where_clause(
+          plan,
+          0,
+          views_before_move,
+          views_after_move,
+          where.used_refs
+        )
 
       assert sql =~ "= ANY ($1::"
       assert sql =~ "AND NOT"
       assert sql =~ "= ANY ($2::"
-      assert length(params) == 2
-      assert Enum.at(params, 0) == [1, 2, 3]
-      assert Enum.sort(Enum.at(params, 1)) == [20, 30]
+      assert sql =~ "= ANY ($3::"
+      assert length(params) == 3
+      assert Enum.sort(Enum.at(params, 0)) == [1, 2, 3, 10]
+      assert Enum.at(params, 1) == [10]
+      assert Enum.sort(Enum.at(params, 2)) == [20, 30]
     end
 
     test "move on dep 1 generates candidate for sq2 and exclusion for sq1",
          %{plan: plan, where: where} do
-      move_in_values = [100]
-      views = %{["$sublink", "0"] => MapSet.new([5]), ["$sublink", "1"] => MapSet.new([10])}
+      views_before_move = %{
+        ["$sublink", "0"] => MapSet.new([5]),
+        ["$sublink", "1"] => MapSet.new([10])
+      }
+
+      views_after_move = %{
+        ["$sublink", "0"] => MapSet.new([5]),
+        ["$sublink", "1"] => MapSet.new([10, 100])
+      }
 
       {sql, params} =
-        Querying.move_in_where_clause(plan, 1, move_in_values, views, where.used_refs)
+        Querying.move_in_where_clause(
+          plan,
+          1,
+          views_before_move,
+          views_after_move,
+          where.used_refs
+        )
 
       assert sql =~ "AND NOT"
-      assert length(params) == 2
-      assert Enum.at(params, 0) == [100]
-      assert Enum.at(params, 1) == [5]
+      assert length(params) == 3
+      assert Enum.sort(Enum.at(params, 0)) == [10, 100]
+      assert Enum.at(params, 1) == [10]
+      assert Enum.at(params, 2) == [5]
     end
   end
 
@@ -802,21 +975,35 @@ defmodule Electric.Shapes.QueryingTest do
 
     test "move on dep 0 includes row predicate in candidate",
          %{plan: plan, where: where} do
-      move_in_values = [1, 2]
-      views = %{["$sublink", "0"] => MapSet.new([10]), ["$sublink", "1"] => MapSet.new([20])}
+      views_before_move = %{
+        ["$sublink", "0"] => MapSet.new([10]),
+        ["$sublink", "1"] => MapSet.new([20])
+      }
+
+      views_after_move = %{
+        ["$sublink", "0"] => MapSet.new([1, 2, 10]),
+        ["$sublink", "1"] => MapSet.new([20])
+      }
 
       {sql, params} =
-        Querying.move_in_where_clause(plan, 0, move_in_values, views, where.used_refs)
+        Querying.move_in_where_clause(
+          plan,
+          0,
+          views_before_move,
+          views_after_move,
+          where.used_refs
+        )
 
       assert sql =~ "= ANY ($1::"
+      assert sql =~ "= ANY ($2::"
       assert sql =~ ~s|"status" = 'open'|
       assert sql =~ "AND NOT"
-      assert length(params) == 2
+      assert length(params) == 3
     end
   end
 
   describe "move_in_where_clause/5 - negated subqueries" do
-    test "uses positive delta membership for x NOT IN sq1" do
+    test "compares before and after views for x NOT IN sq1" do
       {where, deps} =
         parse_where_with_sublinks(~S"NOT x IN (SELECT id FROM dep1)", 1)
 
@@ -827,17 +1014,17 @@ defmodule Electric.Shapes.QueryingTest do
         Querying.move_in_where_clause(
           plan,
           0,
-          [1, 2],
           %{["$sublink", "0"] => MapSet.new([1, 2, 3])},
+          %{["$sublink", "0"] => MapSet.new([3])},
           where.used_refs
         )
 
-      assert sql =~ ~s|"x" = ANY ($1::|
-      refute sql =~ ~s|NOT ("x" = ANY ($1::|
-      assert params == [[1, 2]]
+      assert sql =~ ~s|NOT ("x" = ANY ($1::|
+      assert sql =~ ~s|AND NOT (NOT ("x" = ANY ($2::|
+      assert params == [[3], [1, 2, 3]]
     end
 
-    test "uses delta membership only for the triggering negated subquery position" do
+    test "compares before and after views for nested negated subqueries" do
       {where, deps} =
         parse_where_with_sublinks(~S"NOT (x = 7 OR y IN (SELECT id FROM dep1))", 1)
 
@@ -848,15 +1035,15 @@ defmodule Electric.Shapes.QueryingTest do
         Querying.move_in_where_clause(
           plan,
           0,
-          [5],
           %{["$sublink", "0"] => MapSet.new([5, 6])},
+          %{["$sublink", "0"] => MapSet.new([6])},
           where.used_refs
         )
 
       assert sql =~ ~s|NOT ("x" = 7)|
-      assert sql =~ ~s|"y" = ANY ($1::|
-      refute sql =~ ~s|NOT ("y" = ANY ($1::|
-      assert params == [[5]]
+      assert sql =~ ~s|NOT ("y" = ANY ($1::|
+      assert sql =~ ~s|NOT ("y" = ANY ($2::|
+      assert params == [[6], [5, 6]]
     end
   end
 
