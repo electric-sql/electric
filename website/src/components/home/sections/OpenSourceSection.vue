@@ -1,94 +1,146 @@
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
-import RepoCard from '../RepoCard.vue'
+import { reactive, onMounted } from 'vue'
 import Section from '../Section.vue'
 
-const actions = [
-  {
-    href: 'https://discord.electric-sql.com',
-    text: 'Join Discord',
-    theme: 'brand',
-  },
-  {
-    href: 'https://github.com/electric-sql/electric',
-    text: 'GitHub',
-  },
-]
-
-const repos = [
-  'durable-streams/durable-streams',
-  'electric-sql/electric',
-  'electric-sql/pglite',
-  'TanStack/db',
-]
-
-// Lazy-load the Discord widget to avoid scroll jank
-const discordContainer = ref(null)
-const showWidget = ref(false)
-let observer = null
-
-onMounted(() => {
-  observer = new IntersectionObserver(
-    (entries) => {
-      if (entries[0].isIntersecting) {
-        showWidget.value = true
-        observer.disconnect()
-      }
-    },
-    { rootMargin: '200px' } // Start loading slightly before visible
-  )
-  if (discordContainer.value) {
-    observer.observe(discordContainer.value)
-  }
+const repos = reactive({
+  'electric-sql/electric': { stars: '9k', downloads: '' },
+  'electric-sql/pglite': { stars: '14k', downloads: '' },
+  'durable-streams/durable-streams': { stars: '1k', downloads: '' },
+  'TanStack/db': { stars: '3k', downloads: '' },
 })
 
-onUnmounted(() => {
-  observer?.disconnect()
+function formatCount(n) {
+  if (n >= 1000000) return `${(n / 1000000).toFixed(1)}M`
+  if (n >= 1000) return `${(n / 1000).toFixed(1)}k`
+  return String(n)
+}
+
+async function fetchCached(key, ttl, fn) {
+  try {
+    const cached = localStorage.getItem(key)
+    if (cached) {
+      const { value, expiry } = JSON.parse(cached)
+      if (Date.now() < expiry) return value
+    }
+    const value = await fn()
+    localStorage.setItem(key, JSON.stringify({ value, expiry: Date.now() + ttl }))
+    return value
+  } catch {
+    return null
+  }
+}
+
+onMounted(async () => {
+  const ttl = 3_600_000
+
+  const starFetches = Object.keys(repos).map(async (repo) => {
+    const count = await fetchCached(`stars.${repo}`, ttl, async () => {
+      const res = await fetch(`https://api.github.com/repos/${repo}`)
+      if (!res.ok) return null
+      const data = await res.json()
+      return data.stargazers_count
+    })
+    if (count) repos[repo].stars = formatCount(count)
+  })
+
+  const npmPackages = {
+    'electric-sql/electric': '@electric-sql/client',
+    'electric-sql/pglite': '@electric-sql/pglite',
+    'durable-streams/durable-streams': '@durable-streams/client',
+    'TanStack/db': '@tanstack/db',
+  }
+
+  const downloadFetches = Object.entries(npmPackages).map(async ([repo, pkg]) => {
+    const count = await fetchCached(`npm.${pkg}`, ttl, async () => {
+      const res = await fetch(`https://api.npmjs.org/downloads/point/last-week/${pkg}`)
+      if (!res.ok) return null
+      const data = await res.json()
+      return data.downloads
+    })
+    if (count) repos[repo].downloads = `${formatCount(count)}/wk`
+  })
+
+  await Promise.allSettled([...starFetches, ...downloadFetches])
 })
 </script>
 
 <style scoped>
-.community-widgets {
-  padding: 12px 0 24px;
-  display: flex;
-  flex-direction: row;
-  gap: 40px;
-}
-.discord,
-.github {
-  flex: 1 1 0px;
-}
-.github {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
+.repo-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
 }
 
-@media (max-width: 767px) {
-  .community-widgets {
-    flex-direction: column;
-  }
-  .discord {
-    order: 2;
-  }
-}
-
-.discord-placeholder {
-  width: 100%;
-  height: 523px;
+.repo-card {
+  padding: 20px;
   border: 1px solid var(--vp-c-divider);
   border-radius: 8px;
   background: var(--vp-c-bg-soft);
+  text-decoration: none;
+  transition: border-color 0.2s, background 0.2s;
+  display: flex;
+  flex-direction: column;
+}
+
+.repo-card:hover {
+  border-color: var(--vp-c-brand-1);
+  background: color-mix(in srgb, var(--vp-c-brand-1) 4%, var(--vp-c-bg-soft));
+}
+
+.repo-name {
   display: flex;
   align-items: center;
-  justify-content: center;
+  gap: 10px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--vp-c-text-1);
+  margin-bottom: 6px;
+}
+
+.repo-name svg {
+  flex-shrink: 0;
+  opacity: 0.7;
+  width: 32px;
+  height: 32px;
+}
+
+.repo-desc {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
   color: var(--vp-c-text-2);
-  font-size: 14px;
+  flex: 1;
+}
+
+.repo-stats {
+  display: flex;
+  gap: 16px;
+  margin-top: 12px;
+  font-size: 13px;
+  font-family: var(--vp-font-family-mono);
+  color: var(--vp-c-text-2);
+  flex-wrap: wrap;
+}
+
+.repo-stat {
+  white-space: nowrap;
+}
+
+@media (max-width: 959px) {
+  .repo-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 767px) {
+  .repo-grid {
+    grid-template-columns: 1fr;
+  }
 }
 </style>
 
 <template>
-  <Section :actions="actions">
+  <Section>
     <template #title> Fully open source </template>
     <template #tagline>
       With a thriving
@@ -99,34 +151,51 @@ onUnmounted(() => {
         <span class="no-wrap"> downloads a week</span></span
       >.
     </template>
-    <div class="community-widgets">
-      <div ref="discordContainer" class="discord">
-        <iframe
-          v-if="showWidget"
-          src="https://discord.com/widget?id=933657521581858818&theme=dark"
-          width="350"
-          height="523"
-          sandbox="allow-popups allow-same-origin allow-popups-to-escape-sandbox allow-scripts"
-          style="
-            width: 100%;
-            border: 1px solid var(--vp-c-divider);
-            border-radius: 8px;
-            overflow: hidden;
-          "
-        >
-        </iframe>
-        <div v-else class="discord-placeholder">Loading Discord...</div>
-      </div>
-      <div class="github">
-        <a
-          v-for="repo in repos"
-          :key="repo"
-          :href="`https://github.com/${repo}`"
-          class="no-visual"
-        >
-          <RepoCard :repo="repo" />
-        </a>
-      </div>
+    <div class="repo-grid">
+      <a href="https://github.com/electric-sql/electric" target="_blank" class="repo-card">
+        <div class="repo-name">
+          <svg width="32" height="32" viewBox="0 0 192 192" fill="currentColor"><path d="M106.992 16.1244C107.711 15.4029 108.683 15 109.692 15H170L84.0082 101.089C83.2888 101.811 82.3171 102.213 81.3081 102.213H21L106.992 16.1244Z"/><path d="M96.4157 104.125C96.4157 103.066 97.2752 102.204 98.331 102.204H170L96.4157 176V104.125Z"/></svg>
+          ElectricSQL
+        </div>
+        <p class="repo-desc">Postgres sync engine for real-time apps</p>
+        <div class="repo-stats">
+          <span class="repo-stat">☆ {{ repos['electric-sql/electric'].stars }}</span>
+          <span v-if="repos['electric-sql/electric'].downloads" class="repo-stat">↓ {{ repos['electric-sql/electric'].downloads }}</span>
+        </div>
+      </a>
+      <a href="https://github.com/electric-sql/pglite" target="_blank" class="repo-card">
+        <div class="repo-name">
+          <svg width="32" height="32" viewBox="0 0 300 260" fill="currentColor"><g clip-path="url(#pg2-home)"><path fill-rule="evenodd" clip-rule="evenodd" d="M266 82.7V212.8c0 4.5-3.6 8.1-8.1 8.1h-32.6c-4.3 0-7.8-3.3-8.1-7.6V164c0-13.5-10.9-24.4-24.4-24.4-13.1 0-23.7-10.3-24.4-23.2V42h57.3c22.4 0 40.3 18.2 40.3 40.7zM103.3 42v57c0 13.5 10.9 24.4 24.4 24.4h24.4v-1.6c0 18.9 15.3 34.2 34.1 34.2 8.1 0 14.6 6.6 14.6 14.6v42.3c-.2 4.3-3.7 7.6-8 7.6H151.9l.3-56.9c0-4.5-3.6-8.1-8.1-8.1-4.5 0-8.1 3.6-8.1 8.1l-.3 57H87v-57c0-4.5-3.6-8.1-8.1-8.1s-8.1 3.6-8.1 8.1v57H30.1c-4.5 0-8.1-3.6-8.1-8.1V82.7C22 60.2 40.2 42 62.7 42h40.6zm126.1 49c0-6.7-5.5-12.2-12.2-12.2s-12.2 5.5-12.2 12.2 5.5 12.2 12.2 12.2 12.2-5.5 12.2-12.2z"/></g><defs><clipPath id="pg2-home"><rect width="244" height="179" fill="white" transform="translate(22 42)"/></clipPath></defs></svg>
+          PGlite
+        </div>
+        <p class="repo-desc">Postgres in WASM, in the browser</p>
+        <div class="repo-stats">
+          <span class="repo-stat">☆ {{ repos['electric-sql/pglite'].stars }}</span>
+          <span v-if="repos['electric-sql/pglite'].downloads" class="repo-stat">↓ {{ repos['electric-sql/pglite'].downloads }}</span>
+        </div>
+      </a>
+      <a href="https://github.com/durable-streams/durable-streams" target="_blank" class="repo-card">
+        <div class="repo-name">
+          <svg width="32" height="32" viewBox="22 18 225 225" fill="currentColor"><path d="M229.101 77.1836L229.687 77.2017C230.456 78.0158 231.487 80.7413 231.997 81.8956C235.665 90.1859 238.499 98.5994 241.177 107.26C237.993 106.072 233.613 104.891 230.278 103.895L207.693 97.313C204.43 96.1888 199.954 95.0195 196.539 93.9767C193.089 88.3281 189.93 84.497 185.582 79.4601C200.083 78.602 214.59 77.8431 229.101 77.1836Z"/><path d="M28.4828 110.905C29.7146 111.853 30.938 112.893 32.1406 113.885C42.736 122.621 53.4575 131.261 63.9368 140.135C64.524 143.862 65.3217 147.552 66.3251 151.187C66.6729 152.407 68.3398 156.581 67.9555 157.386L67.3848 157.255C54.4714 152.434 39.7928 147.647 27.2133 142.454C27.2224 141.511 27.1901 140.464 27.144 139.517C26.6705 129.826 27.4288 120.527 28.4828 110.905Z"/><path d="M28.8228 153.74L72.88 166.496C74.8605 169.758 76.701 172.502 79.1639 175.445C80.5995 177.16 82.1523 178.833 83.5063 180.589C82.7868 180.594 82.0426 180.634 81.3218 180.662C71.864 181.41 61.9464 181.606 52.4401 182.236C48.379 182.505 44.2082 182.537 40.1521 182.905C35.9368 174.586 31.3231 162.845 28.8228 153.74Z"/><path d="M201.076 103.614C213.455 107.528 225.772 112.256 237.999 116.621C239.604 117.194 241.22 117.818 242.798 118.46C243.132 129.474 243.238 138.122 241.598 149.184L236.655 145.27L236.059 144.781L215.294 128.392C212.735 126.362 207.662 122.606 205.538 120.576C204.395 113.268 203.189 110.381 201.076 103.614Z"/><path d="M185.163 181.082C185.531 181.776 187.337 221.141 187.405 224.402C180.817 228.13 166.53 233.289 159.236 235.295L157.329 235.766C158.033 233.328 158.824 230.884 159.597 228.466C163.479 216.323 166.819 203.93 170.807 191.827C176.755 188.072 179.765 185.679 185.163 181.082Z"/><path d="M111.215 24.3354L111.624 24.3228L111.759 24.5332C111.655 25.6256 110.561 28.5793 110.175 29.7543C109.401 32.1126 108.657 34.4805 107.943 36.8576C104.857 46.9824 101.733 58.6223 98.3507 68.5116C94.1961 71.0838 90.3063 73.8836 86.5909 77.0775C85.8144 77.7449 85.0996 78.376 84.2896 79.0063L84.0582 78.8956L83.9922 78.1579C83.8752 73.5573 83.4885 68.6474 83.253 64.0254C82.8054 54.509 82.2823 44.9967 81.6835 35.4893C88.767 31.8819 103.575 26.1347 111.215 24.3354Z"/><path d="M72.7565 42.5505C73.2799 43.0843 77.5711 83.003 78.0378 87.0322C75.6078 89.7167 73.3938 93.4996 71.6524 96.698C70.7291 98.394 70.0222 100.124 68.9747 101.791C67.4096 98.8905 65.8876 95.9681 64.4097 93.0244C59.4486 83.3134 54.5736 73.5609 49.7847 63.7675C50.9882 62.2736 52.8039 60.4293 54.1526 59.0081C59.8061 52.9551 66.0355 47.4446 72.7565 42.5505Z"/><path d="M201.044 159.209C202.242 160.118 219.178 194.544 220.215 197.094C215.774 202.436 210.06 207.699 204.866 212.354C202.334 214.419 199.773 216.451 197.185 218.45C196.423 214.285 195.932 207.709 195.433 203.383L191.962 173.977C195.502 169.982 198.598 163.899 201.044 159.209Z"/><path d="M201.205 45.2847C201.798 45.4272 209.889 53.1361 210.874 54.1236C215.015 58.2769 219.449 62.9985 222.949 67.6822C219.037 67.9573 214.441 68.5464 210.488 68.9738L183.301 71.9978L177.249 72.6264C171.297 68.3561 167.982 67.1512 161.886 63.8393C166.512 61.9302 172.247 58.9392 176.87 56.7399L201.205 45.2847Z"/><path d="M206.485 130.044C207.32 130.459 212.203 135.235 213.212 136.175C221.677 144.07 230.088 152.028 238.443 160.046C235.993 167.204 232.72 174.6 229.422 181.372L225.925 188.373C223.091 183.561 220.2 177.966 217.449 173.024C212.801 164.843 208.254 156.601 203.81 148.301C204.484 144.871 205.107 142.058 205.59 138.547C205.994 135.613 206.127 132.882 206.485 130.044Z"/><path d="M131.061 22.5101C138.013 22.4059 146.746 23.1149 153.683 24.1766C147.924 31.4915 142.072 38.7303 136.129 45.8919C132.759 49.9685 129.228 54.0338 125.944 58.1521L125.066 59.1361C118.485 60.4839 114.532 61.5019 108.114 63.5127C110.533 58.0489 112.473 51.909 114.594 46.2946C117.543 38.4836 120.513 30.6493 123.279 22.772C125.873 22.6695 128.466 22.5824 131.061 22.5101Z"/><path d="M165.155 27.0569C165.795 27.1969 168.941 28.4091 169.629 28.6956C177.044 31.7821 185.951 35.6252 192.873 39.6544C189.693 41.2082 185.555 43.6819 182.433 45.4347C174.957 49.6974 167.452 53.9101 159.919 58.0715C157.711 59.3047 155.487 60.5109 153.249 61.6898C147.32 60.0686 141.527 59.5076 135.456 58.8722C138.423 55.4811 142.217 51.6666 145.341 48.3324L165.155 27.0569Z"/><path d="M42.9158 72.6267C50.7773 85.8739 58.5357 99.18 66.1898 112.544C64.7432 119.508 64.0036 123.939 63.3685 130.956L58.2073 126.294C55.6936 123.825 52.7727 121.513 50.2065 119.117C43.5846 112.933 36.2476 106.943 29.7341 100.721C33.574 90.6783 37.9205 82.0796 42.9158 72.6267Z"/><path d="M90.6079 187.467C91.1401 187.346 93.8778 189.534 94.5631 190C98.3302 192.561 102.337 194.285 106.291 196.424C102.951 198.226 99.0158 200.075 95.5942 201.785L67.3695 215.715L64.3657 212.906C58.2147 207.334 51.1316 199.6 46.1392 192.861C47.9276 192.523 50.5896 192.268 52.4634 192.042L63.8638 190.672C72.6253 189.621 81.8686 188.326 90.6079 187.467Z"/><path d="M116.061 199.31C119.849 200.622 129.596 201.754 133.633 202.15C128.532 207.421 123.252 213.222 118.286 218.622C113.593 223.69 108.943 228.797 104.335 233.943C102.093 233.106 99.9597 232.314 97.7632 231.364C90.7259 228.344 83.8388 224.98 77.1266 221.286C81.0908 219.364 85.8695 216.256 89.7915 214.026C98.3752 209.144 107.251 203.717 116.061 199.31Z"/><path d="M160.728 197.487L160.974 197.514C161.066 198.048 147.55 234.351 146.2 238.157C135.635 238.784 128.252 238.617 117.516 237.101L115.405 236.791C118.515 233.213 121.558 229.246 124.557 225.545C131.023 217.533 137.543 209.566 144.115 201.645C150.565 200.384 154.358 199.449 160.728 197.487Z"/></svg>
+          Durable Streams
+        </div>
+        <p class="repo-desc">Persistent event streams over HTTP</p>
+        <div class="repo-stats">
+          <span class="repo-stat">☆ {{ repos['durable-streams/durable-streams'].stars }}</span>
+          <span v-if="repos['durable-streams/durable-streams'].downloads" class="repo-stat">↓ {{ repos['durable-streams/durable-streams'].downloads }}</span>
+        </div>
+      </a>
+      <a href="https://github.com/TanStack/db" target="_blank" class="repo-card">
+        <div class="repo-name">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M11.078.042c.316-.042.65-.014.97-.014 1.181 0 2.341.184 3.472.532a12.3 12.3 0 0 1 3.973 2.086 11.9 11.9 0 0 1 3.432 4.33c1.446 3.15 1.436 6.97-.046 10.107-.958 2.029-2.495 3.727-4.356 4.965-1.518 1.01-3.293 1.629-5.1 1.848-2.298.279-4.784-.129-6.85-1.188-3.88-1.99-6.518-5.994-6.57-10.382-.01-.846.003-1.697.17-2.534.273-1.365.748-2.683 1.463-3.88a12 12 0 0 1 2.966-3.36A12.3 12.3 0 0 1 9.357.3a12 12 0 0 1 1.255-.2l.133-.016zM7.064 19.99c-.535.057-1.098.154-1.557.454.103.025.222 0 .33 0 .258 0 .52-.01.778.002.647.028 1.32.131 1.945.303.8.22 1.505.65 2.275.942.813.307 1.622.402 2.484.402.435 0 .866-.001 1.287-.12-.22-.117-.534-.095-.778-.144a11 11 0 0 1-1.556-.416 12 12 0 0 1-1.093-.467l-.23-.108a15 15 0 0 0-1.012-.44c-.905-.343-1.908-.512-2.873-.408m.808-2.274c-1.059 0-2.13.187-3.083.667q-.346.177-.659.41c-.063.046-.175.106-.199.188s.061.151.11.204c.238-.127.464-.261.718-.357 1.64-.624 3.63-.493 5.268.078.817.285 1.569.712 2.365 1.046.89.374 1.798.616 2.753.74 1.127.147 2.412.028 3.442-.48.362-.179.865-.451 1.018-.847-.189.017-.36.098-.539.154a9 9 0 0 1-.868.222c-.994.2-2.052.24-3.053.06-.943-.17-1.82-.513-2.693-.873l-.111-.046-.223-.092-.112-.046a26 26 0 0 0-1.35-.527c-.89-.31-1.842-.5-2.784-.5M9.728 1.452c-1.27.28-2.407.826-3.502 1.514-.637.4-1.245.81-1.796 1.323-.82.765-1.447 1.695-1.993 2.666-.563 1-.924 2.166-1.098 3.297-.172 1.11-.2 2.277-.004 3.388.245 1.388.712 2.691 1.448 3.897.248-.116.424-.38.629-.557.414-.359.85-.691 1.317-.978a3.5 3.5 0 0 1 .539-.264c.07-.029.187-.055.22-.132.053-.124-.045-.34-.062-.468a7 7 0 0 1-.068-1.109 9.7 9.7 0 0 1 .61-3.177c.29-.76.73-1.45 1.254-2.069.177-.21.365-.405.56-.6.115-.114.258-.212.33-.359-.376 0-.751.108-1.108.218-.769.237-1.518.588-2.155 1.084-.291.226-.504.522-.779.76-.084.073-.235.17-.352.116-.176-.083-.149-.43-.169-.59-.078-.612.154-1.387.45-1.918.473-.852 1.348-1.58 2.376-1.555.444.011.833.166 1.257.266-.107-.153-.252-.264-.389-.39a5.4 5.4 0 0 0-1.107-.8c-.163-.085-.338-.136-.509-.2-.086-.03-.195-.074-.227-.17-.06-.177.26-.342.377-.417.453-.289 1.01-.527 1.556-.54.854-.021 1.688.452 2.04 1.258.123.284.16.583.184.885l.004.057.006.085.002.029.005.057.004.056c.268-.218.457-.54.718-.774.612-.547 1.45-.79 2.245-.544a2.97 2.97 0 0 1 1.71 1.378c.097.173.365.595.171.767-.152.134-.344.03-.504-.026a3 3 0 0 0-.372-.094l-.068-.014-.069-.013a3.9 3.9 0 0 0-1.377-.002c-.282.05-.557.15-.838.192v.06c.768.006 1.51.444 1.89 1.109.157.275.235.59.295.9.075.38.022.796-.082 1.168-.035.125-.098.336-.247.365-.106.02-.195-.085-.256-.155a4.6 4.6 0 0 0-.492-.522 20 20 0 0 0-1.467-1.14c-.267-.19-.56-.44-.868-.556.087.208.171.402.2.63.088.667-.192 1.296-.612 1.798a2.6 2.6 0 0 1-.426.427c-.067.05-.151.114-.24.1-.277-.044-.31-.463-.353-.677-.144-.726-.086-1.447.114-2.158-.178.09-.307.287-.418.45a5.3 5.3 0 0 0-.612 1.138c-.61 1.617-.604 3.51.186 5.066.088.174.221.15.395.15h.157a3 3 0 0 1 .472.018c.08.01.193 0 .257.06.077.072.036.194.018.282-.05.246-.066.469-.066.72.328-.051.419-.576.535-.84.131-.298.265-.597.387-.9.06-.148.14-.314.119-.479-.024-.185-.157-.381-.25-.54-.177-.298-.378-.606-.508-.929-.104-.258-.007-.58.286-.672.161-.05.334.049.439.166.22.244.363.609.523.896l1.249 2.248q.159.286.32.57c.043.074.086.188.173.219.077.028.182-.012.26-.027.198-.04.398-.083.598-.12.24-.043.605-.035.778-.222-.253-.08-.545-.075-.808-.057-.158.01-.333.067-.479-.025-.216-.137-.36-.455-.492-.667-.326-.525-.633-1.057-.945-1.59l-.05-.084-.1-.17q-.075-.126-.149-.255c-.037-.066-.092-.153-.039-.227.056-.076.179-.08.29-.081h.021q.066.001.117-.004a10 10 0 0 1 1.347-.107c-.035-.122-.135-.26-.103-.39.071-.292.49-.383.686-.174.131.14.207.334.292.504.113.223.24.44.361.66.211.383.441.757.658 1.138l.055.094.028.047c.093.156.187.314.238.489-.753-.035-1.318-.909-1.646-1.499-.027.095.016.179.05.27q.103.282.262.54c.152.244.326.495.556.673.408.315.945.317 1.436.283.315-.022.708-.165 1.018-.068s.434.438.25.7c-.138.196-.321.27-.55.3.162.346.373.667.527 1.02.064.146.13.37.283.448.102.051.248.003.358 0-.11-.292-.317-.54-.419-.839.31.015.61.176.898.28.567.202 1.128.424 1.687.648l.258.104c.23.092.462.183.689.283.083.037.198.123.29.07.074-.043.123-.146.169-.215a10.3 10.3 0 0 0 1.393-3.208c.75-2.989.106-6.287-1.695-8.783-.692-.96-1.562-1.789-2.522-2.476-2.401-1.718-5.551-2.407-8.44-1.768m4.908 14.904c-.636.166-1.292.317-1.945.401.086.293.296.577.45.84.059.101.122.237.24.281.132.05.292-.03.417-.072-.058-.158-.155-.3-.235-.45-.033-.06-.084-.133-.056-.206.05-.137.263-.13.381-.153.31-.063.617-.142.928-.204.114-.023.274-.085.389-.047.086.03.138.1.187.174l.022.033q.043.07.097.122c.125.113.313.13.472.162-.097-.219-.259-.41-.362-.63-.06-.127-.11-.315-.242-.388-.182-.102-.557.089-.743.137m-4.01-1.457c-.03.38-.147.689-.33 1.019.21.026.423.036.629.087.154.038.296.11.449.153-.082-.224-.233-.423-.35-.63-.12-.208-.226-.462-.398-.63"/></svg>
+          TanStack DB
+        </div>
+        <p class="repo-desc">Reactive client-side data store</p>
+        <div class="repo-stats">
+          <span class="repo-stat">☆ {{ repos['TanStack/db'].stars }}</span>
+          <span v-if="repos['TanStack/db'].downloads" class="repo-stat">↓ {{ repos['TanStack/db'].downloads }}</span>
+        </div>
+      </a>
     </div>
   </Section>
 </template>
