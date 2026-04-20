@@ -2401,6 +2401,87 @@ defmodule Electric.ClientTest do
       [delete] = delete_msgs
       assert delete.value["id"] == "1111"
     end
+
+    test "resume preserves legacy move-out state when active_conditions are missing", ctx do
+      body1 =
+        Jason.encode!([
+          %{
+            "key" => "row-1",
+            "headers" => %{
+              "operation" => "insert",
+              "tags" => ["legacy-tag"]
+            },
+            "offset" => "1_0",
+            "value" => %{"id" => "1111"}
+          },
+          %{"headers" => %{"control" => "up-to-date", "global_last_seen_lsn" => 9998}}
+        ])
+
+      schema = Jason.encode!(%{"id" => %{type: "text"}})
+
+      {:ok, responses} =
+        start_supervised(
+          {Agent,
+           fn ->
+             %{
+               {"-1", nil} => [
+                 &bypass_resp(&1, body1,
+                   shape_handle: "my-shape",
+                   last_offset: "1_0",
+                   schema: schema
+                 )
+               ]
+             }
+           end}
+        )
+
+      bypass_response(ctx, responses)
+
+      msgs = stream(ctx, live: false) |> Enum.to_list()
+
+      resume_msg = Enum.find(msgs, &match?(%ResumeMessage{}, &1))
+      assert resume_msg != nil
+
+      body2 =
+        Jason.encode!([
+          %{
+            "headers" => %{
+              "event" => "move-out",
+              "patterns" => [%{"pos" => 0, "value" => "legacy-tag"}]
+            }
+          },
+          %{"headers" => %{"control" => "up-to-date", "global_last_seen_lsn" => 9999}}
+        ])
+
+      {:ok, responses2} =
+        start_supervised(
+          {Agent,
+           fn ->
+             %{
+               {"1_0", "my-shape"} => [
+                 &bypass_resp(&1, body2,
+                   shape_handle: "my-shape",
+                   last_offset: "2_0"
+                 )
+               ]
+             }
+           end},
+          id: :legacy_responses2
+        )
+
+      bypass_response(ctx, responses2)
+
+      resumed_msgs = stream(ctx, resume: resume_msg, live: false) |> Enum.to_list()
+
+      delete_msgs =
+        Enum.filter(resumed_msgs, &match?(%ChangeMessage{headers: %{operation: :delete}}, &1))
+
+      assert length(delete_msgs) == 1,
+             "Legacy move-out after resume should generate synthetic delete, got: #{inspect(resumed_msgs)}"
+
+      [delete] = delete_msgs
+      assert delete.value["id"] == "1111"
+    end
   end
 
   defp bypass_response_endpoint(ctx, responses, opts) do

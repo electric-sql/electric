@@ -221,6 +221,46 @@ defmodule Electric.Client.TagTrackerTest do
       assert new_tag_to_keys == %{}
       assert new_key_data == %{}
     end
+
+    test "falls back to empty-tag-set deletion when active_conditions are missing" do
+      msg =
+        make_change_msg("key1", :insert,
+          tags: ["tag_a", "tag_b"],
+          value: %{"id" => "1"}
+        )
+
+      {tag_to_keys, key_data, dp} = TagTracker.update_tag_index(%{}, %{}, nil, msg)
+
+      assert key_data["key1"].active_conditions == nil
+
+      {deletes, tag_to_keys, key_data} =
+        TagTracker.generate_synthetic_deletes(
+          tag_to_keys,
+          key_data,
+          dp,
+          [%{pos: 0, value: "tag_a"}],
+          DateTime.utc_now()
+        )
+
+      assert deletes == []
+      assert key_data["key1"].active_conditions == nil
+      assert key_data["key1"].tags == MapSet.new([{0, "tag_b"}])
+      assert tag_to_keys == %{{0, "tag_b"} => MapSet.new(["key1"])}
+
+      {deletes, tag_to_keys, key_data} =
+        TagTracker.generate_synthetic_deletes(
+          tag_to_keys,
+          key_data,
+          dp,
+          [%{pos: 0, value: "tag_b"}],
+          DateTime.utc_now()
+        )
+
+      assert length(deletes) == 1
+      assert hd(deletes).key == "key1"
+      assert tag_to_keys == %{}
+      assert key_data == %{}
+    end
   end
 
   describe "normalize_tags/1" do

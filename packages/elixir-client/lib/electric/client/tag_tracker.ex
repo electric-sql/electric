@@ -186,25 +186,41 @@ defmodule Electric.Client.TagTracker do
             {deletes, kd_acc, ttk_acc}
 
           %{tags: current_entries, msg: msg} = data ->
-            deactivated_positions =
-              MapSet.new(removed_entries, fn {pos, _} -> pos end)
+            case data.active_conditions do
+              nil ->
+                # Legacy/simple shapes without active_conditions still use
+                # empty-tag-set deletion semantics rather than DNF visibility.
+                remaining_entries = MapSet.difference(current_entries, removed_entries)
+                ttk_acc = remove_key_from_tags(ttk_acc, removed_entries, key)
 
-            updated_ac =
-              data.active_conditions
-              |> Enum.with_index()
-              |> Enum.map(fn {val, idx} ->
-                if MapSet.member?(deactivated_positions, idx), do: false, else: val
-              end)
+                if MapSet.size(remaining_entries) == 0 do
+                  {[{key, msg} | deletes], Map.delete(kd_acc, key), ttk_acc}
+                else
+                  updated_data = %{data | tags: remaining_entries}
+                  {deletes, Map.put(kd_acc, key, updated_data), ttk_acc}
+                end
 
-            visible = row_visible?(updated_ac, disjunct_positions)
+              active_conditions ->
+                deactivated_positions =
+                  MapSet.new(removed_entries, fn {pos, _} -> pos end)
 
-            if not visible do
-              ttk_acc = remove_key_from_tags(ttk_acc, current_entries, key)
+                updated_ac =
+                  active_conditions
+                  |> Enum.with_index()
+                  |> Enum.map(fn {val, idx} ->
+                    if MapSet.member?(deactivated_positions, idx), do: false, else: val
+                  end)
 
-              {[{key, msg} | deletes], Map.delete(kd_acc, key), ttk_acc}
-            else
-              updated_data = %{data | active_conditions: updated_ac}
-              {deletes, Map.put(kd_acc, key, updated_data), ttk_acc}
+                visible = row_visible?(updated_ac, disjunct_positions)
+
+                if not visible do
+                  ttk_acc = remove_key_from_tags(ttk_acc, current_entries, key)
+
+                  {[{key, msg} | deletes], Map.delete(kd_acc, key), ttk_acc}
+                else
+                  updated_data = %{data | active_conditions: updated_ac}
+                  {deletes, Map.put(kd_acc, key, updated_data), ttk_acc}
+                end
             end
         end
       end)
