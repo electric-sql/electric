@@ -268,11 +268,16 @@ defmodule Electric.Plug.ServeShapePlug do
         put_private(conn, :shape_exists, false)
     end
   rescue
-    # Narrow rescue by design: this only catches the startup race where the
-    # shape cache registry isn't yet populated (Registry.lookup raises
-    # ArgumentError). Any other exception from fetch_handle_by_shape
-    # intentionally propagates to the outer try/catch in call/2, since no
-    # permit has been acquired yet and handle_errors will send a 500.
+    # Narrow rescue by design: guards against the startup race where the
+    # shape cache's ETS tables haven't been created yet — ETS operations
+    # (lookup, insert, whereis) raise ArgumentError on a missing table,
+    # which can happen when a request arrives before the shape subsystem
+    # finishes initializing. Note this rescue applies to the whole function
+    # body, not just fetch_handle_by_shape; an ArgumentError from any other
+    # operation here would also be swallowed and classified conservatively
+    # as :initial. Any non-ArgumentError exception intentionally propagates
+    # to the outer try/catch in call/2, since no permit has been acquired
+    # yet and handle_errors will send a 500.
     ArgumentError -> put_private(conn, :shape_exists, false)
   end
 
