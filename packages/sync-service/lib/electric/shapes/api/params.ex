@@ -158,7 +158,6 @@ defmodule Electric.Shapes.Api.Params do
     field(@tmp_compaction_flag, :boolean, default: false)
     field(:live_sse, :boolean, default: false)
     field(:log, Ecto.Enum, values: [:changes_only, :full], default: :full)
-    field(:electric_protocol_version, :string)
 
     embeds_one(:subset, SubsetParams)
   end
