@@ -398,7 +398,7 @@ onUnmounted(() => {
 <template>
   <div ref="rootRef" class="qs-root">
     <span class="sr-only">
-      Animated terminal walkthrough: creates a Durable Stream, appends a
+      Animated terminal walkthrough: creates an Electric Stream, appends a
       message, reads it back from offset -1, then tails it live with
       server-sent events.
     </span>

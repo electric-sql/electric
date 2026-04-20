@@ -34,7 +34,7 @@ const LAYERS: Layer[] = [
     token: '{"event":"click"}',
   },
   {
-    name: "Durable Streams",
+    name: "Electric Streams",
     desc: "PUT · POST · GET · HEAD · DELETE",
     aside: "← bytes + offsets · the base protocol",
     hint: "The HTTP wire format. Append bytes, replay from any offset.",

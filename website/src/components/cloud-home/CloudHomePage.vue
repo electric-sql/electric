@@ -15,7 +15,7 @@ const heroInnerRef = ref<HTMLElement>()
       <CloudHexBg />
       <div ref="heroInnerRef" class="cl-hero-inner">
         <h1 class="cl-hero-name">
-          Electric <span class="cl-hero-underline">Cloud</span>
+          Electric <span class="cl-hero-accent">Cloud</span>
         </h1>
         <p class="cl-hero-tagline">
           Scalable data infrastructure platform for building fast, modern apps
@@ -250,21 +250,20 @@ const heroInnerRef = ref<HTMLElement>()
 
 .cl-hero-name {
   font-size: 64px;
-  font-weight: 800;
+  font-weight: 700;
   line-height: 1.2;
-  background: var(--vp-home-hero-name-background);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: var(--vp-home-hero-name-color);
+  background: none;
+  -webkit-background-clip: border-box;
+  background-clip: border-box;
+  -webkit-text-fill-color: currentColor;
+  color: #f3f7ff;
   margin: 0;
   padding-bottom: 4px;
 }
 
-.cl-hero-underline {
-  text-decoration: underline;
-  text-decoration-color: var(--vp-c-brand-1);
-  text-underline-offset: 0.1em;
-  text-decoration-thickness: 0.135em;
+.cl-hero-accent {
+  color: var(--vp-c-brand-1);
+  -webkit-text-fill-color: currentColor;
 }
 
 .cl-hero-tagline {

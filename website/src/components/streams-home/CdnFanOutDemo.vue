@@ -270,7 +270,7 @@ const particles = computed<Particle[]>(() => {
 <template>
   <div ref="rootRef" class="cf">
     <span class="sr-only">
-      A diagram showing one origin Durable Stream request fanning out
+      A diagram showing one origin Electric Stream request fanning out
       through three CDN edge nodes — lhr, fra and nyc — to a grid of
       cached client reads. Counters at the bottom show one origin
       request and twelve thousand four hundred and thirty-eight client

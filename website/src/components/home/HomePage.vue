@@ -19,10 +19,9 @@ import NoSilosStrap from './straps/NoSilosStrap.vue'
    manage its own inner max-width container — exactly the pattern used by
    the agents / streams / sync landing pages.
 
-   This is regular SSR-friendly Vue. The only client-only bits are the
-   `<HomeIsoBg>` canvas inside `HomeHero` and `HomeProductSection`, which
-   already wrap themselves in `<ClientOnly>`. The rest of the page renders
-   on the server. */
+   This is regular SSR-friendly Vue. The homepage sections all render on the
+   server; any future visual treatments can slot back into the existing
+   placeholders in `HomeHero` and `HomeProductSection`. */
 
 onMounted(() => {
   if (typeof window !== 'undefined' && document.querySelector) {

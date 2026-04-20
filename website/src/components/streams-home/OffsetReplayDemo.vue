@@ -296,7 +296,7 @@ const serverDots = computed(() => {
 <template>
   <div ref="rootRef" class="ord">
     <span class="sr-only">
-      Diagram showing a producer service posting chunks to a Durable Stream
+      Diagram showing a producer service posting chunks to an Electric Stream
       server that de-duplicates by Producer-Id, Producer-Epoch and Producer-Seq
       headers, while a consumer client reads chunks and resumes from the last
       offset it saw after a connection drop.

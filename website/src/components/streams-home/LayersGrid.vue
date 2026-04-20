@@ -11,7 +11,7 @@ interface Layer {
 const layers: Layer[] = [
   {
     tag: "01 · the wire",
-    title: "Durable Streams",
+    title: "Electric Streams",
     body: "Append bytes, replay from any offset. The HTTP base protocol every other layer is built on.",
     code: [
       "PUT   /v1/stream/x",

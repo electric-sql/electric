@@ -11,7 +11,6 @@ import HTML5Video from '../../src/components/HTML5Video.vue'
 import NavSignupButton from '../../src/components/NavSignupButton.vue'
 import YoutubeEmbed from '../../src/components/YoutubeEmbed.vue'
 
-import CloudSectionNav from './components/CloudSectionNav.vue'
 import MegaNav from './components/MegaNav.vue'
 import MegaNavMobile from './components/MegaNavMobile.vue'
 import MegaNavPanel from './components/MegaNavPanel.vue'
@@ -49,7 +48,6 @@ import './custom.css'
 export default {
   enhanceApp({ app }) {
     app.component(`CloudHomePage`, CloudHomePage)
-    app.component(`CloudSectionNav`, CloudSectionNav)
     app.component(`DemoCTAs`, DemoCTAs)
     app.component(`DemoEmbed`, DemoEmbed)
     app.component(`DemoListing`, DemoListing)

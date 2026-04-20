@@ -789,11 +789,11 @@ span.no-visual {
 }
 @media (max-width: 767px) {
   .DocSearch-Button {
-    width: 38px;
-    margin-right: -8px;
+    width: 48px;
+    margin-right: 0;
   }
   .VPNavBarHamburger {
-    width: 38px !important;
+    width: 48px !important;
     margin-right: 4px;
   }
 }
@@ -1626,6 +1626,29 @@ ul.demo-actions li .VPButton {
    which would hide the last <a> (Pricing) and the last <button> in MegaNav. */
 .MegaNav .mega-nav-link {
   display: inline-flex !important;
+}
+
+.MegaNav .mega-nav-fallback-pricing,
+.MegaNav .mega-nav-fallback-blog {
+  display: none !important;
+}
+
+@media (max-width: 1059px) {
+  .MegaNav .mega-nav-top-pricing {
+    display: none !important;
+  }
+  .MegaNav .mega-nav-fallback-pricing {
+    display: flex !important;
+  }
+}
+
+@media (max-width: 959px) {
+  .MegaNav .mega-nav-top-blog {
+    display: none !important;
+  }
+  .MegaNav .mega-nav-fallback-blog {
+    display: flex !important;
+  }
 }
 
 .MegaNav .mega-nav-link.mega-nav-trigger {

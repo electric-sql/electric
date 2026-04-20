@@ -1,27 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed } from 'vue'
 import { VPButton } from 'vitepress/theme'
-import HomeIsoBg from './HomeIsoBg.vue'
-import type { CropName } from './iso/types'
-
-// On narrow viewports we collapse to a single column and the iso
-// scene's horizontal bleed (~55 % of the cell) would push the page
-// content past the viewport edge, forcing horizontal scroll. Switch
-// bleed off below the breakpoint.
-const isNarrow = ref(false)
-let bleedMql: MediaQueryList | null = null
-function syncNarrow() {
-  isNarrow.value = !!bleedMql?.matches
-}
-onMounted(() => {
-  if (typeof window === 'undefined') return
-  bleedMql = window.matchMedia('(max-width: 1099px)')
-  syncNarrow()
-  bleedMql.addEventListener('change', syncNarrow)
-})
-onUnmounted(() => {
-  bleedMql?.removeEventListener('change', syncNarrow)
-})
 
 type Product = 'agents' | 'streams' | 'sync'
 
@@ -33,66 +12,47 @@ const props = defineProps<{
 
 interface Copy {
   eyebrow: string
+  name: string
   title: string
   sub: string
   cta: { text: string; href: string }
   secondary: { text: string; href: string }
-  crop: CropName
   /** Side the iso scene sits on. Text takes the other side. */
   sceneSide: 'left' | 'right'
 }
 
 const COPY: Record<Product, Copy> = {
   agents: {
-    eyebrow: 'Electric Agents',
-    title: 'Agents that participate, not just&nbsp;respond.',
-    sub: 'Durable, serverless agents that share state with humans, hand off work, and never lose a thread.',
+    eyebrow: 'Agent runtime',
+    name: 'Electric Agents',
+    title: 'The runtime for long-lived agents',
+    sub: 'Agents live as durable, synced entities — resumable across devices, observable across teams, forkable for review and experimentation.',
     cta: { text: 'Explore Agents »', href: '/agents' },
     secondary: { text: 'Quickstart', href: '/docs/agents/quickstart' },
-    crop: 'coordination-floor',
     sceneSide: 'left',
   },
   streams: {
-    eyebrow: 'Durable Streams',
-    title: 'A live substrate for in-flight&nbsp;work.',
-    sub: 'Persistent, addressable, real-time streams over plain HTTP. Branch, replay, fan out over CDN.',
+    eyebrow: 'Data primitive',
+    name: 'Electric Streams',
+    title: 'The data primitive for the agent loop',
+    sub: 'Persistent, addressable, real-time streams — a flexible, swiss-army-knife data primitive for agent session data.',
     cta: { text: 'Explore Streams »', href: '/streams' },
     secondary: { text: 'Read the spec', href: 'https://durablestreams.com' },
-    crop: 'substrate-cutaway',
     sceneSide: 'right',
   },
   sync: {
-    eyebrow: 'Electric Sync',
-    title: 'One source of truth, on every&nbsp;surface.',
-    sub: 'Sync subsets of Postgres into everything. Sub-millisecond live updates. Multi-user, multi-agent.',
+    eyebrow: 'Sync engine',
+    name: 'Electric Sync',
+    title: 'The core sync engine technology',
+    sub: 'Compostable sync primitives that power end-to-end reactivity and collaboration for multi-agent systems.',
     cta: { text: 'Explore Sync »', href: '/sync' },
     secondary: { text: 'Quickstart', href: '/docs/quickstart' },
-    crop: 'mirrored-surfaces',
     sceneSide: 'left',
   },
 }
 
 const copy = computed(() => COPY[props.product])
 const sceneFirst = computed(() => copy.value.sceneSide === 'left')
-
-// Bleed for the iso scene. We extend horizontally to the outside page
-// edge (~55 % of the scene cell) so the vignette feels continuous with
-// the page band, but we deliberately keep vertical bleed at 0 — the
-// section is `overflow-y: hidden`, and a vertical bleed would either be
-// clipped (looking abrupt) or leak into neighbouring sections. The
-// feather mask still gives a soft top/bottom fade *within* the cell.
-// `streams` stays boxed so it gets no bleed at all. On mobile we drop
-// the bleed entirely — the layout collapses to single-column so the
-// scene already spans the full content width and any extra bleed would
-// push the page past the viewport edge.
-const sceneBleed = computed(() => {
-  if (copy.value.crop === 'substrate-cutaway') return 0
-  if (isNarrow.value) return 0
-  if (copy.value.sceneSide === 'left') {
-    return { top: 0, right: 0, bottom: 0, left: 0.55 }
-  }
-  return { top: 0, right: 0.55, bottom: 0, left: 0 }
-})
 </script>
 
 <template>
@@ -108,18 +68,13 @@ const sceneBleed = computed(() => {
       <div class="home-product-inner">
       <div class="home-product-grid">
         <div class="home-product-scene">
-          <ClientOnly>
-            <HomeIsoBg
-              :crop="copy.crop"
-              :auto-start="false"
-              :zoom="1.15"
-              :bleed="sceneBleed"
-              :feather="!props.dark && props.product !== 'streams'"
-            />
-          </ClientOnly>
+          <div class="home-product-placeholder" aria-label="Homepage section graphic placeholder">
+            TBD
+          </div>
         </div>
         <div class="home-product-text">
           <p class="home-product-eyebrow">{{ copy.eyebrow }}</p>
+          <p class="home-product-name">{{ copy.name }}</p>
           <h2 class="home-product-title" v-html="copy.title" />
           <p class="home-product-sub">{{ copy.sub }}</p>
           <div class="home-product-actions">
@@ -211,20 +166,22 @@ const sceneBleed = computed(() => {
   aspect-ratio: 4 / 3;
   min-height: 320px;
   max-height: 480px;
-  /* No `overflow: hidden` on the unboxed variants — the iso canvas uses
-     `bleed` to extend past this slot toward the page edge. The page-band
-     `.home-product` still has implicit clipping via the surrounding
-     layout. */
 }
 
-/* Streams is the only vignette rendered as a contained card; the others
-   bleed to the edges of their grid cell so the substrate / surfaces feel
-   continuous with the page. */
-.home-product--boxed .home-product-scene {
-  border: 1px solid var(--vp-c-divider);
+.home-product-placeholder {
+  position: absolute;
+  inset: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed var(--vp-c-divider);
   border-radius: 14px;
-  background: var(--ea-surface-alt);
-  overflow: hidden;
+  background: transparent;
+  color: var(--ea-text-3);
+  font-family: var(--vp-font-family-mono);
+  font-size: 18px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .home-product-eyebrow {
@@ -232,11 +189,20 @@ const sceneBleed = computed(() => {
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--ea-text-3);
-  margin: 0 0 14px;
+  margin: 0 0 10px;
+}
+
+.home-product-name {
+  font-size: 42px;
+  font-weight: 700;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  color: var(--ea-text-1);
+  margin: 0 0 12px;
 }
 
 .home-product-title {
-  font-size: 32px;
+  font-size: 28px;
   font-weight: 700;
   line-height: 1.2;
   letter-spacing: -0.015em;
@@ -292,8 +258,11 @@ const sceneBleed = computed(() => {
     padding-top: 56px;
     padding-bottom: 56px;
   }
+  .home-product-name {
+    font-size: 34px;
+  }
   .home-product-title {
-    font-size: 26px;
+    font-size: 24px;
   }
   .home-product-sub {
     font-size: 15px;

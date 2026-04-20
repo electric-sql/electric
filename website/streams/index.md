@@ -1,6 +1,6 @@
 ---
 layout: page
-title: Durable Streams
+title: Electric Streams
 titleTemplate: false
 description: >-
   The data primitive for the agent loop. Persistent, addressable, real-time

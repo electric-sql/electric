@@ -183,6 +183,17 @@ export default defineConfig({
       provider: 'local',
     },
     sidebar: {
+      '/cloud/': [
+        {
+          text: 'Electric Cloud',
+          collapsed: false,
+          items: [
+            { text: 'Introduction', link: '/cloud' },
+            { text: 'Usage', link: '/cloud/usage' },
+            { text: 'CLI', link: '/cloud/cli' },
+          ],
+        },
+      ],
       '/sync/': [
         {
           text: 'Electric Sync',

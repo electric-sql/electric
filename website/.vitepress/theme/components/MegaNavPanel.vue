@@ -40,33 +40,53 @@ defineEmits(['navigate'])
               product.homeSublabel
             }}</span>
           </a>
-          <a
-            class="mega-nav-panel-item"
-            :href="`${product.docsBase}/quickstart`"
-            role="menuitem"
-            @click="$emit('navigate')"
-          >
-            <span class="mega-nav-panel-label">Quickstart</span>
-            <span class="mega-nav-panel-sublabel">Get up and running fast</span>
-          </a>
-          <a
-            class="mega-nav-panel-item"
-            :href="`${product.base}/demos`"
-            role="menuitem"
-            @click="$emit('navigate')"
-          >
-            <span class="mega-nav-panel-label">Demos</span>
-            <span class="mega-nav-panel-sublabel">Example apps</span>
-          </a>
-          <a
-            class="mega-nav-panel-item"
-            :href="product.docsBase"
-            role="menuitem"
-            @click="$emit('navigate')"
-          >
-            <span class="mega-nav-panel-label">Docs</span>
-            <span class="mega-nav-panel-sublabel">Full documentation</span>
-          </a>
+          <template v-if="product.primaryLinks && product.primaryLinks.length">
+            <a
+              v-for="item in product.primaryLinks"
+              :key="item.link"
+              class="mega-nav-panel-item"
+              :class="item.className"
+              :href="item.link"
+              role="menuitem"
+              @click="$emit('navigate')"
+            >
+              <span class="mega-nav-panel-label">{{ item.label }}</span>
+              <span
+                v-if="item.sublabel"
+                class="mega-nav-panel-sublabel"
+                >{{ item.sublabel }}</span
+              >
+            </a>
+          </template>
+          <template v-else>
+            <a
+              class="mega-nav-panel-item"
+              :href="`${product.docsBase}/quickstart`"
+              role="menuitem"
+              @click="$emit('navigate')"
+            >
+              <span class="mega-nav-panel-label">Quickstart</span>
+              <span class="mega-nav-panel-sublabel">Get up and running fast</span>
+            </a>
+            <a
+              class="mega-nav-panel-item"
+              :href="`${product.base}/demos`"
+              role="menuitem"
+              @click="$emit('navigate')"
+            >
+              <span class="mega-nav-panel-label">Demos</span>
+              <span class="mega-nav-panel-sublabel">Example apps</span>
+            </a>
+            <a
+              class="mega-nav-panel-item"
+              :href="product.docsBase"
+              role="menuitem"
+              @click="$emit('navigate')"
+            >
+              <span class="mega-nav-panel-label">Docs</span>
+              <span class="mega-nav-panel-sublabel">Full documentation</span>
+            </a>
+          </template>
         </div>
         <div
           v-if="product.secondary"
@@ -128,23 +148,34 @@ defineEmits(['navigate'])
     </template>
     <template v-else-if="resources">
       <div class="mega-nav-panel-section mega-nav-panel-cols">
-        <a
-          v-for="link in resources.links"
-          :key="link.link"
-          class="mega-nav-panel-item"
-          :href="link.link"
-          role="menuitem"
-          @click="$emit('navigate')"
+        <div
+          v-for="(column, index) in resources.columns"
+          :key="index"
+          class="mega-nav-panel-col"
+          :class="{ 'mega-nav-panel-col-divider': index > 0 }"
         >
-          <span class="mega-nav-panel-label">{{ link.label }}</span>
-          <span
-            v-if="link.sublabel"
-            class="mega-nav-panel-sublabel"
-            >{{ link.sublabel }}</span
+          <a
+            v-for="link in column"
+            :key="link.link"
+            class="mega-nav-panel-item"
+            :class="link.className"
+            :href="link.link"
+            role="menuitem"
+            @click="$emit('navigate')"
           >
-        </a>
+            <span class="mega-nav-panel-label">{{ link.label }}</span>
+            <span
+              v-if="link.sublabel"
+              class="mega-nav-panel-sublabel"
+              >{{ link.sublabel }}</span
+            >
+          </a>
+        </div>
       </div>
-      <div class="mega-nav-panel-section mega-nav-panel-social">
+      <div
+        v-if="resources.social && resources.social.length"
+        class="mega-nav-panel-section mega-nav-panel-social"
+      >
         <a
           v-for="s in resources.social"
           :key="s.link"

@@ -17,7 +17,7 @@ const NAV = [
     label: 'Streams',
     base: '/streams',
     docsBase: '/docs/streams',
-    homeLabel: 'Durable Streams',
+    homeLabel: 'Electric Streams',
     homeSublabel: 'The data primitive for the agent loop',
     secondary: {
       heading: 'Integrations',
@@ -83,44 +83,74 @@ const NAV = [
     },
   },
   '|',
-  { id: 'cloud', label: 'Cloud', link: '/cloud' },
-  { id: 'pricing', label: 'Pricing', link: '/pricing' },
+  {
+    id: 'cloud',
+    label: 'Cloud',
+    base: '/cloud',
+    homeLabel: 'Electric Cloud',
+    homeSublabel: 'Managed infrastructure for Electric',
+    primaryLinks: [
+      {
+        label: 'Pricing',
+        sublabel: 'Plans and usage-based pricing',
+        link: '/pricing',
+        className: 'mega-nav-fallback-pricing',
+      },
+      {
+        label: 'Usage',
+        sublabel: 'Connect a database and make API requests',
+        link: '/cloud/usage',
+      },
+      {
+        label: 'CLI',
+        sublabel: 'Manage Cloud resources from the terminal',
+        link: '/cloud/cli',
+      },
+    ],
+  },
+  { id: 'pricing', label: 'Pricing', link: '/pricing', className: 'mega-nav-top-pricing' },
   '|',
-  { id: 'resources', label: 'Resources' },
+  { id: 'blog', label: 'Blog', link: '/blog', className: 'mega-nav-top-blog' },
+  { id: 'resources', label: 'More' },
 ]
 
 const RESOURCES = {
-  links: [
-    {
-      label: 'Blog',
-      sublabel: 'Latest posts and updates',
-      link: '/blog',
-    },
-    {
-      label: 'Community',
-      sublabel: 'Discord, GitHub and more',
-      link: '/about/community',
-    },
-    {
-      label: 'Team',
-      sublabel: 'Meet the team behind Electric',
-      link: '/about/team',
-    },
-    {
-      label: 'Careers',
-      sublabel: 'Work with us',
-      link: '/about/careers',
-    },
-    {
-      label: 'Contact',
-      sublabel: 'Get in touch',
-      link: '/about/contact',
-    },
-    {
-      label: 'LLMs / AGENTS.md',
-      sublabel: 'Coding agent instructions',
-      link: '/llms',
-    },
+  columns: [
+    [
+      {
+        label: 'Team',
+        sublabel: 'Meet the team behind Electric',
+        link: '/about/team',
+      },
+      {
+        label: 'Careers',
+        sublabel: 'Work with us',
+        link: '/about/careers',
+      },
+      {
+        label: 'Contact',
+        sublabel: 'Get in touch',
+        link: '/about/contact',
+      },
+    ],
+    [
+      {
+        label: 'Blog',
+        sublabel: 'Latest posts and updates',
+        link: '/blog',
+        className: 'mega-nav-fallback-blog',
+      },
+      {
+        label: 'Community',
+        sublabel: 'Discord, GitHub and more',
+        link: '/about/community',
+      },
+      {
+        label: 'LLMs / AGENTS.md',
+        sublabel: 'Coding agent instructions',
+        link: '/llms',
+      },
+    ],
   ],
   social: [
     {
@@ -151,8 +181,8 @@ const activeId = computed(() => {
   if (p.startsWith('/sync') || p.startsWith('/docs/sync')) return 'sync'
   if (p.startsWith('/cloud')) return 'cloud'
   if (p.startsWith('/pricing')) return 'pricing'
-  if (p.startsWith('/blog') || p.startsWith('/about') || p === '/llms')
-    return 'resources'
+  if (p.startsWith('/blog')) return 'blog'
+  if (p.startsWith('/about') || p === '/llms') return 'resources'
   return null
 })
 
@@ -267,7 +297,7 @@ onBeforeUnmount(() => {
       <a
         v-else-if="item.link"
         class="VPNavBarMenuLink mega-nav-link"
-        :class="{ active: activeId === item.id }"
+        :class="[item.className, { active: activeId === item.id }]"
         :href="item.link"
       >
         {{ item.label }}

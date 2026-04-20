@@ -57,7 +57,7 @@ const fanoutMiniDotCount = FANOUT_COLS * FANOUT_ROWS
       <SyncFanOutBg :exclude-el="heroInnerRef" />
       <div ref="heroInnerRef" class="sh-hero-inner">
         <h1 class="sh-hero-name">
-          Electric <span class="sh-hero-underline">Sync</span>
+          Electric <span class="sh-hero-accent">Sync</span>
         </h1>
         <p class="sh-hero-text">
           Sync subsets of your Postgres into everything.
@@ -649,21 +649,20 @@ const fanoutMiniDotCount = FANOUT_COLS * FANOUT_ROWS
 
 .sh-hero-name {
   font-size: 56px;
-  font-weight: 800;
+  font-weight: 700;
   line-height: 1.2;
-  background: var(--vp-home-hero-name-background);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: var(--vp-home-hero-name-color);
+  background: none;
+  -webkit-background-clip: border-box;
+  background-clip: border-box;
+  -webkit-text-fill-color: currentColor;
+  color: var(--ea-text-1);
   margin: 0;
   padding-bottom: 4px;
 }
 
-.sh-hero-underline {
-  text-decoration: underline;
-  text-decoration-color: var(--vp-c-brand-1);
-  text-underline-offset: 0.1em;
-  text-decoration-thickness: 0.135em;
+.sh-hero-accent {
+  color: var(--vp-c-brand-1);
+  -webkit-text-fill-color: currentColor;
 }
 
 .sh-hero-text {

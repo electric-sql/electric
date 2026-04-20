@@ -5,6 +5,7 @@ import { VPButton } from "vitepress/theme"
 import EaSection from "../agents-home/Section.vue"
 
 import StreamFlowBg from "./StreamFlowBg.vue"
+import AgentLoopFillDemo from "./AgentLoopFillDemo.vue"
 import ConnectionDropDemo from "./ConnectionDropDemo.vue"
 import QuickstartPlaybackDemo from "./QuickstartPlaybackDemo.vue"
 import ThreePropertiesGrid from "./ThreePropertiesGrid.vue"
@@ -36,7 +37,7 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
       <StreamFlowBg :exclude-el="heroInnerRef" />
       <div ref="heroInnerRef" class="ds-hero-inner">
         <h1 class="ds-hero-name">
-          Durable <span class="ds-hero-underline">Streams</span>
+          Electric <span class="ds-hero-accent">Streams</span>
         </h1>
         <p class="ds-hero-text">
           The data primitive for the agent&nbsp;loop
@@ -106,6 +107,26 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
       </div>
     </section>
 
+    <!-- ───────────────── §1.5 — The agent loop, on streams ───────────────── -->
+    <EaSection id="agent-loop-primitive">
+      <div class="ds-split ds-split--demo-2x">
+        <div class="ds-split-text">
+          <h2 class="ea-section-title">
+            The agent loop is a stream of durable&nbsp;events
+          </h2>
+          <p class="ea-section-subtitle">
+            Every prompt, generation, tool call and result is appended at a
+            known <strong>offset</strong> on a durable&nbsp;stream. Each
+            segment is an addressable position &mdash; one you can replay
+            from, branch off, or fan out to anyone&nbsp;watching.
+          </p>
+        </div>
+        <div class="ds-split-demo">
+          <AgentLoopFillDemo />
+        </div>
+      </div>
+    </EaSection>
+
     <!-- ───────────────── §2 — Streaming needs to be durable ───────────────── -->
     <EaSection
       id="durable-pain"
@@ -116,7 +137,7 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
         Real apps need streams that <strong>survive&nbsp;disconnects</strong>,
         <strong>persist&nbsp;across&nbsp;sessions</strong> and let many users
         and agents read and write the same conversation. That's what a
-        <strong>Durable&nbsp;Stream</strong>&nbsp;is.
+        <strong>Electric&nbsp;Stream</strong>&nbsp;is.
       </p>
       <ConnectionDropDemo />
     </EaSection>
@@ -139,7 +160,7 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
     <EaSection
       id="three-properties"
       title="Three properties that change&nbsp;everything"
-      subtitle="Durable Streams is a protocol, not a SaaS. The protocol is the&nbsp;product."
+      subtitle="Electric Streams is a protocol, not a SaaS. The protocol is the&nbsp;product."
     >
       <ThreePropertiesGrid />
     </EaSection>
@@ -168,7 +189,7 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
     <EaSection
       id="polyglot"
       title="It's just HTTP — works&nbsp;everywhere"
-      subtitle="If your runtime can speak HTTP, it can read and write a Durable Stream. No SDK lock-in. No proprietary transport. No WebSocket&nbsp;infrastructure."
+      subtitle="If your runtime can speak HTTP, it can read and write an Electric Stream. No SDK lock-in. No proprietary transport. No WebSocket&nbsp;infrastructure."
     >
       <PolyglotLineup />
     </EaSection>
@@ -211,7 +232,7 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
     <EaSection
       id="ai-loop"
       title="Built for the AI&nbsp;loop"
-      subtitle="From token streams to multi-agent collaboration — Durable Streams plug into the AI stack you already&nbsp;use."
+      subtitle="From token streams to multi-agent collaboration — Electric Streams plug into the AI stack you already&nbsp;use."
     >
       <IntegrationsGrid />
     </EaSection>
@@ -234,7 +255,7 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
             <span class="stack-conn-label">POST /v1/stream/&hellip;</span>
           </div>
           <div class="stack-box runtime-box">
-            <div class="stack-label">⚡ Durable Streams</div>
+            <div class="stack-label">⚡ Electric Streams</div>
             <div class="stack-examples">Electric Cloud · self-host</div>
           </div>
           <div class="stack-connector">
@@ -411,7 +432,7 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
     <EaSection
       id="live-demos"
       title="Live&nbsp;demos"
-      subtitle="See Durable Streams in action. Every demo is open source — fork it, run it, learn from&nbsp;it."
+      subtitle="See Electric Streams in action. Every demo is open source — fork it, run it, learn from&nbsp;it."
       :dark="true"
     >
       <div class="ds-demo-strip">
@@ -439,7 +460,7 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
           </div>
           <div class="ds-demo-body">
             <h3>Yjs Collab Editor</h3>
-            <p>Multi-user collaborative editor over Yjs CRDTs and Durable Streams. No WebSocket server needed.</p>
+            <p>Multi-user collaborative editor over Yjs CRDTs and Electric Streams. No WebSocket server needed.</p>
           </div>
         </a>
       </div>
@@ -573,21 +594,20 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
 
 .ds-hero-name {
   font-size: 56px;
-  font-weight: 800;
+  font-weight: 700;
   line-height: 1.2;
-  background: var(--vp-home-hero-name-background);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: var(--vp-home-hero-name-color);
+  background: none;
+  -webkit-background-clip: border-box;
+  background-clip: border-box;
+  -webkit-text-fill-color: currentColor;
+  color: var(--ea-text-1);
   margin: 0;
   padding-bottom: 4px;
 }
 
-.ds-hero-underline {
-  text-decoration: underline;
-  text-decoration-color: var(--vp-c-brand-1);
-  text-underline-offset: 0.1em;
-  text-decoration-thickness: 0.135em;
+.ds-hero-accent {
+  color: var(--vp-c-brand-1);
+  -webkit-text-fill-color: currentColor;
 }
 
 .ds-hero-text {

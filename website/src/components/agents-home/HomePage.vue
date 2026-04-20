@@ -27,9 +27,9 @@ function copyInstall() {
     <section class="ea-hero">
       <HeroNetworkBg :exclude-el="heroInnerRef" />
       <div ref="heroInnerRef" class="ea-hero-inner">
-        <h1 class="ea-hero-name">Electric <span class="ea-hero-underline">Agents</span></h1>
+        <h1 class="ea-hero-name">Electric <span class="ea-hero-accent">Agents</span></h1>
         <p class="ea-hero-text">
-          Wire the agent loop into your online&nbsp;systems
+          The runtime for long-lived agents
         </p>
         <p class="ea-hero-tagline">
           Durable, composable, serverless agents — built on
@@ -60,7 +60,7 @@ function copyInstall() {
     <Section id="come-online">
       <div class="ea-come-online">
         <div class="ea-come-online-text">
-          <h2 class="ea-section-title">Agents need to come&nbsp;online</h2>
+          <h2 class="ea-section-title">Wire agents into your online systems</h2>
           <p class="ea-prose">
             Today's agents live on your laptop or behind a chat window.
             But real work happens inside business systems — triggered by
@@ -485,21 +485,20 @@ function copyInstall() {
 
 .ea-hero-name {
   font-size: 56px;
-  font-weight: 800;
+  font-weight: 700;
   line-height: 1.2;
-  background: var(--vp-home-hero-name-background);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: var(--vp-home-hero-name-color);
+  background: none;
+  -webkit-background-clip: border-box;
+  background-clip: border-box;
+  -webkit-text-fill-color: currentColor;
+  color: var(--ea-text-1);
   margin: 0;
   padding-bottom: 4px;
 }
 
-.ea-hero-underline {
-  text-decoration: underline;
-  text-decoration-color: var(--vp-c-brand-1);
-  text-underline-offset: 0.1em;
-  text-decoration-thickness: 0.135em;
+.ea-hero-accent {
+  color: var(--vp-c-brand-1);
+  -webkit-text-fill-color: currentColor;
 }
 
 .ea-hero-text {

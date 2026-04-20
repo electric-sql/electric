@@ -3,7 +3,6 @@ title: Usage
 description: How to use Electric Cloud
 image: /img/meta/electric-cloud.jpg
 outline: deep
-sidebar: false
 ---
 
 <img src="/img/icons/ddn.svg" class="product-icon" />

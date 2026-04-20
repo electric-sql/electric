@@ -16,7 +16,7 @@ const NAV = [
     label: 'Streams',
     base: '/streams',
     docsBase: '/docs/streams',
-    homeLabel: 'Durable Streams',
+    homeLabel: 'Electric Streams',
     homeSublabel: 'The data primitive for the agent loop',
     extras: [
       { label: 'TanStack AI', link: '/docs/streams/integrations/tanstack-ai' },
@@ -39,19 +39,29 @@ const NAV = [
     ],
   },
   '|',
-  { id: 'cloud', label: 'Cloud', link: '/cloud' },
+  {
+    id: 'cloud',
+    label: 'Cloud',
+    base: '/cloud',
+    homeLabel: 'Electric Cloud',
+    homeSublabel: 'Managed infrastructure for Electric',
+    primaryLinks: [
+      { label: 'Usage', link: '/cloud/usage' },
+      { label: 'CLI', link: '/cloud/cli' },
+    ],
+  },
   { id: 'pricing', label: 'Pricing', link: '/pricing' },
   '|',
-  { id: 'resources', label: 'Resources' },
+  { id: 'blog', label: 'Blog', link: '/blog' },
+  { id: 'resources', label: 'More' },
 ]
 
 const RESOURCES = {
   links: [
-    { label: 'Blog', link: '/blog' },
-    { label: 'Community', link: '/about/community' },
     { label: 'Team', link: '/about/team' },
     { label: 'Careers', link: '/about/careers' },
     { label: 'Contact', link: '/about/contact' },
+    { label: 'Community', link: '/about/community' },
     { label: 'LLMs / AGENTS.md', link: '/llms' },
   ],
   social: [
@@ -77,6 +87,9 @@ function toggle(id) {
 }
 
 function productSubLinks(item) {
+  if (item.primaryLinks?.length) {
+    return item.primaryLinks
+  }
   const links = [
     { label: 'Quickstart', link: `${item.docsBase}/quickstart` },
     { label: 'Demos', link: `${item.base}/demos` },

@@ -196,18 +196,18 @@ const isFresh = computed(() => (id: string) => isNew.value.has(id))
 <template>
   <div ref="rootRef" class="cd-root">
     <span class="sr-only">
-      Comparison of two streaming token responses. Without Durable Streams, a
+      Comparison of two streaming token responses. Without Electric Streams, a
       dropped connection forces a full retry that re-bills the LLM. With
-      Durable Streams, the client resumes from the last offset and only the
+      Electric Streams, the client resumes from the last offset and only the
       missing tokens stream in.
     </span>
 
     <div class="cd-stack" aria-hidden="true">
-      <!-- ─── Card 1 — Without Durable Streams ─────────────────────── -->
+      <!-- ─── Card 1 — Without Electric Streams ─────────────────────── -->
       <div class="cd-card cd-card--bad">
         <div class="cd-strip">
           <span class="cd-strip-label cd-strip-label--bad">
-            Without Durable Streams
+            Without Electric Streams
           </span>
         </div>
         <div class="cd-body">
@@ -271,11 +271,11 @@ const isFresh = computed(() => (id: string) => isNew.value.has(id))
         </div>
       </div>
 
-      <!-- ─── Card 2 — With Durable Streams ────────────────────────── -->
+      <!-- ─── Card 2 — With Electric Streams ────────────────────────── -->
       <div class="cd-card cd-card--good">
         <div class="cd-strip">
           <span class="cd-strip-label cd-strip-label--good">
-            With Durable Streams
+            With Electric Streams
           </span>
         </div>
         <div class="cd-body">

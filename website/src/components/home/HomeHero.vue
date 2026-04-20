@@ -1,48 +1,6 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from 'vue'
+import { ref } from 'vue'
 import { VPButton } from 'vitepress/theme'
-import HomeIsoBg from './HomeIsoBg.vue'
-import HomeIsoLegend from './HomeIsoLegend.vue'
-import type { Substrate } from './iso/types'
-
-const heroTextRef = ref<HTMLElement>()
-
-// On narrow viewports (single-column layout), collapse the canvas
-// `bleed` to zero — otherwise the iso canvas extends 35–40 % past the
-// viewport edge and forces horizontal scroll. Above the breakpoint
-// the asymmetric bleed gives the hero its preferred composition.
-const isMobile = ref(false)
-let mql: MediaQueryList | null = null
-function syncMobile() {
-  isMobile.value = !!mql?.matches
-}
-onMounted(() => {
-  if (typeof window === 'undefined') return
-  mql = window.matchMedia('(max-width: 1099px)')
-  syncMobile()
-  mql.addEventListener('change', syncMobile)
-})
-onUnmounted(() => {
-  mql?.removeEventListener('change', syncMobile)
-})
-
-// Active legend filter — drives the iso scene's per-substrate alpha.
-// `null` = show everything (default).
-const activeFilter = ref<Substrate | null>(null)
-const hoverFilter = ref<Substrate | null>(null)
-// Hover takes precedence over active for smooth previewing.
-const effectiveFilter = ref<Substrate | null>(null)
-function recompute() {
-  effectiveFilter.value = hoverFilter.value ?? activeFilter.value
-}
-function onLegendChange(v: Substrate | null) {
-  activeFilter.value = v
-  recompute()
-}
-function onLegendHover(v: Substrate | null) {
-  hoverFilter.value = v
-  recompute()
-}
 
 const installCopied = ref(false)
 function copyInstall() {
@@ -58,17 +16,19 @@ function copyInstall() {
   <section class="home-hero">
     <div class="home-hero-inner">
       <div class="home-hero-grid">
-      <div ref="heroTextRef" class="home-hero-text">
+      <div class="home-hero-text">
         <p class="home-hero-eyebrow">
           Open source · Apache 2.0
         </p>
         <h1 class="home-hero-name">
-          The data&nbsp;platform<br />
-          for <span class="home-hero-underline">multi-agent</span>
+          The agent platform
+          built on&nbsp;<span class="home-hero-accent">sync</span>
         </h1>
         <p class="home-hero-sub">
-          Sync, streams and agents — the composable primitives underneath
-          collaborative business&nbsp;software.
+          Agents are long-lived entities that live in the data layer.
+          The substrate for them is a sync&nbsp;engine.
+          <br /><br />
+          Electric is the first agent platform built on&nbsp;sync.
         </p>
         <div class="home-hero-actions">
           <div class="home-hero-install" @click="copyInstall">
@@ -118,24 +78,9 @@ function copyInstall() {
         </div>
       </div>
       <div class="home-hero-scene">
-        <ClientOnly>
-          <HomeIsoBg
-            crop="world"
-            :exclude-el="heroTextRef"
-            :auto-start="true"
-            :filter="effectiveFilter"
-            :zoom="isMobile ? 1.1 : 1.35"
-            :bleed="isMobile ? 0 : { top: 0.08, right: 0.35, bottom: 0.18, left: 0.05 }"
-            feather
-          />
-          <div class="home-hero-legend">
-            <HomeIsoLegend
-              :active="activeFilter"
-              @update:active="onLegendChange"
-              @hover="onLegendHover"
-            />
-          </div>
-        </ClientOnly>
+        <div class="home-hero-placeholder" aria-label="Homepage hero graphic placeholder">
+          TBD
+        </div>
       </div>
       </div>
     </div>
@@ -192,22 +137,21 @@ function copyInstall() {
 
 .home-hero-name {
   font-size: 56px;
-  font-weight: 800;
+  font-weight: 700;
   line-height: 1.05;
   letter-spacing: -0.02em;
-  background: var(--vp-home-hero-name-background);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: var(--vp-home-hero-name-color);
+  background: none;
+  -webkit-background-clip: border-box;
+  background-clip: border-box;
+  -webkit-text-fill-color: currentColor;
+  color: var(--ea-text-1);
   margin: 0;
   padding-bottom: 4px;
 }
 
-.home-hero-underline {
-  text-decoration: underline;
-  text-decoration-color: var(--vp-c-brand-1);
-  text-underline-offset: 0.1em;
-  text-decoration-thickness: 0.135em;
+.home-hero-accent {
+  color: var(--vp-c-brand-1);
+  -webkit-text-fill-color: currentColor;
 }
 
 .home-hero-sub {
@@ -266,25 +210,22 @@ function copyInstall() {
   aspect-ratio: 5 / 4;
   min-height: 420px;
   max-height: 620px;
-  /* No `overflow: hidden` here — the iso canvas uses `bleed` to extend
-     past this slot. The page-level `.home-hero` band still clips
-     anything that would push outside the viewport. */
 }
 
-.home-hero-legend {
+.home-hero-placeholder {
   position: absolute;
-  /* Centred horizontally within the scene cell (the right column of
-     the grid), not across the full hero. */
-  left: 50%;
-  transform: translateX(-50%);
-  bottom: 12px;
-  z-index: 2;
-}
-
-@media (max-width: 768px) {
-  .home-hero-legend {
-    bottom: 8px;
-  }
+  inset: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed var(--vp-c-divider);
+  border-radius: 16px;
+  background: transparent;
+  color: var(--ea-text-3);
+  font-family: var(--vp-font-family-mono);
+  font-size: 18px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 @media (max-width: 1099px) {
