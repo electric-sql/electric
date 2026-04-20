@@ -16,7 +16,7 @@ post: true
 published: false
 ---
 
-Electric now supports complex WHERE clauses with AND, OR, and NOT around subqueries — with incremental sync instead of full resyncs. The access-control and multi-tenant filtering patterns that production apps need now work efficiently at scale.
+Electric now supports incremantal sync for complex WHERE clauses with subqueries combined with AND, OR, and NOT. The access-control and multi-tenant filtering patterns that production apps need now work efficiently at scale.
 
 When a user gains access to a workspace, joins a project, or gets added to a team, only the affected rows sync in. No shape invalidation. No expensive full resync.
 
