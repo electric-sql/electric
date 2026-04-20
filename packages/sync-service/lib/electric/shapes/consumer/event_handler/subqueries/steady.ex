@@ -36,6 +36,15 @@ defmodule Electric.Shapes.Consumer.EventHandler.Subqueries.Steady do
     {:ok, state, []}
   end
 
+  def handle_event(
+        %__MODULE__{
+          shape_info: %ShapeInfo{dependency_move_policy: :invalidate_on_dependency_move}
+        },
+        {:materializer_changes, _dep_handle, _payload}
+      ) do
+    {:error, :unsupported_subquery}
+  end
+
   def handle_event(%__MODULE__{} = state, {:materializer_changes, dep_handle, payload}) do
     subquery_ref = RefResolver.ref_from_dep_handle!(state.shape_info.ref_resolver, dep_handle)
     dep_index = subquery_ref |> List.last() |> String.to_integer()
