@@ -82,14 +82,17 @@ defmodule Electric.Plug.ServeShapePlug do
   # stream), we can't meaningfully recover — re-raise so the caller sees the
   # original error. Otherwise normalize and delegate to handle_errors/2.
   #
-  # Known gap on the re-raise path: the [:electric, :plug, :serve_shape]
-  # telemetry event is NOT emitted for that request because we don't have
-  # access to the accumulated conn here (only the one passed into call/2).
+  # Pre-existing limitation on the re-raise path: the
+  # [:electric, :plug, :serve_shape] telemetry event is NOT emitted when we
+  # re-raise. This is inherited from Plug.ErrorHandler's identical
+  # {:plug_conn, :sent} check — earlier approaches (outer/inner split;
+  # register_before_send) had the same behaviour, because once the response
+  # has been committed we no longer have access to the accumulated conn.
   # The admission permit is still released and the OTEL span is still popped
   # via the `after` clause in call/2 — only the aggregate metric is lost.
-  # This triggers only when Plug.Conn.chunk/2 raises mid-stream, which the
-  # streaming path already handles explicitly as {:error, "closed"} for the
-  # common case (client disconnect).
+  # This triggers only when Plug.Conn.chunk/2 raises mid-stream; client
+  # disconnects are already handled explicitly as {:error, "closed"} in
+  # Api.Response.send_stream/2 without raising.
   defp handle_caught(conn, kind, reason, stack) do
     receive do
       {:plug_conn, :sent} -> :erlang.raise(kind, reason, stack)
