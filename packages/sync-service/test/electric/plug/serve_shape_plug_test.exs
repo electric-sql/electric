@@ -1086,10 +1086,10 @@ defmodule Electric.Plug.ServeShapePlugTest do
     end
   end
 
-  # The plug pipeline is split into outer (setup/admission) and inner
-  # (load_shape/serve_shape_response) modules so that Inner's ErrorHandler
-  # receives the conn with full outer state — including the before_send
-  # callback from check_admission that releases the correct permit kind.
+  # call/2 wraps the whole plug pipeline in try/catch + try/after. The
+  # admission permit is stashed in the process dictionary by check_admission
+  # and released unconditionally in the `after` clause, so every exit path
+  # (success, halt, uncaught exception) returns the correct permit kind.
   describe "admission control release on error" do
     setup :with_lsn_tracker
 
@@ -1125,10 +1125,10 @@ defmodule Electric.Plug.ServeShapePlugTest do
                Electric.AdmissionControl.get_current(ctx.stack_id)
     end
 
-    test "does not call release when exception occurs before config is assigned", ctx do
-      # If an exception occurs and the original conn lacks :config (i.e. the
-      # Router didn't pre-assign it), ensure_admission_control_release must
-      # skip the release call rather than calling release(nil, kind).
+    test "does not call release when exception occurs before check_admission runs", ctx do
+      # If validation raises before check_admission, no permit was stashed in
+      # the process dictionary, so release_admission_permit in the `after`
+      # clause is a no-op and release/2 must not be called.
       Repatch.patch(Electric.Shapes.Api, :validate_params, fn _api, _params ->
         raise RuntimeError, "crash during validation"
       end)
@@ -1136,8 +1136,6 @@ defmodule Electric.Plug.ServeShapePlugTest do
       Repatch.spy(Electric.AdmissionControl)
 
       try do
-        # Deliberately omit Plug.Conn.assign(:config, ...) — the Plug.ErrorHandler
-        # catch clause uses the original conn which won't have :config.
         ctx
         |> conn(:get, %{"table" => "public.users"}, "?offset=-1")
         |> ServeShapePlug.call(ctx.plug_opts)
@@ -1184,14 +1182,10 @@ defmodule Electric.Plug.ServeShapePlugTest do
                Electric.AdmissionControl.get_current(ctx.stack_id)
     end
 
-    # Pre-assigns :config to match production behaviour: the Router sets
-    # conn.assigns.config before dispatching to ServeShapePlug, so the
-    # original conn that Plug.ErrorHandler captures already carries it.
     defp call_plug_expecting_crash(ctx) do
       try do
         ctx
         |> conn(:get, %{"table" => "public.users"}, "?offset=-1")
-        |> Plug.Conn.assign(:config, ctx.plug_opts)
         |> ServeShapePlug.call(ctx.plug_opts)
       catch
         _kind, _reason -> :ok
