@@ -25,7 +25,7 @@ defmodule Electric.Plug.ServeShapePlug do
   `Api.Response.send_stream/2` has synchronously drained the body.
   """
 
-  use Plug.Builder, copy_opts_to_assign: :config
+  use Plug.Builder
 
   alias Electric.Utils
   alias Electric.Shapes.Api
@@ -36,12 +36,11 @@ defmodule Electric.Plug.ServeShapePlug do
 
   @admission_permit_key {__MODULE__, :admission_permit}
 
+  # These plugs are invoked inside the `call/2` function below, after `conn` has been preloaded with
+  # query params and an OTEL span.
   plug :put_resp_content_type, "application/json"
   plug :parse_body
   plug :validate_request
-  # Check if the shape already exists so admission control can classify
-  # accurately (:initial for new shapes, :existing for known shapes).
-  # Also pre-resolves handles to save redundant lookups in load_shape.
   plug :resolve_existing_shape
   plug :check_admission
   plug :load_shape
@@ -56,23 +55,28 @@ defmodule Electric.Plug.ServeShapePlug do
       |> start_telemetry_span()
 
     try do
-      conn =
-        try do
-          super(conn, opts)
-        catch
-          kind, reason ->
-            handle_caught(conn, kind, reason, __STACKTRACE__)
-        end
+      try do
+        conn
+        |> super(opts)
+        |> emit_shape_telemetry()
+      catch
+        kind, reason ->
+          stack = __STACKTRACE__
 
-      emit_shape_telemetry(conn)
-      conn
+          conn
+          |> handle_caught(kind, reason, stack)
+          |> emit_shape_telemetry()
+
+          # Reraise the error just like Plug.ErrorHandler does.
+          :erlang.raise(kind, reason, stack)
+      end
     after
       # Must run unconditionally on every path:
       # - OpentelemetryTelemetry keeps span contexts on a per-process stack, so
       #   a missed end_telemetry_span call would leak the span to the next
       #   request handled by this worker process (and grow the stack over time).
-      # - Admission permits acquired in check_admission must be returned to the
-      #   counter on success, halt, and uncaught exception paths alike.
+      # - Admission permits acquired in check_admission must be returned
+      #   on success, halt, and uncaught exception paths alike.
       OpentelemetryTelemetry.end_telemetry_span(OpenTelemetry, %{})
       release_admission_permit()
     end
@@ -88,6 +92,7 @@ defmodule Electric.Plug.ServeShapePlug do
   # {:plug_conn, :sent} check — earlier approaches (outer/inner split;
   # register_before_send) had the same behaviour, because once the response
   # has been committed we no longer have access to the accumulated conn.
+  #
   # The admission permit is still released and the OTEL span is still popped
   # via the `after` clause in call/2 — only the aggregate metric is lost.
   # This triggers only when Plug.Conn.chunk/2 raises mid-stream; client
@@ -100,21 +105,26 @@ defmodule Electric.Plug.ServeShapePlug do
       0 -> :ok
     end
 
-    normalized = Exception.normalize(kind, reason, stack)
-    status = if kind == :error, do: Plug.Exception.status(normalized), else: 500
+    normalized_reason = Exception.normalize(kind, reason, stack)
+    status = if kind == :error, do: Plug.Exception.status(normalized_reason), else: 500
 
     conn
     |> Conn.put_status(status)
-    |> handle_errors(%{kind: kind, reason: normalized, stack: stack})
+    |> handle_error(kind, normalized_reason, stack)
   end
 
-  defp handle_errors(conn, %{kind: :error, reason: exception, stack: stack})
-       when is_exception(exception, DBConnection.ConnectionError) do
-    OpenTelemetry.record_exception(:error, exception, stack)
-    error_str = Exception.format(:error, exception)
+  defp handle_error(conn, kind, exception, stack) do
+    OpenTelemetry.record_exception(kind, exception, stack)
+    error_str = Exception.format(kind, exception)
 
     conn
     |> assign(:error_str, error_str)
+    |> handle_specific_error(kind, exception)
+  end
+
+  defp handle_specific_error(conn, :error, exception)
+       when is_exception(exception, DBConnection.ConnectionError) do
+    conn
     |> put_resp_header("retry-after", "10")
     |> put_resp_header("cache-control", "no-store")
     |> put_resp_header("surrogate-control", "no-store")
@@ -124,19 +134,8 @@ defmodule Electric.Plug.ServeShapePlug do
     )
   end
 
-  defp handle_errors(conn, %{kind: kind, reason: reason, stack: stack}) do
-    OpenTelemetry.record_exception(kind, reason, stack)
-    error_str = Exception.format(kind, reason)
-    # Log the full exception + stack server-side — the client response is
-    # sanitized to avoid leaking internal details (module names, messages),
-    # so operators rely on these logs + OTEL for debugging. The stack goes
-    # into the Logger output via Exception.format/3 so plain log tailing
-    # shows the origin, not just the error type.
-    Logger.error(Exception.format(kind, reason, stack))
-
-    conn
-    |> assign(:error_str, error_str)
-    |> send_resp(conn.status || 500, Jason.encode!(%{error: "Internal server error"}))
+  defp handle_specific_error(conn, _kind, _reason) do
+    send_resp(conn, conn.status, Jason.encode!(%{error: conn.assigns[:error_str]}))
   end
 
   # Parse JSON body for POST requests to support subset parameters in body
@@ -249,55 +248,45 @@ defmodule Electric.Plug.ServeShapePlug do
     end
   end
 
-  defp resolve_existing_shape(
-         %Conn{assigns: %{config: config, request: request}} = conn,
-         _
-       ) do
+  # Check if the shape already exists so admission control can classify
+  # accurately (:initial for new shapes, :existing for known shapes).
+  # Also pre-resolves handles to save redundant lookups in load_shape.
+  defp resolve_existing_shape(%Conn{assigns: %{config: config, request: request}} = conn, _) do
     stack_id = get_in(config, [:stack_id])
 
     case Electric.Shapes.fetch_handle_by_shape(stack_id, request.params.shape_definition) do
       {:ok, handle} ->
-        # Pre-resolve handle when client didn't provide one to save a lookup in load_shape.
+        # Pre-resolve handle when client didn't provide one to save a lookup in `load_shape/2`
+        # which is called later.
         # When client provided a handle, keep it for 409 redirect flow.
         conn =
           if request.params.handle,
             do: conn,
             else: assign(conn, :request, %{request | params: %{request.params | handle: handle}})
 
-        put_private(conn, :shape_exists, true)
+        put_private(conn, :shape_exists?, true)
 
       :error ->
-        put_private(conn, :shape_exists, false)
+        put_private(conn, :shape_exists?, false)
     end
   rescue
-    # Narrow rescue by design: guards against the startup race where the
-    # shape cache's ETS tables haven't been created yet — ETS operations
-    # (lookup, insert, whereis) raise ArgumentError on a missing table,
-    # which can happen when a request arrives before the shape subsystem
-    # finishes initializing. Note this rescue applies to the whole function
-    # body, not just fetch_handle_by_shape; an ArgumentError from any other
-    # operation here would also be swallowed and classified conservatively
-    # as :initial. Any non-ArgumentError exception intentionally propagates
-    # to the outer try/catch in call/2, since no permit has been acquired
-    # yet and handle_errors will send a 500.
-    ArgumentError -> put_private(conn, :shape_exists, false)
+    # Narrow rescue by design: guards against the startup race where the shape cache's ETS
+    # tables haven't been created yet — ETS operations (lookup, insert, whereis) raise
+    # ArgumentError on a missing table, which can happen when a request arrives before the
+    # shape subsystem finishes initializing.
+    ArgumentError -> put_private(conn, :shape_exists?, false)
   end
 
   defp check_admission(%Conn{assigns: %{config: config}} = conn, _) do
     stack_id = get_in(config, [:stack_id])
-
     kind = admission_kind(conn)
-
     max_concurrent = Map.fetch!(config[:api].max_concurrent_requests, kind)
 
     case Electric.AdmissionControl.try_acquire(stack_id, kind, max_concurrent: max_concurrent) do
       :ok ->
         # Stash the acquired permit in the process dictionary so the `after`
         # clause in call/2 releases it on every code path (success, halt, or
-        # uncaught exception). We can't use register_before_send for this:
-        # send_chunked fires before_send callbacks when streaming starts, not
-        # when it finishes, so a before_send-based release would return the
-        # permit while the stream is still in flight.
+        # uncaught exception).
         Process.put(@admission_permit_key, {stack_id, kind})
         conn
 
@@ -325,6 +314,14 @@ defmodule Electric.Plug.ServeShapePlug do
     end
   end
 
+  defp admission_kind(conn) do
+    if conn.private[:shape_exists?] do
+      :existing
+    else
+      :initial
+    end
+  end
+
   defp calculate_retry_after(_stack_id, _max_concurrent) do
     # Simple version: random 5-10 seconds with jitter
     # This spreads out retry attempts to prevent thundering herd
@@ -332,21 +329,6 @@ defmodule Electric.Plug.ServeShapePlug do
     base = 5
     jitter = :rand.uniform(5)
     base + jitter
-  end
-
-  defp admission_kind(conn) do
-    # Exhaustive by design. `resolve_existing_shape` always runs before
-    # `check_admission` in the plug pipeline, so :shape_exists is always set
-    # to a boolean by the time this is called. The catch-all exists as a
-    # defensive default in case the plug order is ever changed or this
-    # function is called from a future code path that bypasses
-    # resolve_existing_shape — conservative classification is :initial
-    # (the tighter bucket), so an unknown state can't hide under the
-    # permissive :existing limit.
-    case conn.private[:shape_exists] do
-      true -> :existing
-      _ -> :initial
-    end
   end
 
   defp release_admission_permit do
@@ -383,19 +365,18 @@ defmodule Electric.Plug.ServeShapePlug do
 
   defp start_telemetry_span(conn) do
     OpentelemetryTelemetry.start_telemetry_span(OpenTelemetry, "Plug_shape_get", %{}, %{})
-    add_span_attrs_from_conn(conn)
-    put_private(conn, :electric_telemetry_span, %{start_time: System.monotonic_time()})
+
+    conn
+    |> add_span_attrs_from_conn()
+    |> put_private(:electric_telemetry_span, %{start_time: System.monotonic_time()})
   end
 
   # Emit the shape-request telemetry event and set final root-span attributes.
   #
-  # Counterpart to start_telemetry_span/1: runs near the end of call/2 after
-  # all plugs (or handle_errors) have finished, so attributes captured here
-  # reflect the final state of the request — including `streaming_bytes_sent`
-  # assigned by Api.Response.send_stream/2 on the success path. The span
-  # itself is popped by OpentelemetryTelemetry.end_telemetry_span in call/2's
-  # `after` clause — unconditional so a span can never leak into the next
-  # request handled by the same worker process.
+  # Counterpart to start_telemetry_span/1: runs near the end of call/2 after all plugs (or
+  # handle_errors) have finished, so attributes captured here reflect the final state of the
+  # request — including `streaming_bytes_sent` assigned by Api.Response.send_stream/2 on the
+  # success path.
   defp emit_shape_telemetry(%Conn{assigns: assigns} = conn) do
     start_time = get_in(conn.private, [:electric_telemetry_span, :start_time])
     now = System.monotonic_time()
@@ -432,6 +413,8 @@ defmodule Electric.Plug.ServeShapePlug do
     conn
     |> open_telemetry_attrs()
     |> OpenTelemetry.add_span_attributes()
+
+    conn
   end
 
   defp open_telemetry_attrs(%Conn{assigns: assigns} = conn) do
