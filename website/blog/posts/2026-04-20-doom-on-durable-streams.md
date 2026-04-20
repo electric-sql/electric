@@ -14,7 +14,7 @@ published: true
 
 Can Doom run on [Durable&nbsp;Streams](/primitives/durable-streams)? Absolutely! The result turned out to be surprisingly interesting and a showcase of the patterns for building multi-agent systems.
 
-Durable Doom is a fun little experiment where we hook into the game's loop to log every state change into a Durable Stream. Live streaming, time traveling, and the ability to resume playing from any point. What enables a globally-distributed, repayable game loop is the same primitive that power multi-agents.
+Durable Doom is a fun little experiment where we hook into the game's loop to log every state change into a Durable Stream. Live streaming, time traveling, and the ability to resume playing from any point. What enables a globally-distributed, replayable game loop is the same primitive that power multi-agents.
 
 > [!Warning] ✨ Durable&nbsp;Doom
 > [Play Durable&nbsp;Doom](https://durabledoom.com) and read the
