@@ -383,29 +383,24 @@ const srDescription = computed(
 /* Match the parent .ds-split breakpoint so the demo stacks at the same
    width the surrounding two-column layout collapses. */
 @media (max-width: 960px) {
-  .csd { --csd-pane-h: 110px; }
+  .csd {
+    --csd-pane-h: 110px;
+    /* The root needs to actively claim the full width of its column, so
+       the inline-flex URL bar and the grid below both line up edge-to-
+       edge with the available space rather than shrinking to content. */
+    width: 100%;
+    align-items: stretch;
+  }
   .csd-grid {
     grid-template-columns: 1fr;
-    /* Centred column with a comfortable max-width for tablets, expanding
-       to full width on narrow phones via the next breakpoint. */
-    max-width: 480px;
-    margin: 0 auto;
+    width: 100%;
   }
   .csd-url {
+    /* Switch from inline-flex (content-sized) to flex so the URL bar
+       fills the same width as the panes below it. */
     display: flex;
-    align-self: stretch;
-    max-width: 480px;
-    margin-left: auto;
-    margin-right: auto;
     width: 100%;
     box-sizing: border-box;
-  }
-}
-
-@media (max-width: 540px) {
-  .csd-grid,
-  .csd-url {
-    max-width: none;
   }
 }
 </style>
