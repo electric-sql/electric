@@ -13,6 +13,7 @@ defmodule Electric.Shapes.Consumer.EventHandlerBuilder do
   def build(%State{shape: %Shape{shape_dependencies_handles: dep_handles}} = state, action)
       when dep_handles != [] do
     {:ok, dnf_plan} = DnfPlan.compile(state.shape)
+    dependency_move_policy = dependency_move_policy(state.stack_id, state.shape)
 
     {views, dep_handle_to_ref, dep_index_to_ref} =
       dep_handles
@@ -43,7 +44,8 @@ defmodule Electric.Shapes.Consumer.EventHandlerBuilder do
         dnf_plan: dnf_plan,
         ref_resolver:
           Electric.Shapes.Consumer.Subqueries.RefResolver.new(dep_handle_to_ref, dep_index_to_ref),
-        buffer_max_transactions: buffer_max_transactions
+        buffer_max_transactions: buffer_max_transactions,
+        dependency_move_policy: dependency_move_policy
       },
       views: views
     }
@@ -60,5 +62,15 @@ defmodule Electric.Shapes.Consumer.EventHandlerBuilder do
     }
 
     {:ok, handler, [%SetupEffects.SubscribeShape{action: action}]}
+  end
+
+  defp dependency_move_policy(stack_id, _shape) do
+    feature_flags = Electric.StackConfig.lookup(stack_id, :feature_flags, [])
+
+    if "tagged_subqueries" not in feature_flags do
+      :invalidate_on_dependency_move
+    else
+      :stream_dependency_moves
+    end
   end
 end
