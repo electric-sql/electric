@@ -15,7 +15,6 @@ defmodule Electric.DurableStreams.Writer do
   alias Electric.DurableStreams.{BatchTracker, Distributor, SendLoop, StreamPoster}
 
   @drain_batch_size 100
-  @process_interval_ms 5
   @max_in_flight_per_shape 30
 
   def name(stack_id, index) do
@@ -155,21 +154,16 @@ defmodule Electric.DurableStreams.Writer do
   # ============================================================================
 
   defp process_dirty_shapes(state) do
-    if MapSet.size(state.dirty_shapes) == 0 do
-      %{state | processing: false}
-    else
-      state =
-        Enum.reduce(state.dirty_shapes, state, fn shape_handle, acc ->
-          process_one_shape(acc, shape_handle)
-        end)
+    state =
+      Enum.reduce(state.dirty_shapes, state, fn shape_handle, acc ->
+        process_one_shape(acc, shape_handle)
+      end)
 
-      if MapSet.size(state.dirty_shapes) > 0 do
-        Process.send_after(self(), :process, @process_interval_ms)
-        state
-      else
-        %{state | processing: false}
-      end
-    end
+    # Always set processing: false. The next wake-up comes from:
+    #   - A new notify_writes cast (processed inline)
+    #   - An ack arriving (ensure_processing in apply_action)
+    #   - Connection loss triggering retry actions
+    %{state | processing: false}
   end
 
   defp process_one_shape(state, shape_handle) do
