@@ -127,10 +127,12 @@ defmodule Electric.Plug.ServeShapePlug do
   defp handle_errors(conn, %{kind: kind, reason: reason, stack: stack}) do
     OpenTelemetry.record_exception(kind, reason, stack)
     error_str = Exception.format(kind, reason)
-    # Log the full exception server-side — the client response is sanitized
-    # to avoid leaking internal details (module names, messages), so operators
-    # rely on these logs + OTEL for debugging.
-    Logger.error(error_str)
+    # Log the full exception + stack server-side — the client response is
+    # sanitized to avoid leaking internal details (module names, messages),
+    # so operators rely on these logs + OTEL for debugging. The stack goes
+    # into the Logger output via Exception.format/3 so plain log tailing
+    # shows the origin, not just the error type.
+    Logger.error(Exception.format(kind, reason, stack))
 
     conn
     |> assign(:error_str, error_str)
