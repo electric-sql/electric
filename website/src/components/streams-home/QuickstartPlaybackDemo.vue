@@ -7,6 +7,7 @@ import {
   onUnmounted,
   nextTick,
 } from "vue"
+import { useDemoVisibility } from "../../../.vitepress/theme/composables/useDemoVisibility"
 
 // ────────────────────────────────────────────────────────────────────────────
 // Script — easy to edit. Each step is a command (typed character-by-character)
@@ -160,6 +161,8 @@ const rootRef = ref<HTMLElement>()
 const bodyRef = ref<HTMLElement>()
 const trackRef = ref<HTMLElement>()
 
+const isVisible = useDemoVisibility(rootRef)
+
 let masterTick: ReturnType<typeof setInterval> | null = null
 
 function startClock() {
@@ -170,6 +173,7 @@ function startClock() {
     const dt = now - last
     last = now
     if (paused.value || isScrubbing.value) return
+    if (!isVisible.value) return
     if (elapsedMs.value >= TOTAL_MS) {
       // Loop the demo back around.
       elapsedMs.value = 0

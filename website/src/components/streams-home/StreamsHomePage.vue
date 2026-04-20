@@ -43,7 +43,7 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
         </p>
         <p class="ds-hero-tagline">
           Persistent, addressable, real-time streams over plain HTTP. Built for
-          AI sessions, multi-user collaboration and the substrate underneath
+          AI sessions, multi-user collaboration and powering
           <a href="/agents" class="ds-hero-link">Electric&nbsp;Agents</a>.
         </p>
 

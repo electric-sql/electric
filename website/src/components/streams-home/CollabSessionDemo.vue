@@ -380,8 +380,32 @@ const srDescription = computed(
 }
 
 /* ── Mobile ── */
-@media (max-width: 720px) {
-  .csd { --csd-pane-h: 120px; }
-  .csd-grid { grid-template-columns: 1fr; }
+/* Match the parent .ds-split breakpoint so the demo stacks at the same
+   width the surrounding two-column layout collapses. */
+@media (max-width: 960px) {
+  .csd { --csd-pane-h: 110px; }
+  .csd-grid {
+    grid-template-columns: 1fr;
+    /* Centred column with a comfortable max-width for tablets, expanding
+       to full width on narrow phones via the next breakpoint. */
+    max-width: 480px;
+    margin: 0 auto;
+  }
+  .csd-url {
+    display: flex;
+    align-self: stretch;
+    max-width: 480px;
+    margin-left: auto;
+    margin-right: auto;
+    width: 100%;
+    box-sizing: border-box;
+  }
+}
+
+@media (max-width: 540px) {
+  .csd-grid,
+  .csd-url {
+    max-width: none;
+  }
 }
 </style>

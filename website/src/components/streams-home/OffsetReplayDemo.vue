@@ -832,54 +832,132 @@ const serverDots = computed(() => {
 /* ── Responsive ─────────────────────────────────────────────────── */
 @media (max-width: 600px) {
   .ord {
-    padding: 18px 12px 16px;
+    padding: 16px 12px 14px;
   }
+
+  /* Stack producer → server → consumer vertically. Arrows become short
+     horizontal connectors with the label inline so the whole demo
+     stays compact on narrow phones. */
   .ord-grid {
-    grid-template-columns:
-      minmax(110px, 1.3fr)
-      minmax(36px, 0.7fr)
-      minmax(120px, 1.4fr)
-      minmax(36px, 0.7fr)
-      minmax(110px, 1.3fr);
-    gap: 6px;
+    grid-template-columns: 1fr;
+    grid-auto-rows: auto;
+    align-items: stretch;
+    gap: 4px;
   }
-  .ord-arrow-label,
-  .ord-headers-inline,
-  .ord-status-inline,
+
   .ord-actor-label {
     font-size: 10px;
+    text-align: left;
+    margin-bottom: 4px;
+    padding-left: 2px;
+  }
+
+  /* Boxes go full-width and shrink to content height. */
+  .ord-box--combined,
+  .ord-box--server {
+    min-height: 0;
+    padding: 10px 12px;
+    font-size: 12px;
   }
   .ord-box--combined {
-    padding: 8px 10px;
-    min-height: 130px;
-    font-size: 11.5px;
+    flex-direction: row;
+    align-items: stretch;
+    gap: 10px;
   }
   .ord-box--combined .ord-box-name {
-    font-size: 11.5px;
+    font-size: 12px;
+    text-align: left;
+    align-self: center;
+    flex-shrink: 0;
+    min-width: 48px;
+    margin: 0;
   }
   .ord-box-divider {
-    margin: 6px -10px 6px;
+    height: auto;
+    width: 1px;
+    background: var(--ea-divider);
+    margin: 0;
+    flex-shrink: 0;
   }
+
+  /* Producer headers row, two per line to save vertical space. */
   .ord-headers-inline {
-    gap: 5px;
+    flex: 1;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 4px 14px;
+    align-items: baseline;
+  }
+  .ord-hdr {
+    flex-direction: row;
+    align-items: baseline;
+    gap: 4px;
+    min-width: 0;
   }
   .ord-hdr-key {
-    font-size: 9px;
+    font-size: 9.5px;
   }
   .ord-hdr-val {
-    font-size: 10.5px;
+    font-size: 11px;
   }
+
+  /* Consumer status sits next to the name, right-aligned. */
+  .ord-status-inline {
+    flex: 1;
+    text-align: right;
+    font-size: 11px;
+    justify-content: flex-end;
+  }
+
+  /* Server box: hex stack stays vertical inside, but no excess padding. */
   .ord-box--server {
-    padding: 8px 10px;
-    min-height: 130px;
+    justify-content: flex-start;
   }
   .ord-stack {
-    font-size: 10px;
-    line-height: 14px;
-    min-height: calc(5 * 14px);
+    align-items: stretch;
+    font-size: 10.5px;
+    line-height: 15px;
+    min-height: calc(5 * 15px);
   }
+  .ord-stack-row {
+    text-align: left;
+  }
+
+  /* Arrows become short vertical connectors between stacked boxes.
+     The SVG line + animated dots are rotated 90° so the dots travel
+     top-to-bottom along the arrow, matching the new vertical flow.
+     We have to reserve vertical layout space ourselves since CSS
+     transforms don't affect flow size. */
   .ord-arrow {
-    padding-bottom: 61px;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 8px 0 0;
+    min-height: 60px;
+  }
+  .ord-arrow-label {
+    font-size: 10px;
+    color: var(--ea-text-2);
+    text-align: center;
+  }
+  .ord-arrow-track {
+    width: 40px;
+    height: 8px;
+    flex: none;
+    transform: rotate(90deg);
+    transform-origin: center;
+  }
+
+  /* Inline ✓ on consumer box stays anchored to top-right. */
+  .ord-mark--inline {
+    top: 8px;
+    right: 8px;
+  }
+  /* Duplicate callout above the server box can wrap. */
+  .ord-callout {
+    white-space: normal;
+    text-align: center;
   }
 }
 </style>
