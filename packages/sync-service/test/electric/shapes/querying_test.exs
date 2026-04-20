@@ -6,6 +6,7 @@ defmodule Electric.Shapes.QueryingTest do
   alias Electric.Postgres.Inspector.DirectInspector
   alias Electric.Shapes.Querying
   alias Electric.Shapes.Shape
+  alias Electric.Shapes.SubqueryTags
 
   @refs %{
     ["id"] => :int4,
@@ -607,6 +608,18 @@ defmodule Electric.Shapes.QueryingTest do
         )
         |> fill_handles()
 
+      tag1 = SubqueryTags.make_value_hash("dummy-stack-id", "dummy-shape-handle", "ab      ")
+      tag2 = SubqueryTags.make_value_hash("dummy-stack-id", "dummy-shape-handle", "cd      ")
+
+      assert [
+               %{value: %{parent_id: "ab      "}, headers: %{tags: [^tag1]}},
+               %{value: %{parent_id: "cd      "}, headers: %{tags: [^tag2]}},
+               %{value: %{parent_id: "ef      "}, headers: %{tags: [_]}}
+             ] =
+               decode_stream(
+                 Querying.stream_initial_data(conn, "dummy-stack-id", "dummy-shape-handle", shape)
+               )
+
       {:ok, dnf_plan} = DnfPlan.compile(shape)
       move_in_values = ["ab      ", "cd      "]
       views_before_move = %{["$sublink", "0"] => MapSet.new()}
@@ -622,8 +635,8 @@ defmodule Electric.Shapes.QueryingTest do
                )
 
       assert [
-               %{value: %{parent_id: "ab      "}},
-               %{value: %{parent_id: "cd      "}}
+               %{value: %{parent_id: "ab      "}, headers: %{tags: [^tag1]}},
+               %{value: %{parent_id: "cd      "}, headers: %{tags: [^tag2]}}
              ] =
                Querying.query_move_in(
                  conn,
