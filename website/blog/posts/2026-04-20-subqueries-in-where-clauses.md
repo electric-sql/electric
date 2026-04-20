@@ -80,20 +80,7 @@ const tasksCollection = createCollection(
 
 This syncs all tasks where the current user is either a project member or directly assigned — and keeps the shape live as memberships and assignments change.
 
-<!-- SOCIAL PROOF: pull quotes from GitHub issues — users who hit this limitation
-     in production apps.
-
-     Candidates:
-     - @jbingen (#3769): multi-tenant workspace app where new members joining
-       didn't trigger sync updates for existing members
-     - @ibarakaiev (#4004): team-based access control with CASCADE deletes
-       not syncing correctly — includes a full reproduction repo
-     - @dsanmart (#3651): React Native messaging app needing sliding-window
-       sync of recent activity, pointed to subqueries as the solution
-     - Issue #3256: user spent "several days debugging" frequent 409 resyncs,
-       described as "a very noticeable performance problem"
-
-     Ask permission before quoting. Embed as blockquotes with attribution. -->
+This has been our most requested feature — the intersection of subqueries and boolean logic is where most real-world access-control patterns live.
 
 
 ## Get started
@@ -189,8 +176,7 @@ Next steps:
 ## Open questions
 
 - Author key: "rob" needs adding to website/data/blog/authors.yaml
-- Which user quotes to include as social proof? Candidates: @jbingen
-  (#3769), @ibarakaiev (#4004), @dsanmart (#3651), #3256
+- Added "most requested feature" line — no individual quotes needed
 - Confirm exact version numbers for the sync service release
 - Are the feature flags still required or is this enabled by default now?
 
