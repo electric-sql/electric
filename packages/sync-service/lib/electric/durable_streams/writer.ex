@@ -12,7 +12,7 @@ defmodule Electric.DurableStreams.Writer do
   require Logger
 
   alias Electric.Nifs.DiskQueue
-  alias Electric.DurableStreams.{Distributor, SendLoop, StreamPoster}
+  alias Electric.DurableStreams.{BatchTracker, Distributor, SendLoop, StreamPoster}
 
   @drain_batch_size 100
   @process_interval_ms 5
@@ -86,11 +86,8 @@ defmodule Electric.DurableStreams.Writer do
       # shape_handle => DiskQueue reference
       shape_queues: %{},
       shape_timestamps: %{},
-      # slot_id => shape_handle (for ack routing)
-      slot_to_shape: %{},
-      # shape_handle => [{slot_id, count, :pending | {:acked, breakdown} | :failed}]
-      # Ordered list of batches per shape, in send order.
-      shape_batches: %{},
+      # Pure state machine for ack → commit/retry mapping
+      tracker: BatchTracker.new(),
       next_slot_id: 0,
       processing: false,
       total_acked: 0,
@@ -123,13 +120,10 @@ defmodule Electric.DurableStreams.Writer do
         state
       end
 
-    state =
-      if not state.processing do
-        send(self(), :process)
-        %{state | processing: true}
-      else
-        state
-      end
+    # Process this shape inline if it has pipeline room, rather than
+    # waiting for the next :process timer (which can be up to
+    # @process_interval_ms away).
+    state = process_one_shape(state, shape_handle)
 
     {:noreply, state}
   end
@@ -146,26 +140,9 @@ defmodule Electric.DurableStreams.Writer do
   end
 
   def handle_info(:http_connection_lost, state) do
-    Logger.warning(
-      "Writer #{state.index} HTTP connection lost, failing #{map_size(state.slot_to_shape)} in-flight batches"
-    )
-
-    # Mark all pending batches as failed so the commit cursor keeps moving.
-    # The entries are lost (see TODO in flush_shape_batches).
-    state =
-      Enum.reduce(state.slot_to_shape, state, fn {slot_id, {shape_handle, _send_start, _ts}},
-                                                 acc ->
-        mark_batch(acc, shape_handle, slot_id, {:error, :connection_lost}, 0, nil)
-      end)
-
-    state = %{state | slot_to_shape: %{}}
-
-    # Flush all shapes
-    state =
-      state.shape_batches
-      |> Map.keys()
-      |> Enum.reduce(state, fn shape_handle, acc -> flush_shape_batches(acc, shape_handle) end)
-
+    Logger.warning("Writer #{state.index} HTTP connection lost, retrying in-flight batches")
+    {tracker, actions} = BatchTracker.fail_all(state.tracker, :connection_lost)
+    state = apply_actions(%{state | tracker: tracker}, actions)
     {:noreply, state}
   end
 
@@ -196,10 +173,9 @@ defmodule Electric.DurableStreams.Writer do
   end
 
   defp process_one_shape(state, shape_handle) do
-    in_flight_count = shape_in_flight_count(state, shape_handle)
+    in_flight_count = BatchTracker.in_flight_count(state.tracker, shape_handle)
 
     if in_flight_count >= @max_in_flight_per_shape do
-      # Pipeline is full — wait for acks before sending more
       state
     else
       case get_output_queue(state, shape_handle) do
@@ -226,12 +202,6 @@ defmodule Electric.DurableStreams.Writer do
     end
   end
 
-  defp shape_in_flight_count(state, shape_handle) do
-    state.shape_batches
-    |> Map.get(shape_handle, [])
-    |> Enum.count(fn {_, _, status} -> status == :pending end)
-  end
-
   defp send_entries(state, shape_handle, entries) do
     values = Enum.map(entries, fn {_id, data} -> data end)
     encoded_body = StreamPoster.encode_values(values)
@@ -243,9 +213,10 @@ defmodule Electric.DurableStreams.Writer do
     send_start = System.monotonic_time(:microsecond)
     timestamps = Map.get(state.shape_timestamps, shape_handle)
     slot_id = state.next_slot_id
+    count = length(entries)
 
     Logger.debug(fn ->
-      "Writer #{state.index} sending #{length(entries)} entries for #{shape_handle} slot=#{slot_id} (seq=#{stream_seq}, #{byte_size(encoded_body)} bytes)"
+      "Writer #{state.index} sending #{count} entries for #{shape_handle} slot=#{slot_id} (seq=#{stream_seq}, #{byte_size(encoded_body)} bytes)"
     end)
 
     SendLoop.enqueue(
@@ -254,19 +225,17 @@ defmodule Electric.DurableStreams.Writer do
       encoded_body,
       stream_seq,
       System.monotonic_time(:microsecond),
-      length(entries),
+      count,
       1,
       shape_path
     )
 
-    batches = Map.get(state.shape_batches, shape_handle, [])
-    batches = batches ++ [{slot_id, length(entries), :pending}]
+    tracker = BatchTracker.register(state.tracker, shape_handle, slot_id, count,
+                                    %{send_start: send_start, timestamps: timestamps})
 
     %{
       state
-      | slot_to_shape:
-          Map.put(state.slot_to_shape, slot_id, {shape_handle, send_start, timestamps}),
-        shape_batches: Map.put(state.shape_batches, shape_handle, batches),
+      | tracker: tracker,
         next_slot_id: slot_id + 1,
         shape_timestamps: Map.delete(state.shape_timestamps, shape_handle)
     }
@@ -276,134 +245,104 @@ defmodule Electric.DurableStreams.Writer do
   # Internal — ack handling
   # ============================================================================
 
-  # Per-shape batch tracking. Each shape has an ordered list of batches:
-  #   [{slot_id, count, :pending | {:acked, breakdown} | :failed}]
-  # Batches are appended in send order. On ack, the batch is marked.
-  # We then flush from the front: commit all consecutive acked/failed
-  # batches from the head of the list.
-
   defp handle_ack(state, slot_id, result) do
-    case Map.pop(state.slot_to_shape, slot_id) do
-      {nil, _} ->
-        Logger.debug(fn -> "Writer #{state.index} received ack for unknown slot #{slot_id}" end)
+    case result do
+      {:error, reason} ->
+        Logger.warning("Writer #{state.index} slot #{slot_id} failed: #{inspect(reason)}")
+
+      _ ->
+        :ok
+    end
+
+    {tracker, actions} = BatchTracker.ack(state.tracker, slot_id, result)
+    apply_actions(%{state | tracker: tracker}, actions)
+  end
+
+  # ============================================================================
+  # Internal — apply BatchTracker actions
+  # ============================================================================
+
+  defp apply_actions(state, actions) do
+    Enum.reduce(actions, state, &apply_action(&2, &1))
+  end
+
+  defp apply_action(state, {:commit, shape_handle, count, meta}) do
+    case get_output_queue(state, shape_handle) do
+      {:ok, q, state} ->
+        :ok = DiskQueue.commit_n(q, count)
+        breakdown = compute_breakdown(meta)
+        Electric.DurableStreams.Stats.record_latency(state.stack_id, breakdown)
+
+        Logger.debug(fn ->
+          "Writer #{state.index} committed #{count} for #{shape_handle}"
+        end)
+
+        state = %{
+          state
+          | total_acked: state.total_acked + count,
+            last_ack_us: breakdown[:http_us],
+            dirty_shapes: MapSet.put(state.dirty_shapes, shape_handle)
+        }
+
+        state = ensure_processing(state)
+        publish_stats(state)
         state
 
-      {{shape_handle, send_start, timestamps}, slot_to_shape} ->
-        state = %{state | slot_to_shape: slot_to_shape}
-
-        state = mark_batch(state, shape_handle, slot_id, result, send_start, timestamps)
-        flush_shape_batches(state, shape_handle)
+      {:error, _} ->
+        Logger.warning("Writer #{state.index} cannot commit for #{shape_handle}: queue not found")
+        state
     end
   end
 
-  defp mark_batch(state, shape_handle, slot_id, result, send_start, timestamps) do
-    batches = Map.get(state.shape_batches, shape_handle, [])
+  defp apply_action(state, {:retry, shape_handle}) do
+    case get_output_queue(state, shape_handle) do
+      {:ok, q, state} ->
+        :ok = DiskQueue.rewind_peek(q)
 
-    batches =
-      Enum.map(batches, fn
-        {^slot_id, count, :pending} ->
-          case result do
-            :ok ->
-              now = System.monotonic_time(:microsecond)
-              http_us = now - send_start
+        Logger.debug(fn ->
+          "Writer #{state.index} retry #{shape_handle} (peek rewound)"
+        end)
 
-              breakdown =
-                case timestamps do
-                  {entered_at, queued_at} when is_integer(entered_at) and is_integer(queued_at) ->
-                    %{
-                      consumer_us: queued_at - entered_at,
-                      queue_wait_us: send_start - queued_at,
-                      http_us: http_us,
-                      total_us: now - entered_at
-                    }
+        state = %{
+          state
+          | total_errors: state.total_errors + 1,
+            dirty_shapes: MapSet.put(state.dirty_shapes, shape_handle)
+        }
 
-                  _ ->
-                    %{http_us: http_us}
-                end
+        state = ensure_processing(state)
+        publish_stats(state)
+        state
 
-              {slot_id, count, {:acked, breakdown}}
-
-            {:error, reason} ->
-              Logger.warning(
-                "Writer #{state.index} failed for #{shape_handle} slot #{slot_id}: #{inspect(reason)}"
-              )
-
-              {slot_id, count, :failed}
-          end
-
-        other ->
-          other
-      end)
-
-    %{state | shape_batches: Map.put(state.shape_batches, shape_handle, batches)}
+      {:error, _} ->
+        Logger.warning("Writer #{state.index} cannot retry for #{shape_handle}: queue not found")
+        state
+    end
   end
 
-  defp flush_shape_batches(state, shape_handle) do
-    batches = Map.get(state.shape_batches, shape_handle, [])
+  defp ensure_processing(state) do
+    if state.processing do
+      state
+    else
+      send(self(), :process)
+      %{state | processing: true}
+    end
+  end
 
-    case batches do
-      [{slot_id, count, {:acked, breakdown}} | rest] ->
-        case get_output_queue(state, shape_handle) do
-          {:ok, q, state} ->
-            :ok = DiskQueue.commit_n(q, count)
-            Electric.DurableStreams.Stats.record_latency(state.stack_id, breakdown)
+  defp compute_breakdown(%{send_start: send_start, timestamps: timestamps}) do
+    now = System.monotonic_time(:microsecond)
+    http_us = now - send_start
 
-            Logger.debug(fn ->
-              "Writer #{state.index} committed #{count} for #{shape_handle} slot=#{slot_id}"
-            end)
-
-            state = %{
-              state
-              | total_acked: state.total_acked + count,
-                last_ack_us: breakdown[:http_us],
-                dirty_shapes: MapSet.put(state.dirty_shapes, shape_handle),
-                shape_batches: Map.put(state.shape_batches, shape_handle, rest)
-            }
-
-            state =
-              if not state.processing do
-                send(self(), :process)
-                %{state | processing: true}
-              else
-                state
-              end
-
-            publish_stats(state)
-            flush_shape_batches(state, shape_handle)
-
-          {:error, _} ->
-            Logger.warning(
-              "Writer #{state.index} cannot commit for #{shape_handle}: queue not found"
-            )
-
-            state
-        end
-
-      [{_slot_id, count, :failed} | rest] ->
-        # TODO: failed batches should be retried, not dropped.
-        # Currently we commit (discard) the failed entries to keep
-        # the commit cursor moving and unblock subsequent batches.
-        # This loses data.
-        case get_output_queue(state, shape_handle) do
-          {:ok, q, state} ->
-            DiskQueue.commit_n(q, count)
-
-            state = %{
-              state
-              | total_errors: state.total_errors + 1,
-                shape_batches: Map.put(state.shape_batches, shape_handle, rest)
-            }
-
-            publish_stats(state)
-            flush_shape_batches(state, shape_handle)
-
-          _ ->
-            state
-        end
+    case timestamps do
+      {entered_at, queued_at} when is_integer(entered_at) and is_integer(queued_at) ->
+        %{
+          consumer_us: queued_at - entered_at,
+          queue_wait_us: send_start - queued_at,
+          http_us: http_us,
+          total_us: now - entered_at
+        }
 
       _ ->
-        # Head is :pending or list is empty — nothing to flush
-        state
+        %{http_us: http_us}
     end
   end
 
@@ -436,11 +375,19 @@ defmodule Electric.DurableStreams.Writer do
     end
   end
 
+  defp total_in_flight(state) do
+    # Sum in-flight across all shapes in the tracker. This is
+    # approximate (O(shapes)) but the set of shapes per writer is small.
+    Enum.reduce(state.dirty_shapes, 0, fn shape, acc ->
+      acc + BatchTracker.in_flight_count(state.tracker, shape)
+    end)
+  end
+
   defp publish_stats(state) do
     stats = %{
       index: state.index,
       dirty_shapes: MapSet.size(state.dirty_shapes),
-      in_flight: map_size(state.slot_to_shape),
+      in_flight: total_in_flight(state),
       total_acked: state.total_acked,
       total_errors: state.total_errors,
       last_ack_us: state.last_ack_us
