@@ -101,6 +101,31 @@ defmodule Electric.Replication.ShapeLogCollector do
   end
 
   @doc """
+  Non-blocking variant of `handle_event/2`.
+
+  Sends a `$gen_call` to the collector and returns a monitor reference.
+  The caller receives `{monitor_ref, response}` when the event is processed,
+  or `{:DOWN, monitor_ref, :process, pid, reason}` if the collector crashes.
+
+  Uses the same `$gen_call` protocol as `GenServer.call` internally — the
+  existing `handle_call` handles the request unchanged.
+  """
+  def handle_event_async(event, stack_id) do
+    trace_context = OpenTelemetry.get_current_context()
+    server = name(stack_id)
+
+    case GenServer.whereis(server) do
+      nil ->
+        exit({:noproc, {__MODULE__, :handle_event_async, [event, stack_id]}})
+
+      pid ->
+        monitor_ref = Process.monitor(pid)
+        send(pid, {:"$gen_call", {self(), monitor_ref}, {:handle_event, event, trace_context}})
+        monitor_ref
+    end
+  end
+
+  @doc """
   Adds a shape to the shape matching index in the ShapeLogCollector
   used for matching and sending replication stream operations.
   """

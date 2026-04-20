@@ -96,7 +96,7 @@ defmodule Electric.Connection.Restarter do
     StatusMonitor.database_connections_waking_up(state.stack_id)
     Electric.Connection.Manager.Supervisor.restart(stack_id: state.stack_id)
 
-    ref = StatusMonitor.wait_until_conn_up_async(state.stack_id)
+    ref = StatusMonitor.wait_until_async(state.stack_id, :active)
 
     {:noreply, %{state | wait_until_conn_up_ref: ref}}
   end
@@ -112,7 +112,7 @@ defmodule Electric.Connection.Restarter do
     {:reply, :ok, state}
   end
 
-  def handle_info({ref, :ok}, %{wait_until_conn_up_ref: ref} = state) do
+  def handle_info({{StatusMonitor, ref}, {:ok, :active}}, %{wait_until_conn_up_ref: ref} = state) do
     {:noreply, %{state | wait_until_conn_up_ref: nil}}
   end
 end

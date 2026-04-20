@@ -19,7 +19,7 @@ defmodule Electric.Postgres.ReplicationClient.ConnectionSetup do
   @type callback_return ::
           {:noreply, state}
           | {:query, iodata, state}
-          | {:stream, iodata, Postgrex.ReplicationConnection.stream_opts(), state}
+          | {:stream, iodata, Electric.Postgres.ReplicationConnection.stream_opts(), state}
   @type query_result :: [Postgrex.Result.t()] | Postgrex.Error.t()
 
   # The entrypoint to the connection setup that picks the first step to run and returns the
@@ -81,22 +81,27 @@ defmodule Electric.Postgres.ReplicationClient.ConnectionSetup do
   defp pg_info_query(state) do
     Logger.debug("ReplicationClient step: pg_info_query")
 
+    # pg_settings.setting returns the value in base units (milliseconds for
+    # wal_sender_timeout) as a plain integer string, regardless of how the
+    # user configured it (e.g. "60s", "1min"). This avoids interval parsing.
     query = """
     SELECT
       current_setting('server_version_num') server_version_num,
-      pg_backend_pid() pg_backend_pid
+      pg_backend_pid() pg_backend_pid,
+      (SELECT setting FROM pg_settings WHERE name = 'wal_sender_timeout') wal_sender_timeout_ms
     """
 
     {:query, query, state}
   end
 
   defp pg_info_result([%Postgrex.Result{} = result], state) do
-    %{rows: [[version_str, backend_pid_str]]} = result
+    %{rows: [[version_str, backend_pid_str, wal_sender_timeout_str]]} = result
     version_num = String.to_integer(version_str)
     backend_pid_num = String.to_integer(backend_pid_str)
+    wal_sender_timeout_ms = String.to_integer(wal_sender_timeout_str)
 
     {%{server_version_num: version_num, pg_backend_pid: backend_pid_num},
-     %{state | pg_version: version_num}}
+     %{state | pg_version: version_num, wal_sender_timeout: wal_sender_timeout_ms}}
   end
 
   ###
