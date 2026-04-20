@@ -36,18 +36,18 @@ defmodule Electric.Shapes.Filter.WhereCondition do
   path instead of relying entirely on `other_shapes`.
   """
   @spec indexed_where?(Expr.t() | nil) :: boolean()
-  def indexed_where?(where_clause), do: planned_where(where_clause) != :not_optimised
+  def indexed_where?(where_clause), do: optimise_where(where_clause) != :not_optimised
 
   def add_shape(%Filter{where_cond_table: table} = filter, condition_id, shape_id, where_clause) do
-    case planned_where(where_clause) do
+    case optimise_where(where_clause) do
       :not_optimised ->
         add_shape_to_other_shapes(table, condition_id, shape_id, where_clause)
 
-      {:split_or, left, right} ->
+      {:or, left, right} ->
         add_shape(filter, condition_id, shape_id, left)
         add_shape(filter, condition_id, shape_id, right)
 
-      {:index, optimisation} ->
+      %{operation: _} = optimisation ->
         add_shape_to_index(filter, condition_id, shape_id, optimisation)
     end
   end
@@ -73,43 +73,46 @@ defmodule Electric.Shapes.Filter.WhereCondition do
   end
 
   @doc false
-  defp planned_where(nil), do: :not_optimised
+  defp optimise_where(nil), do: :not_optimised
 
-  defp planned_where(%Expr{eval: eval}), do: planned_where(eval)
+  defp optimise_where(%Expr{eval: eval}), do: optimise_where(eval)
 
-  defp planned_where(%Func{name: "or", args: [left, right]}) do
-    if indexed_eval?(left) and indexed_eval?(right) do
-      {:split_or, where_expr(left), where_expr(right)}
+  defp optimise_where(%Func{name: "or", args: [left, right]}) do
+    if optimise_where(left) != :not_optimised and optimise_where(right) != :not_optimised do
+      {:or, where_expr(left), where_expr(right)}
     else
       :not_optimised
     end
   end
 
-  defp planned_where(eval) do
-    case extract_index_optimisation(eval) do
-      {:ok, optimisation, residual} ->
-        {:index, %{optimisation | and_where: maybe_where_expr(residual)}}
+  defp optimise_where(%Func{name: "and", args: [left, right]}) do
+    case {optimise_where(left), optimise_where(right)} do
+      {%{operation: _} = optimisation, _} ->
+        %{optimisation | and_where: merge_and_where(optimisation.and_where, right)}
 
-      :error ->
+      {_, %{operation: _} = optimisation} ->
+        %{optimisation | and_where: merge_and_where(left, optimisation.and_where)}
+
+      _ ->
         :not_optimised
     end
   end
 
-  defp direct_optimisation(%Func{
+  defp optimise_where(%Func{
          name: ~s("="),
          args: [%Ref{path: [field], type: type}, %Const{value: value}]
        }) do
     %{operation: "=", field: field, type: type, value: value, and_where: nil}
   end
 
-  defp direct_optimisation(%Func{
+  defp optimise_where(%Func{
          name: ~s("="),
          args: [%Const{value: value}, %Ref{path: [field], type: type}]
        }) do
     %{operation: "=", field: field, type: type, value: value, and_where: nil}
   end
 
-  defp direct_optimisation(%Func{
+  defp optimise_where(%Func{
          name: ~s("@>"),
          args: [%Ref{path: [field], type: type}, %Const{value: value}]
        })
@@ -117,7 +120,7 @@ defmodule Electric.Shapes.Filter.WhereCondition do
     %{operation: "@>", field: field, type: type, value: value, and_where: nil}
   end
 
-  defp direct_optimisation(%Func{
+  defp optimise_where(%Func{
          name: ~s("<@"),
          args: [%Const{value: value}, %Ref{path: [field], type: type}]
        })
@@ -126,7 +129,7 @@ defmodule Electric.Shapes.Filter.WhereCondition do
   end
 
   # const = ANY(array_ref) → reuse @> index with [const] as single-element array
-  defp direct_optimisation(%Func{
+  defp optimise_where(%Func{
          name: "any",
          args: [
            %Func{
@@ -140,69 +143,50 @@ defmodule Electric.Shapes.Filter.WhereCondition do
     %{operation: "@>", field: field, type: type, value: [value], and_where: nil}
   end
 
-  defp direct_optimisation(%Func{name: "sublink_membership_check"} = subquery) do
+  defp optimise_where(%Func{name: "sublink_membership_check"} = subquery) do
     subquery_optimisation(subquery, :positive)
   end
 
-  defp direct_optimisation(%Func{
+  defp optimise_where(%Func{
          name: "not",
          args: [%Func{name: "sublink_membership_check"} = subquery]
        }) do
     subquery_optimisation(subquery, :negated)
   end
 
-  defp direct_optimisation(_), do: :not_optimised
-
-  defp extract_index_optimisation(%Expr{eval: eval}), do: extract_index_optimisation(eval)
-
-  defp extract_index_optimisation(%Func{name: "and", args: [left, right]}) do
-    case extract_index_optimisation(left) do
-      {:ok, optimisation, residual} ->
-        {:ok, optimisation, and_eval(residual, right)}
-
-      :error ->
-        case extract_index_optimisation(right) do
-          {:ok, optimisation, residual} ->
-            {:ok, optimisation, and_eval(left, residual)}
-
-          :error ->
-            :error
-        end
-    end
-  end
-
-  defp extract_index_optimisation(eval) do
-    case direct_optimisation(eval) do
-      :not_optimised -> :error
-      optimisation -> {:ok, optimisation, nil}
-    end
-  end
-
-  defp indexed_eval?(eval), do: planned_where(eval) != :not_optimised
+  defp optimise_where(_), do: :not_optimised
 
   defp index_key(op), do: op
-
-  defp maybe_where_expr(nil), do: nil
-  defp maybe_where_expr(eval), do: where_expr(eval)
 
   defp where_expr(eval) do
     %Expr{eval: eval, used_refs: Parser.find_refs(eval), returns: :bool}
   end
 
-  defp and_eval(nil, nil), do: nil
-  defp and_eval(nil, eval), do: eval
-  defp and_eval(eval, nil), do: eval
+  defp merge_and_where(nil, nil), do: nil
 
-  defp and_eval(left, right) do
-    %Func{
-      args: [left, right],
+  defp merge_and_where(left, nil), do: normalise_where(left)
+
+  defp merge_and_where(nil, right), do: normalise_where(right)
+
+  defp merge_and_where(left, right) do
+    left_eval = extract_eval(left)
+    right_eval = extract_eval(right)
+
+    where_expr(%Func{
+      args: [left_eval, right_eval],
       type: :bool,
       implementation: &Casting.pg_and/2,
       name: "and",
       strict?: false,
-      location: min(Map.get(left, :location, 0), Map.get(right, :location, 0))
-    }
+      location: min(Map.get(left_eval, :location, 0), Map.get(right_eval, :location, 0))
+    })
   end
+
+  defp normalise_where(%Expr{} = expr), do: expr
+  defp normalise_where(eval), do: where_expr(eval)
+
+  defp extract_eval(%Expr{eval: eval}), do: eval
+  defp extract_eval(eval), do: eval
 
   defp subquery_optimisation(
          %Func{name: "sublink_membership_check", args: [testexpr, %Ref{path: subquery_ref}]} =
@@ -238,16 +222,16 @@ defmodule Electric.Shapes.Filter.WhereCondition do
         shape_id,
         where_clause
       ) do
-    case planned_where(where_clause) do
+    case optimise_where(where_clause) do
       :not_optimised ->
         remove_shape_from_other_shapes(table, condition_id, shape_id)
 
-      {:split_or, left, right} ->
+      {:or, left, right} ->
         _ = remove_shape(filter, condition_id, shape_id, left)
         _ = remove_shape(filter, condition_id, shape_id, right)
         condition_status(table, condition_id)
 
-      {:index, optimisation} ->
+      %{operation: _} = optimisation ->
         remove_shape_from_index(filter, condition_id, shape_id, optimisation)
     end
   end
