@@ -381,18 +381,21 @@ defmodule Electric.DurableStreams.SendLoop do
             status == 409 ->
               closed = get_header(headers, "stream-closed")
 
-              cond do
-                closed == "true" ->
-                  Logger.error("Stream is closed (409), body: #{body}")
-                  {:error, :stream_closed}
-
-                String.contains?(body, "SEQUENCE_REGRESSION") ->
-                  Logger.debug("Sequence already accepted (409) for seq #{commit_lsn}")
-                  :ok
-
-                true ->
-                  Logger.warning("Conflict (409) for seq #{commit_lsn}, body: #{body}")
-                  {:error, {:conflict, body}}
+              if closed == "true" do
+                Logger.error("Stream is closed (409), body: #{body}")
+                {:error, :stream_closed}
+              else
+                # Per protocol, 409 without Stream-Closed: true means either
+                # sequence regression or content-type mismatch. Content-type
+                # is set at stream creation and doesn't change at runtime, so
+                # at runtime a 409-without-closed is effectively always a
+                # sequence regression — treat as idempotent success so the
+                # already-accepted entries get committed.
+                #
+                # Different servers use different error bodies ("SEQUENCE_REGRESSION",
+                # "sequence number conflict", etc.) — don't rely on body text.
+                Logger.debug("Sequence already accepted (409) for seq #{commit_lsn}")
+                :ok
               end
 
             status == 413 ->
