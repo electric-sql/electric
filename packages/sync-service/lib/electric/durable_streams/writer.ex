@@ -15,6 +15,27 @@ defmodule Electric.DurableStreams.Writer do
   alias Electric.DurableStreams.{BatchTracker, Distributor, SendLoop, StreamPoster}
 
   @drain_batch_size 100
+
+  # Max HTTP batches per shape awaiting acks at once.
+  #
+  # Sizing rule: max_in_flight ≈ (target throughput × HTTP round-trip) / batch_size
+  # e.g. 3000 entries/sec × 50ms RTT / 100 per batch ≈ 1.5 — round up to give headroom.
+  #
+  # Larger values:
+  #   - More per-shape throughput during bursts (e.g. snapshot drain)
+  #   - More memory per shape (each in-flight batch retains its encoded body)
+  #   - Peek cursor races further ahead of commit cursor → more DiskQueue
+  #     segments pinned on disk
+  #   - Bigger blast radius on retry (a failed batch drops all subsequent
+  #     in-flight batches for that shape and re-sends them)
+  #
+  # Smaller values:
+  #   - Lower memory and on-disk footprint
+  #   - Per-shape throughput capped at (batch_size × max_in_flight) / RTT
+  #   - Less data re-sent on failure
+  #
+  # For steady-state small-txn workloads this is rarely hit — each batch
+  # acks before the next exists. It only matters for burst/snapshot loads.
   @max_in_flight_per_shape 30
 
   def name(stack_id, index) do
