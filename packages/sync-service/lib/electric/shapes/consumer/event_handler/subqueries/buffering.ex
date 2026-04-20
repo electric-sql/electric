@@ -51,29 +51,16 @@ defmodule Electric.Shapes.Consumer.EventHandler.Subqueries.Buffering do
         |> ActiveMove.carry_latest_seen_lsn(Keyword.get(opts, :latest_seen_lsn))
     }
 
-    {:ok, state,
-     start_effects(
-       state,
-       move,
-       subquery_ref,
-       subscribe_global_lsn?: Keyword.get(opts, :subscribe_global_lsn?, true)
-     )}
-  end
+    effects =
+      EffectList.new()
+      |> maybe_subscribe_global_lsn(Keyword.get(opts, :subscribe_global_lsn?, true))
+      |> EffectList.append_all(
+        IndexChanges.effects_for_buffering(state.shape_info.dnf_plan, move, subquery_ref)
+      )
+      |> EffectList.append(start_move_in_query_effect(state))
+      |> EffectList.to_list()
 
-  @spec start_effects(t(), IndexChanges.move(), [String.t()], keyword()) :: [Effects.t()]
-  def start_effects(
-        %__MODULE__{} = state,
-        {_dep_move_kind, _dep_index, _values} = move,
-        subquery_ref,
-        opts \\ []
-      ) do
-    EffectList.new()
-    |> maybe_subscribe_global_lsn(Keyword.get(opts, :subscribe_global_lsn?, true))
-    |> EffectList.append_all(
-      IndexChanges.effects_for_buffering(state.shape_info.dnf_plan, move, subquery_ref)
-    )
-    |> EffectList.append(start_move_in_query_effect(state))
-    |> EffectList.to_list()
+    {:ok, state, effects}
   end
 
   @impl true
