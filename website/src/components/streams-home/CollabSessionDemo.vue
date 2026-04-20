@@ -385,10 +385,13 @@ const srDescription = computed(
 @media (max-width: 960px) {
   .csd {
     --csd-pane-h: 110px;
-    /* The root needs to actively claim the full width of its column, so
-       the inline-flex URL bar and the grid below both line up edge-to-
-       edge with the available space rather than shrinking to content. */
+    /* Centre the stacked demo within the column. On phones the column is
+       narrower than max-width and the demo simply fills it; on tablet
+       widths the cap keeps the panes from stretching uncomfortably wide. */
     width: 100%;
+    max-width: 480px;
+    margin-left: auto;
+    margin-right: auto;
     align-items: stretch;
   }
   .csd-grid {

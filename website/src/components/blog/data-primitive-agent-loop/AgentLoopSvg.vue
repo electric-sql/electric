@@ -59,9 +59,8 @@ const outlineSlots = Array.from(
         <!-- pulse overlay (LLM_THINKING) -->
         <path
           v-if="pulseActive"
-          class="pulse-slice"
+          class="pulse-slice brand-stroke"
           :d="SPAWN_PATH"
-          class="brand-stroke"
           fill="none"
           stroke="currentColor"
           stroke-width="1"

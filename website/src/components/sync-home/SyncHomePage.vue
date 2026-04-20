@@ -648,14 +648,15 @@ const fanoutMiniDotCount = FANOUT_COLS * FANOUT_ROWS
 }
 
 .sh-hero-name {
-  font-size: 64px;
+  font-size: 56px;
   font-weight: 800;
-  line-height: 1.1;
+  line-height: 1.2;
   background: var(--vp-home-hero-name-background);
   -webkit-background-clip: text;
   background-clip: text;
   color: var(--vp-home-hero-name-color);
   margin: 0;
+  padding-bottom: 4px;
 }
 
 .sh-hero-underline {
@@ -666,11 +667,11 @@ const fanoutMiniDotCount = FANOUT_COLS * FANOUT_ROWS
 }
 
 .sh-hero-text {
-  font-size: 24px;
+  font-size: 22px;
   font-weight: 500;
   color: var(--ea-text-1);
-  margin: 18px 0 0;
-  line-height: 1.35;
+  margin: 20px 0 0;
+  line-height: 1.4;
 }
 
 .sh-hero-tagline {
@@ -1496,8 +1497,10 @@ const fanoutMiniDotCount = FANOUT_COLS * FANOUT_ROWS
     grid-template-columns: 1fr 1fr;
   }
   .sh-fanout-stats {
-    grid-template-columns: 1fr;
-    gap: 16px;
+    /* Keep the three metrics in a single row even on mobile — stacking
+       them produces awkward dead space next to the visual column. */
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
   }
   .fan-mid {
     grid-template-columns: 1fr;
@@ -1508,23 +1511,51 @@ const fanoutMiniDotCount = FANOUT_COLS * FANOUT_ROWS
   }
 }
 
-@media (max-width: 640px) {
+@media (max-width: 768px) {
   .sh-hero {
-    padding: 64px 16px 56px;
+    padding: 72px 20px 56px;
   }
-  .sh-hero-name { font-size: 44px; }
-  .sh-hero-text { font-size: 19px; }
-  .sh-hero-tagline { font-size: 16px; }
+  .sh-hero-name { font-size: 36px; }
+  .sh-hero-text { font-size: 18px; }
+  .sh-hero-tagline { font-size: 15px; }
+  .sh-hero-install {
+    padding: 8px 14px;
+    gap: 10px;
+  }
+  .sh-hero-install-text {
+    font-size: 13px;
+  }
   .sh-demos {
     grid-template-columns: 1fr;
   }
   .fan-clients {
     grid-template-columns: repeat(3, 1fr);
   }
+  .sh-fanout-stats {
+    gap: 10px;
+  }
+  .stat-num { font-size: 22px; }
   .sh-cta {
     padding: 40px 20px 36px;
   }
   .sh-cta-title { font-size: 28px; }
   .sh-cta-buttons { flex-direction: column; align-self: stretch; max-width: 280px; margin-left: auto; margin-right: auto; }
+}
+
+@media (max-width: 480px) {
+  .sh-hero {
+    padding: 56px 16px 40px;
+  }
+  .sh-hero-name { font-size: 28px; }
+  .sh-hero-text { font-size: 16px; }
+  .sh-hero-tagline { font-size: 14px; }
+  .sh-hero-install-text {
+    font-size: 12px;
+  }
+  .sh-fanout-stats {
+    gap: 8px;
+  }
+  .stat-num { font-size: 20px; }
+  .stat-label { font-size: 9.5px; }
 }
 </style>

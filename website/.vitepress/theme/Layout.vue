@@ -1,6 +1,6 @@
 <script setup>
-import { watch, onMounted, computed, ref } from 'vue'
-import { useData, useRouter } from 'vitepress'
+import { watch, onMounted, onBeforeUnmount, computed, ref } from 'vue'
+import { useData, useRoute, useRouter } from 'vitepress'
 import { posthog } from 'posthog-js'
 import { useSidebar, useLocalNav } from 'vitepress/theme'
 
@@ -13,6 +13,7 @@ import NavSignupButton from '../../src/components/NavSignupButton.vue'
 import SiteFooter from '../../src/components/SiteFooter.vue'
 import UseCaseHeader from '../../src/components/UseCaseHeader.vue'
 
+import CloudSectionNav from './components/CloudSectionNav.vue'
 import MegaNav from './components/MegaNav.vue'
 import MegaNavMobile from './components/MegaNavMobile.vue'
 
@@ -69,6 +70,33 @@ const layoutClass = computed(() => {
   if (frontmatter.value?.pageClass) classes.push(frontmatter.value.pageClass)
   return classes.join(' ')
 })
+
+// Cloud section: render the CloudSectionNav from the layout (so it
+// sits at a consistent vertical position across docs and home
+// layouts) instead of inline in each markdown file.
+const route = useRoute()
+const isCloudRoute = computed(() => {
+  const p = route.path || ''
+  return p === '/cloud' || p === '/cloud/' || p.startsWith('/cloud/') || p.startsWith('/pricing')
+})
+
+// Toggle a body class so the non-scoped CSS in CloudSectionNav.vue
+// can lift `--vp-doc-top-height` and shift the right-rail aside down
+// below the bar.
+function syncCloudBodyClass(active) {
+  if (typeof document === 'undefined') return
+  document.body.classList.toggle('has-cloud-nav', !!active)
+}
+
+watch(isCloudRoute, syncCloudBodyClass, { immediate: false })
+
+onMounted(() => {
+  syncCloudBodyClass(isCloudRoute.value)
+})
+
+onBeforeUnmount(() => {
+  syncCloudBodyClass(false)
+})
 </script>
 
 <template>
@@ -88,6 +116,10 @@ const layoutClass = computed(() => {
       <MegaNavMobile />
     </template>
     <template #doc-top>
+      <!-- Cloud section pill nav (rendered from the layout so its
+           vertical position stays consistent across docs and home
+           layouts). -->
+      <CloudSectionNav v-if="isCloudRoute" placement="doc" />
       <!-- Local nav bar: Medium screens - markdown link floats right -->
       <div v-if="showMarkdownLink" class="markdown-link-local-nav-container">
         <MarkdownLink variant="local-nav" />
@@ -96,6 +128,16 @@ const layoutClass = computed(() => {
       <div v-if="showMarkdownLink" class="custom-local-nav-dropdown">
         <LocalNavOutlineDropdown :headers="headers" :navHeight="navHeight" />
       </div>
+    </template>
+    <template #home-hero-before>
+      <CloudSectionNav v-if="isCloudRoute" placement="home" />
+    </template>
+    <template #page-top>
+      <!-- `layout: page` (used by the cloud overview to get a blank,
+           full-bleed canvas like streams / sync / agents) doesn't
+           expose the home-hero slots, so render the cloud pill nav
+           here too. -->
+      <CloudSectionNav v-if="isCloudRoute" placement="home" />
     </template>
     <template #doc-before>
       <div class="vp-doc" v-if="frontmatter.case">

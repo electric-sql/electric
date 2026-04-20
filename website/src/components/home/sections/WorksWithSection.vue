@@ -407,7 +407,7 @@ onMounted(() => {
 </style>
 
 <template>
-  <Section :actions="actions" :wideSectionHead="false">
+  <Section :actions="actions" :wideSectionHead="false" :dark="true">
     <template #title>Works with your&nbsp;stack</template>
     <template #override-tagline>
       <p>

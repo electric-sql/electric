@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from "vue"
+import { ref, watch, onMounted, onUnmounted } from "vue"
+import { useDemoVisibility } from "../../../.vitepress/theme/composables/useDemoVisibility"
 
 // Section 2: "Online together" — one shape, three live readers.
 // A Postgres source emits events; three clients (web, mobile, agent)
@@ -52,6 +53,10 @@ const mobilePulse = ref<PulseState>({ ...FAN_SOURCE, opacity: 0 })
 const agentPulse = ref<PulseState>({ ...FAN_SOURCE, opacity: 0 })
 const sourcePulse = ref(0)
 
+const rootRef = ref<HTMLElement>()
+const isVisible = useDemoVisibility(rootRef)
+const hasStarted = ref(false)
+
 let timer: number | undefined
 let mounted = true
 
@@ -89,34 +94,59 @@ function runPulse(
   requestAnimationFrame(step)
 }
 
-function start() {
-  let i = 0
-  function emit() {
-    const base = SEED[i % SEED.length]
-    const seq = i.toString(16).toUpperCase().padStart(3, "0")
-    const row = { ...base, id: `01F${seq}` }
-    sourcePulse.value = Date.now()
-    sourceTick.value += 1
+let emitCounter = 0
 
-    // Each client receives with its own latency (HTTP CDN realism)
-    setTimeout(() => {
-      pushRow(webRows, row)
-      runPulse(webPulse, FAN_TARGETS.web)
-    }, 320)
-    setTimeout(() => {
-      pushRow(mobileRows, row)
-      runPulse(mobilePulse, FAN_TARGETS.mobile)
-    }, 540)
-    setTimeout(() => {
-      pushRow(agentRows, row)
-      runPulse(agentPulse, FAN_TARGETS.agent)
-    }, 720)
+function emitOne() {
+  const base = SEED[emitCounter % SEED.length]
+  const seq = emitCounter.toString(16).toUpperCase().padStart(3, "0")
+  const row = { ...base, id: `01F${seq}` }
+  sourcePulse.value = Date.now()
+  sourceTick.value += 1
 
-    i += 1
-  }
-  emit()
-  timer = window.setInterval(emit, 2400)
+  // Each client receives with its own latency (HTTP CDN realism)
+  setTimeout(() => {
+    pushRow(webRows, row)
+    runPulse(webPulse, FAN_TARGETS.web)
+  }, 320)
+  setTimeout(() => {
+    pushRow(mobileRows, row)
+    runPulse(mobilePulse, FAN_TARGETS.mobile)
+  }, 540)
+  setTimeout(() => {
+    pushRow(agentRows, row)
+    runPulse(agentPulse, FAN_TARGETS.agent)
+  }, 720)
+
+  emitCounter += 1
 }
+
+let hasEmittedOnce = false
+function start() {
+  if (timer) return
+  // Only emit immediately on the very first start, so the demo doesn't
+  // burst rows every time visibility briefly flips during layout settle.
+  if (!hasEmittedOnce) {
+    hasEmittedOnce = true
+    emitOne()
+  }
+  timer = window.setInterval(emitOne, 2400)
+}
+
+function stop() {
+  if (timer) {
+    window.clearInterval(timer)
+    timer = undefined
+  }
+}
+
+watch(isVisible, (v) => {
+  if (v) {
+    hasStarted.value = true
+    start()
+  } else {
+    stop()
+  }
+})
 
 onMounted(() => {
   // Pre-seed the full row budget (4) so the cards never grow once
@@ -125,17 +155,20 @@ onMounted(() => {
   webRows.value = seeded
   mobileRows.value = seeded
   agentRows.value = seeded
-  start()
+  if (isVisible.value) {
+    hasStarted.value = true
+    start()
+  }
 })
 
 onUnmounted(() => {
   mounted = false
-  if (timer) window.clearInterval(timer)
+  stop()
 })
 </script>
 
 <template>
-  <div class="mcp-demo">
+  <div ref="rootRef" class="mcp-demo" :class="{ started: hasStarted }">
     <div class="mcp-stage">
       <!-- Source -->
       <div class="mcp-source" :class="{ pulse: sourcePulse > 0 }" :key="sourcePulse">
@@ -396,6 +429,8 @@ onUnmounted(() => {
   font-size: 12.5px;
   line-height: 1.35;
   padding: 4px 0;
+}
+.mcp-demo.started .client-row {
   animation: mcp-row-in 0.4s ease-out;
 }
 

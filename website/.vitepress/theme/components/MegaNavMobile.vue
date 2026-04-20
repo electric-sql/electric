@@ -23,7 +23,6 @@ const NAV = [
       { label: 'Vercel AI SDK', link: '/docs/streams/integrations/vercel-ai-sdk' },
       { label: 'Yjs', link: '/docs/streams/integrations/yjs' },
       { label: 'StreamDB', link: '/docs/streams/stream-db' },
-      { label: 'StreamFS', link: '/docs/streams/stream-fs' },
       { label: 'DurableStreams.com', link: 'https://durablestreams.com' },
     ],
   },
@@ -79,7 +78,6 @@ function toggle(id) {
 
 function productSubLinks(item) {
   const links = [
-    { label: 'Overview', link: item.docsBase },
     { label: 'Quickstart', link: `${item.docsBase}/quickstart` },
     { label: 'Demos', link: `${item.base}/demos` },
     { label: 'Docs', link: item.docsBase },

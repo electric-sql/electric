@@ -11,7 +11,7 @@ const actions = [
 </script>
 
 <template>
-  <CTAStrap :actions="actions">
+  <CTAStrap :actions="actions" :light="true">
     <template #title> No&nbsp;siloes. No&nbsp;black&nbsp;boxes </template>
     <template #tagline>
       Just sync, solved, with

@@ -13,6 +13,38 @@ const caddyfileLanguage: LanguageRegistration = {
   aliases: ['caddy', 'Caddyfile'],
 }
 
+const resourcesSidebar = [
+  {
+    text: 'Resources',
+    items: [
+      { text: 'Blog', link: '/blog' },
+      { text: 'Community', link: '/about/community' },
+      { text: 'Team', link: '/about/team' },
+      {
+        text: 'Careers',
+        link: '/about/careers',
+        items: [
+          {
+            text: 'Founders Associate',
+            link: '/about/careers/founders-associate',
+          },
+        ],
+        collapsed: false,
+      },
+      { text: 'LLMs / AGENTS.md', link: '/llms' },
+      {
+        text: 'Legal',
+        items: [
+          { text: 'Terms', link: '/about/legal/terms' },
+          { text: 'Privacy', link: '/about/legal/privacy' },
+        ],
+        collapsed: false,
+      },
+      { text: 'Contact', link: '/about/contact' },
+    ],
+  },
+]
+
 // https://vitepress.dev/reference/site-config
 export default defineConfig({
   vite: {
@@ -164,18 +196,6 @@ export default defineConfig({
           items: [
             { text: 'TanStack DB', link: '/sync/tanstack-db' },
             { text: 'PGlite', link: '/sync/pglite' },
-          ],
-        },
-      ],
-      '/cloud': [
-        {
-          text: 'Electric Cloud',
-          items: [
-            { text: 'Overview', link: '/cloud/' },
-            { text: 'Usage', link: '/cloud/usage' },
-            { text: 'Protocols', link: '/cloud/protocols' },
-            { text: 'Pricing', link: '/pricing' },
-            { text: 'CLI', link: '/cloud/cli' },
           ],
         },
       ],
@@ -534,35 +554,8 @@ export default defineConfig({
           ],
         },
       ],
-      '/about': [
-        {
-          text: 'About',
-          items: [
-            { text: 'Community', link: '/about/community' },
-            { text: 'Team', link: '/about/team' },
-            {
-              text: 'Careers',
-              link: '/about/careers',
-              items: [
-                {
-                  text: 'Founders Associate',
-                  link: '/about/careers/founders-associate',
-                },
-              ],
-              collapsed: false,
-            },
-            {
-              text: 'Legal',
-              items: [
-                { text: 'Terms', link: '/about/legal/terms' },
-                { text: 'Privacy', link: '/about/legal/privacy' },
-              ],
-              collapsed: false,
-            },
-            { text: 'Contact', link: '/about/contact' },
-          ],
-        },
-      ],
+      '/about': resourcesSidebar,
+      '/llms': resourcesSidebar,
     },
     siteTitle: false,
     socialLinks: [],

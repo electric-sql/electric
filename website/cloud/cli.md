@@ -4,6 +4,7 @@ description: >-
   Command-line interface for managing Electric Cloud resources, including Postgres sync services and durable streams.
 image: /img/meta/electric-cloud.jpg
 outline: deep
+sidebar: false
 ---
 
 <img src="/img/icons/ddn.svg" class="product-icon" />

@@ -1300,7 +1300,12 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
 @media (max-width: 960px) {
   .ds-split {
     flex-direction: column;
+    align-items: stretch;
     gap: 32px;
+  }
+  .ds-split-demo,
+  .ds-split-text {
+    width: 100%;
   }
   .ds-split-reverse {
     flex-direction: column;

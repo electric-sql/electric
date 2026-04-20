@@ -1,63 +1,84 @@
 import { ref, onMounted, onUnmounted, type Ref } from "vue"
 
 /**
- * Coordinates animated demos so only the one closest to the viewport
- * center is active at any time. Each demo registers via useDemoVisibility()
- * and receives a reactive `isActive` ref.
+ * Tracks whether an animated demo is currently in view, so the demo can
+ * pause its work (timers, RAF loops) when scrolled off-screen and only
+ * (re)start once the user actually scrolls it into view.
+ *
+ * Uses IntersectionObserver with a tight rootMargin so a demo only
+ * becomes "visible" when it's well inside the viewport, not when it's
+ * just poking up at the bottom edge during initial page load.
  */
-
 interface DemoEntry {
   el: HTMLElement
   active: Ref<boolean>
+  visible: boolean
 }
 
 const demos: DemoEntry[] = []
-let rafId: number | null = null
+let observer: IntersectionObserver | null = null
+// Don't activate any demo until the user has actually scrolled. This
+// stops demos from auto-starting just because they happen to be partly
+// visible at the bottom of the viewport on initial page load — the
+// user's intent ("scroll into view") is honoured literally.
+let hasScrolled = false
+let scrollHandler: (() => void) | null = null
+
+function ensureObserver() {
+  if (observer || typeof IntersectionObserver === `undefined`) return
+  observer = new IntersectionObserver(
+    (entries) => {
+      for (const e of entries) {
+        const d = demos.find((x) => x.el === e.target)
+        if (!d) continue
+        d.visible = e.isIntersecting
+      }
+      pickActive()
+    },
+    {
+      // Shrink the effective viewport by 25% on top and bottom so a demo
+      // only counts as "in view" once it's properly scrolled into the
+      // middle band of the viewport.
+      rootMargin: `-25% 0px -25% 0px`,
+      threshold: 0,
+    }
+  )
+
+  if (typeof window !== `undefined` && !scrollHandler) {
+    scrollHandler = () => {
+      if (hasScrolled) return
+      hasScrolled = true
+      pickActive()
+    }
+    window.addEventListener(`scroll`, scrollHandler, { passive: true })
+  }
+}
 
 function pickActive() {
-  const mid = window.innerHeight / 2
-  let best: DemoEntry | null = null
-  let bestDist = Infinity
+  // Until the user has scrolled, no demo should be active. This keeps
+  // every demo paused on initial page load even when one is partly in
+  // the IO "active" band, so animations only start once the user
+  // scrolls them into view.
+  if (!hasScrolled) {
+    for (const d of demos) d.active.value = false
+    return
+  }
 
+  let chosen: DemoEntry | null = null
+  // Of the demos currently visible, pick the topmost one as the active
+  // one. This biases toward the demo the user is currently reading.
   for (const d of demos) {
-    const rect = d.el.getBoundingClientRect()
-    const top = rect.top
-    const bottom = rect.bottom
-    // skip if completely off-screen
-    if (bottom < 0 || top > window.innerHeight) continue
-    const center = (top + bottom) / 2
-    const dist = Math.abs(center - mid)
-    if (dist < bestDist) {
-      bestDist = dist
-      best = d
+    if (!d.visible) continue
+    if (
+      !chosen ||
+      d.el.getBoundingClientRect().top <
+        chosen.el.getBoundingClientRect().top
+    ) {
+      chosen = d
     }
   }
-
   for (const d of demos) {
-    d.active.value = d === best
-  }
-}
-
-function onScroll() {
-  if (rafId != null) return
-  rafId = requestAnimationFrame(() => {
-    rafId = null
-    pickActive()
-  })
-}
-
-function startListening() {
-  window.addEventListener(`scroll`, onScroll, { passive: true })
-  window.addEventListener(`resize`, onScroll, { passive: true })
-  pickActive()
-}
-
-function stopListening() {
-  window.removeEventListener(`scroll`, onScroll)
-  window.removeEventListener(`resize`, onScroll)
-  if (rafId != null) {
-    cancelAnimationFrame(rafId)
-    rafId = null
+    d.active.value = d === chosen
   }
 }
 
@@ -67,19 +88,27 @@ export function useDemoVisibility(elRef: Ref<HTMLElement | undefined>) {
 
   onMounted(() => {
     if (!elRef.value) return
-    entry = { el: elRef.value, active: isActive }
-    const wasEmpty = demos.length === 0
+    ensureObserver()
+    entry = { el: elRef.value, active: isActive, visible: false }
     demos.push(entry)
-    if (wasEmpty) startListening()
-    pickActive()
+    observer?.observe(elRef.value)
   })
 
   onUnmounted(() => {
     if (entry) {
+      observer?.unobserve(entry.el)
       const idx = demos.indexOf(entry)
       if (idx >= 0) demos.splice(idx, 1)
     }
-    if (demos.length === 0) stopListening()
+    if (demos.length === 0) {
+      observer?.disconnect()
+      observer = null
+      if (scrollHandler && typeof window !== `undefined`) {
+        window.removeEventListener(`scroll`, scrollHandler)
+        scrollHandler = null
+      }
+      hasScrolled = false
+    }
   })
 
   return isActive

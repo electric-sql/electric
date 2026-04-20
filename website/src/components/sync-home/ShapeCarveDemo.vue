@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from "vue"
+import { ref, computed, watch, onMounted, onUnmounted } from "vue"
+import { useDemoVisibility } from "../../../.vitepress/theme/composables/useDemoVisibility"
 
 // Section 3: "Shape — the unit of sync".
 // A SQL query on the left visibly "carves" matching rows out of a Postgres
@@ -60,20 +61,57 @@ function selectShape(i: number) {
   carveKey.value += 1
 }
 
-// Auto-rotate the demo so it's never stale-looking
+const rootRef = ref<HTMLElement>()
+const isVisible = useDemoVisibility(rootRef)
+const hasStarted = ref(false)
+
 let rotate: number | undefined
-onMounted(() => {
+
+function startRotation() {
+  if (rotate) return
   rotate = window.setInterval(() => {
     selectShape((activeIdx.value + 1) % SHAPES.length)
   }, 5500)
+}
+
+function stopRotation() {
+  if (rotate) {
+    window.clearInterval(rotate)
+    rotate = undefined
+  }
+}
+
+let hasRevealed = false
+watch(isVisible, (v) => {
+  if (v) {
+    // First-time entry: bump carveKey so the carve-in / client-in
+    // animations actually play as the demo scrolls into view (not
+    // silently on initial mount). Guard with a permanent latch so a
+    // transient visibility flip during layout settle doesn't
+    // re-trigger the entry animation.
+    if (!hasRevealed) {
+      hasRevealed = true
+      hasStarted.value = true
+      carveKey.value += 1
+    }
+    startRotation()
+  } else {
+    stopRotation()
+  }
 })
-onUnmounted(() => {
-  if (rotate) window.clearInterval(rotate)
+
+onMounted(() => {
+  if (isVisible.value) {
+    hasStarted.value = true
+    startRotation()
+  }
 })
+
+onUnmounted(stopRotation)
 </script>
 
 <template>
-  <div class="shape-carve">
+  <div ref="rootRef" class="shape-carve" :class="{ started: hasStarted }">
     <!-- Top bar: shape selector -->
     <div class="sc-controls">
       <span class="sc-controls-label">Shape:</span>
@@ -276,6 +314,8 @@ onUnmounted(() => {
 .sc-sql-body .sql-where {
   display: block;
   color: var(--ea-text-2);
+}
+.shape-carve.started .sc-sql-body .sql-where {
   animation: sql-where-flash 0.6s ease-out;
 }
 
@@ -344,6 +384,8 @@ onUnmounted(() => {
   opacity: 1;
   background: color-mix(in srgb, var(--vp-c-brand-1) 10%, transparent);
   border-color: color-mix(in srgb, var(--vp-c-brand-1) 35%, var(--ea-divider));
+}
+.shape-carve.started .sc-row.matched {
   animation: sc-carve-in 0.5s ease-out backwards;
   animation-delay: var(--carve-delay);
 }
@@ -447,6 +489,8 @@ onUnmounted(() => {
   background: var(--ea-surface-alt);
   border: 1px solid var(--ea-divider);
   border-radius: 4px;
+}
+.shape-carve.started .sc-client-row {
   animation: sc-client-in 0.45s ease-out backwards;
   animation-delay: var(--in-delay);
 }

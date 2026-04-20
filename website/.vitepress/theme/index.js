@@ -11,9 +11,16 @@ import HTML5Video from '../../src/components/HTML5Video.vue'
 import NavSignupButton from '../../src/components/NavSignupButton.vue'
 import YoutubeEmbed from '../../src/components/YoutubeEmbed.vue'
 
+import CloudSectionNav from './components/CloudSectionNav.vue'
 import MegaNav from './components/MegaNav.vue'
 import MegaNavMobile from './components/MegaNavMobile.vue'
 import MegaNavPanel from './components/MegaNavPanel.vue'
+
+// Site root homepage.
+import HomePage from '../../src/components/home/HomePage.vue'
+
+// Electric Cloud overview.
+import CloudHomePage from '../../src/components/cloud-home/CloudHomePage.vue'
 
 // Electric Sync homepage.
 import SyncHomePage from '../../src/components/sync-home/SyncHomePage.vue'
@@ -41,6 +48,8 @@ import './custom.css'
 
 export default {
   enhanceApp({ app }) {
+    app.component(`CloudHomePage`, CloudHomePage)
+    app.component(`CloudSectionNav`, CloudSectionNav)
     app.component(`DemoCTAs`, DemoCTAs)
     app.component(`DemoEmbed`, DemoEmbed)
     app.component(`DemoListing`, DemoListing)
@@ -65,6 +74,7 @@ export default {
     app.component(`EntityOverviewDiagram`, EntityOverviewDiagram)
     app.component(`EntityStreamDemo`, EntityStreamDemo)
     app.component(`HeroNetworkBg`, HeroNetworkBg)
+    app.component(`HomePage`, HomePage)
     app.component(`MessageLine`, MessageLine)
     app.component(`StreamViewer`, StreamViewer)
     app.component(`SyncHomePage`, SyncHomePage)

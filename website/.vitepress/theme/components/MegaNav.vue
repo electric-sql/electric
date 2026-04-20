@@ -46,12 +46,6 @@ const NAV = [
           link: '/docs/streams/stream-db',
           icon: '/img/icons/durable-streams.square.svg',
         },
-        {
-          label: 'StreamFS',
-          sublabel: 'Shared FS for AI agents',
-          link: '/docs/streams/stream-fs',
-          icon: '/img/icons/durable-streams.square.svg',
-        },
       ],
     },
     extras: [

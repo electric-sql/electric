@@ -177,6 +177,16 @@
   --ec-overlay-strong: rgba(255, 255, 255, 0.6);
   --ec-overlay-medium: rgba(255, 255, 255, 0.4);
   --ec-overlay-soft: rgba(255, 255, 255, 0.2);
+
+  /* Homepage iso scene — three-substrate accents. Tuned so the three land
+     within ±5 perceptual L of each other in light mode. Sync uses a slightly
+     desaturated teal (option 2 of the brand mitigation), so the brand teal
+     stays the umbrella in the rest of the site. Light-mode coral is dialled
+     to land near the same L as the desaturated teal. */
+  --home-iso-sync: #0d9aaa;
+  --home-iso-streams: #6f4dff;
+  --home-iso-agents: #d44a25;
+  --home-iso-neutral: 0, 0, 0;
 }
 
 /* ── Dark theme ─────────────────────────────────────────────────────── */
@@ -265,6 +275,14 @@
 
   --vp-c-border: #2a2d38;
   --vp-c-gutter: #0a0b0e;
+
+  /* Homepage iso scene — three-substrate accents tuned for dark mode.
+     All three sit at high enough L to read on the deep navy background but
+     are within ±5 of each other so no one accent dominates. */
+  --home-iso-sync: #75fbfd;
+  --home-iso-streams: #a78bfa;
+  --home-iso-agents: #ff8a65;
+  --home-iso-neutral: 255, 255, 245;
 }
 
 .Layout {
@@ -564,14 +582,17 @@ span.no-visual {
 }
 
 /* Hide navbar bottom divider on home pages regardless of scroll position.
-   Includes `.ea-homepage` (Electric Agents landing page) and
-   `.ds-homepage` (Durable Streams landing page), both of which use
-   `layout: page` rather than `layout: home` and so don't pick up the
-   `.VPNavBar.home` class on their own. */
+   Includes `.ea-homepage` (Electric Agents landing page),
+   `.ds-homepage` (Durable Streams landing page), `.sync-page` (Electric
+   Sync landing page) and `.home-page` (the site root homepage), all of
+   which use `layout: page` rather than `layout: home` and so don't pick
+   up the `.VPNavBar.home` class on their own. */
 @media (min-width: 960px) {
   .VPNavBar.home:not(.top),
   .ea-homepage .VPNavBar:not(.top),
-  .ds-homepage .VPNavBar:not(.top) {
+  .ds-homepage .VPNavBar:not(.top),
+  .sync-page .VPNavBar:not(.top),
+  .home-page .VPNavBar:not(.top) {
     background-color: transparent !important;
   }
   .VPNavBar.home .divider,
@@ -579,7 +600,11 @@ span.no-visual {
   .ea-homepage .VPNavBar .divider,
   .ea-homepage .VPNavBar .divider-line,
   .ds-homepage .VPNavBar .divider,
-  .ds-homepage .VPNavBar .divider-line {
+  .ds-homepage .VPNavBar .divider-line,
+  .sync-page .VPNavBar .divider,
+  .sync-page .VPNavBar .divider-line,
+  .home-page .VPNavBar .divider,
+  .home-page .VPNavBar .divider-line {
     background-color: transparent !important;
   }
 }
@@ -988,6 +1013,25 @@ iframe {
 
 .VPHome {
   margin-bottom: 0 !important;
+}
+
+/* Site root homepage: `layout: page` with `pageClass: home-page`. Each
+   section / strap inside `<HomePage />` manages its own full-bleed band
+   and centred inner container (matching the agents / streams / sync
+   landing pages), so no outer container is needed here — we just zero out
+   all the padding that VitePress's VPPage / VPDoc / .content wrappers
+   would otherwise apply. */
+.home-page .VPPage,
+.home-page .VPDoc,
+.home-page .VPDoc .container,
+.home-page .VPDoc .content,
+.home-page .VPDoc .content-container,
+.home-page .VPDoc .main {
+  padding: 0 !important;
+  max-width: none !important;
+}
+.home-page .VPPage {
+  overflow-x: clip;
 }
 
 @media (max-width: 639px) {

@@ -100,6 +100,9 @@ https://next.electric-sql.com/* https://electric-sql.com/:splat 301!
 # Cloud pricing moved to top-level pricing page
 /cloud/pricing                  /pricing 302
 
+# Cloud protocols folded into the Cloud overview
+/cloud/protocols                /cloud#protocols 301
+
 # Legacy /products/* (was renamed to /primitives/*) now lands on /sync
 /products                                /sync
 /products/postgres-sync                  /sync

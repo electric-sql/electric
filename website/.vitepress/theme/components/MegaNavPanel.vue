@@ -42,15 +42,6 @@ defineEmits(['navigate'])
           </a>
           <a
             class="mega-nav-panel-item"
-            :href="product.docsBase"
-            role="menuitem"
-            @click="$emit('navigate')"
-          >
-            <span class="mega-nav-panel-label">Overview</span>
-            <span class="mega-nav-panel-sublabel">Docs overview</span>
-          </a>
-          <a
-            class="mega-nav-panel-item"
             :href="`${product.docsBase}/quickstart`"
             role="menuitem"
             @click="$emit('navigate')"
