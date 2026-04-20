@@ -1086,10 +1086,6 @@ defmodule Electric.Plug.ServeShapePlugTest do
     end
   end
 
-  # call/2 wraps the whole plug pipeline in try/catch + try/after. The
-  # admission permit is stashed in the process dictionary by check_admission
-  # and released unconditionally in the `after` clause, so every exit path
-  # (success, halt, uncaught exception) returns the correct permit kind.
   describe "admission control release on error" do
     setup :with_lsn_tracker
 
@@ -1110,8 +1106,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
       call_plug_expecting_crash(ctx)
 
-      assert %{initial: 0, existing: 0} =
-               Electric.AdmissionControl.get_current(ctx.stack_id)
+      assert %{initial: 0, existing: 0} == Electric.AdmissionControl.get_current(ctx.stack_id)
     end
 
     test "releases permit when load_shape raises DBConnection.ConnectionError", ctx do
@@ -1121,29 +1116,23 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
       call_plug_expecting_crash(ctx)
 
-      assert %{initial: 0, existing: 0} =
-               Electric.AdmissionControl.get_current(ctx.stack_id)
+      assert %{initial: 0, existing: 0} == Electric.AdmissionControl.get_current(ctx.stack_id)
     end
 
     test "does not call release when exception occurs before check_admission runs", ctx do
-      # If validation raises before check_admission, no permit was stashed in
-      # the process dictionary, so release_admission_permit in the `after`
-      # clause is a no-op and release/2 must not be called.
+      :ok = Electric.AdmissionControl.try_acquire(ctx.stack_id, :initial, max_concurrent: 1000)
+      :ok = Electric.AdmissionControl.try_acquire(ctx.stack_id, :initial, max_concurrent: 1000)
+      :ok = Electric.AdmissionControl.try_acquire(ctx.stack_id, :existing, max_concurrent: 1000)
+
+      # If validation raises before check_admission, no permit was acquired,
+      # so permit counters remain at their previous values.
       Repatch.patch(Electric.Shapes.Api, :validate_params, fn _api, _params ->
         raise RuntimeError, "crash during validation"
       end)
 
-      Repatch.spy(Electric.AdmissionControl)
+      call_plug_expecting_crash(ctx)
 
-      try do
-        ctx
-        |> conn(:get, %{"table" => "public.users"}, "?offset=-1")
-        |> ServeShapePlug.call(ctx.plug_opts)
-      catch
-        _kind, _reason -> :ok
-      end
-
-      refute Repatch.called?(Electric.AdmissionControl, :release, 3)
+      assert %{initial: 2, existing: 1} == Electric.AdmissionControl.get_current(ctx.stack_id)
     end
 
     test "releases correct :existing permit when shape exists and offset is -1", ctx do
@@ -1161,8 +1150,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
       call_plug_expecting_crash(ctx)
 
-      assert %{initial: 0, existing: 0} =
-               Electric.AdmissionControl.get_current(ctx.stack_id)
+      assert %{initial: 0, existing: 0} == Electric.AdmissionControl.get_current(ctx.stack_id)
     end
 
     test "releases correct :initial permit when shape does not exist", ctx do
@@ -1178,8 +1166,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
       call_plug_expecting_crash(ctx)
 
-      assert %{initial: 0, existing: 0} =
-               Electric.AdmissionControl.get_current(ctx.stack_id)
+      assert %{initial: 0, existing: 0} == Electric.AdmissionControl.get_current(ctx.stack_id)
     end
 
     # The `catch` only fires on the re-raise path (`handle_caught` sees
@@ -1207,15 +1194,12 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
       call_plug_expecting_crash(ctx)
 
-      assert %{initial: 0, existing: 0} =
-               Electric.AdmissionControl.get_current(ctx.stack_id)
+      assert %{initial: 0, existing: 0} == Electric.AdmissionControl.get_current(ctx.stack_id)
     end
 
     test "successful snapshot response releases permit via after-block", ctx do
-      # Covers the chunked streaming success path — the exact scenario the old
-      # register_before_send approach broke on (callback fired when send_chunked
-      # started, not finished). Using try/after in call/2, release happens only
-      # once super returns, i.e. after Api.Response.send_stream drains the body.
+      # Covers the chunked streaming success path — permit release happens only after
+      # Api.Response.send_stream finishes streaming the whole response to the client.
       patch_storage(for_shape: fn @test_shape_handle, _opts -> @test_opts end)
 
       expect_shape_cache(
@@ -1243,8 +1227,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
 
       assert conn.status == 200
 
-      assert %{initial: 0, existing: 0} =
-               Electric.AdmissionControl.get_current(ctx.stack_id)
+      assert %{initial: 0, existing: 0} == Electric.AdmissionControl.get_current(ctx.stack_id)
     end
   end
 
@@ -1344,13 +1327,7 @@ defmodule Electric.Plug.ServeShapePlugTest do
       )
 
       try do
-        try do
-          ctx
-          |> conn(:get, %{"table" => "public.users"}, "?offset=-1")
-          |> ServeShapePlug.call(ctx.plug_opts)
-        catch
-          _kind, _reason -> :ok
-        end
+        call_plug_expecting_crash(ctx)
 
         assert_receive {:serve_shape_telemetry, [:electric, :plug, :serve_shape], measurements,
                         metadata},
