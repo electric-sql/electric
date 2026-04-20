@@ -1,0 +1,11 @@
+{
+	admin off
+}
+
+:4433 {
+	route /v1/stream/* {
+		durable_streams {
+			data_dir /var/data/db/durable-streams
+		}
+	}
+}
