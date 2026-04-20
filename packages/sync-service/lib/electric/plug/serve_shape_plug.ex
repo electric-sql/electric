@@ -81,6 +81,15 @@ defmodule Electric.Plug.ServeShapePlug do
   # If the response was already sent (e.g. send_chunked partway through a
   # stream), we can't meaningfully recover — re-raise so the caller sees the
   # original error. Otherwise normalize and delegate to handle_errors/2.
+  #
+  # Known gap on the re-raise path: the [:electric, :plug, :serve_shape]
+  # telemetry event is NOT emitted for that request because we don't have
+  # access to the accumulated conn here (only the one passed into call/2).
+  # The admission permit is still released and the OTEL span is still popped
+  # via the `after` clause in call/2 — only the aggregate metric is lost.
+  # This triggers only when Plug.Conn.chunk/2 raises mid-stream, which the
+  # streaming path already handles explicitly as {:error, "closed"} for the
+  # common case (client disconnect).
   defp handle_caught(conn, kind, reason, stack) do
     receive do
       {:plug_conn, :sent} -> :erlang.raise(kind, reason, stack)

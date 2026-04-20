@@ -1191,6 +1191,176 @@ defmodule Electric.Plug.ServeShapePlugTest do
         _kind, _reason -> :ok
       end
     end
+
+    test "resolve_existing_shape unexpected exception does not leak permit", ctx do
+      # resolve_existing_shape runs BEFORE check_admission, so a non-ArgumentError
+      # raise here must propagate without a permit having been acquired. Counter
+      # must stay at zero.
+      Repatch.patch(Electric.Shapes, :fetch_handle_by_shape, fn _stack_id, _shape ->
+        raise RuntimeError, "unexpected failure in shape cache lookup"
+      end)
+
+      call_plug_expecting_crash(ctx)
+
+      assert %{initial: 0, existing: 0} =
+               Electric.AdmissionControl.get_current(ctx.stack_id)
+    end
+
+    test "successful snapshot response releases permit via after-block", ctx do
+      # Covers the chunked streaming success path — the exact scenario the old
+      # register_before_send approach broke on (callback fired when send_chunked
+      # started, not finished). Using try/after in call/2, release happens only
+      # once super returns, i.e. after Api.Response.send_stream drains the body.
+      patch_storage(for_shape: fn @test_shape_handle, _opts -> @test_opts end)
+
+      expect_shape_cache(
+        get_or_create_shape_handle: fn @test_shape, _stack_id, _opts ->
+          {@test_shape_handle, @test_offset}
+        end,
+        await_snapshot_start: fn @test_shape_handle, _ -> :started end
+      )
+
+      patch_shape_cache(has_shape?: fn @test_shape_handle, _opts -> true end)
+
+      expect_storage(
+        get_chunk_end_log_offset: fn @before_all_offset, _ ->
+          @first_offset
+        end,
+        get_log_stream: fn @before_all_offset, @first_offset, @test_opts ->
+          [Jason.encode!(%{key: "log", value: "foo", headers: %{}, offset: @first_offset})]
+        end
+      )
+
+      conn =
+        ctx
+        |> conn(:get, %{"table" => "public.users"}, "?offset=-1")
+        |> ServeShapePlug.call(ctx.plug_opts)
+
+      assert conn.status == 200
+
+      assert %{initial: 0, existing: 0} =
+               Electric.AdmissionControl.get_current(ctx.stack_id)
+    end
+  end
+
+  # The old register_before_send approach emitted the telemetry span when
+  # send_chunked started, not when it finished, losing streaming_bytes_sent
+  # and duration. The current try/after in call/2 emits telemetry only after
+  # super/2 returns (i.e. after the chunk reduction has drained the body),
+  # so the event reflects the full request lifecycle.
+  describe "telemetry span covers full chunked response" do
+    setup :with_lsn_tracker
+
+    setup ctx do
+      {:via, _, {registry_name, registry_key}} =
+        Electric.Shapes.Supervisor.name(ctx.stack_id)
+
+      {:ok, _} = Registry.register(registry_name, registry_key, nil)
+      set_status_to_active(ctx)
+
+      %{plug_opts: build_plug_opts(ctx)}
+    end
+
+    test "emits [:electric, :plug, :serve_shape] after chunked body fully drained", ctx do
+      patch_storage(for_shape: fn @test_shape_handle, _opts -> @test_opts end)
+
+      expect_shape_cache(
+        get_or_create_shape_handle: fn @test_shape, _stack_id, _opts ->
+          {@test_shape_handle, @test_offset}
+        end,
+        await_snapshot_start: fn @test_shape_handle, _ -> :started end
+      )
+
+      patch_shape_cache(has_shape?: fn @test_shape_handle, _opts -> true end)
+
+      expect_storage(
+        get_chunk_end_log_offset: fn @before_all_offset, _ ->
+          @first_offset
+        end,
+        get_log_stream: fn @before_all_offset, @first_offset, @test_opts ->
+          [Jason.encode!(%{key: "log", value: "foo", headers: %{}, offset: @first_offset})]
+        end
+      )
+
+      test_pid = self()
+      ref = make_ref()
+      handler_id = "test-serve-shape-telemetry-#{inspect(ref)}"
+
+      :telemetry.attach(
+        handler_id,
+        [:electric, :plug, :serve_shape],
+        fn event, measurements, metadata, _ ->
+          send(test_pid, {:serve_shape_telemetry, event, measurements, metadata})
+        end,
+        nil
+      )
+
+      try do
+        conn =
+          ctx
+          |> conn(:get, %{"table" => "public.users"}, "?offset=-1")
+          |> ServeShapePlug.call(ctx.plug_opts)
+
+        assert conn.status == 200
+
+        assert_receive {:serve_shape_telemetry, [:electric, :plug, :serve_shape], measurements,
+                        metadata},
+                       @receive_timeout
+
+        # Request was fully drained before telemetry fired — bytes must reflect
+        # the chunk actually streamed, duration must be non-zero, and status
+        # must be the final 200 (not pre-response state).
+        assert measurements.count == 1
+        assert measurements.bytes > 0
+        assert measurements.duration > 0
+        assert metadata.status == 200
+        assert metadata.stack_id == ctx.stack_id
+      after
+        :telemetry.detach(handler_id)
+      end
+    end
+
+    test "emits telemetry on error path with final status from handle_errors", ctx do
+      Repatch.patch(Electric.Shapes.Api, :load_shape_info, fn _request ->
+        raise RuntimeError, "simulated crash"
+      end)
+
+      test_pid = self()
+      ref = make_ref()
+      handler_id = "test-serve-shape-error-telemetry-#{inspect(ref)}"
+
+      :telemetry.attach(
+        handler_id,
+        [:electric, :plug, :serve_shape],
+        fn event, measurements, metadata, _ ->
+          send(test_pid, {:serve_shape_telemetry, event, measurements, metadata})
+        end,
+        nil
+      )
+
+      try do
+        try do
+          ctx
+          |> conn(:get, %{"table" => "public.users"}, "?offset=-1")
+          |> ServeShapePlug.call(ctx.plug_opts)
+        catch
+          _kind, _reason -> :ok
+        end
+
+        assert_receive {:serve_shape_telemetry, [:electric, :plug, :serve_shape], measurements,
+                        metadata},
+                       @receive_timeout
+
+        # Error path: handle_errors sends 500, try body returns the sent conn,
+        # emit_shape_telemetry sees the final status before after pops the span.
+        assert measurements.count == 1
+        assert measurements.duration > 0
+        assert metadata.status == 500
+        assert metadata.stack_id == ctx.stack_id
+      after
+        :telemetry.detach(handler_id)
+      end
+    end
   end
 
   describe "stack not ready" do
