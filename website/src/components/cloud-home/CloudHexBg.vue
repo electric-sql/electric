@@ -102,7 +102,16 @@ const totalLabel = computed(() => `${QUOTE.length} bytes total`)
   overflow: hidden;
   pointer-events: none;
   z-index: 0;
-  background: #0d1117;
+  /* Sit on the page surface so the hero blends with the rest of the
+     page in both themes — text colours below adapt per theme. */
+  background: var(--vp-c-bg);
+  /* Light theme defaults — desaturated stone greys that read on the
+     warm-stone page background. Dark theme overrides below. */
+  --cl-hex-fg: #7a8294;
+  --cl-hex-head: #8a93a6;
+  --cl-hex-offset: #aab2c0;
+  --cl-hex-byte: #6e7889;
+  --cl-hex-ascii: #2a6f78;
 }
 
 /* Anchor the hex viewer to the centre, then mask outwards so the
@@ -145,11 +154,10 @@ const totalLabel = computed(() => `${QUOTE.length} bytes total`)
   );
   font-size: 14px;
   line-height: 1.55;
-  color: #6b7a90;
+  color: var(--cl-hex-fg);
   letter-spacing: 0;
   /* Slightly de-emphasise so the hero text reads first. */
   opacity: 0.55;
-  text-shadow: 0 0 1px rgba(0, 0, 0, 0.4);
   display: grid;
   gap: 0;
 }
@@ -162,12 +170,12 @@ const totalLabel = computed(() => `${QUOTE.length} bytes total`)
 }
 
 .cl-hex-head {
-  color: #7e8fa8;
+  color: var(--cl-hex-head);
 }
 
 .cl-hex-foot {
   margin-top: 8px;
-  color: #7e8fa8;
+  color: var(--cl-hex-head);
 }
 
 .cl-hex-cols {
@@ -178,24 +186,24 @@ const totalLabel = computed(() => `${QUOTE.length} bytes total`)
 
 .cl-hex-label,
 .cl-hex-col-h {
-  color: #7e8fa8;
+  color: var(--cl-hex-head);
 }
 
 .cl-hex-offset {
-  color: #5a6a82;
+  color: var(--cl-hex-offset);
 }
 
 .cl-hex-byte {
-  color: #94a4bd;
+  color: var(--cl-hex-byte);
 }
 
 .cl-hex-ascii {
-  color: #75fbfd;
+  color: var(--cl-hex-ascii);
   letter-spacing: 0.02em;
 }
 
 .cl-hex-total {
-  color: #7e8fa8;
+  color: var(--cl-hex-head);
 }
 
 @media (max-width: 768px) {
@@ -219,9 +227,19 @@ const totalLabel = computed(() => `${QUOTE.length} bytes total`)
   }
 }
 
-/* Light theme: the hex viewer is a dark panel either way, but we
-   raise contrast slightly so it doesn't look muddy. */
-:global(html:not(.dark)) .cl-hex-pre {
-  opacity: 0.6;
+</style>
+
+<!-- Dark-theme overrides for the hex viewer palette. Lives in an
+     unscoped block because Vue's scoped CSS compiler mangles a
+     `:global(html.dark)` prefix into a bare `html.dark { … }` rule
+     that dims/colour-shifts the whole page. The defaults above target
+     light mode; we only need to swap accent colours here. -->
+<style>
+html.dark .cl-hex-bg {
+  --cl-hex-fg: #6b7a90;
+  --cl-hex-head: #7e8fa8;
+  --cl-hex-offset: #5a6a82;
+  --cl-hex-byte: #94a4bd;
+  --cl-hex-ascii: #75fbfd;
 }
 </style>

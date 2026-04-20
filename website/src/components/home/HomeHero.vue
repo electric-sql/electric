@@ -1,11 +1,30 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { onMounted, onUnmounted, ref } from 'vue'
 import { VPButton } from 'vitepress/theme'
 import HomeIsoBg from './HomeIsoBg.vue'
 import HomeIsoLegend from './HomeIsoLegend.vue'
 import type { Substrate } from './iso/types'
 
 const heroTextRef = ref<HTMLElement>()
+
+// On narrow viewports (single-column layout), collapse the canvas
+// `bleed` to zero — otherwise the iso canvas extends 35–40 % past the
+// viewport edge and forces horizontal scroll. Above the breakpoint
+// the asymmetric bleed gives the hero its preferred composition.
+const isMobile = ref(false)
+let mql: MediaQueryList | null = null
+function syncMobile() {
+  isMobile.value = !!mql?.matches
+}
+onMounted(() => {
+  if (typeof window === 'undefined') return
+  mql = window.matchMedia('(max-width: 1099px)')
+  syncMobile()
+  mql.addEventListener('change', syncMobile)
+})
+onUnmounted(() => {
+  mql?.removeEventListener('change', syncMobile)
+})
 
 // Active legend filter — drives the iso scene's per-substrate alpha.
 // `null` = show everything (default).
@@ -105,8 +124,8 @@ function copyInstall() {
             :exclude-el="heroTextRef"
             :auto-start="true"
             :filter="effectiveFilter"
-            :zoom="1.35"
-            :bleed="{ top: 0.08, right: 0.35, bottom: 0.18, left: 0.05 }"
+            :zoom="isMobile ? 1.1 : 1.35"
+            :bleed="isMobile ? 0 : { top: 0.08, right: 0.35, bottom: 0.18, left: 0.05 }"
             feather
           />
           <div class="home-hero-legend">

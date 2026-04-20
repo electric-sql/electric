@@ -1,8 +1,27 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { VPButton } from 'vitepress/theme'
 import HomeIsoBg from './HomeIsoBg.vue'
 import type { CropName } from './iso/types'
+
+// On narrow viewports we collapse to a single column and the iso
+// scene's horizontal bleed (~55 % of the cell) would push the page
+// content past the viewport edge, forcing horizontal scroll. Switch
+// bleed off below the breakpoint.
+const isNarrow = ref(false)
+let bleedMql: MediaQueryList | null = null
+function syncNarrow() {
+  isNarrow.value = !!bleedMql?.matches
+}
+onMounted(() => {
+  if (typeof window === 'undefined') return
+  bleedMql = window.matchMedia('(max-width: 1099px)')
+  syncNarrow()
+  bleedMql.addEventListener('change', syncNarrow)
+})
+onUnmounted(() => {
+  bleedMql?.removeEventListener('change', syncNarrow)
+})
 
 type Product = 'agents' | 'streams' | 'sync'
 
@@ -62,9 +81,13 @@ const sceneFirst = computed(() => copy.value.sceneSide === 'left')
 // section is `overflow-y: hidden`, and a vertical bleed would either be
 // clipped (looking abrupt) or leak into neighbouring sections. The
 // feather mask still gives a soft top/bottom fade *within* the cell.
-// `streams` stays boxed so it gets no bleed at all.
+// `streams` stays boxed so it gets no bleed at all. On mobile we drop
+// the bleed entirely — the layout collapses to single-column so the
+// scene already spans the full content width and any extra bleed would
+// push the page past the viewport edge.
 const sceneBleed = computed(() => {
   if (copy.value.crop === 'substrate-cutaway') return 0
+  if (isNarrow.value) return 0
   if (copy.value.sceneSide === 'left') {
     return { top: 0, right: 0, bottom: 0, left: 0.55 }
   }
@@ -237,7 +260,10 @@ const sceneBleed = computed(() => {
   gap: 12px;
 }
 
-@media (max-width: 959px) {
+/* Match the hero's collapse breakpoint (1099) so the whole homepage
+   transitions to single-column at the same width. Avoids a "mobile
+   hero, desktop product sections" Frankenstein gap between 960–1099 px. */
+@media (max-width: 1099px) {
   .home-product-grid {
     grid-template-columns: 1fr !important;
     gap: 28px;
@@ -249,6 +275,8 @@ const sceneBleed = computed(() => {
   .home-product-scene {
     aspect-ratio: 16 / 9;
     min-height: 240px;
+    /* When stacked, scene goes above text so the visual leads. */
+    order: -1;
   }
 }
 
