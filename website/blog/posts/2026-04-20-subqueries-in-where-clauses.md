@@ -1,5 +1,5 @@
 ---
-title: 'Subqueries in WHERE clauses now sync incrementally'
+title: 'WHERE clauses with AND, OR, NOT around subqueries now sync incrementally'
 description: >-
   Electric now handles AND, OR, and NOT combinations of subqueries in shape
   WHERE clauses with incremental updates instead of full resyncs. Multi-tenant
