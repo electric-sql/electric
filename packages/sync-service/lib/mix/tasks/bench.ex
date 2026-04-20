@@ -249,7 +249,9 @@ defmodule Mix.Tasks.Bench do
       SLC per-event:   #{format_latency(slc)}
       Consumer:        #{format_latency(Map.get(pipeline, "consumer", %{}))}
       Queue wait:      #{format_latency(Map.get(pipeline, "queue_wait", %{}))}
-      HTTP:            #{format_latency(Map.get(pipeline, "http", %{}))}
+      Send queue:      #{format_latency(Map.get(pipeline, "send_queue_wait", %{}))}
+      Wire (HTTP):     #{format_latency(Map.get(pipeline, "wire", %{}))}
+      HTTP total:      #{format_latency(Map.get(pipeline, "http", %{}))}
       Total (e2e):     #{format_latency(Map.get(pipeline, "total", %{}))}
     """)
   end

@@ -354,7 +354,7 @@ defmodule Electric.DurableStreams.SendLoop do
       nil ->
         state
 
-      {slot_seq, commit_lsn, _http_start, _oldest_recv_at, _n_changes, _n_txns, _body_size,
+      {slot_seq, commit_lsn, http_start, _oldest_recv_at, _n_changes, _n_txns, _body_size,
        _wire_size} ->
         status = (resp_acc && resp_acc[:status]) || 0
         headers = (resp_acc && resp_acc[:headers]) || []
@@ -387,8 +387,6 @@ defmodule Electric.DurableStreams.SendLoop do
                   {:error, :stream_closed}
 
                 String.contains?(body, "SEQUENCE_REGRESSION") ->
-                  # Our seq <= server's last seq. Since we're the only writer,
-                  # this means the data was already accepted — treat as success.
                   Logger.debug("Sequence already accepted (409) for seq #{commit_lsn}")
                   :ok
 
@@ -410,7 +408,7 @@ defmodule Electric.DurableStreams.SendLoop do
               {:error, {:http_error, status}}
           end
 
-        deliver_result(state, slot_seq, result)
+        deliver_result(state, slot_seq, result, http_start)
     end
   end
 
@@ -421,14 +419,18 @@ defmodule Electric.DurableStreams.SendLoop do
 
     case pending_info do
       nil -> state
-      {slot_seq, _, _, _, _, _, _, _} -> deliver_result(state, slot_seq, {:error, reason})
+      {slot_seq, _, http_start, _, _, _, _, _} ->
+        deliver_result(state, slot_seq, {:error, reason}, http_start)
     end
   end
 
-  defp deliver_result(state, slot_seq, result) do
+  defp deliver_result(state, slot_seq, result, http_start) do
     case state.waiter do
       nil ->
-        if state.callback_pid, do: send(state.callback_pid, {:batch_response, slot_seq, result})
+        if state.callback_pid do
+          send(state.callback_pid, {:batch_response, slot_seq, result, http_start})
+        end
+
         state
 
       from ->

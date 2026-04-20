@@ -13,7 +13,7 @@ defmodule Electric.DurableStreams.Stats do
 
   @table __MODULE__
   @window_size 1000
-  @segments [:consumer_us, :queue_wait_us, :http_us, :total_us]
+  @segments [:consumer_us, :queue_wait_us, :send_queue_wait_us, :wire_us, :http_us, :total_us]
 
   def start_link(opts) do
     stack_id = Keyword.fetch!(opts, :stack_id)

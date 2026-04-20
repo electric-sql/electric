@@ -58,11 +58,23 @@ defmodule Electric.ShapeCache.LmdbQueueStorage do
   @impl Storage
   def for_shape(shape_handle, compiled_opts) do
     %__MODULE__{
-      base_path: Path.join(compiled_opts.base_path, shape_handle),
+      base_path: shape_path(compiled_opts.base_path, shape_handle),
       stack_id: compiled_opts.stack_id,
       shape_handle: shape_handle,
       chunk_bytes_threshold: compiled_opts.chunk_bytes_threshold
     }
+  end
+
+  @doc """
+  Returns the on-disk path for a shape's storage:
+  `<base>/<bucket>/<shape_handle>`, where bucket is the first 3 characters
+  of the shape handle. This avoids having huge numbers of entries in a
+  single directory while keeping manual filesystem navigation easy —
+  you can go straight to a shape's files knowing only its handle.
+  """
+  def shape_path(base, shape_handle) do
+    bucket = String.slice(shape_handle, 0, 3)
+    Path.join([base, bucket, shape_handle])
   end
 
   @impl Storage
@@ -209,10 +221,13 @@ defmodule Electric.ShapeCache.LmdbQueueStorage do
 
     if File.exists?(base) do
       handles =
-        base
-        |> File.ls!()
-        |> Enum.filter(&File.dir?(Path.join(base, &1)))
-        |> MapSet.new()
+        for bucket <- File.ls!(base),
+            bucket_path = Path.join(base, bucket),
+            File.dir?(bucket_path),
+            shape_handle <- File.ls!(bucket_path),
+            File.dir?(Path.join(bucket_path, shape_handle)),
+            into: MapSet.new(),
+            do: shape_handle
 
       {:ok, handles}
     else
@@ -246,7 +261,7 @@ defmodule Electric.ShapeCache.LmdbQueueStorage do
 
   @impl Storage
   def cleanup!(compiled_opts, shape_handle) do
-    path = Path.join(compiled_opts.base_path, shape_handle)
+    path = shape_path(compiled_opts.base_path, shape_handle)
     if File.exists?(path), do: File.rm_rf!(path)
     :ok
   end

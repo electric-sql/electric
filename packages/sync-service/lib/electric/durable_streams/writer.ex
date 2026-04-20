@@ -154,8 +154,8 @@ defmodule Electric.DurableStreams.Writer do
     {:noreply, state}
   end
 
-  def handle_info({:batch_response, slot_seq, result}, state) do
-    state = handle_ack(state, slot_seq, result)
+  def handle_info({:batch_response, slot_seq, result, http_start}, state) do
+    state = handle_ack(state, slot_seq, result, http_start)
     {:noreply, state}
   end
 
@@ -260,7 +260,7 @@ defmodule Electric.DurableStreams.Writer do
   # Internal — ack handling
   # ============================================================================
 
-  defp handle_ack(state, slot_id, result) do
+  defp handle_ack(state, slot_id, result, http_start) do
     case result do
       {:error, reason} ->
         Logger.warning("Writer #{state.index} slot #{slot_id} failed: #{inspect(reason)}")
@@ -270,22 +270,22 @@ defmodule Electric.DurableStreams.Writer do
     end
 
     {tracker, actions} = BatchTracker.ack(state.tracker, slot_id, result)
-    apply_actions(%{state | tracker: tracker}, actions)
+    apply_actions(%{state | tracker: tracker}, actions, http_start)
   end
 
   # ============================================================================
   # Internal — apply BatchTracker actions
   # ============================================================================
 
-  defp apply_actions(state, actions) do
-    Enum.reduce(actions, state, &apply_action(&2, &1))
+  defp apply_actions(state, actions, http_start \\ nil) do
+    Enum.reduce(actions, state, &apply_action(&2, &1, http_start))
   end
 
-  defp apply_action(state, {:commit, shape_handle, count, meta}) do
+  defp apply_action(state, {:commit, shape_handle, count, meta}, http_start) do
     case get_output_queue(state, shape_handle) do
       {:ok, q, state} ->
         :ok = DiskQueue.commit_n(q, count)
-        breakdown = compute_breakdown(meta)
+        breakdown = compute_breakdown(meta, http_start)
         Electric.DurableStreams.Stats.record_latency(state.stack_id, breakdown)
 
         Logger.debug(fn ->
@@ -309,7 +309,7 @@ defmodule Electric.DurableStreams.Writer do
     end
   end
 
-  defp apply_action(state, {:retry, shape_handle}) do
+  defp apply_action(state, {:retry, shape_handle}, _http_start) do
     case get_output_queue(state, shape_handle) do
       {:ok, q, state} ->
         :ok = DiskQueue.rewind_peek(q)
@@ -343,22 +343,36 @@ defmodule Electric.DurableStreams.Writer do
     end
   end
 
-  defp compute_breakdown(%{send_start: send_start, timestamps: timestamps}) do
+  defp compute_breakdown(%{send_start: send_start, timestamps: timestamps}, http_start) do
     now = System.monotonic_time(:microsecond)
     http_us = now - send_start
 
-    case timestamps do
-      {entered_at, queued_at} when is_integer(entered_at) and is_integer(queued_at) ->
-        %{
-          consumer_us: queued_at - entered_at,
-          queue_wait_us: send_start - queued_at,
-          http_us: http_us,
-          total_us: now - entered_at
-        }
+    # Split http into two segments if the SendLoop reported when the
+    # request actually hit the wire:
+    #   send_queue_wait_us: send_start (Writer) → http_start (SendLoop wire)
+    #   wire_us:            http_start → ack arrived
+    extra =
+      if is_integer(http_start) do
+        %{send_queue_wait_us: http_start - send_start, wire_us: now - http_start}
+      else
+        %{}
+      end
 
-      _ ->
-        %{http_us: http_us}
-    end
+    base =
+      case timestamps do
+        {entered_at, queued_at} when is_integer(entered_at) and is_integer(queued_at) ->
+          %{
+            consumer_us: queued_at - entered_at,
+            queue_wait_us: send_start - queued_at,
+            http_us: http_us,
+            total_us: now - entered_at
+          }
+
+        _ ->
+          %{http_us: http_us}
+      end
+
+    Map.merge(base, extra)
   end
 
   # ============================================================================
