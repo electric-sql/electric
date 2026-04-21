@@ -5,7 +5,7 @@ description: >-
 excerpt: >-
   Electric shapes now support AND, OR, NOT, and NOT IN in subquery WHERE clauses — all with incremental sync. Express real access-control logic directly in shape definitions.
 authors: [rob]
-image: /img/blog/fluent-subqueries/header.jpg
+image: /img/blog/expressive-subqueries/header.jpg
 tags: [release, postgres-sync, shapes]
 outline: [2, 3]
 post: true
