@@ -291,11 +291,13 @@ defmodule Electric.Plug.ServeShapePlug do
   # is the place to assign them because we keep this plug last in the "plug pipeline" defined
   # in this module.
   defp end_telemetry_span(%Conn{assigns: assigns} = conn, _ \\ nil) do
+    bytes_sent = assigns[:streaming_bytes_sent] || 0
+
     OpenTelemetry.execute(
       [:electric, :plug, :serve_shape],
       %{
         count: 1,
-        bytes: assigns[:streaming_bytes_sent] || 0,
+        bytes: bytes_sent,
         monotonic_time: System.monotonic_time(),
         duration: System.monotonic_time() - conn.private[:electric_telemetry_span][:start_time]
       },
@@ -307,6 +309,12 @@ defmodule Electric.Plug.ServeShapePlug do
         stack_id: get_in(conn.assigns, [:config, :stack_id])
       }
     )
+
+    # Expose the total response body size as a dedicated span attribute
+    # alongside the semantic `http.response_size` set by
+    # `Electric.Plug.Utils.common_open_telemetry_attrs/1`. This populates the
+    # `num_bytes` Honeycomb column for shape-get requests.
+    OpenTelemetry.add_span_attributes(%{num_bytes: bytes_sent})
 
     add_span_attrs_from_conn(conn)
     OpentelemetryTelemetry.end_telemetry_span(OpenTelemetry, %{})
