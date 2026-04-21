@@ -1,7 +1,7 @@
 ---
 title: 'Expressive subqueries'
 description: >-
-  Add AND, OR, NOT, and NOT IN operators to Electric shape subquery WHERE clauses. All sync incrementally with precise move-in and move-out — no more full resyncs when dependency rows change.
+  Add AND, OR, NOT, and NOT IN operators to Electric shape subquery WHERE clauses. All sync incrementally with precise move-in and move-out.
 excerpt: >-
   Electric shapes now support AND, OR, NOT, and NOT IN in subquery WHERE clauses — all with incremental sync. Express real access-control logic directly in shape definitions.
 authors: [rob]
@@ -14,21 +14,17 @@ published: true
 
 Electric shapes now support expressive subqueries. This release adds AND, OR, NOT, and NOT&nbsp;IN for subquery WHERE&nbsp;clauses — all with incremental sync. You can now express real-world access-control logic directly in your shape definitions, combining nested subqueries, composite keys, and boolean operators.
 
-Before, any subquery more complex than `x IN (SELECT ...)` would trigger a full shape resync when dependency values changed — making large shapes impractical. Now you can write the access-control and multi-tenant queries you'd naturally write in SQL. The sync engine handles them.
-
 
 ## Before: one subquery, one shape
 
 Electric has supported subquery filtering since mid-2025 — sync rows where a relationship exists in another table. But real access-control queries combine multiple conditions. You need orders where the customer is in my region *and* the delivery is pending. You need tasks where I'm a project member *or* directly assigned. You need NOT&nbsp;IN to exclude.
 
-Previously, combining subqueries with boolean operators triggered full shape invalidation and resync from scratch whenever the subquery values changed. For large shapes, that can lead to a laggy experience.
+Previously, combining subqueries with boolean operators triggered full shape invalidation and resync from scratch whenever the subquery values changed. For large shapes, that meant waiting for the entire dataset to re-download before the update appeared.
 
 
 ## Expressive subqueries
 
 This release adds AND, OR, NOT, and NOT&nbsp;IN to subquery WHERE&nbsp;clauses. All sync incrementally — no more resyncs when dependency rows change. When a user gains or loses access, only the affected rows sync in or out.
-
-Here's what that unlocks:
 
 ### Subquery with AND
 
@@ -122,7 +118,7 @@ Update to the latest packages:
 npm install @tanstack/db@latest @tanstack/electric-db-collection@latest
 ```
 
-Enable the subquery feature flags on your sync service:
+Subquery support is behind feature flags while we validate the API. Enable them on your sync service:
 
 ```sh
 ELECTRIC_FEATURE_FLAGS=allow_subqueries,tagged_subqueries
@@ -167,13 +163,13 @@ const documentsCollection = createCollection(
 )
 ```
 
-See the [WHERE&nbsp;clause docs](/docs/guides/shapes#where-clauses) for the full reference on supported operators and subquery patterns.
+See the [WHERE&nbsp;clause docs](/docs/guides/shapes#where-clause) for the full reference on supported operators and subquery patterns.
 
 
 ***
 
 Links:
 
-- [Docs: shapes and WHERE&nbsp;clauses](/docs/guides/shapes#where-clauses)
+- [Docs: shapes and WHERE&nbsp;clauses](/docs/guides/shapes#where-clause)
 - [Electric Cloud](/cloud)
 - [Discord community](https://discord.electric-sql.com)
