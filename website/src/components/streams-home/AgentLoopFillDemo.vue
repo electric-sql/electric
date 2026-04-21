@@ -8,8 +8,11 @@ import { useDemoVisibility } from "../../../.vitepress/theme/composables/useDemo
    Renders the Durable Streams icon as a stack of 16 outline blades that
    "fill in" one-at-a-time as agent-loop events stream into the panel
    on the right (USER_MESSAGE / ASSISTANT_RESPONSE / TOOL_CALL /
-   TOOL_RESULT). Once the wheel is full, the loop keeps producing
-   events on top of a fully-lit logo. Visibility-gated via the shared
+   TOOL_RESULT). Once the wheel has been filled once, the loop just
+   keeps rotating forever — the lead blade (newest event) is always
+   bright at LEAD_ANGLE and the trailing few segments fade out as they
+   approach the back, giving a comet-tail effect that re-brightens as
+   the head wraps around. Visibility-gated via the shared
    IntersectionObserver composable so the timer only ticks while the
    demo is on screen. */
 
@@ -41,22 +44,21 @@ const BLADES: string[] = [
   "M126.002 4.15613C126.586 4.28382 129.455 5.38944 130.083 5.65065C136.846 8.46568 144.969 11.9707 151.283 15.6455C148.382 17.0627 144.608 19.3187 141.761 20.9173C134.942 24.8051 128.098 28.6472 121.227 32.4426C119.213 33.5673 117.185 34.6674 115.144 35.7426C109.737 34.2641 104.453 33.7524 98.9156 33.1729C101.622 30.08 105.082 26.6011 107.931 23.5602L126.002 4.15613Z",
 ]
 
-/* Pre-baked angle for each blade (degrees clockwise from 12 o'clock),
-   computed from each path's first move-to coordinate. Used to drive
-   the wheel rotation: after each tick we rotate so the just-activated
-   blade lands at LEAD_ANGLE, which is the position pointing at the
-   lead event card on the right. */
-const BLADE_ANGLES: number[] = [
-  60, 280, 258, 68, 135, 348, 325, 113, 38, 218, 159, 358, 90, 195, 302, 16,
-]
-
-/* Activation order: clockwise from 12 o'clock. Sorted ascending by
-   `BLADE_ANGLES` (with 358 normalised to ~0). Activating blades in this
-   order while rotating the wheel CCW by one segment per tick gives the
-   "fills in toward the lead position" effect from the design refs. */
+/* Activation order: clockwise from 12 o'clock. Indices into BLADES,
+   sorted by each path's first-move-to angle (≈ blade centre).
+   Activating blades in this order while rotating the wheel CCW by one
+   segment per tick gives the "fills in toward the lead position"
+   effect from the design refs. */
 const ACTIVATION_ORDER: number[] = [
   11, 15, 8, 0, 3, 12, 7, 4, 10, 13, 9, 2, 1, 14, 6, 5,
 ]
+
+/* Angular step between adjacent blades in CW visual order. We treat
+   the 16 blades as evenly distributed around the circle for rotation
+   purposes — even though the source SVG's per-blade reference points
+   aren't perfectly uniform — so each tick rotates the wheel by exactly
+   the same amount and the motion reads as a steady sweep. */
+const BLADE_STEP = 360 / 16
 
 /* Where on the wheel the "leading" (just-activated) blade should land,
    in degrees clockwise from 12 o'clock. ~18° puts the blade up near
@@ -85,23 +87,32 @@ const SEQUENCE: string[] = [
   "USER_MESSAGE",
 ]
 
-const VISIBLE_EVENTS = 6
+/* Number of event cards visible in the stack. Sized to roughly match
+   the wheel's diameter so the demo reads as a single, square unit. */
+const VISIBLE_EVENTS = 4
 const TICK_MS = 1400
-/* How many ticks the wheel sits "fully lit" before the loop wipes
-   everything and starts again. Long enough to read as "complete",
-   short enough that scrollers see the full fill animation again. */
-const FULL_HOLD_TICKS = 4
+/* Number of trailing segments that fade out behind the lead. With 16
+   blades and a 4-blade tail, 11 segments sit fully bright behind the
+   head, then opacity ramps down 0.75 → 0.5 → 0.25 → 0 over the next
+   four. The very last one is fully reset before the head wraps around,
+   so each blade has a clean off-state right before it re-ignites —
+   comet chasing its own tail. */
+const FADE_TAIL = 4
 
 const rootRef = ref<HTMLElement>()
 const isVisible = useDemoVisibility(rootRef)
 
 const events = ref<StreamEvent[]>([])
-const filledCount = ref(0)
-const wheelRotation = ref(0)
+/* Monotonic count of activations since mount. Drives both the wheel
+   rotation and the per-blade opacity calc. We never reset this — the
+   loop just keeps going forever. */
+const activations = ref(0)
+/* Initial rotation puts CW position 0 at LEAD_ANGLE, so the very
+   first activation lights a blade in place — no spin-up. */
+const wheelRotation = ref(LEAD_ANGLE)
 let nextEventId = 0
 let seqIdx = 0
 let timer: number | null = null
-let postFullTicks = 0
 /* In-component clock — keeps timestamps plausible without leaking the
    real wall clock into the page (which would force re-render on every
    tick during SSR hydration). */
@@ -123,19 +134,6 @@ function shortestRotation(target: number, prev: number): number {
 }
 
 function tick(): void {
-  /* Reset frame: once the wheel has been fully lit for a few ticks we
-     wipe events + blade state and let the cycle start again. The wheel
-     rotation is intentionally NOT reset — keeping its current value
-     makes the next activation step a small, continuous CCW move from
-     wherever it is, which reads way better than snapping to 0. */
-  if (filledCount.value === BLADES.length && postFullTicks >= FULL_HOLD_TICKS) {
-    events.value = []
-    filledCount.value = 0
-    postFullTicks = 0
-    seqIdx = 0
-    return
-  }
-
   baseTime += 1700 + Math.floor(Math.random() * 1300)
   const d = new Date(baseTime)
   const time = `${pad2(d.getUTCHours())}:${pad2(d.getUTCMinutes())}:${pad2(d.getUTCSeconds())}`
@@ -146,19 +144,14 @@ function tick(): void {
     ...events.value,
   ].slice(0, VISIBLE_EVENTS)
 
-  if (filledCount.value < BLADES.length) {
-    filledCount.value++
-    /* Rotate the wheel so the blade we just activated ends up at
-       LEAD_ANGLE (the spot pointing at the lead event card). */
-    const lastIdx = ACTIVATION_ORDER[filledCount.value - 1]
-    const target = LEAD_ANGLE - BLADE_ANGLES[lastIdx]
-    wheelRotation.value = shortestRotation(target, wheelRotation.value)
-  } else {
-    /* Wheel is full — keep nudging it round one segment per tick so
-       the loop still feels alive while we hold before resetting. */
-    wheelRotation.value -= 360 / BLADES.length
-    postFullTicks++
-  }
+  activations.value++
+  /* Rotate to the next CW slot. We use a uniform BLADE_STEP per tick
+     so the wheel sweeps at a constant speed. The very first activation
+     is a no-op — wheelRotation is initialised to LEAD_ANGLE so the
+     blade at CW position 0 is already in place. */
+  const cwPos = (activations.value - 1) % BLADES.length
+  const target = LEAD_ANGLE - cwPos * BLADE_STEP
+  wheelRotation.value = shortestRotation(target, wheelRotation.value)
 }
 
 function start(): void {
@@ -180,10 +173,32 @@ watch(isVisible, (active) => {
 
 onBeforeUnmount(stop)
 
-const activeBlades = computed(() => {
-  const set = new Set<number>()
-  for (let i = 0; i < filledCount.value; i++) set.add(ACTIVATION_ORDER[i])
-  return set
+/* Per-blade opacity multiplier (keyed by index into BLADES). The
+   "head" is the blade just activated; everything behind it (in CW
+   activation order) is lit, with the trailing FADE_TAIL segments
+   ramping down to zero. As the head wraps around, the same blades
+   re-brighten on their next pass. */
+const bladeOpacities = computed<Record<number, number>>(() => {
+  const result: Record<number, number> = {}
+  if (activations.value === 0) return result
+
+  const headCwPos = (activations.value - 1) % BLADES.length
+  const visibleAges = Math.min(activations.value, BLADES.length)
+
+  for (let age = 0; age < visibleAges; age++) {
+    const cwPos = (headCwPos - age + BLADES.length) % BLADES.length
+    const bladeIdx = ACTIVATION_ORDER[cwPos]
+
+    let opacity = 1
+    if (age >= BLADES.length - FADE_TAIL) {
+      // age 12 → 0.75, 13 → 0.5, 14 → 0.25, 15 → 0
+      opacity = (BLADES.length - 1 - age) / FADE_TAIL
+    }
+
+    result[bladeIdx] = opacity
+  }
+
+  return result
 })
 </script>
 
@@ -206,7 +221,12 @@ const activeBlades = computed(() => {
               v-for="(d, i) in BLADES"
               :key="i"
               :d="d"
-              :class="['alf-blade', { 'alf-blade--on': activeBlades.has(i) }]"
+              :class="['alf-blade', { 'alf-blade--on': (bladeOpacities[i] ?? 0) > 0 }]"
+              :style="
+                bladeOpacities[i]
+                  ? { '--alf-blade-opacity': bladeOpacities[i] }
+                  : undefined
+              "
             />
           </g>
         </svg>
@@ -285,6 +305,7 @@ const activeBlades = computed(() => {
   height: auto;
   aspect-ratio: 1 / 1;
   display: block;
+  overflow: visible;
 }
 
 /* The blades live inside this group so we can spin them as a single
@@ -302,15 +323,23 @@ const activeBlades = computed(() => {
   stroke: var(--durable-streams-color);
   stroke-opacity: 0.22;
   stroke-width: 0.6;
+  /* Slight delay on the brightness change so the wheel has begun
+     rotating before the new segment lights up (and the tail starts
+     dimming) — roughly a quarter of the way through the 0.85s spin. */
   transition:
-    fill-opacity 0.55s ease,
-    stroke-opacity 0.55s ease,
-    filter 0.55s ease;
+    fill-opacity 0.55s ease 0.2s,
+    stroke-opacity 0.55s ease 0.2s,
+    filter 0.55s ease 0.2s;
 }
+/* `--alf-blade-opacity` (set inline per blade) lets the trailing
+   segments fade out smoothly as the comet tail sweeps past, while
+   still using the same transition curve as the binary on/off case. */
 .alf-blade--on {
-  fill-opacity: 0.85;
-  stroke-opacity: 0.95;
-  filter: drop-shadow(0 0 4px rgba(117, 251, 253, 0.35));
+  fill-opacity: calc(0.85 * var(--alf-blade-opacity, 1));
+  stroke-opacity: calc(0.95 * var(--alf-blade-opacity, 1));
+  filter: drop-shadow(
+    0 0 4px rgba(117, 251, 253, calc(0.35 * var(--alf-blade-opacity, 1)))
+  );
 }
 
 /* --- Event stack --- */
@@ -321,10 +350,11 @@ const activeBlades = computed(() => {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  /* Reserve enough vertical space for VISIBLE_EVENTS cards plus their
-     gaps so the box doesn't grow as new events stream in. Card height
-     ≈ 47.5px, gap 10px, count = 6. */
-  min-height: 340px;
+  /* Reserve a fixed height matching the wheel's diameter so the box
+     never shifts as new events stream in. Card ≈ 47.5px, gap 10px,
+     count = 4 → 4×47.5 + 3×10 ≈ 220px. We round up to 240px so a
+     leaving card animating downward still has runway before clipping. */
+  min-height: 240px;
 }
 
 /* Dog-leg connector. Sits in the gap between wheel and events,
@@ -445,7 +475,7 @@ const activeBlades = computed(() => {
     max-width: 520px;
   }
   .alf-events {
-    min-height: 300px;
+    min-height: 200px;
   }
   .alf-event {
     padding: 8px 12px 10px;
@@ -456,8 +486,12 @@ const activeBlades = computed(() => {
   .alf-event-time {
     font-size: 10px;
   }
+  /* Pull the connector clear of the wheel: the lead blade at
+     LEAD_ANGLE projects out to ~x=122 on a 180px wheel at the
+     connector's y-band, so a 60px width keeps the left edge in the
+     gap (140) and lands the vertical drop (170) past the wheel rim. */
   .alf-connector {
-    width: 90px;
+    width: 60px;
   }
 }
 
@@ -467,10 +501,12 @@ const activeBlades = computed(() => {
     gap: 14px;
   }
   .alf-events {
-    min-height: 280px;
+    min-height: 180px;
   }
+  /* Same logic as 768px, scaled to the 120px wheel: 40px width keeps
+     both the top stroke and the vertical drop clear of the rim. */
   .alf-connector {
-    width: 64px;
+    width: 40px;
   }
 }
 </style>

@@ -25,10 +25,14 @@ function copyInstall() {
           built on&nbsp;<span class="home-hero-accent">sync</span>
         </h1>
         <p class="home-hero-sub">
-          Agents are long-lived entities that live in the data layer.
-          The substrate for them is a sync&nbsp;engine.
+          <span class="home-hero-sub-primary">
+            Agents are long-lived entities that live in the data layer.
+            The substrate for them is a sync&nbsp;engine.
+          </span>
           <br /><br />
-          Electric is the first agent platform built on&nbsp;sync.
+          <span class="home-hero-sub-secondary">
+            Electric is the first agent platform built on&nbsp;sync.
+          </span>
         </p>
         <div class="home-hero-actions">
           <div class="home-hero-install" @click="copyInstall">
@@ -160,6 +164,15 @@ function copyInstall() {
   color: var(--ea-text-1);
   margin: 22px 0 0;
   line-height: 1.4;
+}
+
+.home-hero-sub-primary {
+  font-size: 1.04em;
+}
+
+.home-hero-sub-secondary {
+  font-size: 0.92em;
+  color: var(--ea-text-2);
 }
 
 .home-hero-actions {

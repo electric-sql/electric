@@ -7,8 +7,6 @@ import SyncFanOutBg from "./SyncFanOutBg.vue"
 import MultiClientPulseDemo from "./MultiClientPulseDemo.vue"
 import ShapeCarveDemo from "./ShapeCarveDemo.vue"
 import WritesLadder from "./WritesLadder.vue"
-import WorksWithStack from "./WorksWithStack.vue"
-import CloudStrip from "./CloudStrip.vue"
 import ComposeStackGrid from "./ComposeStackGrid.vue"
 
 import { data as demoData } from "../../../data/demos.data.ts"
@@ -361,28 +359,6 @@ const fanoutMiniDotCount = FANOUT_COLS * FANOUT_ROWS
           <span class="sh-pillar-link">Read more →</span>
         </a>
       </div>
-    </EaSection>
-
-    <!-- ──────────── Section 9: Works with your stack ──────────── -->
-    <EaSection
-      id="works-with"
-      title="Works with your&nbsp;stack"
-      subtitle="Any web framework. Any host. It's just HTTP and JSON — adopt sync incrementally, one route at a time."
-      :dark="true"
-    >
-      <WorksWithStack />
-      <div class="sh-section-foot">
-        <a href="/docs/intro">See the integrations →</a>
-      </div>
-    </EaSection>
-
-    <!-- ──────────── Section 10: Cloud strip ──────────── -->
-    <EaSection
-      id="cloud"
-      title="Managed cloud, open&nbsp;source"
-      subtitle="Vendor agnostic, infra agnostic. Run yourself or skip the ops with Electric Cloud."
-    >
-      <CloudStrip />
     </EaSection>
 
     <!-- ──────────── Section 11: First sync ──────────── -->
