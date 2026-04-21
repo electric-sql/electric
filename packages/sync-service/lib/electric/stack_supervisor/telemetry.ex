@@ -138,15 +138,20 @@ defmodule Electric.StackSupervisor.Telemetry do
   end
 
   def report_shape_db_stats(stack_id, _telemetry_opts) do
-    case Electric.ShapeCache.ShapeStatus.ShapeDb.statistics(stack_id) do
-      {:ok, stats} ->
-        Electric.Telemetry.OpenTelemetry.execute(
-          [:electric, :shape_db, :sqlite],
-          stats,
-          %{stack_id: stack_id}
-        )
+    try do
+      case Electric.ShapeCache.ShapeStatus.ShapeDb.statistics(stack_id) do
+        {:ok, stats} ->
+          Electric.Telemetry.OpenTelemetry.execute(
+            [:electric, :shape_db, :sqlite],
+            stats,
+            %{stack_id: stack_id}
+          )
 
-      _ ->
+        _ ->
+          :ok
+      end
+    catch
+      :exit, {:noproc, _} ->
         :ok
     end
   end
