@@ -24,7 +24,7 @@ Previously, combining subqueries with boolean operators triggered full shape inv
 
 ## Expressive subqueries
 
-This release adds AND, OR, NOT, and NOT&nbsp;IN to subquery WHERE&nbsp;clauses. All sync incrementally — no more resyncs when dependency rows change. When a user gains or loses access, only the affected rows sync in or out.
+This release adds incremental sync for AND, OR, NOT, and NOT&nbsp;IN in subquery WHERE&nbsp;clauses. No more resyncs when dependency rows change — when a user gains or loses access, only the affected rows sync in or out.
 
 ### Subquery with AND
 
