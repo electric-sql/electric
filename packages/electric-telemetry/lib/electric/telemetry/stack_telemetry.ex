@@ -114,8 +114,7 @@ defmodule ElectricTelemetry.StackTelemetry do
       last_value("electric.connection.consumers_ready.total"),
       last_value("electric.connection.consumers_ready.failed_to_recover"),
       last_value("electric.admission_control.acquire.current", tags: [:kind]),
-      last_value("electric.admission_control.limit",
-        event_name: [:electric, :admission_control, :acquire],
+      last_value("electric.admission_control.acquire.limit",
         measurement: fn _measurements, metadata -> metadata.limit end,
         tags: [:kind]
       ),
