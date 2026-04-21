@@ -1,5 +1,5 @@
 ---
-title: 'WHERE clauses with AND, OR, NOT around subqueries now sync incrementally'
+title: 'Subqueries with AND, OR, NOT now sync incrementally'
 description: >-
   Electric now handles AND, OR, and NOT combinations of subqueries in shape
   WHERE clauses with incremental updates instead of full resyncs. Multi-tenant
@@ -16,7 +16,7 @@ post: true
 published: false
 ---
 
-Electric now supports incremantal sync for complex WHERE clauses with subqueries combined with AND, OR, and NOT. The access-control and multi-tenant filtering patterns that production apps need now work efficiently at scale.
+Electric now supports incremental sync for complex WHERE&nbsp;clauses with subqueries combined with AND, OR, and NOT. The access-control and multi-tenant filtering patterns that production apps need now work efficiently at scale.
 
 When a user gains access to a workspace, joins a project, or gets added to a team, only the affected rows sync in. No shape invalidation. No expensive full resync.
 
@@ -30,25 +30,25 @@ When a user gains access to a workspace, joins a project, or gets added to a tea
 
 Most real-world apps don't sync entire tables. They sync the data a specific user is allowed to see. That may require filtering by relationships in other tables — "sync all tasks where the current user is a member of the project."
 
-In SQL, that's a subquery in the WHERE clause:
+In SQL, that's a subquery in the WHERE&nbsp;clause:
 
 ```sql
 id IN (SELECT task_id FROM project_members WHERE user_id = $1)
 ```
 
-Electric has supported basic subquery filtering since mid-2025. But real access-control logic is rarely a single condition. You might need tasks where the user is a project member *or* where the task is directly assigned to them:
+Electric has supported basic subquery filtering since mid-2025. But real access-control logic is rarely a single condition. You might need tasks where the user is a project member *or* where the task is directly assigned to them. [Skip to "Get started"](#get-started) if you just want to try it.
 
 ```sql
 project_id IN (SELECT project_id FROM project_members WHERE user_id = $1)
   OR assignee_id = $1
 ```
 
-Previously, combining subqueries with AND, OR, or NOT would trigger a full resync (HTTP 409) on every change to the dependency tables. The client had to discard the entire shape and re-fetch from scratch. For large shapes, that was a dealbreaker.
+Previously, combining subqueries with AND, OR, or NOT would trigger a full resync (HTTP&nbsp;409) on every change to the dependency tables. The client had to discard the entire shape and re-fetch from scratch. For large shapes, that was a dealbreaker.
 
 
 ## What's new
 
-**Boolean combinations of subqueries now sync incrementally.** WHERE clauses with AND, OR, and NOT around subqueries no longer trigger 409 full resyncs when dependency rows change.
+**Boolean combinations of subqueries now sync incrementally.** WHERE&nbsp;clauses with AND, OR, and NOT around subqueries no longer trigger 409 full resyncs when dependency rows change.
 
 **Move-in and move-out is incremental.** When a user gains or loses access — joins a workspace, gets added to a project, loses a team membership — only the affected rows sync in or out. The rest of the shape stays untouched.
 
@@ -80,9 +80,12 @@ const tasksCollection = createCollection(
 
 This syncs all tasks where the current user is either a project member or directly assigned — and keeps the shape live as memberships and assignments change.
 
-This has been our most requested feature — the intersection of subqueries and boolean logic is where most real-world access-control patterns live.
+This has been one of our most requested features — the intersection of subqueries and boolean logic is where most real-world access-control patterns live.
 
-To support arbitrary boolean expressions, we updated the client protocol to use tags based on the DNF (Disjunctive Normal Form) decomposition of the WHERE clause. This lets the sync service track exactly which conditions each row satisfies, so it can determine precisely which rows to move in or out when any dependency changes — without resorting to full invalidation.
+
+## How it works
+
+To support arbitrary boolean expressions, we updated the client protocol to use tags based on the DNF (Disjunctive Normal Form) decomposition of the WHERE&nbsp;clause. This lets the sync service track exactly which conditions each row satisfies, so it can determine precisely which rows to move in or out when any dependency changes — without resorting to full invalidation.
 
 
 ## Get started
@@ -132,68 +135,17 @@ const documentsCollection = createCollection(
 
 This syncs documents where the user is a workspace member AND the document is either public, created by them, or explicitly shared with them. When any of these relationships change — a new share is added, a user joins a workspace, a document's visibility changes — only the affected rows move in or out.
 
-See the [WHERE clause docs](/docs/guides/shapes#where-clauses) for the full reference on supported operators and subquery patterns.
+See the [WHERE&nbsp;clause docs](/docs/guides/shapes#where-clauses) for the full reference on supported operators and subquery patterns.
 
 
 ## Coming next
 
-- **WHERE clause optimisation for OR** — we're optimising how the sync service indexes and routes OR branches, so shapes with OR conditions perform even better at scale ([#4134](https://github.com/electric-sql/electric/pull/4134))
-
+- **WHERE&nbsp;clause optimization for OR** — we're optimizing how the sync service indexes and routes OR branches, so shapes with OR conditions perform even better at scale ([#4134](https://github.com/electric-sql/electric/pull/4134))
 
 ***
 
-Next steps:
+Links:
 
-- [Docs: shapes and WHERE clauses](/docs/guides/shapes#where-clauses)
+- [Docs: shapes and WHERE&nbsp;clauses](/docs/guides/shapes#where-clauses)
 - [Electric Cloud](/cloud)
 - [Discord community](https://discord.electric-sql.com)
-
-
-<!-- ============================================================
-     META — delete everything below this line before publishing
-     ============================================================ -->
-
-<!--
-## Intent
-
-- **What is this post about?** Electric now handles complex WHERE clauses
-  with AND/OR/NOT around subqueries incrementally, eliminating the expensive
-  full resyncs that made real-world access-control patterns painful.
-- **What's interesting about it?** The most common real-world sync pattern
-  is "show me the data I'm allowed to see" — filtering by relationships
-  in other tables. This requires subqueries in WHERE clauses, and now
-  Electric handles complex boolean combinations of them with incremental
-  updates instead of full resyncs. This unlocks the access-control and
-  multi-tenant patterns that production apps need.
-- **What's the reader takeaway?** Electric can now handle the WHERE clause
-  patterns that real applications actually need — multi-tenant filtering,
-  access control, team membership — without performance cliffs. If you
-  held off because subquery support was limited, it's time to look again.
-- **What are the CTAs?** Try it out, check the docs, join Discord.
-- **Why us?** We built it. This is the team that implemented the subquery
-  infrastructure — DNF planning, splice handling, incremental move-in/out
-  tracking — working through 19+ issues from real users hitting these
-  limitations in production.
-
-## Open questions
-
-- Author key: "rob" needs adding to website/data/blog/authors.yaml
-- Added "most requested feature" line — no individual quotes needed
-- Confirm exact version numbers for the sync service release
-- Are the feature flags still required or is this enabled by default now?
-
-## Asset checklist
-
-- [x] Code sample: realistic WHERE clause with AND/OR + subqueries
-- [x] Code sample: complete "get started" example
-- [ ] User quotes from GitHub issues (get permission)
-- [ ] Header image — use /blog-image-brief for detailed prompt
-- [ ] Confirm exact sync service version number
-
-## Typesetting checklist
-
-- [ ] Use non-breaking spaces and hyphens where appropriate
-- [ ] Title uses sentence case, not Title Case
-- [ ] Check title, image, and post at different screen widths
-- [ ] No LLM tells
--->
