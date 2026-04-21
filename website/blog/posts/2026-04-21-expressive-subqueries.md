@@ -125,7 +125,7 @@ ELECTRIC_FEATURE_FLAGS=allow_subqueries,tagged_subqueries
 ```
 
 :::warning
-The `tagged_subqueries` flag requires a client protocol update. The new server is not compatible with older clients — make sure all your clients are on `@tanstack/db >= 0.6.2` and `@tanstack/electric-db-collection >= 0.3.0` before upgrading the server. These packages have been available since April&nbsp;3rd.
+Making all this work required a client protocol update. If you already have `tagged_subqueries` enabled, make sure all your clients are on `@tanstack/db >= 0.6.2` and `@tanstack/electric-db-collection >= 0.3.0` before upgrading the server. These packages have been available since April&nbsp;3rd.
 :::
 
 :::info
