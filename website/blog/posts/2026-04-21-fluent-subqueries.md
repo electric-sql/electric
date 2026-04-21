@@ -34,7 +34,7 @@ Before, anything more complicated than `x IN (SELECT ...)` handled subquery valu
 
 Electric has supported subquery filtering since mid-2025 — sync rows where a relationship exists in another table. But real access-control logic is rarely a single condition. You need orders where the customer is in my region *and* the delivery is pending. You need tasks where I'm a project member *or* directly assigned. You need NOT&nbsp;IN to exclude.
 
-Previously, combining subqueries with boolean operators triggered HTTP&nbsp;409 — full shape invalidation and resync from scratch. For large shapes, that killed the pattern.
+Previously, combining subqueries with boolean operators triggered full shape invalidation and resync from scratch whenever the subquery values changed. For large shapes, that can lead to a laggy experience.
 
 
 ## Fluent subqueries
@@ -47,7 +47,7 @@ Previously, combining subqueries with boolean operators triggered HTTP&nbsp;409 
      Author: expand each pattern into a short intro sentence + code block.
      Keep intros to one line — the code speaks for itself. -->
 
-This release adds AND, OR, NOT, and NOT&nbsp;IN to subquery WHERE&nbsp;clauses. All sync incrementally — no more 409 resyncs when dependency rows change. Move-in and move-out is precise: when a user gains or loses access, only the affected rows sync in or out.
+This release adds AND, OR, NOT, and NOT&nbsp;IN to subquery WHERE&nbsp;clauses. All sync incrementally — no more resyncs when dependency rows change. Move-in and move-out is precise: when a user gains or loses access, only the affected rows sync in or out.
 
 Here's what that unlocks:
 
