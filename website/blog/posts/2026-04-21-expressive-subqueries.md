@@ -12,7 +12,7 @@ post: true
 published: true
 ---
 
-Electric shapes now support expressive subqueries. This release adds AND, OR, NOT, and NOT&nbsp;IN for subquery WHERE&nbsp;clauses — all with incremental sync. You can now express real-world access-control logic directly in your shape definitions, combining nested subqueries, composite keys, and boolean operators.
+Electric 1.6 adds expressive subqueries. This release adds AND, OR, NOT, and NOT&nbsp;IN for subquery WHERE&nbsp;clauses — all with incremental sync. You can now express real-world access-control logic directly in your shape definitions, combining nested subqueries, composite keys, and boolean operators.
 
 
 ## Before: one subquery, one shape
@@ -111,6 +111,8 @@ All of these sync incrementally. When any dependency changes — a membership ad
 
 
 ## Get started
+
+This release required a client protocol update, so the new server is not compatible with older clients. The compatible client packages (`@tanstack/db >= 0.6.2` and `@tanstack/electric-db-collection >= 0.3.0`) have been available since April&nbsp;3rd — make sure all your clients are updated before upgrading the server.
 
 Update to the latest packages:
 
