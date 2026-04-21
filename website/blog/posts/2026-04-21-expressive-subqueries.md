@@ -167,12 +167,3 @@ const documentsCollection = createCollection(
 ```
 
 See the [WHERE&nbsp;clause docs](/docs/guides/shapes#where-clause) for the full reference on supported operators and subquery patterns.
-
-
-***
-
-Links:
-
-- [Docs: shapes and WHERE&nbsp;clauses](/docs/guides/shapes#where-clause)
-- [Electric Cloud](/cloud)
-- [Discord community](https://discord.electric-sql.com)
