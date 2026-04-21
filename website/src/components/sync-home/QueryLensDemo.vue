@@ -295,7 +295,8 @@ const litCount = computed(() => current.value.cols * current.value.rows)
   margin-top: 10px;
   padding-top: 10px;
   border-top: 1px solid var(--ea-divider);
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  min-width: 0;
 }
 .qld-code {
   font-size: 11px;
@@ -307,12 +308,15 @@ const litCount = computed(() => current.value.cols * current.value.rows)
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 100%;
+  min-width: 0;
+  flex: 0 1 auto;
 }
 .qld-foot-count {
   font-size: 10px;
   color: var(--ea-text-3);
   letter-spacing: 0.02em;
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 .qld-foot-count strong {
   color: var(--brand);

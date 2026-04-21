@@ -1,6 +1,15 @@
 <script setup lang="ts">
-import { ref, reactive, computed, watch, nextTick, onBeforeUnmount } from "vue"
+import { ref, reactive, computed, watch, nextTick, onBeforeUnmount, onMounted } from "vue"
 import { useDemoVisibility } from "../../../.vitepress/theme/composables/useDemoVisibility"
+
+const props = defineProps<{
+  // When true, render a fixed snapshot of the support sub-agents
+  // act (classify + search-kb done, draft in flight) instead of
+  // running the looping animation. Used by the homepage product
+  // section so the embedded preview reads as a frozen moment of
+  // the live demo.
+  paused?: boolean
+}>()
 
 const containerRef = ref<HTMLElement>()
 const logRef = ref<HTMLElement>()
@@ -295,20 +304,68 @@ function stopAnimation() {
   pendingTimers.length = 0
 }
 
-watch(isActive, (active) => {
-  if (active) {
-    resetAgents()
-    log.length = 0
-    logId = 0
-    logFading.value = false
-    if (logRef.value) logRef.value.scrollTop = 0
-    runSequence()
-  } else {
-    stopAnimation()
-    resetAgents()
-    log.length = 0
-    logId = 0
-    logFading.value = false
+// Paused snapshot: support is active mid-flight, classify and
+// search-kb have completed, draft is in progress, plus the matching
+// log entries. Avoids both the animation loop and the visibility
+// watcher so the snapshot stays put.
+function applyPausedSnapshot() {
+  const snapshot: Record<string, Partial<AgentRow>> = {
+    support:   { status: "active", events: 7, barWidth: 55, visible: true },
+    classify:  { status: "done",   events: 2, barWidth: 100, visible: true },
+    "search-kb": { status: "done", events: 3, barWidth: 100, visible: true },
+    draft:     { status: "active", events: 1, barWidth: 50, visible: true },
+    product:   { status: "sleeping", events: 12, barWidth: 0, visible: true },
+    coding:    { status: "sleeping", events: 0,  barWidth: 0, visible: true },
+    deploy:    { status: "sleeping", events: 5,  barWidth: 0, visible: true },
+  }
+  for (const a of agents) {
+    const s = snapshot[a.id]
+    if (s) Object.assign(a, s)
+  }
+  log.length = 0
+  logId = 0
+  const lines: Array<[string, string]> = [
+    ["←", "webhook: new support ticket #1190"],
+    ["⚡", "support/ticket-1190 woke"],
+    ["→", "spawned classify-1190 (sentiment)"],
+    ["→", "spawned search-kb-1190 (RAG)"],
+    ["✓", "classify-1190: urgent, billing issue"],
+    ["✓", "search-kb-1190: 3 articles found"],
+    ["→", "spawned draft-reply-1190 (LLM)"],
+  ]
+  for (const [icon, text] of lines) log.push({ id: logId++, icon, text, fading: false })
+}
+
+if (props.paused) {
+  // Skip the visibility-driven animation entirely — the snapshot
+  // is applied in onMounted (and again here so SSR markup is
+  // populated even before mount runs).
+  applyPausedSnapshot()
+} else {
+  watch(isActive, (active) => {
+    if (active) {
+      resetAgents()
+      log.length = 0
+      logId = 0
+      logFading.value = false
+      if (logRef.value) logRef.value.scrollTop = 0
+      runSequence()
+    } else {
+      stopAnimation()
+      resetAgents()
+      log.length = 0
+      logId = 0
+      logFading.value = false
+    }
+  })
+}
+
+onMounted(() => {
+  if (props.paused) {
+    applyPausedSnapshot()
+    nextTick(() => {
+      if (logRef.value) logRef.value.scrollTop = logRef.value.scrollHeight
+    })
   }
 })
 

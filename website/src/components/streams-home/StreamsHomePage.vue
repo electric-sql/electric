@@ -117,9 +117,9 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
           <p class="ea-section-subtitle">
             Every prompt, generation, tool call and result is appended at a
             known <strong>offset</strong> on a durable&nbsp;stream. Each
-            segment is an addressable position &mdash; one you can replay
-            from, branch off, or fan out to anyone&nbsp;watching. Underneath,
-            it's just an append-only HTTP log: <code>POST</code> to write,
+            offset is an addressable position you can replay from, branch
+            off, or fan out to anyone&nbsp;watching. Underneath, it's an
+            append-only HTTP log: <code>POST</code> to write,
             <code>GET</code> to&nbsp;read.
           </p>
         </div>
@@ -145,8 +145,8 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
           </h2>
           <p class="ea-section-subtitle">
             One session URL. Many humans, many agents, many devices. Everyone
-            reads and writes the same durable stream — and catches up from any
-            offset.
+            shares the same durable stream and can rejoin from any point in
+            the&nbsp;conversation.
           </p>
           <p class="ds-detail-link">
             <a href="/blog/2026/01/12/durable-sessions-for-collaborative-ai">
@@ -190,7 +190,7 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
       <p class="ea-prose ds-pain-intro">
         Real apps need streams that <strong>survive&nbsp;disconnects</strong>,
         <strong>persist&nbsp;across&nbsp;sessions</strong> and let many users
-        and agents read and write the same conversation. That's what a
+        and agents read and write the same conversation. That's what an
         <strong>Electric&nbsp;Stream</strong>&nbsp;is.
       </p>
       <ConnectionDropDemo />
@@ -238,7 +238,7 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
     <EaSection
       id="layered-stack"
       :dark="true"
-      title="Layered protocol, layered&nbsp;power"
+      title="One protocol, four&nbsp;layers"
       subtitle="Pick the layer you need. Bytes → JSON messages → typed CRUD events → reactive type-safe DB. Every layer above adds power; every layer below stays available to drop down&nbsp;to."
     >
       <LayersGrid />
@@ -247,8 +247,8 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
     <!-- ───────────────── §11 — AI loop integrations ───────────────── -->
     <EaSection
       id="ai-loop"
-      title="Built for the AI&nbsp;loop"
-      subtitle="From token streams to multi-agent collaboration — Electric Streams plug into the AI stack you already&nbsp;use."
+      title="Built for the agent&nbsp;loop"
+      subtitle="From token streams to multi-agent collaboration — Electric Streams plugs into the AI stack you already&nbsp;use."
     >
       <IntegrationsGrid />
     </EaSection>
@@ -271,7 +271,7 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
             <span class="stack-conn-label">POST /v1/stream/&hellip;</span>
           </div>
           <div class="stack-box runtime-box">
-            <div class="stack-label">⚡ Electric Streams</div>
+            <div class="stack-label">Electric Streams</div>
             <div class="stack-examples">Electric Cloud · self-host</div>
           </div>
           <div class="stack-connector">
@@ -344,7 +344,7 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
     <EaSection
       id="first-stream"
       title="Your first stream, end to&nbsp;end"
-      subtitle="Create a stream. Append a message. Subscribe live. Sixteen lines, one package, real&nbsp;APIs."
+      subtitle="Create a stream. Append a message. Subscribe live. Three steps, one package, real&nbsp;APIs."
     >
       <div class="ds-first-stream">
         <div class="ea-annotated-code">

@@ -13,6 +13,22 @@ import { ref, onMounted, onUnmounted } from "vue"
 
 const props = defineProps<{
   excludeEl?: HTMLElement
+  // When true, persistent shape and client labels are hidden until
+  // their entity is hovered. The sync landing-page hero leaves this
+  // off to keep its identifying labels always-on; the homepage opts
+  // in so the framed scenes read as cleanly as the agents/streams
+  // canvases (which never draw labels at rest).
+  labelsOnHover?: boolean
+  // When true, no random update tokens auto-spawn. Existing tokens
+  // continue to flight, hover labels still work, and clicking a
+  // shape or client still fires updates manually. Used by the
+  // homepage section graphic to suppress ambient activity.
+  paused?: boolean
+  // When true, the radial edge-fade that softens shapes near the
+  // canvas borders is disabled, so the grid fills the whole frame
+  // at full intensity. Used by the homepage iso-stack hero where
+  // the canvas already sits inside a crisp bordered card.
+  noEdgeFade?: boolean
 }>()
 
 const canvas = ref<HTMLCanvasElement>()
@@ -226,12 +242,17 @@ onMounted(() => {
     minRows: number,
     maxRows: number,
     attempts = 50,
+    allowOverlap = false,
   ): { rowIndices: number[]; bbox: ExcludeRect } | null {
     // Restrict candidate seeds to rows that already live inside this
-    // region so the shape lands where we want it on the hero.
+    // region so the shape lands where we want it on the hero. When
+    // `allowOverlap` is set we also accept rows that already belong
+    // to another shape, so the second pass of `buildShapes` can lay
+    // shapes on top of each other (the visual reads as overlapping
+    // where-clauses sharing rows from the same table).
     const candidates: number[] = []
     for (let i = 0; i < rows.length; i++) {
-      if (rows[i].shapeIds.length > 0) continue
+      if (!allowOverlap && rows[i].shapeIds.length > 0) continue
       const r = rows[i]
       if (
         r.x >= region.left &&
@@ -264,14 +285,20 @@ onMounted(() => {
       bbox.bottom = Math.min(bbox.bottom, region.bottom + 8)
       if (rectHitsExclusion(bbox, exclusions, 14)) continue
       const inside = rowsInRect(bbox)
-      const free = inside.filter((idx) => rows[idx].shapeIds.length === 0)
-      if (free.length < 3) continue
+      // In the no-overlap pass we only count unowned rows toward the
+      // shape's membership (so two shapes never claim the same row);
+      // in the overlap pass any row inside the bbox counts, which is
+      // what makes a second shape visually share rows with a first.
+      const claimable = allowOverlap
+        ? inside
+        : inside.filter((idx) => rows[idx].shapeIds.length === 0)
+      if (claimable.length < 3) continue
 
       let l = Infinity,
         t = Infinity,
         r = -Infinity,
         b = -Infinity
-      for (const idx of free) {
+      for (const idx of claimable) {
         l = Math.min(l, rows[idx].x)
         t = Math.min(t, rows[idx].y)
         r = Math.max(r, rows[idx].x)
@@ -284,7 +311,7 @@ onMounted(() => {
         bottom: b + 12,
       }
       if (rectHitsExclusion(tightBbox, exclusions, 8)) continue
-      return { rowIndices: free, bbox: tightBbox }
+      return { rowIndices: claimable, bbox: tightBbox }
     }
     return null
   }
@@ -302,7 +329,9 @@ onMounted(() => {
     const valid = anchors.filter(
       (a) => !hitsExclusion(a.x, a.y, exclusions, 36),
     )
-    clients = valid.slice(0, Math.min(4, valid.length)).map((a, i) => ({
+    // Five anchors when they all clear the headline — gives the second,
+    // overlapping pass somewhere new to point its tokens.
+    clients = valid.slice(0, Math.min(5, valid.length)).map((a, i) => ({
       id: i,
       name: "",
       x: a.x,
@@ -351,9 +380,9 @@ onMounted(() => {
       .sort(() => Math.random() - 0.5)
 
     let id = 0
-    for (const { q } of order) {
-      const placed = tryPlaceShapeInRegion(q, 3, 5)
-      if (!placed) continue
+    const placeShape = (
+      placed: { rowIndices: number[]; bbox: ExcludeRect },
+    ) => {
       const def = lib[id % lib.length]
       const clientId = nearestClientTo(placed.bbox)
       if (
@@ -363,7 +392,7 @@ onMounted(() => {
           (placed.bbox.top + placed.bbox.bottom) / 2 - clients[clientId].y,
         ) < 70
       ) {
-        continue
+        return false
       }
       const labelSide: "above" | "below" =
         placed.bbox.top - 18 > 4 &&
@@ -390,16 +419,52 @@ onMounted(() => {
       // subscriber is named after the subset it pulls from Postgres,
       // so the link is unambiguous on the page.
       clients[clientId].name = `/${def.name}`
-      for (const ri of placed.rowIndices) rows[ri].shapeIds.push(id)
+      for (const ri of placed.rowIndices) {
+        // A row may already belong to another shape (from the overlap
+        // pass below); just append rather than replace.
+        if (!rows[ri].shapeIds.includes(id)) rows[ri].shapeIds.push(id)
+      }
       id++
+      return true
+    }
+
+    // Pass 1 — one non-overlapping shape per quadrant. This gives the
+    // hero its anchor structure, with each shape having its own slice
+    // of the table and its own client to sync to.
+    for (const { q } of order) {
+      const placed = tryPlaceShapeInRegion(q, 3, 5)
+      if (placed) placeShape(placed)
+    }
+
+    // Pass 2 — additional smaller shapes that ARE allowed to overlap
+    // existing ones. This gives the canvas ~50% more activity (extra
+    // shapes → extra spawn targets → more tokens flying around) and
+    // visually conveys that multiple where-clauses can share rows
+    // from the same table. We attempt one extra shape per quadrant
+    // and stop when we've added two so the scene doesn't get noisy.
+    let added = 0
+    const extraOrder = quadrants
+      .map((q, i) => ({ q, i }))
+      .sort(() => Math.random() - 0.5)
+    for (const { q } of extraOrder) {
+      if (added >= 2) break
+      const placed = tryPlaceShapeInRegion(q, 3, 4, 60, true)
+      if (placed && placeShape(placed)) added++
     }
   }
 
   function doLayout() {
-    const rect = el!.parentElement!.getBoundingClientRect()
+    // `clientWidth/clientHeight` ignores CSS transforms, so the
+    // canvas always sizes itself to the parent's logical inner
+    // box even when the parent is 3D-rotated (e.g. the homepage
+    // iso composition stack). `getBoundingClientRect` would
+    // otherwise return the projected screen bounds of the
+    // rotated rect and leave the grid stretched across the
+    // wrong coordinate space.
+    const parent = el!.parentElement!
     dpr = window.devicePixelRatio || 1
-    w = rect.width
-    h = rect.height
+    w = parent.clientWidth
+    h = parent.clientHeight
     el!.width = w * dpr
     el!.height = h * dpr
     el!.style.width = w + "px"
@@ -413,6 +478,37 @@ onMounted(() => {
     buildRows()
     buildClients()
     buildShapes()
+
+    // When paused, seed tokens mid-flight so the canvas reads as a
+    // snapshot of an active sync rather than an empty grid. Each
+    // shape contributes one row → all of its clients with random
+    // progress, and the source rows stay flash-lit because the
+    // pause also halts flash decay.
+    if (props.paused && shapes.length > 0) {
+      for (const shape of shapes) {
+        if (shape.rowIndices.length === 0) continue
+        const rowIdx =
+          shape.rowIndices[
+            Math.floor(Math.random() * shape.rowIndices.length)
+          ]
+        const row = rows[rowIdx]
+        if (!row) continue
+        row.flash = 1
+        for (const cid of shape.clientIds) {
+          const client = clients[cid]
+          if (!client) continue
+          tokens.push({
+            shapeId: shape.id,
+            fromX: row.x,
+            fromY: row.y,
+            toX: client.x,
+            toY: client.y,
+            progress: 0.15 + Math.random() * 0.7,
+            speed: 0.6,
+          })
+        }
+      }
+    }
   }
 
   function resize() {
@@ -437,6 +533,7 @@ onMounted(() => {
   const isDark = () => document.documentElement.classList.contains("dark")
 
   function radialFade(x: number, y: number): number {
+    if (props.noEdgeFade) return 1
     const cx = w / 2
     const cy = h / 2
     const dx = Math.abs(x - cx) / (w / 2)
@@ -564,29 +661,34 @@ onMounted(() => {
       c!.restore()
     }
 
-    // Persistent label: name above or below the bbox; clause appears
-    // under it on hover so the geometry stays calm at rest.
-    const labelY =
-      shape.labelSide === "above" ? shape.bbox.top - 8 : shape.bbox.bottom + 16
-    c!.save()
-    c!.font = `11px var(--vp-font-family-mono)`
-    c!.textAlign = "center"
-    c!.textBaseline = "alphabetic"
-    c!.fillStyle = teal(
-      dark,
-      hovered ? 0.95 : dim ? 0.28 : 0.6,
-    )
-    c!.fillText(`shape:${shape.name}`, cx, labelY)
-    if (hovered) {
+    // Label: name above or below the bbox; clause appears under it
+    // on hover so the geometry stays calm at rest. When the parent
+    // opts into `labelsOnHover` the name itself only renders while
+    // hovered.
+    const showName = !props.labelsOnHover || hovered
+    if (showName) {
+      const labelY =
+        shape.labelSide === "above" ? shape.bbox.top - 8 : shape.bbox.bottom + 16
+      c!.save()
       c!.font = `11px var(--vp-font-family-mono)`
-      c!.fillStyle = muted(dark, 0.55)
-      c!.fillText(
-        shape.clause,
-        cx,
-        shape.labelSide === "above" ? labelY - 14 : labelY + 14,
+      c!.textAlign = "center"
+      c!.textBaseline = "alphabetic"
+      c!.fillStyle = teal(
+        dark,
+        hovered ? 0.95 : dim ? 0.28 : 0.6,
       )
+      c!.fillText(`shape:${shape.name}`, cx, labelY)
+      if (hovered) {
+        c!.font = `11px var(--vp-font-family-mono)`
+        c!.fillStyle = muted(dark, 0.55)
+        c!.fillText(
+          shape.clause,
+          cx,
+          shape.labelSide === "above" ? labelY - 14 : labelY + 14,
+        )
+      }
+      c!.restore()
     }
-    c!.restore()
   }
 
   function drawClient(client: Client, dark: boolean) {
@@ -622,15 +724,18 @@ onMounted(() => {
     c!.arc(client.x, client.y, 3, 0, Math.PI * 2)
     c!.fill()
 
-    // Label
-    c!.font = `11px var(--vp-font-family-mono)`
-    c!.textAlign = "center"
-    c!.textBaseline = "top"
-    c!.fillStyle = teal(
-      dark,
-      hovered ? 0.95 : dim ? 0.32 : 0.65,
-    )
-    c!.fillText(client.name, client.x, client.y + ringR + 6)
+    // Label — hidden at rest when `labelsOnHover` is set so the
+    // homepage scenes stay quiet until the user investigates.
+    if (!props.labelsOnHover || hovered) {
+      c!.font = `11px var(--vp-font-family-mono)`
+      c!.textAlign = "center"
+      c!.textBaseline = "top"
+      c!.fillStyle = teal(
+        dark,
+        hovered ? 0.95 : dim ? 0.32 : 0.65,
+      )
+      c!.fillText(client.name, client.x, client.y + ringR + 6)
+    }
     c!.restore()
   }
 
@@ -737,23 +842,30 @@ onMounted(() => {
 
     c!.clearRect(0, 0, w, h)
 
-    // Decay row flashes
-    for (const row of rows) {
-      if (row.flash > 0) row.flash = Math.max(0, row.flash - dt / 700)
-    }
-    for (const cl of clients) {
-      if (cl.pulse > 0) cl.pulse = Math.max(0, cl.pulse - dt / 700)
+    // Decay row flashes. When paused we hold the seeded flashes so
+    // the source rows keep glowing alongside their frozen tokens.
+    if (!props.paused) {
+      for (const row of rows) {
+        if (row.flash > 0) row.flash = Math.max(0, row.flash - dt / 700)
+      }
+      for (const cl of clients) {
+        if (cl.pulse > 0) cl.pulse = Math.max(0, cl.pulse - dt / 700)
+      }
     }
 
     // Draw rows first (background dots), then shapes, then tokens, then clients on top.
     for (let i = 0; i < rows.length; i++) drawRow(rows[i], dark, i)
     for (const s of shapes) drawShape(s, dark)
 
-    // Advance + draw tokens
+    // Advance + draw tokens. When paused, each token holds its
+    // seeded progress so the fan-outs read as a frozen mid-flight
+    // snapshot.
     for (let i = tokens.length - 1; i >= 0; i--) {
       const t = tokens[i]
-      t.progress += t.speed * (dt / 1000)
-      if (t.progress >= 1) {
+      if (!props.paused) {
+        t.progress += t.speed * (dt / 1000)
+      }
+      if (!props.paused && t.progress >= 1) {
         // Arrived — pulse the client.
         const shape = shapes[t.shapeId]
         if (shape) {
@@ -776,11 +888,13 @@ onMounted(() => {
 
     for (const cl of clients) drawClient(cl, dark)
 
-    // Spawn cadence
+    // Spawn cadence — tightened by ~40% from the original 700–2100ms
+    // window so the extra shapes the scene now hosts get a steady
+    // stream of in-flight tokens instead of feeling sparse.
     nextSpawn -= dt
-    if (nextSpawn <= 0) {
+    if (!props.paused && nextSpawn <= 0) {
       spawnRandomUpdate()
-      nextSpawn = 700 + Math.random() * 1400
+      nextSpawn = 420 + Math.random() * 850
     }
 
     raf = requestAnimationFrame(tick)

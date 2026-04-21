@@ -2,6 +2,14 @@
 import { ref, watch, onMounted, onUnmounted } from "vue"
 import { useDemoVisibility } from "../../../.vitepress/theme/composables/useDemoVisibility"
 
+const props = defineProps<{
+  // When true, render a static snapshot — three populated client
+  // cards plus pulses frozen mid-flight along each fan line. Used
+  // by the homepage product section so the embedded preview reads
+  // as a paused moment of the live demo.
+  paused?: boolean
+}>()
+
 // Section 2: "Online together" — one shape, three live readers.
 // A Postgres source emits events; three clients (web, mobile, agent)
 // each receive them with a slight, different latency, then render the
@@ -140,6 +148,7 @@ function stop() {
 }
 
 watch(isVisible, (v) => {
+  if (props.paused) return
   if (v) {
     hasStarted.value = true
     start()
@@ -148,13 +157,40 @@ watch(isVisible, (v) => {
   }
 })
 
+// Compute a frozen pulse position at a given progress (0..1) along
+// the fan line from FAN_SOURCE → end. Mirrors the easing used by
+// runPulse so the snapshot looks like a paused frame of the live
+// animation rather than a different shape.
+function pulseAt(end: { x: number; y: number }, progress: number): PulseState {
+  const eased = 1 - Math.pow(1 - progress, 2)
+  return {
+    x: FAN_SOURCE.x + (end.x - FAN_SOURCE.x) * eased,
+    y: FAN_SOURCE.y + (end.y - FAN_SOURCE.y) * eased,
+    opacity: 1,
+  }
+}
+
 onMounted(() => {
   // Pre-seed the full row budget (4) so the cards never grow once
-  // live emits start arriving — height stays rock-stable.
-  const seeded = SEED.slice(0, 4).map((r, idx) => ({ ...r, id: `seed-${idx}` }))
+  // live emits start arriving — height stays rock-stable. In paused
+  // mode we keep the SEED's natural-looking IDs so the snapshot
+  // doesn't show internal "seed-N" placeholders.
+  const seeded = props.paused
+    ? SEED.slice(0, 4).map((r) => ({ ...r }))
+    : SEED.slice(0, 4).map((r, idx) => ({ ...r, id: `seed-${idx}` }))
   webRows.value = seeded
   mobileRows.value = seeded
   agentRows.value = seeded
+  if (props.paused) {
+    // Staggered progress so the three pulses sit at visibly
+    // different points along their respective rays.
+    webPulse.value = pulseAt(FAN_TARGETS.web, 0.3)
+    mobilePulse.value = pulseAt(FAN_TARGETS.mobile, 0.55)
+    agentPulse.value = pulseAt(FAN_TARGETS.agent, 0.75)
+    sourceTick.value = 7
+    hasStarted.value = true
+    return
+  }
   if (isVisible.value) {
     hasStarted.value = true
     start()

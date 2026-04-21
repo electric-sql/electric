@@ -14,14 +14,28 @@ interface Row extends ScriptEvent {
   id: number
 }
 
+const props = withDefaults(
+  defineProps<{
+    // When true, render the static "all-delivered" snapshot — no
+    // animation loop, no offline/reconnect dance.
+    paused?: boolean
+    // Override which client panes render. Defaults to all three;
+    // the homepage uses ["Alice", "agent"] to fit two columns next
+    // to the section copy.
+    clients?: Author[]
+  }>(),
+  { paused: false }
+)
+
+const ALL_CLIENTS: Author[] = ["Alice", "agent", "Bob"]
+const CLIENTS = computed<Author[]>(() => props.clients ?? ALL_CLIENTS)
+
 const SCRIPT: ScriptEvent[] = [
   { who: "Alice", body: "PR #214 needs review" },
   { who: "agent", body: "Found 3 issues" },
   { who: "Bob",   body: "👍 on it" },
   { who: "agent", body: "drafting fix…" },
 ]
-
-const CLIENTS: Author[] = ["Alice", "agent", "Bob"]
 
 /* ── Timing ─────────────────────────────────────────────────────── */
 const APPEND_EVERY_MS    = 1300
@@ -65,7 +79,7 @@ function appendToStream(ev: ScriptEvent, thisCycle: number) {
   const row: Row = { ...ev, id: ++nextId }
   stream.value = [...stream.value, row]
 
-  CLIENTS.forEach((name, i) => {
+  CLIENTS.value.forEach((name, i) => {
     schedule(PROPAGATE_DELAY_MS + i * 80, () => {
       if (cycleId !== thisCycle) return
       if (states.value[name] !== "live") return
@@ -125,7 +139,7 @@ function renderStaticEndState() {
   SCRIPT.forEach((ev) => {
     const row: Row = { ...ev, id: ++nextId }
     stream.value.push(row)
-    CLIENTS.forEach((c) => clients.value[c].push(row))
+    CLIENTS.value.forEach((c) => clients.value[c].push(row))
   })
 }
 
@@ -136,7 +150,7 @@ function stop() {
 }
 
 watch(isActive, (v) => {
-  if (prefersReducedMotion.value) return
+  if (props.paused || prefersReducedMotion.value) return
   if (v) runCycle()
   else stop()
 })
@@ -146,7 +160,8 @@ onMounted(() => {
     const mql = window.matchMedia("(prefers-reduced-motion: reduce)")
     prefersReducedMotion.value = mql.matches
   }
-  if (prefersReducedMotion.value) renderStaticEndState()
+  if (props.paused) renderStaticEndState()
+  else if (prefersReducedMotion.value) renderStaticEndState()
   else if (isActive.value) runCycle()
 })
 
@@ -168,7 +183,7 @@ const srDescription = computed(
       <span class="csd-url-path">/v1/stream/session/design-review</span>
     </div>
 
-    <div class="csd-grid">
+    <div class="csd-grid" :style="{ gridTemplateColumns: `repeat(${CLIENTS.length}, minmax(0, 1fr))` }">
       <article
         v-for="name in CLIENTS"
         :key="name"

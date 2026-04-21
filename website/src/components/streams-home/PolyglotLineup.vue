@@ -219,7 +219,7 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
-    <div class="pl-caption">one stream URL, all of these clients</div>
+    <div class="pl-caption">one URL, every client</div>
 
     <div class="pl-grid" aria-hidden="true">
       <div

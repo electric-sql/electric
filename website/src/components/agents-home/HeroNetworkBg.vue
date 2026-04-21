@@ -3,6 +3,17 @@ import { ref, onMounted, onUnmounted } from "vue"
 
 const props = defineProps<{
   excludeEl?: HTMLElement
+  // When true, no random wakes or chained messages are auto-spawned;
+  // the canvas still renders the static mesh, hover labels still
+  // appear, and a user click still wakes a node + cascades. Used by
+  // the homepage section graphics so the page doesn't feel busy.
+  paused?: boolean
+  // When true, the radial edge-fade that softens geometry near the
+  // canvas borders is disabled, so the mesh fills the whole frame at
+  // full intensity. Used by the homepage iso-stack hero where each
+  // canvas already lives inside a crisp bordered card and the fade
+  // would otherwise leave the corners empty.
+  noEdgeFade?: boolean
 }>()
 
 const canvas = ref<HTMLCanvasElement>()
@@ -258,10 +269,17 @@ onMounted(() => {
   }
 
   function doLayout() {
-    const rect = el!.parentElement!.getBoundingClientRect()
+    // Use `clientWidth/clientHeight` rather than
+    // `getBoundingClientRect` so we get the parent's *logical*
+    // (untransformed) inner size. `getBoundingClientRect` returns
+    // the projected axis-aligned bounds, which on the homepage
+    // hero — where each layer is 3D-rotated for the iso stack —
+    // is much wider than the layer itself, leaving the drawn
+    // mesh stretched across only part of the visible plane.
+    const parent = el!.parentElement!
     dpr = window.devicePixelRatio || 1
-    w = rect.width
-    h = rect.height
+    w = parent.clientWidth
+    h = parent.clientHeight
     el!.width = w * dpr
     el!.height = h * dpr
     el!.style.width = w + "px"
@@ -277,6 +295,35 @@ onMounted(() => {
     edges = pruneEdges(raw, nodes, 200)
     messages = []
     hoveredNode = -1
+
+    // When paused, seed the scene with a "snapshot mid-activity" —
+    // several edges with messages frozen at random progress, plus
+    // both endpoints marked awake. Without this the paused mesh
+    // looks dormant; with it the canvas reads as a paused trace of
+    // a busy network.
+    if (props.paused && edges.length > 0) {
+      const target = Math.min(8, Math.max(4, Math.floor(edges.length / 18)))
+      const shuffled = edges
+        .map((e, i) => ({ e, i, k: Math.random() }))
+        .sort((a, b) => a.k - b.k)
+      for (let s = 0; s < target; s++) {
+        const [a, b] = shuffled[s].e
+        // Skip edges that fall in the heavily faded outer band so
+        // the seeded comets read clearly.
+        const mx = (nodes[a].x + nodes[b].x) / 2
+        const my = (nodes[a].y + nodes[b].y) / 2
+        if (edgeFade(mx, my) < 0.25) continue
+        const forward = Math.random() < 0.5
+        messages.push({
+          from: forward ? a : b,
+          to: forward ? b : a,
+          progress: 0.18 + Math.random() * 0.64,
+          speed: 1,
+        })
+        nodes[a].awake = Math.max(nodes[a].awake, 0.55 + Math.random() * 0.3)
+        nodes[b].awake = Math.max(nodes[b].awake, 0.45 + Math.random() * 0.3)
+      }
+    }
   }
 
   function resize() {
@@ -295,6 +342,7 @@ onMounted(() => {
     document.documentElement.classList.contains("dark")
 
   function edgeFade(x: number, y: number): number {
+    if (props.noEdgeFade) return 1
     const cx = w / 2
     const cy = h / 2
     const dx = Math.abs(x - cx) / (w / 2)
@@ -524,13 +572,20 @@ onMounted(() => {
     }
 
     // --- Update state ---
-    for (const node of nodes) {
-      node.awake = Math.max(0, node.awake - dt * 0.00025)
+    // When paused, awake levels and in-flight messages are held
+    // wherever they were seeded so the scene reads as a paused
+    // snapshot rather than slowly decaying to nothing.
+    if (!props.paused) {
+      for (const node of nodes) {
+        node.awake = Math.max(0, node.awake - dt * 0.00025)
+      }
     }
 
     for (let i = messages.length - 1; i >= 0; i--) {
-      messages[i].progress += messages[i].speed * dt * 0.001
-      if (messages[i].progress >= 1) {
+      if (!props.paused) {
+        messages[i].progress += messages[i].speed * dt * 0.001
+      }
+      if (!props.paused && messages[i].progress >= 1) {
         const arrivedAt = messages[i].to
         const arrivedFrom = messages[i].from
         nodes[arrivedAt].awake = Math.min(1, nodes[arrivedAt].awake + 0.85)
@@ -563,7 +618,7 @@ onMounted(() => {
 
     // --- Spawn random wakes & messages ---
     nextSend -= dt
-    if (nextSend <= 0) {
+    if (!props.paused && nextSend <= 0) {
       nextSend = 800 + Math.random() * 2000
       const startNode = Math.floor(Math.random() * nodes.length)
       nodes[startNode].awake = Math.min(1, nodes[startNode].awake + 0.95)

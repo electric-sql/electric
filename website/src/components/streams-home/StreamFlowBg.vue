@@ -14,6 +14,16 @@ import { ref, onMounted, onUnmounted } from "vue"
 
 const props = defineProps<{
   excludeEl?: HTMLElement
+  // When true, no new comet tokens auto-spawn on rails. Existing
+  // tokens still finish their travel, hover labels still appear,
+  // and clicking still produces a burst. Used by the homepage
+  // section graphics to dial back ambient activity.
+  paused?: boolean
+  // When true, the radial edge-fade that softens rails near the
+  // canvas borders is disabled, so the rails fill the whole frame
+  // at full intensity. Used by the homepage iso-stack hero where
+  // the canvas already sits inside a crisp bordered card.
+  noEdgeFade?: boolean
 }>()
 
 const canvas = ref<HTMLCanvasElement>()
@@ -212,15 +222,53 @@ onMounted(() => {
           offset: ++rail.offsetCounter,
         })
       }
+      // When paused, also pre-seed a branch on most rails so the
+      // frozen scene shows consumer fan-outs in flight, not just
+      // straight rail tokens. Without this the paused image looks
+      // emptier than the active one.
+      if (props.paused && Math.random() < 0.7 && rail.tokens.length > 0) {
+        const seed =
+          rail.tokens[Math.floor(Math.random() * rail.tokens.length)]
+        const dir = Math.random() < 0.5 ? 1 : -1
+        const offset = 26 + Math.random() * 30
+        const consumerY =
+          dir === 1
+            ? Math.min(h - 14, rail.y + offset)
+            : Math.max(14, rail.y - offset)
+        if (consumerY > 12 && consumerY < h - 12) {
+          const totalLife = 1700
+          // Random life remaining gives different stages of branch
+          // travel (early travel → arrived w/ pulse).
+          const elapsedFrac = 0.25 + Math.random() * 0.55
+          const elapsed = totalLife * elapsedFrac
+          const arrived = elapsed > 320
+          rail.branches.push({
+            startX: seed.x,
+            consumerY,
+            life: totalLife - elapsed,
+            totalLife,
+            arrived,
+            pulse: arrived ? 250 + Math.random() * 350 : 0,
+            dir,
+          })
+        }
+      }
       rails.push(rail)
     }
   }
 
   function doLayout() {
-    const rect = el!.parentElement!.getBoundingClientRect()
+    // `clientWidth/clientHeight` ignores CSS transforms, so the
+    // canvas always sizes itself to the parent's logical inner
+    // box even when the parent is 3D-rotated (e.g. the homepage
+    // iso composition stack). `getBoundingClientRect` would
+    // otherwise return the projected screen bounds of the
+    // rotated rect and leave the rails stretched across the
+    // wrong coordinate space.
+    const parent = el!.parentElement!
     dpr = window.devicePixelRatio || 1
-    w = rect.width
-    h = rect.height
+    w = parent.clientWidth
+    h = parent.clientHeight
     el!.width = w * dpr
     el!.height = h * dpr
     el!.style.width = w + "px"
@@ -253,6 +301,7 @@ onMounted(() => {
   // Radial fade — strong centre, soft outer. Same shape as Agents/Sync,
   // so the headline is always sitting on a quiet pool.
   function radialFade(x: number, y: number): number {
+    if (props.noEdgeFade) return 1
     const cx = w / 2
     const cy = h / 2
     const dx = Math.abs(x - cx) / (w / 2)
@@ -447,7 +496,7 @@ onMounted(() => {
 
       // Spawn
       rail.nextSpawn -= dt
-      if (rail.nextSpawn <= 0) {
+      if (!props.paused && rail.nextSpawn <= 0) {
         rail.tokens.push({
           x: -16,
           speed: rail.speed * (0.85 + Math.random() * 0.4),
@@ -458,13 +507,16 @@ onMounted(() => {
         rail.nextSpawn = rail.spawnInterval * (0.65 + Math.random() * 0.7)
       }
 
-      // Advance / age / cull
+      // Advance / age / cull. When paused we skip motion + cull so
+      // the seeded tokens stay frozen wherever they were placed.
       for (let i = rail.tokens.length - 1; i >= 0; i--) {
         const t = rail.tokens[i]
-        t.x += t.speed * (dt / 1000)
-        if (t.age < 1) t.age = Math.min(1, t.age + dt / 220)
-        if (t.x > w - 24) t.age = Math.max(0, t.age - dt / 240)
-        if (t.x > w + 30 || t.age <= 0) {
+        if (!props.paused) {
+          t.x += t.speed * (dt / 1000)
+          if (t.age < 1) t.age = Math.min(1, t.age + dt / 220)
+          if (t.x > w - 24) t.age = Math.max(0, t.age - dt / 240)
+        }
+        if (!props.paused && (t.x > w + 30 || t.age <= 0)) {
           rail.tokens.splice(i, 1)
         } else {
           const hot =
@@ -478,7 +530,7 @@ onMounted(() => {
 
       // Branch life
       rail.nextBranch -= dt
-      if (rail.nextBranch <= 0 && rail.tokens.length > 0) {
+      if (!props.paused && rail.nextBranch <= 0 && rail.tokens.length > 0) {
         const seed = rail.tokens[Math.floor(Math.random() * rail.tokens.length)]
         const dir = Math.random() < 0.5 ? 1 : -1
         const offset = 26 + Math.random() * 30
@@ -502,16 +554,18 @@ onMounted(() => {
 
       for (let i = rail.branches.length - 1; i >= 0; i--) {
         const b = rail.branches[i]
-        b.life -= dt
-        if (b.life <= 0) {
-          rail.branches.splice(i, 1)
-          continue
+        if (!props.paused) {
+          b.life -= dt
+          if (b.life <= 0) {
+            rail.branches.splice(i, 1)
+            continue
+          }
+          if (!b.arrived && b.totalLife - b.life > 320) {
+            b.arrived = true
+            b.pulse = 600
+          }
+          if (b.pulse > 0) b.pulse = Math.max(0, b.pulse - dt)
         }
-        if (!b.arrived && b.totalLife - b.life > 320) {
-          b.arrived = true
-          b.pulse = 600
-        }
-        if (b.pulse > 0) b.pulse = Math.max(0, b.pulse - dt)
         drawBranch(rail, b, dark)
       }
     }

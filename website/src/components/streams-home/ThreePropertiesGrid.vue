@@ -13,7 +13,7 @@ const cards = [
   {
     glyph: "▤ append-only",
     title: "Append-only",
-    body: "Once data is at an offset, it never changes. Offsets are opaque, lexicographically sortable cursors.",
+    body: "Once data is at an offset, it never changes. Offsets are opaque cursors that always sort in order.",
     code: [
       "POST  → 200 OK",
       "      Stream-Next-Offset:",
@@ -23,7 +23,7 @@ const cards = [
   {
     glyph: "↻ resumable",
     title: "Resumable",
-    body: "Reads return Stream-Next-Offset. Reconnect with ?offset=… — exactly once, zero state on the client.",
+    body: "Reads return Stream-Next-Offset. Reconnect with ?offset=… and pick up exactly where you left off.",
     code: [
       "GET ?offset=01JQXK5V00",
       "    → next chunk only",

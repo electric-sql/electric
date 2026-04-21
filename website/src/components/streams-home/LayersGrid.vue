@@ -36,7 +36,7 @@ const layers: Layer[] = [
   {
     tag: "03 · typed CRUD",
     title: "Durable State",
-    body: "Typed insert / update / delete events on the wire, plus snapshot control messages. Fold them into a live key/value projection.",
+    body: "Typed insert / update / delete events on the wire, plus snapshot markers. Materialise them into a live key-value view.",
     code: [
       `{"type":"user","value":{…},"headers":{"operation":"insert"}}`,
       `{"type":"user","key":"1","headers":{"operation":"delete"}}`,

@@ -60,14 +60,15 @@ function copyInstall() {
     <Section id="come-online">
       <div class="ea-come-online">
         <div class="ea-come-online-text">
-          <h2 class="ea-section-title">Wire agents into your online systems</h2>
+          <h2 class="ea-section-title">Bring the agent loop&nbsp;online</h2>
           <p class="ea-prose">
             Today's agents live on your laptop or behind a chat window.
-            But real work happens inside business systems — triggered by
+            Real work happens inside business systems — triggered by
             webhooks, running 24/7 without&nbsp;supervision.
           </p>
           <p class="ea-prose">
-            <strong>Electric Agents brings the agent loop online.</strong>
+            <strong>Electric Agents wires agents into the systems your team
+            already runs.</strong>
             Every agent is backed by a durable stream — sleeping when idle,
             waking on demand, surviving restarts, and plugging straight
             into your existing&nbsp;infrastructure.
@@ -145,12 +146,14 @@ function copyInstall() {
             <li>
               A <strong>framework</strong> in your app, where you define
               entities and write handlers in plain TypeScript. Runs in
-              your process, so your tools and secrets stay&nbsp;yours.
+              your process, so your tools, models and secrets
+              stay&nbsp;yours.
             </li>
             <li>
               A <strong>server</strong> that runs them, routes wakes and
-              persists every agent to its own durable stream. Owns
-              lifecycle, so your handlers don't need to stay&nbsp;alive.
+              persists every agent to its own durable stream. Owns the
+              lifecycle, so your handlers don't need to stay alive
+              between&nbsp;invocations.
             </li>
           </ul>
         </div>
@@ -164,7 +167,7 @@ function copyInstall() {
     >
       <div class="ea-entity-intro">
         <p>You define <strong>entity types</strong> — like <code>assistant</code> or <code>researcher</code> — then spawn instances on&nbsp;demand.</p>
-        <p>Each instance is backed by its own <strong>durable stream</strong>: an append-only log that serves as the agent's memory, message inbox, and audit&nbsp;trail.</p>
+        <p>Each instance is backed by its own <strong>durable stream</strong>: an append-only log that serves as the agent's memory, its inbox, and a complete audit trail of everything it&nbsp;did.</p>
       </div>
       <EntityStreamDemo />
     </Section>
@@ -184,7 +187,7 @@ function copyInstall() {
           <p class="ea-durable-detail">
             When a handler crashes or the process restarts, nothing is lost.
             The stream replays and the agent picks up exactly where it left off
-            — no checkpointing, no snapshots, no coordination&nbsp;overhead.
+            — no checkpointing, no snapshots, no&nbsp;coordination.
           </p>
         </div>
       </div>
@@ -194,7 +197,7 @@ function copyInstall() {
     <Section
       id="coordination"
       title="Primitives for coordination"
-      subtitle="Local agents compose through child processes. Electric Agents makes that pattern durable and&nbsp;serverless."
+      subtitle="Local agents compose through child processes. Electric Agents makes that pattern durable, observable, and&nbsp;serverless."
     >
       <CoordinationDemo />
     </Section>
@@ -211,7 +214,7 @@ function copyInstall() {
           <p class="ea-scale-detail">
             Entities sleep between invocations — no long-running processes,
             no idle VMs. When a message arrives, the handler wakes, replays
-            from the stream, and picks up exactly where it left&nbsp;off.
+            from the stream, and&nbsp;continues.
           </p>
         </div>
         <div class="ea-scale-grid">
@@ -227,11 +230,11 @@ function copyInstall() {
           <ContextCompositionDemo />
         </div>
         <div class="ea-context-text">
-          <h2 class="ea-section-title">Context composition — maximize cache&nbsp;hits</h2>
+          <h2 class="ea-section-title">Cache-friendly context, by&nbsp;construction</h2>
           <p class="ea-section-subtitle">
-            Each context source declares how often it changes. The runtime orders them
-            from most stable to most volatile, so the LLM can cache the prefix of
-            every&nbsp;request.
+            Each context source declares how often it changes. The runtime
+            orders sources from most stable to most volatile, so the LLM can
+            cache the shared prefix across every&nbsp;request.
           </p>
           <p class="ea-context-detail">
             Less re-processing, lower latency, lower cost.
@@ -258,7 +261,7 @@ function copyInstall() {
             <span class="stack-conn-label">webhooks</span>
           </div>
           <div class="stack-box runtime-box">
-            <div class="stack-label">Electric Agents Runtime</div>
+            <div class="stack-label">Electric Agents</div>
             <div class="stack-examples">entities · handlers · context</div>
           </div>
           <div class="stack-connector">
@@ -307,7 +310,7 @@ function copyInstall() {
     <span class="tk-v">ctx</span>.<span class="tk-fn">useAgent</span>({
       <span class="tk-prop">systemPrompt</span>: <span class="tk-str">"You are a helpful assistant."</span>,
       <span class="tk-prop">model</span>: <span class="tk-str">"claude-sonnet-4-5-20250929"</span>,
-      <span class="tk-prop">tools</span>: [...<span class="tk-v">ctx</span>.<span class="tk-v">darixTools</span>],
+      <span class="tk-prop">tools</span>: [...<span class="tk-v">ctx</span>.<span class="tk-v">agentTools</span>],
     })
     <span class="tk-kw">await</span> <span class="tk-v">ctx</span>.<span class="tk-v">agent</span>.<span class="tk-fn">run</span>()
   },
@@ -320,7 +323,7 @@ function copyInstall() {
     <Section
       id="three-ways"
       title="Three ways&nbsp;in"
-      subtitle="Once your handlers are registered, talk to the runtime however&nbsp;suits&nbsp;you."
+      subtitle="Once your handlers are registered, talk to the runtime however best&nbsp;suits&nbsp;you."
     >
       <div class="ea-ways">
         <div class="ea-way">
@@ -336,11 +339,11 @@ function copyInstall() {
           <div class="ea-way-preview cli-preview">
             <div class="cli-header">Terminal</div>
             <div class="cli-body">
-              <div class="cli-line"><span class="cli-prompt">$</span> darix spawn /assistant/research-1</div>
+              <div class="cli-line"><span class="cli-prompt">$</span> electric-agents spawn /assistant/research-1</div>
               <div class="cli-output">✓ Spawned /assistant/research-1</div>
-              <div class="cli-line"><span class="cli-prompt">$</span> darix send /assistant/research-1 "summarise the docs"</div>
+              <div class="cli-line"><span class="cli-prompt">$</span> electric-agents send /assistant/research-1 "summarise the docs"</div>
               <div class="cli-output">→ message delivered, entity woke</div>
-              <div class="cli-line"><span class="cli-prompt">$</span> darix observe /assistant/research-1</div>
+              <div class="cli-line"><span class="cli-prompt">$</span> electric-agents observe /assistant/research-1</div>
               <div class="cli-output">← reasoning · tool_call(read_file) · text…</div>
             </div>
           </div>
@@ -392,10 +395,10 @@ function copyInstall() {
           </p>
           <div class="ea-way-preview ts-preview">
             <div class="code-file-header">app.tsx</div>
-            <pre class="code-block tabbed"><code><span class="tk-kw">import</span> { <span class="tk-v">createDarixClient</span> } <span class="tk-kw">from</span> <span class="tk-str">"electric-agents"</span>
+            <pre class="code-block tabbed"><code><span class="tk-kw">import</span> { <span class="tk-v">createClient</span> } <span class="tk-kw">from</span> <span class="tk-str">"electric-agents"</span>
 <span class="tk-kw">import</span> { <span class="tk-v">useChat</span> } <span class="tk-kw">from</span> <span class="tk-str">"electric-agents/react"</span>
 
-<span class="tk-kw">const</span> <span class="tk-v">client</span> = <span class="tk-fn">createDarixClient</span>({ <span class="tk-prop">baseUrl</span>: <span class="tk-v">DARIX_URL</span> })
+<span class="tk-kw">const</span> <span class="tk-v">client</span> = <span class="tk-fn">createClient</span>({ <span class="tk-prop">baseUrl</span>: <span class="tk-v">RUNTIME_URL</span> })
 <span class="tk-kw">await</span> <span class="tk-v">client</span>.<span class="tk-fn">spawn</span>(<span class="tk-str">"/assistant/research-1"</span>)
 
 <span class="tk-kw">function</span> <span class="tk-fn">Chat</span>() {
@@ -430,7 +433,7 @@ function copyInstall() {
     <span class="tk-v">ctx</span>.<span class="tk-fn">useAgent</span>({
       <span class="tk-prop">model</span>: <span class="tk-str">"claude-sonnet-4-5-20250929"</span>,
       <span class="tk-prop">systemPrompt</span>: <span class="tk-str">"You are a helpful assistant."</span>,
-      <span class="tk-prop">tools</span>: [...<span class="tk-v">ctx</span>.<span class="tk-v">darixTools</span>],<span class="ann-marker" data-n="4"></span>
+      <span class="tk-prop">tools</span>: [...<span class="tk-v">ctx</span>.<span class="tk-v">agentTools</span>],<span class="ann-marker" data-n="4"></span>
     })
 
     <span class="tk-kw">await</span> <span class="tk-v">ctx</span>.<span class="tk-v">agent</span>.<span class="tk-fn">run</span>()<span class="ann-marker" data-n="5"></span>
@@ -476,14 +479,14 @@ function copyInstall() {
               <span class="ea-ann-num">4</span>
               <div>
                 <strong>Bring your own tools</strong>
-                <p><code>darixTools</code> provides <code>spawn</code>, <code>send</code>, <code>observe</code>. Add your own MCP tools, APIs, anything.</p>
+                <p><code>agentTools</code> provides <code>spawn</code>, <code>send</code> and <code>observe</code>. Add your own MCP tools, APIs, or whatever your handler needs.</p>
                 </div>
               </div>
               <div class="ea-ann-item">
               <span class="ea-ann-num">5</span>
               <div>
                 <strong>Run the agent loop</strong>
-                  <p>Reads the stream, calls the LLM, appends events, sleeps. Crashes replay automatically.</p>
+                  <p>Reads the stream, calls the LLM, appends events, then sleeps. Survives crashes by replaying from the stream.</p>
                 </div>
               </div>
               <div class="ea-ann-item">
@@ -535,7 +538,7 @@ function copyInstall() {
       <div class="ea-cta">
         <div class="ea-cta-eyebrow mono">
           <span class="dot"></span>
-          Open source · Apache&nbsp;2.0 · built on Durable&nbsp;Streams
+          Open source · Apache&nbsp;2.0 · built on Electric&nbsp;Streams
         </div>
         <h2 class="ea-cta-title">
           Bring your agents&nbsp;<span class="ea-cta-accent">online</span>.

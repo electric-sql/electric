@@ -54,7 +54,7 @@ const fanoutMiniDotCount = FANOUT_COLS * FANOUT_ROWS
   <div class="sync-home">
     <!-- ───────────────────────── Section 1: Hero ───────────────────────── -->
     <section class="sh-hero">
-      <SyncFanOutBg :exclude-el="heroInnerRef" />
+      <SyncFanOutBg :exclude-el="heroInnerRef" :labels-on-hover="true" />
       <div ref="heroInnerRef" class="sh-hero-inner">
         <h1 class="sh-hero-name">
           Electric <span class="sh-hero-accent">Sync</span>
@@ -137,8 +137,8 @@ const fanoutMiniDotCount = FANOUT_COLS * FANOUT_ROWS
             store that turns them into live, reactive&nbsp;data.
           </p>
           <p class="ea-prose">
-            Writes go through your existing API — Electric handles the read
-            path so your stack stays standard Postgres top to&nbsp;bottom.
+            Writes go through your existing API. Electric handles the read
+            path. Your stack stays plain Postgres end&nbsp;to&nbsp;end.
           </p>
           <div class="sh-section-foot sh-section-foot-tight left">
             <a href="#compose">See the client options&nbsp;↓</a>
@@ -239,8 +239,8 @@ const fanoutMiniDotCount = FANOUT_COLS * FANOUT_ROWS
               <div class="stat-label mono">cache hit&nbsp;rate</div>
             </div>
             <div class="stat">
-              <div class="stat-num">∞</div>
-              <div class="stat-label mono">db load flat</div>
+              <div class="stat-num">flat</div>
+              <div class="stat-label mono">database load</div>
             </div>
           </div>
           <div class="sh-section-foot sh-section-foot-tight">
@@ -297,19 +297,19 @@ const fanoutMiniDotCount = FANOUT_COLS * FANOUT_ROWS
             <span class="mono">human-in-the-loop · agent-in-the-loop</span>
           </div>
           <h2 class="sh-inline-title">
-            Sync is how humans stay in the AI&nbsp;loop
+            Sync is how humans stay in the agent&nbsp;loop
           </h2>
           <p class="ea-prose">
-            AI agents work on shared data — and they change it while users are
-            still looking at it. Without sync, your UI shows stale state, users
-            have to refresh, and teams fall out of step on what every agent is
-            doing.
+            Agents work on shared data — and they change it while users are
+            still looking at it. Without sync, your UI shows stale state,
+            users have to refresh, and teams fall out of step on what every
+            agent is doing.
           </p>
           <p class="ea-prose">
-            With Electric, every user, device and teammate sees the changes
-            agents are making, in real time. The same shared state powers
-            multi-tab, multi-device, multi-user and multi-agent collaboration —
-            out of the&nbsp;box.
+            With Electric, every user, device and teammate sees agent changes
+            in real time. The same shared state powers multi-tab,
+            multi-device, multi-user and multi-agent collaboration — out of
+            the&nbsp;box.
           </p>
           <div class="sh-section-foot sh-section-foot-tight">
             <a href="/blog/2026/04/08/data-primitive-agent-loop">
@@ -405,7 +405,7 @@ const fanoutMiniDotCount = FANOUT_COLS * FANOUT_ROWS
             { id: 'reactivity', title: 'Super-fast reactivity', body: 'Build fast, modern apps like Figma and Linear. Sub-millisecond reactivity and instant local writes.', href: '/blog/2025/07/29/super-fast-apps-on-sync-with-tanstack-db' },
             { id: 'resilience', title: 'Resilient transport', body: 'Build apps that work reliably, even with patchy connectivity. Resilient transport that ensures data is never lost.', href: '/blog/2026/03/24/durable-transport-ai-sdks' },
             { id: 'collaboration', title: 'Real-time collaboration', body: 'Build multi-user, multi-agent apps that naturally support both real-time and asynchronous collaboration.', href: '/blog/2026/01/12/durable-sessions-for-collaborative-ai' },
-            { id: 'durability', title: 'Durable state', body: 'Build multi-step agentic workflows that resume after failures. Agents and workers sync and resume from durable state.', href: '/blog/2026/04/08/data-primitive-agent-loop' },
+            { id: 'durability', title: 'Durable state', body: 'Build multi-step agentic workflows that survive crashes and restarts. Agents and workers resume from the same durable state.', href: '/blog/2026/04/08/data-primitive-agent-loop' },
           ]"
           :key="p.id"
           :href="p.href"
@@ -493,8 +493,8 @@ const fanoutMiniDotCount = FANOUT_COLS * FANOUT_ROWS
               <li class="sh-fs-anno">
                 <span class="num">4</span>
                 <div>
-                  <strong>Just an HTTP fetch.</strong>
-                  <p>Streams over plain HTTP. Cache it, log it, rate-limit it — your usual middleware works.</p>
+                  <strong>It's just HTTP.</strong>
+                  <p>Shapes stream over plain HTTP. Cache, log and rate-limit them with the middleware you already use.</p>
                 </div>
               </li>
               <li class="sh-fs-anno">
@@ -553,7 +553,7 @@ const fanoutMiniDotCount = FANOUT_COLS * FANOUT_ROWS
     <EaSection
       id="compose"
       title="Compose your sync&nbsp;stack"
-      subtitle="Sync is one piece. Pair it with a reactive client store, an embedded database, or a durable stream — pick what fits the work."
+      subtitle="Sync is one piece. Pair it with a reactive client store, an embedded database, or a Durable Stream — pick what fits the work."
       :dark="true"
     >
       <ComposeStackGrid />

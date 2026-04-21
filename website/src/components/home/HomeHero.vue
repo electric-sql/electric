@@ -2,6 +2,8 @@
 import { ref } from 'vue'
 import { VPButton } from 'vitepress/theme'
 
+import HomeCompositionHero from './HomeCompositionHero.vue'
+
 const installCopied = ref(false)
 function copyInstall() {
   navigator.clipboard.writeText('npx @electric-sql/start my-app')
@@ -75,16 +77,14 @@ function copyInstall() {
           <VPButton
             tag="a"
             size="medium"
-            theme="alt"
-            text="GitHub"
-            href="https://github.com/electric-sql/electric"
+            theme="brand"
+            text="Try Electric Cloud »"
+            href="https://dashboard.electric-sql.cloud/"
           />
         </div>
       </div>
       <div class="home-hero-scene">
-        <div class="home-hero-placeholder" aria-label="Homepage hero graphic placeholder">
-          TBD
-        </div>
+        <HomeCompositionHero />
       </div>
       </div>
     </div>
@@ -102,12 +102,22 @@ function copyInstall() {
      visual height via the eyebrow + isometric scene, so this keeps the
      content starting close to the navbar. */
   padding: 8px 24px 48px;
-  overflow: hidden;
+  /* `overflow: visible` lets the iso composition stack bleed past the
+     border-bottom into the start of the next product section. The
+     scene cell sits on `z-index: 2` so its protruding lower layers
+     render *over* the next section's background rather than getting
+     covered by it. */
+  overflow: visible;
   border-bottom: 1px solid var(--vp-c-divider);
 }
 
 .home-hero-inner {
-  max-width: 1280px;
+  /* Matches `.home-product-inner` (1152px) on the product
+     sections below so the hero headline and copy line up
+     with the eyebrow / title text in every product band —
+     previously the hero used 1280px which pushed the text
+     ~64px further left than the rest of the page. */
+  max-width: 1152px;
   margin: 0 auto;
 }
 
@@ -219,26 +229,20 @@ function copyInstall() {
 
 .home-hero-scene {
   position: relative;
+  /* z-index lifts the iso scene above the next section so the
+     lower layers can bleed downward past the hero seam without
+     getting covered by the agents product section's background. */
+  z-index: 2;
   width: 100%;
   aspect-ratio: 5 / 4;
   min-height: 420px;
   max-height: 620px;
-}
-
-.home-hero-placeholder {
-  position: absolute;
-  inset: 40px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px dashed var(--vp-c-divider);
-  border-radius: 16px;
-  background: transparent;
-  color: var(--ea-text-3);
-  font-family: var(--vp-font-family-mono);
-  font-size: 18px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  /* Slightly knocked back so the iso composition reads as a
+     supporting illustration rather than competing with the
+     headline copy beside it. Applied here (rather than on the
+     iso stack itself) so the whole scene — labels, shadows,
+     borders — fades together. */
+  opacity: 0.85;
 }
 
 @media (max-width: 1099px) {

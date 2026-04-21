@@ -17,7 +17,7 @@ const tiles: Tile[] = [
     id: "api",
     label: "Plain API",
     title: "Write through your API",
-    body: "POST/PUT to your existing endpoints. Postgres txid flows back through the read path.",
+    body: "POST or PUT to your existing endpoints. The Postgres txid flows back through the read path.",
     href: "/docs/guides/writes#through-the-db",
   },
   {
