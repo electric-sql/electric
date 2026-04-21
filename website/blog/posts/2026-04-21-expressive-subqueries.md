@@ -128,10 +128,6 @@ ELECTRIC_FEATURE_FLAGS=allow_subqueries,tagged_subqueries
 Making all this work required a client protocol update. If you already have `tagged_subqueries` enabled, make sure all your clients are on `@tanstack/db >= 0.6.2` and `@tanstack/electric-db-collection >= 0.3.0` before upgrading the server. These packages have been available since April&nbsp;3rd.
 :::
 
-:::info
-[PR #4051](https://github.com/electric-sql/electric/pull/4051)
-:::
-
 Then define shapes with expressive subqueries:
 
 ```ts
