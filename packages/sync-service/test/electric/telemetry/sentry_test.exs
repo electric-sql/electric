@@ -1,11 +1,11 @@
 if Electric.telemetry_enabled?() and Code.ensure_loaded?(Sentry.LoggerHandler) do
   defmodule Electric.Telemetry.SentryTest do
+    # async: false because :logger handler state is VM-global — unique ids per
+    # test avoid name collisions but not the add/remove race across processes.
     use ExUnit.Case, async: false
 
     alias Electric.Telemetry.Sentry, as: ElectricSentry
 
-    # A dedicated handler id per test keeps state isolated and prevents
-    # interference with any handler that may have been added elsewhere.
     setup do
       id = :"sentry_test_#{System.unique_integer([:positive])}"
       on_exit(fn -> _ = :logger.remove_handler(id) end)
@@ -17,9 +17,9 @@ if Electric.telemetry_enabled?() and Code.ensure_loaded?(Sentry.LoggerHandler) d
       config
     end
 
-    describe "add_logger_handler/1" do
+    describe "add_logger_handler/2" do
       test "installs Sentry.LoggerHandler with default config", %{handler_id: id} do
-        assert :ok = ElectricSentry.add_logger_handler(id: id)
+        assert :ok = ElectricSentry.add_logger_handler(id)
 
         {:ok, handler} = :logger.get_handler_config(id)
         assert handler.module == Sentry.LoggerHandler
@@ -31,8 +31,7 @@ if Electric.telemetry_enabled?() and Code.ensure_loaded?(Sentry.LoggerHandler) d
       test "merges caller-supplied options into the handler config",
            %{handler_id: id} do
         assert :ok =
-                 ElectricSentry.add_logger_handler(
-                   id: id,
+                 ElectricSentry.add_logger_handler(id,
                    discard_threshold: 2000,
                    sync_threshold: nil
                  )
@@ -47,13 +46,13 @@ if Electric.telemetry_enabled?() and Code.ensure_loaded?(Sentry.LoggerHandler) d
       end
 
       test "caller-supplied options override defaults", %{handler_id: id} do
-        assert :ok = ElectricSentry.add_logger_handler(id: id, level: :warning)
+        assert :ok = ElectricSentry.add_logger_handler(id, level: :warning)
 
         assert %{level: :warning} = handler_config!(id)
       end
 
-      test "accepts an empty option list and uses the default handler id" do
-        default_id = :electric_sentry_handler
+      test "uses the default handler id when called with no arguments" do
+        default_id = ElectricSentry.default_handler_id()
         _ = :logger.remove_handler(default_id)
         on_exit(fn -> _ = :logger.remove_handler(default_id) end)
 

@@ -4,18 +4,27 @@ defmodule Electric.Telemetry.Sentry do
   @default_handler_id :electric_sentry_handler
   @default_config %{metadata: :all, capture_log_messages: true, level: :error}
 
-  @spec add_logger_handler(keyword()) :: :ok | {:error, term()}
+  @typedoc """
+  Extra entries for the `Sentry.LoggerHandler` config map (e.g.
+  `:discard_threshold`, `:sync_threshold`). Merged over the defaults at
+  install time.
+  """
+  @type handler_opts :: [{atom(), term()}]
+
+  def default_handler_id, do: @default_handler_id
+
+  @spec add_logger_handler(atom(), handler_opts()) :: :ok | {:error, term()}
+  @spec add_logger_handler(atom()) :: :ok | {:error, term()}
   @spec add_logger_handler() :: :ok | {:error, term()}
-  def add_logger_handler(opts \\ [])
+  def add_logger_handler(id \\ @default_handler_id, opts \\ [])
 
   with_telemetry Sentry.LoggerHandler do
-    def add_logger_handler(opts) do
-      {id, config_overrides} = Keyword.pop(opts, :id, @default_handler_id)
-      config = Map.merge(@default_config, Map.new(config_overrides))
+    def add_logger_handler(id, opts) do
+      config = Map.merge(@default_config, Map.new(opts))
       :logger.add_handler(id, Sentry.LoggerHandler, %{config: config})
     end
   else
-    def add_logger_handler(_opts), do: :ok
+    def add_logger_handler(_id, _opts), do: :ok
   end
 
   @spec set_tags_context(keyword()) :: :ok
