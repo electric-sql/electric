@@ -17,7 +17,7 @@ Electric 1.6 adds incremental sync for AND, OR, NOT, and NOT&nbsp;IN in subquery
 
 ## Before
 
-Electric has supported subquery filtering since mid-2025 — sync rows where a relationship exists in another table. But real access-control queries combine multiple conditions. You need orders where the customer is in my region *and* the delivery is pending. You need tasks where I'm a project member *or* directly assigned. You need NOT&nbsp;IN to exclude.
+Electric has supported subquery filtering since mid-2025 — sync rows where a relationship exists in another table. For simple expressions like `x IN (subquery)`, incremental sync was supported. But real access-control queries combine multiple conditions. You need orders where the customer is in my region *and* the delivery is pending. You need tasks where I'm a project member *or* directly assigned. You need NOT&nbsp;IN to exclude.
 
 Previously, combining subqueries with boolean operators triggered full shape invalidation and resync from scratch whenever the subquery values changed. For large shapes, that meant waiting for the entire dataset to re-download before the update appeared.
 
