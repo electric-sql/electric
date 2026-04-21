@@ -15,9 +15,9 @@ published: false
 <!-- TLDR opener — what shipped and why it matters. No setup, no preamble.
      Tone: confident, direct. This is the pitch. -->
 
-Electric shapes now fully supports fluent subqueries. AND, OR, NOT, IN, NOT&nbsp;IN, nested subqueries, composite keys — the full range of WHERE&nbsp;clause expressions, all with incremental sync.
+Electric shapes now support fluent subqueries. This release adds AND, OR, NOT, and NOT&nbsp;IN for subquery WHERE&nbsp;clauses — all with incremental sync. Combined with existing support for nested subqueries and composite keys, you can now express real-world access-control logic directly in your shape definitions.
 
-Before, anything more complicated than `x IN (SELECT ...)` handled subquery value changes with a full resync of the shape, makeing large shapes impractical. Now you can write the access-control and multi-tenant queries you'd naturally write in SQL. The sync engine handles them.
+Before, anything more complicated than `x IN (SELECT ...)` handled subquery value changes with a full resync of the shape, making large shapes impractical. Now you can write the access-control and multi-tenant queries you'd naturally write in SQL. The sync engine handles them.
 
 :::info
 - [PR #4051](https://github.com/electric-sql/electric/pull/4051)
@@ -47,9 +47,9 @@ Previously, combining subqueries with boolean operators triggered HTTP&nbsp;409 
      Author: expand each pattern into a short intro sentence + code block.
      Keep intros to one line — the code speaks for itself. -->
 
-Boolean combinations of subqueries now sync incrementally. No more 409 resyncs when dependency rows change. Move-in and move-out is precise — when a user gains or loses access, only affected rows sync in or out.
+This release adds AND, OR, NOT, and NOT&nbsp;IN to subquery WHERE&nbsp;clauses. All sync incrementally — no more 409 resyncs when dependency rows change. Move-in and move-out is precise: when a user gains or loses access, only the affected rows sync in or out.
 
-Here are some patterns that are now fully supported with live incremental sync:
+Here's what that unlocks:
 
 ### Access control with OR
 
@@ -76,11 +76,12 @@ folder_id NOT IN (
 )
 ```
 
-### Nested subqueries
+### Nested subqueries with boolean logic
 
-<!-- Multi-level hierarchy traversal — shows depth of support -->
+<!-- Nested subqueries were already supported — the new part is combining
+     them with AND/OR/NOT. Show a realistic example that uses both. -->
 
-Tasks in projects belonging to teams I'm a member of:
+Nested subqueries were already supported, but lacked full expressiveness. Now you can combine them with boolean operators — tasks in projects belonging to my teams, excluding anything I've explicitly hidden:
 
 ```sql
 project_id IN (
@@ -88,18 +89,26 @@ project_id IN (
     SELECT team_id FROM team_members WHERE user_id = $1
   )
 )
+AND id NOT IN (
+  SELECT task_id FROM hidden_tasks WHERE user_id = $1
+)
 ```
 
-### Composite keys
+### Composite keys with OR
 
-<!-- Tuple matching — less common but powerful for multi-column relationships -->
+<!-- Composite key subqueries were already supported — show them combined
+     with OR to demonstrate how existing + new features compose. -->
 
-Matching on multi-column relationships:
+Composite key subqueries already worked for tuple matching. Now you can combine them with boolean logic — documents where I have the right project role, or that are explicitly shared with me:
 
 ```sql
 (project_id, role) IN (
-  SELECT project_id, role FROM project_assignments
-  WHERE user_id = $1
+  SELECT project_id, role FROM project_roles
+  WHERE user_id = $1 AND role IN ('editor', 'admin')
+)
+OR id IN (
+  SELECT document_id FROM document_shares
+  WHERE shared_with = $1
 )
 ```
 
