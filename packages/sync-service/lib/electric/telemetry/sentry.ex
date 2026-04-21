@@ -2,19 +2,20 @@ defmodule Electric.Telemetry.Sentry do
   use Electric.Telemetry
 
   @default_handler_id :electric_sentry_handler
+  @default_config %{metadata: :all, capture_log_messages: true, level: :error}
 
-  @spec add_logger_handler(handler_id :: atom()) :: :ok | {:error, term()}
+  @spec add_logger_handler(keyword()) :: :ok | {:error, term()}
   @spec add_logger_handler() :: :ok | {:error, term()}
-  def add_logger_handler(id \\ @default_handler_id)
+  def add_logger_handler(opts \\ [])
 
   with_telemetry Sentry.LoggerHandler do
-    def add_logger_handler(id) do
-      :logger.add_handler(id, Sentry.LoggerHandler, %{
-        config: %{metadata: :all, capture_log_messages: true, level: :error}
-      })
+    def add_logger_handler(opts) do
+      {id, config_overrides} = Keyword.pop(opts, :id, @default_handler_id)
+      config = Map.merge(@default_config, Map.new(config_overrides))
+      :logger.add_handler(id, Sentry.LoggerHandler, %{config: config})
     end
   else
-    def add_logger_handler(_id), do: :ok
+    def add_logger_handler(_opts), do: :ok
   end
 
   @spec set_tags_context(keyword()) :: :ok
