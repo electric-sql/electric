@@ -305,7 +305,9 @@ defmodule Electric.Shapes.Consumer do
 
     if create_durable_stream(stack_id, shape_handle) &&
          all_materializers_alive?(state) && subscribe(state, opts.action) do
-      Logger.debug("Shape #{shape_handle} fully initialized — durable stream created, subscribed to events")
+      Logger.debug(
+        "Shape #{shape_handle} fully initialized — durable stream created, subscribed to events"
+      )
 
       # We start the snapshotter even if there's a snapshot because it also performs the call
       # to PublicationManager.add_shape/3. We *could* do that call here and avoid spawning a
@@ -710,9 +712,18 @@ defmodule Electric.Shapes.Consumer do
         recv_at_us = System.monotonic_time(:microsecond)
 
         {lines, total_size} = prepare_log_entries(converted_changes, xid, shape)
-        Logger.debug(fn -> "Consumer #{state.shape_handle} appending fragment xid=#{xid} (#{num_changes} changes, #{total_size} bytes)" end)
+
+        Logger.debug(fn ->
+          "Consumer #{state.shape_handle} appending fragment xid=#{xid} (#{num_changes} changes, #{total_size} bytes)"
+        end)
+
         writer = ShapeCache.Storage.append_fragment_to_log!(lines, writer)
-        Electric.DurableStreams.Distributor.notify_writes(state.stack_id, state.shape_handle, recv_at_us)
+
+        Electric.DurableStreams.Distributor.notify_writes(
+          state.stack_id,
+          state.shape_handle,
+          recv_at_us
+        )
 
         # The Materializer must see all txn changes for correct tracking of move-ins and
         # move-outs for the outer shape. The commit=false flag ensure it doesn't yet notify
@@ -898,9 +909,18 @@ defmodule Electric.Shapes.Consumer do
         recv_at_us = System.monotonic_time(:microsecond)
 
         {lines, total_size} = prepare_log_entries(changes, xid, shape)
-        Logger.debug(fn -> "Consumer #{state.shape_handle} appending txn xid=#{xid} (#{num_changes} changes, #{total_size} bytes)" end)
+
+        Logger.debug(fn ->
+          "Consumer #{state.shape_handle} appending txn xid=#{xid} (#{num_changes} changes, #{total_size} bytes)"
+        end)
+
         writer = ShapeCache.Storage.append_to_log!(lines, writer)
-        Electric.DurableStreams.Distributor.notify_writes(state.stack_id, state.shape_handle, recv_at_us)
+
+        Electric.DurableStreams.Distributor.notify_writes(
+          state.stack_id,
+          state.shape_handle,
+          recv_at_us
+        )
 
         OpenTelemetry.add_span_attributes(%{
           num_bytes: total_size,
@@ -1124,13 +1144,14 @@ defmodule Electric.Shapes.Consumer do
                durable_streams_url: url,
                durable_streams_token: token
              ) do
-          :ok ->
+          {:ok, _next_offset} ->
             elapsed = System.monotonic_time(:millisecond) - start
             Logger.debug("Durable stream created for #{shape_handle} in #{elapsed}ms")
             true
 
           {:error, reason} ->
             elapsed = System.monotonic_time(:millisecond) - start
+
             Logger.error(
               "Failed to create durable stream for #{shape_handle} after #{elapsed}ms: #{inspect(reason)}"
             )

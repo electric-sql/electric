@@ -152,6 +152,7 @@ defmodule Electric.Application do
       manual_table_publishing?: get_env(opts, :manual_table_publishing?),
       durable_streams_url: get_env(opts, :durable_streams_url),
       durable_streams_token: get_env(opts, :durable_streams_token),
+      durable_streams_service_id: get_env(opts, :durable_streams_service_id),
       durable_streams_writer_pool_size: get_env(opts, :durable_streams_writer_pool_size),
       wal_buffer_capacity: get_env(opts, :wal_buffer_capacity),
       shape_db_opts: [

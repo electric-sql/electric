@@ -10,8 +10,7 @@ defmodule Electric.Config.Defaults do
   def storage(opts \\ []) do
     storage_dir = Keyword.get_lazy(opts, :storage_dir, fn -> storage_dir("shapes") end)
 
-    {Electric.ShapeCache.LmdbQueueStorage,
-     storage_dir: storage_dir, stack_id: "single_stack"}
+    {Electric.ShapeCache.LmdbQueueStorage, storage_dir: storage_dir, stack_id: "single_stack"}
   end
 
   @doc false
@@ -128,6 +127,7 @@ defmodule Electric.Config do
     ## Durable Streams
     durable_streams_url: nil,
     durable_streams_token: nil,
+    durable_streams_service_id: nil,
     durable_streams_writer_pool_size: 4,
     wal_buffer_capacity: 64 * 1024 * 1024
   ]

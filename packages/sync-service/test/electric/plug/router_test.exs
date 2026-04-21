@@ -5,6 +5,7 @@ defmodule Electric.Plug.RouterTest do
   Unit tests should be preferred wherever possible because they will run faster.
   """
   use ExUnit.Case, async: false
+  use Repatch.ExUnit
 
   import Support.ComponentSetup
   import Support.DbSetup
@@ -2050,6 +2051,53 @@ defmodule Electric.Plug.RouterTest do
 
       assert {req, 200, [%{"headers" => %{"control" => "up-to-date"}}]} = shape_req(req, opts)
       assert req.offset == "0_inf"
+    end
+  end
+
+  describe "/v1/shape/register" do
+    setup [:with_unique_db, :with_basic_tables]
+
+    setup :with_complete_stack
+
+    setup(ctx) do
+      :ok = Electric.StatusMonitor.wait_until_active(ctx.stack_id, timeout: 1000)
+
+      Electric.StackConfig.put(ctx.stack_id, :durable_streams_url, "http://localhost:1")
+      Electric.StackConfig.put(ctx.stack_id, :durable_streams_service_id, "svc_test")
+      Electric.StackConfig.put(ctx.stack_id, :durable_streams_token, "fake-token")
+
+      %{opts: Router.init(build_router_opts(ctx))}
+    end
+
+    test "POST creates a shape and returns metadata as JSON", %{opts: opts} do
+      Repatch.patch(
+        Electric.DurableStreams.StreamManager,
+        :create_stream,
+        [mode: :shared],
+        fn _handle, _opts -> {:ok, "42"} end
+      )
+
+      conn =
+        conn(:post, "/v1/shape/register", Jason.encode!(%{"table" => "items"}))
+        |> Plug.Conn.put_req_header("content-type", "application/json")
+        |> Router.call(opts)
+
+      assert %{status: 200} = conn
+
+      assert %{
+               "handle" => handle,
+               "offset" => offset,
+               "schema" => schema,
+               "stream_service_id" => "svc_test",
+               "stream_path" => stream_path,
+               "content_type" => "application/json",
+               "stream_next_offset_at_registration" => "42"
+             } = Jason.decode!(conn.resp_body)
+
+      assert is_binary(handle)
+      assert is_binary(offset)
+      assert is_map(schema)
+      assert stream_path == handle
     end
   end
 

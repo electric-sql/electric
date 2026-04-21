@@ -45,6 +45,10 @@ defmodule Electric.Plug.Router do
 
   options "/v1/shape", to: Electric.Plug.OptionsShapePlug
 
+  post "/v1/shape/register",
+    to: PassAssignToOptsPlug,
+    init_opts: [plug: Electric.Plug.RegisterShapePlug, assign_key: :config]
+
   get "/v1/health", to: Electric.Plug.HealthCheckPlug
 
   get "/debug/stats",
@@ -59,7 +63,7 @@ defmodule Electric.Plug.Router do
   # OPTIONS requests should not be authenticated
   def authenticate(%Plug.Conn{method: "OPTIONS"} = conn, _opts), do: conn
 
-  def authenticate(%Plug.Conn{request_path: "/v1/shape"} = conn, _opts) do
+  def authenticate(%Plug.Conn{path_info: ["v1", "shape" | _]} = conn, _opts) do
     api_secret = conn.assigns.config[:secret]
 
     if is_nil(api_secret) do
