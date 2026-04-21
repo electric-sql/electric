@@ -79,6 +79,84 @@ function copyInstall() {
       </div>
     </Section>
 
+    <!-- Section 2: Inside the runtime -->
+    <Section id="inside-runtime" :dark="true">
+      <div class="ea-runtime">
+        <div class="ea-runtime-diagram" aria-hidden="true">
+          <div class="rt-box rt-box-app">
+            <div class="stack-label">Framework</div>
+            <div class="stack-examples">Lives in your app process</div>
+            <div class="rt-code-card">
+              <div class="code-file-header">agent.ts</div>
+              <pre class="code-block"><code><span class="tk-kw">import</span> { <span class="tk-fn">defineEntity</span> } <span class="tk-kw">from</span> <span class="tk-str">"electric-agents"</span>
+
+<span class="tk-fn">defineEntity</span>(<span class="tk-str">"assistant"</span>, {
+  <span class="tk-prop">state</span>: { … },
+  <span class="tk-kw">async</span> <span class="tk-fn">handler</span>(<span class="tk-v">ctx</span>) {
+    <span class="tk-v">ctx</span>.<span class="tk-fn">useAgent</span>({ … })
+    <span class="tk-kw">await</span> <span class="tk-v">ctx</span>.<span class="tk-v">agent</span>.<span class="tk-fn">run</span>()
+  },
+})</code></pre>
+            </div>
+          </div>
+
+          <div class="rt-conn">
+            <div class="rt-conn-arrow" aria-hidden="true">
+              <svg viewBox="0 0 56 12" xmlns="http://www.w3.org/2000/svg">
+                <line x1="8" y1="6" x2="48" y2="6" stroke="currentColor" stroke-width="1" />
+                <polyline points="12,2 8,6 12,10" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" />
+                <polyline points="44,2 48,6 44,10" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+            </div>
+            <ul class="rt-conn-labels mono">
+              <li>wake</li>
+              <li>register</li>
+              <li>ack</li>
+            </ul>
+          </div>
+
+          <div class="rt-box rt-box-server">
+            <div class="stack-label">Server</div>
+            <div class="stack-examples">lifecycle · routing · scheduler</div>
+            <div class="rt-subsection">
+              <div class="rt-sublabel mono">Agents</div>
+              <div class="rt-instances">
+                <div class="rt-instance"><span class="rt-dot live" />/assistant/r-1</div>
+                <div class="rt-instance"><span class="rt-dot idle" />/assistant/r-2</div>
+                <div class="rt-instance"><span class="rt-dot live" />/coder/refactor</div>
+                <div class="rt-instance"><span class="rt-dot idle" />/researcher/x</div>
+              </div>
+            </div>
+            <div class="rt-streams">
+              <div class="rt-sublabel mono">Durable Streams</div>
+              <div class="rt-streams-lines">
+                <span class="rt-stream-line" />
+                <span class="rt-stream-line" />
+                <span class="rt-stream-line" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="ea-runtime-text">
+          <h2 class="ea-section-title">Inside the runtime</h2>
+          <p class="ea-prose">Electric Agents is two pieces:</p>
+          <ul class="ea-runtime-list">
+            <li>
+              A <strong>framework</strong> in your app, where you define
+              entities and write handlers in plain TypeScript. Runs in
+              your process, so your tools and secrets stay&nbsp;yours.
+            </li>
+            <li>
+              A <strong>server</strong> that runs them, routes wakes and
+              persists every agent to its own durable stream. Owns
+              lifecycle, so your handlers don't need to stay&nbsp;alive.
+            </li>
+          </ul>
+        </div>
+      </div>
+    </Section>
+
     <!-- Section 3: Entity + Stream -->
     <Section
       id="entity-stream"
@@ -238,11 +316,103 @@ function copyInstall() {
       </div>
     </Section>
 
+    <!-- Section 8b: Three ways in -->
+    <Section
+      id="three-ways"
+      title="Three ways&nbsp;in"
+      subtitle="Once your handlers are registered, talk to the runtime however&nbsp;suits&nbsp;you."
+    >
+      <div class="ea-ways">
+        <div class="ea-way">
+          <div class="ea-way-header">
+            <span class="ea-way-eyebrow mono">CLI</span>
+            <h3 class="ea-way-title">From the&nbsp;terminal</h3>
+          </div>
+          <p class="ea-way-prose">
+            Spawn entities, send messages, list what's running, and tail an
+            entity's stream live — with reasoning, tool calls and text rendered
+            inline.
+          </p>
+          <div class="ea-way-preview cli-preview">
+            <div class="cli-header">Terminal</div>
+            <div class="cli-body">
+              <div class="cli-line"><span class="cli-prompt">$</span> darix spawn /assistant/research-1</div>
+              <div class="cli-output">✓ Spawned /assistant/research-1</div>
+              <div class="cli-line"><span class="cli-prompt">$</span> darix send /assistant/research-1 "summarise the docs"</div>
+              <div class="cli-output">→ message delivered, entity woke</div>
+              <div class="cli-line"><span class="cli-prompt">$</span> darix observe /assistant/research-1</div>
+              <div class="cli-output">← reasoning · tool_call(read_file) · text…</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="ea-way">
+          <div class="ea-way-header">
+            <span class="ea-way-eyebrow mono">Desktop app</span>
+            <h3 class="ea-way-title">Observe and&nbsp;chat</h3>
+          </div>
+          <p class="ea-way-prose">
+            Browse running entities, watch their timelines update in real time,
+            inspect tool calls, and send follow-up messages — all from a
+            cross-platform desktop&nbsp;app.
+          </p>
+          <div class="ea-way-preview app-preview" role="img" aria-label="Desktop app preview">
+            <div class="app-chrome">
+              <span class="app-dot" />
+              <span class="app-dot" />
+              <span class="app-dot" />
+            </div>
+            <div class="app-body">
+              <div class="app-sidebar">
+                <div class="app-sidebar-row active"><span class="status-dot live" /> assistant/research-1</div>
+                <div class="app-sidebar-row"><span class="status-dot idle" /> assistant/support-bot</div>
+                <div class="app-sidebar-row"><span class="status-dot idle" /> researcher/r-2</div>
+                <div class="app-sidebar-row"><span class="status-dot live" /> coder/refactor</div>
+              </div>
+              <div class="app-main">
+                <div class="app-msg user">summarise the docs</div>
+                <div class="app-msg agent">
+                  <div class="app-msg-tool mono">↳ read_file("docs/intro.md")</div>
+                  <div class="app-msg-text">The docs cover three primary surfaces…</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="ea-way">
+          <div class="ea-way-header">
+            <span class="ea-way-eyebrow mono">TypeScript</span>
+            <h3 class="ea-way-title">From your&nbsp;app</h3>
+          </div>
+          <p class="ea-way-prose">
+            Embed agent control directly in your code: spawn and send from any
+            TypeScript service, and render an entity's live stream in React
+            with the <code>useChat</code>&nbsp;hook.
+          </p>
+          <div class="ea-way-preview ts-preview">
+            <div class="code-file-header">app.tsx</div>
+            <pre class="code-block tabbed"><code><span class="tk-kw">import</span> { <span class="tk-v">createDarixClient</span> } <span class="tk-kw">from</span> <span class="tk-str">"electric-agents"</span>
+<span class="tk-kw">import</span> { <span class="tk-v">useChat</span> } <span class="tk-kw">from</span> <span class="tk-str">"electric-agents/react"</span>
+
+<span class="tk-kw">const</span> <span class="tk-v">client</span> = <span class="tk-fn">createDarixClient</span>({ <span class="tk-prop">baseUrl</span>: <span class="tk-v">DARIX_URL</span> })
+<span class="tk-kw">await</span> <span class="tk-v">client</span>.<span class="tk-fn">spawn</span>(<span class="tk-str">"/assistant/research-1"</span>)
+
+<span class="tk-kw">function</span> <span class="tk-fn">Chat</span>() {
+  <span class="tk-kw">const</span> { <span class="tk-v">messages</span>, <span class="tk-v">send</span> } = <span class="tk-fn">useChat</span>(<span class="tk-str">"/assistant/research-1"</span>)
+  <span class="tk-kw">return</span> &lt;<span class="tk-v">Timeline</span> <span class="tk-prop">messages</span>={<span class="tk-v">messages</span>} <span class="tk-prop">onSend</span>={<span class="tk-v">send</span>} /&gt;
+}</code></pre>
+          </div>
+        </div>
+      </div>
+    </Section>
+
     <!-- Section 9: First Agent -->
     <Section
       id="first-agent"
       title="Your first agent in 10 lines"
       subtitle="Define an entity type. Write a handler. Deploy."
+      :dark="true"
     >
       <div class="ea-first-agent">
         <div class="ea-annotated-code">
@@ -1404,6 +1574,473 @@ function copyInstall() {
   }
 }
 
+/* --- Inside the runtime --- */
+.ea-runtime {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 56px;
+  align-items: flex-start;
+}
+
+.ea-runtime-text {
+  min-width: 0;
+}
+.ea-runtime-text .ea-section-title {
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--ea-text-1);
+  margin: 0 0 20px;
+}
+.ea-runtime-text .ea-prose + .ea-prose {
+  margin-top: 14px;
+}
+.ea-runtime-list {
+  list-style: none;
+  margin: 10px 0 18px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.ea-runtime-list li {
+  position: relative;
+  padding-left: 16px;
+  color: var(--ea-text-2);
+  font-size: 15px;
+  line-height: 1.6;
+}
+.ea-runtime-list li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.65em;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--vp-c-brand-1);
+}
+.ea-runtime-list li strong {
+  color: var(--ea-text-1);
+}
+
+/* Diagram: two boxes either side of a connector — same vocab as .stack-box */
+.ea-runtime-diagram {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: stretch;
+  min-width: 0;
+}
+
+.rt-box {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 20px;
+  border: 1px solid var(--ea-divider);
+  border-radius: 8px;
+  background: var(--ea-surface);
+  text-align: center;
+  min-width: 0;
+}
+
+.rt-box .stack-label {
+  font-family: var(--vp-font-family-mono);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ea-text-1);
+}
+.rt-box .stack-examples {
+  font-size: 12px;
+  color: var(--ea-text-2);
+  margin-top: -8px;
+}
+
+/* Code card inside the framework box */
+.rt-code-card {
+  text-align: left;
+}
+.rt-code-card .code-file-header {
+  border-radius: 8px 8px 0 0;
+}
+.rt-code-card .code-block {
+  font-size: 12.5px;
+  line-height: 1.6;
+  padding: 12px 14px;
+  border-radius: 0 0 8px 8px;
+}
+
+/* Connector between boxes — bidirectional arrow with stacked labels */
+.rt-conn {
+  align-self: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+}
+.rt-conn-arrow {
+  color: var(--ea-text-3);
+  line-height: 0;
+}
+.rt-conn-arrow svg {
+  width: 56px;
+  height: 12px;
+  display: block;
+}
+.rt-conn-labels {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  text-align: center;
+  font-size: 10.5px;
+  line-height: 1.5;
+  letter-spacing: 0.04em;
+  color: var(--ea-text-3);
+}
+.rt-conn-labels li {
+  margin: 0;
+}
+
+/* Server box internals */
+.rt-subsection {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  text-align: left;
+}
+.rt-sublabel {
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ea-text-3);
+}
+.rt-instances {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 8px;
+  text-align: left;
+}
+.rt-instance {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  font-family: var(--vp-font-family-mono);
+  font-size: 11.5px;
+  color: var(--ea-text-2);
+  background: var(--ea-bg);
+  border: 1px solid var(--ea-divider);
+  border-radius: 6px;
+}
+.rt-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.rt-dot.live {
+  background: var(--vp-c-brand-1);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--vp-c-brand-1) 18%, transparent);
+}
+.rt-dot.idle {
+  background: var(--ea-text-3);
+  opacity: 0.5;
+}
+
+.rt-streams {
+  margin-top: auto;
+  padding: 10px 12px;
+  border: 1px solid var(--ea-divider);
+  border-radius: 6px;
+  background: var(--ea-bg);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-align: left;
+}
+.rt-streams .rt-sublabel {
+  white-space: nowrap;
+}
+.rt-streams-lines {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.rt-stream-line {
+  display: block;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--ea-divider);
+  opacity: 0.7;
+}
+.rt-stream-line:nth-child(2) { width: 86%; opacity: 0.5; }
+.rt-stream-line:nth-child(3) { width: 92%; opacity: 0.4; }
+
+@media (max-width: 1024px) {
+  .ea-runtime {
+    grid-template-columns: 1fr;
+    gap: 36px;
+  }
+}
+@media (max-width: 700px) {
+  .ea-runtime-diagram {
+    grid-template-columns: 1fr;
+  }
+  .rt-conn {
+    justify-self: center;
+    flex-direction: row;
+    align-items: center;
+    padding: 18px 0;
+    gap: 14px;
+  }
+  .rt-conn-arrow {
+    position: relative;
+    width: 16px;
+    height: 64px;
+  }
+  .rt-conn-arrow svg {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 64px;
+    height: 16px;
+    transform: translate(-50%, -50%) rotate(90deg);
+  }
+  .rt-conn-labels {
+    text-align: left;
+  }
+}
+@media (max-width: 480px) {
+  .rt-instances {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* --- Three ways in --- */
+.ea-ways {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 24px;
+}
+.ea-way {
+  display: flex;
+  flex-direction: column;
+  padding: 24px;
+  border: 1px solid var(--ea-divider);
+  border-radius: 12px;
+  background: var(--ea-surface);
+  min-width: 0;
+}
+.ea-way-preview {
+  min-width: 0;
+}
+.ea-way-preview > * {
+  min-width: 0;
+}
+.ea-way-header {
+  margin-bottom: 12px;
+}
+.ea-way-eyebrow {
+  display: inline-block;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--vp-c-brand-1);
+  margin-bottom: 6px;
+}
+.ea-way-title {
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--ea-text-1);
+  margin: 0;
+}
+.ea-way-prose {
+  font-size: 14.5px;
+  line-height: 1.55;
+  color: var(--ea-text-2);
+  margin: 0 0 18px;
+}
+.ea-way-prose code {
+  font-family: var(--vp-font-family-mono);
+  font-size: 0.9em;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--ea-surface-alt);
+  color: var(--ea-text-1);
+}
+.ea-way-preview {
+  margin-top: auto;
+  border: 1px solid var(--ea-divider);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--ea-surface-alt);
+  flex: 1 0 240px;
+  display: flex;
+  flex-direction: column;
+}
+
+/* CLI preview (reuses existing .cli-* tokens) */
+.ea-way .cli-preview {
+  background: transparent;
+}
+.ea-way .cli-body {
+  font-size: 12px;
+  padding: 12px 14px;
+  flex: 1;
+}
+.ea-way .cli-line,
+.ea-way .cli-output {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Desktop app mock */
+.app-chrome {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 14px;
+  background: var(--ea-surface);
+  border-bottom: 1px solid var(--ea-divider);
+}
+.dark .app-chrome {
+  background: var(--ea-surface-alt);
+}
+.app-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--ea-divider);
+}
+.app-body {
+  display: grid;
+  grid-template-columns: 130px 1fr;
+  flex: 1;
+  min-height: 0;
+}
+.app-sidebar {
+  border-right: 1px solid var(--ea-divider);
+  padding: 10px 8px;
+  background: var(--ea-surface);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.dark .app-sidebar {
+  background: var(--ea-surface-alt);
+}
+.app-sidebar-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  color: var(--ea-text-2);
+  padding: 4px 6px;
+  border-radius: 4px;
+  font-family: var(--vp-font-family-mono);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.app-sidebar-row.active {
+  background: color-mix(in srgb, var(--vp-c-brand-1) 12%, transparent);
+  color: var(--ea-text-1);
+}
+.status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.status-dot.live {
+  background: var(--vp-c-brand-1);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--vp-c-brand-1) 22%, transparent);
+}
+.status-dot.idle {
+  background: var(--ea-text-3);
+  opacity: 0.55;
+}
+.app-main {
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--ea-surface);
+  min-width: 0;
+  overflow: hidden;
+}
+.dark .app-main {
+  background: var(--ea-bg);
+}
+.app-msg {
+  font-size: 10.5px;
+  line-height: 1.5;
+  padding: 6px 9px;
+  border-radius: 6px;
+  border: 1px solid var(--ea-divider);
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+.app-msg.user {
+  align-self: flex-end;
+  max-width: 80%;
+  background: color-mix(in srgb, var(--vp-c-brand-1) 8%, transparent);
+  border-color: color-mix(in srgb, var(--vp-c-brand-1) 25%, transparent);
+  color: var(--ea-text-1);
+}
+.app-msg.agent {
+  background: var(--ea-surface-alt);
+  color: var(--ea-text-1);
+}
+.app-msg-tool,
+.app-msg-text,
+.app-msg.user {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.app-msg-tool {
+  font-size: 9.5px;
+  color: var(--ea-text-3);
+  margin-bottom: 3px;
+}
+.app-msg-text {
+  color: var(--ea-text-2);
+}
+
+/* TypeScript code preview (reuses .code-* tokens) */
+.ts-preview .code-block {
+  border-radius: 0;
+  border: none;
+  font-size: 11.5px;
+  line-height: 1.55;
+  padding: 12px 14px;
+  margin: 0;
+  flex: 1;
+}
+.ts-preview .code-file-header {
+  border-radius: 0;
+  border: none;
+  border-bottom: 1px solid var(--ea-divider);
+}
+
+@media (max-width: 900px) {
+  .ea-ways {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+}
+@media (max-width: 480px) {
+  .ea-way {
+    padding: 20px;
+  }
+}
+
 /* ── Responsive ────────────────────────────────────────────────────── */
 
 @media (max-width: 768px) {
@@ -1503,7 +2140,8 @@ function copyInstall() {
   }
   .ea-durable-text .ea-section-title,
   .ea-scale-text .ea-section-title,
-  .ea-come-online-text .ea-section-title {
+  .ea-come-online-text .ea-section-title,
+  .ea-runtime-text .ea-section-title {
     font-size: 22px;
   }
   .code-block {

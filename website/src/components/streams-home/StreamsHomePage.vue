@@ -118,7 +118,9 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
             Every prompt, generation, tool call and result is appended at a
             known <strong>offset</strong> on a durable&nbsp;stream. Each
             segment is an addressable position &mdash; one you can replay
-            from, branch off, or fan out to anyone&nbsp;watching.
+            from, branch off, or fan out to anyone&nbsp;watching. Underneath,
+            it's just an append-only HTTP log: <code>POST</code> to write,
+            <code>GET</code> to&nbsp;read.
           </p>
         </div>
         <div class="ds-split-demo">
@@ -127,11 +129,63 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
       </div>
     </EaSection>
 
-    <!-- ───────────────── §2 — Streaming needs to be durable ───────────────── -->
+    <!-- ───────────────── §1.6 — Durable Sessions (moved up, dark) ─────────────────
+         Continues the AI-loop story from §1.5: once the loop is a stream,
+         many humans and agents can attach to the same one. Promoting this
+         section keeps the AI angle front-loaded for the first three
+         sections before we pivot to the general streaming pain. -->
+    <EaSection id="durable-sessions" :dark="true">
+      <div class="ds-split ds-split--demo-2x">
+        <div class="ds-split-demo">
+          <CollabSessionDemo />
+        </div>
+        <div class="ds-split-text">
+          <h2 class="ea-section-title">
+            Durable Sessions: multi-user,&nbsp;multi-agent
+          </h2>
+          <p class="ea-section-subtitle">
+            One session URL. Many humans, many agents, many devices. Everyone
+            reads and writes the same durable stream — and catches up from any
+            offset.
+          </p>
+          <p class="ds-detail-link">
+            <a href="/blog/2026/01/12/durable-sessions-for-collaborative-ai">
+              Read Durable Sessions for Collaborative&nbsp;AI →
+            </a>
+          </p>
+        </div>
+      </div>
+    </EaSection>
+
+    <!-- ───────────────── §3 — 30-second tour (promoted above §2) ─────────────────
+         After two sections of AI-loop framing the reader needs a concrete
+         "here's what a stream actually is" beat. Four curl commands —
+         create / append / read / tail — answer that without any AI vocab.
+         It also primes §2 below: once you've seen POST/GET work, the
+         "but bare SSE breaks because…" pivot lands harder. -->
+    <EaSection
+      id="thirty-second-tour"
+      title="The 30-second&nbsp;tour"
+      subtitle="Four curl commands. Create a stream, append a message, read it back, then tail it&nbsp;live."
+    >
+      <QuickstartPlaybackDemo />
+      <p class="ds-tour-footer">
+        Run this yourself →
+        <a href="/docs/streams/quickstart"><code>/docs/streams/quickstart</code></a>
+      </p>
+    </EaSection>
+
+    <!-- ───────────────── §2 — Streaming needs to be durable ─────────────────
+         Now the reader has seen what a stream IS (the tour above), so the
+         pivot from "look how easy" to "but doing this with bare SSE
+         breaks" carries weight. Dark background suits the heavier
+         "problem zone" beat and keeps the alternation clean (light tour
+         → dark pain → light properties below). -->
     <EaSection
       id="durable-pain"
       title="Streaming needs to be&nbsp;durable"
       subtitle="SSE drops on a refresh. Tokens get lost on flaky networks. Resuming means re-running the request and re-billing the&nbsp;LLM."
+      :dark="true"
     >
       <p class="ea-prose ds-pain-intro">
         Real apps need streams that <strong>survive&nbsp;disconnects</strong>,
@@ -140,20 +194,6 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
         <strong>Electric&nbsp;Stream</strong>&nbsp;is.
       </p>
       <ConnectionDropDemo />
-    </EaSection>
-
-    <!-- ───────────────── §3 — 30-second tour ───────────────── -->
-    <EaSection
-      id="thirty-second-tour"
-      title="The 30-second&nbsp;tour"
-      subtitle="Four curl commands. Create a stream, append a message, read it back, then tail it&nbsp;live."
-      :dark="true"
-    >
-      <QuickstartPlaybackDemo />
-      <p class="ds-tour-footer">
-        Run this yourself →
-        <a href="/docs/streams/quickstart"><code>/docs/streams/quickstart</code></a>
-      </p>
     </EaSection>
 
     <!-- ───────────────── §4 — Three properties ───────────────── -->
@@ -202,30 +242,6 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
       subtitle="Pick the layer you need. Bytes → JSON messages → typed CRUD events → reactive type-safe DB. Every layer above adds power; every layer below stays available to drop down&nbsp;to."
     >
       <LayersGrid />
-    </EaSection>
-
-    <!-- ───────────────── §9 — Durable Sessions ───────────────── -->
-    <EaSection id="durable-sessions">
-      <div class="ds-split ds-split--demo-2x">
-        <div class="ds-split-text">
-          <h2 class="ea-section-title">
-            Durable Sessions: multi-user,&nbsp;multi-agent
-          </h2>
-          <p class="ea-section-subtitle">
-            One session URL. Many humans, many agents, many devices. Everyone
-            reads and writes the same durable stream — and catches up from any
-            offset.
-          </p>
-          <p class="ds-detail-link">
-            <a href="/blog/2026/01/12/durable-sessions-for-collaborative-ai">
-              Read Durable Sessions for Collaborative&nbsp;AI →
-            </a>
-          </p>
-        </div>
-        <div class="ds-split-demo">
-          <CollabSessionDemo />
-        </div>
-      </div>
     </EaSection>
 
     <!-- ───────────────── §11 — AI loop integrations ───────────────── -->

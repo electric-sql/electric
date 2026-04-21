@@ -1,6 +1,6 @@
 <script setup>
+import EaSection from '../../agents-home/Section.vue'
 import Backer from '../Backer.vue'
-import Section from '../Section.vue'
 
 import { data } from '../../../../data/team.data.ts'
 
@@ -25,26 +25,44 @@ select('pvh')
 select('chris')
 select('jose')
 select('adam')
-
-const actions = [
-  {
-    href: '/about/team',
-    text: 'Team',
-    theme: 'brand',
-  },
-  {
-    href: '/about/team#investors',
-    text: 'Investors',
-  },
-]
 </script>
+
+<template>
+  <EaSection>
+    <template #title> Backed by industry insiders </template>
+    <template #subtitle>
+      Built by
+      <a href="/about/team">devtools and database experts</a>. Backed by
+      <a href="/about/team#investors">industry leading founders</a>.
+    </template>
+    <div class="backers">
+      <Backer :backer="backer" :key="backer.slug" v-for="backer in backers" />
+    </div>
+    <template #actions>
+      <VPButton
+        tag="a"
+        size="medium"
+        theme="brand"
+        text="Team"
+        href="/about/team"
+      />
+      <VPButton
+        tag="a"
+        size="medium"
+        theme="alt"
+        text="Investors"
+        href="/about/team#investors"
+      />
+    </template>
+  </EaSection>
+</template>
 
 <style scoped>
 .backers {
   display: grid;
   grid-template-columns: repeat(8, minmax(0, 1fr));
   gap: 16px;
-  margin: 40px 0px 26px;
+  margin: 8px 0px;
   overflow: hidden;
 }
 @media (max-width: 1149px) {
@@ -100,17 +118,3 @@ const actions = [
   }
 }
 </style>
-
-<template>
-  <Section :actions="actions">
-    <template #title> Backed by industry insiders </template>
-    <template #tagline>
-      Built by
-      <a href="/about/team"> devtools and database experts</a>. Backed by
-      <a href="/about/team#investors"> industry leading founders</a>.
-    </template>
-    <div class="backers">
-      <Backer :backer="backer" :key="backer.slug" v-for="backer in backers" />
-    </div>
-  </Section>
-</template>

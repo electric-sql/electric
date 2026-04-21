@@ -8,6 +8,8 @@ import MultiClientPulseDemo from "./MultiClientPulseDemo.vue"
 import ShapeCarveDemo from "./ShapeCarveDemo.vue"
 import WritesLadder from "./WritesLadder.vue"
 import ComposeStackGrid from "./ComposeStackGrid.vue"
+import SyncStackDiagram from "./SyncStackDiagram.vue"
+import QueryLensDemo from "./QueryLensDemo.vue"
 
 import { data as demoData } from "../../../data/demos.data.ts"
 
@@ -62,7 +64,7 @@ const fanoutMiniDotCount = FANOUT_COLS * FANOUT_ROWS
         </p>
         <p class="sh-hero-tagline">
           A read-path sync engine for fast, collaborative apps and live agents.<br />
-          Fanned out over CDN, written through your existing&nbsp;backend.
+          Pair with <strong>TanStack&nbsp;DB</strong> or <strong>PGlite</strong>. Fanned out over CDN, written through your existing&nbsp;backend.
         </p>
 
         <div class="sh-hero-row">
@@ -124,9 +126,33 @@ const fanoutMiniDotCount = FANOUT_COLS * FANOUT_ROWS
       </div>
     </section>
 
+    <!-- ───────── Section 1.5: A complete sync stack (composition) ───────── -->
+    <EaSection id="stack">
+      <div class="sh-two-col sh-two-col-headed sh-two-col-wide-visual">
+        <div class="sh-prose-col">
+          <h2 class="sh-inline-title">A complete sync&nbsp;stack</h2>
+          <p class="ea-prose">
+            <strong>Electric Sync is two things working together:</strong>
+            a sync engine that streams shapes from Postgres, and a client
+            store that turns them into live, reactive&nbsp;data.
+          </p>
+          <p class="ea-prose">
+            Writes go through your existing API — Electric handles the read
+            path so your stack stays standard Postgres top to&nbsp;bottom.
+          </p>
+          <div class="sh-section-foot sh-section-foot-tight left">
+            <a href="#compose">See the client options&nbsp;↓</a>
+          </div>
+        </div>
+        <div class="sh-visual-col">
+          <SyncStackDiagram />
+        </div>
+      </div>
+    </EaSection>
+
     <!-- ───────────── Section 2: Online together (the problem) ───────────── -->
-    <EaSection id="online-together">
-      <div class="sh-two-col sh-two-col-headed">
+    <EaSection id="online-together" :dark="true">
+      <div class="sh-two-col sh-two-col-headed sh-two-col-reversed">
         <div class="sh-prose-col">
           <h2 class="sh-inline-title">Apps that come online&nbsp;together</h2>
           <p class="ea-prose">
@@ -152,11 +178,43 @@ const fanoutMiniDotCount = FANOUT_COLS * FANOUT_ROWS
       id="shape"
       title="Define a Shape — sync just what you&nbsp;need"
       subtitle="A Shape is a SQL query against your Postgres. Electric carves out the matching rows and keeps them live for every client that subscribes."
-      :dark="true"
     >
       <ShapeCarveDemo />
       <div class="sh-section-foot">
         <a href="/docs/guides/shapes">Read the Shapes guide →</a>
+      </div>
+    </EaSection>
+
+    <!-- ─────────── Section 3.5: Query-driven sync (the lens) ─────────── -->
+    <EaSection id="query-driven" :dark="true">
+      <div class="sh-two-col sh-two-col-headed sh-two-col-mini-visual sh-two-col-reversed">
+        <div class="sh-prose-col">
+          <h2 class="sh-inline-title">
+            Query-driven sync — your queries decide what&nbsp;loads
+          </h2>
+          <p class="ea-prose">
+            Your shape defines the <strong>outer bounds</strong> — the slice
+            of Postgres a user is allowed to see. Live queries running on
+            the client narrow that slice further, syncing only the rows
+            actually needed for the current view.
+          </p>
+          <p class="ea-prose">
+            <strong>TanStack&nbsp;DB has this built&nbsp;in.</strong> Pick
+            the sync mode that fits the work: <strong>eager</strong> to
+            preload everything for instant interactions,
+            <strong>on-demand</strong> to fetch only what the current
+            query needs, or <strong>progressive</strong> to start fast and
+            fill in the rest in the background.
+          </p>
+          <div class="sh-section-foot sh-section-foot-tight left">
+            <a href="https://tanstack.com/db/latest/docs/guides/live-queries">
+              Live queries guide&nbsp;→
+            </a>
+          </div>
+        </div>
+        <div class="sh-visual-col">
+          <QueryLensDemo />
+        </div>
       </div>
     </EaSection>
 
@@ -654,8 +712,12 @@ const fanoutMiniDotCount = FANOUT_COLS * FANOUT_ROWS
   font-size: 17px;
   color: var(--ea-text-2);
   margin: 14px auto 0;
-  max-width: 620px;
+  max-width: 640px;
   line-height: 1.6;
+}
+.sh-hero-tagline strong {
+  color: var(--ea-text-1);
+  font-weight: 600;
 }
 
 .sh-hero-row {
@@ -721,6 +783,33 @@ const fanoutMiniDotCount = FANOUT_COLS * FANOUT_ROWS
 }
 .sh-two-col-mini-visual .ea-prose {
   max-width: none;
+}
+
+/* Inverse of -mini-visual: prose ~1/3, visual ~2/3. Used by the
+   "complete sync stack" section so the diagram has room for the
+   parallel read/write columns. */
+/* Visual column is sized to the diagram; prose fills the remaining space on
+   the left. */
+.sh-two-col-wide-visual {
+  grid-template-columns: minmax(220px, 1fr) minmax(0, 560px);
+}
+.sh-two-col-wide-visual .ea-prose {
+  max-width: none;
+}
+
+/* Visual on the left, prose on the right — applied at desktop only so that
+   on mobile the section still stacks prose-first for natural reading.
+   The column widths are mirrored too so each underlying layout variant
+   keeps its intended visual size on the (now left) side. */
+@media (min-width: 961px) {
+  .sh-two-col-reversed {
+    grid-template-columns: 1.4fr minmax(260px, 1fr);
+  }
+  .sh-two-col-mini-visual.sh-two-col-reversed {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+  }
+  .sh-two-col-reversed .sh-prose-col { order: 2; }
+  .sh-two-col-reversed .sh-visual-col { order: 1; }
 }
 
 .sh-prose-col,
@@ -1460,6 +1549,8 @@ const fanoutMiniDotCount = FANOUT_COLS * FANOUT_ROWS
 
 @media (max-width: 960px) {
   .sh-two-col,
+  .sh-two-col-mini-visual,
+  .sh-two-col-wide-visual,
   .sh-scale-layout,
   .sh-first-sync-grid {
     grid-template-columns: 1fr;

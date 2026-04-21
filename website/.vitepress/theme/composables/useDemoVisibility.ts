@@ -23,6 +23,13 @@ let observer: IntersectionObserver | null = null
 // user's intent ("scroll into view") is honoured literally.
 let hasScrolled = false
 let scrollHandler: (() => void) | null = null
+let visibilityHandler: (() => void) | null = null
+
+function isTabVisible(): boolean {
+  // SSR / non-browser → assume visible so server render isn't blocked.
+  if (typeof document === `undefined`) return true
+  return document.visibilityState !== `hidden`
+}
 
 function ensureObserver() {
   if (observer || typeof IntersectionObserver === `undefined`) return
@@ -52,6 +59,18 @@ function ensureObserver() {
     }
     window.addEventListener(`scroll`, scrollHandler, { passive: true })
   }
+
+  // Pause every demo while the tab is hidden. setInterval/RAF get
+  // throttled (or in some browsers queued) when the tab loses focus,
+  // and the moment it comes back demos can race through a backlog of
+  // ticks — most visibly the streams wheel, which spins through many
+  // segments at once. Reacting to visibilitychange flips the same
+  // active flag the IntersectionObserver path uses, so each demo's
+  // existing start/stop logic just runs.
+  if (typeof document !== `undefined` && !visibilityHandler) {
+    visibilityHandler = () => pickActive()
+    document.addEventListener(`visibilitychange`, visibilityHandler)
+  }
 }
 
 function pickActive() {
@@ -59,7 +78,7 @@ function pickActive() {
   // every demo paused on initial page load even when one is partly in
   // the IO "active" band, so animations only start once the user
   // scrolls them into view.
-  if (!hasScrolled) {
+  if (!hasScrolled || !isTabVisible()) {
     for (const d of demos) d.active.value = false
     return
   }
@@ -106,6 +125,10 @@ export function useDemoVisibility(elRef: Ref<HTMLElement | undefined>) {
       if (scrollHandler && typeof window !== `undefined`) {
         window.removeEventListener(`scroll`, scrollHandler)
         scrollHandler = null
+      }
+      if (visibilityHandler && typeof document !== `undefined`) {
+        document.removeEventListener(`visibilitychange`, visibilityHandler)
+        visibilityHandler = null
       }
       hasScrolled = false
     }

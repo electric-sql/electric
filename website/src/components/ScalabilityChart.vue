@@ -37,16 +37,22 @@ export default {
     Chart.defaults.borderColor = getComputedStyleValue('--vp-c-divider')
     Chart.defaults.font = {
       ...Chart.defaults.font,
-      family: getComputedStyleValue('--vp-font-family-base'),
+      family: getComputedStyleValue('--vp-font-family-mono'),
+      size: 11,
     }
 
     const chartCanvas = ref(null)
     const chartInstance = ref(null)
 
+    /* Latency and memory series get distinct colours so all three lines
+       are readable. The cyan brand pairs with `--ea-event-tool-call`
+       (amber) — the same palette already used by the agents/streams
+       landing-page demos. */
     const brandColor1 = getComputedStyleValue('--electric-color')
     const brandColor2 = getComputedStyleValue('--vp-c-brand-1')
     const brandColor3 = getComputedStyleValue('--vp-c-brand-2')
     const brandColor4 = getComputedStyleValue('--vp-c-brand-3')
+    const memoryAccent = getComputedStyleValue('--ea-event-tool-call')
 
     const createChart = () => {
       if (chartInstance.value) {
@@ -62,7 +68,7 @@ export default {
       const memoryData = data.syncServiceMemory
 
       const latencyColor = brandColor1
-      const memoryColor = brandColor2
+      const memoryColor = memoryAccent
 
       const chart = new Chart(chartCanvas.value, {
         type: 'line',
@@ -76,7 +82,7 @@ export default {
               borderWidth: 1.5,
               backgroundColor: 'transparent',
               padding: 20,
-              pointStyle: false,
+              pointStyle: 'line',
               fill: false,
               yAxisID: 'y',
               order: 1,
@@ -99,9 +105,8 @@ export default {
               borderWidth: 1.5,
               borderColor: latencyColor,
               backgroundColor: 'transparent',
-              borderWidth: 1.5,
-              borderDash: [2, 2],
-              pointStyle: false,
+              borderDash: [4, 3],
+              pointStyle: 'line',
               fill: false,
               yAxisID: 'y',
               order: 3,
@@ -112,7 +117,7 @@ export default {
               borderColor: memoryColor,
               borderWidth: 1.5,
               backgroundColor: 'transparent',
-              pointStyle: false,
+              pointStyle: 'line',
               fill: false,
               yAxisID: 'y1',
               order: 4,
@@ -127,7 +132,10 @@ export default {
               // onClick: null, // Disable toggling datasets
               labels: {
                 color: getComputedStyleValue('--vp-c-text-2'),
-                usePointStyle: false,
+                usePointStyle: true,
+                pointStyle: 'line',
+                pointStyleWidth: 28,
+                boxHeight: 1,
                 padding: 14,
               },
             },

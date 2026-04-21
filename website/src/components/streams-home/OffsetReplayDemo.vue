@@ -923,30 +923,55 @@ const serverDots = computed(() => {
     text-align: left;
   }
 
-  /* Arrows become short vertical connectors between stacked boxes.
+  /* Arrows become real vertical connectors between the stacked boxes.
      The SVG line + animated dots are rotated 90° so the dots travel
-     top-to-bottom along the arrow, matching the new vertical flow.
-     We have to reserve vertical layout space ourselves since CSS
-     transforms don't affect flow size. */
+     top-to-bottom. The POST / GET label sits inline beside the arrow
+     (rather than above it) so it can't overlap the arrowhead, and
+     the arrow itself is long enough to span the full gap — passing
+     visually over the next box's "durable streams" / "consumer"
+     actor label and touching the top of the box below. */
   .ord-arrow {
-    flex-direction: column;
+    flex-direction: row;
     align-items: center;
     justify-content: center;
-    gap: 6px;
-    padding: 8px 0 0;
-    min-height: 60px;
+    gap: 8px;
+    padding: 0;
+    /* Row only needs to host the label; the rotated track is allowed
+       to extend visually past the row above and below using transforms. */
+    min-height: 14px;
+    /* Bumped z-index so the arrow line draws over the next actor
+       label rather than under it (no background, but keeps stacking
+       intent obvious to anyone reading the CSS). */
+    position: relative;
+    z-index: 1;
   }
   .ord-arrow-label {
     font-size: 10px;
     color: var(--ea-text-2);
-    text-align: center;
+    text-align: left;
   }
+  /* Tall, slightly thicker connector. After rotate(90deg) the track is
+     visually 44px tall × 10px wide; the trailing translate(N,0) is in
+     the rotated frame, which is the visual DOWN direction — so it
+     shifts the whole arrow downward into the next row. The values are
+     chosen so the top tip aligns with the previous box's bottom edge
+     and the arrowhead extends just past the next actor label, landing
+     at the top of the next box. */
   .ord-arrow-track {
-    width: 40px;
-    height: 8px;
+    width: 44px;
+    height: 10px;
     flex: none;
-    transform: rotate(90deg);
+    transform: rotate(90deg) translate(15px, 0);
     transform-origin: center;
+  }
+  /* Pin the visual stroke width so the line reads as a real arrow
+     even after the viewBox is squashed by preserveAspectRatio="none"
+     onto a 24×10 track (where naive 1-unit strokes would render
+     sub-pixel). */
+  .ord-arrow-line :deep(line),
+  .ord-arrow-line :deep(polyline) {
+    vector-effect: non-scaling-stroke;
+    stroke-width: 1.5;
   }
 
   /* Inline ✓ on consumer box stays anchored to top-right. */

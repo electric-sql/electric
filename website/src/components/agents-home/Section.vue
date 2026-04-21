@@ -39,11 +39,33 @@ onUnmounted(() => {
     :class="{ dark, narrow, revealed: isRevealed }"
   >
     <div class="ea-section-inner">
-      <div v-if="title" class="ea-section-header">
-        <h2 class="ea-section-title">{{ title }}</h2>
-        <p v-if="subtitle" class="ea-section-subtitle">{{ subtitle }}</p>
+      <!--
+        Header is rendered when EITHER a `title` prop is supplied (the
+        original landing-page convention) OR a #title slot is provided.
+        The slot form lets callers pass rich HTML (links, no-wrap spans,
+        gradient accents) — the homepage sections need this.
+      -->
+      <div
+        v-if="title || $slots.title || $slots.subtitle || $slots.eyebrow"
+        class="ea-section-header"
+      >
+        <div v-if="$slots.eyebrow" class="ea-section-eyebrow mono">
+          <slot name="eyebrow" />
+        </div>
+        <h2 class="ea-section-title">
+          <slot name="title">{{ title }}</slot>
+        </h2>
+        <p
+          v-if="subtitle || $slots.subtitle"
+          class="ea-section-subtitle"
+        >
+          <slot name="subtitle">{{ subtitle }}</slot>
+        </p>
       </div>
       <slot />
+      <div v-if="$slots.actions" class="ea-section-actions">
+        <slot name="actions" />
+      </div>
     </div>
   </section>
 </template>
@@ -79,6 +101,36 @@ onUnmounted(() => {
   margin-bottom: 40px;
 }
 
+/* Eyebrow chip — small uppercased mono pill with brand-coloured dot,
+   matches the landing-page section-header pattern used on `cloud-home`,
+   `streams-home` etc. Caller injects content via the #eyebrow slot;
+   we render the dot automatically. */
+.ea-section-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ea-text-3);
+  padding: 4px 10px;
+  background: var(--ea-surface-alt);
+  border: 1px solid var(--ea-divider);
+  border-radius: 999px;
+  margin-bottom: 14px;
+}
+.ea-section.dark .ea-section-eyebrow {
+  background: color-mix(in srgb, var(--ea-surface) 60%, transparent);
+}
+.ea-section-eyebrow::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--vp-c-brand-1);
+  flex-shrink: 0;
+}
+
 .ea-section-title {
   font-size: 28px;
   font-weight: 700;
@@ -95,6 +147,35 @@ onUnmounted(() => {
   margin: 12px 0 0;
   max-width: 640px;
   text-wrap: pretty;
+}
+
+.ea-section-subtitle :deep(a) {
+  color: var(--vp-c-brand-1);
+  text-decoration: none;
+  border-bottom: 1px solid
+    color-mix(in srgb, var(--vp-c-brand-1) 35%, transparent);
+}
+.ea-section-subtitle :deep(a:hover) {
+  border-bottom-color: var(--vp-c-brand-1);
+}
+
+.ea-section-title :deep(.no-wrap) {
+  white-space: nowrap;
+}
+.ea-section-subtitle :deep(.no-wrap) {
+  white-space: nowrap;
+}
+
+/*
+  Optional CTA row that sits below the section body. Mirrors the
+  Actions / VPButton row used at the bottom of every legacy
+  homepage Section so callers can opt in via the #actions slot.
+*/
+.ea-section-actions {
+  margin-top: 32px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
 }
 
 @media (max-width: 768px) {

@@ -11,7 +11,6 @@ import OpenSourceSection from './sections/OpenSourceSection.vue'
 import ScalesToSection from './sections/ScalesToSection.vue'
 import WorksWithSection from './sections/WorksWithSection.vue'
 
-import GetStartedStrap from './straps/GetStartedStrap.vue'
 import NoSilosStrap from './straps/NoSilosStrap.vue'
 
 /* HomePage is the single page component for the site root. We render every
@@ -48,12 +47,11 @@ onMounted(() => {
 
     <NoSilosStrap />
     <WorksWithSection />
-    <DeploymentSection />
     <ScalesToSection />
     <LatestNewsSection />
-    <GetStartedStrap />
     <BackedBySection />
     <OpenSourceSection />
+    <DeploymentSection />
   </div>
 </template>
 

@@ -1,6 +1,6 @@
 <script setup>
 import { reactive, onMounted } from 'vue'
-import Section from '../Section.vue'
+import EaSection from '../../agents-home/Section.vue'
 
 const repos = reactive({
   'electric-sql/electric': { stars: '9k', downloads: '' },
@@ -73,18 +73,18 @@ onMounted(async () => {
 
 .repo-card {
   padding: 20px;
-  border: 1px solid var(--vp-c-divider);
-  border-radius: 8px;
-  background: var(--vp-c-bg-soft);
+  border: 1px solid var(--ea-divider);
+  border-radius: 10px;
+  background: var(--ea-surface);
   text-decoration: none;
-  transition: border-color 0.2s, background 0.2s;
+  transition: border-color 0.2s ease, transform 0.2s ease;
   display: flex;
   flex-direction: column;
 }
 
 .repo-card:hover {
   border-color: var(--vp-c-brand-1);
-  background: color-mix(in srgb, var(--vp-c-brand-1) 4%, var(--vp-c-bg-soft));
+  transform: translateY(-2px);
 }
 
 .repo-name {
@@ -93,7 +93,7 @@ onMounted(async () => {
   gap: 10px;
   font-size: 15px;
   font-weight: 600;
-  color: var(--vp-c-text-1);
+  color: var(--ea-text-1);
   margin-bottom: 6px;
 }
 
@@ -108,7 +108,7 @@ onMounted(async () => {
   margin: 0;
   font-size: 13px;
   line-height: 1.5;
-  color: var(--vp-c-text-2);
+  color: var(--ea-text-2);
   flex: 1;
 }
 
@@ -118,7 +118,7 @@ onMounted(async () => {
   margin-top: 12px;
   font-size: 13px;
   font-family: var(--vp-font-family-mono);
-  color: var(--vp-c-text-2);
+  color: var(--ea-text-3);
   flex-wrap: wrap;
 }
 
@@ -140,11 +140,11 @@ onMounted(async () => {
 </style>
 
 <template>
-  <Section>
+  <EaSection :dark="true">
     <template #title> Fully open source </template>
-    <template #tagline>
+    <template #subtitle>
       With a thriving
-      <a href="https://discord.electric-sql.com"> open source community</a>
+      <a href="https://discord.electric-sql.com">open source community</a>
       and
       <span class="no-wrap-xs">
         millions of
@@ -197,5 +197,5 @@ onMounted(async () => {
         </div>
       </a>
     </div>
-  </Section>
+  </EaSection>
 </template>

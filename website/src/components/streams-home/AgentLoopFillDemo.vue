@@ -102,17 +102,6 @@ const FADE_TAIL = 4
 const rootRef = ref<HTMLElement>()
 const isVisible = useDemoVisibility(rootRef)
 
-const events = ref<StreamEvent[]>([])
-/* Monotonic count of activations since mount. Drives both the wheel
-   rotation and the per-blade opacity calc. We never reset this — the
-   loop just keeps going forever. */
-const activations = ref(0)
-/* Initial rotation puts CW position 0 at LEAD_ANGLE, so the very
-   first activation lights a blade in place — no spin-up. */
-const wheelRotation = ref(LEAD_ANGLE)
-let nextEventId = 0
-let seqIdx = 0
-let timer: number | null = null
 /* In-component clock — keeps timestamps plausible without leaking the
    real wall clock into the page (which would force re-render on every
    tick during SSR hydration). */
@@ -121,6 +110,31 @@ let baseTime = Date.parse("2026-04-18T11:21:50Z")
 function pad2(n: number): string {
   return String(n).padStart(2, "0")
 }
+
+function fmtTime(t: number): string {
+  const d = new Date(t)
+  return `${pad2(d.getUTCHours())}:${pad2(d.getUTCMinutes())}:${pad2(d.getUTCSeconds())}`
+}
+
+/* Pre-seed with one event + one lit blade so the demo isn't visually
+   empty before the first tick fires (the wheel/event column otherwise
+   sit blank until the user scrolls the demo into view). The seed
+   counts as the first activation: head sits at LEAD_ANGLE, blade 0 in
+   the activation order is lit, and the next tick continues the
+   SEQUENCE from index 1 (ASSISTANT_RESPONSE). */
+const events = ref<StreamEvent[]>([
+  { id: 1, type: SEQUENCE[0], time: fmtTime(baseTime) },
+])
+/* Monotonic count of activations since mount. Drives both the wheel
+   rotation and the per-blade opacity calc. We never reset this — the
+   loop just keeps going forever. */
+const activations = ref(1)
+/* Initial rotation puts CW position 0 at LEAD_ANGLE, so the very
+   first activation lights a blade in place — no spin-up. */
+const wheelRotation = ref(LEAD_ANGLE)
+let nextEventId = 1
+let seqIdx = 1
+let timer: number | null = null
 
 /* Bring `target` into the [-180, 180] window around `prev` so the CSS
    transition takes the visually-shortest rotation path between ticks
@@ -135,8 +149,7 @@ function shortestRotation(target: number, prev: number): number {
 
 function tick(): void {
   baseTime += 1700 + Math.floor(Math.random() * 1300)
-  const d = new Date(baseTime)
-  const time = `${pad2(d.getUTCHours())}:${pad2(d.getUTCMinutes())}:${pad2(d.getUTCSeconds())}`
+  const time = fmtTime(baseTime)
   const type = SEQUENCE[seqIdx % SEQUENCE.length]
   seqIdx++
   events.value = [
