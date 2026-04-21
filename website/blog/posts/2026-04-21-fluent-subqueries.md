@@ -51,6 +51,20 @@ This release adds AND, OR, NOT, and NOT&nbsp;IN to subquery WHERE&nbsp;clauses. 
 
 Here's what that unlocks:
 
+### Subquery with AND
+
+<!-- AND narrows — combine a subquery with another condition. Simple,
+     common, and previously triggered a resync. -->
+
+Orders where the customer is in my region and the delivery is pending:
+
+```sql
+customer_id IN (
+  SELECT id FROM customers WHERE region_id = $1
+)
+AND delivery_status = 'pending'
+```
+
 ### Access control with OR
 
 <!-- The most common request — "sync tasks where I'm a member OR directly assigned" -->
@@ -139,14 +153,6 @@ AND (
      demand for this feature, if one exists -->
 
 All of these sync incrementally. When any dependency changes — a membership added, a share revoked, a folder archived — only the affected rows move in or out.
-
-
-## How it works
-
-<!-- Brief technical paragraph — one key insight, not a deep dive.
-     Readers who want depth can check the PR. -->
-
-The client protocol now uses tags based on the DNF (Disjunctive Normal Form) decomposition of the WHERE&nbsp;clause. The sync service tracks exactly which conditions each row satisfies, so it can determine precisely which rows to move in or out when any dependency changes — without resorting to full invalidation.
 
 
 ## Get started
