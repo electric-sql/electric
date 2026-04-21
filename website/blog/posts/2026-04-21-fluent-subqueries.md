@@ -32,7 +32,7 @@ Before, anything more complicated than `x IN (SELECT ...)` handled subquery valu
      "what's new" land. Show the constraint clearly so the reader feels
      the relief when it lifts. 3 bullets max. -->
 
-Electric has supported subquery filtering since mid-2025 — sync rows where a relationship exists in another table. But real access-control logic is rarely a single condition. You need tasks where I'm a project member *or* directly assigned. You need NOT&nbsp;IN to exclude.
+Electric has supported subquery filtering since mid-2025 — sync rows where a relationship exists in another table. But real access-control logic is rarely a single condition. You need orders where the customer is in my region *and* the delivery is pending. You need tasks where I'm a project member *or* directly assigned. You need NOT&nbsp;IN to exclude.
 
 Previously, combining subqueries with boolean operators triggered HTTP&nbsp;409 — full shape invalidation and resync from scratch. For large shapes, that killed the pattern.
 
