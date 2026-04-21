@@ -112,8 +112,6 @@ All of these sync incrementally. When any dependency changes — a membership ad
 
 ## Get started
 
-This release required a client protocol update, so the new server is not compatible with older clients. The compatible client packages (`@tanstack/db >= 0.6.2` and `@tanstack/electric-db-collection >= 0.3.0`) have been available since April&nbsp;3rd — make sure all your clients are updated before upgrading the server.
-
 Update to the latest packages:
 
 ```sh
@@ -126,9 +124,12 @@ Subquery support is behind feature flags while we validate the API. Enable them 
 ELECTRIC_FEATURE_FLAGS=allow_subqueries,tagged_subqueries
 ```
 
+:::warning
+The `tagged_subqueries` flag requires a client protocol update. The new server is not compatible with older clients — make sure all your clients are on `@tanstack/db >= 0.6.2` and `@tanstack/electric-db-collection >= 0.3.0` before upgrading the server. These packages have been available since April&nbsp;3rd.
+:::
+
 :::info
-- [PR #4051](https://github.com/electric-sql/electric/pull/4051)
-- Requires `@tanstack/db >= 0.6.2` and `@tanstack/electric-db-collection >= 0.3.0`
+[PR #4051](https://github.com/electric-sql/electric/pull/4051)
 :::
 
 Then define shapes with expressive subqueries:
