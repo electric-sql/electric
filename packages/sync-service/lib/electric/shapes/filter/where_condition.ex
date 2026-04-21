@@ -14,6 +14,7 @@ defmodule Electric.Shapes.Filter.WhereCondition do
   """
 
   alias Electric.Replication.Eval.Expr
+  alias Electric.Replication.Eval.Decomposer
   alias Electric.Replication.Eval.Parser
   alias Electric.Replication.Eval.Parser.Const
   alias Electric.Replication.Eval.Parser.Func
@@ -85,7 +86,7 @@ defmodule Electric.Shapes.Filter.WhereCondition do
     end
   end
 
-  defp optimise_where(%Func{name: "and", args: [left, right]}) do
+  defp optimise_where(%Func{name: "and", args: [left, right]} = and_expr) do
     case {optimise_where(left), optimise_where(right)} do
       {%{operation: _} = optimisation, _} ->
         %{optimisation | and_where: merge_and_where(optimisation.and_where, right)}
@@ -94,7 +95,7 @@ defmodule Electric.Shapes.Filter.WhereCondition do
         %{optimisation | and_where: merge_and_where(left, optimisation.and_where)}
 
       _ ->
-        :not_optimised
+        optimise_where_dnf(and_expr)
     end
   end
 
@@ -156,6 +157,18 @@ defmodule Electric.Shapes.Filter.WhereCondition do
 
   defp optimise_where(_), do: :not_optimised
 
+  defp optimise_where_dnf(eval) do
+    with {:ok, %{disjuncts: [_, _ | _] = disjuncts, subexpressions: subexpressions}} <-
+           Decomposer.decompose(eval) do
+      disjuncts
+      |> Enum.map(&build_disjunct_expr(&1, subexpressions))
+      |> build_boolean_expr("or", &Casting.pg_or/2)
+      |> optimise_where()
+    else
+      _ -> :not_optimised
+    end
+  end
+
   defp where_expr(eval) do
     %Expr{eval: eval, used_refs: Parser.find_refs(eval), returns: :bool}
   end
@@ -185,6 +198,51 @@ defmodule Electric.Shapes.Filter.WhereCondition do
 
   defp extract_eval(%Expr{eval: eval}), do: eval
   defp extract_eval(eval), do: eval
+
+  defp build_disjunct_expr(disjunct, subexpressions) do
+    disjunct
+    |> Enum.map(fn {pos, polarity} ->
+      subexpressions
+      |> Map.fetch!(pos)
+      |> Map.fetch!(:ast)
+      |> maybe_negate(polarity)
+    end)
+    |> build_boolean_expr("and", &Casting.pg_and/2)
+  end
+
+  defp build_boolean_expr([expr], _name, _implementation), do: normalise_where(expr)
+
+  defp build_boolean_expr([first | rest], name, implementation) do
+    rest
+    |> Enum.reduce(extract_eval(first), fn expr, acc ->
+      eval = extract_eval(expr)
+
+      %Func{
+        args: [acc, eval],
+        type: :bool,
+        implementation: implementation,
+        name: name,
+        strict?: false,
+        location: min(location(acc), location(eval))
+      }
+    end)
+    |> where_expr()
+  end
+
+  defp maybe_negate(ast, :positive), do: ast
+
+  defp maybe_negate(ast, :negated) do
+    %Func{
+      implementation: &Kernel.not/1,
+      name: "not",
+      type: :bool,
+      args: [ast],
+      location: location(ast),
+      strict?: true
+    }
+  end
+
+  defp location(ast), do: Map.get(ast, :location) || 0
 
   defp subquery_optimisation(
          %Func{name: "sublink_membership_check", args: [testexpr, %Ref{path: subquery_ref}]} =

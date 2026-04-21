@@ -41,6 +41,26 @@ defmodule Electric.Shapes.FilterTest do
       refute Filter.indexed_shape?(shape)
     end
 
+    test "returns true for DNF-distributable shapes when every branch becomes indexed" do
+      shape =
+        Shape.new!("t1",
+          where: "(id = 1 OR id = 2) AND (number = 3 OR number = 4)",
+          inspector: @inspector
+        )
+
+      assert Filter.indexed_shape?(shape)
+    end
+
+    test "returns false for DNF-distributable shapes when one distributed branch is not indexed" do
+      shape =
+        Shape.new!("t1",
+          where: "(id = 1 OR number > 2) AND (number = 4 OR number < 1)",
+          inspector: @inspector
+        )
+
+      refute Filter.indexed_shape?(shape)
+    end
+
     test "returns false for shapes without an indexable where clause" do
       shape = Shape.new!("t1", inspector: @inspector)
 
@@ -498,6 +518,17 @@ defmodule Electric.Shapes.FilterTest do
           {%{"id" => "1", "number" => "4"}, false},
           {%{"id" => "3", "number" => "3"}, false}
         ]
+      },
+      %{
+        where: "(id = 1 OR id = 2) AND (number = 3 OR number = 4)",
+        records: [
+          {%{"id" => "1", "number" => "3"}, true},
+          {%{"id" => "1", "number" => "4"}, true},
+          {%{"id" => "2", "number" => "3"}, true},
+          {%{"id" => "2", "number" => "4"}, true},
+          {%{"id" => "2", "number" => "5"}, false},
+          {%{"id" => "3", "number" => "3"}, false}
+        ]
       }
     ]
 
@@ -540,6 +571,10 @@ defmodule Electric.Shapes.FilterTest do
       Shape.new!("table", where: "id = 1 OR number > 5", inspector: @inspector),
       Shape.new!("table", where: "id = 1 AND (number = 2 OR number = 3)", inspector: @inspector),
       Shape.new!("table", where: "(id = 1 OR id = 2) AND number = 3", inspector: @inspector),
+      Shape.new!("table",
+        where: "(id = 1 OR id = 2) AND (number = 3 OR number = 4)",
+        inspector: @inspector
+      ),
       Shape.new!("table", where: "id IN (1, 2, 3)", inspector: @inspector),
       Shape.new!("table", where: "id IN (4, 5)", inspector: @inspector),
       Shape.new!("table", where: "id IN (1, 2) AND number > 5", inspector: @inspector),
