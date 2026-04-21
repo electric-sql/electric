@@ -1070,11 +1070,8 @@ defmodule Electric.ShapeCacheTest do
 
       assert String.contains?(
                log,
-               "[error] No consumer process when waiting on initial snapshot creation"
+               "shape_handle=#{shape_handle} [error] No consumer process when waiting on initial snapshot creation"
              )
-
-      assert String.contains?(log, shape_handle),
-             "expected shape_handle #{shape_handle} to be present in log metadata"
 
       assert_receive {ShapeCache.ShapeCleaner, :cleanup, ^shape_handle}
       assert_receive {ShapeCache.ShapeCleaner, :cleanup, ^subshape_handle}
