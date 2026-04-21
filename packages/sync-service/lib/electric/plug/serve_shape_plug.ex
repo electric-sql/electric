@@ -63,12 +63,16 @@ defmodule Electric.Plug.ServeShapePlug do
         kind, reason ->
           stack = __STACKTRACE__
 
-          conn
-          |> handle_caught(kind, reason, stack)
-          |> emit_shape_telemetry()
+          handled_conn =
+            conn
+            |> handle_caught(kind, reason, stack)
+            |> emit_shape_telemetry()
 
-          # Reraise the error just like Plug.ErrorHandler does.
-          :erlang.raise(kind, reason, stack)
+          # Wrap `:error` reasons in Plug.Conn.WrapperError so outer layers
+          # (Sentry.PlugCapture, any upstream Plug.ErrorHandler) see the
+          # already-sent conn instead of the pre-super conn. `:throw` and
+          # `:exit` pass through unchanged.
+          Plug.Conn.WrapperError.reraise(handled_conn, kind, reason, stack)
       end
     after
       # Must run unconditionally on every path:
