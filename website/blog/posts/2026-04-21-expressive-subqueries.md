@@ -12,10 +12,10 @@ post: true
 published: true
 ---
 
-Electric 1.6 adds AND, OR, NOT, and NOT&nbsp;IN to subquery WHERE&nbsp;clauses — all syncing incrementally. No more full resyncs when dependency rows change. You can now express real-world access-control logic directly in your shape definitions, combining nested subqueries, composite keys, and boolean operators.
+Electric 1.6 adds AND, OR, NOT, and NOT&nbsp;IN to subquery WHERE&nbsp;clauses — all syncing incrementally. No more full resyncs when dependency rows change.
 
 
-## Before: one subquery, one shape
+## Before
 
 Electric has supported subquery filtering since mid-2025 — sync rows where a relationship exists in another table. But real access-control queries combine multiple conditions. You need orders where the customer is in my region *and* the delivery is pending. You need tasks where I'm a project member *or* directly assigned. You need NOT&nbsp;IN to exclude.
 
