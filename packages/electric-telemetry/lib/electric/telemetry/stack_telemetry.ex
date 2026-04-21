@@ -86,6 +86,10 @@ defmodule ElectricTelemetry.StackTelemetry do
         unit: {:native, :millisecond},
         keep: fn metadata -> metadata[:live] != true end
       ),
+      distribution("electric.shape.response_size.bytes",
+        unit: :byte,
+        tags: [:root_table, :is_live, :stack_id]
+      ),
       distribution("electric.shape_cache.create_snapshot_task.stop.duration",
         unit: {:native, :millisecond}
       ),
