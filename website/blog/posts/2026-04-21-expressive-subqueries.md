@@ -12,7 +12,7 @@ post: true
 published: true
 ---
 
-Electric 1.6 adds AND, OR, NOT, and NOT&nbsp;IN to subquery WHERE&nbsp;clauses — all syncing incrementally. No more full resyncs when dependency rows change.
+Electric 1.6 adds incremental sync for AND, OR, NOT, and NOT&nbsp;IN in subquery WHERE&nbsp;clauses. No more full resyncs when dependency rows change.
 
 
 ## Before
