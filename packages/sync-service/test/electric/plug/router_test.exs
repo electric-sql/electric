@@ -2205,6 +2205,104 @@ defmodule Electric.Plug.RouterTest do
       Electric.AdmissionControl.release(stack_id, :initial)
       Electric.AdmissionControl.release(stack_id, :initial)
     end
+
+    @tag with_sql: [
+           "INSERT INTO items VALUES (gen_random_uuid(), 'test value 1')"
+         ]
+    test "classifies requests based on shape existence, not offset value", %{
+      opts: opts,
+      stack_id: stack_id
+    } do
+      # A request for a shape that doesn't exist should be classified as :initial
+      # Pre-fill both initial admission slots so :initial requests are rejected
+      :ok = Electric.AdmissionControl.try_acquire(stack_id, :initial, max_concurrent: 2)
+      :ok = Electric.AdmissionControl.try_acquire(stack_id, :initial, max_concurrent: 2)
+      assert %{initial: 2, existing: 0} = Electric.AdmissionControl.get_current(stack_id)
+
+      conn = conn("GET", "/v1/shape?table=items&offset=-1") |> Router.call(opts)
+      assert %{status: 503} = conn
+
+      # Release permits and create the shape
+      Electric.AdmissionControl.release(stack_id, :initial)
+      Electric.AdmissionControl.release(stack_id, :initial)
+
+      conn = conn("GET", "/v1/shape?table=items&offset=-1") |> Router.call(opts)
+      assert %{status: 200} = conn
+
+      # Now the shape exists. Re-fill initial slots.
+      :ok = Electric.AdmissionControl.try_acquire(stack_id, :initial, max_concurrent: 2)
+      :ok = Electric.AdmissionControl.try_acquire(stack_id, :initial, max_concurrent: 2)
+      assert %{initial: 2, existing: 0} = Electric.AdmissionControl.get_current(stack_id)
+
+      # offset=-1 for an existing shape should be classified as :existing, not :initial
+      conn = conn("GET", "/v1/shape?table=items&offset=-1") |> Router.call(opts)
+      assert %{status: 200} = conn
+
+      # Clean up manually acquired permits
+      Electric.AdmissionControl.release(stack_id, :initial)
+      Electric.AdmissionControl.release(stack_id, :initial)
+    end
+
+    @tag with_sql: [
+           "INSERT INTO items VALUES (gen_random_uuid(), 'test value 1')"
+         ]
+    test "classifies request with dead handle as initial", %{
+      opts: opts,
+      stack_id: stack_id
+    } do
+      # Create a shape and get its handle
+      conn = conn("GET", "/v1/shape?table=items&offset=-1") |> Router.call(opts)
+      assert %{status: 200} = conn
+      shape_handle = get_resp_shape_handle(conn)
+
+      # Delete the shape so the handle becomes dead
+      Electric.ShapeCache.clean_shape(shape_handle, stack_id)
+      Process.sleep(100)
+
+      # Pre-fill both initial admission slots
+      :ok = Electric.AdmissionControl.try_acquire(stack_id, :initial, max_concurrent: 2)
+      :ok = Electric.AdmissionControl.try_acquire(stack_id, :initial, max_concurrent: 2)
+
+      # A request with a dead handle should be classified as :initial and rejected
+      conn =
+        conn("GET", "/v1/shape?table=items&offset=0_0&handle=#{shape_handle}")
+        |> Router.call(opts)
+
+      assert %{status: 503} = conn
+
+      # Clean up
+      Electric.AdmissionControl.release(stack_id, :initial)
+      Electric.AdmissionControl.release(stack_id, :initial)
+    end
+
+    @tag with_sql: [
+           "INSERT INTO items VALUES (gen_random_uuid(), 'test value 1')"
+         ]
+    test "classifies request with valid handle for live shape as existing", %{
+      opts: opts,
+      stack_id: stack_id
+    } do
+      # Create a shape and get its handle + offset
+      conn = conn("GET", "/v1/shape?table=items&offset=-1") |> Router.call(opts)
+      assert %{status: 200} = conn
+      shape_handle = get_resp_shape_handle(conn)
+      offset = get_resp_last_offset(conn)
+
+      # Pre-fill both initial admission slots
+      :ok = Electric.AdmissionControl.try_acquire(stack_id, :initial, max_concurrent: 2)
+      :ok = Electric.AdmissionControl.try_acquire(stack_id, :initial, max_concurrent: 2)
+
+      # A request with a valid handle for a live shape should be :existing
+      conn =
+        conn("GET", "/v1/shape?table=items&offset=#{offset}&handle=#{shape_handle}")
+        |> Router.call(opts)
+
+      assert conn.status in [200, 204, 304]
+
+      # Clean up
+      Electric.AdmissionControl.release(stack_id, :initial)
+      Electric.AdmissionControl.release(stack_id, :initial)
+    end
   end
 
   describe "/v1/shapes - subqueries" do
