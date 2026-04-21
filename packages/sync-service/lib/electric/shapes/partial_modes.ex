@@ -80,9 +80,9 @@ defmodule Electric.Shapes.PartialModes do
           }
         )
 
-        # Expose subset materialisation metrics as span attributes so they
-        # become queryable Honeycomb columns on the enclosing shape request
-        # span. Mirrors the telemetry event measurements above.
+        # Expose subset materialisation metrics as span attributes on the
+        # active shape_snapshot.query_fn child span so they become queryable
+        # Honeycomb columns. Mirrors the telemetry event measurements above.
         OpenTelemetry.add_span_attributes(%{
           "electric.subqueries.subset_result.bytes" => bytes,
           "electric.subqueries.subset_result.rows" => rows,
