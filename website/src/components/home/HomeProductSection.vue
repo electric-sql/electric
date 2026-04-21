@@ -51,10 +51,10 @@ const COPY: Record<Product, Copy> = {
   streams: {
     eyebrow: 'Data primitive',
     name: 'Electric Streams',
-    title: 'The data primitive for the agent loop',
+    title: 'The data primitive for the agent&nbsp;loop',
     sub: 'Persistent, addressable, real-time streams — a flexible, swiss-army-knife data primitive for agent session data.',
     cta: { text: 'Explore Streams »', href: '/streams' },
-    secondary: { text: 'Read the spec', href: 'https://durablestreams.com' },
+    secondary: { text: 'Quickstart', href: '/docs/streams/quickstart' },
     sceneSide: 'right',
   },
   sync: {

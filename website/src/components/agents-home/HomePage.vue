@@ -29,12 +29,7 @@ function copyInstall() {
       <div ref="heroInnerRef" class="ea-hero-inner">
         <h1 class="ea-hero-name">Electric <span class="ea-hero-accent">Agents</span></h1>
         <p class="ea-hero-text">
-          The runtime for long-lived agents
-        </p>
-        <p class="ea-hero-tagline">
-          Durable, composable, serverless agents — built on
-          <a href="https://durablestreams.com" class="ea-hero-link">Durable&nbsp;Streams</a>,
-          using your existing&nbsp;stack.
+          The runtime for long-lived&nbsp;agents
         </p>
         <div class="ea-hero-row">
           <div class="ea-hero-install" @click="copyInstall">
@@ -63,15 +58,15 @@ function copyInstall() {
           <h2 class="ea-section-title">Bring the agent loop&nbsp;online</h2>
           <p class="ea-prose">
             Today's agents live on your laptop or behind a chat window.
-            Real work happens inside business systems — triggered by
-            webhooks, running 24/7 without&nbsp;supervision.
+            <strong>Real work happens inside business&nbsp;systems</strong> —
+            triggered by webhooks, running 24/7 without&nbsp;supervision.
           </p>
           <p class="ea-prose">
-            <strong>Electric Agents wires agents into the systems your team
-            already runs.</strong>
-            Every agent is backed by a durable stream — sleeping when idle,
-            waking on demand, surviving restarts, and plugging straight
-            into your existing&nbsp;infrastructure.
+            Electric Agents brings durable, composable, serverless agents
+            to the infrastructure you already run. Built on
+            <a href="https://durablestreams.com">Durable&nbsp;Streams</a>,
+            every agent sleeps when idle, wakes on demand and
+            survives&nbsp;restarts.
           </p>
         </div>
         <div class="ea-come-online-visual">
@@ -675,32 +670,13 @@ function copyInstall() {
 }
 
 .ea-hero-text {
-  font-size: 22px;
+  font-size: 28px;
   font-weight: 500;
   color: var(--ea-text-1);
-  margin: 20px 0 0;
-  line-height: 1.4;
-}
-
-.ea-hero-tagline {
-  font-family: var(--vp-font-family-base);
-  font-size: 17px;
-  color: var(--ea-text-2);
-  margin: 12px auto 0;
-  max-width: 540px;
-  line-height: 1.6;
-}
-
-.ea-hero-link {
-  color: var(--vp-c-brand-1);
-  text-decoration: underline;
-  text-underline-offset: 3px;
-  text-decoration-color: color-mix(in srgb, var(--vp-c-brand-1) 40%, transparent);
-  transition: text-decoration-color 0.2s;
-}
-
-.ea-hero-link:hover {
-  text-decoration-color: var(--vp-c-brand-1);
+  margin: 24px auto 0;
+  max-width: 720px;
+  line-height: 1.35;
+  text-wrap: balance;
 }
 
 .ea-hero-row {
@@ -779,6 +755,17 @@ function copyInstall() {
   color: var(--ea-text-1);
   margin: 0 0 16px;
   max-width: 640px;
+}
+
+.ea-prose a {
+  color: var(--vp-c-brand-1);
+  text-decoration: none;
+  border-bottom: 1px solid
+    color-mix(in srgb, var(--vp-c-brand-1) 35%, transparent);
+  transition: border-bottom-color 0.2s;
+}
+.ea-prose a:hover {
+  border-bottom-color: var(--vp-c-brand-1);
 }
 
 .ea-entity-intro {
@@ -2054,10 +2041,7 @@ function copyInstall() {
     font-size: 36px;
   }
   .ea-hero-text {
-    font-size: 18px;
-  }
-  .ea-hero-tagline {
-    font-size: 15px;
+    font-size: 22px;
   }
   .ea-hero-install {
     padding: 8px 14px;
@@ -2172,10 +2156,7 @@ function copyInstall() {
     font-size: 28px;
   }
   .ea-hero-text {
-    font-size: 16px;
-  }
-  .ea-hero-tagline {
-    font-size: 14px;
+    font-size: 19px;
   }
   .ea-hero-credibility {
     font-size: 12px;

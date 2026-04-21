@@ -1,17 +1,7 @@
 <script setup lang="ts">
-import { ref } from 'vue'
 import { VPButton } from 'vitepress/theme'
 
 import HomeCompositionHero from './HomeCompositionHero.vue'
-
-const installCopied = ref(false)
-function copyInstall() {
-  navigator.clipboard.writeText('npx @electric-sql/start my-app')
-  installCopied.value = true
-  setTimeout(() => {
-    installCopied.value = false
-  }, 2000)
-}
 </script>
 
 <template>
@@ -37,48 +27,11 @@ function copyInstall() {
           </span>
         </p>
         <div class="home-hero-actions">
-          <div class="home-hero-install" @click="copyInstall">
-            <span class="home-hero-install-text">
-              <span class="home-hero-install-prompt">$</span>
-              npx&nbsp;@electric-sql/start&nbsp;my-app
-            </span>
-            <span class="home-hero-install-copy" :class="{ copied: installCopied }">
-              <svg
-                v-if="!installCopied"
-                xmlns="http://www.w3.org/2000/svg"
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              >
-                <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
-                <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
-              </svg>
-              <svg
-                v-else
-                xmlns="http://www.w3.org/2000/svg"
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              >
-                <polyline points="20 6 9 17 4 12" />
-              </svg>
-            </span>
-          </div>
           <VPButton
             tag="a"
             size="medium"
             theme="brand"
-            text="Try Electric Cloud »"
+            text="Electric Cloud »"
             href="https://dashboard.electric-sql.cloud/"
           />
         </div>
@@ -191,40 +144,6 @@ function copyInstall() {
   align-items: center;
   flex-wrap: wrap;
   gap: 12px;
-}
-
-.home-hero-install {
-  display: inline-flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 16px;
-  background: var(--ea-surface-alt);
-  border: 1px solid var(--vp-c-divider);
-  border-radius: 8px;
-  cursor: pointer;
-  transition: border-color 0.2s;
-  user-select: none;
-}
-.home-hero-install:hover {
-  border-color: var(--vp-c-brand-1);
-}
-.home-hero-install-text {
-  font-family: var(--vp-font-family-mono);
-  font-size: 13px;
-  color: var(--ea-text-1);
-  letter-spacing: -0.01em;
-}
-.home-hero-install-prompt {
-  color: var(--ea-text-2);
-  margin-right: 6px;
-}
-.home-hero-install-copy {
-  color: var(--ea-text-2);
-  display: flex;
-  transition: color 0.2s;
-}
-.home-hero-install-copy.copied {
-  color: var(--vp-c-brand-1);
 }
 
 .home-hero-scene {

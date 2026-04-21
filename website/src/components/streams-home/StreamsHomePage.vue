@@ -42,11 +42,6 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
         <p class="ds-hero-text">
           The data primitive for the agent&nbsp;loop
         </p>
-        <p class="ds-hero-tagline">
-          Persistent, addressable, real-time streams over plain HTTP. Built for
-          AI sessions, multi-user collaboration and powering
-          <a href="/agents" class="ds-hero-link">Electric&nbsp;Agents</a>.
-        </p>
 
         <div class="ds-hero-row">
           <button
@@ -115,12 +110,11 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
             The agent loop is a stream of durable&nbsp;events
           </h2>
           <p class="ea-section-subtitle">
-            Every prompt, generation, tool call and result is appended at a
-            known <strong>offset</strong> on a durable&nbsp;stream. Each
-            offset is an addressable position you can replay from, branch
-            off, or fan out to anyone&nbsp;watching. Underneath, it's an
-            append-only HTTP log: <code>POST</code> to write,
-            <code>GET</code> to&nbsp;read.
+            Every prompt, tool call and generation is appended at a known
+            <strong>offset</strong> on a persistent, real-time stream.
+            Replay from any offset, branch off, or fan out to humans,
+            agents and <a href="/agents">Electric&nbsp;Agents</a> —
+            over plain&nbsp;HTTP.
           </p>
         </div>
         <div class="ds-split-demo">
@@ -627,31 +621,13 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
 }
 
 .ds-hero-text {
-  font-size: 22px;
+  font-size: 28px;
   font-weight: 500;
   color: var(--ea-text-1);
-  margin: 20px 0 0;
-  line-height: 1.4;
-}
-
-.ds-hero-tagline {
-  font-family: var(--vp-font-family-base);
-  font-size: 17px;
-  color: var(--ea-text-2);
-  margin: 12px auto 0;
-  max-width: 580px;
-  line-height: 1.6;
-}
-
-.ds-hero-link {
-  color: var(--vp-c-brand-1);
-  text-decoration: underline;
-  text-underline-offset: 3px;
-  text-decoration-color: color-mix(in srgb, var(--vp-c-brand-1) 40%, transparent);
-  transition: text-decoration-color 0.2s;
-}
-.ds-hero-link:hover {
-  text-decoration-color: var(--vp-c-brand-1);
+  margin: 24px auto 0;
+  max-width: 720px;
+  line-height: 1.35;
+  text-wrap: balance;
 }
 
 .ds-hero-row {
@@ -1378,10 +1354,7 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
     font-size: 36px;
   }
   .ds-hero-text {
-    font-size: 18px;
-  }
-  .ds-hero-tagline {
-    font-size: 15px;
+    font-size: 22px;
   }
   .ds-hero-install {
     padding: 8px 14px;
@@ -1412,10 +1385,7 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
     font-size: 28px;
   }
   .ds-hero-text {
-    font-size: 16px;
-  }
-  .ds-hero-tagline {
-    font-size: 14px;
+    font-size: 19px;
   }
   .ds-hero-install-text {
     font-size: 12px;

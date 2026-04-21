@@ -60,11 +60,7 @@ const fanoutMiniDotCount = FANOUT_COLS * FANOUT_ROWS
           Electric <span class="sh-hero-accent">Sync</span>
         </h1>
         <p class="sh-hero-text">
-          Sync subsets of your Postgres into everything.
-        </p>
-        <p class="sh-hero-tagline">
-          A read-path sync engine for fast, collaborative apps and live agents.<br />
-          Pair with <strong>TanStack&nbsp;DB</strong> or <strong>PGlite</strong>. Fanned out over CDN, written through your existing&nbsp;backend.
+          Sync subsets of your Postgres into&nbsp;everything.
         </p>
 
         <div class="sh-hero-row">
@@ -132,13 +128,15 @@ const fanoutMiniDotCount = FANOUT_COLS * FANOUT_ROWS
         <div class="sh-prose-col">
           <h2 class="sh-inline-title">A complete sync&nbsp;stack</h2>
           <p class="ea-prose">
-            <strong>Electric Sync is two things working together:</strong>
-            a sync engine that streams shapes from Postgres, and a client
-            store that turns them into live, reactive&nbsp;data.
+            <strong>A read-path sync engine for fast, collaborative apps
+            and live agents.</strong>
+            Stream shapes from Postgres into
+            <strong>TanStack&nbsp;DB</strong> or <strong>PGlite</strong>
+            for live, reactive&nbsp;data.
           </p>
           <p class="ea-prose">
-            Writes go through your existing API. Electric handles the read
-            path. Your stack stays plain Postgres end&nbsp;to&nbsp;end.
+            Writes go through your backend. Reads fan out over CDN.
+            Your stack stays plain Postgres end&nbsp;to&nbsp;end.
           </p>
           <div class="sh-section-foot sh-section-foot-tight left">
             <a href="#compose">See the client options&nbsp;↓</a>
@@ -700,24 +698,13 @@ const fanoutMiniDotCount = FANOUT_COLS * FANOUT_ROWS
 }
 
 .sh-hero-text {
-  font-size: 22px;
+  font-size: 28px;
   font-weight: 500;
   color: var(--ea-text-1);
-  margin: 20px 0 0;
-  line-height: 1.4;
-}
-
-.sh-hero-tagline {
-  font-family: var(--vp-font-family-base);
-  font-size: 17px;
-  color: var(--ea-text-2);
-  margin: 14px auto 0;
-  max-width: 640px;
-  line-height: 1.6;
-}
-.sh-hero-tagline strong {
-  color: var(--ea-text-1);
-  font-weight: 600;
+  margin: 24px auto 0;
+  max-width: 720px;
+  line-height: 1.35;
+  text-wrap: balance;
 }
 
 .sh-hero-row {
@@ -1582,8 +1569,7 @@ const fanoutMiniDotCount = FANOUT_COLS * FANOUT_ROWS
     padding: 72px 20px 56px;
   }
   .sh-hero-name { font-size: 36px; }
-  .sh-hero-text { font-size: 18px; }
-  .sh-hero-tagline { font-size: 15px; }
+  .sh-hero-text { font-size: 22px; }
   .sh-hero-install {
     padding: 8px 14px;
     gap: 10px;
@@ -1613,8 +1599,7 @@ const fanoutMiniDotCount = FANOUT_COLS * FANOUT_ROWS
     padding: 56px 16px 40px;
   }
   .sh-hero-name { font-size: 28px; }
-  .sh-hero-text { font-size: 16px; }
-  .sh-hero-tagline { font-size: 14px; }
+  .sh-hero-text { font-size: 19px; }
   .sh-hero-install-text {
     font-size: 12px;
   }
