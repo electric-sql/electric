@@ -9,7 +9,7 @@ image: /img/blog/expressive-subqueries/header.jpg
 tags: [release, postgres-sync, shapes]
 outline: [2, 3]
 post: true
-published: false
+published: true
 ---
 
 Electric shapes now support expressive subqueries. This release adds AND, OR, NOT, and NOT&nbsp;IN for subquery WHERE&nbsp;clauses — all with incremental sync. You can now express real-world access-control logic directly in your shape definitions, combining nested subqueries, composite keys, and boolean operators.
