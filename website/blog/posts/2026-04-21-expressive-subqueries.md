@@ -1,7 +1,7 @@
 ---
 title: 'Expressive subqueries'
 description: >-
-  Add AND, OR, NOT, and NOT IN operators to Electric shape subquery WHERE clauses. All sync incrementally with precise move-in and move-out.
+  Add AND, OR, NOT, and NOT IN operators to Electric shape subquery WHERE clauses. All sync incrementally — only affected rows move in or out.
 excerpt: >-
   Electric shapes now support AND, OR, NOT, and NOT IN in subquery WHERE clauses — all with incremental sync. Express real access-control logic directly in shape definitions.
 authors: [rob]
@@ -12,7 +12,7 @@ post: true
 published: true
 ---
 
-Electric 1.6 adds expressive subqueries. This release adds AND, OR, NOT, and NOT&nbsp;IN for subquery WHERE&nbsp;clauses — all with incremental sync. You can now express real-world access-control logic directly in your shape definitions, combining nested subqueries, composite keys, and boolean operators.
+Electric 1.6 adds AND, OR, NOT, and NOT&nbsp;IN to subquery WHERE&nbsp;clauses — all syncing incrementally. No more full resyncs when dependency rows change. You can now express real-world access-control logic directly in your shape definitions, combining nested subqueries, composite keys, and boolean operators.
 
 
 ## Before: one subquery, one shape
@@ -60,7 +60,7 @@ folder_id NOT IN (
 
 ### Nested subqueries with boolean logic
 
-Nested subqueries were already supported, but lacked full expressiveness. Now you can combine them with boolean operators — tasks in projects belonging to my teams, excluding anything I've explicitly hidden:
+Nested subqueries were already supported, but couldn't be combined with AND, OR, or NOT. Now they can — tasks in projects belonging to my teams, excluding anything I've explicitly hidden:
 
 ```sql
 project_id IN (
@@ -75,7 +75,7 @@ AND id NOT IN (
 
 ### Composite keys with OR
 
-Composite key subqueries already worked for tuple matching. Now you can combine them with boolean logic — documents where I have the right project role, or that are explicitly shared with me:
+Composite key subqueries work for tuple matching — and now support boolean logic too. Documents where I have the right project role, or that are explicitly shared with me:
 
 ```sql
 (project_id, role) IN (
@@ -107,7 +107,7 @@ AND (
 )
 ```
 
-All of these sync incrementally. When any dependency changes — a membership added, a share revoked, a folder archived — only the affected rows sync in or out.
+When any dependency changes — a membership added, a share revoked, a folder archived — only the affected rows move in or out of the shape.
 
 
 ## Get started
