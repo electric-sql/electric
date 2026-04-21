@@ -254,24 +254,18 @@ defmodule Electric.Plug.ServeShapePlug do
 
   # Check if the shape already exists so admission control can classify
   # accurately (:initial for new shapes, :existing for known shapes).
-  # Also pre-resolves handles to save redundant lookups in load_shape.
+  #
+  # Classification is stored in conn.private without touching request.params.handle.
+  # Mutating the request handle would flip `load_shape` from the no-handle
+  # `get_or_create_shape_handle` path to the strict-match `resolve_shape_handle`
+  # path; if the shape were cleaned between the two steps the client would see a
+  # 409 refetch flow for a handle they never sent.
   defp resolve_existing_shape(%Conn{assigns: %{config: config, request: request}} = conn, _) do
     stack_id = get_in(config, [:stack_id])
 
     case Electric.Shapes.fetch_handle_by_shape(stack_id, request.params.shape_definition) do
-      {:ok, handle} ->
-        # Pre-resolve handle when client didn't provide one to save a lookup in `load_shape/2`
-        # which is called later.
-        # When client provided a handle, keep it for 409 redirect flow.
-        conn =
-          if request.params.handle,
-            do: conn,
-            else: assign(conn, :request, %{request | params: %{request.params | handle: handle}})
-
-        put_private(conn, :shape_exists?, true)
-
-      :error ->
-        put_private(conn, :shape_exists?, false)
+      {:ok, _handle} -> put_private(conn, :shape_exists?, true)
+      :error -> put_private(conn, :shape_exists?, false)
     end
   rescue
     # Narrow rescue by design: guards against the startup race where the shape cache's ETS
