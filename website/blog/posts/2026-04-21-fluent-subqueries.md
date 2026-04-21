@@ -15,9 +15,9 @@ published: false
 <!-- TLDR opener — what shipped and why it matters. No setup, no preamble.
      Tone: confident, direct. This is the pitch. -->
 
-Electric shapes now support fluent subqueries. AND, OR, NOT, IN, NOT&nbsp;IN, nested subqueries, composite keys — the full range of WHERE&nbsp;clause expressions, all with incremental sync.
+Electric shapes now fully supports fluent subqueries. AND, OR, NOT, IN, NOT&nbsp;IN, nested subqueries, composite keys — the full range of WHERE&nbsp;clause expressions, all with incremental sync.
 
-Before, only bare `x IN (SELECT ...)` worked incrementally. Anything more complex triggered a full resync. Now you can write the access-control and multi-tenant queries you'd naturally write in SQL. The sync engine handles them.
+Before, anything more complicated than `x IN (SELECT ...)` handled subquery value changes with a full resync of the shape, makeing large shapes impractical. Now you can write the access-control and multi-tenant queries you'd naturally write in SQL. The sync engine handles them.
 
 :::info
 - [PR #4051](https://github.com/electric-sql/electric/pull/4051)
@@ -32,7 +32,7 @@ Before, only bare `x IN (SELECT ...)` worked incrementally. Anything more comple
      "what's new" land. Show the constraint clearly so the reader feels
      the relief when it lifts. 3 bullets max. -->
 
-Electric has supported subquery filtering since mid-2025 — sync rows where a relationship exists in another table. But real access-control logic is rarely a single condition. You need tasks where I'm a project member *or* directly assigned. You need NOT&nbsp;IN to exclude. You need nested subqueries for hierarchical access.
+Electric has supported subquery filtering since mid-2025 — sync rows where a relationship exists in another table. But real access-control logic is rarely a single condition. You need tasks where I'm a project member *or* directly assigned. You need NOT&nbsp;IN to exclude.
 
 Previously, combining subqueries with boolean operators triggered HTTP&nbsp;409 — full shape invalidation and resync from scratch. For large shapes, that killed the pattern.
 
