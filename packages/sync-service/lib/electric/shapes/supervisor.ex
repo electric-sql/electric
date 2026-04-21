@@ -50,6 +50,9 @@ defmodule Electric.Shapes.Supervisor do
     wal_buffer_capacity = Electric.StackConfig.lookup(stack_id, :wal_buffer_capacity, 64 * 1024 * 1024)
     durable_streams_url = Electric.StackConfig.lookup(stack_id, :durable_streams_url)
     durable_streams_token = Electric.StackConfig.lookup(stack_id, :durable_streams_token)
+    durable_streams_http_client_opts =
+      Electric.StackConfig.lookup(stack_id, :durable_streams_http_client_opts, [])
+
     num_writers = Electric.StackConfig.lookup(stack_id, :durable_streams_writer_pool_size, 16)
 
     wal_buffer_spec =
@@ -66,7 +69,8 @@ defmodule Electric.Shapes.Supervisor do
            stack_id: stack_id,
            num_writers: num_writers,
            durable_streams_url: durable_streams_url,
-           durable_streams_token: durable_streams_token}
+           durable_streams_token: durable_streams_token,
+           durable_streams_http_client_opts: durable_streams_http_client_opts}
         ]
       else
         []

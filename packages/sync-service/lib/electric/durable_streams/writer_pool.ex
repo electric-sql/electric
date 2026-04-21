@@ -23,6 +23,7 @@ defmodule Electric.DurableStreams.WriterPool do
     num_writers = Keyword.get(opts, :num_writers, 4)
     url = Keyword.fetch!(opts, :durable_streams_url)
     token = Keyword.fetch!(opts, :durable_streams_token)
+    http_client_opts = Keyword.get(opts, :durable_streams_http_client_opts, [])
 
     children =
       for i <- 0..(num_writers - 1) do
@@ -31,7 +32,8 @@ defmodule Electric.DurableStreams.WriterPool do
            stack_id: stack_id,
            index: i,
            durable_streams_url: url,
-           durable_streams_token: token},
+           durable_streams_token: token,
+           durable_streams_http_client_opts: http_client_opts},
           id: {Electric.DurableStreams.Writer, i}
         )
       end

@@ -22,6 +22,7 @@ defmodule Electric.DurableStreams.StreamManager do
   def create_stream(shape_handle, opts \\ []) do
     url = Keyword.fetch!(opts, :durable_streams_url)
     token = Keyword.fetch!(opts, :durable_streams_token)
+    http_client_opts = Keyword.get(opts, :http_client_opts, [])
 
     stream_url = "#{url}/#{shape_handle}"
 
@@ -30,7 +31,8 @@ defmodule Electric.DurableStreams.StreamManager do
              {"authorization", "Bearer #{token}"},
              {"content-type", "application/json"}
            ],
-           receive_timeout: 30_000
+           receive_timeout: 30_000,
+           connect_options: http_client_opts
          ) do
       {:ok, %Req.Response{status: status} = resp} when status in 200..299 ->
         Logger.info("Created durable stream for shape #{shape_handle}")
@@ -69,12 +71,14 @@ defmodule Electric.DurableStreams.StreamManager do
   def delete_stream(shape_handle, opts \\ []) do
     url = Keyword.fetch!(opts, :durable_streams_url)
     token = Keyword.fetch!(opts, :durable_streams_token)
+    http_client_opts = Keyword.get(opts, :http_client_opts, [])
 
     stream_url = "#{url}/#{shape_handle}"
 
     case Req.delete(stream_url,
            headers: [{"authorization", "Bearer #{token}"}],
-           receive_timeout: 30_000
+           receive_timeout: 30_000,
+           connect_options: http_client_opts
          ) do
       {:ok, %Req.Response{status: status}} when status in 200..299 ->
         Logger.info("Deleted durable stream for shape #{shape_handle}")

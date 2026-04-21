@@ -1137,12 +1137,16 @@ defmodule Electric.Shapes.Consumer do
 
       url ->
         token = Electric.StackConfig.lookup!(stack_id, :durable_streams_token)
+        http_client_opts =
+          Electric.StackConfig.lookup(stack_id, :durable_streams_http_client_opts, [])
+
         Logger.debug("Creating durable stream at #{url}/#{shape_handle}")
         start = System.monotonic_time(:millisecond)
 
         case Electric.DurableStreams.StreamManager.create_stream(shape_handle,
                durable_streams_url: url,
-               durable_streams_token: token
+               durable_streams_token: token,
+               http_client_opts: http_client_opts
              ) do
           {:ok, _next_offset} ->
             elapsed = System.monotonic_time(:millisecond) - start

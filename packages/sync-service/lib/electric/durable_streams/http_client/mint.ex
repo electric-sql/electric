@@ -9,11 +9,17 @@ defmodule Electric.DurableStreams.HttpClient.Mint do
   @behaviour Electric.DurableStreams.HttpClient
 
   @impl true
-  def connect(uri, _opts \\ []) do
+  def connect(uri, opts \\ []) do
     scheme = if uri.scheme == "https", do: :https, else: :http
     port = uri.port || if(scheme == :https, do: 443, else: 80)
 
-    case Mint.HTTP2.connect(scheme, uri.host, port) do
+    connect_opts =
+      case Keyword.get(opts, :transport_opts) do
+        nil -> []
+        t when is_list(t) -> [transport_opts: t]
+      end
+
+    case Mint.HTTP2.connect(scheme, uri.host, port, connect_opts) do
       {:ok, conn} -> {:ok, conn}
       {:error, reason} -> {:error, reason}
     end

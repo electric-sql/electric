@@ -110,10 +110,13 @@ defmodule Electric.Plug.RegisterShapePlug do
 
     url = Electric.StackConfig.lookup!(stack_id, :durable_streams_url)
     token = Electric.StackConfig.lookup!(stack_id, :durable_streams_token)
+    http_client_opts =
+      Electric.StackConfig.lookup(stack_id, :durable_streams_http_client_opts, [])
 
     case Electric.DurableStreams.StreamManager.create_stream(request.handle,
            durable_streams_url: url,
-           durable_streams_token: token
+           durable_streams_token: token,
+           http_client_opts: http_client_opts
          ) do
       {:ok, next_offset} ->
         assign(conn, :stream_next_offset, next_offset)

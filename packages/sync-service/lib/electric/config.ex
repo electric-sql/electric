@@ -128,6 +128,7 @@ defmodule Electric.Config do
     durable_streams_url: nil,
     durable_streams_token: nil,
     durable_streams_service_id: nil,
+    durable_streams_http_client_opts: [],
     durable_streams_writer_pool_size: 4,
     wal_buffer_capacity: 64 * 1024 * 1024
   ]

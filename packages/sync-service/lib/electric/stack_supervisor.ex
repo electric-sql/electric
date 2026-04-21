@@ -170,6 +170,7 @@ defmodule Electric.StackSupervisor do
                  durable_streams_url: [type: {:or, [:string, nil]}, default: nil],
                  durable_streams_token: [type: {:or, [:string, nil]}, default: nil],
                  durable_streams_service_id: [type: {:or, [:string, nil]}, default: nil],
+                 durable_streams_http_client_opts: [type: :keyword_list, default: []],
                  durable_streams_writer_pool_size: [type: :pos_integer, default: 4],
                  wal_buffer_capacity: [type: :pos_integer, default: 64 * 1024 * 1024],
                  shape_db_opts: [
@@ -412,6 +413,7 @@ defmodule Electric.StackSupervisor do
            durable_streams_url: config.durable_streams_url,
            durable_streams_token: config.durable_streams_token,
            durable_streams_service_id: config.durable_streams_service_id,
+           durable_streams_http_client_opts: config.durable_streams_http_client_opts,
            durable_streams_writer_pool_size: config.durable_streams_writer_pool_size,
            wal_buffer_capacity: config.wal_buffer_capacity
          ]},

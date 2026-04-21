@@ -78,6 +78,7 @@ defmodule Electric.DurableStreams.Writer do
     index = Keyword.fetch!(opts, :index)
     url = Keyword.fetch!(opts, :durable_streams_url)
     token = Keyword.fetch!(opts, :durable_streams_token)
+    http_client_opts = Keyword.get(opts, :durable_streams_http_client_opts, [])
 
     Process.set_label({:durable_streams_writer, stack_id, index})
     Logger.metadata(stack_id: stack_id, writer_index: index)
@@ -90,6 +91,7 @@ defmodule Electric.DurableStreams.Writer do
         name: send_loop_name,
         url: url,
         auth_token: token,
+        http_client_opts: http_client_opts,
         callback_pid: self()
       )
 
