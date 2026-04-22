@@ -300,13 +300,13 @@ const fanoutMiniDotCount = FANOUT_COLS * FANOUT_ROWS
           <p class="ea-prose">
             Agents work on shared data — and they change it while users are
             still looking at it. Without sync, your UI shows stale state,
-            users have to refresh, and teams fall out of step on what every
-            agent is doing.
+            users have to refresh, and teams lose track of what each agent
+            is doing.
           </p>
           <p class="ea-prose">
-            With Electric, every user, device and teammate sees agent changes
+            With Electric, every user, device, and teammate sees agent changes
             in real time. The same shared state powers multi-tab,
-            multi-device, multi-user and multi-agent collaboration — out of
+            multi-device, multi-user, and multi-agent collaboration — out of
             the&nbsp;box.
           </p>
           <div class="sh-section-foot sh-section-foot-tight">
@@ -420,7 +420,7 @@ const fanoutMiniDotCount = FANOUT_COLS * FANOUT_ROWS
     <!-- ──────────── Section 11: First sync ──────────── -->
     <EaSection
       id="first-sync"
-      title="Your first sync in 10 lines"
+      title="Your first sync, end to end"
       subtitle="Define a shape on the server. Mount a collection on the client. Render a live query."
       :dark="true"
     >
@@ -645,7 +645,7 @@ const fanoutMiniDotCount = FANOUT_COLS * FANOUT_ROWS
 
         <div class="sh-cta-foot mono">
           Or
-          <a href="https://dashboard.electric-sql.cloud/">sign up to Electric Cloud</a>
+          <a href="https://dashboard.electric-sql.cloud/">sign up for Electric Cloud</a>
           and skip the&nbsp;ops.
         </div>
       </div>

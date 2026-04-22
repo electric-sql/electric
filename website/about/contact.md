@@ -1,35 +1,33 @@
 ---
 title: Contact
 description: >-
-  Get in touch with us by email or say hello on our community Discord.
+  Get in touch with the Electric team. We're a US Delaware corp
+  headquartered in the San Francisco Bay Area, working across US and
+  European timezones.
 image: /img/about/golden-gate-bridge.jpg
 outline: deep
 ---
 
-<figure class="page-image">
-  <a href="/img/about/golden-gate-bridge.lg.jpg" class="no-visual">
-    <img src="/img/about/golden-gate-bridge.jpg" />
-  </a>
-</figure>
+<script setup>
+import ContactCards from '../src/components/ContactCards.vue'
+import LogoDownloads from '../src/components/LogoDownloads.vue'
+import SocialLinks from '../src/components/SocialLinks.vue'
+</script>
 
 # Contact us
 
-Electric is a US Delaware corp headquartered in the San Francisco Bay Area.
-<span class="no-wrap">Our team</span> works across US and European timezones.
+Electric is a US Delaware corp headquartered in the San Francisco Bay Area. Our team works across US and European timezones.
 
-Get in touch by email on [info@electric-sql.com](mailto:info@electric-sql.com) or join our [community Discord](https://discord.electric-sql.com).
+<ContactCards />
 
-## Sales
+## Social
 
-Contact [sales@electric-sql.com](mailto:sales@electric-sql.com).
+You can also find us on:
 
-## Press
-
-Contact [press@electric-sql.com](mailto:press@electric-sql.com).
+<SocialLinks />
 
 ## Logos
 
-You can download our logo here:
+Download our logo for use in presentations, press, and integrations.
 
-- [logo](/img/brand/logo.svg) for dark backgrounds
-- [inverse logo](/img/brand/logo.inverse.svg) for light backgrounds
+<LogoDownloads />

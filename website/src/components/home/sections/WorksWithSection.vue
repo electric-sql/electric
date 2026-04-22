@@ -7,7 +7,7 @@ import WorksWithStack from '../WorksWithStack.vue'
   <EaSection :dark="true">
     <template #title>Works with your&nbsp;stack</template>
     <template #subtitle>
-      Drop Electric in next to your existing API and database. Any web
+      Drop in Electric next to your existing API and database. Any web
       framework, any client &mdash;
       <span class="no-wrap">if it speaks HTTP and JSON</span>, it
       <span class="no-wrap">speaks Electric</span>.

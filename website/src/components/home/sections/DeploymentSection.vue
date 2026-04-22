@@ -18,7 +18,7 @@ const cloudUrl = '/cloud'
 <template>
   <EaSection id="deployment">
     <template #title>
-      Managed cloud or self&#8209;host
+      Managed cloud or self&#8209;hosted
     </template>
     <template #subtitle>
       Vendor agnostic, infra agnostic. Sign up for
@@ -75,7 +75,7 @@ const cloudUrl = '/cloud'
             <h4>Local development</h4>
           </div>
           <p>
-            Spin up the starter, point at Postgres and ship a real-time
+            Spin up the starter, point it at Postgres and ship a real-time
             app on top of your existing&nbsp;stack.
           </p>
           <div class="dp-card-foot mono">

@@ -141,14 +141,14 @@ function copyInstall() {
             <li>
               A <strong>framework</strong> in your app, where you define
               entities and write handlers in plain TypeScript. Runs in
-              your process, so your tools, models and secrets
+              your process, so your tools, models, and secrets
               stay&nbsp;yours.
             </li>
             <li>
-              A <strong>server</strong> that runs them, routes wakes and
+              A <strong>server</strong> that runs, routes wakes, and
               persists every agent to its own durable stream. Owns the
               lifecycle, so your handlers don't need to stay alive
-              between&nbsp;invocations.
+              between invocations.
             </li>
           </ul>
         </div>
@@ -318,7 +318,7 @@ function copyInstall() {
     <Section
       id="three-ways"
       title="Three ways&nbsp;in"
-      subtitle="Once your handlers are registered, talk to the runtime however best&nbsp;suits&nbsp;you."
+      subtitle="Once your handlers are registered, talk to the runtime however you&nbsp;prefer."
     >
       <div class="ea-ways">
         <div class="ea-way">
@@ -328,7 +328,7 @@ function copyInstall() {
           </div>
           <p class="ea-way-prose">
             Spawn entities, send messages, list what's running, and tail an
-            entity's stream live — with reasoning, tool calls and text rendered
+            entity's stream live — with reasoning, tool calls, and text rendered
             inline.
           </p>
           <div class="ea-way-preview cli-preview">
@@ -408,7 +408,7 @@ function copyInstall() {
     <!-- Section 9: First Agent -->
     <Section
       id="first-agent"
-      title="Your first agent in 10 lines"
+      title="Your first agent, end to end"
       subtitle="Define an entity type. Write a handler. Deploy."
       :dark="true"
     >
@@ -514,7 +514,7 @@ function copyInstall() {
             tag="a"
             size="medium"
             theme="brand"
-            text="Get Started"
+            text="Get started"
             href="/docs/agents/quickstart"
           />
           <VPButton
@@ -616,7 +616,7 @@ function copyInstall() {
 
         <div class="ea-cta-foot mono">
           Or
-          <a href="https://dashboard.electric-sql.cloud/">sign up to Electric Cloud</a>
+          <a href="https://dashboard.electric-sql.cloud/">sign up for Electric Cloud</a>
           and skip the&nbsp;ops.
         </div>
       </div>

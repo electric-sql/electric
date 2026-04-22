@@ -59,7 +59,6 @@ const NAV = [
 const RESOURCES = {
   links: [
     { label: 'Team', link: '/about/team' },
-    { label: 'Careers', link: '/about/careers' },
     { label: 'Contact', link: '/about/contact' },
     { label: 'Community', link: '/about/community' },
     { label: 'LLMs / AGENTS.md', link: '/llms' },
