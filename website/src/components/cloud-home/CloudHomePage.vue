@@ -102,7 +102,7 @@ const heroInnerRef = ref<HTMLElement>()
       <p class="cl-ddn-prose">
         This allows you to scale out real-time data to
         <a href="/docs/reference/benchmarks#cloud">millions of concurrent users</a>.
-        With fast load times, low latency and consistent, low resource use.
+        With fast load times, low latency, and consistently low resource use.
       </p>
 
       <div class="cl-stat-row">

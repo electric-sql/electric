@@ -31,7 +31,7 @@ const config = pricing.config
     Pay for writes and retention. Reads&nbsp;are&nbsp;free.
   </template>
   <template #tagline>
-    <a href="/product/cloud">Electric Cloud</a> charges for data
+    <a href="/cloud">Electric Cloud</a> charges for data
     ingress and retention. Egress, fan-out, concurrent users, and data
     delivery are unlimited at no additional&nbsp;cost.
   </template>

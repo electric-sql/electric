@@ -1,18 +1,22 @@
 ---
 title: About
 description: >-
-  Electric is an open source project. We welcome new users,
-  contributors, supporters and community members.
+  Electric creates and maintains open source projects including ElectricSQL,
+  PGlite, Durable Streams, and TanStack DB. We welcome contributors and
+  community members.
 outline: deep
 ---
 
+<script setup>
+import CommunityRepoGrid from '../src/components/community/CommunityRepoGrid.vue'
+import SocialLinks from '../src/components/SocialLinks.vue'
+</script>
+
 # Community
 
-Electric is an open source project. We welcome new users, developers, contributors, advocates and <span class="no-wrap">community members :)</span>
+Electric creates and maintains a family of open source projects — ElectricSQL, PGlite, Durable Streams, and TanStack DB — all released under Apache 2.0 or MIT licenses. We welcome new users, developers, contributors, and community members.
 
-## Source code
-
-The code is at [github.com/electric-sql](https://github.com/electric-sql) released under the [Apache 2.0 License](https://github.com/electric-sql/electric/blob/main/LICENSE).
+<CommunityRepoGrid />
 
 ## Contributing
 
@@ -47,9 +51,7 @@ If you have feature requests or want to post ideas for discussion, please post o
 
 You can also find us on:
 
-- Bluesky as [@electric-sql.com](https://bsky.app/profile/@electric-sql.com) and [@pglite.dev](https://bsky.app/profile/@pglite.dev)
-- X as [@ElectricSQL](https://x.com/ElectricSQL)
-- LinkedIn as [company/ElectricSQL](https://www.linkedin.com/company/electric-sql)
+<SocialLinks />
 
 ## Wider community
 

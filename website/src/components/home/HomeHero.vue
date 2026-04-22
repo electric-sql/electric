@@ -18,7 +18,7 @@ import HomeCompositionHero from './HomeCompositionHero.vue'
         </h1>
         <p class="home-hero-sub">
           <span class="home-hero-sub-primary">
-            Agents are long-lived entities that live in the data layer.
+            Agents are long-lived entities in the data layer.
             The substrate for them is a sync&nbsp;engine.
           </span>
           <br /><br />

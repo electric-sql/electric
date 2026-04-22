@@ -110,10 +110,10 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
             The agent loop is a stream of durable&nbsp;events
           </h2>
           <p class="ea-section-subtitle">
-            Every prompt, tool call and generation is appended at a known
+            Every prompt, tool call, and generation is appended at a known
             <strong>offset</strong> on a persistent, real-time stream.
             Replay from any offset, branch off, or fan out to humans,
-            agents and <a href="/agents">Electric&nbsp;Agents</a> —
+            agents, and <a href="/agents">Electric&nbsp;Agents</a> —
             over plain&nbsp;HTTP.
           </p>
         </div>
@@ -183,7 +183,7 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
     >
       <p class="ea-prose ds-pain-intro">
         Real apps need streams that <strong>survive&nbsp;disconnects</strong>,
-        <strong>persist&nbsp;across&nbsp;sessions</strong> and let many users
+        <strong>persist&nbsp;across&nbsp;sessions</strong>, and let many users
         and agents read and write the same conversation. That's what an
         <strong>Electric&nbsp;Stream</strong>&nbsp;is.
       </p>
@@ -233,7 +233,7 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
       id="layered-stack"
       :dark="true"
       title="One protocol, four&nbsp;layers"
-      subtitle="Pick the layer you need. Bytes → JSON messages → typed CRUD events → reactive type-safe DB. Every layer above adds power; every layer below stays available to drop down&nbsp;to."
+      subtitle="Pick the layer you need. Bytes → JSON messages → typed CRUD events → reactive type-safe DB. Every layer above adds power; every layer below remains available."
     >
       <LayersGrid />
     </EaSection>
@@ -568,7 +568,7 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
 
         <div class="ds-cta-foot mono">
           Or
-          <a href="https://dashboard.electric-sql.cloud/">sign up to Electric Cloud</a>
+          <a href="https://dashboard.electric-sql.cloud/">sign up for Electric Cloud</a>
           and skip the&nbsp;ops.
         </div>
       </div>
