@@ -1,0 +1,52 @@
+services:
+  postgres:
+    image: postgres:18
+    command:
+      - postgres
+      - -c
+      - wal_level=logical
+      - -c
+      - max_connections=300
+      - -c
+      - shared_buffers=256MB
+    ports:
+      - '${PG_HOST_PORT:-5432}:5432'
+    environment:
+      POSTGRES_DB: electric_agents
+      POSTGRES_USER: electric_agents
+      POSTGRES_PASSWORD: electric_agents
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U electric_agents']
+      interval: 1s
+      timeout: 5s
+      retries: 30
+    volumes:
+      - pgdata:/var/lib/postgresql
+
+  electric:
+    image: electricsql/electric:latest
+    ports:
+      - '${ELECTRIC_HOST_PORT:-3060}:3000'
+    environment:
+      DATABASE_URL: postgresql://electric_agents:electric_agents@postgres:5432/electric_agents
+      ELECTRIC_INSECURE: 'true'
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    ports:
+      - '${JAEGER_UI_PORT:-16686}:16686'
+      - '${JAEGER_OTLP_HTTP_PORT:-4318}:4318'
+      - '${JAEGER_OTLP_GRPC_PORT:-4317}:4317'
+    environment:
+      COLLECTOR_OTLP_ENABLED: 'true'
+    healthcheck:
+      test: ['CMD', 'wget', '-q', '-O-', 'http://localhost:16686/']
+      interval: 2s
+      timeout: 5s
+      retries: 15
+
+volumes:
+  pgdata:

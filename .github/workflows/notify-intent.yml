@@ -22,7 +22,7 @@ on:
       - 'website/docs/**'
       - 'packages/typescript-client/src/**'
       - 'packages/y-electric/src/**'
-      - 'packages/agents-runtime/**'
+      - 'packages/agent-runtime/**'
 
 jobs:
   notify:
