@@ -10,19 +10,13 @@ import WritesLadder from "./WritesLadder.vue"
 import ComposeStackGrid from "./ComposeStackGrid.vue"
 import SyncStackDiagram from "./SyncStackDiagram.vue"
 import QueryLensDemo from "./QueryLensDemo.vue"
+import InstallPill from "../InstallPill.vue"
 
 import { data as demoData } from "../../../data/demos.data.ts"
 
 const featuredDemos = demoData.homepage_demos.slice(0, 3)
 
-const installCopied = ref(false)
-function copyInstall() {
-  navigator.clipboard?.writeText("npx @electric-sql/start my-app")
-  installCopied.value = true
-  setTimeout(() => {
-    installCopied.value = false
-  }, 1800)
-}
+const installCommand = "npx @electric-sql/start my-app"
 
 const heroInnerRef = ref<HTMLElement>()
 
@@ -64,52 +58,7 @@ const fanoutMiniDotCount = FANOUT_COLS * FANOUT_ROWS
         </p>
 
         <div class="sh-hero-install-row">
-          <button
-            class="sh-hero-install"
-            type="button"
-            @click="copyInstall"
-            :aria-label="installCopied ? 'Copied' : 'Copy install command'"
-          >
-            <span class="sh-hero-install-text">
-              <span class="sh-hero-install-prompt">$</span>
-              npx @electric-sql/start my-app
-            </span>
-            <span
-              class="sh-hero-install-copy"
-              :class="{ copied: installCopied }"
-              aria-hidden="true"
-            >
-              <svg
-                v-if="!installCopied"
-                xmlns="http://www.w3.org/2000/svg"
-                width="15"
-                height="15"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              >
-                <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
-                <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
-              </svg>
-              <svg
-                v-else
-                xmlns="http://www.w3.org/2000/svg"
-                width="15"
-                height="15"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              >
-                <polyline points="20 6 9 17 4 12" />
-              </svg>
-            </span>
-          </button>
+          <InstallPill :command="installCommand" tone="raised" />
         </div>
 
         <div class="sh-hero-row">
@@ -581,52 +530,11 @@ const fanoutMiniDotCount = FANOUT_COLS * FANOUT_ROWS
           on top of your existing&nbsp;stack.
         </p>
 
-        <button
-          class="sh-cta-install"
-          type="button"
-          @click="copyInstall"
-          :aria-label="installCopied ? 'Copied' : 'Copy install command'"
-        >
-          <span class="sh-cta-install-text">
-            <span class="sh-cta-install-prompt">$</span>
-            npx @electric-sql/start my-app
-          </span>
-          <span
-            class="sh-cta-install-copy"
-            :class="{ copied: installCopied }"
-            aria-hidden="true"
-          >
-            <svg
-              v-if="!installCopied"
-              xmlns="http://www.w3.org/2000/svg"
-              width="15"
-              height="15"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
-              <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
-              <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
-            </svg>
-            <svg
-              v-else
-              xmlns="http://www.w3.org/2000/svg"
-              width="15"
-              height="15"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
-              <polyline points="20 6 9 17 4 12" />
-            </svg>
-          </span>
-        </button>
+        <InstallPill
+          class="sh-cta-install-spacing"
+          :command="installCommand"
+          tone="sunken"
+        />
 
         <div class="sh-cta-buttons">
           <VPButton
@@ -739,41 +647,9 @@ const fanoutMiniDotCount = FANOUT_COLS * FANOUT_ROWS
   gap: 12px;
 }
 
-.sh-hero-install {
-  appearance: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 12px;
-  padding: 9px 14px;
-  background: var(--ea-surface-alt);
-  border: 1px solid var(--ea-divider);
-  border-radius: 8px;
-  cursor: pointer;
-  transition: border-color 0.2s;
-  user-select: none;
-  font: inherit;
-}
-.sh-hero-install:hover {
-  border-color: var(--vp-c-brand-1);
-}
-.sh-hero-install-text {
-  font-family: var(--vp-font-family-mono);
-  font-size: 13.5px;
-  color: var(--ea-text-1);
-  letter-spacing: -0.01em;
-}
-.sh-hero-install-prompt {
-  color: var(--ea-text-3);
-  margin-right: 4px;
-}
-.sh-hero-install-copy {
-  color: var(--ea-text-3);
-  display: flex;
-  transition: color 0.2s;
-}
-.sh-hero-install-copy.copied {
-  color: var(--vp-c-brand-1);
-}
+/* Hero install pill is rendered by the shared `<InstallPill>` component
+   in `src/components/InstallPill.vue` — pill chrome, type sizes,
+   syntax-highlighting palette and clipboard behaviour all live there. */
 
 /* ── Two-col prose+visual layout ────────────────────────────────── */
 
@@ -1496,38 +1372,13 @@ const fanoutMiniDotCount = FANOUT_COLS * FANOUT_ROWS
   max-width: 460px;
 }
 
-.sh-cta-install {
-  appearance: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 16px;
+/* Bottom CTA install pill is rendered by the shared `<InstallPill>`
+   component (see `src/components/InstallPill.vue`). The wrapper class
+   below only adds the spacing between the tagline and the pill so the
+   shared component itself stays free of layout-specific margins. */
+.sh-cta-install-spacing {
   margin-top: 28px;
-  background: var(--ea-bg);
-  border: 1px solid var(--ea-divider);
-  border-radius: 8px;
-  cursor: pointer;
-  transition: border-color 0.2s;
-  user-select: none;
-  font: inherit;
 }
-.sh-cta-install:hover { border-color: var(--vp-c-brand-1); }
-.sh-cta-install-text {
-  font-family: var(--vp-font-family-mono);
-  font-size: 13.5px;
-  color: var(--ea-text-1);
-  letter-spacing: -0.01em;
-}
-.sh-cta-install-prompt {
-  color: var(--ea-text-3);
-  margin-right: 4px;
-}
-.sh-cta-install-copy {
-  color: var(--ea-text-3);
-  display: flex;
-  transition: color 0.2s;
-}
-.sh-cta-install-copy.copied { color: var(--vp-c-brand-1); }
 
 .sh-cta-buttons {
   display: flex;
@@ -1593,13 +1444,6 @@ const fanoutMiniDotCount = FANOUT_COLS * FANOUT_ROWS
   }
   .sh-hero-name { font-size: 36px; }
   .sh-hero-text { font-size: 22px; }
-  .sh-hero-install {
-    padding: 8px 14px;
-    gap: 10px;
-  }
-  .sh-hero-install-text {
-    font-size: 13px;
-  }
   .sh-demos {
     grid-template-columns: 1fr;
   }
@@ -1624,9 +1468,6 @@ const fanoutMiniDotCount = FANOUT_COLS * FANOUT_ROWS
   }
   .sh-hero-name { font-size: 28px; }
   .sh-hero-text { font-size: 19px; }
-  .sh-hero-install-text {
-    font-size: 12px;
-  }
   /* Stack the action buttons full-width on the smallest screens so
      they don't wrap awkwardly underneath the install pill. */
   .sh-hero-row {

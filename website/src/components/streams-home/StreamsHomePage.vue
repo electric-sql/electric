@@ -14,17 +14,11 @@ import PolyglotLineup from "./PolyglotLineup.vue"
 import LayersGrid from "./LayersGrid.vue"
 import CollabSessionDemo from "./CollabSessionDemo.vue"
 import IntegrationsGrid from "./IntegrationsGrid.vue"
+import InstallPill from "../InstallPill.vue"
 
 const heroInnerRef = ref<HTMLElement>()
 
-const installCopied = ref(false)
-function copyInstall() {
-  navigator.clipboard?.writeText("npm i @durable-streams/client")
-  installCopied.value = true
-  setTimeout(() => {
-    installCopied.value = false
-  }, 1800)
-}
+const installCommand = "npm i @durable-streams/client"
 
 const stackTab = ref<"producer" | "consumer" | "curl">("producer")
 
@@ -44,52 +38,7 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
         </p>
 
         <div class="ds-hero-install-row">
-          <button
-            class="ds-hero-install"
-            type="button"
-            @click="copyInstall"
-            :aria-label="installCopied ? 'Copied' : 'Copy install command'"
-          >
-            <span class="ds-hero-install-text">
-              <span class="ds-hero-install-prompt">$</span>
-              npm i @durable-streams/client
-            </span>
-            <span
-              class="ds-hero-install-copy"
-              :class="{ copied: installCopied }"
-              aria-hidden="true"
-            >
-              <svg
-                v-if="!installCopied"
-                xmlns="http://www.w3.org/2000/svg"
-                width="15"
-                height="15"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              >
-                <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
-                <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
-              </svg>
-              <svg
-                v-else
-                xmlns="http://www.w3.org/2000/svg"
-                width="15"
-                height="15"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              >
-                <polyline points="20 6 9 17 4 12" />
-              </svg>
-            </span>
-          </button>
+          <InstallPill :command="installCommand" tone="raised" />
         </div>
 
         <div class="ds-hero-row">
@@ -504,52 +453,11 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
           stream from anywhere on the&nbsp;network.
         </p>
 
-        <button
-          class="ds-cta-install"
-          type="button"
-          @click="copyInstall"
-          :aria-label="installCopied ? 'Copied' : 'Copy install command'"
-        >
-          <span class="ds-cta-install-text">
-            <span class="ds-cta-install-prompt">$</span>
-            npm i @durable-streams/client
-          </span>
-          <span
-            class="ds-cta-install-copy"
-            :class="{ copied: installCopied }"
-            aria-hidden="true"
-          >
-            <svg
-              v-if="!installCopied"
-              xmlns="http://www.w3.org/2000/svg"
-              width="15"
-              height="15"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
-              <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
-              <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
-            </svg>
-            <svg
-              v-else
-              xmlns="http://www.w3.org/2000/svg"
-              width="15"
-              height="15"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
-              <polyline points="20 6 9 17 4 12" />
-            </svg>
-          </span>
-        </button>
+        <InstallPill
+          class="ds-cta-install-spacing"
+          :command="installCommand"
+          tone="sunken"
+        />
 
         <div class="ds-cta-buttons">
           <VPButton
@@ -662,41 +570,9 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
   gap: 12px;
 }
 
-.ds-hero-install {
-  appearance: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 16px;
-  background: var(--ea-surface-alt);
-  border: 1px solid var(--vp-c-divider);
-  border-radius: 8px;
-  cursor: pointer;
-  transition: border-color 0.2s;
-  user-select: none;
-  font: inherit;
-}
-.ds-hero-install:hover {
-  border-color: var(--vp-c-brand-1);
-}
-.ds-hero-install-text {
-  font-family: var(--vp-font-family-mono);
-  font-size: 14px;
-  color: var(--ea-text-1);
-  letter-spacing: -0.01em;
-}
-.ds-hero-install-prompt {
-  color: var(--ea-text-2);
-  margin-right: 6px;
-}
-.ds-hero-install-copy {
-  color: var(--ea-text-2);
-  display: flex;
-  transition: color 0.2s;
-}
-.ds-hero-install-copy.copied {
-  color: var(--vp-c-brand-1);
-}
+/* Hero install pill is rendered by the shared `<InstallPill>` component
+   in `src/components/InstallPill.vue` — pill chrome, type sizes,
+   syntax-highlighting palette and clipboard behaviour all live there. */
 
 /* ── §2 Pain intro ─────────────────────────────────────────────── */
 
@@ -1262,41 +1138,12 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
   max-width: 460px;
 }
 
-.ds-cta-install {
-  appearance: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 16px;
+/* Bottom CTA install pill is rendered by the shared `<InstallPill>`
+   component (see `src/components/InstallPill.vue`). The wrapper class
+   below only adds the spacing between the tagline and the pill so the
+   shared component itself stays free of layout-specific margins. */
+.ds-cta-install-spacing {
   margin-top: 28px;
-  background: var(--ea-bg);
-  border: 1px solid var(--ea-divider);
-  border-radius: 8px;
-  cursor: pointer;
-  transition: border-color 0.2s;
-  user-select: none;
-  font: inherit;
-}
-.ds-cta-install:hover {
-  border-color: var(--vp-c-brand-1);
-}
-.ds-cta-install-text {
-  font-family: var(--vp-font-family-mono);
-  font-size: 13.5px;
-  color: var(--ea-text-1);
-  letter-spacing: -0.01em;
-}
-.ds-cta-install-prompt {
-  color: var(--ea-text-3);
-  margin-right: 4px;
-}
-.ds-cta-install-copy {
-  color: var(--ea-text-3);
-  display: flex;
-  transition: color 0.2s;
-}
-.ds-cta-install-copy.copied {
-  color: var(--vp-c-brand-1);
 }
 
 .ds-cta-buttons {
@@ -1392,13 +1239,6 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
   .ds-hero-text {
     font-size: 22px;
   }
-  .ds-hero-install {
-    padding: 8px 14px;
-    gap: 10px;
-  }
-  .ds-hero-install-text {
-    font-size: 13px;
-  }
   .ds-split-text .ea-section-title {
     font-size: 22px;
   }
@@ -1438,9 +1278,6 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
   }
   .ds-hero-text {
     font-size: 19px;
-  }
-  .ds-hero-install-text {
-    font-size: 12px;
   }
   /* Drop the section title override in lockstep with the shared
      `.ea-section-title` rule in Section.vue (20px at 480px) so the

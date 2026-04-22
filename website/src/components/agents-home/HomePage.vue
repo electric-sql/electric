@@ -9,16 +9,12 @@ import AgentGridDemo from "./AgentGridDemo.vue"
 import ContextCompositionDemo from "./ContextCompositionDemo.vue"
 import HeroNetworkBg from "./HeroNetworkBg.vue"
 import SystemMonitorDemo from "./SystemMonitorDemo.vue"
+import InstallPill from "../InstallPill.vue"
 
 const stackTab = ref<"server" | "entities">("server")
 const heroInnerRef = ref<HTMLElement>()
 
-const installCopied = ref(false)
-function copyInstall() {
-  navigator.clipboard.writeText("npx electric-ax agents quickstart")
-  installCopied.value = true
-  setTimeout(() => { installCopied.value = false }, 2000)
-}
+const installCommand = "npx electric-ax agents quickstart"
 </script>
 
 <template>
@@ -29,16 +25,10 @@ function copyInstall() {
       <div ref="heroInnerRef" class="ea-hero-inner">
         <h1 class="ea-hero-name">Electric&nbsp;<span class="ea-hero-accent">Agents</span></h1>
         <p class="ea-hero-text">
-          The runtime for long-lived&nbsp;agents
+          The durable runtime for long-lived&nbsp;agents
         </p>
         <div class="ea-hero-install-row">
-          <div class="ea-hero-install" @click="copyInstall">
-            <span class="ea-hero-install-text"><span class="ea-hero-install-prompt">$</span> npx electric-ax agents quickstart</span>
-            <span class="ea-hero-install-copy" :class="{ copied: installCopied }">
-              <svg v-if="!installCopied" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
-              <svg v-else xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-            </span>
-          </div>
+          <InstallPill :command="installCommand" tone="raised" />
         </div>
 
         <div class="ea-hero-row">
@@ -73,7 +63,7 @@ function copyInstall() {
           <p class="ea-prose">
             Electric Agents brings durable, composable, serverless agents
             to the infrastructure you already run. Built on
-            <a href="https://durablestreams.com">Durable&nbsp;Streams</a>,
+            <a href="/streams">Electric&nbsp;Streams</a>,
             every agent sleeps when idle, wakes on demand and
             survives&nbsp;restarts.
           </p>
@@ -89,7 +79,7 @@ function copyInstall() {
       <div class="ea-runtime">
         <div class="ea-runtime-diagram" aria-hidden="true">
           <div class="rt-box rt-box-app">
-            <div class="stack-label">Framework</div>
+            <div class="stack-label">SDK</div>
             <div class="stack-examples">Lives in your app process</div>
             <div class="rt-code-card">
               <div class="code-file-header">agent.ts</div>
@@ -121,7 +111,7 @@ function copyInstall() {
           </div>
 
           <div class="rt-box rt-box-server">
-            <div class="stack-label">Server</div>
+            <div class="stack-label">Control plane</div>
             <div class="stack-examples">lifecycle · routing · scheduler</div>
             <div class="rt-subsection">
               <div class="rt-sublabel mono">Agents</div>
@@ -133,7 +123,7 @@ function copyInstall() {
               </div>
             </div>
             <div class="rt-streams">
-              <div class="rt-sublabel mono">Durable Streams</div>
+              <div class="rt-sublabel mono">Electric Streams</div>
               <div class="rt-streams-lines">
                 <span class="rt-stream-line" />
                 <span class="rt-stream-line" />
@@ -148,15 +138,15 @@ function copyInstall() {
           <p class="ea-prose">Electric Agents is two pieces:</p>
           <ul class="ea-runtime-list">
             <li>
-              A <strong>framework</strong> in your app, where you define
+              An <strong>SDK</strong> in your app, where you define
               entities and write handlers in plain TypeScript. Runs in
               your process, so your tools, models, and secrets
               stay&nbsp;yours.
             </li>
             <li>
-              A <strong>server</strong> that runs, routes wakes, and
-              persists every agent to its own durable stream. Owns the
-              lifecycle, so your handlers don't need to stay alive
+              A <strong>control plane</strong> that runs, routes wakes,
+              and persists every agent to its own durable stream. Owns
+              the lifecycle, so your handlers don't need to stay alive
               between invocations.
             </li>
           </ul>
@@ -197,17 +187,60 @@ function copyInstall() {
       </div>
     </Section>
 
+    <!--
+      Mid-page CTA strap. Sits after the foundational concepts
+      (entity / stream + durability) but before the more detailed
+      sections (coordination, scale-to-zero, runtime internals,
+      first-agent code) so readers who are already sold can jump
+      straight to the quickstart without scrolling the whole page.
+      Visual language matches the homepage straps (eyebrow + title +
+      tagline + buttons) so the bottom CTA feels like a callback to
+      this one rather than something new.
+    -->
+    <section class="ea-mid-strap" id="get-started-mid">
+      <div class="ea-mid-strap-inner">
+        <div class="ea-mid-strap-eyebrow mono">
+          <span class="dot"></span>
+          Ready to&nbsp;build
+        </div>
+        <h2 class="ea-mid-strap-title">
+          Ship your first durable agent in&nbsp;minutes
+        </h2>
+        <p class="ea-mid-strap-tagline">
+          Install the SDK, define an entity, deploy it on your stack &mdash;
+          on top of Electric&nbsp;Streams.
+        </p>
+        <div class="ea-mid-strap-actions">
+          <VPButton
+            tag="a"
+            size="medium"
+            theme="brand"
+            text="Quickstart"
+            href="/docs/agents/quickstart"
+          />
+          <VPButton
+            tag="a"
+            size="medium"
+            theme="alt"
+            text="Read the Docs"
+            href="/docs/agents/"
+          />
+        </div>
+      </div>
+    </section>
+
     <!-- Section 5: Coordination -->
     <Section
       id="coordination"
       title="Primitives for&nbsp;coordination"
       subtitle="Local agents compose through child processes. Electric Agents makes that pattern durable, observable, and&nbsp;serverless."
+      :dark="true"
     >
       <CoordinationDemo />
     </Section>
 
     <!-- Section 6: Scale to Zero -->
-    <Section id="scale-to-zero" :dark="true">
+    <Section id="scale-to-zero">
       <div class="ea-scale-layout">
         <div class="ea-scale-text">
           <h2 class="ea-section-title">Scale to zero. Wake on&nbsp;demand.</h2>
@@ -228,7 +261,7 @@ function copyInstall() {
     </Section>
 
     <!-- Section 7: Context Composition -->
-    <Section id="context">
+    <Section id="context" :dark="true">
       <div class="ea-context-layout">
         <div class="ea-context-demo">
           <ContextCompositionDemo />
@@ -252,7 +285,6 @@ function copyInstall() {
       id="your-stack"
       title="Your stack, not&nbsp;ours"
       subtitle="Runs on your infrastructure. Express, Next.js, Hono, TanStack Start — agents are webhook handlers. No vendor&nbsp;lock-in."
-      :dark="true"
     >
       <div class="ea-stack-layout">
         <div class="ea-stack-diagram">
@@ -273,7 +305,7 @@ function copyInstall() {
             <span class="stack-conn-label">HTTP streams</span>
           </div>
           <div class="stack-box streams-box">
-            <div class="stack-label">Durable Streams</div>
+            <div class="stack-label">Electric Streams</div>
             <div class="stack-examples">Electric Cloud or self-hosted</div>
           </div>
         </div>
@@ -328,6 +360,7 @@ function copyInstall() {
       id="three-ways"
       title="Three ways&nbsp;in"
       subtitle="Once your handlers are registered, talk to the runtime however you&nbsp;prefer."
+      :dark="true"
     >
       <div class="ea-ways">
         <div class="ea-way">
@@ -419,7 +452,6 @@ function copyInstall() {
       id="first-agent"
       title="Your first agent, end to&nbsp;end"
       subtitle="Define an entity type. Write a handler.&nbsp;Deploy."
-      :dark="true"
     >
       <div class="ea-first-agent">
         <div class="ea-annotated-code">
@@ -462,7 +494,7 @@ function copyInstall() {
               <span class="ea-ann-num">1</span>
               <div>
                 <strong>Create a registry</strong>
-                  <p>The registry holds your entity definitions and wires them to durable streams.</p>
+                  <p>The registry holds your entity definitions and wires them to Electric Streams.</p>
                 </div>
               </div>
               <div class="ea-ann-item">
@@ -538,7 +570,17 @@ function copyInstall() {
     </Section>
 
     <!-- Section 8: Get started CTA -->
-    <Section id="get-started">
+    <!--
+      Bottom CTA strap. Restyled from the boxed `.ea-cta` panel to
+      a full-bleed strap (no border / radius, just background +
+      gradient + eyebrow + title + install pill + buttons) so it
+      visually matches the homepage `AgentsCTAStrap` and the new
+      mid-page strap above. The "Or sign up to Electric Cloud and
+      skip the ops" foot line was removed — Cloud is covered in the
+      composable-stack section and we don't want to dilute the
+      single end-of-page action.
+    -->
+    <section class="ea-cta-strap" id="get-started">
       <div class="ea-cta">
         <div class="ea-cta-eyebrow mono">
           <span class="dot"></span>
@@ -552,52 +594,11 @@ function copyInstall() {
           your existing&nbsp;stack.
         </p>
 
-        <button
-          class="ea-cta-install"
-          type="button"
-          @click="copyInstall"
-          :aria-label="installCopied ? 'Copied' : 'Copy install command'"
-        >
-          <span class="ea-cta-install-text">
-            <span class="ea-cta-install-prompt">$</span>
-            npx electric-ax agents quickstart
-          </span>
-          <span
-            class="ea-cta-install-copy"
-            :class="{ copied: installCopied }"
-            aria-hidden="true"
-          >
-            <svg
-              v-if="!installCopied"
-              xmlns="http://www.w3.org/2000/svg"
-              width="15"
-              height="15"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
-              <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
-              <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
-            </svg>
-            <svg
-              v-else
-              xmlns="http://www.w3.org/2000/svg"
-              width="15"
-              height="15"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
-              <polyline points="20 6 9 17 4 12" />
-            </svg>
-          </span>
-        </button>
+        <InstallPill
+          class="ea-cta-install-spacing"
+          :command="installCommand"
+          tone="sunken"
+        />
 
         <div class="ea-cta-buttons">
           <VPButton
@@ -622,14 +623,8 @@ function copyInstall() {
             href="https://github.com/electric-sql/electric"
           />
         </div>
-
-        <div class="ea-cta-foot mono">
-          Or
-          <a href="https://dashboard.electric-sql.cloud/">sign up for Electric Cloud</a>
-          and skip the&nbsp;ops.
-        </div>
       </div>
-    </Section>
+    </section>
 
   </div>
 </template>
@@ -711,39 +706,9 @@ function copyInstall() {
   gap: 12px;
 }
 
-.ea-hero-install {
-  display: inline-flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 16px;
-  background: var(--ea-surface-alt);
-  border: 1px solid var(--vp-c-divider);
-  border-radius: 8px;
-  cursor: pointer;
-  transition: border-color 0.2s;
-  user-select: none;
-}
-.ea-hero-install:hover {
-  border-color: var(--vp-c-brand-1);
-}
-.ea-hero-install-text {
-  font-family: var(--vp-font-family-mono);
-  font-size: 14px;
-  color: var(--ea-text-1);
-  letter-spacing: -0.01em;
-}
-.ea-hero-install-prompt {
-  color: var(--ea-text-2);
-  margin-right: 6px;
-}
-.ea-hero-install-copy {
-  color: var(--ea-text-2);
-  display: flex;
-  transition: color 0.2s;
-}
-.ea-hero-install-copy.copied {
-  color: var(--vp-c-brand-1);
-}
+/* Hero install pill is rendered by the shared `<InstallPill>` component
+   in `src/components/InstallPill.vue` — pill chrome, type sizes,
+   syntax-highlighting palette and clipboard behaviour all live there. */
 
 .ea-hero-credibility {
   font-family: var(--vp-font-family-base);
@@ -776,13 +741,6 @@ function copyInstall() {
   .ea-hero-text {
     font-size: 22px;
   }
-  .ea-hero-install {
-    padding: 8px 14px;
-    gap: 10px;
-  }
-  .ea-hero-install-text {
-    font-size: 13px;
-  }
 }
 
 @media (max-width: 480px) {
@@ -795,9 +753,6 @@ function copyInstall() {
   }
   .ea-hero-text {
     font-size: 19px;
-  }
-  .ea-hero-install-text {
-    font-size: 12px;
   }
   /* Stack the action buttons full-width on the smallest screens so
      they don't wrap awkwardly underneath the install pill. */
@@ -1456,7 +1411,37 @@ function copyInstall() {
   margin-top: 40px;
 }
 
-/* --- Get started CTA --- */
+/* --- Get started CTA ---
+   Restyled to a full-bleed strap (no boxed panel) to match the
+   homepage `AgentsCTAStrap` visual language and the mid-page
+   strap above. The wrapping `<section class="ea-cta-strap">`
+   provides the background, padding and gradient; `.ea-cta`
+   itself is now just the centered content stack. */
+.ea-cta-strap {
+  position: relative;
+  padding: 96px 24px;
+  /* Uses --ea-surface-alt — slightly raised/lighter in dark mode —
+     so the page-close panel reads as a lift off the deepest page
+     surface rather than sitting at the same depth. Also matches
+     the alternation chain that continues through the flipped
+     mid-page sections above. */
+  background: var(--ea-surface-alt);
+  border-bottom: 1px solid var(--ea-divider);
+  isolation: isolate;
+  overflow: hidden;
+}
+.ea-cta-strap::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    ellipse 80% 100% at 50% 50%,
+    color-mix(in srgb, var(--vp-c-brand-1) 9%, transparent) 0%,
+    transparent 60%
+  );
+  z-index: -1;
+  opacity: 0.85;
+}
 .ea-cta {
   position: relative;
   text-align: center;
@@ -1464,24 +1449,8 @@ function copyInstall() {
   flex-direction: column;
   align-items: center;
   gap: 0;
-  padding: 56px 32px 48px;
-  background: var(--ea-surface);
-  border: 1px solid var(--ea-divider);
-  border-radius: 12px;
-  overflow: hidden;
-  isolation: isolate;
-}
-.ea-cta::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(
-    ellipse 70% 90% at 50% 0%,
-    color-mix(in srgb, var(--vp-c-brand-1) 6%, transparent) 0%,
-    transparent 55%
-  );
-  z-index: -1;
-  opacity: 0.7;
+  max-width: 720px;
+  margin: 0 auto;
 }
 .ea-cta-eyebrow {
   display: inline-flex;
@@ -1529,74 +1498,142 @@ function copyInstall() {
   margin: 14px auto 0;
   max-width: 460px;
 }
-.ea-cta-install {
-  appearance: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 16px;
+/* Bottom CTA install pill is rendered by the shared `<InstallPill>`
+   component (see `src/components/InstallPill.vue`). The wrapper class
+   below only adds the spacing between the tagline and the pill so the
+   shared component itself stays free of layout-specific margins. */
+.ea-cta-install-spacing {
   margin-top: 28px;
-  background: var(--ea-bg);
-  border: 1px solid var(--ea-divider);
-  border-radius: 8px;
-  cursor: pointer;
-  transition: border-color 0.2s;
-  user-select: none;
-  font: inherit;
-}
-.ea-cta-install:hover {
-  border-color: var(--vp-c-brand-1);
-}
-.ea-cta-install-text {
-  font-family: var(--vp-font-family-mono);
-  font-size: 13.5px;
-  color: var(--ea-text-1);
-  letter-spacing: -0.01em;
-}
-.ea-cta-install-prompt {
-  color: var(--ea-text-3);
-  margin-right: 4px;
-}
-.ea-cta-install-copy {
-  color: var(--ea-text-3);
-  display: flex;
-  transition: color 0.2s;
-}
-.ea-cta-install-copy.copied {
-  color: var(--vp-c-brand-1);
 }
 .ea-cta-buttons {
   display: flex;
   gap: 10px;
-  margin-top: 20px;
+  margin-top: 24px;
   flex-wrap: wrap;
   justify-content: center;
 }
-.ea-cta-foot {
-  margin-top: 28px;
-  padding-top: 20px;
-  border-top: 1px dashed var(--ea-divider);
-  width: 100%;
-  max-width: 480px;
-  font-size: 12px;
-  color: var(--ea-text-3);
-  letter-spacing: 0.02em;
-}
-.ea-cta-foot a {
-  color: var(--vp-c-brand-1);
-  text-decoration: none;
-}
-.ea-cta-foot a:hover {
-  text-decoration: underline;
+@media (max-width: 768px) {
+  .ea-cta-strap {
+    padding: 72px 24px;
+  }
 }
 @media (max-width: 480px) {
-  .ea-cta {
-    padding: 40px 20px 32px;
+  .ea-cta-strap {
+    padding: 56px 20px;
   }
   .ea-cta-title {
     font-size: 28px;
   }
   .ea-cta-buttons {
+    flex-direction: column;
+    align-self: stretch;
+    max-width: 280px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+}
+
+/* --- Mid-page CTA strap ---
+   Lighter-weight version of the bottom strap. Same eyebrow + title
+   + tagline + buttons pattern but without the install pill so it
+   doesn't compete with the bottom CTA, and tuned a little smaller
+   so it reads as a punctuation between sections rather than a
+   page-close. */
+.ea-mid-strap {
+  position: relative;
+  padding: 80px 24px;
+  /* Uses --ea-bg (the page's deepest surface in dark mode) so the
+     strap sits visually *below* the Durable-State panel above it
+     rather than above. The full chain of sections from here down
+     is flipped to keep alternation continuous through the strap. */
+  background: var(--ea-bg);
+  border-bottom: 1px solid var(--ea-divider);
+  isolation: isolate;
+  overflow: hidden;
+}
+.ea-mid-strap::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    ellipse 70% 90% at 50% 50%,
+    color-mix(in srgb, var(--vp-c-brand-1) 7%, transparent) 0%,
+    transparent 60%
+  );
+  z-index: -1;
+  opacity: 0.85;
+}
+.ea-mid-strap-inner {
+  max-width: 720px;
+  margin: 0 auto;
+  text-align: center;
+}
+.ea-mid-strap-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ea-text-3);
+  padding: 4px 10px;
+  background: var(--ea-surface-alt);
+  border: 1px solid var(--ea-divider);
+  border-radius: 999px;
+  margin-bottom: 18px;
+}
+.ea-mid-strap-eyebrow .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--vp-c-brand-1);
+}
+.ea-mid-strap-title {
+  font-size: 34px;
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.015em;
+  color: var(--ea-text-1);
+  margin: 0;
+  max-width: 580px;
+  margin-left: auto;
+  margin-right: auto;
+  text-wrap: balance;
+}
+.ea-mid-strap-tagline {
+  font-family: var(--vp-font-family-base);
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--ea-text-2);
+  margin: 14px auto 0;
+  max-width: 520px;
+}
+.ea-mid-strap-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 28px;
+}
+@media (max-width: 768px) {
+  .ea-mid-strap {
+    padding: 60px 24px;
+  }
+  .ea-mid-strap-title {
+    font-size: 26px;
+  }
+  .ea-mid-strap-tagline {
+    font-size: 15px;
+  }
+}
+@media (max-width: 480px) {
+  .ea-mid-strap {
+    padding: 48px 20px;
+  }
+  .ea-mid-strap-title {
+    font-size: 22px;
+  }
+  .ea-mid-strap-actions {
     flex-direction: column;
     align-self: stretch;
     max-width: 280px;
@@ -1623,6 +1660,23 @@ function copyInstall() {
   color: var(--ea-text-1);
   margin: 0 0 20px;
   text-wrap: balance;
+}
+/* Two-paragraph rhythm in the come-online lead: the first
+   paragraph is the "lede" and steps down a notch from the global
+   .ea-prose 17px so it reads as a tightened opener rather than a
+   slab of body copy. The second paragraph then steps down a
+   further notch (size + tone) so the section has a built-in
+   visual hierarchy — lead → supporting — instead of two equally
+   weighted blocks competing for attention. The mobile cascade
+   below mirrors this two-step rhythm. */
+.ea-come-online-text .ea-prose {
+  font-size: 16px;
+  line-height: 1.65;
+}
+.ea-come-online-text .ea-prose + .ea-prose {
+  font-size: 15px;
+  color: var(--ea-text-3);
+  line-height: 1.6;
 }
 .ea-come-online-visual {
   flex: 1;
@@ -1724,7 +1778,7 @@ function copyInstall() {
   margin-top: -8px;
 }
 
-/* Code card inside the framework box */
+/* Code card inside the SDK box */
 .rt-code-card {
   text-align: left;
 }
@@ -1770,7 +1824,7 @@ function copyInstall() {
   margin: 0;
 }
 
-/* Server box internals */
+/* Control plane box internals */
 .rt-subsection {
   display: flex;
   flex-direction: column;
@@ -2165,9 +2219,12 @@ function copyInstall() {
   .ea-stack-layout {
     flex-direction: column;
   }
+  /* On mobile the stack diagram (Your app → Runtime → Streams →
+     Sync) becomes redundant with the code sample beneath it and
+     burns a screen-height before the actual evidence. Drop it
+     entirely; the bullet list + code block carries the message. */
   .ea-stack-diagram {
-    flex: none;
-    width: 100%;
+    display: none;
   }
   .ea-stack-code {
     width: 100%;
@@ -2198,6 +2255,16 @@ function copyInstall() {
      match for visual consistency. */
   .ea-entity-intro p {
     font-size: 15px;
+  }
+  /* Mirror the come-online lead/supporting two-step rhythm at the
+     mobile breakpoint — sit one notch under the global .ea-prose
+     mobile size (15px) so it stays the "tightened" lead, then a
+     further notch for the supporting paragraph. */
+  .ea-come-online-text .ea-prose {
+    font-size: 14.5px;
+  }
+  .ea-come-online-text .ea-prose + .ea-prose {
+    font-size: 13.5px;
   }
   /* All per-section section-title overrides drop to 22px in lockstep
      with the shared `.ea-section-title` rule in Section.vue. Keep this
@@ -2268,6 +2335,15 @@ function copyInstall() {
      match for visual consistency at the smallest breakpoint. */
   .ea-entity-intro p {
     font-size: 14px;
+  }
+  /* Continue the come-online lead/supporting step-down at the
+     smallest breakpoint, matching the global .ea-prose 14px
+     baseline as the anchor. */
+  .ea-come-online-text .ea-prose {
+    font-size: 13.5px;
+  }
+  .ea-come-online-text .ea-prose + .ea-prose {
+    font-size: 12.5px;
   }
   .code-block {
     font-size: 11px;
