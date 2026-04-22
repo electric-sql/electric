@@ -498,6 +498,14 @@ defmodule Electric.Shapes.FilterTest do
           {%{"id" => "1", "number" => "4"}, false},
           {%{"id" => "3", "number" => "3"}, false}
         ]
+      },
+      %{
+        where: "(id = 1 AND number > 2) OR (id = 1 AND number < 1)",
+        records: [
+          {%{"id" => "1", "number" => "3"}, true},
+          {%{"id" => "1", "number" => "0"}, true},
+          {%{"id" => "1", "number" => "2"}, false}
+        ]
       }
     ]
 
@@ -538,6 +546,10 @@ defmodule Electric.Shapes.FilterTest do
       Shape.new!("table", where: "id = 1 AND 1 = ANY(an_array)", inspector: @inspector),
       Shape.new!("table", where: "id = 1 OR id = 2", inspector: @inspector),
       Shape.new!("table", where: "id = 1 OR number > 5", inspector: @inspector),
+      Shape.new!("table",
+        where: "(id = 1 AND number > 2) OR (id = 1 AND number < 1)",
+        inspector: @inspector
+      ),
       Shape.new!("table", where: "id = 1 AND (number = 2 OR number = 3)", inspector: @inspector),
       Shape.new!("table", where: "(id = 1 OR id = 2) AND number = 3", inspector: @inspector),
       Shape.new!("table", where: "id IN (1, 2, 3)", inspector: @inspector),

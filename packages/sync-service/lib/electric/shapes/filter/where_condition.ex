@@ -8,7 +8,7 @@ defmodule Electric.Shapes.Filter.WhereCondition do
 
   Each WhereCondition is identified by a unique reference and stores:
   - `index_keys`: MapSet of {field_key, operation} tuples for indexed conditions
-  - `other_shapes`: map of shape_id -> where_clause for non-optimized shapes
+  - `other_shapes`: map of {shape_id, branch_key} -> where_clause for non-optimized shapes
 
   The logic for specific indexes (equality, inclusion) is handled by dedicated modules that also use ETS.
   """
@@ -38,23 +38,34 @@ defmodule Electric.Shapes.Filter.WhereCondition do
   @spec indexed_where?(Expr.t() | nil) :: boolean()
   def indexed_where?(where_clause), do: optimise_where(where_clause) != :not_optimised
 
-  def add_shape(%Filter{where_cond_table: table} = filter, condition_id, shape_id, where_clause) do
+  def add_shape(%Filter{} = filter, condition_id, shape_id, where_clause) do
+    add_shape(filter, condition_id, shape_id, where_clause, [])
+  end
+
+  @doc false
+  def add_shape(
+        %Filter{where_cond_table: table} = filter,
+        condition_id,
+        shape_id,
+        where_clause,
+        branch_key
+      ) do
     case optimise_where(where_clause) do
       :not_optimised ->
-        add_shape_to_other_shapes(table, condition_id, shape_id, where_clause)
+        add_shape_to_other_shapes(table, condition_id, shape_id, branch_key, where_clause)
 
       {:or, left, right} ->
-        add_shape(filter, condition_id, shape_id, left)
-        add_shape(filter, condition_id, shape_id, right)
+        add_shape(filter, condition_id, shape_id, left, branch_key ++ [:left])
+        add_shape(filter, condition_id, shape_id, right, branch_key ++ [:right])
 
       %{operation: _} = optimisation ->
-        add_shape_to_index(filter, condition_id, shape_id, optimisation)
+        add_shape_to_index(filter, condition_id, shape_id, optimisation, branch_key)
     end
   end
 
-  defp add_shape_to_other_shapes(table, condition_id, shape_id, where_clause) do
+  defp add_shape_to_other_shapes(table, condition_id, shape_id, branch_key, where_clause) do
     [{_, {index_keys, other_shapes}}] = :ets.lookup(table, condition_id)
-    other_shapes = Map.put(other_shapes, shape_id, where_clause)
+    other_shapes = Map.put(other_shapes, {shape_id, branch_key}, where_clause)
     :ets.insert(table, {condition_id, {index_keys, other_shapes}})
   end
 
@@ -62,14 +73,15 @@ defmodule Electric.Shapes.Filter.WhereCondition do
          %Filter{where_cond_table: table} = filter,
          condition_id,
          shape_id,
-         optimisation
+         optimisation,
+         branch_key
        ) do
     [{_, {index_keys, other_shapes}}] = :ets.lookup(table, condition_id)
     key = {optimisation.field, optimisation.operation}
     index_keys = MapSet.put(index_keys, key)
     :ets.insert(table, {condition_id, {index_keys, other_shapes}})
 
-    Index.add_shape(filter, condition_id, shape_id, optimisation)
+    Index.add_shape(filter, condition_id, shape_id, optimisation, branch_key)
   end
 
   @doc false
@@ -214,33 +226,39 @@ defmodule Electric.Shapes.Filter.WhereCondition do
   or `:ok` if the condition still has shapes.
   """
   @spec remove_shape(Filter.t(), reference(), String.t(), Expr.t() | nil) :: :deleted | :ok
+  def remove_shape(%Filter{} = filter, condition_id, shape_id, where_clause) do
+    remove_shape(filter, condition_id, shape_id, where_clause, [])
+  end
+
+  @doc false
   def remove_shape(
         %Filter{where_cond_table: table} = filter,
         condition_id,
         shape_id,
-        where_clause
+        where_clause,
+        branch_key
       ) do
     case optimise_where(where_clause) do
       :not_optimised ->
-        remove_shape_from_other_shapes(table, condition_id, shape_id)
+        remove_shape_from_other_shapes(table, condition_id, shape_id, branch_key)
 
       {:or, left, right} ->
-        _ = remove_shape(filter, condition_id, shape_id, left)
-        _ = remove_shape(filter, condition_id, shape_id, right)
+        _ = remove_shape(filter, condition_id, shape_id, left, branch_key ++ [:left])
+        _ = remove_shape(filter, condition_id, shape_id, right, branch_key ++ [:right])
         condition_status(table, condition_id)
 
       %{operation: _} = optimisation ->
-        remove_shape_from_index(filter, condition_id, shape_id, optimisation)
+        remove_shape_from_index(filter, condition_id, shape_id, optimisation, branch_key)
     end
   end
 
-  defp remove_shape_from_other_shapes(table, condition_id, shape_id) do
+  defp remove_shape_from_other_shapes(table, condition_id, shape_id, branch_key) do
     case :ets.lookup(table, condition_id) do
       [] ->
         :deleted
 
       [{_, {index_keys, other_shapes}}] ->
-        other_shapes = Map.delete(other_shapes, shape_id)
+        other_shapes = Map.delete(other_shapes, {shape_id, branch_key})
         update_or_delete_condition(table, condition_id, index_keys, other_shapes)
     end
   end
@@ -249,9 +267,10 @@ defmodule Electric.Shapes.Filter.WhereCondition do
          %Filter{where_cond_table: table} = filter,
          condition_id,
          shape_id,
-         optimisation
+         optimisation,
+         branch_key
        ) do
-    case Index.remove_shape(filter, condition_id, shape_id, optimisation) do
+    case Index.remove_shape(filter, condition_id, shape_id, optimisation, branch_key) do
       :deleted ->
         case :ets.lookup(table, condition_id) do
           [] ->
@@ -330,7 +349,7 @@ defmodule Electric.Shapes.Filter.WhereCondition do
       "filter.filter_other_shapes",
       [shape_count: map_size(other_shapes)],
       fn ->
-        for {shape_id, where} <- other_shapes,
+        for {{shape_id, _branch_key}, where} <- other_shapes,
             other_shape_matches?(index, shape_id, where, record),
             into: MapSet.new() do
           shape_id
@@ -383,7 +402,7 @@ defmodule Electric.Shapes.Filter.WhereCondition do
           end)
 
         other_shape_ids =
-          Enum.reduce(other_shapes, MapSet.new(), fn {shape_id, _}, acc ->
+          Enum.reduce(other_shapes, MapSet.new(), fn {{shape_id, _branch_key}, _}, acc ->
             MapSet.put(acc, shape_id)
           end)
 

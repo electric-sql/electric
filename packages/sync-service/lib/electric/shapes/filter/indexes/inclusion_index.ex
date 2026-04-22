@@ -30,7 +30,13 @@ defmodule Electric.Shapes.Filter.Indexes.InclusionIndex do
 
   @env Env.new()
 
-  def add_shape(%Filter{incl_index_table: table} = filter, condition_id, shape_id, optimisation) do
+  def add_shape(
+        %Filter{incl_index_table: table} = filter,
+        condition_id,
+        shape_id,
+        optimisation,
+        branch_key
+      ) do
     %{field: field, type: type, value: array_value, and_where: and_where} = optimisation
     :ets.insert(table, {{:type, condition_id, field}, type})
 
@@ -42,7 +48,8 @@ defmodule Electric.Shapes.Filter.Indexes.InclusionIndex do
       condition_id: condition_id,
       field: field,
       shape_id: shape_id,
-      and_where: and_where
+      and_where: and_where,
+      branch_key: branch_key
     }
 
     add_shape_to_node(ctx, [], values)
@@ -92,7 +99,13 @@ defmodule Electric.Shapes.Filter.Indexes.InclusionIndex do
           existing_id
       end
 
-    WhereCondition.add_shape(ctx.filter, node_condition_id, ctx.shape_id, ctx.and_where)
+    WhereCondition.add_shape(
+      ctx.filter,
+      node_condition_id,
+      ctx.shape_id,
+      ctx.and_where,
+      ctx.branch_key
+    )
   end
 
   defp get_or_create_node(table, node_key) do
@@ -125,7 +138,8 @@ defmodule Electric.Shapes.Filter.Indexes.InclusionIndex do
         %Filter{incl_index_table: table} = filter,
         condition_id,
         shape_id,
-        optimisation
+        optimisation,
+        branch_key
       ) do
     %{field: field, value: array_value, and_where: and_where} = optimisation
     ordered = array_value |> Enum.sort() |> Enum.dedup()
@@ -136,7 +150,8 @@ defmodule Electric.Shapes.Filter.Indexes.InclusionIndex do
       condition_id: condition_id,
       field: field,
       shape_id: shape_id,
-      and_where: and_where
+      and_where: and_where,
+      branch_key: branch_key
     }
 
     remove_shape_from_node(ctx, [], ordered)
@@ -198,7 +213,8 @@ defmodule Electric.Shapes.Filter.Indexes.InclusionIndex do
                ctx.filter,
                node_condition_id,
                ctx.shape_id,
-               ctx.and_where
+               ctx.and_where,
+               ctx.branch_key
              ) do
           :deleted ->
             :ets.insert(ctx.table, {node_key, %{node | condition_id: nil}})

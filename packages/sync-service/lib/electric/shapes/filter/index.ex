@@ -16,12 +16,24 @@ defmodule Electric.Shapes.Filter.Index do
   defp module_for("@>"), do: InclusionIndex
   defp module_for("subquery"), do: SubqueryIndex
 
-  def add_shape(%Filter{} = filter, where_cond_id, shape_id, %{operation: op} = optimisation) do
-    module_for(op).add_shape(filter, where_cond_id, shape_id, optimisation)
+  def add_shape(
+        %Filter{} = filter,
+        where_cond_id,
+        shape_id,
+        %{operation: op} = optimisation,
+        branch_key
+      ) do
+    module_for(op).add_shape(filter, where_cond_id, shape_id, optimisation, branch_key)
   end
 
-  def remove_shape(%Filter{} = filter, where_cond_id, shape_id, %{operation: op} = optimisation) do
-    module_for(op).remove_shape(filter, where_cond_id, shape_id, optimisation)
+  def remove_shape(
+        %Filter{} = filter,
+        where_cond_id,
+        shape_id,
+        %{operation: op} = optimisation,
+        branch_key
+      ) do
+    module_for(op).remove_shape(filter, where_cond_id, shape_id, optimisation, branch_key)
   end
 
   def affected_shapes(%Filter{} = filter, where_cond_id, field, operation, record) do
