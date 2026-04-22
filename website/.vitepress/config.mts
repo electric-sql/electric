@@ -173,15 +173,10 @@ export default defineConfig({
     },
     sidebar: {
       '/cloud/': [
-        {
-          text: 'Electric Cloud',
-          collapsed: false,
-          items: [
-            { text: 'Introduction', link: '/cloud' },
-            { text: 'Usage', link: '/cloud/usage' },
-            { text: 'CLI', link: '/cloud/cli' },
-          ],
-        },
+        // Title-button + primary links (Usage, CLI) at the top of
+        // the sidebar are rendered by `DocsSidebarHero.vue` (mounted
+        // via the `sidebar-nav-before` slot in Layout.vue), so the
+        // sidebar has no further groups for Cloud.
       ],
       '/sync/': [
         {
@@ -200,16 +195,10 @@ export default defineConfig({
         },
       ],
       '/docs/sync': [
-        {
-          text: 'Sync',
-          collapsed: false,
-          items: [
-            { text: 'Introduction', link: '/sync' },
-            { text: 'Overview', link: '/docs/sync' },
-            { text: 'Quickstart', link: '/docs/sync/quickstart' },
-            { text: 'Stacks', link: '/docs/sync/stacks' },
-          ],
-        },
+        // Title-button + primary links (Overview, Quickstart, Stacks)
+        // at the top of the sidebar are rendered by
+        // `DocsSidebarHero.vue` (mounted via `sidebar-nav-before` in
+        // Layout.vue), so the sidebar starts directly with `Guides`.
         {
           text: 'Guides',
           collapsed: false,
@@ -326,15 +315,10 @@ export default defineConfig({
         },
       ],
       '/docs/agents': [
-        {
-          text: 'Agents',
-          collapsed: false,
-          items: [
-            { text: 'Introduction', link: '/agents' },
-            { text: 'Overview', link: '/docs/agents' },
-            { text: 'Quickstart', link: '/docs/agents/quickstart' },
-          ],
-        },
+        // Title-button + primary links (Overview, Quickstart) at the
+        // top of the sidebar are rendered by `DocsSidebarHero.vue`
+        // (mounted via `sidebar-nav-before` in Layout.vue), so the
+        // sidebar starts directly with `Usage`.
         {
           text: 'Usage',
           collapsed: false,
@@ -478,15 +462,10 @@ export default defineConfig({
         },
       ],
       '/docs/streams': [
-        {
-          text: 'Streams',
-          collapsed: false,
-          items: [
-            { text: 'Introduction', link: '/streams' },
-            { text: 'Overview', link: '/docs/streams/concepts' },
-            { text: 'Quickstart', link: '/docs/streams/quickstart' },
-          ],
-        },
+        // Title-button + primary links (Overview, Quickstart) at the
+        // top of the sidebar are rendered by `DocsSidebarHero.vue`
+        // (mounted via `sidebar-nav-before` in Layout.vue), so the
+        // sidebar starts directly with `Usage`.
         {
           text: 'Usage',
           collapsed: false,

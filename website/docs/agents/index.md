@@ -2,17 +2,17 @@
 title: Electric Agents
 titleTemplate: "... - Electric"
 description: >-
-  Core concepts behind Electric Agents: entities, handlers, wakes, state, agent loops, tools, and coordination.
+  The durable runtime for long-lived agents. Core concepts behind Electric Agents — entities, handlers, wakes, state, agent loops, tools, and coordination.
 outline: [2, 3]
 ---
 
 # Electric Agents
 
-Electric Agents is a framework for building durable, composable, serverless agents. It provides its own agent loop, coordination primitives, and context management — all backed by [Durable Streams](https://durablestreams.com). Each agent is an **entity** with its own stream of events.
+Electric Agents is **the durable runtime for long-lived agents**. It provides an agent loop, coordination primitives, and context management — all built on top of [Electric Streams](/streams). Each agent is an **entity** with its own stream of events.
 
 Entities listen for messages and events. When a message or event is received — like a child finishing or state changing — the entity is **woken** and its handler runs.
 
-All agent activity (runs, tool calls, text output) is persisted to the entity's durable stream. This means agents can scale to zero and survive restarts whilst maintaining full session history. Sessions can be observed and interacted with by any number of other users and entities both asynchronously and in real-time.
+All agent activity (runs, tool calls, text output) is persisted to the entity's durable stream. This means agents can scale to zero and survive restarts whilst maintaining full session history. Sessions can be observed and interacted with by any number of other users and entities, both asynchronously and in real time.
 
 <EntityOverviewDiagram />
 
@@ -69,7 +69,7 @@ async handler(ctx, wake) {
 
 ## State
 
-Custom persistent collections on the entity, accessed via `ctx.state`. Backed by [StreamDB](https://durablestreams.com/stream-db) and [TanStack DB](https://tanstack.com/db). State is local to the entity and survives restarts. You define typed collections as part of the [entity definition](/docs/agents/reference/entity-definition). See [Managing State](/docs/agents/usage/managing-state).
+Custom persistent collections on the entity, accessed via `ctx.state`. Backed by [StreamDB](/docs/streams/stream-db) and [TanStack DB](https://tanstack.com/db). State is local to the entity and survives restarts. You define typed collections as part of the [entity definition](/docs/agents/reference/entity-definition). See [Managing State](/docs/agents/usage/managing-state).
 
 ```ts
 registry.define("tracker", {

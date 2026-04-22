@@ -10,7 +10,7 @@ const NAV = [
     base: '/agents',
     docsBase: '/docs/agents',
     homeLabel: 'Electric Agents',
-    homeSublabel: 'Wire the agent loop into your online systems',
+    homeSublabel: 'The runtime for long-lived agents',
   },
   {
     id: 'streams',

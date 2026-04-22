@@ -70,21 +70,21 @@ defineEmits(['navigate'])
             </a>
             <a
               class="mega-nav-panel-item"
-              :href="`${product.base}/demos`"
-              role="menuitem"
-              @click="$emit('navigate')"
-            >
-              <span class="mega-nav-panel-label">Demos</span>
-              <span class="mega-nav-panel-sublabel">Example apps</span>
-            </a>
-            <a
-              class="mega-nav-panel-item"
               :href="product.docsBase"
               role="menuitem"
               @click="$emit('navigate')"
             >
               <span class="mega-nav-panel-label">Docs</span>
               <span class="mega-nav-panel-sublabel">Full documentation</span>
+            </a>
+            <a
+              class="mega-nav-panel-item"
+              :href="`${product.base}/demos`"
+              role="menuitem"
+              @click="$emit('navigate')"
+            >
+              <span class="mega-nav-panel-label">Demos</span>
+              <span class="mega-nav-panel-sublabel">Example apps</span>
             </a>
           </template>
         </div>

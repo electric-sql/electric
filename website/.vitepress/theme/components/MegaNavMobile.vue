@@ -9,7 +9,7 @@ const NAV = [
     base: '/agents',
     docsBase: '/docs/agents',
     homeLabel: 'Electric Agents',
-    homeSublabel: 'Wire the agent loop into your online systems',
+    homeSublabel: 'The runtime for long-lived agents',
   },
   {
     id: 'streams',
@@ -91,8 +91,8 @@ function productSubLinks(item) {
   }
   const links = [
     { label: 'Quickstart', link: `${item.docsBase}/quickstart` },
-    { label: 'Demos', link: `${item.base}/demos` },
     { label: 'Docs', link: item.docsBase },
+    { label: 'Demos', link: `${item.base}/demos` },
   ]
   if (item.extras) {
     for (const extra of item.extras) {

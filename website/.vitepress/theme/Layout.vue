@@ -13,6 +13,7 @@ import NavSignupButton from '../../src/components/NavSignupButton.vue'
 import SiteFooter from '../../src/components/SiteFooter.vue'
 import UseCaseHeader from '../../src/components/UseCaseHeader.vue'
 
+import DocsSidebarHero from './components/DocsSidebarHero.vue'
 import MegaNav from './components/MegaNav.vue'
 import MegaNavMobile from './components/MegaNavMobile.vue'
 
@@ -86,6 +87,9 @@ const layoutClass = computed(() => {
     </template>
     <template #nav-screen-content-before>
       <MegaNavMobile />
+    </template>
+    <template #sidebar-nav-before>
+      <DocsSidebarHero />
     </template>
     <template #doc-top>
       <!-- Local nav bar: Medium screens - markdown link floats right -->
