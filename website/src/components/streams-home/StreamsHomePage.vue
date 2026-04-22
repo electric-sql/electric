@@ -638,7 +638,7 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
   font-size: 28px;
   font-weight: 500;
   color: var(--ea-text-1);
-  margin: 24px auto 0;
+  margin: 16px auto 30px;
   max-width: 720px;
   line-height: 1.35;
   text-wrap: balance;
