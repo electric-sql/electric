@@ -50,12 +50,16 @@ defmodule ElectricTelemetry.PollerTest do
     end
 
     test "swallows bare :normal exit silently" do
-      log = capture_log(fn -> assert Poller.safe_invoke(Fixture, :exit_normal_atom, []) == :ok end)
+      log =
+        capture_log(fn -> assert Poller.safe_invoke(Fixture, :exit_normal_atom, []) == :ok end)
+
       refute log =~ "exit"
     end
 
     test "swallows bare :shutdown exit silently" do
-      log = capture_log(fn -> assert Poller.safe_invoke(Fixture, :exit_shutdown_atom, []) == :ok end)
+      log =
+        capture_log(fn -> assert Poller.safe_invoke(Fixture, :exit_shutdown_atom, []) == :ok end)
+
       refute log =~ "exit"
     end
 
@@ -80,12 +84,14 @@ defmodule ElectricTelemetry.PollerTest do
 
     test "wraps {m, f, a} tuples in safe_invoke" do
       opts = %{periodic_measurements: [{CallbackMod, :some_measurement, []}]}
+
       assert [{ElectricTelemetry.Poller, :safe_invoke, [CallbackMod, :some_measurement, [_]]}] =
                Poller.periodic_measurements(opts, CallbackMod)
     end
 
     test "wraps bare function atoms in safe_invoke" do
       opts = %{periodic_measurements: [:some_measurement]}
+
       assert [{ElectricTelemetry.Poller, :safe_invoke, [CallbackMod, :some_measurement, [_]]}] =
                Poller.periodic_measurements(opts, CallbackMod)
     end
@@ -94,7 +100,10 @@ defmodule ElectricTelemetry.PollerTest do
       f = fn _ -> :ok end
       opts = %{periodic_measurements: [f]}
 
-      assert [{ElectricTelemetry.Poller, :safe_invoke, [ElectricTelemetry.Poller, :user_measurement, [^f, _]]}] =
+      assert [
+               {ElectricTelemetry.Poller, :safe_invoke,
+                [ElectricTelemetry.Poller, :user_measurement, [^f, _]]}
+             ] =
                Poller.periodic_measurements(opts, CallbackMod)
     end
 

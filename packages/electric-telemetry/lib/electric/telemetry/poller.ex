@@ -27,13 +27,22 @@ defmodule ElectricTelemetry.Poller do
 
   def periodic_measurements(%{periodic_measurements: measurements} = telemetry_opts, module) do
     Enum.flat_map(measurements, fn
-      :builtin -> module.builtin_periodic_measurements(telemetry_opts)
+      :builtin ->
+        module.builtin_periodic_measurements(telemetry_opts)
+
       # These are implemented by telemetry_poller
-      f when f in [:memory, :persistent_term, :system_counts, :total_run_queue_lengths] -> [f]
+      f when f in [:memory, :persistent_term, :system_counts, :total_run_queue_lengths] ->
+        [f]
+
       # Bare function names are assumed to be referring to functions defined in the caller module
-      f when is_atom(f) -> [wrap(module, f, [telemetry_opts])]
-      f when is_function(f, 1) -> [wrap(__MODULE__, :user_measurement, [f, telemetry_opts])]
-      {m, f, a} when is_atom(m) and is_atom(f) and is_list(a) -> [wrap(m, f, a ++ [telemetry_opts])]
+      f when is_atom(f) ->
+        [wrap(module, f, [telemetry_opts])]
+
+      f when is_function(f, 1) ->
+        [wrap(__MODULE__, :user_measurement, [f, telemetry_opts])]
+
+      {m, f, a} when is_atom(m) and is_atom(f) and is_list(a) ->
+        [wrap(m, f, a ++ [telemetry_opts])]
     end)
   end
 
