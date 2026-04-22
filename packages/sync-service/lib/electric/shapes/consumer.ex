@@ -39,7 +39,7 @@ defmodule Electric.Shapes.Consumer do
 
   @type initialize_shape_opts() :: %{
           :action => :create | :restore,
-          optional(:otel_ctx) => map() | nil,
+          optional(:otel_ctx) => OpenTelemetry.otel_ctx() | nil,
           optional(:feature_flags) => [binary()],
           optional(:is_subquery_shape?) => boolean()
         }

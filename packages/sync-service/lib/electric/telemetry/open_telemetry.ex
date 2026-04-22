@@ -35,7 +35,12 @@ defmodule Electric.Telemetry.OpenTelemetry do
   @typep span_name :: String.t()
   @typep attr_name :: String.t()
   @typep span_attrs :: :opentelemetry.attributes_map()
-  @typep span_ctx :: :opentelemetry.span_ctx()
+  @type span_ctx :: :opentelemetry.span_ctx()
+
+  @typedoc """
+  Span + baggage pair returned by `get_current_context/0` and consumed by `set_current_context/1`.
+  """
+  @type otel_ctx :: {span_ctx() | :undefined, :otel_baggage.t()}
 
   @doc """
   Create a span that starts at the current point in time and ends when `fun` returns.
