@@ -827,7 +827,7 @@ onMounted(() => {
           toX: client.x,
           toY: client.y,
           progress: 0,
-          speed: 0.6 + Math.random() * 0.5,
+          speed: 1.0 + Math.random() * 0.7,
         })
       }
     }
@@ -888,13 +888,14 @@ onMounted(() => {
 
     for (const cl of clients) drawClient(cl, dark)
 
-    // Spawn cadence — tightened by ~40% from the original 700–2100ms
-    // window so the extra shapes the scene now hosts get a steady
-    // stream of in-flight tokens instead of feeling sparse.
+    // Spawn cadence — further tightened so the fan-out scene reads as
+    // a busy, lively sync engine. Combined with the bumped per-token
+    // speed above, the canvas now feels actively flowing rather than
+    // gently dripping.
     nextSpawn -= dt
     if (!props.paused && nextSpawn <= 0) {
       spawnRandomUpdate()
-      nextSpawn = 420 + Math.random() * 850
+      nextSpawn = 220 + Math.random() * 500
     }
 
     raf = requestAnimationFrame(tick)

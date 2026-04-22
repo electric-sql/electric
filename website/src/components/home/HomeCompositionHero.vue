@@ -33,6 +33,16 @@ import SyncFanOutBg from '../sync-home/SyncFanOutBg.vue'
 // "camera tilt". The actual transform composition lives in CSS so
 // the static iso pose is still readable from the stylesheet.
 const root = ref<HTMLDivElement>()
+
+// Per-layer label refs are forwarded to each canvas Bg as `excludeEl`
+// so the underlying text-avoidance logic (already used to keep the
+// landing-page hero meshes from overlapping the headline copy) also
+// keeps each iso layer's "sync" / "streams" / "agents" sticker clear
+// of nodes, rails, and dots.
+const syncLabelRef = ref<HTMLSpanElement>()
+const streamsLabelRef = ref<HTMLSpanElement>()
+const agentsLabelRef = ref<HTMLSpanElement>()
+
 let raf = 0
 let prefersReducedMotion = false
 
@@ -86,16 +96,20 @@ onBeforeUnmount(() => {
            depth helps deterministic stacking when planes overlap
            exactly. -->
       <div class="hch-band hch-band--sync">
-        <SyncFanOutBg :labels-on-hover="true" :no-edge-fade="true" />
-        <span class="hch-band-label">sync</span>
+        <SyncFanOutBg
+          :labels-on-hover="true"
+          :no-edge-fade="true"
+          :exclude-el="syncLabelRef"
+        />
+        <span ref="syncLabelRef" class="hch-band-label">sync</span>
       </div>
       <div class="hch-band hch-band--streams">
-        <StreamFlowBg :no-edge-fade="true" />
-        <span class="hch-band-label">streams</span>
+        <StreamFlowBg :no-edge-fade="true" :exclude-el="streamsLabelRef" />
+        <span ref="streamsLabelRef" class="hch-band-label">streams</span>
       </div>
       <div class="hch-band hch-band--agents">
-        <HeroNetworkBg :no-edge-fade="true" />
-        <span class="hch-band-label">agents</span>
+        <HeroNetworkBg :no-edge-fade="true" :exclude-el="agentsLabelRef" />
+        <span ref="agentsLabelRef" class="hch-band-label">agents</span>
       </div>
     </div>
   </div>
@@ -279,29 +293,31 @@ onBeforeUnmount(() => {
   font-size: 10px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--ea-text-3);
-  opacity: 0.75;
-  transition: color 0.2s ease, opacity 0.2s ease;
+  /* Brand cyan in dark mode, brand indigo in light — the iso layers are
+     the visual key for the three products, so the labels stay highlighted
+     in the brand colour at all times rather than only on hover. */
+  color: var(--vp-c-brand-1);
+  opacity: 0.95;
+  transition: opacity 0.2s ease;
   pointer-events: none;
   user-select: none;
 }
 .hch-band:hover .hch-band-label {
-  color: var(--vp-c-brand-1);
   opacity: 1;
 }
 
-/* Below the hero collapse breakpoint the scene becomes much
-   shorter (16/9, min-height 320). Tighten the stack so the
-   layers still fit without clipping. */
-@media (max-width: 1099px) {
+/* Intermediate widths (still side-by-side with the text). The cell
+   narrows so trim the iso plane down a notch and tighten the Z spread
+   so it reads as a compact stack rather than an oversized model. */
+@media (max-width: 1099px) and (min-width: 861px) {
   .hch {
     padding-top: 4%;
   }
   .hch-stage {
-    width: 56%;
+    width: 64%;
     transform:
       translateY(var(--hch-shift-y, 0px))
-      rotateX(60deg)
+      rotateX(62deg)
       rotateZ(-30deg);
   }
   .hch-band--agents  { transform: translateZ(120px); }
@@ -309,27 +325,7 @@ onBeforeUnmount(() => {
   .hch-band--sync    { transform: translateZ(-60px); }
 }
 
-@media (max-width: 768px) {
-  .hch {
-    padding-top: 0;
-  }
-  .hch-stage {
-    width: 64%;
-    transform:
-      translateY(var(--hch-shift-y, 0px))
-      rotateX(58deg)
-      rotateZ(-28deg);
-  }
-  .hch-band--agents  { transform: translateZ(96px); }
-  .hch-band--streams { transform: translateZ(24px); }
-  .hch-band--sync    { transform: translateZ(-48px); }
-  .hch-band {
-    border-radius: 10px;
-  }
-  .hch-band-label {
-    font-size: 9px;
-    bottom: 8px;
-    left: 10px;
-  }
-}
+/* Below 861px the homepage hero hides the iso scene entirely (see
+   `HomeHero.vue`), so no further breakpoints are needed here — the
+   composition only renders at side-by-side widths. */
 </style>

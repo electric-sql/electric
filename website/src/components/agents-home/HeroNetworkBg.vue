@@ -366,6 +366,17 @@ onMounted(() => {
     return closest
   }
 
+  // Token motion: identical to `SyncFanOutBg` — the same `speed`
+  // distribution (1.0 + r*0.7 progress/s), the same dt/1000 integrator,
+  // and the same fade-in/out window in `drawToken`. With matching
+  // motion law each token covers its from→to edge in the same fraction
+  // of a second on both canvases, so the in-flight tokens animate "in
+  // the same way". The visible pixel velocity will differ where edges
+  // are physically shorter, but the motion law itself is the match.
+  function tokenSpeed(): number {
+    return 1.0 + Math.random() * 0.7
+  }
+
   function wakeAndSend(idx: number) {
     nodes[idx].awake = 1
     const neighbors = getNeighbors(idx, edges)
@@ -381,7 +392,7 @@ onMounted(() => {
             from: idx,
             to: target,
             progress: 0,
-            speed: 1.0 + Math.random() * 1.2,
+            speed: tokenSpeed(),
           })
         }, delay)
       }
@@ -478,27 +489,60 @@ onMounted(() => {
     }
 
     // --- Draw messages ---
+    // Same glowing-comet style as the sync fan-out (`SyncFanOutBg`) and
+    // streams flow (`StreamFlowBg`) — a short trailing gradient, a soft
+    // radial halo, and a bright head — so the in-flight tokens read as
+    // a single visual language across all three product canvases on the
+    // homepage iso stack.
+    const teal = (a: number) =>
+      dark ? `rgba(0,210,190,${a})` : `rgba(0,180,160,${a})`
     for (const msg of messages) {
       const from = nodes[msg.from]
       const to = nodes[msg.to]
       const x = from.x + (to.x - from.x) * msg.progress
       const y = from.y + (to.y - from.y) * msg.progress
       const fade = edgeFade(x, y)
-      const pa =
-        (msg.progress < 0.1
-          ? msg.progress / 0.1
-          : msg.progress > 0.9
-            ? (1 - msg.progress) / 0.1
-            : 1) * fade
+      const lifeAlpha =
+        msg.progress < 0.12
+          ? msg.progress / 0.12
+          : msg.progress > 0.88
+            ? (1 - msg.progress) / 0.12
+            : 1
+      const a = lifeAlpha * fade
+      if (a < 0.04) continue
 
-      if (pa < 0.01) continue
-
-      const ma = dark ? 0.8 * pa : 0.7 * pa
-      c!.fillStyle = dark
-        ? `rgba(0,210,190,${ma})`
-        : `rgba(0,180,160,${ma})`
+      // Comet tail
+      const tailLen = 22
+      const dx = to.x - from.x
+      const dy = to.y - from.y
+      const len = Math.hypot(dx, dy) || 1
+      const tx = x - (dx / len) * tailLen
+      const ty = y - (dy / len) * tailLen
+      const grad = c!.createLinearGradient(tx, ty, x, y)
+      grad.addColorStop(0, teal(0))
+      grad.addColorStop(1, teal(0.7 * a))
+      c!.strokeStyle = grad
+      c!.lineWidth = 1.6
+      c!.lineCap = "round"
       c!.beginPath()
-      c!.arc(x, y, 3, 0, Math.PI * 2)
+      c!.moveTo(tx, ty)
+      c!.lineTo(x, y)
+      c!.stroke()
+
+      // Soft halo around the head
+      const r = 9
+      const halo = c!.createRadialGradient(x, y, 0, x, y, r)
+      halo.addColorStop(0, teal(0.55 * a))
+      halo.addColorStop(1, teal(0))
+      c!.fillStyle = halo
+      c!.beginPath()
+      c!.arc(x, y, r, 0, Math.PI * 2)
+      c!.fill()
+
+      // Bright head
+      c!.fillStyle = teal(a)
+      c!.beginPath()
+      c!.arc(x, y, 2.8, 0, Math.PI * 2)
       c!.fill()
     }
 
@@ -607,7 +651,7 @@ onMounted(() => {
                   from: arrivedAt,
                   to: next,
                   progress: 0,
-                  speed: 1.2 + Math.random() * 1.0,
+                  speed: tokenSpeed(),
                 })
               }, delay)
             }
@@ -634,7 +678,7 @@ onMounted(() => {
               from: startNode,
               to: target,
               progress: 0,
-              speed: 1.0 + Math.random() * 1.2,
+              speed: tokenSpeed(),
             })
           }, 200 + Math.random() * 400)
         }

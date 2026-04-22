@@ -15,7 +15,7 @@ const heroInnerRef = ref<HTMLElement>()
 
 const installCopied = ref(false)
 function copyInstall() {
-  navigator.clipboard.writeText("npm i electric-agents")
+  navigator.clipboard.writeText("npx electric-ax agents quickstart")
   installCopied.value = true
   setTimeout(() => { installCopied.value = false }, 2000)
 }
@@ -33,7 +33,7 @@ function copyInstall() {
         </p>
         <div class="ea-hero-install-row">
           <div class="ea-hero-install" @click="copyInstall">
-            <span class="ea-hero-install-text"><span class="ea-hero-install-prompt">$</span> npm i electric-agents</span>
+            <span class="ea-hero-install-text"><span class="ea-hero-install-prompt">$</span> npx electric-ax agents quickstart</span>
             <span class="ea-hero-install-copy" :class="{ copied: installCopied }">
               <svg v-if="!installCopied" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
               <svg v-else xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
@@ -560,7 +560,7 @@ function copyInstall() {
         >
           <span class="ea-cta-install-text">
             <span class="ea-cta-install-prompt">$</span>
-            npm i electric-agents
+            npx electric-ax agents quickstart
           </span>
           <span
             class="ea-cta-install-copy"

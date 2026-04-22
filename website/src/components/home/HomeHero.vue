@@ -9,17 +9,14 @@ import HomeCompositionHero from './HomeCompositionHero.vue'
     <div class="home-hero-inner">
       <div class="home-hero-grid">
       <div class="home-hero-text">
-        <p class="home-hero-eyebrow">
-          Open source · Apache 2.0
-        </p>
         <h1 class="home-hero-name">
-          The agent platform
+          The agent&nbsp;platform<br />
           built on&nbsp;<span class="home-hero-accent">sync</span>
         </h1>
         <p class="home-hero-sub">
           <span class="home-hero-sub-primary">
-            Agents are long-lived entities in the data layer.
-            The substrate for them is a sync&nbsp;engine.
+            Agents are long-lived entities in the data&nbsp;layer.
+            The&nbsp;substrate for them is a sync&nbsp;engine.
           </span>
           <br /><br />
           <span class="home-hero-sub-secondary">
@@ -31,8 +28,15 @@ import HomeCompositionHero from './HomeCompositionHero.vue'
             tag="a"
             size="medium"
             theme="brand"
-            text="Electric Cloud »"
-            href="https://dashboard.electric-sql.cloud/"
+            text="Electric Cloud"
+            href="/cloud"
+          />
+          <VPButton
+            tag="a"
+            size="medium"
+            theme="alt"
+            text="Quickstart"
+            href="/docs/agents/quickstart"
           />
         </div>
       </div>
@@ -76,7 +80,11 @@ import HomeCompositionHero from './HomeCompositionHero.vue'
 
 .home-hero-grid {
   display: grid;
-  grid-template-columns: 5fr 7fr;
+  /* 7/5 in favour of the text — gives the headline room to break
+     cleanly across two lines ("The agent platform" / "built on sync")
+     without squeezing onto three. The iso composition still has enough
+     room to read as a supporting illustration. */
+  grid-template-columns: 7fr 5fr;
   gap: 36px;
   /* Vertically centre the text block against the iso scene cell — the
      scene is taller, so this pushes the title down to the visual middle
@@ -92,14 +100,6 @@ import HomeCompositionHero from './HomeCompositionHero.vue'
 }
 .home-hero-text * {
   pointer-events: auto;
-}
-
-.home-hero-eyebrow {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--ea-text-3);
-  margin: 0 0 18px;
 }
 
 .home-hero-name {
@@ -134,7 +134,10 @@ import HomeCompositionHero from './HomeCompositionHero.vue'
 }
 
 .home-hero-sub-secondary {
-  font-size: 0.92em;
+  /* Match the primary supporting paragraph size — keeps the two-block
+     supporting copy as a single visual stratum below the headline
+     instead of tapering into a smaller "punchline" line. */
+  font-size: 1.04em;
   color: var(--ea-text-2);
 }
 
@@ -164,21 +167,70 @@ import HomeCompositionHero from './HomeCompositionHero.vue'
   opacity: 0.85;
 }
 
-@media (max-width: 1099px) {
+/* On wider screens, tuck the text column a touch further left so the
+   headline aligns closer to the section's visual edge and the iso scene
+   on the right has a bit more breathing room. */
+@media (min-width: 1200px) {
+  .home-hero-text {
+    margin-left: -16px;
+  }
+}
+
+/* Intermediate (tablet-ish) widths: keep the side-by-side layout for as
+   long as possible, but trim the iso scene so it doesn't dominate the
+   text column once the cell narrows. The hero is taller than at full
+   width so add a bit more vertical breathing room — matching the
+   pattern we use once the scene drops out below 860px. */
+@media (max-width: 1099px) and (min-width: 861px) {
+  .home-hero {
+    padding: 40px 24px 56px;
+  }
   .home-hero-grid {
-    grid-template-columns: 1fr;
-    gap: 28px;
+    /* Bias the split further toward the text — the iso scene only needs
+       enough room to read as a stacked diagram, while the headline +
+       supporting copy benefit from every extra px. */
+    grid-template-columns: 8fr 4fr;
+    gap: 24px;
+  }
+  /* Knock the headline down a touch so "The agent platform" still fits
+     on one line — at the full 56px the narrower text column was forcing
+     a third line in this range. */
+  .home-hero-name {
+    font-size: 48px;
   }
   .home-hero-scene {
-    order: -1;
-    aspect-ratio: 16 / 9;
-    min-height: 320px;
+    /* Trim the scene's footprint at this breakpoint so it sits as a
+       supporting visual rather than competing with the copy. */
+    aspect-ratio: 1 / 1;
+    min-height: 300px;
+    max-height: 380px;
+  }
+}
+
+/* Below ~860px the side-by-side layout stops working. Rather than
+   stacking the iso scene under the copy (which both pushed the page
+   down and gave the scene awkward proportions), just drop it entirely
+   and let the copy own the hero. With the scene gone we also need to
+   add vertical breathing room — the iso composition was previously
+   shaping the hero's height — so the copy gets generous top/bottom
+   padding to feel like an intentional hero band rather than a
+   collapsed sliver. */
+@media (max-width: 860px) {
+  .home-hero {
+    padding: 56px 24px 64px;
+  }
+  .home-hero-grid {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+  .home-hero-scene {
+    display: none;
   }
 }
 
 @media (max-width: 768px) {
   .home-hero {
-    padding: 8px 20px 32px;
+    padding: 48px 20px 56px;
   }
   .home-hero-name {
     font-size: 40px;
@@ -189,12 +241,12 @@ import HomeCompositionHero from './HomeCompositionHero.vue'
   .home-hero-install-text {
     font-size: 12px;
   }
-  .home-hero-scene {
-    min-height: 260px;
-  }
 }
 
 @media (max-width: 480px) {
+  .home-hero {
+    padding: 40px 20px 48px;
+  }
   .home-hero-name {
     font-size: 32px;
   }
