@@ -34,6 +34,13 @@ const heroInnerRef = ref<HTMLElement>()
             tag="a"
             size="medium"
             theme="alt"
+            text="Docs"
+            href="/cloud"
+          />
+          <VPButton
+            tag="a"
+            size="medium"
+            theme="alt"
             text="See pricing"
             href="/pricing"
           />
@@ -228,7 +235,9 @@ const heroInnerRef = ref<HTMLElement>()
 
 .cl-hero {
   position: relative;
-  padding: 128px 24px 112px;
+  /* Matches the trimmed agents / streams / sync product heroes
+     (72/56) so the four landing pages share the same vertical rhythm. */
+  padding: 72px 24px 56px;
   text-align: center;
   overflow: hidden;
   /* The hero now sits on a dark hex-viewer panel, so anchor a dark
@@ -249,7 +258,8 @@ const heroInnerRef = ref<HTMLElement>()
 }
 
 .cl-hero-name {
-  font-size: 64px;
+  /* Standardized to 56px to match agents / streams / sync hero names. */
+  font-size: 56px;
   font-weight: 700;
   line-height: 1.2;
   background: none;
@@ -268,14 +278,19 @@ const heroInnerRef = ref<HTMLElement>()
 
 .cl-hero-tagline {
   font-family: var(--vp-font-family-base);
-  font-size: 19px;
+  /* Slightly smaller than the 28px tagline on the other product heroes
+     because the cloud tagline is a longer descriptive sentence rather
+     than a snappy strapline. 22px keeps the H1 → tagline hierarchy
+     consistent across the matched set. */
+  font-size: 22px;
+  font-weight: 500;
   /* The hero panel is always dark, so use a light tone regardless
      of the global theme. */
-  color: rgba(231, 238, 248, 0.78);
-  margin: 20px auto 0;
-  max-width: 640px;
-  line-height: 1.55;
-  text-wrap: pretty;
+  color: rgba(231, 238, 248, 0.85);
+  margin: 24px auto 0;
+  max-width: 720px;
+  line-height: 1.4;
+  text-wrap: balance;
 }
 
 .cl-hero-row {
@@ -289,22 +304,34 @@ const heroInnerRef = ref<HTMLElement>()
 
 @media (max-width: 768px) {
   .cl-hero {
-    padding: 88px 20px 80px;
+    padding: 56px 20px 40px;
   }
   .cl-hero-name {
-    font-size: 44px;
+    font-size: 36px;
   }
   .cl-hero-tagline {
-    font-size: 16px;
+    font-size: 18px;
   }
 }
 
 @media (max-width: 480px) {
   .cl-hero {
-    padding: 64px 16px 64px;
+    padding: 44px 16px 32px;
   }
   .cl-hero-name {
-    font-size: 36px;
+    font-size: 28px;
+  }
+  .cl-hero-tagline {
+    font-size: 16px;
+  }
+  /* Stack the three CTAs full-width on the smallest screens so the
+     primary / Docs / pricing trio doesn't wrap awkwardly. */
+  .cl-hero-row {
+    flex-direction: column;
+    align-items: stretch;
+    max-width: 280px;
+    margin-left: auto;
+    margin-right: auto;
   }
 }
 

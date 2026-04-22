@@ -31,7 +31,7 @@ function copyInstall() {
         <p class="ea-hero-text">
           The runtime for long-lived&nbsp;agents
         </p>
-        <div class="ea-hero-row">
+        <div class="ea-hero-install-row">
           <div class="ea-hero-install" @click="copyInstall">
             <span class="ea-hero-install-text"><span class="ea-hero-install-prompt">$</span> npm i electric-agents</span>
             <span class="ea-hero-install-copy" :class="{ copied: installCopied }">
@@ -39,13 +39,22 @@ function copyInstall() {
               <svg v-else xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
             </span>
           </div>
+        </div>
 
+        <div class="ea-hero-row">
           <VPButton
             tag="a"
             size="medium"
             theme="brand"
             text="Quickstart"
             href="/docs/agents/quickstart"
+          />
+          <VPButton
+            tag="a"
+            size="medium"
+            theme="alt"
+            text="Docs"
+            href="/docs/agents"
           />
         </div>
       </div>
@@ -635,7 +644,10 @@ function copyInstall() {
 
 .ea-hero {
   position: relative;
-  padding: 100px 24px 80px;
+  /* Tightened from 100/80 to compensate for the second CTA row
+     (install pill + action-button row) so the hero stays roughly the
+     same overall height as before the split. */
+  padding: 72px 24px 56px;
   text-align: center;
   overflow: hidden;
 }
@@ -679,8 +691,17 @@ function copyInstall() {
   text-wrap: balance;
 }
 
+/* Two-row CTA stack: the install pill always sits on its own line
+   above the action buttons so the copyable command reads as a
+   distinct affordance rather than a peer of the buttons. */
+.ea-hero-install-row {
+  margin-top: 24px;
+  display: flex;
+  justify-content: center;
+}
+
 .ea-hero-row {
-  margin-top: 32px;
+  margin-top: 14px;
   display: flex;
   justify-content: center;
   align-items: center;
@@ -735,6 +756,53 @@ function copyInstall() {
 }
 .ea-hero-credibility a:hover {
   text-decoration: underline;
+}
+
+/* Mobile: tighten hero padding and scale headline / tagline so the
+   hero matches the streams / sync responsive rhythm. Without these the
+   56px name overflows narrow viewports and the 100px top padding
+   crowds the navbar on phones. */
+@media (max-width: 768px) {
+  .ea-hero {
+    padding: 56px 20px 40px;
+  }
+  .ea-hero-name {
+    font-size: 36px;
+  }
+  .ea-hero-text {
+    font-size: 22px;
+  }
+  .ea-hero-install {
+    padding: 8px 14px;
+    gap: 10px;
+  }
+  .ea-hero-install-text {
+    font-size: 13px;
+  }
+}
+
+@media (max-width: 480px) {
+  .ea-hero {
+    padding: 44px 16px 32px;
+  }
+  .ea-hero-name {
+    font-size: 28px;
+  }
+  .ea-hero-text {
+    font-size: 19px;
+  }
+  .ea-hero-install-text {
+    font-size: 12px;
+  }
+  /* Stack the action buttons full-width on the smallest screens so
+     they don't wrap awkwardly underneath the install pill. */
+  .ea-hero-row {
+    flex-direction: column;
+    align-items: stretch;
+    max-width: 280px;
+    margin-left: auto;
+    margin-right: auto;
+  }
 }
 
 .ea-problem-prose .ea-section-title {

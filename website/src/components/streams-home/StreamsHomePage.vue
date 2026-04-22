@@ -43,7 +43,7 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
           The data primitive for the agent&nbsp;loop
         </p>
 
-        <div class="ds-hero-row">
+        <div class="ds-hero-install-row">
           <button
             class="ds-hero-install"
             type="button"
@@ -90,13 +90,22 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
               </svg>
             </span>
           </button>
+        </div>
 
+        <div class="ds-hero-row">
           <VPButton
             tag="a"
             size="medium"
             theme="brand"
             text="Quickstart"
             href="/docs/streams/quickstart"
+          />
+          <VPButton
+            tag="a"
+            size="medium"
+            theme="alt"
+            text="Docs"
+            href="/docs/streams"
           />
         </div>
       </div>
@@ -586,7 +595,10 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
 
 .ds-hero {
   position: relative;
-  padding: 100px 24px 80px;
+  /* Tightened from 100/80 to compensate for the second CTA row
+     (install pill + action-button row) so the hero stays roughly the
+     same overall height as before the split. */
+  padding: 72px 24px 56px;
   text-align: center;
   overflow: hidden;
 }
@@ -630,8 +642,17 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
   text-wrap: balance;
 }
 
+/* Two-row CTA stack: the install pill always sits on its own line
+   above the action buttons so the copyable command reads as a
+   distinct affordance rather than a peer of the buttons. */
+.ds-hero-install-row {
+  margin-top: 24px;
+  display: flex;
+  justify-content: center;
+}
+
 .ds-hero-row {
-  margin-top: 32px;
+  margin-top: 14px;
   display: flex;
   justify-content: center;
   align-items: center;
@@ -1348,7 +1369,7 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
 
 @media (max-width: 768px) {
   .ds-hero {
-    padding: 72px 20px 56px;
+    padding: 56px 20px 40px;
   }
   .ds-hero-name {
     font-size: 36px;
@@ -1379,7 +1400,7 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
 
 @media (max-width: 480px) {
   .ds-hero {
-    padding: 56px 16px 40px;
+    padding: 44px 16px 32px;
   }
   .ds-hero-name {
     font-size: 28px;
@@ -1389,6 +1410,15 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
   }
   .ds-hero-install-text {
     font-size: 12px;
+  }
+  /* Stack the action buttons full-width on the smallest screens so
+     they don't wrap awkwardly underneath the install pill. */
+  .ds-hero-row {
+    flex-direction: column;
+    align-items: stretch;
+    max-width: 280px;
+    margin-left: auto;
+    margin-right: auto;
   }
   .ds-stack-code .code-block,
   .ds-first-stream .code-block {

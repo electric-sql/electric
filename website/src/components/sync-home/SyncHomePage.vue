@@ -63,7 +63,7 @@ const fanoutMiniDotCount = FANOUT_COLS * FANOUT_ROWS
           Sync subsets of your Postgres into&nbsp;everything.
         </p>
 
-        <div class="sh-hero-row">
+        <div class="sh-hero-install-row">
           <button
             class="sh-hero-install"
             type="button"
@@ -110,13 +110,22 @@ const fanoutMiniDotCount = FANOUT_COLS * FANOUT_ROWS
               </svg>
             </span>
           </button>
+        </div>
 
+        <div class="sh-hero-row">
           <VPButton
             tag="a"
             size="medium"
             theme="brand"
             text="Quickstart"
             href="/docs/quickstart"
+          />
+          <VPButton
+            tag="a"
+            size="medium"
+            theme="alt"
+            text="Docs"
+            href="/docs/sync"
           />
         </div>
       </div>
@@ -663,7 +672,10 @@ const fanoutMiniDotCount = FANOUT_COLS * FANOUT_ROWS
 
 .sh-hero {
   position: relative;
-  padding: 96px 24px 80px;
+  /* Tightened from 96/80 to compensate for the second CTA row
+     (install pill + action-button row) so the hero stays roughly the
+     same overall height as before the split. */
+  padding: 72px 24px 56px;
   text-align: center;
   overflow: hidden;
 }
@@ -707,8 +719,17 @@ const fanoutMiniDotCount = FANOUT_COLS * FANOUT_ROWS
   text-wrap: balance;
 }
 
+/* Two-row CTA stack: the install pill always sits on its own line
+   above the action buttons so the copyable command reads as a
+   distinct affordance rather than a peer of the buttons. */
+.sh-hero-install-row {
+  margin-top: 24px;
+  display: flex;
+  justify-content: center;
+}
+
 .sh-hero-row {
-  margin-top: 32px;
+  margin-top: 14px;
   display: flex;
   justify-content: center;
   align-items: center;
@@ -1566,7 +1587,7 @@ const fanoutMiniDotCount = FANOUT_COLS * FANOUT_ROWS
 
 @media (max-width: 768px) {
   .sh-hero {
-    padding: 72px 20px 56px;
+    padding: 56px 20px 40px;
   }
   .sh-hero-name { font-size: 36px; }
   .sh-hero-text { font-size: 22px; }
@@ -1596,12 +1617,21 @@ const fanoutMiniDotCount = FANOUT_COLS * FANOUT_ROWS
 
 @media (max-width: 480px) {
   .sh-hero {
-    padding: 56px 16px 40px;
+    padding: 44px 16px 32px;
   }
   .sh-hero-name { font-size: 28px; }
   .sh-hero-text { font-size: 19px; }
   .sh-hero-install-text {
     font-size: 12px;
+  }
+  /* Stack the action buttons full-width on the smallest screens so
+     they don't wrap awkwardly underneath the install pill. */
+  .sh-hero-row {
+    flex-direction: column;
+    align-items: stretch;
+    max-width: 280px;
+    margin-left: auto;
+    margin-right: auto;
   }
   .sh-fanout-stats {
     gap: 8px;
