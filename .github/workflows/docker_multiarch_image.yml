@@ -8,7 +8,7 @@ on:
         required: true
         type: string
       image_repo:
-        description: 'Canonical image repository used for push-by-digest, e.g. electricax/agents-server'
+        description: 'Canonical image repository used for push-by-digest, e.g. electricax/agent-server'
         required: true
         type: string
       context:

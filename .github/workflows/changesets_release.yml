@@ -56,12 +56,12 @@ jobs:
           # Use jq to pick the relevant package from the JSON array and format it into a <package>@<version> output
           TAGS=$(echo "$PUBLISHED_PACKAGES" | jq -r '.[] | select(.name == "@core/sync-service") | .name + "@" + .version')
           echo "tag=$TAGS" >> "$GITHUB_OUTPUT"
-      - name: Capture the new agents-server release as an output (if any)
+      - name: Capture the new agent-server release as an output (if any)
         id: agent_server_release_tag
         if: steps.changesets.outputs.published == 'true'
         run: |
           PUBLISHED_PACKAGES='${{ steps.changesets.outputs.publishedPackages }}'
-          TAGS=$(echo "$PUBLISHED_PACKAGES" | jq -r '.[] | select(.name == "@electric-ax/agents-server") | .name + "@" + .version')
+          TAGS=$(echo "$PUBLISHED_PACKAGES" | jq -r '.[] | select(.name == "@electric-ax/agent-server") | .name + "@" + .version')
           echo "tag=$TAGS" >> "$GITHUB_OUTPUT"
       - name: Add latest tag to published packages
         if: steps.changesets.outputs.published == 'true'
