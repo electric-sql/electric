@@ -168,6 +168,7 @@ describe(`runElectricAgentsEntrypoint`, () => {
       dataDir: `/streams-data`,
       host: `127.0.0.1`,
       port: 0,
+      webhooks: true,
     })
   })
 })

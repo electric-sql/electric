@@ -20,6 +20,7 @@ jobs:
     outputs:
       published: ${{ steps.changesets.outputs.published }}
       sync_service_release_tag: ${{ steps.sync_service_release_tag.outputs.tag }}
+      agent_server_release_tag: ${{ steps.agent_server_release_tag.outputs.tag }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -55,6 +56,13 @@ jobs:
           # Use jq to pick the relevant package from the JSON array and format it into a <package>@<version> output
           TAGS=$(echo "$PUBLISHED_PACKAGES" | jq -r '.[] | select(.name == "@core/sync-service") | .name + "@" + .version')
           echo "tag=$TAGS" >> "$GITHUB_OUTPUT"
+      - name: Capture the new agent-server release as an output (if any)
+        id: agent_server_release_tag
+        if: steps.changesets.outputs.published == 'true'
+        run: |
+          PUBLISHED_PACKAGES='${{ steps.changesets.outputs.publishedPackages }}'
+          TAGS=$(echo "$PUBLISHED_PACKAGES" | jq -r '.[] | select(.name == "@electric-ax/agent-server") | .name + "@" + .version')
+          echo "tag=$TAGS" >> "$GITHUB_OUTPUT"
       - name: Add latest tag to published packages
         if: steps.changesets.outputs.published == 'true'
         run: node scripts/tag-latest.mjs
@@ -72,6 +80,14 @@ jobs:
     secrets: inherit
     with:
       git_ref: ${{ needs.changesets.outputs.sync_service_release_tag }}
+
+  publish-agent-server-to-dockerhub:
+    needs: changesets
+    if: ${{ needs.changesets.outputs.published == 'true' && needs.changesets.outputs.agent_server_release_tag != '' }}
+    uses: ./.github/workflows/agent_server_dockerhub_image.yml
+    secrets: inherit
+    with:
+      git_ref: ${{ needs.changesets.outputs.agent_server_release_tag }}
 
   update-cloud:
     name: Update Electric version used by Cloud

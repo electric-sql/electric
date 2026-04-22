@@ -1,0 +1,95 @@
+name: Publish agent-server image to Docker Hub
+
+on:
+  workflow_call:
+    inputs:
+      git_ref:
+        description: 'Git ref to build from (branch name, tag, or commit SHA)'
+        required: true
+        type: string
+      docker_tag:
+        description: 'Optional Docker Hub tag override (derived from git_ref if omitted)'
+        required: false
+        type: string
+  workflow_dispatch:
+    inputs:
+      git_ref:
+        description: 'Git ref to build from (branch name, tag, or commit SHA)'
+        required: true
+        type: string
+      docker_tag:
+        description: 'Optional Docker Hub tag override (derived from git_ref if omitted)'
+        required: false
+        type: string
+
+env:
+  DOCKERHUB_REPO: electricax/agent-server
+
+jobs:
+  derive_build_vars:
+    name: Derive build variables from the source code
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    outputs:
+      git_ref: ${{ steps.git_ref.outputs.git_ref }}
+      image_tags: ${{ steps.vars.outputs.image_tags }}
+
+    steps:
+      - name: Determine the ref to check out
+        id: git_ref
+        env:
+          INPUT_GIT_REF: ${{ inputs.git_ref }}
+          INPUT_DOCKER_TAG: ${{ inputs.docker_tag }}
+        run: |
+          if [ -n "$INPUT_DOCKER_TAG" ]; then
+            ref="$INPUT_GIT_REF"
+            build_mode=custom
+          else
+            ref="refs/tags/$INPUT_GIT_REF"
+            build_mode=release
+          fi
+
+          echo "git_ref=$ref" >> $GITHUB_OUTPUT
+          echo "build_mode=$build_mode" >> $GITHUB_OUTPUT
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.git_ref.outputs.git_ref }}
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Determine final image tags
+        id: vars
+        env:
+          BUILD_MODE: ${{ steps.git_ref.outputs.build_mode }}
+          INPUT_DOCKER_TAG: ${{ inputs.docker_tag }}
+        run: |
+          AGENT_SERVER_VERSION=$(
+            git describe --abbrev=7 --tags --always --first-parent --match '@electric-ax/agent-server@*' | sed -En 's|^@electric-ax/agent-server@||p'
+          )
+
+          if [ -n "$INPUT_DOCKER_TAG" ]; then
+            IMAGE_TAGS="${DOCKERHUB_REPO}:${INPUT_DOCKER_TAG}"
+          else
+            IMAGE_TAGS=$(
+              printf '%s\n%s\n' \
+                "${DOCKERHUB_REPO}:latest" \
+                "${DOCKERHUB_REPO}:${AGENT_SERVER_VERSION}"
+            )
+          fi
+
+          {
+            echo "image_tags<<EOF"
+            echo "$IMAGE_TAGS"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+  build_and_publish_image:
+    needs: [derive_build_vars]
+    uses: ./.github/workflows/docker_multiarch_image.yml
+    secrets: inherit
+    with:
+      git_ref: ${{ needs.derive_build_vars.outputs.git_ref }}
+      image_repo: electricax/agent-server
+      context: .
+      file: packages/agent-server/Dockerfile
+      tags: ${{ needs.derive_build_vars.outputs.image_tags }}

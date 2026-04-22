@@ -37,7 +37,7 @@ services:
       ELECTRIC_INSECURE: 'true'
 
   electric-agents:
-    image: electricsql/agent-server:latest
+    image: electricax/agent-server:latest
     restart: unless-stopped
     env_file:
       - .env
@@ -49,6 +49,7 @@ services:
       electric:
         condition: service_started
     environment:
+      ELECTRIC_AGENTS_LOG_LEVEL: ${ELECTRIC_AGENTS_LOG_LEVEL:-debug}
       ELECTRIC_AGENTS_BASE_URL: http://electric-agents:4437
       DATABASE_URL: postgres://${ELECTRIC_AGENTS_POSTGRES_USER:-electric_agents}:${ELECTRIC_AGENTS_POSTGRES_PASSWORD:-electric_agents}@postgres:5432/${ELECTRIC_AGENTS_POSTGRES_DB:-electric_agents}
       ELECTRIC_AGENTS_HOST: 0.0.0.0
