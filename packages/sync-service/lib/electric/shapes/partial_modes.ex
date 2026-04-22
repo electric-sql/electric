@@ -95,7 +95,14 @@ defmodule Electric.Shapes.PartialModes do
       stack_id: opts[:stack_id]
     })
 
+    # Propagate OTel context so spans created inside the task are linked to the
+    # caller's trace. OTel context is per-process, so without this any
+    # `with_child_span` calls in the task would be silently dropped.
+    otel_ctx = :otel_ctx.get_current()
+
     Task.Supervisor.start_child(supervisor, fn ->
+      ctx_token = :otel_ctx.attach(otel_ctx)
+
       try do
         SnapshotQuery.execute_for_shape(pool, shape_handle, shape,
           stack_id: opts[:stack_id],
@@ -116,6 +123,8 @@ defmodule Electric.Shapes.PartialModes do
       rescue
         error ->
           send(consumer_pid, {:query_move_in_error, opts[:move_in_name], error, __STACKTRACE__})
+      after
+        :otel_ctx.detach(ctx_token)
       end
     end)
 
@@ -127,7 +136,14 @@ defmodule Electric.Shapes.PartialModes do
     pool = Manager.pool_name(opts[:stack_id], :snapshot)
     results_fn = Access.fetch!(opts, :results_fn)
 
+    # Propagate OTel context so spans created inside the task are linked to the
+    # caller's trace. OTel context is per-process, so without this any
+    # `with_child_span` calls in the task would be silently dropped.
+    otel_ctx = :otel_ctx.get_current()
+
     Task.Supervisor.start_child(supervisor, fn ->
+      ctx_token = :otel_ctx.attach(otel_ctx)
+
       try do
         SnapshotQuery.execute_for_shape(pool, shape_handle, shape,
           stack_id: opts[:stack_id],
@@ -146,6 +162,8 @@ defmodule Electric.Shapes.PartialModes do
       rescue
         error ->
           send(parent, {:query_move_in_error, opts[:move_in_name], error, __STACKTRACE__})
+      after
+        :otel_ctx.detach(ctx_token)
       end
     end)
 
