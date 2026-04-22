@@ -21,7 +21,10 @@ RUN corepack enable
 COPY . .
 
 RUN pnpm install --filter @electric-ax/agent-server... --frozen-lockfile
-RUN pnpm --filter @electric-ax/agent-server... build
+RUN pnpm --filter @electric-sql/client build
+RUN pnpm --filter @electric-ax/agent-runtime build
+RUN pnpm --filter @electric-ax/agent-server-ui build
+RUN pnpm --filter @electric-ax/agent-server build
 
 WORKDIR /app/packages/agent-server
 

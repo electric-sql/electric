@@ -1,7 +1,10 @@
+import { access, readFile } from 'node:fs/promises'
 import { createServer } from 'node:http'
 import { randomUUID } from 'node:crypto'
+import path from 'node:path'
 import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
+import { fileURLToPath } from 'node:url'
 import { Agent } from 'undici'
 import {
   getCronStreamPathFromSpec,
@@ -62,6 +65,36 @@ function omitUndefined<T extends Record<string, unknown>>(value: T): T {
   return Object.fromEntries(
     Object.entries(value).filter(([, entry]) => entry !== undefined)
   ) as T
+}
+
+const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url))
+const AGENT_UI_DIST_DIR = path.resolve(MODULE_DIR, `../../agent-server-ui/dist`)
+
+function contentTypeForStaticFile(filePath: string): string {
+  const ext = path.extname(filePath).toLowerCase()
+  switch (ext) {
+    case `.html`:
+      return `text/html; charset=utf-8`
+    case `.js`:
+      return `text/javascript; charset=utf-8`
+    case `.css`:
+      return `text/css; charset=utf-8`
+    case `.json`:
+      return `application/json; charset=utf-8`
+    case `.svg`:
+      return `image/svg+xml`
+    case `.png`:
+      return `image/png`
+    case `.jpg`:
+    case `.jpeg`:
+      return `image/jpeg`
+    case `.ico`:
+      return `image/x-icon`
+    case `.map`:
+      return `application/json; charset=utf-8`
+    default:
+      return `application/octet-stream`
+  }
 }
 
 export interface ElectricAgentsServerOptions {
@@ -556,6 +589,26 @@ export class ElectricAgentsServer {
     if (method === `OPTIONS`) {
       res.writeHead(204)
       res.end()
+      return
+    }
+
+    if (path === `/` && [`GET`, `HEAD`].includes(method ?? ``)) {
+      res.writeHead(302, { location: `/__agent_ui/` })
+      res.end()
+      return
+    }
+
+    if (path === `/__agent_ui` && [`GET`, `HEAD`].includes(method ?? ``)) {
+      res.writeHead(302, { location: `/__agent_ui/` })
+      res.end()
+      return
+    }
+
+    if (
+      path.startsWith(`/__agent_ui/`) &&
+      [`GET`, `HEAD`].includes(method ?? ``)
+    ) {
+      await this.handleAgentUiRequest(path, res, method === `HEAD`)
       return
     }
 
@@ -1229,6 +1282,81 @@ export class ElectricAgentsServer {
       throw err
     } finally {
       await endTrackedRead?.()
+    }
+  }
+
+  private async handleAgentUiRequest(
+    requestPath: string,
+    res: ServerResponse,
+    headOnly: boolean
+  ): Promise<void> {
+    const relativePath = decodeURIComponent(
+      requestPath.slice(`/__agent_ui/`.length)
+    )
+    const requestedFile =
+      relativePath.length === 0 ? `index.html` : relativePath
+    const filePath = this.resolveAgentUiPath(requestedFile)
+    const fallbackToIndex =
+      path.extname(requestedFile) === `` || requestedFile.endsWith(`/`)
+    const resolvedFile = await this.pickAgentUiFile(filePath, fallbackToIndex)
+
+    if (!resolvedFile) {
+      sendJsonError(
+        res,
+        404,
+        `AGENT_UI_NOT_FOUND`,
+        `Agent UI build artifacts are missing`
+      )
+      return
+    }
+
+    const body = headOnly ? undefined : await readFile(resolvedFile)
+    res.writeHead(200, {
+      'content-type': contentTypeForStaticFile(resolvedFile),
+      ...(resolvedFile.includes(`${path.sep}assets${path.sep}`)
+        ? { 'cache-control': `public, max-age=31536000, immutable` }
+        : { 'cache-control': `no-cache` }),
+    })
+    res.end(body)
+  }
+
+  private resolveAgentUiPath(relativePath: string): string {
+    const normalized = relativePath.replace(/^\/+/, ``)
+    return path.resolve(AGENT_UI_DIST_DIR, normalized)
+  }
+
+  private async pickAgentUiFile(
+    filePath: string,
+    fallbackToIndex: boolean
+  ): Promise<string | null> {
+    if (this.isAgentUiPath(filePath) && (await this.fileExists(filePath))) {
+      return filePath
+    }
+
+    if (!fallbackToIndex) {
+      return null
+    }
+
+    const indexPath = path.join(AGENT_UI_DIST_DIR, `index.html`)
+    if (!(await this.fileExists(indexPath))) {
+      return null
+    }
+    return indexPath
+  }
+
+  private isAgentUiPath(filePath: string): boolean {
+    return (
+      filePath === AGENT_UI_DIST_DIR ||
+      filePath.startsWith(`${AGENT_UI_DIST_DIR}${path.sep}`)
+    )
+  }
+
+  private async fileExists(filePath: string): Promise<boolean> {
+    try {
+      await access(filePath)
+      return true
+    } catch {
+      return false
     }
   }
 

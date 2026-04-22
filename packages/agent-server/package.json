@@ -69,6 +69,7 @@
     "undici": "^7.24.7"
   },
   "devDependencies": {
+    "@electric-ax/agent-server-ui": "workspace:*",
     "@electric-ax/agent-srever-conformance-tests": "workspace:*",
     "@types/better-sqlite3": "^7.6.13",
     "@types/jsdom": "^27.0.0",
