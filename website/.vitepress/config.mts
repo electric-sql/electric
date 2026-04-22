@@ -20,17 +20,6 @@ const resourcesSidebar = [
       { text: 'Blog', link: '/blog' },
       { text: 'Community', link: '/about/community' },
       { text: 'Team', link: '/about/team' },
-      {
-        text: 'Careers',
-        link: '/about/careers',
-        items: [
-          {
-            text: 'Founders Associate',
-            link: '/about/careers/founders-associate',
-          },
-        ],
-        collapsed: false,
-      },
       { text: 'LLMs / AGENTS.md', link: '/llms' },
       {
         text: 'Legal',
