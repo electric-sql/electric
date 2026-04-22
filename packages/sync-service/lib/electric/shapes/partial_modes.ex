@@ -98,10 +98,10 @@ defmodule Electric.Shapes.PartialModes do
     # Propagate OTel context so spans created inside the task are linked to the
     # caller's trace. OTel context is per-process, so without this any
     # `with_child_span` calls in the task would be silently dropped.
-    otel_ctx = :otel_ctx.get_current()
+    trace_context = OpenTelemetry.get_current_context()
 
     Task.Supervisor.start_child(supervisor, fn ->
-      ctx_token = :otel_ctx.attach(otel_ctx)
+      OpenTelemetry.set_current_context(trace_context)
 
       try do
         SnapshotQuery.execute_for_shape(pool, shape_handle, shape,
@@ -123,8 +123,6 @@ defmodule Electric.Shapes.PartialModes do
       rescue
         error ->
           send(consumer_pid, {:query_move_in_error, opts[:move_in_name], error, __STACKTRACE__})
-      after
-        :otel_ctx.detach(ctx_token)
       end
     end)
 
@@ -139,10 +137,10 @@ defmodule Electric.Shapes.PartialModes do
     # Propagate OTel context so spans created inside the task are linked to the
     # caller's trace. OTel context is per-process, so without this any
     # `with_child_span` calls in the task would be silently dropped.
-    otel_ctx = :otel_ctx.get_current()
+    trace_context = OpenTelemetry.get_current_context()
 
     Task.Supervisor.start_child(supervisor, fn ->
-      ctx_token = :otel_ctx.attach(otel_ctx)
+      OpenTelemetry.set_current_context(trace_context)
 
       try do
         SnapshotQuery.execute_for_shape(pool, shape_handle, shape,
@@ -162,8 +160,6 @@ defmodule Electric.Shapes.PartialModes do
       rescue
         error ->
           send(parent, {:query_move_in_error, opts[:move_in_name], error, __STACKTRACE__})
-      after
-        :otel_ctx.detach(ctx_token)
       end
     end)
 
