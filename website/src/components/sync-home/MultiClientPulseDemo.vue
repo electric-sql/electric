@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, onMounted, onUnmounted } from "vue"
+import { computed, ref, watch, onMounted, onUnmounted } from "vue"
 import { useDemoVisibility } from "../../../.vitepress/theme/composables/useDemoVisibility"
 
 const props = defineProps<{
@@ -44,12 +44,34 @@ interface PulseState {
 // is stretched. preserveAspectRatio="none" stretches both lines and
 // pulses identically.
 const FAN_SOURCE = { x: 300, y: 0 }
-const FAN_TARGETS = {
+// Two endpoint sets — the wide one feeds the desktop 3-column layout
+// (web | mobile | agent) and the compact one collapses Mobile into
+// Web's card so the demo fits side-by-side at narrow viewports as a
+// 2-column "web/mobile | agent" pair. Endpoints land on the
+// approximate horizontal centre of each card in their respective
+// layouts, with the (now hidden) mobile pulse parked on the web ray
+// so any in-flight animations terminate on screen rather than out
+// in empty space.
+const FAN_TARGETS_WIDE = {
   web: { x: 100, y: 80 },
   mobile: { x: 300, y: 80 },
   agent: { x: 500, y: 80 },
 }
+const FAN_TARGETS_COMPACT = {
+  web: { x: 150, y: 80 },
+  mobile: { x: 150, y: 80 },
+  agent: { x: 450, y: 80 },
+}
 const PULSE_DURATION = 620
+
+// Tracks whether we're under the "compact" breakpoint where the
+// three-client grid collapses to two cards (Web/Mobile + Agent).
+// Mirrors the CSS @media (max-width: 760px) breakpoint so visual
+// layout and JS-driven pulse geometry stay in sync.
+const isCompact = ref(false)
+const FAN_TARGETS = computed(() =>
+  isCompact.value ? FAN_TARGETS_COMPACT : FAN_TARGETS_WIDE
+)
 
 const sourceTick = ref(0)
 const webRows = ref<Row[]>([])
@@ -114,15 +136,15 @@ function emitOne() {
   // Each client receives with its own latency (HTTP CDN realism)
   setTimeout(() => {
     pushRow(webRows, row)
-    runPulse(webPulse, FAN_TARGETS.web)
+    runPulse(webPulse, FAN_TARGETS.value.web)
   }, 320)
   setTimeout(() => {
     pushRow(mobileRows, row)
-    runPulse(mobilePulse, FAN_TARGETS.mobile)
+    runPulse(mobilePulse, FAN_TARGETS.value.mobile)
   }, 540)
   setTimeout(() => {
     pushRow(agentRows, row)
-    runPulse(agentPulse, FAN_TARGETS.agent)
+    runPulse(agentPulse, FAN_TARGETS.value.agent)
   }, 720)
 
   emitCounter += 1
@@ -170,7 +192,23 @@ function pulseAt(end: { x: number; y: number }, progress: number): PulseState {
   }
 }
 
+// Wire isCompact to a media query that matches the demo's CSS
+// breakpoint, so layout (CSS) and pulse geometry (JS) flip together
+// when the viewport crosses the threshold. Using window.matchMedia
+// (rather than ResizeObserver on the demo itself) keeps this in
+// lockstep with the @media rule below.
+let mql: MediaQueryList | undefined
+function handleMql(e: MediaQueryListEvent | MediaQueryList) {
+  isCompact.value = e.matches
+}
+
 onMounted(() => {
+  if (typeof window !== "undefined" && window.matchMedia) {
+    mql = window.matchMedia("(max-width: 760px)")
+    isCompact.value = mql.matches
+    mql.addEventListener("change", handleMql)
+  }
+
   // Pre-seed the full row budget (4) so the cards never grow once
   // live emits start arriving — height stays rock-stable. In paused
   // mode we keep the SEED's natural-looking IDs so the snapshot
@@ -184,9 +222,9 @@ onMounted(() => {
   if (props.paused) {
     // Staggered progress so the three pulses sit at visibly
     // different points along their respective rays.
-    webPulse.value = pulseAt(FAN_TARGETS.web, 0.3)
-    mobilePulse.value = pulseAt(FAN_TARGETS.mobile, 0.55)
-    agentPulse.value = pulseAt(FAN_TARGETS.agent, 0.75)
+    webPulse.value = pulseAt(FAN_TARGETS.value.web, 0.3)
+    mobilePulse.value = pulseAt(FAN_TARGETS.value.mobile, 0.55)
+    agentPulse.value = pulseAt(FAN_TARGETS.value.agent, 0.75)
     sourceTick.value = 7
     hasStarted.value = true
     return
@@ -197,9 +235,20 @@ onMounted(() => {
   }
 })
 
+// In paused mode the pulse positions are computed once at mount —
+// re-derive them whenever the breakpoint flips so the snapshot
+// always sits along the currently-rendered fan lines.
+watch(isCompact, () => {
+  if (!props.paused) return
+  webPulse.value = pulseAt(FAN_TARGETS.value.web, 0.3)
+  mobilePulse.value = pulseAt(FAN_TARGETS.value.mobile, 0.55)
+  agentPulse.value = pulseAt(FAN_TARGETS.value.agent, 0.75)
+})
+
 onUnmounted(() => {
   mounted = false
   stop()
+  mql?.removeEventListener("change", handleMql)
 })
 </script>
 
@@ -223,11 +272,32 @@ onUnmounted(() => {
       </div>
 
       <!-- Fan-out lines + pulses (all in viewBox space so pulses
-           travel exactly along the rendered lines) -->
+           travel exactly along the rendered lines). Endpoints are
+           bound to FAN_TARGETS so they shift in to a 2-card layout
+           at the compact breakpoint along with the client grid. -->
       <svg class="mcp-fan" viewBox="0 0 600 80" preserveAspectRatio="none" aria-hidden="true">
-        <line class="fan-line" x1="300" y1="0" x2="100" y2="80" />
-        <line class="fan-line" x1="300" y1="0" x2="300" y2="80" />
-        <line class="fan-line" x1="300" y1="0" x2="500" y2="80" />
+        <line
+          class="fan-line"
+          x1="300"
+          y1="0"
+          :x2="FAN_TARGETS.web.x"
+          :y2="FAN_TARGETS.web.y"
+        />
+        <line
+          v-if="!isCompact"
+          class="fan-line fan-line--mobile"
+          x1="300"
+          y1="0"
+          :x2="FAN_TARGETS_WIDE.mobile.x"
+          :y2="FAN_TARGETS_WIDE.mobile.y"
+        />
+        <line
+          class="fan-line"
+          x1="300"
+          y1="0"
+          :x2="FAN_TARGETS.agent.x"
+          :y2="FAN_TARGETS.agent.y"
+        />
         <circle
           class="fan-pulse"
           r="3.5"
@@ -236,6 +306,7 @@ onUnmounted(() => {
           :opacity="webPulse.opacity"
         />
         <circle
+          v-if="!isCompact"
           class="fan-pulse"
           r="3.5"
           :cx="mobilePulse.x"
@@ -251,12 +322,14 @@ onUnmounted(() => {
         />
       </svg>
 
-      <!-- Three clients -->
+      <!-- Clients: three columns at desktop, two at the compact
+           breakpoint where Mobile is folded into the Web card. -->
       <div class="mcp-clients">
         <div class="mcp-client client-web">
           <div class="client-header">
             <span class="client-dot web-dot"></span>
-            <span class="client-name">Web</span>
+            <span class="client-name client-name--wide">Web</span>
+            <span class="client-name client-name--compact">Web / Mobile</span>
             <span class="client-meta mono">react</span>
           </div>
           <ul class="client-list">
@@ -465,6 +538,27 @@ onUnmounted(() => {
   font-size: 12.5px;
   line-height: 1.35;
   padding: 4px 0;
+  /* Allow the row to shrink below its mono-text min-content so a
+     long terminal/chat line can't force the parent grid column
+     wider than its `minmax(0, 1fr)` track. */
+  min-width: 0;
+}
+/* Same reason — the .row-text and friends are flex children of
+   .client-row, so they default to `min-width: auto` (= min-content),
+   which for long mono strings can blow out the column. Letting
+   them shrink to 0 is fine: they wrap naturally inside their card. */
+.client-row > * {
+  min-width: 0;
+}
+.term-row .row-text,
+.card-row .row-text {
+  /* Long mono terminal lines / row text overflow as ellipsis
+     rather than wrapping the row to two lines, which would knock
+     the card height (which is fixed via `client-list { height }`)
+     out of alignment with the others. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .mcp-demo.started .client-row {
   animation: mcp-row-in 0.4s ease-out;
@@ -530,17 +624,69 @@ onUnmounted(() => {
   color: var(--ea-text-1);
 }
 
+/* The "Web / Mobile" combined label is only shown at the compact
+   breakpoint, where the standalone Mobile card is hidden. The wide
+   "Web" label is shown otherwise — keeping both in the DOM lets us
+   swap purely via CSS without v-if churn around the SVG/grid
+   reactive updates. */
+.client-name--compact {
+  display: none;
+}
+
 /* ── Responsive ─────────────────────────────────────────────────── */
 
+/* Compact breakpoint — collapse the 3-column client grid to 2
+   columns and fold Mobile into the Web card so the demo still
+   reads side-by-side at narrow widths. The matching JS in
+   <script setup> shifts the SVG fan endpoints inwards (web/agent
+   only) so pulses still land on their cards. */
 @media (max-width: 760px) {
   .mcp-clients {
-    grid-template-columns: 1fr;
+    /* `minmax(0, 1fr)` (not bare `1fr`) is critical here: bare
+       `1fr` resolves to `minmax(auto, 1fr)`, which respects each
+       child's min-content width. If any row inside a card (e.g. a
+       mono terminal log line in the Agent column) is wider than
+       half the viewport, the column grows past 50% and the whole
+       grid blows out past 100%, pushing the homepage section
+       wider than the screen on small phones. `minmax(0, 1fr)`
+       lets the column shrink below min-content; combined with the
+       per-row `overflow: hidden` styling already on
+       `.client-meta`, this keeps the demo inside its frame. */
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 10px;
+  }
+  .client-mobile {
+    display: none;
+  }
+  .client-name--wide {
+    display: none;
+  }
+  .client-name--compact {
+    display: inline;
+  }
+  /* The "react" meta chip on Web feels misleading once the card
+     stands in for both web and mobile — drop the per-client tech
+     label at the compact breakpoint. */
+  .client-meta {
+    display: none;
   }
   .mcp-fan {
-    height: 50px;
+    height: 36px;
   }
   .mcp-demo {
     padding: 18px;
+  }
+}
+
+@media (max-width: 420px) {
+  .mcp-clients {
+    gap: 8px;
+  }
+  .mcp-client {
+    padding: 10px 10px;
+  }
+  .client-name {
+    font-size: 12px;
   }
 }
 </style>

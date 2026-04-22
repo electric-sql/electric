@@ -3,7 +3,7 @@ import EaSection from '../../agents-home/Section.vue'
 import LandscapeBlogPostListing from '../../LandscapeBlogPostListing.vue'
 
 import { data } from '../../../../data/posts.data.ts'
-const posts = data.filter((post) => post.homepage !== false).slice(0, 4)
+const posts = data.filter((post) => post.homepage !== false).slice(0, 6)
 </script>
 
 <template>
@@ -51,9 +51,14 @@ const posts = data.filter((post) => post.homepage !== false).slice(0, 4)
 </template>
 
 <style scoped>
+/* 6 posts laid out 2-up across three rows. The post card is a
+   horizontal image-then-text composition — at three columns the
+   text panel becomes too cramped to read comfortably, so we keep
+   the proven 2-up rhythm and use the extra two slots to fill out
+   the section without changing the card design. */
 .listing {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 24px;
   margin: 8px 0px;
 }

@@ -5,12 +5,12 @@ import HomeHero from './HomeHero.vue'
 import HomeProductSection from './HomeProductSection.vue'
 
 import BackedBySection from './sections/BackedBySection.vue'
-import DeploymentSection from './sections/DeploymentSection.vue'
 import LatestNewsSection from './sections/LatestNewsSection.vue'
-import OpenSourceSection from './sections/OpenSourceSection.vue'
 import ScalesToSection from './sections/ScalesToSection.vue'
 import WorksWithSection from './sections/WorksWithSection.vue'
 
+import AgentsCTAStrap from './straps/AgentsCTAStrap.vue'
+import ManagedCloudStrap from './straps/ManagedCloudStrap.vue'
 import NoSilosStrap from './straps/NoSilosStrap.vue'
 
 /* HomePage is the single page component for the site root. We render every
@@ -47,11 +47,11 @@ onMounted(() => {
 
     <NoSilosStrap />
     <WorksWithSection />
+    <ManagedCloudStrap />
     <ScalesToSection />
     <LatestNewsSection />
     <BackedBySection />
-    <OpenSourceSection />
-    <DeploymentSection />
+    <AgentsCTAStrap />
   </div>
 </template>
 

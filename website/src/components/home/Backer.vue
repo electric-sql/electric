@@ -10,9 +10,6 @@ const { image, name, profile_uri, short_bio } = backer
 .backer {
   margin-bottom: 8px;
 }
-.backer:nth-child(8) {
-  display: none;
-}
 .backer .image {
   width: 100%;
 
@@ -74,11 +71,6 @@ const { image, name, profile_uri, short_bio } = backer
     letter-spacing: 0;
   }
 }
-@media (max-width: 549px) {
-  .backer:nth-child(8) {
-    display: block;
-  }
-}
 @media (max-width: 449px) {
   .backer h5 {
     font-size: 13px;
@@ -93,9 +85,6 @@ const { image, name, profile_uri, short_bio } = backer
   }
   .backer h6 {
     font-size: 13px;
-  }
-  .backer:nth-child(8) {
-    display: none;
   }
 }
 </style>

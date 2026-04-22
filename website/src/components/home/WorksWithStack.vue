@@ -5,8 +5,8 @@
    the colour palette matches the rest of the site instead of defaulting
    to whatever shiki produces. */
 
-const sqlLines = [
-  '<span class="tk-kw">INSERT INTO</span> <span class="tk-v">todos</span> <span class="tk-kw">VALUES</span> (<span class="tk-str">\'sync\'</span>);',
+const sseLines = [
+  '<span class="tk-prop">data</span>: {<span class="tk-str">"type"</span>: <span class="tk-str">"text-delta"</span>, <span class="tk-str">"delta"</span>: <span class="tk-str">"Hi, "</span>}',
 ]
 
 const tsxLines = [
@@ -30,13 +30,16 @@ const tsxLines = [
       <div class="ww-data-sources">
         <div class="ww-card ww-card-primary">
           <div class="ww-card-head">
-            <img src="/img/icons/electric.svg" class="ww-card-icon" />
-            <a href="/sync" class="ww-card-label no-visual">Database sync</a>
+            <img
+              src="/img/home/sync-targets/agent.svg"
+              class="ww-card-icon"
+            />
+            <a href="/agents" class="ww-card-label no-visual">Agent streams</a>
           </div>
           <div class="ww-card-code">
             <div class="ww-code">
               <div
-                v-for="(line, i) in sqlLines"
+                v-for="(line, i) in sseLines"
                 :key="i"
                 class="ww-code-line"
                 v-html="line || '&#8203;'"
@@ -56,15 +59,15 @@ const tsxLines = [
             </div>
           </div>
         </a>
-        <a href="/agents" class="ww-card ww-mini no-visual">
+        <a href="/sync" class="ww-card ww-mini no-visual">
           <img
-            src="/img/home/sync-targets/agent.svg"
+            src="/img/icons/electric.svg"
             class="ww-card-icon"
           />
           <div class="ww-mini-text">
-            <div class="ww-mini-title">Agent streams</div>
+            <div class="ww-mini-title">Database sync</div>
             <div class="ww-mini-tagline mono">
-              Durable, resumable agents
+              Sync from Postgres in real time
             </div>
           </div>
         </a>
