@@ -1015,6 +1015,59 @@ iframe {
   margin-bottom: 0 !important;
 }
 
+/* ── Landing-page shared text styles ───────────────────────────────────────
+   Body-copy typography shared by the product landing pages
+   (`.ea-homepage` Agents, `.ds-homepage` Streams, `.sync-page` Sync).
+   These rules used to be duplicated in each page's scoped <style> block,
+   which caused the body-copy colour and mobile font-size to drift apart.
+
+   Canonical pattern (matches `.ea-section-subtitle` in
+   `agents-home/Section.vue`):
+     • body  = --ea-text-2 (grey)
+     • <strong> = --ea-text-1 (white) at font-weight 600
+     • <a>    = brand colour with subtle underline
+     • mobile cascade: 17 → 15 → 14px in lockstep with section subtitles
+
+   Selectors are scoped to the page-class so they don't leak into docs /
+   blog / generic VitePress content. `:is()` keeps the rule lists short. */
+:is(.ea-homepage, .ds-homepage, .sync-page) .ea-prose {
+  font-family: var(--vp-font-family-base);
+  font-size: 17px;
+  line-height: 1.7;
+  text-wrap: pretty;
+  color: var(--ea-text-2);
+  margin: 0 0 16px;
+  max-width: 640px;
+}
+:is(.ea-homepage, .ds-homepage, .sync-page) .ea-prose:last-child {
+  margin-bottom: 0;
+}
+:is(.ea-homepage, .ds-homepage, .sync-page) .ea-prose strong {
+  color: var(--ea-text-1);
+  font-weight: 600;
+}
+:is(.ea-homepage, .ds-homepage, .sync-page) .ea-prose a {
+  color: var(--vp-c-brand-1);
+  text-decoration: none;
+  border-bottom: 1px solid
+    color-mix(in srgb, var(--vp-c-brand-1) 35%, transparent);
+  transition: border-bottom-color 0.2s;
+}
+:is(.ea-homepage, .ds-homepage, .sync-page) .ea-prose a:hover {
+  border-bottom-color: var(--vp-c-brand-1);
+}
+
+@media (max-width: 768px) {
+  :is(.ea-homepage, .ds-homepage, .sync-page) .ea-prose {
+    font-size: 15px;
+  }
+}
+@media (max-width: 480px) {
+  :is(.ea-homepage, .ds-homepage, .sync-page) .ea-prose {
+    font-size: 14px;
+  }
+}
+
 /* Site root homepage: `layout: page` with `pageClass: home-page`. Each
    section / strap inside `<HomePage />` manages its own full-bleed band
    and centred inner container (matching the agents / streams / sync

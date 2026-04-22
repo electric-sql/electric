@@ -9,7 +9,7 @@ const posts = data.filter((post) => post.homepage !== false).slice(0, 4)
 <template>
   <EaSection :dark="true">
     <template #title>
-      Latest <span class="hidden-sm">news and</span> updates
+      Latest <span class="hidden-sm">news and</span>&nbsp;updates
     </template>
     <template #subtitle>
       Subscribe to the

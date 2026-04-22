@@ -68,7 +68,7 @@ const syncTargets = [
 
 <template>
   <Section :actions="actions">
-    <template #title> Sync makes apps awesome </template>
+    <template #title> Sync makes apps&nbsp;awesome </template>
     <template #tagline>
       Sync is the magic
       <span class="hidden-lg"> ingredient</span>

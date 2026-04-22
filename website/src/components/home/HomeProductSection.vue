@@ -42,7 +42,7 @@ const COPY: Record<Product, Copy> = {
   agents: {
     eyebrow: 'Agent runtime',
     name: 'Electric Agents',
-    title: 'The runtime for long-lived agents',
+    title: 'The runtime for long-lived&nbsp;agents',
     sub: 'Agents live as durable, synced entities — resumable across devices, observable across teams, forkable for review and experimentation.',
     cta: { text: 'Explore Agents »', href: '/agents' },
     secondary: { text: 'Quickstart', href: '/docs/agents/quickstart' },
@@ -60,7 +60,7 @@ const COPY: Record<Product, Copy> = {
   sync: {
     eyebrow: 'Sync engine',
     name: 'Electric Sync',
-    title: 'The core sync engine technology',
+    title: 'The core sync engine&nbsp;technology',
     sub: 'Composable sync primitives that power end-to-end reactivity and collaboration for multi-agent systems.',
     cta: { text: 'Explore Sync »', href: '/sync' },
     secondary: { text: 'Quickstart', href: '/docs/quickstart' },

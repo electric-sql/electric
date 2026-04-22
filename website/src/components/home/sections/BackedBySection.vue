@@ -29,7 +29,7 @@ select('adam')
 
 <template>
   <EaSection>
-    <template #title> Backed by industry insiders </template>
+    <template #title> Backed by industry&nbsp;insiders </template>
     <template #subtitle>
       Built by
       <a href="/about/team">devtools and database experts</a>. Backed by

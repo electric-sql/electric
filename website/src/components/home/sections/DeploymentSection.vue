@@ -18,7 +18,7 @@ const cloudUrl = '/cloud'
 <template>
   <EaSection id="deployment">
     <template #title>
-      Managed cloud or self&#8209;hosted
+      Managed cloud or&nbsp;self&#8209;hosted
     </template>
     <template #subtitle>
       Vendor agnostic, infra agnostic. Sign up for
@@ -179,11 +179,14 @@ const cloudUrl = '/cloud'
 .dp-cloud-text h3 {
   margin: 0 0 10px 0;
   font-size: 28px;
-  font-weight: 800;
-  line-height: 1.15;
-  letter-spacing: -0.015em;
+  /* Card title — 600 (down from 800) so it sits a step below the
+     section h2 weight without inverting the hierarchy. */
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
   color: var(--ea-text-1);
   max-width: 480px;
+  text-wrap: balance;
 }
 
 .dp-cloud-text p {

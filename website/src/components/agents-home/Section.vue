@@ -133,10 +133,15 @@ onUnmounted(() => {
 
 .ea-section-title {
   font-size: 28px;
-  font-weight: 700;
-  line-height: 1.3;
+  /* Section / h2 weight reduced from 700 to 600 so the headline-to-section
+     hierarchy reads more clearly (hero name 700 → section title 600 →
+     tertiary 500/600). */
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
   color: var(--ea-text-1);
   margin: 0;
+  text-wrap: balance;
 }
 
 .ea-section-subtitle {
@@ -180,7 +185,9 @@ onUnmounted(() => {
 
 @media (max-width: 768px) {
   .ea-section {
-    padding: 56px 20px;
+    /* Bumped left/right padding from 20 → 24 so content has more
+       breathing room from the viewport edge on tablets / large phones. */
+    padding: 56px 24px;
   }
   .ea-section-title {
     font-size: 22px;
@@ -195,7 +202,8 @@ onUnmounted(() => {
 
 @media (max-width: 480px) {
   .ea-section {
-    padding: 40px 16px;
+    /* Bumped left/right padding from 16 → 20 for the same reason. */
+    padding: 40px 20px;
   }
   .ea-section-title {
     font-size: 20px;

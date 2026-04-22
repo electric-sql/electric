@@ -126,7 +126,9 @@ onUnmounted(() => {
 
 .ns-title {
   font-size: 38px;
-  font-weight: 800;
+  /* Strap heading — matches the 700 weight of the home hero name so it
+     doesn't out-bold the page's H1. Was 800. */
+  font-weight: 700;
   line-height: 1.15;
   letter-spacing: -0.015em;
   color: var(--ea-text-1);

@@ -141,7 +141,7 @@ onMounted(async () => {
 
 <template>
   <EaSection :dark="true">
-    <template #title> Fully open source </template>
+    <template #title> Fully open&nbsp;source </template>
     <template #subtitle>
       With a thriving
       <a href="https://discord.electric-sql.com">open source community</a>

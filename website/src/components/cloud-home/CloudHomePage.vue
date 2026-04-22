@@ -15,7 +15,7 @@ const heroInnerRef = ref<HTMLElement>()
       <CloudHexBg />
       <div ref="heroInnerRef" class="cl-hero-inner">
         <h1 class="cl-hero-name">
-          Electric <span class="cl-hero-accent">Cloud</span>
+          Electric&nbsp;<span class="cl-hero-accent">Cloud</span>
         </h1>
         <p class="cl-hero-tagline">
           Scalable data infrastructure platform for building fast, modern apps
@@ -51,8 +51,8 @@ const heroInnerRef = ref<HTMLElement>()
     <!-- ─────────── §2 — Scalable data infrastructure ─────────── -->
     <EaSection
       id="scalable-infrastructure"
-      title="Scalable data infrastructure"
-      subtitle="Electric Cloud is a reactive data platform designed for running multi-user, multi-agent systems that provides turnkey hosting of Durable Streams and Postgres Sync."
+      title="Scalable data&nbsp;infrastructure"
+      subtitle="Electric Cloud is a reactive data platform designed for running multi-user, multi-agent systems that provides turnkey hosting of Durable Streams and Postgres&nbsp;Sync."
     >
       <div class="cl-product-grid">
         <a class="cl-product-card" href="/streams">
@@ -103,8 +103,8 @@ const heroInnerRef = ref<HTMLElement>()
     <EaSection
       id="data-delivery-network"
       :dark="true"
-      title="Data delivery network"
-      subtitle="Electric syncs data over HTTP via CDN infrastructure. Electric Cloud leverages this to provide a global Data Delivery Network."
+      title="Data delivery&nbsp;network"
+      subtitle="Electric syncs data over HTTP via CDN infrastructure. Electric Cloud leverages this to provide a global Data Delivery&nbsp;Network."
     >
       <p class="cl-ddn-prose">
         This allows you to scale out real-time data to
@@ -132,7 +132,7 @@ const heroInnerRef = ref<HTMLElement>()
     <EaSection
       id="protocols"
       title="Protocols"
-      subtitle="Electric Cloud supports multiple sync protocols. Electric syncs data over plain HTTP, which lets it integrate with CDN infrastructure for global, cached delivery."
+      subtitle="Electric Cloud supports multiple sync protocols. Electric syncs data over plain HTTP, which lets it integrate with CDN infrastructure for global, cached&nbsp;delivery."
     >
       <p class="cl-protocols-prose">
         See the
@@ -193,8 +193,7 @@ const heroInnerRef = ref<HTMLElement>()
           Hosted &middot; usage-based &middot; built on open&nbsp;protocols
         </div>
         <h2 class="cl-cta-title">
-          Start building on
-          <span class="cl-cta-accent">Electric&nbsp;Cloud</span>.
+          Start building on&nbsp;<span class="cl-cta-accent">Electric&nbsp;Cloud</span>.
         </h2>
         <p class="cl-cta-tagline">
           Sign up and start building with Electric Cloud&nbsp;today.
@@ -261,7 +260,8 @@ const heroInnerRef = ref<HTMLElement>()
   /* Standardized to 56px to match agents / streams / sync hero names. */
   font-size: 56px;
   font-weight: 700;
-  line-height: 1.2;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
   background: none;
   -webkit-background-clip: border-box;
   background-clip: border-box;
@@ -269,6 +269,7 @@ const heroInnerRef = ref<HTMLElement>()
   color: #f3f7ff;
   margin: 0;
   padding-bottom: 4px;
+  text-wrap: balance;
 }
 
 .cl-hero-accent {
@@ -304,7 +305,9 @@ const heroInnerRef = ref<HTMLElement>()
 
 @media (max-width: 768px) {
   .cl-hero {
-    padding: 56px 20px 40px;
+    /* Bumped horizontal padding from 20 → 24 for more breathing room
+       from the viewport edge on tablets / large phones. */
+    padding: 56px 24px 40px;
   }
   .cl-hero-name {
     font-size: 36px;
@@ -316,7 +319,8 @@ const heroInnerRef = ref<HTMLElement>()
 
 @media (max-width: 480px) {
   .cl-hero {
-    padding: 44px 16px 32px;
+    /* Bumped horizontal padding from 16 → 20 for breathing room. */
+    padding: 44px 20px 32px;
   }
   .cl-hero-name {
     font-size: 28px;
@@ -380,7 +384,8 @@ const heroInnerRef = ref<HTMLElement>()
 
 .cl-product-card h3 {
   font-size: 22px;
-  font-weight: 700;
+  /* Card title — kept at 600 (one step below section h2). */
+  font-weight: 600;
   line-height: 1.2;
   letter-spacing: -0.01em;
   color: var(--vp-c-text-1);
@@ -510,7 +515,8 @@ const heroInnerRef = ref<HTMLElement>()
 
 .cl-protocols-card h3 {
   font-size: 20px;
-  font-weight: 700;
+  /* Card title — kept at 600 (one step below section h2). */
+  font-weight: 600;
   letter-spacing: -0.01em;
   color: var(--vp-c-text-1);
   margin: 0 0 12px;
@@ -641,7 +647,9 @@ const heroInnerRef = ref<HTMLElement>()
 
 .cl-cta-title {
   font-size: 38px;
-  font-weight: 800;
+  /* Matches the 700 weight of the hero name so the CTA doesn't out-bold
+     the page's H1. Was 800 which inverted the hierarchy. */
+  font-weight: 700;
   line-height: 1.15;
   letter-spacing: -0.015em;
   color: var(--ea-text-1, var(--vp-c-text-1));

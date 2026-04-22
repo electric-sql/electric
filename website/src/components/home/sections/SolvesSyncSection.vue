@@ -23,7 +23,7 @@ const actions = [
 
 <template>
   <Section :actions="actions">
-    <template #title> Electric solves sync </template>
+    <template #title> Electric solves&nbsp;sync </template>
     <template #tagline>
       Electric is a Postgres sync engine. It&nbsp;solves
       <span class="hidden-sm">

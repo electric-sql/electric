@@ -57,7 +57,7 @@ const fanoutMiniDotCount = FANOUT_COLS * FANOUT_ROWS
       <SyncFanOutBg :exclude-el="heroInnerRef" :labels-on-hover="true" />
       <div ref="heroInnerRef" class="sh-hero-inner">
         <h1 class="sh-hero-name">
-          Electric <span class="sh-hero-accent">Sync</span>
+          Electric&nbsp;<span class="sh-hero-accent">Sync</span>
         </h1>
         <p class="sh-hero-text">
           Sync subsets of your Postgres into&nbsp;everything.
@@ -184,7 +184,7 @@ const fanoutMiniDotCount = FANOUT_COLS * FANOUT_ROWS
     <EaSection
       id="shape"
       title="Define a Shape — sync just what you&nbsp;need"
-      subtitle="A Shape is a SQL query against your Postgres. Electric carves out the matching rows and keeps them live for every client that subscribes."
+      subtitle="A Shape is a SQL query against your Postgres. Electric carves out the matching rows and keeps them live for every client that&nbsp;subscribes."
     >
       <ShapeCarveDemo />
       <div class="sh-section-foot">
@@ -286,7 +286,7 @@ const fanoutMiniDotCount = FANOUT_COLS * FANOUT_ROWS
     <EaSection
       id="writes"
       title="Bring your own&nbsp;writes"
-      subtitle="Electric handles the read path. Writes go through your existing backend — pick how much sync you want on top."
+      subtitle="Electric handles the read path. Writes go through your existing backend — pick how much sync you want on&nbsp;top."
       :dark="true"
     >
       <WritesLadder />
@@ -404,7 +404,7 @@ const fanoutMiniDotCount = FANOUT_COLS * FANOUT_ROWS
     <EaSection
       id="pillars"
       title="The best way to build&nbsp;apps"
-      subtitle="Sync makes your apps super-fast, with end-to-end reactivity, resilience, and built-in multi-user collaboration."
+      subtitle="Sync makes your apps super-fast, with end-to-end reactivity, resilience, and built-in multi-user&nbsp;collaboration."
     >
       <div class="sh-pillars">
         <a
@@ -429,8 +429,8 @@ const fanoutMiniDotCount = FANOUT_COLS * FANOUT_ROWS
     <!-- ──────────── Section 11: First sync ──────────── -->
     <EaSection
       id="first-sync"
-      title="Your first sync, end to end"
-      subtitle="Define a shape on the server. Mount a collection on the client. Render a live query."
+      title="Your first sync, end to&nbsp;end"
+      subtitle="Define a shape on the server. Mount a collection on the client. Render a live&nbsp;query."
       :dark="true"
     >
       <div class="sh-first-sync">
@@ -533,7 +533,7 @@ const fanoutMiniDotCount = FANOUT_COLS * FANOUT_ROWS
     <EaSection
       id="demos"
       title="Demos"
-      subtitle="Reference apps you can clone, run locally, and learn from."
+      subtitle="Reference apps you can clone, run locally, and learn&nbsp;from."
     >
       <div class="sh-demos">
         <a
@@ -560,7 +560,7 @@ const fanoutMiniDotCount = FANOUT_COLS * FANOUT_ROWS
     <EaSection
       id="compose"
       title="Compose your sync&nbsp;stack"
-      subtitle="Sync is one piece. Pair it with a reactive client store, an embedded database, or a Durable Stream — pick what fits the work."
+      subtitle="Sync is one piece. Pair it with a reactive client store, an embedded database, or a Durable Stream — pick what fits the&nbsp;work."
       :dark="true"
     >
       <ComposeStackGrid />
@@ -694,7 +694,8 @@ const fanoutMiniDotCount = FANOUT_COLS * FANOUT_ROWS
 .sh-hero-name {
   font-size: 56px;
   font-weight: 700;
-  line-height: 1.2;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
   background: none;
   -webkit-background-clip: border-box;
   background-clip: border-box;
@@ -702,6 +703,7 @@ const fanoutMiniDotCount = FANOUT_COLS * FANOUT_ROWS
   color: var(--ea-text-1);
   margin: 0;
   padding-bottom: 4px;
+  text-wrap: balance;
 }
 
 .sh-hero-accent {
@@ -829,11 +831,12 @@ const fanoutMiniDotCount = FANOUT_COLS * FANOUT_ROWS
    sits next to the heading rather than below it). */
 .sh-inline-title {
   font-size: 28px;
-  font-weight: 700;
-  line-height: 1.3;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
   color: var(--ea-text-1);
   margin: 0 0 20px;
-  text-wrap: pretty;
+  text-wrap: balance;
 }
 
 @media (max-width: 768px) {
@@ -849,17 +852,11 @@ const fanoutMiniDotCount = FANOUT_COLS * FANOUT_ROWS
   }
 }
 
-.ea-prose {
-  font-family: var(--vp-font-family-base);
-  font-size: 17px;
-  line-height: 1.7;
-  text-wrap: pretty;
-  color: var(--ea-text-1);
-  margin: 0 0 16px;
-  max-width: 540px;
-}
-.ea-prose:last-child { margin-bottom: 0; }
-.ea-prose strong { color: var(--ea-text-1); font-weight: 600; }
+/* `.ea-prose` core typography (font, size, color, margin, max-width,
+   mobile cascade, link styling) is defined globally in
+   `.vitepress/theme/custom.css` under "Landing-page shared text styles"
+   so the rules don't drift between Agents / Streams / Sync. Only
+   page-specific overrides should live here. */
 
 .sh-section-foot {
   margin-top: 24px;
@@ -1473,12 +1470,15 @@ const fanoutMiniDotCount = FANOUT_COLS * FANOUT_ROWS
 
 .sh-cta-title {
   font-size: 38px;
-  font-weight: 800;
+  /* Matches the 700 weight of the hero name so the CTA doesn't out-bold
+     the page's H1. Was 800 which inverted the hierarchy. */
+  font-weight: 700;
   line-height: 1.15;
   letter-spacing: -0.015em;
   color: var(--ea-text-1);
   margin: 0;
   max-width: 560px;
+  text-wrap: balance;
 }
 .sh-cta-accent {
   background: var(--vp-home-hero-name-background);
@@ -1587,7 +1587,9 @@ const fanoutMiniDotCount = FANOUT_COLS * FANOUT_ROWS
 
 @media (max-width: 768px) {
   .sh-hero {
-    padding: 56px 20px 40px;
+    /* Bumped horizontal padding from 20 → 24 for more breathing room
+       from the viewport edge on tablets / large phones. */
+    padding: 56px 24px 40px;
   }
   .sh-hero-name { font-size: 36px; }
   .sh-hero-text { font-size: 22px; }
@@ -1617,7 +1619,8 @@ const fanoutMiniDotCount = FANOUT_COLS * FANOUT_ROWS
 
 @media (max-width: 480px) {
   .sh-hero {
-    padding: 44px 16px 32px;
+    /* Bumped horizontal padding from 16 → 20 for breathing room. */
+    padding: 44px 20px 32px;
   }
   .sh-hero-name { font-size: 28px; }
   .sh-hero-text { font-size: 19px; }

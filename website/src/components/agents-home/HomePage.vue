@@ -27,7 +27,7 @@ function copyInstall() {
     <section class="ea-hero">
       <HeroNetworkBg :exclude-el="heroInnerRef" />
       <div ref="heroInnerRef" class="ea-hero-inner">
-        <h1 class="ea-hero-name">Electric <span class="ea-hero-accent">Agents</span></h1>
+        <h1 class="ea-hero-name">Electric&nbsp;<span class="ea-hero-accent">Agents</span></h1>
         <p class="ea-hero-text">
           The runtime for long-lived&nbsp;agents
         </p>
@@ -144,7 +144,7 @@ function copyInstall() {
         </div>
 
         <div class="ea-runtime-text">
-          <h2 class="ea-section-title">Inside the runtime</h2>
+          <h2 class="ea-section-title">Inside the&nbsp;runtime</h2>
           <p class="ea-prose">Electric Agents is two pieces:</p>
           <ul class="ea-runtime-list">
             <li>
@@ -167,7 +167,7 @@ function copyInstall() {
     <!-- Section 3: Entity + Stream -->
     <Section
       id="entity-stream"
-      title="Every agent is an entity with a stream"
+      title="Every agent is an entity with a&nbsp;stream"
     >
       <div class="ea-entity-intro">
         <p>You define <strong>entity types</strong> — like <code>assistant</code> or <code>researcher</code> — then spawn instances on&nbsp;demand.</p>
@@ -200,7 +200,7 @@ function copyInstall() {
     <!-- Section 5: Coordination -->
     <Section
       id="coordination"
-      title="Primitives for coordination"
+      title="Primitives for&nbsp;coordination"
       subtitle="Local agents compose through child processes. Electric Agents makes that pattern durable, observable, and&nbsp;serverless."
     >
       <CoordinationDemo />
@@ -250,7 +250,7 @@ function copyInstall() {
     <!-- Section 8: Your Stack -->
     <Section
       id="your-stack"
-      title="Your stack, not ours"
+      title="Your stack, not&nbsp;ours"
       subtitle="Runs on your infrastructure. Express, Next.js, Hono, TanStack Start — agents are webhook handlers. No vendor&nbsp;lock-in."
       :dark="true"
     >
@@ -417,8 +417,8 @@ function copyInstall() {
     <!-- Section 9: First Agent -->
     <Section
       id="first-agent"
-      title="Your first agent, end to end"
-      subtitle="Define an entity type. Write a handler. Deploy."
+      title="Your first agent, end to&nbsp;end"
+      subtitle="Define an entity type. Write a handler.&nbsp;Deploy."
       :dark="true"
     >
       <div class="ea-first-agent">
@@ -666,7 +666,8 @@ function copyInstall() {
 .ea-hero-name {
   font-size: 56px;
   font-weight: 700;
-  line-height: 1.2;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
   background: none;
   -webkit-background-clip: border-box;
   background-clip: border-box;
@@ -674,6 +675,7 @@ function copyInstall() {
   color: var(--ea-text-1);
   margin: 0;
   padding-bottom: 4px;
+  text-wrap: balance;
 }
 
 .ea-hero-accent {
@@ -764,7 +766,9 @@ function copyInstall() {
    crowds the navbar on phones. */
 @media (max-width: 768px) {
   .ea-hero {
-    padding: 56px 20px 40px;
+    /* Bumped horizontal padding from 20 → 24 for more breathing room
+       from the viewport edge on tablets / large phones. */
+    padding: 56px 24px 40px;
   }
   .ea-hero-name {
     font-size: 36px;
@@ -783,7 +787,8 @@ function copyInstall() {
 
 @media (max-width: 480px) {
   .ea-hero {
-    padding: 44px 16px 32px;
+    /* Bumped horizontal padding from 16 → 20 for breathing room. */
+    padding: 44px 20px 32px;
   }
   .ea-hero-name {
     font-size: 28px;
@@ -807,37 +812,29 @@ function copyInstall() {
 
 .ea-problem-prose .ea-section-title {
   font-size: 28px;
-  font-weight: 700;
-  line-height: 1.3;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
   color: var(--ea-text-1);
   margin: 0 0 24px;
+  text-wrap: balance;
 }
 
 /* ── Prose ──────────────────────────────────────────────────────────── */
-
-.ea-prose {
-  font-family: var(--vp-font-family-base);
-  font-size: 17px;
-  line-height: 1.7;
-  text-wrap: pretty;
-  color: var(--ea-text-1);
-  margin: 0 0 16px;
-  max-width: 640px;
-}
-
-.ea-prose a {
-  color: var(--vp-c-brand-1);
-  text-decoration: none;
-  border-bottom: 1px solid
-    color-mix(in srgb, var(--vp-c-brand-1) 35%, transparent);
-  transition: border-bottom-color 0.2s;
-}
-.ea-prose a:hover {
-  border-bottom-color: var(--vp-c-brand-1);
-}
+/* `.ea-prose` core typography (font, size, color, margin, max-width,
+   mobile cascade, link styling) is defined globally in
+   `.vitepress/theme/custom.css` under "Landing-page shared text styles"
+   so the rules don't drift between Agents / Streams / Sync. Only
+   page-specific overrides should live here. */
 
 .ea-entity-intro {
   max-width: 640px;
+  /* Pull the intro copy 24px closer to the section title on desktop —
+     Section.vue's header has a 40px bottom margin which feels too loose
+     when the body is short prose rather than a sub-heading + diagram.
+     This is reset to 0 at the mobile breakpoints below where the header
+     bottom margin is already tighter (28px / 24px) and any negative
+     margin would collapse the gap to ~0. */
   margin-top: -24px;
   margin-bottom: 32px;
 }
@@ -1019,10 +1016,12 @@ function copyInstall() {
 
 .ea-durable-text .ea-section-title {
   font-size: 28px;
-  font-weight: 700;
-  line-height: 1.3;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
   color: var(--ea-text-1);
   margin: 0;
+  text-wrap: balance;
 }
 
 .ea-durable-text .ea-section-subtitle {
@@ -1056,10 +1055,12 @@ function copyInstall() {
 
 .ea-scale-text .ea-section-title {
   font-size: 28px;
-  font-weight: 700;
-  line-height: 1.3;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
   color: var(--ea-text-1);
   margin: 0;
+  text-wrap: balance;
 }
 
 .ea-scale-text .ea-section-subtitle {
@@ -1098,10 +1099,12 @@ function copyInstall() {
 
 .ea-context-text .ea-section-title {
   font-size: 28px;
-  font-weight: 700;
-  line-height: 1.3;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
   color: var(--ea-text-1);
   margin: 0;
+  text-wrap: balance;
 }
 
 .ea-context-text .ea-section-subtitle {
@@ -1502,12 +1505,15 @@ function copyInstall() {
 }
 .ea-cta-title {
   font-size: 38px;
-  font-weight: 800;
+  /* Matches the 700 weight of the hero name so the CTA doesn't out-bold
+     the page's H1. Was 800 which inverted the hierarchy. */
+  font-weight: 700;
   line-height: 1.15;
   letter-spacing: -0.015em;
   color: var(--ea-text-1);
   margin: 0;
   max-width: 560px;
+  text-wrap: balance;
 }
 .ea-cta-accent {
   background: var(--vp-home-hero-name-background);
@@ -1611,10 +1617,12 @@ function copyInstall() {
 }
 .ea-come-online-text .ea-section-title {
   font-size: 28px;
-  font-weight: 700;
-  line-height: 1.3;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
   color: var(--ea-text-1);
   margin: 0 0 20px;
+  text-wrap: balance;
 }
 .ea-come-online-visual {
   flex: 1;
@@ -1645,10 +1653,12 @@ function copyInstall() {
 }
 .ea-runtime-text .ea-section-title {
   font-size: 28px;
-  font-weight: 700;
-  line-height: 1.3;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
   color: var(--ea-text-1);
   margin: 0 0 20px;
+  text-wrap: balance;
 }
 .ea-runtime-text .ea-prose + .ea-prose {
   margin-top: 14px;
@@ -2102,22 +2112,9 @@ function copyInstall() {
 /* ── Responsive ────────────────────────────────────────────────────── */
 
 @media (max-width: 768px) {
-  .ea-hero {
-    padding: 72px 20px 56px;
-  }
-  .ea-hero-name {
-    font-size: 36px;
-  }
-  .ea-hero-text {
-    font-size: 22px;
-  }
-  .ea-hero-install {
-    padding: 8px 14px;
-    gap: 10px;
-  }
-  .ea-hero-install-text {
-    font-size: 13px;
-  }
+  /* NOTE: hero padding / type sizes for this breakpoint live in the
+     earlier `.ea-hero` media query block alongside the hero CSS so
+     all hero rules are kept together. Do not duplicate them here. */
   .ea-problem {
     flex-direction: column;
     gap: 32px;
@@ -2186,18 +2183,43 @@ function copyInstall() {
   }
   .ea-entity-intro {
     max-width: 100%;
+    /* Reset the desktop -24px pull-up: at this breakpoint Section.vue's
+       header bottom margin is already only 28px so the negative margin
+       would collapse the gap below the title to ~4px. */
+    margin-top: 0;
   }
   .ea-prose {
+    /* Page-specific override: fill the column on mobile (the desktop
+       max-width: 640px in the global rule constrains it on tablet+). */
     max-width: 100%;
   }
-  .ea-problem-prose .ea-section-title {
-    font-size: 22px;
+  /* The entity-intro paragraphs ("Every agent is an entity with a
+     stream") are styled separately from .ea-prose; step them down to
+     match for visual consistency. */
+  .ea-entity-intro p {
+    font-size: 15px;
   }
+  /* All per-section section-title overrides drop to 22px in lockstep
+     with the shared `.ea-section-title` rule in Section.vue. Keep this
+     selector list in sync if a new `.ea-{name}-text .ea-section-title`
+     override is added above. */
+  .ea-problem-prose .ea-section-title,
   .ea-durable-text .ea-section-title,
   .ea-scale-text .ea-section-title,
+  .ea-context-text .ea-section-title,
   .ea-come-online-text .ea-section-title,
   .ea-runtime-text .ea-section-title {
     font-size: 22px;
+  }
+  /* Per-section subtitle overrides — these are inline
+     `<p class="ea-section-subtitle">` paragraphs that live in HomePage's
+     own scoped style block, so the cascade in Section.vue doesn't reach
+     them. Mirror Section.vue's mobile subtitle size (15px) so they
+     scale in lockstep with the section titles above. */
+  .ea-durable-text .ea-section-subtitle,
+  .ea-scale-text .ea-section-subtitle,
+  .ea-context-text .ea-section-subtitle {
+    font-size: 15px;
   }
   .code-block {
     font-size: 12px;
@@ -2217,20 +2239,35 @@ function copyInstall() {
 }
 
 @media (max-width: 480px) {
-  .ea-hero {
-    padding: 56px 16px 40px;
-  }
-  .ea-hero-name {
-    font-size: 28px;
-  }
-  .ea-hero-text {
-    font-size: 19px;
-  }
+  /* NOTE: hero padding / type sizes for this breakpoint live in the
+     earlier `.ea-hero` media query block alongside the hero CSS so
+     all hero rules are kept together. Do not duplicate them here. */
   .ea-hero-credibility {
     font-size: 12px;
   }
-  .ea-hero-install-text {
-    font-size: 12px;
+  /* All per-section section-title overrides drop to 20px in lockstep
+     with the shared `.ea-section-title` rule in Section.vue. Keep this
+     selector list in sync with the 768px rule above. */
+  .ea-problem-prose .ea-section-title,
+  .ea-durable-text .ea-section-title,
+  .ea-scale-text .ea-section-title,
+  .ea-context-text .ea-section-title,
+  .ea-come-online-text .ea-section-title,
+  .ea-runtime-text .ea-section-title {
+    font-size: 20px;
+  }
+  /* Continue stepping the per-section subtitles down in lockstep with
+     Section.vue's `.ea-section-subtitle` (14px at 480px). */
+  .ea-durable-text .ea-section-subtitle,
+  .ea-scale-text .ea-section-subtitle,
+  .ea-context-text .ea-section-subtitle {
+    font-size: 14px;
+  }
+  /* The entity-intro paragraphs ("Every agent is an entity with a
+     stream") are styled separately from .ea-prose; step them down to
+     match for visual consistency at the smallest breakpoint. */
+  .ea-entity-intro p {
+    font-size: 14px;
   }
   .code-block {
     font-size: 11px;

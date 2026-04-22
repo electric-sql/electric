@@ -152,7 +152,9 @@ const totalLabel = computed(() => `${QUOTE.length} bytes total`)
     Consolas,
     monospace
   );
-  font-size: 14px;
+  /* Reduced ~10% from 14px so the hex viewer feels less dominant
+     against the hero copy. */
+  font-size: 12.5px;
   line-height: 1.55;
   color: var(--cl-hex-fg);
   letter-spacing: 0;
@@ -160,6 +162,11 @@ const totalLabel = computed(() => `${QUOTE.length} bytes total`)
   opacity: 0.55;
   display: grid;
   gap: 0;
+  /* Each row is a fixed-width hex dump; never let it wrap or get
+     squeezed. The hex viewer is purely decorative (aria-hidden) and
+     bleeds off the edges via the surrounding mask, so it's safe to
+     overflow rather than reflow on narrow viewports. */
+  white-space: nowrap;
 }
 
 .cl-hex-row {
@@ -167,6 +174,8 @@ const totalLabel = computed(() => `${QUOTE.length} bytes total`)
   grid-template-columns: 10ch 47ch auto;
   column-gap: 3ch;
   align-items: baseline;
+  /* Belt-and-braces: stop any individual cell from wrapping. */
+  white-space: nowrap;
 }
 
 .cl-hex-head {
@@ -208,7 +217,9 @@ const totalLabel = computed(() => `${QUOTE.length} bytes total`)
 
 @media (max-width: 768px) {
   .cl-hex-pre {
-    font-size: 11px;
+    /* Reduced ~10% from 11px to match the desktop trim and to keep
+       the hex dump unobtrusive on smaller viewports. */
+    font-size: 10px;
     opacity: 0.45;
   }
   .cl-hex-mask {

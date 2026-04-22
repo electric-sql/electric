@@ -37,7 +37,7 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
       <StreamFlowBg :exclude-el="heroInnerRef" />
       <div ref="heroInnerRef" class="ds-hero-inner">
         <h1 class="ds-hero-name">
-          Electric <span class="ds-hero-accent">Streams</span>
+          Electric&nbsp;<span class="ds-hero-accent">Streams</span>
         </h1>
         <p class="ds-hero-text">
           The data primitive for the agent&nbsp;loop
@@ -242,7 +242,7 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
       id="layered-stack"
       :dark="true"
       title="One protocol, four&nbsp;layers"
-      subtitle="Pick the layer you need. Bytes → JSON messages → typed CRUD events → reactive type-safe DB. Every layer above adds power; every layer below remains available."
+      subtitle="Pick the layer you need. Bytes → JSON messages → typed CRUD events → reactive type-safe DB. Every layer above adds power; every layer below remains&nbsp;available."
     >
       <LayersGrid />
     </EaSection>
@@ -460,7 +460,7 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
             <span class="ds-demo-glyph">💬</span>
           </div>
           <div class="ds-demo-body">
-            <h3>Durable AI Chat</h3>
+            <h3>Durable AI&nbsp;Chat</h3>
             <p>Multi-user, multi-agent AI chat with resumable sessions across tabs and devices.</p>
           </div>
         </a>
@@ -469,7 +469,7 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
             <span class="ds-demo-glyph">⚙</span>
           </div>
           <div class="ds-demo-body">
-            <h3>Background Jobs</h3>
+            <h3>Background&nbsp;Jobs</h3>
             <p>Real-time job dashboard built on State Protocol. Live progress events into StreamDB.</p>
           </div>
         </a>
@@ -478,7 +478,7 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
             <span class="ds-demo-glyph">✎</span>
           </div>
           <div class="ds-demo-body">
-            <h3>Yjs Collab Editor</h3>
+            <h3>Yjs Collab&nbsp;Editor</h3>
             <p>Multi-user collaborative editor over Yjs CRDTs and Electric Streams. No WebSocket server needed.</p>
           </div>
         </a>
@@ -617,7 +617,8 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
 .ds-hero-name {
   font-size: 56px;
   font-weight: 700;
-  line-height: 1.2;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
   background: none;
   -webkit-background-clip: border-box;
   background-clip: border-box;
@@ -625,6 +626,7 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
   color: var(--ea-text-1);
   margin: 0;
   padding-bottom: 4px;
+  text-wrap: balance;
 }
 
 .ds-hero-accent {
@@ -698,17 +700,22 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
 
 /* ── §2 Pain intro ─────────────────────────────────────────────── */
 
+/* `.ds-pain-intro` — overrides on top of the shared `.ea-prose` rule
+   defined in `.vitepress/theme/custom.css`. The `<p>` carries both
+   classes (`<p class="ea-prose ds-pain-intro">`); only divergent
+   properties live here. */
 .ds-pain-intro {
   max-width: 760px;
+  /* Pull the intro 24px closer to the section title on desktop —
+     EaSection's header has a 40px bottom margin which feels too loose
+     when the body starts with a single prose paragraph. The negative
+     margin is reset to 0 at the mobile breakpoints below where the
+     header bottom margin is already tighter (28px / 24px) and the
+     pull-up would otherwise collapse the gap to ~0. */
   margin: -24px 0 28px;
-  font-size: 17px;
+  /* Slightly tighter line-height than the shared 1.7 so the single
+     paragraph reads more like the section subtitle it follows. */
   line-height: 1.6;
-  color: var(--ea-text-2);
-  text-wrap: pretty;
-}
-.ds-pain-intro strong {
-  color: var(--ea-text-1);
-  font-weight: 600;
 }
 
 /* ── §3 Tour footer ─────────────────────────────────────────────── */
@@ -767,10 +774,12 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
 }
 .ds-split-text .ea-section-title {
   font-size: 28px;
-  font-weight: 700;
-  line-height: 1.3;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
   color: var(--ea-text-1);
   margin: 0;
+  text-wrap: balance;
 }
 .ds-split-text .ea-section-subtitle {
   font-size: 17px;
@@ -1163,7 +1172,8 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
 }
 .ds-demo-body h3 {
   font-size: 16px;
-  font-weight: 700;
+  /* Card title — kept at 600 (one step below section h2). */
+  font-weight: 600;
   margin: 0 0 6px;
   color: var(--ea-text-1);
 }
@@ -1226,12 +1236,15 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
 
 .ds-cta-title {
   font-size: 38px;
-  font-weight: 800;
+  /* Matches the 700 weight of the hero name so the CTA doesn't out-bold
+     the page's H1. Was 800 which inverted the hierarchy. */
+  font-weight: 700;
   line-height: 1.15;
   letter-spacing: -0.015em;
   color: var(--ea-text-1);
   margin: 0;
   max-width: 560px;
+  text-wrap: balance;
 }
 .ds-cta-accent {
   background: var(--vp-home-hero-name-background);
@@ -1369,7 +1382,9 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
 
 @media (max-width: 768px) {
   .ds-hero {
-    padding: 56px 20px 40px;
+    /* Bumped horizontal padding from 20 → 24 for more breathing room
+       from the viewport edge on tablets / large phones. */
+    padding: 56px 24px 40px;
   }
   .ds-hero-name {
     font-size: 36px;
@@ -1387,6 +1402,21 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
   .ds-split-text .ea-section-title {
     font-size: 22px;
   }
+  /* These are inline `<p class="ea-section-subtitle">` paragraphs (not
+     rendered through EaSection's slot), so the cascade in Section.vue's
+     scoped style block doesn't reach them. Mirror Section.vue's mobile
+     subtitle size (15px) so the subtitle scales in lockstep with the
+     section title above it. */
+  .ds-split-text .ea-section-subtitle {
+    font-size: 15px;
+  }
+  /* Reset the desktop -24px pull-up: EaSection's header bottom margin
+     is already only 28px at this breakpoint so the negative top margin
+     would collapse the gap below the title to ~4px. Font-size is
+     handled by the shared `.ea-prose` mobile cascade in custom.css. */
+  .ds-pain-intro {
+    margin-top: 0;
+  }
   .ds-stack-code .code-block,
   .ds-first-stream .code-block {
     font-size: 12px;
@@ -1400,7 +1430,8 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
 
 @media (max-width: 480px) {
   .ds-hero {
-    padding: 44px 16px 32px;
+    /* Bumped horizontal padding from 16 → 20 for breathing room. */
+    padding: 44px 20px 32px;
   }
   .ds-hero-name {
     font-size: 28px;
@@ -1411,6 +1442,20 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
   .ds-hero-install-text {
     font-size: 12px;
   }
+  /* Drop the section title override in lockstep with the shared
+     `.ea-section-title` rule in Section.vue (20px at 480px) so the
+     `.ds-split-text` heading matches every other section title on
+     the page at this breakpoint. */
+  .ds-split-text .ea-section-title {
+    font-size: 20px;
+  }
+  /* Continue stepping the inline subtitle down in lockstep with
+     Section.vue's `.ea-section-subtitle` (14px at 480px). */
+  .ds-split-text .ea-section-subtitle {
+    font-size: 14px;
+  }
+  /* `.ds-pain-intro` font-size at 480px is handled by the shared
+     `.ea-prose` mobile cascade in custom.css. */
   /* Stack the action buttons full-width on the smallest screens so
      they don't wrap awkwardly underneath the install pill. */
   .ds-hero-row {

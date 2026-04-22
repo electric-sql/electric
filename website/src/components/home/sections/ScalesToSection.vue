@@ -63,9 +63,11 @@ import ScalabilityChart from '../../ScalabilityChart.vue'
 
 .st-title {
   font-size: 32px;
-  font-weight: 800;
-  line-height: 1.15;
-  letter-spacing: -0.015em;
+  /* Section h2 — 600 (down from 800) so it sits below the home hero
+     name without out-bolding it. */
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
   color: var(--ea-text-1);
   margin: 0 0 16px;
   text-wrap: balance;
