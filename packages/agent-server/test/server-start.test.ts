@@ -1,0 +1,344 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+import { ElectricAgentsServer } from '../src/server'
+import { TEST_POSTGRES_URL } from './test-backend'
+
+const {
+  abortWakesMock,
+  createAgentHandlerMock,
+  drainWakesMock,
+  schedulerCancelManifestDelayedSendMock,
+  schedulerEnqueueCronTickMock,
+  schedulerSyncManifestDelayedSendMock,
+  schedulerStartMock,
+  schedulerStopMock,
+  registerAgentTypesMock,
+  registryCloseMock,
+  registryInitializeMock,
+  registryListEntitiesMock,
+  runMigrationsMock,
+  selectFromMock,
+  selectMock,
+  serverAddressMock,
+  serverCloseMock,
+  serverListenMock,
+  serverOnMock,
+  streamCreateMock,
+  streamExistsMock,
+  streamReadJsonMock,
+} = vi.hoisted(() => ({
+  abortWakesMock: vi.fn(),
+  createAgentHandlerMock: vi.fn(),
+  drainWakesMock: vi.fn(),
+  schedulerCancelManifestDelayedSendMock: vi.fn(),
+  schedulerEnqueueCronTickMock: vi.fn(),
+  schedulerSyncManifestDelayedSendMock: vi.fn(),
+  schedulerStartMock: vi.fn(),
+  schedulerStopMock: vi.fn(),
+  registerAgentTypesMock: vi.fn(),
+  registryCloseMock: vi.fn(),
+  registryInitializeMock: vi.fn(),
+  registryListEntitiesMock: vi.fn(),
+  runMigrationsMock: vi.fn(),
+  selectFromMock: vi.fn(),
+  selectMock: vi.fn(),
+  serverAddressMock: vi.fn(),
+  serverCloseMock: vi.fn(),
+  serverListenMock: vi.fn(),
+  serverOnMock: vi.fn(),
+  streamCreateMock: vi.fn(),
+  streamExistsMock: vi.fn(),
+  streamReadJsonMock: vi.fn(),
+}))
+
+vi.mock(`node:http`, async (importOriginal) => {
+  const actual = await importOriginal<any>()
+
+  return {
+    ...actual,
+    createServer: vi.fn(() => ({
+      on: serverOnMock,
+      listen: serverListenMock,
+      address: serverAddressMock,
+      close: serverCloseMock,
+    })),
+  }
+})
+
+vi.mock(`../src/electric-agents/bootstrap`, () => ({
+  createAgentHandler: createAgentHandlerMock,
+  registerAgentTypes: registerAgentTypesMock,
+}))
+
+vi.mock(`../src/electric-agents-registry`, () => ({
+  PostgresRegistry: class MockPostgresRegistry {
+    initialize(): Promise<void> {
+      return registryInitializeMock()
+    }
+
+    listEntities(): Promise<{ entities: Array<never> }> {
+      return registryListEntitiesMock()
+    }
+
+    clearEntityManifestSources(): Promise<void> {
+      return Promise.resolve()
+    }
+
+    replaceEntityManifestSource(): Promise<void> {
+      return Promise.resolve()
+    }
+
+    releaseTagOutboxClaims(): Promise<void> {
+      return Promise.resolve()
+    }
+
+    close(): void {
+      registryCloseMock()
+    }
+  },
+}))
+
+vi.mock(`../src/db/index`, () => ({
+  createDb: () => ({
+    db: {
+      select: selectMock,
+    },
+    client: {
+      end: vi.fn(),
+    },
+  }),
+  runMigrations: runMigrationsMock,
+}))
+
+vi.mock(`../src/db/schema`, () => ({
+  subscriptionWebhooks: {},
+  consumerCallbacks: {},
+  wakeRegistrations: { sourceUrl: `source_url` },
+}))
+
+vi.mock(`../src/wake-registry`, () => ({
+  WakeRegistry: class MockWakeRegistry {
+    setTimeoutCallback(): void {}
+    setDebounceCallback(): void {}
+    startSync(): Promise<void> {
+      return Promise.resolve()
+    }
+    stopSync(): Promise<void> {
+      return Promise.resolve()
+    }
+    loadRegistrations(): Promise<void> {
+      return Promise.resolve()
+    }
+  },
+}))
+
+vi.mock(`../src/scheduler`, () => ({
+  Scheduler: class MockScheduler {
+    enqueueCronTick(...args: Array<unknown>): Promise<void> {
+      return schedulerEnqueueCronTickMock(...args)
+    }
+
+    cancelManifestDelayedSend(...args: Array<unknown>): Promise<void> {
+      return schedulerCancelManifestDelayedSendMock(...args)
+    }
+
+    syncManifestDelayedSend(...args: Array<unknown>): Promise<void> {
+      return schedulerSyncManifestDelayedSendMock(...args)
+    }
+
+    start(): Promise<void> {
+      return schedulerStartMock()
+    }
+
+    stop(): Promise<void> {
+      return schedulerStopMock()
+    }
+  },
+}))
+
+vi.mock(`drizzle-orm`, () => ({
+  eq: vi.fn(),
+}))
+
+vi.mock(`../src/stream-client`, () => ({
+  StreamClient: class MockStreamClient {
+    exists(): Promise<boolean> {
+      return streamExistsMock()
+    }
+
+    create(): Promise<void> {
+      return streamCreateMock()
+    }
+
+    readJson(): Promise<Array<Record<string, unknown>>> {
+      return streamReadJsonMock()
+    }
+
+    getConsumerState(): Promise<null> {
+      return Promise.resolve(null)
+    }
+  },
+}))
+
+describe(`ElectricAgentsServer.start`, () => {
+  let server: ElectricAgentsServer | null = null
+
+  beforeEach(() => {
+    abortWakesMock.mockReset()
+    createAgentHandlerMock.mockReset()
+    drainWakesMock.mockReset()
+    schedulerCancelManifestDelayedSendMock.mockReset()
+    schedulerEnqueueCronTickMock.mockReset()
+    schedulerSyncManifestDelayedSendMock.mockReset()
+    schedulerStartMock.mockReset()
+    schedulerStopMock.mockReset()
+    registerAgentTypesMock.mockReset()
+    registryCloseMock.mockReset()
+    registryInitializeMock.mockReset()
+    registryListEntitiesMock.mockReset()
+    serverAddressMock.mockReset()
+    serverCloseMock.mockReset()
+    serverListenMock.mockReset()
+    serverOnMock.mockReset()
+    selectFromMock.mockReset()
+    selectMock.mockReset()
+    streamCreateMock.mockReset()
+    streamExistsMock.mockReset()
+    streamReadJsonMock.mockReset()
+    runMigrationsMock.mockReset()
+
+    runMigrationsMock.mockResolvedValue(undefined)
+    drainWakesMock.mockResolvedValue(undefined)
+    schedulerCancelManifestDelayedSendMock.mockResolvedValue(undefined)
+    schedulerEnqueueCronTickMock.mockResolvedValue(undefined)
+    schedulerSyncManifestDelayedSendMock.mockResolvedValue(undefined)
+    schedulerStartMock.mockResolvedValue(undefined)
+    schedulerStopMock.mockResolvedValue(undefined)
+    registryInitializeMock.mockResolvedValue(undefined)
+    registryListEntitiesMock.mockResolvedValue({ entities: [] })
+    serverAddressMock.mockReturnValue({ port: 4437 })
+    serverCloseMock.mockImplementation((callback?: () => void) => {
+      callback?.()
+    })
+    serverListenMock.mockImplementation(
+      (_port: number, _host: string, callback?: () => void) => {
+        callback?.()
+      }
+    )
+    selectFromMock.mockResolvedValue([])
+    selectMock.mockReturnValue({
+      from: selectFromMock,
+    })
+    streamCreateMock.mockResolvedValue(undefined)
+    streamExistsMock.mockResolvedValue(true)
+    streamReadJsonMock.mockResolvedValue([])
+
+    createAgentHandlerMock.mockReturnValue({
+      handler: vi.fn().mockResolvedValue(undefined),
+      runtime: {
+        abortWakes: abortWakesMock,
+        drainWakes: drainWakesMock,
+      },
+      registry: {},
+      typeNames: [`chat`],
+    })
+  })
+
+  afterEach(async () => {
+    if (server) {
+      await server.stop().catch(() => {})
+      server = null
+    }
+  })
+
+  it(`rejects startup and cleans up when built-in agent registration fails`, async () => {
+    registerAgentTypesMock.mockRejectedValueOnce(new Error(`register exploded`))
+
+    server = new ElectricAgentsServer({
+      durableStreamsUrl: `http://durable.test`,
+      port: 0,
+      postgresUrl: TEST_POSTGRES_URL,
+    })
+
+    await expect(server.start()).rejects.toThrow(`register exploded`)
+    expect(abortWakesMock).toHaveBeenCalledOnce()
+    expect(drainWakesMock).toHaveBeenCalledOnce()
+    expect(schedulerStartMock).toHaveBeenCalledOnce()
+    expect(schedulerStopMock).toHaveBeenCalledOnce()
+    expect(registryCloseMock).toHaveBeenCalledOnce()
+    expect(serverCloseMock).toHaveBeenCalledOnce()
+    expect(() => server!.url).toThrow(`Server not started`)
+  })
+
+  it(`continues startup when one cron rehydration row is invalid`, async () => {
+    selectFromMock.mockResolvedValueOnce([
+      { sourceUrl: `/_cron/not-a-valid-cron` },
+      {
+        sourceUrl: `/_cron/${Buffer.from(
+          JSON.stringify({
+            expression: `*/5 * * * *`,
+            timezone: `UTC`,
+          })
+        ).toString(`base64url`)}`,
+      },
+    ])
+
+    server = new ElectricAgentsServer({
+      durableStreamsUrl: `http://durable.test`,
+      port: 0,
+      postgresUrl: `postgres://electric_agents:electric_agents@localhost:5432/electric_agents`,
+    })
+
+    await expect(server.start()).resolves.toMatch(/^http:\/\//)
+    expect(streamExistsMock).toHaveBeenCalled()
+    expect(schedulerStartMock).toHaveBeenCalledOnce()
+  })
+
+  it(`rehydrates pending future_send manifest schedules on startup`, async () => {
+    registryListEntitiesMock.mockResolvedValueOnce({
+      entities: [
+        {
+          url: `/chat/test`,
+          streams: { main: `/chat/test/main` },
+        },
+      ],
+    })
+    streamReadJsonMock.mockResolvedValueOnce([
+      {
+        type: `manifest`,
+        key: `schedule:say_hi`,
+        value: {
+          key: `schedule:say_hi`,
+          kind: `schedule`,
+          id: `say_hi`,
+          scheduleType: `future_send`,
+          fireAt: `2026-04-10T02:30:00.000Z`,
+          targetUrl: `/chat/test`,
+          payload: { text: `hi` },
+          producerId: `future-send-server`,
+          status: `pending`,
+        },
+        headers: {
+          operation: `upsert`,
+        },
+      },
+    ])
+
+    server = new ElectricAgentsServer({
+      durableStreamsUrl: `http://durable.test`,
+      port: 0,
+      postgresUrl: `postgres://electric_agents:electric_agents@localhost:5432/electric_agents`,
+    })
+
+    await expect(server.start()).resolves.toMatch(/^http:\/\//)
+    expect(schedulerSyncManifestDelayedSendMock).toHaveBeenCalledWith(
+      `/chat/test`,
+      `schedule:say_hi`,
+      expect.objectContaining({
+        entityUrl: `/chat/test`,
+        producerId: `future-send-server`,
+      }),
+      new Date(`2026-04-10T02:30:00.000Z`)
+    )
+  })
+})
