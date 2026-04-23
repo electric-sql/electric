@@ -1014,6 +1014,12 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
 .ds-first-stream .ann-marker[data-n] {
   display: inline;
 }
+/* Outlined, brand-coloured numeric markers — matches the
+   `Your first sync, end to end` annotation style on the Sync
+   landing page (see `.code-block .ann-marker` in
+   sync-home/SyncHomePage.vue). The outlined variant reads
+   cleanly on both the code and CLI panels, so the previous
+   per-panel inversion is no longer needed. */
 .ds-first-stream .ann-marker[data-n]::after {
   content: attr(data-n);
   display: inline-flex;
@@ -1022,17 +1028,14 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
   width: 20px;
   height: 20px;
   border-radius: 50%;
-  background: var(--ea-text-1);
-  color: var(--ea-surface);
+  background: transparent;
+  border: 1px solid var(--vp-c-brand-1);
+  color: var(--vp-c-brand-1);
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
   line-height: 1;
   margin-left: 12px;
   vertical-align: middle;
-}
-:root:not(.dark) .ds-first-stream .ea-cli-panel .ann-marker[data-n]::after {
-  background: var(--ea-surface);
-  color: var(--ea-text-1);
 }
 .ds-first-stream .ea-annotations {
   display: flex;
@@ -1052,10 +1055,11 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  background: var(--ea-text-1);
-  color: var(--ea-surface);
-  font-size: 13px;
-  font-weight: 700;
+  background: transparent;
+  border: 1px solid var(--vp-c-brand-1);
+  color: var(--vp-c-brand-1);
+  font-size: 12px;
+  font-weight: 600;
   line-height: 1;
   margin-top: 1px;
 }

@@ -1274,6 +1274,13 @@ const installCommand = "npx electric-ax agents quickstart"
   display: none;
 }
 
+/* Outlined, brand-coloured numeric markers — matches the
+   `Your first sync, end to end` annotation style on the Sync
+   landing page (see `.code-block .ann-marker` in
+   sync-home/SyncHomePage.vue). The previous filled circles
+   needed a per-panel inversion to stay legible inside the dark
+   CLI strip; the outlined variant reads cleanly on every
+   surface so we can drop that special case. */
 .ann-marker[data-n]::after {
   content: attr(data-n);
   display: inline-flex;
@@ -1282,10 +1289,11 @@ const installCommand = "npx electric-ax agents quickstart"
   width: 20px;
   height: 20px;
   border-radius: 50%;
-  background: var(--ea-text-1);
-  color: var(--ea-surface);
+  background: transparent;
+  border: 1px solid var(--vp-c-brand-1);
+  color: var(--vp-c-brand-1);
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
   line-height: 1;
   margin-left: 12px;
   vertical-align: middle;
@@ -1293,11 +1301,6 @@ const installCommand = "npx electric-ax agents quickstart"
 
 .ann-marker[data-n] {
   display: inline;
-}
-
-:root:not(.dark) .ea-cli-panel .ann-marker[data-n]::after {
-  background: var(--ea-surface);
-  color: var(--ea-text-1);
 }
 
 .ea-annotations {
@@ -1320,10 +1323,11 @@ const installCommand = "npx electric-ax agents quickstart"
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  background: var(--ea-text-1);
-  color: var(--ea-surface);
-  font-size: 13px;
-  font-weight: 700;
+  background: transparent;
+  border: 1px solid var(--vp-c-brand-1);
+  color: var(--vp-c-brand-1);
+  font-size: 12px;
+  font-weight: 600;
   line-height: 1;
   margin-top: 1px;
 }
