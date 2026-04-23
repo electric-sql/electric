@@ -93,6 +93,7 @@ const scene = computed(() =>
     connectionDensity: props.connectionDensity,
     gridSize: props.gridSize,
     routePadding: props.routePadding,
+    cornerRadius: props.cornerRadius,
   })
 )
 
@@ -264,10 +265,16 @@ function radialFade(x: number, y: number): number {
   return Math.max(0, 1 - (d - 0.3) / 0.7)
 }
 
+interface CornerArcInfo {
+  radius: number
+  center?: { x: number; y: number }
+}
+
 function traceLineArcPath(
   target: CanvasRenderingContext2D,
   points: readonly { x: number; y: number }[],
-  radius: number
+  corners: readonly CornerArcInfo[] | undefined,
+  fallbackRadius: number
 ) {
   if (points.length === 0) return
   target.beginPath()
@@ -285,16 +292,53 @@ function traceLineArcPath(
     const inDy = cur.y - prev.y
     const outDx = next.x - cur.x
     const outDy = next.y - cur.y
-    const inAxisAligned = inDx === 0 || inDy === 0
-    const outAxisAligned = outDx === 0 || outDy === 0
-    const orthogonal = inDx * outDx + inDy * outDy === 0
-    const inLen = Math.hypot(cur.x - prev.x, cur.y - prev.y)
-    const outLen = Math.hypot(next.x - cur.x, next.y - cur.y)
-    const r = Math.min(radius, inLen / 2, outLen / 2)
-    if (r <= 0.001 || !inAxisAligned || !outAxisAligned || !orthogonal) {
+    const inLen = Math.hypot(inDx, inDy)
+    const outLen = Math.hypot(outDx, outDy)
+    if (inLen < 0.001 || outLen < 0.001) {
       target.lineTo(cur.x, cur.y)
       continue
     }
+    const corner = corners?.[i]
+    const requested =
+      corner && corner.radius > 0 ? corner.radius : fallbackRadius
+    const cross = inDx * outDy - inDy * outDx
+    if (Math.abs(cross) < 0.001 || requested <= 0.001) {
+      target.lineTo(cur.x, cur.y)
+      continue
+    }
+    if (corner && corner.center) {
+      // Wheel-hug arc: use the supplied center and radius. Draw from the
+      // tangent point on the inbound segment around to the tangent point on
+      // the outbound segment.
+      const cx = corner.center.x
+      const cy = corner.center.y
+      const inUx = inDx / inLen
+      const inUy = inDy / inLen
+      const outUx = outDx / outLen
+      const outUy = outDy / outLen
+      // Project center onto the inbound line (from prev to cur) to find the
+      // closest point; the tangent point lies along the perpendicular at
+      // distance `radius` from the line, clamped to the segment.
+      const t1 = (cx - prev.x) * inUx + (cy - prev.y) * inUy
+      const tangentInX = prev.x + inUx * t1
+      const tangentInY = prev.y + inUy * t1
+      const t2 = (cx - cur.x) * outUx + (cy - cur.y) * outUy
+      const tangentOutX = cur.x + outUx * t2
+      const tangentOutY = cur.y + outUy * t2
+      target.lineTo(tangentInX, tangentInY)
+      const startAngle = Math.atan2(tangentInY - cy, tangentInX - cx)
+      const endAngle = Math.atan2(tangentOutY - cy, tangentOutX - cx)
+      // Direction: cross > 0 means we turn left (counterclockwise in screen
+      // y-down means actual canvas-arc anticlockwise = true).
+      target.arc(cx, cy, corner.radius, startAngle, endAngle, cross > 0)
+      target.lineTo(next.x, next.y)
+      continue
+    }
+    // Standard rounded corner — let canvas auto-derive the arc center from
+    // the two tangent segments and the requested radius. For parallel offset
+    // lanes that share the same angle bisector at this corner, varying the
+    // radius produces concentric arcs around the corridor's pivot.
+    const r = Math.max(0.5, Math.min(requested, inLen / 2, outLen / 2))
     target.arcTo(cur.x, cur.y, next.x, next.y, r)
   }
   const last = points[points.length - 1]
@@ -337,14 +381,14 @@ function drawCanvas(timeSec: number) {
     const fade = radialFade(mid.x, mid.y)
     if (fade < 0.02) continue
 
-    traceLineArcPath(ctx, track.points, props.cornerRadius)
+    traceLineArcPath(ctx, track.points, track.corners, props.cornerRadius)
     ctx.lineCap = "round"
     ctx.lineJoin = "round"
     ctx.strokeStyle = `rgba(117, 251, 253, ${0.12 * fade})`
     ctx.lineWidth = props.trackWidth + 1.15
     ctx.stroke()
 
-    traceLineArcPath(ctx, track.points, props.cornerRadius)
+    traceLineArcPath(ctx, track.points, track.corners, props.cornerRadius)
     ctx.strokeStyle = `rgba(117, 251, 253, ${0.58 * fade})`
     ctx.lineWidth = props.trackWidth
     ctx.stroke()

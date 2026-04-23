@@ -15,11 +15,23 @@ export interface MeshWheel {
   segmentOffset: number
 }
 
+export interface MeshCornerArc {
+  // If present, overrides the arc center used at points[index].
+  // Otherwise the renderer derives the center from the two adjacent segments
+  // using `radius` (canvas arcTo style).
+  center?: MeshPoint
+  // Arc radius for this corner (per-lane, so concentric arcs across a bundle).
+  radius: number
+}
+
 export interface MeshTrack {
   id: string
   fromWheelId: string
   toWheelId: string
   points: MeshPoint[]
+  // Per-vertex corner data (length === points.length). Endpoints have radius 0
+  // and are ignored by the renderer.
+  corners: MeshCornerArc[]
   length: number
 }
 
@@ -39,6 +51,7 @@ export interface MeshSceneOptions {
   connectionDensity: number
   gridSize: number
   routePadding: number
+  cornerRadius: number
 }
 
 interface CandidateEdge {
@@ -107,6 +120,14 @@ function polylineLength(points: MeshPoint[]): number {
   for (let i = 1; i < points.length; i++)
     total += distance(points[i - 1], points[i])
   return total
+}
+
+function minSegmentLength(points: MeshPoint[]): number {
+  let min = Number.POSITIVE_INFINITY
+  for (let i = 1; i < points.length; i++) {
+    min = Math.min(min, distance(points[i - 1], points[i]))
+  }
+  return Number.isFinite(min) ? min : 0
 }
 
 function simplifyPolyline(points: MeshPoint[]): MeshPoint[] {
@@ -250,6 +271,83 @@ function pointToSegmentDistance(
   return distance(point, { x: a.x + dx * t, y: a.y + dy * t })
 }
 
+function pathCoverageDistance(
+  points: MeshPoint[],
+  existingPaths: MeshPoint[][]
+): number {
+  if (existingPaths.length === 0) return 0
+  let total = 0
+  let samples = 0
+  for (const point of points) {
+    let nearest = Number.POSITIVE_INFINITY
+    for (const existing of existingPaths) {
+      for (let i = 1; i < existing.length; i++) {
+        nearest = Math.min(
+          nearest,
+          pointToSegmentDistance(point, existing[i - 1], existing[i])
+        )
+      }
+    }
+    if (Number.isFinite(nearest)) {
+      total += nearest
+      samples += 1
+    }
+  }
+  return samples > 0 ? total / samples : 0
+}
+
+function orientation(a: MeshPoint, b: MeshPoint, c: MeshPoint): number {
+  return (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x)
+}
+
+function onSegment(a: MeshPoint, b: MeshPoint, c: MeshPoint): boolean {
+  return (
+    c.x >= Math.min(a.x, b.x) - 0.001 &&
+    c.x <= Math.max(a.x, b.x) + 0.001 &&
+    c.y >= Math.min(a.y, b.y) - 0.001 &&
+    c.y <= Math.max(a.y, b.y) + 0.001
+  )
+}
+
+function segmentsIntersectOrOverlap(
+  a0: MeshPoint,
+  a1: MeshPoint,
+  b0: MeshPoint,
+  b1: MeshPoint
+): boolean {
+  const o1 = orientation(a0, a1, b0)
+  const o2 = orientation(a0, a1, b1)
+  const o3 = orientation(b0, b1, a0)
+  const o4 = orientation(b0, b1, a1)
+
+  if (
+    ((o1 > 0 && o2 < 0) || (o1 < 0 && o2 > 0)) &&
+    ((o3 > 0 && o4 < 0) || (o3 < 0 && o4 > 0))
+  ) {
+    return true
+  }
+  if (Math.abs(o1) < 0.001 && onSegment(a0, a1, b0)) return true
+  if (Math.abs(o2) < 0.001 && onSegment(a0, a1, b1)) return true
+  if (Math.abs(o3) < 0.001 && onSegment(b0, b1, a0)) return true
+  if (Math.abs(o4) < 0.001 && onSegment(b0, b1, a1)) return true
+  return false
+}
+
+function segmentDistance(
+  a0: MeshPoint,
+  a1: MeshPoint,
+  b0: MeshPoint,
+  b1: MeshPoint
+): number {
+  if (segmentsIntersectOrOverlap(a0, a1, b0, b1)) return 0
+  return Math.min(
+    pointToSegmentDistance(a0, b0, b1),
+    pointToSegmentDistance(a1, b0, b1),
+    pointToSegmentDistance(b0, a0, a1),
+    pointToSegmentDistance(b1, a0, a1)
+  )
+}
+
 function pathHitsWheel(
   points: MeshPoint[],
   wheel: MeshWheel,
@@ -261,6 +359,21 @@ function pathHitsWheel(
       wheel.r + margin
     ) {
       return true
+    }
+  }
+  return false
+}
+
+function tracksConflict(
+  a: MeshPoint[],
+  b: MeshPoint[],
+  minGap: number
+): boolean {
+  for (let i = 1; i < a.length; i++) {
+    for (let j = 1; j < b.length; j++) {
+      if (segmentDistance(a[i - 1], a[i], b[j - 1], b[j]) < minGap) {
+        return true
+      }
     }
   }
   return false
@@ -282,6 +395,65 @@ function lineIntersection(
   const cy = b0.y - a0.y
   const t = (cx * by - cy * bx) / det
   return { x: a0.x + ax * t, y: a0.y + ay * t }
+}
+
+/**
+ * Replace Z-shapes (two same-direction segments separated by a short
+ * perpendicular step) with a single 45° diagonal. This produces cleaner
+ * routing when a corridor only needs to "shift sideways" a little: instead of
+ * 90° → tiny step → 90°, we get 45° → diagonal → 45°.
+ *
+ * Only chamfers when:
+ *   - A→B and C→D are EXACTLY same axis-aligned direction
+ *   - B→C is a perpendicular step
+ *   - The step is short enough to fit within both A→B and C→D
+ *   - Step length is at most `maxStep` (otherwise it's a "real" Z, not a
+ *     small offset, and a 45° diagonal would look weird)
+ */
+function chamferZShapes(points: MeshPoint[], maxStep: number): MeshPoint[] {
+  if (points.length < 4) return points.slice()
+  const out = points.slice()
+  let i = 1
+  while (i < out.length - 2) {
+    const A = out[i - 1]
+    const B = out[i]
+    const C = out[i + 1]
+    const D = out[i + 2]
+    const abDx = B.x - A.x
+    const abDy = B.y - A.y
+    const bcDx = C.x - B.x
+    const bcDy = C.y - B.y
+    const cdDx = D.x - C.x
+    const cdDy = D.y - C.y
+    const abLen = Math.hypot(abDx, abDy)
+    const bcLen = Math.hypot(bcDx, bcDy)
+    const cdLen = Math.hypot(cdDx, cdDy)
+    if (abLen < 0.01 || bcLen < 0.01 || cdLen < 0.01) {
+      i += 1
+      continue
+    }
+    const sameDir =
+      Math.abs(abDx / abLen - cdDx / cdLen) < 0.001 &&
+      Math.abs(abDy / abLen - cdDy / cdLen) < 0.001
+    const perp = Math.abs(abDx * bcDx + abDy * bcDy) < 0.001
+    if (!sameDir || !perp || bcLen > maxStep) {
+      i += 1
+      continue
+    }
+    const half = bcLen
+    if (half >= abLen || half >= cdLen) {
+      i += 1
+      continue
+    }
+    const inDirX = abDx / abLen
+    const inDirY = abDy / abLen
+    const outDirX = cdDx / cdLen
+    const outDirY = cdDy / cdLen
+    out[i] = { x: B.x - inDirX * half, y: B.y - inDirY * half }
+    out[i + 1] = { x: C.x + outDirX * half, y: C.y + outDirY * half }
+    i += 2
+  }
+  return out
 }
 
 function offsetPolyline(points: MeshPoint[], offset: number): MeshPoint[] {
@@ -395,6 +567,7 @@ export function createMeshScene(options: MeshSceneOptions): MeshScene {
   const grid = clamp(Math.round(options.gridSize), 18, 60)
   const routePadding = clamp(Math.round(options.routePadding), 0, 3)
   const connectionDensity = clamp(options.connectionDensity, 0, 1)
+  const cornerRadius = Math.max(0, options.cornerRadius)
 
   const layoutScale =
     options.layout === `dense`
@@ -522,6 +695,14 @@ export function createMeshScene(options: MeshSceneOptions): MeshScene {
     }
   }
 
+  function guideOffset(offsetFromCenter = 0): number {
+    return Math.max(
+      grid * 1.15,
+      cornerRadius * 1.4,
+      Math.abs(offsetFromCenter) + laneSpacing * 1.25
+    )
+  }
+
   const edges: CandidateEdge[] = []
   for (let i = 0; i < wheels.length; i++) {
     for (let j = i + 1; j < wheels.length; j++) {
@@ -532,12 +713,11 @@ export function createMeshScene(options: MeshSceneOptions): MeshScene {
 
   const chosenKeys = new Set<string>()
   const chosenEdges: CandidateEdge[] = []
-  const degree = wheels.map(() => 0)
 
   const minNeighbors = clamp(
-    2 + Math.round(connectionDensity * 4),
-    2,
-    Math.max(2, Math.min(6, wheels.length - 1))
+    6 + Math.round(connectionDensity * 6),
+    6,
+    Math.max(6, Math.min(12, wheels.length - 1))
   )
 
   function addEdge(a: number, b: number) {
@@ -545,8 +725,6 @@ export function createMeshScene(options: MeshSceneOptions): MeshScene {
     if (chosenKeys.has(key)) return
     chosenKeys.add(key)
     chosenEdges.push({ a, b, distance: distance(wheels[a], wheels[b]) })
-    degree[a] += 1
-    degree[b] += 1
   }
 
   for (let i = 0; i < wheels.length; i++) {
@@ -578,6 +756,10 @@ export function createMeshScene(options: MeshSceneOptions): MeshScene {
     for (const other of neighbors.slice(0, minNeighbors)) {
       addEdge(i, other)
     }
+    const midReach = neighbors[Math.floor(neighbors.length * 0.66)]
+    const farReach = neighbors[neighbors.length - 1]
+    if (midReach !== undefined) addEdge(i, midReach)
+    if (farReach !== undefined) addEdge(i, farReach)
   }
 
   function snapCoord(value: number): number {
@@ -599,6 +781,18 @@ export function createMeshScene(options: MeshSceneOptions): MeshScene {
     candidates.push([startGuide, { x: startGuide.x, y: endGuide.y }, endGuide])
     const midX = snapCoord((startGuide.x + endGuide.x) / 2)
     const midY = snapCoord((startGuide.y + endGuide.y) / 2)
+    const quarterXs = [
+      snapCoord(startGuide.x * 0.75 + endGuide.x * 0.25),
+      midX,
+      snapCoord(startGuide.x * 0.25 + endGuide.x * 0.75),
+    ]
+    const quarterYs = [
+      snapCoord(startGuide.y * 0.75 + endGuide.y * 0.25),
+      midY,
+      snapCoord(startGuide.y * 0.25 + endGuide.y * 0.75),
+    ]
+    const boundaryXs = [snapCoord(grid * 3), snapCoord(width - grid * 3)]
+    const boundaryYs = [snapCoord(grid * 3), snapCoord(height - grid * 3)]
     candidates.push([
       startGuide,
       { x: midX, y: startGuide.y },
@@ -611,6 +805,38 @@ export function createMeshScene(options: MeshSceneOptions): MeshScene {
       { x: endGuide.x, y: midY },
       endGuide,
     ])
+    for (const x of quarterXs) {
+      candidates.push([
+        startGuide,
+        { x, y: startGuide.y },
+        { x, y: endGuide.y },
+        endGuide,
+      ])
+    }
+    for (const y of quarterYs) {
+      candidates.push([
+        startGuide,
+        { x: startGuide.x, y },
+        { x: endGuide.x, y },
+        endGuide,
+      ])
+    }
+    for (const x of boundaryXs) {
+      candidates.push([
+        startGuide,
+        { x, y: startGuide.y },
+        { x, y: endGuide.y },
+        endGuide,
+      ])
+    }
+    for (const y of boundaryYs) {
+      candidates.push([
+        startGuide,
+        { x: startGuide.x, y },
+        { x: endGuide.x, y },
+        endGuide,
+      ])
+    }
     return candidates.map((points) =>
       normalizePolyline(simplifyPolyline(points))
     )
@@ -627,7 +853,9 @@ export function createMeshScene(options: MeshSceneOptions): MeshScene {
     if (hasSelfOverlapOrIntersection(simplified)) return false
     const directDistance = distance(fromWheel, toWheel)
     const length = polylineLength(simplified)
-    if (directDistance > 0 && length / directDistance > 2.6) return false
+    const segmentFloor = Math.max(grid * 0.45, cornerRadius + 2)
+    if (minSegmentLength(simplified) < segmentFloor) return false
+    if (directDistance > 0 && length / directDistance > 3.1) return false
     for (const wheel of wheels) {
       if (wheel.id === fromWheel.id || wheel.id === toWheel.id) continue
       if (
@@ -640,10 +868,22 @@ export function createMeshScene(options: MeshSceneOptions): MeshScene {
   }
 
   const tracks: MeshTrack[] = []
-  const bundleLaneCount = Math.max(3, 2 + Math.round(connectionDensity * 4))
-  const laneSpacing = Math.max(6, grid * 0.28)
+  const maxBundleHalfWidth = Math.max(
+    1,
+    1 + Math.round(connectionDensity * 1.5)
+  )
+  const laneSpacing = Math.max(8, grid * 0.38)
+  const acceptedTrackPointSets: MeshPoint[][] = []
+  const wheelDegree = wheels.map(() => 0)
+  const pairUsage = new Map<string, number>()
+  const minCorridorsPerWheel = Math.max(
+    5,
+    4 + Math.round(connectionDensity * 3)
+  )
 
-  for (const edge of chosenEdges) {
+  type Lane = { points: MeshPoint[]; corners: MeshCornerArc[]; offset: number }
+
+  function tryPlaceBundle(edge: CandidateEdge): Lane[] | null {
     const fromWheel = wheels[edge.a]
     const toWheel = wheels[edge.b]
     const startAngle = Math.atan2(
@@ -655,27 +895,39 @@ export function createMeshScene(options: MeshSceneOptions): MeshScene {
       fromWheel.x - toWheel.x
     )
     const centerStartPoint = anglePoint(fromWheel, startAngle, 0)
-    const centerStartGuide = anglePoint(fromWheel, startAngle, grid * 0.78)
-    const centerEndGuide = anglePoint(toWheel, endAngle, grid * 0.78)
+    const centerStartGuide = anglePoint(fromWheel, startAngle, guideOffset(0))
+    const centerEndGuide = anglePoint(toWheel, endAngle, guideOffset(0))
     const centerEndPoint = anglePoint(toWheel, endAngle, 0)
 
     const routeCandidates = makeRouteCandidates(
       centerStartGuide,
       centerEndGuide
     )
-      .map((core) => {
+      .map((rawCore) => {
+        // Chamfer small Z-shapes (lateral shifts) into 45° diagonals so we get
+        // a cleaner stretched corner rather than two 90° corners and a short
+        // perpendicular nubbin between them.
+        const core = chamferZShapes(
+          rawCore,
+          Math.max(grid * 0.9, laneSpacing * 2.4)
+        )
         const full = normalizePolyline([
           centerStartPoint,
           ...core,
           centerEndPoint,
         ])
+        const coverageScore =
+          acceptedTrackPointSets.length === 0
+            ? 0
+            : pathCoverageDistance(full, acceptedTrackPointSets)
         return {
           core,
           full,
           score:
             polylineLength(full) +
             turnCount(full) * grid * 0.35 +
-            maxTurnAngleDegrees(full) * 0.25,
+            maxTurnAngleDegrees(full) * 0.25 -
+            coverageScore * 2.1,
         }
       })
       .filter((candidate) =>
@@ -683,41 +935,340 @@ export function createMeshScene(options: MeshSceneOptions): MeshScene {
       )
       .sort((a, b) => a.score - b.score)
 
-    const chosen = routeCandidates[0]
-    if (!chosen) continue
+    let bestBundle: Lane[] | null = null
+    let bestScore = Number.POSITIVE_INFINITY
 
-    for (let laneIdx = 0; laneIdx < bundleLaneCount; laneIdx++) {
-      const laneOffset = (laneIdx - (bundleLaneCount - 1) / 2) * laneSpacing
-      const startAngleOffset =
-        startAngle + laneOffset / Math.max(fromWheel.r, 1)
-      const endAngleOffset = endAngle - laneOffset / Math.max(toWheel.r, 1)
-      const laneStartPoint = anglePoint(fromWheel, startAngleOffset, 0)
-      const laneStartGuide = anglePoint(
-        fromWheel,
-        startAngleOffset,
-        grid * 0.78
+    for (const chosen of routeCandidates) {
+      // The first and last segments of the corridor define the directions in
+      // which lanes approach (and leave) the wheels. Every lane in the bundle
+      // travels parallel to these directions; the lanes simply touch the wheel
+      // circumference at whatever point those parallel lines intersect it.
+      if (chosen.core.length < 2) continue
+      const startSegDx = chosen.core[1]
+        ? chosen.core[1].x - chosen.core[0].x
+        : 0
+      const startSegDy = chosen.core[1]
+        ? chosen.core[1].y - chosen.core[0].y
+        : 0
+      const endIdx = chosen.core.length - 1
+      const endSegDx = chosen.core[endIdx].x - chosen.core[endIdx - 1].x
+      const endSegDy = chosen.core[endIdx].y - chosen.core[endIdx - 1].y
+      const startSegLen = Math.hypot(startSegDx, startSegDy)
+      const endSegLen = Math.hypot(endSegDx, endSegDy)
+      if (startSegLen < 0.01 || endSegLen < 0.01) continue
+      // startU points AWAY from fromWheel (along the first corridor segment).
+      const startU = {
+        x: startSegDx / startSegLen,
+        y: startSegDy / startSegLen,
+      }
+      // endU points AWAY from toWheel (= reverse of last corridor segment).
+      const endU = { x: -endSegDx / endSegLen, y: -endSegDy / endSegLen }
+
+      // Find the point on the line through `point` in direction `dir` that
+      // lies on the circle around `wheel` of radius wheel.r and is on the
+      // -dir side of `point` (i.e., closer to the wheel along the parallel
+      // line we just constructed).
+      function lineCircleEntry(
+        point: MeshPoint,
+        dir: { x: number; y: number },
+        wheel: MeshWheel
+      ): MeshPoint | null {
+        const wx = point.x - wheel.x
+        const wy = point.y - wheel.y
+        const b = 2 * (wx * dir.x + wy * dir.y)
+        const c = wx * wx + wy * wy - wheel.r * wheel.r
+        const disc = b * b - 4 * c
+        if (disc < 0) return null
+        const sq = Math.sqrt(disc)
+        const t1 = (-b - sq) / 2
+        const t2 = (-b + sq) / 2
+        // We want the negative-t intersection (walk back toward wheel from c0).
+        const t =
+          t1 < 0 && t2 < 0
+            ? Math.max(t1, t2)
+            : t1 < 0
+              ? t1
+              : t2 < 0
+                ? t2
+                : Math.min(t1, t2)
+        return { x: point.x + t * dir.x, y: point.y + t * dir.y }
+      }
+
+      // Per centerline corner, capture the geometry we'll need to assign arc
+      // radii once the bundle size is known. We DON'T pre-pick a radius here:
+      // routing is planned without rounding, then radii are filled in below.
+      interface CornerGeom {
+        turnSign: number
+        inLen: number
+        outLen: number
+        tanHalf: number
+        // Whether this corner sits at the FIRST or LAST interior corner; if
+        // so, the segment toward the wheel-side guide can use its full length
+        // (no neighboring corner consuming part of it).
+        isFirstInterior: boolean
+        isLastInterior: boolean
+      }
+      const cornerGeometry: (CornerGeom | null)[] = chosen.core.map(
+        (_, idx) => {
+          if (idx === 0 || idx === chosen.core.length - 1) return null
+          const a = chosen.core[idx - 1]
+          const b = chosen.core[idx]
+          const c = chosen.core[idx + 1]
+          const inDx = b.x - a.x
+          const inDy = b.y - a.y
+          const outDx = c.x - b.x
+          const outDy = c.y - b.y
+          const inLen = Math.hypot(inDx, inDy)
+          const outLen = Math.hypot(outDx, outDy)
+          const cross = inDx * outDy - inDy * outDx
+          if (Math.abs(cross) < 0.001) return null
+          const turnSign = cross > 0 ? 1 : -1
+          const dot = inDx * outDx + inDy * outDy
+          // External turn angle (0 = straight, π = U-turn).
+          const turnExt = Math.atan2(Math.abs(cross), dot)
+          const tanHalf = Math.tan(turnExt / 2)
+          return {
+            turnSign,
+            inLen,
+            outLen,
+            tanHalf,
+            isFirstInterior: idx === 1,
+            isLastInterior: idx === chosen.core.length - 2,
+          }
+        }
       )
-      const laneEndGuide = anglePoint(toWheel, endAngleOffset, grid * 0.78)
-      const laneEndPoint = anglePoint(toWheel, endAngleOffset, 0)
 
-      const offsetCore = offsetPolyline(chosen.core, laneOffset)
-      const lanePoints = normalizePolyline([
-        laneStartPoint,
-        laneStartGuide,
-        ...offsetCore.slice(1, -1),
-        laneEndGuide,
-        laneEndPoint,
-      ])
-      if (!validateTrackPoints(lanePoints, fromWheel, toWheel)) continue
+      function buildLane(
+        offset: number
+      ): {
+        points: MeshPoint[]
+        corners: MeshCornerArc[]
+        offset: number
+      } | null {
+        const offsetCore = offsetPolyline(chosen.core, offset)
+        if (offsetCore.length < 2) return null
+        const c0 = offsetCore[0]
+        const cN = offsetCore[offsetCore.length - 1]
 
-      tracks.push({
-        id: `track-${tracks.length}`,
-        fromWheelId: fromWheel.id,
-        toWheelId: toWheel.id,
-        points: lanePoints,
-        length: polylineLength(lanePoints),
-      })
+        // Lane entry: extend the offset corridor's first segment line back
+        // toward fromWheel until it touches the circle. The lane segment
+        // (laneStartPoint → c0) is collinear with (c0 → c1), so normalize
+        // will collapse them into a single straight entry.
+        const laneStartPoint = lineCircleEntry(c0, startU, fromWheel)
+        const laneEndPoint = lineCircleEntry(cN, endU, toWheel)
+        if (!laneStartPoint || !laneEndPoint) return null
+
+        // Build the raw lane (vertex per centerline vertex plus wheel-edge
+        // entry/exit). Corner radii start as 0; they'll be filled in once
+        // the bundle is finalized.
+        const rawPoints: MeshPoint[] = [
+          laneStartPoint,
+          ...offsetCore,
+          laneEndPoint,
+        ]
+        const rawCorners: MeshCornerArc[] = rawPoints.map(() => ({ radius: 0 }))
+
+        // Normalize: drop adjacent duplicates and a-b-a backtracks while
+        // keeping cornerInfo in sync.
+        const lanePoints: MeshPoint[] = []
+        const laneCorners: MeshCornerArc[] = []
+        for (let i = 0; i < rawPoints.length; i++) {
+          const p = rawPoints[i]
+          const prev = lanePoints[lanePoints.length - 1]
+          if (
+            prev &&
+            Math.abs(prev.x - p.x) < 0.001 &&
+            Math.abs(prev.y - p.y) < 0.001
+          ) {
+            continue
+          }
+          lanePoints.push(p)
+          laneCorners.push(rawCorners[i])
+          while (lanePoints.length >= 3) {
+            const a = lanePoints[lanePoints.length - 3]
+            const c = lanePoints[lanePoints.length - 1]
+            if (Math.abs(a.x - c.x) < 0.001 && Math.abs(a.y - c.y) < 0.001) {
+              lanePoints.splice(lanePoints.length - 2, 2)
+              laneCorners.splice(laneCorners.length - 2, 2)
+              continue
+            }
+            break
+          }
+        }
+        // Drop interior vertices that are perfectly collinear (the entry/exit
+        // segments by construction sit on the same line as their neighbors).
+        // These dropped vertices never carried corner data anyway; this keeps
+        // lanePoints[k] aligned with chosen.core[k] for k = 1..N-2.
+        for (let i = lanePoints.length - 2; i >= 1; i--) {
+          const a = lanePoints[i - 1]
+          const b = lanePoints[i]
+          const c = lanePoints[i + 1]
+          const cross = (b.x - a.x) * (c.y - b.y) - (b.y - a.y) * (c.x - b.x)
+          if (Math.abs(cross) < 0.5) {
+            lanePoints.splice(i, 1)
+            laneCorners.splice(i, 1)
+          }
+        }
+
+        if (!validateTrackPoints(lanePoints, fromWheel, toWheel)) return null
+        for (const existing of acceptedTrackPointSets) {
+          if (tracksConflict(lanePoints, existing, laneSpacing * 0.2)) {
+            return null
+          }
+        }
+        if (laneCorners.length > 0) {
+          laneCorners[0] = { radius: 0 }
+          laneCorners[laneCorners.length - 1] = { radius: 0 }
+        }
+        return { points: lanePoints, corners: laneCorners, offset }
+      }
+
+      const centerLane = buildLane(0)
+      if (!centerLane) continue
+
+      const bundleLanes: Lane[] = [centerLane]
+      let expansionScore = 0
+      for (let band = 1; band <= maxBundleHalfWidth; band++) {
+        const offset = band * laneSpacing
+        const negLane = buildLane(-offset)
+        const posLane = buildLane(offset)
+        if (!negLane || !posLane) break
+        let siblingConflict = false
+        for (const sibling of bundleLanes) {
+          if (
+            tracksConflict(
+              negLane.points,
+              sibling.points,
+              laneSpacing * 0.88
+            ) ||
+            tracksConflict(posLane.points, sibling.points, laneSpacing * 0.88)
+          ) {
+            siblingConflict = true
+            break
+          }
+        }
+        if (
+          siblingConflict ||
+          tracksConflict(negLane.points, posLane.points, laneSpacing * 1.76)
+        ) {
+          break
+        }
+        bundleLanes.unshift(negLane)
+        bundleLanes.push(posLane)
+        expansionScore += offset
+      }
+
+      // Now that the bundle is finalized, assign concentric arc radii at each
+      // corridor corner. The widest-possible centerline radius is bounded by
+      // segment headroom (so the OUTERMOST lane's tangent point still fits in
+      // its segments). The innermost lane is allowed to go very tight (down to
+      // ~0) when a bundle is wide or a segment is short, exactly as requested:
+      //   "few tracks → nice wide radii; short segments or many tracks → tight
+      //    inside corner."
+      // All lanes share the same arc center per corner because they're
+      // perpendicular offsets of the centerline (canvas's arcTo derives the
+      // center from the angle bisector, and the bisector is shared across
+      // parallel offsets).
+      {
+        const halfBundleCount = (bundleLanes.length - 1) / 2
+        const halfBundleOffset = halfBundleCount * laneSpacing
+        const niceWide = Math.max(cornerRadius, grid * 1.4)
+        const minR = 0.5
+        const corneRadii: number[] = chosen.core.map(() => 0)
+        for (let idx = 1; idx < chosen.core.length - 1; idx++) {
+          const geom = cornerGeometry[idx]
+          if (!geom) continue
+          // Each segment is shared with at most one neighbor corner: reserve
+          // half its length for THIS corner (or all of it on a wheel-side
+          // segment that has no neighbor corner).
+          const inHead = geom.isFirstInterior ? geom.inLen : geom.inLen / 2
+          const outHead = geom.isLastInterior ? geom.outLen : geom.outLen / 2
+          const headroom = Math.min(inHead, outHead)
+          // Largest radius the OUTERMOST lane can wear without its tangent
+          // point overshooting the segment.
+          const maxOuterR = headroom * geom.tanHalf
+          // Desired outer radius if we got our way: a nice wide centerline
+          // arc plus the bundle's outward expansion.
+          const desiredOuterR = niceWide + halfBundleOffset
+          const outerR = Math.min(desiredOuterR, maxOuterR)
+          // Centerline = outer minus the bundle's outward offset. Inner lane
+          // = centerline minus the bundle's inward offset; that's allowed to
+          // go tight (clamped per-lane below).
+          corneRadii[idx] = Math.max(minR * 0.5, outerR - halfBundleOffset)
+        }
+        for (const lane of bundleLanes) {
+          for (let k = 1; k < lane.points.length - 1; k++) {
+            const geom = cornerGeometry[k]
+            if (!geom) {
+              lane.corners[k] = { radius: 0 }
+              continue
+            }
+            const r = corneRadii[k] - geom.turnSign * lane.offset
+            lane.corners[k] = { radius: Math.max(minR, r) }
+          }
+        }
+      }
+
+      const candidateScore =
+        chosen.score - bundleLanes.length * grid * 1.8 - expansionScore * 0.08
+
+      if (
+        bestBundle === null ||
+        bundleLanes.length > bestBundle.length ||
+        (bundleLanes.length === bestBundle.length && candidateScore < bestScore)
+      ) {
+        bestBundle = bundleLanes
+        bestScore = candidateScore
+      }
     }
+    return bestBundle && bestBundle.length >= 1 ? bestBundle : null
+  }
+
+  for (let pass = 0; pass < 36; pass++) {
+    let placedInPass = 0
+    const orderedEdges = [...chosenEdges].sort((a, b) => {
+      const pairA = pairUsage.get(uniquePairKey(a.a, a.b)) ?? 0
+      const pairB = pairUsage.get(uniquePairKey(b.a, b.b)) ?? 0
+      const deficitA =
+        Math.max(0, minCorridorsPerWheel - wheelDegree[a.a]) +
+        Math.max(0, minCorridorsPerWheel - wheelDegree[a.b])
+      const deficitB =
+        Math.max(0, minCorridorsPerWheel - wheelDegree[b.a]) +
+        Math.max(0, minCorridorsPerWheel - wheelDegree[b.b])
+      const degreeA = wheelDegree[a.a] + wheelDegree[a.b]
+      const degreeB = wheelDegree[b.a] + wheelDegree[b.b]
+      if (pairA !== pairB) return pairA - pairB
+      if (deficitA !== deficitB) return deficitB - deficitA
+      if (degreeA !== degreeB) return degreeA - degreeB
+      return a.distance - b.distance
+    })
+
+    for (const edge of orderedEdges) {
+      const key = uniquePairKey(edge.a, edge.b)
+      const used = pairUsage.get(key) ?? 0
+      if (used >= 2) continue
+
+      const acceptedBundle = tryPlaceBundle(edge)
+      if (!acceptedBundle) continue
+
+      for (const lane of acceptedBundle) {
+        tracks.push({
+          id: `track-${tracks.length}`,
+          fromWheelId: wheels[edge.a].id,
+          toWheelId: wheels[edge.b].id,
+          points: lane.points,
+          corners: lane.corners,
+          length: polylineLength(lane.points),
+        })
+        acceptedTrackPointSets.push(lane.points)
+      }
+      pairUsage.set(key, used + 1)
+      wheelDegree[edge.a] += 1
+      wheelDegree[edge.b] += 1
+      placedInPass += 1
+    }
+
+    if (placedInPass === 0) break
   }
 
   return { width, height, wheels, tracks }
