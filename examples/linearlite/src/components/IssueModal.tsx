@@ -84,7 +84,9 @@ function IssueModal({ isOpen, onDismiss }: Props) {
     }, 250)
   }
 
-  const timeoutRef = useRef<ReturnType<typeof setTimeout>>()
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(
+    undefined
+  )
 
   useEffect(() => {
     if (isOpen && !timeoutRef.current) {
