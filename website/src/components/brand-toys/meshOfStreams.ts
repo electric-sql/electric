@@ -1220,10 +1220,10 @@ export function createMeshScene(options: MeshSceneOptions): MeshScene {
               // Simplification at 45° chamfer corners: don't try to be
               // concentric (the diagonal segment is too short to fit
               // meaningfully different per-lane radii). Give every lane the
-              // same small radius equal to the lane spacing — enough to
-              // visibly soften the corner and stay consistent with the
-              // 90° corners' visual weight.
-              lane.corners[k] = { radius: laneSpacing }
+              // same fixed radius (2× the lane spacing) — enough to visibly
+              // soften the corner and stay consistent with the 90° corners'
+              // visual weight.
+              lane.corners[k] = { radius: laneSpacing * 2 }
               continue
             }
             // Standard 90°-ish corner: lanes whose offset puts them on the
