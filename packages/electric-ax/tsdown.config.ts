@@ -4,7 +4,9 @@ const config: Options = {
   entry: [
     `src/index.ts`,
     `src/completions.ts`,
+    `src/start.ts`,
     `src/observe-ui.tsx`,
+    `src/types-table.tsx`,
     `src/entity-stream-db.ts`,
   ],
   format: [`esm`, `cjs`],
