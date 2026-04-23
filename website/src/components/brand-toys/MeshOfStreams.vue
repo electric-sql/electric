@@ -97,13 +97,23 @@ const scene = computed(() =>
   })
 )
 
-const animated = computed(
-  () =>
-    !props.paused &&
-    props.showMessages &&
+// Animated when ANY of the per-frame visual elements need to update.
+// Previously this only checked message animation; once the wheels moved off
+// SVG and onto canvas we also need rAF whenever the wheel rotor or the
+// per-blade segment pulse is enabled, otherwise the canvas would paint a
+// single static frame and never advance.
+const animated = computed(() => {
+  if (props.paused) return false
+  if (
     props.animateMessages &&
+    props.showMessages &&
     props.messageSpeed > 0
-)
+  )
+    return true
+  if (props.animateSegments && props.segmentPulse > 0) return true
+  if (props.rotateWheels && props.wheelRotationSpeed > 0) return true
+  return false
+})
 
 function syncSize() {
   const el = root.value
@@ -212,46 +222,47 @@ const portDots = computed(() =>
   })
 )
 
-function wheelScale(wheel: MeshWheel): number {
-  return (wheel.r * 2) / DURABLE_STREAMS_WHEEL_VIEWBOX
+// One-shot Path2D cache for the wheel blade SVG paths. Compiling the path
+// strings into Path2D objects up front lets us re-use them every frame
+// across every wheel without re-parsing.
+let bladePath2Ds: Path2D[] | null = null
+function getBladePath2Ds(): Path2D[] {
+  if (!bladePath2Ds) {
+    bladePath2Ds = DURABLE_STREAMS_WHEEL_BLADES.map((d) => new Path2D(d))
+  }
+  return bladePath2Ds
 }
 
-function bladeStrengthAtPhase(wheel: MeshWheel, bladeIndex: number): number {
-  const cwPos = DURABLE_STREAMS_ACTIVATION_ORDER.indexOf(bladeIndex)
-  if (cwPos === -1) return 0
+const BLADE_INDEX_TO_CW_POS: number[] = (() => {
+  const out: number[] = new Array(DURABLE_STREAMS_WHEEL_BLADES.length).fill(-1)
+  for (let i = 0; i < DURABLE_STREAMS_ACTIVATION_ORDER.length; i++) {
+    out[DURABLE_STREAMS_ACTIVATION_ORDER[i]] = i
+  }
+  return out
+})()
+
+// Given a wheel and a time, compute the activation "head" — the cw position
+// at which a blade is currently at peak strength. Older positions fade out
+// linearly over DURABLE_STREAMS_FADE_TAIL steps.
+function wheelHeadAt(wheel: MeshWheel, timeSec: number): number {
   const cycle = DURABLE_STREAMS_ACTIVATION_ORDER.length
-  const head = ((wheel.segmentOffset / (Math.PI * 2)) * cycle) % cycle
-  const age = (head - cwPos + cycle) % cycle
-  const cutoff = cycle - DURABLE_STREAMS_FADE_TAIL
-  if (age < cutoff) return 1
-  return Math.max(0, (cycle - age) / DURABLE_STREAMS_FADE_TAIL)
+  const baseHead = (wheel.segmentOffset / (Math.PI * 2)) * cycle
+  const pulseRate = Math.max(0.0001, props.segmentPulse * 2.2)
+  const head =
+    props.animateSegments && !props.paused
+      ? baseHead + timeSec * pulseRate
+      : baseHead
+  return ((head % cycle) + cycle) % cycle
 }
 
-function wheelAnimationStyle(wheel: MeshWheel) {
-  const rotationTurns = wheel.rotationOffset / (Math.PI * 2)
-  const effectiveRate = Math.abs(wheel.rotationRate * props.wheelRotationSpeed)
-  const rotationDuration = effectiveRate > 0.0001 ? (Math.PI * 2) / effectiveRate : 9999
-  const pulseRate = Math.max(0.0001, props.segmentPulse * 2.2)
-  const pulseDuration = DURABLE_STREAMS_ACTIVATION_ORDER.length / pulseRate
-  return {
-    "--mesh-wheel-rotation-offset": `${rotationTurns}turn`,
-    "--mesh-wheel-rotation-duration": `${rotationDuration}s`,
-    "--mesh-wheel-rotation-direction": wheel.rotationRate >= 0 ? "normal" : "reverse",
-    "--mesh-wheel-phase-delay": `${-(rotationTurns * rotationDuration)}s`,
-    "--mesh-blade-cycle-duration": `${pulseDuration}s`,
-    "--mesh-blade-phase-delay": `${-((wheel.segmentOffset / (Math.PI * 2)) * pulseDuration)}s`,
-    "--mesh-wheel-animation-play-state": props.paused ? "paused" : "running",
+function wheelRotationAt(wheel: MeshWheel, timeSec: number): number {
+  if (props.paused || !props.rotateWheels || props.wheelRotationSpeed <= 0) {
+    return wheel.rotationOffset
   }
-}
-
-function bladeStyle(wheel: MeshWheel, bladeIndex: number) {
-  const cwPos = DURABLE_STREAMS_ACTIVATION_ORDER.indexOf(bladeIndex)
-  const pulseRate = Math.max(0.0001, props.segmentPulse * 2.2)
-  const stepDuration = 1 / pulseRate
-  return {
-    "--mesh-blade-strength": String(bladeStrengthAtPhase(wheel, bladeIndex)),
-    "--mesh-blade-delay": `${-(cwPos >= 0 ? cwPos * stepDuration : 0)}s`,
-  }
+  return (
+    wheel.rotationOffset +
+    timeSec * wheel.rotationRate * props.wheelRotationSpeed
+  )
 }
 
 function radialFade(x: number, y: number): number {
@@ -371,6 +382,52 @@ function drawGlowDot(
   ctx.fill()
 }
 
+function drawWheels(timeSec: number) {
+  if (!ctx) return
+  const blades = getBladePath2Ds()
+  const cycle = DURABLE_STREAMS_ACTIVATION_ORDER.length
+  const cutoff = cycle - DURABLE_STREAMS_FADE_TAIL
+  // Pre-compute per-blade strength buckets so we only string-format two
+  // alpha values per draw rather than per blade. With 14 wheels × 16
+  // blades = 224 paths/frame the string allocations alone were measurable
+  // in flame charts.
+  const teal = "117, 251, 253"
+  for (const wheel of scene.value.wheels) {
+    const fade = radialFade(wheel.x, wheel.y)
+    if (fade < 0.02) continue
+    const head = wheelHeadAt(wheel, timeSec)
+    const rotation = wheelRotationAt(wheel, timeSec)
+    const scale = (wheel.r * 2) / DURABLE_STREAMS_WHEEL_VIEWBOX
+    ctx!.save()
+    ctx!.translate(wheel.x, wheel.y)
+    ctx!.rotate(rotation)
+    ctx!.scale(scale, scale)
+    ctx!.translate(
+      -DURABLE_STREAMS_WHEEL_VIEWBOX / 2,
+      -DURABLE_STREAMS_WHEEL_VIEWBOX / 2
+    )
+    // Stroke width 0.6 in viewBox units matches the previous SVG styling
+    // (CSS used `stroke-width: 0.6` against the same viewBox).
+    ctx!.lineWidth = 0.6
+    for (let bladeIndex = 0; bladeIndex < blades.length; bladeIndex++) {
+      const cwPos = BLADE_INDEX_TO_CW_POS[bladeIndex]
+      let strength = 0
+      if (cwPos !== -1) {
+        const age = (head - cwPos + cycle) % cycle
+        if (age < cutoff) strength = 1
+        else strength = Math.max(0, (cycle - age) / DURABLE_STREAMS_FADE_TAIL)
+      }
+      const fillAlpha = (0.07 + 0.88 * strength) * fade
+      const strokeAlpha = (0.22 + 0.78 * strength) * fade
+      ctx!.fillStyle = `rgba(${teal}, ${fillAlpha})`
+      ctx!.strokeStyle = `rgba(${teal}, ${strokeAlpha})`
+      ctx!.fill(blades[bladeIndex])
+      ctx!.stroke(blades[bladeIndex])
+    }
+    ctx!.restore()
+  }
+}
+
 function drawCanvas(timeSec: number) {
   if (!ctx) return
   ensureCanvasSize()
@@ -397,6 +454,8 @@ function drawCanvas(timeSec: number) {
   for (const dot of portDots.value) {
     drawGlowDot(dot.point.x, dot.point.y, props.trackWidth * 0.9, 0.7)
   }
+
+  drawWheels(timeSec)
 
   if (props.showMessages) {
     const tailOffsets = [0, 5, 10, 16]
@@ -437,6 +496,12 @@ watch(
     props.messageSpeed,
     props.messageScale,
     props.noEdgeFade,
+    // Wheels are drawn on canvas now, so changes to wheel-related props
+    // also need to trigger a static redraw when the rAF loop isn't running.
+    props.rotateWheels,
+    props.wheelRotationSpeed,
+    props.animateSegments,
+    props.segmentPulse,
   ],
   () => {
     if (!running) drawCanvas(sceneTime.value)
@@ -465,49 +530,17 @@ function debugCellPath() {
   >
     <canvas ref="canvas" class="mesh-canvas" />
     <svg
-      class="mesh-wheel-layer"
+      v-if="showDebug"
+      class="mesh-debug-layer"
       :viewBox="`0 0 ${scene.width} ${scene.height}`"
       preserveAspectRatio="none"
-      aria-label="Mesh of streams"
-      role="img"
+      aria-hidden="true"
     >
       <path
-        v-if="showDebug"
         :d="debugCellPath()"
         class="mesh-debug-grid"
         vector-effect="non-scaling-stroke"
       />
-
-      <g class="mesh-wheels">
-        <g
-          v-for="wheel in scene.wheels"
-          :key="wheel.id"
-          :style="wheelAnimationStyle(wheel)"
-          :transform="[
-            `translate(${wheel.x} ${wheel.y})`,
-            `scale(${wheelScale(wheel)})`,
-            `translate(${-DURABLE_STREAMS_WHEEL_VIEWBOX / 2} ${-DURABLE_STREAMS_WHEEL_VIEWBOX / 2})`,
-          ].join(' ')"
-          class="mesh-wheel"
-        >
-          <g
-            class="mesh-wheel-rotor"
-            :class="{ 'mesh-wheel-rotor--animated': rotateWheels && wheelRotationSpeed > 0 }"
-          >
-            <path
-              v-for="(blade, index) in DURABLE_STREAMS_WHEEL_BLADES"
-              :key="`${wheel.id}-blade-${index}`"
-              :d="blade"
-              class="mesh-blade"
-              :class="{
-                'mesh-blade--on': bladeStrengthAtPhase(wheel, index) > 0.01,
-                'mesh-blade--animated': animateSegments && segmentPulse > 0,
-              }"
-              :style="bladeStyle(wheel, index)"
-            />
-          </g>
-        </g>
-      </g>
     </svg>
   </div>
 </template>
@@ -540,7 +573,7 @@ function debugCellPath() {
 }
 
 .mesh-canvas,
-.mesh-wheel-layer {
+.mesh-debug-layer {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -548,102 +581,13 @@ function debugCellPath() {
   display: block;
 }
 
-.mesh-wheel-layer {
+.mesh-debug-layer {
   pointer-events: none;
-}
-
-.mesh-wheel-rotor {
-  transform-box: fill-box;
-  transform-origin: 50% 50%;
-  transform: rotate(var(--mesh-wheel-rotation-offset, 0turn));
-}
-
-.mesh-wheel-rotor--animated {
-  animation-name: mesh-wheel-spin;
-  animation-duration: var(--mesh-wheel-rotation-duration, 24s);
-  animation-timing-function: linear;
-  animation-iteration-count: infinite;
-  animation-direction: var(--mesh-wheel-rotation-direction, normal);
-  animation-delay: var(--mesh-wheel-phase-delay, 0s);
-  animation-play-state: var(--mesh-wheel-animation-play-state, running);
-}
-
-.mesh-blade {
-  /* Opaque base colour — alpha is controlled exclusively via fill-opacity /
-     stroke-opacity below. Previously the base used rgba(..., 0.07) AND the
-     "on" state set fill-opacity: 0.84, multiplying down to ~6% effective
-     alpha and rendering the wheels as washed-out grey. */
-  fill: var(--vp-c-brand-1, #75fbfd);
-  stroke: var(--vp-c-brand-1, #75fbfd);
-  stroke-width: 0.6;
-  fill-opacity: 0.07;
-  stroke-opacity: 0.22;
-  transition:
-    fill-opacity 0.4s ease,
-    stroke-opacity 0.4s ease,
-    filter 0.4s ease;
-}
-
-.mesh-blade--on {
-  fill-opacity: calc(0.95 * var(--mesh-blade-strength, 1));
-  stroke-opacity: var(--mesh-blade-strength, 1);
-  filter: drop-shadow(
-    0 0 4px rgba(117, 251, 253, calc(0.55 * var(--mesh-blade-strength, 1)))
-  );
-}
-
-.mesh-blade--animated {
-  animation-name: mesh-blade-cycle;
-  animation-duration: var(--mesh-blade-cycle-duration, 7.2s);
-  animation-timing-function: linear;
-  animation-iteration-count: infinite;
-  animation-delay: calc(
-    var(--mesh-blade-phase-delay, 0s) + var(--mesh-blade-delay, 0s)
-  );
-  animation-play-state: var(--mesh-wheel-animation-play-state, running);
 }
 
 .mesh-debug-grid {
   fill: none;
   stroke: rgba(255, 255, 255, 0.08);
   stroke-width: 1;
-}
-
-@keyframes mesh-wheel-spin {
-  from {
-    transform: rotate(var(--mesh-wheel-rotation-offset, 0turn));
-  }
-  to {
-    transform: rotate(calc(var(--mesh-wheel-rotation-offset, 0turn) + 1turn));
-  }
-}
-
-@keyframes mesh-blade-cycle {
-  0%,
-  74.999% {
-    fill-opacity: 0.95;
-    stroke-opacity: 1;
-    filter: drop-shadow(0 0 4px rgba(117, 251, 253, 0.55));
-  }
-  81.25% {
-    fill-opacity: 0.7;
-    stroke-opacity: 0.78;
-    filter: drop-shadow(0 0 4px rgba(117, 251, 253, 0.36));
-  }
-  87.5% {
-    fill-opacity: 0.45;
-    stroke-opacity: 0.55;
-    filter: drop-shadow(0 0 3px rgba(117, 251, 253, 0.2));
-  }
-  93.75% {
-    fill-opacity: 0.22;
-    stroke-opacity: 0.32;
-    filter: drop-shadow(0 0 2px rgba(117, 251, 253, 0.1));
-  }
-  100% {
-    fill-opacity: 0.07;
-    stroke-opacity: 0.22;
-    filter: none;
-  }
 }
 </style>
