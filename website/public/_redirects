@@ -105,7 +105,7 @@ https://next.electric-sql.com/* https://electric-sql.com/:splat 301!
 
 # Legacy /products/* (was renamed to /primitives/*) now lands on /sync
 /products                                /sync
-/products/postgres-sync                  /sync
+/products/postgres-sync                  /sync/postgres-sync
 /products/durable-streams                /streams
 /products/tanstack-db                    /sync/tanstack-db
 /products/pglite                         /sync/pglite
@@ -146,10 +146,10 @@ https://next.electric-sql.com/* https://electric-sql.com/:splat 301!
 /demos                            /sync/demos
 /demos/*                          /sync/demos/:splat
 
-# Primitives section dropped; PGlite + TanStack DB live under /sync,
-# Postgres Sync = Sync product, Durable Streams = Streams product.
+# Primitives section dropped; the three sync primitives live under
+# /sync/* and Durable Streams = Streams product.
 /primitives                       /sync
-/primitives/postgres-sync         /sync
+/primitives/postgres-sync         /sync/postgres-sync
 /primitives/durable-streams       /streams
 /primitives/tanstack-db           /sync/tanstack-db
 /primitives/pglite                /sync/pglite

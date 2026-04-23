@@ -60,7 +60,15 @@ const PRODUCTS = [
     id: "sync",
     label: "Electric Sync",
     href: "/sync",
-    matches: (p) => p.startsWith("/docs/sync"),
+    // The sync hero appears on /docs/sync/* AND on the three primitive
+    // pages at /sync/{postgres-sync,tanstack-db,pglite} — all of which
+    // share the same docs sidebar (see `syncDocsSidebar` in
+    // .vitepress/config.mts).
+    matches: (p) =>
+      p.startsWith("/docs/sync") ||
+      p === "/sync/postgres-sync" ||
+      p === "/sync/tanstack-db" ||
+      p === "/sync/pglite",
     primary: [
       { text: "Overview", link: "/docs/sync" },
       { text: "Quickstart", link: "/docs/sync/quickstart" },

@@ -34,6 +34,119 @@ const resourcesSidebar = [
   },
 ]
 
+// Shared sidebar for the Sync docs section AND the three sync primitive
+// pages at /sync/postgres-sync, /sync/tanstack-db, /sync/pglite. The
+// primitive pages are conceptually part of the docs (they sit in the
+// `Sync primitives` group at the top of the sidebar) so they render
+// with this sidebar rather than the marketing /sync/ sidebar used by
+// the top-level landing page and the demos.
+const syncDocsSidebar = [
+  // Title-button + primary links (Overview, Quickstart, Stacks) at the
+  // top of the sidebar are rendered by `DocsSidebarHero.vue` (mounted
+  // via `sidebar-nav-before` in Layout.vue), so the sidebar starts
+  // directly with the `Sync primitives` group.
+  {
+    text: 'Sync primitives',
+    collapsed: false,
+    items: [
+      { text: 'Postgres Sync', link: '/sync/postgres-sync' },
+      { text: 'TanStack DB', link: '/sync/tanstack-db' },
+      { text: 'PGlite', link: '/sync/pglite' },
+    ],
+  },
+  {
+    text: 'Guides',
+    collapsed: false,
+    items: [
+      { text: 'Auth', link: '/docs/sync/guides/auth' },
+      { text: 'Shapes', link: '/docs/sync/guides/shapes' },
+      { text: 'Writes', link: '/docs/sync/guides/writes' },
+      { text: 'Installation', link: '/docs/sync/guides/installation' },
+      {
+        text: 'PostgreSQL Permissions',
+        link: '/docs/sync/guides/postgres-permissions',
+      },
+      { text: 'Deployment', link: '/docs/sync/guides/deployment' },
+      { text: 'Upgrading', link: '/docs/sync/guides/upgrading' },
+      { text: 'Sharding', link: '/docs/sync/guides/sharding' },
+      { text: 'Security', link: '/docs/sync/guides/security' },
+      {
+        text: 'Troubleshooting',
+        link: '/docs/sync/guides/troubleshooting',
+      },
+      {
+        text: 'Client development',
+        link: '/docs/sync/guides/client-development',
+      },
+    ],
+  },
+  {
+    text: 'API',
+    collapsed: false,
+    items: [
+      { text: 'HTTP', link: '/docs/sync/api/http' },
+      {
+        text: 'Clients',
+        items: [
+          { text: 'TypeScript', link: '/docs/sync/api/clients/typescript' },
+          { text: 'Elixir', link: '/docs/sync/api/clients/elixir' },
+        ],
+        collapsed: false,
+      },
+      { text: 'Config', link: '/docs/sync/api/config' },
+    ],
+  },
+  {
+    text: 'Integrations',
+    collapsed: false,
+    items: [
+      {
+        text: 'Frameworks',
+        items: [
+          { text: 'LiveStore', link: '/docs/sync/integrations/livestore' },
+          { text: 'MobX', link: '/docs/sync/integrations/mobx' },
+          { text: 'Next.js', link: '/docs/sync/integrations/next' },
+          { text: 'Phoenix', link: '/docs/sync/integrations/phoenix' },
+          { text: 'React', link: '/docs/sync/integrations/react' },
+          { text: 'Redis', link: '/docs/sync/integrations/redis' },
+          { text: 'TanStack', link: '/docs/sync/integrations/tanstack' },
+          { text: 'Yjs', link: '/docs/sync/integrations/yjs' },
+        ],
+      },
+      {
+        text: 'Platforms',
+        items: [
+          { text: 'AWS', link: '/docs/sync/integrations/aws' },
+          { text: 'Cloudflare', link: '/docs/sync/integrations/cloudflare' },
+          { text: 'Crunchy', link: '/docs/sync/integrations/crunchy' },
+          {
+            text: 'Digital Ocean',
+            link: '/docs/sync/integrations/digital-ocean',
+          },
+          { text: 'Expo', link: '/docs/sync/integrations/expo' },
+          { text: 'Fly.io', link: '/docs/sync/integrations/fly' },
+          { text: 'GCP', link: '/docs/sync/integrations/gcp' },
+          { text: 'Neon', link: '/docs/sync/integrations/neon' },
+          { text: 'Netlify', link: '/docs/sync/integrations/netlify' },
+          { text: 'PlanetScale', link: '/docs/sync/integrations/planetscale' },
+          { text: 'Render', link: '/docs/sync/integrations/render' },
+          { text: 'Supabase', link: '/docs/sync/integrations/supabase' },
+        ],
+      },
+    ],
+  },
+  {
+    text: 'Reference',
+    collapsed: false,
+    items: [
+      { text: 'Alternatives', link: '/docs/sync/reference/alternatives' },
+      { text: 'Benchmarks', link: '/docs/sync/reference/benchmarks' },
+      { text: 'Literature', link: '/docs/sync/reference/literature' },
+      { text: 'Telemetry', link: '/docs/sync/reference/telemetry' },
+    ],
+  },
+]
+
 // https://vitepress.dev/reference/site-config
 export default defineConfig({
   vite: {
@@ -187,6 +300,21 @@ export default defineConfig({
           ],
         },
       ],
+      // Primitive pages live at /sync/{primitive} but conceptually
+      // belong to the sync docs — they use the docs sidebar so users
+      // can navigate sideways into Guides / API / Integrations.
+      //
+      // IMPORTANT: VitePress sorts sidebar keys by path-segment count
+      // and the sort is stable, so keys with the SAME depth fall back
+      // to insertion order. `/sync/postgres-sync` and `/sync/` both
+      // have the same segment count, so the more specific primitive
+      // keys MUST come before `/sync/` here, otherwise `/sync/` would
+      // match every `/sync/*` path first.
+      '/sync/postgres-sync': syncDocsSidebar,
+      '/sync/tanstack-db': syncDocsSidebar,
+      '/sync/pglite': syncDocsSidebar,
+      // Marketing-style /sync/* pages: the Electric Sync landing page
+      // and the demos under /sync/demos/*.
       '/sync/': [
         {
           text: 'Electric Sync',
@@ -196,133 +324,15 @@ export default defineConfig({
           ],
         },
         {
-          text: 'Client primitives',
+          text: 'Sync primitives',
           items: [
+            { text: 'Postgres Sync', link: '/sync/postgres-sync' },
             { text: 'TanStack DB', link: '/sync/tanstack-db' },
             { text: 'PGlite', link: '/sync/pglite' },
           ],
         },
       ],
-      '/docs/sync': [
-        // Title-button + primary links (Overview, Quickstart, Stacks)
-        // at the top of the sidebar are rendered by
-        // `DocsSidebarHero.vue` (mounted via `sidebar-nav-before` in
-        // Layout.vue), so the sidebar starts directly with `Guides`.
-        {
-          text: 'Guides',
-          collapsed: false,
-          items: [
-            { text: 'Auth', link: '/docs/sync/guides/auth' },
-            { text: 'Shapes', link: '/docs/sync/guides/shapes' },
-            { text: 'Writes', link: '/docs/sync/guides/writes' },
-            { text: 'Installation', link: '/docs/sync/guides/installation' },
-            {
-              text: 'PostgreSQL Permissions',
-              link: '/docs/sync/guides/postgres-permissions',
-            },
-            { text: 'Deployment', link: '/docs/sync/guides/deployment' },
-            { text: 'Upgrading', link: '/docs/sync/guides/upgrading' },
-            { text: 'Sharding', link: '/docs/sync/guides/sharding' },
-            { text: 'Security', link: '/docs/sync/guides/security' },
-            {
-              text: 'Troubleshooting',
-              link: '/docs/sync/guides/troubleshooting',
-            },
-            {
-              text: 'Client development',
-              link: '/docs/sync/guides/client-development',
-            },
-          ],
-        },
-        {
-          text: 'API',
-          collapsed: false,
-          items: [
-            { text: 'HTTP', link: '/docs/sync/api/http' },
-            {
-              text: 'Clients',
-              items: [
-                {
-                  text: 'TypeScript',
-                  link: '/docs/sync/api/clients/typescript',
-                },
-                { text: 'Elixir', link: '/docs/sync/api/clients/elixir' },
-              ],
-              collapsed: false,
-            },
-            { text: 'Config', link: '/docs/sync/api/config' },
-          ],
-        },
-        {
-          text: 'Integrations',
-          collapsed: false,
-          items: [
-            {
-              text: 'Frameworks',
-              items: [
-                {
-                  text: 'LiveStore',
-                  link: '/docs/sync/integrations/livestore',
-                },
-                { text: 'MobX', link: '/docs/sync/integrations/mobx' },
-                { text: 'Next.js', link: '/docs/sync/integrations/next' },
-                { text: 'Phoenix', link: '/docs/sync/integrations/phoenix' },
-                { text: 'React', link: '/docs/sync/integrations/react' },
-                { text: 'Redis', link: '/docs/sync/integrations/redis' },
-                { text: 'TanStack', link: '/docs/sync/integrations/tanstack' },
-                { text: 'Yjs', link: '/docs/sync/integrations/yjs' },
-              ],
-            },
-            {
-              text: 'Platforms',
-              items: [
-                { text: 'AWS', link: '/docs/sync/integrations/aws' },
-                {
-                  text: 'Cloudflare',
-                  link: '/docs/sync/integrations/cloudflare',
-                },
-                { text: 'Crunchy', link: '/docs/sync/integrations/crunchy' },
-                {
-                  text: 'Digital Ocean',
-                  link: '/docs/sync/integrations/digital-ocean',
-                },
-                { text: 'Expo', link: '/docs/sync/integrations/expo' },
-                { text: 'Fly.io', link: '/docs/sync/integrations/fly' },
-                { text: 'GCP', link: '/docs/sync/integrations/gcp' },
-                { text: 'Neon', link: '/docs/sync/integrations/neon' },
-                { text: 'Netlify', link: '/docs/sync/integrations/netlify' },
-                {
-                  text: 'PlanetScale',
-                  link: '/docs/sync/integrations/planetscale',
-                },
-                { text: 'Render', link: '/docs/sync/integrations/render' },
-                { text: 'Supabase', link: '/docs/sync/integrations/supabase' },
-              ],
-            },
-          ],
-        },
-        {
-          text: 'Reference',
-          collapsed: false,
-          items: [
-            {
-              text: 'Alternatives',
-              link: '/docs/sync/reference/alternatives',
-            },
-            { text: 'Benchmarks', link: '/docs/sync/reference/benchmarks' },
-            { text: 'Literature', link: '/docs/sync/reference/literature' },
-            { text: 'Telemetry', link: '/docs/sync/reference/telemetry' },
-          ],
-        },
-        {
-          text: 'Client primitives',
-          collapsed: false,
-          items: [
-            { text: 'TanStack DB', link: '/sync/tanstack-db' },
-            { text: 'PGlite', link: '/sync/pglite' },
-          ],
-        },
-      ],
+      '/docs/sync': syncDocsSidebar,
       '/docs/agents': [
         // Title-button + primary links (Overview, Quickstart) at the
         // top of the sidebar are rendered by `DocsSidebarHero.vue`

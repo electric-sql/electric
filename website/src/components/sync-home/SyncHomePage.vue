@@ -1,16 +1,33 @@
 <script setup lang="ts">
+/* SyncHomePage — top-level /sync landing page.
+   ────────────────────────────────────────────
+   Educational overview of the composable sync stack. The deep-dive
+   marketing for Postgres Sync itself lives on /sync/postgres-sync.
+
+   Page outline:
+     §1   Hero ............ "Composable sync primitives for multi-agent systems"
+     §2   Compose ......... ComposeStackGrid showcasing the three primitives
+     §3   Postgres Sync ... brief intro + link to /sync/postgres-sync
+     §4   TanStack DB ..... brief intro + link to /sync/tanstack-db
+     §5   PGlite .......... brief intro + link to /sync/pglite
+     §6   Agent loop ...... "Sync is how humans stay in the agent loop"
+     §7   Pillars ......... "The best way to build apps" — four-pillar grid
+     §8   First sync ...... annotated end-to-end code example
+     §9   Demos ........... featured reference demos
+     §10  Blog ............ curated posts panel
+     §11  CTA ............. shared BottomCtaStrap
+*/
+
 import { ref } from "vue"
 import { VPButton } from "vitepress/theme"
 
 import EaSection from "../agents-home/Section.vue"
 import SyncFanOutBg from "./SyncFanOutBg.vue"
-import MultiClientPulseDemo from "./MultiClientPulseDemo.vue"
-import ShapeCarveDemo from "./ShapeCarveDemo.vue"
-import WritesLadder from "./WritesLadder.vue"
 import ComposeStackGrid from "./ComposeStackGrid.vue"
-import SyncStackDiagram from "./SyncStackDiagram.vue"
-import QueryLensDemo from "./QueryLensDemo.vue"
+import MultiClientPulseDemo from "./MultiClientPulseDemo.vue"
 import InstallPill from "../InstallPill.vue"
+import BottomCtaStrap from "../BottomCtaStrap.vue"
+import CuratedBlogPosts from "../CuratedBlogPosts.vue"
 
 import { data as demoData } from "../../../data/demos.data.ts"
 
@@ -20,33 +37,20 @@ const installCommand = "npx @electric-sql/start my-app"
 
 const heroInnerRef = ref<HTMLElement>()
 
-// Compact fan-out diagram geometry (viewBox is 200 wide, centred on x=100).
-// Lines fan from the CDN pill out to a grid of client dots arranged in
-// FANOUT_ROWS rows × FANOUT_COLS columns underneath.
-// Compute evenly-distributed x positions in a 100-wide viewBox to match
-// flex `justify-content: space-around` (centers at (i + 0.5) * 100/N).
-const tickXs = (n: number) =>
-  Array.from({ length: n }, (_, i) => ((i + 0.5) * 100) / n)
-
-const FANOUT_COLS = 10
-const FANOUT_ROWS = 3
-// Horizontal spacing (in viewBox units ≈ on-screen px at this scale)
-// between adjacent line *starts* on the CDN pill, so the lines fan from a
-// short bar instead of a single point.
-const FANOUT_START_GAP = 5
-const fanoutMiniLines = Array.from({ length: FANOUT_COLS }, (_, i) => {
-  const offset = i - (FANOUT_COLS - 1) / 2
-  return {
-    x1: 100 + offset * FANOUT_START_GAP,
-    x2: 20 + (i * (200 - 40)) / (FANOUT_COLS - 1),
-  }
-})
-const fanoutMiniDotCount = FANOUT_COLS * FANOUT_ROWS
+// Curated list of Sync-relevant blog posts that fill the panel before
+// the bottom CTA. Slugs are the trailing path segment of the blog post
+// filename (date prefix stripped).
+const syncBlogPosts = [
+  "data-primitive-agent-loop",
+  "super-fast-apps-on-sync-with-tanstack-db",
+  "tanstack-db-0.6-app-ready-with-persistence-and-includes",
+  "local-first-with-your-existing-api",
+]
 </script>
 
 <template>
   <div class="sync-home">
-    <!-- ───────────────────────── Section 1: Hero ───────────────────────── -->
+    <!-- ───────────────────────── §1 — Hero ───────────────────────── -->
     <section class="sh-hero">
       <SyncFanOutBg :exclude-el="heroInnerRef" :labels-on-hover="true" />
       <div ref="heroInnerRef" class="sh-hero-inner">
@@ -54,12 +58,8 @@ const fanoutMiniDotCount = FANOUT_COLS * FANOUT_ROWS
           Electric&nbsp;<span class="sh-hero-accent">Sync</span>
         </h1>
         <p class="sh-hero-text">
-          Sync subsets of your Postgres into&nbsp;everything.
+          Composable sync primitives for multi-agent&nbsp;systems
         </p>
-
-        <div class="sh-hero-install-row">
-          <InstallPill :command="installCommand" tone="raised" />
-        </div>
 
         <div class="sh-hero-row">
           <VPButton
@@ -67,7 +67,7 @@ const fanoutMiniDotCount = FANOUT_COLS * FANOUT_ROWS
             size="medium"
             theme="brand"
             text="Quickstart"
-            href="/docs/quickstart"
+            href="/docs/sync/quickstart"
           />
           <VPButton
             tag="a"
@@ -80,196 +80,201 @@ const fanoutMiniDotCount = FANOUT_COLS * FANOUT_ROWS
       </div>
     </section>
 
-    <!-- ───────── Section 1.5: A complete sync stack (composition) ───────── -->
-    <EaSection id="stack">
-      <div class="sh-two-col sh-two-col-headed sh-two-col-wide-visual">
-        <div class="sh-prose-col">
-          <h2 class="sh-inline-title">A complete sync&nbsp;stack</h2>
-          <p class="ea-prose">
-            <strong>A read-path sync engine for fast, collaborative apps
-            and live agents.</strong>
-            Stream shapes from Postgres into
-            <strong>TanStack&nbsp;DB</strong> or <strong>PGlite</strong>
-            for live, reactive&nbsp;data.
-          </p>
-          <p class="ea-prose">
-            Writes go through your backend. Reads fan out over CDN.
-            Your stack stays plain Postgres end&nbsp;to&nbsp;end.
-          </p>
-          <div class="sh-section-foot sh-section-foot-tight left">
-            <a href="#compose">See the client options&nbsp;↓</a>
-          </div>
-        </div>
-        <div class="sh-visual-col">
-          <SyncStackDiagram />
-        </div>
-      </div>
+    <!-- ───────────── §2 — Compose your sync stack ───────────── -->
+    <EaSection
+      id="compose"
+      title="Compose your sync&nbsp;stack"
+      subtitle="Three composable primitives that work together &mdash; or independently &mdash; to keep state in sync from your database, through your network, into your apps and&nbsp;agents."
+    >
+      <ComposeStackGrid :order="['postgres-sync', 'tanstack-db', 'pglite']" />
     </EaSection>
 
-    <!-- ───────────── Section 2: Online together (the problem) ───────────── -->
-    <EaSection id="online-together" :dark="true">
-      <div class="sh-two-col sh-two-col-headed sh-two-col-reversed">
-        <div class="sh-prose-col">
-          <h2 class="sh-inline-title">Apps that come online&nbsp;together</h2>
+    <!-- ───────────── §3 — Postgres Sync (dark) ───────────── -->
+    <EaSection id="postgres-sync" :dark="true">
+      <div class="sh-primitive sh-primitive-two-col">
+        <div class="sh-primitive-prose">
+          <div class="sh-primitive-head">
+            <img src="/img/icons/electric.svg" alt="" class="sh-primitive-icon" />
+            <h2 class="sh-primitive-title">Postgres&nbsp;Sync</h2>
+          </div>
           <p class="ea-prose">
-            Modern products are real-time, multi-user, multi-device, and increasingly 
-            <strong>multi-agent</strong>. The same record needs to land in a
-            web dashboard, a mobile feed, and the context window of an agent
-            that's mid-flight.
+            <strong>Sync subsets of your Postgres into everything.</strong>
+            A read-path sync engine that streams shapes from Postgres over plain
+            HTTP. Cached at the edge, fanned out to millions of concurrent
+            readers, with flat database&nbsp;load.
           </p>
           <p class="ea-prose">
-            <strong>Sync is the primitive that fixes it.</strong>
-            One source of truth in Postgres. The same live changelog delivered
-            to every reader, with the same guarantees.
+            Define a shape on the server. Mount a collection on the client.
+            Render a live query. Writes go through your existing&nbsp;backend.
           </p>
+          <div class="sh-primitive-actions">
+            <VPButton
+              tag="a"
+              size="medium"
+              theme="brand"
+              text="Explore Postgres Sync"
+              href="/sync/postgres-sync"
+            />
+            <VPButton
+              tag="a"
+              size="medium"
+              theme="alt"
+              text="Docs"
+              href="/docs/sync"
+            />
+          </div>
         </div>
-        <div class="sh-visual-col">
+        <div class="sh-primitive-visual">
           <MultiClientPulseDemo />
         </div>
       </div>
     </EaSection>
 
-    <!-- ─────────────── Section 3: Shape — the unit of sync ─────────────── -->
-    <EaSection
-      id="shape"
-      title="Define a Shape — sync just what you&nbsp;need"
-      subtitle="A Shape is a SQL query against your Postgres. Electric carves out the matching rows and keeps them live for every client that&nbsp;subscribes."
-    >
-      <ShapeCarveDemo />
-      <div class="sh-section-foot">
-        <a href="/docs/guides/shapes">Read the Shapes guide →</a>
-      </div>
-    </EaSection>
-
-    <!-- ─────────── Section 3.5: Query-driven sync (the lens) ─────────── -->
-    <EaSection id="query-driven" :dark="true">
-      <div class="sh-two-col sh-two-col-headed sh-two-col-mini-visual sh-two-col-reversed">
-        <div class="sh-prose-col">
-          <h2 class="sh-inline-title">
-            Query-driven sync — your queries decide what&nbsp;loads
-          </h2>
+    <!-- ───────────── §4 — TanStack DB ───────────── -->
+    <EaSection id="tanstack-db">
+      <div class="sh-primitive sh-primitive-two-col sh-primitive-reversed">
+        <div class="sh-primitive-prose">
+          <div class="sh-primitive-head">
+            <img src="/img/icons/tanstack.svg" alt="" class="sh-primitive-icon" />
+            <h2 class="sh-primitive-title">TanStack&nbsp;DB</h2>
+          </div>
           <p class="ea-prose">
-            Your shape defines the <strong>outer bounds</strong> — the slice
-            of Postgres a user is allowed to see. Live queries running on
-            the client narrow that slice further, syncing only the rows
-            actually needed for the current view.
+            <strong>A reactive client store for building super-fast apps.</strong>
+            Sub-millisecond reactivity, instant local writes, and live
+            cross-collection queries powered by differential&nbsp;dataflow.
           </p>
           <p class="ea-prose">
-            <strong>TanStack&nbsp;DB has this built&nbsp;in.</strong> Pick
-            the sync mode that fits the work: <strong>eager</strong> to
-            preload everything for instant interactions,
-            <strong>on-demand</strong> to fetch only what the current
-            query needs, or <strong>progressive</strong> to start fast and
-            fill in the rest in the background.
+            Loads data from any source &mdash; including
+            <a href="/sync/postgres-sync">Postgres&nbsp;Sync</a> and
+            <a href="/streams">Electric&nbsp;Streams</a> &mdash; with optimistic
+            mutations that reconcile against your&nbsp;backend.
           </p>
-          <div class="sh-section-foot sh-section-foot-tight left">
-            <a href="https://tanstack.com/db/latest/docs/guides/live-queries">
-              Live queries guide&nbsp;→
-            </a>
+          <div class="sh-primitive-actions">
+            <VPButton
+              tag="a"
+              size="medium"
+              theme="brand"
+              text="Explore TanStack DB"
+              href="/sync/tanstack-db"
+            />
+            <VPButton
+              tag="a"
+              size="medium"
+              theme="alt"
+              text="TanStack DB docs"
+              href="https://tanstack.com/db"
+            />
           </div>
         </div>
-        <div class="sh-visual-col">
-          <QueryLensDemo />
+        <div class="sh-primitive-visual">
+          <div class="sh-fs-panel">
+            <div class="code-file-header mono">app/Todos.tsx</div>
+            <pre class="code-block annotated"><code><span class="tk-kw">const</span> <span class="tk-v">todos</span> = <span class="tk-fn">createCollection</span>(
+  <span class="tk-fn">electricCollectionOptions</span>({
+    <span class="tk-prop">shapeOptions</span>: { <span class="tk-prop">url</span>: <span class="tk-str">"/api/todos"</span> },
+    <span class="tk-prop">getKey</span>: (<span class="tk-v">row</span>) <span class="tk-kw">=&gt;</span> <span class="tk-v">row</span>.<span class="tk-prop">id</span>,
+  }),
+)
+
+<span class="tk-kw">export function</span> <span class="tk-fn">Todos</span>() {
+  <span class="tk-kw">const</span> { <span class="tk-v">data</span> } = <span class="tk-fn">useLiveQuery</span>((<span class="tk-v">q</span>) <span class="tk-kw">=&gt;</span>
+    <span class="tk-v">q</span>.<span class="tk-fn">from</span>({ <span class="tk-prop">todo</span>: <span class="tk-v">todos</span> })
+     .<span class="tk-fn">where</span>(({ <span class="tk-v">todo</span> }) <span class="tk-kw">=&gt;</span>
+        <span class="tk-fn">eq</span>(<span class="tk-v">todo</span>.<span class="tk-prop">completed</span>, <span class="tk-kw">false</span>)),
+  )
+  <span class="tk-kw">return</span> &lt;<span class="tk-v">List</span> <span class="tk-prop">todos</span>={<span class="tk-v">data</span>} /&gt;
+}</code></pre>
+          </div>
         </div>
       </div>
     </EaSection>
 
-    <!-- ──────────────── Section 4: Fan-out at the edge ──────────────── -->
-    <EaSection id="fan-out">
-      <div class="sh-two-col sh-two-col-headed sh-two-col-mini-visual">
-        <div class="sh-prose-col">
-          <h2 class="sh-inline-title">
-            One shape, every client — fanned out at the&nbsp;edge
-          </h2>
+    <!-- ───────────── §5 — PGlite (dark) ───────────── -->
+    <EaSection id="pglite" :dark="true">
+      <div class="sh-primitive sh-primitive-two-col">
+        <div class="sh-primitive-prose">
+          <div class="sh-primitive-head">
+            <img src="/img/icons/pglite.product.svg" alt="" class="sh-primitive-icon" />
+            <h2 class="sh-primitive-title">PGlite</h2>
+          </div>
           <p class="ea-prose">
-            Shapes stream over plain HTTP. CDNs cache them. Millions of clients
-            can read the same shape without touching your&nbsp;database.
+            <strong>Embeddable Postgres with reactivity and sync.</strong>
+            A lightweight WASM build of Postgres &mdash; under 3MB gzipped &mdash;
+            that runs in the browser, Node.js, Bun and Deno, with built-in live
+            query and sync&nbsp;primitives.
           </p>
-          <div class="sh-fanout-stats">
-            <div class="stat">
-              <div class="stat-num">1M+</div>
-              <div class="stat-label mono">readers per&nbsp;shape</div>
-            </div>
-            <div class="stat">
-              <div class="stat-num">99%</div>
-              <div class="stat-label mono">cache hit&nbsp;rate</div>
-            </div>
-            <div class="stat">
-              <div class="stat-num">flat</div>
-              <div class="stat-label mono">database load</div>
-            </div>
-          </div>
-          <div class="sh-section-foot sh-section-foot-tight">
-            <a href="/docs/api/http">HTTP API reference →</a>
+          <p class="ea-prose">
+            Pair it with <a href="/sync/postgres-sync">Postgres&nbsp;Sync</a>
+            to keep an embedded Postgres database in sync with your cloud
+            Postgres &mdash; for fully local, offline-capable&nbsp;apps.
+          </p>
+          <div class="sh-primitive-actions">
+            <VPButton
+              tag="a"
+              size="medium"
+              theme="brand"
+              text="Explore PGlite"
+              href="/sync/pglite"
+            />
+            <VPButton
+              tag="a"
+              size="medium"
+              theme="alt"
+              text="PGlite.dev"
+              href="https://pglite.dev"
+            />
           </div>
         </div>
-        <div class="sh-visual-col">
-          <div class="sh-fanout-mini" aria-hidden="true">
-            <div class="fan-mini-row">
-              <div class="fan-node fan-pg">
-                <span class="fan-node-label">Postgres</span>
-              </div>
-            </div>
-            <svg class="fan-mini-rail" viewBox="0 0 200 28" preserveAspectRatio="none">
-              <line x1="100" y1="0" x2="100" y2="28" />
-            </svg>
-            <div class="fan-mini-row">
-              <div class="fan-node fan-electric">
-                <span class="fan-node-label">Electric + CDN</span>
-                <span class="fan-node-meta mono">cached&nbsp;HTTP</span>
-              </div>
-            </div>
-            <svg class="fan-mini-fan" viewBox="0 0 200 44" preserveAspectRatio="none">
-              <line v-for="(l, i) in fanoutMiniLines" :key="i"
-                :x1="l.x1" y1="0" :x2="l.x2" y2="44" />
-            </svg>
-            <div class="fan-mini-clients">
-              <span v-for="i in fanoutMiniDotCount" :key="i" class="fan-mini-dot" />
-            </div>
+        <div class="sh-primitive-visual">
+          <div class="sh-fs-panel">
+            <div class="code-file-header mono">app/db.ts</div>
+            <pre class="code-block annotated"><code><span class="tk-kw">import</span> { <span class="tk-v">PGlite</span> } <span class="tk-kw">from</span> <span class="tk-str">"@electric-sql/pglite"</span>
+<span class="tk-kw">import</span> { <span class="tk-v">live</span> } <span class="tk-kw">from</span> <span class="tk-str">"@electric-sql/pglite/live"</span>
+
+<span class="tk-kw">const</span> <span class="tk-v">db</span> = <span class="tk-kw">new</span> <span class="tk-v">PGlite</span>(<span class="tk-str">"idb://app"</span>, {
+  <span class="tk-prop">extensions</span>: { <span class="tk-v">live</span> },
+})
+
+<span class="tk-kw">await</span> <span class="tk-v">db</span>.<span class="tk-fn">exec</span>(<span class="tk-str">`
+  create table if not exists todos (
+    id uuid primary key,
+    text text not null,
+    completed boolean default false
+  )
+`</span>)
+
+<span class="tk-kw">await</span> <span class="tk-v">db</span>.<span class="tk-prop">live</span>.<span class="tk-fn">query</span>(
+  <span class="tk-str">"select * from todos where completed = $1"</span>,
+  [<span class="tk-kw">false</span>],
+  (<span class="tk-v">res</span>) <span class="tk-kw">=&gt;</span> <span class="tk-fn">render</span>(<span class="tk-v">res</span>.<span class="tk-prop">rows</span>),
+)</code></pre>
           </div>
         </div>
       </div>
     </EaSection>
 
-    <!-- ──────────── Section 5: Bring your own writes ──────────── -->
-    <EaSection
-      id="writes"
-      title="Bring your own&nbsp;writes"
-      subtitle="Electric handles the read path. Writes go through your existing backend — pick how much sync you want on&nbsp;top."
-      :dark="true"
-    >
-      <WritesLadder />
-      <div class="sh-section-foot">
-        <a href="/docs/guides/writes">Writes guide →</a>
-      </div>
-    </EaSection>
-
-    <!-- ──────────── Section 6: Sync for AI agent apps ──────────── -->
+    <!-- ───────────── §6 — Sync is how humans stay in the agent loop ───────────── -->
     <EaSection id="agent-loop">
       <div class="sh-two-col sh-two-col-headed sh-two-col-mini-visual">
         <div class="sh-prose-col">
-          <div class="sh-paradigm-label good">
-            <span class="dot dot-good"></span>
-            <span class="mono">human-in-the-loop · agent-in-the-loop</span>
-          </div>
           <h2 class="sh-inline-title">
             Sync is how humans stay in the agent&nbsp;loop
           </h2>
           <p class="ea-prose">
-            Agents work on shared data — and they change it while users are
-            still looking at it. Without sync, your UI shows stale state,
+            Agents work on shared data &mdash; and they change it while users
+            are still looking at it. Without sync, your UI shows stale state,
             users have to refresh, and teams lose track of what each agent
             is doing.
           </p>
           <p class="ea-prose">
             With Electric, every user, device, and teammate sees agent changes
             in real time. The same shared state powers multi-tab,
-            multi-device, multi-user, and multi-agent collaboration — out of
-            the&nbsp;box.
+            multi-device, multi-user, and multi-agent collaboration &mdash;
+            out of the&nbsp;box.
           </p>
-          <div class="sh-section-foot sh-section-foot-tight">
+          <div class="sh-section-foot sh-section-foot-tight left">
             <a href="/blog/2026/04/08/data-primitive-agent-loop">
-              Read: the data primitive for the agent loop →
+              Read: the data primitive for the agent loop &rarr;
             </a>
           </div>
         </div>
@@ -298,66 +303,16 @@ const fanoutMiniDotCount = FANOUT_COLS * FANOUT_ROWS
       </div>
     </EaSection>
 
-    <!-- ──────────── Section 7: Scales with Postgres ──────────── -->
-    <EaSection
-      id="scales"
-      :dark="true"
-    >
-      <div class="sh-scale-layout">
-        <div class="sh-scale-text">
-          <h2 class="sh-inline-title">Scales with your&nbsp;Postgres</h2>
-          <p class="sh-scale-lead">
-            One Electric instance can fan out a single shape to a million
-            concurrent readers without adding load to your database.
-          </p>
-          <p class="sh-scale-detail">
-            The shape log is computed once, written to disk, and served from a
-            CDN. Compute scales horizontally, storage scales out, and your
-            Postgres only does what Postgres is&nbsp;good&nbsp;at.
-          </p>
-          <div class="sh-section-foot left">
-            <a href="/docs/reference/benchmarks">See the benchmarks →</a>
-          </div>
-        </div>
-        <div class="sh-scale-chart">
-          <div class="chart-card">
-            <div class="chart-row">
-              <span class="chart-label mono">10k clients</span>
-              <div class="chart-bar"><span class="bar-fill" style="--w: 8%"></span></div>
-              <span class="chart-val mono">~3% CPU</span>
-            </div>
-            <div class="chart-row">
-              <span class="chart-label mono">100k clients</span>
-              <div class="chart-bar"><span class="bar-fill" style="--w: 18%"></span></div>
-              <span class="chart-val mono">~7% CPU</span>
-            </div>
-            <div class="chart-row">
-              <span class="chart-label mono">1M clients</span>
-              <div class="chart-bar"><span class="bar-fill" style="--w: 42%"></span></div>
-              <span class="chart-val mono">~14% CPU</span>
-            </div>
-            <div class="chart-row">
-              <span class="chart-label mono">database</span>
-              <div class="chart-bar"><span class="bar-fill flat" style="--w: 4%"></span></div>
-              <span class="chart-val mono">flat</span>
-            </div>
-            <div class="chart-foot mono">
-              single Electric instance · 1 shape · sustained read fan-out
-            </div>
-          </div>
-        </div>
-      </div>
-    </EaSection>
-
-    <!-- ──────────── Section 8: Four pillars (BestWayToBuild re-skin) ──────────── -->
+    <!-- ───────────── §7 — The best way to build apps (four pillars) ───────────── -->
     <EaSection
       id="pillars"
       title="The best way to build&nbsp;apps"
       subtitle="Sync makes your apps super-fast, with end-to-end reactivity, resilience, and built-in multi-user&nbsp;collaboration."
+      :dark="true"
     >
       <div class="sh-pillars">
         <a
-          v-for="p in [
+          v-for="(p, i) in [
             { id: 'reactivity', title: 'Super-fast reactivity', body: 'Build fast, modern apps like Figma and Linear. Sub-millisecond reactivity and instant local writes.', href: '/blog/2025/07/29/super-fast-apps-on-sync-with-tanstack-db' },
             { id: 'resilience', title: 'Resilient transport', body: 'Build apps that work reliably, even with patchy connectivity. Resilient transport that ensures data is never lost.', href: '/blog/2026/03/24/durable-transport-ai-sdks' },
             { id: 'collaboration', title: 'Real-time collaboration', body: 'Build multi-user, multi-agent apps that naturally support both real-time and asynchronous collaboration.', href: '/blog/2026/01/12/durable-sessions-for-collaborative-ai' },
@@ -367,31 +322,38 @@ const fanoutMiniDotCount = FANOUT_COLS * FANOUT_ROWS
           :href="p.href"
           class="sh-pillar"
         >
-          <div class="sh-pillar-num mono">{{ ['01', '02', '03', '04'][[ 'reactivity', 'resilience', 'collaboration', 'durability' ].indexOf(p.id)] }}</div>
+          <div class="sh-pillar-num mono">{{ ['01', '02', '03', '04'][i] }}</div>
           <h4 class="sh-pillar-title">{{ p.title }}</h4>
           <p class="sh-pillar-body">{{ p.body }}</p>
-          <span class="sh-pillar-link">Read more →</span>
+          <span class="sh-pillar-link">Read more &rarr;</span>
         </a>
       </div>
     </EaSection>
 
-    <!-- ──────────── Section 11: First sync ──────────── -->
+    <!-- ───────────── §8 — Your first sync, end to end ───────────── -->
     <EaSection
       id="first-sync"
       title="Your first sync, end to&nbsp;end"
-      subtitle="Define a shape on the server. Mount a collection on the client. Render a live&nbsp;query."
-      :dark="true"
     >
+      <template #eyebrow>
+        Postgres&nbsp;Sync &nbsp;+&nbsp; TanStack&nbsp;DB
+      </template>
+      <template #subtitle>
+        Compose <a href="/sync/postgres-sync">Postgres&nbsp;Sync</a> with
+        <a href="/sync/tanstack-db">TanStack&nbsp;DB</a> to ship a real-time
+        feature in three&nbsp;moves: define a shape on the server, mount a
+        collection on the client, render a live&nbsp;query.
+      </template>
       <div class="sh-first-sync">
         <div class="sh-first-sync-grid">
           <div class="sh-fs-col">
             <div class="sh-fs-panel">
-              <div class="code-file-header mono">api/todos.ts &nbsp;<span class="muted">— server proxy</span></div>
+              <div class="code-file-header mono">api/todos.ts &nbsp;<span class="muted">&mdash; server proxy</span></div>
               <pre class="code-block annotated"><code><span class="tk-kw">export const</span> <span class="tk-v">ServerRoute</span> = <span class="tk-fn">createServerFileRoute</span>(<span class="tk-str">"/api/todos"</span>).<span class="tk-fn">methods</span>({
-  <span class="tk-prop">GET</span>: <span class="tk-kw">async</span> ({ <span class="tk-v">request</span> }) <span class="tk-kw">=></span> {
+  <span class="tk-prop">GET</span>: <span class="tk-kw">async</span> ({ <span class="tk-v">request</span> }) <span class="tk-kw">=&gt;</span> {
     <span class="tk-kw">const</span> <span class="tk-v">url</span> = <span class="tk-kw">new</span> <span class="tk-v">URL</span>(<span class="tk-v">request</span>.<span class="tk-prop">url</span>)
     <span class="tk-kw">const</span> <span class="tk-v">origin</span> = <span class="tk-kw">new</span> <span class="tk-v">URL</span>(<span class="tk-str">"https://api.electric-sql.cloud/v1/shape"</span>)<span class="ann-marker" data-n="1"></span>
-    <span class="tk-v">url</span>.<span class="tk-prop">searchParams</span>.<span class="tk-fn">forEach</span>((<span class="tk-v">v</span>, <span class="tk-v">k</span>) <span class="tk-kw">=></span>
+    <span class="tk-v">url</span>.<span class="tk-prop">searchParams</span>.<span class="tk-fn">forEach</span>((<span class="tk-v">v</span>, <span class="tk-v">k</span>) <span class="tk-kw">=&gt;</span>
       <span class="tk-v">ELECTRIC_PROTOCOL_QUERY_PARAMS</span>.<span class="tk-fn">includes</span>(<span class="tk-v">k</span>) &amp;&amp;
         <span class="tk-v">origin</span>.<span class="tk-prop">searchParams</span>.<span class="tk-fn">set</span>(<span class="tk-v">k</span>, <span class="tk-v">v</span>))
 
@@ -405,19 +367,19 @@ const fanoutMiniDotCount = FANOUT_COLS * FANOUT_ROWS
             </div>
 
             <div class="sh-fs-panel">
-              <div class="code-file-header mono">app/Todos.tsx &nbsp;<span class="muted">— client</span></div>
+              <div class="code-file-header mono">app/Todos.tsx &nbsp;<span class="muted">&mdash; client</span></div>
               <pre class="code-block annotated"><code><span class="tk-kw">export const</span> <span class="tk-v">todoCollection</span> = <span class="tk-fn">createCollection</span>(
   <span class="tk-fn">electricCollectionOptions</span>({<span class="ann-marker" data-n="5"></span>
     <span class="tk-prop">id</span>: <span class="tk-str">"todos"</span>,
     <span class="tk-prop">shapeOptions</span>: { <span class="tk-prop">url</span>: <span class="tk-str">"/api/todos"</span> },
-    <span class="tk-prop">getKey</span>: (<span class="tk-v">row</span>) <span class="tk-kw">=></span> <span class="tk-v">row</span>.<span class="tk-prop">id</span>,
+    <span class="tk-prop">getKey</span>: (<span class="tk-v">row</span>) <span class="tk-kw">=&gt;</span> <span class="tk-v">row</span>.<span class="tk-prop">id</span>,
   }),
 )
 
 <span class="tk-kw">export function</span> <span class="tk-fn">Todos</span>() {
-  <span class="tk-kw">const</span> { <span class="tk-v">data</span> } = <span class="tk-fn">useLiveQuery</span>((<span class="tk-v">q</span>) <span class="tk-kw">=></span><span class="ann-marker" data-n="6"></span>
+  <span class="tk-kw">const</span> { <span class="tk-v">data</span> } = <span class="tk-fn">useLiveQuery</span>((<span class="tk-v">q</span>) <span class="tk-kw">=&gt;</span><span class="ann-marker" data-n="6"></span>
     <span class="tk-v">q</span>.<span class="tk-fn">from</span>({ <span class="tk-prop">todo</span>: <span class="tk-v">todoCollection</span> })
-     .<span class="tk-fn">where</span>(({ <span class="tk-v">todo</span> }) <span class="tk-kw">=></span> <span class="tk-v">eq</span>(<span class="tk-v">todo</span>.<span class="tk-prop">completed</span>, <span class="tk-kw">false</span>)),
+     .<span class="tk-fn">where</span>(({ <span class="tk-v">todo</span> }) <span class="tk-kw">=&gt;</span> <span class="tk-v">eq</span>(<span class="tk-v">todo</span>.<span class="tk-prop">completed</span>, <span class="tk-kw">false</span>)),
   )
   <span class="tk-kw">return</span> &lt;<span class="tk-v">List</span> <span class="tk-prop">todos</span>={<span class="tk-v">data</span>} /&gt;
 }</code></pre>
@@ -443,7 +405,7 @@ const fanoutMiniDotCount = FANOUT_COLS * FANOUT_ROWS
                 <span class="num">3</span>
                 <div>
                   <strong>Tenant isolation.</strong>
-                  <p>Bind the <code>where</code> clause to the authenticated user — every client gets its own slice.</p>
+                  <p>Bind the <code>where</code> clause to the authenticated user &mdash; every client gets its own slice.</p>
                 </div>
               </li>
               <li class="sh-fs-anno">
@@ -457,7 +419,7 @@ const fanoutMiniDotCount = FANOUT_COLS * FANOUT_ROWS
                 <span class="num">5</span>
                 <div>
                   <strong>Mount a collection.</strong>
-                  <p>An Electric collection in TanStack DB — local, reactive, persisted.</p>
+                  <p>An Electric collection in TanStack DB &mdash; local, reactive, persisted.</p>
                 </div>
               </li>
               <li class="sh-fs-anno">
@@ -472,17 +434,18 @@ const fanoutMiniDotCount = FANOUT_COLS * FANOUT_ROWS
         </div>
 
         <div class="sh-fs-cta">
-          <VPButton tag="a" size="medium" theme="brand" text="Quickstart" href="/docs/quickstart" />
-          <VPButton tag="a" size="medium" theme="alt" text="Read the Docs" href="/docs/intro" />
+          <VPButton tag="a" size="medium" theme="brand" text="Quickstart" href="/docs/sync/quickstart" />
+          <VPButton tag="a" size="medium" theme="alt" text="Read the Docs" href="/docs/sync" />
         </div>
       </div>
     </EaSection>
 
-    <!-- ──────────── Section 12: Demos ──────────── -->
+    <!-- ───────────── §9 — Demos ───────────── -->
     <EaSection
       id="demos"
       title="Demos"
       subtitle="Reference apps you can clone, run locally, and learn&nbsp;from."
+      :dark="true"
     >
       <div class="sh-demos">
         <a
@@ -500,73 +463,65 @@ const fanoutMiniDotCount = FANOUT_COLS * FANOUT_ROWS
           </div>
         </a>
       </div>
-      <div class="sh-section-foot">
-        <a href="/demos">See all demos →</a>
-      </div>
     </EaSection>
 
-    <!-- ──────────── Section 13: Compose your stack ──────────── -->
+    <!-- ───────────── §10 — Blog ───────────── -->
     <EaSection
-      id="compose"
-      title="Compose your sync&nbsp;stack"
-      subtitle="Sync is one piece. Pair it with a reactive client store, an embedded database, or a Durable Stream — pick what fits the&nbsp;work."
-      :dark="true"
+      id="blog"
+      title="From the&nbsp;blog"
+      subtitle="Deep dives into sync engine architecture, the agent loop, and building real apps on the&nbsp;stack."
     >
-      <ComposeStackGrid />
-    </EaSection>
-
-    <!-- ──────────── Section 14: Get started ──────────── -->
-    <EaSection id="get-started">
-      <div class="sh-cta">
-        <div class="sh-cta-eyebrow mono">
-          <span class="dot"></span>
-          Open source · Apache&nbsp;2.0 · ★&nbsp;9.5k
-        </div>
-        <h2 class="sh-cta-title">
-          Start syncing in&nbsp;<span class="sh-cta-accent">minutes</span>.
-        </h2>
-        <p class="sh-cta-tagline">
-          Spin up the starter, point it at Postgres, and ship a real-time app
-          on top of your existing&nbsp;stack.
-        </p>
-
-        <InstallPill
-          class="sh-cta-install-spacing"
-          :command="installCommand"
-          tone="sunken"
+      <CuratedBlogPosts :posts="syncBlogPosts" :limit="4" />
+      <template #actions>
+        <VPButton
+          tag="a"
+          size="medium"
+          theme="alt"
+          text="Electric Blog"
+          href="/blog"
         />
-
-        <div class="sh-cta-buttons">
-          <VPButton
-            tag="a"
-            size="medium"
-            theme="brand"
-            text="Quickstart"
-            href="/docs/quickstart"
-          />
-          <VPButton
-            tag="a"
-            size="medium"
-            theme="alt"
-            text="Read the Docs"
-            href="/docs/intro"
-          />
-          <VPButton
-            tag="a"
-            size="medium"
-            theme="alt"
-            text="GitHub"
-            href="https://github.com/electric-sql/electric"
-          />
-        </div>
-
-        <div class="sh-cta-foot mono">
-          Or
-          <a href="https://dashboard.electric-sql.cloud/">sign up for Electric Cloud</a>
-          and skip the&nbsp;ops.
-        </div>
-      </div>
+      </template>
     </EaSection>
+
+    <!-- ───────────── §7 — Bottom CTA ───────────── -->
+    <BottomCtaStrap id="get-started">
+      <template #eyebrow>
+        Open source &middot; Apache&nbsp;2.0 &middot; ★&nbsp;9.5k
+      </template>
+      <template #title>
+        Start syncing in&nbsp;<span class="bottom-cta-accent">minutes</span>.
+      </template>
+      <template #tagline>
+        Spin up the starter, point it at Postgres, and ship a real-time app
+        on top of your existing&nbsp;stack.
+      </template>
+      <template #install>
+        <InstallPill :command="installCommand" tone="sunken" />
+      </template>
+      <template #actions>
+        <VPButton
+          tag="a"
+          size="medium"
+          theme="brand"
+          text="Quickstart"
+          href="/docs/sync/quickstart"
+        />
+        <VPButton
+          tag="a"
+          size="medium"
+          theme="alt"
+          text="Docs"
+          href="/docs/sync"
+        />
+        <VPButton
+          tag="a"
+          size="medium"
+          theme="alt"
+          text="GitHub"
+          href="https://github.com/electric-sql/electric"
+        />
+      </template>
+    </BottomCtaStrap>
   </div>
 </template>
 
@@ -580,10 +535,7 @@ const fanoutMiniDotCount = FANOUT_COLS * FANOUT_ROWS
 
 .sh-hero {
   position: relative;
-  /* Tightened from 96/80 to compensate for the second CTA row
-     (install pill + action-button row) so the hero stays roughly the
-     same overall height as before the split. */
-  padding: 72px 24px 56px;
+  padding: 80px 24px 72px;
   text-align: center;
   overflow: hidden;
 }
@@ -604,10 +556,6 @@ const fanoutMiniDotCount = FANOUT_COLS * FANOUT_ROWS
   font-weight: 700;
   line-height: 1.1;
   letter-spacing: -0.02em;
-  background: none;
-  -webkit-background-clip: border-box;
-  background-clip: border-box;
-  -webkit-text-fill-color: currentColor;
   color: var(--ea-text-1);
   margin: 0;
   padding-bottom: 4px;
@@ -616,26 +564,16 @@ const fanoutMiniDotCount = FANOUT_COLS * FANOUT_ROWS
 
 .sh-hero-accent {
   color: var(--vp-c-brand-1);
-  -webkit-text-fill-color: currentColor;
 }
 
 .sh-hero-text {
   font-size: 28px;
   font-weight: 500;
   color: var(--ea-text-1);
-  margin: 16px auto 30px;
+  margin: 16px auto 32px;
   max-width: 720px;
   line-height: 1.35;
   text-wrap: balance;
-}
-
-/* Two-row CTA stack: the install pill always sits on its own line
-   above the action buttons so the copyable command reads as a
-   distinct affordance rather than a peer of the buttons. */
-.sh-hero-install-row {
-  margin-top: 24px;
-  display: flex;
-  justify-content: center;
 }
 
 .sh-hero-row {
@@ -647,11 +585,81 @@ const fanoutMiniDotCount = FANOUT_COLS * FANOUT_ROWS
   gap: 12px;
 }
 
-/* Hero install pill is rendered by the shared `<InstallPill>` component
-   in `src/components/InstallPill.vue` — pill chrome, type sizes,
-   syntax-highlighting palette and clipboard behaviour all live there. */
+/* ── Primitive sections ─────────────────────────────────────────── */
 
-/* ── Two-col prose+visual layout ────────────────────────────────── */
+.sh-primitive {
+  max-width: 760px;
+  margin: 0 auto;
+}
+
+/* Two-col variant: prose on one side, visual (demo or code) on the other.
+   We let the EaSection's inner provide the outer max-width so the layout
+   can breathe wider than the single-col 760px. */
+.sh-primitive-two-col {
+  max-width: none;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
+  gap: 56px;
+  align-items: center;
+}
+
+.sh-primitive-reversed .sh-primitive-prose { order: 2; }
+.sh-primitive-reversed .sh-primitive-visual { order: 1; }
+
+.sh-primitive-prose,
+.sh-primitive-visual {
+  min-width: 0;
+}
+
+.sh-primitive-two-col .ea-prose {
+  max-width: none;
+}
+
+.sh-primitive-head {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.sh-primitive-icon {
+  width: 44px;
+  height: 44px;
+  display: block;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.sh-primitive-title {
+  margin: 0;
+  font-size: 32px;
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.015em;
+  color: var(--ea-text-1);
+}
+
+.sh-primitive-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 24px;
+}
+
+/* Collapse two-col primitives to a single column on tablet/mobile.
+   Visual stacks below prose regardless of source order. */
+@media (max-width: 960px) {
+  .sh-primitive-two-col {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 36px;
+  }
+  .sh-primitive-reversed .sh-primitive-prose,
+  .sh-primitive-reversed .sh-primitive-visual {
+    order: initial;
+  }
+}
+
+/* ── Two-col prose+visual layout (used by agent-loop section) ───── */
 
 .sh-two-col {
   display: grid;
@@ -660,10 +668,6 @@ const fanoutMiniDotCount = FANOUT_COLS * FANOUT_ROWS
   align-items: start;
 }
 
-/* Variant where the visual is a small accent rather than the main subject:
-   text takes ~2/3, visual ~1/3. The prose column is wider here, so let
-   the paragraphs fill the column instead of being clamped by the default
-   .ea-prose max-width (which is tuned for the narrower 1.4fr column). */
 .sh-two-col-mini-visual {
   grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
 }
@@ -671,40 +675,11 @@ const fanoutMiniDotCount = FANOUT_COLS * FANOUT_ROWS
   max-width: none;
 }
 
-/* Inverse of -mini-visual: prose ~1/3, visual ~2/3. Used by the
-   "complete sync stack" section so the diagram has room for the
-   parallel read/write columns. */
-/* Visual column is sized to the diagram; prose fills the remaining space on
-   the left. */
-.sh-two-col-wide-visual {
-  grid-template-columns: minmax(220px, 1fr) minmax(0, 560px);
-}
-.sh-two-col-wide-visual .ea-prose {
-  max-width: none;
-}
-
-/* Visual on the left, prose on the right — applied at desktop only so that
-   on mobile the section still stacks prose-first for natural reading.
-   The column widths are mirrored too so each underlying layout variant
-   keeps its intended visual size on the (now left) side. */
-@media (min-width: 961px) {
-  .sh-two-col-reversed {
-    grid-template-columns: 1.4fr minmax(260px, 1fr);
-  }
-  .sh-two-col-mini-visual.sh-two-col-reversed {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
-  }
-  .sh-two-col-reversed .sh-prose-col { order: 2; }
-  .sh-two-col-reversed .sh-visual-col { order: 1; }
-}
-
 .sh-prose-col,
 .sh-visual-col {
   min-width: 0;
 }
 
-/* When a two-col block hosts the section heading inline (so the visual
-   sits next to the heading rather than below it). */
 .sh-inline-title {
   font-size: 28px;
   font-weight: 600;
@@ -714,25 +689,6 @@ const fanoutMiniDotCount = FANOUT_COLS * FANOUT_ROWS
   margin: 0 0 20px;
   text-wrap: balance;
 }
-
-@media (max-width: 768px) {
-  .sh-inline-title {
-    font-size: 22px;
-    margin-bottom: 16px;
-  }
-}
-@media (max-width: 480px) {
-  .sh-inline-title {
-    font-size: 20px;
-    margin-bottom: 14px;
-  }
-}
-
-/* `.ea-prose` core typography (font, size, color, margin, max-width,
-   mobile cascade, link styling) is defined globally in
-   `.vitepress/theme/custom.css` under "Landing-page shared text styles"
-   so the rules don't drift between Agents / Streams / Sync. Only
-   page-specific overrides should live here. */
 
 .sh-section-foot {
   margin-top: 24px;
@@ -746,107 +702,6 @@ const fanoutMiniDotCount = FANOUT_COLS * FANOUT_ROWS
   text-decoration: none;
 }
 .sh-section-foot a:hover { text-decoration: underline; }
-
-/* ── Section 4: fan-out (compact two-col) ──────────────────────── */
-
-.fan-node {
-  display: inline-flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  padding: 8px 14px;
-  background: var(--ea-surface);
-  border: 1px solid var(--ea-divider);
-  border-radius: 8px;
-}
-.fan-node-label {
-  font-size: 12.5px;
-  font-weight: 600;
-  color: var(--ea-text-1);
-  line-height: 1.2;
-}
-.fan-node-meta {
-  font-size: 10px;
-  color: var(--ea-text-3);
-  letter-spacing: 0.02em;
-}
-.fan-pg .fan-node-label { color: #336791; }
-.fan-electric .fan-node-label { color: var(--vp-c-brand-1); }
-
-.sh-fanout-mini {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 4px;
-  padding: 22px 14px 22px;
-  background: var(--ea-surface);
-  border: 1px solid var(--ea-divider);
-  border-radius: 8px;
-}
-
-.fan-mini-row {
-  display: flex;
-  justify-content: center;
-}
-
-.fan-mini-rail,
-.fan-mini-fan {
-  width: 100%;
-  display: block;
-  stroke: var(--ea-divider);
-  stroke-width: 1;
-  fill: none;
-}
-.fan-mini-rail { height: 16px; }
-.fan-mini-fan { height: 48px; margin-top: 4px; }
-.fan-mini-rail line,
-.fan-mini-fan line {
-  stroke: var(--ea-divider);
-  stroke-width: 1;
-}
-
-.fan-mini-clients {
-  display: grid;
-  grid-template-columns: repeat(10, 1fr);
-  column-gap: 5px;
-  row-gap: 18px;
-  justify-items: center;
-  padding: 6px 6px 2px;
-  margin-top: 0;
-}
-.fan-mini-dot {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--vp-c-brand-1);
-  opacity: 0.7;
-}
-
-.sh-fanout-stats {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 18px;
-  margin-top: 24px;
-  padding-top: 20px;
-  border-top: 1px solid var(--ea-divider);
-}
-.stat { text-align: left; }
-.stat:first-child { padding-left: 0; }
-.stat-num {
-  font-size: 26px;
-  font-weight: 700;
-  color: var(--ea-text-1);
-  letter-spacing: -0.02em;
-  line-height: 1;
-}
-.stat-label {
-  margin-top: 6px;
-  font-size: 10.5px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--ea-text-3);
-}
-
 .sh-section-foot-tight { margin-top: 16px; }
 
 /* ── Agent loop section (humans + agents on a shared bus) ──────── */
@@ -865,9 +720,6 @@ const fanoutMiniDotCount = FANOUT_COLS * FANOUT_ROWS
 }
 .dot-good { background: var(--vp-c-brand-1); }
 
-/* Vertical bus: users (left) ──── shared-state rail ──── agents (right).
-   Tick lines are CSS pseudo-elements on each node so they're guaranteed
-   to attach to the node's vertical centre regardless of column heights. */
 .sh-agent-loop-diagram-v {
   --tick-len: 22px;
   --tick-color: color-mix(in srgb, var(--vp-c-brand-1) 35%, var(--ea-divider));
@@ -903,7 +755,6 @@ const fanoutMiniDotCount = FANOUT_COLS * FANOUT_ROWS
   box-sizing: border-box;
 }
 
-/* Tick from each user node's right edge to the rail. */
 .vbus-users .node::after {
   content: "";
   position: absolute;
@@ -914,7 +765,6 @@ const fanoutMiniDotCount = FANOUT_COLS * FANOUT_ROWS
   background: var(--tick-color);
   pointer-events: none;
 }
-/* Tick from the rail to each agent node's left edge. */
 .vbus-agents .node::before {
   content: "";
   position: absolute;
@@ -944,35 +794,6 @@ const fanoutMiniDotCount = FANOUT_COLS * FANOUT_ROWS
   line-height: 1.25;
 }
 
-/* Short vertical ticks connecting each row of nodes to the bus. */
-.bus-tick {
-  width: 100%;
-  height: 12px;
-  display: block;
-  fill: none;
-}
-.bus-tick line {
-  stroke: color-mix(in srgb, var(--vp-c-brand-1) 35%, var(--ea-divider));
-  stroke-width: 0.75;
-}
-
-/* The shared-state "bus" rail spans the full sketch width. */
-.bus {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 28px;
-  background: color-mix(in srgb, var(--vp-c-brand-1) 8%, var(--ea-surface));
-  border: 1px solid color-mix(in srgb, var(--vp-c-brand-1) 35%, var(--ea-divider));
-  border-radius: 4px;
-}
-.bus-label {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  color: var(--vp-c-brand-1);
-}
-
 .node {
   display: inline-flex;
   align-items: center;
@@ -984,90 +805,13 @@ const fanoutMiniDotCount = FANOUT_COLS * FANOUT_ROWS
   color: var(--ea-text-1);
 }
 .node.small { padding: 1px 6px; font-size: 10.5px; }
-.node-pg { color: #336791; }
 .node-agent { color: var(--vp-c-brand-1); }
 .node-device {
   color: var(--ea-text-2);
   border-style: dashed;
 }
-.arrow { color: var(--ea-text-3); }
 
-/* ── Scale section ──────────────────────────────────────────────── */
-
-.sh-scale-layout {
-  display: grid;
-  grid-template-columns: 1fr 1.2fr;
-  gap: 48px;
-  align-items: center;
-}
-.sh-scale-lead {
-  margin: 0 0 16px;
-  font-family: var(--vp-font-family-base);
-  font-size: 17px;
-  line-height: 1.6;
-  color: var(--ea-text-2);
-  text-wrap: pretty;
-}
-.sh-scale-detail {
-  margin: 0;
-  font-family: var(--vp-font-family-base);
-  font-size: 15.5px;
-  line-height: 1.7;
-  color: var(--ea-text-2);
-}
-
-.chart-card {
-  background: var(--ea-surface);
-  border: 1px solid var(--ea-divider);
-  border-radius: 8px;
-  padding: 24px;
-}
-.chart-row {
-  display: grid;
-  grid-template-columns: 88px 1fr 80px;
-  gap: 12px;
-  align-items: center;
-  margin-bottom: 14px;
-}
-.chart-row:last-of-type { margin-bottom: 0; }
-.chart-label, .chart-val {
-  font-size: 12px;
-  color: var(--ea-text-3);
-  letter-spacing: 0.02em;
-}
-.chart-val { text-align: right; color: var(--ea-text-1); }
-.chart-bar {
-  height: 8px;
-  background: var(--ea-surface-alt);
-  border-radius: 4px;
-  overflow: hidden;
-  position: relative;
-}
-.bar-fill {
-  display: block;
-  height: 100%;
-  width: var(--w);
-  background: var(--vp-c-brand-1);
-  border-radius: 4px;
-  animation: bar-grow 1s ease-out;
-}
-.bar-fill.flat {
-  background: var(--ea-text-3);
-}
-@keyframes bar-grow {
-  from { width: 0; }
-  to { width: var(--w); }
-}
-.chart-foot {
-  margin-top: 18px;
-  padding-top: 14px;
-  border-top: 1px dashed var(--ea-divider);
-  font-size: 11px;
-  color: var(--ea-text-3);
-  letter-spacing: 0.02em;
-}
-
-/* ── Pillars ────────────────────────────────────────────────────── */
+/* ── Pillars (best way to build apps) ───────────────────────────── */
 
 .sh-pillars {
   display: grid;
@@ -1136,6 +880,20 @@ const fanoutMiniDotCount = FANOUT_COLS * FANOUT_ROWS
   border: 1px solid var(--ea-divider);
   border-radius: 8px;
   overflow: hidden;
+}
+
+/* Code panels used as the visual next to a primitive's prose: nudge type
+   up slightly and add a touch more breathing room so they hold the
+   right-hand column with similar visual weight to the demo. */
+.sh-primitive-visual .sh-fs-panel { width: 100%; }
+.sh-primitive-visual .code-block.annotated {
+  font-size: 13.5px;
+  padding: 18px 20px;
+  line-height: 1.65;
+}
+.sh-primitive-visual .code-file-header {
+  font-size: 12px;
+  padding: 12px 18px;
 }
 .code-file-header {
   font-size: 11.5px;
@@ -1293,124 +1051,11 @@ const fanoutMiniDotCount = FANOUT_COLS * FANOUT_ROWS
   color: var(--ea-text-2);
 }
 
-/* ── Get started CTA ────────────────────────────────────────────── */
-
-.sh-cta {
-  position: relative;
-  text-align: center;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0;
-  padding: 56px 32px 48px;
-  background: var(--ea-surface);
-  border: 1px solid var(--ea-divider);
-  border-radius: 12px;
-  overflow: hidden;
-  isolation: isolate;
-}
-.sh-cta::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background:
-    radial-gradient(
-      ellipse 70% 90% at 50% 0%,
-      color-mix(in srgb, var(--vp-c-brand-1) 6%, transparent) 0%,
-      transparent 55%
-    );
-  z-index: -1;
-  opacity: 0.7;
-}
-
-.sh-cta-eyebrow {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--ea-text-3);
-  padding: 4px 10px;
-  background: var(--ea-surface-alt);
-  border: 1px solid var(--ea-divider);
-  border-radius: 999px;
-  margin-bottom: 22px;
-}
-.sh-cta-eyebrow .dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--vp-c-brand-1);
-}
-
-.sh-cta-title {
-  font-size: 38px;
-  /* Matches the 700 weight of the hero name so the CTA doesn't out-bold
-     the page's H1. Was 800 which inverted the hierarchy. */
-  font-weight: 700;
-  line-height: 1.15;
-  letter-spacing: -0.015em;
-  color: var(--ea-text-1);
-  margin: 0;
-  max-width: 560px;
-  text-wrap: balance;
-}
-.sh-cta-accent {
-  background: var(--vp-home-hero-name-background);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: var(--vp-home-hero-name-color);
-}
-
-.sh-cta-tagline {
-  font-family: var(--vp-font-family-base);
-  font-size: 16px;
-  line-height: 1.6;
-  color: var(--ea-text-2);
-  margin: 14px auto 0;
-  max-width: 460px;
-}
-
-/* Bottom CTA install pill is rendered by the shared `<InstallPill>`
-   component (see `src/components/InstallPill.vue`). The wrapper class
-   below only adds the spacing between the tagline and the pill so the
-   shared component itself stays free of layout-specific margins. */
-.sh-cta-install-spacing {
-  margin-top: 28px;
-}
-
-.sh-cta-buttons {
-  display: flex;
-  gap: 10px;
-  margin-top: 20px;
-  flex-wrap: wrap;
-  justify-content: center;
-}
-
-.sh-cta-foot {
-  margin-top: 28px;
-  padding-top: 20px;
-  border-top: 1px dashed var(--ea-divider);
-  width: 100%;
-  max-width: 480px;
-  font-size: 12px;
-  color: var(--ea-text-3);
-  letter-spacing: 0.02em;
-}
-.sh-cta-foot a {
-  color: var(--vp-c-brand-1);
-  text-decoration: none;
-}
-.sh-cta-foot a:hover { text-decoration: underline; }
-
 /* ── Responsive ─────────────────────────────────────────────────── */
 
 @media (max-width: 960px) {
   .sh-two-col,
   .sh-two-col-mini-visual,
-  .sh-two-col-wide-visual,
-  .sh-scale-layout,
   .sh-first-sync-grid {
     grid-template-columns: 1fr;
     gap: 32px;
@@ -1421,55 +1066,39 @@ const fanoutMiniDotCount = FANOUT_COLS * FANOUT_ROWS
   .sh-demos {
     grid-template-columns: 1fr 1fr;
   }
-  .sh-fanout-stats {
-    /* Keep the three metrics in a single row even on mobile — stacking
-       them produces awkward dead space next to the visual column. */
-    grid-template-columns: repeat(3, 1fr);
-    gap: 12px;
-  }
-  .fan-mid {
-    grid-template-columns: 1fr;
-    gap: 12px;
-  }
-  .fan-clients {
-    grid-template-columns: repeat(4, 1fr);
-  }
 }
 
 @media (max-width: 768px) {
   .sh-hero {
-    /* Bumped horizontal padding from 20 → 24 for more breathing room
-       from the viewport edge on tablets / large phones. */
-    padding: 56px 24px 40px;
+    padding: 56px 24px 48px;
   }
   .sh-hero-name { font-size: 36px; }
   .sh-hero-text { font-size: 22px; }
+
+  .sh-primitive-icon {
+    width: 36px;
+    height: 36px;
+  }
+  .sh-primitive-title {
+    font-size: 26px;
+  }
+
+  .sh-inline-title {
+    font-size: 22px;
+    margin-bottom: 16px;
+  }
   .sh-demos {
     grid-template-columns: 1fr;
   }
-  .fan-clients {
-    grid-template-columns: repeat(3, 1fr);
-  }
-  .sh-fanout-stats {
-    gap: 10px;
-  }
-  .stat-num { font-size: 22px; }
-  .sh-cta {
-    padding: 40px 20px 36px;
-  }
-  .sh-cta-title { font-size: 28px; }
-  .sh-cta-buttons { flex-direction: column; align-self: stretch; max-width: 280px; margin-left: auto; margin-right: auto; }
 }
 
 @media (max-width: 480px) {
   .sh-hero {
-    /* Bumped horizontal padding from 16 → 20 for breathing room. */
-    padding: 44px 20px 32px;
+    padding: 44px 20px 36px;
   }
   .sh-hero-name { font-size: 28px; }
   .sh-hero-text { font-size: 19px; }
-  /* Stack the action buttons full-width on the smallest screens so
-     they don't wrap awkwardly underneath the install pill. */
+
   .sh-hero-row {
     flex-direction: column;
     align-items: stretch;
@@ -1477,10 +1106,18 @@ const fanoutMiniDotCount = FANOUT_COLS * FANOUT_ROWS
     margin-left: auto;
     margin-right: auto;
   }
-  .sh-fanout-stats {
-    gap: 8px;
+
+  .sh-primitive-head {
+    gap: 12px;
+    margin-bottom: 16px;
   }
-  .stat-num { font-size: 20px; }
-  .stat-label { font-size: 9.5px; }
+  .sh-primitive-title {
+    font-size: 22px;
+  }
+
+  .sh-inline-title {
+    font-size: 20px;
+    margin-bottom: 14px;
+  }
 }
 </style>

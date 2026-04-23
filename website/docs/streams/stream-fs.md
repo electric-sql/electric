@@ -90,5 +90,5 @@ The watcher emits chokidar-style events: `add`, `change`, `unlink`, `addDir`, an
 
 - `StreamFilesystem`
 - `streamFsTools`
-- [Core concepts](concepts)
+- [Overview](/docs/streams/)
 - [JSON mode](json-mode)

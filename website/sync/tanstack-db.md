@@ -106,7 +106,7 @@ TanStack&nbsp;DB acts as the client-side data layer in [the Electric ecosystem](
   </a>
 </figure>
 
-You can load and sync data into it from multiple sources, including [your API](https://tanstack.com/blog/tanstack-db-0.1-the-embedded-client-database-for-tanstack-query), [Postgres&nbsp;Sync](/sync) and [Durable&nbsp;Streams](/streams).
+You can load and sync data into it from multiple sources, including [your API](https://tanstack.com/blog/tanstack-db-0.1-the-embedded-client-database-for-tanstack-query), [Postgres&nbsp;Sync](/sync/postgres-sync) and [Durable&nbsp;Streams](/streams).
 
 TanStack&nbsp;DB then provides a unified, reactive interface to the data.
 

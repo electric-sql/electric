@@ -21,7 +21,11 @@ import HomePage from '../../src/components/home/HomePage.vue'
 // Electric Cloud overview.
 import CloudHomePage from '../../src/components/cloud-home/CloudHomePage.vue'
 
-// Electric Sync homepage.
+// Electric Sync homepage. /sync is the composable sync stack overview;
+// the Postgres Sync primitive deep-dive (/sync/postgres-sync) is now a
+// docs-style markdown page that imports the educational demo
+// components from `src/components/sync-home/*` directly, so it doesn't
+// need a top-level page component.
 import SyncHomePage from '../../src/components/sync-home/SyncHomePage.vue'
 
 // Durable Streams homepage.

@@ -145,4 +145,4 @@ For a detailed walkthrough, see the [Durable Sessions for Collaborative AI](http
 
 ---
 
-See also: [Core concepts](concepts) | [JSON mode](json-mode) | [StreamDB](stream-db) | [Yjs](integrations/yjs)
+See also: [Overview](/docs/streams/) | [JSON mode](json-mode) | [StreamDB](stream-db) | [Yjs](integrations/yjs)

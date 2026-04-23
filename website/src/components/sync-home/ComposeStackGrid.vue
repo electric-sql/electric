@@ -2,10 +2,22 @@
 import { computed } from 'vue'
 import { data as primitives } from '../../../data/primitives.data.ts'
 
-const ORDER = ['tanstack-db', 'pglite', 'durable-streams']
+const props = defineProps({
+  // Slugs (in render order) of the primitives to feature. Defaults to the
+  // "what to pair Postgres Sync with" lineup used on the Postgres Sync
+  // primitive page; the new top-level Sync landing page passes its own
+  // ordering (postgres-sync, tanstack-db, pglite) to introduce the
+  // primitives that compose the sync stack.
+  order: {
+    type: Array,
+    default: () => ['tanstack-db', 'pglite', 'durable-streams'],
+  },
+})
 
 const products = computed(() =>
-  ORDER.map((slug) => primitives.find((p) => p.slug === slug)).filter(Boolean)
+  props.order
+    .map((slug) => primitives.find((p) => p.slug === slug))
+    .filter(Boolean)
 )
 </script>
 

@@ -65,8 +65,14 @@ const NAV = [
     homeLabel: 'Electric Sync',
     homeSublabel: 'The magic behind fast apps',
     secondary: {
-      heading: 'Client primitives',
+      heading: 'Primitives',
       items: [
+        {
+          label: 'Postgres Sync',
+          sublabel: 'Sync from Postgres into anything',
+          link: '/sync/postgres-sync',
+          icon: '/img/icons/electric.svg',
+        },
         {
           label: 'TanStack DB',
           sublabel: 'Reactive client store',
