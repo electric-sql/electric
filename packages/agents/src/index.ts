@@ -31,6 +31,11 @@ export {
   registerHorton,
 } from './agents/horton.js'
 export { registerWorker } from './agents/worker.js'
+export { registerCodingSession } from './agents/coding-session.js'
+export type {
+  CodingSessionCliRunner,
+  RegisterCodingSessionOptions,
+} from './agents/coding-session.js'
 export {
   WORKER_TOOL_NAMES,
   createSpawnWorkerTool,

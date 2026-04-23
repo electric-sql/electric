@@ -20,6 +20,9 @@ import { EntityHeader } from './components/EntityHeader'
 import { EntityTimeline } from './components/EntityTimeline'
 import { MessageInput } from './components/MessageInput'
 import { StateExplorerPanel } from './components/stateExplorer/StateExplorerPanel'
+import { CodingSessionView } from './components/CodingSessionView'
+
+const CODING_SESSION_TYPE = `coding-session`
 
 function RootLayout(): React.ReactElement {
   const { pinnedUrls } = usePinnedEntities()
