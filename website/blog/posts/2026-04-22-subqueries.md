@@ -14,19 +14,20 @@ published: false
 
 Electric syncs Postgres data into local apps. You declare a shape — a table and a WHERE clause — and Electric streams the matching rows, keeps them current, handles reconnection. Your app reads from a local store. No fetch logic, no loading states, no stale data. If you haven't seen the pitch: [sync replaces data fetching](/blog/2025/04/22/untangling-llm-spaghetti) and it's [how you build real-time, collaborative apps](/blog/2025/04/09/building-ai-apps-on-sync).
 
-Subqueries extend shape WHERE clauses with relational logic. Sync rows where a membership exists, a role matches, a share is granted — access control defined in SQL, evaluated server-side, synced incrementally.
+Subqueries extend shape WHERE clauses with relational logic. Sync rows where a membership exists, a role matches, a share is granted. Sync the line items for an invoice, the comments on an issue, the messages in a thread. Relational filtering defined in SQL, evaluated server-side, synced incrementally.
 
 :::info
 Subqueries are available on [Electric Cloud](/cloud) and are included in the [Pro, Scale, and Enterprise plans](/pricing).
 :::
 
 
-## Shapes and access control
+## Shapes and relational data
 
-Shapes are the primitive for declaring what data syncs to each client. A table and a WHERE clause. Declare the subset, sync it. This makes shapes fast to sync and means users only have access to the data they should see. 
+Shapes are the primitive for declaring what data syncs to each client. A table and a WHERE clause. Declare the subset, sync it. This makes shapes fast to sync and means users only have access to the data they should see.
 
+But real data is relational. Access control depends on memberships, roles, and shares in other tables. Hierarchical data — invoice line items, issue comments, thread messages — lives in child tables linked by foreign keys. "Sync tasks where this user is a project member", "sync the items for this invoice" — the data you need to filter on lives in a different table. Column filters can't reach it.
 
-But access often depends on data in other tables — memberships, roles, shares, team assignments. "Sync tasks where this user is a project member" — the membership lives in `project_members`, not in `tasks`. You need relational logic in your shape WHERE clause.
+You need relational logic in your shape WHERE clause.
 
 
 ## Subqueries
@@ -45,7 +46,7 @@ Parameters (`$1`) are bound per client — the same shape definition serves diff
 When the underlying data changes — a membership added, a user removed — the sync engine re-evaluates and moves only the affected rows in or out. No full resync, no refetch.
 
 
-## Access-control patterns
+## Patterns
 
 ### Tenant scoping
 
@@ -101,6 +102,20 @@ org_id IN (
 ```
 
 The role filter narrows which memberships grant access. Different roles sync different data from the same shape definition.
+
+### Project scoping
+
+Sync comments for a specific project, traversing through tasks and issues.
+
+```sql
+issue_id IN (
+  SELECT id FROM issues WHERE task_id IN (
+    SELECT id FROM tasks WHERE project_id = $1
+  )
+)
+```
+
+The shape syncs all comments reachable from the project root. When a new task or issue is created under the project, its comments sync in automatically.
 
 See the [WHERE&nbsp;clause docs](/docs/guides/shapes#where-clause) for the full reference on supported operators and subquery patterns.
 
