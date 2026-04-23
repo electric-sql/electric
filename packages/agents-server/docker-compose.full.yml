@@ -24,7 +24,7 @@ services:
       timeout: 5s
       retries: 30
     volumes:
-      - electric-agents-postgres-data:/var/lib/postgresql/data
+      - electric-agents-postgres-data:/var/lib/postgresql
 
   electric:
     image: electricsql/electric:latest
