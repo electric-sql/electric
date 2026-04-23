@@ -24,6 +24,10 @@ Subqueries extend shape WHERE clauses with relational logic. Sync rows where a m
 <!-- The rest of the post explains what subqueries are, shows the patterns
      they enable, and covers why they're now ready for real use. -->
 
+:::info
+Subqueries are available on [Electric Cloud](/cloud) and are included in the [Pro, Scale, and Enterprise plans](/pricing).
+:::
+
 
 ## Shapes and access control
 
