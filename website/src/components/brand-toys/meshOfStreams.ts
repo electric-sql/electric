@@ -1663,7 +1663,12 @@ export function createMeshScene(options: MeshSceneOptions): MeshScene {
       // parallel offsets).
       {
         const niceWide = Math.max(cornerRadius, grid * 1.4)
-        const minR = 0.5
+        // Minimum radius for 90°-ish corners. The inside lane of a wide
+        // bundle (or any lane on a tightly-packed corner) used to clamp at
+        // ~0.5px, which renders as a visually sharp point against the
+        // generously-rounded outer lanes. Floor at 1/3 of the lane spacing
+        // so even the innermost lane keeps a perceptible curve.
+        const minR = laneSpacing / 3
         // virtualCenterR[idx] is the (possibly negative) centerline radius
         // that, combined with the per-lane offset, gives each lane a
         // concentric arc. Per-lane floor is applied below.
