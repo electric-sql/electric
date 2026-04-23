@@ -1,9 +1,10 @@
 import { spawn } from 'node:child_process'
-import { watch } from 'node:fs'
+import { readdirSync, realpathSync, statSync, watch } from 'node:fs'
+import { homedir } from 'node:os'
+import { join } from 'node:path'
 import { z } from 'zod'
 import {
   deserializeCursor,
-  discoverSessions,
   importLocalSession,
   loadSession,
   resolveSession,
@@ -81,19 +82,36 @@ const defaultCliRunner: CodingSessionCliRunner = {
   },
 }
 
-async function discoverNewestSession(
+/**
+ * Scan the project directory for .jsonl files. Uses direct fs scanning
+ * instead of the library's `discoverSessions` because `claude -p`
+ * doesn't register sessions in `~/.claude/history.jsonl`.
+ */
+function scanSessionDir(
   agent: CodingAgentType,
-  cwd: string,
-  excludeIds: ReadonlySet<string>
-): Promise<string | null> {
-  const all = await discoverSessions(agent)
-  const candidates = all.filter(
-    (s) => !excludeIds.has(s.sessionId) && (!s.cwd || s.cwd === cwd)
-  )
-  if (candidates.length === 0) return null
-  // discoverSessions returns most-recent-first for each agent, so
-  // the first match is what the CLI just wrote.
-  return candidates[0]!.sessionId
+  cwd: string
+): Array<{ id: string; mtime: number }> {
+  try {
+    const resolvedCwd = realpathSync(cwd)
+    const sanitized = resolvedCwd.replace(/\//g, `-`)
+    const projectDir =
+      agent === `claude`
+        ? join(homedir(), `.claude`, `projects`, sanitized)
+        : join(homedir(), `.codex`, `sessions`)
+    const entries = readdirSync(projectDir)
+    return entries
+      .filter((f) => f.endsWith(`.jsonl`))
+      .map((f) => {
+        const fullPath = join(projectDir, f)
+        return {
+          id: f.replace(/\.jsonl$/, ``),
+          mtime: statSync(fullPath).mtimeMs,
+        }
+      })
+      .sort((a, b) => b.mtime - a.mtime)
+  } catch {
+    return []
+  }
 }
 
 const sessionMetaRowSchema = z.object({
@@ -355,7 +373,9 @@ export function registerCodingSession(
       },
     },
     async handler(ctx: HandlerContext, _wake: WakeEvent) {
-      if (ctx.firstWake) {
+      const alreadyInitialized =
+        ctx.db.collections.sessionMeta.get(`current`) !== undefined
+      if (ctx.firstWake && !alreadyInitialized) {
         const args = creationArgsSchema.parse(ctx.args)
         const cwd = args.cwd ?? defaultCwd
         const electricSessionId =
@@ -478,11 +498,8 @@ export function registerCodingSession(
             // `claude -r <id>` — claude can't resume an empty file).
             // After it exits, diff the on-disk sessions to find the
             // new id, then load and mirror in one shot.
-            const preIds = new Set(
-              (await discoverSessions(runningMeta.agent)).map(
-                (s) => s.sessionId
-              )
-            )
+            const preScan = scanSessionDir(runningMeta.agent, runningMeta.cwd)
+            const preIds = new Set(preScan.map((s) => s.id))
             const cliResult = await runner.run({
               agent: runningMeta.agent,
               cwd: runningMeta.cwd,
@@ -493,11 +510,8 @@ export function registerCodingSession(
                 `[coding-session] ${runningMeta.agent} CLI exited ${cliResult.exitCode}. stderr=${cliResult.stderr.slice(0, 800) || `<empty>`} stdout=${cliResult.stdout.slice(0, 800) || `<empty>`}`
               )
             }
-            const foundId = await discoverNewestSession(
-              runningMeta.agent,
-              runningMeta.cwd,
-              preIds
-            )
+            const postScan = scanSessionDir(runningMeta.agent, runningMeta.cwd)
+            const foundId = postScan.find((s) => !preIds.has(s.id))?.id ?? null
             if (!foundId) {
               throw new Error(
                 `[coding-session] ${runningMeta.agent} CLI succeeded but no new session file was found`
