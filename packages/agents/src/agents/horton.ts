@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { serverLog } from '../log'
 import { createHortonDocsSupport } from '../docs/knowledge-base'
+import { createSkillTools } from '../skills/tools'
 import { createBashTool } from '../tools/bash'
 import { createEditTool } from '../tools/edit'
 import { fetchUrlTool } from '../tools/fetch-url'
@@ -15,6 +16,7 @@ import type {
   WakeEvent,
 } from '@electric-ax/agents-runtime'
 import type { ChangeEvent } from '@durable-streams/state'
+import type { SkillsRegistry } from '../skills/types'
 
 const TITLE_MODEL = `claude-haiku-4-5-20251001`
 
@@ -143,13 +145,32 @@ export async function generateTitle(
 
 export function buildHortonSystemPrompt(
   workingDirectory: string,
-  opts: { hasDocsSupport?: boolean } = {}
+  opts: { hasDocsSupport?: boolean; hasSkills?: boolean } = {}
 ): string {
   const docsTools = opts.hasDocsSupport
     ? `\n- search_durable_agents_docs: hybrid search over the built-in Durable Agents docs index`
     : ``
+  const skillsTools = opts.hasSkills
+    ? `\n- use_skill: load a skill (knowledge, instructions, or a tutorial) into your context to help with the user's request\n- remove_skill: unload a skill from context when you're done with it`
+    : ``
   const docsGuidance = opts.hasDocsSupport
     ? `\n- You have built-in Durable Agents docs context plus a docs search tool. Use that before broad web search when the question is about this repo, Electric Agents, or Durable Agents.\n- The docs TOC and docs search results include concrete file paths under the docs tree. Use the normal read tool with those returned paths.\n- Use repo read/bash tools for non-doc files or when you need to inspect exact implementation code in the workspace.`
+    : ``
+  const skillsGuidance = opts.hasSkills
+    ? `\n# Skills\nYou have access to skills — specialized knowledge and guided workflows you can load on demand. Your context includes a skills catalog listing what's available. When the user's request matches a skill's description or keywords, load it with use_skill.
+
+Some skills are user-invocable — the user can trigger them with a slash command like \`/tutorial\`. When you see a message starting with \`/\` followed by a skill name, load that skill immediately with use_skill. Pass any text after the skill name as args.
+
+## IMPORTANT: How to use a loaded skill
+
+When you load a skill, it becomes your primary directive for that interaction. Follow the skill's instructions exactly:
+
+1. **Read all reference files first.** The use_skill tool response lists reference files with absolute paths. Read ALL of them with your read tool before responding to the user. These files contain the actual content the skill needs — without them you're guessing.
+2. **Follow the skill's conversation flow.** If the skill defines steps, follow them in order. Do not improvise your own approach.
+3. **Adopt the skill's persona and teaching style.** The skill defines how to interact — follow it.
+4. **Unload when done.** Use remove_skill to free context space when the skill's workflow is complete.
+
+Do NOT load a skill and then ignore its instructions. The skill is there because it contains a tested, specific workflow. Your job is to execute it faithfully.`
     : ``
   return `You are Horton, a friendly and capable assistant. You can chat, research the web, read and edit code, run shell commands, and dispatch subagents (workers) for isolated subtasks. Be warm and engaging in conversation; be precise and concrete when working with code.
 
@@ -161,13 +182,13 @@ export function buildHortonSystemPrompt(
 - brave_search: search the web
 - fetch_url: fetch and convert a URL to markdown
 - spawn_worker: dispatch a subagent for an isolated task
-${docsTools}
+${docsTools}${skillsTools}
 
 # Working with files
 - Prefer edit over write when modifying existing files.
 - You must read a file before you can edit it.
 - Use absolute paths or paths relative to the current working directory.
-${docsGuidance}
+${docsGuidance}${skillsGuidance}
 
 # Risky actions
 Pause and confirm with the user before:
@@ -236,8 +257,16 @@ function createAssistantHandler(options: {
   streamFn?: StreamFn
   docsSupport: HortonDocsSupport | null
   docsSearchTool?: AgentTool
+  skillsRegistry: SkillsRegistry | null
 }) {
-  const { workingDirectory, streamFn, docsSupport, docsSearchTool } = options
+  const {
+    workingDirectory,
+    streamFn,
+    docsSupport,
+    docsSearchTool,
+    skillsRegistry,
+  } = options
+  const hasSkills = Boolean(skillsRegistry && skillsRegistry.catalog.size > 0)
 
   return async function assistantHandler(
     ctx: HandlerContext,
@@ -247,6 +276,9 @@ function createAssistantHandler(options: {
     const tools = [
       ...ctx.electricTools,
       ...createHortonTools(workingDirectory, ctx, readSet, { docsSearchTool }),
+      ...(skillsRegistry && skillsRegistry.catalog.size > 0
+        ? createSkillTools(skillsRegistry, ctx)
+        : []),
     ]
 
     if (docsSupport) {
@@ -272,6 +304,30 @@ function createAssistantHandler(options: {
             content: () => ctx.timelineMessages(),
             cache: `volatile`,
           },
+          ...(skillsRegistry && skillsRegistry.catalog.size > 0
+            ? {
+                skills_catalog: {
+                  content: () => skillsRegistry.renderCatalog(2_000),
+                  max: 2_000,
+                  cache: `stable` as const,
+                },
+              }
+            : {}),
+        },
+      })
+    } else if (skillsRegistry && skillsRegistry.catalog.size > 0) {
+      ctx.useContext({
+        sourceBudget: 100_000,
+        sources: {
+          skills_catalog: {
+            content: () => skillsRegistry.renderCatalog(2_000),
+            max: 2_000,
+            cache: `stable` as const,
+          },
+          conversation: {
+            content: () => ctx.timelineMessages(),
+            cache: `volatile`,
+          },
         },
       })
     }
@@ -279,6 +335,7 @@ function createAssistantHandler(options: {
     ctx.useAgent({
       systemPrompt: buildHortonSystemPrompt(workingDirectory, {
         hasDocsSupport: Boolean(docsSupport),
+        hasSkills,
       }),
       model: HORTON_MODEL,
       tools,
@@ -314,9 +371,13 @@ function createAssistantHandler(options: {
 
 export function registerHorton(
   registry: EntityRegistry,
-  options: { workingDirectory: string; streamFn?: StreamFn }
+  options: {
+    workingDirectory: string
+    streamFn?: StreamFn
+    skillsRegistry?: SkillsRegistry | null
+  }
 ): Array<string> {
-  const { workingDirectory, streamFn } = options
+  const { workingDirectory, streamFn, skillsRegistry = null } = options
   const docsSupport = createHortonDocsSupport(workingDirectory)
   const docsSearchTool = docsSupport?.createSearchTool()
 
@@ -331,6 +392,7 @@ export function registerHorton(
     streamFn,
     docsSupport,
     docsSearchTool,
+    skillsRegistry,
   })
 
   registry.define(`horton`, {

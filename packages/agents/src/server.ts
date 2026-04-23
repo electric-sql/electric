@@ -49,7 +49,9 @@ export interface BuiltinAgentsServerOptions {
 
 export class BuiltinAgentsServer {
   private server: Server | null = null
-  private bootstrap: ReturnType<typeof createBuiltinAgentHandler> | null = null
+  private bootstrap: Awaited<
+    ReturnType<typeof createBuiltinAgentHandler>
+  > | null = null
   private _url: string | null = null
   private publicBaseUrl: string | null = null
   readonly options: BuiltinAgentsServerOptions
@@ -113,7 +115,7 @@ export class BuiltinAgentsServer {
               : `${this.publicBaseUrl}/`
           ).toString()
 
-          this.bootstrap = createBuiltinAgentHandler({
+          this.bootstrap = await createBuiltinAgentHandler({
             agentServerUrl: this.options.agentServerUrl,
             serveEndpoint,
             workingDirectory: this.options.workingDirectory,

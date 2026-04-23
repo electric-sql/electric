@@ -2,6 +2,8 @@
  * Bootstrap built-in agent types on dev server startup.
  */
 
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import {
   createEntityRegistry,
   createRuntimeHandler,
@@ -9,6 +11,7 @@ import {
 import { serverLog } from './log'
 import { registerHorton } from './agents/horton'
 import { registerWorker } from './agents/worker'
+import { createSkillsRegistry } from './skills/registry'
 import type {
   AgentTool,
   EntityRegistry,
@@ -18,6 +21,7 @@ import type {
 import type { ChangeEvent } from '@durable-streams/state'
 import type { StreamFn } from '@mariozechner/pi-agent-core'
 import type { IncomingMessage, ServerResponse } from 'node:http'
+import type { SkillsRegistry } from './skills/types'
 
 export const DEFAULT_BUILTIN_AGENT_HANDLER_PATH = `/_electric/builtin-agent-handler`
 
@@ -26,6 +30,7 @@ export interface AgentHandlerResult {
   runtime: RuntimeHandler
   registry: EntityRegistry
   typeNames: Array<string>
+  skillsRegistry: SkillsRegistry | null
 }
 
 export interface BuiltinAgentHandlerOptions {
@@ -59,9 +64,9 @@ export interface BuiltinAgentHandlerOptions {
   }) => Array<AgentTool> | Promise<Array<AgentTool>>
 }
 
-export function createBuiltinAgentHandler(
+export async function createBuiltinAgentHandler(
   options: BuiltinAgentHandlerOptions
-): AgentHandlerResult | null {
+): Promise<AgentHandlerResult | null> {
   const {
     agentServerUrl,
     serveEndpoint = `${agentServerUrl}${DEFAULT_BUILTIN_AGENT_HANDLER_PATH}`,
@@ -78,10 +83,33 @@ export function createBuiltinAgentHandler(
   }
 
   const cwd = workingDirectory ?? process.cwd()
+
+  const here = path.dirname(fileURLToPath(import.meta.url))
+  const baseSkillsDir = path.resolve(here, `../skills`)
+
+  let skillsRegistry: SkillsRegistry | null = null
+  try {
+    skillsRegistry = await createSkillsRegistry({
+      baseSkillsDir,
+      appSkillsDir: path.resolve(cwd, `skills`),
+      cacheDir: path.resolve(cwd, `.electric-agents`),
+    })
+    if (skillsRegistry.catalog.size > 0) {
+      serverLog.info(
+        `[electric-agents] ${skillsRegistry.catalog.size} skill(s) loaded: ${Array.from(skillsRegistry.catalog.keys()).join(`, `)}`
+      )
+    }
+  } catch (err) {
+    serverLog.warn(
+      `[electric-agents] skills registry failed to initialize: ${err instanceof Error ? err.message : String(err)}`
+    )
+  }
+
   const registry = createEntityRegistry()
   const typeNames = registerHorton(registry, {
     workingDirectory: cwd,
     streamFn,
+    skillsRegistry,
   })
 
   registerWorker(registry, { workingDirectory: cwd, streamFn })
@@ -101,16 +129,17 @@ export function createBuiltinAgentHandler(
     runtime,
     registry,
     typeNames,
+    skillsRegistry,
   }
 }
 
-export function createAgentHandler(
+export async function createAgentHandler(
   agentServerUrl: string,
   workingDirectory?: string,
   streamFn?: StreamFn,
   createElectricTools?: BuiltinAgentHandlerOptions[`createElectricTools`],
   serveEndpoint?: string
-): AgentHandlerResult | null {
+): Promise<AgentHandlerResult | null> {
   return createBuiltinAgentHandler({
     agentServerUrl,
     serveEndpoint,
