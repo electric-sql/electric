@@ -1,5 +1,5 @@
 ---
-title: Relational access control for sync with subqueries
+title: Subqueries — complete access control for sync
 description: >-
   Electric now supports subqueries in shape WHERE clauses. Define access-control logic in SQL and Electric syncs only the matching rows to each client, incrementally.
 excerpt: >-
@@ -12,12 +12,11 @@ post: true
 published: true
 ---
 
-With Electric&nbsp;1.6, subqueries in shape WHERE clauses are production-ready. Complex expressions now sync incrementally — no tradeoff between expressiveness and performance.
-
 Sync makes apps fast, resilient, and collaborative. You declare a shape — a table and a WHERE clause — and Electric streams the matching rows into your app, keeps them current, handles reconnection. No fetch logic, no loading states, no stale data. If you haven't seen the pitch: [sync replaces data fetching](/blog/2025/04/22/untangling-llm-spaghetti) and it's [how you build real-time, collaborative apps](/blog/2025/04/09/building-ai-apps-on-sync).
 
 Subqueries extend shape WHERE clauses with relational logic. Sync rows where a membership exists, a role matches, a share is granted. Sync the line items for an invoice, the comments on an issue, the messages in a thread. Relational filtering defined in SQL, evaluated server-side, synced incrementally.
 
+With Electric&nbsp;1.6, subqueries in shape WHERE clauses are going mainstream. Complex expressions now sync incrementally — no tradeoff between expressiveness and performance.
 
 ## Shapes and relational data
 
@@ -74,9 +73,9 @@ Subqueries are available on [Electric Cloud](/cloud) and are included in the [Pr
 :::
 
 
-## Production-ready in Electric&nbsp;1.6
+## What's new in Electric&nbsp;1.6
 
-We've kept subqueries experimental while we built out the sync engine support. With Electric&nbsp;1.6, they're production-ready.
+We've kept subqueries experimental while we built out the sync engine support. With Electric&nbsp;1.6, they're ready for widescale use.
 
 Before 1.6, subqueries worked with complex SQL expressions, large shapes, and low-latency updates — but you couldn't have all three at the same time. Shapes with subqueries combined with AND/OR/NOT would trigger a full resync on subquery value changes, which for a large dataset would cause a noticeable delay.
 
