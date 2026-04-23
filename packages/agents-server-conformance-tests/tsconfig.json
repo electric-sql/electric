@@ -1,0 +1,19 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "target": "es2022",
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "module": "esnext",
+    "moduleResolution": "Bundler",
+    "outDir": "./dist",
+    "baseUrl": ".",
+    "paths": {
+      "@electric-ax/agents-server": ["../agents-server/src/index.ts"],
+      "@electric-ax/agents-server/*": ["../agents-server/src/*"],
+      "@electric-ax/agents-runtime": ["../agents-runtime/src/index.ts"],
+      "@electric-ax/agents-runtime/*": ["../agents-runtime/src/*"]
+    }
+  },
+  "include": ["src/**/*", "test/**/*", "*.ts"],
+  "exclude": ["node_modules", "dist"]
+}

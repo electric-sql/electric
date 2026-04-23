@@ -6,7 +6,7 @@ import {
   buildSections,
   createEntityIncludesQuery,
   normalizeEntityTimelineData,
-} from '@electric-ax/agent-runtime'
+} from '@electric-ax/agents-runtime'
 import { createEntityStreamDB } from './entity-stream-db'
 import type {
   EntityStopped,
@@ -14,7 +14,7 @@ import type {
   EntityTimelineData,
   EntityTimelineSection,
   MessageReceived,
-} from '@electric-ax/agent-runtime'
+} from '@electric-ax/agents-runtime'
 import type { EntityStreamDB } from './entity-stream-db'
 
 interface StreamingText {

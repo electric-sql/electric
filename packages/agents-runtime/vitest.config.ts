@@ -3,7 +3,8 @@ import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
   test: {
-    environment: `node`,
+    fileParallelism: false,
+    maxWorkers: 1,
     coverage: {
       provider: `v8`,
       reporter: [`text`, `json`, `html`, `lcov`],
@@ -14,7 +15,12 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      '@electric-ax/agents': resolve(__dirname, `../agents/src/index.ts`),
+      '@electric-ax/agents-runtime': resolve(__dirname, `./src/index.ts`),
+      '@electric-ax/agents-runtime/react': resolve(__dirname, `./src/react.ts`),
+      '@electric-sql/client': resolve(
+        __dirname,
+        `../typescript-client/src/index.ts`
+      ),
     },
   },
 })

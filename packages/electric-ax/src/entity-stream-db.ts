@@ -8,10 +8,10 @@
  */
 
 import { createStreamDB } from '@durable-streams/state'
-import { entityStateSchema } from '@electric-ax/agent-runtime'
-import type { EntityStreamDB } from '@electric-ax/agent-runtime'
+import { entityStateSchema } from '@electric-ax/agents-runtime'
+import type { EntityStreamDB } from '@electric-ax/agents-runtime'
 
-export type { EntityStreamDB } from '@electric-ax/agent-runtime'
+export type { EntityStreamDB } from '@electric-ax/agents-runtime'
 
 function getMainStreamPath(
   entityUrl: string,

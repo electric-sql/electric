@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { basename, resolve as resolvePath } from 'node:path'
 import { spawn } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
-import { BuiltinAgentsServer } from '@electric-ax/builtin-agents'
+import { BuiltinAgentsServer } from '@electric-ax/agents'
 import type {
   StartCommandOptions,
   StartBuiltinCommandOptions,
