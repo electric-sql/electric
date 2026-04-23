@@ -72,17 +72,13 @@ The shape syncs all comments reachable from the project root. When a new task or
 See the [WHERE&nbsp;clause docs](/docs/guides/shapes#where-clause) for the full reference on supported operators and subquery patterns.
 
 
-## Incremental sync for all subquery expressions
+## Ready for general use
 
-With the release of Electric 1.6, subqueries we now support incremental sync for all subquery expressions, including complex boolean logic and nesting. This means you can write expressive shape definitions with subqueries, and Electric will efficiently sync only the affected rows when underlying data changes. 
+We've kept subqueries experimental while we built out the sync engine support. With the release of Electric 1.6, subqueries are going mainstream. Incremental sync is now supported for all subquery expressions — fast, expressive shapes no matter how large the dataset.
 
-<!-- The Venn diagram section. Why subqueries are now ready for real use.
-     State what's true now — don't dwell on what was broken before.
-     Short and punchy. -->
+<!-- The Venn diagram. Short and punchy. -->
 
-Shapes can be large — millions of rows. Expressive — subqueries with AND, OR, NOT, nesting, composite keys. And fast — incremental sync, only affected rows move.
-
-This release makes all three work together. Complex boolean expressions over subqueries now sync incrementally. No tradeoff.
+Shapes can be large — millions of rows. Expressive — subqueries with AND, OR, NOT, nesting, composite keys. And fast — incremental sync, only affected rows move. No tradeoff.
 
 When a membership changes, a share is revoked, or a role is updated, the sync engine identifies exactly which rows are affected. Only those rows move in or out. No full resync, regardless of shape size or WHERE clause complexity.
 
