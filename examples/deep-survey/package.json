@@ -1,0 +1,35 @@
+{
+  "name": "@electric-ax/example-deep-survey",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "pnpm run --parallel \"/^dev:/\"",
+    "dev:server": "tsx watch src/server/index.ts",
+    "dev:ui": "vite",
+    "build:ui": "vite build",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@electric-ax/agents-runtime": "workspace:*",
+    "@durable-streams/state": "npm:@electric-ax/durable-streams-state-beta@^0.3.0",
+    "@radix-ui/themes": "^3.3.0",
+    "@tanstack/db": "^0.6.0",
+    "@tanstack/react-db": "^0.1.78",
+    "@mariozechner/pi-agent-core": "^0.57.1",
+    "@sinclair/typebox": "^0.34.0",
+    "d3-force": "^3.0.0",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/d3-force": "^3.0.0",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.2.0",
+    "tsx": "^4.0.0",
+    "typescript": "~5.9.3",
+    "vite": "^7.2.4"
+  }
+}

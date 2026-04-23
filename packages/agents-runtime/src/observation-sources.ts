@@ -140,14 +140,14 @@ export interface DbObservationSource extends ObservationSource {
 
 export function db(
   id: string,
-  schema: SharedStateSchemaMap
+  dbSchema: SharedStateSchemaMap
 ): DbObservationSource {
   const streamPath = getSharedStateStreamPath(id)
   return {
     sourceType: `db`,
     sourceRef: id,
     streamUrl: streamPath,
-    schema,
+    schema: dbSchema,
     dbId: id,
     toManifestEntry(): ManifestSourceEntry {
       return {
@@ -158,7 +158,7 @@ export function db(
         config: {
           id,
           collections: Object.fromEntries(
-            Object.entries(schema).map(([name, def]) => [
+            Object.entries(dbSchema).map(([name, def]) => [
               name,
               { type: def.type, primaryKey: def.primaryKey },
             ])
