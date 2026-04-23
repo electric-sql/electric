@@ -18,7 +18,7 @@ const layers: Layer[] = [
       "POST  /v1/stream/x",
       "GET   /v1/stream/x?offset=…",
     ],
-    href: "/docs/streams/concepts",
+    href: "/docs/streams/",
     linkLabel: "Concepts →",
   },
   {

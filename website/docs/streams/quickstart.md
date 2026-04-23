@@ -70,7 +70,7 @@ The first terminal will receive the new data immediately.
 
 ## Next steps
 
-Raw durable streams are awesome but it's what you do with them that counts. Dive into the [core concepts](/docs/streams/concepts) and see all of the ways you can use Durable Streams to build resilient, collaborative multi-agent systems.
+Raw durable streams are awesome but it's what you do with them that counts. Dive into the [overview](/docs/streams/) and see all of the ways you can use Durable Streams to build resilient, collaborative multi-agent systems.
 
 Including, working with structured data and integrating into AI SDKs:
 

@@ -14,7 +14,7 @@ Per-page mapping:
 | --- | --- |
 | `durablestreams.com/` | `https://electric-sql.com/streams` |
 | `durablestreams.com/quickstart` | `https://electric-sql.com/docs/streams/quickstart` |
-| `durablestreams.com/concepts` | `https://electric-sql.com/docs/streams/concepts` |
+| `durablestreams.com/concepts` | `https://electric-sql.com/docs/streams/` |
 | `durablestreams.com/cli` | `https://electric-sql.com/docs/streams/cli` |
 | `durablestreams.com/typescript-client` | `https://electric-sql.com/docs/streams/clients/typescript` |
 | `durablestreams.com/python-client` | `https://electric-sql.com/docs/streams/clients/python` |
@@ -24,10 +24,6 @@ Per-page mapping:
 | `durablestreams.com/durable-state` | `https://electric-sql.com/docs/streams/durable-state` |
 | `durablestreams.com/stream-db` | `https://electric-sql.com/docs/streams/stream-db` |
 | `durablestreams.com/stream-fs` | `https://electric-sql.com/docs/streams/stream-fs` |
-| `durablestreams.com/deployment` | `https://electric-sql.com/docs/streams/deployment` |
-| `durablestreams.com/building-a-client` | `https://electric-sql.com/docs/streams/building-a-client` |
-| `durablestreams.com/building-a-server` | `https://electric-sql.com/docs/streams/building-a-server` |
-| `durablestreams.com/benchmarking` | `https://electric-sql.com/docs/streams/benchmarking` |
 | `durablestreams.com/tanstack-ai` | `https://electric-sql.com/docs/streams/integrations/tanstack-ai` |
 | `durablestreams.com/vercel-ai-sdk` | `https://electric-sql.com/docs/streams/integrations/vercel-ai-sdk` |
 | `durablestreams.com/yjs` | `https://electric-sql.com/docs/streams/integrations/yjs` |
@@ -54,3 +50,4 @@ Per-page mapping:
 - The catch-all rule must be the **last** rule for each domain so the more specific rules win.
 - If the source domain is hosted on Netlify, these can go in that domain's own `_redirects` file. Otherwise, configure them in whatever hosting environment serves the domain (Cloudflare Page Rules, Vercel `vercel.json`, etc.).
 - DNS for `durablestreams.com` and `electric-agents.com` should continue to resolve until all major links and search-engine references have updated.
+- The following protocol-level reference pages **stay on `durablestreams.com`** and are intentionally not redirected to Electric: `/deployment`, `/building-a-client`, `/building-a-server`, `/benchmarking`. The Electric Streams docs link out to them on the open protocol site.

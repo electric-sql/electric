@@ -128,6 +128,16 @@ https://next.electric-sql.com/* https://electric-sql.com/:splat 301!
 # Agents docs: about page folded into the section overview
 /docs/agents/about                /docs/agents/
 
+# Streams docs: core concepts folded into the section overview (/docs/streams/)
+/docs/streams/concepts            /docs/streams/
+
+# Streams docs: protocol-level reference pages live on the open
+# Durable Streams site at durablestreams.com
+/docs/streams/building-a-client   https://durablestreams.com/building-a-client
+/docs/streams/building-a-server   https://durablestreams.com/building-a-server
+/docs/streams/deployment          https://durablestreams.com/deployment
+/docs/streams/benchmarking        https://durablestreams.com/benchmarking
+
 # Jobs page renamed to Careers
 /about/jobs                       /about/careers
 /about/jobs/*                     /about/careers/:splat

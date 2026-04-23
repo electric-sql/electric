@@ -108,7 +108,7 @@ with stream("http://localhost:4437/v1/stream/events") as res:
 
 ## More
 
-- [Core concepts](/docs/streams/concepts#messages-and-content-types)
+- [Overview](/docs/streams/#messages-and-content-types)
 - [Durable State](/docs/streams/durable-state) for structured state sync on top of JSON mode
 - [StreamDB](stream-db) for a type-safe reactive database in a stream, running on Durable State
 - [Yjs](integrations/yjs) for syncing Yjs CRDTs over durable streams

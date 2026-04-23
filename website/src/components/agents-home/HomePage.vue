@@ -10,6 +10,8 @@ import ContextCompositionDemo from "./ContextCompositionDemo.vue"
 import HeroNetworkBg from "./HeroNetworkBg.vue"
 import SystemMonitorDemo from "./SystemMonitorDemo.vue"
 import InstallPill from "../InstallPill.vue"
+import MidPageStrap from "../MidPageStrap.vue"
+import BottomCtaStrap from "../BottomCtaStrap.vue"
 
 const stackTab = ref<"server" | "entities">("server")
 const heroInnerRef = ref<HTMLElement>()
@@ -197,37 +199,32 @@ const installCommand = "npx electric-ax agents quickstart"
       tagline + buttons) so the bottom CTA feels like a callback to
       this one rather than something new.
     -->
-    <section class="ea-mid-strap" id="get-started-mid">
-      <div class="ea-mid-strap-inner">
-        <div class="ea-mid-strap-eyebrow mono">
-          <span class="dot"></span>
-          Ready to&nbsp;build
-        </div>
-        <h2 class="ea-mid-strap-title">
-          Ship your first durable agent in&nbsp;minutes
-        </h2>
-        <p class="ea-mid-strap-tagline">
-          Install the SDK, define an entity, deploy it on your stack &mdash;
-          on top of Electric&nbsp;Streams.
-        </p>
-        <div class="ea-mid-strap-actions">
-          <VPButton
-            tag="a"
-            size="medium"
-            theme="brand"
-            text="Quickstart"
-            href="/docs/agents/quickstart"
-          />
-          <VPButton
-            tag="a"
-            size="medium"
-            theme="alt"
-            text="Read the Docs"
-            href="/docs/agents/"
-          />
-        </div>
-      </div>
-    </section>
+    <MidPageStrap id="get-started-mid">
+      <template #eyebrow>Ready to&nbsp;build</template>
+      <template #title>
+        Ship your first durable agent in&nbsp;minutes
+      </template>
+      <template #tagline>
+        Install the SDK, define an entity, deploy it on your stack &mdash;
+        on top of Electric&nbsp;Streams.
+      </template>
+      <template #actions>
+        <VPButton
+          tag="a"
+          size="medium"
+          theme="brand"
+          text="Quickstart"
+          href="/docs/agents/quickstart"
+        />
+        <VPButton
+          tag="a"
+          size="medium"
+          theme="alt"
+          text="Docs"
+          href="/docs/agents/"
+        />
+      </template>
+    </MidPageStrap>
 
     <!-- Section 5: Coordination -->
     <Section
@@ -580,51 +577,44 @@ const installCommand = "npx electric-ax agents quickstart"
       composable-stack section and we don't want to dilute the
       single end-of-page action.
     -->
-    <section class="ea-cta-strap" id="get-started">
-      <div class="ea-cta">
-        <div class="ea-cta-eyebrow mono">
-          <span class="dot"></span>
-          Open source · Apache&nbsp;2.0 · built on Electric&nbsp;Streams
-        </div>
-        <h2 class="ea-cta-title">
-          Bring your agents&nbsp;<span class="ea-cta-accent">online</span>.
-        </h2>
-        <p class="ea-cta-tagline">
-          Install the SDK, define an entity, and ship a durable agent on top of
-          your existing&nbsp;stack.
-        </p>
-
-        <InstallPill
-          class="ea-cta-install-spacing"
-          :command="installCommand"
-          tone="sunken"
+    <BottomCtaStrap id="get-started">
+      <template #eyebrow>
+        Open source · Apache&nbsp;2.0 · built on Electric&nbsp;Streams
+      </template>
+      <template #title>
+        Bring your agents&nbsp;<span class="bottom-cta-accent">online</span>.
+      </template>
+      <template #tagline>
+        Install the SDK, define an entity, and ship a durable agent on top of
+        your existing&nbsp;stack.
+      </template>
+      <template #install>
+        <InstallPill :command="installCommand" tone="sunken" />
+      </template>
+      <template #actions>
+        <VPButton
+          tag="a"
+          size="medium"
+          theme="brand"
+          text="Quickstart"
+          href="/docs/agents/quickstart"
         />
-
-        <div class="ea-cta-buttons">
-          <VPButton
-            tag="a"
-            size="medium"
-            theme="brand"
-            text="Quickstart"
-            href="/docs/agents/quickstart"
-          />
-          <VPButton
-            tag="a"
-            size="medium"
-            theme="alt"
-            text="Read the Docs"
-            href="/docs/agents/"
-          />
-          <VPButton
-            tag="a"
-            size="medium"
-            theme="alt"
-            text="GitHub"
-            href="https://github.com/electric-sql/electric"
-          />
-        </div>
-      </div>
-    </section>
+        <VPButton
+          tag="a"
+          size="medium"
+          theme="alt"
+          text="Docs"
+          href="/docs/agents/"
+        />
+        <VPButton
+          tag="a"
+          size="medium"
+          theme="alt"
+          text="GitHub"
+          href="https://github.com/electric-sql/electric"
+        />
+      </template>
+    </BottomCtaStrap>
 
   </div>
 </template>
@@ -1411,236 +1401,10 @@ const installCommand = "npx electric-ax agents quickstart"
   margin-top: 40px;
 }
 
-/* --- Get started CTA ---
-   Restyled to a full-bleed strap (no boxed panel) to match the
-   homepage `AgentsCTAStrap` visual language and the mid-page
-   strap above. The wrapping `<section class="ea-cta-strap">`
-   provides the background, padding and gradient; `.ea-cta`
-   itself is now just the centered content stack. */
-.ea-cta-strap {
-  position: relative;
-  padding: 96px 24px;
-  /* Uses --ea-surface-alt — slightly raised/lighter in dark mode —
-     so the page-close panel reads as a lift off the deepest page
-     surface rather than sitting at the same depth. Also matches
-     the alternation chain that continues through the flipped
-     mid-page sections above. */
-  background: var(--ea-surface-alt);
-  border-bottom: 1px solid var(--ea-divider);
-  isolation: isolate;
-  overflow: hidden;
-}
-.ea-cta-strap::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(
-    ellipse 80% 100% at 50% 50%,
-    color-mix(in srgb, var(--vp-c-brand-1) 9%, transparent) 0%,
-    transparent 60%
-  );
-  z-index: -1;
-  opacity: 0.85;
-}
-.ea-cta {
-  position: relative;
-  text-align: center;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0;
-  max-width: 720px;
-  margin: 0 auto;
-}
-.ea-cta-eyebrow {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--ea-text-3);
-  padding: 4px 10px;
-  background: var(--ea-surface-alt);
-  border: 1px solid var(--ea-divider);
-  border-radius: 999px;
-  margin-bottom: 22px;
-}
-.ea-cta-eyebrow .dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--vp-c-brand-1);
-}
-.ea-cta-title {
-  font-size: 38px;
-  /* Matches the 700 weight of the hero name so the CTA doesn't out-bold
-     the page's H1. Was 800 which inverted the hierarchy. */
-  font-weight: 700;
-  line-height: 1.15;
-  letter-spacing: -0.015em;
-  color: var(--ea-text-1);
-  margin: 0;
-  max-width: 560px;
-  text-wrap: balance;
-}
-.ea-cta-accent {
-  background: var(--vp-home-hero-name-background);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: var(--vp-home-hero-name-color);
-}
-.ea-cta-tagline {
-  font-family: var(--vp-font-family-base);
-  font-size: 16px;
-  line-height: 1.6;
-  color: var(--ea-text-2);
-  margin: 14px auto 0;
-  max-width: 460px;
-}
-/* Bottom CTA install pill is rendered by the shared `<InstallPill>`
-   component (see `src/components/InstallPill.vue`). The wrapper class
-   below only adds the spacing between the tagline and the pill so the
-   shared component itself stays free of layout-specific margins. */
-.ea-cta-install-spacing {
-  margin-top: 28px;
-}
-.ea-cta-buttons {
-  display: flex;
-  gap: 10px;
-  margin-top: 24px;
-  flex-wrap: wrap;
-  justify-content: center;
-}
-@media (max-width: 768px) {
-  .ea-cta-strap {
-    padding: 72px 24px;
-  }
-}
-@media (max-width: 480px) {
-  .ea-cta-strap {
-    padding: 56px 20px;
-  }
-  .ea-cta-title {
-    font-size: 28px;
-  }
-  .ea-cta-buttons {
-    flex-direction: column;
-    align-self: stretch;
-    max-width: 280px;
-    margin-left: auto;
-    margin-right: auto;
-  }
-}
-
-/* --- Mid-page CTA strap ---
-   Lighter-weight version of the bottom strap. Same eyebrow + title
-   + tagline + buttons pattern but without the install pill so it
-   doesn't compete with the bottom CTA, and tuned a little smaller
-   so it reads as a punctuation between sections rather than a
-   page-close. */
-.ea-mid-strap {
-  position: relative;
-  padding: 80px 24px;
-  /* Uses --ea-bg (the page's deepest surface in dark mode) so the
-     strap sits visually *below* the Durable-State panel above it
-     rather than above. The full chain of sections from here down
-     is flipped to keep alternation continuous through the strap. */
-  background: var(--ea-bg);
-  border-bottom: 1px solid var(--ea-divider);
-  isolation: isolate;
-  overflow: hidden;
-}
-.ea-mid-strap::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(
-    ellipse 70% 90% at 50% 50%,
-    color-mix(in srgb, var(--vp-c-brand-1) 7%, transparent) 0%,
-    transparent 60%
-  );
-  z-index: -1;
-  opacity: 0.85;
-}
-.ea-mid-strap-inner {
-  max-width: 720px;
-  margin: 0 auto;
-  text-align: center;
-}
-.ea-mid-strap-eyebrow {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--ea-text-3);
-  padding: 4px 10px;
-  background: var(--ea-surface-alt);
-  border: 1px solid var(--ea-divider);
-  border-radius: 999px;
-  margin-bottom: 18px;
-}
-.ea-mid-strap-eyebrow .dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--vp-c-brand-1);
-}
-.ea-mid-strap-title {
-  font-size: 34px;
-  font-weight: 700;
-  line-height: 1.15;
-  letter-spacing: -0.015em;
-  color: var(--ea-text-1);
-  margin: 0;
-  max-width: 580px;
-  margin-left: auto;
-  margin-right: auto;
-  text-wrap: balance;
-}
-.ea-mid-strap-tagline {
-  font-family: var(--vp-font-family-base);
-  font-size: 16px;
-  line-height: 1.6;
-  color: var(--ea-text-2);
-  margin: 14px auto 0;
-  max-width: 520px;
-}
-.ea-mid-strap-actions {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 12px;
-  margin-top: 28px;
-}
-@media (max-width: 768px) {
-  .ea-mid-strap {
-    padding: 60px 24px;
-  }
-  .ea-mid-strap-title {
-    font-size: 26px;
-  }
-  .ea-mid-strap-tagline {
-    font-size: 15px;
-  }
-}
-@media (max-width: 480px) {
-  .ea-mid-strap {
-    padding: 48px 20px;
-  }
-  .ea-mid-strap-title {
-    font-size: 22px;
-  }
-  .ea-mid-strap-actions {
-    flex-direction: column;
-    align-self: stretch;
-    max-width: 280px;
-    margin-left: auto;
-    margin-right: auto;
-  }
-}
+/* Mid-page CTA strap and bottom CTA strap are rendered by the
+   shared `<MidPageStrap>` and `<BottomCtaStrap>` components
+   (see `src/components/`). All visual styles for those straps
+   live with their components — nothing extra is needed here. */
 
 /* --- Agents need to come online --- */
 .ea-come-online {

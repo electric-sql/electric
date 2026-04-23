@@ -9,7 +9,7 @@ outline: [2, 3]
 
 Durable Streams has official client libraries in 10 languages. All implement the same [protocol](https://github.com/durable-streams/durable-streams/blob/main/PROTOCOL.md) and pass the client conformance test suite, ensuring consistent behavior regardless of which language you use.
 
-If your language isn't listed here, you can build your own -- see [Building a client](../building-a-client).
+If your language isn't listed here, you can build your own &mdash; see [Building a client](https://durablestreams.com/building-a-client) on the open [Durable&nbsp;Streams](https://durablestreams.com/) protocol&nbsp;site.
 
 ## Common features
 

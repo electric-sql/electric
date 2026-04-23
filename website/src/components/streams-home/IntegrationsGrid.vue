@@ -1,6 +1,6 @@
 <script setup lang="ts">
 interface Card {
-  glyph?: string
+  img?: string
   svg?: string
   name: string
   body: string
@@ -8,23 +8,23 @@ interface Card {
   blog: string | null
 }
 
-// Single-colour TanStack mark, recoloured via currentColor so it inherits
-// the brand tint set on .ig-glyph.
-const TANSTACK_SVG = `<svg viewBox="0 0 264 264" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-  <path d="M136.992 53.1244C137.711 52.4029 138.683 52 139.692 52H200L114.008 138.089C113.289 138.811 112.317 139.213 111.308 139.213H51L136.992 53.1244Z" fill="currentColor" />
-  <path d="M126.416 141.125C126.416 140.066 127.275 139.204 128.331 139.204H200L126.416 213V141.125Z" fill="currentColor" />
+// Inline Vercel mark using currentColor so it adapts to light/dark themes
+// (the canonical /img/icons/vercel.svg is hard-filled white for use on
+// dark surfaces only, which doesn't read against the light card here).
+const VERCEL_SVG = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 76 76" aria-hidden="true">
+  <path fill="currentColor" d="M38 6L71 64H5L38 6Z"/>
 </svg>`
 
 const cards: Card[] = [
   {
-    svg: TANSTACK_SVG,
+    img: "/img/icons/tanstack.svg",
     name: "TanStack AI",
     body: "Durable connection adapter. Resumable, shareable AI sessions across tabs and devices.",
     docs: "/docs/streams/integrations/tanstack-ai",
     blog: "/blog/2026/01/12/durable-sessions-for-collaborative-ai",
   },
   {
-    glyph: "▲",
+    svg: VERCEL_SVG,
     name: "Vercel AI SDK",
     body: "Durable Transport for the AI SDK. Drop-in replacement for streamText transport.",
     docs: "/docs/streams/integrations/vercel-ai-sdk",
@@ -42,9 +42,9 @@ const cards: Card[] = [
       class="ig-card"
     >
       <div class="ig-head">
-        <span class="ig-glyph" :class="{ 'ig-glyph--svg': card.svg }">
-          <span v-if="card.svg" v-html="card.svg" />
-          <template v-else>{{ card.glyph }}</template>
+        <span class="ig-glyph">
+          <img v-if="card.img" :src="card.img" :alt="card.name" />
+          <span v-else-if="card.svg" v-html="card.svg" />
         </span>
         <span class="ig-name">{{ card.name }}</span>
       </div>
@@ -88,22 +88,20 @@ const cards: Card[] = [
   margin-bottom: 10px;
 }
 .ig-glyph {
-  font-family: var(--vp-font-family-mono);
-  font-size: 18px;
-  color: var(--vp-c-brand-1);
-  width: 26px;
-  height: 26px;
+  width: 22px;
+  height: 22px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid color-mix(in srgb, var(--vp-c-brand-1) 30%, var(--ea-divider));
-  border-radius: 6px;
-  background: color-mix(in srgb, var(--vp-c-brand-1) 5%, transparent);
+  color: var(--ea-text-1);
+  flex-shrink: 0;
 }
-.ig-glyph--svg :deep(svg) {
-  width: 18px;
-  height: 18px;
+.ig-glyph img,
+.ig-glyph :deep(svg) {
+  width: 100%;
+  height: 100%;
   display: block;
+  object-fit: contain;
 }
 .ig-name {
   font-family: var(--vp-font-family-mono);

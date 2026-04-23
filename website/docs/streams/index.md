@@ -1,13 +1,25 @@
 ---
-title: Core concepts
+title: Overview
 description: >-
-  Key concepts behind the Durable Streams protocol: streams, offsets, content types, producers, consumers, live modes, stream lifecycle, and CDN caching.
+  An overview of Electric Streams and the Durable Streams protocol: streams, offsets, content types, producers, consumers, live modes, stream lifecycle, and CDN caching.
 outline: [2, 3]
 ---
 
-# Core concepts
+# Overview
 
-Learn the key concepts behind the Durable Streams protocol here. For the complete specification, see [PROTOCOL.md](https://github.com/durable-streams/durable-streams/blob/main/PROTOCOL.md).
+**Electric Streams** is a hosted, fully-managed implementation of the open [Durable&nbsp;Streams](https://durablestreams.com/) protocol &mdash; durable, append-only, replayable HTTP streams for events, agent loops and real-time&nbsp;data.
+
+A stream is a URL you can `POST` to and `GET` from. Producers append events; any number of consumers &mdash; services, agents, browsers &mdash; read live or replay from any offset. Streams are durable, ordered and CDN-cacheable, so the same primitive serves catch-up reads, real-time fan-out and resumable&nbsp;subscriptions.
+
+Out of the box, Electric Streams gives you a managed [stream server](/streams), [client SDKs](/docs/streams/clients/typescript) for TypeScript and Python, a [CLI](/docs/streams/cli), [JSON&nbsp;mode](/docs/streams/json-mode), [Durable&nbsp;Proxy](/docs/streams/durable-proxy), [Durable&nbsp;State](/docs/streams/durable-state), [StreamDB](/docs/streams/stream-db), [StreamFS](/docs/streams/stream-fs) and integrations for [TanStack&nbsp;AI](/docs/streams/integrations/tanstack-ai), the [Vercel AI SDK](/docs/streams/integrations/vercel-ai-sdk) and [Yjs](/docs/streams/integrations/yjs).
+
+This page introduces the core protocol concepts that the rest of the docs build on &mdash; streams, offsets, content types, producers, consumers, live modes, the stream lifecycle and CDN caching. If you'd rather start coding, jump straight to the [Quickstart](/docs/streams/quickstart).
+
+::: info Open protocol — Apache&nbsp;2.0
+Electric Streams is **one implementation** of [Durable&nbsp;Streams](https://durablestreams.com/). The protocol spec, conformance suite, reference servers and low-level client guides live independently at [durablestreams.com](https://durablestreams.com/), fully open under Apache&nbsp;2.0.
+
+Building your own client or server, or looking for the wire-level spec? See [PROTOCOL.md](https://github.com/durable-streams/durable-streams/blob/main/PROTOCOL.md), [building a client](https://durablestreams.com/building-a-client) and [building a server](https://durablestreams.com/building-a-server) on the protocol&nbsp;site.
+:::
 
 ## Streams
 
@@ -291,6 +303,6 @@ The protocol is designed to work well with CDNs and HTTP caches.
 
 ---
 
-For the complete protocol specification -- including exact header semantics, error codes, validation rules, and edge cases -- see [PROTOCOL.md](https://github.com/durable-streams/durable-streams/blob/main/PROTOCOL.md).
+For the complete protocol specification &mdash; including exact header semantics, error codes, validation rules, and edge cases &mdash; see [PROTOCOL.md](https://github.com/durable-streams/durable-streams/blob/main/PROTOCOL.md) on the open [Durable&nbsp;Streams](https://durablestreams.com/) site.
 
-See also: [Quickstart](quickstart) | [Building a client](building-a-client) | [Building a server](building-a-server)
+See also: [Quickstart](quickstart) | [CLI](cli) | [Clients](clients/typescript) | [JSON mode](json-mode)

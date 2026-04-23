@@ -44,7 +44,7 @@ const NAV = [
           label: 'StreamDB',
           sublabel: 'Reactive DB in a stream',
           link: '/docs/streams/stream-db',
-          icon: '/img/icons/durable-streams.square.svg',
+          icon: '/img/icons/database.svg',
         },
       ],
     },

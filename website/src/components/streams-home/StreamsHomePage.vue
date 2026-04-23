@@ -15,6 +15,20 @@ import LayersGrid from "./LayersGrid.vue"
 import CollabSessionDemo from "./CollabSessionDemo.vue"
 import IntegrationsGrid from "./IntegrationsGrid.vue"
 import InstallPill from "../InstallPill.vue"
+import MidPageStrap from "../MidPageStrap.vue"
+import BottomCtaStrap from "../BottomCtaStrap.vue"
+import CuratedBlogPosts from "../CuratedBlogPosts.vue"
+
+/* Curated list of Streams-relevant blog posts that fill the panel
+   below the 30-second tour. Order matters — first item appears
+   top-left and so on. Slugs are the trailing path segment of the
+   blog post filename (date prefix stripped). */
+const streamsBlogPosts = [
+  "fork-branching-for-durable-streams",
+  "data-primitive-agent-loop",
+  "ai-agents-as-crdt-peers-with-yjs",
+  "stream-db",
+]
 
 const heroInnerRef = ref<HTMLElement>()
 
@@ -34,7 +48,7 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
           Electric&nbsp;<span class="ds-hero-accent">Streams</span>
         </h1>
         <p class="ds-hero-text">
-          The data primitive for the agent&nbsp;loop
+          Composable sync primitives for multi-agent&nbsp;systems
         </p>
 
         <div class="ds-hero-install-row">
@@ -81,24 +95,28 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
       </div>
     </EaSection>
 
-    <!-- ───────────────── §1.6 — Durable Sessions (moved up, dark) ─────────────────
-         Continues the AI-loop story from §1.5: once the loop is a stream,
-         many humans and agents can attach to the same one. Promoting this
-         section keeps the AI angle front-loaded for the first three
-         sections before we pivot to the general streaming pain. -->
-    <EaSection id="durable-sessions" :dark="true">
+    <!-- ───────────────── §1.6 — Many agents, one stream (dark) ─────────────────
+         Pays off the new hero promise ("composable sync primitives for
+         multi-agent systems"): once the agent loop is a stream (§1.5),
+         any number of agents — and any number of humans — can attach
+         to the same stream and coordinate on it without external
+         infrastructure. Kept in this slot (right after §1.5) so the
+         multi-agent angle lands inside the first two sections, before
+         the page pivots to the general streaming pain. -->
+    <EaSection id="multi-agent-coordination" :dark="true">
       <div class="ds-split ds-split--demo-2x">
         <div class="ds-split-demo">
           <CollabSessionDemo />
         </div>
         <div class="ds-split-text">
           <h2 class="ea-section-title">
-            Durable Sessions: multi-user,&nbsp;multi-agent
+            Every stream is&nbsp;multiplayer
           </h2>
           <p class="ea-section-subtitle">
-            One session URL. Many humans, many agents, many devices. Everyone
-            shares the same durable stream and can rejoin from any point in
-            the&nbsp;conversation.
+            Streams aren't single-consumer. Any number of agents — and
+            humans — can attach to the same stream, see each other's
+            events as they land, and pick up exactly where they left
+            off. The shared stream is the coordination&nbsp;layer.
           </p>
           <p class="ds-detail-link">
             <a href="/blog/2026/01/12/durable-sessions-for-collaborative-ai">
@@ -125,6 +143,75 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
         Run this yourself →
         <a href="/docs/streams/quickstart"><code>/docs/streams/quickstart</code></a>
       </p>
+    </EaSection>
+
+    <!--
+      Mid-page CTA strap. Sits after the concrete tour and the curated
+      blog panel below — once readers have seen what a stream IS, give
+      them a single jump-off to the docs without making them scroll the
+      whole page.
+
+      `tone="surface"` (raised) is used here because both the section
+      above (§3 thirty-second-tour) and the curated-blog section below
+      are default/light, so the strap needs to read as a *lift* above
+      them rather than a valley. The open-protocol strap further down
+      sits between two `:dark="true"` sections and uses the default
+      `tone="bg"` (deep) for the inverse effect.
+    -->
+    <MidPageStrap id="ship-streams" tone="surface">
+      <template #eyebrow>Ready to&nbsp;build</template>
+      <template #title>
+        Ship your first durable stream in&nbsp;minutes
+      </template>
+      <template #tagline>
+        Install the client, open a stream, and start appending events.
+        Subscribe live from anywhere on the&nbsp;network.
+      </template>
+      <template #actions>
+        <VPButton
+          tag="a"
+          size="medium"
+          theme="brand"
+          text="Quickstart"
+          href="/docs/streams/quickstart"
+        />
+        <VPButton
+          tag="a"
+          size="medium"
+          theme="alt"
+          text="Docs"
+          href="/docs/streams/"
+        />
+      </template>
+    </MidPageStrap>
+
+    <!-- ───────────────── Curated blog posts ─────────────────
+         Hand-picked selection of posts that go deeper on the topics
+         introduced above. Source list lives in the script setup as
+         `streamsBlogPosts` so it can be tuned without touching the
+         template. -->
+    <EaSection
+      id="from-the-blog"
+      title="From the&nbsp;blog"
+      subtitle="Go deeper on Electric Streams, the Durable Streams protocol, and what teams are building on&nbsp;them."
+    >
+      <CuratedBlogPosts :posts="streamsBlogPosts" :limit="4" />
+      <template #actions>
+        <VPButton
+          tag="a"
+          size="medium"
+          theme="brand"
+          text="Electric Blog"
+          href="/blog"
+        />
+        <VPButton
+          tag="a"
+          size="medium"
+          theme="alt"
+          text="Follow @ElectricSQL"
+          href="https://x.com/ElectricSQL"
+        />
+      </template>
     </EaSection>
 
     <!-- ───────────────── §2 — Streaming needs to be durable ─────────────────
@@ -171,7 +258,7 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
             coordination&nbsp;required.
           </p>
           <p class="ds-detail-link">
-            <a href="/docs/streams/concepts#producers">Read the protocol →</a>
+            <a href="/docs/streams/#producers">Read the protocol →</a>
           </p>
         </div>
       </div>
@@ -196,9 +283,50 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
       <LayersGrid />
     </EaSection>
 
-    <!-- ───────────────── §11 — AI loop integrations ───────────────── -->
+    <!--
+      Open-protocol callout strap. Sits right after the four-layer
+      diagram so readers reach for the protocol while it's still on
+      screen. Marketing/product framing stays on this site; the
+      protocol spec, conformance suite and reference implementations
+      all live on durablestreams.com.
+    -->
+    <MidPageStrap id="open-protocol-strap">
+      <template #eyebrow>Open protocol · Apache&nbsp;2.0</template>
+      <template #title>
+        Built on the open Durable&nbsp;Streams protocol
+      </template>
+      <template #tagline>
+        Electric Streams is one implementation. The protocol spec,
+        conformance suite and reference clients live on
+        <a href="https://durablestreams.com/" target="_blank" rel="noopener">durablestreams.com</a> —
+        independent, fully&nbsp;open.
+      </template>
+      <template #actions>
+        <VPButton
+          tag="a"
+          size="medium"
+          theme="brand"
+          text="durablestreams.com"
+          href="https://durablestreams.com/"
+        />
+        <VPButton
+          tag="a"
+          size="medium"
+          theme="alt"
+          text="Read the spec"
+          href="https://durablestreams.com/spec"
+        />
+      </template>
+    </MidPageStrap>
+
+    <!-- ───────────────── §11 — AI loop integrations ─────────────────
+         Flipped to dark so the open-protocol strap above (deep --ea-bg)
+         sits as a valley between two equally-toned dark sections —
+         matches the rhythm used around `MidPageStrap` on the agents
+         page. The full chain §11 → §14 below is flipped accordingly. -->
     <EaSection
       id="ai-loop"
+      :dark="true"
       title="Built for the agent&nbsp;loop"
       subtitle="From token streams to multi-agent collaboration — Electric Streams plugs into the AI stack you already&nbsp;use."
     >
@@ -210,7 +338,6 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
       id="your-stack"
       title="Your stack, not&nbsp;ours"
       subtitle="Self-host the server with one binary, or run it on Electric Cloud. Producers and consumers are anything that speaks&nbsp;HTTP."
-      :dark="true"
     >
       <div class="ds-stack-layout">
         <div class="ds-stack-diagram">
@@ -297,6 +424,7 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
       id="first-stream"
       title="Your first stream, end to&nbsp;end"
       subtitle="Create a stream. Append a message. Subscribe live. Three steps, one package, real&nbsp;APIs."
+      :dark="true"
     >
       <div class="ds-first-stream">
         <div class="ea-annotated-code">
@@ -401,7 +529,6 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
       id="live-demos"
       title="Live&nbsp;demos"
       subtitle="See Electric Streams in action. Every demo is open source — fork it, run it, learn from&nbsp;it."
-      :dark="true"
     >
       <div class="ds-demo-strip">
         <a href="/streams/demos" class="ds-demo-card">
@@ -432,64 +559,61 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
           </div>
         </a>
       </div>
-      <p class="ds-tour-footer">
-        See all demos →
-        <a href="/streams/demos"><code>/streams/demos</code></a>
-      </p>
-    </EaSection>
-
-    <!-- ───────────────── §15 — Get started ───────────────── -->
-    <EaSection id="get-started">
-      <div class="ds-cta">
-        <div class="ds-cta-eyebrow mono">
-          <span class="dot"></span>
-          Open protocol · Apache&nbsp;2.0 · just&nbsp;HTTP
-        </div>
-        <h2 class="ds-cta-title">
-          Start streaming in&nbsp;<span class="ds-cta-accent">seconds</span>.
-        </h2>
-        <p class="ds-cta-tagline">
-          Install the client, point it at any HTTP endpoint, and tail a durable
-          stream from anywhere on the&nbsp;network.
-        </p>
-
-        <InstallPill
-          class="ds-cta-install-spacing"
-          :command="installCommand"
-          tone="sunken"
+      <template #actions>
+        <VPButton
+          tag="a"
+          size="medium"
+          theme="brand"
+          text="All demos"
+          href="/streams/demos"
         />
-
-        <div class="ds-cta-buttons">
-          <VPButton
-            tag="a"
-            size="medium"
-            theme="brand"
-            text="Quickstart"
-            href="/docs/streams/quickstart"
-          />
-          <VPButton
-            tag="a"
-            size="medium"
-            theme="alt"
-            text="Read the Docs"
-            href="/docs/streams/"
-          />
-          <VPButton
-            tag="a"
-            size="medium"
-            theme="alt"
-            text="GitHub"
-            href="https://github.com/electric-sql/durable-streams"
-          />
-        </div>
-
-        <div class="ds-cta-foot mono">
-          Or
-          <a href="https://dashboard.electric-sql.cloud/">sign up for Electric Cloud</a>
-          and skip the&nbsp;ops.
-        </div>
-      </div>
+      </template>
     </EaSection>
+
+    <!-- ───────────────── §15 — Get started ─────────────────
+         Restyled from the boxed `.ds-cta` panel to the shared
+         `<BottomCtaStrap>` so the page-close visual matches the
+         agents page. Copy was tightened — eyebrow drops the
+         protocol callout (now handled by the open-protocol strap
+         mid-page) and the "Or sign up for Electric Cloud" foot
+         was removed to keep one clear end-of-page action. -->
+    <BottomCtaStrap id="get-started">
+      <template #eyebrow>
+        Apache&nbsp;2.0 · open&nbsp;source
+      </template>
+      <template #title>
+        Start streaming&nbsp;<span class="bottom-cta-accent">today</span>.
+      </template>
+      <template #tagline>
+        One package. Open a stream, append events, subscribe&nbsp;live.
+      </template>
+      <template #install>
+        <InstallPill :command="installCommand" tone="sunken" />
+      </template>
+      <template #actions>
+        <VPButton
+          tag="a"
+          size="medium"
+          theme="brand"
+          text="Quickstart"
+          href="/docs/streams/quickstart"
+        />
+        <VPButton
+          tag="a"
+          size="medium"
+          theme="alt"
+          text="Docs"
+          href="/docs/streams/"
+        />
+        <VPButton
+          tag="a"
+          size="medium"
+          theme="alt"
+          text="GitHub"
+          href="https://github.com/electric-sql/durable-streams"
+        />
+      </template>
+    </BottomCtaStrap>
   </div>
 </template>
 
@@ -503,10 +627,11 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
 
 .ds-hero {
   position: relative;
-  /* Tightened from 100/80 to compensate for the second CTA row
-     (install pill + action-button row) so the hero stays roughly the
-     same overall height as before the split. */
-  padding: 72px 24px 56px;
+  /* Bottom padding bumped from 56 → 96 to give the hero (and the
+     animated stream-flow background that paints behind it) more room
+     to breathe before the first section takes over. Top stays at 72
+     so the headline still anchors high on the viewport. */
+  padding: 72px 24px 96px;
   text-align: center;
   overflow: hidden;
 }
@@ -1060,133 +1185,10 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
   margin: 0;
 }
 
-/* ── §15 Get started ──────────────────────────────────────────── */
-
-.ds-cta {
-  position: relative;
-  text-align: center;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0;
-  padding: 56px 32px 48px;
-  background: var(--ea-surface);
-  border: 1px solid var(--ea-divider);
-  border-radius: 12px;
-  overflow: hidden;
-  isolation: isolate;
-}
-.ds-cta::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(
-    ellipse 70% 90% at 50% 0%,
-    color-mix(in srgb, var(--vp-c-brand-1) 6%, transparent) 0%,
-    transparent 55%
-  );
-  z-index: -1;
-  opacity: 0.7;
-}
-
-.ds-cta-eyebrow {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--ea-text-3);
-  padding: 4px 10px;
-  background: var(--ea-surface-alt);
-  border: 1px solid var(--ea-divider);
-  border-radius: 999px;
-  margin-bottom: 22px;
-}
-.ds-cta-eyebrow .dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--vp-c-brand-1);
-}
-
-.ds-cta-title {
-  font-size: 38px;
-  /* Matches the 700 weight of the hero name so the CTA doesn't out-bold
-     the page's H1. Was 800 which inverted the hierarchy. */
-  font-weight: 700;
-  line-height: 1.15;
-  letter-spacing: -0.015em;
-  color: var(--ea-text-1);
-  margin: 0;
-  max-width: 560px;
-  text-wrap: balance;
-}
-.ds-cta-accent {
-  background: var(--vp-home-hero-name-background);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: var(--vp-home-hero-name-color);
-}
-
-.ds-cta-tagline {
-  font-family: var(--vp-font-family-base);
-  font-size: 16px;
-  line-height: 1.6;
-  color: var(--ea-text-2);
-  margin: 14px auto 0;
-  max-width: 460px;
-}
-
-/* Bottom CTA install pill is rendered by the shared `<InstallPill>`
-   component (see `src/components/InstallPill.vue`). The wrapper class
-   below only adds the spacing between the tagline and the pill so the
-   shared component itself stays free of layout-specific margins. */
-.ds-cta-install-spacing {
-  margin-top: 28px;
-}
-
-.ds-cta-buttons {
-  display: flex;
-  gap: 10px;
-  margin-top: 20px;
-  flex-wrap: wrap;
-  justify-content: center;
-}
-
-.ds-cta-foot {
-  margin-top: 28px;
-  padding-top: 20px;
-  border-top: 1px dashed var(--ea-divider);
-  width: 100%;
-  max-width: 480px;
-  font-size: 12px;
-  color: var(--ea-text-3);
-  letter-spacing: 0.02em;
-}
-.ds-cta-foot a {
-  color: var(--vp-c-brand-1);
-  text-decoration: none;
-}
-.ds-cta-foot a:hover {
-  text-decoration: underline;
-}
-
-@media (max-width: 480px) {
-  .ds-cta {
-    padding: 40px 20px 32px;
-  }
-  .ds-cta-title {
-    font-size: 28px;
-  }
-  .ds-cta-buttons {
-    flex-direction: column;
-    align-self: stretch;
-    max-width: 280px;
-    margin-left: auto;
-    margin-right: auto;
-  }
-}
+/* §15 bottom CTA is now rendered by the shared `<BottomCtaStrap>`
+   component (see `src/components/BottomCtaStrap.vue`). All visual
+   styles for that strap live with the component — nothing extra is
+   needed here. */
 
 /* ── Responsive ────────────────────────────────────────────────── */
 
@@ -1230,8 +1232,10 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
 @media (max-width: 768px) {
   .ds-hero {
     /* Bumped horizontal padding from 20 → 24 for more breathing room
-       from the viewport edge on tablets / large phones. */
-    padding: 56px 24px 40px;
+       from the viewport edge on tablets / large phones. Bottom
+       padding scales with the desktop bump (40 → 64) so the hero
+       still has air below the CTAs at this breakpoint. */
+    padding: 56px 24px 64px;
   }
   .ds-hero-name {
     font-size: 36px;
@@ -1270,8 +1274,9 @@ const stackTab = ref<"producer" | "consumer" | "curl">("producer")
 
 @media (max-width: 480px) {
   .ds-hero {
-    /* Bumped horizontal padding from 16 → 20 for breathing room. */
-    padding: 44px 20px 32px;
+    /* Bumped horizontal padding from 16 → 20 for breathing room.
+       Bottom padding scales with the desktop bump (32 → 52). */
+    padding: 44px 20px 52px;
   }
   .ds-hero-name {
     font-size: 28px;

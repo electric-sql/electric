@@ -513,21 +513,31 @@ export default defineConfig({
           ],
         },
         {
-          text: 'Reference',
+          text: 'Protocol',
           collapsed: false,
           items: [
-            { text: 'Deployment', link: '/docs/streams/deployment' },
+            {
+              text: 'durablestreams.com',
+              link: 'https://durablestreams.com',
+            },
             {
               text: 'Building a client',
-              link: '/docs/streams/building-a-client',
+              link: 'https://durablestreams.com/building-a-client',
             },
             {
               text: 'Building a server',
-              link: '/docs/streams/building-a-server',
+              link: 'https://durablestreams.com/building-a-server',
             },
-            { text: 'Benchmarking', link: '/docs/streams/benchmarking' },
             {
-              text: 'Protocol',
+              text: 'Deployment',
+              link: 'https://durablestreams.com/deployment',
+            },
+            {
+              text: 'Benchmarking',
+              link: 'https://durablestreams.com/benchmarking',
+            },
+            {
+              text: 'PROTOCOL.md',
               link: 'https://github.com/durable-streams/durable-streams/blob/main/PROTOCOL.md',
             },
           ],

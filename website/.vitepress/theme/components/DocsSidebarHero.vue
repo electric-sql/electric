@@ -52,7 +52,7 @@ const PRODUCTS = [
     href: "/streams",
     matches: (p) => p.startsWith("/docs/streams"),
     primary: [
-      { text: "Overview", link: "/docs/streams/concepts" },
+      { text: "Overview", link: "/docs/streams/" },
       { text: "Quickstart", link: "/docs/streams/quickstart" },
     ],
   },

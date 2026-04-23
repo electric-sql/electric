@@ -44,13 +44,15 @@ const BLADES: string[] = [
   "M126.002 4.15613C126.586 4.28382 129.455 5.38944 130.083 5.65065C136.846 8.46568 144.969 11.9707 151.283 15.6455C148.382 17.0627 144.608 19.3187 141.761 20.9173C134.942 24.8051 128.098 28.6472 121.227 32.4426C119.213 33.5673 117.185 34.6674 115.144 35.7426C109.737 34.2641 104.453 33.7524 98.9156 33.1729C101.622 30.08 105.082 26.6011 107.931 23.5602L126.002 4.15613Z",
 ]
 
-/* Activation order: clockwise from 12 o'clock. Indices into BLADES,
-   sorted by each path's first-move-to angle (≈ blade centre).
-   Activating blades in this order while rotating the wheel CCW by one
-   segment per tick gives the "fills in toward the lead position"
-   effect from the design refs. */
+/* Activation order: counter-clockwise from 12 o'clock. Indices into
+   BLADES, paired with the wheel's CW rotation per tick to produce a
+   "fills in toward the lead position" sweep that visually reads as
+   moving clockwise around the wheel — the lead blade lands at
+   LEAD_ANGLE, then the next tick spins the wheel CW so the next
+   lit blade arrives at LEAD next, leaving the trail extending CW
+   behind the head. */
 const ACTIVATION_ORDER: number[] = [
-  11, 15, 8, 0, 3, 12, 7, 4, 10, 13, 9, 2, 1, 14, 6, 5,
+  11, 5, 6, 14, 1, 2, 9, 13, 10, 4, 7, 12, 3, 0, 8, 15,
 ]
 
 /* Angular step between adjacent blades in CW visual order. We treat
@@ -158,12 +160,13 @@ function tick(): void {
   ].slice(0, VISIBLE_EVENTS)
 
   activations.value++
-  /* Rotate to the next CW slot. We use a uniform BLADE_STEP per tick
-     so the wheel sweeps at a constant speed. The very first activation
-     is a no-op — wheelRotation is initialised to LEAD_ANGLE so the
-     blade at CW position 0 is already in place. */
-  const cwPos = (activations.value - 1) % BLADES.length
-  const target = LEAD_ANGLE - cwPos * BLADE_STEP
+  /* Rotate the wheel one segment clockwise (positive CSS rotation)
+     so the next lit blade — sitting one segment CCW of LEAD before
+     the tick — sweeps round to land at LEAD. Pairing CW rotation
+     with the CCW-ordered ACTIVATION_ORDER above gives a comet whose
+     head visually moves clockwise around the wheel. */
+  const pos = (activations.value - 1) % BLADES.length
+  const target = LEAD_ANGLE + pos * BLADE_STEP
   wheelRotation.value = shortestRotation(target, wheelRotation.value)
 }
 
