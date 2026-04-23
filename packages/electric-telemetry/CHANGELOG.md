@@ -1,5 +1,12 @@
 # @core/electric-telemetry
 
+## 0.2.1
+
+### Patch Changes
+
+- e9db22c: Add binary memory, average number of off-heap binaries and their ref counts to top processes by memory metric.
+- 1a4d094: Remove unused stack-level Prometheus reporter to fix unbounded ETS table growth
+
 ## 0.2.0
 
 ### Minor Changes

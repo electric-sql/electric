@@ -1,5 +1,11 @@
 # @core/elixir-client
 
+## 0.9.5
+
+### Patch Changes
+
+- dffd198: Include support for electric ~> 1.5.1
+
 ## 0.9.4
 
 ### Patch Changes
