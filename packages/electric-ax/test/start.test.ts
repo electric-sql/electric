@@ -91,9 +91,9 @@ describe(`resolveComposeProjectName`, () => {
     ).toBe(`custom-project`)
   })
 
-  it(`derives a stable name from cwd`, () => {
+  it(`defaults to the global project name`, () => {
     expect(resolveComposeProjectName(`/tmp/My Project`, {})).toBe(
-      `electric-agents-my-project`
+      `electric-agents`
     )
   })
 })

@@ -10,21 +10,16 @@ import type {
   ElectricAgentsEntityRow,
   ElectricAgentsEntityType,
 } from './api-types.js'
-import {
-  type StartedBuiltinAgentsEnvironment,
-  type StartedDevEnvironment,
-  type StoppedDevEnvironment,
-  startBuiltinAgentsServer,
-  getStoppedEnvironmentMessage,
-  getStartedEnvironmentMessage,
-  startElectricAgentsDevEnvironment,
-  stopElectricAgentsDevEnvironment,
-} from './start.js'
 
 export const DEFAULT_ELECTRIC_AGENTS_URL = `http://localhost:4437`
 export type { StartedDevEnvironment } from './start.js'
 export type { StoppedDevEnvironment } from './start.js'
 export type { StartedBuiltinAgentsEnvironment } from './start.js'
+import type {
+  StartedBuiltinAgentsEnvironment,
+  StartedDevEnvironment,
+  StoppedDevEnvironment,
+} from './start.js'
 
 export interface ElectricCliEnv {
   electricAgentsUrl: string
@@ -457,11 +452,33 @@ async function killEntity(env: ElectricCliEnv, url: string): Promise<void> {
 }
 
 function printStartedEnvironment(env: StartedDevEnvironment): void {
-  console.log(getStartedEnvironmentMessage(env))
+  console.log(
+    [
+      `Electric Agents dev environment is up.`,
+      `Server + UI: ${env.uiUrl}`,
+      `Docker project: ${env.composeProjectName}`,
+    ].join(`\n`)
+  )
 }
 
 function printStoppedEnvironment(env: StoppedDevEnvironment): void {
-  console.log(getStoppedEnvironmentMessage(env))
+  console.log(
+    [
+      `Electric Agents dev environment is down.`,
+      `Docker project: ${env.composeProjectName}`,
+      env.removedVolumes ? `Volumes removed: yes` : `Volumes removed: no`,
+    ].join(`\n`)
+  )
+}
+
+// eslint-disable-next-line quotes
+type StartModule = typeof import('./start.js')
+
+let startModulePromise: Promise<StartModule> | null = null
+
+async function loadStartModule(): Promise<StartModule> {
+  startModulePromise ??= import(`./start.js`)
+  return startModulePromise
 }
 
 export function createElectricCliHandlers(
@@ -479,21 +496,26 @@ export function createElectricCliHandlers(
     ps: (options) => listEntities(env, options),
     kill: (url) => killEntity(env, url),
     start: async (options) => {
+      const { startElectricAgentsDevEnvironment } = await loadStartModule()
       const started = await startElectricAgentsDevEnvironment(options)
       printStartedEnvironment(started)
       return started
     },
     startBuiltin: async (options) => {
+      const { startBuiltinAgentsServer } = await loadStartModule()
       return startBuiltinAgentsServer(options, {
         agentServerUrl: env.electricAgentsUrl,
       })
     },
     stop: async (options) => {
+      const { stopElectricAgentsDevEnvironment } = await loadStartModule()
       const stopped = await stopElectricAgentsDevEnvironment(options)
       printStoppedEnvironment(stopped)
       return stopped
     },
     quickstart: async (options) => {
+      const { startBuiltinAgentsServer, startElectricAgentsDevEnvironment } =
+        await loadStartModule()
       const started = await startElectricAgentsDevEnvironment()
       printStartedEnvironment(started)
       console.log(``)
