@@ -17,6 +17,54 @@ max: 25000
 
 Build a `perspectives` entity that analyzes questions from an optimist and a critic using the manager-worker pattern. Use the exact code below — do not invent different code.
 
+## Core Concepts
+
+### What is Electric Agents?
+
+Electric Agents is a runtime for spawning and orchestrating collaborative AI agents on serverless compute.
+
+The core idea: agent sessions and communication are backed by **durable streams**. Each agent is an **entity** with its own stream of events. All agent activity — runs, tool calls, text output — is persisted to this stream. This means agents can scale to zero, survive restarts, and maintain full session history.
+
+**Why this matters for multi-agent systems**: Because everything is durable and observable, agents can spawn children, wait for results (even across restarts), observe each other's state changes, and coordinate through structured primitives — all without worrying about losing state.
+
+### Entities
+
+An entity is a durable, addressable unit of computation. Each entity has:
+
+- A **type** (e.g., `assistant`, `worker`, `research-team`) — defined once, instantiated many times
+- A **URL** (e.g., `/research-team/my-team`) — its unique address
+- A **handler** — the function that runs each time the entity wakes up
+- **State** — persistent collections that survive across wakes
+
+You define entity types with `registry.define()` and create instances by spawning them.
+
+### Handlers and Wakes
+
+An entity's handler runs in response to **wake events**:
+
+- A message arrives in the entity's inbox
+- A child entity finishes its run
+- A cron schedule fires
+- A state change in an observed entity
+
+The handler is **not** a long-running process. It wakes, does its work (usually running an LLM agent loop), and goes back to sleep.
+
+### The Agent Loop
+
+`ctx.useAgent()` configures an LLM agent and `ctx.agent.run()` starts it. The agent receives conversation history, calls tools as needed, and generates a response — all persisted to the entity's durable stream.
+
+### Spawning Children
+
+Any entity can spawn child entities. When a child finishes (and the parent registered `wake: "runFinished"`), the parent's handler runs again. The wake event includes the child's response and the status of sibling children.
+
+### The Worker Entity
+
+The built-in `worker` type is a generic agent substrate. You configure it at spawn time with a `systemPrompt` and `tools` array (at least one tool required).
+
+### State Collections
+
+Entities can declare persistent state collections that survive across wakes, allowing coordination patterns like tracking which children have completed.
+
 ## Before starting
 
 Read `server.ts` in the working directory:
@@ -27,7 +75,7 @@ Read `server.ts` in the working directory:
 
 ## Steps
 
-**Step 1 — Welcome + first entity.** In one message: briefly introduce Electric Agents (durable streams backing agent sessions — use your docs knowledge), preview the perspectives analyzer, and show the Step 1 code. Ask to write.
+**Step 1 — Welcome + first entity.** In one message: introduce Electric Agents using the Core Concepts above, preview the perspectives analyzer, and show the Step 1 code. Ask to write.
 
 **Step 2 — After confirmation:** write `entities/perspectives.ts` with Step 1 code. Give CLI commands. Explain spawning briefly, show Step 2 code (adds one worker). Ask to write.
 
