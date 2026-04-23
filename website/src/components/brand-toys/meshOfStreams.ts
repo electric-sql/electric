@@ -32,8 +32,34 @@ export interface MeshTrack {
   // Per-vertex corner data (length === points.length). Endpoints have radius 0
   // and are ignored by the renderer.
   corners: MeshCornerArc[]
+  // Pre-built primitives (straight line + circular arc) that exactly mirror
+  // what the canvas renderer draws via arcTo. Used by sampleAlongTrack so
+  // animated messages follow the visible rounded path instead of cutting
+  // outside each corner.
+  segments: RenderedPathSegment[]
+  // Total length along the rendered (rounded) path, not the raw polyline.
   length: number
 }
+
+export type RenderedPathSegment =
+  | {
+      kind: `line`
+      x0: number
+      y0: number
+      x1: number
+      y1: number
+      length: number
+    }
+  | {
+      kind: `arc`
+      cx: number
+      cy: number
+      r: number
+      a0: number
+      a1: number
+      ccw: boolean
+      length: number
+    }
 
 export interface MeshScene {
   width: number
@@ -556,7 +582,209 @@ export function sampleAlongTrack(
   fraction: number
 ): { x: number; y: number; angle: number } {
   const wrapped = ((fraction % 1) + 1) % 1
-  return pointAtDistance(track.points, wrapped * track.length)
+  return sampleAlongRenderedPath(track.segments, track.length, wrapped)
+}
+
+export function sampleAlongRenderedPath(
+  segments: readonly RenderedPathSegment[],
+  totalLength: number,
+  fraction: number
+): { x: number; y: number; angle: number } {
+  if (segments.length === 0 || totalLength <= 0) {
+    return { x: 0, y: 0, angle: 0 }
+  }
+  let target = fraction * totalLength
+  // Walk segments until we find the one containing `target`.
+  for (let i = 0; i < segments.length; i++) {
+    const seg = segments[i]
+    if (target <= seg.length || i === segments.length - 1) {
+      const t = seg.length === 0 ? 0 : clamp(target / seg.length, 0, 1)
+      if (seg.kind === `line`) {
+        return {
+          x: lerp(seg.x0, seg.x1, t),
+          y: lerp(seg.y0, seg.y1, t),
+          angle: Math.atan2(seg.y1 - seg.y0, seg.x1 - seg.x0),
+        }
+      }
+      // arc: interpolate angle from a0 -> a1 in the correct direction.
+      let delta = seg.a1 - seg.a0
+      if (seg.ccw) {
+        // Counterclockwise (canvas convention with y-down): delta should be negative.
+        if (delta > 0) delta -= Math.PI * 2
+      } else {
+        if (delta < 0) delta += Math.PI * 2
+      }
+      const angle = seg.a0 + delta * t
+      return {
+        x: seg.cx + Math.cos(angle) * seg.r,
+        y: seg.cy + Math.sin(angle) * seg.r,
+        // Tangent direction at this point on the arc: perpendicular to the
+        // radius, in the direction of travel.
+        angle: angle + (seg.ccw ? -Math.PI / 2 : Math.PI / 2),
+      }
+    }
+    target -= seg.length
+  }
+  // Fallback (shouldn't reach here)
+  const last = segments[segments.length - 1]
+  if (last.kind === `line`) {
+    return {
+      x: last.x1,
+      y: last.y1,
+      angle: Math.atan2(last.y1 - last.y0, last.x1 - last.x0),
+    }
+  }
+  return {
+    x: last.cx + Math.cos(last.a1) * last.r,
+    y: last.cy + Math.sin(last.a1) * last.r,
+    angle: last.a1 + (last.ccw ? -Math.PI / 2 : Math.PI / 2),
+  }
+}
+
+// Builds the same line+arc primitives that the canvas renderer draws via
+// arcTo, so we can sample along the rounded path. Mirrors the per-corner
+// clamping (`min(requested, inLen/2, outLen/2)`) used by traceLineArcPath.
+export function buildRenderedPathSegments(
+  points: readonly MeshPoint[],
+  corners: readonly MeshCornerArc[] | undefined,
+  fallbackRadius: number
+): RenderedPathSegment[] {
+  const out: RenderedPathSegment[] = []
+  if (points.length < 2) return out
+
+  type CornerArcGeom = {
+    tangentInX: number
+    tangentInY: number
+    tangentOutX: number
+    tangentOutY: number
+    cx: number
+    cy: number
+    r: number
+    a0: number
+    a1: number
+    ccw: boolean
+    arcLen: number
+  }
+
+  // Pre-compute arc geometry per interior point (null if no arc).
+  const arcs: (CornerArcGeom | null)[] = new Array(points.length).fill(null)
+  for (let i = 1; i < points.length - 1; i++) {
+    const prev = points[i - 1]
+    const cur = points[i]
+    const next = points[i + 1]
+    const inDx = cur.x - prev.x
+    const inDy = cur.y - prev.y
+    const outDx = next.x - cur.x
+    const outDy = next.y - cur.y
+    const inLen = Math.hypot(inDx, inDy)
+    const outLen = Math.hypot(outDx, outDy)
+    if (inLen < 0.001 || outLen < 0.001) continue
+    const inUx = inDx / inLen
+    const inUy = inDy / inLen
+    const outUx = outDx / outLen
+    const outUy = outDy / outLen
+    const cross = inUx * outUy - inUy * outUx
+    const dot = inUx * outUx + inUy * outUy
+    const corner = corners?.[i]
+    const requested =
+      corner && corner.radius > 0 ? corner.radius : fallbackRadius
+    if (Math.abs(cross) < 0.001 || requested <= 0.001) continue
+    // Match the renderer's clamp.
+    const r = Math.max(0.5, Math.min(requested, inLen / 2, outLen / 2))
+    // Exterior turn angle (between inbound direction and outbound direction).
+    const turnExt = Math.atan2(Math.abs(cross), dot)
+    // Distance from corner vertex to each tangent point along the segments:
+    //   d = r / tan((π - turnExt)/2) = r * tan(turnExt/2)
+    const d = r * Math.tan(turnExt / 2)
+    const tangentInX = cur.x - inUx * d
+    const tangentInY = cur.y - inUy * d
+    const tangentOutX = cur.x + outUx * d
+    const tangentOutY = cur.y + outUy * d
+    // Arc center: along the bisector of the INTERIOR angle (from cur, between
+    // -inU and +outU), at distance h = r / cos(turnExt/2).
+    const bisX = -inUx + outUx
+    const bisY = -inUy + outUy
+    const bisLen = Math.hypot(bisX, bisY)
+    if (bisLen < 0.001) continue
+    const h = r / Math.cos(turnExt / 2)
+    const cx = cur.x + (bisX / bisLen) * h
+    const cy = cur.y + (bisY / bisLen) * h
+    const a0 = Math.atan2(tangentInY - cy, tangentInX - cx)
+    const a1 = Math.atan2(tangentOutY - cy, tangentOutX - cx)
+    // In canvas y-down coords:
+    //   cross > 0  → outU is rotated CW from inU  → right turn on screen
+    //                → arc sweeps clockwise on screen → counterclockwise=false
+    //   cross < 0  → left turn → arc sweeps counterclockwise on screen
+    //                → counterclockwise=true
+    const ccw = cross < 0
+    arcs[i] = {
+      tangentInX,
+      tangentInY,
+      tangentOutX,
+      tangentOutY,
+      cx,
+      cy,
+      r,
+      a0,
+      a1,
+      ccw,
+      arcLen: r * turnExt,
+    }
+  }
+
+  // Walk through, emitting line segments between arcs (or endpoints) and
+  // arc segments at each corner that has one.
+  let curX = points[0].x
+  let curY = points[0].y
+  for (let i = 1; i < points.length; i++) {
+    const arc = arcs[i]
+    let lineEndX: number
+    let lineEndY: number
+    if (arc) {
+      lineEndX = arc.tangentInX
+      lineEndY = arc.tangentInY
+    } else {
+      lineEndX = points[i].x
+      lineEndY = points[i].y
+    }
+    const lineLen = Math.hypot(lineEndX - curX, lineEndY - curY)
+    if (lineLen > 0.001) {
+      out.push({
+        kind: `line`,
+        x0: curX,
+        y0: curY,
+        x1: lineEndX,
+        y1: lineEndY,
+        length: lineLen,
+      })
+    }
+    if (arc) {
+      out.push({
+        kind: `arc`,
+        cx: arc.cx,
+        cy: arc.cy,
+        r: arc.r,
+        a0: arc.a0,
+        a1: arc.a1,
+        ccw: arc.ccw,
+        length: arc.arcLen,
+      })
+      curX = arc.tangentOutX
+      curY = arc.tangentOutY
+    } else {
+      curX = lineEndX
+      curY = lineEndY
+    }
+  }
+  return out
+}
+
+export function renderedPathLength(
+  segments: readonly RenderedPathSegment[]
+): number {
+  let total = 0
+  for (const seg of segments) total += seg.length
+  return total
 }
 
 export function trackPath(points: MeshPoint[], radius: number): string {
@@ -841,6 +1069,114 @@ export function createMeshScene(options: MeshSceneOptions): MeshScene {
         endGuide,
       ])
     }
+
+    // 4-segment "pan" candidates: H V H V (or V H V H).
+    //   A ──────┐                   D
+    //           │                   │
+    //           └───────────────────┘
+    // Asymmetric: one wheel leaves along the wheel-axis (the short "handle"),
+    // detours perpendicular, runs a long parallel section (the "pan body"),
+    // and enters the other wheel from a perpendicular direction. The two
+    // orientations below cover both choices of which end is which.
+    const panHandleH = Math.max(
+      grid * 1.2,
+      Math.abs(endGuide.x - startGuide.x) * 0.12
+    )
+    const panHandleV = Math.max(
+      grid * 1.2,
+      Math.abs(endGuide.y - startGuide.y) * 0.12
+    )
+
+    // HVHV "horizontal-axis" pan: short H handle out of A, V drop, long H
+    // across at panY, V into D.
+    {
+      const panDirX =
+        Math.abs(endGuide.x - startGuide.x) < 0.5
+          ? 1
+          : Math.sign(endGuide.x - startGuide.x)
+      const panMx1 = snapCoord(startGuide.x + panDirX * panHandleH)
+      if (Math.abs(endGuide.x - panMx1) > grid * 0.6) {
+        const panYs = [
+          snapCoord(grid * 3),
+          snapCoord(height - grid * 3),
+          snapCoord((startGuide.y + endGuide.y) / 2 + grid * 4),
+          snapCoord((startGuide.y + endGuide.y) / 2 - grid * 4),
+        ]
+        for (const panY of panYs) {
+          if (
+            Math.abs(panY - startGuide.y) < grid * 1.5 ||
+            Math.abs(panY - endGuide.y) < grid * 1.5
+          ) {
+            continue
+          }
+          // A enters horizontally, D enters vertically.
+          candidates.push([
+            startGuide,
+            { x: panMx1, y: startGuide.y },
+            { x: panMx1, y: panY },
+            { x: endGuide.x, y: panY },
+            endGuide,
+          ])
+          // Mirror: A enters vertically, D enters horizontally.
+          const panMx2 = snapCoord(endGuide.x - panDirX * panHandleH)
+          if (Math.abs(panMx2 - startGuide.x) > grid * 0.6) {
+            candidates.push([
+              startGuide,
+              { x: startGuide.x, y: panY },
+              { x: panMx2, y: panY },
+              { x: panMx2, y: endGuide.y },
+              endGuide,
+            ])
+          }
+        }
+      }
+    }
+
+    // VHVH "vertical-axis" pan: short V handle out of A, H jog, long V across
+    // at panX, H into D.
+    {
+      const panDirY =
+        Math.abs(endGuide.y - startGuide.y) < 0.5
+          ? 1
+          : Math.sign(endGuide.y - startGuide.y)
+      const panMy1 = snapCoord(startGuide.y + panDirY * panHandleV)
+      if (Math.abs(endGuide.y - panMy1) > grid * 0.6) {
+        const panXs = [
+          snapCoord(grid * 3),
+          snapCoord(width - grid * 3),
+          snapCoord((startGuide.x + endGuide.x) / 2 + grid * 4),
+          snapCoord((startGuide.x + endGuide.x) / 2 - grid * 4),
+        ]
+        for (const panX of panXs) {
+          if (
+            Math.abs(panX - startGuide.x) < grid * 1.5 ||
+            Math.abs(panX - endGuide.x) < grid * 1.5
+          ) {
+            continue
+          }
+          // A enters vertically, D enters horizontally.
+          candidates.push([
+            startGuide,
+            { x: startGuide.x, y: panMy1 },
+            { x: panX, y: panMy1 },
+            { x: panX, y: endGuide.y },
+            endGuide,
+          ])
+          // Mirror: A enters horizontally, D enters vertically.
+          const panMy2 = snapCoord(endGuide.y - panDirY * panHandleV)
+          if (Math.abs(panMy2 - startGuide.y) > grid * 0.6) {
+            candidates.push([
+              startGuide,
+              { x: panX, y: startGuide.y },
+              { x: panX, y: panMy2 },
+              { x: endGuide.x, y: panMy2 },
+              endGuide,
+            ])
+          }
+        }
+      }
+    }
+
     return candidates.map((points) =>
       normalizePolyline(simplifyPolyline(points))
     )
@@ -1279,13 +1615,19 @@ export function createMeshScene(options: MeshSceneOptions): MeshScene {
       if (!acceptedBundle) continue
 
       for (const lane of acceptedBundle) {
+        const segments = buildRenderedPathSegments(
+          lane.points,
+          lane.corners,
+          cornerRadius
+        )
         tracks.push({
           id: `track-${tracks.length}`,
           fromWheelId: wheels[edge.a].id,
           toWheelId: wheels[edge.b].id,
           points: lane.points,
           corners: lane.corners,
-          length: polylineLength(lane.points),
+          segments,
+          length: renderedPathLength(segments),
         })
         acceptedTrackPointSets.push(lane.points)
       }
