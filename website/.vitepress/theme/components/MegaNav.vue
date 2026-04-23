@@ -69,7 +69,7 @@ const NAV = [
       items: [
         {
           label: 'Postgres Sync',
-          sublabel: 'Sync from Postgres into anything',
+          sublabel: 'Sync subsets of Postgres',
           link: '/sync/postgres-sync',
           icon: '/img/icons/electric.svg',
         },

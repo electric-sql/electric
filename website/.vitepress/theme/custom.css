@@ -1768,7 +1768,7 @@ ul.demo-actions li .VPButton {
   overflow-y: auto;
 }
 .mega-nav-panel:has(.mega-nav-panel-grid-2col) {
-  min-width: 480px;
+  min-width: 520px;
 }
 
 .mega-nav-panel-section {
@@ -1788,7 +1788,7 @@ ul.demo-actions li .VPButton {
   grid-template-columns: 1fr;
 }
 .mega-nav-panel-grid-2col {
-  grid-template-columns: minmax(220px, 1fr) minmax(220px, 1fr);
+  grid-template-columns: minmax(220px, 1fr) minmax(240px, 1fr);
   gap: 0 8px;
 }
 .mega-nav-panel-grid-2col .mega-nav-panel-secondary {

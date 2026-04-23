@@ -156,6 +156,15 @@ export default defineConfig({
         process.env.DEPLOY_PRIME_URL || ''
       ),
     },
+    // PGlite ships a precompiled WASM build + a binary FS data bundle
+    // (`pglite.data`). Vite's dependency optimizer rewrites these as
+    // text and corrupts them, which surfaces at runtime as
+    // `Invalid FS bundle size: <small> !== <real>`. Excluding the
+    // package from optimizeDeps makes Vite serve the original ESM
+    // build untouched. See pglite docs > Bundler Support.
+    optimizeDeps: {
+      exclude: ['@electric-sql/pglite'],
+    },
     plugins: [
       llmstxt({
         generateLLMsFullTxt: false,

@@ -20,6 +20,7 @@
 
 import { ref } from "vue"
 import { VPButton } from "vitepress/theme"
+import { defineClientComponent } from "vitepress"
 
 import EaSection from "../agents-home/Section.vue"
 import SyncFanOutBg from "./SyncFanOutBg.vue"
@@ -28,6 +29,12 @@ import MultiClientPulseDemo from "./MultiClientPulseDemo.vue"
 import InstallPill from "../InstallPill.vue"
 import BottomCtaStrap from "../BottomCtaStrap.vue"
 import CuratedBlogPosts from "../CuratedBlogPosts.vue"
+
+// PGlite REPL is browser-only (WASM + DOM access at script-setup
+// time), so lazy-load it on the client and render inside <ClientOnly>.
+const PGliteReplDemo = defineClientComponent(() => {
+  return import("./PGliteReplDemo.vue")
+})
 
 import { data as demoData } from "../../../data/demos.data.ts"
 
@@ -170,20 +177,40 @@ const syncBlogPosts = [
           <div class="sh-fs-panel">
             <div class="code-file-header mono">app/Todos.tsx</div>
             <pre class="code-block annotated"><code><span class="tk-kw">const</span> <span class="tk-v">todos</span> = <span class="tk-fn">createCollection</span>(
-  <span class="tk-fn">electricCollectionOptions</span>({
+  <span class="tk-fn">electricCollectionOptions</span>({<span class="ann-marker" data-n="1"></span>
     <span class="tk-prop">shapeOptions</span>: { <span class="tk-prop">url</span>: <span class="tk-str">"/api/todos"</span> },
     <span class="tk-prop">getKey</span>: (<span class="tk-v">row</span>) <span class="tk-kw">=&gt;</span> <span class="tk-v">row</span>.<span class="tk-prop">id</span>,
   }),
 )
 
 <span class="tk-kw">export function</span> <span class="tk-fn">Todos</span>() {
-  <span class="tk-kw">const</span> { <span class="tk-v">data</span> } = <span class="tk-fn">useLiveQuery</span>((<span class="tk-v">q</span>) <span class="tk-kw">=&gt;</span>
+  <span class="tk-kw">const</span> { <span class="tk-v">data</span> } = <span class="tk-fn">useLiveQuery</span>((<span class="tk-v">q</span>) <span class="tk-kw">=&gt;</span><span class="ann-marker" data-n="2"></span>
     <span class="tk-v">q</span>.<span class="tk-fn">from</span>({ <span class="tk-prop">todo</span>: <span class="tk-v">todos</span> })
      .<span class="tk-fn">where</span>(({ <span class="tk-v">todo</span> }) <span class="tk-kw">=&gt;</span>
         <span class="tk-fn">eq</span>(<span class="tk-v">todo</span>.<span class="tk-prop">completed</span>, <span class="tk-kw">false</span>)),
   )
   <span class="tk-kw">return</span> &lt;<span class="tk-v">List</span> <span class="tk-prop">todos</span>={<span class="tk-v">data</span>} /&gt;
 }</code></pre>
+            <ol class="sh-inline-annos">
+              <li>
+                <span class="num">1</span>
+                <div>
+                  <strong>Electric collection.</strong>
+                  Subscribes to a server-defined shape. Synced rows
+                  live locally &mdash; persisted, reactive, and shared
+                  across every component that queries them.
+                </div>
+              </li>
+              <li>
+                <span class="num">2</span>
+                <div>
+                  <strong>Live incremental reactivity.</strong>
+                  Differential dataflow keeps the result set up to
+                  date as rows arrive or change &mdash; sub-millisecond
+                  updates, only the diff re-renders.
+                </div>
+              </li>
+            </ol>
           </div>
         </div>
       </div>
@@ -226,28 +253,20 @@ const syncBlogPosts = [
           </div>
         </div>
         <div class="sh-primitive-visual">
-          <div class="sh-fs-panel">
-            <div class="code-file-header mono">app/db.ts</div>
-            <pre class="code-block annotated"><code><span class="tk-kw">import</span> { <span class="tk-v">PGlite</span> } <span class="tk-kw">from</span> <span class="tk-str">"@electric-sql/pglite"</span>
-<span class="tk-kw">import</span> { <span class="tk-v">live</span> } <span class="tk-kw">from</span> <span class="tk-str">"@electric-sql/pglite/live"</span>
-
-<span class="tk-kw">const</span> <span class="tk-v">db</span> = <span class="tk-kw">new</span> <span class="tk-v">PGlite</span>(<span class="tk-str">"idb://app"</span>, {
-  <span class="tk-prop">extensions</span>: { <span class="tk-v">live</span> },
-})
-
-<span class="tk-kw">await</span> <span class="tk-v">db</span>.<span class="tk-fn">exec</span>(<span class="tk-str">`
-  create table if not exists todos (
-    id uuid primary key,
-    text text not null,
-    completed boolean default false
-  )
-`</span>)
-
-<span class="tk-kw">await</span> <span class="tk-v">db</span>.<span class="tk-prop">live</span>.<span class="tk-fn">query</span>(
-  <span class="tk-str">"select * from todos where completed = $1"</span>,
-  [<span class="tk-kw">false</span>],
-  (<span class="tk-v">res</span>) <span class="tk-kw">=&gt;</span> <span class="tk-fn">render</span>(<span class="tk-v">res</span>.<span class="tk-prop">rows</span>),
-)</code></pre>
+          <div class="sh-pglite-panel">
+            <div class="sh-pglite-header mono">
+              <span class="sh-pglite-dot" />
+              <span class="sh-pglite-title">PGlite&nbsp;REPL</span>
+              <span class="sh-pglite-meta">WASM Postgres · in this page</span>
+            </div>
+            <div class="sh-pglite-body">
+              <ClientOnly>
+                <PGliteReplDemo />
+                <template #fallback>
+                  <div class="sh-pglite-loading mono">Booting PGlite&hellip;</div>
+                </template>
+              </ClientOnly>
+            </div>
           </div>
         </div>
       </div>
@@ -894,6 +913,106 @@ const syncBlogPosts = [
 .sh-primitive-visual .code-file-header {
   font-size: 12px;
   padding: 12px 18px;
+}
+
+/* Compact annotation strip rendered below a code panel inside a
+   primitive-visual column. Same numbered-circle motif as
+   .sh-fs-anno but tighter for the narrower column. */
+.sh-inline-annos {
+  list-style: none;
+  margin: 0;
+  padding: 14px 18px 16px;
+  border-top: 1px solid var(--ea-divider);
+  background: var(--ea-surface-alt);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.sh-inline-annos li {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--ea-text-2);
+}
+.sh-inline-annos .num {
+  flex: 0 0 20px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 1px solid var(--vp-c-brand-1);
+  color: var(--vp-c-brand-1);
+  font-family: var(--vp-font-family-base);
+  font-size: 11px;
+  font-weight: 600;
+  text-align: center;
+  line-height: 18px;
+  margin-top: 1px;
+}
+.sh-inline-annos strong {
+  font-weight: 600;
+  color: var(--ea-text-1);
+  margin-right: 4px;
+}
+
+/* PGlite REPL panel — wraps the live <pglite-repl> web component
+   with a small terminal-style header so it visually pairs with the
+   .sh-fs-panel code panels used by the other primitives. */
+.sh-pglite-panel {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--vp-code-block-bg, #161618);
+  border: 1px solid var(--ea-divider);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.sh-pglite-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: color-mix(in srgb, #fff 4%, var(--vp-code-block-bg, #161618));
+  border-bottom: 1px solid color-mix(in srgb, #fff 6%, transparent);
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.85);
+}
+.sh-pglite-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--vp-c-brand-1);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--vp-c-brand-1) 25%, transparent);
+}
+.sh-pglite-title {
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.sh-pglite-meta {
+  margin-left: auto;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.55);
+  letter-spacing: 0.02em;
+}
+.sh-pglite-body {
+  display: flex;
+  align-items: stretch;
+  height: 360px;
+}
+.sh-pglite-body > * {
+  width: 100%;
+  height: 100%;
+}
+.sh-pglite-loading {
+  width: 100%;
+  height: 360px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.55);
+  background: var(--vp-code-block-bg, #161618);
 }
 .code-file-header {
   font-size: 11.5px;

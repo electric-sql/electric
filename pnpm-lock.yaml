@@ -938,6 +938,34 @@ importers:
         specifier: ^5.3.4
         version: 5.4.10(@types/node@22.19.1)(lightningcss@1.30.1)(terser@5.44.0)
 
+  examples/replay-loop-repro:
+    dependencies:
+      '@electric-sql/client':
+        specifier: workspace:*
+        version: link:../../packages/typescript-client
+      react:
+        specifier: ^18.3.1
+        version: 18.3.1
+      react-dom:
+        specifier: ^18.3.1
+        version: 18.3.1(react@18.3.1)
+    devDependencies:
+      '@types/react':
+        specifier: ^18.3.3
+        version: 18.3.12
+      '@types/react-dom':
+        specifier: ^18.3.0
+        version: 18.3.1
+      '@vitejs/plugin-react':
+        specifier: ^4.3.1
+        version: 4.3.3(vite@5.4.10(@types/node@22.19.1)(lightningcss@1.30.1)(terser@5.44.0))
+      typescript:
+        specifier: ^5.5.3
+        version: 5.8.3
+      vite:
+        specifier: ^5.3.4
+        version: 5.4.10(@types/node@22.19.1)(lightningcss@1.30.1)(terser@5.44.0)
+
   examples/tanstack:
     dependencies:
       '@electric-sql/client':
@@ -1036,10 +1064,10 @@ importers:
         version: 4.1.0
       drizzle-orm:
         specifier: ^0.44.3
-        version: 0.44.3(@electric-sql/pglite@0.2.17)(@types/pg@8.15.4)(gel@2.2.0)(kysely@0.28.7)(pg@8.16.3)(postgres@3.4.7)
+        version: 0.44.3(@electric-sql/pglite@0.4.4)(@types/pg@8.15.4)(gel@2.2.0)(kysely@0.28.7)(pg@8.16.3)(postgres@3.4.7)
       drizzle-zod:
         specifier: ^0.8.2
-        version: 0.8.2(drizzle-orm@0.44.3(@electric-sql/pglite@0.2.17)(@types/pg@8.15.4)(gel@2.2.0)(kysely@0.28.7)(pg@8.16.3)(postgres@3.4.7))(zod@4.0.10)
+        version: 0.8.2(drizzle-orm@0.44.3(@electric-sql/pglite@0.4.4)(@types/pg@8.15.4)(gel@2.2.0)(kysely@0.28.7)(pg@8.16.3)(postgres@3.4.7))(zod@4.0.10)
       expo:
         specifier: 53.0.20
         version: 53.0.20(@babel/core@7.28.0)(@expo/metro-runtime@5.0.4(react-native@0.80.1(@babel/core@7.28.0)(@types/react@19.1.8)(react@19.1.0)))(react-native@0.80.1(@babel/core@7.28.0)(@types/react@19.1.8)(react@19.1.0))(react@19.1.0)
@@ -1145,16 +1173,16 @@ importers:
         version: 0.30.6
       drizzle-orm:
         specifier: ^0.39.0
-        version: 0.39.3(@electric-sql/pglite@0.2.17)(@types/pg@8.15.4)(kysely@0.28.7)(pg@8.16.3)(postgres@3.4.7)
+        version: 0.39.3(@electric-sql/pglite@0.4.4)(@types/pg@8.15.4)(kysely@0.28.7)(pg@8.16.3)(postgres@3.4.7)
       drizzle-zod:
         specifier: ^0.7.1
-        version: 0.7.1(drizzle-orm@0.39.3(@electric-sql/pglite@0.2.17)(@types/pg@8.15.4)(kysely@0.28.7)(pg@8.16.3)(postgres@3.4.7))(zod@4.1.11)
+        version: 0.7.1(drizzle-orm@0.39.3(@electric-sql/pglite@0.4.4)(@types/pg@8.15.4)(kysely@0.28.7)(pg@8.16.3)(postgres@3.4.7))(zod@4.1.11)
       lucide-react:
         specifier: ^0.544.0
         version: 0.544.0(react@19.2.0)
       nitro:
         specifier: 3.0.1-alpha.1
-        version: 3.0.1-alpha.1(@electric-sql/pglite@0.2.17)(aws4fetch@1.0.20)(chokidar@4.0.1)(drizzle-orm@0.39.3(@electric-sql/pglite@0.2.17)(@types/pg@8.15.4)(kysely@0.28.7)(pg@8.16.3)(postgres@3.4.7))(lru-cache@11.2.2)(rollup@4.46.1)(vite@7.1.7(@types/node@22.19.1)(jiti@2.6.1)(lightningcss@1.30.1)(terser@5.44.0)(tsx@4.20.3)(yaml@2.8.1))(xml2js@0.6.2)
+        version: 3.0.1-alpha.1(@electric-sql/pglite@0.4.4)(aws4fetch@1.0.20)(chokidar@4.0.1)(drizzle-orm@0.39.3(@electric-sql/pglite@0.4.4)(@types/pg@8.15.4)(kysely@0.28.7)(pg@8.16.3)(postgres@3.4.7))(lru-cache@11.2.2)(rollup@4.46.1)(vite@7.1.7(@types/node@22.19.1)(jiti@2.6.1)(lightningcss@1.30.1)(terser@5.44.0)(tsx@4.20.3)(yaml@2.8.1))(xml2js@0.6.2)
       pg:
         specifier: ^8.16.3
         version: 8.16.3
@@ -1842,6 +1870,12 @@ importers:
 
   website:
     dependencies:
+      '@electric-sql/pglite':
+        specifier: 0.4.4
+        version: 0.4.4
+      '@electric-sql/pglite-repl':
+        specifier: 0.3.4
+        version: 0.3.4(@babel/runtime@7.28.4)(@codemirror/lint@6.8.4)(@codemirror/search@6.5.8)(@codemirror/state@6.5.0)(@codemirror/theme-one-dark@6.1.2)(@electric-sql/pglite@0.4.4)(@lezer/common@1.2.3)(codemirror@6.0.1(@lezer/common@1.2.3))
       posthog-js:
         specifier: ^1.236.4
         version: 1.236.4
@@ -3352,10 +3386,24 @@ packages:
       '@electric-sql/pglite': ^0.2.17
       react: ^18.0.0 || ^19.0.0 || ^19.0.0-rc
 
+  '@electric-sql/pglite-react@0.3.4':
+    resolution: {integrity: sha512-tj1jP0XmX6REU1FKReI6fSBkts0GrIMJhJepUc6n/P8cenPi0e/tsiKtjtxqhNY7wGcSUzchfpqFuQ10dh1JsA==}
+    peerDependencies:
+      '@electric-sql/pglite': 0.4.4
+      react: ^18.0.0 || ^19.0.0 || ^19.0.0-rc
+
   '@electric-sql/pglite-repl@0.2.17':
     resolution: {integrity: sha512-gvqYrTc+vPn26MGWH55zkbDQWPETiZ/UNp9OV6gPn7dqfKjnyCRccopmc07zA16Kmv5mBHxI30mab1fq0lTCYA==}
     peerDependencies:
       '@electric-sql/pglite': ^0.2.17
+    peerDependenciesMeta:
+      '@electric-sql/pglite':
+        optional: true
+
+  '@electric-sql/pglite-repl@0.3.4':
+    resolution: {integrity: sha512-0gwHgqy3bwA+8VZI+RYCqHC6pFjjDs2VtvWxdTXKmhrj9iBIbxpJAYCffOreheQI2j+oIunvethMntYrUSS0EQ==}
+    peerDependencies:
+      '@electric-sql/pglite': 0.4.4
     peerDependenciesMeta:
       '@electric-sql/pglite':
         optional: true
@@ -3367,6 +3415,9 @@ packages:
 
   '@electric-sql/pglite@0.2.17':
     resolution: {integrity: sha512-qEpKRT2oUaWDH6tjRxLHjdzMqRUGYDnGZlKrnL4dJ77JVMcP2Hpo3NYnOSPKdZdeec57B6QPprCUFg0picx5Pw==}
+
+  '@electric-sql/pglite@0.4.4':
+    resolution: {integrity: sha512-g/6CWAJ4XOkObWCWAQ2IReZD8VvsDy3poRHSKvpRR2F96F8WJ3HVbjpso3gN7l0q6QPPgvxSSpl/qo5k8a7mkQ==}
 
   '@emnapi/core@1.7.1':
     resolution: {integrity: sha512-o1uhUASyo921r2XtHYOHy7gdkGLge8ghBEQHMWmyJFoXlpU58kIrhhN3w26lpQb6dspetweapMn2CSNwQ8I4wg==}
@@ -7484,6 +7535,17 @@ packages:
     resolution: {integrity: sha512-FrvMpAK+hTbFy7vH5j1+tMYHMSKLE6RzluFJlkFNKD0p9YsUT75JlBSmr5so3QRzvMwU5/bIEdeNrxm8du8l3Q==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
 
+  '@uiw/codemirror-extensions-basic-setup@4.23.5':
+    resolution: {integrity: sha512-eTMfT8TejVN/D5vvuz9Lab+MIoRYdtqa2ftZZmU3JpcDIXf9KaExPo+G2Rl9HqySzaasgGXOOG164MAnj3MSIw==}
+    peerDependencies:
+      '@codemirror/autocomplete': '>=6.0.0'
+      '@codemirror/commands': '>=6.0.0'
+      '@codemirror/language': '>=6.0.0'
+      '@codemirror/lint': '>=6.0.0'
+      '@codemirror/search': '>=6.0.0'
+      '@codemirror/state': '>=6.0.0'
+      '@codemirror/view': '>=6.0.0'
+
   '@uiw/codemirror-extensions-basic-setup@4.23.6':
     resolution: {integrity: sha512-bvtq8IOvdkLJMhoJBRGPEzU51fMpPDwEhcAHp9xCR05MtbIokQgsnLXrmD1aZm6e7s/3q47H+qdSfAAkR5MkLA==}
     peerDependencies:
@@ -7495,11 +7557,24 @@ packages:
       '@codemirror/state': '>=6.0.0'
       '@codemirror/view': '>=6.0.0'
 
+  '@uiw/codemirror-theme-github@4.23.5':
+    resolution: {integrity: sha512-gR5rgWUaRoLRavzA6w+/dKE6KMDQdHF82xpnLYQvOwE/1agNS0asowdZUodMXbvOoNLIgcopLm3hXdzzVouuaw==}
+
   '@uiw/codemirror-theme-github@4.23.6':
     resolution: {integrity: sha512-p74sbyuDo7JsYlGWNtyNyJSyr9N4niCPGqYreQhoAk2C6c4JXi0sGwZRlHd8KyynsxCdSA9L727SADOuukD1Ug==}
 
+  '@uiw/codemirror-theme-xcode@4.23.5':
+    resolution: {integrity: sha512-8Ojpf+B+CjSpGM2hwDjR5e4Y5j8vkk18j8e7Drxa7vP+K4yB1RruTba8saobLX61HaNB/L8RcZ/BFTBcOEgS0Q==}
+
   '@uiw/codemirror-theme-xcode@4.23.6':
     resolution: {integrity: sha512-t4shD5Cq6e1mqzG6w/+oMCw3oXn6QSbYZbCHDZ7GrbN51f6ZttKVOSZgUInlNeh9Spbvag8ZE5osMFFv6+twcQ==}
+
+  '@uiw/codemirror-themes@4.23.5':
+    resolution: {integrity: sha512-yWUTpaVroxIxjKASQAmKaYy+ZYtF+YB6d8sVmSRK2TVD13M+EWvVT2jBGFLqR1UVg7G0W/McAy8xdeTg+a3slg==}
+    peerDependencies:
+      '@codemirror/language': '>=6.0.0'
+      '@codemirror/state': '>=6.0.0'
+      '@codemirror/view': '>=6.0.0'
 
   '@uiw/codemirror-themes@4.23.6':
     resolution: {integrity: sha512-0dpuLQW+V6zrKvfvor/eo71V3tpr2L2Hsu8QZAdtSzksjWABxTOzH3ShaBRxCEsrz6sU9sa9o7ShwBMMDz59bQ==}
@@ -7507,6 +7582,17 @@ packages:
       '@codemirror/language': '>=6.0.0'
       '@codemirror/state': '>=6.0.0'
       '@codemirror/view': '>=6.0.0'
+
+  '@uiw/react-codemirror@4.23.5':
+    resolution: {integrity: sha512-2zzGpx61L4mq9zDG/hfsO4wAH209TBE8VVsoj/qrccRe6KfcneCwKgRxtQjxBCCnO0Q5S+IP+uwCx5bXRzgQFQ==}
+    peerDependencies:
+      '@babel/runtime': '>=7.11.0'
+      '@codemirror/state': '>=6.0.0'
+      '@codemirror/theme-one-dark': '>=6.0.0'
+      '@codemirror/view': '>=6.0.0'
+      codemirror: '>=6.0.0'
+      react: '>=16.8.0'
+      react-dom: '>=16.8.0'
 
   '@uiw/react-codemirror@4.23.6':
     resolution: {integrity: sha512-caYKGV6TfGLRV1HHD3p0G3FiVzKL1go7wes5XT2nWjB0+dTdyzyb81MKRSacptgZcotujfNO6QXn65uhETRAMw==}
@@ -17484,11 +17570,25 @@ snapshots:
       '@codemirror/view': 6.35.2
       '@lezer/common': 1.2.3
 
-  '@codemirror/commands@6.7.1':
+  '@codemirror/autocomplete@6.18.3(@codemirror/language@6.10.6)(@codemirror/state@6.5.0)(@codemirror/view@6.38.3)(@lezer/common@1.2.3)':
     dependencies:
       '@codemirror/language': 6.10.6
       '@codemirror/state': 6.5.0
-      '@codemirror/view': 6.35.2
+      '@codemirror/view': 6.38.3
+      '@lezer/common': 1.2.3
+
+  '@codemirror/autocomplete@6.18.3(@codemirror/language@6.11.3)(@codemirror/state@6.5.0)(@codemirror/view@6.38.3)(@lezer/common@1.2.3)':
+    dependencies:
+      '@codemirror/language': 6.11.3
+      '@codemirror/state': 6.5.0
+      '@codemirror/view': 6.38.3
+      '@lezer/common': 1.2.3
+
+  '@codemirror/commands@6.7.1':
+    dependencies:
+      '@codemirror/language': 6.11.3
+      '@codemirror/state': 6.5.0
+      '@codemirror/view': 6.38.3
       '@lezer/common': 1.2.3
 
   '@codemirror/lang-javascript@6.2.2':
@@ -17504,6 +17604,17 @@ snapshots:
   '@codemirror/lang-sql@6.8.0(@codemirror/view@6.35.2)':
     dependencies:
       '@codemirror/autocomplete': 6.18.3(@codemirror/language@6.10.6)(@codemirror/state@6.5.0)(@codemirror/view@6.35.2)(@lezer/common@1.2.3)
+      '@codemirror/language': 6.10.6
+      '@codemirror/state': 6.5.0
+      '@lezer/common': 1.2.3
+      '@lezer/highlight': 1.2.1
+      '@lezer/lr': 1.4.2
+    transitivePeerDependencies:
+      - '@codemirror/view'
+
+  '@codemirror/lang-sql@6.8.0(@codemirror/view@6.38.3)':
+    dependencies:
+      '@codemirror/autocomplete': 6.18.3(@codemirror/language@6.10.6)(@codemirror/state@6.5.0)(@codemirror/view@6.38.3)(@lezer/common@1.2.3)
       '@codemirror/language': 6.10.6
       '@codemirror/state': 6.5.0
       '@lezer/common': 1.2.3
@@ -17533,13 +17644,13 @@ snapshots:
   '@codemirror/lint@6.8.4':
     dependencies:
       '@codemirror/state': 6.5.0
-      '@codemirror/view': 6.35.2
+      '@codemirror/view': 6.38.3
       crelt: 1.0.6
 
   '@codemirror/search@6.5.8':
     dependencies:
       '@codemirror/state': 6.5.0
-      '@codemirror/view': 6.35.2
+      '@codemirror/view': 6.38.3
       crelt: 1.0.6
 
   '@codemirror/state@6.5.0':
@@ -17808,6 +17919,11 @@ snapshots:
       '@electric-sql/pglite': 0.2.17
       react: 19.0.0-rc.1
 
+  '@electric-sql/pglite-react@0.3.4(@electric-sql/pglite@0.4.4)(react@19.2.0)':
+    dependencies:
+      '@electric-sql/pglite': 0.4.4
+      react: 19.2.0
+
   '@electric-sql/pglite-repl@0.2.17(@babel/runtime@7.28.4)(@codemirror/lint@6.8.4)(@codemirror/search@6.5.8)(@codemirror/state@6.5.0)(@codemirror/theme-one-dark@6.1.2)(@electric-sql/pglite@0.2.17)(@lezer/common@1.2.3)(codemirror@6.0.1(@lezer/common@1.2.3))':
     dependencies:
       '@codemirror/autocomplete': 6.18.3(@codemirror/language@6.10.6)(@codemirror/state@6.5.0)(@codemirror/view@6.35.2)(@lezer/common@1.2.3)
@@ -17834,12 +17950,40 @@ snapshots:
       - '@lezer/common'
       - codemirror
 
+  '@electric-sql/pglite-repl@0.3.4(@babel/runtime@7.28.4)(@codemirror/lint@6.8.4)(@codemirror/search@6.5.8)(@codemirror/state@6.5.0)(@codemirror/theme-one-dark@6.1.2)(@electric-sql/pglite@0.4.4)(@lezer/common@1.2.3)(codemirror@6.0.1(@lezer/common@1.2.3))':
+    dependencies:
+      '@codemirror/autocomplete': 6.18.3(@codemirror/language@6.11.3)(@codemirror/state@6.5.0)(@codemirror/view@6.38.3)(@lezer/common@1.2.3)
+      '@codemirror/commands': 6.7.1
+      '@codemirror/lang-sql': 6.8.0(@codemirror/view@6.38.3)
+      '@codemirror/language': 6.11.3
+      '@codemirror/view': 6.38.3
+      '@electric-sql/pglite-react': 0.3.4(@electric-sql/pglite@0.4.4)(react@19.2.0)
+      '@uiw/codemirror-theme-github': 4.23.5(@codemirror/language@6.11.3)(@codemirror/state@6.5.0)(@codemirror/view@6.38.3)
+      '@uiw/codemirror-theme-xcode': 4.23.5(@codemirror/language@6.11.3)(@codemirror/state@6.5.0)(@codemirror/view@6.38.3)
+      '@uiw/codemirror-themes': 4.23.5(@codemirror/language@6.11.3)(@codemirror/state@6.5.0)(@codemirror/view@6.38.3)
+      '@uiw/react-codemirror': 4.23.5(@babel/runtime@7.28.4)(@codemirror/autocomplete@6.18.3(@codemirror/language@6.11.3)(@codemirror/state@6.5.0)(@codemirror/view@6.38.3)(@lezer/common@1.2.3))(@codemirror/language@6.11.3)(@codemirror/lint@6.8.4)(@codemirror/search@6.5.8)(@codemirror/state@6.5.0)(@codemirror/theme-one-dark@6.1.2)(@codemirror/view@6.38.3)(codemirror@6.0.1(@lezer/common@1.2.3))(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
+      psql-describe: 0.1.6
+      react: 19.2.0
+      react-dom: 19.2.0(react@19.2.0)
+    optionalDependencies:
+      '@electric-sql/pglite': 0.4.4
+    transitivePeerDependencies:
+      - '@babel/runtime'
+      - '@codemirror/lint'
+      - '@codemirror/search'
+      - '@codemirror/state'
+      - '@codemirror/theme-one-dark'
+      - '@lezer/common'
+      - codemirror
+
   '@electric-sql/pglite-sync@0.2.20(@electric-sql/pglite@0.2.17)':
     dependencies:
       '@electric-sql/client': 1.0.0-beta.3
       '@electric-sql/pglite': 0.2.17
 
   '@electric-sql/pglite@0.2.17': {}
+
+  '@electric-sql/pglite@0.4.4': {}
 
   '@emnapi/core@1.7.1':
     dependencies:
@@ -22468,6 +22612,16 @@ snapshots:
       '@typescript-eslint/types': 8.46.0
       eslint-visitor-keys: 4.2.1
 
+  '@uiw/codemirror-extensions-basic-setup@4.23.5(@codemirror/autocomplete@6.18.3(@codemirror/language@6.11.3)(@codemirror/state@6.5.0)(@codemirror/view@6.38.3)(@lezer/common@1.2.3))(@codemirror/commands@6.7.1)(@codemirror/language@6.11.3)(@codemirror/lint@6.8.4)(@codemirror/search@6.5.8)(@codemirror/state@6.5.0)(@codemirror/view@6.38.3)':
+    dependencies:
+      '@codemirror/autocomplete': 6.18.3(@codemirror/language@6.11.3)(@codemirror/state@6.5.0)(@codemirror/view@6.38.3)(@lezer/common@1.2.3)
+      '@codemirror/commands': 6.7.1
+      '@codemirror/language': 6.11.3
+      '@codemirror/lint': 6.8.4
+      '@codemirror/search': 6.5.8
+      '@codemirror/state': 6.5.0
+      '@codemirror/view': 6.38.3
+
   '@uiw/codemirror-extensions-basic-setup@4.23.6(@codemirror/autocomplete@6.18.3(@codemirror/language@6.10.6)(@codemirror/state@6.5.0)(@codemirror/view@6.35.2)(@lezer/common@1.2.3))(@codemirror/commands@6.7.1)(@codemirror/language@6.10.6)(@codemirror/lint@6.8.4)(@codemirror/search@6.5.8)(@codemirror/state@6.5.0)(@codemirror/view@6.35.2)':
     dependencies:
       '@codemirror/autocomplete': 6.18.3(@codemirror/language@6.10.6)(@codemirror/state@6.5.0)(@codemirror/view@6.35.2)(@lezer/common@1.2.3)
@@ -22478,9 +22632,25 @@ snapshots:
       '@codemirror/state': 6.5.0
       '@codemirror/view': 6.35.2
 
+  '@uiw/codemirror-theme-github@4.23.5(@codemirror/language@6.11.3)(@codemirror/state@6.5.0)(@codemirror/view@6.38.3)':
+    dependencies:
+      '@uiw/codemirror-themes': 4.23.5(@codemirror/language@6.11.3)(@codemirror/state@6.5.0)(@codemirror/view@6.38.3)
+    transitivePeerDependencies:
+      - '@codemirror/language'
+      - '@codemirror/state'
+      - '@codemirror/view'
+
   '@uiw/codemirror-theme-github@4.23.6(@codemirror/language@6.10.6)(@codemirror/state@6.5.0)(@codemirror/view@6.35.2)':
     dependencies:
       '@uiw/codemirror-themes': 4.23.6(@codemirror/language@6.10.6)(@codemirror/state@6.5.0)(@codemirror/view@6.35.2)
+    transitivePeerDependencies:
+      - '@codemirror/language'
+      - '@codemirror/state'
+      - '@codemirror/view'
+
+  '@uiw/codemirror-theme-xcode@4.23.5(@codemirror/language@6.11.3)(@codemirror/state@6.5.0)(@codemirror/view@6.38.3)':
+    dependencies:
+      '@uiw/codemirror-themes': 4.23.5(@codemirror/language@6.11.3)(@codemirror/state@6.5.0)(@codemirror/view@6.38.3)
     transitivePeerDependencies:
       - '@codemirror/language'
       - '@codemirror/state'
@@ -22494,11 +22664,34 @@ snapshots:
       - '@codemirror/state'
       - '@codemirror/view'
 
+  '@uiw/codemirror-themes@4.23.5(@codemirror/language@6.11.3)(@codemirror/state@6.5.0)(@codemirror/view@6.38.3)':
+    dependencies:
+      '@codemirror/language': 6.11.3
+      '@codemirror/state': 6.5.0
+      '@codemirror/view': 6.38.3
+
   '@uiw/codemirror-themes@4.23.6(@codemirror/language@6.10.6)(@codemirror/state@6.5.0)(@codemirror/view@6.35.2)':
     dependencies:
       '@codemirror/language': 6.10.6
       '@codemirror/state': 6.5.0
       '@codemirror/view': 6.35.2
+
+  '@uiw/react-codemirror@4.23.5(@babel/runtime@7.28.4)(@codemirror/autocomplete@6.18.3(@codemirror/language@6.11.3)(@codemirror/state@6.5.0)(@codemirror/view@6.38.3)(@lezer/common@1.2.3))(@codemirror/language@6.11.3)(@codemirror/lint@6.8.4)(@codemirror/search@6.5.8)(@codemirror/state@6.5.0)(@codemirror/theme-one-dark@6.1.2)(@codemirror/view@6.38.3)(codemirror@6.0.1(@lezer/common@1.2.3))(react-dom@19.2.0(react@19.2.0))(react@19.2.0)':
+    dependencies:
+      '@babel/runtime': 7.28.4
+      '@codemirror/commands': 6.7.1
+      '@codemirror/state': 6.5.0
+      '@codemirror/theme-one-dark': 6.1.2
+      '@codemirror/view': 6.38.3
+      '@uiw/codemirror-extensions-basic-setup': 4.23.5(@codemirror/autocomplete@6.18.3(@codemirror/language@6.11.3)(@codemirror/state@6.5.0)(@codemirror/view@6.38.3)(@lezer/common@1.2.3))(@codemirror/commands@6.7.1)(@codemirror/language@6.11.3)(@codemirror/lint@6.8.4)(@codemirror/search@6.5.8)(@codemirror/state@6.5.0)(@codemirror/view@6.38.3)
+      codemirror: 6.0.1(@lezer/common@1.2.3)
+      react: 19.2.0
+      react-dom: 19.2.0(react@19.2.0)
+    transitivePeerDependencies:
+      - '@codemirror/autocomplete'
+      - '@codemirror/language'
+      - '@codemirror/lint'
+      - '@codemirror/search'
 
   '@uiw/react-codemirror@4.23.6(@babel/runtime@7.28.4)(@codemirror/autocomplete@6.18.3(@codemirror/language@6.10.6)(@codemirror/state@6.5.0)(@codemirror/view@6.35.2)(@lezer/common@1.2.3))(@codemirror/language@6.10.6)(@codemirror/lint@6.8.4)(@codemirror/search@6.5.8)(@codemirror/state@6.5.0)(@codemirror/theme-one-dark@6.1.2)(@codemirror/view@6.35.2)(codemirror@6.0.1(@lezer/common@1.2.3))(react-dom@19.0.0(react@19.0.0))(react@19.0.0)':
     dependencies:
@@ -24036,10 +24229,10 @@ snapshots:
 
   dayjs@1.11.13: {}
 
-  db0@0.3.4(@electric-sql/pglite@0.2.17)(drizzle-orm@0.39.3(@electric-sql/pglite@0.2.17)(@types/pg@8.15.4)(kysely@0.28.7)(pg@8.16.3)(postgres@3.4.7)):
+  db0@0.3.4(@electric-sql/pglite@0.4.4)(drizzle-orm@0.39.3(@electric-sql/pglite@0.4.4)(@types/pg@8.15.4)(kysely@0.28.7)(pg@8.16.3)(postgres@3.4.7)):
     optionalDependencies:
-      '@electric-sql/pglite': 0.2.17
-      drizzle-orm: 0.39.3(@electric-sql/pglite@0.2.17)(@types/pg@8.15.4)(kysely@0.28.7)(pg@8.16.3)(postgres@3.4.7)
+      '@electric-sql/pglite': 0.4.4
+      drizzle-orm: 0.39.3(@electric-sql/pglite@0.4.4)(@types/pg@8.15.4)(kysely@0.28.7)(pg@8.16.3)(postgres@3.4.7)
 
   debug@2.6.9:
     dependencies:
@@ -24244,31 +24437,31 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  drizzle-orm@0.39.3(@electric-sql/pglite@0.2.17)(@types/pg@8.15.4)(kysely@0.28.7)(pg@8.16.3)(postgres@3.4.7):
+  drizzle-orm@0.39.3(@electric-sql/pglite@0.4.4)(@types/pg@8.15.4)(kysely@0.28.7)(pg@8.16.3)(postgres@3.4.7):
     optionalDependencies:
-      '@electric-sql/pglite': 0.2.17
+      '@electric-sql/pglite': 0.4.4
       '@types/pg': 8.15.4
       kysely: 0.28.7
       pg: 8.16.3
       postgres: 3.4.7
 
-  drizzle-orm@0.44.3(@electric-sql/pglite@0.2.17)(@types/pg@8.15.4)(gel@2.2.0)(kysely@0.28.7)(pg@8.16.3)(postgres@3.4.7):
+  drizzle-orm@0.44.3(@electric-sql/pglite@0.4.4)(@types/pg@8.15.4)(gel@2.2.0)(kysely@0.28.7)(pg@8.16.3)(postgres@3.4.7):
     optionalDependencies:
-      '@electric-sql/pglite': 0.2.17
+      '@electric-sql/pglite': 0.4.4
       '@types/pg': 8.15.4
       gel: 2.2.0
       kysely: 0.28.7
       pg: 8.16.3
       postgres: 3.4.7
 
-  drizzle-zod@0.7.1(drizzle-orm@0.39.3(@electric-sql/pglite@0.2.17)(@types/pg@8.15.4)(kysely@0.28.7)(pg@8.16.3)(postgres@3.4.7))(zod@4.1.11):
+  drizzle-zod@0.7.1(drizzle-orm@0.39.3(@electric-sql/pglite@0.4.4)(@types/pg@8.15.4)(kysely@0.28.7)(pg@8.16.3)(postgres@3.4.7))(zod@4.1.11):
     dependencies:
-      drizzle-orm: 0.39.3(@electric-sql/pglite@0.2.17)(@types/pg@8.15.4)(kysely@0.28.7)(pg@8.16.3)(postgres@3.4.7)
+      drizzle-orm: 0.39.3(@electric-sql/pglite@0.4.4)(@types/pg@8.15.4)(kysely@0.28.7)(pg@8.16.3)(postgres@3.4.7)
       zod: 4.1.11
 
-  drizzle-zod@0.8.2(drizzle-orm@0.44.3(@electric-sql/pglite@0.2.17)(@types/pg@8.15.4)(gel@2.2.0)(kysely@0.28.7)(pg@8.16.3)(postgres@3.4.7))(zod@4.0.10):
+  drizzle-zod@0.8.2(drizzle-orm@0.44.3(@electric-sql/pglite@0.4.4)(@types/pg@8.15.4)(gel@2.2.0)(kysely@0.28.7)(pg@8.16.3)(postgres@3.4.7))(zod@4.0.10):
     dependencies:
-      drizzle-orm: 0.44.3(@electric-sql/pglite@0.2.17)(@types/pg@8.15.4)(gel@2.2.0)(kysely@0.28.7)(pg@8.16.3)(postgres@3.4.7)
+      drizzle-orm: 0.44.3(@electric-sql/pglite@0.4.4)(@types/pg@8.15.4)(gel@2.2.0)(kysely@0.28.7)(pg@8.16.3)(postgres@3.4.7)
       zod: 4.0.10
 
   dunder-proto@1.0.1:
@@ -28063,11 +28256,11 @@ snapshots:
 
   nf3@0.1.12: {}
 
-  nitro@3.0.1-alpha.1(@electric-sql/pglite@0.2.17)(aws4fetch@1.0.20)(chokidar@4.0.1)(drizzle-orm@0.39.3(@electric-sql/pglite@0.2.17)(@types/pg@8.15.4)(kysely@0.28.7)(pg@8.16.3)(postgres@3.4.7))(lru-cache@11.2.2)(rollup@4.46.1)(vite@7.1.7(@types/node@22.19.1)(jiti@2.6.1)(lightningcss@1.30.1)(terser@5.44.0)(tsx@4.20.3)(yaml@2.8.1))(xml2js@0.6.2):
+  nitro@3.0.1-alpha.1(@electric-sql/pglite@0.4.4)(aws4fetch@1.0.20)(chokidar@4.0.1)(drizzle-orm@0.39.3(@electric-sql/pglite@0.4.4)(@types/pg@8.15.4)(kysely@0.28.7)(pg@8.16.3)(postgres@3.4.7))(lru-cache@11.2.2)(rollup@4.46.1)(vite@7.1.7(@types/node@22.19.1)(jiti@2.6.1)(lightningcss@1.30.1)(terser@5.44.0)(tsx@4.20.3)(yaml@2.8.1))(xml2js@0.6.2):
     dependencies:
       consola: 3.4.2
       crossws: 0.4.3(srvx@0.9.8)
-      db0: 0.3.4(@electric-sql/pglite@0.2.17)(drizzle-orm@0.39.3(@electric-sql/pglite@0.2.17)(@types/pg@8.15.4)(kysely@0.28.7)(pg@8.16.3)(postgres@3.4.7))
+      db0: 0.3.4(@electric-sql/pglite@0.4.4)(drizzle-orm@0.39.3(@electric-sql/pglite@0.4.4)(@types/pg@8.15.4)(kysely@0.28.7)(pg@8.16.3)(postgres@3.4.7))
       h3: 2.0.1-rc.5(crossws@0.4.3(srvx@0.9.8))
       jiti: 2.6.1
       nf3: 0.1.12
@@ -28078,7 +28271,7 @@ snapshots:
       srvx: 0.9.8
       undici: 7.19.0
       unenv: 2.0.0-rc.24
-      unstorage: 2.0.0-alpha.5(aws4fetch@1.0.20)(chokidar@4.0.1)(db0@0.3.4(@electric-sql/pglite@0.2.17)(drizzle-orm@0.39.3(@electric-sql/pglite@0.2.17)(@types/pg@8.15.4)(kysely@0.28.7)(pg@8.16.3)(postgres@3.4.7)))(lru-cache@11.2.2)(ofetch@2.0.0-alpha.3)
+      unstorage: 2.0.0-alpha.5(aws4fetch@1.0.20)(chokidar@4.0.1)(db0@0.3.4(@electric-sql/pglite@0.4.4)(drizzle-orm@0.39.3(@electric-sql/pglite@0.4.4)(@types/pg@8.15.4)(kysely@0.28.7)(pg@8.16.3)(postgres@3.4.7)))(lru-cache@11.2.2)(ofetch@2.0.0-alpha.3)
     optionalDependencies:
       rollup: 4.46.1
       vite: 7.1.7(@types/node@22.19.1)(jiti@2.6.1)(lightningcss@1.30.1)(terser@5.44.0)(tsx@4.20.3)(yaml@2.8.1)
@@ -31262,11 +31455,11 @@ snapshots:
       picomatch: 4.0.3
       webpack-virtual-modules: 0.6.2
 
-  unstorage@2.0.0-alpha.5(aws4fetch@1.0.20)(chokidar@4.0.1)(db0@0.3.4(@electric-sql/pglite@0.2.17)(drizzle-orm@0.39.3(@electric-sql/pglite@0.2.17)(@types/pg@8.15.4)(kysely@0.28.7)(pg@8.16.3)(postgres@3.4.7)))(lru-cache@11.2.2)(ofetch@2.0.0-alpha.3):
+  unstorage@2.0.0-alpha.5(aws4fetch@1.0.20)(chokidar@4.0.1)(db0@0.3.4(@electric-sql/pglite@0.4.4)(drizzle-orm@0.39.3(@electric-sql/pglite@0.4.4)(@types/pg@8.15.4)(kysely@0.28.7)(pg@8.16.3)(postgres@3.4.7)))(lru-cache@11.2.2)(ofetch@2.0.0-alpha.3):
     optionalDependencies:
       aws4fetch: 1.0.20
       chokidar: 4.0.1
-      db0: 0.3.4(@electric-sql/pglite@0.2.17)(drizzle-orm@0.39.3(@electric-sql/pglite@0.2.17)(@types/pg@8.15.4)(kysely@0.28.7)(pg@8.16.3)(postgres@3.4.7))
+      db0: 0.3.4(@electric-sql/pglite@0.4.4)(drizzle-orm@0.39.3(@electric-sql/pglite@0.4.4)(@types/pg@8.15.4)(kysely@0.28.7)(pg@8.16.3)(postgres@3.4.7))
       lru-cache: 11.2.2
       ofetch: 2.0.0-alpha.3
 
