@@ -4,6 +4,12 @@ import { ElectricAgentsServer } from '../src/server'
 import { TEST_POSTGRES_URL } from './test-backend'
 
 const {
+  mockAgentHandlerMock,
+  mockAgentRegisterTypesMock,
+  mockAgentAbortWakesMock,
+  mockAgentDrainWakesMock,
+  createEntityRegistryMock,
+  createRuntimeHandlerMock,
   schedulerCancelManifestDelayedSendMock,
   schedulerEnqueueCronTickMock,
   schedulerSyncManifestDelayedSendMock,
@@ -23,6 +29,12 @@ const {
   streamExistsMock,
   streamReadJsonMock,
 } = vi.hoisted(() => ({
+  mockAgentHandlerMock: vi.fn(),
+  mockAgentRegisterTypesMock: vi.fn(),
+  mockAgentAbortWakesMock: vi.fn(),
+  mockAgentDrainWakesMock: vi.fn(),
+  createEntityRegistryMock: vi.fn(),
+  createRuntimeHandlerMock: vi.fn(),
   schedulerCancelManifestDelayedSendMock: vi.fn(),
   schedulerEnqueueCronTickMock: vi.fn(),
   schedulerSyncManifestDelayedSendMock: vi.fn(),
@@ -42,6 +54,16 @@ const {
   streamExistsMock: vi.fn(),
   streamReadJsonMock: vi.fn(),
 }))
+
+vi.mock(`@electric-ax/agent-runtime`, async (importOriginal) => {
+  const actual = await importOriginal<any>()
+
+  return {
+    ...actual,
+    createEntityRegistry: createEntityRegistryMock,
+    createRuntimeHandler: createRuntimeHandlerMock,
+  }
+})
 
 vi.mock(`node:http`, async (importOriginal) => {
   const actual = await importOriginal<any>()
@@ -189,6 +211,12 @@ describe(`ElectricAgentsServer.start`, () => {
     streamExistsMock.mockReset()
     streamReadJsonMock.mockReset()
     runMigrationsMock.mockReset()
+    mockAgentHandlerMock.mockReset()
+    mockAgentRegisterTypesMock.mockReset()
+    mockAgentAbortWakesMock.mockReset()
+    mockAgentDrainWakesMock.mockReset()
+    createEntityRegistryMock.mockReset()
+    createRuntimeHandlerMock.mockReset()
 
     runMigrationsMock.mockResolvedValue(undefined)
     schedulerCancelManifestDelayedSendMock.mockResolvedValue(undefined)
@@ -214,6 +242,17 @@ describe(`ElectricAgentsServer.start`, () => {
     streamCreateMock.mockResolvedValue(undefined)
     streamExistsMock.mockResolvedValue(true)
     streamReadJsonMock.mockResolvedValue([])
+    mockAgentRegisterTypesMock.mockResolvedValue(undefined)
+    mockAgentDrainWakesMock.mockResolvedValue(undefined)
+    createEntityRegistryMock.mockReturnValue({
+      define: vi.fn(),
+    })
+    createRuntimeHandlerMock.mockReturnValue({
+      onEnter: mockAgentHandlerMock,
+      registerTypes: mockAgentRegisterTypesMock,
+      abortWakes: mockAgentAbortWakesMock,
+      drainWakes: mockAgentDrainWakesMock,
+    })
   })
 
   afterEach(async () => {
@@ -310,5 +349,27 @@ describe(`ElectricAgentsServer.start`, () => {
       }),
       new Date(`2026-04-10T02:30:00.000Z`)
     )
+  })
+
+  it(`registers the mock chat agent when mockStreamFn is provided`, async () => {
+    const streamFn = vi.fn()
+
+    server = new ElectricAgentsServer({
+      durableStreamsUrl: `http://durable.test`,
+      mockStreamFn: streamFn as any,
+      port: 0,
+      postgresUrl: TEST_POSTGRES_URL,
+    })
+
+    await expect(server.start()).resolves.toMatch(/^http:\/\//)
+    expect(createEntityRegistryMock).toHaveBeenCalledOnce()
+    expect(createRuntimeHandlerMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        baseUrl: `http://127.0.0.1:4437`,
+        serveEndpoint: `http://127.0.0.1:4437/_electric/mock-agent-handler`,
+        subscriptionPathForType: expect.any(Function),
+      })
+    )
+    expect(mockAgentRegisterTypesMock).toHaveBeenCalledOnce()
   })
 })
