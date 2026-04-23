@@ -163,11 +163,18 @@ function simplifyPolyline(points: MeshPoint[]): MeshPoint[] {
     const prev = out[out.length - 1]
     const cur = points[i]
     const next = points[i + 1]
-    const dx1 = Math.sign(cur.x - prev.x)
-    const dy1 = Math.sign(cur.y - prev.y)
-    const dx2 = Math.sign(next.x - cur.x)
-    const dy2 = Math.sign(next.y - cur.y)
-    if (dx1 === dx2 && dy1 === dy2) continue
+    // Drop `cur` only when prev/cur/next are EXACTLY collinear and going in
+    // the same direction (no backtrack). The previous sign-only check would
+    // collapse a near-horizontal sequence like (573,240)→(601,243)→(633,245)
+    // into a single slanted segment, even though intermediate vertices
+    // represent real direction changes.
+    const ax = cur.x - prev.x
+    const ay = cur.y - prev.y
+    const bx = next.x - cur.x
+    const by = next.y - cur.y
+    const cross = ax * by - ay * bx
+    const dot = ax * bx + ay * by
+    if (Math.abs(cross) < 0.001 && dot >= 0) continue
     out.push(cur)
   }
   out.push(points[points.length - 1])
@@ -935,6 +942,9 @@ export function createMeshScene(options: MeshSceneOptions): MeshScene {
     )
   }
 
+  // Every wheel pair is a candidate corridor; the placement loop below
+  // saturates the canvas by trying each pair repeatedly until conflict
+  // detection refuses any more bundles.
   const edges: CandidateEdge[] = []
   for (let i = 0; i < wheels.length; i++) {
     for (let j = i + 1; j < wheels.length; j++) {
@@ -942,57 +952,6 @@ export function createMeshScene(options: MeshSceneOptions): MeshScene {
     }
   }
   edges.sort((a, b) => a.distance - b.distance)
-
-  const chosenKeys = new Set<string>()
-  const chosenEdges: CandidateEdge[] = []
-
-  const minNeighbors = clamp(
-    6 + Math.round(connectionDensity * 6),
-    6,
-    Math.max(6, Math.min(12, wheels.length - 1))
-  )
-
-  function addEdge(a: number, b: number) {
-    const key = uniquePairKey(a, b)
-    if (chosenKeys.has(key)) return
-    chosenKeys.add(key)
-    chosenEdges.push({ a, b, distance: distance(wheels[a], wheels[b]) })
-  }
-
-  for (let i = 0; i < wheels.length; i++) {
-    const neighbors = edges
-      .filter((edge) => edge.a === i || edge.b === i)
-      .map((edge) => (edge.a === i ? edge.b : edge.a))
-      .sort(
-        (a, b) =>
-          distance(wheels[i], wheels[a]) - distance(wheels[i], wheels[b])
-      )
-
-    const directional = {
-      left: -1,
-      right: -1,
-      up: -1,
-      down: -1,
-    }
-    for (const other of neighbors) {
-      const dx = wheels[other].x - wheels[i].x
-      const dy = wheels[other].y - wheels[i].y
-      if (dx < 0 && directional.left === -1) directional.left = other
-      if (dx > 0 && directional.right === -1) directional.right = other
-      if (dy < 0 && directional.up === -1) directional.up = other
-      if (dy > 0 && directional.down === -1) directional.down = other
-    }
-    for (const other of Object.values(directional)) {
-      if (other >= 0) addEdge(i, other)
-    }
-    for (const other of neighbors.slice(0, minNeighbors)) {
-      addEdge(i, other)
-    }
-    const midReach = neighbors[Math.floor(neighbors.length * 0.66)]
-    const farReach = neighbors[neighbors.length - 1]
-    if (midReach !== undefined) addEdge(i, midReach)
-    if (farReach !== undefined) addEdge(i, farReach)
-  }
 
   function snapCoord(value: number): number {
     return nearestGrid(value, grid)
@@ -1003,11 +962,35 @@ export function createMeshScene(options: MeshSceneOptions): MeshScene {
     endGuide: MeshPoint
   ): MeshPoint[][] {
     const candidates: MeshPoint[][] = []
-    if (
-      Math.abs(startGuide.x - endGuide.x) < 0.5 ||
-      Math.abs(startGuide.y - endGuide.y) < 0.5
-    ) {
-      candidates.push([startGuide, endGuide])
+    // No bare [startGuide, endGuide] shortcut: when guides are only NEARLY
+    // axis-aligned, that 2-point candidate (wrapped with wheel-edge points
+    // that lie on the line of sight between wheel centers) becomes fully
+    // collinear and collapses to a slanted 2-point segment — visually a
+    // diagonal track running through the wheel-axis. The HVH/VHV variants
+    // below collapse cleanly to a true 2-point straight line when guides
+    // ARE axis-aligned, so we don't lose anything in that case.
+    //
+    // For nearly-aligned wheel pairs we DO want a clean straight track,
+    // though: emit a 2-point candidate at the AVERAGED Y (or X) so the
+    // resulting polyline is truly horizontal (or vertical). Lane
+    // construction's lineCircleEntry then finds the wheel-edge entry along
+    // that axis-aligned direction, producing a clean stripe rather than a
+    // slanted line of sight.
+    const guideDx = endGuide.x - startGuide.x
+    const guideDy = endGuide.y - startGuide.y
+    if (Math.abs(guideDy) < grid * 0.5 && Math.abs(guideDx) > grid * 1.5) {
+      const y = (startGuide.y + endGuide.y) / 2
+      candidates.push([
+        { x: startGuide.x, y },
+        { x: endGuide.x, y },
+      ])
+    }
+    if (Math.abs(guideDx) < grid * 0.5 && Math.abs(guideDy) > grid * 1.5) {
+      const x = (startGuide.x + endGuide.x) / 2
+      candidates.push([
+        { x, y: startGuide.y },
+        { x, y: endGuide.y },
+      ])
     }
     candidates.push([startGuide, { x: endGuide.x, y: startGuide.y }, endGuide])
     candidates.push([startGuide, { x: startGuide.x, y: endGuide.y }, endGuide])
@@ -1182,6 +1165,59 @@ export function createMeshScene(options: MeshSceneOptions): MeshScene {
     )
   }
 
+  // Local-only variant of makeRouteCandidates used as a last-resort fallback
+  // for very close wheel pairs whose normal guides would produce U-turns or
+  // sub-grid segments. Emits ONLY routes whose interior points sit within (or
+  // very near) the bounding box of start/end — no boundary detours, no pan
+  // shapes — so the resulting tracks are short HVH/VHV dog-legs rather than
+  // visually jarring loops out to the canvas edge.
+  function makeLocalRouteCandidates(
+    startGuide: MeshPoint,
+    endGuide: MeshPoint
+  ): MeshPoint[][] {
+    const candidates: MeshPoint[][] = []
+    // Nearly-axis-aligned wheel pair: emit a clean straight track at the
+    // averaged Y (or X). Wrapping with line-of-sight wheel-edge points would
+    // give a slanted path; the lane construction's lineCircleEntry instead
+    // computes the wheel-edge entry along this 2-point candidate's direction,
+    // producing a true axis-aligned stripe.
+    const dx = endGuide.x - startGuide.x
+    const dy = endGuide.y - startGuide.y
+    if (Math.abs(dy) < grid * 0.5 && Math.abs(dx) > grid * 1.5) {
+      const y = (startGuide.y + endGuide.y) / 2
+      candidates.push([
+        { x: startGuide.x, y },
+        { x: endGuide.x, y },
+      ])
+    }
+    if (Math.abs(dx) < grid * 0.5 && Math.abs(dy) > grid * 1.5) {
+      const x = (startGuide.x + endGuide.x) / 2
+      candidates.push([
+        { x, y: startGuide.y },
+        { x, y: endGuide.y },
+      ])
+    }
+    candidates.push([startGuide, { x: endGuide.x, y: startGuide.y }, endGuide])
+    candidates.push([startGuide, { x: startGuide.x, y: endGuide.y }, endGuide])
+    const midX = snapCoord((startGuide.x + endGuide.x) / 2)
+    const midY = snapCoord((startGuide.y + endGuide.y) / 2)
+    candidates.push([
+      startGuide,
+      { x: midX, y: startGuide.y },
+      { x: midX, y: endGuide.y },
+      endGuide,
+    ])
+    candidates.push([
+      startGuide,
+      { x: startGuide.x, y: midY },
+      { x: endGuide.x, y: midY },
+      endGuide,
+    ])
+    return candidates.map((points) =>
+      normalizePolyline(simplifyPolyline(points))
+    )
+  }
+
   function validateTrackPoints(
     points: MeshPoint[],
     fromWheel: MeshWheel,
@@ -1239,10 +1275,72 @@ export function createMeshScene(options: MeshSceneOptions): MeshScene {
     const centerEndGuide = anglePoint(toWheel, endAngle, guideOffset(0))
     const centerEndPoint = anglePoint(toWheel, endAngle, 0)
 
-    const routeCandidates = makeRouteCandidates(
-      centerStartGuide,
-      centerEndGuide
-    )
+    // For very close wheel pairs the offset guides either cross past each
+    // other (forcing a U-turn) or sit too close together to fit any HVH
+    // detour without sub-grid segments. In those cases we route between the
+    // wheel-edge points directly using a SMALL set of LOCAL HVH/VHV variants
+    // (no canvas-boundary detours, no pan shapes). The full makeRouteCandidates
+    // output would happily synthesise a U-shape that runs all the way up to
+    // the canvas edge for a pair of adjacent wheels — visually awful and not
+    // the intent of the fallback, which is just "find the shortest sensible
+    // PCB route between these two close edges".
+    const guideAxis = {
+      x: centerEndGuide.x - centerStartGuide.x,
+      y: centerEndGuide.y - centerStartGuide.y,
+    }
+    const wheelAxis = {
+      x: toWheel.x - fromWheel.x,
+      y: toWheel.y - fromWheel.y,
+    }
+    const guidesCrossed =
+      guideAxis.x * wheelAxis.x + guideAxis.y * wheelAxis.y <= 0
+    const guideSeparation = Math.hypot(guideAxis.x, guideAxis.y)
+    const segmentFloorEstimate = Math.max(grid * 0.45, cornerRadius + 2)
+    const guidesTooClose = guideSeparation < segmentFloorEstimate * 1.5
+    const rawCandidates: MeshPoint[][] = [
+      ...makeRouteCandidates(centerStartGuide, centerEndGuide),
+    ]
+    if (guidesCrossed || guidesTooClose) {
+      rawCandidates.push(
+        ...makeLocalRouteCandidates(centerStartPoint, centerEndPoint)
+      )
+    }
+    // For validation we need wheel-edge entry/exit points along the actual
+    // CORE direction (matching what the lane will do via lineCircleEntry),
+    // not along the line-of-sight from wheel-to-wheel. Without this, a
+    // nearly-axis-aligned core that the lane would render as a clean
+    // horizontal stripe gets validated as a slanted polyline (the
+    // line-of-sight wheel-edge points sit at slightly different Y values),
+    // and either (a) gets falsely rejected for a sub-grid kink, or (b) gets
+    // collapsed by simplifyPolyline into a single off-axis 2-point segment.
+    function entryAlongCoreDir(
+      coreFirst: MeshPoint,
+      coreSecond: MeshPoint,
+      wheel: MeshWheel
+    ): MeshPoint {
+      const dx = coreSecond.x - coreFirst.x
+      const dy = coreSecond.y - coreFirst.y
+      const len = Math.hypot(dx, dy)
+      if (len < 0.0001) return coreFirst
+      const dir = { x: dx / len, y: dy / len }
+      const wx = coreFirst.x - wheel.x
+      const wy = coreFirst.y - wheel.y
+      const b = 2 * (wx * dir.x + wy * dir.y)
+      const c = wx * wx + wy * wy - wheel.r * wheel.r
+      const disc = b * b - 4 * c
+      if (disc < 0) return coreFirst
+      const sq = Math.sqrt(disc)
+      const t1 = (-b - sq) / 2
+      const t2 = (-b + sq) / 2
+      // Pick the intersection closest to coreFirst. This covers all three
+      // configurations: coreFirst outside the wheel (both t negative, want
+      // closer-to-c0 = least negative), coreFirst exactly on the circle
+      // (one t≈0, want that one), and coreFirst on the far side (both t
+      // positive, want least positive).
+      const t = Math.abs(t1) < Math.abs(t2) ? t1 : t2
+      return { x: coreFirst.x + t * dir.x, y: coreFirst.y + t * dir.y }
+    }
+    const routeCandidates = rawCandidates
       .map((rawCore) => {
         // Chamfer small Z-shapes (lateral shifts) into 45° diagonals so we get
         // a cleaner stretched corner rather than two 90° corners and a short
@@ -1251,11 +1349,19 @@ export function createMeshScene(options: MeshSceneOptions): MeshScene {
           rawCore,
           Math.max(grid * 0.9, laneSpacing * 2.4)
         )
-        const full = normalizePolyline([
-          centerStartPoint,
-          ...core,
-          centerEndPoint,
-        ])
+        const startEntry =
+          core.length >= 2
+            ? entryAlongCoreDir(core[0], core[1], fromWheel)
+            : centerStartPoint
+        const endEntry =
+          core.length >= 2
+            ? entryAlongCoreDir(
+                core[core.length - 1],
+                core[core.length - 2],
+                toWheel
+              )
+            : centerEndPoint
+        const full = normalizePolyline([startEntry, ...core, endEntry])
         const coverageScore =
           acceptedTrackPointSets.length === 0
             ? 0
@@ -1305,9 +1411,11 @@ export function createMeshScene(options: MeshSceneOptions): MeshScene {
       const endU = { x: -endSegDx / endSegLen, y: -endSegDy / endSegLen }
 
       // Find the point on the line through `point` in direction `dir` that
-      // lies on the circle around `wheel` of radius wheel.r and is on the
-      // -dir side of `point` (i.e., closer to the wheel along the parallel
-      // line we just constructed).
+      // lies on the circle around `wheel`. Returns the intersection closest
+      // to `point` so we don't accidentally cross the wheel and emerge on the
+      // far side (which used to happen when `point` was already on or inside
+      // the circle and the previous "always pick negative t" rule selected
+      // the t = -2r intersection).
       function lineCircleEntry(
         point: MeshPoint,
         dir: { x: number; y: number },
@@ -1322,15 +1430,7 @@ export function createMeshScene(options: MeshSceneOptions): MeshScene {
         const sq = Math.sqrt(disc)
         const t1 = (-b - sq) / 2
         const t2 = (-b + sq) / 2
-        // We want the negative-t intersection (walk back toward wheel from c0).
-        const t =
-          t1 < 0 && t2 < 0
-            ? Math.max(t1, t2)
-            : t1 < 0
-              ? t1
-              : t2 < 0
-                ? t2
-                : Math.min(t1, t2)
+        const t = Math.abs(t1) < Math.abs(t2) ? t1 : t2
         return { x: point.x + t * dir.x, y: point.y + t * dir.y }
       }
 
@@ -1587,56 +1687,118 @@ export function createMeshScene(options: MeshSceneOptions): MeshScene {
     return bestBundle && bestBundle.length >= 1 ? bestBundle : null
   }
 
-  for (let pass = 0; pass < 36; pass++) {
-    let placedInPass = 0
-    const orderedEdges = [...chosenEdges].sort((a, b) => {
-      const pairA = pairUsage.get(uniquePairKey(a.a, a.b)) ?? 0
-      const pairB = pairUsage.get(uniquePairKey(b.a, b.b)) ?? 0
-      const deficitA =
+  // Keep adding corridors until the canvas is saturated. The naive approach
+  // (sort once per pass, then try all edges) leaves outlying wheels orphaned:
+  // the closest pairs saturate first, and by the time we get round to a far
+  // wheel its routing space is already blocked by other bundles.
+  //
+  // Instead we run two phases:
+  //   1. CONNECT — guarantee every wheel gets at least minCorridorsPerWheel
+  //      connections, prioritising the most-under-connected pair on every
+  //      single placement (re-sort after each successful placement).
+  //   2. FILL — saturation loop that keeps stacking corridors until conflict
+  //      detection refuses any more bundles.
+  // tracksConflict in tryPlaceBundle prevents physical overlap, so the cap
+  // on corridors-per-pair just needs to be high enough not to gate fill.
+  const maxCorridorsPerPair = Math.max(8, wheels.length)
+
+  function placeBundleForEdge(edge: CandidateEdge): boolean {
+    const key = uniquePairKey(edge.a, edge.b)
+    const used = pairUsage.get(key) ?? 0
+    if (used >= maxCorridorsPerPair) return false
+    const acceptedBundle = tryPlaceBundle(edge)
+    if (!acceptedBundle) return false
+    for (const lane of acceptedBundle) {
+      const segments = buildRenderedPathSegments(
+        lane.points,
+        lane.corners,
+        cornerRadius
+      )
+      tracks.push({
+        id: `track-${tracks.length}`,
+        fromWheelId: wheels[edge.a].id,
+        toWheelId: wheels[edge.b].id,
+        points: lane.points,
+        corners: lane.corners,
+        segments,
+        length: renderedPathLength(segments),
+      })
+      acceptedTrackPointSets.push(lane.points)
+    }
+    pairUsage.set(key, used + 1)
+    wheelDegree[edge.a] += 1
+    wheelDegree[edge.b] += 1
+    return true
+  }
+
+  // Phase 1: connectivity. Re-sort after every placement so the most
+  // under-connected wheel is always next in line. The MAX deficit (rather
+  // than sum) keeps pairs containing a single isolated wheel at the top.
+  const maxConnectIterations = edges.length * (minCorridorsPerWheel + 2)
+  for (let iter = 0; iter < maxConnectIterations; iter++) {
+    const remaining = edges.filter(
+      (e) => (pairUsage.get(uniquePairKey(e.a, e.b)) ?? 0) < maxCorridorsPerPair
+    )
+    if (remaining.length === 0) break
+    remaining.sort((a, b) => {
+      const deficitA = Math.max(
+        Math.max(0, minCorridorsPerWheel - wheelDegree[a.a]),
+        Math.max(0, minCorridorsPerWheel - wheelDegree[a.b])
+      )
+      const deficitB = Math.max(
+        Math.max(0, minCorridorsPerWheel - wheelDegree[b.a]),
+        Math.max(0, minCorridorsPerWheel - wheelDegree[b.b])
+      )
+      if (deficitA !== deficitB) return deficitB - deficitA
+      const sumDefA =
         Math.max(0, minCorridorsPerWheel - wheelDegree[a.a]) +
         Math.max(0, minCorridorsPerWheel - wheelDegree[a.b])
-      const deficitB =
+      const sumDefB =
         Math.max(0, minCorridorsPerWheel - wheelDegree[b.a]) +
         Math.max(0, minCorridorsPerWheel - wheelDegree[b.b])
+      if (sumDefA !== sumDefB) return sumDefB - sumDefA
+      const pairA = pairUsage.get(uniquePairKey(a.a, a.b)) ?? 0
+      const pairB = pairUsage.get(uniquePairKey(b.a, b.b)) ?? 0
+      if (pairA !== pairB) return pairA - pairB
+      return a.distance - b.distance
+    })
+    // No wheel is under its target → connectivity goal met, exit phase 1.
+    const topDeficit = Math.max(
+      Math.max(0, minCorridorsPerWheel - wheelDegree[remaining[0].a]),
+      Math.max(0, minCorridorsPerWheel - wheelDegree[remaining[0].b])
+    )
+    if (topDeficit === 0) break
+    // Walk the sorted list and place the first edge that succeeds. This is
+    // important: a pair may fail because of conflicts, in which case we want
+    // to fall through to the next-most-deserving pair instead of giving up.
+    let placedAny = false
+    for (const edge of remaining) {
+      if (placeBundleForEdge(edge)) {
+        placedAny = true
+        break
+      }
+    }
+    if (!placedAny) break
+  }
+
+  // Phase 2: saturation fill. The connectivity phase already placed at least
+  // one corridor per wheel, so now we just keep stacking until tryPlaceBundle
+  // runs out of fitting routes.
+  const maxFillPasses = 120
+  for (let pass = 0; pass < maxFillPasses; pass++) {
+    let placedInPass = 0
+    const orderedEdges = [...edges].sort((a, b) => {
+      const pairA = pairUsage.get(uniquePairKey(a.a, a.b)) ?? 0
+      const pairB = pairUsage.get(uniquePairKey(b.a, b.b)) ?? 0
       const degreeA = wheelDegree[a.a] + wheelDegree[a.b]
       const degreeB = wheelDegree[b.a] + wheelDegree[b.b]
       if (pairA !== pairB) return pairA - pairB
-      if (deficitA !== deficitB) return deficitB - deficitA
       if (degreeA !== degreeB) return degreeA - degreeB
       return a.distance - b.distance
     })
-
     for (const edge of orderedEdges) {
-      const key = uniquePairKey(edge.a, edge.b)
-      const used = pairUsage.get(key) ?? 0
-      if (used >= 2) continue
-
-      const acceptedBundle = tryPlaceBundle(edge)
-      if (!acceptedBundle) continue
-
-      for (const lane of acceptedBundle) {
-        const segments = buildRenderedPathSegments(
-          lane.points,
-          lane.corners,
-          cornerRadius
-        )
-        tracks.push({
-          id: `track-${tracks.length}`,
-          fromWheelId: wheels[edge.a].id,
-          toWheelId: wheels[edge.b].id,
-          points: lane.points,
-          corners: lane.corners,
-          segments,
-          length: renderedPathLength(segments),
-        })
-        acceptedTrackPointSets.push(lane.points)
-      }
-      pairUsage.set(key, used + 1)
-      wheelDegree[edge.a] += 1
-      wheelDegree[edge.b] += 1
-      placedInPass += 1
+      if (placeBundleForEdge(edge)) placedInPass += 1
     }
-
     if (placedInPass === 0) break
   }
 
