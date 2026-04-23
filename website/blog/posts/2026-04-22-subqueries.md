@@ -45,12 +45,7 @@ Parameters (`$1`) are bound per client — the same shape definition serves diff
 
 When the underlying data changes — a membership added, a user removed — the sync engine re-evaluates and moves only the affected rows in or out. No full resync, no refetch.
 
-
-## Patterns
-
-### Ownership + sharing
-
-My files, plus files shared with me. Two paths to access in one shape.
+Subqueries can be combined with OR. My files, plus files shared with me — two paths to access in one shape:
 
 ```sql
 owner_id = $1
@@ -62,9 +57,7 @@ OR id IN (
 
 Direct ownership is a column filter. Sharing is a subquery. OR combines them. When a share is granted or revoked, only that document moves.
 
-### Project scoping
-
-Sync comments for a specific project, traversing through tasks and issues.
+Subqueries can also be nested. Sync comments for a specific project, traversing through tasks and issues:
 
 ```sql
 issue_id IN (
