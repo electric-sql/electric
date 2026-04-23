@@ -18,6 +18,7 @@ const AGENTS_COMMANDS = [
   `ps`,
   `kill`,
   `start`,
+  `start-builtin`,
   `stop`,
   `quickstart`,
   `completion`,
@@ -30,8 +31,9 @@ const COMMAND_FLAGS: Record<string, Array<string>> = {
   send: [`--type`, `--json`],
   observe: [`--from`],
   ps: [`--type`, `--status`, `--parent`],
-  start: [`--anthropic-api-key`],
+  'start-builtin': [`--anthropic-api-key`],
   stop: [`--remove-volumes`],
+  quickstart: [`--anthropic-api-key`],
 }
 
 const FETCH_TIMEOUT_MS = 2000

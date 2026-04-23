@@ -251,7 +251,7 @@ Main methods:
 
 ## Built-in agents
 
-The previous `registerChatAgent` / `registerResearcherAgent` / `registerCoderAgent` / `registerOracleAgent` helpers have been removed. Built-in agents now live in `@electric-ax/agent-server` (Horton + worker). To register them in your own runtime, use `createAgentHandler` from `@electric-ax/agent-server`.
+The previous `registerChatAgent` / `registerResearcherAgent` / `registerCoderAgent` / `registerOracleAgent` helpers have been removed. Built-in agents now live in `@electric-ax/builtin-agents` (Horton + worker). To register them in your own runtime, use `createBuiltinAgentHandler` from `@electric-ax/builtin-agents`.
 
 ## Timeline Helpers
 

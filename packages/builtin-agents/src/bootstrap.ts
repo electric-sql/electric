@@ -6,7 +6,7 @@ import {
   createEntityRegistry,
   createRuntimeHandler,
 } from '@electric-ax/agent-runtime'
-import { serverLog } from '../log'
+import { serverLog } from './log'
 import { registerHorton } from './agents/horton'
 import { registerWorker } from './agents/worker'
 import type {
@@ -19,6 +19,8 @@ import type { ChangeEvent } from '@durable-streams/state'
 import type { StreamFn } from '@mariozechner/pi-agent-core'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 
+export const DEFAULT_BUILTIN_AGENT_HANDLER_PATH = `/_electric/builtin-agent-handler`
+
 export interface AgentHandlerResult {
   handler: (req: IncomingMessage, res: ServerResponse) => Promise<void>
   runtime: RuntimeHandler
@@ -26,10 +28,11 @@ export interface AgentHandlerResult {
   typeNames: Array<string>
 }
 
-export function createAgentHandler(
-  baseUrl: string,
-  workingDirectory?: string,
-  streamFn?: StreamFn,
+export interface BuiltinAgentHandlerOptions {
+  agentServerUrl: string
+  serveEndpoint?: string
+  workingDirectory?: string
+  streamFn?: StreamFn
   createElectricTools?: (context: {
     entityUrl: string
     entityType: string
@@ -54,10 +57,22 @@ export function createAgentHandler(
     }) => Promise<{ txid: string }>
     deleteSchedule: (opts: { id: string }) => Promise<{ txid: string }>
   }) => Array<AgentTool> | Promise<Array<AgentTool>>
+}
+
+export function createBuiltinAgentHandler(
+  options: BuiltinAgentHandlerOptions
 ): AgentHandlerResult | null {
+  const {
+    agentServerUrl,
+    serveEndpoint = `${agentServerUrl}${DEFAULT_BUILTIN_AGENT_HANDLER_PATH}`,
+    workingDirectory,
+    streamFn,
+    createElectricTools,
+  } = options
+
   if (!streamFn && !process.env.ANTHROPIC_API_KEY) {
     serverLog.warn(
-      `[agent-server] ANTHROPIC_API_KEY not set — skipping built-in agent registration`
+      `[builtin-agents] ANTHROPIC_API_KEY not set — skipping built-in agent registration`
     )
     return null
   }
@@ -73,8 +88,8 @@ export function createAgentHandler(
   typeNames.push(`worker`)
 
   const runtime = createRuntimeHandler({
-    baseUrl,
-    serveEndpoint: `${baseUrl}/_electric/agent-handler`,
+    baseUrl: agentServerUrl,
+    serveEndpoint,
     registry,
     subscriptionPathForType: (name) => `/${name}/*/main`,
     idleTimeout: 5_000,
@@ -89,12 +104,30 @@ export function createAgentHandler(
   }
 }
 
-export async function registerAgentTypes(
+export function createAgentHandler(
+  agentServerUrl: string,
+  workingDirectory?: string,
+  streamFn?: StreamFn,
+  createElectricTools?: BuiltinAgentHandlerOptions[`createElectricTools`],
+  serveEndpoint?: string
+): AgentHandlerResult | null {
+  return createBuiltinAgentHandler({
+    agentServerUrl,
+    serveEndpoint,
+    workingDirectory,
+    streamFn,
+    createElectricTools,
+  })
+}
+
+export async function registerBuiltinAgentTypes(
   bootstrap: AgentHandlerResult
 ): Promise<void> {
   await bootstrap.runtime.registerTypes()
 
   serverLog.info(
-    `[agent-server] ${bootstrap.typeNames.length} built-in agent types ready: ${bootstrap.typeNames.join(`, `)}`
+    `[builtin-agents] ${bootstrap.typeNames.length} built-in agent types ready: ${bootstrap.typeNames.join(`, `)}`
   )
 }
+
+export const registerAgentTypes = registerBuiltinAgentTypes

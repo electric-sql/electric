@@ -4,15 +4,11 @@ import { ElectricAgentsServer } from '../src/server'
 import { TEST_POSTGRES_URL } from './test-backend'
 
 const {
-  abortWakesMock,
-  createAgentHandlerMock,
-  drainWakesMock,
   schedulerCancelManifestDelayedSendMock,
   schedulerEnqueueCronTickMock,
   schedulerSyncManifestDelayedSendMock,
   schedulerStartMock,
   schedulerStopMock,
-  registerAgentTypesMock,
   registryCloseMock,
   registryInitializeMock,
   registryListEntitiesMock,
@@ -27,15 +23,11 @@ const {
   streamExistsMock,
   streamReadJsonMock,
 } = vi.hoisted(() => ({
-  abortWakesMock: vi.fn(),
-  createAgentHandlerMock: vi.fn(),
-  drainWakesMock: vi.fn(),
   schedulerCancelManifestDelayedSendMock: vi.fn(),
   schedulerEnqueueCronTickMock: vi.fn(),
   schedulerSyncManifestDelayedSendMock: vi.fn(),
   schedulerStartMock: vi.fn(),
   schedulerStopMock: vi.fn(),
-  registerAgentTypesMock: vi.fn(),
   registryCloseMock: vi.fn(),
   registryInitializeMock: vi.fn(),
   registryListEntitiesMock: vi.fn(),
@@ -64,11 +56,6 @@ vi.mock(`node:http`, async (importOriginal) => {
     })),
   }
 })
-
-vi.mock(`../src/electric-agents/bootstrap`, () => ({
-  createAgentHandler: createAgentHandlerMock,
-  registerAgentTypes: registerAgentTypesMock,
-}))
 
 vi.mock(`../src/electric-agents-registry`, () => ({
   PostgresRegistry: class MockPostgresRegistry {
@@ -184,15 +171,11 @@ describe(`ElectricAgentsServer.start`, () => {
   let server: ElectricAgentsServer | null = null
 
   beforeEach(() => {
-    abortWakesMock.mockReset()
-    createAgentHandlerMock.mockReset()
-    drainWakesMock.mockReset()
     schedulerCancelManifestDelayedSendMock.mockReset()
     schedulerEnqueueCronTickMock.mockReset()
     schedulerSyncManifestDelayedSendMock.mockReset()
     schedulerStartMock.mockReset()
     schedulerStopMock.mockReset()
-    registerAgentTypesMock.mockReset()
     registryCloseMock.mockReset()
     registryInitializeMock.mockReset()
     registryListEntitiesMock.mockReset()
@@ -208,7 +191,6 @@ describe(`ElectricAgentsServer.start`, () => {
     runMigrationsMock.mockReset()
 
     runMigrationsMock.mockResolvedValue(undefined)
-    drainWakesMock.mockResolvedValue(undefined)
     schedulerCancelManifestDelayedSendMock.mockResolvedValue(undefined)
     schedulerEnqueueCronTickMock.mockResolvedValue(undefined)
     schedulerSyncManifestDelayedSendMock.mockResolvedValue(undefined)
@@ -232,16 +214,6 @@ describe(`ElectricAgentsServer.start`, () => {
     streamCreateMock.mockResolvedValue(undefined)
     streamExistsMock.mockResolvedValue(true)
     streamReadJsonMock.mockResolvedValue([])
-
-    createAgentHandlerMock.mockReturnValue({
-      handler: vi.fn().mockResolvedValue(undefined),
-      runtime: {
-        abortWakes: abortWakesMock,
-        drainWakes: drainWakesMock,
-      },
-      registry: {},
-      typeNames: [`chat`],
-    })
   })
 
   afterEach(async () => {
@@ -251,8 +223,8 @@ describe(`ElectricAgentsServer.start`, () => {
     }
   })
 
-  it(`rejects startup and cleans up when built-in agent registration fails`, async () => {
-    registerAgentTypesMock.mockRejectedValueOnce(new Error(`register exploded`))
+  it(`rejects startup and cleans up when scheduler startup fails`, async () => {
+    schedulerStartMock.mockRejectedValueOnce(new Error(`scheduler exploded`))
 
     server = new ElectricAgentsServer({
       durableStreamsUrl: `http://durable.test`,
@@ -260,9 +232,7 @@ describe(`ElectricAgentsServer.start`, () => {
       postgresUrl: TEST_POSTGRES_URL,
     })
 
-    await expect(server.start()).rejects.toThrow(`register exploded`)
-    expect(abortWakesMock).toHaveBeenCalledOnce()
-    expect(drainWakesMock).toHaveBeenCalledOnce()
+    await expect(server.start()).rejects.toThrow(`scheduler exploded`)
     expect(schedulerStartMock).toHaveBeenCalledOnce()
     expect(schedulerStopMock).toHaveBeenCalledOnce()
     expect(registryCloseMock).toHaveBeenCalledOnce()

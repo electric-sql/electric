@@ -12,11 +12,7 @@
     "forceConsistentCasingInFileNames": true,
     "esModuleInterop": true,
     "outDir": "./dist",
-    "jsx": "react-jsx",
-    "baseUrl": ".",
-    "paths": {
-      "@electric-ax/builtin-agents": ["../builtin-agents/src/index.ts"]
-    }
+    "baseUrl": "."
   },
   "include": ["src/**/*", "test/**/*", "*.ts"],
   "exclude": ["node_modules", "dist"]

@@ -3,6 +3,7 @@ import { createElectricProgram, resolveCommandPrefix, run } from '../src/index'
 import type {
   ElectricCliEnv,
   ElectricCliHandlers,
+  StartedBuiltinAgentsEnvironment,
   StartedDevEnvironment,
   StoppedDevEnvironment,
 } from '../src/index'
@@ -16,6 +17,13 @@ const STARTED_ENV: StartedDevEnvironment = {
   port: 4437,
   uiUrl: `http://localhost:4437`,
   composeProjectName: `electric-agents-test`,
+}
+
+const STARTED_BUILTIN_ENV: StartedBuiltinAgentsEnvironment = {
+  port: 4448,
+  url: `http://localhost:4448`,
+  registeredBaseUrl: `http://localhost:4448`,
+  agentServerUrl: `http://localhost:4437`,
 }
 
 const STOPPED_ENV: StoppedDevEnvironment = {
@@ -66,12 +74,15 @@ function createHandlers() {
       .mockResolvedValue(undefined),
     kill: vi.fn<(url: string) => Promise<void>>().mockResolvedValue(undefined),
     start: vi
+      .fn<(options: object) => Promise<StartedDevEnvironment>>()
+      .mockResolvedValue(STARTED_ENV),
+    startBuiltin: vi
       .fn<
         (options: {
           anthropicApiKey?: string
-        }) => Promise<StartedDevEnvironment>
+        }) => Promise<StartedBuiltinAgentsEnvironment>
       >()
-      .mockResolvedValue(STARTED_ENV),
+      .mockResolvedValue(STARTED_BUILTIN_ENV),
     stop: vi
       .fn<
         (options: { removeVolumes?: boolean }) => Promise<StoppedDevEnvironment>
@@ -184,15 +195,21 @@ describe(`createElectricProgram`, () => {
     )
   })
 
-  it(`passes start options through commander`, async () => {
+  it(`dispatches start without anthropic options`, async () => {
+    const handlers = await parse([`agent`, `start`])
+
+    expect(handlers.start).toHaveBeenCalledWith({})
+  })
+
+  it(`passes start-builtin options through commander`, async () => {
     const handlers = await parse([
       `agent`,
-      `start`,
+      `start-builtin`,
       `--anthropic-api-key`,
       `sk-ant-test`,
     ])
 
-    expect(handlers.start).toHaveBeenCalledWith(
+    expect(handlers.startBuiltin).toHaveBeenCalledWith(
       expect.objectContaining({
         anthropicApiKey: `sk-ant-test`,
       })
@@ -210,9 +227,18 @@ describe(`createElectricProgram`, () => {
   })
 
   it(`dispatches quickstart`, async () => {
-    const handlers = await parse([`agent`, `quickstart`])
+    const handlers = await parse([
+      `agent`,
+      `quickstart`,
+      `--anthropic-api-key`,
+      `sk-ant-test`,
+    ])
 
-    expect(handlers.quickstart).toHaveBeenCalledTimes(1)
+    expect(handlers.quickstart).toHaveBeenCalledWith(
+      expect.objectContaining({
+        anthropicApiKey: `sk-ant-test`,
+      })
+    )
   })
 
   it(`registers the nested completion command`, async () => {

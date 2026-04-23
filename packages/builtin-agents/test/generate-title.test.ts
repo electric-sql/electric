@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { generateTitle } from '../src/electric-agents/agents/horton'
+import { generateTitle } from '../src/agents/horton'
 
 describe(`generateTitle`, () => {
   it(`uses the injected llmCall and returns its trimmed result`, async () => {

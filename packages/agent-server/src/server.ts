@@ -38,14 +38,8 @@ import { ATTR, extractTraceContext, tracer } from './tracing.js'
 import { EntityBridgeManager } from './entity-bridge-manager.js'
 import { TagStreamOutboxDrainer } from './tag-stream-outbox-drainer.js'
 import { rewriteLoopbackWebhookUrl } from './webhook-url.js'
-import {
-  createAgentHandler,
-  registerAgentTypes,
-} from './electric-agents/bootstrap.js'
-import { createScheduleTools } from './electric-agents/tools/schedules.js'
 import type { WakeRegistration } from './wake-registry.js'
 import type { DrizzleDB, PgClient } from './db/index.js'
-import type { AgentHandlerResult } from './electric-agents/bootstrap.js'
 import type { CronTickPayload, DelayedSendPayload } from './scheduler.js'
 import type { IncomingMessage, Server, ServerResponse } from 'node:http'
 import type { DurableStreamTestServer } from '@durable-streams/server'
@@ -115,7 +109,6 @@ export class ElectricAgentsServer {
   private electricAgentsRoutes: ElectricAgentsRoutes | null = null
   private electricAgentsEntityTypeRoutes: ElectricAgentsEntityTypeRoutes | null =
     null
-  private agentBootstrap: AgentHandlerResult | null = null
   private registry: PostgresRegistry | null = null
   private pgDb: DrizzleDB | null = null
   private pgClient: PgClient | null = null
@@ -197,30 +190,6 @@ export class ElectricAgentsServer {
           } else {
             throw new Error(`Could not determine server address`)
           }
-
-          const baseUrl = this.options.baseUrl ?? this._url
-
-          this.agentBootstrap = createAgentHandler(
-            baseUrl,
-            this.options.workingDirectory,
-            this.options.mockStreamFn,
-            ({
-              entityUrl,
-              args,
-              db,
-              upsertCronSchedule,
-              upsertFutureSendSchedule,
-              deleteSchedule,
-            }) =>
-              createScheduleTools({
-                entityUrl,
-                args,
-                db,
-                upsertCronSchedule,
-                upsertFutureSendSchedule,
-                deleteSchedule,
-              })
-          )
 
           // Initialize Postgres
           serverLog.info(`[agent-server] running migrations...`)
@@ -374,12 +343,6 @@ export class ElectricAgentsServer {
           this.electricAgentsEntityTypeRoutes =
             new ElectricAgentsEntityTypeRoutes(this.electricAgentsManager)
 
-          if (this.agentBootstrap) {
-            serverLog.info(`[agent-server] registering agent types...`)
-            await registerAgentTypes(this.agentBootstrap)
-            serverLog.info(`[agent-server] agent types registered`)
-          }
-
           resolve(this._url)
         } catch (err) {
           await this.stop().catch(() => {})
@@ -391,14 +354,6 @@ export class ElectricAgentsServer {
 
   async stop(): Promise<void> {
     this.shuttingDown = true
-
-    if (this.agentBootstrap) {
-      this.agentBootstrap.runtime.abortWakes()
-      await Promise.race([
-        this.agentBootstrap.runtime.drainWakes().catch(() => {}),
-        new Promise<void>((resolve) => setTimeout(resolve, 5_000)),
-      ])
-    }
 
     if (this.server) {
       const server = this.server
@@ -430,8 +385,6 @@ export class ElectricAgentsServer {
       this.electricAgentsEntityTypeRoutes = null
       this.registry = null
     }
-
-    this.agentBootstrap = null
 
     if (this.pgClient) {
       await this.pgClient.end()
@@ -572,8 +525,7 @@ export class ElectricAgentsServer {
 
     if (
       this.shuttingDown &&
-      (path === `/_electric/agent-handler` ||
-        path.startsWith(`/_electric/subscription-webhook/`))
+      path.startsWith(`/_electric/subscription-webhook/`)
     ) {
       sendJsonError(res, 503, `SERVER_STOPPING`, `Server is shutting down`)
       return
@@ -633,15 +585,6 @@ export class ElectricAgentsServer {
       this.electricAgentsManager
     ) {
       await this.handleCallbackForward(path, req, res)
-      return
-    }
-
-    if (
-      path === `/_electric/agent-handler` &&
-      method === `POST` &&
-      this.agentBootstrap
-    ) {
-      await this.agentBootstrap.handler(req, res)
       return
     }
 

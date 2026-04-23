@@ -1,5 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk'
-import { serverLog } from '../../log'
+import { serverLog } from '../log'
 import { createHortonDocsSupport } from '../docs/knowledge-base'
 import { createBashTool } from '../tools/bash'
 import { createEditTool } from '../tools/edit'

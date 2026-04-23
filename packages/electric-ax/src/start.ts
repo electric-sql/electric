@@ -2,9 +2,15 @@ import { readFileSync } from 'node:fs'
 import { basename, resolve as resolvePath } from 'node:path'
 import { spawn } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
-import type { StartCommandOptions, StopCommandOptions } from './index.js'
+import { BuiltinAgentsServer } from '@electric-ax/builtin-agents'
+import type {
+  StartCommandOptions,
+  StartBuiltinCommandOptions,
+  StopCommandOptions,
+} from './index.js'
 
 const DEFAULT_ELECTRIC_AGENTS_PORT = 4437
+const DEFAULT_BUILTIN_AGENTS_PORT = 4448
 const DOCKER_COMPOSE_FILE = fileURLToPath(
   new URL(`../docker-compose.full.yml`, import.meta.url)
 )
@@ -18,6 +24,19 @@ export interface StartedDevEnvironment {
 export interface StoppedDevEnvironment {
   composeProjectName: string
   removedVolumes: boolean
+}
+
+export interface StartedBuiltinAgentsEnvironment {
+  port: number
+  url: string
+  registeredBaseUrl: string
+  agentServerUrl: string
+}
+
+interface WaitForServerOptions {
+  fetchImpl?: typeof globalThis.fetch
+  timeoutMs?: number
+  intervalMs?: number
 }
 
 function parseDotEnvValue(raw: string): string {
@@ -67,7 +86,7 @@ export function readDotEnvFile(
 }
 
 export function resolveAnthropicApiKey(
-  options: StartCommandOptions,
+  options: StartBuiltinCommandOptions,
   env: NodeJS.ProcessEnv = process.env,
   fileEnv: Record<string, string> = readDotEnvFile()
 ): string {
@@ -83,6 +102,20 @@ export function resolveAnthropicApiKey(
   }
 
   return candidate
+}
+
+export function resolveBuiltinAgentsPort(
+  env: NodeJS.ProcessEnv = process.env,
+  fileEnv: Record<string, string> = readDotEnvFile()
+): number {
+  const raw =
+    env.ELECTRIC_AGENTS_BUILTIN_PORT?.trim() ||
+    fileEnv.ELECTRIC_AGENTS_BUILTIN_PORT?.trim()
+  const parsed = raw ? Number(raw) : DEFAULT_BUILTIN_AGENTS_PORT
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    throw new Error(`ELECTRIC_AGENTS_BUILTIN_PORT must be a positive integer`)
+  }
+  return parsed
 }
 
 export function resolveElectricAgentsPort(
@@ -115,6 +148,17 @@ export function getStoppedEnvironmentMessage(
     `Electric Agents dev environment is down.`,
     `Docker project: ${stopped.composeProjectName}`,
     stopped.removedVolumes ? `Volumes removed: yes` : `Volumes removed: no`,
+  ].join(`\n`)
+}
+
+export function getStartedBuiltinAgentsMessage(
+  started: StartedBuiltinAgentsEnvironment
+): string {
+  return [
+    `Builtin Horton server is up.`,
+    `Webhook server: ${started.url}`,
+    `Registers with: ${started.agentServerUrl}`,
+    `Press Ctrl-C to stop.`,
   ].join(`\n`)
 }
 
@@ -168,26 +212,65 @@ async function runDockerCompose(
   })
 }
 
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms)
+  })
+}
+
+export async function waitForElectricAgentsServer(
+  baseUrl: string,
+  options: WaitForServerOptions = {}
+): Promise<void> {
+  const fetchImpl = options.fetchImpl ?? globalThis.fetch
+  const timeoutMs = options.timeoutMs ?? 60_000
+  const intervalMs = options.intervalMs ?? 1_000
+  const deadline = Date.now() + timeoutMs
+  const healthUrl = `${baseUrl.replace(/\/$/, ``)}/_electric/health`
+  let lastError: string | null = null
+
+  while (Date.now() < deadline) {
+    try {
+      const response = await fetchImpl(healthUrl, {
+        signal: AbortSignal.timeout(5_000),
+      })
+      if (response.ok) {
+        return
+      }
+      lastError = `healthcheck returned ${response.status}`
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : String(error)
+    }
+
+    await delay(intervalMs)
+  }
+
+  throw new Error(
+    `Timed out waiting for Electric Agents server at ${healthUrl}${lastError ? `: ${lastError}` : ``}`
+  )
+}
+
 export async function startElectricAgentsDevEnvironment(
-  options: StartCommandOptions,
+  _options: StartCommandOptions = {},
   env: NodeJS.ProcessEnv = process.env,
   cwd: string = process.cwd()
 ): Promise<StartedDevEnvironment> {
   const fileEnv = readDotEnvFile(cwd)
-  const anthropicApiKey = resolveAnthropicApiKey(options, env, fileEnv)
   const port = resolveElectricAgentsPort(env, fileEnv)
   const composeProjectName = resolveComposeProjectName(cwd, env)
 
   await runDockerCompose([`compose`, `-f`, DOCKER_COMPOSE_FILE, `up`, `-d`], {
     ...env,
-    ANTHROPIC_API_KEY: anthropicApiKey,
     COMPOSE_PROJECT_NAME: composeProjectName,
     ELECTRIC_AGENTS_PORT: String(port),
   })
 
+  const uiUrl = `http://localhost:${port}`
+  await waitForElectricAgentsServer(uiUrl)
+
   return {
     port,
-    uiUrl: `http://localhost:${port}`,
+    uiUrl,
     composeProjectName,
   }
 }
@@ -213,4 +296,86 @@ export async function stopElectricAgentsDevEnvironment(
     composeProjectName,
     removedVolumes: options.removeVolumes ?? false,
   }
+}
+
+function waitForShutdown(
+  stop: () => Promise<void>,
+  signalSource: NodeJS.Process = process
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    let stopping = false
+
+    const cleanup = (): void => {
+      signalSource.off(`SIGINT`, onSigint)
+      signalSource.off(`SIGTERM`, onSigterm)
+    }
+
+    const shutdown = (signal: string): void => {
+      if (stopping) {
+        return
+      }
+      stopping = true
+      cleanup()
+      stop()
+        .then(resolve)
+        .catch((error) => {
+          reject(
+            new Error(
+              `Failed to stop builtin agents server after ${signal}: ${error instanceof Error ? error.message : String(error)}`
+            )
+          )
+        })
+    }
+
+    const onSigint = (): void => {
+      shutdown(`SIGINT`)
+    }
+    const onSigterm = (): void => {
+      shutdown(`SIGTERM`)
+    }
+
+    signalSource.on(`SIGINT`, onSigint)
+    signalSource.on(`SIGTERM`, onSigterm)
+  })
+}
+
+export async function startBuiltinAgentsServer(
+  options: StartBuiltinCommandOptions,
+  params: {
+    env?: NodeJS.ProcessEnv
+    cwd?: string
+    agentServerUrl?: string
+  } = {}
+): Promise<StartedBuiltinAgentsEnvironment> {
+  const env = params.env ?? process.env
+  const cwd = params.cwd ?? process.cwd()
+  const fileEnv = readDotEnvFile(cwd)
+  const anthropicApiKey = resolveAnthropicApiKey(options, env, fileEnv)
+  const port = resolveBuiltinAgentsPort(env, fileEnv)
+  const agentServerUrl =
+    params.agentServerUrl ??
+    env.ELECTRIC_AGENTS_URL?.trim() ??
+    `http://localhost:${resolveElectricAgentsPort(env, fileEnv)}`
+
+  process.env.ANTHROPIC_API_KEY = anthropicApiKey
+  await waitForElectricAgentsServer(agentServerUrl)
+
+  const server = new BuiltinAgentsServer({
+    agentServerUrl,
+    port,
+    workingDirectory: cwd,
+  })
+
+  await server.start()
+
+  const started = {
+    port,
+    url: server.url,
+    registeredBaseUrl: server.registeredBaseUrl,
+    agentServerUrl,
+  }
+
+  console.log(getStartedBuiltinAgentsMessage(started))
+  await waitForShutdown(() => server.stop())
+  return started
 }

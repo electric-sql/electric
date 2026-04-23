@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { DurableStreamTestServer } from '@durable-streams/server'
+import { BuiltinAgentsServer } from '../../builtin-agents/src/server'
 import { ElectricAgentsServer } from '../src/server'
 import { waitFor } from './test-utils'
 import {
@@ -12,6 +13,7 @@ describe.skipIf(!process.env.ANTHROPIC_API_KEY)(
   `horton title generation`,
   () => {
     let dsServer: DurableStreamTestServer
+    let builtinAgentsServer: BuiltinAgentsServer
     let electricAgentsServer: ElectricAgentsServer
     let baseUrl = ``
 
@@ -29,10 +31,19 @@ describe.skipIf(!process.env.ANTHROPIC_API_KEY)(
         electricUrl: TEST_ELECTRIC_URL,
       })
       baseUrl = await electricAgentsServer.start()
+      builtinAgentsServer = new BuiltinAgentsServer({
+        agentServerUrl: baseUrl,
+        port: 0,
+      })
+      await builtinAgentsServer.start()
     }, 60_000)
 
     afterAll(async () => {
-      await Promise.allSettled([electricAgentsServer.stop(), dsServer.stop()])
+      await Promise.allSettled([
+        builtinAgentsServer.stop(),
+        electricAgentsServer.stop(),
+        dsServer.stop(),
+      ])
     }, 60_000)
 
     it(`sets tags.title after the first user message`, async () => {

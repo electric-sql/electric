@@ -1,6 +1,6 @@
 import { Type } from '@sinclair/typebox'
 import { nanoid } from 'nanoid'
-import { serverLog } from '../../log'
+import { serverLog } from '../log'
 import type { AgentTool } from '@mariozechner/pi-agent-core'
 import type { HandlerContext } from '@electric-ax/agent-runtime'
 

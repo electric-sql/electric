@@ -46,6 +46,7 @@
   "dependencies": {
     "@durable-streams/client": "npm:@electric-ax/durable-streams-client-beta@^0.3.0",
     "@durable-streams/state": "npm:@electric-ax/durable-streams-state-beta@^0.3.0",
+    "@electric-ax/builtin-agents": "workspace:*",
     "@electric-ax/agent-runtime": "workspace:*",
     "@electric-sql/client": "^1.5.14",
     "@tanstack/db": "^0.6.4",

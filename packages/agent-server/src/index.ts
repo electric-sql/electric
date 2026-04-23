@@ -31,12 +31,6 @@ export type {
 export { SchemaValidator } from './electric-agents-schema-validator.js'
 export { WakeRegistry } from './wake-registry.js'
 export type { WakeEvalResult } from './wake-registry.js'
-
-export {
-  createAgentHandler,
-  registerAgentTypes,
-} from './electric-agents/bootstrap.js'
-export type { AgentHandlerResult } from './electric-agents/bootstrap.js'
 export type {
   WriteEvent,
   StreamEvent,

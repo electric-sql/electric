@@ -47,7 +47,6 @@ services:
       electric:
         condition: service_started
     environment:
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
       ELECTRIC_AGENTS_LOG_LEVEL: ${ELECTRIC_AGENTS_LOG_LEVEL:-debug}
       ELECTRIC_AGENTS_BASE_URL: http://electric-agents:4437
       DATABASE_URL: postgres://${ELECTRIC_AGENTS_POSTGRES_USER:-electric_agents}:${ELECTRIC_AGENTS_POSTGRES_PASSWORD:-electric_agents}@postgres:5432/${ELECTRIC_AGENTS_POSTGRES_DB:-electric_agents}

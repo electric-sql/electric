@@ -1,9 +1,11 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
   readDotEnvFile,
   resolveAnthropicApiKey,
+  resolveBuiltinAgentsPort,
   resolveComposeProjectName,
   resolveElectricAgentsPort,
+  waitForElectricAgentsServer,
 } from '../src/start'
 
 describe(`resolveAnthropicApiKey`, () => {
@@ -62,6 +64,24 @@ describe(`resolveElectricAgentsPort`, () => {
   })
 })
 
+describe(`resolveBuiltinAgentsPort`, () => {
+  it(`uses process env when present`, () => {
+    expect(
+      resolveBuiltinAgentsPort({ ELECTRIC_AGENTS_BUILTIN_PORT: `5548` }, {})
+    ).toBe(5548)
+  })
+
+  it(`falls back to .env`, () => {
+    expect(
+      resolveBuiltinAgentsPort({}, { ELECTRIC_AGENTS_BUILTIN_PORT: `6658` })
+    ).toBe(6658)
+  })
+
+  it(`defaults to 4448`, () => {
+    expect(resolveBuiltinAgentsPort({}, {})).toBe(4448)
+  })
+})
+
 describe(`resolveComposeProjectName`, () => {
   it(`uses the explicit override when provided`, () => {
     expect(
@@ -82,6 +102,29 @@ describe(`readDotEnvFile`, () => {
   it(`returns an empty object when .env is missing`, () => {
     expect(readDotEnvFile(`/tmp/definitely-missing-electric-ax-env`)).toEqual(
       {}
+    )
+  })
+})
+
+describe(`waitForElectricAgentsServer`, () => {
+  it(`retries until the health endpoint responds`, async () => {
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockRejectedValueOnce(new Error(`fetch failed`))
+      .mockResolvedValueOnce(new Response(null, { status: 200 }))
+
+    await waitForElectricAgentsServer(`http://localhost:4437`, {
+      fetchImpl,
+      timeoutMs: 100,
+      intervalMs: 0,
+    })
+
+    expect(fetchImpl).toHaveBeenCalledTimes(2)
+    expect(fetchImpl).toHaveBeenLastCalledWith(
+      `http://localhost:4437/_electric/health`,
+      expect.objectContaining({
+        signal: expect.any(AbortSignal),
+      })
     )
   })
 })

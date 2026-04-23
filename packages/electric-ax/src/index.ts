@@ -11,10 +11,12 @@ import type {
   ElectricAgentsEntityType,
 } from './api-types.js'
 import {
+  type StartedBuiltinAgentsEnvironment,
   type StartedDevEnvironment,
   type StoppedDevEnvironment,
-  getStartedEnvironmentMessage,
+  startBuiltinAgentsServer,
   getStoppedEnvironmentMessage,
+  getStartedEnvironmentMessage,
   startElectricAgentsDevEnvironment,
   stopElectricAgentsDevEnvironment,
 } from './start.js'
@@ -22,6 +24,7 @@ import {
 export const DEFAULT_ELECTRIC_AGENTS_URL = `http://localhost:4437`
 export type { StartedDevEnvironment } from './start.js'
 export type { StoppedDevEnvironment } from './start.js'
+export type { StartedBuiltinAgentsEnvironment } from './start.js'
 
 export interface ElectricCliEnv {
   electricAgentsUrl: string
@@ -47,7 +50,9 @@ export interface PsCommandOptions {
   parent?: string
 }
 
-export interface StartCommandOptions {
+export interface StartCommandOptions {}
+
+export interface StartBuiltinCommandOptions {
   anthropicApiKey?: string
 }
 
@@ -70,8 +75,11 @@ export interface ElectricCliHandlers {
   ps: (options: PsCommandOptions) => Promise<void>
   kill: (url: string) => Promise<void>
   start: (options: StartCommandOptions) => Promise<StartedDevEnvironment>
+  startBuiltin: (
+    options: StartBuiltinCommandOptions
+  ) => Promise<StartedBuiltinAgentsEnvironment>
   stop: (options: StopCommandOptions) => Promise<StoppedDevEnvironment>
-  quickstart: (options: StartCommandOptions) => Promise<void>
+  quickstart: (options: StartBuiltinCommandOptions) => Promise<void>
 }
 
 class CliError extends Error {}
@@ -475,27 +483,37 @@ export function createElectricCliHandlers(
       printStartedEnvironment(started)
       return started
     },
+    startBuiltin: async (options) => {
+      return startBuiltinAgentsServer(options, {
+        agentServerUrl: env.electricAgentsUrl,
+      })
+    },
     stop: async (options) => {
       const stopped = await stopElectricAgentsDevEnvironment(options)
       printStoppedEnvironment(stopped)
       return stopped
     },
     quickstart: async (options) => {
-      const started = await startElectricAgentsDevEnvironment(options)
+      const started = await startElectricAgentsDevEnvironment()
       printStartedEnvironment(started)
       console.log(``)
       console.log(
         [
           `electric agents server is up`,
           ``,
-          `Try this next:`,
+          `Open a separate terminal and run:`,
           `  ${commandPrefix} spawn /horton/onboarding`,
           `  ${commandPrefix} send /horton/onboarding "Please walk me through onboarding for the Electric agents"`,
           `  ${commandPrefix} observe /horton/onboarding`,
           ``,
           `UI: ${started.uiUrl}`,
+          `This terminal will now run the built-in Horton server in the foreground.`,
         ].join(`\n`)
       )
+      console.log(``)
+      await startBuiltinAgentsServer(options, {
+        agentServerUrl: started.uiUrl,
+      })
     },
   }
 }
@@ -507,14 +525,15 @@ function getHelpText(commandName: string): string {
 Environment:
   ELECTRIC_AGENTS_URL        Base URL of the server (default: ${DEFAULT_ELECTRIC_AGENTS_URL})
   ELECTRIC_AGENTS_IDENTITY   Sender identity for messages (default: ${getDefaultElectricAgentsIdentity()})
-  ANTHROPIC_API_KEY          Required for '${agentsCommand} start' and '${agentsCommand} quickstart'
+  ANTHROPIC_API_KEY          Required for '${agentsCommand} start-builtin' and '${agentsCommand} quickstart'
 
 Examples:
   $ ${agentsCommand} types
   $ ${agentsCommand} spawn /horton/onboarding
   $ ${agentsCommand} send /horton/onboarding "Please walk me through onboarding for the Electric agents"
   $ ${agentsCommand} observe /horton/onboarding --from 0
-  $ ${agentsCommand} start --anthropic-api-key sk-ant-...
+  $ ${agentsCommand} start
+  $ ${agentsCommand} start-builtin --anthropic-api-key sk-ant-...
   $ ${agentsCommand} stop --remove-volumes
 `
 }
@@ -625,14 +644,22 @@ export function createElectricProgram({
 
   agentsCommand
     .command(`start`)
-    .description(`Start the local Electric Agents dev environment`)
-    .option(
-      `--anthropic-api-key <key>`,
-      `Anthropic API key to forward into the server container`
-    )
+    .description(`Start the Electric Agents coordinator server`)
     .action(async (...actionArgs: Array<unknown>) => {
       const command = getCommandActionArg(actionArgs)
       await handlers.start(command.opts<StartCommandOptions>())
+    })
+
+  agentsCommand
+    .command(`start-builtin`)
+    .description(`Start runtime for Horton & other builtin agents`)
+    .option(
+      `--anthropic-api-key <key>`,
+      `Anthropic API key for the builtin Horton server`
+    )
+    .action(async (...actionArgs: Array<unknown>) => {
+      const command = getCommandActionArg(actionArgs)
+      await handlers.startBuiltin(command.opts<StartBuiltinCommandOptions>())
     })
 
   agentsCommand
@@ -647,15 +674,15 @@ export function createElectricProgram({
   agentsCommand
     .command(`quickstart`)
     .description(
-      `Start the dev environment and print the Horton onboarding flow`
+      `Start the coordinator server, print onboarding steps, and run builtin agents locally`
     )
     .option(
       `--anthropic-api-key <key>`,
-      `Anthropic API key to forward into the server container`
+      `Anthropic API key for the builtin Horton server`
     )
     .action(async (...actionArgs: Array<unknown>) => {
       const command = getCommandActionArg(actionArgs)
-      await handlers.quickstart(command.opts<StartCommandOptions>())
+      await handlers.quickstart(command.opts<StartBuiltinCommandOptions>())
     })
 
   const completionCommand = agentsCommand
