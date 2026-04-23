@@ -100,7 +100,10 @@ defmodule Electric.MixProject do
         {:opentelemetry_semantic_conventions, "~> 1.27"},
         {:pg_query_ex, "0.10.0"},
         {:plug, "~> 1.17"},
-        {:postgrex, "~> 0.20"},
+        # TODO: Switch back to Hex once postgrex releases a version with the
+        # Elixir 1.20 unused-clause fix (https://github.com/elixir-ecto/postgrex/issues/760)
+        {:postgrex,
+         github: "elixir-ecto/postgrex", ref: "e4f79427e99bb0dc86376a769fc966b98edb7dfc"},
         {:retry, "~> 0.19"},
         {:remote_ip, "~> 1.2"},
         {:req, "~> 0.5"},

@@ -11,7 +11,6 @@ defmodule Electric.Shapes.Consumer.State do
   alias Electric.ShapeCache.Storage
 
   require Logger
-  require LogOffset
 
   @write_unit_txn :txn
   @write_unit_txn_fragment :txn_fragment
