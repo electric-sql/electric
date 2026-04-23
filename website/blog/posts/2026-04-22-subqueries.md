@@ -9,7 +9,7 @@ image: /img/blog/subqueries/header.jpg
 tags: [shapes, postgres-sync, release]
 outline: [2, 3]
 post: true
-published: false
+published: true
 ---
 
 With Electric&nbsp;1.6, subqueries in shape WHERE clauses are production-ready. Complex expressions now sync incrementally — no tradeoff between expressiveness and performance.
